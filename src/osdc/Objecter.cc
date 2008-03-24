@@ -334,7 +334,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, int flags, Context *onfinish)
 {
-  OSDStat *st = new OSDStat(size, flags);
+  OSDStat *st = prepare_stat(size, flags);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
   st->extents.front().layout = ol;
   st->onfinish = onfinish;
@@ -373,6 +373,10 @@ tid_t Objecter::stat_submit(OSDStat *st)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_STAT, flags);
+    if (inc_lock >= 0) {
+      st->inc_lock = inc_lock;
+      m->set_inc_lock(inc_lock);
+    }
     
     messenger->send_message(m, osdmap->get_inst(pg.acker()));
   }
@@ -440,7 +444,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
                      Context *onfinish)
 {
-  OSDRead *rd = new OSDRead(bl, flags);
+  OSDRead *rd = prepare_read(bl, flags);
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().layout = ol;
   readx(rd, onfinish);
@@ -491,6 +495,10 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_READ, flags);
+    if (inc_lock >= 0) {
+      rd->inc_lock = inc_lock;
+      m->set_inc_lock(inc_lock);
+    }
     m->set_length(ex.length);
     m->set_offset(ex.start);
     m->set_retry_attempt(retry);
@@ -680,7 +688,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
-  OSDWrite *wr = new OSDWrite(bl, flags);
+  OSDWrite *wr = prepare_write(bl, flags);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
@@ -694,7 +702,7 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol
 tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol, int flags, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO, flags);
+  OSDModify *z = prepare_modify(CEPH_OSD_OP_ZERO, flags);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
   modifyx(z, onack, oncommit);
@@ -707,7 +715,7 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
 tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *l = new OSDModify(op, flags);
+  OSDModify *l = prepare_modify(op, flags);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().layout = ol;
   modifyx(l, onack, oncommit);
@@ -777,6 +785,10 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   wr->op, flags);
+    if (inc_lock >= 0) {
+      wr->inc_lock = inc_lock;
+      m->set_inc_lock(inc_lock);
+    }
     m->set_length(ex.length);
     m->set_offset(ex.start);
     if (usetid > 0)
@@ -840,6 +852,18 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   // ignore?
   if (pg.acker() != m->get_source().num()) {
     dout(7) << " ignoring ack|commit from non-acker" << dendl;
+    delete m;
+    return;
+  }
+  if (m->get_result() == -EAGAIN) {
+    dout(7) << " got -EAGAIN, resubmitting" << dendl;
+    if (wr->onack) num_unacked--;
+    if (wr->oncommit) num_uncommitted--;
+    if (wr->waitfor_ack.count(tid)) 
+      modifyx_submit(wr, wr->waitfor_ack[tid]);
+    else if (wr->waitfor_commit.count(tid)) 
+      modifyx_submit(wr, wr->waitfor_commit[tid]);
+    else assert(0);
     delete m;
     return;
   }

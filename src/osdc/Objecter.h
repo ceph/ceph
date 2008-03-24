@@ -44,6 +44,7 @@ class Objecter {
  private:
   tid_t last_tid;
   int client_inc;
+  int inc_lock;       // optional
   int num_unacked;
   int num_uncommitted;
 
@@ -70,6 +71,8 @@ class Objecter {
   class OSDOp {
   public:
     list<ObjectExtent> extents;
+    int inc_lock;
+    OSDOp() : inc_lock(-1) {}
     virtual ~OSDOp() {}
   };
 
@@ -86,6 +89,10 @@ class Objecter {
     }
   };
 
+  OSDRead *prepare_read(bufferlist *b, int f) {
+    return new OSDRead(b, f);
+  }
+
   class OSDStat : public OSDOp {
   public:
     tid_t tid;
@@ -94,6 +101,10 @@ class Objecter {
     Context *onfinish;
     OSDStat(off_t *s, int f) : tid(0), size(s), flags(f), onfinish(0) { }
   };
+
+  OSDStat *prepare_stat(off_t *s, int f) {
+    return new OSDStat(s, f);
+  }
 
   // generic modify
   class OSDModify : public OSDOp {
@@ -109,6 +120,10 @@ class Objecter {
 
     OSDModify(int o, int f) : op(o), flags(f), onack(0), oncommit(0) {}
   };
+
+  OSDModify *prepare_modify(int o, int f) { 
+    return new OSDModify(o, f); 
+  }
   
   // write (includes the bufferlist)
   class OSDWrite : public OSDModify {
@@ -116,6 +131,10 @@ class Objecter {
     bufferlist bl;
     OSDWrite(bufferlist &b, int f) : OSDModify(CEPH_OSD_OP_WRITE, f), bl(b) {}
   };
+
+  OSDWrite *prepare_write(bufferlist &b, int f) { 
+    return new OSDWrite(b, f); 
+  }
 
   
 
@@ -172,7 +191,7 @@ class Objecter {
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
     messenger(m), monmap(mm), osdmap(om), 
-    last_tid(0), client_inc(-1),
+    last_tid(0), client_inc(-1), inc_lock(-1),
     num_unacked(0), num_uncommitted(0),
     last_epoch_requested(0),
     client_lock(l), timer(l)
@@ -204,10 +223,12 @@ class Objecter {
   }
   void dump_active();
 
-  int get_client_incarnation() { return client_inc; }
-  void set_client_incarnation(int inc) {
-	client_inc = inc;
-  }
+  int get_client_incarnation() const { return client_inc; }
+  void set_client_incarnation(int inc) { client_inc = inc; }
+
+  //int get_inc_lock() const { return inc_lock; }
+  void set_inc_lock(int l) { inc_lock = l; }
+    
 
   // med level
   tid_t readx(OSDRead *read, Context *onfinish);

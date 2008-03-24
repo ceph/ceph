@@ -85,7 +85,7 @@ class Filer {
 				  size_t len, 
 				  bufferlist *bl,
 				  int flags) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, flags);
+    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
     file_to_extents(inode, offset, len, rd->extents);
     return rd;
   }
@@ -107,7 +107,7 @@ class Filer {
             Context *onack,
             Context *oncommit,
 	    objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, flags);
+    Objecter::OSDWrite *wr = objecter->prepare_write(bl, flags);
     file_to_extents(inode, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
@@ -118,7 +118,7 @@ class Filer {
 	   int flags,
            Context *onack,
            Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_ZERO, flags);
+    Objecter::OSDModify *z = objecter->prepare_modify(CEPH_OSD_OP_ZERO, flags);
     file_to_extents(inode, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
@@ -129,7 +129,7 @@ class Filer {
 	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_DELETE, flags);
+    Objecter::OSDModify *z = objecter->prepare_modify(CEPH_OSD_OP_DELETE, flags);
     file_to_extents(inode, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }

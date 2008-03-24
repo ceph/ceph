@@ -489,7 +489,7 @@ class ObjectCacher {
                 bufferlist *bl,
 		int flags,
                 Context *onfinish) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, flags);
+    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
     filer.file_to_extents(inode, offset, len, rd->extents);
     return readx(rd, inode.ino, onfinish);
   }
@@ -498,7 +498,7 @@ class ObjectCacher {
                  off_t offset, size_t len, 
                  bufferlist& bl, int flags,
 		 objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, flags);
+    Objecter::OSDWrite *wr = objecter->prepare_write(bl, flags);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return writex(wr, inode.ino);
   }
@@ -511,7 +511,7 @@ class ObjectCacher {
                             off_t offset, size_t len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl, flags);
+    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
     filer.file_to_extents(inode, offset, len, rd->extents);
     return atomic_sync_readx(rd, inode.ino, lock);
   }
@@ -521,7 +521,7 @@ class ObjectCacher {
                              bufferlist& bl, int flags,
                              Mutex &lock,
 			     objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl, flags);
+    Objecter::OSDWrite *wr = objecter->prepare_write(bl, flags);
     filer.file_to_extents(inode, offset, len, wr->extents);
     return atomic_sync_writex(wr, inode.ino, lock);
   }
