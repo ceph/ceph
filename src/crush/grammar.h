@@ -85,7 +85,7 @@ struct crush_grammar : public grammar<crush_grammar>
       device = str_p("device") >> posint >> name >> !( str_p("offload") >> real_p );
       
       // bucket types
-      bucket_type = str_p("buckettype") >> posint >> name;
+      bucket_type = str_p("type") >> posint >> name;
 
       // buckets
       bucket_id = str_p("id") >> negint;

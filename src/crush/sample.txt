@@ -7,9 +7,10 @@ device 4 osd004 offload 0       # 0.0 -> normal, 1.0 -> failed
 device 5 osd005 offload 0.1
 
 # hierarchy
-buckettype 2 cab
-buckettype 3 row
-buckettype 10 pool
+type 0 osd   # 'device' is actually the default for 0
+type 2 cab
+type 3 row
+type 10 pool
 
 cab cabd2 {
        id -1         # optional

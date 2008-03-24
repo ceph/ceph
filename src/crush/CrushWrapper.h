@@ -334,6 +334,7 @@ public:
   }
 
   void _encode(bufferlist &bl, bool lean=false) {
+    if (!crush) create();  // duh.
     ::_encode_simple(crush->max_buckets, bl);
     ::_encode_simple(crush->max_rules, bl);
     ::_encode_simple(crush->max_devices, bl);

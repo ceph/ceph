@@ -119,16 +119,23 @@ const char *infn = "stdin";
 
 ////////////////////////////////////////////////////////////////////////////
 
+int verbose = 0;
+
 int compile_crush_file(const char *infn, CrushWrapper &crush)
 { 
   // read the file
   ifstream in(infn);
+  if (!in.is_open()) {
+    cerr << "input file " << infn << " not found" << std::endl;
+    return -ENOENT;
+  }
+
   string big;
   string str;
   int line = 1;
   map<int,int> line_pos;  // pos -> line
   map<int,string> line_val;
-  while (getline(cin, str)) {
+  while (getline(in, str)) {
     // remove newline
     int l = str.length();
     if (l && str[l] == '\n')
@@ -140,7 +147,8 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     int n = str.find("#");
     if (n >= 0)
       str.erase(n, str.length()-n);
-    cout << line << ": " << str << std::endl;
+    
+    if (verbose) cout << line << ": " << str << std::endl;
 
     if (big.length()) big += " ";
     line_pos[big.length()] = line;
@@ -148,7 +156,7 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     big += str;
   }
 
-  cout << "whole file is: \"" << big << "\"" << std::endl;
+  if (verbose >= 2) cout << "whole file is: \"" << big << "\"" << std::endl;
   
   crush_grammar crushg;
   const char *start = big.c_str();
@@ -341,7 +349,7 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
 
 int usage(const char *me)
 {
-  cout << me << ": usage: crushtool [-i infile] [-c infile.txt] [-o outfile] [-x outfile.txt]" << std::endl;
+  cout << me << ": usage: crushtool [-d map] [-c map.txt] [-o outfile [--clobber]]" << std::endl;
   exit(1);
 }
 
@@ -350,55 +358,67 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  parse_config_options(args);
 
   const char *me = argv[0];
-
-  const char *infn = 0;
-  const char *outfn = 0;
   const char *cinfn = 0;
-  const char *doutfn = 0;
-  bool print = false;
-  bool createsimple = false;
-  int size = 0;
+  const char *dinfn = 0;
+  const char *outfn = 0;
   bool clobber = false;
-  list<entity_addr_t> add, rm;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--print") == 0)
-      print = true;
-    else if (strcmp(args[i], "--createsimple") == 0) {
-      createsimple = true;
-      size = atoi(args[++i]);
-    } else if (strcmp(args[i], "--clobber") == 0) 
+    if (strcmp(args[i], "--clobber") == 0) 
       clobber = true;
-    else if (strcmp(args[i], "-i") == 0)
-      infn = args[++i];
+    else if (strcmp(args[i], "-d") == 0)
+      dinfn = args[++i];
     else if (strcmp(args[i], "-o") == 0)
       outfn = args[++i];
     else if (strcmp(args[i], "-c") == 0)
       cinfn = args[++i];
-    else if (strcmp(args[i], "-x") == 0)
-      doutfn = args[++i];
+    else if (strcmp(args[i], "-v") == 0)
+      verbose++;
     else 
       usage(me);
   }
+  if (cinfn && dinfn)
+    usage(me);
+  if (!cinfn && !dinfn)
+    usage(me);
+
+  /*
+  if (outfn) cout << "outfn " << outfn << std::endl;
+  if (cinfn) cout << "cinfn " << cinfn << std::endl;
+  if (dinfn) cout << "dinfn " << dinfn << std::endl;
+  */
 
   CrushWrapper crush;
-  
-  if (infn) {
+
+  if (dinfn) {
     bufferlist bl;
-    int r = bl.read_file(infn);
+    int r = bl.read_file(dinfn);
     if (r < 0) {
-      cerr << me << ": error reading '" << infn << "': " << strerror(-r) << std::endl;
+      cerr << me << ": error reading '" << dinfn << "': " << strerror(-r) << std::endl;
       exit(1);
     }
     bufferlist::iterator p = bl.begin();
     crush._decode(p);
+
+    if (outfn) {
+      ofstream o;
+      o.open(outfn, ios::out | ios::binary | ios::trunc);
+      if (!o.is_open()) {
+	cerr << me << ": error writing '" << outfn << "'" << std::endl;
+	exit(1);
+      }
+      decompile_crush(crush, o);
+      o.close();
+    } else 
+      decompile_crush(crush, cout);
   }
 
   if (cinfn) {
-    compile_crush_file(cinfn, crush);
+    int r = compile_crush_file(cinfn, crush);
+    if (r < 0) 
+      exit(1);
 
     if (outfn) {
       bufferlist bl;
@@ -408,11 +428,9 @@ int main(int argc, const char **argv)
 	cerr << me << ": error writing '" << outfn << "': " << strerror(-r) << std::endl;
 	exit(1);
       }
+    } else {
+      cout << me << " successfully compiled '" << cinfn << "'.  Use -o file to write it out." << std::endl;
     }
-  }
-
-  if (doutfn) {
-    decompile_crush(crush, cout);
   }
 
   return 0;
