@@ -152,8 +152,8 @@ static inline int ceph_stable_mod(int x, int b, int bmask) {
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	union ceph_pg ol_pgid;
-	__u32         ol_stripe_unit;  
+	__le64 ol_pgid;
+	__le32 ol_stripe_unit;
 } __attribute__ ((packed));
 
 /*
@@ -529,14 +529,15 @@ struct ceph_osd_peer_stat {
 struct ceph_osd_request_head {
 	struct ceph_entity_inst   client_inst;
 	ceph_tid_t                tid;
-	__u32                     client_inc;
-	__u32                     op;
-	__u64                     offset, length;
+	__le32                    client_inc;
+	__le32                    op;
+	__le64                    offset, length;
 	struct ceph_object        oid;
 	struct ceph_object_layout layout;
 	ceph_epoch_t              osdmap_epoch;
 
-	__u32                     flags;
+	__le32                    flags;
+	__le32                    inc_lock;
 
 	struct ceph_eversion      reassert_version;
 
@@ -547,13 +548,13 @@ struct ceph_osd_request_head {
 
 struct ceph_osd_reply_head {
 	ceph_tid_t           tid;
-	__u32                op;
-	__u32                flags;
+	__le32               op;
+	__le32               flags;
 	struct ceph_object   oid;
 	struct ceph_object_layout layout;
 	ceph_epoch_t         osdmap_epoch;
-	__s32                result;
-	__u64                offset, length;
+	__le32               result;
+	__le64               offset, length;
 	struct ceph_eversion reassert_version;
 } __attribute__ ((packed));
 

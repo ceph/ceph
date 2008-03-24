@@ -65,6 +65,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_need(p, end, 10*sizeof(__u32), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
+	ceph_decode_32(p, m->m_last_failure);
 	ceph_decode_32(p, m->m_created.tv_sec);
 	ceph_decode_32(p, m->m_created.tv_usec);
 	ceph_decode_32(p, m->m_anchortable);

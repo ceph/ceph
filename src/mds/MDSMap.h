@@ -101,6 +101,7 @@ class MDSMap {
  protected:
   epoch_t epoch;
   epoch_t client_epoch;       // incremented only when change is significant to client.
+  epoch_t last_failure;   // epoch of last failure.  for inclocks
   utime_t created;
 
   int32_t max_mds;
@@ -343,6 +344,7 @@ class MDSMap {
   void encode(bufferlist& bl) {
     ::_encode(epoch, bl);
     ::_encode(client_epoch, bl);
+    ::_encode(last_failure, bl);
     ::_encode(created, bl);
     ::_encode(anchortable, bl);
     ::_encode(root, bl);
@@ -362,6 +364,7 @@ class MDSMap {
     int off = 0;
     ::_decode(epoch, bl, off);
     ::_decode(client_epoch, bl, off);
+    ::_decode(last_failure, bl, off);
     ::_decode(created, bl, off);
     ::_decode(anchortable, bl, off);
     ::_decode(root, bl, off);

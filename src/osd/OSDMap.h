@@ -479,8 +479,8 @@ private:
     // construct object layout
     pg_t pgid = pg_t(pg_type, pg_size, ps, pg_pool, preferred);
     ceph_object_layout layout;
-    layout.ol_pgid = pgid.u;
-    layout.ol_stripe_unit = object_stripe_unit;
+    layout.ol_pgid = cpu_to_le64(pgid.u.pg64);
+    layout.ol_stripe_unit = cpu_to_le32(object_stripe_unit);
     return layout;
   }
 
