@@ -13,10 +13,11 @@ using namespace std;
  * Initializes a ceph client.
  */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv *, jobject)
+(JNIEnv *env, jobject, jstring j_mon_host)
 {
-
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
+
+  g_conf.mon_host = env->GetStringUTFChars(j_mon_host, 0);
 
   // parse args from CEPH_ARGS 
   vector<const char*> args; 
@@ -28,24 +29,19 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
   // be safe
   g_conf.use_abspaths = true;
 
-  // load monmap
+  // get monmap
   MonMap monmap;
-  //  int r = monmap.read(".ceph_monmap");
-  int r = monmap.read("/cse/grads/eestolan/ceph/trunk/ceph/.ceph_monmap");
-  if (r < 0) {
-    dout(0) << "CephFSInterface: could not find .ceph_monmap" << dendl; 
-    assert(0 && "could not find .ceph_monmap");
-    //    return 0;
-  }
-  assert(r >= 0);
+  MonClient mc;
+  if (mc.get_monmap(&monmap) < 0)
+    return 0;
 
   // start up network
   rank.bind();
+  cout << "starting ceph client at " << rank.get_rank_addr() << std::endl;
   rank.start();
 
   // start client
-  Client *client;
-  client = new Client(rank.register_entity(entity_name_t::CLIENT(-1)), &monmap);
+  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT(-1)), &monmap);
   client->init();
     
   // mount
