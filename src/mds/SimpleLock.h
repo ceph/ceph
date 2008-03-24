@@ -50,6 +50,7 @@ inline const char *get_lock_type_name(int t) {
 #define LOCK_LOCK     2  // AR   R W    . .
 #define LOCK_GLOCKR  -3  // AR   R .    . .
 #define LOCK_REMOTEXLOCK  -50    // on NON-auth
+#define LOCK_CLIENTDEL -60
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
@@ -58,9 +59,25 @@ inline const char *get_simplelock_state_name(int n) {
   case LOCK_LOCK: return "lock";
   case LOCK_GLOCKR: return "glockr";
   case LOCK_REMOTEXLOCK: return "remote_xlock";
+  case LOCK_CLIENTDEL: return "clientdel";
   default: assert(0); return 0;
   }
 }
+
+/*
+
+
+          glockr
+       <-/      ^--
+  lock      -->    sync
+       
+    | ^-- glockc
+    v
+          ^
+  clientdel
+         
+
+ */
 
 class MDRequest;
 
@@ -82,7 +99,8 @@ protected:
 
   // lock state
   int state;
-  set<int> gather_set;  // auth
+  set<int> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+  set<int> client_set;  // auth+rep
 
   // local state
   int num_rdlock;
@@ -155,6 +173,10 @@ public:
 	 p != parent->replicas_end(); 
 	 ++p)
       gather_set.insert(p->first);
+    for (set<in>::const_iterator p = client_set.begin();
+	 p != client_set.end();
+	 p++)
+      gather_set.insert(-1-*p);
   }
   bool is_gathering() { return !gather_set.empty(); }
   bool is_gathering(int i) {
@@ -196,8 +218,11 @@ public:
     return is_xlocked() && xlock_by != mdr;
   }
   MDRequest *get_xlocked_by() { return xlock_by; }
+  
+  int get_num_clients() { return client_set.size(); }
+
   bool is_used() {
-    return is_xlocked() || is_rdlocked();
+    return is_xlocked() || is_rdlocked() || !client_set.empty();
   }
 
   // encode/decode
@@ -283,6 +308,8 @@ public:
     out << get_lock_type_name(get_type()) << " ";
     out << get_simplelock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
+    if (!client_set.empty())
+      out << " c=" << client_set;
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())

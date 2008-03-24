@@ -1243,8 +1243,9 @@ void Locker::simple_lock(SimpleLock *lock)
   if (lock->get_state() == LOCK_LOCK) return;
   assert(lock->get_state() == LOCK_SYNC);
   
-  if (lock->get_parent()->is_replicated()) {
-    // bcast to replicas
+  if (lock->get_parent()->is_replicated() ||
+      lock->get_num_clients()) {
+    // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
     
     // change lock

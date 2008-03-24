@@ -268,6 +268,8 @@ struct ceph_msg_header {
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_FILECAPS        0x310
 
+#define CEPH_MSG_CLIENT_LOCK            28
+
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
 #define CEPH_MSG_OSD_MAP          41
