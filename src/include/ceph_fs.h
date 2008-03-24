@@ -466,6 +466,10 @@ struct ceph_mds_file_caps {
 	struct ceph_timeval mtime, atime;
 } __attribute__ ((packed));
 
+#define CEPH_MDS_LOCK_REVOKE  1
+#define CEPH_MDS_LOCK_RELEASE 2
+#define CEPH_MDS_LOCK_RENEW   3
+
 /* client reconnect */
 struct ceph_mds_cap_reconnect {
 	__le32 wanted;

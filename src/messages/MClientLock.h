@@ -37,10 +37,10 @@ struct MClientLock : public Message {
 
   MClientLock(int l, int ac, __u64 i) :
     Message(CEPH_MSG_CLIENT_LOCK),
-    lock(l), actiong(ac), ino(i) {}
+    lock_type(l), action(ac), ino(i) {}
   MClientLock(int l, int ac, __u64 i, const string& d) :
     Message(CEPH_MSG_CLIENT_LOCK),
-    lock(l), actiong(ac), ino(i), dname(d) {}
+    lock_type(l), action(ac), ino(i), dname(d) {}
   MClientLock(SimpleLock *lock, int ac, __u64 i) :
     Message(CEPH_MSG_CLIENT_LOCK),
     lock_type(lock->get_type()),
@@ -57,7 +57,7 @@ struct MClientLock : public Message {
 	<< " " << ino;
     if (dname.length())
       out << "/" << dname;
-    << ")";
+    out << ")";
   }
   
   void decode_payload() {

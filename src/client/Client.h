@@ -55,6 +55,7 @@ class MStatfsReply;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
+class MClientLock;
 class MMonMap;
 
 class Filer;
@@ -88,6 +89,7 @@ class Dentry : public LRUObject {
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
+  utime_t ttl;
   
   void get() { assert(ref == 0); ref++; lru_pin(); }
   void put() { assert(ref == 1); ref--; lru_unpin(); }
@@ -675,6 +677,8 @@ protected:
   void handle_mon_map(MMonMap *m);
   void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
+
+  void handle_lock(MClientLock *m);
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);

@@ -277,23 +277,7 @@ class MClientReply : public Message {
 
 
   // trace
-  void set_trace_dist(CInode *in, int whoami) {
-    // inode, dentry, dir, ..., inode
-    bufferlist bl;
-    __u32 numi = 0;
-    if (in) 
-      while (true) {
-	// inode
-	InodeStat::_encode(bl, in);
-	numi++;
-	CDentry *dn = in->get_parent_dn();
-	if (!dn) break;
-
-	// dentry, dir
-	::_encode_simple(in->get_parent_dn()->get_name(), bl);
-	DirStat::_encode(bl, dn->get_dir(), whoami);
-	in = dn->get_dir()->get_inode();
-      }
+  void set_trace_dist(int numi, bufferlist& bl) {
     ::_encode_simple(numi, trace_bl);
     trace_bl.claim_append(bl);
   }

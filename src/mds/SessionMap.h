@@ -50,6 +50,8 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
+  int get_client() { return inst.name.num(); }
+
   bool is_undef() { return state == STATE_UNDEF; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
@@ -62,6 +64,7 @@ private:
   version_t cap_push_seq;        // cap push seq #
 public:
   xlist<Capability*> caps;  // inodes with caps; front=most recently used
+  xlist<ClientReplica*> replicas;  // metadata object replicas
   utime_t last_cap_renew;
 
 public:

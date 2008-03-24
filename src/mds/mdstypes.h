@@ -682,4 +682,14 @@ inline ostream& operator<<(ostream& out, mdsco_db_line_prefix o) {
 }
 
 
+struct ClientReplica {
+  int client;
+  SimpleLock *lock;
+  utime_t ttl;
+  xlist<ClientReplica*>::item session_replica_item;
+  ClientReplica(int c, SimpleLock *l) : client(c), lock(l),
+					session_replica_item(this) { }
+};
+
+
 #endif

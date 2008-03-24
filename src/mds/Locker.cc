@@ -40,6 +40,7 @@
 #include "messages/MInodeFileCaps.h"
 
 #include "messages/MLock.h"
+#include "messages/MClientLock.h"
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
@@ -1247,6 +1248,27 @@ void Locker::simple_lock(SimpleLock *lock)
       lock->get_num_clients()) {
     // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
+
+    // bcast to client replicas
+    for (hash_map<int, ClientReplica*>::iterator p = lock->client_set.begin();
+	 p != lock->client_set.end();
+	 p++) {
+      ClientReplica *r = p->second;
+      if (lock->get_type() == LOCK_OTYPE_DN) {
+	CDentry *dn = (CDentry*)lock->get_parent();
+	mds->send_message_client(new MClientLock(lock->get_type(), 
+						 CEPH_MDS_LOCK_REVOKE,
+						 dn->get_dir()->ino(),
+						 dn->get_name()),
+				 r->client);
+      } else {
+	CInode *in = (CInode*)lock->get_parent();
+	mds->send_message_client(new MClientLock(lock->get_type(),
+						 CEPH_MDS_LOCK_REVOKE,
+						 in->ino()),
+				 r->client);
+      }
+    }
     
     // change lock
     lock->set_state(LOCK_GLOCKR);

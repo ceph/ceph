@@ -81,6 +81,7 @@ inline const char *get_simplelock_state_name(int n) {
 
 class MDRequest;
 
+
 class SimpleLock {
 public:
   static const int WAIT_RD          = (1<<0);  // to read
@@ -100,11 +101,14 @@ protected:
   // lock state
   int state;
   set<int> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
-  set<int> client_set;  // auth+rep
 
   // local state
   int num_rdlock;
   MDRequest *xlock_by;
+
+public:
+  hash_map<int, ClientReplica*> client_set; // auth+rep
+
 
 public:
   SimpleLock(MDSCacheObject *o, int t, int wo) :
@@ -173,10 +177,10 @@ public:
 	 p != parent->replicas_end(); 
 	 ++p)
       gather_set.insert(p->first);
-    for (set<in>::const_iterator p = client_set.begin();
+    for (hash_map<int,ClientReplica*>::const_iterator p = client_set.begin();
 	 p != client_set.end();
 	 p++)
-      gather_set.insert(-1-*p);
+      gather_set.insert(-1 - p->second->client);
   }
   bool is_gathering() { return !gather_set.empty(); }
   bool is_gathering(int i) {
@@ -309,7 +313,7 @@ public:
     out << get_simplelock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
     if (!client_set.empty())
-      out << " c=" << client_set;
+      out << " c=" << client_set.size();
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())

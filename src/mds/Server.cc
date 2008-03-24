@@ -530,17 +530,19 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   }
   */
 
-  // include trace
-  if (tracei)
-    reply->set_trace_dist( tracei, mds->get_nodeid() );
-  
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   
   // send reply
   if (req->get_client_inst().name.is_mds())
     delete reply;   // mds doesn't need a reply
-  else
+  else {
+    // include trace
+    if (tracei)
+      set_trace_dist(mdr->session, reply, tracei);
+
     messenger->send_message(reply, req->get_client_inst());
+
+  }
   
   // finish request
   mdcache->request_finish(mdr);
@@ -551,6 +553,37 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
     mdcache->eval_remote(tracei->get_parent_dn());
 }
 
+void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
+{
+  // inode, dentry, dir, ..., inode
+  bufferlist bl;
+  int whoami = mds->get_nodeid();
+  int client = session->get_client();
+  __u32 numi = 0;
+  utime_t ttl = g_clock.now();
+  ttl += 60.0;  // FIXME
+
+  while (true) {
+    // inode
+    InodeStat::_encode(bl, in);
+    numi++;
+    CDentry *dn = in->get_parent_dn();
+    if (!dn) break;
+    
+    // dentry
+    ::_encode_simple(dn->get_name(), bl);
+    ClientReplica *r = dn->lock.client_set[client];
+    if (!r) 
+      r = dn->lock.client_set[client] = new ClientReplica(client, &dn->lock);
+    r->ttl = ttl;
+    session->replicas.push_back(&r->session_replica_item);
+    
+    // dir
+    DirStat::_encode(bl, dn->get_dir(), whoami);
+    in = dn->get_dir()->get_inode();
+  }
+  reply->set_trace_dist(numi, bl);
+}
 
 
 

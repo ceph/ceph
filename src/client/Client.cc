@@ -45,6 +45,7 @@ using namespace std;
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
+#include "messages/MClientLock.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -455,6 +456,8 @@ Inode* Client::insert_trace(MClientReply *reply)
 {
   Inode *cur = root;
   utime_t now = g_clock.real_now();
+  utime_t ttl = now;
+  ttl += 60.0;  /* FIXME ASKJSDFJKDFJKDFSJK*/
 
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
 
@@ -484,8 +487,10 @@ Inode* Client::insert_trace(MClientReply *reply)
       ++pdn;      
 
       // move to top of lru!
-      if (cur->dn) 
+      if (cur->dn) {
         lru.lru_touch(cur->dn);
+	cur->dn->ttl = ttl;
+      }
     }
 
     // set cache ttl
@@ -1094,6 +1099,41 @@ void Client::kick_requests(int mds)
       p->second->retry_attempt++;   // inc retry counter
       send_request(p->second, mds);
     }
+}
+
+
+
+/************
+ * locks
+ */
+
+void Client::handle_lock(MClientLock *m)
+{
+  dout(10) << "handle_lock " << *m << dendl;
+
+  assert(m->action == CEPH_MDS_LOCK_REVOKE);
+  
+  Inode *in;
+  if (inode_map.count(m->ino) == 0) {
+    dout(10) << " don't have inode " << m->ino << dendl;
+    goto revoke;
+  }
+  in = inode_map[m->ino];
+
+  if (m->lock_type == LOCK_OTYPE_DN) {
+    if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
+      dout(10) << " don't have dir|dentry " << m->ino << "/" << m->dname <<dendl;
+      goto revoke;
+    }
+    Dentry *dn = in->dir->dentries[m->dname];
+    dout(10) << " reset ttl on " << dn << dendl;
+    dn->ttl = utime_t();
+  }
+  
+ revoke:
+  messenger->send_message(new MClientLock(m->lock_type, m->action, m->ino, m->dname),
+			  m->get_source_inst());
+  delete m;
 }
 
 
@@ -3447,6 +3487,7 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   Inode *diri = 0;
   Inode *in = 0;
   int r = 0;
+  utime_t now = g_clock.now();
 
   if (inode_map.count(parent) == 0) {
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOENT (parent DNE... WTF)" << dendl;
@@ -3466,9 +3507,13 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   if (diri->dir &&
       diri->dir->dentries.count(dname)) {
     Dentry *dn = diri->dir->dentries[dname];
-    touch_dn(dn);
-    in = dn->inode;
-  } else {
+    if (dn->ttl > now) {
+      touch_dn(dn);
+      in = dn->inode;
+      dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry" << dendl;
+    }
+  } 
+  if (!in) {
     string path;
     diri->make_path(path);
     path += "/";
