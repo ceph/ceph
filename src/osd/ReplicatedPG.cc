@@ -638,7 +638,7 @@ void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t,
 void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
 					  pg_t pgid, int op, pobject_t poid, 
 					  off_t offset, off_t length, bufferlist& bl,
-					  eversion_t& version, objectrev_t crev, objectrev_t rev)
+					  eversion_t& version, __u32 inc_lock, objectrev_t crev, objectrev_t rev)
 {
   bool did_clone = false;
 
@@ -690,13 +690,6 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
     }
     break;
 
-  case CEPH_OSD_OP_MININCLOCK:
-    {
-      uint32_t mininc = length;
-      t.setattr(poid, "mininclock", &mininc, sizeof(mininc));
-    }
-    break;
-
   case CEPH_OSD_OP_BALANCEREADS:
     {
       bool bal = true;
@@ -718,6 +711,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       bufferlist nbl;
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
       t.write(poid, offset, length, nbl);
+      if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
     
@@ -729,8 +723,10 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       if (r >= 0) {
 	if (offset == 0 && offset + length >= (off_t)st.st_size) 
 	  t.remove(poid);
-	else
+	else {
 	  t.zero(poid, offset, length);
+	  if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+	}
       } else {
 	// noop?
 	dout(10) << "apply_transaction zero on " << poid << ", but dne?  stat returns " << r << dendl;
@@ -741,6 +737,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
       t.truncate(poid, length);
+      if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
     
@@ -929,7 +926,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->op->get_op(), 
 				repop->op->get_offset(), repop->op->get_length(), 
 				osd->osdmap->get_epoch(), 
-				repop->rep_tid, repop->new_version);
+				repop->rep_tid, repop->op->get_inc_lock(), repop->new_version);
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
   wr->set_pg_trim_to(peers_complete_thru);
   wr->set_peer_stat(osd->get_my_stat_for(now, dest));
@@ -1252,7 +1249,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     prepare_op_transaction(repop->t, op->get_reqid(),
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(),
-			   nv, crev, poid.oid.rev);
+			   nv, op->get_inc_lock(), crev, poid.oid.rev);
   }
   
   // (logical) local ack.
@@ -1307,7 +1304,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     prepare_op_transaction(t, op->get_reqid(), 
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(), 
-			   nv, crev, 0);
+			   nv, op->get_inc_lock(), crev, 0);
   }
   
   C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
@@ -1394,7 +1391,7 @@ void ReplicatedPG::pull(pobject_t poid)
   tid_t tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PULL,
 				   0, 0, 
-				   osd->osdmap->get_epoch(), tid, v);
+				   osd->osdmap->get_epoch(), tid, 0, v);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(fromosd));
   
   // take note
@@ -1434,7 +1431,7 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   // send
   osd_reqid_t rid;  // useless?
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, bl.length(),
-				osd->osdmap->get_epoch(), osd->get_tid(), v);
+				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
   subop->set_data(bl);   // note: claims bl, set length above here!
   subop->set_attrset(attrset);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));

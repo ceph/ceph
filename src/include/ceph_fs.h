@@ -495,7 +495,6 @@ enum {
 	CEPH_OSD_OP_RDUNLOCK   = 23,
 	CEPH_OSD_OP_UPLOCK     = 24,
 	CEPH_OSD_OP_DNLOCK     = 25,
-	CEPH_OSD_OP_MININCLOCK = 26, /* minimum incarnation lock */
 
 	CEPH_OSD_OP_PULL       = 30,
 	CEPH_OSD_OP_PUSH       = 31,

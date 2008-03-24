@@ -48,8 +48,6 @@ public:
     case CEPH_OSD_OP_UPLOCK: return "uplock"; 
     case CEPH_OSD_OP_DNLOCK: return "dnlock"; 
 
-    case CEPH_OSD_OP_MININCLOCK: return "mininclock";
-
     case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
     case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 
