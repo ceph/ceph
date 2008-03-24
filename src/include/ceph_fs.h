@@ -510,7 +510,7 @@ enum {
 	CEPH_OSD_OP_ACK = 1,          /* want (or is) "ack" ack */
 	CEPH_OSD_OP_SAFE = 2,         /* want (or is) "safe" ack */
 	CEPH_OSD_OP_RETRY = 4,        /* resend attempt */
-	CEPH_OSD_OP_INC_LOCK = 8,     /* acquire/require incarnation lock */
+	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
 	CEPH_OSD_OP_BALANCE_READS = 16
 };
 

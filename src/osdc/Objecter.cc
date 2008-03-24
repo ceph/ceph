@@ -409,7 +409,8 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   if (pg.active_tids.empty()) close_pg( m->get_pg() );
   
   // success?
-  if (m->get_result() == -EINCLOCKED) {
+  if (m->get_result() == -EINCLOCKED &&
+      st->flags & CEPH_OSD_OP_INCLOCK_FAIL == 0) {
     dout(7) << " got -EINCLOCKED, resubmitting" << dendl;
     stat_submit(st);
     delete m;
@@ -421,13 +422,12 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
     delete m;
     return;
   }
-  //assert(m->get_result() >= 0);
 
   // ok!
   if (m->get_result() < 0) {
-	*st->size = -1;
+    *st->size = -1;
   } else {
-	*st->size = m->get_length();
+    *st->size = m->get_length();
   }
 
   // finish, clean up
@@ -436,8 +436,8 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   // done
   delete st;
   if (onfinish) {
-	onfinish->finish(m->get_result());
-	delete onfinish;
+    onfinish->finish(m->get_result());
+    delete onfinish;
   }
 
   delete m;
@@ -548,6 +548,19 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   // our op finished
   rd->ops.erase(tid);
 
+  // fail?
+  if (m->get_result() == -EINCLOCKED &&
+      rd->flags & CEPH_OSD_OP_INCLOCK_FAIL) {
+    dout(7) << " got -EINCLOCKED, failing" << dendl;
+    if (rd->onfinish) {
+      rd->onfinish->finish(-EINCLOCKED);
+      delete rd->onfinish;
+    }
+    delete rd;
+    delete m;
+    return;
+  }
+
   // success?
   if (m->get_result() == -EAGAIN ||
       m->get_result() == -EINCLOCKED) {
@@ -556,7 +569,6 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
     delete m;
     return;
   }
-  //assert(m->get_result() >= 0);
 
   // what buffer offset are we?
   dout(7) << " got frag from " << m->get_oid() << " "
@@ -862,6 +874,24 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     delete m;
     return;
   }
+  
+  int rc = 0;
+  if (m->get_result() == -EINCLOCKED && wr->flags & CEPH_OSD_OP_INCLOCK_FAIL) {
+    dout(7) << " got -EINCLOCKED, failing" << dendl;
+    rc = -EINCLOCKED;
+    if (wr->onack) {
+      onack = wr->onack;
+      wr->onack = 0;
+      num_unacked--;
+    }
+    if (wr->oncommit) {
+      oncommit = wr->oncommit;
+      wr->oncommit = 0;
+      num_uncommitted--;
+    }
+    goto done;
+  }
+
   if (m->get_result() == -EAGAIN ||
       m->get_result() == -EINCLOCKED) {
     dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
@@ -919,6 +949,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   }
 
   // done?
+ done:
   if (wr->onack == 0 && wr->oncommit == 0) {
     // remove from tid/osd maps
     assert(pg.active_tids.count(tid));
@@ -935,11 +966,11 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   // do callbacks
   if (onack) {
-    onack->finish(0);
+    onack->finish(rc);
     delete onack;
   }
   if (oncommit) {
-    oncommit->finish(0);
+    oncommit->finish(rc);
     delete oncommit;
   }
 

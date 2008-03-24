@@ -778,11 +778,17 @@ class C_MDS_BootStart : public Context {
   int nextstep;
 public:
   C_MDS_BootStart(MDS *m, int n) : mds(m), nextstep(n) {}
-  void finish(int r) { mds->boot_start(nextstep); }
+  void finish(int r) { mds->boot_start(nextstep, r); }
 };
 
-void MDS::boot_start(int step)
+void MDS::boot_start(int step, int r)
 {
+  if (r < 0) {
+    dout(0) << "boot_start encountered an error, failing" << dendl;
+    suicide();
+    return;
+  }
+
   switch (step) {
   case 0:
     step = 1;  // fall-thru.

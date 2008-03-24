@@ -101,6 +101,7 @@ class Journaler {
   static const int STATE_ACTIVE = 2;
 
   int state;
+  int error;
 
   // header
   utime_t last_wrote_head;
@@ -173,7 +174,7 @@ public:
   Journaler(inode_t& inode_, Objecter *obj, Logger *l, Mutex *lk, off_t fl=0, off_t pff=0) : 
     inode(inode_), objecter(obj), filer(objecter), logger(l), 
     lock(lk), timer(*lk), delay_flush_event(0),
-    state(STATE_UNDEF),
+    state(STATE_UNDEF), error(0),
     write_pos(0), flush_pos(0), ack_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(fl), prefetch_from(pff),
@@ -203,6 +204,7 @@ public:
   void write_head(Context *onsave=0);
 
   bool is_active() { return state == STATE_ACTIVE; }
+  int get_error() { return error; }
 
   off_t get_write_pos() const { return write_pos; }
   off_t get_write_ack_pos() const { return ack_pos; }

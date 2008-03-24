@@ -168,11 +168,10 @@ osd/rados
 - transaction prepare/commit
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
-- read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
+
+- a more general fencing mechanism?  per-object granularity isn't usually a good match.
 
 - consider implications of nvram writeahead logs
-- clean shutdown?
-- pgmonitor should supplement failure detection
 
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 

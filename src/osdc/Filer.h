@@ -53,6 +53,7 @@ class Filer {
     inode_t inode;
     off_t from;
     off_t *end;
+    int flags;
     Context *onfinish;
     
     list<ObjectExtent> probing;
@@ -61,8 +62,8 @@ class Filer {
     map<object_t, off_t> known;
     map<object_t, tid_t> ops;
 
-    Probe(inode_t &i, off_t f, off_t *e, Context *c) : 
-      inode(i), from(f), end(e), onfinish(c), probing_len(0) {}
+    Probe(inode_t &i, off_t f, off_t *e, int fl, Context *c) : 
+      inode(i), from(f), end(e), flags(fl), onfinish(c), probing_len(0) {}
   };
   
   class C_Probe;
@@ -137,6 +138,7 @@ class Filer {
   int probe_fwd(inode_t& inode,
 		off_t start_from,
 		off_t *end,
+		int flags,
 		Context *onfinish);
 
 

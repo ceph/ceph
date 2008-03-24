@@ -50,11 +50,12 @@ public:
 int Filer::probe_fwd(inode_t& inode,
 		     off_t start_from,
 		     off_t *end,
+		     int flags,
 		     Context *onfinish) 
 {
   dout(10) << "probe_fwd " << hex << inode.ino << dec << " starting from " << start_from << dendl;
 
-  Probe *probe = new Probe(inode, start_from, end, onfinish);
+  Probe *probe = new Probe(inode, start_from, end, flags, onfinish);
 
   // period (bytes before we jump unto a new set of object(s))
   off_t period = ceph_file_layout_period(inode.layout);
@@ -80,7 +81,7 @@ void Filer::_probe(Probe *probe)
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, 0, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, probe->flags, c);
   }
 }
 
