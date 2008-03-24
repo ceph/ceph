@@ -665,6 +665,7 @@ void MDSMonitor::tick()
       case MDSMap::STATE_ACTIVE:
       case MDSMap::STATE_STOPPING:
 	newstate = MDSMap::STATE_FAILED;
+	pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	break;
 
       default:
@@ -732,6 +733,7 @@ void MDSMonitor::do_stop()
     case MDSMap::STATE_REJOIN:
       // BUG: hrm, if this is the case, the STOPPING gusy won't be able to stop, will they?
       pending_mdsmap.mds_state[p->first] = MDSMap::STATE_FAILED;
+      pending_mdsmap.last_failure = pending_mdsmap.epoch;
       break;
     }
   }

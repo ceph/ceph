@@ -123,7 +123,7 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), client_epoch(0), anchortable(0), root(0) {
+  MDSMap() : epoch(0), client_epoch(0), last_failure(0), anchortable(0), root(0) {
     // hack.. this doesn't really belong here
     cap_bit_timeout = (int)g_conf.mds_cap_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
@@ -134,6 +134,8 @@ class MDSMap {
 
   const utime_t& get_created() const { return created; }
   void set_created(utime_t ct) { created = ct; }
+
+  epoch_t get_last_failure() const { return last_failure; }
 
   int get_max_mds() const { return max_mds; }
   void set_max_mds(int m) { max_mds = m; }
