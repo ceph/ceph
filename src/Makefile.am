@@ -111,7 +111,7 @@ JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
 	${CXX} -fPIC -shared -Wl,-soname,$@.1 -I. ${AM_CXXFLAGS} -I${JAVA_BASE}/include -I${JAVA_BASE}/include/linux ${LIBS} $^ -o $@
 
-BUILT_SOURCES += libhadoopcephfs.so
+#BUILT_SOURCES += libhadoopcephfs.so
 
 
 ##
