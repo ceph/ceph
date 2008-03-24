@@ -373,7 +373,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_STAT, flags);
-    if (inc_lock >= 0) {
+    if (inc_lock > 0) {
       st->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
     }
@@ -409,6 +409,12 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   if (pg.active_tids.empty()) close_pg( m->get_pg() );
   
   // success?
+  if (m->get_result() == -EINCLOCKED) {
+    dout(7) << " got -EINCLOCKED, resubmitting" << dendl;
+    stat_submit(st);
+    delete m;
+    return;
+  }
   if (m->get_result() == -EAGAIN) {
     dout(7) << " got -EAGAIN, resubmitting" << dendl;
     stat_submit(st);
@@ -495,7 +501,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_READ, flags);
-    if (inc_lock >= 0) {
+    if (inc_lock > 0) {
       rd->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
     }
@@ -543,8 +549,9 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   rd->ops.erase(tid);
 
   // success?
-  if (m->get_result() == -EAGAIN) {
-    dout(7) << " got -EAGAIN, resubmitting" << dendl;
+  if (m->get_result() == -EAGAIN ||
+      m->get_result() == -EINCLOCKED) {
+    dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
     readx_submit(rd, rd->ops[tid], true);
     delete m;
     return;
@@ -785,7 +792,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   wr->op, flags);
-    if (inc_lock >= 0) {
+    if (inc_lock > 0) {
       wr->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
     }
@@ -855,8 +862,9 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     delete m;
     return;
   }
-  if (m->get_result() == -EAGAIN) {
-    dout(7) << " got -EAGAIN, resubmitting" << dendl;
+  if (m->get_result() == -EAGAIN ||
+      m->get_result() == -EINCLOCKED) {
+    dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
     if (wr->onack) num_unacked--;
     if (wr->oncommit) num_uncommitted--;
     if (wr->waitfor_ack.count(tid)) 

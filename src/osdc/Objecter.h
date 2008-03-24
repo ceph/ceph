@@ -72,7 +72,7 @@ class Objecter {
   public:
     list<ObjectExtent> extents;
     int inc_lock;
-    OSDOp() : inc_lock(-1) {}
+    OSDOp() : inc_lock(0) {}
     virtual ~OSDOp() {}
   };
 
@@ -191,7 +191,7 @@ class Objecter {
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
     messenger(m), monmap(mm), osdmap(om), 
-    last_tid(0), client_inc(-1), inc_lock(-1),
+    last_tid(0), client_inc(-1), inc_lock(0),
     num_unacked(0), num_uncommitted(0),
     last_epoch_requested(0),
     client_lock(l), timer(l)

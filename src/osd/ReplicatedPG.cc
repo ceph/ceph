@@ -512,41 +512,56 @@ void ReplicatedPG::op_read(MOSDOp *op)
   if (oid.rev && !pick_object_rev(oid)) {
     // we have no revision for this request.
     r = -EEXIST;
-  } else {
-    switch (op->get_op()) {
-    case CEPH_OSD_OP_READ:
-      {
-	// read into a buffer
-	bufferlist bl;
-	r = osd->store->read(poid, 
-			     op->get_offset(), op->get_length(),
-			     bl);
-	reply->set_data(bl);
-	if (r >= 0) 
-	  reply->set_length(r);
-	else
-	  reply->set_length(0);
-	dout(10) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
-      }
-      osd->logger->inc("c_rd");
-      osd->logger->inc("c_rdb", op->get_length());
-      break;
-
-    case CEPH_OSD_OP_STAT:
-      {
-	struct stat st;
-	memset(&st, sizeof(st), 0);
-	r = osd->store->stat(poid, &st);
-	if (r >= 0)
-	  reply->set_length(st.st_size);
-      }
-      break;
-
-    default:
-      assert(0);
+    goto done;
+  } 
+  
+  // check inc_lock?
+  if (op->get_inc_lock() > 0) {
+    __u32 cur = 0;
+    osd->store->getattr(poid, "inc_lock", &cur, sizeof(cur));
+    if (cur > op->get_inc_lock()) {
+      dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
+	       << " on " << poid << dendl;
+      r = -EINCLOCKED;
+      goto done;
     }
   }
   
+  switch (op->get_op()) {
+  case CEPH_OSD_OP_READ:
+    {
+      // read into a buffer
+      bufferlist bl;
+      r = osd->store->read(poid, 
+			   op->get_offset(), op->get_length(),
+			   bl);
+      reply->set_data(bl);
+      if (r >= 0) 
+	reply->set_length(r);
+      else
+	reply->set_length(0);
+      dout(10) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
+    }
+    osd->logger->inc("c_rd");
+    osd->logger->inc("c_rdb", op->get_length());
+    break;
+    
+  case CEPH_OSD_OP_STAT:
+    {
+      struct stat st;
+      memset(&st, sizeof(st), 0);
+      r = osd->store->stat(poid, &st);
+      if (r >= 0)
+	reply->set_length(st.st_size);
+    }
+    break;
+    
+  default:
+      assert(0);
+  }
+  
+  
+ done:
   if (r >= 0) {
     reply->set_result(0);
 
@@ -1141,6 +1156,20 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       block_if_wrlocked(op)) 
     return; // op will be handled later, after the object unlocks
   
+  // check inc_lock?
+  if (op->get_inc_lock() > 0) {
+    __u32 cur = 0;
+    osd->store->getattr(poid, "inc_lock", &cur, sizeof(cur));
+    if (cur > op->get_inc_lock()) {
+      dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
+	       << " on " << poid << dendl;
+      MOSDOpReply *reply = new MOSDOpReply(op, -EINCLOCKED, osd->osdmap->get_epoch(), true);
+      osd->messenger->send_message(reply, op->get_client_inst());
+      delete op;
+      return;
+    }
+  }
+
   // balance-reads set?
   char v;
   if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&

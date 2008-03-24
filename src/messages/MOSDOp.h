@@ -27,6 +27,8 @@
  *
  */
 
+#define EINCLOCKED 100
+
 class MOSDOp : public Message {
 public:
   static const char* get_opname(int op) {
@@ -90,6 +92,8 @@ public:
 
   off_t get_length() const { return le64_to_cpu(head.length); }
   off_t get_offset() const { return le64_to_cpu(head.offset); }
+
+  unsigned get_inc_lock() const { return le32_to_cpu(head.inc_lock); }
 
   void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
   const ceph_osd_peer_stat& get_peer_stat() { return head.peer_stat; }
