@@ -562,20 +562,23 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
   __u32 numi = 0;
   utime_t ttl = g_clock.now();
   ttl += 60.0;  // FIXME
+  ClientReplica *r;
 
   while (true) {
     // inode
-    InodeStat::_encode(bl, in);
+    r = in->get_client_replica(client);
+    r->ttl = ttl;
+    r->mask |= InodeStat::_encode(bl, in);
     numi++;
+
     CDentry *dn = in->get_parent_dn();
     if (!dn) break;
     
     // dentry
     ::_encode_simple(dn->get_name(), bl);
-    ClientReplica *r = dn->lock.client_set[client];
-    if (!r) 
-      r = dn->lock.client_set[client] = new ClientReplica(client, &dn->lock);
+    r = dn->get_client_replica(client);
     r->ttl = ttl;
+    r->mask = CEPH_STAT_MASK_DN;
     session->replicas.push_back(&r->session_replica_item);
     
     // dir
@@ -1477,12 +1480,12 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> xlocks = mdr->xlocks;
   
   int mask = req->head.args.stat.mask;
-  if (mask & STAT_MASK_LINK) rdlocks.insert(&ref->linklock);
-  if (mask & STAT_MASK_AUTH) rdlocks.insert(&ref->authlock);
+  if (mask & CEPH_STAT_MASK_LINK) rdlocks.insert(&ref->linklock);
+  if (mask & CEPH_STAT_MASK_AUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
-      mask & STAT_MASK_FILE) rdlocks.insert(&ref->filelock);
+      mask & CEPH_STAT_MASK_FILE) rdlocks.insert(&ref->filelock);
   if (ref->is_dir() &&
-      mask & STAT_MASK_MTIME) rdlocks.insert(&ref->dirlock);
+      mask & CEPH_STAT_MASK_MTIME) rdlocks.insert(&ref->dirlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;

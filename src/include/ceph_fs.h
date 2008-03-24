@@ -308,6 +308,29 @@ struct ceph_statfs {
 #define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata */
 
 
+/*
+ * metadata/stat validity masks
+ */
+#define CEPH_STAT_MASK_INODE    1   /* immutable inode bits */
+#define CEPH_STAT_MASK_AUTH     2
+#define CEPH_STAT_MASK_LINK     4
+#define CEPH_STAT_MASK_FILE     8
+#define CEPH_STAT_MASK_INODE_ALL 15
+
+#define CEPH_STAT_MASK_DN       64  /* dentry */
+
+#define CEPH_STAT_MASK_TYPE     CEPH_STAT_MASK_INODE  /* mode >> 12 */
+#define CEPH_STAT_MASK_SYMLINK  CEPH_STAT_MASK_INODE
+#define CEPH_STAT_MASK_LAYOUT   CEPH_STAT_MASK_INODE
+#define CEPH_STAT_MASK_UID      CEPH_STAT_MASK_AUTH
+#define CEPH_STAT_MASK_GID      CEPH_STAT_MASK_AUTH
+#define CEPH_STAT_MASK_MODE     CEPH_STAT_MASK_AUTH
+#define CEPH_STAT_MASK_NLINK    CEPH_STAT_MASK_LINK
+#define CEPH_STAT_MASK_MTIME    CEPH_STAT_MASK_FILE
+#define CEPH_STAT_MASK_SIZE     CEPH_STAT_MASK_FILE
+#define CEPH_STAT_MASK_ATIME    CEPH_STAT_MASK_FILE  /* fixme */
+
+
 /* client_session */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,

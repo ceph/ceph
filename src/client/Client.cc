@@ -320,7 +320,7 @@ void Client::trim_cache()
  *
  * insert + link a single dentry + inode into the metadata cache.
  */
-Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
+Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname, utime_t ttl)
 {
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
@@ -376,17 +376,17 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
   } else {
     // actually update info
     dout(12) << " stat inode mask is " << st->mask << dendl;
-    if (st->mask & STAT_MASK_BASE) {
+    if (st->mask & CEPH_STAT_MASK_INODE) {
       dn->inode->inode = st->inode;
       dn->inode->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
     }
 
     // ...but don't clobber our mtime, size!
     /* isn't this handled below?
-    if ((dn->inode->mask & STAT_MASK_SIZE) == 0 &&
+    if ((dn->inode->mask & CEPH_STAT_MASK_SIZE) == 0 &&
         dn->inode->file_wr_size > dn->inode->inode.size) 
       dn->inode->inode.size = dn->inode->file_wr_size;
-    if ((dn->inode->mask & STAT_MASK_MTIME) == 0 &&
+    if ((dn->inode->mask & CEPH_STAT_MASK_MTIME) == 0 &&
         dn->inode->file_wr_mtime > dn->inode->inode.mtime) 
       dn->inode->inode.mtime = dn->inode->file_wr_mtime;
     */
@@ -397,6 +397,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname)
 
   // save the mask
   dn->inode->mask = st->mask;
+  dn->inode->ttl = ttl;
   
   // or do we have newer size/mtime from writing?
   if (dn->inode->file_wr_size > dn->inode->inode.size)
@@ -478,25 +479,21 @@ Inode* Client::insert_trace(MClientReply *reply)
         inode_map[root->inode.ino] = root;
 	root->dir_auth = 0;
       }
+      cur->ttl = ttl;
+      cur->mask = (*pin)->mask;
     } else {
       // not root.
       Dir *dir = cur->open_dir();
       assert(pdn != reply->get_trace_dn().end());
-      cur = this->insert_inode(dir, *pin, *pdn);
+      cur = this->insert_inode(dir, *pin, *pdn, ttl);
       dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << dendl;
       ++pdn;      
 
-      // move to top of lru!
+      // touch dn
       if (cur->dn) {
         lru.lru_touch(cur->dn);
 	cur->dn->ttl = ttl;
       }
-    }
-
-    // set cache ttl
-    if (g_conf.client_cache_stat_ttl) {
-      cur->valid_until = now;
-      cur->valid_until += g_conf.client_cache_stat_ttl;
     }
 
     // update dir dist info
@@ -510,12 +507,21 @@ Inode* Client::insert_trace(MClientReply *reply)
 
 
 
-
+/*
+ * bleh, dentry vs inode semantics here are sloppy
+ */
 Dentry *Client::lookup(filepath& path)
 {
   dout(14) << "lookup " << path << dendl;
 
-  Inode *cur = root;
+  Inode *cur;
+  if (path.get_ino()) {
+    if (inode_map.count(path.get_ino()))
+      cur = inode_map[path.get_ino()];
+    else
+      return NULL;
+  } else
+    cur = root;
   if (!cur) return NULL;
 
   Dentry *dn = 0;
@@ -526,7 +532,7 @@ Dentry *Client::lookup(filepath& path)
       Dir *dir = cur->dir;
       if (dir->dentries.count(path[i])) {
         dn = dir->dentries[path[i]];
-        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " valid_until " << dn->inode->valid_until << dendl;
+        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " ttl " << dn->inode->ttl << dendl;
       } else {
         dout(14) << " dentry " << path[i] << " dne" << dendl;
         return NULL;
@@ -537,9 +543,11 @@ Dentry *Client::lookup(filepath& path)
       return NULL;  // not a dir
     }
   }
-  
+
+  if (!dn) 
+    dn = cur->dn;
   if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " valid_until " << dn->inode->valid_until<< dendl;
+    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " ttl " << dn->inode->ttl << dendl;
   }
 
   return dn;
@@ -1510,7 +1518,7 @@ int Client::mount()
   //  fuse assumes it's always there.
   Inode *root;
   filepath fpath("", 1);
-  _do_lstat(fpath, STAT_MASK_ALL, &root);
+  _do_lstat(fpath, CEPH_STAT_MASK_INODE_ALL, &root);
   _ll_get(root);
 
   // trace?
@@ -1963,7 +1971,7 @@ int Client::_readlink(const char *path, char *buf, off_t size)
 { 
   Inode *in;
   filepath fpath(path);
-  int r = _do_lstat(fpath, STAT_MASK_BASE, &in);
+  int r = _do_lstat(fpath, CEPH_STAT_MASK_SYMLINK, &in);
   if (r == 0 && !in->inode.is_symlink()) r = -EINVAL;
   if (r == 0) {
     // copy into buf (at most size bytes)
@@ -1994,27 +2002,30 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
   inode_t inode;
   utime_t now = g_clock.real_now();
 
-  if (dn && 
-      now <= dn->inode->valid_until)
-    dout(10) << "_lstat has inode " << fpath << " with mask " << dn->inode->mask << ", want " << mask << dendl;
+  if (dn) {
+    if (now <= dn->inode->ttl) {
+      dout(10) << "_lstat has inode " << fpath << " with mask " << dn->inode->mask << ", want " << mask << dendl;
+    } else {
+      dout(10) << "_lstat has EXPIRED (" << dn->inode->ttl << ") inode " << fpath
+	       << " with mask " << dn->inode->mask << ", want " << mask 
+	       << dendl;
+    }
+  } else {
+    dout(10) << "_lstat has no dn for path " << fpath << dendl;
+  }
   
   if (dn && dn->inode &&
-      now <= dn->inode->valid_until &&
-      ((mask & ~STAT_MASK_BASE) || now <= dn->inode->valid_until) &&
+      now <= dn->inode->ttl &&
+      ((mask & ~CEPH_STAT_MASK_INODE) || now <= dn->inode->ttl) &&
       ((dn->inode->mask & mask) == mask)) {
     inode = dn->inode->inode;
-    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->valid_until << dendl;
+    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->ttl << dendl;
     
-    if (g_conf.client_cache_stat_ttl == 0)
-      dn->inode->valid_until = utime_t();           // only one stat allowed after each readdir
+    //if (g_conf.client_cache_stat_ttl == 0)
+    //dn->inode->ttl = utime_t();           // only one stat allowed after each readdir
 
     *in = dn->inode;
   } else {  
-    // FIXME where does FUSE maintain user information
-    //struct fuse_context *fc = fuse_get_context();
-    //req->set_caller_uid(fc->uid);
-    //req->set_caller_gid(fc->gid);
-    
     req = new MClientRequest(CEPH_MDS_OP_LSTAT, messenger->get_myinst());
     req->head.args.stat.mask = mask;
     req->set_filepath(fpath);
@@ -2087,7 +2098,7 @@ int Client::_lstat(const char *path, struct stat *stbuf)
 {
   Inode *in = 0;
   filepath fpath(path);
-  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
+  int res = _do_lstat(fpath, CEPH_STAT_MASK_INODE_ALL, &in);
   if (res == 0) {
     assert(in);
     fill_stat(in, stbuf);
@@ -2478,7 +2489,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
       assert(dir);
-      utime_t now = g_clock.real_now();
+      utime_t ttl = g_clock.real_now();
+      ttl += 60.0;
       
       list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
       for (list<string>::const_iterator pdn = reply->get_dir_dn().begin();
@@ -2488,17 +2500,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
         res++;
 	
 	// put in cache
-	Inode *in = this->insert_inode(dir, *pin, *pdn);
-	
-	if (g_conf.client_cache_stat_ttl) {
-	  in->valid_until = now;
-	  in->valid_until += g_conf.client_cache_stat_ttl;
-	}
-	else if (g_conf.client_cache_readdir_ttl) {
-	  in->valid_until = now;
-	  in->valid_until += g_conf.client_cache_readdir_ttl;
-	} else 
-	  in->valid_until = utime_t();
+	Inode *in = this->insert_inode(dir, *pin, *pdn, ttl);
 	
 	// contents to caller too!
 	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << dendl;
@@ -3299,7 +3301,7 @@ int Client::_fstat(Fh *f, struct stat *stbuf)
 {
   Inode *in = 0;
   filepath fpath("", f->inode->ino());
-  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
+  int res = _do_lstat(fpath, CEPH_STAT_MASK_INODE_ALL, &in);
   if (res == 0) {
     assert(in);
     fill_stat(in, stbuf);
@@ -3624,7 +3626,7 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr)
 
   Inode *in = _ll_get_inode(ino);
   filepath fpath("", in->ino());
-  int res = _do_lstat(fpath, STAT_MASK_ALL, &in);
+  int res = _do_lstat(fpath, CEPH_STAT_MASK_INODE_ALL, &in);
   if (res == 0)
     fill_stat(in, attr);
   return res;

@@ -4,6 +4,10 @@ code cleanup
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
 
+client leases
+- clean up readdir vs stat leases
+  - esp on client.. keep mask/ttl and onetime_mask/onetime_ttl?
+
 kernel client
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
 - procfs/debugfs

@@ -106,9 +106,6 @@ protected:
   int num_rdlock;
   MDRequest *xlock_by;
 
-public:
-  hash_map<int, ClientReplica*> client_set; // auth+rep
-
 
 public:
   SimpleLock(MDSCacheObject *o, int t, int wo) :
@@ -177,8 +174,8 @@ public:
 	 p != parent->replicas_end(); 
 	 ++p)
       gather_set.insert(p->first);
-    for (hash_map<int,ClientReplica*>::const_iterator p = client_set.begin();
-	 p != client_set.end();
+    for (hash_map<int,ClientReplica*>::const_iterator p = parent->client_replica_map.begin();
+	 p != parent->client_replica_map.end();
 	 p++)
       gather_set.insert(-1 - p->second->client);
   }
@@ -223,10 +220,8 @@ public:
   }
   MDRequest *get_xlocked_by() { return xlock_by; }
   
-  int get_num_clients() { return client_set.size(); }
-
   bool is_used() {
-    return is_xlocked() || is_rdlocked() || !client_set.empty();
+    return is_xlocked() || is_rdlocked() || !parent->client_replica_map.empty();
   }
 
   // encode/decode
@@ -312,8 +307,8 @@ public:
     out << get_lock_type_name(get_type()) << " ";
     out << get_simplelock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
-    if (!client_set.empty())
-      out << " c=" << client_set.size();
+    if (!parent->client_replica_map.empty())
+      out << " c=" << parent->client_replica_map.size();
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())

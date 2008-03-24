@@ -339,6 +339,20 @@ class MDSCacheObject;
 //#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
 
 
+/*
+ * for metadata leases to clients
+ */
+struct ClientReplica {
+  int client;
+  int mask;                 // CEPH_STAT_MASK_*
+  utime_t ttl;
+  MDSCacheObject *parent;
+  xlist<ClientReplica*>::item session_replica_item;
+  ClientReplica(int c) : 
+    client(c), mask(0),
+    session_replica_item(this) { }
+};
+
 
 // print hack
 struct mdsco_db_line_prefix {
@@ -542,9 +556,9 @@ protected:
 
 
   // --------------------------------------------
-  // replication
+  // replication (across mds cluster)
  protected:
-  map<int,int> replica_map;      // [auth] mds -> nonce
+  map<int,int> replica_map;   // [auth] mds -> nonce
   int          replica_nonce; // [replica] defined on replica
 
  public:
@@ -591,6 +605,22 @@ protected:
   int get_replica_nonce() { return replica_nonce;}
   void set_replica_nonce(int n) { replica_nonce = n; }
 
+
+  // ---------------------------------------------
+  // replicas (on clients)
+ public:
+  hash_map<int,ClientReplica*> client_replica_map;
+  
+  ClientReplica *get_client_replica(int c) {
+    if (client_replica_map.count(c))
+      return client_replica_map[c];
+    else
+      return client_replica_map[c] = new ClientReplica(c);
+  }
+  bool is_client_replicated() {
+    return !client_replica_map.empty();
+  }
+  
 
   // ---------------------------------------------
   // waiting
@@ -682,14 +712,6 @@ inline ostream& operator<<(ostream& out, mdsco_db_line_prefix o) {
 }
 
 
-struct ClientReplica {
-  int client;
-  SimpleLock *lock;
-  utime_t ttl;
-  xlist<ClientReplica*>::item session_replica_item;
-  ClientReplica(int c, SimpleLock *l) : client(c), lock(l),
-					session_replica_item(this) { }
-};
 
 
 #endif

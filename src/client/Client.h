@@ -129,8 +129,8 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  utime_t   valid_until;
-  int mask;
+  int       mask;
+  utime_t   ttl;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -197,7 +197,7 @@ class Inode {
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
     inode(_inode),
-    valid_until(0, 0),
+    mask(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
@@ -693,7 +693,7 @@ protected:
   void unlock_fh_pos(Fh *f);
   
   // metadata cache
-  Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
+  Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn, utime_t ttl);
   void update_dir_dist(Inode *in, DirStat *st);
   Inode* insert_trace(MClientReply *reply);
 

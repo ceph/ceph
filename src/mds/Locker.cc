@@ -1245,13 +1245,13 @@ void Locker::simple_lock(SimpleLock *lock)
   assert(lock->get_state() == LOCK_SYNC);
   
   if (lock->get_parent()->is_replicated() ||
-      lock->get_num_clients()) {
+      lock->get_parent()->is_client_replicated()) {
     // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
 
     // bcast to client replicas
-    for (hash_map<int, ClientReplica*>::iterator p = lock->client_set.begin();
-	 p != lock->client_set.end();
+    for (hash_map<int, ClientReplica*>::iterator p = lock->get_parent()->client_replica_map.begin();
+	 p != lock->get_parent()->client_replica_map.end();
 	 p++) {
       ClientReplica *r = p->second;
       if (lock->get_type() == LOCK_OTYPE_DN) {
