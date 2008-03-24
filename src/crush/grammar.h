@@ -101,7 +101,7 @@ struct crush_grammar : public grammar<crush_grammar>
       step_choose_firstn = str_p("choose_firstn") >> integer >> name;
       step_emit = str_p("emit");
       step = str_p("step") >> ( step_take | step_choose_indep | step_choose_firstn | step_emit );
-      crushrule = str_p("rule") >> name >> '{' 
+      crushrule = str_p("rule") >> !name >> '{' 
 			   >> str_p("pool") >> posint
 			   >> str_p("type") >> ( str_p("replicated") | str_p("raid4") )
 			   >> str_p("min_size") >> posint

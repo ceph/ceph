@@ -23,7 +23,7 @@ using namespace std;
 class CrushWrapper {
 public:
   struct crush_map *crush;
-  std::map<int, string> type_map; /* bucket type names */
+  std::map<int, string> type_map; /* bucket/device type names */
   std::map<int, string> name_map; /* bucket/device names */
   std::map<int, string> rule_name_map;
 
