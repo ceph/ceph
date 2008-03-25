@@ -622,7 +622,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
   ::_encode_simple(dmask, bl);
   numdn++;
-  dout(20) << " trace added " << dmask << " " << *dn << dendl;
+  dout(20) << " trace added " << (int)dmask << " " << *dn << dendl;
   
   // dir
   DirStat::_encode(bl, dn->get_dir(), whoami);
@@ -4090,7 +4090,8 @@ public:
     // set/pin ref inode for open()
     mdr->ref = newi;
     mdr->pin(newi);
-    
+    mdr->trace.push_back(dn);
+
     // ok, do the open.
     mds->server->handle_client_open(mdr);
   }
