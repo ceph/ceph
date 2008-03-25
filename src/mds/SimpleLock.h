@@ -17,27 +17,18 @@
 #define __SIMPLELOCK_H
 
 // -- lock types --
-// NOTE: this also defines the lock ordering!
-#define LOCK_OTYPE_DN       1
-
-#define LOCK_OTYPE_IVERSION 2
-#define LOCK_OTYPE_IFILE    3
-#define LOCK_OTYPE_IAUTH    4
-#define LOCK_OTYPE_ILINK    5
-#define LOCK_OTYPE_IDIRFRAGTREE 6
-#define LOCK_OTYPE_IDIR     7
-
-//#define LOCK_OTYPE_DIR      7  // not used
+// see CEPH_LOCK_*
 
 inline const char *get_lock_type_name(int t) {
   switch (t) {
-  case LOCK_OTYPE_DN: return "dn";
-  case LOCK_OTYPE_IVERSION: return "iversion";
-  case LOCK_OTYPE_IFILE: return "ifile";
-  case LOCK_OTYPE_IAUTH: return "iauth";
-  case LOCK_OTYPE_ILINK: return "ilink";
-  case LOCK_OTYPE_IDIRFRAGTREE: return "idft";
-  case LOCK_OTYPE_IDIR: return "idir";
+  case CEPH_LOCK_DN: return "dn";
+  case CEPH_LOCK_IVERSION: return "iversion";
+  case CEPH_LOCK_IFILE: return "ifile";
+  case CEPH_LOCK_IAUTH: return "iauth";
+  case CEPH_LOCK_ILINK: return "ilink";
+  case CEPH_LOCK_IDFT: return "idft";
+  case CEPH_LOCK_IDIR: return "idir";
+  case CEPH_LOCK_INO: return "ino";
   default: assert(0); return 0;
   }
 }
@@ -101,6 +92,7 @@ protected:
   // lock state
   int state;
   set<int> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+  int num_client_lease;
 
   // local state
   int num_rdlock;
@@ -110,7 +102,7 @@ protected:
 public:
   SimpleLock(MDSCacheObject *o, int t, int wo) :
     parent(o), type(t), wait_offset(wo),
-    state(LOCK_SYNC), 
+    state(LOCK_SYNC), num_client_lease(0),
     num_rdlock(0), xlock_by(0) { }
   virtual ~SimpleLock() {}
 
@@ -121,8 +113,8 @@ public:
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
       // first sort by object type (dn < inode)
-      if ((l->type>LOCK_OTYPE_DN) <  (r->type>LOCK_OTYPE_DN)) return true;
-      if ((l->type>LOCK_OTYPE_DN) == (r->type>LOCK_OTYPE_DN)) {
+      if ((l->type>CEPH_LOCK_DN) <  (r->type>CEPH_LOCK_DN)) return true;
+      if ((l->type>CEPH_LOCK_DN) == (r->type>CEPH_LOCK_DN)) {
 	// then sort by object
 	if (l->parent->is_lt(r->parent)) return true;
 	if (l->parent == r->parent) {
@@ -174,10 +166,6 @@ public:
 	 p != parent->replicas_end(); 
 	 ++p)
       gather_set.insert(p->first);
-    for (hash_map<int,ClientReplica*>::const_iterator p = parent->client_replica_map.begin();
-	 p != parent->client_replica_map.end();
-	 p++)
-      gather_set.insert(-1 - p->second->client);
   }
   bool is_gathering() { return !gather_set.empty(); }
   bool is_gathering(int i) {
@@ -221,7 +209,18 @@ public:
   MDRequest *get_xlocked_by() { return xlock_by; }
   
   bool is_used() {
-    return is_xlocked() || is_rdlocked() || !parent->client_replica_map.empty();
+    return is_xlocked() || is_rdlocked() || num_client_lease;
+  }
+
+  void get_client_lease() {
+    num_client_lease++;
+  }
+  void put_client_lease() {
+    assert(num_client_lease > 0);
+    num_client_lease--;
+  }
+  int get_num_client_lease() {
+    return num_client_lease;
   }
 
   // encode/decode
@@ -307,8 +306,8 @@ public:
     out << get_lock_type_name(get_type()) << " ";
     out << get_simplelock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
-    if (!parent->client_replica_map.empty())
-      out << " c=" << parent->client_replica_map.size();
+    if (num_client_lease)
+      out << " c=" << num_client_lease;
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())

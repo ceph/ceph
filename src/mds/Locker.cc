@@ -62,22 +62,23 @@ void Locker::dispatch(Message *m)
 
   switch (m->get_type()) {
 
-    // locking
+    // inter-mds locking
   case MSG_MDS_LOCK:
     handle_lock((MLock*)m);
     break;
-
-    // cache fun
+    // inter-mds caps
   case MSG_MDS_INODEFILECAPS:
     handle_inode_file_caps((MInodeFileCaps*)m);
     break;
 
+    // client sync
   case CEPH_MSG_CLIENT_FILECAPS:
     handle_client_file_caps((MClientFileCaps*)m);
     break;
-
+  case CEPH_MSG_CLIENT_LOCK:
+    handle_client_lock((MClientLock*)m);
+    break;
     
-
   default:
     assert(0);
   }
@@ -139,7 +140,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
 
     // augment xlock with a versionlock?
-    if ((*p)->get_type() > LOCK_OTYPE_IVERSION) {
+    if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
       CInode *in = (CInode*)(*p)->get_parent();
       if (mdr->is_master()) {
@@ -159,7 +160,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
-    else if ((*p)->get_type() == LOCK_OTYPE_IDIR &&
+    else if ((*p)->get_type() == CEPH_LOCK_IDIR &&
 	     !(*p)->get_parent()->is_auth() && !((ScatterLock*)(*p))->can_wrlock()) { // we might have to request a scatter
       dout(15) << " will also auth_pin " << *(*p)->get_parent() << " in case we need to request a scatter" << dendl;
       mustpin.insert(*p);
@@ -335,13 +336,26 @@ void Locker::drop_locks(MDRequest *mdr)
 
 // generics
 
+void Locker::eval_gather(SimpleLock *lock)
+{
+  switch (lock->get_type()) {
+  case CEPH_LOCK_IFILE:
+    return file_eval_gather((FileLock*)lock);
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
+    return scatter_eval_gather((ScatterLock*)lock);
+  default:
+    return simple_eval_gather(lock);
+  }
+}
+
 bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_rdlock_start((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_rdlock_start((ScatterLock*)lock, mdr);
   default:
     return simple_rdlock_start(lock, mdr);
@@ -351,10 +365,10 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
 void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_rdlock_finish((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_rdlock_finish((ScatterLock*)lock, mdr);
   default:
     return simple_rdlock_finish(lock, mdr);
@@ -364,10 +378,10 @@ void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_wrlock_start((ScatterLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mdr);
   default:
     assert(0); 
@@ -378,10 +392,10 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
 void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_wrlock_finish((ScatterLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_wrlock_finish((LocalLock*)lock, mdr);
   default:
     assert(0);
@@ -391,12 +405,12 @@ void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
 bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_xlock_start((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_xlock_start((LocalLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     assert(0);
   default:
     return simple_xlock_start(lock, mdr);
@@ -406,12 +420,12 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
 void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_xlock_finish((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_xlock_finish((LocalLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     assert(0);
   default:
     return simple_xlock_finish(lock, mdr);
@@ -936,7 +950,68 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 }
 
 
+void Locker::handle_client_lock(MClientLock *m)
+{
+  dout(10) << "handle_client_lock " << *m << dendl;
 
+  assert(m->get_source().is_client());
+  int client = m->get_source().num();
+
+  CInode *in = mdcache->get_inode(m->ino);
+  if (!in) {
+    dout(7) << "handle_client_lock don't have ino " << m->ino << dendl;
+    delete m;
+    return;
+  }
+  CDentry *dn = 0;
+  MDSCacheObject *p;
+  if (m->lock_type == CEPH_LOCK_DN) {
+    frag_t fg = in->pick_dirfrag(m->dname);
+    CDir *dir = in->get_dirfrag(fg);
+    if (dir) 
+      p = dn = dir->lookup(m->dname);
+    if (!dn) {
+      dout(7) << "handle_client_lock don't have dn " << m->ino << " " << m->dname << dendl;
+      delete m;
+      return;
+    }
+  } else {
+    p = in;
+  }
+  dout(10) << " on " << *p << dendl;
+
+  // replica and lock
+  SimpleLock *lock = p->get_lock(m->lock_type);
+  assert(lock);
+  ClientReplica *r = in->get_client_replica(client);
+  if (!r) {
+    dout(7) << "handle_client_lock didn't have replica for client" << client << " of " << *p << dendl;
+    delete m;
+    return;
+  } 
+
+  switch (m->action) {
+  case CEPH_MDS_LOCK_RELEASE:
+    {
+      dout(7) << "handle_client_lock client" << client
+	      << " release mask " << m->mask
+	      << " on " << *p << dendl;
+      int left = p->remove_client_replica(r, r->mask);
+      dout(10) << " remaining mask is " << left << " on " << *p << dendl;
+    }
+    break;
+
+  case CEPH_MDS_LOCK_RENEW:
+    assert(0); // implement me
+    break;
+  }
+
+  // eval/waiters
+  if (!lock->is_stable())
+    eval_gather(lock);
+
+  delete m;
+}
 
 
 
@@ -949,7 +1024,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info) 
 {
   switch (lock_type) {
-  case LOCK_OTYPE_DN:
+  case CEPH_LOCK_DN:
     {
       // be careful; info.dirfrag may have incorrect frag; recalculate based on dname.
       CInode *diri = mdcache->get_inode(info.dirfrag.ino);
@@ -969,11 +1044,11 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       return &dn->lock;
     }
 
-  case LOCK_OTYPE_IAUTH:
-  case LOCK_OTYPE_ILINK:
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IFILE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IAUTH:
+  case CEPH_LOCK_ILINK:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IFILE:
+  case CEPH_LOCK_IDIR:
     {
       CInode *in = mdcache->get_inode(info.ino);
       if (!in) {
@@ -981,11 +1056,11 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
 	return 0;
       }
       switch (lock_type) {
-      case LOCK_OTYPE_IAUTH: return &in->authlock;
-      case LOCK_OTYPE_ILINK: return &in->linklock;
-      case LOCK_OTYPE_IDIRFRAGTREE: return &in->dirfragtreelock;
-      case LOCK_OTYPE_IFILE: return &in->filelock;
-      case LOCK_OTYPE_IDIR: return &in->dirlock;
+      case CEPH_LOCK_IAUTH: return &in->authlock;
+      case CEPH_LOCK_ILINK: return &in->linklock;
+      case CEPH_LOCK_IDFT: return &in->dirfragtreelock;
+      case CEPH_LOCK_IFILE: return &in->filelock;
+      case CEPH_LOCK_IDIR: return &in->dirlock;
       }
     }
 
@@ -1012,18 +1087,18 @@ void Locker::handle_lock(MLock *m)
   }
 
   switch (lock->get_type()) {
-  case LOCK_OTYPE_DN:
-  case LOCK_OTYPE_IAUTH:
-  case LOCK_OTYPE_ILINK:
+  case CEPH_LOCK_DN:
+  case CEPH_LOCK_IAUTH:
+  case CEPH_LOCK_ILINK:
     handle_simple_lock(lock, m);
     break;
     
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     handle_file_lock((FileLock*)lock, m);
     break;
     
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;
 
@@ -1063,7 +1138,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
 
     // special case: trim replica no-longer-null dentry?
-    if (lock->get_type() == LOCK_OTYPE_DN) {
+    if (lock->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)lock->get_parent();
       if (dn->is_null() && m->get_data().length() > 0) {
 	dout(10) << "handle_simple_lock replica dentry null -> non-null, must trim " 
@@ -1161,6 +1236,7 @@ void Locker::simple_eval_gather(SimpleLock *lock)
   // finished gathering?
   if (lock->get_state() == LOCK_GLOCKR &&
       !lock->is_gathering() &&
+      lock->get_num_client_lease() == 0 &&
       !lock->is_rdlocked()) {
     dout(7) << "simple_eval finished gather on " << *lock << " on " << *lock->get_parent() << dendl;
 
@@ -1246,19 +1322,26 @@ void Locker::simple_lock(SimpleLock *lock)
   assert(lock->get_state() == LOCK_SYNC);
   
   if (lock->get_parent()->is_replicated() ||
-      lock->get_parent()->is_client_replicated()) {
+      lock->get_num_client_lease()) {
     // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
 
     // bcast to client replicas
+    int n = 0;
     for (hash_map<int, ClientReplica*>::iterator p = lock->get_parent()->client_replica_map.begin();
 	 p != lock->get_parent()->client_replica_map.end();
 	 p++) {
       ClientReplica *r = p->second;
-      if (lock->get_type() == LOCK_OTYPE_DN) {
+
+      if (r->mask & lock->get_type() == 0)
+	continue;
+
+      n++;
+      if (lock->get_type() == CEPH_LOCK_DN) {
 	CDentry *dn = (CDentry*)lock->get_parent();
 	mds->send_message_client(new MClientLock(lock->get_type(), 
 						 CEPH_MDS_LOCK_REVOKE,
+						 lock->get_type(),
 						 dn->get_dir()->ino(),
 						 dn->get_name()),
 				 r->client);
@@ -1266,10 +1349,12 @@ void Locker::simple_lock(SimpleLock *lock)
 	CInode *in = (CInode*)lock->get_parent();
 	mds->send_message_client(new MClientLock(lock->get_type(),
 						 CEPH_MDS_LOCK_REVOKE,
+						 lock->get_type(),
 						 in->ino()),
 				 r->client);
       }
     }
+    assert(n == lock->get_num_client_lease());
     
     // change lock
     lock->set_state(LOCK_GLOCKR);

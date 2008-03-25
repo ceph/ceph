@@ -132,10 +132,10 @@ struct InodeStat {
 
   static int _encode(bufferlist &bl, CInode *in) {
     // mask
-    int mask = CEPH_STAT_MASK_INODE;
-    if (in->authlock.can_rdlock(0)) mask |= CEPH_STAT_MASK_AUTH;
-    if (in->linklock.can_rdlock(0)) mask |= CEPH_STAT_MASK_LINK;
-    if (in->filelock.can_rdlock(0)) mask |= CEPH_STAT_MASK_FILE;
+    int mask = CEPH_LOCK_INO;
+    if (in->authlock.can_rdlock(0)) mask |= CEPH_LOCK_IAUTH;
+    if (in->linklock.can_rdlock(0)) mask |= CEPH_LOCK_ILINK;
+    if (in->filelock.can_rdlock(0)) mask |= CEPH_LOCK_IFILE;
 
     /*
      * note: encoding matches struct ceph_client_reply_inode

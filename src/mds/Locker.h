@@ -78,6 +78,7 @@ public:
   void drop_locks(MDRequest *mdr);
 
 protected:
+  void eval_gather(SimpleLock *lock);
   bool rdlock_start(SimpleLock *lock, MDRequest *mdr);
   void rdlock_finish(SimpleLock *lock, MDRequest *mdr);
   bool xlock_start(SimpleLock *lock, MDRequest *mdr);
@@ -189,6 +190,7 @@ protected:
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);
+  void handle_client_lock(class MClientLock *m);
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);

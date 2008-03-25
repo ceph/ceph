@@ -229,7 +229,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       ClientReplica *r = session->replicas.front();
       MDSCacheObject *p = r->parent;
       dout(10) << " killing client replica of " << *p << dendl;
-      p->remove_client_replica(r);
+      p->remove_client_replica(r, r->mask);
     }
 
     if (session->is_closing())
@@ -577,8 +577,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
     // inode
     int mask = InodeStat::_encode(bl, in);
     if (mask) {
-      r = in->get_client_replica(client);
-      r->mask |= mask;
+      r = in->add_client_replica(client, mask);
       session->touch_replica(r);
       mdcache->touch_client_replica(r, ttl);
     }
@@ -591,8 +590,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
     char dmask = 0;
     ::_encode_simple(dn->get_name(), bl);
     if (dn->lock.can_rdlock(0)) {
-      r = dn->get_client_replica(client);
-      dmask = r->mask = CEPH_STAT_MASK_DN;
+      dmask = CEPH_LOCK_DN;
+      r = dn->add_client_replica(client, dmask);
       session->touch_replica(r);
       mdcache->touch_client_replica(r, ttl);
     }
@@ -1497,10 +1496,10 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> xlocks = mdr->xlocks;
   
   int mask = req->head.args.stat.mask;
-  if (mask & CEPH_STAT_MASK_LINK) rdlocks.insert(&ref->linklock);
-  if (mask & CEPH_STAT_MASK_AUTH) rdlocks.insert(&ref->authlock);
+  if (mask & CEPH_LOCK_ILINK) rdlocks.insert(&ref->linklock);
+  if (mask & CEPH_LOCK_IAUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
-      mask & CEPH_STAT_MASK_FILE) rdlocks.insert(&ref->filelock);
+      mask & CEPH_LOCK_IFILE) rdlocks.insert(&ref->filelock);
   if (ref->is_dir() &&
       mask & CEPH_STAT_MASK_MTIME) rdlocks.insert(&ref->dirlock);
 

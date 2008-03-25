@@ -88,7 +88,6 @@ using namespace std;
 
 
 
-
 MDCache::MDCache(MDS *m)
 {
   mds = m;
@@ -3504,7 +3503,7 @@ void MDCache::trim_client_replicas()
     if (r->ttl > now) break;
     MDSCacheObject *p = r->parent;
     dout(10) << " expiring client" << r->client << " replica of " << *p << dendl;
-    p->remove_client_replica(r);
+    p->remove_client_replica(r, r->mask);
   }
 
   dout(10) << "trim_client_replicas finish - " << client_replicas.size() << " replicas" << dendl;

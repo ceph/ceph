@@ -1151,7 +1151,7 @@ void Client::handle_lock(MClientLock *m)
   }
   in = inode_map[m->ino];
 
-  if (m->lock_type == LOCK_OTYPE_DN) {
+  if (m->lock_type == CEPH_LOCK_DN) {
     if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
       dout(10) << " don't have dir|dentry " << m->ino << "/" << m->dname <<dendl;
       goto revoke;
@@ -1159,10 +1159,16 @@ void Client::handle_lock(MClientLock *m)
     Dentry *dn = in->dir->dentries[m->dname];
     dout(10) << " reset ttl on " << dn << dendl;
     dn->ttl = utime_t();
+  } else {
+    int newmask = in->mask & ~m->mask;
+    dout(10) << " reset inode " << in->ino() 
+	     << " mask " << in->mask << " -> " << newmask << dendl;
+    in->mask = newmask;
   }
   
  revoke:
-  messenger->send_message(new MClientLock(m->lock_type, m->action, m->ino, m->dname),
+  messenger->send_message(new MClientLock(m->lock_type, CEPH_MDS_LOCK_RELEASE,
+					  m->mask, m->ino, m->dname),
 			  m->get_source_inst());
   delete m;
 }

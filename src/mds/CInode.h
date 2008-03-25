@@ -243,12 +243,12 @@ public:
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
-    versionlock(this, LOCK_OTYPE_IVERSION, WAIT_VERSIONLOCK_OFFSET),
-    authlock(this, LOCK_OTYPE_IAUTH, WAIT_AUTHLOCK_OFFSET),
-    linklock(this, LOCK_OTYPE_ILINK, WAIT_LINKLOCK_OFFSET),
-    dirfragtreelock(this, LOCK_OTYPE_IDIRFRAGTREE, WAIT_DIRFRAGTREELOCK_OFFSET),
-    filelock(this, LOCK_OTYPE_IFILE, WAIT_FILELOCK_OFFSET),
-    dirlock(this, LOCK_OTYPE_IDIR, WAIT_DIRLOCK_OFFSET)
+    versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
+    authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),
+    linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
+    dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
+    filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
+    dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET)
   {
     state = 0;  
     if (auth) state_set(STATE_AUTH);
@@ -337,13 +337,13 @@ public:
 
   SimpleLock* get_lock(int type) {
     switch (type) {
-    case LOCK_OTYPE_IFILE: return &filelock;
-    case LOCK_OTYPE_IAUTH: return &authlock;
-    case LOCK_OTYPE_ILINK: return &linklock;
-    case LOCK_OTYPE_IDIRFRAGTREE: return &dirfragtreelock;
-    case LOCK_OTYPE_IDIR: return &dirlock;
-    default: assert(0); return 0;
+    case CEPH_LOCK_IFILE: return &filelock;
+    case CEPH_LOCK_IAUTH: return &authlock;
+    case CEPH_LOCK_ILINK: return &linklock;
+    case CEPH_LOCK_IDFT: return &dirfragtreelock;
+    case CEPH_LOCK_IDIR: return &dirlock;
     }
+    return 0;
   }
   void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);

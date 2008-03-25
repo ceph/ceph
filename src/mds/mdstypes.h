@@ -616,26 +616,18 @@ protected:
   // replicas (on clients)
  public:
   hash_map<int,ClientReplica*> client_replica_map;
-  
+
   ClientReplica *get_client_replica(int c) {
     if (client_replica_map.count(c))
       return client_replica_map[c];
-    else {
-      if (client_replica_map.empty())
-	get(PIN_CLIENTREPLICA);
-      return client_replica_map[c] = new ClientReplica(c, this);
-    }
+    return 0;
   }
-  bool is_client_replicated() {
+  bool is_client_replicated__() {
     return !client_replica_map.empty();
   }
-  void remove_client_replica(ClientReplica *r) {
-    assert(r->parent == this);
-    client_replica_map.erase(r->client);
-    delete r;
-    if (client_replica_map.empty())
-      put(PIN_CLIENTREPLICA);
-  }
+
+  ClientReplica *add_client_replica(int c, int mask);
+  int remove_client_replica(ClientReplica *r, int mask);  // returns remaining mask (if any)
   
 
   // ---------------------------------------------

@@ -267,8 +267,7 @@ struct ceph_msg_header {
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_FILECAPS        0x310
-
-#define CEPH_MSG_CLIENT_LOCK            28
+#define CEPH_MSG_CLIENT_LOCK            0x311
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -309,26 +308,35 @@ struct ceph_statfs {
 
 
 /*
- * metadata/stat validity masks
+ * metadata lock types.
+ *  - these are bitmasks.. we can compose them
+ *  - they also define the lock ordering by the MDS
+ *  - a few of these are internal to the mds
  */
-#define CEPH_STAT_MASK_INODE    1   /* immutable inode bits */
-#define CEPH_STAT_MASK_AUTH     2
-#define CEPH_STAT_MASK_LINK     4
-#define CEPH_STAT_MASK_FILE     8
-#define CEPH_STAT_MASK_INODE_ALL 15
+#define CEPH_LOCK_DN          1
+#define CEPH_LOCK_IVERSION    2     /* mds internal */
+#define CEPH_LOCK_IFILE       4
+#define CEPH_LOCK_IAUTH       8
+#define CEPH_LOCK_ILINK       16
+#define CEPH_LOCK_IDFT        32    /* dir frag tree */
+#define CEPH_LOCK_IDIR        64    /* mds internal */
+#define CEPH_LOCK_INO         128   /* immutable inode bits; not actually a lock */
 
-#define CEPH_STAT_MASK_DN       64  /* dentry */
-
-#define CEPH_STAT_MASK_TYPE     CEPH_STAT_MASK_INODE  /* mode >> 12 */
-#define CEPH_STAT_MASK_SYMLINK  CEPH_STAT_MASK_INODE
-#define CEPH_STAT_MASK_LAYOUT   CEPH_STAT_MASK_INODE
-#define CEPH_STAT_MASK_UID      CEPH_STAT_MASK_AUTH
-#define CEPH_STAT_MASK_GID      CEPH_STAT_MASK_AUTH
-#define CEPH_STAT_MASK_MODE     CEPH_STAT_MASK_AUTH
-#define CEPH_STAT_MASK_NLINK    CEPH_STAT_MASK_LINK
-#define CEPH_STAT_MASK_MTIME    CEPH_STAT_MASK_FILE
-#define CEPH_STAT_MASK_SIZE     CEPH_STAT_MASK_FILE
-#define CEPH_STAT_MASK_ATIME    CEPH_STAT_MASK_FILE  /* fixme */
+/*
+ * stat masks are defined in terms of the locks that cover inode fields.
+ */
+#define CEPH_STAT_MASK_INODE    CEPH_LOCK_INO
+#define CEPH_STAT_MASK_TYPE     CEPH_LOCK_INO  /* mode >> 12 */
+#define CEPH_STAT_MASK_SYMLINK  CEPH_LOCK_INO
+#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_INO
+#define CEPH_STAT_MASK_UID      CEPH_LOCK_IAUTH
+#define CEPH_STAT_MASK_GID      CEPH_LOCK_IAUTH
+#define CEPH_STAT_MASK_MODE     CEPH_LOCK_IAUTH
+#define CEPH_STAT_MASK_NLINK    CEPH_LOCK_ILINK
+#define CEPH_STAT_MASK_MTIME    CEPH_LOCK_IFILE
+#define CEPH_STAT_MASK_SIZE     CEPH_LOCK_IFILE
+#define CEPH_STAT_MASK_ATIME    CEPH_LOCK_IFILE  /* fixme */
+#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_IFILE|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
 
 
 /* client_session */

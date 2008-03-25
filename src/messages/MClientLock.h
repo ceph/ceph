@@ -32,31 +32,32 @@ static const char *get_clientlock_action_name(int a) {
 struct MClientLock : public Message {
   __u8 lock_type;
   __u8 action;
+  __u16 mask;
   __u64 ino;
   string dname;
 
-
   MClientLock() : Message(CEPH_MSG_CLIENT_LOCK) {}
-  MClientLock(int l, int ac, __u64 i) :
+  MClientLock(int l, int ac, int m, __u64 i) :
     Message(CEPH_MSG_CLIENT_LOCK),
-    lock_type(l), action(ac), ino(i) {}
-  MClientLock(int l, int ac, __u64 i, const string& d) :
+    lock_type(l), action(ac), mask(m), ino(i) {}
+  MClientLock(int l, int ac, int m, __u64 i, const string& d) :
     Message(CEPH_MSG_CLIENT_LOCK),
-    lock_type(l), action(ac), ino(i), dname(d) {}
-  MClientLock(SimpleLock *lock, int ac, __u64 i) :
-    Message(CEPH_MSG_CLIENT_LOCK),
-    lock_type(lock->get_type()),
-    action(ac), ino(i) {}
-  MClientLock(SimpleLock *lock, int ac, __u64 i, const string& d) :
+    lock_type(l), action(ac), mask(m), ino(i), dname(d) {}
+  MClientLock(SimpleLock *lock, int ac, int m, __u64 i) :
     Message(CEPH_MSG_CLIENT_LOCK),
     lock_type(lock->get_type()),
-    action(ac), ino(i), dname(d) {}
+    action(ac), mask(m), ino(i) {}
+  MClientLock(SimpleLock *lock, int ac, int m, __u64 i, const string& d) :
+    Message(CEPH_MSG_CLIENT_LOCK),
+    lock_type(lock->get_type()),
+    action(ac), mask(m), ino(i), dname(d) {}
 
   const char *get_type_name() { return "client_lock"; }
   void print(ostream& out) {
     out << "client_lock(a=" << get_clientlock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)
-	<< " " << ino;
+	<< " mask " << mask;
+    out << " " << inodeno_t(ino);
     if (dname.length())
       out << "/" << dname;
     out << ")";
@@ -65,12 +66,14 @@ struct MClientLock : public Message {
   void decode_payload() {
     int off = 0;
     ::_decode(lock_type, payload, off);
+    ::_decode(mask, payload, off);
     ::_decode(action, payload, off);
     ::_decode(ino, payload, off);
     ::_decode(dname, payload, off);
   }
   virtual void encode_payload() {
     ::_encode(lock_type, payload);
+    ::_encode(mask, payload);
     ::_encode(action, payload);
     ::_encode(ino, payload);
     ::_encode(dname, payload);
