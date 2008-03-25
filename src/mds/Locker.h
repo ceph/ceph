@@ -190,7 +190,7 @@ protected:
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);
-  void handle_client_lock(class MClientLock *m);
+  void handle_client_lease(class MClientLease *m);
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);

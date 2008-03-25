@@ -267,7 +267,7 @@ struct ceph_msg_header {
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_FILECAPS        0x310
-#define CEPH_MSG_CLIENT_LOCK            0x311
+#define CEPH_MSG_CLIENT_LEASE           0x311
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -498,9 +498,11 @@ struct ceph_mds_file_caps {
 	struct ceph_timeval mtime, atime;
 } __attribute__ ((packed));
 
-#define CEPH_MDS_LOCK_REVOKE  1
-#define CEPH_MDS_LOCK_RELEASE 2
-#define CEPH_MDS_LOCK_RENEW   3
+
+#define CEPH_MDS_LEASE_REVOKE  1  /*    mds  -> client */
+#define CEPH_MDS_LEASE_RELEASE 2  /* client  -> mds    */
+#define CEPH_MDS_LEASE_RENEW   3  /* client <-> mds    */
+
 
 /* client reconnect */
 struct ceph_mds_cap_reconnect {

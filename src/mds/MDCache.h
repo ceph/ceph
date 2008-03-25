@@ -269,7 +269,7 @@ class MDCache {
   set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
 
   // client replicas
-  xlist<ClientReplica*> client_replicas;
+  xlist<ClientLease*> client_leases;
 
   // -- discover --
   // waiters
@@ -298,8 +298,8 @@ public:
   int get_num_inodes() { return inode_map.size(); }
   int get_num_dentries() { return lru.lru_get_size(); }
 
-  void touch_client_replica(ClientReplica *r, utime_t ttl) {
-    client_replicas.push_back(&r->replica_item);
+  void touch_client_lease(ClientLease *r, utime_t ttl) {
+    client_leases.push_back(&r->lease_item);
     r->ttl = ttl;
   }
 
@@ -503,7 +503,7 @@ public:
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 
-  void trim_client_replicas();
+  void trim_client_leases();
 
   // shutdown
   void shutdown_start();

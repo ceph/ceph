@@ -45,7 +45,7 @@ using namespace std;
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
-#include "messages/MClientLock.h"
+#include "messages/MClientLease.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -994,8 +994,8 @@ void Client::dispatch(Message *m)
   case CEPH_MSG_CLIENT_FILECAPS:
     handle_file_caps((MClientFileCaps*)m);
     break;
-  case CEPH_MSG_CLIENT_LOCK:
-    handle_lock((MClientLock*)m);
+  case CEPH_MSG_CLIENT_LEASE:
+    handle_lease((MClientLease*)m);
     break;
 
   case CEPH_MSG_STATFS_REPLY:
@@ -1138,11 +1138,11 @@ void Client::kick_requests(int mds)
  * locks
  */
 
-void Client::handle_lock(MClientLock *m)
+void Client::handle_lease(MClientLease *m)
 {
-  dout(10) << "handle_lock " << *m << dendl;
+  dout(10) << "handle_lease " << *m << dendl;
 
-  assert(m->action == CEPH_MDS_LOCK_REVOKE);
+  assert(m->action == CEPH_MDS_LEASE_REVOKE);
   
   Inode *in;
   if (inode_map.count(m->ino) == 0) {
@@ -1151,7 +1151,7 @@ void Client::handle_lock(MClientLock *m)
   }
   in = inode_map[m->ino];
 
-  if (m->lock_type == CEPH_LOCK_DN) {
+  if (m->lock == CEPH_LOCK_DN) {
     if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
       dout(10) << " don't have dir|dentry " << m->ino << "/" << m->dname <<dendl;
       goto revoke;
@@ -1167,7 +1167,7 @@ void Client::handle_lock(MClientLock *m)
   }
   
  revoke:
-  messenger->send_message(new MClientLock(m->lock_type, CEPH_MDS_LOCK_RELEASE,
+  messenger->send_message(new MClientLease(m->lock, CEPH_MDS_LEASE_RELEASE,
 					  m->mask, m->ino, m->dname),
 			  m->get_source_inst());
   delete m;

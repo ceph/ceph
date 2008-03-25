@@ -55,7 +55,7 @@ class MStatfsReply;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
-class MClientLock;
+class MClientLease;
 class MMonMap;
 
 class Filer;
@@ -679,7 +679,7 @@ protected:
   void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 
-  void handle_lock(MClientLock *m);
+  void handle_lease(MClientLease *m);
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);

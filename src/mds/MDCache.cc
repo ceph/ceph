@@ -3493,20 +3493,20 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
 
 
 
-void MDCache::trim_client_replicas()
+void MDCache::trim_client_leases()
 {
-  dout(10) << "trim_client_replicas start - " << client_replicas.size() << " replicas" << dendl;
+  dout(10) << "trim_client_leases start - " << client_leases.size() << " leases" << dendl;
 
   utime_t now = g_clock.now();
-  while (!client_replicas.empty()) {
-    ClientReplica *r = client_replicas.front();
+  while (!client_leases.empty()) {
+    ClientLease *r = client_leases.front();
     if (r->ttl > now) break;
     MDSCacheObject *p = r->parent;
-    dout(10) << " expiring client" << r->client << " replica of " << *p << dendl;
-    p->remove_client_replica(r, r->mask);
+    dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
+    p->remove_client_lease(r, r->mask);
   }
 
-  dout(10) << "trim_client_replicas finish - " << client_replicas.size() << " replicas" << dendl;
+  dout(10) << "trim_client_leases finish - " << client_leases.size() << " leases" << dendl;
 }
 
 

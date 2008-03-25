@@ -225,11 +225,11 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       dout(10) << " killing capability on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
-    while (!session->replicas.empty()) {
-      ClientReplica *r = session->replicas.front();
+    while (!session->leases.empty()) {
+      ClientLease *r = session->leases.front();
       MDSCacheObject *p = r->parent;
-      dout(10) << " killing client replica of " << *p << dendl;
-      p->remove_client_replica(r, r->mask);
+      dout(10) << " killing client lease of " << *p << dendl;
+      p->remove_client_lease(r, r->mask);
     }
 
     if (session->is_closing())
@@ -567,7 +567,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
   int whoami = mds->get_nodeid();
   int client = session->get_client();
   __u32 numi = 0;
-  ClientReplica *r;
+  ClientLease *l;
 
   utime_t ttl = g_clock.now();
   ttl += g_conf.mds_client_lease;
@@ -577,9 +577,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
     // inode
     int mask = InodeStat::_encode(bl, in);
     if (mask) {
-      r = in->add_client_replica(client, mask);
-      session->touch_replica(r);
-      mdcache->touch_client_replica(r, ttl);
+      l = in->add_client_lease(client, mask);
+      session->touch_lease(l);
+      mdcache->touch_client_lease(l, ttl);
     }
     numi++;
 
@@ -591,9 +591,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
     ::_encode_simple(dn->get_name(), bl);
     if (dn->lock.can_rdlock(0)) {
       dmask = CEPH_LOCK_DN;
-      r = dn->add_client_replica(client, dmask);
-      session->touch_replica(r);
-      mdcache->touch_client_replica(r, ttl);
+      l = dn->add_client_lease(client, dmask);
+      session->touch_lease(l);
+      mdcache->touch_client_lease(l, ttl);
     }
     ::_encode_simple(dmask, bl);
     

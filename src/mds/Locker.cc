@@ -40,7 +40,7 @@
 #include "messages/MInodeFileCaps.h"
 
 #include "messages/MLock.h"
-#include "messages/MClientLock.h"
+#include "messages/MClientLease.h"
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
@@ -75,8 +75,8 @@ void Locker::dispatch(Message *m)
   case CEPH_MSG_CLIENT_FILECAPS:
     handle_client_file_caps((MClientFileCaps*)m);
     break;
-  case CEPH_MSG_CLIENT_LOCK:
-    handle_client_lock((MClientLock*)m);
+  case CEPH_MSG_CLIENT_LEASE:
+    handle_client_lease((MClientLease*)m);
     break;
     
   default:
@@ -950,28 +950,28 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 }
 
 
-void Locker::handle_client_lock(MClientLock *m)
+void Locker::handle_client_lease(MClientLease *m)
 {
-  dout(10) << "handle_client_lock " << *m << dendl;
+  dout(10) << "handle_client_lease " << *m << dendl;
 
   assert(m->get_source().is_client());
   int client = m->get_source().num();
 
   CInode *in = mdcache->get_inode(m->ino);
   if (!in) {
-    dout(7) << "handle_client_lock don't have ino " << m->ino << dendl;
+    dout(7) << "handle_client_lease don't have ino " << m->ino << dendl;
     delete m;
     return;
   }
   CDentry *dn = 0;
   MDSCacheObject *p;
-  if (m->lock_type == CEPH_LOCK_DN) {
+  if (m->lock == CEPH_LOCK_DN) {
     frag_t fg = in->pick_dirfrag(m->dname);
     CDir *dir = in->get_dirfrag(fg);
     if (dir) 
       p = dn = dir->lookup(m->dname);
     if (!dn) {
-      dout(7) << "handle_client_lock don't have dn " << m->ino << " " << m->dname << dendl;
+      dout(7) << "handle_client_lease don't have dn " << m->ino << " " << m->dname << dendl;
       delete m;
       return;
     }
@@ -981,27 +981,27 @@ void Locker::handle_client_lock(MClientLock *m)
   dout(10) << " on " << *p << dendl;
 
   // replica and lock
-  SimpleLock *lock = p->get_lock(m->lock_type);
+  SimpleLock *lock = p->get_lock(m->lock);
   assert(lock);
-  ClientReplica *r = in->get_client_replica(client);
-  if (!r) {
-    dout(7) << "handle_client_lock didn't have replica for client" << client << " of " << *p << dendl;
+  ClientLease *l = in->get_client_lease(client);
+  if (!l) {
+    dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *p << dendl;
     delete m;
     return;
   } 
 
   switch (m->action) {
-  case CEPH_MDS_LOCK_RELEASE:
+  case CEPH_MDS_LEASE_RELEASE:
     {
-      dout(7) << "handle_client_lock client" << client
+      dout(7) << "handle_client_lease client" << client
 	      << " release mask " << m->mask
 	      << " on " << *p << dendl;
-      int left = p->remove_client_replica(r, r->mask);
+      int left = p->remove_client_lease(l, l->mask);
       dout(10) << " remaining mask is " << left << " on " << *p << dendl;
     }
     break;
 
-  case CEPH_MDS_LOCK_RENEW:
+  case CEPH_MDS_LEASE_RENEW:
     assert(0); // implement me
     break;
   }
@@ -1328,30 +1328,30 @@ void Locker::simple_lock(SimpleLock *lock)
 
     // bcast to client replicas
     int n = 0;
-    for (hash_map<int, ClientReplica*>::iterator p = lock->get_parent()->client_replica_map.begin();
-	 p != lock->get_parent()->client_replica_map.end();
+    for (hash_map<int, ClientLease*>::iterator p = lock->get_parent()->client_lease_map.begin();
+	 p != lock->get_parent()->client_lease_map.end();
 	 p++) {
-      ClientReplica *r = p->second;
+      ClientLease *l = p->second;
 
-      if (r->mask & lock->get_type() == 0)
+      if (l->mask & lock->get_type() == 0)
 	continue;
 
       n++;
       if (lock->get_type() == CEPH_LOCK_DN) {
 	CDentry *dn = (CDentry*)lock->get_parent();
-	mds->send_message_client(new MClientLock(lock->get_type(), 
-						 CEPH_MDS_LOCK_REVOKE,
-						 lock->get_type(),
-						 dn->get_dir()->ino(),
-						 dn->get_name()),
-				 r->client);
+	mds->send_message_client(new MClientLease(lock->get_type(), 
+						  CEPH_MDS_LEASE_REVOKE,
+						  lock->get_type(),
+						  dn->get_dir()->ino(),
+						  dn->get_name()),
+				 l->client);
       } else {
 	CInode *in = (CInode*)lock->get_parent();
-	mds->send_message_client(new MClientLock(lock->get_type(),
-						 CEPH_MDS_LOCK_REVOKE,
-						 lock->get_type(),
-						 in->ino()),
-				 r->client);
+	mds->send_message_client(new MClientLease(lock->get_type(),
+						  CEPH_MDS_LEASE_REVOKE,
+						  lock->get_type(),
+						  in->ino()),
+				 l->client);
       }
     }
     assert(n == lock->get_num_client_lease());

@@ -1140,7 +1140,7 @@ void MDS::_dispatch(Message *m)
 
     // trim cache
     mdcache->trim();
-    mdcache->trim_client_replicas();
+    mdcache->trim_client_leases();
   }
 
   

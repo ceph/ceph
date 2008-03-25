@@ -20,19 +20,19 @@
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " " << this << " "
 #define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " " << this << " "
 
-ClientReplica *MDSCacheObject::add_client_replica(int c, int mask) 
+ClientLease *MDSCacheObject::add_client_lease(int c, int mask) 
 {
-  ClientReplica *r;
-  if (client_replica_map.count(c))
-    r = client_replica_map[c];
+  ClientLease *l;
+  if (client_lease_map.count(c))
+    l = client_lease_map[c];
   else {
-    if (client_replica_map.empty())
-      get(PIN_CLIENTREPLICA);
-    r = client_replica_map[c] = new ClientReplica(c, this);
+    if (client_lease_map.empty())
+      get(PIN_CLIENTLEASE);
+    l = client_lease_map[c] = new ClientLease(c, this);
   }
   
-  int adding = ~r->mask & mask;
-  dout(10) << " had " << r->mask << " adding " << mask << " -> new " << adding << dendl;
+  int adding = ~l->mask & mask;
+  dout(10) << " had " << l->mask << " adding " << mask << " -> new " << adding << dendl;
   int b = 0;
   while (adding) {
     if (adding & 1) {
@@ -45,17 +45,17 @@ ClientReplica *MDSCacheObject::add_client_replica(int c, int mask)
     b++;
     adding = adding >> 1;
   }
-  r->mask |= mask;
+  l->mask |= mask;
   
-  return r;
+  return l;
 }
 
-int MDSCacheObject::remove_client_replica(ClientReplica *r, int mask) 
+int MDSCacheObject::remove_client_lease(ClientLease *l, int mask) 
 {
-  assert(r->parent == this);
+  assert(l->parent == this);
   
-  int removing = r->mask & mask;
-  dout(10) << "had " << r->mask << " removing " << mask << " -> " << removing << dendl;
+  int removing = l->mask & mask;
+  dout(10) << "had " << l->mask << " removing " << mask << " -> " << removing << dendl;
   int b = 0;
   while (removing) {
     if (removing & 1) {
@@ -69,15 +69,15 @@ int MDSCacheObject::remove_client_replica(ClientReplica *r, int mask)
     removing = removing >> 1;
   }
 
-  r->mask &= ~mask;
-  if (r->mask)
-    return r->mask;
+  l->mask &= ~mask;
+  if (l->mask)
+    return l->mask;
 
   // remove!
-  client_replica_map.erase(r->client);
-  delete r;
-  if (client_replica_map.empty())
-    put(PIN_CLIENTREPLICA);
+  client_lease_map.erase(l->client);
+  delete l;
+  if (client_lease_map.empty())
+    put(PIN_CLIENTLEASE);
   return 0;
 }
 

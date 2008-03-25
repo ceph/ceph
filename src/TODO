@@ -5,7 +5,6 @@ code cleanup
 - addr=?
 
 client leases
-- make sure callbacks behave
 - clean up readdir vs stat leases
   - esp on client.. keep mask/ttl and onetime_mask/onetime_ttl?
 /- time out on mds
@@ -14,8 +13,7 @@ client leases
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
   - or inode fields we are chmodding, etc.
 - rework reply trace to allow negative dentries...  maybe hard links...
-- mds: implement release handler
-
+- lease renewals (to avoid blocking client ops?)
 
 kernel client
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)

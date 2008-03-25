@@ -65,7 +65,7 @@ private:
   version_t cap_push_seq;        // cap push seq #
 public:
   xlist<Capability*> caps;  // inodes with caps; front=most recently used
-  xlist<ClientReplica*> replicas;  // metadata object replicas
+  xlist<ClientLease*> leases;  // metadata leases to clients
   utime_t last_cap_renew;
 
 public:
@@ -75,8 +75,8 @@ public:
   void touch_cap(Capability *cap) {
     caps.push_back(&cap->session_caps_item);
   }
-  void touch_replica(ClientReplica *r) {
-    replicas.push_back(&r->session_replica_item);
+  void touch_lease(ClientLease *r) {
+    leases.push_back(&r->session_lease_item);
   }
 
   // -- completed requests --
