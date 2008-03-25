@@ -446,6 +446,7 @@ public:
     MClientRequest *request;    
     bufferlist request_payload;  // in case i have to retry
 
+    utime_t  sent_stamp;
     bool     idempotent;         // is request idempotent?
     set<int> mds;                // who i am asking
     int      resend_mds;         // someone wants you to (re)send the request here
@@ -475,7 +476,7 @@ public:
   };
   map<tid_t,StatfsRequest*> statfs_requests;
   
-  MClientReply *make_request(MClientRequest *req, int use_auth=-1);
+  MClientReply *make_request(MClientRequest *req, Inode **ppin=0, int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds);
@@ -695,7 +696,7 @@ protected:
   // metadata cache
   Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn, utime_t ttl);
   void update_dir_dist(Inode *in, DirStat *st);
-  Inode* insert_trace(MClientReply *reply);
+  Inode* insert_trace(MClientReply *reply, utime_t ttl);
 
   // ----------------------
   // fs ops.

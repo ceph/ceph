@@ -207,6 +207,7 @@ class MClientReply : public Message {
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
   void set_lease_duration_ms(int ms) { st.lease_duration_ms = cpu_to_le32(ms); }
+  int get_lease_duration_ms() { return le32_to_cpu(st.lease_duration_ms); }
 
   MClientReply() : dir_dir(0) {}
   MClientReply(MClientRequest *req, int result = 0) : 

@@ -397,7 +397,7 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname, utime_
 
   // save the mask
   dn->inode->mask = st->mask;
-  dn->inode->ttl = ttl;
+  if (ttl > dn->inode->ttl) dn->inode->ttl = ttl;
   
   // or do we have newer size/mtime from writing?
   if (dn->inode->file_wr_size > dn->inode->inode.size)
@@ -453,12 +453,10 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  *
  * insert a trace from a MDS reply into the cache.
  */
-Inode* Client::insert_trace(MClientReply *reply)
+Inode* Client::insert_trace(MClientReply *reply, utime_t ttl)
 {
   Inode *cur = root;
   utime_t now = g_clock.real_now();
-  utime_t ttl = now;
-  ttl += 60.0;  /* FIXME ASKJSDFJKDFJKDFSJK*/
 
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
 
@@ -479,7 +477,7 @@ Inode* Client::insert_trace(MClientReply *reply)
         inode_map[root->inode.ino] = root;
 	root->dir_auth = 0;
       }
-      cur->ttl = ttl;
+      if (ttl > cur->ttl) cur->ttl = ttl;
       cur->mask = (*pin)->mask;
     } else {
       // not root.
@@ -627,8 +625,7 @@ int Client::choose_target_mds(MClientRequest *req)
 
 
 
-MClientReply *Client::make_request(MClientRequest *req,
-                                   int use_mds)  // this param is purely for debug hacking
+MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, int use_mds)
 {
   // time the call
   utime_t start = g_clock.real_now();
@@ -664,7 +661,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   request.idempotent = req->is_idempotent();
 
   // hack target mds?
-  if (use_mds)
+  if (use_mds >= 0)
     request.resend_mds = use_mds;
 
   // set up wait cond
@@ -746,6 +743,15 @@ MClientReply *Client::make_request(MClientRequest *req,
   // clean up.
   mds_requests.erase(tid);
 
+
+  // insert trace
+  if (reply->get_result() >= 0) {
+    utime_t ttl = request.sent_stamp;
+    ttl += 1000.0 * (float)reply->get_lease_duration_ms();
+    Inode *in = insert_trace(reply, ttl);
+    if (ppin)
+      *ppin = in;
+  }
 
   // -- log times --
   if (client_logger) {
@@ -838,6 +844,9 @@ void Client::send_request(MetaRequest *request, int mds)
   request->request = 0;
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());
+
+  if (request->mds.empty())
+    request->sent_stamp = g_clock.now();
 
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));
@@ -1737,10 +1746,8 @@ int Client::_link(const char *existing, const char *newname)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req, utime);
+  MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  
-  insert_trace(reply);
   delete reply;
   dout(10) << "link result is " << res << dendl;
 
@@ -1784,7 +1791,6 @@ int Client::_unlink(const char *path)
       unlink(dn);
     }
   }
-  insert_trace(reply);
   delete reply;
   dout(10) << "unlink result is " << res << dendl;
 
@@ -1829,7 +1835,6 @@ int Client::_rename(const char *from, const char *to)
       unlink(dn);
     }
   }
-  insert_trace(reply);
   delete reply;
   dout(10) << "rename result is " << res << dendl;
 
@@ -1868,7 +1873,6 @@ int Client::_mkdir(const char *path, mode_t mode)
    
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);
   delete reply;
   dout(10) << "mkdir result is " << res << dendl;
 
@@ -1912,7 +1916,6 @@ int Client::_rmdir(const char *path)
       unlink(dn);
     }
   }
-  insert_trace(reply);  
   delete reply;
 
   trim_cache();
@@ -1948,7 +1951,6 @@ int Client::_symlink(const char *target, const char *link)
    
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  //FIXME assuming trace of link, not of target
   delete reply;
 
   trim_cache();
@@ -1999,7 +2001,6 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
   int res = 0;
 
   Dentry *dn = lookup(fpath);
-  inode_t inode;
   utime_t now = g_clock.real_now();
 
   if (dn) {
@@ -2018,7 +2019,6 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
       now <= dn->inode->ttl &&
       ((mask & ~CEPH_STAT_MASK_INODE) || now <= dn->inode->ttl) &&
       ((dn->inode->mask & mask) == mask)) {
-    inode = dn->inode->inode;
     dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->ttl << dendl;
     
     //if (g_conf.client_cache_stat_ttl == 0)
@@ -2030,19 +2030,10 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
     req->head.args.stat.mask = mask;
     req->set_filepath(fpath);
 
-    MClientReply *reply = make_request(req);
+    MClientReply *reply = make_request(req, in);
     res = reply->get_result();
     dout(10) << "lstat res is " << res << dendl;
-    if (res == 0) {
-      //Transfer information from reply to stbuf
-      inode = reply->get_inode();
-      
-      //Update metadata cache
-      *in = insert_trace(reply);
-    }
-
     delete reply;
-
     if (res != 0) 
       *in = 0;     // not a success.
   }
@@ -2172,7 +2163,6 @@ int Client::_chmod(const char *path, mode_t mode)
   
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
   delete reply;
 
   trim_cache();
@@ -2209,7 +2199,6 @@ int Client::_chown(const char *path, uid_t uid, gid_t gid)
 
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
   delete reply;
   dout(10) << "chown result is " << res << dendl;
 
@@ -2245,7 +2234,6 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
 
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
   delete reply;
 
   dout(3) << "utimes(\"" << path << "\", " << mtime << ", " << atime << ") = " << res << dendl;
@@ -2285,7 +2273,6 @@ int Client::_mknod(const char *path, mode_t mode, dev_t rdev)
    
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
 
   delete reply;
 
@@ -2441,7 +2428,6 @@ int Client::_readdir_get_frag(DirResult *dirp)
   
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
   inodeno_t ino = reply->get_ino();
   
   // did i get directory inode?
@@ -2671,7 +2657,6 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
   MClientReply *reply = make_request(req);
   assert(reply);
 
-  insert_trace(reply);  
   int result = reply->get_result();
 
   // success?
@@ -3207,7 +3192,6 @@ int Client::_truncate(const char *file, off_t length)
   
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
   delete reply;
 
   dout(3) << "truncate(\"" << file << "\", " << length << ") = " << res << dendl;
@@ -3238,7 +3222,6 @@ int Client::_ftruncate(Fh *fh, off_t length)
   
   MClientReply *reply = make_request(req);
   int res = reply->get_result();
-  insert_trace(reply);  
   delete reply;
 
   dout(3) << "ftruncate(\"" << fh << "\", " << length << ") = " << res << dendl;
