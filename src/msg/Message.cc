@@ -55,6 +55,7 @@ using namespace std;
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
+#include "messages/MClientLock.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -239,6 +240,9 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     break;
   case CEPH_MSG_CLIENT_FILECAPS:
     m = new MClientFileCaps;
+    break;
+  case CEPH_MSG_CLIENT_LOCK:
+    m = new MClientLock;
     break;
 
     // mds

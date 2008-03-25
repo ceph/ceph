@@ -575,21 +575,28 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
 
   while (true) {
     // inode
-    r = in->get_client_replica(client);
-    r->mask |= InodeStat::_encode(bl, in);
-    session->touch_replica(r);
-    mdcache->touch_client_replica(r, ttl);
+    int mask = InodeStat::_encode(bl, in);
+    if (mask) {
+      r = in->get_client_replica(client);
+      r->mask |= mask;
+      session->touch_replica(r);
+      mdcache->touch_client_replica(r, ttl);
+    }
     numi++;
 
     CDentry *dn = in->get_parent_dn();
     if (!dn) break;
     
     // dentry
+    char dmask = 0;
     ::_encode_simple(dn->get_name(), bl);
-    r = dn->get_client_replica(client);
-    r->mask = CEPH_STAT_MASK_DN;
-    session->touch_replica(r);
-    mdcache->touch_client_replica(r, ttl);
+    if (dn->lock.can_rdlock(0)) {
+      r = dn->get_client_replica(client);
+      dmask = r->mask = CEPH_STAT_MASK_DN;
+      session->touch_replica(r);
+      mdcache->touch_client_replica(r, ttl);
+    }
+    ::_encode_simple(dmask, bl);
     
     // dir
     DirStat::_encode(bl, dn->get_dir(), whoami);

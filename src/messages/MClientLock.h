@@ -35,6 +35,8 @@ struct MClientLock : public Message {
   __u64 ino;
   string dname;
 
+
+  MClientLock() : Message(CEPH_MSG_CLIENT_LOCK) {}
   MClientLock(int l, int ac, __u64 i) :
     Message(CEPH_MSG_CLIENT_LOCK),
     lock_type(l), action(ac), ino(i) {}
@@ -52,7 +54,7 @@ struct MClientLock : public Message {
 
   const char *get_type_name() { return "client_lock"; }
   void print(ostream& out) {
-    out << "lock(a=" << get_clientlock_action_name(action)
+    out << "client_lock(a=" << get_clientlock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)
 	<< " " << ino;
     if (dname.length())

@@ -178,6 +178,7 @@ class MClientReply : public Message {
   list<InodeStat*> trace_in;
   list<DirStat*>   trace_dir;
   list<string>     trace_dn;
+  list<char>       trace_dn_mask;
   bufferlist trace_bl;
 
   DirStat *dir_dir;
@@ -297,8 +298,11 @@ class MClientReply : public Message {
 
 	// dentry, dir
 	string ref_dn;
+	char dn_mask;
 	::_decode_simple(ref_dn, p);
+	::_decode_simple(dn_mask, p);
 	trace_dn.push_front(ref_dn);
+	trace_dn_mask.push_front(dn_mask);
 	trace_dir.push_front(new DirStat(p));
       }
     assert(p.end());
@@ -315,6 +319,10 @@ class MClientReply : public Message {
   const list<string>& get_trace_dn() { 
     if (trace_in.empty() && trace_bl.length()) _decode_trace();
     return trace_dn; 
+  }
+  const list<char>& get_trace_dn_mask() { 
+    if (trace_in.empty() && trace_bl.length()) _decode_trace();
+    return trace_dn_mask; 
   }
 
 

@@ -990,6 +990,9 @@ void Client::dispatch(Message *m)
   case CEPH_MSG_CLIENT_FILECAPS:
     handle_file_caps((MClientFileCaps*)m);
     break;
+  case CEPH_MSG_CLIENT_LOCK:
+    handle_lock((MClientLock*)m);
+    break;
 
   case CEPH_MSG_STATFS_REPLY:
     handle_statfs_reply((MStatfsReply*)m);
