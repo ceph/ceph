@@ -983,7 +983,7 @@ void Locker::handle_client_lease(MClientLease *m)
   // replica and lock
   SimpleLock *lock = p->get_lock(m->lock);
   assert(lock);
-  ClientLease *l = in->get_client_lease(client);
+  ClientLease *l = p->get_client_lease(client);
   if (!l) {
     dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *p << dendl;
     delete m;
