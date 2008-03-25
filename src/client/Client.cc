@@ -328,12 +328,6 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t ttl)
   if (ttl > in->ttl) 
     in->ttl = ttl;
 
-  // or do we have newer size/mtime from writing?
-  if (in->file_wr_size > in->inode.size)
-    in->inode.size = in->file_wr_size;
-  if (in->file_wr_mtime > in->inode.mtime)
-    in->inode.mtime = in->file_wr_mtime;
-
   // symlink?
   if (in->inode.is_symlink()) {
     if (!in->symlink) 
@@ -1276,7 +1270,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     if (g_conf.client_oc)
       in->fc.truncate(in->inode.size, m->get_size());
 
-    in->inode.size = in->file_wr_size = m->get_size(); 
+    in->inode.size = m->get_size(); 
     delete m;
     return;
   }
@@ -1307,20 +1301,17 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " was " << cap_string(old_caps) << dendl;
   
   // update inode
-  in->inode.size = m->get_size();      // might have updated size... FIXME this is overkill!
-  in->inode.mtime = m->get_mtime();
-  in->inode.atime = m->get_atime();
+  if (m->get_size() > in->inode.size)
+    in->inode.size = m->get_size();
+  if (m->get_mtime() > in->inode.mtime && (old_caps & CEPH_CAP_EXCL) == 0) 
+    in->inode.mtime = m->get_mtime();
+  if (m->get_atime() > in->inode.atime && (old_caps & CEPH_CAP_EXCL) == 0) 
+    in->inode.atime = m->get_atime();
 
-  // preserve our (possibly newer) file size, mtime
-  if (in->file_wr_size > in->inode.size) {
-    in->inode.size = in->file_wr_size;
-    m->set_size(in->file_wr_size);
-  }
-  if (in->file_wr_mtime > in->inode.mtime) {
-    in->inode.mtime = in->file_wr_mtime;
-    m->set_mtime(in->file_wr_mtime);
-  }
-
+  // share our (possibly newer) file size, mtime, atime
+  m->set_size(in->inode.size);
+  m->set_mtime(in->inode.mtime);
+  m->set_atime(in->inode.atime);
 
   if (g_conf.client_oc) {
     // caching on, use FileCache.
@@ -1387,11 +1378,6 @@ void Client::implemented_caps(MClientFileCaps *m, Inode *in)
   dout(5) << "implemented_caps " << cap_string(m->get_caps()) 
           << ", acking to " << m->get_source() << dendl;
 
-  if (in->file_caps() == 0) {
-    in->file_wr_mtime = utime_t();
-    in->file_wr_size = 0;
-  }
-
   messenger->send_message(m, m->get_source_inst());
 }
 
@@ -1427,11 +1413,6 @@ void Client::release_caps(Inode *in,
   if (wanted == 0 && !in->caps.empty()) {
     in->caps.clear();
     put_inode(in);
-  }
-
-  if (in->file_caps() == 0) {
-    in->file_wr_mtime = utime_t();
-    in->file_wr_size = 0;
   }
 }
 
@@ -1777,7 +1758,6 @@ int Client::unlink(const char *relpath)
 
 int Client::_unlink(const char *path)
 {
-
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UNLINK, messenger->get_myinst());
   req->set_path(path);
  
@@ -2230,6 +2210,18 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
 int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
 {
   dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
+
+  filepath fpath(path);
+  Dentry *dn = lookup(fpath);
+  int want = CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
+  if (dn && dn->inode &&
+      (dn->inode->file_caps() & want) == want) {
+    dout(5) << " have WR and EXCL caps, just updating our m/atime" << dendl;
+    dn->inode->inode.mtime = mtime;
+    dn->inode->inode.atime = atime;
+    return 0;
+  }
+
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UTIME, messenger->get_myinst());
   req->set_path(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
@@ -3074,7 +3066,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
 
   bool lazy = f->mode == FILE_MODE_LAZY;
 
-  dout(10) << "cur file size is " << in->inode.size << "    wr size " << in->file_wr_size << dendl;
+  dout(10) << "cur file size is " << in->inode.size << dendl;
 
   // time it.
   utime_t start = g_clock.real_now();
@@ -3155,14 +3147,14 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   
   // extend file?
   if (totalwritten + offset > in->inode.size) {
-    in->inode.size = in->file_wr_size = totalwritten + offset;
+    in->inode.size = totalwritten + offset;
     dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
     dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->inode.size << dendl;
   }
 
   // mtime
-  in->file_wr_mtime = in->inode.mtime = g_clock.real_now();
+  in->inode.mtime = g_clock.real_now();
 
   // ok!
   return totalwritten;  

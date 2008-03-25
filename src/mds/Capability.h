@@ -39,6 +39,7 @@ inline string cap_string(int cap)
   if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
   if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
   if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
+  if (cap & CEPH_CAP_EXCL) s += " excl";
   s += " ]";
   return s;
 }

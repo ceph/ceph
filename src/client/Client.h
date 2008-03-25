@@ -141,8 +141,6 @@ class Inode {
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  utime_t   file_wr_mtime;   // [writers] time of last write
-  off_t     file_wr_size;    // [writers] largest offset we've written to
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
@@ -199,7 +197,6 @@ class Inode {
     inode(_inode),
     mask(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -229,7 +226,7 @@ class Inode {
   }
 
   int file_caps_wanted() {
-    int w = 0;
+    int w = CEPH_CAP_EXCL;  // always ask
     if (num_open_rd) w |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
     if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
     if (num_open_lazy) w |= CEPH_CAP_LAZYIO;

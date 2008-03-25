@@ -208,7 +208,7 @@ class FileLock : public SimpleLock {
         return 0;
 
       case LOCK_LONER:  // single client writer, of course.
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO | CEPH_CAP_EXCL;
       case LOCK_GLONERR:
         return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GLONERM:

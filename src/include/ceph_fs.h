@@ -478,6 +478,7 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
 #define CEPH_CAP_WREXTEND 32  /* client can extend eof */
 #define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
+#define CEPH_CAP_EXCL    128  /* exclusive/loner access */
 
 enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */

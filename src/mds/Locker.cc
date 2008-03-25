@@ -884,15 +884,19 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   // atime|mtime|size?
   bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
-  bool dirty = false;
-  //if (atime > latest->atime) 
-  //dirty = true;
+  bool excl = (had|has) & CEPH_CAP_EXCL;
+  bool dirty_atime = false;
+  bool dirty_mtime = false;
+  bool dirty_size = false;
   if (had_or_has_wr) {
-    if (mtime > latest->mtime) 
-      dirty = true;
+    if (mtime > latest->mtime || (excl && mtime != latest->mtime)) 
+      dirty_mtime = true;
     if (size > latest->size) 
-      dirty = true;
+      dirty_size = true;
   }
+  if (excl && atime != latest->atime)
+    dirty_atime = true;
+  bool dirty = dirty_atime || dirty_mtime || dirty_size;
   
   // increase max_size?
   bool increase_max = false;
@@ -918,19 +922,19 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
       pi->max_size = new_max;
     }    
-    if (mtime > latest->mtime) {
-      dout(7) << "  taking mtime " << mtime << " > " 
-	      << in->inode.mtime << " for " << *in << dendl;
+    if (dirty_mtime) {
+      dout(7) << "  mtime " << pi->mtime << " -> " <<  mtime
+	      << " for " << *in << dendl;
       pi->mtime = mtime;
     }
-    if (size > latest->size) {
-      dout(7) << "  taking size " << size << " > " 
-	      << in->inode.size << " for " << *in << dendl;
+    if (dirty_size) {
+      dout(7) << "  size " << pi->size << " -> " << size
+	      << " for " << *in << dendl;
       pi->size = size;
     }
-    if (atime > latest->atime) {
-      dout(7) << "  taking atime " << atime << " > " 
-	      << in->inode.atime << " for " << *in << dendl;
+    if (dirty_atime) {
+      dout(7) << "  atime " << pi->atime << " -> " << atime
+	      << " for " << *in << dendl;
       pi->atime = atime;
     }
     le->metablob.add_dir_context(in->get_parent_dir());
