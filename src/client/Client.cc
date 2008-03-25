@@ -316,17 +316,43 @@ void Client::trim_cache()
   }
 }
 
-/** insert_inode
- *
- * insert + link a single dentry + inode into the metadata cache.
+
+void Client::update_inode(Inode *in, InodeStat *st, utime_t ttl)
+{
+  dout(12) << "update_inode stat mask is " << st->mask << dendl;
+  if (st->mask & CEPH_STAT_MASK_INODE) {
+    in->inode = st->inode;
+    in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+  }
+  in->mask = st->mask;
+  if (ttl > in->ttl) 
+    in->ttl = ttl;
+
+  // or do we have newer size/mtime from writing?
+  if (in->file_wr_size > in->inode.size)
+    in->inode.size = in->file_wr_size;
+  if (in->file_wr_mtime > in->inode.mtime)
+    in->inode.mtime = in->file_wr_mtime;
+
+  // symlink?
+  if (in->inode.is_symlink()) {
+    if (!in->symlink) 
+      in->symlink = new string;
+    *(in->symlink) = st->symlink;
+  }
+}
+
+
+/*
+ * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
-Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname, utime_t ttl)
+Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, int dmask, InodeStat *st, utime_t ttl)
 {
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_inode " << dname << " ino " << st->inode.ino 
+  dout(12) << "insert_dentry_inode " << dname << " ino " << st->inode.ino 
            << "  size " << st->inode.size
            << "  mtime " << st->inode.mtime
 	   << "  mask " << st->mask
@@ -367,50 +393,17 @@ Inode* Client::insert_inode(Dir *dir, InodeStat *st, const string& dname, utime_
       }
     }
   }
-  
+
   if (!dn) {
     Inode *in = new Inode(st->inode, objectcacher);
     inode_map[st->inode.ino] = in;
     dn = link(dir, dname, in);
     dout(12) << " new dentry+node with ino " << st->inode.ino << dendl;
-  } else {
-    // actually update info
-    dout(12) << " stat inode mask is " << st->mask << dendl;
-    if (st->mask & CEPH_STAT_MASK_INODE) {
-      dn->inode->inode = st->inode;
-      dn->inode->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
-    }
+  } 
 
-    // ...but don't clobber our mtime, size!
-    /* isn't this handled below?
-    if ((dn->inode->mask & CEPH_STAT_MASK_SIZE) == 0 &&
-        dn->inode->file_wr_size > dn->inode->inode.size) 
-      dn->inode->inode.size = dn->inode->file_wr_size;
-    if ((dn->inode->mask & CEPH_STAT_MASK_MTIME) == 0 &&
-        dn->inode->file_wr_mtime > dn->inode->inode.mtime) 
-      dn->inode->inode.mtime = dn->inode->file_wr_mtime;
-    */
-  }
-
-  // OK, we found it!
   assert(dn && dn->inode);
 
-  // save the mask
-  dn->inode->mask = st->mask;
-  if (ttl > dn->inode->ttl) dn->inode->ttl = ttl;
-  
-  // or do we have newer size/mtime from writing?
-  if (dn->inode->file_wr_size > dn->inode->inode.size)
-    dn->inode->inode.size = dn->inode->file_wr_size;
-  if (dn->inode->file_wr_mtime > dn->inode->inode.mtime)
-    dn->inode->inode.mtime = dn->inode->file_wr_mtime;
-
-  // symlink?
-  if (dn->inode->inode.is_symlink()) {
-    if (!dn->inode->symlink) 
-      dn->inode->symlink = new string;
-    *(dn->inode->symlink) = st->symlink;
-  }
+  update_inode(dn->inode, st, ttl);
 
   return dn->inode;
 }
@@ -455,56 +448,50 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  */
 Inode* Client::insert_trace(MClientReply *reply, utime_t ttl)
 {
-  Inode *cur = root;
   utime_t now = g_clock.real_now();
 
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
+  if (reply->get_trace_in().empty())
+    return NULL;
 
   list<string>::const_iterator pdn = reply->get_trace_dn().begin();
   list<char>::const_iterator pdnmask = reply->get_trace_dn_mask().begin();
   list<DirStat*>::const_iterator pdir = reply->get_trace_dir().begin();
+  list<InodeStat*>::const_iterator pin = reply->get_trace_in().begin();
 
-  for (list<InodeStat*>::const_iterator pin = reply->get_trace_in().begin();
-       pin != reply->get_trace_in().end();
-       ++pin) {
-    
-    if (pin == reply->get_trace_in().begin()) {
-      // root
-      dout(10) << "insert_trace root" << dendl;
-      if (!root) {
-        // create
-        cur = root = new Inode((*pin)->inode, objectcacher);
-	dout(10) << "insert_trace new root is " << root << dendl;
-        inode_map[root->inode.ino] = root;
-	root->dir_auth = 0;
-      }
-      if (ttl > cur->ttl) cur->ttl = ttl;
-      cur->mask = (*pin)->mask;
-    } else {
-      // not root.
-      Dir *dir = cur->open_dir();
-      assert(pdn != reply->get_trace_dn().end());
-      cur = this->insert_inode(dir, *pin, *pdn, ttl);
-      dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << dendl;
+  Inode *curi = 0;
+  inodeno_t ino = (*pin)->inode.ino;
+  if (!root && ino == 1) {
+    curi = root = new Inode((*pin)->inode, objectcacher);
+    dout(10) << "insert_trace new root is " << root << dendl;
+    inode_map[ino] = root;
+    root->dir_auth = 0;
+  }
+  if (!curi) {
+    assert(inode_map.count(ino));
+    curi = inode_map[ino];
+  }
+  update_inode(curi, *pin, ttl);
+  pin++;
 
-      // touch dn
-      if (cur->dn) {
-        lru.lru_touch(cur->dn);
-	if (*pdnmask)
-	  cur->dn->ttl = ttl;
-      }
-
-      ++pdn;      
-      ++pdnmask;
+  while (pdir != reply->get_trace_dir().end()) {
+    Dir *dir = curi->open_dir();
+    assert(pdn != reply->get_trace_dn().end());
+    if (pin == reply->get_trace_in().end()) {
+      dout(10) << "insert_trace " << *pdn << " mask " << *pdnmask 
+	       << " -- NULL dentry caching not supported yet, IMPLEMENT ME" << dendl;
+      //insert_null_dentry(dir, *pdn, *pdnmask, ttl);  // fixme
+      break;
     }
-
-    // update dir dist info
-    if (pdir == reply->get_trace_dir().end()) break;
-    update_dir_dist(cur, *pdir);
-    ++pdir;
+    curi = insert_dentry_inode(dir, *pdn, *pdnmask, *pin, ttl);
+    update_dir_dist(curi, *pdir);  // dir stat info is attached to inode...
+    pdn++;
+    pdnmask++;
+    pin++;
+    pdir++;
   }
 
-  return cur;
+  return curi;
 }
 
 
@@ -2506,7 +2493,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
         res++;
 	
 	// put in cache
-	Inode *in = this->insert_inode(dir, *pin, *pdn, ttl);
+	Inode *in = this->insert_dentry_inode(dir, *pdn, 0, *pin, ttl);
 	
 	// contents to caller too!
 	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << dendl;

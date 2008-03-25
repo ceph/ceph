@@ -282,30 +282,43 @@ class MClientReply : public Message {
 
 
   // trace
-  void set_trace_dist(int numi, bufferlist& bl) {
+  void set_trace(__u16 numi, __u16 numdn, bufferlist& bl) {
     ::_encode_simple(numi, trace_bl);
+    ::_encode_simple(numdn, trace_bl);
     trace_bl.claim_append(bl);
   }
   void _decode_trace() {
     bufferlist::iterator p = trace_bl.begin();
-    __u32 numi;
-    ::_decode_simple(numi, p);
-    if (numi) 
-      while (1) {
-	// inode
-	trace_in.push_front(new InodeStat(p));
-	if (--numi == 0) break;
+    __u16 numi, numdn;
+    string ref_dn;
+    char dn_mask;
 
-	// dentry, dir
-	string ref_dn;
-	char dn_mask;
-	::_decode_simple(ref_dn, p);
-	::_decode_simple(dn_mask, p);
-	trace_dn.push_front(ref_dn);
-	trace_dn_mask.push_front(dn_mask);
-	trace_dir.push_front(new DirStat(p));
-      }
+    ::_decode_simple(numi, p);
+    ::_decode_simple(numdn, p);
+    if (numi == numdn) 
+      goto dentry;
+
+  inode:
+    // inode
+    trace_in.push_front(new InodeStat(p));
+    if (--numi == 0) goto done;
+
+  dentry:
+    // dentry, dir
+    ::_decode_simple(ref_dn, p);
+    ::_decode_simple(dn_mask, p);
+    trace_dn.push_front(ref_dn);
+    trace_dn_mask.push_front(dn_mask);
+    trace_dir.push_front(new DirStat(p));
+    numdn--;
+    goto inode;
+
+  done:
     assert(p.end());
+  }
+
+  bool have_trailing_inode() {
+    return trace_in.size() > trace_dn.size();
   }
 
   const list<InodeStat*>& get_trace_in() { 

@@ -694,9 +694,12 @@ protected:
   void unlock_fh_pos(Fh *f);
   
   // metadata cache
-  Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn, utime_t ttl);
   void update_dir_dist(Inode *in, DirStat *st);
+
   Inode* insert_trace(MClientReply *reply, utime_t ttl);
+  void update_inode(Inode *in, InodeStat *st, utime_t ttl);
+  Inode* insert_dentry_inode(Dir *dir, const string& dname, int dmask, InodeStat *st, utime_t ttl);
+
 
   // ----------------------
   // fs ops.

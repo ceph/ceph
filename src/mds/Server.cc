@@ -494,9 +494,9 @@ void Server::reconnect_gather_finish()
 /*
  * send generic response (just and error code)
  */
-void Server::reply_request(MDRequest *mdr, int r, CInode *tracei)
+void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *tracedn)
 {
-  reply_request(mdr, new MClientReply(mdr->client_request, r), tracei);
+  reply_request(mdr, new MClientReply(mdr->client_request, r), tracei, tracedn);
 }
 
 
@@ -504,7 +504,7 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei)
  * send given reply
  * include a trace to tracei
  */
-void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei) 
+void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
   MClientRequest *req = mdr->client_request;
   
@@ -544,11 +544,18 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
     delete reply;   // mds doesn't need a reply
   else {
     // include trace
-    if (tracei)
-      set_trace_dist(mdr->session, reply, tracei);
+    if (!tracei && !tracedn && mdr->ref) {
+      tracei = mdr->ref;
+      dout(20) << "inferring tracei to be " << *tracei << dendl;
+      if (!mdr->trace.empty()) {
+	tracedn = mdr->trace.back();
+	dout(20) << "inferring tracedn to be " << *tracedn << dendl;
+      }
+    }
+    if (tracei || tracedn)
+      set_trace_dist(mdr->session, reply, tracei, tracedn);
 
     messenger->send_message(reply, req->get_client_inst());
-
   }
   
   // finish request
@@ -560,48 +567,73 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
     mdcache->eval_remote(tracei->get_parent_dn());
 }
 
-void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
+
+/*
+ * pass inode OR dentry (not both, or we may get confused)
+ *
+ * trace is in reverse order (i.e. root inode comes last)
+ */
+void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
   int whoami = mds->get_nodeid();
   int client = session->get_client();
-  __u32 numi = 0;
+  int numi = 0, numdn = 0;
   ClientLease *l;
 
   utime_t ttl = g_clock.now();
   ttl += g_conf.mds_client_lease;
   reply->set_lease_duration_ms((int)(g_conf.mds_client_lease * 1000.0));
 
-  while (true) {
-    // inode
-    int mask = InodeStat::_encode(bl, in);
-    if (mask) {
-      l = in->add_client_lease(client, mask);
-      session->touch_lease(l);
-      mdcache->touch_client_lease(l, ttl);
-    }
-    numi++;
+  char dmask;
+  int imask;
 
-    CDentry *dn = in->get_parent_dn();
-    if (!dn) break;
-    
-    // dentry
-    char dmask = 0;
-    ::_encode_simple(dn->get_name(), bl);
-    if (dn->lock.can_rdlock(0)) {
-      dmask = CEPH_LOCK_DN;
-      l = dn->add_client_lease(client, dmask);
-      session->touch_lease(l);
-      mdcache->touch_client_lease(l, ttl);
-    }
-    ::_encode_simple(dmask, bl);
-    
-    // dir
-    DirStat::_encode(bl, dn->get_dir(), whoami);
-    in = dn->get_dir()->get_inode();
+  // start with dentry or inode?
+  if (!in) {
+    assert(dn);
+    in = dn->inode;
+    goto dentry;
   }
-  reply->set_trace_dist(numi, bl);
+
+ inode:
+  imask = InodeStat::_encode(bl, in);
+  if (imask) {
+    l = in->add_client_lease(client, imask);
+    session->touch_lease(l);
+    mdcache->touch_client_lease(l, ttl);
+  }
+  numi++;
+  dout(20) << " trace added " << imask << " " << *in << dendl;
+
+  if (!dn)
+    dn = in->get_parent_dn();
+  if (!dn) 
+    goto done;
+
+ dentry:
+  dmask = 0;
+  ::_encode_simple(dn->get_name(), bl);
+  if (dn->lock.can_rdlock(0)) {
+    dmask = CEPH_LOCK_DN;
+    l = dn->add_client_lease(client, dmask);
+    session->touch_lease(l);
+    mdcache->touch_client_lease(l, ttl);
+  }
+  ::_encode_simple(dmask, bl);
+  numdn++;
+  dout(20) << " trace added " << dmask << " " << *dn << dendl;
+  
+  // dir
+  DirStat::_encode(bl, dn->get_dir(), whoami);
+  dout(20) << " trace added " << *dn->get_dir() << dendl;
+
+  in = dn->get_dir()->get_inode();
+  dn = 0;
+  goto inode;
+
+done:
+  reply->set_trace(numi, numdn, bl);
 }
 
 
@@ -1512,7 +1544,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
   MClientReply *reply = new MClientReply(req);
-  reply_request(mdr, reply, ref);
+  reply_request(mdr, reply);
 }
 
 
@@ -1543,7 +1575,7 @@ public:
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
-    mds->server->reply_request(mdr, reply, in);
+    mds->server->reply_request(mdr, reply);
   }
 };
 
@@ -1686,7 +1718,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!diri->is_dir()) {
     // not a dir
     dout(10) << "reply to " << *req << " readdir -ENOTDIR" << dendl;
-    reply_request(mdr, -ENOTDIR, diri);
+    reply_request(mdr, -ENOTDIR);
     return;
   }
 
@@ -1696,7 +1728,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
     dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << dendl;
-    reply_request(mdr, -EAGAIN, diri);
+    reply_request(mdr, -EAGAIN);
     return;
   }
   
@@ -1779,7 +1811,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
   
   // reply
-  reply_request(mdr, reply, diri);
+  reply_request(mdr, reply);
 }
 
 
@@ -1825,7 +1857,7 @@ public:
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
-    mds->server->reply_request(mdr, reply, newi);
+    mds->server->reply_request(mdr, reply, newi, dn);
   }
 };
 
@@ -2127,7 +2159,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, targeti, dn);
 }
 
 
@@ -2209,7 +2241,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, targeti, dn);  // FIXME: imprecise ref
 }
 
 
@@ -2621,7 +2653,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, 0, dn);
   
   // clean up?
   if (straydn)
@@ -2724,7 +2756,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, 0, dn);  // FIXME: imprecise ref
 
   // removing a new dn?
   dn->dir->try_remove_unlinked_dn(dn);
@@ -3119,7 +3151,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, destdn->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, destdn->get_inode(), destdn);
   
   // clean up?
   if (straydn) 
@@ -3941,7 +3973,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
   //reply->set_file_data_version(fdv);
-  reply_request(mdr, reply, cur);
+  reply_request(mdr, reply);
 
   // make sure this inode gets into the journal
   if (cur->xlist_open_file.get_xlist() == 0) {
@@ -4079,7 +4111,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     // it existed.  
     if (req->head.args.open.flags & O_EXCL) {
       dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
-      reply_request(mdr, -EEXIST, dn->get_dir()->get_inode());
+      reply_request(mdr, -EEXIST, dn->get_inode(), dn);
       return;
     } 
     
