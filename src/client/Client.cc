@@ -747,7 +747,12 @@ MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, int use_md
   // insert trace
   if (reply->get_result() >= 0) {
     utime_t ttl = request.sent_stamp;
-    ttl += 1000.0 * (float)reply->get_lease_duration_ms();
+    float dur = (float)reply->get_lease_duration_ms() / 1000.0;
+    ttl += dur;
+    dout(20) << "make_request got ttl of " << ttl
+	     << " (sent_stamp " << request.sent_stamp
+	     << " + " << dur << "s"
+	     << ")" << dendl;
     Inode *in = insert_trace(reply, ttl);
     if (ppin)
       *ppin = in;
@@ -845,8 +850,10 @@ void Client::send_request(MetaRequest *request, int mds)
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());
 
-  if (request->mds.empty())
+  if (request->mds.empty()) {
     request->sent_stamp = g_clock.now();
+    dout(20) << "send_request set sent_stamp to " << request->sent_stamp << dendl;
+  }
 
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));

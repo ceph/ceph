@@ -3494,6 +3494,24 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
 
 
 
+void MDCache::trim_client_replicas()
+{
+  dout(10) << "trim_client_replicas start - " << client_replicas.size() << " replicas" << dendl;
+
+  utime_t now = g_clock.now();
+  while (!client_replicas.empty()) {
+    ClientReplica *r = client_replicas.front();
+    if (r->ttl > now) break;
+    MDSCacheObject *p = r->parent;
+    dout(10) << " expiring client" << r->client << " replica of " << *p << dendl;
+    p->remove_client_replica(r);
+  }
+
+  dout(10) << "trim_client_replicas finish - " << client_replicas.size() << " replicas" << dendl;
+}
+
+
+
 // =========================================================================================
 // shutdown
 

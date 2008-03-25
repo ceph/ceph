@@ -503,6 +503,8 @@ public:
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 
+  void trim_client_replicas();
+
   // shutdown
   void shutdown_start();
   void shutdown_check();
