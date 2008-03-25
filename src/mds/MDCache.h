@@ -268,6 +268,9 @@ class MDCache {
 
   set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
 
+  // client replicas
+  xlist<ClientReplica*> client_replicas;
+
   // -- discover --
   // waiters
   map<int, hash_map<inodeno_t, list<Context*> > > waiting_for_base_ino;
@@ -295,6 +298,10 @@ public:
   int get_num_inodes() { return inode_map.size(); }
   int get_num_dentries() { return lru.lru_get_size(); }
 
+  void touch_client_replica(ClientReplica *r, utime_t ttl) {
+    client_replicas.push_back(&r->replica_item);
+    r->ttl = ttl;
+  }
 
   // -- subtrees --
 protected:

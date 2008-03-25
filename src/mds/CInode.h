@@ -360,13 +360,12 @@ public:
       return client_caps[client];
     return 0;
   }
-  Capability *add_client_cap(int client, CInode *in, xlist<Capability*>& cls) {
+  Capability *add_client_cap(int client, CInode *in) {
     if (client_caps.empty())
       get(PIN_CAPS);
     assert(client_caps.count(client) == 0);
     Capability *cap = client_caps[client] = new Capability;
     cap->set_inode(in);
-    cap->add_to_cap_list(cls);
     return cap;
   }
   void remove_client_cap(int client) {
@@ -376,18 +375,19 @@ public:
     if (client_caps.empty())
       put(PIN_CAPS);
   }
-  void reconnect_cap(int client, inode_caps_reconnect_t& icr, xlist<Capability*>& cls) {
+  Capability *reconnect_cap(int client, inode_caps_reconnect_t& icr) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      cap = add_client_cap(client, this, cls);
+      cap = add_client_cap(client, this);
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }
     inode.size = MAX(inode.size, icr.size);
     inode.mtime = MAX(inode.mtime, icr.mtime);
     inode.atime = MAX(inode.atime, icr.atime);
+    return cap;
   }
   void clear_client_caps() {
     while (!client_caps.empty())

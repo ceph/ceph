@@ -2658,11 +2658,10 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   assert(session);
 
   // add cap
-  in->reconnect_cap(client, icr, session->caps);
+  Capability *cap = in->reconnect_cap(client, icr);
+  session->touch_cap(cap);
   
   // send REAP
-  Capability *cap = in->get_client_cap(client);
-  assert(cap); // ?
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
 					      cap->get_last_seq(),

@@ -225,6 +225,12 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       dout(10) << " killing capability on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
+    while (!session->replicas.empty()) {
+      ClientReplica *r = session->replicas.front();
+      MDSCacheObject *p = r->parent;
+      dout(10) << " killing client replica of " << *p << dendl;
+      p->remove_client_replica(r);
+    }
 
     if (session->is_closing())
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
@@ -380,7 +386,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
 	dout(15) << "open caps on " << *in << dendl;
-	in->reconnect_cap(from, p->second, session->caps);
+	Capability *cap = in->reconnect_cap(from, p->second);
+	session->touch_cap(cap);
 	reconnected_caps.insert(in);
 	continue;
       }
@@ -569,8 +576,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
   while (true) {
     // inode
     r = in->get_client_replica(client);
-    r->ttl = ttl;
     r->mask |= InodeStat::_encode(bl, in);
+    session->touch_replica(r);
+    mdcache->touch_client_replica(r, ttl);
     numi++;
 
     CDentry *dn = in->get_parent_dn();
@@ -579,9 +587,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
     // dentry
     ::_encode_simple(dn->get_name(), bl);
     r = dn->get_client_replica(client);
-    r->ttl = ttl;
     r->mask = CEPH_STAT_MASK_DN;
-    session->replicas.push_back(&r->session_replica_item);
+    session->touch_replica(r);
+    mdcache->touch_client_replica(r, ttl);
     
     // dir
     DirStat::_encode(bl, dn->get_dir(), whoami);

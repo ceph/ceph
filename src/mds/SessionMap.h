@@ -26,7 +26,8 @@ using __gnu_cxx::hash_map;
 #include "mdstypes.h"
 
 class CInode;
-class Capability;
+
+#include "Capability.h"
 
 /* 
  * session
@@ -70,6 +71,13 @@ public:
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
+
+  void touch_cap(Capability *cap) {
+    caps.push_back(&cap->session_caps_item);
+  }
+  void touch_replica(ClientReplica *r) {
+    replicas.push_back(&r->session_replica_item);
+  }
 
   // -- completed requests --
 private:

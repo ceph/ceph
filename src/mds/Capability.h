@@ -91,9 +91,6 @@ public:
 
   CInode *get_inode() { return inode; }
   void set_inode(CInode *i) { inode = i; }
-  void add_to_cap_list(xlist<Capability*>& ls) {
-    ls.push_back(&session_caps_item);
-  }
 
   bool is_null() { return cap_history.empty() && wanted_caps == 0; }
 

@@ -345,12 +345,16 @@ class MDSCacheObject;
 struct ClientReplica {
   int client;
   int mask;                 // CEPH_STAT_MASK_*
-  utime_t ttl;
   MDSCacheObject *parent;
-  xlist<ClientReplica*>::item session_replica_item;
-  ClientReplica(int c) : 
-    client(c), mask(0),
-    session_replica_item(this) { }
+
+  utime_t ttl;
+  xlist<ClientReplica*>::item session_replica_item; // per-session list
+  xlist<ClientReplica*>::item replica_item;         // global list
+
+  ClientReplica(int c, MDSCacheObject *p) : 
+    client(c), mask(0), parent(p),
+    session_replica_item(this),
+    replica_item(this) { }
 };
 
 
@@ -402,6 +406,7 @@ class MDSCacheObject {
   static const int PIN_AUTHPIN    =  1006;
   static const int PIN_PTRWAITER  = -1007;
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
+  static const int PIN_CLIENTREPLICA = 1009;
 
   const char *generic_pin_name(int p) {
     switch (p) {
@@ -414,6 +419,7 @@ class MDSCacheObject {
     case PIN_AUTHPIN: return "authpin";
     case PIN_PTRWAITER: return "ptrwaiter";
     case PIN_TEMPEXPORTING: return "tempexporting";
+    case PIN_CLIENTREPLICA: return "clientreplica";
     default: assert(0); return 0;
     }
   }
@@ -614,11 +620,21 @@ protected:
   ClientReplica *get_client_replica(int c) {
     if (client_replica_map.count(c))
       return client_replica_map[c];
-    else
-      return client_replica_map[c] = new ClientReplica(c);
+    else {
+      if (client_replica_map.empty())
+	get(PIN_CLIENTREPLICA);
+      return client_replica_map[c] = new ClientReplica(c, this);
+    }
   }
   bool is_client_replicated() {
     return !client_replica_map.empty();
+  }
+  void remove_client_replica(ClientReplica *r) {
+    assert(r->parent == this);
+    client_replica_map.erase(r->client);
+    delete r;
+    if (client_replica_map.empty())
+      put(PIN_CLIENTREPLICA);
   }
   
 
