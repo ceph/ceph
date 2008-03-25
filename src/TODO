@@ -15,6 +15,7 @@ client leases
   - or inode fields we are chmodding, etc.
 - rework reply trace to allow negative dentries...  maybe hard links...
 - mds: implement release handler
+- client: look at dn mask
 
 
 kernel client
