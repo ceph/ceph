@@ -461,6 +461,7 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t ttl)
   dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
 
   list<string>::const_iterator pdn = reply->get_trace_dn().begin();
+  list<char>::const_iterator pdnmask = reply->get_trace_dn_mask().begin();
   list<DirStat*>::const_iterator pdir = reply->get_trace_dir().begin();
 
   for (list<InodeStat*>::const_iterator pin = reply->get_trace_in().begin();
@@ -485,13 +486,16 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t ttl)
       assert(pdn != reply->get_trace_dn().end());
       cur = this->insert_inode(dir, *pin, *pdn, ttl);
       dout(10) << "insert_trace dn " << *pdn << " ino " << (*pin)->inode.ino << " -> " << cur << dendl;
-      ++pdn;      
 
       // touch dn
       if (cur->dn) {
         lru.lru_touch(cur->dn);
-	cur->dn->ttl = ttl;
+	if (*pdnmask)
+	  cur->dn->ttl = ttl;
       }
+
+      ++pdn;      
+      ++pdnmask;
     }
 
     // update dir dist info

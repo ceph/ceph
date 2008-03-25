@@ -10,12 +10,11 @@ client leases
   - esp on client.. keep mask/ttl and onetime_mask/onetime_ttl?
 /- time out on mds
   - dual-mode?  short vs long lease lrus, depending on some simple heuristic...
-  - kick affected locks
+  - kick affected locks on release
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
   - or inode fields we are chmodding, etc.
 - rework reply trace to allow negative dentries...  maybe hard links...
 - mds: implement release handler
-- client: look at dn mask
 
 
 kernel client
