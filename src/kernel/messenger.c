@@ -1281,6 +1281,7 @@ out:
 
 void ceph_msg_put(struct ceph_msg *m)
 {
+	BUG_ON(atomic_read(&m->nref) <= 0);
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(30, "ceph_msg_put last one on %p\n", m);
 		BUG_ON(!list_empty(&m->list_head));
