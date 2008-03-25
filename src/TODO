@@ -6,14 +6,22 @@ code cleanup
 
 client leases
 /- rework reply trace to allow negative dentries...  maybe hard links...
+- short vs long lease lrus, depending on some simple heuristics or something...
 - clean up readdir vs stat leases
   - esp on client.. keep mask/ttl and onetime_mask/onetime_ttl?
-/- time out on mds
-  - dual-mode?  short vs long lease lrus, depending on some simple heuristic...
-  - kick affected locks on release
+  - or just short leases?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
   - or inode fields we are chmodding, etc.
 - lease renewals (to avoid blocking client ops?)
+
+userspace client
+- clean up ll_ interface, now that we have leases!
+- obey file_max
+- revoke own caps when they time out,
+- clean up client mds session vs mdsmap behavior?
+- client caps migration races
+  - caps need a seq number; reap logic needs to be a bit smarter
+  - also needs cope with mds failures
 
 kernel client
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
@@ -109,15 +117,6 @@ mds
 - efficient stat for single writers
 - add FILE_CAP_EXTEND capability bit
 
-
-client
-- obey file_max
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
-- clean up client mds session vs mdsmap behavior?
-- client caps migration races
-  - caps need a seq number; reap logic needs to be a bit smarter
-  - also needs cope with mds failures
 
 
 
