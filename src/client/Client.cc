@@ -1737,7 +1737,7 @@ int Client::_link(const char *existing, const char *newname)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req);
+  MClientReply *reply = make_request(req, utime);
   int res = reply->get_result();
   
   insert_trace(reply);

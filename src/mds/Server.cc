@@ -560,9 +560,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in)
   int whoami = mds->get_nodeid();
   int client = session->get_client();
   __u32 numi = 0;
-  utime_t ttl = g_clock.now();
-  ttl += 60.0;  // FIXME
   ClientReplica *r;
+
+  utime_t ttl = g_clock.now();
+  ttl += g_conf.mds_client_lease;
+  reply->set_lease_duration_ms((int)(g_conf.mds_client_lease * 1000.0));
 
   while (true) {
     // inode

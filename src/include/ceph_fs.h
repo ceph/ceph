@@ -433,6 +433,7 @@ struct ceph_mds_reply_head {
 	__u32 file_caps;
 	__u32 file_caps_seq;
 	__u64 mdsmap_epoch;
+	__le32 lease_duration_ms;
 } __attribute__ ((packed));
 
 struct ceph_frag_tree_head {
