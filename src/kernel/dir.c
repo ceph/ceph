@@ -564,19 +564,12 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 
 static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
-	dout(20, "ceph_d_revalidate\n");
-	if (dentry->d_inode) {
-		if (ceph_inode_revalidate(dentry)) {
-			dout(20, "ceph_d_revalidate (invalid entry)\n");
-			return 0;
-		}
-	} else {
-		if (!ceph_lookup_cache ||
-		    time_after(jiffies, dentry->d_time+CACHE_HZ)) {
-			d_drop(dentry);
-			return 0;
-		}
+	if (time_after(jiffies, dentry->d_time+CACHE_HZ)) {
+		dout(20, "d_revalidate - dentry %p expired\n", dentry);
+		d_drop(dentry);
+		return 0;
 	}
+	dout(20, "d_revalidate - dentry %p ok\n", dentry);
 	return 1;
 }
 

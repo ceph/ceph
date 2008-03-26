@@ -163,8 +163,6 @@ struct ceph_inode_info {
 
 	unsigned long i_hashval;
 
-	unsigned long time;
-
 	struct inode vfs_inode; /* at end */
 };
 

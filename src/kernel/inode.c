@@ -150,7 +150,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		return -EINVAL;
 	}
 
-	ci->time = jiffies;
 	return 0;
 }
 
@@ -759,6 +758,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
+/*
 int ceph_inode_revalidate(struct dentry *dentry)
 {
 	struct ceph_inode_info *ci;
@@ -776,13 +776,14 @@ int ceph_inode_revalidate(struct dentry *dentry)
 	dout(10, "revalidate %p is old\n", dentry);
 	return ceph_do_lookup(dentry->d_inode->i_sb, dentry);
 }
+*/
 
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
 {
-	int err;
+	int err = 0;
 	dout(30, "ceph_inode_getattr\n");
 
-	err = ceph_inode_revalidate(dentry);
+	//err = ceph_inode_revalidate(dentry);
 
 	dout(30, "ceph_inode_getattr returned %d\n", err);
 	if (!err) 
