@@ -94,7 +94,6 @@ struct InodeStat {
   inode_t inode;
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
-  uint32_t mask;
 
  public:
   InodeStat() {}
@@ -127,16 +126,9 @@ struct InodeStat {
       n--;
     }
     ::_decode_simple(symlink, p);
-    mask = e.mask;
   }
 
-  static int _encode(bufferlist &bl, CInode *in) {
-    // mask
-    int mask = CEPH_LOCK_INO;
-    if (in->authlock.can_rdlock(0)) mask |= CEPH_LOCK_IAUTH;
-    if (in->linklock.can_rdlock(0)) mask |= CEPH_LOCK_ILINK;
-    if (in->filelock.can_rdlock(0)) mask |= CEPH_LOCK_IFILE;
-
+  static void _encode(bufferlist &bl, CInode *in) {
     /*
      * note: encoding matches struct ceph_client_reply_inode
      */
@@ -154,7 +146,6 @@ struct InodeStat {
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
     e.rdev = in->inode.rdev;
-    e.mask = mask;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
     ::_encode_simple(e, bl);
     for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
@@ -164,8 +155,6 @@ struct InodeStat {
       ::_encode_simple(p->second, bl);
     }
     ::_encode_simple(in->symlink, bl);
-
-    return mask;
   }
   
 };
@@ -206,9 +195,6 @@ class MClientReply : public Message {
   void set_file_caps(unsigned char c) { st.file_caps = c; }
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
-
-  void set_lease_duration_ms(int ms) { st.lease_duration_ms = cpu_to_le32(ms); }
-  int get_lease_duration_ms() { return le32_to_cpu(st.lease_duration_ms); }
 
   MClientReply() : dir_dir(0) {}
   MClientReply(MClientRequest *req, int result = 0) : 

@@ -5,11 +5,11 @@ code cleanup
 - addr=?
 
 client leases
-/- rework reply trace to allow negative dentries...  maybe hard links...
-- short vs long lease lrus, depending on some simple heuristics or something...
 - clean up readdir vs stat leases
   - esp on client.. keep mask/ttl and onetime_mask/onetime_ttl?
   - or just short leases?
+- lease length heuristics
+  - per-object leease durations in client_reply?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
   - or inode fields we are chmodding, etc.
 - lease renewals (to avoid blocking client ops?)

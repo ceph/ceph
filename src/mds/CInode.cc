@@ -848,6 +848,3 @@ void CInode::decode_import(bufferlist::iterator& p,
   filelock._decode(p);
   dirlock._decode(p);
 }
-
-
-

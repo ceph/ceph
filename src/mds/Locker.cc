@@ -1018,6 +1018,40 @@ void Locker::handle_client_lease(MClientLease *m)
 }
 
 
+void Locker::decide_client_lease(CInode *in, int mask, int pool, int client)
+{
+  mask = CEPH_LOCK_INO;
+  pool = 1;   // fixme.. do something smart!
+  if (in->authlock.can_rdlock(0)) mask |= CEPH_LOCK_IAUTH;
+  if (in->linklock.can_rdlock(0)) mask |= CEPH_LOCK_ILINK;
+  if (in->filelock.can_rdlock(0)) mask |= CEPH_LOCK_IFILE;
+}
+
+void Locker::decide_client_lease(CDentry *dn, int mask, int pool, int client)
+{
+  pool = 1;   // fixme.. do something smart!
+  mask = 0;
+  if (dn->lock.can_rdlock(0)) mask |= CEPH_LOCK_DN;
+}
+
+void Locker::issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
+				bufferlist &bl, utime_t now, Session *session)
+{
+  if (mask) {
+    ClientLease *l = p->add_client_lease(client, mask);
+    session->touch_lease(l);
+
+    now += mdcache->client_lease_durations[pool];
+    mdcache->touch_client_lease(l, pool, now);
+  }
+
+  ceph_mds_reply_lease e;
+  e.mask = cpu_to_le16(mask);
+  e.duration_ms = cpu_to_le32(1000 * mdcache->client_lease_durations[pool]);
+  ::_encode_simple(e, bl);
+}
+  
+
 
 
 

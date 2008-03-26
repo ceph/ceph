@@ -580,17 +580,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   int whoami = mds->get_nodeid();
   int client = session->get_client();
   int numi = 0, numdn = 0;
-  ClientLease *l;
 
   // choose lease duration
-  int pool = 1;  // FIXME: choose intelligently?
+  utime_t now = g_clock.now();
 
-  utime_t ttl = g_clock.now();
-  ttl += mdcache->client_lease_durations[pool];
-  reply->set_lease_duration_ms((int)(mdcache->client_lease_durations[pool] * 1000.0));
-
-  char dmask;
-  int imask;
+  int lmask, lpool;
 
   // start with dentry or inode?
   if (!in) {
@@ -600,14 +594,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
  inode:
-  imask = InodeStat::_encode(bl, in);
-  if (imask) {
-    l = in->add_client_lease(client, imask);
-    session->touch_lease(l);
-    mdcache->touch_client_lease(l, pool, ttl);
-  }
+  InodeStat::_encode(bl, in);
+  mds->locker->decide_client_lease(in, lmask, lpool, client);
+  mds->locker->issue_client_lease(in, lmask, lpool, client, bl, now, session);
   numi++;
-  dout(20) << " trace added " << imask << " " << *in << dendl;
+  dout(20) << " trace added " << lmask << " " << *in << dendl;
 
   if (!dn)
     dn = in->get_parent_dn();
@@ -615,17 +606,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     goto done;
 
  dentry:
-  dmask = 0;
   ::_encode_simple(dn->get_name(), bl);
-  if (dn->lock.can_rdlock(0)) {
-    dmask = CEPH_LOCK_DN;
-    l = dn->add_client_lease(client, dmask);
-    session->touch_lease(l);
-    mdcache->touch_client_lease(l, pool, ttl);
-  }
-  ::_encode_simple(dmask, bl);
+  mds->locker->decide_client_lease(dn, lmask, lpool, client);
+  mds->locker->issue_client_lease(dn, lmask, lpool, client, bl, now, session);
   numdn++;
-  dout(20) << " trace added " << (int)dmask << " " << *dn << dendl;
+  dout(20) << " trace added " << (int)lmask << " " << *dn << dendl;
   
   // dir
   DirStat::_encode(bl, dn->get_dir(), whoami);
@@ -1714,6 +1699,7 @@ void Server::handle_client_chown(MDRequest *mdr)
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  int client = req->get_client().num();
   CInode *diri = rdlock_path_pin_ref(mdr, false);
   if (!diri) return;
 
@@ -1792,12 +1778,19 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     dout(12) << "including inode " << *in << dendl;
     
-    // add this dentry + inodeinfo
+    // dentry
+    int lmask, lpool;
     ::_encode(it->first, dnbl);
+    mds->locker->decide_client_lease(dn, lmask, lpool, client);
+    mds->locker->issue_client_lease(dn, lmask, lpool, client, dnbl, mdr->now, mdr->session);
+
+    // inode
     InodeStat::_encode(dnbl, in);
+    mds->locker->decide_client_lease(in, lmask, lpool, client);
+    mds->locker->issue_client_lease(in, lmask, lpool, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 
-    // touch it
+    // touch dn
     mdcache->lru.lru_touch(dn);
   }
   ::_encode_simple(numfiles, dirbl);

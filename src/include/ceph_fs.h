@@ -441,7 +441,6 @@ struct ceph_mds_reply_head {
 	__u32 file_caps;
 	__u32 file_caps_seq;
 	__u64 mdsmap_epoch;
-	__le32 lease_duration_ms;
 } __attribute__ ((packed));
 
 struct ceph_frag_tree_head {
@@ -457,10 +456,15 @@ struct ceph_mds_reply_inode {
 	__u32 nlink;
 	__u64 size, max_size;
 	__u32 rdev;
-	__u32 mask;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));
 /* followed by frag array, then symlink string */
+
+/* reply_lease follows dname, and reply_inode */
+struct ceph_mds_reply_lease {
+	__le16 mask;
+	__le32 duration_ms;
+} __attribute__ ((packed));
 
 struct ceph_mds_reply_dirfrag {
 	__u32 frag;

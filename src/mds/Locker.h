@@ -190,7 +190,6 @@ protected:
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);
-  void handle_client_lease(class MClientLease *m);
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
@@ -200,6 +199,16 @@ protected:
 
   friend class C_MDL_RequestInodeFileCaps;
   friend class C_Locker_FileUpdate_finish;
+
+  
+  // -- client leases --
+public:
+  void handle_client_lease(class MClientLease *m);
+
+  void decide_client_lease(CInode *in, int mask, int pool, int client);
+  void decide_client_lease(CDentry *dn, int mask, int pool, int client);
+  void issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
+			  bufferlist &bl, utime_t now, Session *session);
 
 };
 
