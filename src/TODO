@@ -5,14 +5,12 @@ code cleanup
 - addr=?
 
 client leases
-- clean up readdir vs stat leases
-  - esp on client.. keep mask/ttl and onetime_mask/onetime_ttl?
-  - or just short leases?
 - lease length heuristics
-  - per-object leease durations in client_reply?
+  - mds lock last_change stamp?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
   - or inode fields we are chmodding, etc.
 - lease renewals (to avoid blocking client ops?)
+- IFILE vs caps...
 
 userspace client
 - clean up ll_ interface, now that we have leases!

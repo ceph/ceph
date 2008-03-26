@@ -2047,10 +2047,6 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
   
   if (dn && dn->inode && (havemask & mask) == mask) {
     dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->ttl << dendl;
-    
-    //if (g_conf.client_cache_stat_ttl == 0)
-    //dn->inode->ttl = utime_t();           // only one stat allowed after each readdir
-
     *in = dn->inode;
   } else {  
     req = new MClientRequest(CEPH_MDS_OP_LSTAT, messenger->get_myinst());
@@ -2088,17 +2084,6 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_blksize = 4096;
   return in->mask;
 }
-
-  /*
-  S_REQUIREBLKSIZE(st->st_litemask);
-  if (inode.mask & INODE_MASK_BASE) S_REQUIRECTIME(st->st_litemask);
-  if (inode.mask & INODE_MASK_SIZE) {
-    S_REQUIRESIZE(st->st_litemask);
-    S_REQUIREBLOCKS(st->st_litemask);
-  }
-  if (inode.mask & INODE_MASK_MTIME) S_REQUIREMTIME(st->st_litemask);
-  if (inode.mask & INODE_MASK_ATIME) S_REQUIREATIME(st->st_litemask);
-  */
 
 
 int Client::lstat(const char *relpath, struct stat *stbuf)
