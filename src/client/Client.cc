@@ -1276,7 +1276,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // don't want?
-  if (in->file_caps_wanted() == 0) {
+  int wanted = in->file_caps_wanted();
+  if (wanted == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 

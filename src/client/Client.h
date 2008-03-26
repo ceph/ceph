@@ -226,7 +226,7 @@ class Inode {
   }
 
   int file_caps_wanted() {
-    int w;
+    int w = 0;
     if (num_open_rd) w |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
     if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
     if (num_open_lazy) w |= CEPH_CAP_LAZYIO;
