@@ -2028,22 +2028,24 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
   Dentry *dn = lookup(fpath);
   utime_t now = g_clock.real_now();
 
+  int havemask = 0;
   if (dn) {
-    if (now <= dn->inode->ttl) {
-      dout(10) << "_lstat has inode " << fpath << " with mask " << dn->inode->mask << ", want " << mask << dendl;
-    } else {
+    if (now > dn->inode->ttl) {
       dout(10) << "_lstat has EXPIRED (" << dn->inode->ttl << ") inode " << fpath
-	       << " with mask " << dn->inode->mask << ", want " << mask 
-	       << dendl;
+	       << " with mask " << havemask << dendl;
+    } else {
+      havemask = dn->inode->mask;
     }
+    if (dn->inode->file_caps() & CEPH_CAP_EXCL) {
+      dout(10) << "_lstat has inode " << fpath << " with CAP_EXCL, yay" << dendl;
+      havemask |= CEPH_LOCK_IFILE;
+    }
+    dout(10) << "_lstat has inode " << fpath << " with mask " << havemask << ", want " << mask << dendl;
   } else {
     dout(10) << "_lstat has no dn for path " << fpath << dendl;
   }
   
-  if (dn && dn->inode &&
-      now <= dn->inode->ttl &&
-      ((mask & ~CEPH_STAT_MASK_INODE) || now <= dn->inode->ttl) &&
-      ((dn->inode->mask & mask) == mask)) {
+  if (dn && dn->inode && (havemask & mask) == mask) {
     dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->ttl << dendl;
     
     //if (g_conf.client_cache_stat_ttl == 0)
@@ -2713,10 +2715,9 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     f->inode = in;
     f->inode->get();
 
-    if (!in) {
-      in = f->inode;
-      in->add_open(f->mode);
-    }
+    in->add_open(f->mode);
+    dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+	     << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
 
     // caps included?
     int mds = reply->get_source().num();

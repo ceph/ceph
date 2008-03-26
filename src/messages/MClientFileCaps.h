@@ -24,6 +24,8 @@ class MClientFileCaps : public Message {
     switch (op) {
     case CEPH_CAP_OP_GRANT: return "grant";
     case CEPH_CAP_OP_ACK: return "ack";
+    case CEPH_CAP_OP_REQUEST: return "request";
+    case CEPH_CAP_OP_TRUNC: return "trunc";
     case CEPH_CAP_OP_EXPORT: return "export";
     case CEPH_CAP_OP_IMPORT: return "import";
     default: assert(0); return 0;
