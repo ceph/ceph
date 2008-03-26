@@ -226,11 +226,11 @@ class Inode {
   }
 
   int file_caps_wanted() {
-    int w = CEPH_CAP_EXCL;  // always ask
+    int w;
     if (num_open_rd) w |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
-    if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
+    if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
     if (num_open_lazy) w |= CEPH_CAP_LAZYIO;
-    if (fc.is_dirty()) w |= CEPH_CAP_WRBUFFER;
+    if (fc.is_dirty()) w |= CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
     if (fc.is_cached()) w |= CEPH_CAP_RDCACHE;
     return w;
   }

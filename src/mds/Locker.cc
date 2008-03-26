@@ -496,7 +496,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   int my_client = session->inst.name.num();
   int my_want = 0;
   if (mode & FILE_MODE_R) my_want |= CEPH_CAP_RDCACHE  | CEPH_CAP_RD;
-  if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR;
+  if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR | CEPH_CAP_EXCL;
 
   // register a capability
   Capability *cap = in->get_client_cap(my_client);
