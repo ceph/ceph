@@ -815,8 +815,10 @@ retry:
 	}
 
 	/* make request? */
-	if (req->r_num_mds == 0)
+	if (req->r_num_mds == 0) {
 		req->r_from_time = jiffies;
+		dout(30, "do_request from_time %lu\n", req->r_from_time);
+	}
 	BUG_ON(req->r_num_mds >= 2);
 	req->r_mds[req->r_num_mds++] = session;
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
@@ -1364,6 +1366,81 @@ int ceph_mdsc_renew_caps(struct ceph_mds_client *mdsc)
 		send_renewcaps(mdsc, i);
 	}
 	return 0;
+}
+
+
+/*
+ * leases
+ */
+
+void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->client->sb;
+	struct inode *inode;
+	struct ceph_inode_info *ci;
+	struct dentry *parent, *dentry;
+	int mds = le32_to_cpu(msg->hdr.src.name.num);
+	__u8 action;
+	__u16 mask;
+	__u64 ino;
+	struct qstr dname;
+	void *p = msg->front.iov_base;
+	void *end = p + msg->front.iov_len;
+	ino_t inot;
+
+	dout(10, "handle_lease from mds%d\n", mds);
+	
+	/* decode */
+	ceph_decode_need(&p, end, 1 + 2 + 8, bad);
+	ceph_decode_8(&p, action);
+	ceph_decode_16(&p, mask);
+	ceph_decode_64(&p, ino);
+	dname.name = p;
+	dname.len = end-p;
+
+	/* lookup inode */
+	inot = ceph_ino_to_ino(ino);
+#if BITS_PER_LONG == 64
+	inode = ilookup(sb, ino);
+#else
+	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
+#endif
+	dout(20, "action is %d, ino %llx %p\n", action, ino, inode);
+	
+	BUG_ON(action != CEPH_MDS_LEASE_REVOKE);  /* for now */
+
+	if (inode == NULL) {
+		dout(10, "i don't have inode %llx\n", ino);
+		goto revoke;
+	}
+
+	if (mask & CEPH_LOCK_DN) {
+		/* dentry */
+		parent = d_find_alias(inode);
+		if (!parent)
+			goto revoke;  /* hrm... */
+		dname.hash = full_name_hash(dname.name, dname.len);
+		dentry = d_lookup(parent, &dname);
+		if (!dentry)
+			goto revoke;
+		dentry->d_time = 0;
+		dout(10, "lease revoked on dentry %p\n", dentry);
+	} else {
+		/* inode */
+		ci = ceph_inode(inode);
+		ci->i_lease_mask &= mask;
+		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
+		     mask, inode, ci->i_lease_mask);
+	}
+
+revoke:
+	dout(10, "sending release\n");
+	*(__u8*)(msg->front.iov_base) = CEPH_MDS_LEASE_RELEASE;
+	send_msg_mds(mdsc, msg, mds);
+	return;
+
+bad:
+	dout(0, "corrupt lease message\n");
 }
 
 

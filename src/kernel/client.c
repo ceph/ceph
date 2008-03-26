@@ -275,6 +275,9 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_CLIENT_FILECAPS:
 		ceph_mdsc_handle_filecaps(&client->mdsc, msg);
 		break;
+	case CEPH_MSG_CLIENT_LEASE:
+		ceph_mdsc_handle_lease(&client->mdsc, msg);
+		break;
 
 		/* osd client */
 	case CEPH_MSG_OSD_MAP:

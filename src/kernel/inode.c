@@ -155,7 +155,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 void ceph_update_inode_lease(struct inode *inode, 
 			     struct ceph_mds_reply_lease *lease,
-			     int from_time) 
+			     unsigned long from_time) 
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
@@ -172,7 +172,7 @@ void ceph_update_inode_lease(struct inode *inode,
 
 void ceph_update_dentry_lease(struct dentry *dentry, 
 			      struct ceph_mds_reply_lease *lease,
-			      int from_time) 
+			      unsigned long from_time) 
 {
 	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
 
@@ -238,7 +238,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		parent = dn;
 		
 		/* dentry */	       
-		if (d+1 == rinfo->trace_numi &&
+		if (d == rinfo->trace_numd-1 &&
 		    req->r_last_dentry) {
 			dout(10, "fill_trace using provided dentry\n");
 			dn = req->r_last_dentry;

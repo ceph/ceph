@@ -593,11 +593,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
  inode:
-  dout(0) << " inodestat start at " << bl.length() << dendl;
   InodeStat::_encode(bl, in);
-  dout(0) << " lease start at " << bl.length() << dendl;
   lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
-  dout(0) << " done at " << bl.length() << dendl;
   numi++;
   dout(20) << " trace added " << lmask << " " << *in << dendl;
 
@@ -626,7 +623,6 @@ done:
   ::_encode(numi, fbl);
   ::_encode(numdn, fbl);
   fbl.claim_append(bl);
-  dout(20) << " final trace len is " << fbl.length() << dendl;
   reply->set_trace(fbl);
 }
 

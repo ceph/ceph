@@ -73,7 +73,7 @@ struct ceph_mds_request {
 	struct inode    * r_last_inode;
 	struct dentry   * r_last_dentry;
 	int				r_expects_cap;
-	__u64             r_from_time;
+	unsigned long           r_from_time;
 	struct ceph_inode_cap * r_cap;
 	struct ceph_mds_session * r_session;
 	struct ceph_mds_session * r_mds[2];
@@ -126,6 +126,9 @@ extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 				      struct ceph_msg *msg);
 struct ceph_inode_info;
 extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
+
+extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
+				   struct ceph_msg *msg);
 
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,

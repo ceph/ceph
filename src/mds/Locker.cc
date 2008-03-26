@@ -970,7 +970,7 @@ void Locker::handle_client_lease(MClientLease *m)
   }
   CDentry *dn = 0;
   MDSCacheObject *p;
-  if (m->lock == CEPH_LOCK_DN) {
+  if (m->mask & CEPH_LOCK_DN) {
     frag_t fg = in->pick_dirfrag(m->dname);
     CDir *dir = in->get_dirfrag(fg);
     if (dir) 
@@ -1076,16 +1076,14 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     n++;
     if (lock->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)lock->get_parent();
-      mds->send_message_client(new MClientLease(lock->get_type(), 
-						CEPH_MDS_LEASE_REVOKE,
+      mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
 						lock->get_type(),
 						dn->get_dir()->ino(),
 						dn->get_name()),
 			       l->client);
     } else {
       CInode *in = (CInode*)lock->get_parent();
-      mds->send_message_client(new MClientLease(lock->get_type(),
-						CEPH_MDS_LEASE_REVOKE,
+      mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
 						lock->get_type(),
 						in->ino()),
 			       l->client);

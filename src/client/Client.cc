@@ -1169,7 +1169,7 @@ void Client::handle_lease(MClientLease *m)
   }
   in = inode_map[m->ino];
 
-  if (m->lock == CEPH_LOCK_DN) {
+  if (m->mask & CEPH_LOCK_DN) {
     if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
       dout(10) << " don't have dir|dentry " << m->ino << "/" << m->dname <<dendl;
       goto revoke;
@@ -1185,7 +1185,7 @@ void Client::handle_lease(MClientLease *m)
   }
   
  revoke:
-  messenger->send_message(new MClientLease(m->lock, CEPH_MDS_LEASE_RELEASE,
+  messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE,
 					  m->mask, m->ino, m->dname),
 			  m->get_source_inst());
   delete m;

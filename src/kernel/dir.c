@@ -564,6 +564,7 @@ ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 
 static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
+	dout(20, "d_revalidate ttl %lu now %lu\n", dentry->d_time, jiffies);
 	if (time_after(jiffies, dentry->d_time+CACHE_HZ)) {
 		dout(20, "d_revalidate - dentry %p expired\n", dentry);
 		d_drop(dentry);
