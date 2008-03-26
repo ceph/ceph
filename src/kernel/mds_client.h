@@ -23,17 +23,21 @@ struct ceph_mds_reply_info_in {
 struct ceph_mds_reply_info {
 	struct ceph_mds_reply_head    *head;
 
-	int                           trace_nr;
+	int trace_numi, trace_numd;
 	struct ceph_mds_reply_info_in *trace_in;
+	struct ceph_mds_reply_lease   **trace_ilease;
 	struct ceph_mds_reply_dirfrag **trace_dir;
 	char                          **trace_dname;
 	__u32                         *trace_dname_len;
-
+	struct ceph_mds_reply_lease   **trace_dlease;
+	
 	struct ceph_mds_reply_dirfrag *dir_dir;
 	int                           dir_nr;
-	struct ceph_mds_reply_info_in *dir_in;
+	struct ceph_mds_reply_lease   **dir_ilease;
 	char                          **dir_dname;
 	__u32                         *dir_dname_len;
+	struct ceph_mds_reply_lease   **dir_dlease;
+	struct ceph_mds_reply_info_in *dir_in;
 };
 
 /*
@@ -69,6 +73,7 @@ struct ceph_mds_request {
 	struct inode    * r_last_inode;
 	struct dentry   * r_last_dentry;
 	int				r_expects_cap;
+	__u64             r_from_time;
 	struct ceph_inode_cap * r_cap;
 	struct ceph_mds_session * r_session;
 	struct ceph_mds_session * r_mds[2];

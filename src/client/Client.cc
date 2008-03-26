@@ -460,7 +460,7 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
     return NULL;
   }
 
-  __u32 numi, numd;
+  __u16 numi, numd;
   ::_decode_simple(numi, p);
   ::_decode_simple(numd, p);
   dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries" << dendl;

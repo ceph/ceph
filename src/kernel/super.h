@@ -141,6 +141,9 @@ struct ceph_inode_info {
 
 	char *i_symlink;
 
+	int i_lease_mask;
+	__u64 i_lease_ttl;  /* jiffies */
+
 	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
 	int i_frag_map_nr;
 	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
@@ -310,6 +313,14 @@ extern int ceph_get_inode(struct super_block *sb, u64 ino,
 			  struct inode **pinode);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
+
+extern void ceph_update_inode_lease(struct inode *inode, 
+				    struct ceph_mds_reply_lease *lease,
+				    int from_time);
+extern void ceph_update_dentry_lease(struct dentry *dentry, 
+				     struct ceph_mds_reply_lease *lease,
+				     int from_time);
+
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
@@ -354,10 +365,6 @@ extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
 	dentry->d_op = &ceph_dentry_ops;
-}
-static inline void ceph_touch_dentry(struct dentry *dentry) {
-	dentry->d_time = jiffies;
-	BUG_ON(dentry->d_op != &ceph_dentry_ops);
 }
 
 /* proc.c */

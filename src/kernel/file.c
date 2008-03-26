@@ -140,7 +140,6 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 		err = ceph_init_file(req->r_last_inode, file, flags);
 	else if (err == -ENOENT) {
 		ceph_init_dentry(dentry);
-		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
 	}
 	ceph_mdsc_put_request(req);
@@ -231,7 +230,9 @@ ssize_t ceph_write(struct file *filp, const char __user *buf, size_t len, loff_t
 
 	dout(10, "write trying to get caps\n");
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_WR, CEPH_CAP_WRBUFFER, &got));
+				       ceph_get_cap_refs(ci, CEPH_CAP_WR, 
+							 CEPH_CAP_WRBUFFER,
+							 &got));
 	if (ret < 0) 
 		goto out;
 	dout(10, "write got cap refs on %d\n", got);

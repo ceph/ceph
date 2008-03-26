@@ -55,7 +55,7 @@ struct LeaseStat {
   // this matches ceph_mds_reply_lease
   __u16 mask;
   __u32 duration_ms;  
-};
+} __attribute__ ((packed));
 
 struct DirStat {
   // mds distribution hints

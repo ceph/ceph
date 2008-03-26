@@ -154,6 +154,43 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	return 0;
 }
 
+void ceph_update_inode_lease(struct inode *inode, 
+			     struct ceph_mds_reply_lease *lease,
+			     int from_time) 
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
+
+	do_div(ttl, 1000);
+	ttl += from_time;
+	dout(10, "update_inode_lease %p mask %d duration %d ms ttl %llu\n",
+	     inode, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
+	     ttl);
+	if (ttl > ci->i_lease_ttl)
+		ci->i_lease_ttl = ttl;
+	ci->i_lease_mask = le16_to_cpu(lease->mask);
+}
+
+void ceph_update_dentry_lease(struct dentry *dentry, 
+			      struct ceph_mds_reply_lease *lease,
+			      int from_time) 
+{
+	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
+
+	do_div(ttl, 1000);
+	ttl += from_time;
+
+	dout(10, "update_dentry_lease %p mask %d duration %d ms ttl %llu\n",
+	     dentry, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
+	     ttl);
+	if (lease->mask) {
+		if (ttl > dentry->d_time)
+			dentry->d_time = ttl;
+	} else {
+		dentry->d_time = 0;  /* invalidate */
+	}
+}
+
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 {
 	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
@@ -163,9 +200,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 	struct dentry *parent = NULL;
 	struct inode *in;
 	struct ceph_mds_reply_inode *ininfo;
-	int i = 0;
+	int d = 0;
 
-	if (rinfo->trace_nr == 0) {
+	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
 		return 0;
 	}
@@ -189,26 +226,28 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 	err = ceph_fill_inode(in, rinfo->trace_in[0].in);
 	if (err < 0)
 		return err;
+	ceph_update_inode_lease(in, rinfo->trace_ilease[0], req->r_from_time);
 
 	if (sb->s_root == NULL)
 		sb->s_root = dn;
 
 	dget(dn);
-	for (i = 1; i < rinfo->trace_nr; i++) {
-		dout(10, "fill_trace i=%d/%d dn %p in %p\n", 
-		     i, rinfo->trace_nr,
+	for (d = 0; d < rinfo->trace_numd; d++) {
+		dout(10, "fill_trace dn %d/%d dn %p in %p\n", 
+		     (d+1), rinfo->trace_numd,
 		     dn, dn->d_inode);
 		parent = dn;
-
-		if (i == rinfo->trace_nr - 1 &&
+		
+		/* dentry */	       
+		if (d+1 == rinfo->trace_numi &&
 		    req->r_last_dentry) {
 			dout(10, "fill_trace using provided dentry\n");
 			dn = req->r_last_dentry;
 			ceph_init_dentry(dn);  /* just in case */
 			req->r_last_dentry = NULL;
 		} else {
-			dname.name = rinfo->trace_dname[i];
-			dname.len = rinfo->trace_dname_len[i];
+			dname.name = rinfo->trace_dname[d];
+			dname.len = rinfo->trace_dname_len[d];
 			dname.hash = full_name_hash(dname.name, dname.len);
 			dn = d_lookup(parent, &dname);
 			dout(10, "fill_trace d_lookup of '%.*s' got %p\n", 
@@ -224,16 +263,19 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				ceph_init_dentry(dn);
 			}
 		}
-		ininfo = rinfo->trace_in[i].in;
-		if (!ininfo) {
+		ceph_update_dentry_lease(dn, rinfo->trace_dlease[d], 
+					 req->r_from_time);
+
+		/* inode */
+		if (d+1 == rinfo->trace_numi) {
 			dout(10, "fill_trace has dentry but no inode\n");
 			err = -ENOENT;
 			d_instantiate(dn, NULL);
 			if (d_unhashed(dn))
 				d_rehash(dn);
-			ceph_touch_dentry(dn);
 			break;
 		}
+		ininfo = rinfo->trace_in[d+1].in;
 
 		if ((!dn->d_inode) ||
 		    (ceph_ino(dn->d_inode) != ininfo->ino)) {
@@ -253,14 +295,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				dn = NULL;
 				break;
 			}
-			ceph_touch_dentry(dn);
 			dout(10, "fill_trace d_instantiate\n");
 			d_instantiate(dn, in);
 			if (d_unhashed(dn))
 				d_rehash(dn);
 			dout(10, "ceph_fill_trace added dentry %p"
-			     " inode %llx %d/%d\n",
-			     dn, ceph_ino(in), i, rinfo->trace_nr);
+			     " inode %llx\n", dn, ceph_ino(in));
 		} else {
 			in = dn->d_inode;
 			if ((err = ceph_fill_inode(in, ininfo)) < 0) {
@@ -268,6 +308,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				break;
 			}
 		}
+		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
+					req->r_from_time);
 		dput(parent);
 		parent = NULL;
 	}

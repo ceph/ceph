@@ -94,7 +94,8 @@ static unsigned fpos_off(loff_t p)
 
 
 static int prepopulate_dir(struct dentry *parent,
-			   struct ceph_mds_reply_info *rinfo)
+			   struct ceph_mds_reply_info *rinfo,
+			   int from_time)
 {
 	struct qstr dname;
 	struct dentry *dn;
@@ -102,6 +103,7 @@ static int prepopulate_dir(struct dentry *parent,
 	int i;
 
 	for (i = 0; i < rinfo->dir_nr; i++) {
+		/* dentry */
 		dname.name = rinfo->dir_dname[i];
 		dname.len = rinfo->dir_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
@@ -118,7 +120,9 @@ static int prepopulate_dir(struct dentry *parent,
 			}
 			ceph_init_dentry(dn);
 		}
+		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], from_time);
 
+		/* inode */
 		if (dn->d_inode == NULL) {
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
@@ -130,7 +134,6 @@ static int prepopulate_dir(struct dentry *parent,
 			in = dn->d_inode;
 		}
 
-		ceph_touch_dentry(dn);
 		if (ceph_ino(in) !=
 		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
 			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
@@ -150,6 +153,7 @@ static int prepopulate_dir(struct dentry *parent,
 				return -1;
 			}
 		}
+		ceph_update_inode_lease(in, rinfo->dir_ilease[i], from_time);
 
 		dput(dn);
 	}
@@ -197,7 +201,8 @@ nextfrag:
 		fi->last_readdir = req;
 
 		/* pre-populate dentry cache */
-		prepopulate_dir(filp->f_dentry, &req->r_reply_info);
+		prepopulate_dir(filp->f_dentry, &req->r_reply_info, 
+				req->r_from_time);
 	}
 
 	/* include . and .. with first fragment */
@@ -289,7 +294,6 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry)
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	if (err == -ENOENT) {
 		ceph_init_dentry(dentry);
-		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
 		err = 0;
 	}

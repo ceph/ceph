@@ -53,8 +53,8 @@ static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 /*
  * mds reply parsing
  */
-int parse_reply_info_in(void **p, void *end,
-			struct ceph_mds_reply_info_in *info)
+static int parse_reply_info_in(void **p, void *end,
+			       struct ceph_mds_reply_info_in *info)
 {
 	int err = -EINVAL;
 	info->in = *p;
@@ -69,19 +69,26 @@ bad:
 	return err;
 }
 
-int parse_reply_info_trace(void **p, void *end,
-			   struct ceph_mds_reply_info *info)
+static int parse_reply_info_trace(void **p, void *end,
+				  struct ceph_mds_reply_info *info)
 {
-	__u32 numi;
+	__u16 numi, numd;
 	int err = -EINVAL;
 
-	ceph_decode_32_safe(p, end, numi, bad);
-	if (numi == 0)
+	ceph_decode_need(p, end, 2*sizeof(__u32), bad);
+	ceph_decode_16(p, numi);
+	ceph_decode_16(p, numd);
+	info->trace_numi = numi;
+	info->trace_numd = numd;
+	dout(10, "numi %d numd %d\n", numi, numd);
+	if (numi == 0) {
+		info->trace_in = 0;
 		goto done;   /* hrm, this shouldn't actually happen, but.. */
+	}
 
-	/* alloc one longer shared array */
-	info->trace_nr = numi;
+	/* alloc one big shared array */
 	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
+					 2*sizeof(*info->trace_ilease) +
 					 sizeof(*info->trace_dir) +
 					 sizeof(*info->trace_dname) +
 					 sizeof(*info->trace_dname_len)),
@@ -89,31 +96,48 @@ int parse_reply_info_trace(void **p, void *end,
 	if (info->trace_in == NULL) 
 		goto badmem;
 
-	info->trace_dir = (void *)(info->trace_in + numi);
-	info->trace_dname = (void *)(info->trace_dir + numi);
-	info->trace_dname_len = (void *)(info->trace_dname + numi);
+	info->trace_ilease = (void *)(info->trace_in + numi);
+	info->trace_dir = (void *)(info->trace_ilease + numi);
+	info->trace_dname = (void *)(info->trace_dir + numd);
+	info->trace_dname_len = (void *)(info->trace_dname + numd);
+	info->trace_dlease = (void *)(info->trace_dname_len + numd);
 
-	while (1) {
-		/* inode */
-		err = parse_reply_info_in(p, end, &info->trace_in[numi-1]);
-		if (err < 0)
-			goto bad;
-		if (--numi == 0)
-			break;
-		/* dentry */
-		ceph_decode_32_safe(p, end, info->trace_dname_len[numi], bad);
-		ceph_decode_need(p, end, info->trace_dname_len[numi], bad);
-		info->trace_dname[numi] = *p;
-		*p += info->trace_dname_len[numi];
-		/* dir */
-		info->trace_dir[numi] = *p;
-		*p += sizeof(struct ceph_mds_reply_dirfrag) +
-			sizeof(__u32)*le32_to_cpu(info->trace_dir[numi]->ndist);
-		if (unlikely(*p > end))
-			goto bad;
-	}
+	if (numi == numd)
+		goto dentry;
+inode:
+	if (!numi)
+		goto done;
+	dout(20, "parsing inode at %p/%p,  numi %d\n", *p, end, numi);
+	numi--;
+	err = parse_reply_info_in(p, end, &info->trace_in[numi]);
+	if (err < 0)
+		goto bad;
+	dout(20, "parsing lease at %p/%p\n", *p, end);
+	info->trace_ilease[numi] = *p;
+	*p += sizeof(struct ceph_mds_reply_lease);
+	
+dentry:
+	if (!numd)
+		goto done;
+	dout(20, "parsing dentry and dir,  numd %d\n", numd);
+	numd--;
+	ceph_decode_32_safe(p, end, info->trace_dname_len[numd], bad);
+	ceph_decode_need(p, end, info->trace_dname_len[numd], bad);
+	info->trace_dname[numd] = *p;
+	*p += info->trace_dname_len[numd];
+	info->trace_dlease[numd] = *p;
+	*p += sizeof(struct ceph_mds_reply_lease);
+
+	/* dir */
+	info->trace_dir[numd] = *p;
+	*p += sizeof(struct ceph_mds_reply_dirfrag) +
+		sizeof(__u32)*le32_to_cpu(info->trace_dir[numd]->ndist);
+	if (unlikely(*p > end))
+		goto bad;
+	goto inode;
 
 done:
+	dout(20, "done, %p/%p\n", *p, end);
 	if (unlikely(*p != end))
 		return -EINVAL;
 	return 0;
@@ -144,23 +168,35 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 	/* alloc large array */
 	info->dir_nr = num;
 	info->dir_in = kmalloc(num * (sizeof(*info->dir_in) +
+				      sizeof(*info->dir_ilease) +
 				      sizeof(*info->dir_dname) +
-				      sizeof(*info->dir_dname_len)),
+				      sizeof(*info->dir_dname_len) +
+				      sizeof(*info->dir_dlease)),
 			       GFP_KERNEL);
 	if (info->dir_in == NULL)
 		goto badmem;
-	info->dir_dname = (void *)(info->dir_in + num);
+	info->dir_ilease = (void *)(info->dir_in + num);
+	info->dir_dname = (void *)(info->dir_ilease + num);
 	info->dir_dname_len = (void *)(info->dir_dname + num);
+	info->dir_dlease = (void *)(info->dir_dname_len + num);
 
 	while (num) {
-		/* dentry, inode */
+		/* dentry */
 		ceph_decode_32_safe(p, end, info->dir_dname_len[i], bad);
 		ceph_decode_need(p, end, info->dir_dname_len[i], bad);
 		info->dir_dname[i] = *p;
 		*p += info->dir_dname_len[i];
+		dout(20, "parsed dir dname '%.*s'\n", info->dir_dname_len[i],
+		     info->dir_dname[i]);
+		info->dir_dlease[i] = *p;
+		*p += sizeof(struct ceph_mds_reply_lease);
+
+		/* inode */
 		err = parse_reply_info_in(p, end, &info->dir_in[i]);
 		if (err < 0)
 			goto bad;
+		info->dir_ilease[i] = *p;
+		*p += sizeof(struct ceph_mds_reply_lease);
 		i++;
 		num--;
 	}
@@ -779,6 +815,8 @@ retry:
 	}
 
 	/* make request? */
+	if (req->r_num_mds == 0)
+		req->r_from_time = jiffies;
 	BUG_ON(req->r_num_mds >= 2);
 	req->r_mds[req->r_num_mds++] = session;
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
@@ -812,8 +850,7 @@ retry:
 	drop_request_session_attempt_refs(req);
 
 	err = le32_to_cpu(req->r_reply_info.head->result);
-	dout(30, "do_request done on %p result %d tracelen %d\n", req,
-	     err, req->r_reply_info.trace_nr);
+	dout(30, "do_request done on %p result %d\n", req, err);
 	return err;
 }
 
@@ -856,21 +893,21 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	result = le32_to_cpu(rinfo->head->result);
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
-	if (result == 0) {
-		err = ceph_fill_trace(mdsc->client->sb, req);
-		if (err)
+
+	/* insert trace into our cache */
+	err = ceph_fill_trace(mdsc->client->sb, req);
+	if (err)
+		goto done;
+	if (result == 0 && req->r_expects_cap) {
+		cap = le32_to_cpu(rinfo->head->file_caps);
+		capseq = le32_to_cpu(rinfo->head->file_caps_seq);
+		req->r_cap = ceph_add_cap(req->r_last_inode,
+					  req->r_session,
+					  cap, capseq);
+		if (IS_ERR(req->r_cap)) {
+			err = PTR_ERR(req->r_cap);
+			req->r_cap = 0;
 			goto done;
-		if (req->r_expects_cap) {
-			cap = le32_to_cpu(rinfo->head->file_caps);
-			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
-			req->r_cap = ceph_add_cap(req->r_last_inode,
-						  req->r_session,
-						  cap, capseq);
-			if (IS_ERR(req->r_cap)) {
-				err = PTR_ERR(req->r_cap);
-				req->r_cap = 0;
-				goto done;
-			}
 		}
 	}
 

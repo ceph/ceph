@@ -3499,10 +3499,11 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
 void MDCache::trim_client_leases()
 {
   utime_t now = g_clock.now();
+  
+  dout(10) << "trim_client_leases" << dendl;
 
   for (int pool=0; pool<client_lease_pools; pool++) {
-    dout(10) << "trim_client_leases pool " << pool << " (" << client_lease_durations[pool] 
-	     << "s) - " << client_leases[pool].size() << " leases" << dendl;
+    int before = client_leases[pool].size();
     if (client_leases[pool].empty()) 
       continue;
 
@@ -3513,8 +3514,9 @@ void MDCache::trim_client_leases()
       dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
       p->remove_client_lease(r, r->mask, mds->locker);
     }
-    dout(10) << "trim_client_leases pool " << pool << " finish - " 
-	     << client_leases[pool].size() << " leases" << dendl;
+    int after = client_leases[pool].size();
+    dout(10) << "trim_client_leases pool " << pool << " trimmed "
+	     << (before-after) << " leases, " << after << " left" << dendl;
   }
 }
 
