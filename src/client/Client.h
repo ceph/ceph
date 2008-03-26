@@ -473,7 +473,7 @@ public:
   };
   map<tid_t,StatfsRequest*> statfs_requests;
   
-  MClientReply *make_request(MClientRequest *req, Inode **ppin=0, int use_mds=-1);
+  MClientReply *make_request(MClientRequest *req, Inode **ppin=0, utime_t *pfrom=0, int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds);
@@ -694,8 +694,10 @@ protected:
   void update_dir_dist(Inode *in, DirStat *st);
 
   Inode* insert_trace(MClientReply *reply, utime_t ttl);
-  void update_inode(Inode *in, InodeStat *st, utime_t ttl);
-  Inode* insert_dentry_inode(Dir *dir, const string& dname, int dmask, InodeStat *st, utime_t ttl);
+  void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
+  Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+			     InodeStat *ist, LeaseStat *ilease, 
+			     utime_t from);
 
 
   // ----------------------

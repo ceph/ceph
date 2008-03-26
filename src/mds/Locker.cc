@@ -44,6 +44,7 @@
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 
 #include "messages/MMDSSlaveRequest.h"
@@ -1030,16 +1031,16 @@ void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int clie
     mdcache->touch_client_lease(l, pool, now);
   }
 
-  ceph_mds_reply_lease e;
-  e.mask = cpu_to_le16(mask);
-  e.duration_ms = cpu_to_le32(1000 * mdcache->client_lease_durations[pool]);
+  LeaseStat e;
+  e.mask = mask;
+  e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
   ::_encode_simple(e, bl);
 }
   
 
 
 int Locker::issue_client_lease(CInode *in, int client, 
-				bufferlist &bl, utime_t now, Session *session)
+			       bufferlist &bl, utime_t now, Session *session)
 {
   int mask = CEPH_LOCK_INO;
   int pool = 1;   // fixme.. do something smart!
@@ -1052,7 +1053,7 @@ int Locker::issue_client_lease(CInode *in, int client,
 }
 
 int Locker::issue_client_lease(CDentry *dn, int client,
-				bufferlist &bl, utime_t now, Session *session)
+			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
   int mask = 0;

@@ -579,7 +579,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   bufferlist bl;
   int whoami = mds->get_nodeid();
   int client = session->get_client();
-  int numi = 0, numdn = 0;
+  __u32 numi = 0, numdn = 0;
 
   // choose lease duration
   utime_t now = g_clock.now();
@@ -618,7 +618,12 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   goto inode;
 
 done:
-  reply->set_trace(numi, numdn, bl);
+  // put numi, numd in front
+  bufferlist fbl;
+  ::_encode(numi, fbl);
+  ::_encode(numdn, fbl);
+  fbl.claim_append(bl);
+  reply->set_trace(fbl);
 }
 
 
@@ -1792,7 +1797,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
-  reply->take_dir_items(dirbl);
+  reply->set_dir_bl(dirbl);
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
   reply->set_result(0);

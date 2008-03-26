@@ -317,14 +317,18 @@ void Client::trim_cache()
 }
 
 
-void Client::update_inode(Inode *in, InodeStat *st, ceph_mds_reply_lease *l, utime_t ttl)
+void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t from)
 {
-  dout(12) << "update_inode stat mask is " << st->mask << dendl;
-  if (st->mask & CEPH_STAT_MASK_INODE) {
+  utime_t ttl = from;
+  ttl += (float)lease->duration_ms * 1000.0;
+
+  dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
+  if (lease->mask & CEPH_STAT_MASK_INODE) {
     in->inode = st->inode;
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
   }
-  in->mask = st->mask;
+
+  in->mask = lease->mask;
   if (ttl > in->ttl) 
     in->ttl = ttl;
 
@@ -337,24 +341,31 @@ void Client::update_inode(Inode *in, InodeStat *st, ceph_mds_reply_lease *l, uti
 }
 
 
+
 /*
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
-Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, int dmask, InodeStat *st, utime_t ttl)
+Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+				   InodeStat *ist, LeaseStat *ilease, 
+				   utime_t from)
 {
+  int dmask = dlease->mask;
+  utime_t dttl = from;
+  dttl += (float)dlease->duration_ms * 1000.0;
+
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_dentry_inode " << dname << " ino " << st->inode.ino 
-           << "  size " << st->inode.size
-           << "  mtime " << st->inode.mtime
-	   << "  mask " << st->mask
+  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->inode.ino 
+           << "  size " << ist->inode.size
+           << "  mtime " << ist->inode.mtime
+	   << " dmask " << dmask
 	   << " in dir " << dir->parent_inode->inode.ino
            << dendl;
   
   if (dn) {
-    if (dn->inode->inode.ino == st->inode.ino) {
+    if (dn->inode->inode.ino == ist->inode.ino) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
                << " with correct ino " << dn->inode->inode.ino
@@ -370,8 +381,8 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, int dmask, Ino
   
   if (!dn) {
     // have inode linked elsewhere?  -> unlink and relink!
-    if (inode_map.count(st->inode.ino)) {
-      Inode *in = inode_map[st->inode.ino];
+    if (inode_map.count(ist->inode.ino)) {
+      Inode *in = inode_map[ist->inode.ino];
       assert(in);
 
       if (in->dn) {
@@ -389,15 +400,15 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, int dmask, Ino
   }
 
   if (!dn) {
-    Inode *in = new Inode(st->inode, objectcacher);
-    inode_map[st->inode.ino] = in;
+    Inode *in = new Inode(ist->inode, objectcacher);
+    inode_map[ist->inode.ino] = in;
     dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with ino " << st->inode.ino << dendl;
+    dout(12) << " new dentry+node with ino " << ist->inode.ino << dendl;
   } 
 
   assert(dn && dn->inode);
 
-  update_inode(dn->inode, st, ttl);
+  update_inode(dn->inode, ist, ilease, from);
 
   return dn->inode;
 }
@@ -440,23 +451,57 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  *
  * insert a trace from a MDS reply into the cache.
  */
-Inode* Client::insert_trace(MClientReply *reply, utime_t ttl)
+Inode* Client::insert_trace(MClientReply *reply, utime_t from)
 {
-  utime_t now = g_clock.real_now();
 
-  dout(10) << "insert_trace got " << reply->get_trace_in().size() << " inodes" << dendl;
-  if (reply->get_trace_in().empty())
+  bufferlist::iterator p = reply->get_trace_bl().begin();
+  if (p.end()) {
+    dout(10) << "insert_trace -- no trace" << dendl;
+    return NULL;
+  }
+
+  __u32 numi, numd;
+  ::_decode_simple(numi, p);
+  ::_decode_simple(numd, p);
+  dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries" << dendl;
+
+  // decode
+  LeaseStat ilease[numi];
+  InodeStat ist[numi];
+  DirStat dst[numd];
+  string dname[numd];
+  LeaseStat dlease[numd];
+
+  if (numi == 0)
     return NULL;
 
-  list<string>::const_iterator pdn = reply->get_trace_dn().begin();
-  list<char>::const_iterator pdnmask = reply->get_trace_dn_mask().begin();
-  list<DirStat*>::const_iterator pdir = reply->get_trace_dir().begin();
-  list<InodeStat*>::const_iterator pin = reply->get_trace_in().begin();
+  int ileft = numi;
+  int dleft = numd;
+  if (numi == numd)
+    goto dentry;
 
+ inode:
+  if (!ileft) goto done;
+  ileft--;
+  ist[ileft]._decode(p);
+  ::_decode_simple(ilease[ileft], p);
+
+ dentry:
+  if (!dleft) goto done;
+  dleft--;
+  ::_decode_simple(dname[dleft], p);
+  ::_decode_simple(dlease[dleft], p);
+  dst[dleft]._decode(p);
+  goto inode;
+
+ done:
+  
+  // insert into cache --
+  // first inode
   Inode *curi = 0;
-  inodeno_t ino = (*pin)->inode.ino;
+  inodeno_t ino = ist[0].inode.ino;
   if (!root && ino == 1) {
-    curi = root = new Inode((*pin)->inode, objectcacher);
+    curi = root = new Inode(ist[0].inode, objectcacher);
     dout(10) << "insert_trace new root is " << root << dendl;
     inode_map[ino] = root;
     root->dir_auth = 0;
@@ -465,25 +510,23 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t ttl)
     assert(inode_map.count(ino));
     curi = inode_map[ino];
   }
-  update_inode(curi, *pin, ttl);
-  pin++;
+  update_inode(curi, &ist[0], &ilease[0], from);
 
-  while (pdir != reply->get_trace_dir().end()) {
+  for (unsigned i=0; i<numd; i++) {
     Dir *dir = curi->open_dir();
-    assert(pdn != reply->get_trace_dn().end());
-    if (pin == reply->get_trace_in().end()) {
-      dout(10) << "insert_trace " << *pdn << " mask " << *pdnmask 
+
+    // in?
+    if (i+1 == numi) {
+      dout(10) << "insert_trace " << dname[i] << " mask " << dlease[i].mask
 	       << " -- NULL dentry caching not supported yet, IMPLEMENT ME" << dendl;
       //insert_null_dentry(dir, *pdn, *pdnmask, ttl);  // fixme
       break;
     }
-    curi = insert_dentry_inode(dir, *pdn, *pdnmask, *pin, ttl);
-    update_dir_dist(curi, *pdir);  // dir stat info is attached to inode...
-    pdn++;
-    pdnmask++;
-    pin++;
-    pdir++;
+    
+    curi = insert_dentry_inode(dir, dname[i], &dlease[i], &ist[i+1], &ilease[i+1], from);
+    update_dir_dist(curi, &dst[i]);  // dir stat info is attached to inode...
   }
+  assert(p.end());
 
   return curi;
 }
@@ -610,7 +653,7 @@ int Client::choose_target_mds(MClientRequest *req)
 
 
 
-MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, int use_mds)
+MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, utime_t *pfrom, int use_mds)
 {
   // time the call
   utime_t start = g_clock.real_now();
@@ -730,18 +773,12 @@ MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, int use_md
 
 
   // insert trace
-  if (reply->get_result() >= 0) {
-    utime_t ttl = request.sent_stamp;
-    float dur = (float)reply->get_lease_duration_ms() / 1000.0;
-    ttl += dur;
-    dout(20) << "make_request got ttl of " << ttl
-	     << " (sent_stamp " << request.sent_stamp
-	     << " + " << dur << "s"
-	     << ")" << dendl;
-    Inode *in = insert_trace(reply, ttl);
-    if (ppin)
-      *ppin = in;
-  }
+  utime_t from = request.sent_stamp;
+  if (pfrom) 
+    *pfrom = from;
+  Inode *in = insert_trace(reply, from);
+  if (ppin)
+    *ppin = in;
 
   // -- log times --
   if (client_logger) {
@@ -2426,23 +2463,20 @@ int Client::_readdir_get_frag(DirResult *dirp)
   req->set_caller_uid(getuid());
   req->set_caller_gid(getgid());
   
-  MClientReply *reply = make_request(req);
+  Inode *diri;
+  utime_t from;
+  MClientReply *reply = make_request(req, &diri, &from);
   int res = reply->get_result();
-  inodeno_t ino = reply->get_ino();
   
   // did i get directory inode?
-  Inode *diri = 0;
-  if ((res == -EAGAIN || res == 0) &&
-      inode_map.count(ino)) {
-    diri = inode_map[ino];
+  if ((res == -EAGAIN || res == 0) && diri) {
     dout(10) << "_readdir_get_frag got diri " << diri << " " << diri->inode.ino << dendl;
-    assert(diri);
     assert(diri->inode.is_dir());
   }
   
   if (!dirp->inode && diri) {
     dout(10) << "_readdir_get_frag attaching inode" << dendl;
-    dirp->inode = inode_map[ino];
+    dirp->inode = diri;
     diri->get();
   }
 
@@ -2471,28 +2505,35 @@ int Client::_readdir_get_frag(DirResult *dirp)
     }
     
     // the rest?
-    if (!reply->get_dir_dn().empty()) {
+    bufferlist::iterator p = reply->get_dir_bl().begin();
+    if (!p.end()) {
       // only open dir if we're actually adding stuff to it!
       Dir *dir = diri->open_dir();
       assert(dir);
-      utime_t ttl = g_clock.real_now();
-      ttl += 60.0;
-      
-      list<InodeStat*>::const_iterator pin = reply->get_dir_in().begin();
-      for (list<string>::const_iterator pdn = reply->get_dir_dn().begin();
-	   pdn != reply->get_dir_dn().end(); 
-           ++pdn, ++pin) {
-	// count entries
-        res++;
-	
-	// put in cache
-	Inode *in = this->insert_dentry_inode(dir, *pdn, 0, *pin, ttl);
-	
-	// contents to caller too!
-	dout(15) << "_readdir_get_frag got " << *pdn << " to " << in->inode.ino << dendl;
-	_readdir_add_dirent(dirp, *pdn, in);
-      }
 
+      // dirstat
+      DirStat dst(p);
+      __u32 numdn;
+      ::_decode_simple(numdn, p);
+
+      string dname;
+      LeaseStat dlease, ilease;
+      while (numdn) {
+	::_decode_simple(dname, p);
+	::_decode_simple(dlease, p);
+	InodeStat ist(p);
+	::_decode_simple(ilease, p);
+
+	// cache
+	Inode *in = this->insert_dentry_inode(dir, dname, &dlease, &ist, &ilease, from);
+
+	// caller
+	dout(15) << "_readdir_get_frag got " << dname << " to " << in->inode.ino << dendl;
+	_readdir_add_dirent(dirp, dname, in);
+
+	numdn--;
+      }
+      
       if (dir->is_empty())
 	close_dir(dir);
     }
@@ -2654,7 +2695,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     in->add_open(cmode);  // make note of pending open, since it effects _wanted_ caps.
   }
   
-  MClientReply *reply = make_request(req);
+  in = 0;
+  MClientReply *reply = make_request(req, &in);
   assert(reply);
 
   int result = reply->get_result();
@@ -2667,8 +2709,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     f->mode = cmode;
 
     // inode
-    f->inode = inode_map[reply->get_ino()];
-    assert(f->inode);
+    assert(in);
+    f->inode = in;
     f->inode->get();
 
     if (!in) {
