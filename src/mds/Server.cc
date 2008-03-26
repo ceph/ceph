@@ -582,9 +582,12 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   int numi = 0, numdn = 0;
   ClientLease *l;
 
+  // choose lease duration
+  int pool = 1;  // FIXME: choose intelligently?
+
   utime_t ttl = g_clock.now();
-  ttl += g_conf.mds_client_lease;
-  reply->set_lease_duration_ms((int)(g_conf.mds_client_lease * 1000.0));
+  ttl += mdcache->client_lease_durations[pool];
+  reply->set_lease_duration_ms((int)(mdcache->client_lease_durations[pool] * 1000.0));
 
   char dmask;
   int imask;
@@ -601,7 +604,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   if (imask) {
     l = in->add_client_lease(client, imask);
     session->touch_lease(l);
-    mdcache->touch_client_lease(l, ttl);
+    mdcache->touch_client_lease(l, pool, ttl);
   }
   numi++;
   dout(20) << " trace added " << imask << " " << *in << dendl;
@@ -618,7 +621,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     dmask = CEPH_LOCK_DN;
     l = dn->add_client_lease(client, dmask);
     session->touch_lease(l);
-    mdcache->touch_client_lease(l, ttl);
+    mdcache->touch_client_lease(l, pool, ttl);
   }
   ::_encode_simple(dmask, bl);
   numdn++;

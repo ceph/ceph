@@ -38,7 +38,6 @@ kernel client
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
-- optimization: preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client

@@ -92,13 +92,16 @@ MDCache::MDCache(MDS *m)
 {
   mds = m;
   migrator = new Migrator(mds, this);
-  //  renamer = new Renamer(mds, this);
   root = NULL;
   stray = NULL;
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
   did_shutdown_log_cap = false;
+
+  client_lease_durations[0] = 5.0;
+  client_lease_durations[1] = 30.0;
+  client_lease_durations[2] = 300.0;
 }
 
 MDCache::~MDCache() 
@@ -3495,18 +3498,24 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
 
 void MDCache::trim_client_leases()
 {
-  dout(10) << "trim_client_leases start - " << client_leases.size() << " leases" << dendl;
-
   utime_t now = g_clock.now();
-  while (!client_leases.empty()) {
-    ClientLease *r = client_leases.front();
-    if (r->ttl > now) break;
-    MDSCacheObject *p = r->parent;
-    dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
-    p->remove_client_lease(r, r->mask);
-  }
 
-  dout(10) << "trim_client_leases finish - " << client_leases.size() << " leases" << dendl;
+  for (int pool=0; pool<client_lease_pools; pool++) {
+    dout(10) << "trim_client_leases pool " << pool << " (" << client_lease_durations[pool] 
+	     << "s) - " << client_leases[pool].size() << " leases" << dendl;
+    if (client_leases[pool].empty()) 
+      continue;
+
+    while (!client_leases[pool].empty()) {
+      ClientLease *r = client_leases[pool].front();
+      if (r->ttl > now) break;
+      MDSCacheObject *p = r->parent;
+      dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
+      p->remove_client_lease(r, r->mask);
+    }
+    dout(10) << "trim_client_leases pool " << pool << " finish - " 
+	     << client_leases[pool].size() << " leases" << dendl;
+  }
 }
 
 
