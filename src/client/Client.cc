@@ -2714,9 +2714,10 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     assert(in);
     f->inode = in;
     f->inode->get();
+    if (!dn)
+      in->add_open(f->mode);  // i may have alrady added it above!
 
-    in->add_open(f->mode);
-    dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+    dout(10) << in->inode.ino << " wr " << in->num_open_wr << " rd " << in->num_open_rd
 	     << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
 
     // caps included?
@@ -2778,7 +2779,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
 void Client::close_release(Inode *in)
 {
   dout(10) << "close_release on " << in->ino() << dendl;
-  dout(10) << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+  dout(10) << in->inode.ino << " wr " << in->num_open_wr << " rd " << in->num_open_rd
 	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
 
   if (!in->num_open_rd) 
@@ -2825,6 +2826,8 @@ int Client::_release(Fh *f)
   int before = in->file_caps_wanted();
   in->sub_open(f->mode);
   int after = in->file_caps_wanted();
+
+  delete f;
 
   // does this change what caps we want?
   if (before != after && after)
