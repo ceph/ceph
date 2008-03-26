@@ -205,10 +205,9 @@ protected:
 public:
   void handle_client_lease(class MClientLease *m);
 
-  void decide_client_lease(CInode *in, int mask, int pool, int client);
-  void decide_client_lease(CDentry *dn, int mask, int pool, int client);
-  void issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
-			  bufferlist &bl, utime_t now, Session *session);
+  void _issue_client_lease(MDSCacheObject *p, int mask, int pool, int client, bufferlist &bl, utime_t now, Session *session);
+  int issue_client_lease(CInode *in, int client, bufferlist &bl, utime_t now, Session *session);
+  int issue_client_lease(CDentry *dn, int client, bufferlist &bl, utime_t now, Session *session);
 
 };
 

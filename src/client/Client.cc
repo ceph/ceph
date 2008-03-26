@@ -317,7 +317,7 @@ void Client::trim_cache()
 }
 
 
-void Client::update_inode(Inode *in, InodeStat *st, utime_t ttl)
+void Client::update_inode(Inode *in, InodeStat *st, ceph_mds_reply_lease *l, utime_t ttl)
 {
   dout(12) << "update_inode stat mask is " << st->mask << dendl;
   if (st->mask & CEPH_STAT_MASK_INODE) {

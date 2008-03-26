@@ -583,8 +583,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
   // choose lease duration
   utime_t now = g_clock.now();
-
-  int lmask, lpool;
+  int lmask;
 
   // start with dentry or inode?
   if (!in) {
@@ -595,8 +594,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  inode:
   InodeStat::_encode(bl, in);
-  mds->locker->decide_client_lease(in, lmask, lpool, client);
-  mds->locker->issue_client_lease(in, lmask, lpool, client, bl, now, session);
+  lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   numi++;
   dout(20) << " trace added " << lmask << " " << *in << dendl;
 
@@ -607,10 +605,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  dentry:
   ::_encode_simple(dn->get_name(), bl);
-  mds->locker->decide_client_lease(dn, lmask, lpool, client);
-  mds->locker->issue_client_lease(dn, lmask, lpool, client, bl, now, session);
+  lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   numdn++;
-  dout(20) << " trace added " << (int)lmask << " " << *dn << dendl;
+  dout(20) << " trace added " << lmask << " " << *dn << dendl;
   
   // dir
   DirStat::_encode(bl, dn->get_dir(), whoami);
@@ -1779,15 +1776,12 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dout(12) << "including inode " << *in << dendl;
     
     // dentry
-    int lmask, lpool;
     ::_encode(it->first, dnbl);
-    mds->locker->decide_client_lease(dn, lmask, lpool, client);
-    mds->locker->issue_client_lease(dn, lmask, lpool, client, dnbl, mdr->now, mdr->session);
+    mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
     // inode
     InodeStat::_encode(dnbl, in);
-    mds->locker->decide_client_lease(in, lmask, lpool, client);
-    mds->locker->issue_client_lease(in, lmask, lpool, client, dnbl, mdr->now, mdr->session);
+    mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 
     // touch dn

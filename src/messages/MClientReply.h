@@ -164,10 +164,12 @@ class MClientReply : public Message {
   // reply data
   struct ceph_mds_reply_head st;
  
+  /*
   list<InodeStat*> trace_in;
   list<DirStat*>   trace_dir;
   list<string>     trace_dn;
   list<char>       trace_dn_mask;
+  */
   bufferlist trace_bl;
 
   DirStat *dir_dir;
@@ -273,6 +275,10 @@ class MClientReply : public Message {
     ::_encode_simple(numdn, trace_bl);
     trace_bl.claim_append(bl);
   }
+  bufferlist& get_trace_bl() {
+    return trace_bl;
+  }
+  /*
   void _decode_trace() {
     bufferlist::iterator p = trace_bl.begin();
     __u16 numi, numdn;
@@ -323,7 +329,7 @@ class MClientReply : public Message {
     if (trace_in.empty() && trace_bl.length()) _decode_trace();
     return trace_dn_mask; 
   }
-
+  */
 
 };
 

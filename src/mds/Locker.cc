@@ -1018,24 +1018,9 @@ void Locker::handle_client_lease(MClientLease *m)
 }
 
 
-void Locker::decide_client_lease(CInode *in, int mask, int pool, int client)
-{
-  mask = CEPH_LOCK_INO;
-  pool = 1;   // fixme.. do something smart!
-  if (in->authlock.can_rdlock(0)) mask |= CEPH_LOCK_IAUTH;
-  if (in->linklock.can_rdlock(0)) mask |= CEPH_LOCK_ILINK;
-  if (in->filelock.can_rdlock(0)) mask |= CEPH_LOCK_IFILE;
-}
 
-void Locker::decide_client_lease(CDentry *dn, int mask, int pool, int client)
-{
-  pool = 1;   // fixme.. do something smart!
-  mask = 0;
-  if (dn->lock.can_rdlock(0)) mask |= CEPH_LOCK_DN;
-}
-
-void Locker::issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
-				bufferlist &bl, utime_t now, Session *session)
+void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
+				 bufferlist &bl, utime_t now, Session *session)
 {
   if (mask) {
     ClientLease *l = p->add_client_lease(client, mask);
@@ -1051,6 +1036,31 @@ void Locker::issue_client_lease(MDSCacheObject *p, int mask, int pool, int clien
   ::_encode_simple(e, bl);
 }
   
+
+
+int Locker::issue_client_lease(CInode *in, int client, 
+				bufferlist &bl, utime_t now, Session *session)
+{
+  int mask = CEPH_LOCK_INO;
+  int pool = 1;   // fixme.. do something smart!
+  if (in->authlock.can_rdlock(0)) mask |= CEPH_LOCK_IAUTH;
+  if (in->linklock.can_rdlock(0)) mask |= CEPH_LOCK_ILINK;
+  if (in->filelock.can_rdlock(0)) mask |= CEPH_LOCK_IFILE;
+
+  _issue_client_lease(in, mask, pool, client, bl, now, session);
+  return mask;
+}
+
+int Locker::issue_client_lease(CDentry *dn, int client,
+				bufferlist &bl, utime_t now, Session *session)
+{
+  int pool = 1;   // fixme.. do something smart!
+  int mask = 0;
+  if (dn->lock.can_rdlock(0)) mask |= CEPH_LOCK_DN;
+
+  _issue_client_lease(dn, mask, pool, client, bl, now, session);
+  return mask;
+}
 
 
 
