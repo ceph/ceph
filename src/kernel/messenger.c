@@ -635,7 +635,7 @@ static int read_message_partial(struct ceph_connection *con)
 
 	/* front */
 	front_len = le32_to_cpu(m->hdr.front_len);
-	if (m->front.iov_len < front_len) {
+	while (m->front.iov_len < front_len) {
 		if (m->front.iov_base == NULL) {
 			m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
 			if (m->front.iov_base == NULL)
