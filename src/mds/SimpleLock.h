@@ -281,6 +281,9 @@ public:
     return false;
   }
 
+  bool can_lease() {
+    return state == LOCK_SYNC;
+  }
   bool can_rdlock(MDRequest *mdr) {
     //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
     //if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;

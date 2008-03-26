@@ -118,9 +118,6 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
 
 
 
-
-
-
 bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
@@ -384,6 +381,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
     return scatter_wrlock_start((ScatterLock*)lock, mdr);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mdr);
+    //case CEPH_LOCK_IFILE:
+    //return file_wrlock_start((ScatterLock*)lock, mdr);
   default:
     assert(0); 
     return false;
@@ -534,6 +533,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   cap->set_last_open();
 
   // increase max_size?
+  /* FIXME
   inode_t *latest = in->get_projected_inode();
   if (latest->max_size == 0 && 
       !in->is_base() &&
@@ -553,6 +553,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
     file_wrlock_start(&in->filelock);  // wrlock for duration of journal
   }
+  */
   
   // twiddle file_data_version?
   int now = cap->pending();
@@ -986,8 +987,6 @@ void Locker::handle_client_lease(MClientLease *m)
   dout(10) << " on " << *p << dendl;
 
   // replica and lock
-  SimpleLock *lock = p->get_lock(m->lock);
-  assert(lock);
   ClientLease *l = p->get_client_lease(client);
   if (!l) {
     dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *p << dendl;
@@ -1001,7 +1000,7 @@ void Locker::handle_client_lease(MClientLease *m)
       dout(7) << "handle_client_lease client" << client
 	      << " release mask " << m->mask
 	      << " on " << *p << dendl;
-      int left = p->remove_client_lease(l, l->mask);
+      int left = p->remove_client_lease(l, l->mask, this);
       dout(10) << " remaining mask is " << left << " on " << *p << dendl;
     }
     break;
@@ -1010,10 +1009,6 @@ void Locker::handle_client_lease(MClientLease *m)
     assert(0); // implement me
     break;
   }
-
-  // eval/waiters
-  if (!lock->is_stable())
-    eval_gather(lock);
 
   delete m;
 }
@@ -1044,9 +1039,13 @@ int Locker::issue_client_lease(CInode *in, int client,
 {
   int mask = CEPH_LOCK_INO;
   int pool = 1;   // fixme.. do something smart!
-  if (in->authlock.can_rdlock(0)) mask |= CEPH_LOCK_IAUTH;
-  if (in->linklock.can_rdlock(0)) mask |= CEPH_LOCK_ILINK;
-  if (in->filelock.can_rdlock(0)) mask |= CEPH_LOCK_IFILE;
+  if (in->authlock.can_lease()) mask |= CEPH_LOCK_IAUTH;
+  if (in->linklock.can_lease()) mask |= CEPH_LOCK_ILINK;
+  if (in->is_dir()) {
+    if (in->dirlock.can_lease()) mask |= CEPH_LOCK_IDIR;
+  } else {
+    if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
+  }
 
   _issue_client_lease(in, mask, pool, client, bl, now, session);
   return mask;
@@ -1057,10 +1056,43 @@ int Locker::issue_client_lease(CDentry *dn, int client,
 {
   int pool = 1;   // fixme.. do something smart!
   int mask = 0;
-  if (dn->lock.can_rdlock(0)) mask |= CEPH_LOCK_DN;
+  if (dn->lock.can_lease()) mask |= CEPH_LOCK_DN;
 
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
+}
+
+
+void Locker::revoke_client_leases(SimpleLock *lock)
+{
+  int n = 0;
+  for (hash_map<int, ClientLease*>::iterator p = lock->get_parent()->client_lease_map.begin();
+       p != lock->get_parent()->client_lease_map.end();
+       p++) {
+    ClientLease *l = p->second;
+    
+    if (l->mask & lock->get_type() == 0)
+      continue;
+    
+    n++;
+    if (lock->get_type() == CEPH_LOCK_DN) {
+      CDentry *dn = (CDentry*)lock->get_parent();
+      mds->send_message_client(new MClientLease(lock->get_type(), 
+						CEPH_MDS_LEASE_REVOKE,
+						lock->get_type(),
+						dn->get_dir()->ino(),
+						dn->get_name()),
+			       l->client);
+    } else {
+      CInode *in = (CInode*)lock->get_parent();
+      mds->send_message_client(new MClientLease(lock->get_type(),
+						CEPH_MDS_LEASE_REVOKE,
+						lock->get_type(),
+						in->ino()),
+			       l->client);
+    }
+  }
+  assert(n == lock->get_num_client_lease());
 }
 
 
@@ -1376,34 +1408,7 @@ void Locker::simple_lock(SimpleLock *lock)
     send_lock_message(lock, LOCK_AC_LOCK);
 
     // bcast to client replicas
-    int n = 0;
-    for (hash_map<int, ClientLease*>::iterator p = lock->get_parent()->client_lease_map.begin();
-	 p != lock->get_parent()->client_lease_map.end();
-	 p++) {
-      ClientLease *l = p->second;
-
-      if (l->mask & lock->get_type() == 0)
-	continue;
-
-      n++;
-      if (lock->get_type() == CEPH_LOCK_DN) {
-	CDentry *dn = (CDentry*)lock->get_parent();
-	mds->send_message_client(new MClientLease(lock->get_type(), 
-						  CEPH_MDS_LEASE_REVOKE,
-						  lock->get_type(),
-						  dn->get_dir()->ino(),
-						  dn->get_name()),
-				 l->client);
-      } else {
-	CInode *in = (CInode*)lock->get_parent();
-	mds->send_message_client(new MClientLease(lock->get_type(),
-						  CEPH_MDS_LEASE_REVOKE,
-						  lock->get_type(),
-						  in->ino()),
-				 l->client);
-      }
-    }
-    assert(n == lock->get_num_client_lease());
+    revoke_client_leases(lock);
     
     // change lock
     lock->set_state(LOCK_GLOCKR);
@@ -2478,14 +2483,22 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
 
 bool Locker::file_wrlock_start(FileLock *lock)
 {
-  if (!lock->can_wrlock()) {
-    dout(7) << "wrlock_start can't on " << *lock << " on " << *lock->get_parent() << dendl;
-    assert(0); // !
-    return false;
-  }
-  dout(7) << "wrlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
+  dout(7) << "file_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+  assert(lock->can_wrlock());
   lock->get_wrlock();
   return true;
+
+  /*
+  if (lock->can_wrlock()) {
+    lock->get_wrlock();
+    mdr->wrlocks.insert(lock);
+    mdr->locks.insert(lock);
+    return true;
+  } else {
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+    }*/
 }
 
 void Locker::file_wrlock_finish(FileLock *lock)
@@ -2629,6 +2642,7 @@ void Locker::file_eval_gather(FileLock *lock)
   if (in->is_auth() &&
       !lock->is_gathering() &&
       !lock->is_wrlocked() &&
+      lock->get_num_client_lease() == 0 &&
       ((issued & ~lock->caps_allowed()) == 0)) {
     dout(7) << "file_eval_gather finished gather" << dendl;
     
@@ -2714,6 +2728,7 @@ void Locker::file_eval_gather(FileLock *lock)
   
   // [replica] finished caps gather?
   if (!in->is_auth() &&
+      lock->get_num_client_lease() == 0 &&
       ((issued & ~lock->caps_allowed()) == 0)) {
     switch (lock->get_state()) {
     case LOCK_GMIXEDR:
@@ -2784,20 +2799,25 @@ void Locker::file_eval(FileLock *lock)
   // * -> sync?
   else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
 	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
-	   ((wanted & CEPH_CAP_RD) || 
-	    in->is_replicated() || 
-	    (!loner && lock->get_state() == LOCK_LONER)) &&
+	   //((wanted & CEPH_CAP_RD) || 
+	    //in->is_replicated() || 
+	    //lock->get_num_client_lease() || 
+	   //(!loner && lock->get_state() == LOCK_LONER)) &&
+	   !(loner && lock->get_state() == LOCK_LONER) &&       // leave loner in loner state
 	   lock->get_state() != LOCK_SYNC) {
     dout(7) << "file_eval stable, bump to sync " << *lock << " on " << *lock->get_parent() << dendl;
     file_sync(lock);
   }
   
   // * -> lock?  (if not replicated or open)
+/*
   else if (!in->is_replicated() &&
 	   wanted == 0 &&
+	   lock->get_num_client_lease() == 0 && 
 	   lock->get_state() != LOCK_LOCK) {
     file_lock(lock);
   }
+*/
 }
 
 
@@ -2891,10 +2911,12 @@ void Locker::file_lock(FileLock *lock)
   int issued = in->get_caps_issued();
 
   if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated()) {
+    if (in->is_replicated() ||
+	lock->get_num_client_lease()) {
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
+      revoke_client_leases(lock);
       
       // change lock
       lock->set_state(LOCK_GLOCKR);
@@ -2970,9 +2992,11 @@ void Locker::file_mixed(FileLock *lock)
   int issued = in->get_caps_issued();
 
   if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated()) {
+    if (in->is_replicated() ||
+	lock->get_num_client_lease()) {
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_MIXED);
+      revoke_client_leases(lock);
       lock->init_gather();
     
       lock->set_state(LOCK_GMIXEDR);
@@ -3031,7 +3055,7 @@ void Locker::file_mixed(FileLock *lock)
 void Locker::file_loner(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "inode_file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
 
   assert(in->is_auth());
   assert(lock->is_stable());
@@ -3039,9 +3063,11 @@ void Locker::file_loner(FileLock *lock)
   assert((in->client_caps.size() == 1) && in->mds_caps_wanted.empty());
   
   if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated()) {
+    if (in->is_replicated() ||
+	lock->get_num_client_lease()) {
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_LOCK);
+      revoke_client_leases(lock);
       lock->init_gather();
       
       // change lock

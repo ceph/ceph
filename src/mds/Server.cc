@@ -229,7 +229,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       ClientLease *r = session->leases.front();
       MDSCacheObject *p = r->parent;
       dout(10) << " killing client lease of " << *p << dendl;
-      p->remove_client_lease(r, r->mask);
+      p->remove_client_lease(r, r->mask, mds->locker);
     }
 
     if (session->is_closing())
@@ -1521,9 +1521,9 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (mask & CEPH_LOCK_ILINK) rdlocks.insert(&ref->linklock);
   if (mask & CEPH_LOCK_IAUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
-      mask & CEPH_LOCK_IFILE) rdlocks.insert(&ref->filelock);
+      mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->filelock);
   if (ref->is_dir() &&
-      mask & CEPH_STAT_MASK_MTIME) rdlocks.insert(&ref->dirlock);
+      mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->dirlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -3914,7 +3914,6 @@ void Server::handle_client_open(MDRequest *mdr)
 
   // hmm, check permissions or something.
 
-
   // O_TRUNC
   if (flags & O_TRUNC) {
     assert(cur->is_auth());
@@ -3931,7 +3930,7 @@ void Server::handle_client_open(MDRequest *mdr)
       handle_client_opent(mdr);
       return;
     }
-  }
+  } 
   
   // do it
   _do_open(mdr, cur);

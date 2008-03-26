@@ -49,6 +49,7 @@ class SimpleLock;
 class FileLock;
 class ScatterLock;
 class LocalLock;
+class MDCache;
 
 class Locker {
 private:
@@ -77,8 +78,8 @@ public:
 
   void drop_locks(MDRequest *mdr);
 
-protected:
   void eval_gather(SimpleLock *lock);
+protected:
   bool rdlock_start(SimpleLock *lock, MDRequest *mdr);
   void rdlock_finish(SimpleLock *lock, MDRequest *mdr);
   bool xlock_start(SimpleLock *lock, MDRequest *mdr);
@@ -208,7 +209,7 @@ public:
   void _issue_client_lease(MDSCacheObject *p, int mask, int pool, int client, bufferlist &bl, utime_t now, Session *session);
   int issue_client_lease(CInode *in, int client, bufferlist &bl, utime_t now, Session *session);
   int issue_client_lease(CDentry *dn, int client, bufferlist &bl, utime_t now, Session *session);
-
+  void revoke_client_leases(SimpleLock *lock);
 };
 
 

@@ -2038,8 +2038,11 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
     }
     if (dn->inode->file_caps() & CEPH_CAP_EXCL) {
       dout(10) << "_lstat has inode " << fpath << " with CAP_EXCL, yay" << dendl;
-      havemask |= CEPH_LOCK_IFILE;
+      havemask |= CEPH_LOCK_ICONTENT;
     }
+    if (havemask & CEPH_LOCK_ICONTENT)
+      havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
+ 
     dout(10) << "_lstat has inode " << fpath << " with mask " << havemask << ", want " << mask << dendl;
   } else {
     dout(10) << "_lstat has no dn for path " << fpath << dendl;

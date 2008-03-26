@@ -3511,7 +3511,7 @@ void MDCache::trim_client_leases()
       if (r->ttl > now) break;
       MDSCacheObject *p = r->parent;
       dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
-      p->remove_client_lease(r, r->mask);
+      p->remove_client_lease(r, r->mask, mds->locker);
     }
     dout(10) << "trim_client_leases pool " << pool << " finish - " 
 	     << client_leases[pool].size() << " leases" << dendl;

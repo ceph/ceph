@@ -5,12 +5,15 @@ code cleanup
 - addr=?
 
 client leases
+- FIX max_size!!!!!!!!!
+- IFILE lease vs filelock and caps...
+- IFILE lease vs dirlock...
+  - do i need to unify filelock and scatterlock?
 - lease length heuristics
   - mds lock last_change stamp?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
   - or inode fields we are chmodding, etc.
 - lease renewals (to avoid blocking client ops?)
-- IFILE vs caps...
 
 userspace client
 - clean up ll_ interface, now that we have leases!

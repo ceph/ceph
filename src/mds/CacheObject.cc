@@ -15,6 +15,7 @@
 
 #include "mdstypes.h"
 #include "SimpleLock.h"
+#include "Locker.h"
 
 #include "config.h"
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " " << this << " "
@@ -50,7 +51,7 @@ ClientLease *MDSCacheObject::add_client_lease(int c, int mask)
   return l;
 }
 
-int MDSCacheObject::remove_client_lease(ClientLease *l, int mask) 
+int MDSCacheObject::remove_client_lease(ClientLease *l, int mask, Locker *locker) 
 {
   assert(l->parent == this);
   
@@ -63,6 +64,8 @@ int MDSCacheObject::remove_client_lease(ClientLease *l, int mask)
       if (lock) {
 	lock->put_client_lease();
 	dout(10) << "put_client_lease on " << (1 << b) << " " << *lock << dendl;
+	if (lock->get_num_client_lease() == 0 && !lock->is_stable())
+	  locker->eval_gather(lock);
       }
     }
     b++;

@@ -624,7 +624,7 @@ protected:
   }
 
   ClientLease *add_client_lease(int c, int mask);
-  int remove_client_lease(ClientLease *r, int mask);  // returns remaining mask (if any)
+  int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   
 
   // ---------------------------------------------
