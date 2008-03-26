@@ -532,29 +532,6 @@ Capability* Locker::issue_new_caps(CInode *in,
   cap->issue(cap->pending());
   cap->set_last_open();
 
-  // increase max_size?
-  /* FIXME
-  inode_t *latest = in->get_projected_inode();
-  if (latest->max_size == 0 && 
-      !in->is_base() &&
-      (mode & FILE_MODE_W)) {
-    int64_t inc = in->get_layout_size_increment();
-    int64_t new_max = ROUND_UP_TO(latest->size + inc/2, inc);
-    dout(10) << "hey, wr caps wanted, max_size 0 -> " << new_max << dendl;
-    inode_t *pi = in->project_inode();
-    pi->version = in->pre_dirty();
-    pi->max_size = new_max;
-    EOpen *le = new EOpen(mds->mdlog);
-    le->metablob.add_dir_context(in->get_parent_dir());
-    le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    le->add_ino(in->ino());
-    ls->open_files.push_back(&in->xlist_open_file);
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
-    file_wrlock_start(&in->filelock);  // wrlock for duration of journal
-  }
-  */
-  
   // twiddle file_data_version?
   int now = cap->pending();
   if ((before & CEPH_CAP_WRBUFFER) == 0 &&
@@ -576,6 +553,28 @@ bool Locker::issue_caps(CInode *in)
 
   // count conflicts with
   int nissued = 0;        
+
+  // should we increase max_size?
+  if (!in->is_dir() && (allowed & CEPH_CAP_WR)) {
+    inode_t *latest = in->get_projected_inode();
+    int64_t inc = in->get_layout_size_increment();
+    if (latest->size + inc > latest->max_size) {
+      int64_t new_max = ROUND_UP_TO(latest->size + inc/2, inc);
+      dout(10) << "increasing max_size " << latest->max_size << " -> " << new_max << dendl;
+      
+      inode_t *pi = in->project_inode();
+      pi->version = in->pre_dirty();
+      pi->max_size = new_max;
+      EOpen *le = new EOpen(mds->mdlog);
+      le->metablob.add_dir_context(in->get_parent_dir());
+      le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+      LogSegment *ls = mds->mdlog->get_current_segment();
+      le->add_ino(in->ino());
+      ls->open_files.push_back(&in->xlist_open_file);
+      mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
+      file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+    }
+  }
 
   // client caps
   for (map<int, Capability*>::iterator it = in->client_caps.begin();
@@ -904,7 +903,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   bool increase_max = false;
   int64_t inc = in->get_layout_size_increment();
   if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      size > latest->max_size + inc) {
+      size + inc > latest->max_size) {
     dout(10) << "hey, wr caps wanted, and size " << size
 	     << " > max " << latest->max_size << " *2, increasing" << dendl;
     increase_max = true;

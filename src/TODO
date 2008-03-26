@@ -5,8 +5,6 @@ code cleanup
 - addr=?
 
 client leases
-- FIX max_size!!!!!!!!!
-- scatterlock needs to do lease callbacks
 - lease length heuristics
   - mds lock last_change stamp?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
