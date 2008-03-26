@@ -21,17 +21,25 @@ extern int ceph_debug_addr;
 
 extern int ceph_lookup_cache;
 
+#define CEPH_DUMP_ERROR_ALWAYS
+
 #define dout(x, args...) do {						\
 		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
 		    (ceph_debug < 0 && x <= DOUT_VAR))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
+
+#ifdef CEPH_DUMP_ERROR_ALWAYS
+#define derr(x, args...) do {						\
+		printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
+	} while (0)
+#else
 #define derr(x, args...) do {						\
 		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
 		    (ceph_debug < 0 && x <= DOUT_VAR))			\
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
-
+#endif
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
