@@ -349,7 +349,7 @@ extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 			    struct nameidata *nd);
 extern int ceph_release(struct inode *inode, struct file *filp);
-extern int ceph_inode_revalidate(struct dentry *dentry);
+extern int ceph_inode_revalidate(struct inode *inode, int mask);
 
 
 /* dir.c */
@@ -359,7 +359,7 @@ extern struct dentry_operations ceph_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
 extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req);
-extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry);
+extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int m);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
 	dentry->d_op = &ceph_dentry_ops;

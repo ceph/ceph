@@ -269,16 +269,17 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-int ceph_do_lookup(struct super_block *sb, struct dentry *dentry)
+int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	char *path;
 	int pathlen;
 	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *rhead;
 	int err;
 
-	dout(10, "do_lookup %p\n", dentry);
+	dout(10, "do_lookup %p mask %d\n", dentry, CEPH_STAT_MASK_INODE_ALL);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
@@ -288,6 +289,8 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	rhead = req->r_request->front.iov_base;
+	rhead->args.stat.mask = cpu_to_le32(mask);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
@@ -315,7 +318,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(err);
 	}
 
-	err = ceph_do_lookup(dir->i_sb, dentry);
+	err = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL);
 	if (err == -ENOENT)
 		d_add(dentry, NULL);
 	else if (err < 0)

@@ -758,32 +758,35 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
-/*
-int ceph_inode_revalidate(struct dentry *dentry)
+int ceph_inode_revalidate(struct inode *inode, int mask)
 {
-	struct ceph_inode_info *ci;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int havemask = 0;
 
-	if (dentry->d_inode == NULL) {
-		dout(10, "revalidate %p has no inode, -ENOENT\n", dentry);
-		return -ENOENT;
-	}
-	ci = ceph_inode(dentry->d_inode);
+	/* EXCL cap counts for an ICONTENT lease */
+	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL)
+		havemask |= CEPH_LOCK_ICONTENT;
 
-	if (ceph_lookup_cache && time_before(jiffies, ci->time+CACHE_HZ)) {
-		dout(10, "revalidate %p still valid\n", dentry);
+	/* any bits implies all bits */
+	if (havemask & CEPH_LOCK_ICONTENT)  
+		havemask |= CEPH_LOCK_ICONTENT;
+	
+	if (time_before(jiffies, ci->i_lease_ttl+CACHE_HZ) &&
+	    (havemask & mask) == mask) {
+		dout(10, "revalidate %p mask %d still valid\n", inode, mask);
 		return 0;
 	}
-	dout(10, "revalidate %p is old\n", dentry);
-	return ceph_do_lookup(dentry->d_inode->i_sb, dentry);
+	dout(10, "revalidate %p is old\n", inode);
+	return ceph_do_lookup(inode->i_sb, d_find_alias(inode), mask);
 }
-*/
 
-int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
+int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry, 
+		       struct kstat *stat)
 {
 	int err = 0;
 	dout(30, "ceph_inode_getattr\n");
 
-	//err = ceph_inode_revalidate(dentry);
+	err = ceph_inode_revalidate(dentry->d_inode, CEPH_STAT_MASK_INODE_ALL);
 
 	dout(30, "ceph_inode_getattr returned %d\n", err);
 	if (!err) 
