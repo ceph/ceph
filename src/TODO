@@ -6,9 +6,7 @@ code cleanup
 
 client leases
 - FIX max_size!!!!!!!!!
-- IFILE lease vs filelock and caps...
-- IFILE lease vs dirlock...
-  - do i need to unify filelock and scatterlock?
+- scatterlock needs to do lease callbacks
 - lease length heuristics
   - mds lock last_change stamp?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.

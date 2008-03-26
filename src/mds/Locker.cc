@@ -1803,6 +1803,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     if ((lock->get_state() == LOCK_GLOCKS || 
 	 lock->get_state() == LOCK_GLOCKT) &&
 	!lock->is_gathering() &&
+	lock->get_num_client_lease() == 0 &&
 	!lock->is_rdlocked()) {
       dout(7) << "scatter_eval finished lock gather/un-rdlock on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -1846,6 +1847,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     else if ((lock->get_state() == LOCK_GSCATTERT ||
 	      lock->get_state() == LOCK_GSCATTERS) &&
 	     !lock->is_gathering() &&
+	     lock->get_num_client_lease() == 0 &&
 	     !lock->is_rdlocked()) {
       dout(7) << "scatter_eval finished scatter un-rdlock(/gather) on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -2042,12 +2044,14 @@ void Locker::scatter_scatter(ScatterLock *lock)
   switch (lock->get_state()) {
   case LOCK_SYNC:
     if (!lock->is_rdlocked() &&
-	!lock->get_parent()->is_replicated())
+	!lock->get_parent()->is_replicated() &&
+	!lock->get_num_client_lease())
       break; // do it
     if (lock->get_parent()->is_replicated()) {
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
     }
+    revoke_client_leases(lock);
     lock->set_state(LOCK_GSCATTERS);
     lock->get_parent()->auth_pin();
     return;
@@ -2093,13 +2097,15 @@ void Locker::scatter_lock(ScatterLock *lock)
   switch (lock->get_state()) {
   case LOCK_SYNC:
     if (!lock->is_rdlocked() &&
-	!lock->get_parent()->is_replicated())
+	!lock->get_parent()->is_replicated() &&
+	!lock->get_num_client_lease())
       break; // do it.
 
     if (lock->get_parent()->is_replicated()) {
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
     } 
+    revoke_client_leases(lock);  
     lock->set_state(LOCK_GLOCKS);
     lock->get_parent()->auth_pin();
     return;
@@ -2144,7 +2150,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
 
   switch (lock->get_state()) {
   case LOCK_SYNC:
-    break;  // do it.
+    assert(0);   // this shouldn't happen
 
   case LOCK_LOCK:
     if (lock->is_wrlocked() ||
