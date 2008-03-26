@@ -8,6 +8,7 @@ int ceph_debug_file = 50;
 
 #include "mds_client.h"
 
+#include <linux/namei.h>
 
 /*
  * if err==0, caller is responsible for a put_session on *psession

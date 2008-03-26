@@ -3,6 +3,8 @@ int ceph_dir_debug = 50;
 #define DOUT_PREFIX "dir: "
 #include "super.h"
 
+#include <linux/namei.h>
+
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
 struct dentry_operations ceph_dentry_ops;
