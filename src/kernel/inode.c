@@ -473,13 +473,16 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int seq = le32_to_cpu(grant->seq);
 	int newcaps;
 	int used;
+	int issued; /* to me, before */
 	int wanted = ceph_caps_wanted(ci) | ceph_caps_used(ci);
 	int ret = 0;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
+	struct timespec mtime, atime;
 	int wake = 0;
-
-	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
+	
+	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", 
+	     inode, ci, mds, seq);
 	dout(10, " my wanted = %d\n", wanted);
 	dout(10, " size %llu max_size %llu\n", size, max_size);
 
@@ -494,6 +497,25 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	if (max_size != ci->i_max_size) {
 		dout(10, "max_size %lld -> %llu\n", ci->i_max_size, max_size);
 		ci->i_max_size = max_size;
+	}
+
+	/* mtime/atime? */
+	issued = ceph_caps_issued(ci);
+	if ((issued & CEPH_CAP_EXCL) == 0) {
+		ceph_decode_timespec(&mtime, &grant->mtime);
+		ceph_decode_timespec(&atime, &grant->atime);
+		if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
+			dout(10, "mtime %lu.%09ld -> %lu.%.09ld\n", 
+			     mtime.tv_sec, mtime.tv_nsec,
+			     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec);
+			inode->i_mtime = mtime;
+		}
+		if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
+			dout(10, "atime %lu.%09ld -> %lu.%09ld\n", 
+			     atime.tv_sec, atime.tv_nsec,
+			     inode->i_atime.tv_sec, inode->i_atime.tv_nsec);
+			inode->i_atime = atime;
+		}
 	}
 
 	cap = get_cap_for_mds(inode, mds);
@@ -766,8 +788,8 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	/* truncate? */
 	if (ia_valid & ATTR_SIZE &&
 	    attr->ia_size < inode->i_size) {  /* fixme? */
-		dout(10, "truncate: ia_size %d i_size %d ci->i_wr_size %d\n",
-		     (int)attr->ia_size, (int)inode->i_size, (int)ci->i_wr_size);
+		dout(10, "truncate: ia_size %d i_size %d\n",
+		     (int)attr->ia_size, (int)inode->i_size);
 		if (ia_valid & ATTR_FILE) 
 			req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_TRUNCATE, 
 						       ceph_ino(dentry->d_inode), "", 0, 0);

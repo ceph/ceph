@@ -1027,7 +1027,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_inode_cap *cap;
 	char *path;
 	int pathlen, err;
-	int usectmp;
+	int tmp; /* for timespec encoding */
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
 	struct ceph_mds_cap_reconnect *rec;
@@ -1091,9 +1091,9 @@ retry:
 		BUG_ON(p > end);
 		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
-		rec->size = cpu_to_le64(ci->i_wr_size);
-		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime, usectmp);
-		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime, usectmp);
+		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
+		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime, tmp);
+		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime, tmp);
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {

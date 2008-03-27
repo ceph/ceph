@@ -296,7 +296,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user *data,
 
 	spin_lock(&inode->i_lock);
 	if (pos > inode->i_size) {
-		ci->i_wr_size = inode->i_size = pos;
+		inode->i_size = pos;
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}
