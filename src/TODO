@@ -8,6 +8,10 @@ client leases
 - lease length heuristics
   - mds lock last_change stamp?
 - client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
+  - ICONTENT on file open
+  - DN on unlink, rename
+  - IAUTH on setattr
+  - ICONTENT on utimes
   - or inode fields we are chmodding, etc.
 - lease renewals (to avoid blocking client ops?)
 

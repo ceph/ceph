@@ -510,6 +510,12 @@ struct ceph_mds_file_caps {
 #define CEPH_MDS_LEASE_RELEASE 2  /* client  -> mds    */
 #define CEPH_MDS_LEASE_RENEW   3  /* client <-> mds    */
 
+struct ceph_mds_lease {
+	__u8 action;
+	__le16 mask;
+	__le64 ino;
+} __attribute__ ((packed));
+/* followed by a __le32+string for dname */
 
 /* client reconnect */
 struct ceph_mds_cap_reconnect {

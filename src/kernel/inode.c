@@ -269,10 +269,13 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		/* inode */
 		if (d+1 == rinfo->trace_numi) {
 			dout(10, "fill_trace has dentry but no inode\n");
-			err = -ENOENT;
-			d_instantiate(dn, NULL);
-			if (d_unhashed(dn))
-				d_rehash(dn);
+			if (dn->d_inode)
+				d_delete(dn);  /* is this right? */
+			else {
+				d_instantiate(dn, NULL);
+				if (d_unhashed(dn))
+					d_rehash(dn);
+			}
 			break;
 		}
 		ininfo = rinfo->trace_in[d+1].in;

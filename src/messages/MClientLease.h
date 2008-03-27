@@ -30,24 +30,33 @@ static const char *get_lease_action_name(int a) {
 
 
 struct MClientLease : public Message {
-  __u8 action;
-  __u16 mask;
-  __u64 ino;
+  struct ceph_mds_lease h;
   string dname;
+  
+  int get_action() { return h.action; }
+  int get_mask() { return le16_to_cpu(h.mask); }
+  __u64 get_ino() { return le64_to_cpu(h.ino); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(int ac, int m, __u64 i) :
-    Message(CEPH_MSG_CLIENT_LEASE),
-    action(ac), mask(m), ino(i) {}
+    Message(CEPH_MSG_CLIENT_LEASE) {
+    h.action = ac;
+    h.mask = cpu_to_le16(m);
+    h.ino = cpu_to_le64(i);
+  }
   MClientLease(int ac, int m, __u64 i, const string& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
-    action(ac), mask(m), ino(i), dname(d) {}
+    dname(d) {
+    h.action = ac;
+    h.mask = cpu_to_le16(m);
+    h.ino = cpu_to_le64(i);
+  }
 
   const char *get_type_name() { return "client_lease"; }
   void print(ostream& out) {
-    out << "client_lease(a=" << get_lease_action_name(action)
-	<< " mask " << mask;
-    out << " " << inodeno_t(ino);
+    out << "client_lease(a=" << get_lease_action_name(get_action())
+	<< " mask " << get_mask();
+    out << " " << inodeno_t(get_ino());
     if (dname.length())
       out << "/" << dname;
     out << ")";
@@ -55,15 +64,11 @@ struct MClientLease : public Message {
   
   void decode_payload() {
     int off = 0;
-    ::_decode(mask, payload, off);
-    ::_decode(action, payload, off);
-    ::_decode(ino, payload, off);
+    ::_decode(h, payload, off);
     ::_decode(dname, payload, off);
   }
   virtual void encode_payload() {
-    ::_encode(mask, payload);
-    ::_encode(action, payload);
-    ::_encode(ino, payload);
+    ::_encode(h, payload);
     ::_encode(dname, payload);
   }
 

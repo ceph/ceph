@@ -80,7 +80,6 @@ static int parse_reply_info_trace(void **p, void *end,
 	ceph_decode_16(p, numd);
 	info->trace_numi = numi;
 	info->trace_numd = numd;
-	dout(10, "numi %d numd %d\n", numi, numd);
 	if (numi == 0) {
 		info->trace_in = 0;
 		goto done;   /* hrm, this shouldn't actually happen, but.. */
@@ -107,19 +106,16 @@ static int parse_reply_info_trace(void **p, void *end,
 inode:
 	if (!numi)
 		goto done;
-	dout(20, "parsing inode at %p/%p,  numi %d\n", *p, end, numi);
 	numi--;
 	err = parse_reply_info_in(p, end, &info->trace_in[numi]);
 	if (err < 0)
 		goto bad;
-	dout(20, "parsing lease at %p/%p\n", *p, end);
 	info->trace_ilease[numi] = *p;
 	*p += sizeof(struct ceph_mds_reply_lease);
 	
 dentry:
 	if (!numd)
 		goto done;
-	dout(20, "parsing dentry and dir,  numd %d\n", numd);
 	numd--;
 	ceph_decode_32_safe(p, end, info->trace_dname_len[numd], bad);
 	ceph_decode_need(p, end, info->trace_dname_len[numd], bad);
@@ -137,7 +133,6 @@ dentry:
 	goto inode;
 
 done:
-	dout(20, "done, %p/%p\n", *p, end);
 	if (unlikely(*p != end))
 		return -EINVAL;
 	return 0;
@@ -1380,23 +1375,21 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_inode_info *ci;
 	struct dentry *parent, *dentry;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
-	__u8 action;
-	__u16 mask;
+	struct ceph_mds_lease *h = msg->front.iov_base;
 	__u64 ino;
+	int mask;
 	struct qstr dname;
-	void *p = msg->front.iov_base;
-	void *end = p + msg->front.iov_len;
 	ino_t inot;
 
 	dout(10, "handle_lease from mds%d\n", mds);
 	
 	/* decode */
-	ceph_decode_need(&p, end, 1 + 2 + 8, bad);
-	ceph_decode_8(&p, action);
-	ceph_decode_16(&p, mask);
-	ceph_decode_64(&p, ino);
-	dname.name = p;
-	dname.len = end-p;
+	if (msg->front.iov_len < sizeof(*h) + sizeof(__u32))
+		goto bad;
+	ino = le64_to_cpu(h->ino);
+	mask = le16_to_cpu(h->mask);
+	dname.name = (void *)(h + 1);
+	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(__u32);
 
 	/* lookup inode */
 	inot = ceph_ino_to_ino(ino);
@@ -1405,37 +1398,40 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 #else
 	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
 #endif
-	dout(20, "action is %d, ino %llx %p\n", action, ino, inode);
+	dout(20, "action is %d, ino %llx %p\n", h->action, ino, inode);
 	
-	BUG_ON(action != CEPH_MDS_LEASE_REVOKE);  /* for now */
+	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
 
 	if (inode == NULL) {
 		dout(10, "i don't have inode %llx\n", ino);
-		goto revoke;
+		goto release;
 	}
 
 	if (mask & CEPH_LOCK_DN) {
 		/* dentry */
 		parent = d_find_alias(inode);
-		if (!parent)
-			goto revoke;  /* hrm... */
+		if (!parent) {
+			dout(10, "no parent dentry on inode %p\n", inode);
+			goto release;  /* hrm... */
+		}
 		dname.hash = full_name_hash(dname.name, dname.len);
 		dentry = d_lookup(parent, &dname);
 		if (!dentry)
-			goto revoke;
+			goto release;
 		dentry->d_time = 0;
 		dout(10, "lease revoked on dentry %p\n", dentry);
 	} else {
 		/* inode */
 		ci = ceph_inode(inode);
-		ci->i_lease_mask &= mask;
+		ci->i_lease_mask &= ~mask;
 		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
 		     mask, inode, ci->i_lease_mask);
 	}
 
-revoke:
+release:
 	dout(10, "sending release\n");
-	*(__u8*)(msg->front.iov_base) = CEPH_MDS_LEASE_RELEASE;
+	h->action = CEPH_MDS_LEASE_RELEASE;
+	ceph_msg_get(msg);
 	send_msg_mds(mdsc, msg, mds);
 	return;
 

@@ -1160,25 +1160,25 @@ void Client::handle_lease(MClientLease *m)
 {
   dout(10) << "handle_lease " << *m << dendl;
 
-  assert(m->action == CEPH_MDS_LEASE_REVOKE);
+  assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
   
   Inode *in;
-  if (inode_map.count(m->ino) == 0) {
-    dout(10) << " don't have inode " << m->ino << dendl;
+  if (inode_map.count(m->get_ino()) == 0) {
+    dout(10) << " don't have inode " << m->get_ino() << dendl;
     goto revoke;
   }
-  in = inode_map[m->ino];
+  in = inode_map[m->get_ino()];
 
-  if (m->mask & CEPH_LOCK_DN) {
+  if (m->get_mask() & CEPH_LOCK_DN) {
     if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
-      dout(10) << " don't have dir|dentry " << m->ino << "/" << m->dname <<dendl;
+      dout(10) << " don't have dir|dentry " << m->get_ino() << "/" << m->dname <<dendl;
       goto revoke;
     }
     Dentry *dn = in->dir->dentries[m->dname];
     dout(10) << " reset ttl on " << dn << dendl;
     dn->ttl = utime_t();
   } else {
-    int newmask = in->mask & ~m->mask;
+    int newmask = in->mask & ~m->get_mask();
     dout(10) << " reset inode " << in->ino() 
 	     << " mask " << in->mask << " -> " << newmask << dendl;
     in->mask = newmask;
@@ -1186,7 +1186,7 @@ void Client::handle_lease(MClientLease *m)
   
  revoke:
   messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE,
-					  m->mask, m->ino, m->dname),
+					   m->get_mask(), m->get_ino(), m->dname),
 			  m->get_source_inst());
   delete m;
 }

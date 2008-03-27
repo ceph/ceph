@@ -962,21 +962,21 @@ void Locker::handle_client_lease(MClientLease *m)
   assert(m->get_source().is_client());
   int client = m->get_source().num();
 
-  CInode *in = mdcache->get_inode(m->ino);
+  CInode *in = mdcache->get_inode(m->get_ino());
   if (!in) {
-    dout(7) << "handle_client_lease don't have ino " << m->ino << dendl;
+    dout(7) << "handle_client_lease don't have ino " << m->get_ino() << dendl;
     delete m;
     return;
   }
   CDentry *dn = 0;
   MDSCacheObject *p;
-  if (m->mask & CEPH_LOCK_DN) {
+  if (m->get_mask() & CEPH_LOCK_DN) {
     frag_t fg = in->pick_dirfrag(m->dname);
     CDir *dir = in->get_dirfrag(fg);
     if (dir) 
       p = dn = dir->lookup(m->dname);
     if (!dn) {
-      dout(7) << "handle_client_lease don't have dn " << m->ino << " " << m->dname << dendl;
+      dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
       delete m;
       return;
     }
@@ -993,11 +993,11 @@ void Locker::handle_client_lease(MClientLease *m)
     return;
   } 
 
-  switch (m->action) {
+  switch (m->get_action()) {
   case CEPH_MDS_LEASE_RELEASE:
     {
       dout(7) << "handle_client_lease client" << client
-	      << " release mask " << m->mask
+	      << " release mask " << m->get_mask()
 	      << " on " << *p << dendl;
       int left = p->remove_client_lease(l, l->mask, this);
       dout(10) << " remaining mask is " << left << " on " << *p << dendl;
@@ -1005,6 +1005,7 @@ void Locker::handle_client_lease(MClientLease *m)
     break;
 
   case CEPH_MDS_LEASE_RENEW:
+  default:
     assert(0); // implement me
     break;
   }
