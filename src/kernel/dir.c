@@ -312,8 +312,9 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	dout(5, "dir_lookup in dir %p dentry %p '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
-	/* open(|create) intent? */
-	if (nd->flags & LOOKUP_OPEN) {
+	/* open (but not create!) intent? */
+	if (nd->flags & LOOKUP_OPEN &&
+	    !(nd->intent.open.flags & O_CREAT)) {
 		err = ceph_lookup_open(dir, dentry, nd);
 		return ERR_PTR(err);
 	}
@@ -325,6 +326,17 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(err);
 
 	return NULL;
+}
+
+static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
+			   struct nameidata *nd)
+{
+	int err;
+	dout(5, "create in dir %p dentry %p name '%.*s'\n",
+	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
+	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
+	err = ceph_lookup_open(dir, dentry, nd);
+	return err;
 }
 
 static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry,
@@ -529,37 +541,6 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	err = ceph_mdsc_do_request(mdsc, req);
-	ceph_mdsc_put_request(req);
-	return err;
-}
-
-static int
-ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
-		struct nameidata *nd)
-{
-	struct ceph_mds_client *mdsc = &ceph_inode_to_client(dir)->mdsc;
-	ceph_ino_t pathbase;
-	char *path;
-	int pathlen;
-	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *rhead;
-	int err;
-
-	dout(5, "create in dir %p dentry %p name '%.*s' flags %d\n",
-	     dir, dentry, dentry->d_name.len, dentry->d_name.name, mode);
-	pathbase = ceph_ino(dir->i_sb->s_root->d_inode);
-	path = ceph_build_dentry_path(dentry, &pathlen);
-	if (IS_ERR(path))
-		return PTR_ERR(path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD,
-				       pathbase, path, 0, 0);
-	kfree(path);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	rhead = req->r_request->front.iov_base;
-	rhead->args.mknod.mode = cpu_to_le32(mode);
-	rhead->args.mknod.rdev = 0;
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

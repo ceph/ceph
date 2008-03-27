@@ -1,5 +1,6 @@
 
 #include <linux/sched.h>
+#include <linux/file.h>
 
 int ceph_debug_file = 50;
 #define DOUT_VAR ceph_debug_file
@@ -7,6 +8,7 @@ int ceph_debug_file = 50;
 #include "super.h"
 
 #include "mds_client.h"
+
 
 
 /*
@@ -136,7 +138,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err == 0) 
+	if (err == 0)
 		err = ceph_init_file(req->r_last_inode, file, flags);
 	else if (err == -ENOENT) {
 		ceph_init_dentry(dentry);
