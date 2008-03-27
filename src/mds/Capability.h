@@ -39,6 +39,7 @@ inline string cap_string(int cap)
   if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
   if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
   if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
+  if (cap & CEPH_CAP_EXCL) s += " excl";
   s += " ]";
   return s;
 }
@@ -91,9 +92,6 @@ public:
 
   CInode *get_inode() { return inode; }
   void set_inode(CInode *i) { inode = i; }
-  void add_to_cap_list(xlist<Capability*>& ls) {
-    ls.push_back(&session_caps_item);
-  }
 
   bool is_null() { return cap_history.empty() && wanted_caps == 0; }
 

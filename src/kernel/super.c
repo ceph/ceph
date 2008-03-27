@@ -108,6 +108,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_symlink = 0;
 
+	ci->i_lease_mask = 0;
+	ci->i_lease_ttl = 0;
+
 	ci->i_fragtree = ci->i_fragtree_static;
 	ci->i_fragtree->nsplits = 0;
 
@@ -124,10 +127,6 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
-
-	ci->i_wr_size = 0;
-	ci->i_wr_mtime.tv_sec = 0;
-	ci->i_wr_mtime.tv_nsec = 0;
 
 	ci->i_hashval = 0;
 
@@ -391,6 +390,9 @@ static int ceph_set_super(struct super_block *s, void *data)
 	/* fill sbinfo */
 	s->s_op = &ceph_sops;
 	memcpy(&client->mount_args, args, sizeof(*args));
+
+	/* set time granularity */
+	s->s_time_gran = 1000;  /* 1 us == 1000 ns */
 
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
 	if (ret != 0)

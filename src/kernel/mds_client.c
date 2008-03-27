@@ -53,8 +53,8 @@ static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 /*
  * mds reply parsing
  */
-int parse_reply_info_in(void **p, void *end,
-			struct ceph_mds_reply_info_in *info)
+static int parse_reply_info_in(void **p, void *end,
+			       struct ceph_mds_reply_info_in *info)
 {
 	int err = -EINVAL;
 	info->in = *p;
@@ -69,19 +69,25 @@ bad:
 	return err;
 }
 
-int parse_reply_info_trace(void **p, void *end,
-			   struct ceph_mds_reply_info *info)
+static int parse_reply_info_trace(void **p, void *end,
+				  struct ceph_mds_reply_info *info)
 {
-	__u32 numi;
+	__u16 numi, numd;
 	int err = -EINVAL;
 
-	ceph_decode_32_safe(p, end, numi, bad);
-	if (numi == 0)
+	ceph_decode_need(p, end, 2*sizeof(__u32), bad);
+	ceph_decode_16(p, numi);
+	ceph_decode_16(p, numd);
+	info->trace_numi = numi;
+	info->trace_numd = numd;
+	if (numi == 0) {
+		info->trace_in = 0;
 		goto done;   /* hrm, this shouldn't actually happen, but.. */
+	}
 
-	/* alloc one longer shared array */
-	info->trace_nr = numi;
+	/* alloc one big shared array */
 	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
+					 2*sizeof(*info->trace_ilease) +
 					 sizeof(*info->trace_dir) +
 					 sizeof(*info->trace_dname) +
 					 sizeof(*info->trace_dname_len)),
@@ -89,29 +95,42 @@ int parse_reply_info_trace(void **p, void *end,
 	if (info->trace_in == NULL) 
 		goto badmem;
 
-	info->trace_dir = (void *)(info->trace_in + numi);
-	info->trace_dname = (void *)(info->trace_dir + numi);
-	info->trace_dname_len = (void *)(info->trace_dname + numi);
+	info->trace_ilease = (void *)(info->trace_in + numi);
+	info->trace_dir = (void *)(info->trace_ilease + numi);
+	info->trace_dname = (void *)(info->trace_dir + numd);
+	info->trace_dname_len = (void *)(info->trace_dname + numd);
+	info->trace_dlease = (void *)(info->trace_dname_len + numd);
 
-	while (1) {
-		/* inode */
-		err = parse_reply_info_in(p, end, &info->trace_in[numi-1]);
-		if (err < 0)
-			goto bad;
-		if (--numi == 0)
-			break;
-		/* dentry */
-		ceph_decode_32_safe(p, end, info->trace_dname_len[numi], bad);
-		ceph_decode_need(p, end, info->trace_dname_len[numi], bad);
-		info->trace_dname[numi] = *p;
-		*p += info->trace_dname_len[numi];
-		/* dir */
-		info->trace_dir[numi] = *p;
-		*p += sizeof(struct ceph_mds_reply_dirfrag) +
-			sizeof(__u32)*le32_to_cpu(info->trace_dir[numi]->ndist);
-		if (unlikely(*p > end))
-			goto bad;
-	}
+	if (numi == numd)
+		goto dentry;
+inode:
+	if (!numi)
+		goto done;
+	numi--;
+	err = parse_reply_info_in(p, end, &info->trace_in[numi]);
+	if (err < 0)
+		goto bad;
+	info->trace_ilease[numi] = *p;
+	*p += sizeof(struct ceph_mds_reply_lease);
+	
+dentry:
+	if (!numd)
+		goto done;
+	numd--;
+	ceph_decode_32_safe(p, end, info->trace_dname_len[numd], bad);
+	ceph_decode_need(p, end, info->trace_dname_len[numd], bad);
+	info->trace_dname[numd] = *p;
+	*p += info->trace_dname_len[numd];
+	info->trace_dlease[numd] = *p;
+	*p += sizeof(struct ceph_mds_reply_lease);
+
+	/* dir */
+	info->trace_dir[numd] = *p;
+	*p += sizeof(struct ceph_mds_reply_dirfrag) +
+		sizeof(__u32)*le32_to_cpu(info->trace_dir[numd]->ndist);
+	if (unlikely(*p > end))
+		goto bad;
+	goto inode;
 
 done:
 	if (unlikely(*p != end))
@@ -144,23 +163,35 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 	/* alloc large array */
 	info->dir_nr = num;
 	info->dir_in = kmalloc(num * (sizeof(*info->dir_in) +
+				      sizeof(*info->dir_ilease) +
 				      sizeof(*info->dir_dname) +
-				      sizeof(*info->dir_dname_len)),
+				      sizeof(*info->dir_dname_len) +
+				      sizeof(*info->dir_dlease)),
 			       GFP_KERNEL);
 	if (info->dir_in == NULL)
 		goto badmem;
-	info->dir_dname = (void *)(info->dir_in + num);
+	info->dir_ilease = (void *)(info->dir_in + num);
+	info->dir_dname = (void *)(info->dir_ilease + num);
 	info->dir_dname_len = (void *)(info->dir_dname + num);
+	info->dir_dlease = (void *)(info->dir_dname_len + num);
 
 	while (num) {
-		/* dentry, inode */
+		/* dentry */
 		ceph_decode_32_safe(p, end, info->dir_dname_len[i], bad);
 		ceph_decode_need(p, end, info->dir_dname_len[i], bad);
 		info->dir_dname[i] = *p;
 		*p += info->dir_dname_len[i];
+		dout(20, "parsed dir dname '%.*s'\n", info->dir_dname_len[i],
+		     info->dir_dname[i]);
+		info->dir_dlease[i] = *p;
+		*p += sizeof(struct ceph_mds_reply_lease);
+
+		/* inode */
 		err = parse_reply_info_in(p, end, &info->dir_in[i]);
 		if (err < 0)
 			goto bad;
+		info->dir_ilease[i] = *p;
+		*p += sizeof(struct ceph_mds_reply_lease);
 		i++;
 		num--;
 	}
@@ -779,6 +810,10 @@ retry:
 	}
 
 	/* make request? */
+	if (req->r_num_mds == 0) {
+		req->r_from_time = jiffies;
+		dout(30, "do_request from_time %lu\n", req->r_from_time);
+	}
 	BUG_ON(req->r_num_mds >= 2);
 	req->r_mds[req->r_num_mds++] = session;
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
@@ -812,8 +847,7 @@ retry:
 	drop_request_session_attempt_refs(req);
 
 	err = le32_to_cpu(req->r_reply_info.head->result);
-	dout(30, "do_request done on %p result %d tracelen %d\n", req,
-	     err, req->r_reply_info.trace_nr);
+	dout(30, "do_request done on %p result %d\n", req, err);
 	return err;
 }
 
@@ -856,21 +890,21 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	result = le32_to_cpu(rinfo->head->result);
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
-	if (result == 0) {
-		err = ceph_fill_trace(mdsc->client->sb, req);
-		if (err)
+
+	/* insert trace into our cache */
+	err = ceph_fill_trace(mdsc->client->sb, req);
+	if (err)
+		goto done;
+	if (result == 0 && req->r_expects_cap) {
+		cap = le32_to_cpu(rinfo->head->file_caps);
+		capseq = le32_to_cpu(rinfo->head->file_caps_seq);
+		req->r_cap = ceph_add_cap(req->r_last_inode,
+					  req->r_session,
+					  cap, capseq);
+		if (IS_ERR(req->r_cap)) {
+			err = PTR_ERR(req->r_cap);
+			req->r_cap = 0;
 			goto done;
-		if (req->r_expects_cap) {
-			cap = le32_to_cpu(rinfo->head->file_caps);
-			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
-			req->r_cap = ceph_add_cap(req->r_last_inode,
-						  req->r_session,
-						  cap, capseq);
-			if (IS_ERR(req->r_cap)) {
-				err = PTR_ERR(req->r_cap);
-				req->r_cap = 0;
-				goto done;
-			}
 		}
 	}
 
@@ -993,7 +1027,6 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_inode_cap *cap;
 	char *path;
 	int pathlen, err;
-	int usectmp;
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
 	struct ceph_mds_cap_reconnect *rec;
@@ -1057,9 +1090,9 @@ retry:
 		BUG_ON(p > end);
 		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
-		rec->size = cpu_to_le64(ci->i_wr_size);
-		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime, usectmp);
-		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime, usectmp);
+		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
+		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
+		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {
@@ -1165,7 +1198,9 @@ void check_new_map(struct ceph_mds_client *mdsc,
 /* caps */
 
 void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-		  int wanted, __u32 seq, __u64 size, __u64 max_size, int mds)
+		  int wanted, __u32 seq, __u64 size, __u64 max_size, 
+		  struct timespec *mtime, struct timespec *atime,
+		  int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1188,6 +1223,10 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 	fc->ino = cpu_to_le64(ino);
 	fc->size = cpu_to_le64(size);
 	fc->max_size = cpu_to_le64(max_size);
+	if (mtime)
+		ceph_encode_timespec(&fc->mtime, mtime);
+	if (atime)
+		ceph_encode_timespec(&fc->atime, atime);
 
 	send_msg_mds(mdsc, msg, mds);
 }
@@ -1245,7 +1284,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, mds);
+		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, 0, 0, mds);
 		return;
 	}
 
@@ -1294,6 +1333,7 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 		cap->caps &= wanted;  /* drop caps we don't want */
 		send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), cap->caps, wanted,
 			     cap->seq, ci->vfs_inode.i_size, ci->i_max_size,
+			     &ci->vfs_inode.i_mtime, &ci->vfs_inode.i_atime, 
 			     cap->mds);
 	}
 
@@ -1327,6 +1367,82 @@ int ceph_mdsc_renew_caps(struct ceph_mds_client *mdsc)
 		send_renewcaps(mdsc, i);
 	}
 	return 0;
+}
+
+
+/*
+ * leases
+ */
+
+void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->client->sb;
+	struct inode *inode;
+	struct ceph_inode_info *ci;
+	struct dentry *parent, *dentry;
+	int mds = le32_to_cpu(msg->hdr.src.name.num);
+	struct ceph_mds_lease *h = msg->front.iov_base;
+	__u64 ino;
+	int mask;
+	struct qstr dname;
+	ino_t inot;
+
+	dout(10, "handle_lease from mds%d\n", mds);
+	
+	/* decode */
+	if (msg->front.iov_len < sizeof(*h) + sizeof(__u32))
+		goto bad;
+	ino = le64_to_cpu(h->ino);
+	mask = le16_to_cpu(h->mask);
+	dname.name = (void *)(h + 1);
+	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(__u32);
+
+	/* lookup inode */
+	inot = ceph_ino_to_ino(ino);
+#if BITS_PER_LONG == 64
+	inode = ilookup(sb, ino);
+#else
+	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
+#endif
+	dout(20, "action is %d, ino %llx %p\n", h->action, ino, inode);
+	
+	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
+
+	if (inode == NULL) {
+		dout(10, "i don't have inode %llx\n", ino);
+		goto release;
+	}
+
+	if (mask & CEPH_LOCK_DN) {
+		/* dentry */
+		parent = d_find_alias(inode);
+		if (!parent) {
+			dout(10, "no parent dentry on inode %p\n", inode);
+			goto release;  /* hrm... */
+		}
+		dname.hash = full_name_hash(dname.name, dname.len);
+		dentry = d_lookup(parent, &dname);
+		if (!dentry)
+			goto release;
+		dentry->d_time = 0;
+		dout(10, "lease revoked on dentry %p\n", dentry);
+	} else {
+		/* inode */
+		ci = ceph_inode(inode);
+		ci->i_lease_mask &= ~mask;
+		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
+		     mask, inode, ci->i_lease_mask);
+	}
+
+release:
+	dout(10, "sending release\n");
+	h->action = CEPH_MDS_LEASE_RELEASE;
+	ceph_msg_get(msg);
+	send_msg_mds(mdsc, msg, mds);
+	return;
+
+bad:
+	dout(0, "corrupt lease message\n");
 }
 
 

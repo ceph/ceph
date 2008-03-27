@@ -89,7 +89,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	/* update written data size in ceph_inode_info */
 	spin_lock(&inode->i_lock);
 	if (inode->i_size <= PAGE_SIZE) {
-		ci->i_wr_size = inode->i_size = PAGE_SIZE;
+		inode->i_size = PAGE_SIZE;
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}

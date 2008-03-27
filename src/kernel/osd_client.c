@@ -143,6 +143,7 @@ static void get_request(struct ceph_osd_request *req)
 
 static void put_request(struct ceph_osd_request *req)
 {
+	BUG_ON(atomic_read(&req->r_ref) <= 0);
 	if (atomic_dec_and_test(&req->r_ref)) {
 		ceph_msg_put(req->r_request);
 		kfree(req);

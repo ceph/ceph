@@ -4,7 +4,34 @@ code cleanup
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
 
+- switch to nsec in ceph_timespec
+
+client leases
+- lease length heuristics
+  - mds lock last_change stamp?
+- client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
+  - ICONTENT on file open
+  - DN on unlink, rename
+  - IAUTH on setattr
+  - ICONTENT on utimes
+  - or inode fields we are chmodding, etc.
+- lease renewals (to avoid blocking client ops?)
+
+userspace client
+- clean up ll_ interface, now that we have leases!
+- obey file_max
+- revoke own caps when they time out,
+- clean up client mds session vs mdsmap behavior?
+- client caps migration races
+  - caps need a seq number; reap logic needs to be a bit smarter
+  - also needs cope with mds failures
+- reference count lease validations on path lookup?
+
 kernel client
+- strip i_wr_size etc out of ceph_inode_info
+  - take mds provided versions when appropriate
+- carry wrbuffer/rdcache caps until data is flushed
+  - this should make the utimes bit kick in
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
 - procfs/debugfs
   - adjust granular debug levels too
@@ -18,7 +45,6 @@ kernel client
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
-- optimization: preemptively release caps as part of request if doing utimes/etc. on an open file?
 - mds client
   - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
@@ -98,15 +124,6 @@ mds
 - efficient stat for single writers
 - add FILE_CAP_EXTEND capability bit
 
-
-client
-- obey file_max
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
-- clean up client mds session vs mdsmap behavior?
-- client caps migration races
-  - caps need a seq number; reap logic needs to be a bit smarter
-  - also needs cope with mds failures
 
 
 

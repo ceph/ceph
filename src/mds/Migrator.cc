@@ -2044,8 +2044,10 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
     assert(session);
 
     Capability *cap = in->get_client_cap(it->first);
-    if (!cap) 
-      cap = in->add_client_cap(it->first, in, session->caps);
+    if (!cap) {
+      cap = in->add_client_cap(it->first, in);
+      session->touch_cap(cap);
+    }
     cap->merge(it->second);
 
     MClientFileCaps *caps = new MClientFileCaps(CEPH_CAP_OP_IMPORT,

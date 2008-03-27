@@ -59,9 +59,9 @@ struct ceph_object {
 
 #define CEPH_INO_ROOT 1
 
-struct ceph_timeval {
+struct ceph_timespec {
 	__le32 tv_sec;
-	__le32 tv_usec;
+	__le32 tv_nsec;
 };
 
 /*
@@ -267,6 +267,7 @@ struct ceph_msg_header {
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_FILECAPS        0x310
+#define CEPH_MSG_CLIENT_LEASE           0x311
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -306,6 +307,40 @@ struct ceph_statfs {
 #define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata */
 
 
+/*
+ * metadata lock types.
+ *  - these are bitmasks.. we can compose them
+ *  - they also define the lock ordering by the MDS
+ *  - a few of these are internal to the mds
+ */
+#define CEPH_LOCK_DN          1
+#define CEPH_LOCK_IVERSION    2     /* mds internal */
+#define CEPH_LOCK_IFILE       4     /* mds internal */
+#define CEPH_LOCK_IAUTH       8
+#define CEPH_LOCK_ILINK       16
+#define CEPH_LOCK_IDFT        32    /* dir frag tree */
+#define CEPH_LOCK_IDIR        64    /* mds internal */
+#define CEPH_LOCK_INO         128   /* immutable inode bits; not actually a lock */
+
+#define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)  /* alias for either filelock or dirlock */
+
+/*
+ * stat masks are defined in terms of the locks that cover inode fields.
+ */
+#define CEPH_STAT_MASK_INODE    CEPH_LOCK_INO
+#define CEPH_STAT_MASK_TYPE     CEPH_LOCK_INO  /* mode >> 12 */
+#define CEPH_STAT_MASK_SYMLINK  CEPH_LOCK_INO
+#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_INO
+#define CEPH_STAT_MASK_UID      CEPH_LOCK_IAUTH
+#define CEPH_STAT_MASK_GID      CEPH_LOCK_IAUTH
+#define CEPH_STAT_MASK_MODE     CEPH_LOCK_IAUTH
+#define CEPH_STAT_MASK_NLINK    CEPH_LOCK_ILINK
+#define CEPH_STAT_MASK_MTIME    CEPH_LOCK_ICONTENT
+#define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
+#define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
+#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
+
+
 /* client_session */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,
@@ -322,7 +357,7 @@ enum {
 struct ceph_mds_session_head {
 	__le32 op;
 	__le64 seq;
-	struct ceph_timeval stamp;
+	struct ceph_timespec stamp;
 } __attribute__ ((packed));
 
 /* client_request */
@@ -372,8 +407,8 @@ struct ceph_mds_request_head {
 			ceph_frag_t frag;
 		} readdir;
 		struct {
-			struct ceph_timeval mtime;
-			struct ceph_timeval atime;
+			struct ceph_timespec mtime;
+			struct ceph_timespec atime;
 		} utime;
 		struct {
 			__u32 mode;
@@ -418,15 +453,20 @@ struct ceph_frag_tree_head {
 struct ceph_mds_reply_inode {
 	ceph_ino_t ino;
 	struct ceph_file_layout layout;
-	struct ceph_timeval ctime, mtime, atime;
+	struct ceph_timespec ctime, mtime, atime;
 	__u32 mode, uid, gid;
 	__u32 nlink;
 	__u64 size, max_size;
 	__u32 rdev;
-	__u32 mask;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));
 /* followed by frag array, then symlink string */
+
+/* reply_lease follows dname, and reply_inode */
+struct ceph_mds_reply_lease {
+	__le16 mask;
+	__le32 duration_ms;
+} __attribute__ ((packed));
 
 struct ceph_mds_reply_dirfrag {
 	__u32 frag;
@@ -444,6 +484,7 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
 #define CEPH_CAP_WREXTEND 32  /* client can extend eof */
 #define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
+#define CEPH_CAP_EXCL    128  /* exclusive/loner access */
 
 enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */
@@ -461,15 +502,27 @@ struct ceph_mds_file_caps {
 	__le64 ino;
 	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
-	struct ceph_timeval mtime, atime;
+	struct ceph_timespec mtime, atime;
 } __attribute__ ((packed));
+
+
+#define CEPH_MDS_LEASE_REVOKE  1  /*    mds  -> client */
+#define CEPH_MDS_LEASE_RELEASE 2  /* client  -> mds    */
+#define CEPH_MDS_LEASE_RENEW   3  /* client <-> mds    */
+
+struct ceph_mds_lease {
+	__u8 action;
+	__le16 mask;
+	__le64 ino;
+} __attribute__ ((packed));
+/* followed by a __le32+string for dname */
 
 /* client reconnect */
 struct ceph_mds_cap_reconnect {
 	__le32 wanted;
 	__le32 issued;
 	__le64 size;
-	struct ceph_timeval mtime, atime;
+	struct ceph_timespec mtime, atime;
 } __attribute__ ((packed));
 /* followed by encoded string */
 
@@ -514,7 +567,7 @@ enum {
 };
 
 struct ceph_osd_peer_stat {
-	struct ceph_timeval stamp;
+	struct ceph_timespec stamp;
 	float oprate;
 	float qlen;
 	float recent_qlen;

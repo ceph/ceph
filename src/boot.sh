@@ -31,7 +31,6 @@ $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 20 --debug_ms 1
 # osds
 for osd in 0 1 2 3 
 do
- $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
  $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 40
 done
 

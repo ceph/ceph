@@ -268,6 +268,19 @@ class MDCache {
 
   set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
 
+  // -- client leases --
+public:
+  static const int client_lease_pools = 3;
+  float client_lease_durations[client_lease_pools];
+protected:
+  xlist<ClientLease*> client_leases[client_lease_pools];
+public:
+  void touch_client_lease(ClientLease *r, int pool, utime_t ttl) {
+    client_leases[pool].push_back(&r->lease_item);
+    r->ttl = ttl;
+  }
+
+
   // -- discover --
   // waiters
   map<int, hash_map<inodeno_t, list<Context*> > > waiting_for_base_ino;
@@ -495,6 +508,8 @@ public:
 		  map<int,class MCacheExpire*>& expiremap);
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
+
+  void trim_client_leases();
 
   // shutdown
   void shutdown_start();

@@ -635,7 +635,7 @@ static int read_message_partial(struct ceph_connection *con)
 
 	/* front */
 	front_len = le32_to_cpu(m->hdr.front_len);
-	if (m->front.iov_len < front_len) {
+	while (m->front.iov_len < front_len) {
 		if (m->front.iov_base == NULL) {
 			m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
 			if (m->front.iov_base == NULL)
@@ -1281,6 +1281,7 @@ out:
 
 void ceph_msg_put(struct ceph_msg *m)
 {
+	BUG_ON(atomic_read(&m->nref) <= 0);
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(30, "ceph_msg_put last one on %p\n", m);
 		BUG_ON(!list_empty(&m->list_head));

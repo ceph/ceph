@@ -1,5 +1,6 @@
 
 #include <linux/sched.h>
+#include <linux/file.h>
 
 int ceph_debug_file = 50;
 #define DOUT_VAR ceph_debug_file
@@ -7,6 +8,8 @@ int ceph_debug_file = 50;
 #include "super.h"
 
 #include "mds_client.h"
+
+#include <linux/namei.h>
 
 
 /*
@@ -136,11 +139,10 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err == 0) 
+	if (err == 0)
 		err = ceph_init_file(req->r_last_inode, file, flags);
 	else if (err == -ENOENT) {
 		ceph_init_dentry(dentry);
-		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
 	}
 	ceph_mdsc_put_request(req);
@@ -169,9 +171,10 @@ int ceph_release(struct inode *inode, struct file *file)
 	mode = cf->mode;
 	ci->i_nr_by_mode[mode]--;
 	wanted = ceph_caps_wanted(ci);
-	dout(10, "released %p flags 0%o mode %d nr now %d.  wanted %d was %d\n", 
+	dout(10, "released %p flags 0%o mode %d nr now %d, wanted %d -> %d\n",
 	     file, file->f_flags, mode, 
 	     ci->i_nr_by_mode[mode], wanted, ci->i_cap_wanted);
+	wanted |= ceph_caps_used(ci);
 	if (wanted != ci->i_cap_wanted)
 		ceph_mdsc_update_cap_wanted(ci, wanted);
 	
@@ -231,7 +234,9 @@ ssize_t ceph_write(struct file *filp, const char __user *buf, size_t len, loff_t
 
 	dout(10, "write trying to get caps\n");
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_WR, CEPH_CAP_WRBUFFER, &got));
+				       ceph_get_cap_refs(ci, CEPH_CAP_WR, 
+							 CEPH_CAP_WRBUFFER,
+							 &got));
 	if (ret < 0) 
 		goto out;
 	dout(10, "write got cap refs on %d\n", got);
@@ -291,7 +296,7 @@ ssize_t ceph_silly_write(struct file *file, const char __user *data,
 
 	spin_lock(&inode->i_lock);
 	if (pos > inode->i_size) {
-		ci->i_wr_size = inode->i_size = pos;
+		inode->i_size = pos;
 		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}

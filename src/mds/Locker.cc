@@ -40,9 +40,11 @@
 #include "messages/MInodeFileCaps.h"
 
 #include "messages/MLock.h"
+#include "messages/MClientLease.h"
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 
 #include "messages/MMDSSlaveRequest.h"
@@ -61,22 +63,23 @@ void Locker::dispatch(Message *m)
 
   switch (m->get_type()) {
 
-    // locking
+    // inter-mds locking
   case MSG_MDS_LOCK:
     handle_lock((MLock*)m);
     break;
-
-    // cache fun
+    // inter-mds caps
   case MSG_MDS_INODEFILECAPS:
     handle_inode_file_caps((MInodeFileCaps*)m);
     break;
 
+    // client sync
   case CEPH_MSG_CLIENT_FILECAPS:
     handle_client_file_caps((MClientFileCaps*)m);
     break;
-
+  case CEPH_MSG_CLIENT_LEASE:
+    handle_client_lease((MClientLease*)m);
+    break;
     
-
   default:
     assert(0);
   }
@@ -115,9 +118,6 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
 
 
 
-
-
-
 bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
@@ -138,7 +138,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
 
     // augment xlock with a versionlock?
-    if ((*p)->get_type() > LOCK_OTYPE_IVERSION) {
+    if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
       CInode *in = (CInode*)(*p)->get_parent();
       if (mdr->is_master()) {
@@ -158,7 +158,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
-    else if ((*p)->get_type() == LOCK_OTYPE_IDIR &&
+    else if ((*p)->get_type() == CEPH_LOCK_IDIR &&
 	     !(*p)->get_parent()->is_auth() && !((ScatterLock*)(*p))->can_wrlock()) { // we might have to request a scatter
       dout(15) << " will also auth_pin " << *(*p)->get_parent() << " in case we need to request a scatter" << dendl;
       mustpin.insert(*p);
@@ -334,13 +334,26 @@ void Locker::drop_locks(MDRequest *mdr)
 
 // generics
 
+void Locker::eval_gather(SimpleLock *lock)
+{
+  switch (lock->get_type()) {
+  case CEPH_LOCK_IFILE:
+    return file_eval_gather((FileLock*)lock);
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
+    return scatter_eval_gather((ScatterLock*)lock);
+  default:
+    return simple_eval_gather(lock);
+  }
+}
+
 bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_rdlock_start((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_rdlock_start((ScatterLock*)lock, mdr);
   default:
     return simple_rdlock_start(lock, mdr);
@@ -350,10 +363,10 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
 void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_rdlock_finish((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_rdlock_finish((ScatterLock*)lock, mdr);
   default:
     return simple_rdlock_finish(lock, mdr);
@@ -363,11 +376,13 @@ void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_wrlock_start((ScatterLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mdr);
+    //case CEPH_LOCK_IFILE:
+    //return file_wrlock_start((ScatterLock*)lock, mdr);
   default:
     assert(0); 
     return false;
@@ -377,10 +392,10 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
 void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     return scatter_wrlock_finish((ScatterLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_wrlock_finish((LocalLock*)lock, mdr);
   default:
     assert(0);
@@ -390,12 +405,12 @@ void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
 bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_xlock_start((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_xlock_start((LocalLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     assert(0);
   default:
     return simple_xlock_start(lock, mdr);
@@ -405,12 +420,12 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
 void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
 {
   switch (lock->get_type()) {
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     return file_xlock_finish((FileLock*)lock, mdr);
-  case LOCK_OTYPE_IVERSION:
+  case CEPH_LOCK_IVERSION:
     return local_xlock_finish((LocalLock*)lock, mdr);
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     assert(0);
   default:
     return simple_xlock_finish(lock, mdr);
@@ -481,13 +496,14 @@ Capability* Locker::issue_new_caps(CInode *in,
   int my_client = session->inst.name.num();
   int my_want = 0;
   if (mode & FILE_MODE_R) my_want |= CEPH_CAP_RDCACHE  | CEPH_CAP_RD;
-  if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR;
+  if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR | CEPH_CAP_EXCL;
 
   // register a capability
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    cap = in->add_client_cap(my_client, in, session->caps);
+    cap = in->add_client_cap(my_client, in);
+    session->touch_cap(cap);
     cap->set_wanted(my_want);
     cap->set_suppress(true); // suppress file cap messages for new cap (we'll bundle with the open() reply)
   } else {
@@ -516,27 +532,6 @@ Capability* Locker::issue_new_caps(CInode *in,
   cap->issue(cap->pending());
   cap->set_last_open();
 
-  // increase max_size?
-  inode_t *latest = in->get_projected_inode();
-  if (latest->max_size == 0 && 
-      !in->is_base() &&
-      (mode & FILE_MODE_W)) {
-    int64_t inc = in->get_layout_size_increment();
-    int64_t new_max = ROUND_UP_TO(latest->size + inc/2, inc);
-    dout(10) << "hey, wr caps wanted, max_size 0 -> " << new_max << dendl;
-    inode_t *pi = in->project_inode();
-    pi->version = in->pre_dirty();
-    pi->max_size = new_max;
-    EOpen *le = new EOpen(mds->mdlog);
-    le->metablob.add_dir_context(in->get_parent_dir());
-    le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    le->add_ino(in->ino());
-    ls->open_files.push_back(&in->xlist_open_file);
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
-    file_wrlock_start(&in->filelock);  // wrlock for duration of journal
-  }
-  
   // twiddle file_data_version?
   int now = cap->pending();
   if ((before & CEPH_CAP_WRBUFFER) == 0 &&
@@ -558,6 +553,28 @@ bool Locker::issue_caps(CInode *in)
 
   // count conflicts with
   int nissued = 0;        
+
+  // should we increase max_size?
+  if (!in->is_dir() && (allowed & CEPH_CAP_WR)) {
+    inode_t *latest = in->get_projected_inode();
+    int64_t inc = in->get_layout_size_increment();
+    if (latest->size + inc > latest->max_size) {
+      int64_t new_max = ROUND_UP_TO(latest->size + inc/2, inc);
+      dout(10) << "increasing max_size " << latest->max_size << " -> " << new_max << dendl;
+      
+      inode_t *pi = in->project_inode();
+      pi->version = in->pre_dirty();
+      pi->max_size = new_max;
+      EOpen *le = new EOpen(mds->mdlog);
+      le->metablob.add_dir_context(in->get_parent_dir());
+      le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+      LogSegment *ls = mds->mdlog->get_current_segment();
+      le->add_ino(in->ino());
+      ls->open_files.push_back(&in->xlist_open_file);
+      mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
+      file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+    }
+  }
 
   // client caps
   for (map<int, Capability*>::iterator it = in->client_caps.begin();
@@ -868,21 +885,25 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   // atime|mtime|size?
   bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
-  bool dirty = false;
-  //if (atime > latest->atime) 
-  //dirty = true;
+  bool excl = (had|has) & CEPH_CAP_EXCL;
+  bool dirty_atime = false;
+  bool dirty_mtime = false;
+  bool dirty_size = false;
   if (had_or_has_wr) {
-    if (mtime > latest->mtime) 
-      dirty = true;
+    if (mtime > latest->mtime || (excl && mtime != latest->mtime)) 
+      dirty_mtime = true;
     if (size > latest->size) 
-      dirty = true;
+      dirty_size = true;
   }
+  if (excl && atime != latest->atime)
+    dirty_atime = true;
+  bool dirty = dirty_atime || dirty_mtime || dirty_size;
   
   // increase max_size?
   bool increase_max = false;
   int64_t inc = in->get_layout_size_increment();
   if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      size > latest->max_size + inc) {
+      size + inc > latest->max_size) {
     dout(10) << "hey, wr caps wanted, and size " << size
 	     << " > max " << latest->max_size << " *2, increasing" << dendl;
     increase_max = true;
@@ -902,19 +923,19 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
       pi->max_size = new_max;
     }    
-    if (mtime > latest->mtime) {
-      dout(7) << "  taking mtime " << mtime << " > " 
-	      << in->inode.mtime << " for " << *in << dendl;
+    if (dirty_mtime) {
+      dout(7) << "  mtime " << pi->mtime << " -> " <<  mtime
+	      << " for " << *in << dendl;
       pi->mtime = mtime;
     }
-    if (size > latest->size) {
-      dout(7) << "  taking size " << size << " > " 
-	      << in->inode.size << " for " << *in << dendl;
+    if (dirty_size) {
+      dout(7) << "  size " << pi->size << " -> " << size
+	      << " for " << *in << dendl;
       pi->size = size;
     }
-    if (atime > latest->atime) {
-      dout(7) << "  taking atime " << atime << " > " 
-	      << in->inode.atime << " for " << *in << dendl;
+    if (dirty_atime) {
+      dout(7) << "  atime " << pi->atime << " -> " << atime
+	      << " for " << *in << dendl;
       pi->atime = atime;
     }
     le->metablob.add_dir_context(in->get_parent_dir());
@@ -934,8 +955,143 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 }
 
 
+void Locker::handle_client_lease(MClientLease *m)
+{
+  dout(10) << "handle_client_lease " << *m << dendl;
+
+  assert(m->get_source().is_client());
+  int client = m->get_source().num();
+
+  CInode *in = mdcache->get_inode(m->get_ino());
+  if (!in) {
+    dout(7) << "handle_client_lease don't have ino " << m->get_ino() << dendl;
+    delete m;
+    return;
+  }
+  CDentry *dn = 0;
+  MDSCacheObject *p;
+  if (m->get_mask() & CEPH_LOCK_DN) {
+    frag_t fg = in->pick_dirfrag(m->dname);
+    CDir *dir = in->get_dirfrag(fg);
+    if (dir) 
+      p = dn = dir->lookup(m->dname);
+    if (!dn) {
+      dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
+      delete m;
+      return;
+    }
+  } else {
+    p = in;
+  }
+  dout(10) << " on " << *p << dendl;
+
+  // replica and lock
+  ClientLease *l = p->get_client_lease(client);
+  if (!l) {
+    dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *p << dendl;
+    delete m;
+    return;
+  } 
+
+  switch (m->get_action()) {
+  case CEPH_MDS_LEASE_RELEASE:
+    {
+      dout(7) << "handle_client_lease client" << client
+	      << " release mask " << m->get_mask()
+	      << " on " << *p << dendl;
+      int left = p->remove_client_lease(l, l->mask, this);
+      dout(10) << " remaining mask is " << left << " on " << *p << dendl;
+    }
+    break;
+
+  case CEPH_MDS_LEASE_RENEW:
+  default:
+    assert(0); // implement me
+    break;
+  }
+
+  delete m;
+}
 
 
+
+void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
+				 bufferlist &bl, utime_t now, Session *session)
+{
+  if (mask) {
+    ClientLease *l = p->add_client_lease(client, mask);
+    session->touch_lease(l);
+
+    now += mdcache->client_lease_durations[pool];
+    mdcache->touch_client_lease(l, pool, now);
+  }
+
+  LeaseStat e;
+  e.mask = mask;
+  e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
+  ::_encode_simple(e, bl);
+}
+  
+
+
+int Locker::issue_client_lease(CInode *in, int client, 
+			       bufferlist &bl, utime_t now, Session *session)
+{
+  int mask = CEPH_LOCK_INO;
+  int pool = 1;   // fixme.. do something smart!
+  if (in->authlock.can_lease()) mask |= CEPH_LOCK_IAUTH;
+  if (in->linklock.can_lease()) mask |= CEPH_LOCK_ILINK;
+  if (in->is_dir()) {
+    if (in->dirlock.can_lease()) mask |= CEPH_LOCK_IDIR;
+  } else {
+    if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
+  }
+
+  _issue_client_lease(in, mask, pool, client, bl, now, session);
+  return mask;
+}
+
+int Locker::issue_client_lease(CDentry *dn, int client,
+			       bufferlist &bl, utime_t now, Session *session)
+{
+  int pool = 1;   // fixme.. do something smart!
+  int mask = 0;
+  if (dn->lock.can_lease()) mask |= CEPH_LOCK_DN;
+
+  _issue_client_lease(dn, mask, pool, client, bl, now, session);
+  return mask;
+}
+
+
+void Locker::revoke_client_leases(SimpleLock *lock)
+{
+  int n = 0;
+  for (hash_map<int, ClientLease*>::iterator p = lock->get_parent()->client_lease_map.begin();
+       p != lock->get_parent()->client_lease_map.end();
+       p++) {
+    ClientLease *l = p->second;
+    
+    if (l->mask & lock->get_type() == 0)
+      continue;
+    
+    n++;
+    if (lock->get_type() == CEPH_LOCK_DN) {
+      CDentry *dn = (CDentry*)lock->get_parent();
+      mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
+						lock->get_type(),
+						dn->get_dir()->ino(),
+						dn->get_name()),
+			       l->client);
+    } else {
+      CInode *in = (CInode*)lock->get_parent();
+      mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
+						lock->get_type(),
+						in->ino()),
+			       l->client);
+    }
+  }
+  assert(n == lock->get_num_client_lease());
+}
 
 
 
@@ -947,7 +1103,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info) 
 {
   switch (lock_type) {
-  case LOCK_OTYPE_DN:
+  case CEPH_LOCK_DN:
     {
       // be careful; info.dirfrag may have incorrect frag; recalculate based on dname.
       CInode *diri = mdcache->get_inode(info.dirfrag.ino);
@@ -967,11 +1123,11 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       return &dn->lock;
     }
 
-  case LOCK_OTYPE_IAUTH:
-  case LOCK_OTYPE_ILINK:
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IFILE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IAUTH:
+  case CEPH_LOCK_ILINK:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IFILE:
+  case CEPH_LOCK_IDIR:
     {
       CInode *in = mdcache->get_inode(info.ino);
       if (!in) {
@@ -979,11 +1135,11 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
 	return 0;
       }
       switch (lock_type) {
-      case LOCK_OTYPE_IAUTH: return &in->authlock;
-      case LOCK_OTYPE_ILINK: return &in->linklock;
-      case LOCK_OTYPE_IDIRFRAGTREE: return &in->dirfragtreelock;
-      case LOCK_OTYPE_IFILE: return &in->filelock;
-      case LOCK_OTYPE_IDIR: return &in->dirlock;
+      case CEPH_LOCK_IAUTH: return &in->authlock;
+      case CEPH_LOCK_ILINK: return &in->linklock;
+      case CEPH_LOCK_IDFT: return &in->dirfragtreelock;
+      case CEPH_LOCK_IFILE: return &in->filelock;
+      case CEPH_LOCK_IDIR: return &in->dirlock;
       }
     }
 
@@ -1010,18 +1166,18 @@ void Locker::handle_lock(MLock *m)
   }
 
   switch (lock->get_type()) {
-  case LOCK_OTYPE_DN:
-  case LOCK_OTYPE_IAUTH:
-  case LOCK_OTYPE_ILINK:
+  case CEPH_LOCK_DN:
+  case CEPH_LOCK_IAUTH:
+  case CEPH_LOCK_ILINK:
     handle_simple_lock(lock, m);
     break;
     
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     handle_file_lock((FileLock*)lock, m);
     break;
     
-  case LOCK_OTYPE_IDIRFRAGTREE:
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDFT:
+  case CEPH_LOCK_IDIR:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;
 
@@ -1061,7 +1217,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
 
     // special case: trim replica no-longer-null dentry?
-    if (lock->get_type() == LOCK_OTYPE_DN) {
+    if (lock->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)lock->get_parent();
       if (dn->is_null() && m->get_data().length() > 0) {
 	dout(10) << "handle_simple_lock replica dentry null -> non-null, must trim " 
@@ -1159,6 +1315,7 @@ void Locker::simple_eval_gather(SimpleLock *lock)
   // finished gathering?
   if (lock->get_state() == LOCK_GLOCKR &&
       !lock->is_gathering() &&
+      lock->get_num_client_lease() == 0 &&
       !lock->is_rdlocked()) {
     dout(7) << "simple_eval finished gather on " << *lock << " on " << *lock->get_parent() << dendl;
 
@@ -1243,9 +1400,13 @@ void Locker::simple_lock(SimpleLock *lock)
   if (lock->get_state() == LOCK_LOCK) return;
   assert(lock->get_state() == LOCK_SYNC);
   
-  if (lock->get_parent()->is_replicated()) {
-    // bcast to replicas
+  if (lock->get_parent()->is_replicated() ||
+      lock->get_num_client_lease()) {
+    // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
+
+    // bcast to client replicas
+    revoke_client_leases(lock);
     
     // change lock
     lock->set_state(LOCK_GLOCKR);
@@ -1640,6 +1801,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     if ((lock->get_state() == LOCK_GLOCKS || 
 	 lock->get_state() == LOCK_GLOCKT) &&
 	!lock->is_gathering() &&
+	lock->get_num_client_lease() == 0 &&
 	!lock->is_rdlocked()) {
       dout(7) << "scatter_eval finished lock gather/un-rdlock on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -1683,6 +1845,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     else if ((lock->get_state() == LOCK_GSCATTERT ||
 	      lock->get_state() == LOCK_GSCATTERS) &&
 	     !lock->is_gathering() &&
+	     lock->get_num_client_lease() == 0 &&
 	     !lock->is_rdlocked()) {
       dout(7) << "scatter_eval finished scatter un-rdlock(/gather) on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -1879,12 +2042,14 @@ void Locker::scatter_scatter(ScatterLock *lock)
   switch (lock->get_state()) {
   case LOCK_SYNC:
     if (!lock->is_rdlocked() &&
-	!lock->get_parent()->is_replicated())
+	!lock->get_parent()->is_replicated() &&
+	!lock->get_num_client_lease())
       break; // do it
     if (lock->get_parent()->is_replicated()) {
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
     }
+    revoke_client_leases(lock);
     lock->set_state(LOCK_GSCATTERS);
     lock->get_parent()->auth_pin();
     return;
@@ -1930,13 +2095,15 @@ void Locker::scatter_lock(ScatterLock *lock)
   switch (lock->get_state()) {
   case LOCK_SYNC:
     if (!lock->is_rdlocked() &&
-	!lock->get_parent()->is_replicated())
+	!lock->get_parent()->is_replicated() &&
+	!lock->get_num_client_lease())
       break; // do it.
 
     if (lock->get_parent()->is_replicated()) {
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
     } 
+    revoke_client_leases(lock);  
     lock->set_state(LOCK_GLOCKS);
     lock->get_parent()->auth_pin();
     return;
@@ -1981,7 +2148,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
 
   switch (lock->get_state()) {
   case LOCK_SYNC:
-    break;  // do it.
+    assert(0);   // this shouldn't happen
 
   case LOCK_LOCK:
     if (lock->is_wrlocked() ||
@@ -2320,14 +2487,22 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
 
 bool Locker::file_wrlock_start(FileLock *lock)
 {
-  if (!lock->can_wrlock()) {
-    dout(7) << "wrlock_start can't on " << *lock << " on " << *lock->get_parent() << dendl;
-    assert(0); // !
-    return false;
-  }
-  dout(7) << "wrlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
+  dout(7) << "file_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+  assert(lock->can_wrlock());
   lock->get_wrlock();
   return true;
+
+  /*
+  if (lock->can_wrlock()) {
+    lock->get_wrlock();
+    mdr->wrlocks.insert(lock);
+    mdr->locks.insert(lock);
+    return true;
+  } else {
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+    }*/
 }
 
 void Locker::file_wrlock_finish(FileLock *lock)
@@ -2471,6 +2646,7 @@ void Locker::file_eval_gather(FileLock *lock)
   if (in->is_auth() &&
       !lock->is_gathering() &&
       !lock->is_wrlocked() &&
+      lock->get_num_client_lease() == 0 &&
       ((issued & ~lock->caps_allowed()) == 0)) {
     dout(7) << "file_eval_gather finished gather" << dendl;
     
@@ -2556,6 +2732,7 @@ void Locker::file_eval_gather(FileLock *lock)
   
   // [replica] finished caps gather?
   if (!in->is_auth() &&
+      lock->get_num_client_lease() == 0 &&
       ((issued & ~lock->caps_allowed()) == 0)) {
     switch (lock->get_state()) {
     case LOCK_GMIXEDR:
@@ -2626,20 +2803,25 @@ void Locker::file_eval(FileLock *lock)
   // * -> sync?
   else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
 	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
-	   ((wanted & CEPH_CAP_RD) || 
-	    in->is_replicated() || 
-	    (!loner && lock->get_state() == LOCK_LONER)) &&
+	   //((wanted & CEPH_CAP_RD) || 
+	    //in->is_replicated() || 
+	    //lock->get_num_client_lease() || 
+	   //(!loner && lock->get_state() == LOCK_LONER)) &&
+	   !(loner && lock->get_state() == LOCK_LONER) &&       // leave loner in loner state
 	   lock->get_state() != LOCK_SYNC) {
     dout(7) << "file_eval stable, bump to sync " << *lock << " on " << *lock->get_parent() << dendl;
     file_sync(lock);
   }
   
   // * -> lock?  (if not replicated or open)
+/*
   else if (!in->is_replicated() &&
 	   wanted == 0 &&
+	   lock->get_num_client_lease() == 0 && 
 	   lock->get_state() != LOCK_LOCK) {
     file_lock(lock);
   }
+*/
 }
 
 
@@ -2733,10 +2915,12 @@ void Locker::file_lock(FileLock *lock)
   int issued = in->get_caps_issued();
 
   if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated()) {
+    if (in->is_replicated() ||
+	lock->get_num_client_lease()) {
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
+      revoke_client_leases(lock);
       
       // change lock
       lock->set_state(LOCK_GLOCKR);
@@ -2812,9 +2996,11 @@ void Locker::file_mixed(FileLock *lock)
   int issued = in->get_caps_issued();
 
   if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated()) {
+    if (in->is_replicated() ||
+	lock->get_num_client_lease()) {
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_MIXED);
+      revoke_client_leases(lock);
       lock->init_gather();
     
       lock->set_state(LOCK_GMIXEDR);
@@ -2873,7 +3059,7 @@ void Locker::file_mixed(FileLock *lock)
 void Locker::file_loner(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "inode_file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
 
   assert(in->is_auth());
   assert(lock->is_stable());
@@ -2881,9 +3067,11 @@ void Locker::file_loner(FileLock *lock)
   assert((in->client_caps.size() == 1) && in->mds_caps_wanted.empty());
   
   if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated()) {
+    if (in->is_replicated() ||
+	lock->get_num_client_lease()) {
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_LOCK);
+      revoke_client_leases(lock);
       lock->init_gather();
       
       // change lock

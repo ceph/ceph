@@ -9,7 +9,7 @@ struct ceph_osdmap {
 	struct ceph_fsid fsid;
 	ceph_epoch_t epoch;
 	ceph_epoch_t mkfs_epoch;
-	struct ceph_timeval ctime, mtime;
+	struct ceph_timespec ctime, mtime;
 	
 	__u32 pg_num, pg_num_mask;
 	__u32 pgp_num, pgp_num_mask;

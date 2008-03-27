@@ -187,6 +187,7 @@ struct md_config_t {
 
   float mds_cap_timeout;
   float mds_session_autoclose;
+  float mds_client_lease;
 
   float mds_tick_interval;
 

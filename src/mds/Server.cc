@@ -225,6 +225,12 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       dout(10) << " killing capability on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
+    while (!session->leases.empty()) {
+      ClientLease *r = session->leases.front();
+      MDSCacheObject *p = r->parent;
+      dout(10) << " killing client lease of " << *p << dendl;
+      p->remove_client_lease(r, r->mask, mds->locker);
+    }
 
     if (session->is_closing())
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
@@ -380,7 +386,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
 	dout(15) << "open caps on " << *in << dendl;
-	in->reconnect_cap(from, p->second, session->caps);
+	Capability *cap = in->reconnect_cap(from, p->second);
+	session->touch_cap(cap);
 	reconnected_caps.insert(in);
 	continue;
       }
@@ -487,9 +494,9 @@ void Server::reconnect_gather_finish()
 /*
  * send generic response (just and error code)
  */
-void Server::reply_request(MDRequest *mdr, int r, CInode *tracei)
+void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *tracedn)
 {
-  reply_request(mdr, new MClientReply(mdr->client_request, r), tracei);
+  reply_request(mdr, new MClientReply(mdr->client_request, r), tracei, tracedn);
 }
 
 
@@ -497,7 +504,7 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei)
  * send given reply
  * include a trace to tracei
  */
-void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei) 
+void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
   MClientRequest *req = mdr->client_request;
   
@@ -530,17 +537,26 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
   }
   */
 
-  // include trace
-  if (tracei)
-    reply->set_trace_dist( tracei, mds->get_nodeid() );
-  
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   
   // send reply
   if (req->get_client_inst().name.is_mds())
     delete reply;   // mds doesn't need a reply
-  else
+  else {
+    // include trace
+    if (!tracei && !tracedn && mdr->ref) {
+      tracei = mdr->ref;
+      dout(20) << "inferring tracei to be " << *tracei << dendl;
+      if (!mdr->trace.empty()) {
+	tracedn = mdr->trace.back();
+	dout(20) << "inferring tracedn to be " << *tracedn << dendl;
+      }
+    }
+    if (tracei || tracedn)
+      set_trace_dist(mdr->session, reply, tracei, tracedn);
+
     messenger->send_message(reply, req->get_client_inst());
+  }
   
   // finish request
   mdcache->request_finish(mdr);
@@ -551,6 +567,64 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei)
     mdcache->eval_remote(tracei->get_parent_dn());
 }
 
+
+/*
+ * pass inode OR dentry (not both, or we may get confused)
+ *
+ * trace is in reverse order (i.e. root inode comes last)
+ */
+void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn)
+{
+  // inode, dentry, dir, ..., inode
+  bufferlist bl;
+  int whoami = mds->get_nodeid();
+  int client = session->get_client();
+  __u16 numi = 0, numdn = 0;
+
+  // choose lease duration
+  utime_t now = g_clock.now();
+  int lmask;
+
+  // start with dentry or inode?
+  if (!in) {
+    assert(dn);
+    in = dn->inode;
+    goto dentry;
+  }
+
+ inode:
+  InodeStat::_encode(bl, in);
+  lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+  numi++;
+  dout(20) << " trace added " << lmask << " " << *in << dendl;
+
+  if (!dn)
+    dn = in->get_parent_dn();
+  if (!dn) 
+    goto done;
+
+ dentry:
+  ::_encode_simple(dn->get_name(), bl);
+  lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
+  numdn++;
+  dout(20) << " trace added " << lmask << " " << *dn << dendl;
+  
+  // dir
+  DirStat::_encode(bl, dn->get_dir(), whoami);
+  dout(20) << " trace added " << *dn->get_dir() << dendl;
+
+  in = dn->get_dir()->get_inode();
+  dn = 0;
+  goto inode;
+
+done:
+  // put numi, numd in front
+  bufferlist fbl;
+  ::_encode(numi, fbl);
+  ::_encode(numdn, fbl);
+  fbl.claim_append(bl);
+  reply->set_trace(fbl);
+}
 
 
 
@@ -1444,12 +1518,12 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> xlocks = mdr->xlocks;
   
   int mask = req->head.args.stat.mask;
-  if (mask & STAT_MASK_LINK) rdlocks.insert(&ref->linklock);
-  if (mask & STAT_MASK_AUTH) rdlocks.insert(&ref->authlock);
+  if (mask & CEPH_LOCK_ILINK) rdlocks.insert(&ref->linklock);
+  if (mask & CEPH_LOCK_IAUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
-      mask & STAT_MASK_FILE) rdlocks.insert(&ref->filelock);
+      mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->filelock);
   if (ref->is_dir() &&
-      mask & STAT_MASK_MTIME) rdlocks.insert(&ref->dirlock);
+      mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->dirlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -1460,7 +1534,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
   MClientReply *reply = new MClientReply(req);
-  reply_request(mdr, reply, ref);
+  reply_request(mdr, reply);
 }
 
 
@@ -1491,7 +1565,7 @@ public:
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
-    mds->server->reply_request(mdr, reply, in);
+    mds->server->reply_request(mdr, reply);
   }
 };
 
@@ -1627,6 +1701,7 @@ void Server::handle_client_chown(MDRequest *mdr)
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  int client = req->get_client().num();
   CInode *diri = rdlock_path_pin_ref(mdr, false);
   if (!diri) return;
 
@@ -1634,7 +1709,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!diri->is_dir()) {
     // not a dir
     dout(10) << "reply to " << *req << " readdir -ENOTDIR" << dendl;
-    reply_request(mdr, -ENOTDIR, diri);
+    reply_request(mdr, -ENOTDIR);
     return;
   }
 
@@ -1644,7 +1719,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
     dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << dendl;
-    reply_request(mdr, -EAGAIN, diri);
+    reply_request(mdr, -EAGAIN);
     return;
   }
   
@@ -1705,12 +1780,16 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     dout(12) << "including inode " << *in << dendl;
     
-    // add this dentry + inodeinfo
+    // dentry
     ::_encode(it->first, dnbl);
+    mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
+
+    // inode
     InodeStat::_encode(dnbl, in);
+    mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 
-    // touch it
+    // touch dn
     mdcache->lru.lru_touch(dn);
   }
   ::_encode_simple(numfiles, dirbl);
@@ -1718,7 +1797,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   
   // yay, reply
   MClientReply *reply = new MClientReply(req);
-  reply->take_dir_items(dirbl);
+  reply->set_dir_bl(dirbl);
   
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
   reply->set_result(0);
@@ -1727,7 +1806,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
   
   // reply
-  reply_request(mdr, reply, diri);
+  reply_request(mdr, reply);
 }
 
 
@@ -1773,7 +1852,7 @@ public:
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
-    mds->server->reply_request(mdr, reply, newi);
+    mds->server->reply_request(mdr, reply, newi, dn);
   }
 };
 
@@ -2075,7 +2154,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, targeti, dn);
 }
 
 
@@ -2157,7 +2236,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->get_dir()->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, targeti, dn);  // FIXME: imprecise ref
 }
 
 
@@ -2569,7 +2648,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, 0, dn);
   
   // clean up?
   if (straydn)
@@ -2672,7 +2751,7 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, dn->dir->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, 0, dn);  // FIXME: imprecise ref
 
   // removing a new dn?
   dn->dir->try_remove_unlinked_dn(dn);
@@ -3067,7 +3146,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, destdn->get_inode());  // FIXME: imprecise ref
+  reply_request(mdr, reply, destdn->get_inode(), destdn);
   
   // clean up?
   if (straydn) 
@@ -3835,7 +3914,6 @@ void Server::handle_client_open(MDRequest *mdr)
 
   // hmm, check permissions or something.
 
-
   // O_TRUNC
   if (flags & O_TRUNC) {
     assert(cur->is_auth());
@@ -3852,7 +3930,7 @@ void Server::handle_client_open(MDRequest *mdr)
       handle_client_opent(mdr);
       return;
     }
-  }
+  } 
   
   // do it
   _do_open(mdr, cur);
@@ -3889,7 +3967,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
   //reply->set_file_data_version(fdv);
-  reply_request(mdr, reply, cur);
+  reply_request(mdr, reply);
 
   // make sure this inode gets into the journal
   if (cur->xlist_open_file.get_xlist() == 0) {
@@ -4006,7 +4084,8 @@ public:
     // set/pin ref inode for open()
     mdr->ref = newi;
     mdr->pin(newi);
-    
+    mdr->trace.push_back(dn);
+
     // ok, do the open.
     mds->server->handle_client_open(mdr);
   }
@@ -4027,7 +4106,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     // it existed.  
     if (req->head.args.open.flags & O_EXCL) {
       dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
-      reply_request(mdr, -EEXIST, dn->get_dir()->get_inode());
+      reply_request(mdr, -EEXIST, dn->get_inode(), dn);
       return;
     } 
     

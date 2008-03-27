@@ -148,7 +148,7 @@ int main(int argc, const char **argv)
     cout << me << ": exported crush map to " << export_crush << std::endl;
   }  
 
-  if (!print && !modified) {
+  if (!print && !modified && !export_crush && !import_crush) {
     cerr << me << ": no action specified?" << std::endl;
     usage(me);
   }
