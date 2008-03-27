@@ -31,87 +31,100 @@
 #include <string>
 #include <cassert>
 #include <map>
+
+#include <typeinfo>
+
 using namespace std;
 
-/*typedef char const*         iterator_t;
-typedef tree_match<iterator_t> parse_tree_match_t;
+typedef char const*         iterator_t;                                                                              
+typedef tree_match<iterator_t> parse_tree_match_t;                                                                   
 typedef parse_tree_match_t::tree_iterator iter_t;
-*/
 
-//
-/*
-long evaluate(parse_tree_match_t hit);
-long eval_expression(iter_t const& i);
+long eval_term(iter_t const& i);                                                                                                                   
+long evaluate(parse_tree_match_t hit);                                                                               
+long eval_expression(iter_t const& i);                                                                               
+long evaluate(tree_parse_info<> info)                                                                                
+{                                                                                                                    
 
-long evaluate(tree_parse_info<> info)
-{
-  return eval_expression(info.trees.begin());
-}
+  std::cout << "t_id(info.trees.begin()).name(): " << typeid(info.trees.begin()).name() << '\n';
+  std::cout << "info.trees.size(): " <<  info.trees.size() <<std::endl;
 
-long eval_expression(iter_t const& i)
-{
-  cout << "In eval_expression. i->value = "
-       << string(i->value.begin(), i->value.end())
-       << " i->children.size() = " << i->children.size() << std::endl;
-  
-  if (i->value.id() == crush_grammar::integerID)
-    {
-      assert(i->children.size() == 0);
+  for (unsigned int i=0; i<info.trees.size();i++) {
+    std::cout << "i: " << i << std::endl;
+    std::cout << "DOWN A LEVEL\n";
+    std::cout << "info.trees[index_i].children.size() :" <<  info.trees[i].children.size() <<std::endl;
+    //boost::spirit::parser_id id = info.trees[i].value.id();
+    
+    std::cout << "In eval_expression. info.trees[index_i].value = " << string(info.trees[i].value.begin(), info.trees[i].value.end()) << std::endl 
+	      << "info.trees[index_i].children.size() = " << info.trees[i].children.size() << std::endl;      
+    std::cout << "t_id(info.trees[index_ii].value.begin()).name(): " << typeid(info.trees[i].value.begin()).name() << '\n';
+    std::cout << "t_id(info.trees[index_i].value).name: " << typeid(info.trees[i].value).name() << '\n';
+    
+    if (info.trees[i].value.is_root()) {
+      printf("is root!\n");
+    }
+    
+    std::cout << "typeid( (info.trees[index_i].value).value() ).name(): " << typeid( info.trees[i].value.value() ).name() << std::endl;
+    
+    string blah(info.trees[i].value.begin(), info.trees[i].value.end());
+    //string integerB(info.trees[i].value.value.begin(), info.trees[i].value.value.end());
+
+    std::cout << "value: " << blah << std::endl;
+    //printf("IB: %s\n", integerB);
+    
+    for (unsigned int j = 0; j < info.trees[i].children.size(); j++) {                        
+      std::cout<< "index_j: " << j << std::endl;
+      std::cout << "typeid(info.trees[index_i].children[index_j]).name(): " << typeid(info.trees[i].children[j]).name() << '\n';
+      std::cout << "typeid(info.trees[index_i].children[index_j].value).name(): " << typeid(info.trees[i].children[j].value).name() << '\n';
       
-      // extract integer (not always delimited by '\0')
-      string integer(i->value.begin(), i->value.end());
-      
-      return strtol(integer.c_str(), 0, 10);
-    }
-  else if (i->value.id() == crush_grammar::factorID)
-    {
-      // factor can only be unary minus
-      assert(*i->value.begin() == '-');
-      return - eval_expression(i->children.begin());
-    }
-  else if (i->value.id() == crush_grammar::termID)
-    {
-      if (*i->value.begin() == '*')
-        {
-	  assert(i->children.size() == 2);
-	  return eval_expression(i->children.begin()) *
-	    eval_expression(i->children.begin()+1);
-        }
-      else if (*i->value.begin() == '/')
-        {
-	  assert(i->children.size() == 2);
-	  return eval_expression(i->children.begin()) /
-	    eval_expression(i->children.begin()+1);
-        }
-      else
-	assert(0);
-    }
-  else if (i->value.id() == crush_grammar::expressionID)
-    {
-      if (*i->value.begin() == '+')
-        {
-	  assert(i->children.size() == 2);
-	  return eval_expression(i->children.begin()) +
-	    eval_expression(i->children.begin()+1);
-        }
-      else if (*i->value.begin() == '-')
-        {
-	  assert(i->children.size() == 2);
-	  return eval_expression(i->children.begin()) -
-	    eval_expression(i->children.begin()+1);
-        }
-      else
-	assert(0);
-    }
-  else
-    {
-      assert(0); // error
-    }
-  
-  return 0;
-}
-*/
+      //string temp = typeid(info.trees[i].children[j]).name() 
 
+      //string blah(info.trees[i].children[j].value.begin(), info.trees[i].children[j].value.end());
+      //std::cout << "value string: " << blah << std::endl;
+
+      //string blah2(info.trees[i].children[j].begin(), info.trees[i].children[j].end());
+      //std::cout << "child string: " << blah2 << std::endl;
+
+      // eval_expression( info.trees[i].children[j].begin );
+      
+      
+      //      const type_info tp = typeid(info.trees[i].children[j]);
+      //const char *nm = tp.name();
+      //std::cout << nm<<std::endl;
+      // next node points to the operator.  The text of the operator is                                                     
+      // stored in value (a vector<char>) 
+      //for (iter_t j = chi->value.begin(); j != chi->value.end(); ij+) { 
+      //std::cout << "here: " << *j <<std::endl;
+      //char op = *(chi->value.begin());
+      //std::cout << chi->value <<std::endl;
+      //printf("op: %c\n", op);
+      //}
+    }                                                                                                                         
+  
+    cout << "evalutaing info..." << std::endl;                                                                         
+    //printf("%d\n", (int)info.trees[i].value.id());
+    
+    if (info.trees[i].value.id() == crush_grammar::_int) {                                                                        
+      return 1;                                                                                                        
+    } else if (info.trees[i].value.id() == crush_grammar::_posint) {                                                              
+      return 2;                                                                                                        
+    } else if (info.trees[i].value.id() == crush_grammar::_name) {                                                                
+      return 3;                                                                                                        
+    } else if (info.trees[i].value.id() == crush_grammar::_device) {                                                              
+      return 4;                                                                                                        
+    } else if (info.trees[i].value.id() == crush_grammar::_bucket_type) {                                                         
+      return 5;                                                                                                        
+    } else if (info.trees[i].value.id() == crush_grammar::_bucket_id) {                                                           
+      return 6;                                                                                                        
+    } else if (info.trees[i].value.id() == crush_grammar::_bucket_alg) {                                                          
+      return 7;                                                                                                        
+    } else {                                                                                                           
+      return 0;                                                                                                        
+    }                                                                                                                  
+  }
+  cout << "should never get here." << std::endl;                                                                     
+  return -1;                                                                                                         
+}                                                                                                                    
 
 
 const char *infn = "stdin";
@@ -160,6 +173,7 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
   
   crush_grammar crushg;
   const char *start = big.c_str();
+  //tree_parse_info<const char *> info = ast_parse(start, crushg, space_p);
   tree_parse_info<> info = ast_parse(start, crushg, space_p);
 
   // parse error?
@@ -194,11 +208,12 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     rule_names[crush_grammar::_step_emit] = "step_emit";
     rule_names[crush_grammar::_crushrule] = "rule";
     rule_names[crush_grammar::_crushmap] = "map";
-    tree_to_xml(cout, info.trees, big.c_str(), rule_names);
+    //tree_to_xml(cout, info.trees, big.c_str(), rule_names);
+
 
     // print the result
     cout << "parsing succeeded\n";
-    //cout << "result = " << evaluate(info) << "\n\n";
+    cout << "result = " << evaluate(info) << "\n\n";
   }
 
   return 0;
