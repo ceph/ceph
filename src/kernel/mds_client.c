@@ -1199,6 +1199,7 @@ void check_new_map(struct ceph_mds_client *mdsc,
 
 void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 		  int wanted, __u32 seq, __u64 size, __u64 max_size, 
+		  struct timespec *mtime, struct timespec *atime,
 		  int mds)
 {
 	struct ceph_mds_file_caps *fc;
@@ -1222,6 +1223,10 @@ void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 	fc->ino = cpu_to_le64(ino);
 	fc->size = cpu_to_le64(size);
 	fc->max_size = cpu_to_le64(max_size);
+	if (mtime)
+		ceph_encode_timespec(&fc->mtime, mtime);
+	if (atime)
+		ceph_encode_timespec(&fc->atime, atime);
 
 	send_msg_mds(mdsc, msg, mds);
 }
@@ -1279,7 +1284,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, mds);
+		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, 0, 0, mds);
 		return;
 	}
 
@@ -1328,6 +1333,7 @@ int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
 		cap->caps &= wanted;  /* drop caps we don't want */
 		send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), cap->caps, wanted,
 			     cap->seq, ci->vfs_inode.i_size, ci->i_max_size,
+			     &ci->vfs_inode.i_mtime, &ci->vfs_inode.i_atime, 
 			     cap->mds);
 	}
 
