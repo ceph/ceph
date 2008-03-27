@@ -35,8 +35,6 @@ extern int ceph_lookup_cache;
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
 
-#define CACHE_HZ		(1*HZ)
-
 #define IPQUADPORT(n)							\
 	(unsigned int)((n.sin_addr.s_addr)) & 0xFF,			\
 		(unsigned int)((n.sin_addr.s_addr)>>8) & 0xFF,		\

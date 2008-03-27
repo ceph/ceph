@@ -162,6 +162,7 @@ void ceph_update_inode_lease(struct inode *inode,
 
 	do_div(ttl, 1000);
 	ttl += from_time;
+
 	dout(10, "update_inode_lease %p mask %d duration %d ms ttl %llu\n",
 	     inode, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
 	     ttl);
@@ -761,22 +762,27 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 int ceph_inode_revalidate(struct inode *inode, int mask)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int havemask = 0;
+	int havemask = ci->i_lease_mask;
 
 	/* EXCL cap counts for an ICONTENT lease */
 	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL)
 		havemask |= CEPH_LOCK_ICONTENT;
-
-	/* any bits implies all bits */
+	/* any ICONTENT bits imply all bits */
 	if (havemask & CEPH_LOCK_ICONTENT)  
 		havemask |= CEPH_LOCK_ICONTENT;
 	
-	if (time_before(jiffies, ci->i_lease_ttl+CACHE_HZ) &&
-	    (havemask & mask) == mask) {
-		dout(10, "revalidate %p mask %d still valid\n", inode, mask);
-		return 0;
+	if (time_before(jiffies, ci->i_lease_ttl)) {
+		if ((havemask & mask) == mask) {
+			dout(10, "inode_revalidate %p mask %d still valid\n", 
+			     inode, mask);
+			return 0;
+		} 
+		dout(10, "inode_revalidate %p mask %d by only have %d\n", inode,
+		     mask, havemask);
+	} else {
+		dout(10, "inode_revalidate %p have %d want %d, lease expired\n",
+		     inode, havemask, mask);
 	}
-	dout(10, "revalidate %p is old\n", inode);
 	return ceph_do_lookup(inode->i_sb, d_find_alias(inode), mask);
 }
 
