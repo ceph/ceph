@@ -1027,7 +1027,6 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_inode_cap *cap;
 	char *path;
 	int pathlen, err;
-	int tmp; /* for timespec encoding */
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
 	struct ceph_mds_cap_reconnect *rec;
@@ -1092,8 +1091,8 @@ retry:
 		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
 		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
-		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime, tmp);
-		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime, tmp);
+		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
+		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {
@@ -1199,7 +1198,8 @@ void check_new_map(struct ceph_mds_client *mdsc,
 /* caps */
 
 void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-		  int wanted, __u32 seq, __u64 size, __u64 max_size, int mds)
+		  int wanted, __u32 seq, __u64 size, __u64 max_size, 
+		  int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;

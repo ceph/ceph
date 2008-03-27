@@ -10,7 +10,7 @@
  */
 struct ceph_mdsmap {
 	ceph_epoch_t m_epoch, m_client_epoch;
-	struct ceph_timeval m_created;
+	struct ceph_timespec m_created;
 	__u32 m_anchortable;
 	__u32 m_root;
 	__u32 m_cap_bit_timeout;

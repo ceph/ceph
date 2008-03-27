@@ -314,9 +314,9 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_64(p, map->fsid.minor);
 	ceph_decode_32(p, map->epoch);
 	ceph_decode_32(p, map->ctime.tv_sec);
-	ceph_decode_32(p, map->ctime.tv_usec);
+	ceph_decode_32(p, map->ctime.tv_nsec);
 	ceph_decode_32(p, map->mtime.tv_sec);
-	ceph_decode_32(p, map->mtime.tv_usec);
+	ceph_decode_32(p, map->mtime.tv_nsec);
 	ceph_decode_32(p, map->pg_num);
 	ceph_decode_32(p, map->pgp_num);
 	ceph_decode_32(p, map->lpg_num);
@@ -389,7 +389,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	struct crush_map *newcrush = 0;
 	struct ceph_fsid fsid;
 	__u32 epoch;
-	struct ceph_timeval ctime;
+	struct ceph_timespec ctime;
 	__u32 len;
 	__u32 max;
 	int err = -EINVAL;
@@ -400,7 +400,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_decode_32(p, epoch);
 	BUG_ON(epoch != map->epoch+1);
 	ceph_decode_32(p, ctime.tv_sec);
-	ceph_decode_32(p, ctime.tv_usec);
+	ceph_decode_32(p, ctime.tv_nsec);
 
 	/* full map? */
 	ceph_decode_32(p, len);

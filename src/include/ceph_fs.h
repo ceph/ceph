@@ -59,9 +59,9 @@ struct ceph_object {
 
 #define CEPH_INO_ROOT 1
 
-struct ceph_timeval {
+struct ceph_timespec {
 	__le32 tv_sec;
-	__le32 tv_usec;
+	__le32 tv_nsec;
 };
 
 /*
@@ -357,7 +357,7 @@ enum {
 struct ceph_mds_session_head {
 	__le32 op;
 	__le64 seq;
-	struct ceph_timeval stamp;
+	struct ceph_timespec stamp;
 } __attribute__ ((packed));
 
 /* client_request */
@@ -407,8 +407,8 @@ struct ceph_mds_request_head {
 			ceph_frag_t frag;
 		} readdir;
 		struct {
-			struct ceph_timeval mtime;
-			struct ceph_timeval atime;
+			struct ceph_timespec mtime;
+			struct ceph_timespec atime;
 		} utime;
 		struct {
 			__u32 mode;
@@ -453,7 +453,7 @@ struct ceph_frag_tree_head {
 struct ceph_mds_reply_inode {
 	ceph_ino_t ino;
 	struct ceph_file_layout layout;
-	struct ceph_timeval ctime, mtime, atime;
+	struct ceph_timespec ctime, mtime, atime;
 	__u32 mode, uid, gid;
 	__u32 nlink;
 	__u64 size, max_size;
@@ -502,7 +502,7 @@ struct ceph_mds_file_caps {
 	__le64 ino;
 	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
-	struct ceph_timeval mtime, atime;
+	struct ceph_timespec mtime, atime;
 } __attribute__ ((packed));
 
 
@@ -522,7 +522,7 @@ struct ceph_mds_cap_reconnect {
 	__le32 wanted;
 	__le32 issued;
 	__le64 size;
-	struct ceph_timeval mtime, atime;
+	struct ceph_timespec mtime, atime;
 } __attribute__ ((packed));
 /* followed by encoded string */
 
@@ -567,7 +567,7 @@ enum {
 };
 
 struct ceph_osd_peer_stat {
-	struct ceph_timeval stamp;
+	struct ceph_timespec stamp;
 	float oprate;
 	float qlen;
 	float recent_qlen;

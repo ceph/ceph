@@ -699,7 +699,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
         const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
-	int usectmp, err;
+	int err;
 
 	/* gratuitous debug output */
         if (ia_valid & ATTR_UID)
@@ -774,10 +774,8 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
 		reqh = req->r_request->front.iov_base;
-		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime,
-				     usectmp);
-		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime,
-				     usectmp);
+		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
+		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
 		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
 		dout(10, "utime result %d\n", err);

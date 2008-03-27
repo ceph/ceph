@@ -45,7 +45,7 @@ class utime_t {
   utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
   //utime_t(time_t s) { tv.tv_sec = s; tv.tv_usec = 0; }
   utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
-  utime_t(const struct ceph_timeval &v) {
+  utime_t(const struct ceph_timespec &v) {
     decode_timeval(&v);
   }
   utime_t(const struct timeval &v) {
@@ -78,13 +78,13 @@ class utime_t {
     tv.tv_usec = v->tv_usec;
   }
 
-  void encode_timeval(struct ceph_timeval *t) const {
+  void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = cpu_to_le32(tv.tv_sec);
-    t->tv_usec = cpu_to_le32(tv.tv_usec);
+    t->tv_nsec = cpu_to_le32(tv.tv_usec*1000);
   }
-  void decode_timeval(const struct ceph_timeval *t) {
+  void decode_timeval(const struct ceph_timespec *t) {
     tv.tv_sec = le32_to_cpu(t->tv_sec);
-    tv.tv_usec = le32_to_cpu(t->tv_usec);
+    tv.tv_usec = le32_to_cpu(t->tv_nsec) / 1000;
   }
   void _encode(bufferlist &bl) {
     ::_encode_simple(tv.tv_sec, bl);

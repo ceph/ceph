@@ -66,19 +66,17 @@
 	} while (0)
 
 /*
- * struct ceph_timeval <-> struct timespec
+ * struct ceph_timespec <-> struct timespec
  */ 
 #define ceph_decode_timespec(ts, tv)					\
 	do {								\
 		(ts)->tv_sec = le32_to_cpu((tv)->tv_sec);		\
-		(ts)->tv_nsec = 1000*le32_to_cpu((tv)->tv_usec);	\
+		(ts)->tv_nsec = le32_to_cpu((tv)->tv_nsec);		\
 	} while (0)
-#define ceph_encode_timespec(tv, ts, usec)				\
+#define ceph_encode_timespec(tv, ts)				\
 	do {							\
-		usec = (ts)->tv_nsec;			\
-		do_div(usec, 1000);				\
 		(tv)->tv_sec = cpu_to_le32((ts)->tv_sec);	\
-		(tv)->tv_usec = cpu_to_le32(usec);		\
+		(tv)->tv_nsec = cpu_to_le32((ts)->tv_nsec);	\
 	} while (0)
 
 
