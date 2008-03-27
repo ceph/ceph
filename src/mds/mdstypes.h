@@ -339,6 +339,24 @@ class MDSCacheObject;
 //#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
 
 
+/*
+ * for metadata leases to clients
+ */
+struct ClientLease {
+  int client;
+  int mask;                 // CEPH_STAT_MASK_*
+  MDSCacheObject *parent;
+
+  utime_t ttl;
+  xlist<ClientLease*>::item session_lease_item; // per-session list
+  xlist<ClientLease*>::item lease_item;         // global list
+
+  ClientLease(int c, MDSCacheObject *p) : 
+    client(c), mask(0), parent(p),
+    session_lease_item(this),
+    lease_item(this) { }
+};
+
 
 // print hack
 struct mdsco_db_line_prefix {
@@ -388,6 +406,7 @@ class MDSCacheObject {
   static const int PIN_AUTHPIN    =  1006;
   static const int PIN_PTRWAITER  = -1007;
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
+  static const int PIN_CLIENTLEASE = 1009;
 
   const char *generic_pin_name(int p) {
     switch (p) {
@@ -400,6 +419,7 @@ class MDSCacheObject {
     case PIN_AUTHPIN: return "authpin";
     case PIN_PTRWAITER: return "ptrwaiter";
     case PIN_TEMPEXPORTING: return "tempexporting";
+    case PIN_CLIENTLEASE: return "clientlease";
     default: assert(0); return 0;
     }
   }
@@ -542,9 +562,9 @@ protected:
 
 
   // --------------------------------------------
-  // replication
+  // replication (across mds cluster)
  protected:
-  map<int,int> replica_map;      // [auth] mds -> nonce
+  map<int,int> replica_map;   // [auth] mds -> nonce
   int          replica_nonce; // [replica] defined on replica
 
  public:
@@ -591,6 +611,21 @@ protected:
   int get_replica_nonce() { return replica_nonce;}
   void set_replica_nonce(int n) { replica_nonce = n; }
 
+
+  // ---------------------------------------------
+  // replicas (on clients)
+ public:
+  hash_map<int,ClientLease*> client_lease_map;
+
+  ClientLease *get_client_lease(int c) {
+    if (client_lease_map.count(c))
+      return client_lease_map[c];
+    return 0;
+  }
+
+  ClientLease *add_client_lease(int c, int mask);
+  int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
+  
 
   // ---------------------------------------------
   // waiting
@@ -680,6 +715,8 @@ inline ostream& operator<<(ostream& out, mdsco_db_line_prefix o) {
   o.object->print_db_line_prefix(out);
   return out;
 }
+
+
 
 
 #endif

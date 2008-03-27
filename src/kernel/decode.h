@@ -31,6 +31,11 @@
 		v = le16_to_cpu(*(__u16*)*(p));		\
 		*(p) += sizeof(__u16);			\
 	} while (0)
+#define ceph_decode_8(p, v)				\
+	do {						\
+		v = *(__u8*)*(p);			\
+		(*p)++;					\
+	} while (0)
 
 #define ceph_decode_copy(p, pv, n)			\
 	do {						\

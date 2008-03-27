@@ -96,7 +96,8 @@ static unsigned fpos_off(loff_t p)
 
 
 static int prepopulate_dir(struct dentry *parent,
-			   struct ceph_mds_reply_info *rinfo)
+			   struct ceph_mds_reply_info *rinfo,
+			   int from_time)
 {
 	struct qstr dname;
 	struct dentry *dn;
@@ -104,6 +105,7 @@ static int prepopulate_dir(struct dentry *parent,
 	int i;
 
 	for (i = 0; i < rinfo->dir_nr; i++) {
+		/* dentry */
 		dname.name = rinfo->dir_dname[i];
 		dname.len = rinfo->dir_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
@@ -120,7 +122,9 @@ static int prepopulate_dir(struct dentry *parent,
 			}
 			ceph_init_dentry(dn);
 		}
+		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], from_time);
 
+		/* inode */
 		if (dn->d_inode == NULL) {
 			in = new_inode(parent->d_sb);
 			if (in == NULL) {
@@ -132,7 +136,6 @@ static int prepopulate_dir(struct dentry *parent,
 			in = dn->d_inode;
 		}
 
-		ceph_touch_dentry(dn);
 		if (ceph_ino(in) !=
 		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
 			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
@@ -152,6 +155,7 @@ static int prepopulate_dir(struct dentry *parent,
 				return -1;
 			}
 		}
+		ceph_update_inode_lease(in, rinfo->dir_ilease[i], from_time);
 
 		dput(dn);
 	}
@@ -199,7 +203,8 @@ nextfrag:
 		fi->last_readdir = req;
 
 		/* pre-populate dentry cache */
-		prepopulate_dir(filp->f_dentry, &req->r_reply_info);
+		prepopulate_dir(filp->f_dentry, &req->r_reply_info, 
+				req->r_from_time);
 	}
 
 	/* include . and .. with first fragment */
@@ -266,16 +271,17 @@ const struct file_operations ceph_dir_fops = {
 };
 
 
-int ceph_do_lookup(struct super_block *sb, struct dentry *dentry)
+int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	char *path;
 	int pathlen;
 	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *rhead;
 	int err;
 
-	dout(10, "do_lookup %p\n", dentry);
+	dout(10, "do_lookup %p mask %d\n", dentry, CEPH_STAT_MASK_INODE_ALL);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
@@ -285,13 +291,14 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	rhead = req->r_request->front.iov_base;
+	rhead->args.stat.mask = cpu_to_le32(mask);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	if (err == -ENOENT) {
 		ceph_init_dentry(dentry);
-		ceph_touch_dentry(dentry);
 		d_add(dentry, NULL);
 		err = 0;
 	}
@@ -307,19 +314,31 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	dout(5, "dir_lookup in dir %p dentry %p '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
-	/* open(|create) intent? */
-	if (nd->flags & LOOKUP_OPEN) {
+	/* open (but not create!) intent? */
+	if (nd->flags & LOOKUP_OPEN &&
+	    !(nd->intent.open.flags & O_CREAT)) {
 		err = ceph_lookup_open(dir, dentry, nd);
 		return ERR_PTR(err);
 	}
 
-	err = ceph_do_lookup(dir->i_sb, dentry);
+	err = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL);
 	if (err == -ENOENT)
 		d_add(dentry, NULL);
 	else if (err < 0)
 		return ERR_PTR(err);
 
 	return NULL;
+}
+
+static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
+			   struct nameidata *nd)
+{
+	int err;
+	dout(5, "create in dir %p dentry %p name '%.*s'\n",
+	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
+	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
+	err = ceph_lookup_open(dir, dentry, nd);
+	return err;
 }
 
 static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry,
@@ -529,52 +548,15 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return err;
 }
 
-static int
-ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
-		struct nameidata *nd)
-{
-	struct ceph_mds_client *mdsc = &ceph_inode_to_client(dir)->mdsc;
-	ceph_ino_t pathbase;
-	char *path;
-	int pathlen;
-	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *rhead;
-	int err;
-
-	dout(5, "create in dir %p dentry %p name '%.*s' flags %d\n",
-	     dir, dentry, dentry->d_name.len, dentry->d_name.name, mode);
-	pathbase = ceph_ino(dir->i_sb->s_root->d_inode);
-	path = ceph_build_dentry_path(dentry, &pathlen);
-	if (IS_ERR(path))
-		return PTR_ERR(path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD,
-				       pathbase, path, 0, 0);
-	kfree(path);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	rhead = req->r_request->front.iov_base;
-	rhead->args.mknod.mode = cpu_to_le32(mode);
-	rhead->args.mknod.rdev = 0;
-	err = ceph_mdsc_do_request(mdsc, req);
-	ceph_mdsc_put_request(req);
-	return err;
-}
-
 static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
-	dout(20, "ceph_d_revalidate\n");
-	if (dentry->d_inode) {
-		if (ceph_inode_revalidate(dentry)) {
-			dout(20, "ceph_d_revalidate (invalid entry)\n");
-			return 0;
-		}
-	} else {
-		if (!ceph_lookup_cache ||
-		    time_after(jiffies, dentry->d_time+CACHE_HZ)) {
-			d_drop(dentry);
-			return 0;
-		}
+	dout(20, "d_revalidate ttl %lu now %lu\n", dentry->d_time, jiffies);
+	if (time_after(jiffies, dentry->d_time)) {
+		dout(20, "d_revalidate - dentry %p expired\n", dentry);
+		d_drop(dentry);
+		return 0;
 	}
+	dout(20, "d_revalidate - dentry %p ok\n", dentry);
 	return 1;
 }
 

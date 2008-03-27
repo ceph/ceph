@@ -26,7 +26,8 @@ using __gnu_cxx::hash_map;
 #include "mdstypes.h"
 
 class CInode;
-class Capability;
+
+#include "Capability.h"
 
 /* 
  * session
@@ -50,6 +51,8 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
+  int get_client() { return inst.name.num(); }
+
   bool is_undef() { return state == STATE_UNDEF; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
@@ -62,11 +65,19 @@ private:
   version_t cap_push_seq;        // cap push seq #
 public:
   xlist<Capability*> caps;  // inodes with caps; front=most recently used
+  xlist<ClientLease*> leases;  // metadata leases to clients
   utime_t last_cap_renew;
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
+
+  void touch_cap(Capability *cap) {
+    caps.push_back(&cap->session_caps_item);
+  }
+  void touch_lease(ClientLease *r) {
+    leases.push_back(&r->session_lease_item);
+  }
 
   // -- completed requests --
 private:

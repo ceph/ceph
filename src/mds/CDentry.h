@@ -118,7 +118,7 @@ public:
     xlist_dirty(this),
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
-    lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
+    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, CInode *in) :
     name(n),
     remote_ino(0), remote_d_type(0),
@@ -127,7 +127,7 @@ public:
     xlist_dirty(this),
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
-    lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
+    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
     name(n),
     remote_ino(ino), remote_d_type(dt),
@@ -136,7 +136,7 @@ public:
     xlist_dirty(this),
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0),
-    lock(this, LOCK_OTYPE_DN, WAIT_LOCK_OFFSET) { }
+    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
 
   CInode *get_inode() const { return inode; }
   CDir *get_dir() const { return dir; }
@@ -252,7 +252,7 @@ public:
 
   // -- locking --
   SimpleLock* get_lock(int type) {
-    assert(type == LOCK_OTYPE_DN);
+    assert(type == CEPH_LOCK_DN);
     return &lock;
   }
   void set_object_info(MDSCacheObjectInfo &info);

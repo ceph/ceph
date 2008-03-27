@@ -50,6 +50,13 @@ class CInode;
  *
  */
 
+
+struct LeaseStat {
+  // this matches ceph_mds_reply_lease
+  __u16 mask;
+  __u32 duration_ms;  
+} __attribute__ ((packed));
+
 struct DirStat {
   // mds distribution hints
   frag_t frag;
@@ -94,7 +101,6 @@ struct InodeStat {
   inode_t inode;
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
-  uint32_t mask;
 
  public:
   InodeStat() {}
@@ -127,17 +133,9 @@ struct InodeStat {
       n--;
     }
     ::_decode_simple(symlink, p);
-    mask = e.mask;
   }
 
   static void _encode(bufferlist &bl, CInode *in) {
-    int mask = STAT_MASK_INO|STAT_MASK_TYPE|STAT_MASK_BASE;
-
-    // mask
-    if (in->authlock.can_rdlock(0)) mask |= STAT_MASK_AUTH;
-    if (in->linklock.can_rdlock(0)) mask |= STAT_MASK_LINK;
-    if (in->filelock.can_rdlock(0)) mask |= STAT_MASK_FILE;
-
     /*
      * note: encoding matches struct ceph_client_reply_inode
      */
@@ -155,7 +153,6 @@ struct InodeStat {
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
     e.rdev = in->inode.rdev;
-    e.mask = mask;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
     ::_encode_simple(e, bl);
     for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
@@ -173,15 +170,7 @@ struct InodeStat {
 class MClientReply : public Message {
   // reply data
   struct ceph_mds_reply_head st;
- 
-  list<InodeStat*> trace_in;
-  list<DirStat*>   trace_dir;
-  list<string>     trace_dn;
   bufferlist trace_bl;
-
-  DirStat *dir_dir;
-  list<InodeStat*> dir_in;
-  list<string> dir_dn;
   bufferlist dir_bl;
 
  public:
@@ -193,9 +182,6 @@ class MClientReply : public Message {
 
   int get_result() { return st.result; }
 
-  inodeno_t get_ino() { return trace_in.back()->inode.ino; }
-  const inode_t& get_inode() { return trace_in.back()->inode; }
-
   unsigned char get_file_caps() { return st.file_caps; }
   long get_file_caps_seq() { return st.file_caps_seq; }
   //uint64_t get_file_data_version() { return st.file_data_version; }
@@ -205,21 +191,13 @@ class MClientReply : public Message {
   void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
-  MClientReply() : dir_dir(0) {}
+  MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
-    Message(CEPH_MSG_CLIENT_REPLY), dir_dir(0) {
+    Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
     this->st.tid = cpu_to_le64(req->get_tid());
     this->st.op = req->get_op();
     this->st.result = result;
-  }
-  virtual ~MClientReply() {
-    list<InodeStat*>::iterator it;
-    
-    for (it = trace_in.begin(); it != trace_in.end(); ++it) 
-      delete *it;
-    for (it = dir_in.begin(); it != dir_in.end(); ++it) 
-      delete *it;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
@@ -246,90 +224,20 @@ class MClientReply : public Message {
 
 
   // dir contents
-  void take_dir_items(bufferlist& bl) {
+  void set_dir_bl(bufferlist& bl) {
     dir_bl.claim(bl);
   }
-  void _decode_dir() {
-    bufferlist::iterator p = dir_bl.begin();
-    dir_dir = new DirStat(p);
-    __u32 num;
-    ::_decode_simple(num, p);
-    while (num--) {
-      string dn;
-      ::_decode_simple(dn, p);
-      dir_dn.push_back(dn);
-      dir_in.push_back(new InodeStat(p));
-    }
-    assert(p.end());
+  bufferlist &get_dir_bl() {
+    return dir_bl;
   }
-
-  const list<InodeStat*>& get_dir_in() { 
-    if (dir_in.empty() && dir_bl.length()) _decode_dir();
-    return dir_in;
-  }
-  const list<string>& get_dir_dn() { 
-    if (dir_dn.empty() && dir_bl.length()) _decode_dir();    
-    return dir_dn; 
-  }
-  const DirStat* get_dir_dir() {
-    return dir_dir;
-  }
-
 
   // trace
-  void set_trace_dist(CInode *in, int whoami) {
-    // inode, dentry, dir, ..., inode
-    bufferlist bl;
-    __u32 numi = 0;
-    if (in) 
-      while (true) {
-	// inode
-	InodeStat::_encode(bl, in);
-	numi++;
-	CDentry *dn = in->get_parent_dn();
-	if (!dn) break;
-
-	// dentry, dir
-	::_encode_simple(in->get_parent_dn()->get_name(), bl);
-	DirStat::_encode(bl, dn->get_dir(), whoami);
-	in = dn->get_dir()->get_inode();
-      }
-    ::_encode_simple(numi, trace_bl);
-    trace_bl.claim_append(bl);
+  void set_trace(bufferlist& bl) {
+    trace_bl.claim(bl);
   }
-  void _decode_trace() {
-    bufferlist::iterator p = trace_bl.begin();
-    __u32 numi;
-    ::_decode_simple(numi, p);
-    if (numi) 
-      while (1) {
-	// inode
-	trace_in.push_front(new InodeStat(p));
-	if (--numi == 0) break;
-
-	// dentry, dir
-	string ref_dn;
-	::_decode_simple(ref_dn, p);
-	trace_dn.push_front(ref_dn);
-	trace_dir.push_front(new DirStat(p));
-      }
-    assert(p.end());
+  bufferlist& get_trace_bl() {
+    return trace_bl;
   }
-
-  const list<InodeStat*>& get_trace_in() { 
-    if (trace_in.empty() && trace_bl.length()) _decode_trace();
-    return trace_in; 
-  }
-  const list<DirStat*>& get_trace_dir() { 
-    if (trace_in.empty() && trace_bl.length()) _decode_trace();
-    return trace_dir; 
-  }
-  const list<string>& get_trace_dn() { 
-    if (trace_in.empty() && trace_bl.length()) _decode_trace();
-    return trace_dn; 
-  }
-
-
 };
 
 #endif

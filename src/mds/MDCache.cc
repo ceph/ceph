@@ -88,18 +88,20 @@ using namespace std;
 
 
 
-
 MDCache::MDCache(MDS *m)
 {
   mds = m;
   migrator = new Migrator(mds, this);
-  //  renamer = new Renamer(mds, this);
   root = NULL;
   stray = NULL;
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
   did_shutdown_log_cap = false;
+
+  client_lease_durations[0] = 5.0;
+  client_lease_durations[1] = 30.0;
+  client_lease_durations[2] = 300.0;
 }
 
 MDCache::~MDCache() 
@@ -2658,11 +2660,10 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   assert(session);
 
   // add cap
-  in->reconnect_cap(client, icr, session->caps);
+  Capability *cap = in->reconnect_cap(client, icr);
+  session->touch_cap(cap);
   
   // send REAP
-  Capability *cap = in->get_client_cap(client);
-  assert(cap); // ?
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
 					      cap->get_last_seq(),
@@ -3491,6 +3492,32 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   if (dn->lock.remove_replica(from) ||
       !dn->is_replicated())
     mds->locker->simple_eval_gather(&dn->lock);
+}
+
+
+
+void MDCache::trim_client_leases()
+{
+  utime_t now = g_clock.now();
+  
+  dout(10) << "trim_client_leases" << dendl;
+
+  for (int pool=0; pool<client_lease_pools; pool++) {
+    int before = client_leases[pool].size();
+    if (client_leases[pool].empty()) 
+      continue;
+
+    while (!client_leases[pool].empty()) {
+      ClientLease *r = client_leases[pool].front();
+      if (r->ttl > now) break;
+      MDSCacheObject *p = r->parent;
+      dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
+      p->remove_client_lease(r, r->mask, mds->locker);
+    }
+    int after = client_leases[pool].size();
+    dout(10) << "trim_client_leases pool " << pool << " trimmed "
+	     << (before-after) << " leases, " << after << " left" << dendl;
+  }
 }
 
 

@@ -155,21 +155,6 @@ namespace __gnu_cxx {
 #define FILE_MODE_RW         (1|2)
 #define FILE_MODE_LAZY       4
 
-/** stat masks
- */
-#define STAT_MASK_INO        1   // inode nmber
-#define STAT_MASK_TYPE       2   // file type bits of the mode
-#define STAT_MASK_BASE       4   // layout, symlink value
-#define STAT_MASK_AUTH       8   // uid, gid, mode
-#define STAT_MASK_LINK       16   // nlink, anchored
-#define STAT_MASK_FILE       32  // mtime, size.
-
-#define STAT_MASK_ALL        63
-
-#define STAT_MASK_SIZE       STAT_MASK_FILE // size, blksize, blocks
-#define STAT_MASK_MTIME      STAT_MASK_FILE // mtime
-#define STAT_MASK_ATIME      STAT_MASK_FILE // atime
-#define STAT_MASK_CTIME      (STAT_MASK_FILE|STAT_MASK_AUTH|STAT_MASK_LINK) // ctime
 
 inline int DT_TO_MODE(int dt) {
   return dt << 12;

@@ -55,6 +55,7 @@ class MStatfsReply;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
+class MClientLease;
 class MMonMap;
 
 class Filer;
@@ -88,6 +89,7 @@ class Dentry : public LRUObject {
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
+  utime_t ttl;
   
   void get() { assert(ref == 0); ref++; lru_pin(); }
   void put() { assert(ref == 1); ref--; lru_unpin(); }
@@ -127,8 +129,8 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  utime_t   valid_until;
-  int mask;
+  int       mask;
+  utime_t   ttl;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -139,8 +141,6 @@ class Inode {
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  utime_t   file_wr_mtime;   // [writers] time of last write
-  off_t     file_wr_size;    // [writers] largest offset we've written to
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
@@ -195,9 +195,8 @@ class Inode {
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
     inode(_inode),
-    valid_until(0, 0),
+    mask(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    file_wr_mtime(0, 0), file_wr_size(0), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -229,9 +228,9 @@ class Inode {
   int file_caps_wanted() {
     int w = 0;
     if (num_open_rd) w |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
-    if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
+    if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
     if (num_open_lazy) w |= CEPH_CAP_LAZYIO;
-    if (fc.is_dirty()) w |= CEPH_CAP_WRBUFFER;
+    if (fc.is_dirty()) w |= CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
     if (fc.is_cached()) w |= CEPH_CAP_RDCACHE;
     return w;
   }
@@ -444,6 +443,7 @@ public:
     MClientRequest *request;    
     bufferlist request_payload;  // in case i have to retry
 
+    utime_t  sent_stamp;
     bool     idempotent;         // is request idempotent?
     set<int> mds;                // who i am asking
     int      resend_mds;         // someone wants you to (re)send the request here
@@ -473,7 +473,7 @@ public:
   };
   map<tid_t,StatfsRequest*> statfs_requests;
   
-  MClientReply *make_request(MClientRequest *req, int use_auth=-1);
+  MClientReply *make_request(MClientRequest *req, Inode **ppin=0, utime_t *pfrom=0, int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds);
@@ -676,6 +676,8 @@ protected:
   void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 
+  void handle_lease(MClientLease *m);
+
   // file caps
   void handle_file_caps(class MClientFileCaps *m);
   void implemented_caps(class MClientFileCaps *m, Inode *in);
@@ -689,9 +691,14 @@ protected:
   void unlock_fh_pos(Fh *f);
   
   // metadata cache
-  Inode* insert_inode(Dir *dir, InodeStat *in_info, const string& dn);
   void update_dir_dist(Inode *in, DirStat *st);
-  Inode* insert_trace(MClientReply *reply);
+
+  Inode* insert_trace(MClientReply *reply, utime_t ttl);
+  void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
+  Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+			     InodeStat *ist, LeaseStat *ilease, 
+			     utime_t from);
+
 
   // ----------------------
   // fs ops.

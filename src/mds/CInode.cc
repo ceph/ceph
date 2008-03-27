@@ -480,20 +480,20 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   switch (type) {
-  case LOCK_OTYPE_IAUTH:
+  case CEPH_LOCK_IAUTH:
     _encode(inode.ctime, bl);
     _encode(inode.mode, bl);
     _encode(inode.uid, bl);
     _encode(inode.gid, bl);  
     break;
     
-  case LOCK_OTYPE_ILINK:
+  case CEPH_LOCK_ILINK:
     _encode(inode.ctime, bl);
     _encode(inode.nlink, bl);
     _encode(inode.anchored, bl);
     break;
     
-  case LOCK_OTYPE_IDIRFRAGTREE:
+  case CEPH_LOCK_IDFT:
     {
       // encode the raw tree
       dirfragtree._encode(bl);
@@ -511,13 +511,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     }
     break;
     
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     _encode(inode.size, bl);
     _encode(inode.mtime, bl);
     _encode(inode.atime, bl);
     break;
 
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDIR:
     _encode(inode.mtime, bl);
     if (0) {
       map<frag_t,int> frag_sizes;
@@ -543,7 +543,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   utime_t tm;
 
   switch (type) {
-  case LOCK_OTYPE_IAUTH:
+  case CEPH_LOCK_IAUTH:
     _decode(tm, bl, off);
     if (inode.ctime < tm) inode.ctime = tm;
     _decode(inode.mode, bl, off);
@@ -551,14 +551,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     _decode(inode.gid, bl, off);
     break;
 
-  case LOCK_OTYPE_ILINK:
+  case CEPH_LOCK_ILINK:
     _decode(tm, bl, off);
     if (inode.ctime < tm) inode.ctime = tm;
     _decode(inode.nlink, bl, off);
     _decode(inode.anchored, bl, off);
     break;
 
-  case LOCK_OTYPE_IDIRFRAGTREE:
+  case CEPH_LOCK_IDFT:
     {
       fragtree_t temp;
       temp._decode(bl, off);
@@ -575,13 +575,13 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     }
     break;
 
-  case LOCK_OTYPE_IFILE:
+  case CEPH_LOCK_IFILE:
     _decode(inode.size, bl, off);
     _decode(inode.mtime, bl, off);
     _decode(inode.atime, bl, off);
     break;
 
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDIR:
     //::_decode(inode.size, bl, off);
     _decode(tm, bl, off);
     if (inode.mtime < tm) {
@@ -609,7 +609,7 @@ void CInode::clear_dirty_scattered(int type)
 {
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
   switch (type) {
-  case LOCK_OTYPE_IDIR:
+  case CEPH_LOCK_IDIR:
     xlist_dirty_inode_mtime.remove_myself();
     break;
   default:
@@ -848,6 +848,3 @@ void CInode::decode_import(bufferlist::iterator& p,
   filelock._decode(p);
   dirlock._decode(p);
 }
-
-
-

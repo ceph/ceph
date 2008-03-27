@@ -275,6 +275,9 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_CLIENT_FILECAPS:
 		ceph_mdsc_handle_filecaps(&client->mdsc, msg);
 		break;
+	case CEPH_MSG_CLIENT_LEASE:
+		ceph_mdsc_handle_lease(&client->mdsc, msg);
+		break;
 
 		/* osd client */
 	case CEPH_MSG_OSD_MAP:
@@ -313,6 +316,7 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD: return "client_request_forward";
 	case CEPH_MSG_CLIENT_REPLY: return "client_reply";
 	case CEPH_MSG_CLIENT_FILECAPS: return "client_filecaps";
+	case CEPH_MSG_CLIENT_LEASE: return "client_lease";
 	case CEPH_MSG_OSD_GETMAP: return "osd_getmap";
 	case CEPH_MSG_OSD_MAP: return "osd_map";
 	case CEPH_MSG_OSD_OP: return "osd_op";

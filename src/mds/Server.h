@@ -76,8 +76,10 @@ public:
   void handle_client_request(MClientRequest *m);
 
   void dispatch_client_request(MDRequest *mdr);
-  void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0);
-  void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei);
+  void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
+  void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
+  void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn);
+
 
   void handle_slave_request(MMDSSlaveRequest *m);
   void dispatch_slave_request(MDRequest *mdr);
