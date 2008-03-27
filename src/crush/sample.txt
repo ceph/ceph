@@ -5,6 +5,7 @@ device 2 osd002
 device 3 osd003
 device 4 osd004 offload 0       # 0.0 -> normal, 1.0 -> failed
 device 5 osd005 offload 0.1
+device 6 osd006 offload 0.1
 
 # hierarchy
 type 0 osd   # 'device' is actually the default for 0
