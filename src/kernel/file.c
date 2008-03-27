@@ -170,9 +170,10 @@ int ceph_release(struct inode *inode, struct file *file)
 	mode = cf->mode;
 	ci->i_nr_by_mode[mode]--;
 	wanted = ceph_caps_wanted(ci);
-	dout(10, "released %p flags 0%o mode %d nr now %d.  wanted %d was %d\n", 
+	dout(10, "released %p flags 0%o mode %d nr now %d, wanted %d -> %d\n",
 	     file, file->f_flags, mode, 
 	     ci->i_nr_by_mode[mode], wanted, ci->i_cap_wanted);
+	wanted |= ceph_caps_used(ci);
 	if (wanted != ci->i_cap_wanted)
 		ceph_mdsc_update_cap_wanted(ci, wanted);
 	

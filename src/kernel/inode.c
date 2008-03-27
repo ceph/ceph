@@ -473,7 +473,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int seq = le32_to_cpu(grant->seq);
 	int newcaps;
 	int used;
-	int wanted = ceph_caps_wanted(ci);
+	int wanted = ceph_caps_wanted(ci) | ceph_caps_used(ci);
 	int ret = 0;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
@@ -605,16 +605,29 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
 
 void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 {
+	int last = 0, wanted;
+
 	spin_lock(&ci->vfs_inode.i_lock);
 	if (had & CEPH_CAP_RD)
-		ci->i_rd_ref--;
+		if (--ci->i_rd_ref == 0)
+			last++;
 	if (had & CEPH_CAP_RDCACHE)
-		ci->i_rdcache_ref--;
+		if (--ci->i_rdcache_ref == 0)
+			last++;
 	if (had & CEPH_CAP_WR)
-		ci->i_wr_ref--;
+		if (--ci->i_wr_ref == 0)
+			last++;
 	if (had & CEPH_CAP_WRBUFFER)
-		ci->i_wrbuffer_ref--;
+		if (--ci->i_wrbuffer_ref)
+			last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
+
+	if (last) {
+		wanted = ceph_caps_wanted(ci);
+		wanted |= ceph_caps_used(ci);
+		if (wanted != ci->i_cap_wanted)
+			ceph_mdsc_update_cap_wanted(ci, wanted);
+	}
 }
 
 
@@ -638,17 +651,19 @@ const struct inode_operations ceph_symlink_iops = {
 /*
  * generics
  */
-struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc, struct dentry *dentry, int op)
+struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc, 
+					 struct dentry *dentry, int op)
 {
 	char *path;
 	int pathlen;
 	struct ceph_mds_request *req;
+	__u64 baseino = ceph_ino(dentry->d_inode->i_sb->s_root->d_inode);
 
 	dout(5, "prepare_setattr dentry %p\n", dentry);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
-	req = ceph_mdsc_create_request(mdsc, op, ceph_ino(dentry->d_inode->i_sb->s_root->d_inode), path, 0, 0);
+	req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0);
 	kfree(path);
 	return req;
 }
@@ -670,9 +685,11 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
         if (ia_valid & ATTR_GID)
 		dout(10, "setattr: gid %d -> %d\n", inode->i_uid, attr->ia_uid);
         if (ia_valid & ATTR_MODE)
-		dout(10, "setattr: mode %d -> %d\n", inode->i_mode, attr->ia_mode);
+		dout(10, "setattr: mode %d -> %d\n", inode->i_mode, 
+		     attr->ia_mode);
         if (ia_valid & ATTR_SIZE)
-		dout(10, "setattr: size %lld -> %lld\n", inode->i_size, attr->ia_size);
+		dout(10, "setattr: size %lld -> %lld\n", inode->i_size, 
+		     attr->ia_size);
         if (ia_valid & ATTR_ATIME)
 		dout(10, "setattr: atime %ld.%ld -> %ld.%ld\n", 
 		     inode->i_atime.tv_sec, inode->i_atime.tv_nsec, 
@@ -720,9 +737,17 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* utimes */
-	/* FIXME: second resolution here is a hack to avoid setattr on open... :/ */
-	if (((ia_valid & ATTR_ATIME) && inode->i_atime.tv_sec != attr->ia_atime.tv_sec) ||
-	    ((ia_valid & ATTR_MTIME) && inode->i_mtime.tv_sec != attr->ia_mtime.tv_sec)) {
+	if (((ia_valid & ATTR_ATIME) && 
+	     !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
+	    ((ia_valid & ATTR_MTIME) && 
+	     !timespec_equal(&inode->i_mtime, &attr->ia_mtime))) {
+		/* do i hold CAP_EXCL? */
+		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+			dout(10, "utime holding EXCL, doing nothing\n");
+			inode->i_atime = attr->ia_atime;
+			inode->i_mtime = attr->ia_mtime;
+			return 0;
+		}
 		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);

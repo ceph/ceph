@@ -395,6 +395,9 @@ static int ceph_set_super(struct super_block *s, void *data)
 	s->s_op = &ceph_sops;
 	memcpy(&client->mount_args, args, sizeof(*args));
 
+	/* set time granularity */
+	s->s_time_gran = 1000;  /* 1 us == 1000 ns */
+
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
 	if (ret != 0)
 		goto bail;

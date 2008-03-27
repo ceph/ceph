@@ -151,7 +151,7 @@ struct ceph_inode_info {
 	wait_queue_head_t i_cap_wq;
 
 	int i_nr_by_mode[4];
-	int i_cap_wanted;
+	int i_cap_wanted;      /* what we've told the mds(s) */
 	loff_t i_max_size;     /* size authorized by mds */
 	loff_t i_wr_size;      /* largest offset we've written (+1) */
 	struct timespec i_wr_mtime;
@@ -223,9 +223,10 @@ static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 		want |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
 	if (ci->i_nr_by_mode[2])
 		want |= CEPH_CAP_RD|CEPH_CAP_RDCACHE|
-			CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
+			CEPH_CAP_WR|CEPH_CAP_WRBUFFER|
+			CEPH_CAP_EXCL;
 	if (ci->i_nr_by_mode[3])
-		want |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER;
+		want |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
 	return want;
 }
 

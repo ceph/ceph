@@ -26,6 +26,8 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
+- carry wrbuffer/rdcache caps until data is flushed
+  - this should make the utimes bit kick in
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
 - procfs/debugfs
   - adjust granular debug levels too
