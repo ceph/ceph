@@ -1696,6 +1696,7 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
       !lock->get_parent()->is_replicated() &&
       !lock->is_rdlocked() &&
       !lock->is_xlocked() &&
+      lock->get_num_client_lease() == 0 &&
       lock->get_state() == LOCK_SYNC) 
     lock->set_state(LOCK_SCATTER);
   //scatter_scatter(lock);

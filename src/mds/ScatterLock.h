@@ -167,6 +167,8 @@ public:
     out << get_lock_type_name(get_type()) << " ";
     out << get_scatterlock_state_name(get_state());
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
+    if (get_num_client_lease())
+      out << " c=" << get_num_client_lease();
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())
