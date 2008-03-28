@@ -1359,8 +1359,11 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // don't want?
+  // or, don't have cap?   
+  //   (it may be that we've reopened the file locally,
+  //    and thus want caps, but don't have a cap yet)
   int wanted = in->file_caps_wanted();
-  if (wanted == 0) {
+  if (wanted == 0 || in->caps.count(mds) == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
@@ -1371,8 +1374,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
     messenger->send_message(m, m->get_source_inst());
     return;
   }
-
-  assert(in->caps.count(mds));
 
   // update per-mds caps
   const int old_caps = in->caps[mds].caps;
