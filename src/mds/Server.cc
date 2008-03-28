@@ -538,29 +538,37 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   */
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-  
-  // send reply
-  if (req->get_client_inst().name.is_mds())
-    delete reply;   // mds doesn't need a reply
-  else {
-    // include trace
-    if (!tracei && !tracedn && mdr->ref) {
-      tracei = mdr->ref;
-      dout(20) << "inferring tracei to be " << *tracei << dendl;
-      if (!mdr->trace.empty()) {
-	tracedn = mdr->trace.back();
-	dout(20) << "inferring tracedn to be " << *tracedn << dendl;
-      }
-    }
-    if (tracei || tracedn)
-      set_trace_dist(mdr->session, reply, tracei, tracedn);
 
-    messenger->send_message(reply, req->get_client_inst());
+
+  // infer tracei/tracedn from mdr?
+  if (!tracei && !tracedn && mdr->ref) {
+    tracei = mdr->ref;
+    dout(20) << "inferring tracei to be " << *tracei << dendl;
+    if (!mdr->trace.empty()) {
+      tracedn = mdr->trace.back();
+      dout(20) << "inferring tracedn to be " << *tracedn << dendl;
+    }
+  }
+
+  // clean up request, drop locks, etc.
+  // do this before replying, so that we can issue leases
+  Session *session = mdr->session;
+  entity_inst_t client_inst = req->get_client_inst();
+  mdcache->request_finish(mdr);
+  mdr = 0;
+
+  // reply at all?
+  if (client_inst.name.is_mds()) {
+    delete reply;   // mds doesn't need a reply
+    reply = 0;
+  } else {
+    // send reply, with trace, and possible leases
+    if (tracei || tracedn)
+      set_trace_dist(session, reply, tracei, tracedn);
+    messenger->send_message(reply, client_inst);
   }
   
-  // finish request
-  mdcache->request_finish(mdr);
-
+  // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
       tracei->get_parent_dn() &&
       tracei->get_parent_dn()->is_remote())
