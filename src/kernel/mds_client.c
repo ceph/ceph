@@ -1413,8 +1413,16 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		goto release;
 	}
 
+	/* inode */
+	ci = ceph_inode(inode);
+	if (mask & ci->i_lease_mask) {
+		ci->i_lease_mask &= ~mask;
+		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
+		     mask, inode, ci->i_lease_mask);
+	}
+
+	/* dentry */
 	if (mask & CEPH_LOCK_DN) {
-		/* dentry */
 		parent = d_find_alias(inode);
 		if (!parent) {
 			dout(10, "no parent dentry on inode %p\n", inode);
@@ -1426,13 +1434,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			goto release;
 		dentry->d_time = 0;
 		dout(10, "lease revoked on dentry %p\n", dentry);
-	} else {
-		/* inode */
-		ci = ceph_inode(inode);
-		ci->i_lease_mask &= ~mask;
-		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
-		     mask, inode, ci->i_lease_mask);
-	}
+	} 
 
 release:
 	dout(10, "sending release\n");
@@ -1446,28 +1448,50 @@ bad:
 }
 
 
-void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct dentry *dn)
+/*
+ * pass inode _or_ dentry
+ */
+void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
+			     struct dentry *dentry, int mask)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
-	int mds = (long)dn->d_fsdata;
+	struct ceph_inode_info *ci;
+	int mds;
+	int len = sizeof(*lease) + sizeof(__u32);
+	int dnamelen = 0;
+	__u64 ino;
+
+	if (dentry) {
+		mds = (long)dentry->d_fsdata;
+		dnamelen = dentry->d_name.len;
+		len += dentry->d_name.len;
+		inode = dentry->d_parent->d_inode;
+	}
+	ci = ceph_inode(inode);
+	ino = ci->i_ceph_ino;
+	if (!dentry) {
+		mds = ci->i_lease_mds;
+	}
 	
 	if (mds < 0) {
-		dout(10, "lease_release dentry %p -- no lease\n", dn);
+		dout(10, "lease_release inode %p dentry %p -- no lease\n", 
+		     inode, dentry);
 		return;
 	}
-	dout(10, "lease_release dentry %p to mds%d\n", dn, mds);
+	dout(10, "lease_release inode %p dentry %p to mds%d\n", inode,
+	     dentry, mds);
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, sizeof(*lease) + 
-			   sizeof(__u32) + dn->d_name.len, 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, 0);
 	if (IS_ERR(msg))
 		return;
 	lease = msg->front.iov_base;
 	lease->action = CEPH_MDS_LEASE_RELEASE;
-	lease->mask = CEPH_LOCK_DN;
-	lease->ino = cpu_to_le64(dn->d_parent->d_inode->i_ino); /* ?? */
-	*(__le32*)(lease+1) = cpu_to_le32(dn->d_name.len);
-	memcpy((void *)(lease + 1) + 4, dn->d_name.name, dn->d_name.len);
+	lease->mask = mask;
+	lease->ino = cpu_to_le64(ino); /* ?? */
+	*(__le32*)(lease+1) = cpu_to_le32(dnamelen);
+	if (dentry)
+		memcpy((void *)(lease + 1) + 4, dentry->d_name.name, dnamelen);
 
 	send_msg_mds(mdsc, msg, mds);
 }

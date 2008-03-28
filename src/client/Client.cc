@@ -323,14 +323,17 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
   ttl += (float)lease->duration_ms * 1000.0;
 
   dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
+
   if (lease->mask & CEPH_STAT_MASK_INODE) {
     in->inode = st->inode;
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
   }
 
-  in->mask = lease->mask;
-  if (ttl > in->ttl) 
-    in->ttl = ttl;
+  if (lease->mask && ttl > in->lease_ttl) {
+    in->lease_ttl = ttl;
+    in->lease_mask = lease->mask;
+    in->lease_mds = from;
+  }
 
   // symlink?
   if (in->inode.is_symlink()) {
@@ -407,6 +410,15 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   } 
 
   assert(dn && dn->inode);
+
+  if (dlease->mask & CEPH_LOCK_DN) {
+    utime_t ttl = from;
+    ttl += (float)dlease->duration_ms * 1000.0;
+    if (ttl > dn->lease_ttl) {
+      dn->lease_ttl = ttl;
+      dn->lease_mds = from;
+    }
+  }
 
   update_inode(dn->inode, ist, ilease, from);
 
@@ -558,7 +570,8 @@ Dentry *Client::lookup(filepath& path)
       Dir *dir = cur->dir;
       if (dir->dentries.count(path[i])) {
         dn = dir->dentries[path[i]];
-        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " ttl " << dn->inode->ttl << dendl;
+        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode
+		 << " ttl " << dn->inode->lease_ttl << dendl;
       } else {
         dout(14) << " dentry " << path[i] << " dne" << dendl;
         return NULL;
@@ -573,7 +586,8 @@ Dentry *Client::lookup(filepath& path)
   if (!dn) 
     dn = cur->dn;
   if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " ttl " << dn->inode->ttl << dendl;
+    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino
+	     << " ttl " << dn->inode->lease_ttl << dendl;
   }
 
   return dn;
@@ -1175,13 +1189,14 @@ void Client::handle_lease(MClientLease *m)
       goto revoke;
     }
     Dentry *dn = in->dir->dentries[m->dname];
-    dout(10) << " reset ttl on " << dn << dendl;
-    dn->ttl = utime_t();
-  } else {
-    int newmask = in->mask & ~m->get_mask();
-    dout(10) << " reset inode " << in->ino() 
-	     << " mask " << in->mask << " -> " << newmask << dendl;
-    in->mask = newmask;
+    dout(10) << " revoked DN lease on " << dn << dendl;
+    dn->lease_mds = -1;
+  } 
+  if (m->get_mask() & in->lease_mask) {
+    int newmask = in->lease_mask & ~m->get_mask();
+    dout(10) << " revoked inode lease on " << in->ino() 
+	     << " mask " << in->lease_mask << " -> " << newmask << dendl;
+    in->lease_mask = newmask;
   }
   
  revoke:
@@ -2030,12 +2045,9 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
 
   int havemask = 0;
   if (dn) {
-    if (now > dn->inode->ttl) {
-      dout(10) << "_lstat has EXPIRED (" << dn->inode->ttl << ") inode " << fpath
-	       << " with mask " << havemask << dendl;
-    } else {
-      havemask = dn->inode->mask;
-    }
+    if (now < dn->inode->lease_ttl &&
+	dn->inode->lease_mds >= 0)
+      havemask = dn->inode->lease_mask;
     if (dn->inode->file_caps() & CEPH_CAP_EXCL) {
       dout(10) << "_lstat has inode " << fpath << " with CAP_EXCL, yay" << dendl;
       havemask |= CEPH_LOCK_ICONTENT;
@@ -2043,13 +2055,14 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
     if (havemask & CEPH_LOCK_ICONTENT)
       havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
  
-    dout(10) << "_lstat has inode " << fpath << " with mask " << havemask << ", want " << mask << dendl;
+    dout(10) << "_lstat has inode " << fpath << " with mask " << havemask
+	     << ", want " << mask << dendl;
   } else {
     dout(10) << "_lstat has no dn for path " << fpath << dendl;
   }
   
   if (dn && dn->inode && (havemask & mask) == mask) {
-    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->ttl << dendl;
+    dout(10) << "lstat cache hit w/ sufficient mask, until " << dn->inode->lease_ttl << dendl;
     *in = dn->inode;
   } else {  
     req = new MClientRequest(CEPH_MDS_OP_LSTAT, messenger->get_myinst());
@@ -2085,7 +2098,7 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_size = in->inode.size;
   st->st_blocks = in->inode.size ? ((in->inode.size - 1) / 4096 + 1):0;
   st->st_blksize = 4096;
-  return in->mask;
+  return in->lease_mask;
 }
 
 
@@ -3526,7 +3539,7 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   if (diri->dir &&
       diri->dir->dentries.count(dname)) {
     Dentry *dn = diri->dir->dentries[dname];
-    if (dn->ttl > now) {
+    if (dn->lease_mds >= 0 && dn->lease_ttl > now) {
       touch_dn(dn);
       in = dn->inode;
       dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry" << dendl;

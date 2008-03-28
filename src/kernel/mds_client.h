@@ -131,7 +131,8 @@ extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
 
 extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, 
-				    struct dentry *dn);
+				    struct inode *inode,
+				    struct dentry *dn, int mask);
 
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,

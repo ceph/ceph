@@ -155,6 +155,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 
 void ceph_update_inode_lease(struct inode *inode, 
 			     struct ceph_mds_reply_lease *lease,
+			     int from_mds,
 			     unsigned long from_time) 
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -166,9 +167,11 @@ void ceph_update_inode_lease(struct inode *inode,
 	dout(10, "update_inode_lease %p mask %d duration %d ms ttl %llu\n",
 	     inode, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
 	     ttl);
-	if (ttl > ci->i_lease_ttl)
+	if (ttl > ci->i_lease_ttl) {
 		ci->i_lease_ttl = ttl;
-	ci->i_lease_mask = le16_to_cpu(lease->mask);
+		ci->i_lease_mask = le16_to_cpu(lease->mask);
+		ci->i_lease_mds = from_mds;
+	}
 }
 
 void ceph_update_dentry_lease(struct dentry *dentry, 
@@ -230,7 +233,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	err = ceph_fill_inode(in, rinfo->trace_in[0].in);
 	if (err < 0)
 		return err;
-	ceph_update_inode_lease(in, rinfo->trace_ilease[0], req->r_from_time);
+	ceph_update_inode_lease(in, rinfo->trace_ilease[0], mds, 
+				req->r_from_time);
 
 	if (sb->s_root == NULL)
 		sb->s_root = dn;
@@ -316,7 +320,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 		}
 		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
-					req->r_from_time);
+					mds, req->r_from_time);
 		dput(parent);
 		parent = NULL;
 	}

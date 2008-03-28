@@ -156,7 +156,8 @@ static int prepopulate_dir(struct dentry *parent,
 				return -1;
 			}
 		}
-		ceph_update_inode_lease(in, rinfo->dir_ilease[i], from_time);
+		ceph_update_inode_lease(in, rinfo->dir_ilease[i], from_mds,
+					from_time);
 
 		dput(dn);
 	}
@@ -506,7 +507,9 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	ceph_mdsc_lease_release(mdsc, dentry);
+	ceph_mdsc_lease_release(mdsc, dir, dentry, 
+				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
+	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -546,6 +549,11 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
+				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
+	if (new_dentry->d_inode)
+		ceph_mdsc_lease_release(mdsc, new_dentry->d_inode, 0, 
+					CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

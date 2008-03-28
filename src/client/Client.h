@@ -89,12 +89,13 @@ class Dentry : public LRUObject {
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
-  utime_t ttl;
+  int lease_mds;
+  utime_t lease_ttl;
   
   void get() { assert(ref == 0); ref++; lru_pin(); }
   void put() { assert(ref == 1); ref--; lru_unpin(); }
   
-  Dentry() : dir(0), inode(0), ref(0) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
 
   /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
   Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
@@ -129,8 +130,8 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  int       mask;
-  utime_t   ttl;
+  int       lease_mask, lease_mds;
+  utime_t   lease_ttl;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -195,7 +196,7 @@ class Inode {
 
   Inode(inode_t _inode, ObjectCacher *_oc) : 
     inode(_inode),
-    mask(0),
+    lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), ll_ref(0), 

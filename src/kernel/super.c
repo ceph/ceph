@@ -108,6 +108,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_symlink = 0;
 
+	ci->i_lease_mds = -1;
 	ci->i_lease_mask = 0;
 	ci->i_lease_ttl = 0;
 

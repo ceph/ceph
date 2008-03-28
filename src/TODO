@@ -16,6 +16,7 @@ client leases
 - lease renewals (to avoid blocking client ops?)
 
 userspace client
+- validate dn leases
 - pay attention to dn lease mds
 - pay attention to inode lease mds
 - clean up ll_ interface, now that we have leases!
