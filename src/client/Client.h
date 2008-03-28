@@ -679,6 +679,8 @@ protected:
 
   void handle_lease(MClientLease *m);
 
+  void release_lease(Inode *in, Dentry *dn, int mask);
+
   // file caps
   void handle_file_caps(class MClientFileCaps *m);
   void implemented_caps(class MClientFileCaps *m, Inode *in);

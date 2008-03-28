@@ -1167,7 +1167,7 @@ void Client::kick_requests(int mds)
 
 
 /************
- * locks
+ * leases
  */
 
 void Client::handle_lease(MClientLease *m)
@@ -1205,6 +1205,36 @@ void Client::handle_lease(MClientLease *m)
 			  m->get_source_inst());
   delete m;
 }
+
+
+void Client::release_lease(Inode *in, Dentry *dn, int mask)
+{
+  int havemask = 0;
+  int mds = -1;
+  utime_t now = g_clock.now();
+  string dname;
+
+  // inode?
+  if (in->lease_mds >= 0 && (in->lease_mask & mask) && now < in->lease_ttl) {
+    havemask |= (in->lease_mask & mask);
+    mds = in->lease_mds;
+  }
+
+  // dentry?
+  if (dn && dn->lease_mds >= 0 && now < in->lease_ttl) {
+    havemask |= CEPH_LOCK_DN;
+    mds = dn->lease_mds;
+    dname = dn->name;
+  }
+
+  if (mds >= 0 && mdsmap->is_up(mds)) {
+    dout(10) << "release_lease mds" << mds << " mask " << mask
+	     << " on " << in->ino() << " " << dname << dendl;
+    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, mask, in->ino(), dname),
+			    mdsmap->get_inst(mds));
+  }
+}
+
 
 
 /****
