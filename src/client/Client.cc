@@ -415,6 +415,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
     utime_t ttl = from;
     ttl += (float)dlease->duration_ms * 1000.0;
     if (ttl > dn->lease_ttl) {
+      dout(10) << "got dentry lease on " << dname << " ttl " << ttl << dendl;
       dn->lease_ttl = ttl;
       dn->lease_mds = from;
     }

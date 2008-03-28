@@ -1055,8 +1055,15 @@ int Locker::issue_client_lease(CDentry *dn, int client,
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
+
+  // is it necessary?
+  // -> dont issue per-dentry lease if a dir lease is possible, or
+  //    if the client is holding EXCL|RDCACHE caps.
   int mask = 0;
-  if (dn->lock.can_lease()) mask |= CEPH_LOCK_DN;
+  CInode *diri = dn->get_dir()->get_inode();
+  if (!diri->dirlock.can_lease() &&
+      (diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0)
+    mask |= CEPH_LOCK_DN;
 
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
@@ -1077,8 +1084,15 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     n++;
     if (lock->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)lock->get_parent();
+      int mask = CEPH_LOCK_DN;
+
+      // i should also revoke the dir ICONTENT lease, if they have it!
+      CInode *diri = dn->get_dir()->get_inode();
+      if (diri->get_client_lease_mask(l->client) & CEPH_LOCK_ICONTENT)
+	mask |= CEPH_LOCK_ICONTENT;
+
       mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
-						lock->get_type(),
+						mask,
 						dn->get_dir()->ino(),
 						dn->get_name()),
 			       l->client);
