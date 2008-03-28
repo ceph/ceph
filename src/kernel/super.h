@@ -147,8 +147,10 @@ struct ceph_inode_info {
 
 	char *i_symlink;
 
-	int i_lease_mask, i_lease_mds;
+	int i_lease_mask;
+	struct ceph_mds_session *i_lease_session;
 	long unsigned i_lease_ttl;  /* jiffies */
+	struct list_head i_lease_item; /* mds session list */
 
 	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
 	int i_frag_map_nr;
@@ -175,6 +177,20 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
 
+struct ceph_dentry_info {
+	struct dentry *dentry;
+	struct ceph_mds_session *lease_session;
+	struct list_head lease_item; /* mds session list */
+};
+
+static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
+{
+	return (struct ceph_dentry_info *)dentry->d_fsdata;
+}
+
+extern void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask);
+extern void ceph_revoke_dentry_lease(struct dentry *dentry);
+
 /*
  * ino_t is <64 bits on many architectures... blech
  */
@@ -184,7 +200,6 @@ static inline ino_t ceph_ino_to_ino(u64 cephino)
 #if BITS_PER_LONG == 32
 	ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
 #endif
-
 	return ino;
 }
 
@@ -198,7 +213,6 @@ static inline void ceph_set_ino(struct inode *inode, __u64 ino)
 static inline int ceph_set_ino_cb(struct inode *inode, void *data)
 {
 	ceph_set_ino(inode, *(__u64 *)data);
-
 	return 0;
 }
 
@@ -319,10 +333,12 @@ extern int ceph_fill_inode(struct inode *inode,
 
 extern void ceph_update_inode_lease(struct inode *inode, 
 				    struct ceph_mds_reply_lease *lease,
-				    int from_mds, unsigned long from_time);
+				    struct ceph_mds_session *seesion,
+				    unsigned long from_time);
 extern void ceph_update_dentry_lease(struct dentry *dentry, 
 				     struct ceph_mds_reply_lease *lease,
-				     int from_mds, unsigned long from_time);
+				     struct ceph_mds_session *session,
+				     unsigned long from_time);
 
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
@@ -364,7 +380,8 @@ extern struct dentry_operations ceph_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
 extern int ceph_fill_trace(struct super_block *sb, 
-			   struct ceph_mds_request *req, int mds);
+			   struct ceph_mds_request *req,
+			   struct ceph_mds_session *session);
 extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int m);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {

@@ -97,7 +97,8 @@ static unsigned fpos_off(loff_t p)
 
 static int prepopulate_dir(struct dentry *parent,
 			   struct ceph_mds_reply_info *rinfo,
-			   int from_mds, unsigned long from_time)
+			   struct ceph_mds_session *session, 
+			   unsigned long from_time)
 {
 	struct qstr dname;
 	struct dentry *dn;
@@ -123,7 +124,7 @@ static int prepopulate_dir(struct dentry *parent,
 			ceph_init_dentry(dn);
 		}
 		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], 
-					 from_mds, from_time);
+					 session, from_time);
 
 		/* inode */
 		if (dn->d_inode == NULL) {
@@ -156,7 +157,7 @@ static int prepopulate_dir(struct dentry *parent,
 				return -1;
 			}
 		}
-		ceph_update_inode_lease(in, rinfo->dir_ilease[i], from_mds,
+		ceph_update_inode_lease(in, rinfo->dir_ilease[i], session,
 					from_time);
 
 		dput(dn);
@@ -206,7 +207,7 @@ nextfrag:
 
 		/* pre-populate dentry cache */
 		prepopulate_dir(filp->f_dentry, &req->r_reply_info, 
-				le32_to_cpu(req->r_reply->hdr.src.name.num),
+				req->r_session,
 				req->r_from_time);
 	}
 
@@ -570,7 +571,7 @@ static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 	     mds, jiffies);
 	
 	/* does dir inode lease or cap cover it? */
-	if (dirci->i_lease_mds >= 0 &&
+	if (dirci->i_lease_session &&
 	    time_after(dirci->i_lease_ttl, jiffies) &&
 	    (dirci->i_lease_mask & CEPH_LOCK_ICONTENT)) {
 		dout(20, "d_revalidate have ICONTENT on dir inode %p, ok\n",
@@ -594,6 +595,16 @@ static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 	return 0;
 }
 
+static void ceph_d_release(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+	if (dentry->d_fsdata) {
+		di = ceph_dentry(dentry);
+		list_del(&di->lease_item);
+		kfree(di);
+	}
+}
+
 
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
@@ -611,5 +622,6 @@ const struct inode_operations ceph_dir_iops = {
 
 struct dentry_operations ceph_dentry_ops = {
 	.d_revalidate = ceph_d_revalidate,
+	.d_release = ceph_d_release,
 };
 

@@ -27,7 +27,8 @@ int ceph_get_inode(struct super_block *sb, __u64 ino, struct inode **pinode)
 #if BITS_PER_LONG == 64
 	*pinode = iget_locked(sb, ino);
 #else
-	*pinode = iget5_locked(sb, inot, ceph_ino_compare, ceph_set_ino_cb, &ino);
+	*pinode = iget5_locked(sb, inot, ceph_ino_compare, ceph_set_ino_cb,
+			       &ino);
 #endif
 	if (*pinode == NULL) 
 		return -ENOMEM;
@@ -40,7 +41,8 @@ int ceph_get_inode(struct super_block *sb, __u64 ino, struct inode **pinode)
 #endif
 	ci->i_hashval = (*pinode)->i_ino;
 
-	dout(30, "get_inode on %lu=%llx got %p\n", (*pinode)->i_ino, ino, *pinode);
+	dout(30, "get_inode on %lu=%llx got %p\n", (*pinode)->i_ino, ino, 
+	     *pinode);
 	return 0;
 }
 
@@ -153,9 +155,14 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	return 0;
 }
 
+/* 
+ * inode lease lock order is
+ *     inode->i_lock
+ *          session->s_cap_lock
+ */
 void ceph_update_inode_lease(struct inode *inode, 
 			     struct ceph_mds_reply_lease *lease,
-			     int from_mds,
+			     struct ceph_mds_session *session,
 			     unsigned long from_time) 
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -167,19 +174,56 @@ void ceph_update_inode_lease(struct inode *inode,
 	dout(10, "update_inode_lease %p mask %d duration %d ms ttl %llu\n",
 	     inode, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
 	     ttl);
+
+	if (lease->mask == 0)
+		return;
+
+	spin_lock(&inode->i_lock);
 	if (ttl > ci->i_lease_ttl) {
 		ci->i_lease_ttl = ttl;
 		ci->i_lease_mask = le16_to_cpu(lease->mask);
-		ci->i_lease_mds = from_mds;
+		if (ci->i_lease_session) {
+			spin_lock(&ci->i_lease_session->s_cap_lock);
+			list_del(&ci->i_lease_item);
+			spin_unlock(&ci->i_lease_session->s_cap_lock);
+		}
+		ci->i_lease_session = session;
+		spin_lock(&session->s_cap_lock);
+		list_add(&ci->i_lease_item, &session->s_inode_leases);
+		spin_lock(&session->s_cap_lock);
 	}
+	spin_unlock(&inode->i_lock);
 }
 
+void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask)
+{
+	int drop = 0;
+	spin_lock(&ci->vfs_inode.i_lock);
+	ci->i_lease_mask &= ~mask;
+	if (ci->i_lease_mask == 0) {
+		spin_lock(&ci->i_lease_session->s_cap_lock);
+		list_del(&ci->i_lease_item);
+		spin_unlock(&ci->i_lease_session->s_cap_lock);
+		ci->i_lease_session = 0;
+	}
+	spin_unlock(&ci->vfs_inode.i_lock);
+	if (drop)
+		iput(&ci->vfs_inode);
+}
+
+/*
+ * dentry lease lock order is
+ *     dentry->d_lock
+ *         session->s_cap_lock
+ */
 void ceph_update_dentry_lease(struct dentry *dentry, 
 			      struct ceph_mds_reply_lease *lease,
-			      int from_mds,
+			      struct ceph_mds_session *session,
 			      unsigned long from_time) 
 {
 	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
+	struct ceph_dentry_info *di;
+	int is_new = 0;
 
 	do_div(ttl, 1000);
 	ttl += from_time;
@@ -187,18 +231,81 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 	dout(10, "update_dentry_lease %p mask %d duration %d ms ttl %llu\n",
 	     dentry, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
 	     ttl);
-	if (lease->mask) {
-		if (ttl > dentry->d_time) {
-			dentry->d_time = ttl;
-			dentry->d_fsdata = (void *)(long)from_mds;
+	if (lease->mask == 0)
+		return;
+
+	spin_lock(&dentry->d_lock);
+	if (ttl < dentry->d_time) 
+		goto fail_unlock;  /* older. */
+
+	di = ceph_dentry(dentry);
+	if (!di) {
+		spin_unlock(&dentry->d_lock);
+		di = kmalloc(sizeof(struct ceph_dentry_info),
+			     GFP_KERNEL);
+		if (!di)
+			return;          /* oh well */
+		spin_lock(&dentry->d_lock);
+		if (dentry->d_fsdata) {  /* lost a race! */
+			kfree(di);
+			goto fail_unlock;
 		}
-	} else {
-		dentry->d_fsdata = (void *)(long)-1;  /* invalidate */
+		is_new = 1;
+		di->dentry = dentry;
+		dentry->d_fsdata = di;
 	}
+
+	/* update */
+	dentry->d_time = ttl;
+
+	/* (re)add to session lru */
+	if (di->lease_session) {
+		spin_lock(&di->lease_session->s_cap_lock);
+		list_del(&di->lease_item);
+		spin_unlock(&di->lease_session->s_cap_lock);
+	}
+	di->lease_session = session;	      
+	spin_lock(&session->s_cap_lock);
+	list_add(&di->lease_item, &session->s_dentry_leases);
+	spin_unlock(&session->s_cap_lock);
+	
+	spin_unlock(&dentry->d_lock);
+	if (is_new)
+		dget(dentry);
+	return;
+
+fail_unlock:
+	spin_unlock(&dentry->d_lock);    
 }
 
+void ceph_revoke_dentry_lease(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+	struct ceph_mds_session *session;
+	int drop = 0;
+
+	/* detach from dentry */
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (di) {
+		session = di->lease_session;
+		spin_lock(&session->s_cap_lock);
+		list_del(&di->lease_item);
+		spin_unlock(&session->s_cap_lock);
+		kfree(di);
+		drop = 1;
+		dentry->d_fsdata = 0;
+	}
+	spin_unlock(&dentry->d_lock);
+	if (drop)
+		dput(dentry);
+}
+
+
+
+
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req, 
-		    int mds)
+		    struct ceph_mds_session *session)
 {
 	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
 	int err = 0;
@@ -233,7 +340,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	err = ceph_fill_inode(in, rinfo->trace_in[0].in);
 	if (err < 0)
 		return err;
-	ceph_update_inode_lease(in, rinfo->trace_ilease[0], mds, 
+	ceph_update_inode_lease(in, rinfo->trace_ilease[0], session, 
 				req->r_from_time);
 
 	if (sb->s_root == NULL)
@@ -272,7 +379,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 		}
 		ceph_update_dentry_lease(dn, rinfo->trace_dlease[d], 
-					 mds, req->r_from_time);
+					 session, req->r_from_time);
 
 		/* inode */
 		if (d+1 == rinfo->trace_numi) {
@@ -320,7 +427,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 		}
 		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
-					mds, req->r_from_time);
+					session, req->r_from_time);
 		dput(parent);
 		parent = NULL;
 	}
@@ -838,6 +945,7 @@ int ceph_inode_revalidate(struct inode *inode, int mask)
 	} else {
 		dout(10, "inode_revalidate %p have %d want %d, lease expired\n",
 		     inode, havemask, mask);
+		ceph_revoke_inode_lease(ci, mask);
 	}
 	return ceph_do_lookup(inode->i_sb, d_find_alias(inode), mask);
 }

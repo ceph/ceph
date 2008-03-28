@@ -57,6 +57,7 @@ struct ceph_mds_session {
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
 	spinlock_t        s_cap_lock;
 	struct list_head  s_caps;
+	struct list_head  s_inode_leases, s_dentry_leases;
 	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct completion s_completion;

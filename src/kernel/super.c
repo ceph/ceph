@@ -108,9 +108,10 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_symlink = 0;
 
-	ci->i_lease_mds = -1;
+	ci->i_lease_session = 0;
 	ci->i_lease_mask = 0;
 	ci->i_lease_ttl = 0;
+	INIT_LIST_HEAD(&ci->i_lease_item);
 
 	ci->i_fragtree = ci->i_fragtree_static;
 	ci->i_fragtree->nsplits = 0;

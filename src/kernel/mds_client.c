@@ -289,6 +289,8 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	s->s_cap_seq = 0;
 	spin_lock_init(&s->s_cap_lock);
 	INIT_LIST_HEAD(&s->s_caps);
+	INIT_LIST_HEAD(&s->s_inode_leases);
+	INIT_LIST_HEAD(&s->s_dentry_leases);
 	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
@@ -617,6 +619,37 @@ static void remove_session_caps(struct ceph_mds_session *session)
 	spin_unlock(&session->s_cap_lock);
 }
 
+static void remove_session_leases(struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci;
+	struct ceph_dentry_info *di;
+	struct list_head *p, *n;
+
+	dout(10, "remove_session_leases on %p\n", session);
+
+	spin_lock(&session->s_cap_lock);
+
+	/* inodes */
+	while (!list_empty(&session->s_inode_leases)) {
+		ci = list_entry(session->s_inode_leases.next, 
+				struct ceph_inode_info, i_lease_item);
+		dout(10, "removing lease from inode %p\n", &ci->vfs_inode);
+		spin_unlock(&session->s_cap_lock);
+		ceph_revoke_inode_lease(ci, ci->i_lease_mask);
+		spin_lock(&session->s_cap_lock);
+	}
+
+	/* dentries */
+	while (!list_empty(&session->s_dentry_leases)) {
+		di = list_entry(session->s_dentry_leases.next, 
+				struct ceph_dentry_info, lease_item);
+		dout(10, "removing lease from dentry %p\n", di->dentry);
+		spin_unlock(&session->s_cap_lock);
+		ceph_revoke_dentry_lease(di->dentry);
+		spin_lock(&session->s_cap_lock);
+	}
+}
+
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 			      struct ceph_msg *msg)
 {
@@ -656,6 +689,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 			     seq, session->s_cap_seq);
 		}
 		remove_session_caps(session);
+		remove_session_leases(session);
 		complete(&mdsc->session_close_waiters);
 		break;
 
@@ -892,7 +926,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
 	/* insert trace into our cache */
-	err = ceph_fill_trace(mdsc->client->sb, req, mds);
+	err = ceph_fill_trace(mdsc->client->sb, req, req->r_session);
 	if (err)
 		goto done;
 	if (result == 0 && req->r_expects_cap) {
@@ -1416,7 +1450,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	/* inode */
 	ci = ceph_inode(inode);
 	if (mask & ci->i_lease_mask) {
-		ci->i_lease_mask &= ~mask;
+		ceph_revoke_inode_lease(ci, mask);
 		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
 		     mask, inode, ci->i_lease_mask);
 	}
@@ -1432,7 +1466,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dentry = d_lookup(parent, &dname);
 		if (!dentry)
 			goto release;
-		dentry->d_time = 0;
+		ceph_revoke_dentry_lease(dentry);
 		dout(10, "lease revoked on dentry %p\n", dentry);
 	} 
 
@@ -1457,6 +1491,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
 	struct ceph_inode_info *ci;
+	struct ceph_dentry_info *di;
 	int origmask = mask;
 	int mds = -1;
 	int len = sizeof(*lease) + sizeof(__u32);
@@ -1464,8 +1499,9 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	__u64 ino;
 
 	BUG_ON(inode == 0);
-	if ((mask & CEPH_LOCK_DN) && dentry) {
-		mds = (long)dentry->d_fsdata;
+	if ((mask & CEPH_LOCK_DN) && dentry->d_fsdata) {
+		di = ceph_dentry(dentry);
+		mds = di->lease_session->s_mds;
 		if (mds >= 0 && time_before(jiffies, dentry->d_time)) {
 			dnamelen = dentry->d_name.len;
 			len += dentry->d_name.len;
@@ -1474,9 +1510,9 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	} 
 	ci = ceph_inode(inode);
 	ino = ci->i_ceph_ino;
-	if (ci->i_lease_mds >= 0 && time_after(ci->i_lease_ttl, jiffies)) {
+	if (ci->i_lease_session && time_after(ci->i_lease_ttl, jiffies)) {
 		mask &= ci->i_lease_mask;     /* lease is valid */
-		mds = ci->i_lease_mds;
+		mds = ci->i_lease_session->s_mds;
 	} else
 		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
 	if (mask == 0) {
