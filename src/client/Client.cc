@@ -2715,7 +2715,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
   req->head.args.open.flags = flags;
   req->head.args.open.mode = mode;
 
-  int cmode = req->get_open_file_mode();
+  int cmode = file_flags_to_mode(flags);
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());

@@ -3888,9 +3888,8 @@ void Server::handle_client_open(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   int flags = req->head.args.open.flags;
-  int cmode = req->get_open_file_mode();
-  bool need_auth = ((cmode != FILE_MODE_R && cmode != FILE_MODE_LAZY) ||
-		    (flags & O_TRUNC));
+  int cmode = file_flags_to_mode(req->head.args.open.flags);
+  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
 	   << ", need_auth = " << need_auth
@@ -3905,8 +3904,8 @@ void Server::handle_client_open(MDRequest *mdr)
     reply_request(mdr, -EINVAL);                 // FIXME what error do we want?
     return;
   }
-  // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || (flags | O_DIRECTORY) == 0)) {
+  // can only open a dir with mode FILE_MODE_PIN, at least for now.
+  if (cur->inode.is_dir() && cmode != FILE_MODE_PIN) {
     dout(10) << "bad open flags " << flags << " cmode " << cmode << " on dir " << *cur << dendl;
     reply_request(mdr, -EINVAL);
     return;
@@ -3939,7 +3938,7 @@ void Server::handle_client_open(MDRequest *mdr)
 void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
   MClientRequest *req = mdr->client_request;
-  int cmode = req->get_open_file_mode();
+  int cmode = file_flags_to_mode(req->head.args.open.flags);
 
   // register new cap
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
