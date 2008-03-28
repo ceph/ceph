@@ -96,6 +96,8 @@ mds
 - fix file_data_version
 - on recovery, validate file sizes when max_size > size
 
+- coalesce lease revocations on dir inode + dentry, where possible
+
 - fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 - consistency points/snapshots
