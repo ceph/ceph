@@ -1449,7 +1449,7 @@ bad:
 
 
 /*
- * pass inode _or_ dentry
+ * pass inode always.  dentry is optional.
  */
 void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 			     struct dentry *dentry, int mask)
@@ -1457,30 +1457,38 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
 	struct ceph_inode_info *ci;
-	int mds;
+	int origmask = mask;
+	int mds = -1;
 	int len = sizeof(*lease) + sizeof(__u32);
 	int dnamelen = 0;
 	__u64 ino;
 
-	if (dentry) {
+	BUG_ON(inode == 0);
+	if ((mask & CEPH_LOCK_DN) && dentry) {
 		mds = (long)dentry->d_fsdata;
-		dnamelen = dentry->d_name.len;
-		len += dentry->d_name.len;
-		inode = dentry->d_parent->d_inode;
-	}
+		if (mds >= 0 && time_before(jiffies, dentry->d_time)) {
+			dnamelen = dentry->d_name.len;
+			len += dentry->d_name.len;
+		} else
+			mask &= ~CEPH_LOCK_DN;  /* nothing to release */
+	} 
 	ci = ceph_inode(inode);
 	ino = ci->i_ceph_ino;
-	if (!dentry) {
+	if (ci->i_lease_mds >= 0 && time_after(ci->i_lease_ttl, jiffies)) {
+		mask &= ci->i_lease_mask;     /* lease is valid */
 		mds = ci->i_lease_mds;
+	} else
+		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
+	if (mask == 0) {
+		dout(10, "lease_release inode %p (%d) dentry %p -- "
+		     "no lease on %d \n",
+		     inode, ci->i_lease_mask, dentry, origmask);
+		return;  /* nothing to drop */
 	}
-	
-	if (mds < 0) {
-		dout(10, "lease_release inode %p dentry %p -- no lease\n", 
-		     inode, dentry);
-		return;
-	}
-	dout(10, "lease_release inode %p dentry %p to mds%d\n", inode,
-	     dentry, mds);
+	BUG_ON(mds < 0);
+
+	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n", inode,
+	     dentry, mask, mds);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, 0);
 	if (IS_ERR(msg))
