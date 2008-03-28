@@ -368,6 +368,7 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
@@ -400,6 +401,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	if (err < 0)
@@ -429,6 +431,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);
 	err = ceph_mdsc_do_request(mdsc, req);
@@ -469,11 +472,9 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-	
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
-
 	ceph_mdsc_put_request(req);
-
 	if (!err) {
 		igrab(old_dentry->d_inode);
 		inc_nlink(old_dentry->d_inode);

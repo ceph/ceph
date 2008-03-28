@@ -136,6 +136,8 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	if (flags & O_CREAT)
+		ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
