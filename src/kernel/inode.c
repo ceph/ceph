@@ -173,6 +173,7 @@ void ceph_update_inode_lease(struct inode *inode,
 
 void ceph_update_dentry_lease(struct dentry *dentry, 
 			      struct ceph_mds_reply_lease *lease,
+			      int from_mds,
 			      unsigned long from_time) 
 {
 	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
@@ -184,14 +185,17 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 	     dentry, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
 	     ttl);
 	if (lease->mask) {
-		if (ttl > dentry->d_time)
+		if (ttl > dentry->d_time) {
 			dentry->d_time = ttl;
+			dentry->d_fsdata = (void *)(long)from_mds;
+		}
 	} else {
-		dentry->d_time = 0;  /* invalidate */
+		dentry->d_fsdata = (void *)(long)-1;  /* invalidate */
 	}
 }
 
-int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
+int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req, 
+		    int mds)
 {
 	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
 	int err = 0;
@@ -264,7 +268,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 			}
 		}
 		ceph_update_dentry_lease(dn, rinfo->trace_dlease[d], 
-					 req->r_from_time);
+					 mds, req->r_from_time);
 
 		/* inode */
 		if (d+1 == rinfo->trace_numi) {

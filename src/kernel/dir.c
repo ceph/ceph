@@ -97,7 +97,7 @@ static unsigned fpos_off(loff_t p)
 
 static int prepopulate_dir(struct dentry *parent,
 			   struct ceph_mds_reply_info *rinfo,
-			   int from_time)
+			   int from_mds, unsigned long from_time)
 {
 	struct qstr dname;
 	struct dentry *dn;
@@ -122,7 +122,8 @@ static int prepopulate_dir(struct dentry *parent,
 			}
 			ceph_init_dentry(dn);
 		}
-		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], from_time);
+		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], 
+					 from_mds, from_time);
 
 		/* inode */
 		if (dn->d_inode == NULL) {
@@ -204,6 +205,7 @@ nextfrag:
 
 		/* pre-populate dentry cache */
 		prepopulate_dir(filp->f_dentry, &req->r_reply_info, 
+				le32_to_cpu(req->r_reply->hdr.src.name.num),
 				req->r_from_time);
 	}
 
@@ -504,6 +506,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	ceph_mdsc_lease_release(mdsc, dentry);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -550,8 +553,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
-	dout(20, "d_revalidate ttl %lu now %lu\n", dentry->d_time, jiffies);
-	if (time_after(jiffies, dentry->d_time)) {
+	int mds = (long)dentry->d_fsdata;
+	dout(20, "d_revalidate ttl %lu mds %d now %lu\n", dentry->d_time, 
+	     mds, jiffies);
+	if (mds >= 0 && time_after(jiffies, dentry->d_time)) {
 		dout(20, "d_revalidate - dentry %p expired\n", dentry);
 		d_drop(dentry);
 		return 0;

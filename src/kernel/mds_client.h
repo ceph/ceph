@@ -130,6 +130,9 @@ extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
 
+extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, 
+				    struct dentry *dn);
+
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 ceph_ino_t ino1, const char *path1,

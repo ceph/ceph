@@ -4,8 +4,6 @@ code cleanup
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
 
-- switch to nsec in ceph_timespec
-
 client leases
 - lease length heuristics
   - mds lock last_change stamp?
@@ -18,6 +16,8 @@ client leases
 - lease renewals (to avoid blocking client ops?)
 
 userspace client
+- pay attention to dn lease mds
+- pay attention to inode lease mds
 - clean up ll_ interface, now that we have leases!
 - obey file_max
 - revoke own caps when they time out,
@@ -28,8 +28,8 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
-- strip i_wr_size etc out of ceph_inode_info
-  - take mds provided versions when appropriate
+- pay attention to dn lease mds
+- pay attention to inode lease mds
 - carry wrbuffer/rdcache caps until data is flushed
   - this should make the utimes bit kick in
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)

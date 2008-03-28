@@ -892,7 +892,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
 	/* insert trace into our cache */
-	err = ceph_fill_trace(mdsc->client->sb, req);
+	err = ceph_fill_trace(mdsc->client->sb, req, mds);
 	if (err)
 		goto done;
 	if (result == 0 && req->r_expects_cap) {
@@ -1443,6 +1443,33 @@ release:
 
 bad:
 	dout(0, "corrupt lease message\n");
+}
+
+
+void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct dentry *dn)
+{
+	struct ceph_msg *msg;
+	struct ceph_mds_lease *lease;
+	int mds = (long)dn->d_fsdata;
+	
+	if (mds < 0) {
+		dout(10, "lease_release dentry %p -- no lease\n", dn);
+		return;
+	}
+	dout(10, "lease_release dentry %p to mds%d\n", dn, mds);
+
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, sizeof(*lease) + 
+			   sizeof(__u32) + dn->d_name.len, 0, 0, 0);
+	if (IS_ERR(msg))
+		return;
+	lease = msg->front.iov_base;
+	lease->action = CEPH_MDS_LEASE_RELEASE;
+	lease->mask = CEPH_LOCK_DN;
+	lease->ino = cpu_to_le64(dn->d_parent->d_inode->i_ino); /* ?? */
+	*(__le32*)(lease+1) = cpu_to_le32(dn->d_name.len);
+	memcpy((void *)(lease + 1) + 4, dn->d_name.name, dn->d_name.len);
+
+	send_msg_mds(mdsc, msg, mds);
 }
 
 

@@ -322,6 +322,7 @@ extern void ceph_update_inode_lease(struct inode *inode,
 				    unsigned long from_time);
 extern void ceph_update_dentry_lease(struct dentry *dentry, 
 				     struct ceph_mds_reply_lease *lease,
+				     int from_mds,
 				     unsigned long from_time);
 
 extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
@@ -363,7 +364,8 @@ extern const struct file_operations ceph_dir_fops;
 extern struct dentry_operations ceph_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
-extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req);
+extern int ceph_fill_trace(struct super_block *sb, 
+			   struct ceph_mds_request *req, int mds);
 extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int m);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
