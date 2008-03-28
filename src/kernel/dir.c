@@ -562,15 +562,35 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	int mds = (long)dentry->d_fsdata;
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct ceph_inode_info *dirci = ceph_inode(dir);
+
 	dout(20, "d_revalidate ttl %lu mds %d now %lu\n", dentry->d_time, 
 	     mds, jiffies);
-	if (mds >= 0 && time_after(jiffies, dentry->d_time)) {
-		dout(20, "d_revalidate - dentry %p expired\n", dentry);
-		d_drop(dentry);
-		return 0;
+	
+	/* does dir inode lease or cap cover it? */
+	if (dirci->i_lease_mds >= 0 &&
+	    time_after(dirci->i_lease_ttl, jiffies) &&
+	    (dirci->i_lease_mask & CEPH_LOCK_ICONTENT)) {
+		dout(20, "d_revalidate have ICONTENT on dir inode %p, ok\n",
+		     dir);
+		return 1;
 	}
-	dout(20, "d_revalidate - dentry %p ok\n", dentry);
-	return 1;
+	if (ceph_caps_issued(dirci) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) {
+		dout(20, "d_revalidate have EXCL|RDCACHE caps on dir inode %p"
+		     ", ok\n", dir);
+		return 1;
+	}
+
+	/* dentry lease? */
+	if (mds >= 0 && time_after(dentry->d_time, jiffies)) {
+		dout(20, "d_revalidate - dentry %p lease valid\n", dentry);
+		return 1;
+	}
+
+	dout(20, "d_revalidate - dentry %p expired\n", dentry);
+	d_drop(dentry);
+	return 0;
 }
 
 

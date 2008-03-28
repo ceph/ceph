@@ -17,8 +17,6 @@ client leases
 
 userspace client
 - validate dn leases
-- pay attention to dn lease mds
-- pay attention to inode lease mds
 - clean up ll_ interface, now that we have leases!
 - obey file_max
 - revoke own caps when they time out,
@@ -29,8 +27,7 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
-- pay attention to dn lease mds
-- pay attention to inode lease mds
+- link leased inode/dentries into mds_session
 - carry wrbuffer/rdcache caps until data is flushed
   - this should make the utimes bit kick in
 - make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
