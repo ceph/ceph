@@ -167,6 +167,7 @@ void ceph_update_inode_lease(struct inode *inode,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
+	int is_new = 0;
 
 	do_div(ttl, 1000);
 	ttl += from_time;
@@ -186,13 +187,18 @@ void ceph_update_inode_lease(struct inode *inode,
 			spin_lock(&ci->i_lease_session->s_cap_lock);
 			list_del(&ci->i_lease_item);
 			spin_unlock(&ci->i_lease_session->s_cap_lock);
-		}
+		} else
+			is_new = 1;
 		ci->i_lease_session = session;
 		spin_lock(&session->s_cap_lock);
 		list_add(&ci->i_lease_item, &session->s_inode_leases);
-		spin_lock(&session->s_cap_lock);
+		spin_unlock(&session->s_cap_lock);
 	}
 	spin_unlock(&inode->i_lock);
+	if (is_new) {
+		dout(10, "lease iget on %p\n", inode);
+		igrab(inode);
+	}
 }
 
 void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask)
@@ -205,10 +211,13 @@ void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask)
 		list_del(&ci->i_lease_item);
 		spin_unlock(&ci->i_lease_session->s_cap_lock);
 		ci->i_lease_session = 0;
+		drop = 1;
 	}
 	spin_unlock(&ci->vfs_inode.i_lock);
-	if (drop)
+	if (drop) {
+		dout(10, "lease iput on %p\n", &ci->vfs_inode);
 		iput(&ci->vfs_inode);
+	}
 }
 
 /*
@@ -259,7 +268,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 	dentry->d_time = ttl;
 
 	/* (re)add to session lru */
-	if (di->lease_session) {
+	if (!is_new && di->lease_session) {
 		spin_lock(&di->lease_session->s_cap_lock);
 		list_del(&di->lease_item);
 		spin_unlock(&di->lease_session->s_cap_lock);
@@ -270,8 +279,10 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 	spin_unlock(&session->s_cap_lock);
 	
 	spin_unlock(&dentry->d_lock);
-	if (is_new)
+	if (is_new) {
+		dout(10, "lease dget on %p\n", dentry);
 		dget(dentry);
+	}
 	return;
 
 fail_unlock:
@@ -297,8 +308,10 @@ void ceph_revoke_dentry_lease(struct dentry *dentry)
 		dentry->d_fsdata = 0;
 	}
 	spin_unlock(&dentry->d_lock);
-	if (drop)
+	if (drop) {
+		dout(10, "lease dput on %p\n", dentry);
 		dput(dentry);
+	}
 }
 
 
@@ -571,7 +584,8 @@ void ceph_remove_all_caps(struct ceph_inode_info *ci)
 	struct ceph_inode_cap *cap;
 	dout(10, "remove_caps on %p\n", &ci->vfs_inode);
 	while (!list_empty(&ci->i_caps)) {
-		cap = list_entry(ci->i_caps.next, struct ceph_inode_cap, ci_caps);
+		cap = list_entry(ci->i_caps.next, struct ceph_inode_cap,
+				 ci_caps);
 		ceph_remove_cap(cap);
 	}
 }
@@ -656,7 +670,8 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	cap->seq = seq;
 
 	if (wanted != le32_to_cpu(grant->wanted)) {
-		dout(10, "wanted %d -> %d\n", le32_to_cpu(grant->wanted), wanted);
+		dout(10, "wanted %d -> %d\n", le32_to_cpu(grant->wanted), 
+		     wanted);
 		grant->wanted = cpu_to_le32(wanted);
 	}
 
@@ -664,7 +679,8 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	newcaps = le32_to_cpu(grant->caps);
 	if (cap->caps & ~newcaps) {
 		used = ceph_caps_used(ci);
-		dout(10, "revocation: %d -> %d, used %d\n", cap->caps, newcaps, used);
+		dout(10, "revocation: %d -> %d, used %d\n", cap->caps,
+		     newcaps, used);
 		if (newcaps & used) {
 			/* FIXME FIXME FIXME DO STUFF HERE */
 			/* but blindly ack for now... */
@@ -690,13 +706,15 @@ out:
 	return ret;	
 }
 
-int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc, struct ceph_mds_session *session)
+int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
+			  struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(trunc->seq);
 	u64 size = le64_to_cpu(trunc->size);
-	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, mds, seq);
+	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, 
+	     mds, seq);
 
 	spin_lock(&inode->i_lock);
 	dout(10, "trunc size %lld -> %llu\n", inode->i_size, size);

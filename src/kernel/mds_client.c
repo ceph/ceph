@@ -623,7 +623,6 @@ static void remove_session_leases(struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci;
 	struct ceph_dentry_info *di;
-	struct list_head *p, *n;
 
 	dout(10, "remove_session_leases on %p\n", session);
 
