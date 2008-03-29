@@ -11,6 +11,8 @@ int ceph_debug_file = 50;
 
 #include <linux/namei.h>
 
+static ssize_t ceph_silly_write(struct file *file, const char __user *data,
+				size_t count, loff_t *offset);
 
 /*
  * if err==0, caller is responsible for a put_session on *psession
@@ -227,10 +229,12 @@ out:
 /*
  * ditto
  */
-ssize_t ceph_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
+ssize_t ceph_write(struct file *filp, const char __user *buf, 
+		   size_t len, loff_t *ppos)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_client *client = ceph_inode_to_client(inode);
 	ssize_t ret;
 	int got = 0;
 
@@ -243,8 +247,11 @@ ssize_t ceph_write(struct file *filp, const char __user *buf, size_t len, loff_t
 		goto out;
 	dout(10, "write got cap refs on %d\n", got);
 
+	if (client->mount_args.silly_write) 
+		ret = ceph_silly_write(filp, buf, len, ppos);
+	else
 	//if (got & CEPH_CAP_RDCACHE) {
-	ret = do_sync_write(filp, buf, len, ppos);
+		ret = do_sync_write(filp, buf, len, ppos);
 
 out:
 	dout(10, "write dropping cap refs on %d\n", got);
@@ -254,13 +261,12 @@ out:
 
 
 
-
 /*
  * totally naive write.  just to get things sort of working.
  * ugly hack!
  */
-ssize_t ceph_silly_write(struct file *file, const char __user *data,
-			 size_t count, loff_t *offset)
+static ssize_t ceph_silly_write(struct file *file, const char __user *data,
+				size_t count, loff_t *offset)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);

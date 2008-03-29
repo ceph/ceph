@@ -19,8 +19,6 @@ extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
 
-extern int ceph_lookup_cache;
-
 #define CEPH_DUMP_ERROR_ALWAYS
 
 #define dout(x, args...) do {						\
@@ -65,6 +63,7 @@ struct ceph_mount_args {
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
 	char path[100];
+	int silly_write;
 };
 
 

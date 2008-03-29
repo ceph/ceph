@@ -6,9 +6,13 @@
 #include <linux/string.h>
 #include <linux/version.h>
 
-int ceph_debug_super = 50;
+/* debug levels; defined in super.h */
 
-int ceph_lookup_cache = 1;
+/* global value.  0 = quiet, -1 == use per-file levels */
+int ceph_debug = 0;
+
+/* for this file */
+int ceph_debug_super = 50;
 
 #define DOUT_VAR ceph_debug_super
 #define DOUT_PREFIX "super: "
@@ -213,7 +217,8 @@ enum {
 	Opt_debug_osdc,
 	Opt_monport,
 	Opt_port,
-	Opt_ip
+	Opt_ip,
+	Opt_sillywrite,
 };
 
 static match_table_t arg_tokens = {
@@ -226,7 +231,9 @@ static match_table_t arg_tokens = {
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
-	{Opt_ip, "ip=%s"}
+	{Opt_ip, "ip=%s"},
+	/* int args above, no arguments below */
+	{Opt_sillywrite, "sillywrite"},
 };
 
 /*
@@ -313,6 +320,11 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		if (!*c)
 			continue;
 		token = match_token(c, arg_tokens, argstr);
+		if (token == 0) {
+			derr(0, "bad mount option at '%s'\n", c);
+			return -EINVAL;
+			
+		}
 		if (token < Opt_ip) {
 			ret = match_int(&argstr[0], &intval);
 			if (ret < 0) {
@@ -363,9 +375,13 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			ceph_debug_osdc = intval;
 			break;
 
+			/* misc */
+		case Opt_sillywrite:
+			args->silly_write = 1;
+			break;
+
 		default:
-			derr(1, "parse_mount_args bad token %d\n", token);
-			continue;
+			BUG_ON(token);
 		}
 	}
 

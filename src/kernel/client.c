@@ -6,9 +6,6 @@
 #include <linux/fs.h>
 #include <linux/mount.h>
 
-/* debug level; defined in super.h */
-int ceph_debug = 0;
-
 int ceph_client_debug = 50;
 #define DOUT_VAR ceph_client_debug
 #define DOUT_PREFIX "client: "
