@@ -477,9 +477,11 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	if (!err) {
+	/*
 		igrab(old_dentry->d_inode);
 		inc_nlink(old_dentry->d_inode);
 		d_instantiate(dentry, old_dentry->d_inode);
+	*/
 	} else
 		d_drop(dentry);
 	
