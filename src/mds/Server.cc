@@ -3899,13 +3899,17 @@ void Server::handle_client_open(MDRequest *mdr)
   int cmode = file_flags_to_mode(req->head.args.open.flags);
 
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
+
+  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
+  if (!cur) return;
+
+  // can only open a dir with mode FILE_MODE_PIN, at least for now.
+  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
+
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
 	   << ", need_auth = " << need_auth
 	   << dendl;
-
-  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
-  if (!cur) return;
   
   // regular file?
   if (!cur->inode.is_file() && !cur->inode.is_dir()) {
@@ -3918,8 +3922,6 @@ void Server::handle_client_open(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-  // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
   
   // hmm, check permissions or something.
 
