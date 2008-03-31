@@ -16,8 +16,6 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
-- use list_for_each_safe for caps removal?
-  - revisit cap removal locking, make sure it's okay....
 - trim expired leases so we don't indefinitely hold dcache refs...
 - carry wrbuffer/rdcache caps until data is flushed
   - this should make the utimes bit kick in

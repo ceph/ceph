@@ -62,30 +62,30 @@ out_unlock:
  */
 static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 {
-       struct inode *inode = page->mapping->host;
-       struct ceph_inode_info *ci;
-       struct ceph_osd_client *osdc;
-       int err = 0;
-
-       if (!page->mapping || !page->mapping->host)
-	       return -EFAULT;
-
-       ci = ceph_inode(inode);
-       osdc = &ceph_inode_to_client(inode)->osdc;
-
-       get_page(page);
-       set_page_writeback(page);
-       SetPageUptodate(page);
-
-       dout(10, "ceph_writepage inode %p page %p index %lu\n",
-	    inode, page, page->index);
-
+	struct inode *inode = page->mapping->host;
+	struct ceph_inode_info *ci;
+	struct ceph_osd_client *osdc;
+	int err = 0;
+	
+	if (!page->mapping || !page->mapping->host)
+		return -EFAULT;
+	
+	ci = ceph_inode(inode);
+	osdc = &ceph_inode_to_client(inode)->osdc;
+	
+	get_page(page);
+	set_page_writeback(page);
+	SetPageUptodate(page);
+	
+	dout(10, "ceph_writepage inode %p page %p index %lu\n",
+	     inode, page, page->index);
+	
 	/* write a page at the index of page->index, by size of PAGE_SIZE */
 	err = ceph_osdc_writepage(osdc, ceph_ino(inode), &ci->i_layout,
-				page->index << PAGE_SHIFT, PAGE_SIZE, page);
+				  page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (err)
 		goto out_unlock;
-
+	
 	/* update written data size in ceph_inode_info */
 	spin_lock(&inode->i_lock);
 	if (inode->i_size <= PAGE_SIZE) {
@@ -94,12 +94,12 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 		dout(10, "extending file size to %d\n", (int)inode->i_size);
 	}
 	spin_unlock(&inode->i_lock);
-
+	
 out_unlock:
 	end_page_writeback(page);
 	put_page(page);
-
-       return err;
+	
+	return err;
 }
 
 /*
@@ -124,6 +124,7 @@ static int ceph_writepages(struct address_space *mapping, struct writeback_contr
 
 	return generic_writepages(mapping, wbc);
 }
+
 
 /*
  * ceph_prepare_write:
@@ -233,6 +234,7 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 		/* set the page as up-to-date and mark it as dirty */
 		SetPageUptodate(page);
 		set_page_dirty(page);
+		ci->i_nr_dirty_pages++;
 	}
 
 /*out_unlock:*/
@@ -240,11 +242,133 @@ static int ceph_commit_write(struct file *filp, struct page *page,
 }
 
 
+/*
+ * newer write interface
+ */
+static int ceph_write_begin(struct file *file, struct address_space *mapping,
+			    loff_t pos, unsigned len, unsigned flags,
+			    struct page **pagep, void **fsdata)
+{
+	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_inode_info *ci;
+	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
+	struct page *page;
+	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
+	loff_t page_off = pos & PAGE_MASK;
+	int pos_in_page = pos & ~PAGE_MASK;
+	loff_t i_size;
+	int r;
+
+	/* get a page*/
+	page = __grab_cache_page(mapping, index);
+	if (!page) 
+		return -ENOMEM;
+	*pagep = page;
+
+	dout(10, "write_begin file %p inode %p page %p %d~%d\n", file,
+	     inode, page, (int)pos, (int)len);
+
+	if (PageUptodate(page))
+		return 0;
+
+	/* full page? */
+	if (pos_in_page == 0 && len == PAGE_SIZE) {  
+		SetPageUptodate(page);
+		return 0;
+	}
+	
+	/* past end of file? */
+	i_size = i_size_read(inode);
+	if (page_off >= i_size || 
+	    (pos_in_page == 0 && (pos+len) >= i_size)) {
+		simple_prepare_write(file, page, pos_in_page, pos_in_page+len);
+		SetPageUptodate(page);
+		return 0;
+	}
+	
+	/* we need to read it. */
+	/* or, do sub-page granularity dirty accounting? */
+	/* try to read the full page */
+	ci = ceph_inode(inode);
+	r = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
+			       page_off, PAGE_SIZE, page);
+	if (r < 0)
+		return r;
+	if (r < pos_in_page) {
+		/* we didn't read up to our write start pos, zero the gap */
+		void *kaddr = kmap_atomic(page, KM_USER0);
+		memset(kaddr+r, 0, pos_in_page-r);
+		flush_dcache_page(page);
+		kunmap_atomic(kaddr, KM_USER0);
+	}
+	return 0;
+}
+
+static int ceph_write_end(struct file *file, struct address_space *mapping,
+			  loff_t pos, unsigned len, unsigned copied,
+			  struct page *page, void *fsdata)
+{
+	struct inode *inode = file->f_dentry->d_inode;
+	unsigned offset = pos & (PAGE_CACHE_SIZE - 1);
+
+	dout(10, "write_end file %p inode %p page %p %d~%d (%d)\n", file,
+	     inode, page, (int)pos, (int)copied, (int)len);
+
+	/* did file size increase? */
+	spin_lock(&inode->i_lock);
+	if (pos+copied > inode->i_size)
+		i_size_write(inode, pos + copied);
+	spin_unlock(&inode->i_lock);
+
+	SetPageUptodate(page);
+	set_page_dirty(page);
+	unlock_page(page);
+
+	return copied;
+}
+
+
+
+/* generic_perform_write
+ * page accounting
+ */
+
+static int ceph_set_page_dirty(struct page *page)
+{
+	struct ceph_inode_info *ci = ceph_inode(page->mapping->host);
+	spin_lock(&ci->vfs_inode.i_lock);
+	dout(10, "set_page_dirty %p : %d -> %d \n", page,
+	     ci->i_nr_dirty_pages, ci->i_nr_dirty_pages + 1);
+	ci->i_nr_dirty_pages++;
+	spin_lock(&ci->vfs_inode.i_lock);
+	return 0;
+}
+
+static int ceph_releasepage(struct page *page, gfp_t gfpmask)
+{
+	struct ceph_inode_info *ci = ceph_inode(page->mapping->host);
+	int last = 0;
+	spin_lock(&ci->vfs_inode.i_lock);
+	dout(10, "releasepage %p gfpmask %d : %d -> %d \n", page, gfpmask,
+	     ci->i_nr_pages, ci->i_nr_pages - 1);
+	if (--ci->i_nr_pages == 0)
+		last++;
+	spin_lock(&ci->vfs_inode.i_lock);
+	if (last)
+		ceph_check_caps_wanted(ci, gfpmask);
+	return 0;
+}
+
+
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
 	.readpages = ceph_readpages,
-	.prepare_write = ceph_prepare_write,
-	.commit_write = ceph_commit_write,
+	.write_begin = ceph_write_begin,
+	.write_end = ceph_write_end,
+	//.prepare_write = ceph_prepare_write,
+	//.commit_write = ceph_commit_write,
 	.writepage = ceph_writepage,
 //     .writepages = ceph_writepages,
+//	.set_page_dirty = ceph_set_page_dirty,
+	.releasepage = ceph_releasepage,
 };

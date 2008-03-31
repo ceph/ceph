@@ -689,7 +689,7 @@ void ceph_remove_cap(struct ceph_inode_cap *cap)
  * examine currently wanted versus held caps, and release caps to mds
  * as appropriate.
  */
-void ceph_check_caps_wanted(struct ceph_inode_info *ci)
+void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -710,6 +710,13 @@ retry:
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
 		if ((cap->caps & ~wanted) == 0)
 			continue;     /* nothing extra, all good */
+
+		if (gfpmask != GFP_KERNEL) {
+			/* put on examine list */
+			dout(10, "** dropping caps, but bad gfpmask, "
+			     "IMPLEMENT ME *************\n");
+			goto out;
+		}
 
 		cap->caps &= wanted;  /* drop bits we don't want */
 
@@ -734,6 +741,7 @@ retry:
 	}
 
 	/* okay */
+out:
 	spin_unlock(&ci->vfs_inode.i_lock);
 }
 
@@ -758,7 +766,7 @@ void ceph_put_mode(struct ceph_inode_info *ci, int mode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last)
-		ceph_check_caps_wanted(ci);
+		ceph_check_caps_wanted(ci, GFP_KERNEL);
 }
 
 
@@ -944,7 +952,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last) 
-		ceph_check_caps_wanted(ci);
+		ceph_check_caps_wanted(ci, GFP_KERNEL);
 }
 
 
