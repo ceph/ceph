@@ -4,17 +4,6 @@ code cleanup
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
 
-client leases
-- lease length heuristics
-  - mds lock last_change stamp?
-- client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
-  - ICONTENT on file open
-  - DN on unlink, rename
-  - IAUTH on setattr
-  - ICONTENT on utimes
-  - or inode fields we are chmodding, etc.
-- lease renewals (to avoid blocking client ops?)
-
 userspace client
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
@@ -92,6 +81,9 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
+- lease length heuristics
+  - mds lock last_change stamp?
+
 - fix file_data_version
 - on recovery, validate file sizes when max_size > size
 
