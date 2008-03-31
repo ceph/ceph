@@ -1389,12 +1389,23 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
 
-  // don't want?
-  // or, don't have cap?   
+  // don't have cap?   
   //   (it may be that we've reopened the file locally,
-  //    and thus want caps, but don't have a cap yet)
+  //    and thus want caps, but don't have a cap yet.
+  //    we should never reply to a cap out of turn.)
+  if (in->caps.count(mds) == 0) {
+    // silently drop.
+    dout(5) << "handle_file_caps on ino " << m->get_ino() 
+            << " seq " << m->get_seq() 
+            << " " << cap_string(m->get_caps()) 
+            << ", don't have this cap, silently dropping." << dendl;
+    delete m;
+    return;
+  }
+
+  // don't want?
   int wanted = in->file_caps_wanted();
-  if (wanted == 0 || in->caps.count(mds) == 0) {
+  if (wanted == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 

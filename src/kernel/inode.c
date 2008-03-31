@@ -121,7 +121,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	}
 	ci->i_fragtree->nsplits = le32_to_cpu(info->fragtree.nsplits);
 	for (i=0; i<ci->i_fragtree->nsplits; i++)
-		ci->i_fragtree->splits[i] = le32_to_cpu(info->fragtree.splits[i]);
+		ci->i_fragtree->splits[i] = 
+			le32_to_cpu(info->fragtree.splits[i]);
 
 	ci->i_frag_map_nr = 1;
 	ci->i_frag_map[0].frag = 0;
@@ -669,21 +670,15 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 
 	cap = get_cap_for_mds(inode, mds);
 
-	/* new cap? */
+	/* do we have this cap? */
 	if (!cap) {
-		/* unwanted? */
-		if (wanted == 0) {
-			dout(10, "wanted=0, reminding mds\n");
-			grant->wanted = cpu_to_le32(0);
-			spin_unlock(&inode->i_lock);
-			return 1; /* ack */
-		}
-		/* hrm */
-		BUG_ON(1);
-		dout(10, "adding new cap inode %p for mds%d\n", inode, mds);
-		cap = ceph_add_cap(inode, session, 
-				   le32_to_cpu(grant->caps), 
-				   le32_to_cpu(grant->seq));
+		/*
+		 * then ignore.  never reply to cap messages out of turn,
+		 * or we'll be mixing up different instances of caps on the
+		 * same inode, and confuse the mds.
+		 */
+		dout(10, "no cap on ino %llx from mds%d, ignoring\n",
+		     ci->i_ceph_ino, mds);
 		goto out;
 	} 
 

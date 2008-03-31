@@ -27,6 +27,7 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
+- make sure create() is setting mode properly.. untar shouldn't need to chmod!
 - use list_for_each_safe for caps removal?
   - revisit cap removal locking, make sure it's okay....
 - fix dentry locking on lease addition
