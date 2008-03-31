@@ -231,9 +231,23 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
 /*
  * caps helpers
  */
-extern int ceph_caps_issued(struct ceph_inode_info *ci);
+extern int __ceph_caps_issued(struct ceph_inode_info *ci);
 
-static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
+static inline int __ceph_caps_used(struct ceph_inode_info *ci)
+{
+	int used = 0;
+	if (ci->i_rd_ref)
+		used |= CEPH_CAP_RD;
+	if (ci->i_rdcache_ref)
+		used |= CEPH_CAP_RDCACHE;
+	if (ci->i_wr_ref)
+		used |= CEPH_CAP_WR;
+	if (ci->i_wrbuffer_ref)
+		used |= CEPH_CAP_WRBUFFER;
+	return used;
+}
+
+static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 {
 	int want = 0;
 	if (ci->i_nr_by_mode[0])
@@ -249,18 +263,9 @@ static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 	return want;
 }
 
-static inline int ceph_caps_used(struct ceph_inode_info *ci)
+static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
-	int used = 0;
-	if (ci->i_rd_ref)
-		used |= CEPH_CAP_RD;
-	if (ci->i_rdcache_ref)
-		used |= CEPH_CAP_RDCACHE;
-	if (ci->i_wr_ref)
-		used |= CEPH_CAP_WR;
-	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_WRBUFFER;
-	return used;
+	return __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
 }
 
 static inline int ceph_file_mode(int flags)
@@ -343,7 +348,6 @@ extern void ceph_update_dentry_lease(struct dentry *dentry,
 				     struct ceph_mds_session *session,
 				     unsigned long from_time);
 
-extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
 					   u32 cap, u32 seq);
@@ -357,6 +361,9 @@ extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_session *session);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
+extern void ceph_check_caps_wanted(struct ceph_inode_info *ci);
+extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
+extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,

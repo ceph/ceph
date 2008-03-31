@@ -125,8 +125,6 @@ extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 
 extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 				      struct ceph_msg *msg);
-struct ceph_inode_info;
-extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
@@ -143,4 +141,11 @@ extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
+extern void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, 
+				   int caps, int wanted, __u32 seq, 
+				   __u64 size, __u64 max_size, 
+				   struct timespec *mtime, 
+				   struct timespec *atime,
+				   int mds);
+	
 #endif

@@ -128,7 +128,6 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 		ci->i_static_caps[i].mds = -1;
 	for (i = 0; i < 4; i++)
 		ci->i_nr_by_mode[i] = 0;
-	ci->i_cap_wanted = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;

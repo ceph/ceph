@@ -487,38 +487,49 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return err;
 }
 
+/*
+ * check if dentry lease, or parent directory inode lease or cap says
+ * this dentry is still valid
+ */
 static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
-	int mds = (long)dentry->d_fsdata;
 	struct inode *dir = dentry->d_parent->d_inode;
 	struct ceph_inode_info *dirci = ceph_inode(dir);
+	struct ceph_dentry_info *di;
 
-	dout(20, "d_revalidate ttl %lu mds %d now %lu\n", dentry->d_time, 
-	     mds, jiffies);
-	
 	/* does dir inode lease or cap cover it? */
+	spin_lock(&dirci->vfs_inode.i_lock);
 	if (dirci->i_lease_session &&
 	    time_after(dirci->i_lease_ttl, jiffies) &&
 	    (dirci->i_lease_mask & CEPH_LOCK_ICONTENT)) {
 		dout(20, "d_revalidate have ICONTENT on dir inode %p, ok\n",
 		     dir);
-		return 1;
+		goto inode_ok;
 	}
-	if (ceph_caps_issued(dirci) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) {
+	if (__ceph_caps_issued(dirci) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) {
 		dout(20, "d_revalidate have EXCL|RDCACHE caps on dir inode %p"
 		     ", ok\n", dir);
-		return 1;
+		goto inode_ok;
 	}
+	spin_unlock(&dirci->vfs_inode.i_lock);
 
 	/* dentry lease? */
-	if (mds >= 0 && time_after(dentry->d_time, jiffies)) {
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (di && time_after(dentry->d_time, jiffies)) {
 		dout(20, "d_revalidate - dentry %p lease valid\n", dentry);
+		spin_unlock(&dentry->d_lock);
 		return 1;
 	}
+	spin_unlock(&dentry->d_lock);
 
 	dout(20, "d_revalidate - dentry %p expired\n", dentry);
 	d_drop(dentry);
 	return 0;
+
+inode_ok:
+	spin_unlock(&dirci->vfs_inode.i_lock);
+	return 1;
 }
 
 static void ceph_d_release(struct dentry *dentry)

@@ -607,13 +607,11 @@ static void remove_session_caps(struct ceph_mds_session *session)
 		cap = list_entry(session->s_caps.next, struct ceph_inode_cap,
 				 session_caps);
 		ci = cap->ci;
-		igrab(&ci->vfs_inode);
 		dout(10, "removing cap %p, ci is %p, inode is %p\n",
 		     cap, ci, &ci->vfs_inode);
 		spin_unlock(&session->s_cap_lock);
 		ceph_remove_cap(cap);
 		spin_lock(&session->s_cap_lock);
-		iput(&ci->vfs_inode);
 	}
 	BUG_ON(session->s_nr_caps > 0);
 	spin_unlock(&session->s_cap_lock);
@@ -1127,11 +1125,13 @@ retry:
 		rec = p;
 		p += sizeof(*rec);
 		BUG_ON(p > end);
-		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
-		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
+		spin_lock(&ci->vfs_inode.i_lock);
+		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
+		rec->issued = cpu_to_le32(__ceph_caps_issued(ci));
 		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
 		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
 		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
+		spin_unlock(&ci->vfs_inode.i_lock);
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {
@@ -1236,10 +1236,10 @@ void check_new_map(struct ceph_mds_client *mdsc,
 
 /* caps */
 
-void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-		  int wanted, __u32 seq, __u64 size, __u64 max_size, 
-		  struct timespec *mtime, struct timespec *atime,
-		  int mds)
+void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
+			    int wanted, __u32 seq, __u64 size, __u64 max_size, 
+			    struct timespec *mtime, struct timespec *atime,
+			    int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1323,7 +1323,8 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, 0, 0, mds);
+		ceph_mdsc_send_cap_ack(mdsc, ino, 0, 0, seq, 
+				       size, max_size, 0, 0, mds);
 		return;
 	}
 
@@ -1351,36 +1352,6 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 bad:
 	dout(10, "corrupt filecaps message\n");
 	return;
-}
-
-int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
-{
-	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_inode_cap *cap;
-	struct ceph_mds_session *session;
-	struct list_head *p;
-
-	dout(10, "update_cap_wanted %d -> %d\n", ci->i_cap_wanted, wanted);
-
-	list_for_each(p, &ci->i_caps) {
-		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
-
-		session = __get_session(mdsc, cap->mds);
-		BUG_ON(!session);
-
-		cap->caps &= wanted;  /* drop caps we don't want */
-		send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), cap->caps, wanted,
-			     cap->seq, ci->vfs_inode.i_size, ci->i_max_size,
-			     &ci->vfs_inode.i_mtime, &ci->vfs_inode.i_atime, 
-			     cap->mds);
-	}
-
-	ci->i_cap_wanted = wanted;
-	if (wanted == 0)
-		ceph_remove_all_caps(ci);
-
-	return 0;
 }
 
 int send_renewcaps(struct ceph_mds_client *mdsc, int mds)
@@ -1454,11 +1425,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* inode */
 	ci = ceph_inode(inode);
-	if (mask & ci->i_lease_mask) {
-		ceph_revoke_inode_lease(ci, mask);
-		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
-		     mask, inode, ci->i_lease_mask);
-	}
+	ceph_revoke_inode_lease(ci, mask);
 
 	/* dentry */
 	if (mask & CEPH_LOCK_DN) {

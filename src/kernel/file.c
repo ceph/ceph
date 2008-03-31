@@ -54,24 +54,14 @@ static int ceph_init_file(struct inode *inode, struct file *file,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf;
 	int mode = ceph_file_mode(flags);
-	int wanted;
 
 	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
 	if (cf == NULL)
 		return -ENOMEM;
 	file->private_data = cf;
 
-	spin_lock(&inode->i_lock);
 	cf->mode = mode;
-	ci->i_nr_by_mode[mode]++;
-	wanted = ceph_caps_wanted(ci);
-	dout(10, "init_file %p flags 0%o mode %d nr now %d.  wanted %d -> %d\n",
-	     file, flags,
-	     mode, ci->i_nr_by_mode[mode], 
-	     ci->i_cap_wanted, ci->i_cap_wanted|wanted);
-	ci->i_cap_wanted |= wanted;   /* FIXME this isn't quite right */
-	spin_unlock(&inode->i_lock);
-
+	ceph_get_mode(ci, mode);
 	return 0;
 }
 
@@ -94,11 +84,6 @@ int ceph_open(struct inode *inode, struct file *file)
 		dout(5, "open file %p is already opened\n", file);
 		return 0;
 	}
-
-	/*
-	if (file->f_flags == O_DIRECTORY && ... )
-		cap = ceph_find_cap(inode, 0);
-	*/
 
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req))
@@ -158,8 +143,6 @@ int ceph_release(struct inode *inode, struct file *file)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf = file->private_data;
-	int mode = cf->mode;
-	int wanted;
 
 	dout(5, "release inode %p file %p\n", inode, file);
 
@@ -172,16 +155,8 @@ int ceph_release(struct inode *inode, struct file *file)
 	 *   ceph_file: released 000000006fa3ebd0 flags 0100001 mode 3 nr now -1.  wanted 30 was 30
 	 * for now, store the open mode in ceph_file_info.
 	 */
-	mode = cf->mode;
-	ci->i_nr_by_mode[mode]--;
-	wanted = ceph_caps_wanted(ci);
-	dout(10, "released %p flags 0%o mode %d nr now %d, wanted %d -> %d\n",
-	     file, file->f_flags, mode, 
-	     ci->i_nr_by_mode[mode], wanted, ci->i_cap_wanted);
-	wanted |= ceph_caps_used(ci);
-	if (wanted != ci->i_cap_wanted)
-		ceph_mdsc_update_cap_wanted(ci, wanted);
-	
+
+	ceph_put_mode(ci, cf->mode);
 	if (cf->last_readdir)
 		ceph_mdsc_put_request(cf->last_readdir);
 	kfree(cf);
