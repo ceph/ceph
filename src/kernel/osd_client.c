@@ -169,16 +169,24 @@ struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op)
 	return req;
 }
 
-struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
-					  struct ceph_msg *msg,
-					  int nr_pages)
+struct ceph_osd_request *alloc_request(int nr_pages)
 {
 	struct ceph_osd_request *req;
-	struct ceph_osd_request_head *head = msg->front.iov_base;
 
 	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void*), GFP_KERNEL);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
+
+	return req;
+}
+
+struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
+					  struct ceph_msg *msg,
+					  int nr_pages,
+					  struct ceph_osd_request *req)
+{
+	struct ceph_osd_request_head *head = msg->front.iov_base;
+
 	req->r_tid = head->tid = ++osdc->last_tid;
 	req->r_flags = 0;
 	req->r_request = msg;
@@ -440,8 +448,12 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
 	
 	/* register request */
+	req = alloc_request(nr_pages);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
 	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, nr_pages);
+	req = register_request(osdc, reqm, nr_pages, req);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		spin_unlock(&osdc->lock);
@@ -513,9 +525,13 @@ int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	nrp = calc_pages_for(len, off);
 	dout(10, "%d~%d -> %d pages\n", (int)off, (int)len, nrp);
 
+	req = alloc_request(nrp);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
 	/* register+send request */
 	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, nrp);
+	req = register_request(osdc, reqm, nrp, req);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		spin_unlock(&osdc->lock);
@@ -696,9 +712,13 @@ static int ceph_readpage_async(struct ceph_osd_client *osdc,
 
 	reqhead = reqm->front.iov_base;
 
+	req = alloc_request(1);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
 	/* register+send request */
 	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, 1);
+	req = register_request(osdc, reqm, 1, req);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		spin_unlock(&osdc->lock);
@@ -765,9 +785,13 @@ static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	dout(10, "writepage_async object block %u %llu~%llu\n",
 	     reqhead->oid.bno, reqhead->offset, reqhead->length);
 	
+	req = alloc_request(1);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
 	/* register+send request */
 	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, 1);
+	req = register_request(osdc, reqm, 1, req);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		spin_unlock(&osdc->lock);

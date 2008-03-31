@@ -22,6 +22,7 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <fcntl.h>
 #include "statlite.h"
 }
 
