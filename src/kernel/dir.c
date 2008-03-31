@@ -94,77 +94,6 @@ static unsigned fpos_off(loff_t p)
 	return p & 0xffffffff;
 }
 
-
-static int prepopulate_dir(struct dentry *parent,
-			   struct ceph_mds_reply_info *rinfo,
-			   struct ceph_mds_session *session, 
-			   unsigned long from_time)
-{
-	struct qstr dname;
-	struct dentry *dn;
-	struct inode *in;
-	int i;
-
-	for (i = 0; i < rinfo->dir_nr; i++) {
-		/* dentry */
-		dname.name = rinfo->dir_dname[i];
-		dname.len = rinfo->dir_dname_len[i];
-		dname.hash = full_name_hash(dname.name, dname.len);
-
-		dn = d_lookup(parent, &dname);
-		dout(30, "calling d_lookup on parent=%p name=%.*s"
-		     " returned %p\n", parent, dname.len, dname.name, dn);
-
-		if (!dn) {
-			dn = d_alloc(parent, &dname);
-			if (dn == NULL) {
-				dout(30, "d_alloc badness\n");
-				return -1;
-			}
-			ceph_init_dentry(dn);
-		}
-		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], 
-					 session, from_time);
-
-		/* inode */
-		if (dn->d_inode == NULL) {
-			in = new_inode(parent->d_sb);
-			if (in == NULL) {
-				dout(30, "new_inode badness\n");
-				d_delete(dn);
-				return -1;
-			}
-		} else {
-			in = dn->d_inode;
-		}
-
-		if (ceph_ino(in) !=
-		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
-			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				iput(in);
-				d_delete(dn);
-				return -1;
-			}
-			d_instantiate(dn, in);
-			if (d_unhashed(dn))
-				d_rehash(dn);
-			dout(10, "dir_readdir added dentry %p ino %llx %d/%d\n",
-			     dn, ceph_ino(in), i, rinfo->dir_nr);
-		} else {
-			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				return -1;
-			}
-		}
-		ceph_update_inode_lease(in, rinfo->dir_ilease[i], session,
-					from_time);
-
-		dput(dn);
-	}
-	return 0;
-}
-
 static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
@@ -204,11 +133,6 @@ nextfrag:
 		dout(10, "dir_readdir got and parsed readdir result=%d"
 		     " on frag %u\n", err, frag);
 		fi->last_readdir = req;
-
-		/* pre-populate dentry cache */
-		prepopulate_dir(filp->f_dentry, &req->r_reply_info, 
-				req->r_session,
-				req->r_from_time);
 	}
 
 	/* include . and .. with first fragment */

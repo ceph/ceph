@@ -928,17 +928,23 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	err = ceph_fill_trace(mdsc->client->sb, req, req->r_session);
 	if (err)
 		goto done;
-	if (result == 0 && req->r_expects_cap) {
-		cap = le32_to_cpu(rinfo->head->file_caps);
-		capseq = le32_to_cpu(rinfo->head->file_caps_seq);
-		req->r_cap = ceph_add_cap(req->r_last_inode,
-					  req->r_session,
-					  cap, capseq);
-		if (IS_ERR(req->r_cap)) {
-			err = PTR_ERR(req->r_cap);
-			req->r_cap = 0;
-			goto done;
+	if (result == 0) {
+		/* caps? */
+		if (req->r_expects_cap) {
+			cap = le32_to_cpu(rinfo->head->file_caps);
+			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
+			req->r_cap = ceph_add_cap(req->r_last_inode,
+						  req->r_session,
+						  cap, capseq);
+			if (IS_ERR(req->r_cap)) {
+				err = PTR_ERR(req->r_cap);
+				req->r_cap = 0;
+				goto done;
+			}
 		}
+
+		/* readdir result? */
+		ceph_readdir_prepopulate(req);
 	}
 
 done:

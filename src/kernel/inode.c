@@ -337,7 +337,6 @@ void ceph_revoke_dentry_lease(struct dentry *dentry)
 
 
 
-
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req, 
 		    struct ceph_mds_session *session)
 {
@@ -477,6 +476,81 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	req->r_last_inode = in;
 	igrab(in);
 	return err;
+}
+
+/*
+ * prepopulate cache with readdir results
+ */
+int ceph_readdir_prepopulate(struct ceph_mds_request *req)
+{
+	struct dentry *parent = req->r_last_dentry;
+	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
+	struct qstr dname;
+	struct dentry *dn;
+	struct inode *in;
+	int i;
+
+	dout(10, "readdir_prepopulate %d items under dentry %p\n", 
+	     rinfo->dir_nr, parent);
+	for (i = 0; i < rinfo->dir_nr; i++) {
+		/* dentry */
+		dname.name = rinfo->dir_dname[i];
+		dname.len = rinfo->dir_dname_len[i];
+		dname.hash = full_name_hash(dname.name, dname.len);
+
+		dn = d_lookup(parent, &dname);
+		dout(30, "calling d_lookup on parent=%p name=%.*s"
+		     " returned %p\n", parent, dname.len, dname.name, dn);
+
+		if (!dn) {
+			dn = d_alloc(parent, &dname);
+			if (dn == NULL) {
+				dout(30, "d_alloc badness\n");
+				return -1;
+			}
+			ceph_init_dentry(dn);
+		}
+		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], 
+					 req->r_session, req->r_from_time);
+
+		/* inode */
+		if (dn->d_inode == NULL) {
+			in = new_inode(parent->d_sb);
+			if (in == NULL) {
+				dout(30, "new_inode badness\n");
+				d_delete(dn);
+				return -1;
+			}
+		} else {
+			in = dn->d_inode;
+		}
+
+		if (ceph_ino(in) !=
+		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
+			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
+				dout(30, "ceph_fill_inode badness\n");
+				iput(in);
+				d_delete(dn);
+				return -1;
+			}
+			d_instantiate(dn, in);
+			if (d_unhashed(dn))
+				d_rehash(dn);
+			dout(10, "added dentry %p ino %llx %d/%d\n",
+			     dn, ceph_ino(in), i, rinfo->dir_nr);
+		} else {
+			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
+				dout(30, "ceph_fill_inode badness\n");
+				return -1;
+			}
+		}
+		ceph_update_inode_lease(in, rinfo->dir_ilease[i], 
+					req->r_session, req->r_from_time);
+
+		dput(dn);
+	}
+	dout(10, "readdir_prepopulate done\n");
+	return 0;
 }
 
 

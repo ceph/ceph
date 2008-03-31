@@ -329,6 +329,10 @@ extern int ceph_get_inode(struct super_block *sb, u64 ino,
 			  struct inode **pinode);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
+extern int ceph_fill_trace(struct super_block *sb, 
+			   struct ceph_mds_request *req,
+			   struct ceph_mds_session *session);
+extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 
 extern void ceph_update_inode_lease(struct inode *inode, 
 				    struct ceph_mds_reply_lease *lease,
@@ -378,9 +382,6 @@ extern const struct file_operations ceph_dir_fops;
 extern struct dentry_operations ceph_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
-extern int ceph_fill_trace(struct super_block *sb, 
-			   struct ceph_mds_request *req,
-			   struct ceph_mds_session *session);
 extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int m);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
