@@ -325,8 +325,39 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
   dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
 
   if (lease->mask & CEPH_STAT_MASK_INODE) {
-    in->inode = st->inode;
+    int issued = in->file_caps();
+    
+    in->inode.ino = st->ino;
+    in->inode.layout = st->layout;
+    in->inode.rdev = st->rdev;
+
+    in->inode.mode = st->mode;
+    in->inode.uid = st->uid;
+    in->inode.gid = st->gid;
+
+    in->inode.nlink = st->nlink;
+    in->inode.anchored = false;  /* lie */
+
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+
+    in->inode.ctime = st->ctime;
+    in->inode.max_size = st->max_size;  // right?
+
+    // be careful with size, mtime, atime
+    if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+      if ((issued & CEPH_CAP_EXCL) == 0) {
+	if (st->size > in->inode.size)
+	  in->inode.size = st->size;
+	if (st->mtime > in->inode.mtime) 
+	  in->inode.mtime = st->mtime;
+	if (st->atime > in->inode.atime)
+	  in->inode.atime = st->atime;
+      }
+    } else {
+      in->inode.size = st->size;
+      in->inode.mtime = st->mtime;
+      in->inode.atime = st->atime;
+    }
   }
 
   if (lease->mask && ttl > in->lease_ttl) {
@@ -360,15 +391,15 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->inode.ino 
-           << "  size " << ist->inode.size
-           << "  mtime " << ist->inode.mtime
+  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->ino 
+           << "  size " << ist->size
+           << "  mtime " << ist->mtime
 	   << " dmask " << dmask
 	   << " in dir " << dir->parent_inode->inode.ino
            << dendl;
   
   if (dn) {
-    if (dn->inode->inode.ino == ist->inode.ino) {
+    if (dn->inode->inode.ino == ist->ino) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
                << " with correct ino " << dn->inode->inode.ino
@@ -384,8 +415,8 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   
   if (!dn) {
     // have inode linked elsewhere?  -> unlink and relink!
-    if (inode_map.count(ist->inode.ino)) {
-      Inode *in = inode_map[ist->inode.ino];
+    if (inode_map.count(ist->ino)) {
+      Inode *in = inode_map[ist->ino];
       assert(in);
 
       if (in->dn) {
@@ -403,10 +434,10 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   }
 
   if (!dn) {
-    Inode *in = new Inode(ist->inode, objectcacher);
-    inode_map[ist->inode.ino] = in;
+    Inode *in = new Inode(ist->ino, &ist->layout, objectcacher);
+    inode_map[ist->ino] = in;
     dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with ino " << ist->inode.ino << dendl;
+    dout(12) << " new dentry+node with ino " << ist->ino << dendl;
   } 
 
   assert(dn && dn->inode);
@@ -512,9 +543,9 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   // insert into cache --
   // first inode
   Inode *curi = 0;
-  inodeno_t ino = ist[0].inode.ino;
+  inodeno_t ino = ist[0].ino;
   if (!root && ino == 1) {
-    curi = root = new Inode(ist[0].inode, objectcacher);
+    curi = root = new Inode(ino, &ist[0].layout, objectcacher);
     dout(10) << "insert_trace new root is " << root << dendl;
     inode_map[ino] = root;
     root->dir_auth = 0;
@@ -4127,7 +4158,7 @@ int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  filer->file_to_extents(in->inode, offset, length, result);
+  filer->file_to_extents(in->inode.ino, &in->inode.layout, offset, length, result);
 
   dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;

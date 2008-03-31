@@ -59,6 +59,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	int blkbits = fls(su)-1;
 	unsigned blksize = 1 << blkbits;
 	u64 size = le64_to_cpu(info->size);
+	int issued;
+	struct timespec mtime, atime;
 	u64 blocks = size + blksize - 1;
 	do_div(blocks, blksize);
 
@@ -74,20 +76,38 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_gid = le32_to_cpu(info->gid);
 	inode->i_nlink = le32_to_cpu(info->nlink);
 	inode->i_rdev = le32_to_cpu(info->rdev);
+	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
+
+	/* be careful with mtime, atime, size */
+	ceph_decode_timespec(&atime, &info->atime);
+	ceph_decode_timespec(&mtime, &info->mtime);
+	issued = ceph_caps_issued(ci);
 	spin_lock(&inode->i_lock);
-	inode->i_size = size;
-	inode->i_blkbits = blkbits;
-	inode->i_blocks = blocks;
+	if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+		if ((issued & CEPH_CAP_EXCL) == 0) {
+			if (size > inode->i_size) {
+				inode->i_size = size;
+				inode->i_blkbits = blkbits;
+				inode->i_blocks = blocks;
+			}
+			if (timespec_compare(&mtime, &inode->i_mtime) > 0)
+				inode->i_mtime = mtime;
+			if (timespec_compare(&atime, &inode->i_atime) > 0)
+				inode->i_atime = atime;
+		}
+	} else {
+		inode->i_size = size;
+		inode->i_blkbits = blkbits;
+		inode->i_blocks = blocks;
+		inode->i_mtime = mtime;
+		inode->i_atime = atime;
+	}
 	spin_unlock(&inode->i_lock);
 
 	if (ci->i_hashval != inode->i_ino) {
 		insert_inode_hash(inode);
 		ci->i_hashval = inode->i_ino;
 	}
-
-	ceph_decode_timespec(&inode->i_atime, &info->atime);
-	ceph_decode_timespec(&inode->i_mtime, &info->mtime);
-	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
 
 	/* ceph inode */
 	ci->i_layout = info->layout; 

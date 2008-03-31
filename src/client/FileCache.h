@@ -25,7 +25,8 @@ class ObjectCacher;
 
 class FileCache {
   ObjectCacher *oc;
-  inode_t inode;
+  inodeno_t ino;
+  ceph_file_layout layout;
   
   // caps
   int latest_caps;
@@ -42,9 +43,9 @@ class FileCache {
   bool waitfor_release;
 
  public:
-  FileCache(ObjectCacher *_oc, inode_t _inode) : 
+  FileCache(ObjectCacher *_oc, inodeno_t i, ceph_file_layout *l) : 
     oc(_oc), 
-    inode(_inode),
+    ino(i), layout(*l),
     latest_caps(0),
     num_reading(0), num_writing(0),// num_unsafe(0),
     waitfor_release(false) {}

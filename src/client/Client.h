@@ -194,17 +194,19 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(inode_t _inode, ObjectCacher *_oc) : 
-    inode(_inode),
+  Inode(inodeno_t ino, ceph_file_layout *layout, ObjectCacher *_oc) : 
+    //inode(_inode),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
-    fc(_oc, _inode),
+    fc(_oc, ino, layout),
     sync_reads(0), sync_writes(0),
     hack_balance_reads(false)
-  { }
+  {
+    inode.ino = ino;
+  }
   ~Inode() {
     if (symlink) { delete symlink; symlink = 0; }
   }

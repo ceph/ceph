@@ -85,7 +85,7 @@ class Filer {
 				  size_t len, 
 				  bufferlist *bl) {
     Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-    file_to_extents(inode, offset, len, rd->extents);
+    file_to_extents(inode.ino, &inode.layout, offset, len, rd->extents);
     return rd;
   }
   int read(inode_t& inode,
@@ -106,7 +106,7 @@ class Filer {
             Context *oncommit,
 	    objectrev_t rev=0) {
     Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-    file_to_extents(inode, offset, len, wr->extents, rev);
+    file_to_extents(inode.ino, &inode.layout, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -116,7 +116,7 @@ class Filer {
            Context *onack,
            Context *oncommit) {
     Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_ZERO);
-    file_to_extents(inode, offset, len, z->extents);
+    file_to_extents(inode.ino, &inode.layout, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -126,7 +126,7 @@ class Filer {
 	     Context *onack,
 	     Context *oncommit) {
     Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_DELETE);
-    file_to_extents(inode, offset, len, z->extents);
+    file_to_extents(inode.ino, &inode.layout, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -152,7 +152,7 @@ class Filer {
 
   /* map (ino, offset, len) to a (list of) OSDExtents 
      (byte ranges in objects on (primary) osds) */
-  void file_to_extents(inode_t inode,
+  void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
 		       off_t offset,
 		       size_t len,
 		       list<ObjectExtent>& extents,
