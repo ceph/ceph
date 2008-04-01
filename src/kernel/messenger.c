@@ -836,7 +836,7 @@ static void process_connect(struct ceph_connection *con)
 		     le32_to_cpu(con->in_connect_seq));
 		reset_connection(con);
 		prepare_write_connect(con->msgr, con);
-		con->msgr->peer_reset(con);
+		con->msgr->peer_reset(con->msgr->parent, &con->peer_name);
 		break;
 	case CEPH_MSGR_TAG_RETRY:
 		dout(10, 
@@ -951,7 +951,8 @@ static void process_accept(struct ceph_connection *con)
 				reset_connection(existing);
 				/* replace connection */
 				__replace_connection(msgr, existing, con);
-				msgr->peer_reset(con);
+				con->msgr->peer_reset(con->msgr->parent, 
+						      &con->peer_name);
 			} else {
 				/* old attempt or peer didn't get the READY */
 				/* send retry with peers connect seq */

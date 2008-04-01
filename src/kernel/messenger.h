@@ -11,7 +11,7 @@
 struct ceph_msg;
 
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
-typedef void (*ceph_msgr_peer_reset_t) (void *c);
+typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_name *pn);
 typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m, int want);
 
 static __inline__ const char *ceph_name_type_str(int t) {
