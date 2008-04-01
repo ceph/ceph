@@ -35,7 +35,7 @@ struct MClientLease : public Message {
   
   int get_action() { return h.action; }
   int get_mask() { return le16_to_cpu(h.mask); }
-  __u64 get_ino() { return le64_to_cpu(h.ino); }
+  inodeno_t get_ino() { return inodeno_t(le64_to_cpu(h.ino)); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(int ac, int m, __u64 i) :
@@ -56,7 +56,7 @@ struct MClientLease : public Message {
   void print(ostream& out) {
     out << "client_lease(a=" << get_lease_action_name(get_action())
 	<< " mask " << get_mask();
-    out << " " << inodeno_t(get_ino());
+    out << " " << get_ino();
     if (dname.length())
       out << "/" << dname;
     out << ")";
