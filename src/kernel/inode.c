@@ -439,7 +439,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				igrab(in);
 				inc_nlink(in);
 			} else {
-				in = ceph_get_inode(dn->d_sb);
+				in = ceph_get_inode(dn->d_sb, ininfo->ino);
 				if (IS_ERR(in)) {
 					dout(30, "new_inode badness\n");
 					err = PTR_ERR(in);
