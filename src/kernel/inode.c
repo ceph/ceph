@@ -435,7 +435,15 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if ((!dn->d_inode) ||
 		    (ceph_ino(dn->d_inode) != ininfo->ino)) {
 			dout(10, "fill_trace new_inode\n");
-			in = new_inode(dn->d_sb);
+			if (req->r_last_inode && 
+			    ceph_ino(req->r_last_inode) == ininfo->ino) {
+				in = req->r_last_inode;
+				igrab(in);
+				inc_nlink(in);
+			} else {
+				in = new_inode(dn->d_sb);
+			}
+
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				err = -ENOMEM;
