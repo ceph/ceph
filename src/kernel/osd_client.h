@@ -65,7 +65,7 @@ extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			       struct address_space *mapping,
 			       ceph_ino_t ino, struct ceph_file_layout *layout,
 			       __u64 off, __u64 len,
-			       struct ceph_osd_request *req);
+			       struct list_head *page_list, int nr_pages);
 extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			      struct ceph_file_layout *layout, 
 			      loff_t off, loff_t len,
@@ -95,9 +95,6 @@ extern int ceph_osdc_writepage(struct ceph_osd_client *osdc, ceph_ino_t ino,
                                 struct ceph_file_layout *layout, 
                                 loff_t off, loff_t len,
                                 struct page *page);
-
-extern struct ceph_osd_request *ceph_osdc_alloc_request(int nr_pages);
-extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
 #endif
 
