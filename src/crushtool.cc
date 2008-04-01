@@ -24,6 +24,7 @@
 #include "crush/CrushWrapper.h"
 #include "crush/grammar.h"
 
+
 #include <iostream>
 #include <fstream>
 #include <stack>
@@ -40,92 +41,63 @@ typedef char const*         iterator_t;
 typedef tree_match<iterator_t> parse_tree_match_t;                                                                   
 typedef parse_tree_match_t::tree_iterator iter_t;
 
-long eval_term(iter_t const& i);                                                                                                                   
-long evaluate(parse_tree_match_t hit);                                                                               
-long eval_expression(iter_t const& i);                                                                               
-long evaluate(tree_parse_info<> info)                                                                                
-{                                                                                                                    
 
-  std::cout << "t_id(info.trees.begin()).name(): " << typeid(info.trees.begin()).name() << '\n';
-  std::cout << "info.trees.size(): " <<  info.trees.size() <<std::endl;
-
-  for (unsigned int i=0; i<info.trees.size();i++) {
-    std::cout << "i: " << i << std::endl;
-    std::cout << "DOWN A LEVEL\n";
-    std::cout << "info.trees[index_i].children.size() :" <<  info.trees[i].children.size() <<std::endl;
-    //boost::spirit::parser_id id = info.trees[i].value.id();
-    
-    std::cout << "In eval_expression. info.trees[index_i].value = " << string(info.trees[i].value.begin(), info.trees[i].value.end()) << std::endl 
-	      << "info.trees[index_i].children.size() = " << info.trees[i].children.size() << std::endl;      
-    std::cout << "t_id(info.trees[index_ii].value.begin()).name(): " << typeid(info.trees[i].value.begin()).name() << '\n';
-    std::cout << "t_id(info.trees[index_i].value).name: " << typeid(info.trees[i].value).name() << '\n';
-    
-    if (info.trees[i].value.is_root()) {
-      printf("is root!\n");
-    }
-    
-    std::cout << "typeid( (info.trees[index_i].value).value() ).name(): " << typeid( info.trees[i].value.value() ).name() << std::endl;
-    
-    string blah(info.trees[i].value.begin(), info.trees[i].value.end());
-    //string integerB(info.trees[i].value.value.begin(), info.trees[i].value.value.end());
-
-    std::cout << "value: " << blah << std::endl;
-    //printf("IB: %s\n", integerB);
-    
-    for (unsigned int j = 0; j < info.trees[i].children.size(); j++) {                        
-      std::cout<< "index_j: " << j << std::endl;
-      std::cout << "typeid(info.trees[index_i].children[index_j]).name(): " << typeid(info.trees[i].children[j]).name() << '\n';
-      std::cout << "typeid(info.trees[index_i].children[index_j].value).name(): " << typeid(info.trees[i].children[j].value).name() << '\n';
-      
-      //string temp = typeid(info.trees[i].children[j]).name() 
-
-      //string blah(info.trees[i].children[j].value.begin(), info.trees[i].children[j].value.end());
-      //std::cout << "value string: " << blah << std::endl;
-
-      //string blah2(info.trees[i].children[j].begin(), info.trees[i].children[j].end());
-      //std::cout << "child string: " << blah2 << std::endl;
-
-      // eval_expression( info.trees[i].children[j].begin );
-      
-      
-      //      const type_info tp = typeid(info.trees[i].children[j]);
-      //const char *nm = tp.name();
-      //std::cout << nm<<std::endl;
-      // next node points to the operator.  The text of the operator is                                                     
-      // stored in value (a vector<char>) 
-      //for (iter_t j = chi->value.begin(); j != chi->value.end(); ij+) { 
-      //std::cout << "here: " << *j <<std::endl;
-      //char op = *(chi->value.begin());
-      //std::cout << chi->value <<std::endl;
-      //printf("op: %c\n", op);
-      //}
-    }                                                                                                                         
-  
-    cout << "evalutaing info..." << std::endl;                                                                         
-    //printf("%d\n", (int)info.trees[i].value.id());
-    
-    if (info.trees[i].value.id() == crush_grammar::_int) {                                                                        
-      return 1;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_posint) {                                                              
-      return 2;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_name) {                                                                
-      return 3;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_device) {                                                              
-      return 4;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_bucket_type) {                                                         
-      return 5;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_bucket_id) {                                                           
-      return 6;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_bucket_alg) {                                                          
-      return 7;                                                                                                        
-    } else {                                                                                                           
-      return 0;                                                                                                        
-    }                                                                                                                  
+void parse_device(iter_t const& i, CrushWrapper &crush) {
+  int size = i->children.size();
+  string id_str = string(i->children[1].value.begin(), i->children[1].value.end());
+  istringstream idStream(id_str);;
+  int id;
+  if (idStream>>id) {
+    cout << "id: " << id << std::endl;
   }
-  cout << "should never get here." << std::endl;                                                                     
-  return -1;                                                                                                         
-}                                                                                                                    
 
+  string name = string(i->children[2].value.begin(), i->children[2].value.end());
+  cout << "name: " << name << std::endl;
+
+  float offload = 0;
+  bool have_offload = false;
+  if (size == 5) {
+    have_offload = true;
+    string offload_str = string(i->children[4].value.begin(), i->children[4].value.end()); 
+    istringstream offloadStream(offload_str);
+    if (offloadStream>>offload) {
+      cout << "offload: " << offload << std::endl;
+    } 
+  }
+}
+
+
+void walk_crush_config(iter_t const& i, CrushWrapper &crush, int ind=1) 
+{ 
+  cout << "dump"; 
+  for (int j=0; j<ind; j++) cout << "\t"; 
+  long id = i->value.id().to_long();
+  cout << id << "\t"; 
+  cout << "'" << string(i->value.begin(), i->value.end())  
+       << "' " << i->children.size() << " children" << std::endl; 
+
+  switch (i->value.id().to_long()) {
+  case crush_grammar::_device: 
+    cout << "device" << std::endl;
+    parse_device(i, crush);
+    break;
+  case crush_grammar::_bucket_type: 
+    cout << "type" << std::endl;
+    //parse_bucket_type(i->children.begin(), crush);
+    break;
+  case crush_grammar::_bucket: 
+    cout << "bucket" << std::endl;
+    //parse_bucket(i->children.begin(), crush);
+    break;
+  case crush_grammar::_crushrule: 
+    cout << "rule"  << std::endl;
+    //parse_rule(i->children.begin(), crush);
+    break;
+  default:
+    for (unsigned int j = 0; j < i->children.size(); j++)  
+      walk_crush_config(i->children.begin() + j, crush, ind+1); 
+  }
+} 
 
 const char *infn = "stdin";
 
@@ -168,14 +140,14 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     line++;
     big += str;
   }
-
+  
   if (verbose >= 2) cout << "whole file is: \"" << big << "\"" << std::endl;
   
   crush_grammar crushg;
   const char *start = big.c_str();
   //tree_parse_info<const char *> info = ast_parse(start, crushg, space_p);
   tree_parse_info<> info = ast_parse(start, crushg, space_p);
-
+  
   // parse error?
   if (!info.full) {
     int cpos = info.stop - start;
@@ -190,32 +162,10 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
 	 << " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
     return 1;
   }
-  {
-    // dump parse tree as XML
-    std::map<parser_id, std::string> rule_names;
-    rule_names[crush_grammar::_int] = "int";
-    rule_names[crush_grammar::_posint] = "posint";
-    rule_names[crush_grammar::_name] = "name";
-    rule_names[crush_grammar::_device] = "device";
-    rule_names[crush_grammar::_bucket_type] = "bucket_type";
-    rule_names[crush_grammar::_bucket_id] = "bucket_id";
-    rule_names[crush_grammar::_bucket_alg] = "bucket_alg";
-    rule_names[crush_grammar::_bucket_item] = "bucket_item";
-    rule_names[crush_grammar::_bucket] = "bucket";
-    rule_names[crush_grammar::_step_take] = "step_take";
-    rule_names[crush_grammar::_step_choose_indep] = "step_choose_indep";
-    rule_names[crush_grammar::_step_choose_firstn] = "step_choose_firstn";
-    rule_names[crush_grammar::_step_emit] = "step_emit";
-    rule_names[crush_grammar::_crushrule] = "rule";
-    rule_names[crush_grammar::_crushmap] = "map";
-    //tree_to_xml(cout, info.trees, big.c_str(), rule_names);
 
-
-    // print the result
-    cout << "parsing succeeded\n";
-    cout << "result = " << evaluate(info) << "\n\n";
-  }
-
+  cout << "parsing succeeded\n";
+  walk_crush_config(info.trees.begin(), crush);
+  
   return 0;
 }
 
