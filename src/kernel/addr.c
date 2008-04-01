@@ -62,43 +62,41 @@ out_unlock:
  */
 static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 {
-	struct inode *inode = page->mapping->host;
+	struct inode *inode;
 	struct ceph_inode_info *ci;
 	struct ceph_osd_client *osdc;
+	loff_t page_off = page->index << PAGE_CACHE_SHIFT;
+	int len = PAGE_CACHE_SIZE;
+	loff_t i_size;
 	int err = 0;
 	
 	if (!page->mapping || !page->mapping->host)
 		return -EFAULT;
-	
+	inode = page->mapping->host;
 	ci = ceph_inode(inode);
 	osdc = &ceph_inode_to_client(inode)->osdc;
+
+	i_size = i_size_read(inode);
+	if (i_size < page_off + len)
+		len = i_size - page_off;
+
+	dout(10, "ceph_writepage inode %p page %p index %lu on %llu~%u\n",
+	     inode, page, page->index, page_off, len);
 	
-	get_page(page);
+	page_cache_get(page);
 	set_page_writeback(page);
-	SetPageUptodate(page);
-	
-	dout(10, "ceph_writepage inode %p page %p index %lu\n",
-	     inode, page, page->index);
-	
+
+
 	/* write a page at the index of page->index, by size of PAGE_SIZE */
 	err = ceph_osdc_writepage(osdc, ceph_ino(inode), &ci->i_layout,
-				  page->index << PAGE_SHIFT, PAGE_SIZE, page);
-	if (err)
-		goto out_unlock;
-	
-	/* update written data size in ceph_inode_info */
-	spin_lock(&inode->i_lock);
-	if (inode->i_size <= PAGE_SIZE) {
-		inode->i_size = PAGE_SIZE;
-		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
-		dout(10, "extending file size to %d\n", (int)inode->i_size);
-	}
-	spin_unlock(&inode->i_lock);
-	
-out_unlock:
+				  page_off, len, page);
+	if (err >= 0)
+		SetPageUptodate(page);
+	//else
+	//redirty_page_for_writepage(page);  /* is this right?? */
+	unlock_page(page);
 	end_page_writeback(page);
-	put_page(page);
-	
+	page_cache_release(page);
 	return err;
 }
 
@@ -309,7 +307,6 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  struct page *page, void *fsdata)
 {
 	struct inode *inode = file->f_dentry->d_inode;
-	unsigned offset = pos & (PAGE_CACHE_SIZE - 1);
 
 	dout(10, "write_end file %p inode %p page %p %d~%d (%d)\n", file,
 	     inode, page, (int)pos, (int)copied, (int)len);
