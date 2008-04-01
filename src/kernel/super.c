@@ -217,6 +217,8 @@ enum {
 	Opt_debug_osdc,
 	Opt_monport,
 	Opt_port,
+	Opt_wsize,
+	/* int args above */
 	Opt_ip,
 	Opt_sillywrite,
 };
@@ -231,8 +233,9 @@ static match_table_t arg_tokens = {
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
+	{Opt_wsize, "wsize=%d"},
+	/* int args above */
 	{Opt_ip, "ip=%s"},
-	/* int args above, no arguments below */
 	{Opt_sillywrite, "sillywrite"},
 };
 
@@ -376,6 +379,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 
 			/* misc */
+		case Opt_wsize:
+			args->wsize = intval;
+			break;
 		case Opt_sillywrite:
 			args->silly_write = 1;
 			break;

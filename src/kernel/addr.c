@@ -76,6 +76,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	ci = ceph_inode(inode);
 	osdc = &ceph_inode_to_client(inode)->osdc;
 
+	/* is this a partial page at end of file? */
 	i_size = i_size_read(inode);
 	if (i_size < page_off + len)
 		len = i_size - page_off;
@@ -85,15 +86,12 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	
 	page_cache_get(page);
 	set_page_writeback(page);
-
-
-	/* write a page at the index of page->index, by size of PAGE_SIZE */
 	err = ceph_osdc_writepage(osdc, ceph_ino(inode), &ci->i_layout,
 				  page_off, len, page);
 	if (err >= 0)
 		SetPageUptodate(page);
-	//else
-	//redirty_page_for_writepage(page);  /* is this right?? */
+	else
+		redirty_page_for_writepage(wbc, page);  /* is this right?? */
 	unlock_page(page);
 	end_page_writeback(page);
 	page_cache_release(page);
@@ -104,23 +102,46 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
  * ceph_writepages:
  *  do write jobs for several pages
  */
-static int ceph_writepages(struct address_space *mapping, struct writeback_control *wbc)
+static int ceph_writepages(struct address_space *mapping, 
+			   struct writeback_control *wbc)
 {
-#if 0
 	struct inode *inode = mapping->host;
-	struct ceph_pageio_descriptor pgio;
-	int err;
+	struct ceph_client *client = ceph_inode_to_client(inode);
+	pgoff_t index, end;
+	int range_whole = 0;
+	int scanned = 0;
 
-	ceph_pageio_init_write(&pgio, inode, wb_priority(wbc));
-	wbc->fs_private = &pgio;
-	err = generic_writepages(mapping, wbc);
-	if (err)
-		return err;
+	dout(10, "writepages on %p\n", inode);
 
-	return 0;
-#endif
+	/* if wsize is small, write 1 page at a time */
+	if (client->mount_args.wsize &&
+	    client->mount_args.wsize < PAGE_CACHE_SIZE)
+		return generic_writepages(mapping, wbc);
+
+	/* ?? from cifs. */
+	/*
+	if (wbc->nonblocking && bdi_write_congested(bdi)) {
+		wbc->encountered_congestions = 1;
+		return 0;
+	}
+	*/
 
 	return generic_writepages(mapping, wbc);
+
+	/* where to start? */
+	if (wbc->range_cyclic) {
+		index = mapping->writeback_index; /* Start from prev offset */
+		end = -1;
+	} else {
+		index = wbc->range_start >> PAGE_CACHE_SHIFT;
+		end = wbc->range_end >> PAGE_CACHE_SHIFT;
+		if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
+			range_whole = 1;
+		scanned = 1;
+	}
+
+		
+
 }
 
 

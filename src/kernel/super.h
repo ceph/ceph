@@ -64,6 +64,7 @@ struct ceph_mount_args {
 	struct ceph_entity_addr mon_addr[5];
 	char path[100];
 	int silly_write;
+	int wsize;
 };
 
 
