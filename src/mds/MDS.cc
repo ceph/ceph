@@ -520,6 +520,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     assert(mdsmap->get_inc(whoami) > 0);
     objecter->set_client_incarnation(mdsmap->get_inc(whoami));
   }
+  // and inc_lock
+  objecter->set_inc_lock(mdsmap->get_last_failure());
 
   // for debug
   if (g_conf.mds_dump_cache_on_map)
@@ -776,11 +778,17 @@ class C_MDS_BootStart : public Context {
   int nextstep;
 public:
   C_MDS_BootStart(MDS *m, int n) : mds(m), nextstep(n) {}
-  void finish(int r) { mds->boot_start(nextstep); }
+  void finish(int r) { mds->boot_start(nextstep, r); }
 };
 
-void MDS::boot_start(int step)
+void MDS::boot_start(int step, int r)
 {
+  if (r < 0) {
+    dout(0) << "boot_start encountered an error, failing" << dendl;
+    suicide();
+    return;
+  }
+
   switch (step) {
   case 0:
     step = 1;  // fall-thru.

@@ -48,6 +48,16 @@ kernel client
     - flush data before unmount.
   - send (+deliver!) unmount message
 
+client
+- obey file_max
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
+- clean up client mds session vs mdsmap behavior?
+- client caps migration races
+  - caps need a seq number; reap logic needs to be a bit smarter
+  - also needs cope with mds failures
+
+
 osdmon
 - actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
@@ -117,8 +127,6 @@ mds
 - add FILE_CAP_EXTEND capability bit
 
 
-
-
 journaler
 - fix up for large events (e.g. imports)
 - use set_floor_and_read for safe takeover from possibly-not-quite-dead otherguy.
@@ -178,11 +186,10 @@ osd/rados
 - transaction prepare/commit
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
-- read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
+
+- a more general fencing mechanism?  per-object granularity isn't usually a good match.
 
 - consider implications of nvram writeahead logs
-- clean shutdown?
-- pgmonitor should supplement failure detection
 
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 

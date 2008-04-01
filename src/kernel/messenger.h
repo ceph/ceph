@@ -11,8 +11,9 @@
 struct ceph_msg;
 
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
-typedef void (*ceph_msgr_peer_reset_t) (void *c);
-typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m, int want);
+typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_name *pn);
+typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
+					  int want);
 
 static __inline__ const char *ceph_name_type_str(int t) {
 	switch (t) {
@@ -37,7 +38,7 @@ struct ceph_messenger {
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /*  doing handshake, or */
-	struct radix_tree_root con_open; /*  established. see get_connection() */
+	struct radix_tree_root con_open; /*  established */
 };
 
 struct ceph_msg {
@@ -55,46 +56,46 @@ struct ceph_msg_pos {
 };
 
 /* ceph connection fault delay defaults */
-#define BASE_DELAY_INTERVAL	1	
+#define BASE_DELAY_INTERVAL	1
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
-#define NEW           	 0
-#define CONNECTING       1
-#define ACCEPTING        2
-#define OPEN             3
-#define WRITE_PENDING    4  /* we have data to send */
-#define READABLE         5  /* set when socket gets new data */
-#define READING          6  /* provides mutual exclusion, protecting in_* */
-#define REJECTING        7
-#define CLOSING          8
-#define CLOSED           9
-#define SOCK_CLOSE       10 /* socket state changed to close */
-#define STANDBY          11 /* standby, when socket state close, no message queued */
+#define NEW		0
+#define CONNECTING	1
+#define ACCEPTING	2
+#define OPEN		3
+#define WRITE_PENDING	4  /* we have data to send */
+#define READABLE	5  /* set when socket gets new data */
+#define READING		6  /* provides mutual exclusion, protecting in_* */
+#define WAIT		7  /* wait for peer to connect */
+#define CLOSED		8  /* we've closed the connection */
+#define SOCK_CLOSE	9  /* socket state changed to close */
+#define STANDBY		10 /* standby, when socket state close, no messages */
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
 	unsigned long state;	/* connection state */
-	
+
 	atomic_t nref;
 
 	struct list_head list_all;   /* msgr->con_all */
 	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
-	__u32 connect_seq;     
+	struct ceph_entity_name peer_name; /* peer name */
+	__u32 connect_seq;
+	__le32 in_connect_seq, out_connect_seq;
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
 
 	/* connect state */
 	struct ceph_entity_addr actual_peer_addr;
-	__u32 peer_connect_seq;
 
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
 	struct list_head out_queue;
-	struct list_head out_sent;   /* sending/sent but unacked; resend if connection drops */
+	struct list_head out_sent;   /* sending/sent but unacked */
 
 	__le32 out32;
 	struct kvec out_kvec[4],
@@ -105,36 +106,36 @@ struct ceph_connection {
 	struct ceph_msg_pos out_msg_pos;
 
 	/* partially read message contents */
-	char in_tag;       /* READY (accepting, or no in-progress read) or ACK or MSG */
-	int in_base_pos;   /* for ack seq, or msg headers, or accept handshake */
-	__u32 in_partial_ack; 
+	char in_tag;
+	int in_base_pos;   /* for ack seq, or msg headers, or handshake */
+	__u32 in_partial_ack;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
 	struct work_struct rwork;		/* receive work */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct delayed_work swork;		/* send work */
-#else
-	struct work_struct	swork;		/* send work */
-#endif
-        unsigned long           delay;          /* delay interval */
-        unsigned int            retries;        /* temp track of retries */
+	unsigned long           delay;          /* delay interval */
+	unsigned int            retries;        /* temp track of retries */
 };
 
 
-extern struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr);
+extern struct ceph_messenger *
+ceph_messenger_create(struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
-extern void ceph_messenger_mark_down(struct ceph_messenger *msgr, struct ceph_entity_addr *addr);
+extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
+				     struct ceph_entity_addr *addr);
 
 extern void ceph_queue_write(struct ceph_connection *con);
 extern void ceph_queue_read(struct ceph_connection *con);
 
-extern struct ceph_msg *ceph_msg_new(int type, int front_len, int page_len, int page_off, struct page **pages);
+extern struct ceph_msg *ceph_msg_new(int type, int front_len,
+				     int page_len, int page_off,
+				     struct page **pages);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	atomic_inc(&msg->nref);
 }
 extern void ceph_msg_put(struct ceph_msg *msg);
-extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, 
+extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 			 unsigned long timeout);
 
 #endif

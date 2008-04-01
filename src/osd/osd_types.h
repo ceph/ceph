@@ -160,9 +160,10 @@ namespace __gnu_cxx {
 
 inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
-  out << "pg" << ol.ol_pgid;
-  if (ol.ol_stripe_unit)
-    out << ".su=" << ol.ol_stripe_unit;
+  out << pg_t(le64_to_cpu(ol.ol_pgid));
+  int su = le32_to_cpu(ol.ol_stripe_unit);
+  if (su)
+    out << ".su=" << su;
   return out;
 }
 

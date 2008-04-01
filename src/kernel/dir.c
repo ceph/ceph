@@ -397,6 +397,12 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+
+	dget(dentry);                /* to match put_request below */
+	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
+	igrab(old_dentry->d_inode);
+	req->r_last_inode = old_dentry->d_inode;
+
 	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);

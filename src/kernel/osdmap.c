@@ -543,6 +543,8 @@ void calc_object_layout(struct ceph_object_layout *ol,
 			struct ceph_osdmap *osdmap)
 {
 	unsigned num, num_mask;
+	union ceph_pg pgid;
+
 	if (fl->fl_pg_preferred >= 0) {
 		num = osdmap->lpg_num;
 		num_mask = osdmap->lpg_num_mask;
@@ -550,12 +552,15 @@ void calc_object_layout(struct ceph_object_layout *ol,
 		num = osdmap->pg_num;
 		num_mask = osdmap->pg_num_mask;
 	}
-	ol->ol_pgid.pg.ps = 
-		ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, 
-							  oid->ino>>32), 
-				num, num_mask);
-	ol->ol_pgid.pg.preferred = fl->fl_pg_preferred;
-	ol->ol_pgid.pg.type = fl->fl_pg_type;
-	ol->ol_pgid.pg.size = fl->fl_pg_size;
-	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
+
+	pgid.pg64 = 0;   /* start with it zeroed out */
+	pgid.pg.ps = ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, 
+							       oid->ino>>32), 
+				     num, num_mask);
+	pgid.pg.preferred = fl->fl_pg_preferred;
+	pgid.pg.type = fl->fl_pg_type;
+	pgid.pg.size = fl->fl_pg_size;
+
+	ol->ol_pgid = cpu_to_le64(pgid.pg64);
+	ol->ol_stripe_unit = cpu_to_le32(fl->fl_object_stripe_unit);
 }

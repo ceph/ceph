@@ -186,7 +186,7 @@ struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
 	req->r_tid = head->tid = ++osdc->last_tid;
 	req->r_flags = 0;
 	req->r_request = msg;
-	req->r_pgid = head->layout.ol_pgid;
+	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 	req->r_reply = 0;
 	req->r_result = 0;
 	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */

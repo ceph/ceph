@@ -14,7 +14,7 @@ int ceph_client_debug = 50;
 
 
 void ceph_dispatch(void *p, struct ceph_msg *msg);
-void ceph_peer_reset(void *c);
+void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name);
 
 
 /*
@@ -322,7 +322,12 @@ const char *ceph_msg_type_name(int type)
 	return "unknown";
 }
 
-void ceph_peer_reset(void *c)
+void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
 {
-	return;
+	struct ceph_client *client = p;
+	
+	dout(30, "ceph_peer_reset peer_name = %s%d\n", 
+	     ceph_name_type_str(peer_name->type), le32_to_cpu(peer_name->num));
+
+	/* write me */
 }

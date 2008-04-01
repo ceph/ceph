@@ -55,12 +55,10 @@ public:
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
-      return !sent_ack && !sent_commit &&
-        waitfor_ack.empty(); 
+      return !sent_ack && !sent_commit && waitfor_ack.empty(); 
     }
     bool can_send_commit() { 
-      return !sent_commit &&
-        waitfor_ack.empty() && waitfor_commit.empty(); 
+      return !sent_commit && waitfor_ack.empty() && waitfor_commit.empty(); 
     }
     bool can_delete() { 
       return waitfor_ack.empty() && waitfor_commit.empty(); 
@@ -106,7 +104,7 @@ protected:
   void prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
 			      pg_t pgid, int op, pobject_t poid, 
 			      off_t offset, off_t length, bufferlist& bl,
-			      eversion_t& version, objectrev_t crev, objectrev_t rev);
+			      eversion_t& version, __u32 inc_lock, objectrev_t crev, objectrev_t rev);
 
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;

@@ -676,9 +676,6 @@ void Server::handle_client_request(MClientRequest *req)
     // they have a high request rate.
   }
 
-  // okay, i want
-  CInode *ref = 0;
-
   // retry?
   if (req->get_retry_attempt()) {
     assert(session);
@@ -699,12 +696,6 @@ void Server::handle_client_request(MClientRequest *req)
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) return;
   mdr->session = session;
-
-  if (ref) {
-    dout(10) << "inode op on ref " << *ref << dendl;
-    mdr->ref = ref;
-    mdr->pin(ref);
-  }
 
   dispatch_client_request(mdr);
   return;
@@ -1232,9 +1223,17 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 {
+  dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
+
   // already got ref?
-  if (mdr->ref) 
+  if (mdr->ref) {
+    if (mdr->trace.size()) {
+      CDentry *last = mdr->trace[mdr->trace.size()-1];
+      assert(last->get_inode() == mdr->ref);
+    }
+    dout(10) << "rdlock_path_pin_ref had " << *mdr->ref << dendl;
     return mdr->ref;
+  }
 
   MClientRequest *req = mdr->client_request;
 
@@ -1329,6 +1328,15 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist)
 {
   MClientRequest *req = mdr->client_request;
+
+  dout(10) << "rdlock_path_xlock_dentry " << *mdr << dendl;
+
+  if (mdr->ref) {
+    CDentry *last = mdr->trace[mdr->trace.size()-1];
+    assert(last->get_inode() == mdr->ref);
+    dout(10) << "rdlock_path_xlock_dentry had " << *last << " " << *mdr->ref << dendl;
+    return last;
+  }
 
   vector<CDentry*> trace;
   CDir *dir = traverse_to_auth_dir(mdr, trace, req->get_filepath());
@@ -3900,6 +3908,8 @@ void Server::handle_client_open(MDRequest *mdr)
 
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
+  dout(7) << "open on " << req->get_filepath() << dendl;
+
   CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
   if (!cur) return;
 
@@ -4123,6 +4133,8 @@ void Server::handle_client_openc(MDRequest *mdr)
     } 
     
     // pass to regular open handler.
+    mdr->trace.push_back(dn);
+    mdr->ref = dn->get_inode();
     handle_client_open(mdr);
     return;
   }

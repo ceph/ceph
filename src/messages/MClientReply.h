@@ -99,7 +99,7 @@ struct DirStat {
 
 struct InodeStat {
   //inode_t inode;
-  __u64 ino;
+  inodeno_t ino;
   ceph_file_layout layout;
   utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;

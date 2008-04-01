@@ -391,7 +391,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->ino 
+  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->ino
            << "  size " << ist->size
            << "  mtime " << ist->mtime
 	   << " dmask " << dmask
@@ -1693,6 +1693,9 @@ int Client::unmount()
 
   dout(2) << "unmounting" << dendl;
   unmounting = true;
+
+  timer.cancel_event(tick_event);
+  tick_event = 0;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
   assert(fd_map.empty());
@@ -3106,10 +3109,10 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     bool done = false;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
     if (in->hack_balance_reads ||
 	g_conf.client_hack_balance_reads)
-      rd->balance_reads = true;
+      rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
     assert(r >= 0);
 

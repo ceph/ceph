@@ -48,13 +48,14 @@ void RAID4PG::do_op(MOSDOp *op)
   off_t left = op->get_length();
 
   // map data onto pobjects
+  int su = le32_to_cpu(layout.ol_stripe_unit);
   int n = pg.size() - 1;  // n+1 raid4
-  int rank = (off % layout.ol_stripe_unit) % n;
+  int rank = (off % su) % n;
   off_t off_in_bl = 0;
   while (left > 0) {
     pobject_t po(0, rank, oid);
-    off_t off_in_po = off % layout.ol_stripe_unit;
-    off_t stripe_unit_end = off - off_in_po + layout.ol_stripe_unit;
+    off_t off_in_po = off % su;
+    off_t stripe_unit_end = off - off_in_po + su;
     off_t len_in_po = MAX(left, stripe_unit_end-off);
     bufferlist data_in_po;
     data_in_po.substr_of(data, off_in_bl, len_in_po);

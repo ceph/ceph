@@ -401,7 +401,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), &onfinish->bl,
+  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), &onfinish->bl, 0,
                  onfinish);
 }
 
@@ -490,7 +490,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), bh->bl,
+  tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), bh->bl, 0,
                               onack, oncommit);
 
   // set bh last_write_tid
@@ -1121,7 +1121,7 @@ void ObjectCacher::rdlock(Object *o)
     commit->tid = 
       ack->tid = 
       o->last_write_tid = 
-      objecter->lock(CEPH_OSD_OP_RDLOCK, o->get_oid(), o->get_layout(), ack, commit);
+      objecter->lock(CEPH_OSD_OP_RDLOCK, o->get_oid(), 0, o->get_layout(), ack, commit);
   }
   
   // stake our claim.
@@ -1165,7 +1165,7 @@ void ObjectCacher::wrlock(Object *o)
     commit->tid = 
       ack->tid = 
       o->last_write_tid = 
-      objecter->lock(op, o->get_oid(), o->get_layout(), ack, commit);
+      objecter->lock(op, o->get_oid(), 0, o->get_layout(), ack, commit);
   }
   
   // stake our claim.
@@ -1209,7 +1209,7 @@ void ObjectCacher::rdunlock(Object *o)
   commit->tid = 
     lockack->tid = 
     o->last_write_tid = 
-    objecter->lock(CEPH_OSD_OP_RDUNLOCK, o->get_oid(), o->get_layout(), lockack, commit);
+    objecter->lock(CEPH_OSD_OP_RDUNLOCK, o->get_oid(), 0, o->get_layout(), lockack, commit);
 }
 
 void ObjectCacher::wrunlock(Object *o)
@@ -1242,7 +1242,7 @@ void ObjectCacher::wrunlock(Object *o)
   commit->tid = 
     lockack->tid = 
     o->last_write_tid = 
-    objecter->lock(op, o->get_oid(), o->get_layout(), lockack, commit);
+    objecter->lock(op, o->get_oid(), 0, o->get_layout(), lockack, commit);
 }
 
 
