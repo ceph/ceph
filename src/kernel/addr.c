@@ -502,12 +502,12 @@ static int ceph_releasepage(struct page *page, gfp_t gfpmask)
 
 
 const struct address_space_operations ceph_aops = {
-	.readpage = ceph_readpage,
-	.readpages = ceph_readpages,
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
 	//.prepare_write = ceph_prepare_write,
 	//.commit_write = ceph_commit_write,
+	.readpage = ceph_readpage,
+	//.readpages = ceph_readpages,
 	.writepage = ceph_writepage,
 	.writepages = ceph_writepages,
 //	.set_page_dirty = ceph_set_page_dirty,
