@@ -25,10 +25,6 @@ struct ceph_readdesc {
 static int ceph_readpage_async(struct ceph_osd_client *osdc,
 			  struct ceph_msg *reqm, 
 			  struct page *page);
-static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			  struct ceph_file_layout *layout, 
-			  loff_t off, loff_t len,
-				struct page *page);
 
 void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 {
@@ -660,25 +656,6 @@ int ceph_osdc_commit_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	return ret;
 }
 
-/*
- * Do write a single page, sending data to remote OSDs.
- */
-int ceph_osdc_writepage(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			struct ceph_file_layout *layout, 
-			loff_t off, loff_t len,
-			struct page *page)
-{
-	int ret = 0;
-	
-	dout(10, "writepage on ino %llx at %lld~%lld\n", ino, off, len);
-	BUG_ON(len > PAGE_SIZE);
-	
-	kmap(page);
-	ret = ceph_writepage_async(osdc, ino, layout, off, len, page);
-	kunmap(page);
-	return ret;
-}
-
 
 /*
  * do a read job for one page
@@ -729,12 +706,12 @@ static int ceph_readpage_async(struct ceph_osd_client *osdc,
 }
 
 /*
- * do a write job for one page
+ * do a write job for N pages
  */
-static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
-				struct ceph_file_layout *layout, 
-				loff_t off, loff_t len,
-				struct page *page)
+int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
+			 struct ceph_file_layout *layout, 
+			 loff_t off, loff_t len,
+			 struct page **pagevec, int nr_pages)
 {
 	struct ceph_msg *reqm, *reply;
 	struct ceph_osd_request_head *reqhead;
@@ -747,7 +724,7 @@ static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE);
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
-	req = alloc_request(1);
+	req = alloc_request(nr_pages);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		return PTR_ERR(req);
@@ -758,23 +735,23 @@ static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	reqhead->oid.rev = 0;
 	reqhead->flags = CEPH_OSD_OP_ACK;    /* just ACK for now */
 
-	dout(10, "writepage_async getting object mapping on %llx %llu~%llu\n",
+	dout(10, "writepages getting object mapping on %llx %llu~%llu\n",
 	     ino, off, len);
 	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
 				 &reqhead->offset, &reqhead->length);
 	if (tlen != 0) {
-		dout(10, "not writing complete bit.. "
+		dout(10, "writepages not writing complete extent... "
 		     "skipping last %llu, doing %llu~%llu\n", tlen, off, len);
 		len -= tlen;
 	}
 	calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
 			   osdc->osdmap);
-	dout(10, "writepage_async object block %u %llu~%llu\n",
+	dout(10, "writepages object block %u is %llu~%llu\n",
 	     reqhead->oid.bno, reqhead->offset, reqhead->length);
 	
 	/* register+send request */
 	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, 1, req);
+	req = register_request(osdc, reqm, nr_pages, req);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
 		put_request(req);
@@ -783,24 +760,22 @@ static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 	
 	/* copy data into a page in a request message */
-	dout(10, "writepage_async alloc\n");
-	req->r_pages[0] = page;
-	
+	memcpy(req->r_pages, pagevec, nr_pages * sizeof(struct page *));
 	req->r_request->pages = req->r_pages;
 	req->r_request->nr_pages = req->r_nr_pages;
 	req->r_request->hdr.data_len = len;
 	req->r_request->hdr.data_off = off;
-	
 	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	dout(10, "writepage_async send\n");
+	
+	dout(10, "writepages sending request\n");
 	send_request(osdc, req);
 	spin_unlock(&osdc->lock);
 	
 	/* wait */
-	dout(10, "writepage_async tid %llu waiting for reply on %p\n", 
+	dout(10, "writepages tid %llu waiting for reply on %p\n", 
 	     req->r_tid, req);
 	wait_for_completion(&req->r_completion);
-	dout(10, "writepage_async tid %llu got reply on %p\n", req->r_tid, req);
+	dout(10, "writepages tid %llu got reply on %p\n", req->r_tid, req);
 	
 	spin_lock(&osdc->lock);
 	unregister_request(osdc, req);
@@ -809,7 +784,13 @@ static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	reply = req->r_reply;
 	replyhead = reply->front.iov_base;
 	ret = le32_to_cpu(replyhead->result);
-	dout(10, "writepage_async result %d\n", ret);
+	dout(10, "writepages result %d\n", ret);
 	put_request(req);
-	return ret;
+	
+	/* return error, or number of bytes written */
+	if (ret < 0)
+		return ret;
+	return len;
 }
+
+

@@ -3,6 +3,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/writeback.h>	/* generic_writepages */
+#include <linux/pagevec.h>
 
 int ceph_debug_addr = 50;
 #define DOUT_VAR ceph_debug_addr
@@ -86,8 +87,10 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	
 	page_cache_get(page);
 	set_page_writeback(page);
-	err = ceph_osdc_writepage(osdc, ceph_ino(inode), &ci->i_layout,
-				  page_off, len, page);
+	kmap(page);
+	err = ceph_osdc_writepages(osdc, ceph_ino(inode), &ci->i_layout,
+				   page_off, len, &page, 1);
+	kunmap(page);
 	if (err >= 0)
 		SetPageUptodate(page);
 	else
@@ -106,10 +109,14 @@ static int ceph_writepages(struct address_space *mapping,
 			   struct writeback_control *wbc)
 {
 	struct inode *inode = mapping->host;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_inode_to_client(inode);
 	pgoff_t index, end;
 	int range_whole = 0;
-	int scanned = 0;
+	int should_loop = 1;
+	struct pagevec pvec;
+	int done = 0;
+	int rc = 0;
 
 	dout(10, "writepages on %p\n", inode);
 
@@ -126,22 +133,138 @@ static int ceph_writepages(struct address_space *mapping,
 	}
 	*/
 
-	return generic_writepages(mapping, wbc);
+	//return generic_writepages(mapping, wbc);
 
 	/* where to start? */
+	pagevec_init(&pvec, 0);
 	if (wbc->range_cyclic) {
 		index = mapping->writeback_index; /* Start from prev offset */
 		end = -1;
+		dout(10, "cyclic, start at %lu\n", index);
 	} else {
 		index = wbc->range_start >> PAGE_CACHE_SHIFT;
 		end = wbc->range_end >> PAGE_CACHE_SHIFT;
 		if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
 			range_whole = 1;
-		scanned = 1;
+		should_loop = 0;
+		dout(10, "not cyclic, %lu to %lu\n", index, end);
 	}
+	
 
+retry:
+	while (!done && index <= end) {
+		int first;       /* index of first page in pvec */
+		unsigned i;
+		pgoff_t next;
+		struct page *page;
+		int nr_pages, locked_pages;
+
+		nr_pages = pagevec_lookup_tag(&pvec, mapping, &index,
+			      PAGECACHE_TAG_DIRTY,
+			      min(end - index, (pgoff_t)PAGEVEC_SIZE - 1) + 1);
+		dout(30, "lookup_tag got %d pages\n", nr_pages);
+		if (!nr_pages)
+			break;
+
+		first = -1;
+		next = 0;
+		locked_pages = 0;
 		
+		for (i = 0; i < nr_pages; i++) {
+			page = pvec.pages[i];
+			dout(30, "trying page %p\n", page);
+			if (first < 0)
+				lock_page(page);
+			else if (TestSetPageLocked(page))
+				break;
+			if (unlikely(page->mapping != mapping)) {
+				unlock_page(page);
+				break;
+			}
+			if (!wbc->range_cyclic && page->index > end) {
+				done = 1;
+				unlock_page(page);
+				break;
+			}
+			if (next && (page->index != next)) {
+				/* Not next consecutive page */
+				unlock_page(page);
+				break;
+			}
+			if (wbc->sync_mode != WB_SYNC_NONE)
+				wait_on_page_writeback(page);
+			if (PageWriteback(page) ||
+			    !clear_page_dirty_for_io(page)) {
+				unlock_page(page);
+				break;
+			}
 
+			/* ok */
+			set_page_writeback(page);
+			if (page_offset(page) >= i_size_read(inode)) {
+				done = 1;
+				unlock_page(page);
+				end_page_writeback(page);
+				break;
+			}
+			dout(20, "writepages locked page %p index %lu\n",
+			     page, page->index);
+			kmap(page);
+			if (first < 0)
+				first = i;
+			locked_pages++;
+			next = page->index + 1;
+		}
+
+		/* did we get anything? */
+		if (first >= 0) {
+			loff_t offset = pvec.pages[first]->index <<
+				PAGE_CACHE_SHIFT;
+			loff_t len = min(i_size_read(inode) - offset,
+				 (loff_t)locked_pages << PAGE_CACHE_SHIFT);
+			dout(10, "writepages got %d pages at %llu~%llu\n",
+			     locked_pages, offset, len);
+			rc = ceph_osdc_writepages(&client->osdc, 
+						  ceph_ino(inode), 
+						  &ci->i_layout,
+						  offset, len,
+						  pvec.pages + first,
+						  locked_pages);
+			dout(20, "writepages rc %d\n", rc);
+						     
+			/* unmap+unlock pages */
+			for (i = 0; i < locked_pages; i++) {
+				page = pvec.pages[first + i];
+				if (rc > (i << PAGE_CACHE_SHIFT))
+					SetPageUptodate(page);
+				else if (rc < 0)
+					SetPageError(page);
+				kunmap(page);
+				unlock_page(page);
+				end_page_writeback(page);
+			}				
+
+			/* continue? */
+			index = next;
+			wbc->nr_to_write -= locked_pages;
+			if (wbc->nr_to_write <= 0)
+				done = 1;
+		}
+		pagevec_release(&pvec);
+	}
+	
+	if (should_loop && !done) {
+		/* more to do; loop back to beginning of file */
+		dout(10, "looping back to beginning of file\n");
+		should_loop = 0;
+		index = 0;
+		goto retry;
+	}
+	if (wbc->range_cyclic || (range_whole && wbc->nr_to_write > 0))
+		mapping->writeback_index = index;
+
+	dout(10, "writepages done, rc = %d\n", rc);
+	return rc;
 }
 
 
@@ -386,7 +509,7 @@ const struct address_space_operations ceph_aops = {
 	//.prepare_write = ceph_prepare_write,
 	//.commit_write = ceph_commit_write,
 	.writepage = ceph_writepage,
-//     .writepages = ceph_writepages,
+	.writepages = ceph_writepages,
 //	.set_page_dirty = ceph_set_page_dirty,
 	.releasepage = ceph_releasepage,
 };
