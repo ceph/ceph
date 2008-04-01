@@ -87,9 +87,8 @@ private:
       STATE_OPEN,
       STATE_STANDBY,
       STATE_CLOSED,
-      STATE_CLOSING
-      //STATE_GOTCLOSE,  // got (but haven't sent) a close
-      //STATE_SENTCLOSE  // sent (but haven't got) a close
+      STATE_CLOSING,
+      STATE_WAIT       // just wait for racing connection
     };
 
     int sd;
@@ -107,7 +106,6 @@ private:
     utime_t last_attempt;  // time of last reconnect attempt
 
     bool reader_running;
-    bool kick_reader_on_join;
     bool writer_running;
 
     list<Message*> q;
@@ -132,6 +130,8 @@ private:
     void fault(bool silent=false);
     void fail();
 
+    void was_session_reset();
+
     void report_failures();
 
     // threads
@@ -155,7 +155,7 @@ private:
     Pipe(int st) : 
       sd(-1),
       state(st), 
-      reader_running(false), kick_reader_on_join(false), writer_running(false),
+      reader_running(false), writer_running(false),
       connect_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
@@ -181,10 +181,7 @@ private:
     void dirty_close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
-      if (reader_thread.is_started()) {
-	//if (kick_reader_on_join) reader_thread.kill(SIGUSR1);
-	reader_thread.join();
-      }
+      if (reader_thread.is_started()) reader_thread.join();
     }
     void stop();
 
