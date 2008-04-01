@@ -34,25 +34,79 @@ out_unlock:
 }
 
 static int ceph_readpages(struct file *file, struct address_space *mapping,
-			  struct list_head *pages, unsigned nr_pages)
+			  struct list_head *page_list, unsigned nr_pages)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
-	int err = 0;
+	int rc = 0;
+	struct page *page;
+	int contig_pages = 0;
+	int next_index;
+	struct ceph_osd_request *oreq;
+	struct pagevec pvec;
+	loff_t offset;
 
-	dout(10, "ceph_readpages inode %p file %p nr_pages %d\n",
+	dout(10, "readpages inode %p file %p nr_pages %d\n",
 	     inode, file, nr_pages);
 
-	err = ceph_osdc_readpages(osdc, mapping, ceph_ino(inode), &ci->i_layout,
-				  pages, nr_pages);
-	if (err < 0)
-		goto out_unlock;
+	/* alloc request, w/ page vector */
+	oreq = ceph_osdc_alloc_request(nr_pages);
+	if (oreq == 0)
+		return -ENOMEM;
 
-out_unlock:
-	return err;
+	/* find adjacent pages */
+	BUG_ON(list_empty(page_list));
+	page = list_entry(page_list->prev, struct page, lru);
+	offset = page->index << PAGE_CACHE_SHIFT;
+	next_index = page->index;
+	contig_pages = 0;
+	list_for_each_entry_reverse(page, page_list, lru) {
+		if (page->index == next_index) {
+			oreq->r_pages[contig_pages] = page;
+			contig_pages++;
+			next_index++;
+		} else
+			break;
+	}
+	dout(10, "readpages found %d/%d contig\n", contig_pages, nr_pages);
+	if (contig_pages == 0)
+		return 0;
+	rc = ceph_osdc_readpages(osdc, mapping, ceph_ino(inode), &ci->i_layout,
+				 offset, contig_pages << PAGE_CACHE_SHIFT,
+				 oreq);
+	if (rc < 0)
+		goto out;
+	
+	/* set uptodate and add to lru in pagevec-sized chunks */
+	pagevec_init(&pvec, 0);
+	for (; rc > 0; rc -= PAGE_CACHE_SIZE) {
+		if (list_empty(&page_list))
+			break;  /* WTF */
+		page = list_entry(page_list->prev, struct page, lru);
+		list_del(&page->lru);
 
+		if (add_to_page_cache(page, mapping, page->index,
+				      GFP_KERNEL)) {
+			page_cache_release(page);
+			dout(20, "readpages add_to_page_cache failed on %p\n",
+			     page);
+			continue;
+		}
+		dout(10, "readpages adding page %p\n", page);
+		flush_dcache_page(page);
+		SetPageUptodate(page);
+		unlock_page(page);
+		if (pagevec_add(&pvec, page) == 0)
+			pagevec_lru_add(&pvec);
+	}
+	pagevec_lru_add(&pvec);
 
+out:
+	ceph_osdc_put_request(oreq);
+	if (rc < 0)
+		return rc;
+	return 0;
 }
 
 
@@ -507,7 +561,7 @@ const struct address_space_operations ceph_aops = {
 	//.prepare_write = ceph_prepare_write,
 	//.commit_write = ceph_commit_write,
 	.readpage = ceph_readpage,
-	//.readpages = ceph_readpages,
+	.readpages = ceph_readpages,
 	.writepage = ceph_writepage,
 	.writepages = ceph_writepages,
 //	.set_page_dirty = ceph_set_page_dirty,

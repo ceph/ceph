@@ -183,20 +183,22 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	ssize_t ret;
 	int got = 0;
 
-	dout(10, "read trying to get caps\n");
+	dout(10, "read %llx %llu~%u trying to get caps\n",
+	     ceph_ino(inode), *ppos, (unsigned)len);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD, 
 							 CEPH_CAP_RDCACHE, 
 							 &got));
 	if (ret < 0) 
 		goto out;
-	dout(10, "read got cap refs on %d\n", got);
+	dout(10, "read %llx %llu~%u got cap refs on %d\n",
+	     ceph_ino(inode), *ppos, (unsigned)len, got);
 
 	//if (got & CEPH_CAP_RDCACHE) {
 	ret = do_sync_read(filp, buf, len, ppos);
 
 out:
-	dout(10, "read dropping cap refs on %d\n", got);
+	dout(10, "read %llx dropping cap refs on %d\n", ceph_ino(inode), got);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
