@@ -914,7 +914,7 @@ static void __replace_connection(struct ceph_messenger *msgr, struct ceph_connec
 	}
 	spin_unlock(&old->out_queue_lock);
 
-	new->connect_seq = old->connect_seq;
+	new->connect_seq =  le32_to_cpu(new->in_connect_seq);
 	new->out_seq = old->out_seq;
 
 	/* replace list entry */
@@ -974,13 +974,11 @@ static void process_accept(struct ceph_connection *con)
 				   tell peer to wait for our outgoing 
 				   connection to go through */
 				prepare_write_accept_reply(con, &tag_wait);
-				goto done;
 			}
 		} else if (existing->connect_seq == 0 && 
 			  (peer_cseq > existing->connect_seq)) {
 			/* we reset and already reconnecting */
 			prepare_write_accept_reply(con, &tag_reset);
-			goto done;
 		} else {
 			/* reconnect case, replace connection */
 			__replace_connection(msgr, existing, con);
@@ -993,9 +991,9 @@ static void process_accept(struct ceph_connection *con)
 		dout(20, "process_accept no existing connection, connection now OPEN\n");
 		__add_connection(msgr, con);
                 set_bit(OPEN, &con->state);
+		con->connect_seq = peer_cseq + 1;
 		prepare_write_accept_reply(con, &tag_ready);
 	}
-done:
 	spin_unlock(&msgr->con_lock);
 	/* queue write */
 	ceph_queue_write(con);
