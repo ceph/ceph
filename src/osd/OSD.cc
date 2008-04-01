@@ -1886,8 +1886,8 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), parentid.size(),
 						      parentid.pool(), parentid.preferred());
-    if (l.ol_pgid.pg64 != parentid.u.pg64) {
-      pg_t pgid(l.ol_pgid);
+    if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {
+      pg_t pgid(le64_to_cpu(l.ol_pgid));
       dout(20) << "  moving " << poid << " from " << parentid << " -> " << pgid << dendl;
       PG *child = children[pgid];
       assert(child);

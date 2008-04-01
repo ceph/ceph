@@ -158,13 +158,13 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	dout(-10) << "preprocess_op balance-reads on " << oid << dendl;
 	balancing_reads.insert(oid);
 	ceph_object_layout layout;
-	layout.ol_pgid = info.pgid.u;
-	layout.ol_stripe_unit = 0;
+	layout.ol_pgid = cpu_to_le64(info.pgid.u.pg64);
+	layout.ol_stripe_unit = cpu_to_le32(0);
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
-				 CEPH_OSD_OP_BALANCEREADS);
+				 CEPH_OSD_OP_BALANCEREADS, 0);
 	do_op(pop);
       }
       if (is_balanced && !should_balance &&
@@ -172,13 +172,13 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	dout(-10) << "preprocess_op unbalance-reads on " << oid << dendl;
 	unbalancing_reads.insert(oid);
 	ceph_object_layout layout;
-	layout.ol_pgid = info.pgid.u;
-	layout.ol_stripe_unit = 0;
+	layout.ol_pgid = cpu_to_le64(info.pgid.u.pg64);
+	layout.ol_stripe_unit = cpu_to_le32(0);
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
-				 CEPH_OSD_OP_UNBALANCEREADS);
+				 CEPH_OSD_OP_UNBALANCEREADS, 0);
 	do_op(pop);
       }
     }
@@ -512,41 +512,56 @@ void ReplicatedPG::op_read(MOSDOp *op)
   if (oid.rev && !pick_object_rev(oid)) {
     // we have no revision for this request.
     r = -EEXIST;
-  } else {
-    switch (op->get_op()) {
-    case CEPH_OSD_OP_READ:
-      {
-	// read into a buffer
-	bufferlist bl;
-	r = osd->store->read(poid, 
-			     op->get_offset(), op->get_length(),
-			     bl);
-	reply->set_data(bl);
-	if (r >= 0) 
-	  reply->set_length(r);
-	else
-	  reply->set_length(0);
-	dout(10) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
-      }
-      osd->logger->inc("c_rd");
-      osd->logger->inc("c_rdb", op->get_length());
-      break;
-
-    case CEPH_OSD_OP_STAT:
-      {
-	struct stat st;
-	memset(&st, sizeof(st), 0);
-	r = osd->store->stat(poid, &st);
-	if (r >= 0)
-	  reply->set_length(st.st_size);
-      }
-      break;
-
-    default:
-      assert(0);
+    goto done;
+  } 
+  
+  // check inc_lock?
+  if (op->get_inc_lock() > 0) {
+    __u32 cur = 0;
+    osd->store->getattr(poid, "inc_lock", &cur, sizeof(cur));
+    if (cur > op->get_inc_lock()) {
+      dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
+	       << " on " << poid << dendl;
+      r = -EINCLOCKED;
+      goto done;
     }
   }
   
+  switch (op->get_op()) {
+  case CEPH_OSD_OP_READ:
+    {
+      // read into a buffer
+      bufferlist bl;
+      r = osd->store->read(poid, 
+			   op->get_offset(), op->get_length(),
+			   bl);
+      reply->set_data(bl);
+      if (r >= 0) 
+	reply->set_length(r);
+      else
+	reply->set_length(0);
+      dout(10) << " read got " << r << " / " << op->get_length() << " bytes from obj " << oid << dendl;
+    }
+    osd->logger->inc("c_rd");
+    osd->logger->inc("c_rdb", op->get_length());
+    break;
+    
+  case CEPH_OSD_OP_STAT:
+    {
+      struct stat st;
+      memset(&st, sizeof(st), 0);
+      r = osd->store->stat(poid, &st);
+      if (r >= 0)
+	reply->set_length(st.st_size);
+    }
+    break;
+    
+  default:
+      assert(0);
+  }
+  
+  
+ done:
   if (r >= 0) {
     reply->set_result(0);
 
@@ -623,7 +638,7 @@ void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t,
 void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
 					  pg_t pgid, int op, pobject_t poid, 
 					  off_t offset, off_t length, bufferlist& bl,
-					  eversion_t& version, objectrev_t crev, objectrev_t rev)
+					  eversion_t& version, __u32 inc_lock, objectrev_t crev, objectrev_t rev)
 {
   bool did_clone = false;
 
@@ -675,13 +690,6 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
     }
     break;
 
-  case CEPH_OSD_OP_MININCLOCK:
-    {
-      uint32_t mininc = length;
-      t.setattr(poid, "mininclock", &mininc, sizeof(mininc));
-    }
-    break;
-
   case CEPH_OSD_OP_BALANCEREADS:
     {
       bool bal = true;
@@ -703,6 +711,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       bufferlist nbl;
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
       t.write(poid, offset, length, nbl);
+      if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
     
@@ -714,8 +723,10 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       if (r >= 0) {
 	if (offset == 0 && offset + length >= (off_t)st.st_size) 
 	  t.remove(poid);
-	else
+	else {
 	  t.zero(poid, offset, length);
+	  if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+	}
       } else {
 	// noop?
 	dout(10) << "apply_transaction zero on " << poid << ", but dne?  stat returns " << r << dendl;
@@ -726,6 +737,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
       t.truncate(poid, length);
+      if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
     
@@ -842,27 +854,29 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
   dout(10) << "put_repop " << *repop << dendl;
   
   // commit?
-  if (repop->can_send_commit() &&
-      repop->op->wants_commit()) {
-    // send commit.
-    MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
-    dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
-    osd->messenger->send_message(reply, repop->op->get_client_inst());
-    repop->sent_commit = true;
+  if (repop->can_send_commit()) {
+    if (repop->op->wants_commit()) {
+      // send commit.
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
+      dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
+      osd->messenger->send_message(reply, repop->op->get_client_inst());
+      repop->sent_commit = true;
+    }
   }
 
   // ack?
-  else if (repop->can_send_ack() &&
-           repop->op->wants_ack()) {
+  else if (repop->can_send_ack()) {
     // apply
     if (!repop->applied)
       apply_repop(repop);
 
-    // send ack
-    MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
-    dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
-    osd->messenger->send_message(reply, repop->op->get_client_inst());
-    repop->sent_ack = true;
+    if (repop->op->wants_ack()) {
+      // send ack
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
+      dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
+      osd->messenger->send_message(reply, repop->op->get_client_inst());
+      repop->sent_ack = true;
+    }
 
     utime_t now = g_clock.now();
     now -= repop->start;
@@ -912,7 +926,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->op->get_op(), 
 				repop->op->get_offset(), repop->op->get_length(), 
 				osd->osdmap->get_epoch(), 
-				repop->rep_tid, repop->new_version);
+				repop->rep_tid, repop->op->get_inc_lock(), repop->new_version);
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
   wr->set_pg_trim_to(peers_complete_thru);
   wr->set_peer_stat(osd->get_my_stat_for(now, dest));
@@ -1139,6 +1153,20 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       block_if_wrlocked(op)) 
     return; // op will be handled later, after the object unlocks
   
+  // check inc_lock?
+  if (op->get_inc_lock() > 0) {
+    __u32 cur = 0;
+    osd->store->getattr(poid, "inc_lock", &cur, sizeof(cur));
+    if (cur > op->get_inc_lock()) {
+      dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
+	       << " on " << poid << dendl;
+      MOSDOpReply *reply = new MOSDOpReply(op, -EINCLOCKED, osd->osdmap->get_epoch(), true);
+      osd->messenger->send_message(reply, op->get_client_inst());
+      delete op;
+      return;
+    }
+  }
+
   // balance-reads set?
   char v;
   if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&
@@ -1151,13 +1179,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       unbalancing_reads.insert(poid.oid);
       
       ceph_object_layout layout;
-      layout.ol_pgid = info.pgid.u;
-      layout.ol_stripe_unit = 0;
+      layout.ol_pgid = cpu_to_le64(info.pgid.u.pg64);
+      layout.ol_stripe_unit = cpu_to_le32(0);
       MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 			       poid.oid,
 			       layout,
 			       osd->osdmap->get_epoch(),
-			       CEPH_OSD_OP_UNBALANCEREADS);
+			       CEPH_OSD_OP_UNBALANCEREADS, 0);
       do_op(pop);
     }
 
@@ -1221,7 +1249,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     prepare_op_transaction(repop->t, op->get_reqid(),
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(),
-			   nv, crev, poid.oid.rev);
+			   nv, op->get_inc_lock(), crev, poid.oid.rev);
   }
   
   // (logical) local ack.
@@ -1276,7 +1304,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     prepare_op_transaction(t, op->get_reqid(), 
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(), 
-			   nv, crev, 0);
+			   nv, op->get_inc_lock(), crev, 0);
   }
   
   C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
@@ -1363,7 +1391,7 @@ void ReplicatedPG::pull(pobject_t poid)
   tid_t tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PULL,
 				   0, 0, 
-				   osd->osdmap->get_epoch(), tid, v);
+				   osd->osdmap->get_epoch(), tid, 0, v);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(fromosd));
   
   // take note
@@ -1403,7 +1431,7 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   // send
   osd_reqid_t rid;  // useless?
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, bl.length(),
-				osd->osdmap->get_epoch(), osd->get_tid(), v);
+				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
   subop->set_data(bl);   // note: claims bl, set length above here!
   subop->set_attrset(attrset);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));

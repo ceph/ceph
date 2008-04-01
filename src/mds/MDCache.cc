@@ -2847,7 +2847,7 @@ void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
 
   // remove
   if (in->inode.size > 0) {
-    mds->filer->remove(in->inode, newsize, oldsize,
+    mds->filer->remove(in->inode, newsize, oldsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
     // no need, empty file, just log it
@@ -3550,8 +3550,10 @@ void MDCache::shutdown_check()
   dout(0) << "log len " << mds->mdlog->get_num_events() << dendl;
 
 
-  if (mds->filer->is_active()) 
-    dout(0) << "filer still active" << dendl;
+  if (mds->objecter->is_active()) {
+    dout(0) << "objecter still active" << dendl;
+    mds->objecter->dump_active();
+  }
 }
 
 void MDCache::shutdown_start()
@@ -3667,8 +3669,9 @@ bool MDCache::shutdown_pass()
   }
 
   // filer active?
-  if (mds->filer->is_active()) {
-    dout(7) << "filer still active" << dendl;
+  if (mds->objecter->is_active()) {
+    dout(7) << "objecter still active" << dendl;
+    mds->objecter->dump_active();
     return false;
   }
 

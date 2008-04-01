@@ -3109,10 +3109,10 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     bool done = false;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
     if (in->hack_balance_reads ||
 	g_conf.client_hack_balance_reads)
-      rd->balance_reads = true;
+      rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
     assert(r >= 0);
 

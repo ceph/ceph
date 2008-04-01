@@ -433,13 +433,20 @@ void MDLog::_replay_thread()
   dout(10) << "_replay_thread start" << dendl;
 
   // loop
+  int r = 0;
   off_t new_expire_pos = journaler->get_expire_pos();
   while (1) {
     // wait for read?
     while (!journaler->is_readable() &&
-	   journaler->get_read_pos() < journaler->get_write_pos()) {
+	   journaler->get_read_pos() < journaler->get_write_pos() &&
+	   !journaler->get_error()) {
       journaler->wait_for_readable(new C_MDL_Replay(this));
       replay_cond.Wait(mds->mds_lock);
+    }
+    if (journaler->get_error()) {
+      r = journaler->get_error();
+      dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
+      break;
     }
     
     if (!journaler->is_readable() &&
@@ -490,18 +497,20 @@ void MDLog::_replay_thread()
   }
 
   // done!
-  assert(journaler->get_read_pos() == journaler->get_write_pos());
-  dout(10) << "_replay - complete, " << num_events << " events, new read/expire pos is " << new_expire_pos << dendl;
-  
-  // move read pointer _back_ to first subtree map we saw, for eventual trimming
-  journaler->set_read_pos(new_expire_pos);
-  journaler->set_expire_pos(new_expire_pos);
-  logger->set("expos", new_expire_pos);
-  
+  if (r == 0) {
+    assert(journaler->get_read_pos() == journaler->get_write_pos());
+    dout(10) << "_replay - complete, " << num_events << " events, new read/expire pos is " << new_expire_pos << dendl;
+    
+    // move read pointer _back_ to first subtree map we saw, for eventual trimming
+    journaler->set_read_pos(new_expire_pos);
+    journaler->set_expire_pos(new_expire_pos);
+    logger->set("expos", new_expire_pos);
+  }
+
   // kick waiter(s)
   list<Context*> ls;
   ls.swap(waitfor_replay);
-  finish_contexts(ls,0);  
+  finish_contexts(ls, r);  
   
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();

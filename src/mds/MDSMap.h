@@ -101,6 +101,7 @@ class MDSMap {
  protected:
   epoch_t epoch;
   epoch_t client_epoch;       // incremented only when change is significant to client.
+  epoch_t last_failure;   // epoch of last failure.  for inclocks
   utime_t created;
 
   int32_t max_mds;
@@ -122,7 +123,7 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), client_epoch(0), anchortable(0), root(0) {
+  MDSMap() : epoch(0), client_epoch(0), last_failure(0), anchortable(0), root(0) {
     // hack.. this doesn't really belong here
     cap_bit_timeout = (int)g_conf.mds_cap_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
@@ -133,6 +134,8 @@ class MDSMap {
 
   const utime_t& get_created() const { return created; }
   void set_created(utime_t ct) { created = ct; }
+
+  epoch_t get_last_failure() const { return last_failure; }
 
   int get_max_mds() const { return max_mds; }
   void set_max_mds(int m) { max_mds = m; }
@@ -343,6 +346,7 @@ class MDSMap {
   void encode(bufferlist& bl) {
     ::_encode(epoch, bl);
     ::_encode(client_epoch, bl);
+    ::_encode(last_failure, bl);
     ::_encode(created, bl);
     ::_encode(anchortable, bl);
     ::_encode(root, bl);
@@ -362,6 +366,7 @@ class MDSMap {
     int off = 0;
     ::_decode(epoch, bl, off);
     ::_decode(client_epoch, bl, off);
+    ::_decode(last_failure, bl, off);
     ::_decode(created, bl, off);
     ::_decode(anchortable, bl, off);
     ::_decode(root, bl, off);
