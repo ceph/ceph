@@ -330,8 +330,7 @@ extern const char *ceph_msg_type_name(int type);
 
 
 /* inode.c */
-extern int ceph_get_inode(struct super_block *sb, u64 ino,
-			  struct inode **pinode);
+extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
 extern int ceph_fill_trace(struct super_block *sb, 

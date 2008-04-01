@@ -16,34 +16,34 @@ int ceph_inode_debug = 50;
 
 const struct inode_operations ceph_symlink_iops;
 
-int ceph_get_inode(struct super_block *sb, __u64 ino, struct inode **pinode)
+/*
+ * find or create an inode, given the ceph ino number
+ */
+struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
 {
+	struct inode *inode;
 	struct ceph_inode_info *ci;
 	ino_t inot;
 
-	BUG_ON(pinode == NULL);
-
 	inot = ceph_ino_to_ino(ino);
 #if BITS_PER_LONG == 64
-	*pinode = iget_locked(sb, ino);
+	inode = iget_locked(sb, ino);
 #else
-	*pinode = iget5_locked(sb, inot, ceph_ino_compare, ceph_set_ino_cb,
-			       &ino);
+	inode = iget5_locked(sb, inot, ceph_ino_compare, ceph_set_ino_cb, &ino);
 #endif
-	if (*pinode == NULL) 
-		return -ENOMEM;
-	if ((*pinode)->i_state & I_NEW)
-		unlock_new_inode(*pinode);
+	if (inode == NULL) 
+		return ERR_PTR(-ENOMEM);
+	if (inode->i_state & I_NEW)
+		unlock_new_inode(inode);
 
-	ci = ceph_inode(*pinode);
+	ci = ceph_inode(inode);
 #if BITS_PER_LONG == 64
-	ceph_set_ino(*pinode, ino);
+	ceph_set_ino(inode, ino);
 #endif
-	ci->i_hashval = (*pinode)->i_ino;
+	ci->i_hashval = inode->i_ino;
 
-	dout(30, "get_inode on %lu=%llx got %p\n", (*pinode)->i_ino, ino, 
-	     *pinode);
-	return 0;
+	dout(30, "get_inode on %lu=%llx got %p\n", inode->i_ino, ino, inode);
+	return inode;
 }
 
 /*
@@ -362,11 +362,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		in = dn->d_inode;
 	} else {
 		/* first reply (i.e. mount) */
-		err = ceph_get_inode(sb, 
-				     le64_to_cpu(rinfo->trace_in[0].in->ino),
-				     &in);
-		if (err < 0) 
-			return err;
+		in = ceph_get_inode(sb,le64_to_cpu(rinfo->trace_in[0].in->ino));
+		if (IS_ERR(in)) 
+			return PTR_ERR(in);
 		dn = d_alloc_root(in);
 		if (dn == NULL) {
 			derr(0, "d_alloc_root enomem badness on root dentry\n");
@@ -441,15 +439,15 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				igrab(in);
 				inc_nlink(in);
 			} else {
-				in = new_inode(dn->d_sb);
-			}
-
-			if (in == NULL) {
-				dout(30, "new_inode badness\n");
-				err = -ENOMEM;
-				d_delete(dn);
-				dn = NULL;
-				break;
+				in = ceph_get_inode(dn->d_sb);
+				if (IS_ERR(in)) {
+					dout(30, "new_inode badness\n");
+					err = PTR_ERR(in);
+					d_delete(dn);
+					dn = NULL;
+					in = NULL;
+					break;
+				}
 			}
 			if ((err = ceph_fill_inode(in, ininfo)) < 0) {
 				dout(30, "ceph_fill_inode badness\n");
