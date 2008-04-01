@@ -2627,6 +2627,19 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 void SyntheticClient::foo()
 {
   if (1) {
+    dout(0) << "first" << dendl;
+    int fd = client->open("tester", O_WRONLY|O_CREAT);
+    client->write(fd, "hi there", 0, 8);
+    client->close(fd);
+    dout(0) << "sleep" << dendl;
+    sleep(10);
+    dout(0) << "again" << dendl;
+    fd = client->open("tester", O_WRONLY|O_CREAT);
+    client->write(fd, "hi there", 0, 8);
+    client->close(fd);
+    return;    
+  }
+  if (1) {
     // open some files
     srand(0);
     for (int i=0; i<20; i++) {
