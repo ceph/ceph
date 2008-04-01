@@ -656,24 +656,22 @@ static int read_message_partial(struct ceph_connection *con)
 		con->in_msg_pos.page = 0;
 		con->in_msg_pos.page_pos = data_off & ~PAGE_MASK;
 		con->in_msg_pos.data_pos = 0;
-		/* find (or alloc) pages for data payload */
+		/* find pages for data payload */
 		want = calc_pages_for(data_len, data_off & ~PAGE_MASK);
 		ret = 0;
 		BUG_ON(!con->msgr->prepare_pages);
 		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
 		if (ret < 0) {
-			dout(10, "prepare_pages failed, skipping+discarding message\n");
-			con->in_base_pos = -data_len; /* ignore rest of message */
+			dout(10, "prepare_pages failed, skipping+discarding "
+			     "message\n");
+			con->in_base_pos = -data_len; /* skip payload */
 			ceph_msg_put(con->in_msg);
 			con->in_msg = 0;
 			con->in_tag = CEPH_MSGR_TAG_READY;
 			return 0;
 		} else {
-			BUG_ON(m->nr_pages != want);
+			BUG_ON(m->nr_pages < want);
 		}
-		/*
-		 * FIXME: we should discard the data payload if ret 
-		 */
 	}
 	while (con->in_msg_pos.data_pos < data_len) {
 		left = min((int)(data_len - con->in_msg_pos.data_pos),
@@ -682,7 +680,8 @@ static int read_message_partial(struct ceph_connection *con)
 		  con->in_msg_pos.data_pos, m->hdr.data_len, con->in_msg_pos.page_pos, left);*/
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos, left);
-		if (ret <= 0) return ret;
+		if (ret <= 0)
+			return ret;
 		con->in_msg_pos.data_pos += ret;
 		con->in_msg_pos.page_pos += ret;
 		if (con->in_msg_pos.page_pos == PAGE_SIZE) {
