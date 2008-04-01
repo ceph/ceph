@@ -431,15 +431,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		ininfo = rinfo->trace_in[d+1].in;
 
 		if ((!dn->d_inode) ||
-		    (ceph_ino(dn->d_inode) != ininfo->ino)) {
+		    (ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino))) {
 			dout(10, "fill_trace new_inode\n");
-			if (req->r_last_inode && 
-			    ceph_ino(req->r_last_inode) == ininfo->ino) {
+			if (req->r_last_inode && ceph_ino(req->r_last_inode) == 
+			    le64_to_cpu(ininfo->ino)) {
 				in = req->r_last_inode;
 				igrab(in);
 				inc_nlink(in);
 			} else {
-				in = ceph_get_inode(dn->d_sb, ininfo->ino);
+				in = ceph_get_inode(dn->d_sb, 
+						    le64_to_cpu(ininfo->ino));
 				if (IS_ERR(in)) {
 					dout(30, "new_inode badness\n");
 					err = PTR_ERR(in);
