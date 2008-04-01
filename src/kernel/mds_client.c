@@ -1388,6 +1388,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
 	struct inode *inode;
+	struct ceph_mds_session *session;
 	struct ceph_inode_info *ci;
 	struct dentry *parent, *dentry;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
@@ -1406,6 +1407,14 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	mask = le16_to_cpu(h->mask);
 	dname.name = (void *)(h + 1);
 	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(__u32);
+
+	/* find session */
+	session = __get_session(mdsc, mds);
+	if (!session) {
+		dout(10, "WTF, got lease but no session for mds%d\n", mds);
+		return;
+	}
+	session->s_cap_seq++;
 
 	/* lookup inode */
 	inot = ceph_ino_to_ino(ino);
