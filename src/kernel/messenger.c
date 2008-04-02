@@ -8,7 +8,7 @@
 #include "messenger.h"
 #include "ktcp.h"
 
-int ceph_debug_msgr = 50;
+int ceph_debug_msgr = 1;
 #define DOUT_VAR ceph_debug_msgr
 #define DOUT_PREFIX "msgr: "
 #include "super.h"
@@ -357,6 +357,10 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	struct kvec kv;
 	int ret;
 	unsigned data_len = le32_to_cpu(msg->hdr.data_len);
+
+	dout(30, "write_partial_msg_pages %p on %d/%d offset %d\n", 
+	     con, con->out_msg_pos.page, con->out_msg->nr_pages,
+	     con->out_msg_pos.page_pos);
 
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
 		kv.iov_base = kmap(msg->pages[con->out_msg_pos.page]) +

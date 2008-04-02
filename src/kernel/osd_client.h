@@ -79,9 +79,10 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 				loff_t off, loff_t len,
 				struct page **pagevec, int nr_pages);
 
-extern int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
-				 struct ceph_file_layout *layout, 
-				 __u64 count, __u64 offset, const char __user *data);
+extern int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+				struct ceph_file_layout *layout, 
+				__u64 off, __u64 len, 
+				const char __user *data);
 
 extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
                              struct ceph_file_layout *layout, 

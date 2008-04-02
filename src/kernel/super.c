@@ -220,7 +220,7 @@ enum {
 	Opt_wsize,
 	/* int args above */
 	Opt_ip,
-	Opt_sillywrite,
+	Opt_sync,
 };
 
 static match_table_t arg_tokens = {
@@ -236,7 +236,8 @@ static match_table_t arg_tokens = {
 	{Opt_wsize, "wsize=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
-	{Opt_sillywrite, "sillywrite"},
+	{Opt_sync, "sync"},
+	{-1, NULL}
 };
 
 /*
@@ -323,7 +324,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		if (!*c)
 			continue;
 		token = match_token(c, arg_tokens, argstr);
-		if (token == 0) {
+		if (token < 0) {
 			derr(0, "bad mount option at '%s'\n", c);
 			return -EINVAL;
 			
@@ -382,8 +383,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_wsize:
 			args->wsize = intval;
 			break;
-		case Opt_sillywrite:
-			args->silly_write = 1;
+		case Opt_sync:
+			args->sync = 1;
 			break;
 
 		default:
