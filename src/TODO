@@ -17,26 +17,17 @@ userspace client
 
 kernel client
 - setattr should check lease before believing something is a no-op
-- use list_for_each_safe for caps removal?
-  - revisit cap removal locking, make sure it's okay....
 - trim expired leases so we don't indefinitely hold dcache refs...
 - carry wrbuffer/rdcache caps until data is flushed
   - this should make the utimes bit kick in
-- make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- msgr layer
-  - standby state, to keep connect_seq around after a disconnect
-- audit locking
-- audit use of kmalloc vs spinlocks
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
-- mds client
-  - test ceph_fill_trace when files/directories are moved around by another client
 - osd client
   - readpages (readahead)
   - async (caching) mode
