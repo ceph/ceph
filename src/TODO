@@ -18,8 +18,6 @@ userspace client
 kernel client
 - setattr should check lease before believing something is a no-op
 - trim expired leases so we don't indefinitely hold dcache refs...
-- carry wrbuffer/rdcache caps until data is flushed
-  - this should make the utimes bit kick in
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
@@ -28,13 +26,15 @@ kernel client
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
-- osd client
-  - readpages (readahead)
-  - async (caching) mode
-  - sync mode (write-through)
+- io / osd client
+  - carry wrbuffer/rdcache caps until data is flushed
+    - this should make the utimes bit kick in
+    - invalidate cache pages?
+  - kick requests when new map arrives
+  - sync?
+  - sync on unmount?
   - capability changes (flush.. need way to initiate/block on writeback initiated by mds)
   - osd ack vs commit handling.  hmm!
-  - handle map changes (resubmit ops)
 - mon client
   - work out message resend logic..?
 - unmount

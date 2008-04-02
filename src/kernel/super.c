@@ -73,6 +73,13 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 }
 
 
+static int ceph_syncfs(struct super_block *sb, int wait)
+{
+	dout(10, "sync_fs %d\n", wait);
+	return 0;
+}
+
+
 /**
  * ceph_show_options - Show mount options in /proc/mounts
  * @m: seq_file to write to
@@ -192,7 +199,7 @@ static const struct super_operations ceph_sops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
 	.write_inode    = ceph_write_inode,
-/*	.sync_fs        = ceph_syncfs, */
+	.sync_fs        = ceph_syncfs, 
 	.put_super	= ceph_put_super,
 	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
