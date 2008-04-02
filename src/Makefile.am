@@ -77,7 +77,7 @@ crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
 libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
 	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
 
-BUILT_SOURCES = libCrushWrapper.so
+#BUILT_SOURCES = libCrushWrapper.so
 
 
 ## libcephclient.so
