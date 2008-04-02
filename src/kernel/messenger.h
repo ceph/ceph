@@ -115,7 +115,6 @@ struct ceph_connection {
 	struct work_struct rwork;		/* receive work */
 	struct delayed_work swork;		/* send work */
 	unsigned long           delay;          /* delay interval */
-	unsigned int            retries;        /* temp track of retries */
 };
 
 
