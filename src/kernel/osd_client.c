@@ -353,6 +353,11 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	return bytes;
 }
 
+/*
+ * calculate the mapping of an extent onto an object, and fill out the
+ * request accordingly.  shorten extent as necessary if it hits an
+ * object boundary.
+ */
 __u64 calc_layout(struct ceph_osd_client *osdc, 
 		  ceph_ino_t ino, struct ceph_file_layout *layout,
 		  __u64 off, __u64 len,
@@ -382,7 +387,9 @@ __u64 calc_layout(struct ceph_osd_client *osdc,
 	return len;
 }
 
-
+/*
+ * synchronous read direct to user buffer
+ */
 int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			struct ceph_file_layout *layout, 
 			__u64 off, __u64 len,
@@ -445,7 +452,6 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	dout(10, "sync_read result %d\n", rc); 
 	return rc;
 }
-
 
 /*
  * read a single page.
@@ -611,10 +617,10 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 
 	rc = do_request(osdc, req);
 	put_request(req);
+	if (rc == 0)
+		rc = len;
 	dout(10, "sync_write result %d\n", rc); 
-	if (rc < 0)
-		return rc;
-	return len;
+	return rc;
 }
 
 /*
@@ -656,11 +662,10 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 
 	rc = do_request(osdc, req);
 	put_request(req);
+	if (rc == 0)
+		rc = len;
 	dout(10, "writepages result %d\n", rc);
-	if (rc < 0)
-		return rc;
-	return len;
-
+	return rc;
 }
 
 
