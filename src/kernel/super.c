@@ -220,7 +220,6 @@ enum {
 	Opt_wsize,
 	/* int args above */
 	Opt_ip,
-	Opt_sync,
 };
 
 static match_table_t arg_tokens = {
@@ -236,7 +235,6 @@ static match_table_t arg_tokens = {
 	{Opt_wsize, "wsize=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
-	{Opt_sync, "sync"},
 	{-1, NULL}
 };
 
@@ -382,9 +380,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			/* misc */
 		case Opt_wsize:
 			args->wsize = intval;
-			break;
-		case Opt_sync:
-			args->sync = 1;
 			break;
 
 		default:

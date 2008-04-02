@@ -63,7 +63,6 @@ struct ceph_mount_args {
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
 	char path[100];
-	int sync;
 	int wsize;
 };
 
