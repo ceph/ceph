@@ -42,14 +42,14 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	struct ceph_osdmap *newmap = 0;
 	int err;
 
-	dout(1, "handle_map\n");
+	dout(1, "handle_map, have %u\n", osdc->osdmap ? osdc->osdmap->epoch:0);
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
 
 	/* incremental maps */
 	ceph_decode_32_safe(&p, end, nr_maps, bad);
 	dout(10, " %d inc maps\n", nr_maps);
-	while (nr_maps--) {
+	while (nr_maps > 0) {
 		ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
 		ceph_decode_32(&p, epoch);
 		ceph_decode_32(&p, maplen);
@@ -68,9 +68,11 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 				osdc->osdmap = newmap;
 			}
 		} else {
-			dout(10, "ignoring incremental map %u len %d\n", epoch, maplen);
+			dout(10, "ignoring incremental map %u len %d\n",
+			     epoch, maplen);
 		}
 		p = next;
+		nr_maps--;
 	}
 	if (newmap) 
 		goto out;
@@ -86,6 +88,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		dout(5, "skipping non-latest full map %u len %d\n", 
 		     epoch, maplen);
 		p += maplen;
+		nr_maps--;
 	}
 	if (nr_maps) {
 		ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
@@ -111,6 +114,8 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	}
 	dout(1, "handle_map done\n");
 	
+	ceph_monc_got_osdmap(&osdc->client->monc, osdc->osdmap->epoch);
+
 	/* kick any pending requests that need kicking */
 	/* WRITE ME */
 
@@ -229,7 +234,9 @@ static void send_request(struct ceph_osd_client *osdc,
 		ceph_msg_get(req->r_request); /* send consumes a ref */
 		ceph_msg_send(osdc->client->msgr, req->r_request, 0);
 	} else {
-		dout(10, "send_request no osds in pg are up\n");
+		dout(10, "send_request no osds in this pg are up\n");
+		ceph_monc_request_osdmap(&osdc->client->monc, 
+					 osdc->osdmap->epoch, 0);
 	}
 }
 

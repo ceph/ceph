@@ -208,7 +208,6 @@ retry:
 		
 		for (i = 0; i < nr_pages; i++) {
 			page = pvec.pages[i];
-			dout(30, "trying page %p\n", page);
 			if (first < 0)
 				lock_page(page);
 			else if (TestSetPageLocked(page))
@@ -243,8 +242,10 @@ retry:
 				end_page_writeback(page);
 				break;
 			}
+			/*
 			dout(20, "writepages locked page %p index %lu\n",
 			     page, page->index);
+			*/
 			kmap(page);
 			if (first < 0)
 				first = i;
