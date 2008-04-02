@@ -101,11 +101,7 @@ struct ceph_mds_client {
 	struct radix_tree_root  request_tree;  /* pending mds requests */
 	__u64                   last_requested_map;
 	struct completion       map_waiters, session_close_waiters;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct delayed_work     delayed_work;  /* delayed work */
-#else
-	struct work_struct		delayed_work;  /* delayed work */
-#endif
 };
 
 extern const char* ceph_mds_op_name(int op);
