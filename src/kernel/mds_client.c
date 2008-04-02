@@ -1449,9 +1449,11 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			goto release;
 		ceph_revoke_dentry_lease(dentry);
 		dout(10, "lease revoked on dentry %p\n", dentry);
+		dput(dentry);
 	} 
 
 release:
+	iput(inode);
 	dout(10, "sending release\n");
 	h->action = CEPH_MDS_LEASE_RELEASE;
 	ceph_msg_get(msg);
