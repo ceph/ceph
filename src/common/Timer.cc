@@ -40,12 +40,10 @@ Timer      g_timer;
 bool Timer::get_next_due(utime_t& when)
 {
   if (scheduled.empty()) {
-    dout(10) << "get_next_due - nothing scheduled" << dendl;
     return false;
   } else {
     map< utime_t, set<Context*> >::iterator it = scheduled.begin();
     when = it->first;
-    dout(10) << "get_next_due - " << when << dendl;
     return true;
   }
 }
@@ -55,14 +53,18 @@ void Timer::timer_entry()
 {
   lock.Lock();
   
+  utime_t now = g_clock.now();
+
   while (!thread_stop) {
-    
-    // now
-    utime_t now = g_clock.now();
 
     // any events due?
     utime_t next;
     bool next_due = get_next_due(next);
+    if (next_due) {
+      dout(10) << "get_next_due - " << next << dendl;
+    } else {
+      dout(10) << "get_next_due - nothing scheduled" << dendl;
+    }
     
     if (next_due && now >= next) {
       // move to pending list
@@ -108,6 +110,8 @@ void Timer::timer_entry()
         lock.Lock();
       }
 
+      now = g_clock.now();
+      dout(DBL) << "looping at " << now << dendl;
     }
     else {
       // sleep
@@ -116,14 +120,14 @@ void Timer::timer_entry()
         timed_sleep = true;
         sleeping = true;
         timeout_cond.WaitUntil(lock, next);  // wait for waker or time
-        utime_t now = g_clock.now();
+        now = g_clock.now();
         dout(DBL) << "kicked or timed out at " << now << dendl;
       } else {
         dout(DBL) << "sleeping" << dendl;
         timed_sleep = false;
         sleeping = true;
         sleep_cond.Wait(lock);         // wait for waker
-        utime_t now = g_clock.now();
+        now = g_clock.now();
         dout(DBL) << "kicked at " << now << dendl;
       }
     }
