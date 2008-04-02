@@ -16,6 +16,7 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
+- setattr should check lease before believing something is a no-op
 - use list_for_each_safe for caps removal?
   - revisit cap removal locking, make sure it's okay....
 - trim expired leases so we don't indefinitely hold dcache refs...
