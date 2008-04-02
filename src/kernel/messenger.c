@@ -1061,7 +1061,10 @@ more:
 			prepare_read_message(con);
 		else if (con->in_tag == CEPH_MSGR_TAG_ACK)
 			prepare_read_ack(con);
-		else {
+		else if (con->in_tag == CEPH_MSGR_TAG_CLOSE) {
+			set_bit(CLOSED, &con->state);   /* fixme */
+			goto done;
+		} else {
 			derr(2, "try_read got bad tag %d\n", (int)con->in_tag);
 			ret = -EINVAL;
 			goto bad;
