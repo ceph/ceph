@@ -810,7 +810,27 @@ int Rank::Pipe::accept()
       existing->lock.Lock();
       
       if (peer_cseq < existing->connect_seq) {
-	if (peer_cseq == 0) {
+	if (false &&
+	    /*
+	     * FIXME: protocol spec is flawed here.  we can't
+	     * distinguish between a remote reset or a slow remote
+	     * connect race (where the remote connect arrives _after_
+	     * our outgoing connection gets a READY reply).
+	     *
+	     * BUT, this doesn't happen in practice, yet.  the "reset"
+	     * case comes up in two situations:
+	     *
+	     * - mds resets connection to client.  it should _never_
+	     * talk to that client after that, unless the client
+	     * initiates the connection.
+	     *
+	     * - mon restarts.  it'll talk to the client.  but, the client
+	     * doesn't need the peer_reset calback in that case.  faling into the 
+	     * RETRY case is harmless.
+	     *
+	     * blah!
+	     */
+	    peer_cseq == 0) {
 	  dout(10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
