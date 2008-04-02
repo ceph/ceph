@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
+#include <linux/pagemap.h>
 
 #include "messenger.h"
 #include "mon_client.h"
@@ -308,8 +309,11 @@ struct ceph_file_info {
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
  */
-static inline int calc_pages_for(int len, int off)
+static inline int calc_pages_for(int off, int len)
 {
+	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) - 
+		(off >> PAGE_CACHE_SHIFT);
+	/*
 	int nr = 0;
 	if (len == 0)
 		return 0;
@@ -318,6 +322,7 @@ static inline int calc_pages_for(int len, int off)
 	if (len & ~PAGE_MASK)
 		nr++;
 	return nr;
+	*/
 }
 
 

@@ -190,6 +190,8 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	ret = ceph_osdc_sync_read(&client->osdc, ceph_ino(inode),
 				  &ci->i_layout,
 				  pos, count, data);
+	if (ret > 0)
+		*offset = pos + ret;
 	return ret;
 }
 
@@ -211,19 +213,18 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	ret = ceph_osdc_sync_write(&client->osdc, ceph_ino(inode),
 				   &ci->i_layout,
 				   pos, count, data);
-	if (ret <= 0)
-		return ret;
-	pos += ret;
-	*offset = pos;
+	if (ret > 0) {
+		pos += ret;
+		*offset = pos;
 
-	spin_lock(&inode->i_lock);
-	if (pos > inode->i_size) {
-		inode->i_size = pos;
-		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
-		dout(10, "extending file size to %d\n", (int)inode->i_size);
+		spin_lock(&inode->i_lock);
+		if (pos > inode->i_size) {
+			inode->i_size = pos;
+			inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+			dout(10, "extending file size to %lu\n", pos);
+		}
+		spin_unlock(&inode->i_lock);
 	}
-	spin_unlock(&inode->i_lock);
-
 	return ret;
 }
 

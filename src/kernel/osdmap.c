@@ -544,6 +544,8 @@ void calc_object_layout(struct ceph_object_layout *ol,
 {
 	unsigned num, num_mask;
 	union ceph_pg pgid;
+	ceph_ino_t ino = le64_to_cpu(oid->ino);
+	unsigned bno = le32_to_cpu(oid->bno);
 
 	if (fl->fl_pg_preferred >= 0) {
 		num = osdmap->lpg_num;
@@ -554,8 +556,7 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	}
 
 	pgid.pg64 = 0;   /* start with it zeroed out */
-	pgid.pg.ps = ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, 
-							       oid->ino>>32), 
+	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32), 
 				     num, num_mask);
 	pgid.pg.preferred = fl->fl_pg_preferred;
 	pgid.pg.type = fl->fl_pg_type;

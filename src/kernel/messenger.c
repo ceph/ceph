@@ -652,7 +652,7 @@ static int read_message_partial(struct ceph_connection *con)
 		con->in_msg_pos.page_pos = data_off & ~PAGE_MASK;
 		con->in_msg_pos.data_pos = 0;
 		/* find pages for data payload */
-		want = calc_pages_for(data_len, data_off & ~PAGE_MASK);
+		want = calc_pages_for(data_off & ~PAGE_MASK, data_len);
 		ret = 0;
 		BUG_ON(!con->msgr->prepare_pages);
 		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
@@ -1343,7 +1343,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->front.iov_len = front_len;
 
 	/* pages */
-	m->nr_pages = calc_pages_for(page_len, page_off);
+	m->nr_pages = calc_pages_for(page_off, page_len);
 	m->pages = pages;
 
 	INIT_LIST_HEAD(&m->list_head);
