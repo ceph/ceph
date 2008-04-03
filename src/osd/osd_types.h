@@ -24,11 +24,11 @@
  */
 struct osd_reqid_t {
   entity_name_t name; // who
-  int32_t       inc;  // incarnation
   tid_t         tid;
-  osd_reqid_t() : inc(0), tid(0) {}
-  osd_reqid_t(const entity_name_t& a, int i, tid_t t) : name(a), inc(i), tid(t) {}
-};
+  int32_t       inc;  // incarnation
+  osd_reqid_t() : tid(0), inc(0) {}
+  osd_reqid_t(const entity_name_t& a, int i, tid_t t) : name(a), tid(t), inc(i) {}
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
