@@ -265,7 +265,7 @@ struct pg_stat_t {
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
-  pg_stat_t() : parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
+  pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
 } __attribute__ ((packed));
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
