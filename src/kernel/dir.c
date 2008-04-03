@@ -1,5 +1,5 @@
-int ceph_dir_debug = 50;
-#define DOUT_VAR ceph_dir_debug
+int ceph_debug_dir = -1;
+#define DOUT_VAR ceph_debug_dir
 #define DOUT_PREFIX "dir: "
 #include "super.h"
 
