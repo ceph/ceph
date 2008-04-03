@@ -333,6 +333,7 @@ extern void ceph_destroy_client(struct ceph_client *cl);
 extern int ceph_mount(struct ceph_client *client, 
 		      struct ceph_mount_args *args, 
 		      struct vfsmount *mnt);
+extern void ceph_umount_start(struct ceph_client *cl);
 extern const char *ceph_msg_type_name(int type);
 
 

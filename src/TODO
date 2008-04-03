@@ -27,6 +27,7 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
+  - writepages should do io on more than 14 pages at a time!
   - carry wrbuffer/rdcache caps until data is flushed
     - this should make the utimes bit kick in
     - invalidate cache pages?

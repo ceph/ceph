@@ -217,14 +217,17 @@ fail:
 	return ERR_PTR(err);
 }
 
+void ceph_umount_start(struct ceph_client *cl)
+{
+	ceph_mdsc_stop(&cl->mdsc);	
+}
+
 void ceph_destroy_client(struct ceph_client *cl)
 {
 	dout(10, "destroy_client %p\n", cl);
 
 	/* unmount */
 	/* ... */
-
-	ceph_mdsc_stop(&cl->mdsc);	
 
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
