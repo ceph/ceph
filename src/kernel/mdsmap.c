@@ -8,8 +8,8 @@
 #include "messenger.h"
 #include "decode.h"
 
-int ceph_mdsmap_debug = 50;
-#define DOUT_VAR ceph_mdsmap_debug
+int ceph_debug_mdsmap = -1;
+#define DOUT_VAR ceph_debug_mdsmap
 #define DOUT_PREFIX "mdsmap: "
 #include "super.h"
 

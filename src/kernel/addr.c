@@ -4,7 +4,7 @@
 #include <linux/pagemap.h>
 #include <linux/writeback.h>	/* generic_writepages */
 
-int ceph_debug_addr = 50;
+int ceph_debug_addr = -1;
 #define DOUT_VAR ceph_debug_addr
 #define DOUT_PREFIX "addr: "
 #include "super.h"

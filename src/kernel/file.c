@@ -2,7 +2,7 @@
 #include <linux/sched.h>
 #include <linux/file.h>
 
-int ceph_debug_file = 50;
+int ceph_debug_file = -1;
 #define DOUT_VAR ceph_debug_file
 #define DOUT_PREFIX "file: "
 #include "super.h"
