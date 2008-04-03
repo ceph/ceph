@@ -6,8 +6,8 @@
 #include <linux/fs.h>
 #include <linux/mount.h>
 
-int ceph_client_debug = 50;
-#define DOUT_VAR ceph_client_debug
+int ceph_debug_client = -1;
+#define DOUT_VAR ceph_debug_client
 #define DOUT_PREFIX "client: "
 #include "super.h"
 #include "ktcp.h"

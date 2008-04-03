@@ -5,7 +5,7 @@
 #include "mds_client.h"
 #include "mon_client.h"
 
-int ceph_debug_mdsc = 50;
+int ceph_debug_mdsc = -1;
 #define DOUT_VAR ceph_debug_mdsc
 #define DOUT_PREFIX "mds: "
 #include "super.h"

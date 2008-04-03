@@ -3,8 +3,8 @@
 #include <linux/random.h>
 #include "mon_client.h"
 
-int ceph_mon_debug = 50;
-#define DOUT_VAR ceph_mon_debug
+int ceph_debug_mon = -1;
+#define DOUT_VAR ceph_debug_mon
 #define DOUT_PREFIX "mon: "
 #include "super.h"
 

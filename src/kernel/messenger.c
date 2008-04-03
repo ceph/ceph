@@ -8,7 +8,7 @@
 #include "messenger.h"
 #include "ktcp.h"
 
-int ceph_debug_msgr = 50;
+int ceph_debug_msgr = 0;
 #define DOUT_VAR ceph_debug_msgr
 #define DOUT_PREFIX "msgr: "
 #include "super.h"

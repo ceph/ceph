@@ -8,11 +8,17 @@
 
 /* debug levels; defined in super.h */
 
-/* global value.  0 = quiet, -1 == use per-file levels */
+/*
+ * global debug value.  
+ *  0 = quiet. 
+ *
+ * if the per-file debug level >= 0, then that overrides this  global
+ * debug level.
+ */
 int ceph_debug = 0;
 
 /* for this file */
-int ceph_debug_super = 50;
+int ceph_debug_super = -1;
 
 #define DOUT_VAR ceph_debug_super
 #define DOUT_PREFIX "super: "
