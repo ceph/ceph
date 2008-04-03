@@ -152,16 +152,28 @@ static int ceph_writepages(struct address_space *mapping,
 	pgoff_t index, end;
 	int range_whole = 0;
 	int should_loop = 1;
+	struct page *pages;
+	int nr_pages = 0, max_pages;
 	struct pagevec pvec;
 	int done = 0;
 	int rc = 0;
 
 	dout(10, "writepages on %p\n", inode);
 
-	/* if wsize is small, write 1 page at a time */
-	if (client->mount_args.wsize &&
-	    client->mount_args.wsize < PAGE_CACHE_SIZE)
-		return generic_writepages(mapping, wbc);
+	if (client->mount_args.wsize) {
+		/* if wsize is small, write 1 page at a time */
+		if (client->mount_args.wsize < PAGE_CACHE_SIZE)
+			return generic_writepages(mapping, wbc);
+	
+		/* larger page vector? */
+		max_pages = (client->mount_args.wsize >> PAGE_CACHE_SHIFT);
+		if (pages > PAGEVEC_SIZE) {
+			pages = kmalloc(max_pages * sizeof(void *), GFP_KERNEL);
+			if (!pages) 
+				return generic_writepages(mapping, wbc);
+		}
+	}
+	pagevec_init(&pvec, 0);
 
 	/* ?? from cifs. */
 	/*
@@ -172,7 +184,6 @@ static int ceph_writepages(struct address_space *mapping,
 	*/
 
 	/* where to start? */
-	pagevec_init(&pvec, 0);
 	if (wbc->range_cyclic) {
 		index = mapping->writeback_index; /* Start from prev offset */
 		end = -1;
@@ -193,20 +204,19 @@ retry:
 		unsigned i;
 		pgoff_t next;
 		struct page *page;
-		int nr_pages, locked_pages;
-
-		nr_pages = pagevec_lookup_tag(&pvec, mapping, &index,
-			      PAGECACHE_TAG_DIRTY,
-			      min(end - index, (pgoff_t)PAGEVEC_SIZE - 1) + 1);
-		dout(30, "lookup_tag got %d pages\n", nr_pages);
-		if (!nr_pages)
-			break;
-
+		int got_pages, locked_pages;
+		
 		first = -1;
 		next = 0;
 		locked_pages = 0;
-		
-		for (i = 0; i < nr_pages; i++) {
+
+	get_more_pages:
+		got_pages = pagevec_lookup_tag(&pvec, mapping, &index,
+			      PAGECACHE_TAG_DIRTY,
+			      min(end - index, (pgoff_t)PAGEVEC_SIZE - 1) + 1);
+		dout(30, "lookup_tag got %d pages\n", got_pages);
+	
+		for (i = 0; i < got_pages; i++) {
 			page = pvec.pages[i];
 			if (first < 0)
 				lock_page(page);
@@ -251,6 +261,15 @@ retry:
 				first = i;
 			locked_pages++;
 			next = page->index + 1;
+		}
+
+		if (pages && got_pages && locked_pages < max_pages) {
+			/* move pagevec into big pagevec */
+			memcpy(pages + nr_pages, pvec.pages,
+			       pvec.nr * sizeof(struct page *));
+			nr_pages += pvec.nr;
+			pagevec_reinit(pvec);
+			goto get_more_pages;
 		}
 
 		/* did we get anything? */
@@ -302,6 +321,7 @@ retry:
 	if (wbc->range_cyclic || (range_whole && wbc->nr_to_write > 0))
 		mapping->writeback_index = index;
 
+	kfree(pvec);
 	dout(10, "writepages done, rc = %d\n", rc);
 	return rc;
 }

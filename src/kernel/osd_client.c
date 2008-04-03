@@ -636,7 +636,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			 struct ceph_file_layout *layout, 
 			 loff_t off, loff_t len,
-			 struct page **pagevec, int nr_pages)
+			 struct page **pages, int nr_pages)
 {
 	struct ceph_msg *reqm;
 	struct ceph_osd_request_head *reqhead;
@@ -660,8 +660,8 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	nr_pages = calc_pages_for(off, len);
 	dout(10, "writepages %llu~%llu -> %d pages\n", off, len, nr_pages);
 	
-	/* copy pagevec */
-	memcpy(req->r_pages, pagevec, nr_pages * sizeof(struct page *));
+	/* copy pages */
+	memcpy(req->r_pages, pages, nr_pages * sizeof(struct page *));
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_nr_pages = nr_pages;
 	reqm->hdr.data_len = len;
