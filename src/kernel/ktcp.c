@@ -5,7 +5,7 @@
 #include "messenger.h"
 #include "ktcp.h"
 
-int ceph_debug_tcp = -1;
+int ceph_debug_tcp = 0;
 #define DOUT_VAR ceph_debug_tcp
 #define DOUT_PREFIX "tcp: "
 #include "super.h"
