@@ -75,7 +75,7 @@ public:
       epoch_t same_primary_since;  // same primary at least back through this epoch.
       epoch_t same_acker_since;    // same acker at least back through this epoch.
       History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
-    } history;
+    } __attribute__ ((packed)) history;
     
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
@@ -84,7 +84,7 @@ public:
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return epoch_created == 0; }
-  };
+  } __attribute__ ((packed));
   
   
   /** 
@@ -657,6 +657,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
     out << " v " << pgi.last_update << "/" << pgi.last_complete
         << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
+  //out << " c " << pgi.epoch_created;
   out << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
       << " " << pgi.history
       << ")";

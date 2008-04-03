@@ -222,6 +222,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
 
   state = STATE_BOOTING;
 
+  memset(&my_stat, 0, sizeof(my_stat));
+
   stat_ops = 0;
   stat_qlen = 0;
   stat_rd_ops = stat_rd_ops_shed_in = stat_rd_ops_shed_out = 0;
