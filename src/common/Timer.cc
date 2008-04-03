@@ -56,7 +56,7 @@ void Timer::timer_entry()
   utime_t now = g_clock.now();
 
   while (!thread_stop) {
-
+    dout(10) << "at top" << dendl;
     // any events due?
     utime_t next;
     bool next_due = get_next_due(next);
@@ -130,7 +130,9 @@ void Timer::timer_entry()
         now = g_clock.now();
         dout(DBL) << "kicked at " << now << dendl;
       }
+      dout(10) << "in brace" << dendl;
     }
+    dout(10) << "at bottom" << dendl;
   }
 
   lock.Unlock();
