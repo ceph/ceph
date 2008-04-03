@@ -23,8 +23,8 @@ extern int ceph_debug_addr;
 #define CEPH_DUMP_ERROR_ALWAYS
 
 #define dout(x, args...) do {						\
-		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
-		    (ceph_debug < 0 && x <= DOUT_VAR))			\
+		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
+		    (DOUT_VAR < 0 && x <= ceph_debug))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 
@@ -34,8 +34,8 @@ extern int ceph_debug_addr;
 	} while (0)
 #else
 #define derr(x, args...) do {						\
-		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
-		    (ceph_debug < 0 && x <= DOUT_VAR))			\
+		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
+		    (DOUT_VAR < 0 && x <= ceph_debug))			\
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 #endif

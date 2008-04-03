@@ -8,8 +8,8 @@
 #include <linux/ceph_fs.h>
 #include <linux/namei.h>
 
-int ceph_inode_debug = 50;
-#define DOUT_VAR ceph_inode_debug
+int ceph_debug_inode = -1;
+#define DOUT_VAR ceph_debug_inode
 #define DOUT_PREFIX "inode: "
 #include "super.h"
 #include "decode.h"

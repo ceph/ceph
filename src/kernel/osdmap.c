@@ -1,8 +1,8 @@
 
 #include <asm/div64.h>
 
-int ceph_osdmap_debug = 50;
-#define DOUT_VAR ceph_osdmap_debug
+int ceph_debug_osdmap = -1;
+#define DOUT_VAR ceph_debug_osdmap
 #define DOUT_PREFIX "osdmap: "
 #include "super.h"
 
