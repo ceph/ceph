@@ -354,6 +354,8 @@ extern void ceph_update_dentry_lease(struct dentry *dentry,
 				     struct ceph_mds_reply_lease *lease,
 				     struct ceph_mds_session *session,
 				     unsigned long from_time);
+extern int ceph_inode_lease_valid(struct inode *inode, int mask);
+extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,

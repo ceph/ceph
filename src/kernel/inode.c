@@ -244,6 +244,36 @@ void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask)
 	}
 }
 
+/*
+ * check if inode lease is valid for a given mask
+ */
+int ceph_inode_lease_valid(struct inode *inode, int mask)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int havemask;
+	int valid = 0;
+	
+	spin_lock(&inode->i_lock);
+	havemask = ci->i_lease_mask;
+	/* EXCL cap counts for an ICONTENT lease */
+	if (__ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+		dout(20, "lease_valid inode %p EXCL cap -> ICONTENT\n", inode);
+		havemask |= CEPH_LOCK_ICONTENT;
+	}
+	/* any ICONTENT bits imply all bits */
+	if (havemask & CEPH_LOCK_ICONTENT)  
+		havemask |= CEPH_LOCK_ICONTENT;
+
+	if ((havemask & mask) != mask)
+		goto out;
+
+	valid = time_before(jiffies, ci->i_lease_ttl);
+out:
+	spin_unlock(&inode->i_lock);
+	dout(10, "lease_valid inode %p mask %d = %d\n", inode, mask, valid);
+	return valid;
+}
+
 
 /*
  * dentry lease lock order is
@@ -338,6 +368,23 @@ void ceph_revoke_dentry_lease(struct dentry *dentry)
 		dput(dentry);
 	}
 }
+
+/*
+ * check if dentry lease is valid
+ */
+int ceph_dentry_lease_valid(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+	int valid = 0;
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (di && time_after(dentry->d_time, jiffies)) 
+		valid = 1;
+	spin_unlock(&dentry->d_lock);
+	dout(20, "dentry_lease_valid - dentry %p = %d\n", dentry, valid);
+	return valid;
+}
+
 
 
 
@@ -1122,36 +1169,11 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
+
 int ceph_inode_revalidate(struct inode *inode, int mask)
 {
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int havemask;
-	int valid;
-
-	spin_lock(&inode->i_lock);
-	havemask = ci->i_lease_mask;
-	/* EXCL cap counts for an ICONTENT lease */
-	if (__ceph_caps_issued(ci) & CEPH_CAP_EXCL)
-		havemask |= CEPH_LOCK_ICONTENT;
-	/* any ICONTENT bits imply all bits */
-	if (havemask & CEPH_LOCK_ICONTENT)  
-		havemask |= CEPH_LOCK_ICONTENT;
-	valid = time_before(jiffies, ci->i_lease_ttl);
-	spin_unlock(&inode->i_lock);
-
-	if (valid) {	
-		if ((havemask & mask) == mask) {
-			dout(10, "inode_revalidate %p mask %d still valid\n", 
-			     inode, mask);
-			return 0;
-		} 
-		dout(10, "inode_revalidate %p mask %d by only have %d\n", inode,
-		     mask, havemask);
-	} else {
-		dout(10, "inode_revalidate %p have %d want %d, lease expired\n",
-		     inode, havemask, mask);
-	}
-
+	if (ceph_inode_lease_valid(inode, mask))
+		return 0;
 	return ceph_do_lookup(inode->i_sb, d_find_alias(inode), mask);
 }
 
