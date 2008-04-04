@@ -16,6 +16,9 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
+- truncate
+  - do locally if EXCL
+  - helper that is called when mds does a truncate
 - setattr should check lease before believing something is a no-op
 - trim expired leases so we don't indefinitely hold dcache refs...
 - procfs/debugfs
