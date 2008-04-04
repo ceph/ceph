@@ -158,11 +158,9 @@ static int ceph_writepages(struct address_space *mapping,
 	int done = 0;
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
-	int pinned = 0, locked = 0;
 
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
-	wsize = 14 << PAGE_CACHE_SHIFT; // for now
 
 	dout(10, "writepages on %p, wsize %u\n", inode, wsize);
 
@@ -222,10 +220,7 @@ retry:
 		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
-		pinned += pvec_pages;
-		dout(30, "lookup_tag want %d got %d pages\n", want, pvec_pages);
-	
-		for (i = 0; i < pvec_pages; i++) {
+		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
 			if (locked_pages == 0) 
 				lock_page(page);
@@ -261,19 +256,15 @@ retry:
 				end_page_writeback(page);
 				break;
 			}
-			/*
-			dout(20, "writepages locked page %p index %lu\n",
+
+			dout(50, "writepages locked page %p index %lu\n",
 			     page, page->index);
-			*/
-			locked++;
 			kmap(page);
 			if (pages)
 				pages[locked_pages] = page;
 			else if (locked_pages == 0)
 				pagep = pvec.pages + i;
 			locked_pages++;
-			if (locked_pages == max_pages)
-				break;
 			next = page->index + 1;
 		}
 
@@ -284,15 +275,18 @@ retry:
 			int j;
 			if (pvec_pages && i == pvec_pages &&
 			    locked_pages && locked_pages < max_pages) {
-				dout(10, "reached end pvec, trying for more\n");
+				dout(50, "reached end pvec, trying for more\n");
 				pagevec_reinit(&pvec);
 				goto get_more_pages;
 			}
 
 			/* shift unused pages over in the pvec...  we
 			 * will need to release them below. */
-			for (j = i; j < pvec_pages; j++)
+			for (j = i; j < pvec_pages; j++) {
+				dout(50, " pvec leftover page %p\n", 
+				     pvec.pages[j]);
 				pvec.pages[j-i] = pvec.pages[j];
+			}
 			pvec.nr -= i;
 		}
 
@@ -321,9 +315,8 @@ retry:
 				else if (rc < 0)
 					SetPageError(page);
 				kunmap(page);
+				dout(50, "unlocking %d %p\n", i, page);
 				unlock_page(page);
-				BUG_ON(locked == 0);
-				locked--;
 				end_page_writeback(page);
 			}				
 
@@ -336,19 +329,16 @@ retry:
 		
 		if (pages) {
 			/* hmm, pagevec_release also does lru_add_drain()...? */
+			dout(50, "release_pages on %d\n", locked_pages);
 			release_pages(pages, locked_pages, 0);  /* cold? */
-			pinned -= locked_pages;
-			BUG_ON(pinned < 0);
 		}
-		pinned -= pvec.nr;
+		dout(50, "pagevec_release on %d pages\n", (int)pvec.nr);
 		pagevec_release(&pvec);
-		BUG_ON(pinned != 0);
-		BUG_ON(locked != 0);
 	}
 	
 	if (should_loop && !done) {
 		/* more to do; loop back to beginning of file */
-		dout(10, "writepages looping back to beginning of file\n");
+		dout(40, "writepages looping back to beginning of file\n");
 		should_loop = 0;
 		index = 0;
 		goto retry;
@@ -395,7 +385,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 		return 0;
 	
 	/* past end of file? */
-	i_size = i_size_read(inode);
+	i_size = inode->i_size;   /* caller holds i_mutex */
 	if (page_off >= i_size || 
 	    (pos_in_page == 0 && (pos+len) >= i_size)) {
 		simple_prepare_write(file, page, pos_in_page, pos_in_page+len);
@@ -420,6 +410,10 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	return 0;
 }
 
+/*
+ * hey, we don't do anything in here that simple_write_end doesn't do.
+ * let's use that instead.
+ */
 static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  loff_t pos, unsigned len, unsigned copied,
 			  struct page *page, void *fsdata)
@@ -456,7 +450,7 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 
 
 
-/* generic_perform_write
+/* 
  * page accounting
  */
 
@@ -492,8 +486,8 @@ const struct address_space_operations ceph_aops = {
 	.readpages = ceph_readpages,
 	.writepage = ceph_writepage,
 	.writepages = ceph_writepages,
-	.write_begin = simple_write_begin,//ceph_write_begin,
-	.write_end = simple_write_end,//ceph_write_end,
+	.write_begin = ceph_write_begin,
+	.write_end = simple_write_end, /*ceph_write_end,*/
 //	.set_page_dirty = ceph_set_page_dirty,
 	.releasepage = ceph_releasepage,
 };
