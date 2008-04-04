@@ -934,6 +934,19 @@ out:
 	return ret;	
 }
 
+void apply_truncate(struct inode *inode, loff_t size)
+{
+	spin_lock(&inode->i_lock);
+	dout(10, "apply_truncate %p size %lld -> %llu\n", inode,
+	     inode->i_size, size);
+	inode->i_size = size;
+	spin_unlock(&inode->i_lock);
+
+	/*
+	 * FIXME: how to truncate the page cache here?
+	 */
+}
+
 int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 			  struct ceph_mds_session *session)
 {
@@ -944,14 +957,7 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, 
 	     mds, seq);
 
-	spin_lock(&inode->i_lock);
-	dout(10, "trunc size %lld -> %llu\n", inode->i_size, size);
-	inode->i_size = size;
-	spin_unlock(&inode->i_lock);
-
-	/*
-	 * FIXME: how to truncate the page cache here?
-	 */
+	apply_truncate(inode, size);
 	return 0;
 }
 
@@ -1048,6 +1054,7 @@ struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 	return req;
 }
 
+
 int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
@@ -1121,7 +1128,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	/* utimes */
 	if (ia_valid & (ATTR_ATIME|ATTR_MTIME)) {
 		/* do i hold CAP_EXCL? */
-		if (__ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 			dout(10, "utime holding EXCL, doing locally\n");
 			inode->i_atime = attr->ia_atime;
 			inode->i_mtime = attr->ia_mtime;
@@ -1131,8 +1138,10 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		    !(((ia_valid & ATTR_MTIME) &&
 		       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
 		      ((ia_valid & ATTR_MTIME) && 
-		       !timespec_equal(&inode->i_mtime, &attr->ia_mtime))))
-			return 0;  /* lease is valid, and this is a no-op */
+		       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
+			dout(10, "lease indicates utimes is a no-op\n");
+			return 0;
+		}
 		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
 		if (IS_ERR(req)) 
 			return PTR_ERR(req);
@@ -1148,10 +1157,19 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* truncate? */
-	if (ia_valid & ATTR_SIZE &&
-	    attr->ia_size < inode->i_size) {  /* fixme? */
+	if (ia_valid & ATTR_SIZE) {
+		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+			dout(10, "holding EXCL, doing truncate locally\n");
+			apply_truncate(inode, attr->ia_size);
+			return 0;
+		}
 		dout(10, "truncate: ia_size %d i_size %d\n",
 		     (int)attr->ia_size, (int)inode->i_size);
+		if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
+		    attr->ia_size < inode->i_size) {
+			dout(10, "lease indicates truncate is a no-op\n");
+			return 0; 
+		}
 		if (ia_valid & ATTR_FILE) 
 			req = ceph_mdsc_create_request(mdsc, 
 				       CEPH_MDS_OP_TRUNCATE, 

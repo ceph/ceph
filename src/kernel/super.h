@@ -236,6 +236,15 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
  */
 extern int __ceph_caps_issued(struct ceph_inode_info *ci);
 
+static inline int ceph_caps_issued(struct ceph_inode_info *ci)
+{
+	int issued;
+	spin_lock(&ci->vfs_inode.i_lock);
+	issued = __ceph_caps_issued(ci);
+	spin_unlock(&ci->vfs_inode.i_lock);
+	return issued;
+}
+
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
 	int used = 0;

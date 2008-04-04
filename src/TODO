@@ -16,11 +16,8 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
-- truncate
-  - do locally if EXCL
-  - helper that is called when mds does a truncate
-- setattr should check lease before believing something is a no-op
-- trim expired leases so we don't indefinitely hold dcache refs...
+- trim expired leases so we don't indefinitely hold dcache/icache refs...
+- apply_truncate needs to truncate page cache, or something?
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
@@ -30,13 +27,10 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
-  - writepages should do io on more than 14 pages at a time!
   - carry wrbuffer/rdcache caps until data is flushed
     - this should make the utimes bit kick in
     - invalidate cache pages?
   - kick requests when new map arrives
-  - sync?
-  - sync on unmount?
   - capability changes (flush.. need way to initiate/block on writeback initiated by mds)
   - osd ack vs commit handling.  hmm!
 - mon client
