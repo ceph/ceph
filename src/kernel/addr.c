@@ -162,6 +162,7 @@ static int ceph_writepages(struct address_space *mapping,
 
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
+	wsize = 14 << PAGE_CACHE_SHIFT; // for now
 
 	dout(10, "writepages on %p, wsize %u\n", inode, wsize);
 
@@ -339,8 +340,8 @@ retry:
 			pinned -= locked_pages;
 			BUG_ON(pinned < 0);
 		}
-		pagevec_release(&pvec);
 		pinned -= pvec.nr;
+		pagevec_release(&pvec);
 		BUG_ON(pinned != 0);
 		BUG_ON(locked != 0);
 	}
@@ -424,20 +425,31 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  struct page *page, void *fsdata)
 {
 	struct inode *inode = file->f_dentry->d_inode;
+	unsigned from = pos & (PAGE_CACHE_SIZE - 1);
 
 	dout(10, "write_end file %p inode %p page %p %d~%d (%d)\n", file,
 	     inode, page, (int)pos, (int)copied, (int)len);
 
+	/* zero the stale part of the page if we did a short copy */
+	if (copied < len) {
+		void *kaddr = kmap_atomic(page, KM_USER0);
+		memset(kaddr + from + copied, 0, len - copied);
+		flush_dcache_page(page);
+		kunmap_atomic(kaddr, KM_USER0);
+	}
+	
 	/* did file size increase? */
-	spin_lock(&inode->i_lock);
+	/* (no need for i_size_read(); we caller holds i_mutex */
 	if (pos+copied > inode->i_size)
 		i_size_write(inode, pos + copied);
-	spin_unlock(&inode->i_lock);
 
-	SetPageUptodate(page);
+	if (!PageUptodate(page))
+		SetPageUptodate(page);
+
 	set_page_dirty(page);
+
 	unlock_page(page);
-	//page_cache_release(page);
+	page_cache_release(page);
 
 	return copied;
 }
@@ -480,8 +492,8 @@ const struct address_space_operations ceph_aops = {
 	.readpages = ceph_readpages,
 	.writepage = ceph_writepage,
 	.writepages = ceph_writepages,
-	.write_begin = ceph_write_begin,
-	.write_end = ceph_write_end,
+	.write_begin = simple_write_begin,//ceph_write_begin,
+	.write_end = simple_write_end,//ceph_write_end,
 //	.set_page_dirty = ceph_set_page_dirty,
 	.releasepage = ceph_releasepage,
 };
