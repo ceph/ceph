@@ -118,7 +118,8 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
 
 struct ceph_inode_cap {
 	int mds;    /* -1 if not used */
-	int caps;
+	int issued;       /* latest, from the mds */
+	int implemented;  /* what we've implemneted (for tracking revocation) */
 	u64 seq;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
@@ -165,6 +166,7 @@ struct ceph_inode_info {
 	loff_t i_max_size;     /* size authorized by mds */
 	struct timespec i_old_atime;
 
+	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
 
 	int i_nr_pages, i_nr_dirty_pages; // hrm!

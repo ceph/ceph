@@ -637,7 +637,7 @@ static struct ceph_inode_cap *__get_cap_for_mds(struct inode *inode, int mds)
  */
 struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 				    struct ceph_mds_session *session, 
-				    u32 caps, u32 seq)
+				    u32 issued, u32 seq)
 {
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -646,7 +646,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 	int is_new = 0;
 
 	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode,
-	     session->s_mds, caps, seq);
+	     session->s_mds, issued, seq);
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(inode, mds);
 	if (!cap) {
@@ -668,7 +668,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 		}
 		
 		is_new = 1;    /* grab inode later */
-		cap->caps = 0;
+		cap->issued = cap->implemented = 0;
 		cap->mds = mds;
 		cap->seq = 0;
 		cap->flags = 0;
@@ -685,8 +685,9 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 	}
 
 	dout(10, "add_cap inode %p (%llx) got cap %xh now %xh seq %d from %d\n",
-	     inode, ceph_ino(inode), caps, caps|cap->caps, seq, mds);
-	cap->caps |= caps;
+	     inode, ceph_ino(inode), issued, issued|cap->issued, seq, mds);
+	cap->issued |= issued;
+	cap->implemented |= issued;
 	cap->seq = seq;
 	spin_unlock(&inode->i_lock);
 	if (is_new)
@@ -702,7 +703,7 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 
 	list_for_each(p, &ci->i_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
-		have |= cap->caps;
+		have |= cap->issued;
 	}
 	return have;
 }
@@ -740,8 +741,8 @@ void ceph_remove_cap(struct ceph_inode_cap *cap)
 }
 
 /*
- * examine currently wanted versus held caps, and release caps to mds
- * as appropriate.
+ * examine currently used, wanted versus held caps.
+ *  release, ack revoked caps to mds as appropriate.
  */
 void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask)
 {
@@ -749,7 +750,7 @@ void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask)
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_inode_cap *cap;
 	struct list_head *p;
-	int wanted;
+	int wanted, used;
 	int keep;
 	__u64 seq;
 	__u64 size, max_size;
@@ -759,12 +760,23 @@ void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask)
 retry:
 	spin_lock(&ci->vfs_inode.i_lock);
 	wanted = __ceph_caps_wanted(ci);
+	used = __ceph_caps_used(ci);
 
 	list_for_each(p, &ci->i_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
-		if ((cap->caps & ~wanted) == 0)
+
+		/* completed revocation? */
+		if (((cap->implemented & ~cap->issued) & used) == 0) {
+			dout(10, "completed revocation of %d\n",
+			     cap->implemented & ~cap->issued);
+			cap->implemented = cap->issued;
+			goto ack;
+		}
+
+		if ((cap->issued & ~wanted) == 0)
 			continue;     /* nothing extra, all good */
 
+	ack:
 		if (gfpmask != GFP_KERNEL) {
 			/* put on examine list */
 			dout(10, "** dropping caps, but bad gfpmask, "
@@ -772,9 +784,9 @@ retry:
 			goto out;
 		}
 
-		cap->caps &= wanted;  /* drop bits we don't want */
+		cap->issued &= wanted;  /* drop bits we don't want */
 
-		keep = cap->caps;
+		keep = cap->issued;
 		seq = cap->seq;
 		size = ci->vfs_inode.i_size;
 		max_size = ci->i_max_size;
@@ -844,6 +856,8 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	u64 max_size = le64_to_cpu(grant->max_size);
 	struct timespec mtime, atime;
 	int wake = 0;
+	int writeback_now = 0;
+	int invalidate = 0;
 	
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", 
 	     inode, ci, mds, seq);
@@ -907,23 +921,26 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 
 	/* revocation? */
 	newcaps = le32_to_cpu(grant->caps);
-	if (cap->caps & ~newcaps) {
-		dout(10, "revocation: %d -> %d\n", cap->caps, newcaps);
-		if (newcaps & used) {
-			/* FIXME FIXME FIXME DO STUFF HERE */
-			/* but blindly ack for now... */
+	if (cap->issued & ~newcaps) {
+		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
+		if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
+			invalidate = 1;
+		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER) 
+			writeback_now = 1; /* will delay ack */
+		else {
+			cap->implemented = newcaps;
+			ret = 1; /* ack now */
 		}
-		cap->caps = newcaps;
-		ret = 1; /* ack */
+		cap->issued = newcaps;
 		goto out;
 	}
 	
 	/* grant or no-op */
-	if (cap->caps == newcaps) {
-		dout(10, "caps unchanged: %d -> %d\n", cap->caps, newcaps);
+	if (cap->issued == newcaps) {
+		dout(10, "caps unchanged: %d -> %d\n", cap->issued, newcaps);
 	} else {
-		dout(10, "grant: %d -> %d\n", cap->caps, newcaps);
-		cap->caps = newcaps;
+		dout(10, "grant: %d -> %d\n", cap->issued, newcaps);
+		cap->implemented = cap->issued = newcaps;
 		wake = 1;
 	}
 
@@ -931,6 +948,10 @@ out:
 	spin_unlock(&inode->i_lock);
 	if (wake)
 		wake_up(&ci->i_cap_wq);
+	if (writeback_now)
+		write_inode_now(inode, 0);
+	if (invalidate)
+		invalidate_mapping_pages(&inode->i_data, 0, -1);
 	return ret;	
 }
 

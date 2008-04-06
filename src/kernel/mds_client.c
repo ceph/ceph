@@ -546,7 +546,7 @@ static int resume_session(struct ceph_mds_client *mdsc,
 	spin_lock(&session->s_cap_lock);
 	list_for_each(cp, &session->s_caps) {
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
-		cap->caps = 0;
+		cap->issued = cap->implemented = 0;
 	}
 	spin_unlock(&session->s_cap_lock);
 
