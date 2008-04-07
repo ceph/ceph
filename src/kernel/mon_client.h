@@ -32,6 +32,10 @@ struct ceph_mon_client {
 	u64 last_tid;
 
 	u32 want_mdsmap;  /* protected by caller's lock */
+	struct delayed_work delayed_work;  /* delayed work */
+	unsigned long delay;
+
+	struct ceph_msg *msg;
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);
