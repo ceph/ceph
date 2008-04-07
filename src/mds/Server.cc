@@ -2155,7 +2155,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
-  dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
+  dn->dir->link_remote_inode(dn, targeti);
   dn->mark_dirty(dnpv, mdr->ls);
 
   // target inode
@@ -2240,7 +2240,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << dendl;
 
   // link the new dentry
-  dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
+  dn->dir->link_remote_inode(dn, targeti);
   dn->mark_dirty(dpv, mdr->ls);
 
   // dir inode's mtime
@@ -3420,7 +3420,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (srcdn->is_remote()) {
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_remote_inode(destdn, in->ino(), MODE_TO_DT(in->inode.mode));    
+      destdn->dir->link_remote_inode(destdn, in);
       destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
@@ -3707,16 +3707,16 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       if (mdr->more()->destdn_was_remote_inode) {
 	destdn->dir->unlink_inode(destdn);
 	srcdn->dir->link_primary_inode(srcdn, in);
-	destdn->dir->link_remote_inode(destdn, in->ino(),  MODE_TO_DT(in->inode.mode));
+	destdn->dir->link_remote_inode(destdn, in);
       } else {
-	srcdn->dir->link_remote_inode(srcdn, in->ino(), MODE_TO_DT(in->inode.mode));
+	srcdn->dir->link_remote_inode(srcdn, in);
       }
     } else {
       // normal
 
       // revert srcdn
       if (destdn->is_remote()) {
-	srcdn->dir->link_remote_inode(srcdn, destdn->inode->ino(), MODE_TO_DT(destdn->inode->inode.mode));
+	srcdn->dir->link_remote_inode(srcdn, destdn->inode);
 	destdn->dir->unlink_inode(destdn);
       } else {
 	// renamed a primary
@@ -3727,9 +3727,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       
       // revert destdn
       if (mdr->more()->destdn_was_remote_inode) {
-	destdn->dir->link_remote_inode(destdn, 
-				       mdr->more()->destdn_was_remote_inode->ino(), 
-				       MODE_TO_DT(mdr->more()->destdn_was_remote_inode->inode.mode));
+	destdn->dir->link_remote_inode(destdn, mdr->more()->destdn_was_remote_inode);
 	mdr->more()->destdn_was_remote_inode->inode.nlink++;
       } else if (straydn && straydn->inode) {
 	CInode *in = straydn->inode;
