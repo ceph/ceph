@@ -920,6 +920,14 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 		ci->i_wrbuffer_ref++;
 }
 
+void ceph_take_cap_refs(struct ceph_inode_info *ci, int got)
+{
+	dout(20, "take_cap_refs on %p taking %d\n", &ci->vfs_inode, got);
+	spin_lock(&ci->vfs_inode.i_lock);
+	__take_cap_refs(ci, got);
+	spin_unlock(&ci->vfs_inode.i_lock);
+}	
+
 int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
 {
 	int ret = 0;
@@ -928,7 +936,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
 	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
 	have = __ceph_caps_issued(ci);
-	dout(10, "get_cap_refs have %d\n", have);
+	dout(20, "get_cap_refs have %d\n", have);
 	if ((have & need) == need) {
 		*got = need | (have & want);
 		__take_cap_refs(ci, *got);
@@ -955,14 +963,34 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		if (--ci->i_wr_ref == 0)
 			last++;
 	if (had & CEPH_CAP_WRBUFFER)
-		if (--ci->i_wrbuffer_ref)
+		if (--ci->i_wrbuffer_ref == 0)
 			last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
 
+	dout(10, "put_cap_refs on %p had %d %s\n", &ci->vfs_inode, had,
+	     last ? "last":"");
+	
 	if (last) 
 		ceph_check_caps_wanted(ci, GFP_KERNEL);
 }
 
+void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
+{
+	int last = 0;
+
+	spin_lock(&ci->vfs_inode.i_lock);
+	ci->i_wrbuffer_ref -= nr;
+	if (ci->i_wrbuffer_ref == 0)
+		last++;
+	BUG_ON(ci->i_wrbuffer_ref < 0);
+	spin_unlock(&ci->vfs_inode.i_lock);
+	
+	dout(10, "put_wrbuffer_cap_refs on %p nr %d %s\n", &ci->vfs_inode, nr,
+	     last ? "last":"");
+	
+	if (last) 
+		ceph_check_caps_wanted(ci, GFP_KERNEL);
+}
 
 
 /*

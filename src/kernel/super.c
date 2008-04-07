@@ -146,7 +146,6 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
-	ci->i_nr_pages = ci->i_nr_dirty_pages = 0;
 
 	ci->i_hashval = 0;
 
