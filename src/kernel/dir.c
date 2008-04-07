@@ -209,6 +209,9 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 	struct ceph_mds_request_head *rhead;
 	int err;
 
+	if (dentry->d_name.len > NAME_MAX)
+		return -ENAMETOOLONG;
+
 	dout(10, "do_lookup %p mask %d\n", dentry, CEPH_STAT_MASK_INODE_ALL);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
@@ -245,7 +248,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	/* open (but not create!) intent? */
 	if (nd->flags & LOOKUP_OPEN &&
 	    !(nd->intent.open.flags & O_CREAT)) {
-		err = ceph_lookup_open(dir, dentry, nd);
+		int mode = nd->intent.open.create_mode & ~current->fs->umask;
+		err = ceph_lookup_open(dir, dentry, nd, mode);
 		return ERR_PTR(err);
 	}
 
@@ -265,7 +269,7 @@ static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-	err = ceph_lookup_open(dir, dentry, nd);
+	err = ceph_lookup_open(dir, dentry, nd, mode);
 	return err;
 }
 
@@ -483,6 +487,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	dget(old_dentry);
+	req->r_old_dentry = old_dentry;
+	dget(new_dentry);
+	req->r_last_dentry = new_dentry;
 	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
 	if (new_dentry->d_inode)
@@ -493,52 +501,32 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return err;
 }
 
+
+
 /*
  * check if dentry lease, or parent directory inode lease or cap says
  * this dentry is still valid
  */
-static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
+static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
-	struct ceph_inode_info *dirci = ceph_inode(dir);
-	struct ceph_dentry_info *di;
 
-	/* does dir inode lease or cap cover it? */
-	spin_lock(&dirci->vfs_inode.i_lock);
-	if (dirci->i_lease_session &&
-	    time_after(dirci->i_lease_ttl, jiffies) &&
-	    (dirci->i_lease_mask & CEPH_LOCK_ICONTENT)) {
-		dout(20, "d_revalidate have ICONTENT on dir inode %p, ok\n",
-		     dir);
-		goto inode_ok;
-	}
-	if (__ceph_caps_issued(dirci) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) {
-		dout(20, "d_revalidate have EXCL|RDCACHE caps on dir inode %p"
-		     ", ok\n", dir);
-		goto inode_ok;
-	}
-	spin_unlock(&dirci->vfs_inode.i_lock);
-
-	/* dentry lease? */
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	if (di && time_after(dentry->d_time, jiffies)) {
-		dout(20, "d_revalidate - dentry %p lease valid\n", dentry);
-		spin_unlock(&dentry->d_lock);
+	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
+		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
+		     dentry, dir);
 		return 1;
 	}
-	spin_unlock(&dentry->d_lock);
+	if (ceph_dentry_lease_valid(dentry)) {
+		dout(20, "dentry_revalidate %p lease valid\n", dentry);
+		return 1;
+	}
 
-	dout(20, "d_revalidate - dentry %p expired\n", dentry);
+	dout(20, "dentry_revalidate %p no lease\n", dentry);
 	d_drop(dentry);
 	return 0;
-
-inode_ok:
-	spin_unlock(&dirci->vfs_inode.i_lock);
-	return 1;
 }
 
-static void ceph_d_release(struct dentry *dentry)
+static void ceph_dentry_release(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
 	if (dentry->d_fsdata) {
@@ -564,7 +552,7 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 struct dentry_operations ceph_dentry_ops = {
-	.d_revalidate = ceph_d_revalidate,
-	.d_release = ceph_d_release,
+	.d_revalidate = ceph_dentry_revalidate,
+	.d_release = ceph_dentry_release,
 };
 

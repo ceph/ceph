@@ -234,6 +234,15 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
  */
 extern int __ceph_caps_issued(struct ceph_inode_info *ci);
 
+static inline int ceph_caps_issued(struct ceph_inode_info *ci)
+{
+	int issued;
+	spin_lock(&ci->vfs_inode.i_lock);
+	issued = __ceph_caps_issued(ci);
+	spin_unlock(&ci->vfs_inode.i_lock);
+	return issued;
+}
+
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
 	int used = 0;
@@ -279,9 +288,7 @@ static inline int ceph_file_mode(int flags)
 		return FILE_MODE_WRONLY;
 	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
-	BUG_ON(1);
-
-	return 0; /* remove compilation warning */
+	return FILE_MODE_RDWR;  /* not -EINVAL under Linux, strangely */
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -352,6 +359,8 @@ extern void ceph_update_dentry_lease(struct dentry *dentry,
 				     struct ceph_mds_reply_lease *lease,
 				     struct ceph_mds_session *session,
 				     unsigned long from_time);
+extern int ceph_inode_lease_valid(struct inode *inode, int mask);
+extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
@@ -385,7 +394,7 @@ extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-			    struct nameidata *nd);
+			    struct nameidata *nd, int mode);
 extern int ceph_release(struct inode *inode, struct file *filp);
 extern int ceph_inode_revalidate(struct inode *inode, int mask);
 

@@ -536,7 +536,7 @@ static struct file_system_type ceph_fs_type = {
 	.name		= "ceph",
 	.get_sb		= ceph_get_sb,
 	.kill_sb	= ceph_kill_sb,
-/*	.fs_flags	=   */
+	.fs_flags	= FS_RENAME_DOES_D_MOVE,
 };
 
 static int __init init_ceph(void)
