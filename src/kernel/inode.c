@@ -1080,13 +1080,17 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_request_head *reqh;
 	int err;
 
+	err = inode_change_ok(inode, attr);
+	if (err != 0)
+		return err;
+
 	/* gratuitous debug output */
         if (ia_valid & ATTR_UID)
 		dout(10, "setattr: uid %d -> %d\n", inode->i_uid, attr->ia_uid);
         if (ia_valid & ATTR_GID)
 		dout(10, "setattr: gid %d -> %d\n", inode->i_uid, attr->ia_uid);
         if (ia_valid & ATTR_MODE)
-		dout(10, "setattr: mode %d -> %d\n", inode->i_mode, 
+		dout(10, "setattr: mode %o -> %o\n", inode->i_mode, 
 		     attr->ia_mode);
         if (ia_valid & ATTR_SIZE)
 		dout(10, "setattr: size %lld -> %lld\n", inode->i_size, 
