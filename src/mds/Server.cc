@@ -1649,10 +1649,11 @@ void Server::handle_client_chmod(MDRequest *mdr)
   // project update
   inode_t *pi = cur->project_inode();
   pi->mode = 
-    (pi->mode & ~04777) | 
-    (req->head.args.chmod.mode & 04777);
+    (pi->mode & ~03777) | 
+    (req->head.args.chmod.mode & 03777);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
+  dout(10) << "chmod " << oct << pi->mode << " (" << req->head.args.chmod.mode << ")" << dec << *cur << dendl;
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
