@@ -483,6 +483,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	dget(old_dentry);
+	req->r_old_dentry = old_dentry;
+	dget(new_dentry);
+	req->r_last_dentry = new_dentry;
 	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
 	if (new_dentry->d_inode)

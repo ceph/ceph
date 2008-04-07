@@ -437,12 +437,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		
 		/* dentry */
 		ininfo = rinfo->trace_in[d+1].in;
-		if (d == rinfo->trace_numd-1 &&
-		    req->r_last_dentry) {
+		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
 			dout(10, "fill_trace using provided dentry\n");
 			dn = req->r_last_dentry;
 			ceph_init_dentry(dn);  /* just in case */
 			req->r_last_dentry = NULL;
+			if (req->r_old_dentry) {
+				dout(10, "fill_trace doing d_move %p -> %p\n",
+				     req->r_old_dentry, dn);
+				d_move(req->r_old_dentry, dn);
+			}
 		} else {
 			dname.name = rinfo->trace_dname[d];
 			dname.len = rinfo->trace_dname_len[d];
@@ -469,8 +473,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				ceph_init_dentry(dn);
 			}
 		}
-		ceph_update_dentry_lease(dn, rinfo->trace_dlease[d], 
-					 session, req->r_from_time);
+		if (dn->d_parent == parent)
+			ceph_update_dentry_lease(dn, rinfo->trace_dlease[d], 
+						 session, req->r_from_time);
 
 		/* inode */
 		if (d+1 == rinfo->trace_numi) {
@@ -533,6 +538,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dput(parent);
 
 	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
+	if (req->r_old_dentry)
+		dput(req->r_old_dentry);
 	if (req->r_last_dentry)
 		dput(req->r_last_dentry);
 	if (req->r_last_inode)
