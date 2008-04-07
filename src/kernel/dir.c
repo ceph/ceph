@@ -209,6 +209,9 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 	struct ceph_mds_request_head *rhead;
 	int err;
 
+	if (dentry->d_name.len > NAME_MAX)
+		return -ENAMETOOLONG;
+
 	dout(10, "do_lookup %p mask %d\n", dentry, CEPH_STAT_MASK_INODE_ALL);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
