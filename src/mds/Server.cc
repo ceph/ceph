@@ -4087,11 +4087,11 @@ class C_MDS_openc_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
-  version_t pv;
+  version_t pv, dirpv;
 public:
-  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
+  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dpv) :
     mds(m), mdr(r), dn(d), newi(ni),
-    pv(d->get_projected_version()) {}
+    pv(d->get_projected_version()), dirpv(dpv) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -4100,6 +4100,9 @@ public:
 
     // dirty inode, dn, dir
     newi->mark_dirty(pv, mdr->ls);
+
+    // dir inode's mtime
+    mds->server->dirty_dn_diri(mdr, dn, dirpv);
 
     // downgrade xlock to rdlock
     //mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
@@ -4154,15 +4157,16 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.max_size = in->get_layout_size_increment();
   
   // prepare finisher
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
+  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   
   // log + wait
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, dirpv);
   mdlog->submit_entry(le, fin);
   
   /*
