@@ -1389,11 +1389,11 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
   for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
-  if (dn->is_null()) {
+  if (dn->is_null())
     xlocks.insert(&dn->lock);                 // new dn, xlock
-    wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
-  } else
+  else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
+  wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
