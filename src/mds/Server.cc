@@ -3222,17 +3222,19 @@ void Server::_rename_prepare(MDRequest *mdr,
       mdr->more()->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
   }
 
-  inode_t *ji = 0;     // journaled inode getting nlink--
-  version_t ipv = 0;   // it's version
-  
+  inode_t *tji = 0;     // journaled inode getting nlink--
+  version_t tipv = 0;   // it's version
+  inode_t *sji = 0;     // renamed inode, if different that tji
+  version_t sipv = 0;
+
   if (linkmerge) {
     dout(10) << "will merge remote+primary links" << dendl;
 
     // destdn -> primary
     metablob->add_dir_context(destdn->dir);
     if (destdn->is_auth())
-      ipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
-    ji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
+      tipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
+    tji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
     destdn->inode->projected_parent = destdn;
     
     // do src dentry
@@ -3250,8 +3252,8 @@ void Server::_rename_prepare(MDRequest *mdr,
       // link-- inode, move to stray dir.
       metablob->add_dir_context(straydn->dir);
       if (straydn->is_auth())
-	ipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
-      ji = metablob->add_primary_dentry(straydn, true, destdn->inode);
+	tipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
+      tji = metablob->add_primary_dentry(straydn, true, destdn->inode);
       destdn->inode->projected_parent = straydn;
     } 
     else if (destdn->is_remote()) {
@@ -3259,8 +3261,8 @@ void Server::_rename_prepare(MDRequest *mdr,
       // nlink-- targeti
       metablob->add_dir_context(destdn->inode->get_parent_dir());
       if (destdn->inode->is_auth())
-	ipv = mdr->more()->pvmap[destdn->inode] = destdn->inode->pre_dirty();
-      ji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
+	tipv = mdr->more()->pvmap[destdn->inode] = destdn->inode->pre_dirty();
+      tji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
       dout(10) << "remote targeti (nlink--) is " << *destdn->inode << dendl;
     }
     else {
@@ -3272,11 +3274,10 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (srcdn->is_primary()) {
       dout(10) << "src is a primary dentry" << dendl;
       if (destdn->is_auth()) {
-	version_t siv;
 	if (srcdn->is_auth())
-	  siv = srcdn->inode->get_projected_version();
+	  sipv = srcdn->inode->get_projected_version();
 	else {
-	  siv = mdr->more()->inode_import_v;
+	  sipv = mdr->more()->inode_import_v;
 
 	  /* import node */
 	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
@@ -3299,9 +3300,9 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  srcdn->inode->state_clear(CInode::STATE_AUTH);
 	  srcdn->inode->mark_clean();
 	}
-	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
+	mdr->more()->pvmap[destdn] = destdn->pre_dirty(sipv+1);
       }
-      metablob->add_primary_dentry(destdn, true, srcdn->inode); 
+      sji = metablob->add_primary_dentry(destdn, true, srcdn->inode); 
       srcdn->inode->projected_parent = destdn;
 
     } else {
@@ -3330,13 +3331,20 @@ void Server::_rename_prepare(MDRequest *mdr,
     }       
   }
 
-  if (ipv) {
-    // update journaled target inode
+  if (tipv) {
+    // update journaled target/overwritten inode
     inode_t *pi = destdn->inode->project_inode();
     pi->nlink--;
     pi->ctime = mdr->now;
-    pi->version = ipv;
-    *ji = *pi;  // copy into journal
+    pi->version = tipv;
+    *tji = *pi;  // copy into journal
+  }
+  if (sji) {
+    // update renamed inode
+    inode_t *pi = srcdn->inode->project_inode();
+    pi->ctime = mdr->now;
+    pi->version = sipv;
+    *sji = *pi;  // copy into journal
   }
 
   // anchor updates?
@@ -3451,6 +3459,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
     if (srcdn->is_auth())
       srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
+
+    if (destdn->inode->is_auth())
+      destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
   }
 
   // update subtree map?
