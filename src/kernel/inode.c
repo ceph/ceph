@@ -446,6 +446,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dout(10, "fill_trace doing d_move %p -> %p\n",
 				     req->r_old_dentry, dn);
 				d_move(req->r_old_dentry, dn);
+				dput(dn);  /* dn is dropped */
+				dn = req->r_old_dentry;  /* use old_dentry */
+				req->r_old_dentry = 0;
 			}
 		} else {
 			dname.name = rinfo->trace_dname[d];

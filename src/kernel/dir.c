@@ -512,16 +512,16 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	struct inode *dir = dentry->d_parent->d_inode;
 
 	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
-		dout(20, "dentry_revalidate have ICONTENT on dir inode %p\n",
-		     dir);
+		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
+		     dentry, dir);
 		return 1;
 	}
 	if (ceph_dentry_lease_valid(dentry)) {
-		dout(20, "dentry_revalidate - dentry %p lease valid\n", dentry);
+		dout(20, "dentry_revalidate %p lease valid\n", dentry);
 		return 1;
 	}
 
-	dout(20, "dentry_revalidate - dentry %p expired\n", dentry);
+	dout(20, "dentry_revalidate %p no lease\n", dentry);
 	d_drop(dentry);
 	return 0;
 }
