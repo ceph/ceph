@@ -764,8 +764,10 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/* head->retry_attempt = 0; set by do_request */
 	head->mds_wants_replica_in_dirino = 0;
 	head->op = cpu_to_le32(op);
-	head->caller_uid = cpu_to_le32(current->uid);
-	head->caller_gid = cpu_to_le32(current->gid);
+	head->caller_uid = cpu_to_le32(current->euid);
+	head->caller_gid = cpu_to_le32(current->egid);
+	dout(10, "create_request euid.egid %d.%d\n", 
+	     current->euid, current->egid);
 
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
