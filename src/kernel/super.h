@@ -394,7 +394,7 @@ extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-			    struct nameidata *nd);
+			    struct nameidata *nd, int mode);
 extern int ceph_release(struct inode *inode, struct file *filp);
 extern int ceph_inode_revalidate(struct inode *inode, int mask);
 

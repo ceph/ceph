@@ -248,7 +248,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	/* open (but not create!) intent? */
 	if (nd->flags & LOOKUP_OPEN &&
 	    !(nd->intent.open.flags & O_CREAT)) {
-		err = ceph_lookup_open(dir, dentry, nd);
+		int mode = nd->intent.open.create_mode & ~current->fs->umask;
+		err = ceph_lookup_open(dir, dentry, nd, mode);
 		return ERR_PTR(err);
 	}
 
@@ -268,7 +269,7 @@ static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-	err = ceph_lookup_open(dir, dentry, nd);
+	err = ceph_lookup_open(dir, dentry, nd, mode);
 	return err;
 }
 
