@@ -1171,7 +1171,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir)
   in->inode.uid = mdr->client_request->get_caller_uid();
   in->inode.gid = mdr->client_request->get_caller_gid();
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
-  dout(10) << "prepare_new_inode " << *in << dendl;
+  dout(10) << "prepare_new_inode " 
+	   << in->inode.uid << "." << in->inode.gid << " "
+	   << *in << dendl;
 
   return in;
 }
@@ -1649,8 +1651,8 @@ void Server::handle_client_chmod(MDRequest *mdr)
   // project update
   inode_t *pi = cur->project_inode();
   pi->mode = 
-    (pi->mode & ~03777) | 
-    (req->head.args.chmod.mode & 03777);
+    (pi->mode & ~07777) | 
+    (req->head.args.chmod.mode & 07777);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   dout(10) << "chmod " << oct << pi->mode << " (" << req->head.args.chmod.mode << ")" << dec << *cur << dendl;
