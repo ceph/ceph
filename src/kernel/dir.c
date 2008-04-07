@@ -209,6 +209,9 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 	struct ceph_mds_request_head *rhead;
 	int err;
 
+	if (dentry->d_name.len > NAME_MAX)
+		return -ENAMETOOLONG;
+
 	dout(10, "do_lookup %p mask %d\n", dentry, CEPH_STAT_MASK_INODE_ALL);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
@@ -245,7 +248,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	/* open (but not create!) intent? */
 	if (nd->flags & LOOKUP_OPEN &&
 	    !(nd->intent.open.flags & O_CREAT)) {
-		err = ceph_lookup_open(dir, dentry, nd);
+		int mode = nd->intent.open.create_mode & ~current->fs->umask;
+		err = ceph_lookup_open(dir, dentry, nd, mode);
 		return ERR_PTR(err);
 	}
 
@@ -265,7 +269,7 @@ static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-	err = ceph_lookup_open(dir, dentry, nd);
+	err = ceph_lookup_open(dir, dentry, nd, mode);
 	return err;
 }
 
@@ -483,6 +487,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	dget(old_dentry);
+	req->r_old_dentry = old_dentry;
+	dget(new_dentry);
+	req->r_last_dentry = new_dentry;
 	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
 	if (new_dentry->d_inode)
@@ -504,16 +512,16 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	struct inode *dir = dentry->d_parent->d_inode;
 
 	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
-		dout(20, "dentry_revalidate have ICONTENT on dir inode %p\n",
-		     dir);
+		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
+		     dentry, dir);
 		return 1;
 	}
 	if (ceph_dentry_lease_valid(dentry)) {
-		dout(20, "dentry_revalidate - dentry %p lease valid\n", dentry);
+		dout(20, "dentry_revalidate %p lease valid\n", dentry);
 		return 1;
 	}
 
-	dout(20, "dentry_revalidate - dentry %p expired\n", dentry);
+	dout(20, "dentry_revalidate %p no lease\n", dentry);
 	d_drop(dentry);
 	return 0;
 }

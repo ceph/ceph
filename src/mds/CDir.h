@@ -258,6 +258,7 @@ protected:
   CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
+  void link_remote_inode( CDentry *dn, CInode *in );
   void link_primary_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
   void try_remove_unlinked_dn(CDentry *dn);

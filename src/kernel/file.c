@@ -106,7 +106,7 @@ int ceph_open(struct inode *inode, struct file *file)
  *  path_lookup_create -> LOOKUP_OPEN|LOOKUP_CREATE
  */
 int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-		     struct nameidata *nd)
+		     struct nameidata *nd, int mode)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -114,7 +114,6 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	struct ceph_mds_request *req;
 	int err;
 	int flags = nd->intent.open.flags;
-	int mode = nd->intent.open.create_mode;
 	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n", 
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 	

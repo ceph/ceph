@@ -289,6 +289,11 @@ void CDir::remove_dentry(CDentry *dn)
   //assert(nnull == null_items.size());         
 }
 
+void CDir::link_remote_inode(CDentry *dn, CInode *in)
+{
+  link_remote_inode(dn, in->ino(), MODE_TO_DT(in->get_projected_inode()->mode));
+}
+
 void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 {
   dout(12) << "link_remote_inode " << *dn << " remote " << ino << dendl;

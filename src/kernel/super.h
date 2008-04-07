@@ -290,9 +290,7 @@ static inline int ceph_file_mode(int flags)
 		return FILE_MODE_WRONLY;
 	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
-	BUG_ON(1);
-
-	return 0; /* remove compilation warning */
+	return FILE_MODE_RDWR;  /* not -EINVAL under Linux, strangely */
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -398,7 +396,7 @@ extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-			    struct nameidata *nd);
+			    struct nameidata *nd, int mode);
 extern int ceph_release(struct inode *inode, struct file *filp);
 extern int ceph_inode_revalidate(struct inode *inode, int mask);
 
