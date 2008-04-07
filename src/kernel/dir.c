@@ -483,6 +483,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	dget(old_dentry);
+	req->r_old_dentry = old_dentry;
+	dget(new_dentry);
+	req->r_last_dentry = new_dentry;
 	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
 	if (new_dentry->d_inode)
@@ -493,52 +497,32 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return err;
 }
 
+
+
 /*
  * check if dentry lease, or parent directory inode lease or cap says
  * this dentry is still valid
  */
-static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
+static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
-	struct ceph_inode_info *dirci = ceph_inode(dir);
-	struct ceph_dentry_info *di;
 
-	/* does dir inode lease or cap cover it? */
-	spin_lock(&dirci->vfs_inode.i_lock);
-	if (dirci->i_lease_session &&
-	    time_after(dirci->i_lease_ttl, jiffies) &&
-	    (dirci->i_lease_mask & CEPH_LOCK_ICONTENT)) {
-		dout(20, "d_revalidate have ICONTENT on dir inode %p, ok\n",
+	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
+		dout(20, "dentry_revalidate have ICONTENT on dir inode %p\n",
 		     dir);
-		goto inode_ok;
-	}
-	if (__ceph_caps_issued(dirci) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) {
-		dout(20, "d_revalidate have EXCL|RDCACHE caps on dir inode %p"
-		     ", ok\n", dir);
-		goto inode_ok;
-	}
-	spin_unlock(&dirci->vfs_inode.i_lock);
-
-	/* dentry lease? */
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	if (di && time_after(dentry->d_time, jiffies)) {
-		dout(20, "d_revalidate - dentry %p lease valid\n", dentry);
-		spin_unlock(&dentry->d_lock);
 		return 1;
 	}
-	spin_unlock(&dentry->d_lock);
+	if (ceph_dentry_lease_valid(dentry)) {
+		dout(20, "dentry_revalidate - dentry %p lease valid\n", dentry);
+		return 1;
+	}
 
-	dout(20, "d_revalidate - dentry %p expired\n", dentry);
+	dout(20, "dentry_revalidate - dentry %p expired\n", dentry);
 	d_drop(dentry);
 	return 0;
-
-inode_ok:
-	spin_unlock(&dirci->vfs_inode.i_lock);
-	return 1;
 }
 
-static void ceph_d_release(struct dentry *dentry)
+static void ceph_dentry_release(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
 	if (dentry->d_fsdata) {
@@ -564,7 +548,7 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 struct dentry_operations ceph_dentry_ops = {
-	.d_revalidate = ceph_d_revalidate,
-	.d_release = ceph_d_release,
+	.d_revalidate = ceph_dentry_revalidate,
+	.d_release = ceph_dentry_release,
 };
 

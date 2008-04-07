@@ -358,6 +358,10 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	int ret;
 	unsigned data_len = le32_to_cpu(msg->hdr.data_len);
 
+	dout(30, "write_partial_msg_pages %p on %d/%d offset %d\n", 
+	     con, con->out_msg_pos.page, con->out_msg->nr_pages,
+	     con->out_msg_pos.page_pos);
+
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
 		kv.iov_base = kmap(msg->pages[con->out_msg_pos.page]) +
 			con->out_msg_pos.page_pos;
@@ -647,8 +651,8 @@ static int read_message_partial(struct ceph_connection *con)
 		con->in_msg_pos.page = 0;
 		con->in_msg_pos.page_pos = data_off & ~PAGE_MASK;
 		con->in_msg_pos.data_pos = 0;
-		/* find (or alloc) pages for data payload */
-		want = calc_pages_for(data_len, data_off & ~PAGE_MASK);
+		/* find pages for data payload */
+		want = calc_pages_for(data_off & ~PAGE_MASK, data_len);
 		ret = 0;
 		BUG_ON(!con->msgr->prepare_pages);
 		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
@@ -660,11 +664,8 @@ static int read_message_partial(struct ceph_connection *con)
 			con->in_tag = CEPH_MSGR_TAG_READY;
 			return 0;
 		} else {
-			BUG_ON(m->nr_pages != want);
+			BUG_ON(m->nr_pages < want);
 		}
-		/*
-		 * FIXME: we should discard the data payload if ret
-		 */
 	}
 	while (con->in_msg_pos.data_pos < data_len) {
 		left = min((int)(data_len - con->in_msg_pos.data_pos),
@@ -672,7 +673,8 @@ static int read_message_partial(struct ceph_connection *con)
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
-		if (ret <= 0) return ret;
+		if (ret <= 0) 
+			return ret;
 		con->in_msg_pos.data_pos += ret;
 		con->in_msg_pos.page_pos += ret;
 		if (con->in_msg_pos.page_pos == PAGE_SIZE) {
@@ -1344,7 +1346,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->front.iov_len = front_len;
 
 	/* pages */
-	m->nr_pages = calc_pages_for(page_len, page_off);
+	m->nr_pages = calc_pages_for(page_off, page_len);
 	m->pages = pages;
 
 	INIT_LIST_HEAD(&m->list_head);

@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
+#include <linux/pagemap.h>
 
 #include "messenger.h"
 #include "mon_client.h"
@@ -63,7 +64,7 @@ struct ceph_mount_args {
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
 	char path[100];
-	int silly_write;
+	int wsize;
 };
 
 
@@ -166,6 +167,8 @@ struct ceph_inode_info {
 
 	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
 
+	int i_nr_pages, i_nr_dirty_pages; // hrm!
+
 	unsigned long i_hashval;
 
 	struct inode vfs_inode; /* at end */
@@ -233,6 +236,15 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
  */
 extern int __ceph_caps_issued(struct ceph_inode_info *ci);
 
+static inline int ceph_caps_issued(struct ceph_inode_info *ci)
+{
+	int issued;
+	spin_lock(&ci->vfs_inode.i_lock);
+	issued = __ceph_caps_issued(ci);
+	spin_unlock(&ci->vfs_inode.i_lock);
+	return issued;
+}
+
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
 	int used = 0;
@@ -278,9 +290,7 @@ static inline int ceph_file_mode(int flags)
 		return FILE_MODE_WRONLY;
 	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
-	BUG_ON(1);
-
-	return 0; /* remove compilation warning */
+	return FILE_MODE_RDWR;  /* not -EINVAL under Linux, strangely */
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -306,8 +316,11 @@ struct ceph_file_info {
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
  */
-static inline int calc_pages_for(int len, int off)
+static inline int calc_pages_for(int off, int len)
 {
+	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) - 
+		(off >> PAGE_CACHE_SHIFT);
+	/*
 	int nr = 0;
 	if (len == 0)
 		return 0;
@@ -316,6 +329,7 @@ static inline int calc_pages_for(int len, int off)
 	if (len & ~PAGE_MASK)
 		nr++;
 	return nr;
+	*/
 }
 
 
@@ -326,6 +340,7 @@ extern void ceph_destroy_client(struct ceph_client *cl);
 extern int ceph_mount(struct ceph_client *client, 
 		      struct ceph_mount_args *args, 
 		      struct vfsmount *mnt);
+extern void ceph_umount_start(struct ceph_client *cl);
 extern const char *ceph_msg_type_name(int type);
 
 
@@ -346,6 +361,8 @@ extern void ceph_update_dentry_lease(struct dentry *dentry,
 				     struct ceph_mds_reply_lease *lease,
 				     struct ceph_mds_session *session,
 				     unsigned long from_time);
+extern int ceph_inode_lease_valid(struct inode *inode, int mask);
+extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
@@ -360,7 +377,7 @@ extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_session *session);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
-extern void ceph_check_caps_wanted(struct ceph_inode_info *ci);
+extern void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask);
 extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
 

@@ -148,6 +148,41 @@ int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have)
 	}
 }
 
+int ceph_monc_request_osdmap(struct ceph_mon_client *monc,
+			     __u32 have, __u32 want)
+{
+	struct ceph_msg *msg;
+	int mon = pick_mon(monc, -1);
+	
+	dout(5, "ceph_monc_request_osdmap from mon%d have %u want %u\n", 
+	     mon, have, want);
+	monc->want_mdsmap = have;
+	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, 2*sizeof(__u32), 0, 0, 0);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
+	*(__le32*)msg->front.iov_base = cpu_to_le32(have);
+	*(((__le32*)msg->front.iov_base)+1) = cpu_to_le32(want);
+	msg->hdr.dst = monc->monmap->mon_inst[mon];
+	ceph_msg_send(monc->client->msgr, msg, 0);
+	return 0;
+
+}
+
+int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have)
+{
+	if (have > monc->want_osdmap) {
+		monc->want_osdmap = 0;
+		dout(5, "ceph_monc_got_osdmap have %u > wanted %u\n", 
+		     have, monc->want_osdmap);
+		return 0;
+	} else {
+		dout(5, "ceph_monc_got_osdmap have %u <= wanted %u *****\n", 
+		     have, monc->want_osdmap);
+		return -EAGAIN;
+	}
+}
+
+
 
 /*
  * statfs

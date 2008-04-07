@@ -36,6 +36,7 @@ struct ceph_mon_client {
 	unsigned long delay;
 
 	struct ceph_msg *msg;
+	u32 want_osdmap;  /* protected by caller's lock */
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);
@@ -46,8 +47,10 @@ extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 extern int ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have);
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have);
 
+extern int ceph_monc_request_osdmap(struct ceph_mon_client *monc,
+				    __u32 have, __u32 want);
+extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have);
 
-extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u64 have);
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 extern void ceph_monc_report_failure(struct ceph_mon_client *monc, struct ceph_entity_inst *who);
 

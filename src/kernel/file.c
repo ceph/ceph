@@ -11,8 +11,6 @@ int ceph_debug_file = -1;
 
 #include <linux/namei.h>
 
-static ssize_t ceph_silly_write(struct file *file, const char __user *data,
-				size_t count, loff_t *offset);
 
 /*
  * if err==0, caller is responsible for a put_session on *psession
@@ -172,6 +170,64 @@ const struct inode_operations ceph_file_iops = {
 };
 
 
+
+/*
+ * completely synchronous read and write methods.  direct from __user
+ * buffer to osd.
+ */
+static ssize_t ceph_sync_read(struct file *file, char __user *data,
+			       size_t count, loff_t *offset)
+{
+	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_client *client = ceph_inode_to_client(inode);
+	int ret = 0;
+	off_t pos = *offset;
+
+	dout(10, "sync_read on file %p %lld~%u\n", file, *offset,
+	     (unsigned)count);
+	
+	ret = ceph_osdc_sync_read(&client->osdc, ceph_ino(inode),
+				  &ci->i_layout,
+				  pos, count, data);
+	if (ret > 0)
+		*offset = pos + ret;
+	return ret;
+}
+
+static ssize_t ceph_sync_write(struct file *file, const char __user *data,
+			       size_t count, loff_t *offset)
+{
+	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_client *client = ceph_inode_to_client(inode);
+	int ret = 0;
+	off_t pos = *offset;
+
+	dout(10, "sync_write on file %p %lld~%u\n", file, *offset,
+	     (unsigned)count);
+
+	if (file->f_flags & O_APPEND)
+		pos = i_size_read(inode);
+
+	ret = ceph_osdc_sync_write(&client->osdc, ceph_ino(inode),
+				   &ci->i_layout,
+				   pos, count, data);
+	if (ret > 0) {
+		pos += ret;
+		*offset = pos;
+
+		spin_lock(&inode->i_lock);
+		if (pos > inode->i_size) {
+			inode->i_size = pos;
+			inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+			dout(10, "extending file size to %lu\n", pos);
+		}
+		spin_unlock(&inode->i_lock);
+	}
+	return ret;
+}
+
 /* 
  * wrap do_sync_read and friends with checks for cap bits on the inode.
  * atomically grab references, so that those bits are released mid-read.
@@ -183,20 +239,25 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	ssize_t ret;
 	int got = 0;
 
-	dout(10, "read trying to get caps\n");
+	dout(10, "read %llx %llu~%u trying to get caps\n",
+	     ceph_ino(inode), *ppos, (unsigned)len);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD, 
 							 CEPH_CAP_RDCACHE, 
 							 &got));
 	if (ret < 0) 
 		goto out;
-	dout(10, "read got cap refs on %d\n", got);
+	dout(10, "read %llx %llu~%u got cap refs %d\n",
+	     ceph_ino(inode), *ppos, (unsigned)len, got);
 
-	//if (got & CEPH_CAP_RDCACHE) {
-	ret = do_sync_read(filp, buf, len, ppos);
+	if ((got & CEPH_CAP_RDCACHE) == 0 ||
+	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) 
+		ret = ceph_sync_read(filp, buf, len, ppos);
+	else
+		ret = do_sync_read(filp, buf, len, ppos);
 
 out:
-	dout(10, "read dropping cap refs on %d\n", got);
+	dout(10, "read %llx dropping cap refs on %d\n", ceph_ino(inode), got);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
@@ -209,7 +270,6 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 {
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_client *client = ceph_inode_to_client(inode);
 	ssize_t ret;
 	int got = 0;
 
@@ -222,10 +282,10 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 		goto out;
 	dout(10, "write got cap refs on %d\n", got);
 
-	if (client->mount_args.silly_write) 
-		ret = ceph_silly_write(filp, buf, len, ppos);
+	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
+	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) 
+		ret = ceph_sync_write(filp, buf, len, ppos);
 	else
-	//if (got & CEPH_CAP_RDCACHE) {
 		ret = do_sync_write(filp, buf, len, ppos);
 
 out:
@@ -235,61 +295,6 @@ out:
 }
 
 
-
-/*
- * totally naive write.  just to get things sort of working.
- * ugly hack!
- */
-static ssize_t ceph_silly_write(struct file *file, const char __user *data,
-				size_t count, loff_t *offset)
-{
-	struct inode *inode = file->f_dentry->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
-	int ret = 0;
-	int did = 0;
-	off_t pos = *offset;
-
-	dout(10, "silly_write on file %p %lld~%u\n", file, *offset,
-	     (unsigned)count);
-
-	/* ignore caps, for now. */
-	/* this is an ugly hack */
-
-	if (file->f_flags & O_APPEND)
-		pos = inode->i_size;
-
-	while (count > 0) {
-		ret = ceph_osdc_silly_write(osdc, ceph_ino(inode),
-					    &ci->i_layout,
-					    count, pos, data);
-		dout(10, "ret is %d\n", ret);
-		if (ret > 0) {
-			did += ret;
-			pos += ret;
-			data += ret;
-			count -= ret;
-			dout(10, "did %d bytes, ret now %d, %u left\n",
-			     did, ret, (unsigned)count);
-		} else if (did)
-			break;
-		else
-			return ret;
-	}
-
-	spin_lock(&inode->i_lock);
-	if (pos > inode->i_size) {
-		inode->i_size = pos;
-		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
-		dout(10, "extending file size to %d\n", (int)inode->i_size);
-	}
-	spin_unlock(&inode->i_lock);
-	invalidate_inode_pages2(inode->i_mapping);
-
-	*offset = pos;
-
-	return ret;
-}
 
 const struct file_operations ceph_file_fops = {
 	.open = ceph_open,

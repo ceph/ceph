@@ -49,6 +49,7 @@ static int ceph_write_inode(struct inode *inode, int unused)
 static void ceph_put_super(struct super_block *s)
 {
 	dout(30, "ceph_put_super\n");
+	ceph_umount_start(ceph_client(s));
 	return;
 }
 
@@ -65,7 +66,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 	/* fill in kstatfs */
 	buf->f_type = CEPH_SUPER_MAGIC;  /* ?? */
-	buf->f_bsize = 4096;
+	buf->f_bsize = 1 << 20;   /* 1 MB */
 	buf->f_blocks = st.f_total >> 2;
 	buf->f_bfree = st.f_free >> 2;
 	buf->f_bavail = st.f_avail >> 2;
@@ -75,6 +76,13 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_namelen = 1024;
 	buf->f_frsize = 4096;
 
+	return 0;
+}
+
+
+static int ceph_syncfs(struct super_block *sb, int wait)
+{
+	dout(10, "sync_fs %d\n", wait);
 	return 0;
 }
 
@@ -138,6 +146,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
+	ci->i_nr_pages = ci->i_nr_dirty_pages = 0;
 
 	ci->i_hashval = 0;
 
@@ -197,7 +206,7 @@ static const struct super_operations ceph_sops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
 	.write_inode    = ceph_write_inode,
-/*	.sync_fs        = ceph_syncfs, */
+	.sync_fs        = ceph_syncfs, 
 	.put_super	= ceph_put_super,
 	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
@@ -222,8 +231,9 @@ enum {
 	Opt_debug_osdc,
 	Opt_monport,
 	Opt_port,
+	Opt_wsize,
+	/* int args above */
 	Opt_ip,
-	Opt_sillywrite,
 };
 
 static match_table_t arg_tokens = {
@@ -236,9 +246,10 @@ static match_table_t arg_tokens = {
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
+	{Opt_wsize, "wsize=%d"},
+	/* int args above */
 	{Opt_ip, "ip=%s"},
-	/* int args above, no arguments below */
-	{Opt_sillywrite, "sillywrite"},
+	{-1, NULL}
 };
 
 /*
@@ -325,7 +336,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		if (!*c)
 			continue;
 		token = match_token(c, arg_tokens, argstr);
-		if (token == 0) {
+		if (token < 0) {
 			derr(0, "bad mount option at '%s'\n", c);
 			return -EINVAL;
 			
@@ -381,8 +392,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 
 			/* misc */
-		case Opt_sillywrite:
-			args->silly_write = 1;
+		case Opt_wsize:
+			args->wsize = intval;
 			break;
 
 		default:
@@ -511,8 +522,8 @@ static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
+	kill_anon_super(s);    /* will call put_super after sb is r/o */
 	ceph_destroy_client(client);
-	kill_anon_super(s);
 }
 
 
@@ -526,7 +537,7 @@ static struct file_system_type ceph_fs_type = {
 	.name		= "ceph",
 	.get_sb		= ceph_get_sb,
 	.kill_sb	= ceph_kill_sb,
-/*	.fs_flags	=   */
+	.fs_flags	= FS_RENAME_DOES_D_MOVE,
 };
 
 static int __init init_ceph(void)

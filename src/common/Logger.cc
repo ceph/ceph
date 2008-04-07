@@ -82,7 +82,7 @@ static void flush_all_loggers()
 
   // do any catching up we need to
   while (now_sec - last_flush >= g_conf.log_interval) {
-    generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushign" << dendl;
+    generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
     for (list<Logger*>::iterator p = logger_list.begin();
 	 p != logger_list.end();
 	 ++p) 

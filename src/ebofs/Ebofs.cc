@@ -1219,6 +1219,8 @@ void Ebofs::write_cnode(Cnode *cn)
   unsigned off = 0;
   csum_t csum = encode_cnode(cn, bl, off);
   assert(off == bytes);
+  if (off < bl.length())
+    bl.zero(off, bl.length()-off);
 
   // update pointer
   collection_tab->remove(cn->coll_id);

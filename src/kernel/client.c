@@ -92,21 +92,25 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
 		if (IS_ERR(mount_msg))
 			return PTR_ERR(mount_msg);
-		mount_msg->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
+		mount_msg->hdr.dst.name.type = 
+			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		mount_msg->hdr.dst.name.num = cpu_to_le32(which);
 		mount_msg->hdr.dst.addr = args->mon_addr[which];
 		
 		ceph_msg_send(client->msgr, mount_msg, 0);
-		dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
+		dout(10, "mount from mon%d, %d attempts left\n", 
+		     which, attempts);
 		
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
-		err = wait_for_completion_timeout(&client->mount_completion, 6*HZ);
+		err = wait_for_completion_timeout(&client->mount_completion, 
+						  6*HZ);
 		if (err == -EINTR)
 			return err; 
 		if (client->mounting == 7) 
 			break;  /* success */
-		dout(10, "mount still waiting for mount, attempts=%d\n", attempts);
+		dout(10, "mount still waiting for mount, attempts=%d\n", 
+		     attempts);
 		if (--attempts == 0)
 			return -EIO;
 	}
@@ -146,7 +150,9 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	if (first) {
 		client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
 		client->msgr->inst.name = msg->hdr.dst.name;
-		dout(1, "i am client%d\n", client->whoami);
+		dout(1, "i am client%d, fsid is %llx.%llx\n", client->whoami,
+		     le64_to_cpu(client->monc.monmap->fsid.major),
+		     le64_to_cpu(client->monc.monmap->fsid.minor));
 	}
 }
 
@@ -211,14 +217,17 @@ fail:
 	return ERR_PTR(err);
 }
 
+void ceph_umount_start(struct ceph_client *cl)
+{
+	ceph_mdsc_stop(&cl->mdsc);	
+}
+
 void ceph_destroy_client(struct ceph_client *cl)
 {
 	dout(10, "destroy_client %p\n", cl);
 
 	/* unmount */
 	/* ... */
-
-	ceph_mdsc_stop(&cl->mdsc);	
 
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();

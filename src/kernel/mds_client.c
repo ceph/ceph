@@ -404,6 +404,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_reply = 0;
 	req->r_last_inode = 0;
 	req->r_last_dentry = 0;
+	req->r_old_dentry = 0;
 	req->r_expects_cap = 0;
 	req->r_cap = 0;
 	req->r_session = 0;
@@ -1532,8 +1533,12 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	/*
 	 * renew at 1/2 the advertised timeout period.
 	 */
-	unsigned hz = (HZ * mdsc->mdsmap->m_cap_bit_timeout) >> 1;
-	schedule_delayed_work(&mdsc->delayed_work, hz);
+	int delay = mdsc->mdsmap->m_cap_bit_timeout >> 1;
+	unsigned hz = HZ * delay;
+	int r;
+	dout(10, "schedule_delayed for %d seconds (%u hz)\n", delay, hz);
+	r = schedule_delayed_work(&mdsc->delayed_work, hz);
+	dout(10, "r = %d\n", r);
 }
 
 void delayed_work(struct work_struct *work)
