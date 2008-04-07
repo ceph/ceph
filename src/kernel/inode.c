@@ -435,7 +435,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		     dn, dn->d_inode);
 		parent = dn;
 		
-		/* dentry */	       
+		/* dentry */
+		ininfo = rinfo->trace_in[d+1].in;
 		if (d == rinfo->trace_numd-1 &&
 		    req->r_last_dentry) {
 			dout(10, "fill_trace using provided dentry\n");
@@ -446,9 +447,17 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			dname.name = rinfo->trace_dname[d];
 			dname.len = rinfo->trace_dname_len[d];
 			dname.hash = full_name_hash(dname.name, dname.len);
+		retry_lookup:
 			dn = d_lookup(parent, &dname);
 			dout(10, "fill_trace d_lookup of '%.*s' got %p\n", 
 			     (int)dname.len, dname.name, dn);
+			if (d+1 < rinfo->trace_numi &&
+			    dn->d_inode &&
+			    ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino)) {
+				dout(10, "fill_trace dn points to wrong ino\n");
+				d_delete(dn);
+				goto retry_lookup; /* may drop, be neg */
+			}
 			if (!dn) {
 				dout(10, "fill_trace calling d_alloc\n");
 				dn = d_alloc(parent, &dname);
@@ -475,11 +484,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 			break;
 		}
-		ininfo = rinfo->trace_in[d+1].in;
 
-		if ((!dn->d_inode) ||
-		    (ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino))) {
-			dout(10, "fill_trace new_inode\n");
+		if (!dn->d_inode) {
+			dout(10, "fill_trace attaching inode\n");
 			if (req->r_last_inode && ceph_ino(req->r_last_inode) == 
 			    le64_to_cpu(ininfo->ino)) {
 				in = req->r_last_inode;
