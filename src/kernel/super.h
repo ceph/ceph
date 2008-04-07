@@ -169,8 +169,6 @@ struct ceph_inode_info {
 	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
 
-	int i_nr_pages, i_nr_dirty_pages; // hrm!
-
 	unsigned long i_hashval;
 
 	struct inode vfs_inode; /* at end */
@@ -380,7 +378,9 @@ extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got);
+extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
+extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
 extern void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask);
 extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
