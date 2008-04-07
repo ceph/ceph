@@ -780,10 +780,14 @@ retry:
 	used = __ceph_caps_used(ci);
 
 	list_for_each(p, &ci->i_caps) {
+		int revoking;
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
 
 		/* completed revocation? */
-		if (((cap->implemented & ~cap->issued) & used) == 0) {
+		revoking = cap->implemented & ~cap->issued;
+		dout(20, "cap %p issued %d impl %d revoking %d used %d\n",
+		     cap, cap->issued, cap->implemented, revoking, used);
+		if (revoking && (revoking && used) == 0) {
 			dout(10, "completed revocation of %d\n",
 			     cap->implemented & ~cap->issued);
 			cap->implemented = cap->issued;
