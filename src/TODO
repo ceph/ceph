@@ -16,6 +16,7 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
+- why is mds_client delayed work not working?
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - trim expired leases so we don't indefinitely hold dcache/icache refs...

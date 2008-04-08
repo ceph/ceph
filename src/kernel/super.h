@@ -41,6 +41,8 @@ extern int ceph_debug_addr;
 #endif
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
+#define CEPH_BLOCK_SHIFT 20    /* 1 MB */
+#define CEPH_BLOCK  (1 << CEPH_BLOCK_SHIFT)
 
 #define IPQUADPORT(n)							\
 	(unsigned int)((n.sin_addr.s_addr)) & 0xFF,			\
@@ -65,14 +67,6 @@ struct ceph_mount_args {
 	struct ceph_entity_addr mon_addr[5];
 	char path[100];
 	int wsize;
-};
-
-
-enum {
-	MOUNTING,
-	MOUNTED,
-	UNMOUNTING,
-	UNMOUNTED
 };
 
 /*
