@@ -3271,7 +3271,18 @@ void Server::_rename_prepare(MDRequest *mdr,
 
     // add dest dentry
     metablob->add_dir_context(destdn->dir);
-    if (srcdn->is_primary()) {
+    if (srcdn->is_remote()) {
+      dout(10) << "src is a remote dentry" << dendl;
+      if (destdn->is_auth())
+	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
+      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
+				  srcdn->get_remote_d_type());
+      if (srcdn->inode->is_auth()) {
+	sipv = srcdn->inode->pre_dirty();
+	sji = metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true);
+      }
+    } else {
+      assert(srcdn->is_primary());
       dout(10) << "src is a primary dentry" << dendl;
       if (destdn->is_auth()) {
 	if (srcdn->is_auth())
@@ -3300,18 +3311,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  srcdn->inode->state_clear(CInode::STATE_AUTH);
 	  srcdn->inode->mark_clean();
 	}
-	mdr->more()->pvmap[destdn] = destdn->pre_dirty(sipv+1);
+	sipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(sipv+1);
       }
       sji = metablob->add_primary_dentry(destdn, true, srcdn->inode); 
       srcdn->inode->projected_parent = destdn;
-
-    } else {
-      assert(srcdn->is_remote());
-      dout(10) << "src is a remote dentry" << dendl;
-      if (destdn->is_auth())
-	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
-      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
-				  srcdn->get_remote_d_type()); 
     }
     
     // remove src dentry
@@ -3453,15 +3456,12 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	// hack: fix auth bit
 	destdn->inode->state_set(CInode::STATE_AUTH);
       }
-      if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     }
+    if (destdn->inode->is_auth())
+      destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
 
     if (srcdn->is_auth())
       srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
-
-    if (destdn->inode->is_auth())
-      destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
   }
 
   // update subtree map?
