@@ -882,14 +882,12 @@ void OSD::heartbeat()
       if (heartbeat_from_stamp[*p] < grace) {
 	dout(0) << "no heartbeat from osd" << *p << " since " << heartbeat_from_stamp[*p]
 		<< " (cutoff " << grace << ")" << dendl;
-	int mon = monmap->pick_mon();
-	messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), osdmap->get_inst(*p), osdmap->get_epoch()),
-				monmap->get_inst(mon));
+	queue_failure(*p);
       }
     } else
       heartbeat_from_stamp[*p] = now;  // fake initial
   }
-
+  maybe_report_failures();
 
   if (logger) logger->set("hbto", heartbeat_to.size());
   if (logger) logger->set("hbfrom", heartbeat_from.size());
@@ -920,7 +918,26 @@ void OSD::heartbeat()
   timer.add_event_after(wait, new C_Heartbeat(this));
 }
 
+void OSD::maybe_report_failures()
+{
+  if (pending_failures.empty())
+    return;  // nothing to report
 
+  utime_t now = g_clock.now();
+  if (last_failure_report + g_conf.osd_failure_report_interval > now)
+    return;  // not yet
+
+  last_failure_report = now;
+
+  int mon = monmap->pick_mon();
+  for (set<int>::iterator p = pending_failures.begin();
+       p != pending_failures.end();
+       p++)
+    messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), 
+					    osdmap->get_inst(*p), osdmap->get_epoch()),
+			    monmap->get_inst(mon));
+  pending_failures.clear();
+}
 
 void OSD::send_pg_stats()
 {
@@ -1152,39 +1169,22 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
     return;
   }
 
-  if (dest.is_osd()) {
-    // failed osd.  drop message, report to mon.
-    if (!osdmap->have_inst(dest.num()) ||
-	(osdmap->get_inst(dest.num()) != inst)) {
-      dout(1) << "ms_handle_failure " << inst 
-	      << ", already dropped/changed in osdmap, dropping " << *m
-	      << dendl;
-    } else {
-      int mon = monmap->pick_mon();
-      dout(1) << "ms_handle_failure " << inst 
-	      << ", dropping and reporting to mon" << mon 
-	      << " " << *m
-	      << dendl;
-      messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), inst, 
-					      osdmap->get_epoch()),
-			      monmap->get_inst(mon));
+  if (dest.is_mon()) {
+    if (m->get_type() == MSG_PGSTATS) {
+      MPGStats *pgstats = (MPGStats*)m;
+      dout(10) << "ms_handle_failure on " << *m << ", requeuing pg stats" << dendl;
+      pg_stat_queue_lock.Lock();
+      for (map<pg_t,pg_stat_t>::iterator p = pgstats->pg_stat.begin(); 
+	   p != pgstats->pg_stat.end(); 
+	   p++)
+	pg_stat_queue.insert(p->first);
+      pg_stat_queue_lock.Unlock();
     }
-    delete m;
-  } else if (dest.is_mon()) {
-    // resend to a different monitor.
-    int mon = monmap->pick_mon(true);
-    dout(1) << "ms_handle_failure " << inst 
-            << ", resending to mon" << mon 
-	    << " " << *m
-            << dendl;
-    messenger->send_message(m, monmap->get_inst(mon));
   }
-  else {
-    // client?
-    dout(1) << "ms_handle_failure " << inst 
-            << ", dropping " << *m << dendl;
-    delete m;
-  }
+
+  dout(1) << "ms_handle_failure " << inst 
+	  << ", dropping " << *m << dendl;
+  delete m;
 }
 
 
@@ -1342,6 +1342,7 @@ void OSD::handle_osd_map(MOSDMap *m)
            i++) {
         int osd = i->first;
         if (osd == whoami) continue;
+	pending_failures.erase(i->first);
         messenger->mark_down(osdmap->get_addr(i->first));
         peer_map_epoch.erase(entity_name_t::OSD(i->first));
       }

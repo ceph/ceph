@@ -151,10 +151,12 @@ public:
   void _encode(bufferlist &bl) {
     ::_encode(version, bl);
     ::_encode(pg_stat, bl);
+    ::_encode(osd_stat, bl);
   }
   void _decode(bufferlist& bl, int& off) {
     ::_decode(version, bl, off);
     ::_decode(pg_stat, bl, off);
+    ::_decode(osd_stat, bl, off);
     stat_zero();
     for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
 	 p != pg_stat.end();

@@ -1169,6 +1169,12 @@ void Rank::Pipe::fault(bool onconnect)
   ::close(sd);
   sd = -1;
 
+  // lossy channel?
+  if (policy.retry_interval == 0) {
+    fail();
+    return;
+  }
+
   if (q.empty()) {
     if (state == STATE_CLOSING || onconnect) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
