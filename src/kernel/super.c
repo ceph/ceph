@@ -64,12 +64,14 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	if (err < 0)
 		return err;
 
+#define BLOCK_IN_KB_SHIFT  10   /* 1 MB */
+
 	/* fill in kstatfs */
 	buf->f_type = CEPH_SUPER_MAGIC;  /* ?? */
-	buf->f_bsize = 1 << 20;   /* 1 MB */
-	buf->f_blocks = st.f_total >> 2;
-	buf->f_bfree = st.f_free >> 2;
-	buf->f_bavail = st.f_avail >> 2;
+	buf->f_bsize = 1 << (10 + BLOCK_IN_KB_SHIFT);     /* 1 MB */
+	buf->f_blocks = st.f_total >> BLOCK_IN_KB_SHIFT;  
+	buf->f_bfree = st.f_free >> BLOCK_IN_KB_SHIFT;  
+	buf->f_bavail = st.f_avail >> BLOCK_IN_KB_SHIFT;  
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
 	/* fsid? */
