@@ -107,7 +107,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       else {
         dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
         int mon = monmap->pick_mon();
-        messenger->send_message(new MOSDGetMap(osdmap->get_epoch()+1), 
+        messenger->send_message(new MOSDGetMap(osdmap->get_fsid(), osdmap->get_epoch()+1), 
                                 monmap->get_inst(mon));
         break;
       }
@@ -140,7 +140,7 @@ void Objecter::maybe_request_map()
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
   last_epoch_requested = osdmap->get_epoch()+1;
-  messenger->send_message(new MOSDGetMap(osdmap->get_epoch(), last_epoch_requested),
+  messenger->send_message(new MOSDGetMap(osdmap->get_fsid(), osdmap->get_epoch(), last_epoch_requested),
 			  monmap->get_inst(monmap->pick_mon()));
 }
 
@@ -999,7 +999,8 @@ void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_in
       dout(0) << "ms_handle_failure " << dest << " inst " << inst 
 	      << ", dropping, reporting to mon" << mon 
 	      << dendl;
-      messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()), 
+      messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), inst, 
+					      osdmap->get_epoch()), 
 			      monmap->get_inst(mon));
     }
     delete m;

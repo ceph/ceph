@@ -286,6 +286,17 @@ struct ceph_statfs {
 	__le64 f_objects;
 };
 
+struct ceph_osd_getmap {
+	struct ceph_fsid fsid;
+	__le64 start, want;
+} __attribute__ ((packed));
+
+struct ceph_mds_getmap {
+	struct ceph_fsid fsid;
+	__le64 have;
+} __attribute__ ((packed));
+
+
 /*
  * mds states 
  *   > 0 -> in

@@ -344,6 +344,11 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 {
   dout(7) << "handle_osd_getmap from " << m->get_source() << " from " << m->get_start_epoch() << dendl;
   
+  if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
+    dout(0) << "handle_osd_getmap on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    delete m;
+  }
+
   if (m->get_start_epoch()) {
     if (m->get_want_epoch() <= osdmap.get_epoch())
 	send_incremental(m->get_source_inst(), m->get_start_epoch());
@@ -365,6 +370,12 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 
 bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
+  if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
+    dout(0) << "preprocess_failure on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    delete m;
+    return true;
+  }
+
   /*
    * FIXME
    * this whole thing needs a rework of some sort.  we shouldn't
@@ -394,6 +405,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_from() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m->get_from(), m->get_epoch()+1);
+    delete m;
     return true;
   }
   if (osdmap.get_inst(badboy) != m->get_failed()) {
@@ -401,6 +413,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 	    << ", from " << m->get_from() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m->get_from(), m->get_epoch()+1);
+    delete m;
     return true;
   }
   // already reported?
@@ -408,6 +421,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_from() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m->get_from(), m->get_epoch()+1);
+    delete m;
     return true;
   }
 
@@ -446,6 +460,12 @@ void OSDMonitor::_reported_failure(MOSDFailure *m)
 
 bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 {
+  if (!ceph_fsid_equal(&m->sb.fsid, &mon->monmap->fsid)) {
+    dout(0) << "preprocess_boot on fsid " << m->sb.fsid << " != " << mon->monmap->fsid << dendl;
+    delete m;
+    return true;
+  }
+
   assert(m->inst.name.is_osd());
   int from = m->inst.name.num();
   

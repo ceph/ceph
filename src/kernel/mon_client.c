@@ -119,13 +119,16 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 int ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have)
 {
 	int mon = pick_mon(monc, -1);
+	struct ceph_mds_getmap *h;
 
 	dout(5, "ceph_monc_request_mdsmap from mon%d have %u\n", mon, have);
 	monc->want_mdsmap = have;
-	monc->msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(__u32), 0, 0, 0);
+	monc->msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, 0);
 	if (IS_ERR(monc->msg))
 		return PTR_ERR(monc->msg);
-	*(__le32*)monc->msg->front.iov_base = cpu_to_le32(have);
+	h = monc->msg->front.iov_base;
+	h->fsid = monc->monmap->fsid;
+	h->have = cpu_to_le32(have);
 	monc->msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_delayed_work(&monc->delayed_work, &monc->delay);
 	return 0;
@@ -152,16 +155,19 @@ int ceph_monc_request_osdmap(struct ceph_mon_client *monc,
 			     __u32 have, __u32 want)
 {
 	struct ceph_msg *msg;
+	struct ceph_osd_getmap *h;
 	int mon = pick_mon(monc, -1);
 	
 	dout(5, "ceph_monc_request_osdmap from mon%d have %u want %u\n", 
 	     mon, have, want);
 	monc->want_mdsmap = have;
-	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, 2*sizeof(__u32), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, 0);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
-	*(__le32*)msg->front.iov_base = cpu_to_le32(have);
-	*(((__le32*)msg->front.iov_base)+1) = cpu_to_le32(want);
+	h = msg->front.iov_base;
+	h->fsid = monc->monmap->fsid;
+	h->start = cpu_to_le32(have);
+	h->want = cpu_to_le32(want);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;

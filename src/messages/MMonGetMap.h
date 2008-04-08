@@ -24,7 +24,7 @@ class MMonGetMap : public Message {
  public:
   MMonGetMap() : Message(CEPH_MSG_MON_GET_MAP) { }
 
-  const char *get_type_name() { return "mongetmap"; }
+  const char *get_type_name() { return "mon_getmap"; }
   
   void encode_payload() { }
   void decode_payload() { }

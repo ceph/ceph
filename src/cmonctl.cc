@@ -140,7 +140,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   messenger->set_dispatcher(&dispatcher);
   
   // build command
-  MMonCommand *m = new MMonCommand(messenger->get_myinst());
+  MMonCommand *m = new MMonCommand(monmap.fsid, messenger->get_myinst());
   m->set_data(indata);
   m->cmd.swap(vcmd);
   int mon = monmap.pick_mon();

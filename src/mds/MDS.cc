@@ -509,7 +509,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (oldwhoami < 0) {
       // we need an osdmap too.
       int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(0),
+      messenger->send_message(new MOSDGetMap(monmap->fsid, 0),
 			      monmap->get_inst(mon));
     }
   }
