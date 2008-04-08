@@ -2344,7 +2344,7 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
   req->set_path(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
   atime.encode_timeval(&req->head.args.utime.atime);
-  req->head.args.utime.mask = CEPH_UTIME_ATIME | CEPH_UTIME_MTIME
+  req->head.args.utime.mask = CEPH_UTIME_ATIME | CEPH_UTIME_MTIME;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
