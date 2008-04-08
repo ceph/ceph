@@ -249,8 +249,10 @@ void OSDMonitor::committed()
 {
   // tell any osd
   int r = osdmap.get_any_up_osd();
-  if (r >= 0)
+  if (r >= 0) {
+    dout(10) << "committed, telling random osd" << r << " all about it" << dendl;
     send_latest(osdmap.get_inst(r));
+  }
 }
 
 
@@ -346,7 +348,7 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
   
   if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_osd_getmap on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
+    goto out;
   }
 
   if (m->get_start_epoch()) {
@@ -358,6 +360,7 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
   } else
     send_full(m->get_source_inst());
   
+ out:
   delete m;
 }
 
@@ -370,10 +373,12 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 
 bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
+  // who is failed
+  int badboy = m->get_failed().name.num();
+
   if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_failure on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
-    return true;
+    goto didit;
   }
 
   /*
@@ -392,41 +397,39 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 	osdmap.is_down(from)) {
       dout(5) << "preprocess_failure from dead osd" << from << ", ignoring" << dendl;
       send_incremental(m->get_from(), m->get_epoch()+1);
-      delete m;
-      return true;
+      goto didit;
     }
   }
   
-  // who is failed
-  int badboy = m->get_failed().name.num();
 
   // weird?
   if (!osdmap.have_inst(badboy)) {
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_from() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m->get_from(), m->get_epoch()+1);
-    delete m;
-    return true;
+    goto didit;
   }
   if (osdmap.get_inst(badboy) != m->get_failed()) {
     dout(5) << "preprocess_failure wrong osd: report " << m->get_failed() << " != map's " << osdmap.get_inst(badboy)
 	    << ", from " << m->get_from() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m->get_from(), m->get_epoch()+1);
-    delete m;
-    return true;
+    goto didit;
   }
   // already reported?
   if (osdmap.is_down(badboy)) {
     dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_from() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m->get_from(), m->get_epoch()+1);
-    delete m;
-    return true;
+    goto didit;
   }
 
   dout(10) << "preprocess_failure new: " << m->get_failed() << ", from " << m->get_from() << dendl;
   return false;
+
+ didit:
+  delete m;
+  return true;
 }
 
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
@@ -522,8 +525,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
 void OSDMonitor::_booted(MOSDBoot *m)
 {
-  dout(7) << "_booted " << m->inst << " w " << m->sb.weight << dendl;
-  send_latest(m->inst, m->sb.current_epoch);
+  dout(7) << "_booted " << m->inst << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
+  send_latest(m->inst, m->sb.current_epoch+1);
   delete m;
 }
 
@@ -576,7 +579,7 @@ void OSDMonitor::send_latest(entity_inst_t who, epoch_t start)
 void OSDMonitor::send_full(entity_inst_t who)
 {
   dout(5) << "send_full to " << who << dendl;
-  mon->messenger->send_message(new MOSDMap(&osdmap), who);
+  mon->messenger->send_message(new MOSDMap(mon->monmap->fsid, &osdmap), who);
 }
 
 void OSDMonitor::send_incremental(entity_inst_t dest, epoch_t from)
@@ -584,7 +587,7 @@ void OSDMonitor::send_incremental(entity_inst_t dest, epoch_t from)
   dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
 	  << " to " << dest << dendl;
   
-  MOSDMap *m = new MOSDMap;
+  MOSDMap *m = new MOSDMap(mon->monmap->fsid);
   
   for (epoch_t e = osdmap.get_epoch();
        e >= from;

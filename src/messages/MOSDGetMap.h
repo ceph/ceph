@@ -40,11 +40,13 @@ class MOSDGetMap : public Message {
   }
   
   void encode_payload() {
+    ::_encode(fsid, payload);
     ::_encode(start, payload);
     ::_encode(want, payload);
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(fsid, payload, off);
     ::_decode(start, payload, off);
     ::_decode(want, payload, off);
   }

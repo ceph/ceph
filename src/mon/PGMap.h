@@ -133,6 +133,10 @@ public:
     total_osd_num_objects -= s.num_objects;
   }
 
+  uint64_t total_kb() { return 4*total_osd_num_blocks; }
+  uint64_t total_avail_kb() { return 4*total_osd_num_blocks_avail; }
+  uint64_t total_used_kb() { return total_kb() - total_avail_kb(); }
+
   PGMap() : version(0),
 	    last_pg_scan(0),
 	    num_pg(0), 

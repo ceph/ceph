@@ -59,7 +59,7 @@ void Monitor::init()
 {
   lock.Lock();
   
-  dout(1) << "init" << dendl;
+  dout(1) << "init fsid " << monmap->fsid << dendl;
   
   preinit();
   

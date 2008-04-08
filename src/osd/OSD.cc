@@ -1214,7 +1214,7 @@ void OSD::wait_for_new_map(Message *m)
   // ask 
   if (waiting_for_osdmap.empty()) {
     int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDGetMap(osdmap->get_fsid(), osdmap->get_epoch()+1),
+    messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
                             monmap->get_inst(mon));
   }
   
@@ -1227,6 +1227,12 @@ void OSD::wait_for_new_map(Message *m)
  */
 void OSD::handle_osd_map(MOSDMap *m)
 {
+  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    delete m;
+    return;
+  }
+
   wait_for_no_ops();
   
   assert(osd_lock.is_locked());
@@ -1635,7 +1641,7 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
   
-  MOSDMap *m = new MOSDMap;
+  MOSDMap *m = new MOSDMap(monmap->fsid);
   
   for (epoch_t e = osdmap->get_epoch();
        e > since;

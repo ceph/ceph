@@ -38,6 +38,23 @@
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 
+struct kb_t {
+  uint64_t v;
+  kb_t(uint64_t _v) : v(_v) {}
+};
+ostream& operator<<(ostream& out, const kb_t& kb)
+{
+  if (kb.v > 2048*1024*1024*1024ULL)
+    return out << (kb.v >> 40) << " PB";    
+  if (kb.v > 2048*1024*1024ULL)
+    return out << (kb.v >> 30) << " TB";    
+  if (kb.v > 2048*1024ULL)
+    return out << (kb.v >> 20) << " GB";    
+  if (kb.v > 2048ULL)
+    return out << (kb.v >> 10) << " MB";
+  return out << kb.v << " KB";
+}
+
 ostream& operator<<(ostream& out, PGMonitor& pm)
 {
   std::stringstream ss;
@@ -51,7 +68,10 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
   string states = ss.str();
   return out << "v" << pm.pg_map.version << ": "
 	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states;
+	     << states
+	     << "; " << kb_t(pm.pg_map.total_used_kb()) << " used, "
+	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
+	     << kb_t(pm.pg_map.total_kb()) << " free";
 }
 
 /*
@@ -206,9 +226,9 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   memset(&reply->stfs, 0, sizeof(reply->stfs));
 
   // these are in KB.
-  reply->stfs.f_total = cpu_to_le64(4*pg_map.total_osd_num_blocks);
-  reply->stfs.f_free = cpu_to_le64(4*pg_map.total_osd_num_blocks_avail);
-  reply->stfs.f_avail = cpu_to_le64(4*pg_map.total_osd_num_blocks_avail);
+  reply->stfs.f_total = cpu_to_le64(pg_map.total_kb());
+  reply->stfs.f_free = cpu_to_le64(pg_map.total_avail_kb());
+  reply->stfs.f_avail = cpu_to_le64(pg_map.total_avail_kb());
   reply->stfs.f_objects = cpu_to_le64(pg_map.total_osd_num_objects);
 
   // reply

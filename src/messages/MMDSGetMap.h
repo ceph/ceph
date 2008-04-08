@@ -22,17 +22,24 @@
 
 class MMDSGetMap : public Message {
  public:
+  ceph_fsid fsid;
   epoch_t have;
 
-  MMDSGetMap(epoch_t h=0) : Message(CEPH_MSG_MDS_GETMAP), have (h) { }
+  MMDSGetMap() {}
+  MMDSGetMap(ceph_fsid &f, epoch_t h=0) : 
+    Message(CEPH_MSG_MDS_GETMAP), 
+    fsid(f),
+    have(h) { }
 
-  const char *get_type_name() { return "mdsgetmap"; }
+  const char *get_type_name() { return "mds_getmap"; }
   
   void encode_payload() {
+    ::_encode_simple(fsid, payload);
     ::_encode_simple(have, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::_decode_simple(fsid, p);
     ::_decode_simple(have, p);
   }
 };

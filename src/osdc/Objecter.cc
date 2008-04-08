@@ -70,6 +70,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(osdmap); 
 
+  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    delete m;
+    return;
+  }
+
   if (m->get_last() <= osdmap->get_epoch()) {
     dout(3) << "handle_osd_map ignoring epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -107,7 +113,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       else {
         dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
         int mon = monmap->pick_mon();
-        messenger->send_message(new MOSDGetMap(osdmap->get_fsid(), osdmap->get_epoch()+1), 
+        messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1), 
                                 monmap->get_inst(mon));
         break;
       }
@@ -140,7 +146,7 @@ void Objecter::maybe_request_map()
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
   last_epoch_requested = osdmap->get_epoch()+1;
-  messenger->send_message(new MOSDGetMap(osdmap->get_fsid(), osdmap->get_epoch(), last_epoch_requested),
+  messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch(), last_epoch_requested),
 			  monmap->get_inst(monmap->pick_mon()));
 }
 

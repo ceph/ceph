@@ -379,7 +379,7 @@ void MDS::beacon_send()
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
   int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), mdsmap->get_epoch(), 
+  messenger->send_message(new MMDSBeacon(monmap->fsid, messenger->get_myinst(), mdsmap->get_epoch(), 
 					 want_state, beacon_last_seq, want_rank),
 			  monmap->get_inst(mon));
 
