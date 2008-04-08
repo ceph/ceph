@@ -780,7 +780,7 @@ retry:
 	used = __ceph_caps_used(ci);
 
 	list_for_each(p, &ci->i_caps) {
-		int revoking;
+		int revoking, dropping;
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
 
 		/* completed revocation? */
@@ -805,6 +805,7 @@ retry:
 			goto out;
 		}
 
+		dropping = cap->issued & ~wanted;
 		cap->issued &= wanted;  /* drop bits we don't want */
 
 		keep = cap->issued;
@@ -822,6 +823,10 @@ retry:
 				       keep, wanted, seq, 
 				       size, max_size, &mtime, &atime, mds);
 
+		if (dropping & CEPH_CAP_RDCACHE) {
+			dout(20, "invalidating pages on %p\n", &ci->vfs_inode);
+			invalidate_mapping_pages(&ci->vfs_inode.i_data, 0, -1);
+		}
 		if (wanted == 0)
 			iput(&ci->vfs_inode);  /* removed cap */
 		goto retry;
