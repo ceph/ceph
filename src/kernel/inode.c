@@ -1213,8 +1213,12 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		/* do i hold CAP_EXCL? */
 		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 			dout(10, "utime holding EXCL, doing locally\n");
-			inode->i_atime = attr->ia_atime;
-			inode->i_mtime = attr->ia_mtime;
+			if (ia_valid & ATTR_ATIME)
+				inode->i_atime = attr->ia_atime;
+			if (ia_valid & ATTR_MTIME)
+				inode->i_mtime = attr->ia_mtime;
+			if (ia_valid & ATTR_CTIME)
+				inode->i_ctime = attr->ia_ctime;
 			return 0;
 		}
 		if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
