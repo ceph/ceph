@@ -43,6 +43,7 @@ class MClientFileCaps : public Message {
   inodeno_t get_ino() { return le64_to_cpu(h.ino); }
   __s64 get_size() { return le64_to_cpu(h.size);  }
   __s64 get_max_size() { return le64_to_cpu(h.max_size);  }
+  utime_t get_ctime() { return utime_t(h.ctime); }
   utime_t get_mtime() { return utime_t(h.mtime); }
   utime_t get_atime() { return utime_t(h.atime); }
 

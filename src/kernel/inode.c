@@ -60,7 +60,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	unsigned blksize = 1 << blkbits;
 	u64 size = le64_to_cpu(info->size);
 	int issued;
-	struct timespec mtime, atime;
+	struct timespec mtime, atime, ctime;
 	u64 blocks = size + blksize - 1;
 	do_div(blocks, blksize);
 
@@ -76,11 +76,11 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_gid = le32_to_cpu(info->gid);
 	inode->i_nlink = le32_to_cpu(info->nlink);
 	inode->i_rdev = le32_to_cpu(info->rdev);
-	ceph_decode_timespec(&inode->i_ctime, &info->ctime);
 
 	/* be careful with mtime, atime, size */
 	ceph_decode_timespec(&atime, &info->atime);
 	ceph_decode_timespec(&mtime, &info->mtime);
+	ceph_decode_timespec(&ctime, &info->ctime);
 	issued = __ceph_caps_issued(ci);
 	spin_lock(&inode->i_lock);
 	if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
@@ -94,6 +94,8 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 				inode->i_mtime = mtime;
 			if (timespec_compare(&atime, &inode->i_atime) > 0)
 				inode->i_atime = atime;
+			if (timespec_compare(&ctime, &inode->i_ctime) > 0)
+				inode->i_ctime = ctime;
 		}
 	} else {
 		inode->i_size = size;
@@ -101,6 +103,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		inode->i_blocks = blocks;
 		inode->i_mtime = mtime;
 		inode->i_atime = atime;
+		inode->i_atime = ctime;
 	}
 	spin_unlock(&inode->i_lock);
 
@@ -880,7 +883,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int ret = 0;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
-	struct timespec mtime, atime;
+	struct timespec mtime, atime, ctime;
 	int wake = 0;
 	int writeback_now = 0;
 	int invalidate = 0;
@@ -907,13 +910,20 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	if ((issued & CEPH_CAP_EXCL) == 0) {
 		ceph_decode_timespec(&mtime, &grant->mtime);
 		ceph_decode_timespec(&atime, &grant->atime);
+		ceph_decode_timespec(&ctime, &grant->ctime);
 		if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
 			dout(10, "mtime %lu.%09ld -> %lu.%.09ld\n", 
 			     mtime.tv_sec, mtime.tv_nsec,
 			     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec);
 			inode->i_mtime = mtime;
 		}
-		if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
+		if (timespec_compare(&ctime, &inode->i_ctime) > 0) {
+			dout(10, "ctime %lu.%09ld -> %lu.%.09ld\n", 
+			     ctime.tv_sec, ctime.tv_nsec,
+			     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec);
+			inode->i_ctime = ctime;
+		}
+		if (timespec_compare(&atime, &inode->i_atime) > 0) {
 			dout(10, "atime %lu.%09ld -> %lu.%09ld\n", 
 			     atime.tv_sec, atime.tv_nsec,
 			     inode->i_atime.tv_sec, inode->i_atime.tv_nsec);

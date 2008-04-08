@@ -882,6 +882,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   utime_t atime = m->get_atime();
   utime_t mtime = m->get_mtime();
+  utime_t ctime = m->get_ctime();
   off_t size = m->get_size();
 
   // atime|mtime|size?
@@ -889,16 +890,19 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   bool excl = (had|has) & CEPH_CAP_EXCL;
   bool dirty_atime = false;
   bool dirty_mtime = false;
+  bool dirty_ctime = false;
   bool dirty_size = false;
   if (had_or_has_wr) {
     if (mtime > latest->mtime || (excl && mtime != latest->mtime)) 
       dirty_mtime = true;
+    if (ctime > latest->ctime || (excl && ctime != latest->ctime)) 
+      dirty_ctime = true;
     if (size > latest->size) 
       dirty_size = true;
   }
   if (excl && atime != latest->atime)
     dirty_atime = true;
-  bool dirty = dirty_atime || dirty_mtime || dirty_size;
+  bool dirty = dirty_atime || dirty_mtime || dirty_ctime || dirty_size;
   
   // increase max_size?
   bool increase_max = false;
@@ -913,7 +917,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   if ((dirty || no_wr || increase_max) &&
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
-    EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|atime update");
+    EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
     if (no_wr) {
@@ -929,6 +933,11 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << "  mtime " << pi->mtime << " -> " <<  mtime
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
+    }
+    if (dirty_ctime) {
+      dout(7) << "  ctime " << pi->ctime << " -> " <<  ctime
+	      << " for " << *in << dendl;
+      pi->ctime = ctime;
     }
     if (dirty_size) {
       dout(7) << "  size " << pi->size << " -> " << size

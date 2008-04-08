@@ -509,7 +509,7 @@ struct ceph_mds_file_caps {
 	__le64 ino;
 	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
-	struct ceph_timespec mtime, atime;
+	struct ceph_timespec mtime, atime, ctime;
 } __attribute__ ((packed));
 
 
