@@ -103,7 +103,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		inode->i_blocks = blocks;
 		inode->i_mtime = mtime;
 		inode->i_atime = atime;
-		inode->i_atime = ctime;
+		inode->i_ctime = ctime;
 	}
 	spin_unlock(&inode->i_lock);
 
