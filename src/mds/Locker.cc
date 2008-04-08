@@ -904,7 +904,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   bool increase_max = false;
   int64_t inc = in->get_layout_size_increment();
   if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      size + inc > latest->max_size) {
+      size + inc > latest->max_size &&
+      in->filelock.can_wrlock()) {
     dout(10) << "hey, wr caps wanted, and size " << size
 	     << " > max " << latest->max_size << " *2, increasing" << dendl;
     increase_max = true;
