@@ -143,6 +143,23 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	return err;
 }
 
+
+/*
+ * lame release_pages helper.  release_pages() isn't exported to
+ * modules.
+ */
+void ceph_release_pages(struct page **pages, int num)
+{
+	struct pagevec pvec;
+	int i;
+	pagevec_init(&pvec, 0);
+	for (i = 0; i < num; i++) {
+		if (pagevec_add(&pvec, pages[i]) == 0)
+			pagevec_release(&pvec);
+	}
+	pagevec_release(&pvec);
+}
+
 /*
  * ceph_writepages:
  *  do write jobs for several pages
@@ -346,7 +363,7 @@ retry:
 		if (pages) {
 			/* hmm, pagevec_release also does lru_add_drain()...? */
 			dout(50, "release_pages on %d\n", locked_pages);
-			release_pages(pages, locked_pages, 0);  /* cold? */
+			ceph_release_pages(pages, locked_pages);
 		}
 		dout(50, "pagevec_release on %d pages\n", (int)pvec.nr);
 		pagevec_release(&pvec);
