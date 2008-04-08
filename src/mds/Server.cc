@@ -1594,6 +1594,7 @@ void Server::handle_client_utime(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
+  __u32 mask;
   if (!cur) return;
 
   if (cur->is_root()) {
@@ -1611,10 +1612,17 @@ void Server::handle_client_utime(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->mtime = req->head.args.utime.mtime;
-  pi->atime = req->head.args.utime.atime;
+  
+  mask = req->head.args.utime.mask;
+
+  if (mask & CEPH_UTIME_MTIME)
+    pi->mtime = req->head.args.utime.mtime;
+  if (mask & CEPH_UTIME_ATIME)
+    pi->atime = req->head.args.utime.atime;
+  if (mask & CEPH_UTIME_CTIME)
+    pi->ctime = req->head.args.utime.ctime;
+
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();

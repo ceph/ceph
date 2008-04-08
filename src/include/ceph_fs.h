@@ -342,6 +342,9 @@ struct ceph_statfs {
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
 #define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
 
+#define CEPH_UTIME_ATIME		1
+#define CEPH_UTIME_MTIME		2
+#define CEPH_UTIME_CTIME		4
 
 /* client_session */
 enum {
@@ -409,8 +412,10 @@ struct ceph_mds_request_head {
 			ceph_frag_t frag;
 		} readdir;
 		struct {
+			__u32 mask;
 			struct ceph_timespec mtime;
 			struct ceph_timespec atime;
+			struct ceph_timespec ctime;
 		} utime;
 		struct {
 			__u32 mode;

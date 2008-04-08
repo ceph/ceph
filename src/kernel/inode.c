@@ -1159,6 +1159,10 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr: mtime %ld.%ld -> %ld.%ld\n", 
 		     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec, 
 		     attr->ia_mtime.tv_sec, attr->ia_mtime.tv_nsec);
+        if (ia_valid & ATTR_CTIME)
+		dout(10, "setattr: ctime %ld.%ld -> %ld.%ld\n", 
+		     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec, 
+		     attr->ia_ctime.tv_sec, attr->ia_ctime.tv_nsec);
         if (ia_valid & ATTR_FILE)
 		dout(10, "setattr: ATTR_FILE ... hrm!\n");
 
@@ -1200,7 +1204,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* utimes */
-	if (ia_valid & (ATTR_ATIME|ATTR_MTIME)) {
+	if (ia_valid & (ATTR_ATIME|ATTR_MTIME|ATTR_CTIME)) {
 		/* do i hold CAP_EXCL? */
 		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 			dout(10, "utime holding EXCL, doing locally\n");
@@ -1209,10 +1213,12 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			return 0;
 		}
 		if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
-		    !(((ia_valid & ATTR_MTIME) &&
+		    !(((ia_valid & ATTR_ATIME) &&
 		       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
 		      ((ia_valid & ATTR_MTIME) && 
-		       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
+		       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)) ||
+		      ((ia_valid & ATTR_CTIME) && 
+		       !timespec_equal(&inode->i_ctime, &attr->ia_ctime)))) {
 			dout(10, "lease indicates utimes is a no-op\n");
 			return 0;
 		}
@@ -1222,6 +1228,16 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		reqh = req->r_request->front.iov_base;
 		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
 		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
+		ceph_encode_timespec(&reqh->args.utime.ctime, &attr->ia_ctime);
+
+		reqh->args.utime.mask = 0;
+		if (ia_valid & ATTR_ATIME)
+			reqh->args.utime.mask |= CEPH_UTIME_ATIME;
+		if (ia_valid & ATTR_MTIME)
+			reqh->args.utime.mask |= CEPH_UTIME_MTIME;
+		if (ia_valid & ATTR_CTIME)
+			reqh->args.utime.mask |= CEPH_UTIME_CTIME;
+
 		ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
 		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
