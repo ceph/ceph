@@ -1619,10 +1619,9 @@ void Server::handle_client_utime(MDRequest *mdr)
     pi->mtime = req->head.args.utime.mtime;
   if (mask & CEPH_UTIME_ATIME)
     pi->atime = req->head.args.utime.atime;
-  if (mask & CEPH_UTIME_CTIME)
-    pi->ctime = req->head.args.utime.ctime;
 
   pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
