@@ -558,8 +558,8 @@ bool Locker::issue_caps(CInode *in)
   // should we increase max_size?
   if (!in->is_dir() && (allowed & CEPH_CAP_WR)) {
     inode_t *latest = in->get_projected_inode();
-    int64_t inc = in->get_layout_size_increment();
-    if (latest->size + inc > latest->max_size) {
+    int64_t inc = latest->max_size ? latest->max_size:in->get_layout_size_increment();
+    if (latest->size + inc >= latest->max_size) {
       int64_t new_max = latest->max_size ? (latest->max_size << 1):inc;
       dout(10) << "increasing max_size " << latest->max_size << " -> " << new_max << dendl;
       
@@ -906,9 +906,9 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   
   // increase max_size?
   bool increase_max = false;
-  int64_t inc = in->get_layout_size_increment();
+  int64_t inc = latest->max_size ? latest->max_size:in->get_layout_size_increment();
   if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      size + inc > latest->max_size &&
+      size + inc >= latest->max_size &&
       in->filelock.can_wrlock()) {
     dout(10) << "hey, wr caps wanted, and size " << size
 	     << " > max " << latest->max_size << " *2, increasing" << dendl;
