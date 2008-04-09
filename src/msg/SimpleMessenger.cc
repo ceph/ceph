@@ -1170,7 +1170,7 @@ void Rank::Pipe::fault(bool onconnect)
   sd = -1;
 
   // lossy channel?
-  if (policy.retry_interval == 0) {
+  if (policy.retry_interval < 0) {
     fail();
     return;
   }
@@ -1380,6 +1380,10 @@ void Rank::Pipe::reader()
       }
       in_seq++;
       assert(in_seq == m->get_seq());
+
+      if (in_seq == 1) 
+	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
+
       cond.Signal();  // wake up writer, to ack this
       lock.Unlock();
       

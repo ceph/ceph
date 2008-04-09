@@ -41,8 +41,8 @@ using namespace __gnu_cxx;
 class Rank {
 public:
   struct Policy {
-    float retry_interval;               // (initial).  0 => lossy channel, fail immediately.
-    float fail_interval;                // before we call ms_handle_failure  0 => retry forever.
+    float retry_interval;               // (initial).  <0 => lossy channel, fail immediately.
+    float fail_interval;                // before we call ms_handle_failure  <0 => retry forever.
     bool drop_msg_callback;
     bool fail_callback;
     bool remote_reset_callback;
@@ -59,9 +59,9 @@ public:
       fail_callback(fc),
       remote_reset_callback(rrc) {}
 
-    static Policy fast_fail() { return Policy(0, 0, true, true, true); }
+    static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
     static Policy fail_after(float f) { return Policy(MIN(g_conf.ms_retry_interval, f), f, true, true, true); }
-    static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, 0, false, true, true); }
+    static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, -1, false, true, true); }
   };
 
 
