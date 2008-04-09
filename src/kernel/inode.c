@@ -61,8 +61,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	u64 size = le64_to_cpu(info->size);
 	int issued;
 	struct timespec mtime, atime, ctime;
-	u64 blocks = size + blksize - 1;
-	do_div(blocks, blksize);
+	u64 blocks = (size + blksize - 1) >> blkbits;
 
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n", 
 	     inode, info->ino, inode->i_uid, inode->i_gid, 
@@ -848,6 +847,24 @@ retry:
 	/* okay */
 out:
 	spin_unlock(&ci->vfs_inode.i_lock);
+}
+
+void ceph_inode_set_size(struct inode *inode, loff_t size)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	
+	spin_lock(&inode->i_lock);
+	dout(20, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
+	inode->i_size = size;
+	inode->i_blocks = (size + (1 << inode->i_blkbits) - 1) >>
+		inode->i_blkbits;
+	
+	if ((size << 1) >= ci->i_max_size &&
+	    (ci->i_reported_size << 1) < ci->i_max_size) {
+		spin_unlock(&inode->i_lock);
+		ceph_check_caps(ci, GFP_KERNEL);
+	} else
+		spin_unlock(&inode->i_lock);
 }
 
 /*

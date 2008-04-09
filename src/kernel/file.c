@@ -215,14 +215,8 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	if (ret > 0) {
 		pos += ret;
 		*offset = pos;
-
-		spin_lock(&inode->i_lock);
-		if (pos > inode->i_size) {
-			inode->i_size = pos;
-			inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
-			dout(10, "extending file size to %lu\n", pos);
-		}
-		spin_unlock(&inode->i_lock);
+		if (pos > i_size_read(inode)) 
+			ceph_inode_set_size(inode, pos);
 	}
 	return ret;
 }

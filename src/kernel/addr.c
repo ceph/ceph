@@ -468,12 +468,8 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	
 	/* did file size increase? */
 	/* (no need for i_size_read(); we caller holds i_mutex */
-	if (pos+copied > inode->i_size) {
-		i_size_write(inode, pos + copied);
-		if ((inode->i_size << 1) >= ci->i_max_size &&
-		    (ci->i_reported_size << 1) < ci->i_max_size) 
-			ceph_check_caps(ci, GFP_KERNEL);
-	}
+	if (pos+copied > inode->i_size) 
+		ceph_inode_set_size(inode, pos);
 
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
