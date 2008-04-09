@@ -131,8 +131,10 @@ private:
 #ifdef DARWIN
       data = (char *) valloc (len);
 #else
+      data = 0;
       ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
 #endif /* DARWIN */
+      assert(data);
       inc_total_alloc(len);
     }
     ~raw_posix_aligned() {
