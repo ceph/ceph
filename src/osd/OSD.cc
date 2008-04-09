@@ -809,7 +809,7 @@ osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
 void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
 {
   Mutex::Locker lock(peer_stat_lock);
-  dout(10) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
+  dout(15) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
   peer_stat[peer] = stat;
 }
 
@@ -1225,6 +1225,19 @@ void OSD::wait_for_new_map(Message *m)
 /** update_map
  * assimilate new OSDMap(s).  scan pgs, etc.
  */
+
+void OSD::note_down_osd(int osd)
+{
+  messenger->mark_down(osdmap->get_addr(osd));
+  peer_map_epoch.erase(entity_name_t::OSD(osd));
+  pending_failures.erase(osd);
+  heartbeat_from_stamp.erase(osd);
+}
+void OSD::note_up_osd(int osd)
+{
+  peer_map_epoch.erase(entity_name_t::OSD(osd));
+}
+
 void OSD::handle_osd_map(MOSDMap *m)
 {
   if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
@@ -1342,15 +1355,13 @@ void OSD::handle_osd_map(MOSDMap *m)
            i++) {
         int osd = i->first;
         if (osd == whoami) continue;
-	pending_failures.erase(i->first);
-        messenger->mark_down(osdmap->get_addr(i->first));
-        peer_map_epoch.erase(entity_name_t::OSD(i->first));
+	note_down_osd(i->first);
       }
       for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
            i != inc.new_up.end();
            i++) {
         if (i->first == whoami) continue;
-        peer_map_epoch.erase(entity_name_t::OSD(i->first));
+	note_up_osd(i->first);
       }
     }
     else if (m->maps.count(cur+1) ||
@@ -1369,10 +1380,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       set<int> old;
       osdmap->get_all_osds(old);
       for (set<int>::iterator p = old.begin(); p != old.end(); p++)
-	if (osdmap->is_up(*p) && 
-	    (!newmap->exists(*p) || !newmap->is_up(*p)))
-	  messenger->mark_down(osdmap->get_addr(*p));
-
+	if (osdmap->is_up(*p) && (!newmap->exists(*p) || !newmap->is_up(*p))) 
+	  note_down_osd(*p);
+      // NOTE: note_up_osd isn't called at all for full maps... FIXME?
       delete osdmap;
       osdmap = newmap;
     }

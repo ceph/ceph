@@ -256,6 +256,8 @@ private:
 
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
+  void note_down_osd(int osd);
+  void note_up_osd(int osd);
   
   void advance_map(ObjectStore::Transaction& t);
   void activate_map(ObjectStore::Transaction& t);
