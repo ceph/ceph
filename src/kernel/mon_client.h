@@ -31,12 +31,14 @@ struct ceph_mon_client {
 	struct radix_tree_root statfs_request_tree;  /* statfs requests */
 	u64 last_tid;
 
-	u32 want_mdsmap;  /* protected by caller's lock */
-	struct delayed_work delayed_work;  /* delayed work */
-	unsigned long delay;
+	struct delayed_work mds_delayed_work;  /* mds delayed work */
+	struct delayed_work osd_delayed_work;  /* osd delayed work */
+	unsigned long mds_delay;
+	unsigned long osd_delay;
 
-	struct ceph_msg *msg;
+	u32 have_mdsmap;  /* protected by caller's lock */
 	u32 want_osdmap;  /* protected by caller's lock */
+	u32 have_osdmap;  /* protected by caller's lock */
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);
@@ -44,10 +46,10 @@ extern int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *
 
 extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 
-extern int ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have);
+extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have);
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have);
 
-extern int ceph_monc_request_osdmap(struct ceph_mon_client *monc,
+extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc,
 				    __u32 have, __u32 want);
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have);
 
