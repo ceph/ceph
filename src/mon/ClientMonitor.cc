@@ -217,14 +217,13 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
   
-  // reply with latest mds, osd maps
-  mon->mdsmon->send_latest(to);
-  mon->osdmon->send_latest(to);
-
-  dout(10) << "sending monmap to " << to << dendl;
+  // reply with latest mon, mds, osd maps
   bufferlist bl;
   mon->monmap->encode(bl);
   mon->messenger->send_message(new MMonMap(bl), to);
+
+  mon->mdsmon->send_latest(to);
+  mon->osdmon->send_latest(to);
 
   delete m;
 }
