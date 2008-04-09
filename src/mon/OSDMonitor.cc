@@ -250,7 +250,7 @@ void OSDMonitor::committed()
   int r = osdmap.get_any_up_osd();
   if (r >= 0) {
     dout(10) << "committed, telling random osd" << r << " all about it" << dendl;
-    send_latest(osdmap.get_inst(r));
+    send_latest(osdmap.get_inst(r), osdmap.get_epoch() - 1);  // whatev, they'll request more if they need it
   }
 }
 
