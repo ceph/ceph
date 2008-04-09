@@ -111,6 +111,7 @@ int main(int argc, const char **argv)
   }
 
   if (create) {
+    srand(getpid() + time(0));
     monmap.generate_fsid();
     cout << me << ": generated fsid " << monmap.fsid << std::endl;
     modified++;
