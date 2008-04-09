@@ -107,6 +107,14 @@ int main(int argc, const char **argv)
   Monitor *mon = new Monitor(whoami, &store, m, &monmap);
 
   rank.start();  // may daemonize
+
+  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::fail_after(g_conf.mon_lease_timeout * 2));
+  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::fast_fail());
+  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::fast_fail());
+  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::fast_fail());
+  rank.set_policy(entity_name_t::TYPE_ADMIN, Rank::Policy::fast_fail());
+
+
   mon->init();
   rank.wait();
 
