@@ -170,9 +170,8 @@ bool OSDMonitor::update_from_paxos()
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
-  // kick pgmon, in case there are pg creations going on 
-  mon->pgmon->register_new_pgs();
-  mon->pgmon->send_pg_creates();
+  // kick pgmon, make sure it's seen the latest map
+  mon->pgmon->check_osd_map(osdmap.epoch);
 
   // new map!
   bcast_latest_mds();

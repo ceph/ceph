@@ -299,37 +299,87 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 
 // ------------------------
 
-struct RetryRegisterNewPgs : public Context {
+struct RetryCheckOSDMap : public Context {
   PGMonitor *pgmon;
-  RetryRegisterNewPgs(PGMonitor *p) : pgmon(p) {}
+  epoch_t epoch;
+  RetryCheckOSDMap(PGMonitor *p, epoch_t e) : pgmon(p), epoch(e) {}
   void finish(int r) {
-    pgmon->register_new_pgs();
+    pgmon->check_osd_map(epoch);
   }
 };
 
-void PGMonitor::register_new_pgs()
+void PGMonitor::check_osd_map(epoch_t epoch)
 {
   if (mon->is_peon()) 
     return; // whatever.
 
+  if (pg_map.last_osdmap_epoch >= epoch) {
+    dout(10) << "check_osd_map already seen " << pg_map.last_osdmap_epoch << " >= " << epoch << dendl;
+    return;
+  }
+
   if (!mon->osdmon->paxos->is_readable()) {
     dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
-    mon->osdmon->paxos->wait_for_readable(new RetryRegisterNewPgs(this));
+    mon->osdmon->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
   if (!paxos->is_writeable()) {
     dout(10) << "register_new_pgs -- pgmap not writeable, waiting" << dendl;
-    paxos->wait_for_writeable(new RetryRegisterNewPgs(this));
+    paxos->wait_for_writeable(new RetryCheckOSDMap(this, epoch));
     return;
   }
+
+  // apply latest map(s)
+  for (epoch_t e = pg_map.last_osdmap_epoch+1;
+       e <= epoch;
+       e++) {
+    dout(10) << "check_osd_map applying osdmap e" << e << " to pg_map" << dendl;
+    bufferlist bl;
+    mon->store->get_bl_sn(bl, "osdmap", e);
+    assert(bl.length());
+    OSDMap::Incremental inc;
+    int off = 0;
+    inc.decode(bl, off);
+    for (map<int32_t,uint32_t>::iterator p = inc.new_offload.begin();
+	 p != inc.new_offload.end();
+	 p++)
+      if (p->second == 0x10000) {
+	dout(10) << "check_osd_map  osd" << p->first << " went OUT" << dendl;
+	pending_inc.osd_stat_rm.insert(p->first);
+      } else {
+	dout(10) << "check_osd_map  osd" << p->first << " is IN" << dendl;
+	pending_inc.osd_stat_rm.erase(p->first);
+	pending_inc.osd_stat_updates[p->first]; 
+      }
+  }
+
+  bool propose = false;
+  if (pg_map.last_osdmap_epoch < epoch) {
+    pending_inc.osdmap_epoch = epoch;
+    propose = true;
+  }
+
+  // scan pg space?
+  if (register_new_pgs())
+    propose = true;
+  
+  if (propose)
+    propose_pending();
+
+  send_pg_creates();
+}
+
+bool PGMonitor::register_new_pgs()
+{
+
 
   dout(10) << "osdmap last_pg_change " << mon->osdmon->osdmap.get_last_pg_change()
 	   << ", pgmap last_pg_scan " << pg_map.last_pg_scan << dendl;
   if (mon->osdmon->osdmap.get_last_pg_change() <= pg_map.last_pg_scan ||
       mon->osdmon->osdmap.get_last_pg_change() <= pending_inc.pg_scan) {
     dout(10) << "register_new_pgs -- i've already scanned pg space since last significant osdmap update" << dendl;
-    return;
+    return false;
   }
 
   // iterate over crush mapspace
@@ -398,8 +448,9 @@ void PGMonitor::register_new_pgs()
   if (created) {
     last_sent_pg_create.clear();  // reset pg_create throttle timer
     pending_inc.pg_scan = epoch;
-    propose_pending();
+    return true;
   }
+  return false;
 }
 
 void PGMonitor::send_pg_creates()
