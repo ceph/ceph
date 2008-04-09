@@ -452,6 +452,7 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  struct page *page, void *fsdata)
 {
 	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	unsigned from = pos & (PAGE_CACHE_SIZE - 1);
 
 	dout(10, "write_end file %p inode %p page %p %d~%d (%d)\n", file,
@@ -467,8 +468,12 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	
 	/* did file size increase? */
 	/* (no need for i_size_read(); we caller holds i_mutex */
-	if (pos+copied > inode->i_size)
+	if (pos+copied > inode->i_size) {
 		i_size_write(inode, pos + copied);
+		if ((inode->i_size << 1) >= ci->i_max_size &&
+		    (ci->i_reported_size << 1) < ci->i_max_size) 
+			ceph_check_caps(ci, GFP_KERNEL);
+	}
 
 	if (!PageUptodate(page))
 		SetPageUptodate(page);

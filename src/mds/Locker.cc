@@ -560,7 +560,7 @@ bool Locker::issue_caps(CInode *in)
     inode_t *latest = in->get_projected_inode();
     int64_t inc = in->get_layout_size_increment();
     if (latest->size + inc > latest->max_size) {
-      int64_t new_max = ROUND_UP_TO(latest->size + inc/2, inc);
+      int64_t new_max = latest->max_size ? (latest->max_size << 1):inc;
       dout(10) << "increasing max_size " << latest->max_size << " -> " << new_max << dendl;
       
       inode_t *pi = in->project_inode();
@@ -925,7 +925,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       pi->max_size = 0;
     } else if (increase_max) {
       int64_t inc = in->get_layout_size_increment();
-      int64_t new_max = ROUND_UP_TO(latest->size + inc, inc);
+      int64_t new_max = latest->max_size ? (latest->max_size << 1):inc;
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
       pi->max_size = new_max;
     }    
@@ -952,7 +952,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     LogSegment *ls = mds->mdlog->get_current_segment();
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls));
+    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, increase_max));
     file_wrlock_start(&in->filelock);  // wrlock for duration of journal
   }
 

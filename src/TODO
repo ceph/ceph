@@ -19,12 +19,11 @@ yehuda:
 - apply_truncate needs to truncate page cache, or something?
 
 kernel client
+- somehow get a max_size bump if we lseek into a (sparse) file ...
 - why is mds_client delayed work not working?
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - trim expired leases so we don't indefinitely hold dcache/icache refs...
-- obey file_max
-- send mds a file_cap message when we approach the current file_max
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?

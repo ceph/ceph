@@ -134,6 +134,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_old_atime = inode->i_atime;
 
 	ci->i_max_size = le64_to_cpu(info->max_size);
+	ci->i_reported_size = inode->i_size;  /* reset */
 
 	inode->i_mapping->a_ops = &ceph_aops;
 
@@ -764,7 +765,7 @@ void ceph_remove_cap(struct ceph_inode_cap *cap)
  * examine currently used, wanted versus held caps.
  *  release, ack revoked caps to mds as appropriate.
  */
-void ceph_check_caps_wanted(struct ceph_inode_info *ci, gfp_t gfpmask)
+void ceph_check_caps(struct ceph_inode_info *ci, gfp_t gfpmask)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -797,6 +798,15 @@ retry:
 			goto ack;
 		}
 
+		/* approaching file_max? */
+		if ((cap->issued & CEPH_CAP_WR) &&
+		    (ci->vfs_inode.i_size << 1) >= ci->i_max_size &&
+		    (ci->i_reported_size << 1) < ci->i_max_size) {
+			dout(10, "i_size approaching max_size\n");
+			ci->i_reported_size = ci->vfs_inode.i_size;
+			goto ack;
+		}
+		
 		if ((cap->issued & ~wanted) == 0)
 			continue;     /* nothing extra, all good */
 
@@ -861,7 +871,7 @@ void ceph_put_mode(struct ceph_inode_info *ci, int mode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last)
-		ceph_check_caps_wanted(ci, GFP_KERNEL);
+		ceph_check_caps(ci, GFP_KERNEL);
 }
 
 
@@ -1001,10 +1011,13 @@ out:
 
 void apply_truncate(struct inode *inode, loff_t size)
 {
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
 	spin_lock(&inode->i_lock);
 	dout(10, "apply_truncate %p size %lld -> %llu\n", inode,
 	     inode->i_size, size);
 	inode->i_size = size;
+	ci->i_reported_size = size;
 	spin_unlock(&inode->i_lock);
 
 	/*
@@ -1021,7 +1034,6 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	u64 size = le64_to_cpu(trunc->size);
 	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, 
 	     mds, seq);
-
 	apply_truncate(inode, size);
 	return 0;
 }
@@ -1096,7 +1108,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	     last ? "last":"");
 	
 	if (last) 
-		ceph_check_caps_wanted(ci, GFP_KERNEL);
+		ceph_check_caps(ci, GFP_KERNEL);
 }
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
@@ -1114,7 +1126,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	     last ? "last":"");
 	
 	if (last) 
-		ceph_check_caps_wanted(ci, GFP_KERNEL);
+		ceph_check_caps(ci, GFP_KERNEL);
 }
 
 
