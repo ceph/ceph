@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/ceph_fs.h>
 #include <linux/namei.h>
+#include <linux/writeback.h>
 
 int ceph_debug_inode = -1;
 #define DOUT_VAR ceph_debug_inode
@@ -1019,8 +1020,17 @@ out:
 	spin_unlock(&inode->i_lock);
 	if (wake)
 		wake_up(&ci->i_cap_wq);
-	if (writeback_now)
-		write_inode_now(inode, 0);
+	if (writeback_now) {
+		/*
+		 * _queue_ inode for writeback, but don't actually
+		 * call writepages from this context!!
+		 */
+		dout(10, "queueing %p for writeback\n", inode);
+		spin_lock(&inode_lock);
+		list_move(&inode->i_list, &inode->i_sb->s_more_io);
+		spin_unlock(&inode_lock);
+		wakeup_pdflush(0);  /* this is overkill? */
+	}
 	if (invalidate)
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
 	return reply;
