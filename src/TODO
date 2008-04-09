@@ -15,12 +15,14 @@ userspace client
   - also needs cope with mds failures
 - reference count lease validations on path lookup?
 
+yehuda:
+- apply_truncate needs to truncate page cache, or something?
+
 kernel client
 - why is mds_client delayed work not working?
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - trim expired leases so we don't indefinitely hold dcache/icache refs...
-- apply_truncate needs to truncate page cache, or something?
 - obey file_max
 - send mds a file_cap message when we approach the current file_max
 - procfs/debugfs
@@ -32,10 +34,9 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
+  - fix writeback_now on cap revocation
   - kick requests when new map arrives
   - osd ack vs commit handling.  hmm!
-- mon client
-  - work out message resend logic..?
 - unmount
 /  - close open file handles, mds sessions
     - flush data before unmount.

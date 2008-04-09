@@ -243,7 +243,7 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD, 
 							 CEPH_CAP_RDCACHE, 
-							 &got));
+							 &got, -1));
 	if (ret < 0) 
 		goto out;
 	dout(10, "read %llx %llu~%u got cap refs %d\n",
@@ -272,11 +272,11 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	ssize_t ret;
 	int got = 0;
 
-	dout(10, "write trying to get caps\n");
+	dout(10, "write trying to get caps. i_size %llu\n", inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_WR, 
 							 CEPH_CAP_WRBUFFER,
-							 &got));
+							 &got, *ppos));
 	if (ret < 0) 
 		goto out;
 	dout(10, "write got cap refs on %d\n", got);

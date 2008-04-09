@@ -880,7 +880,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	int used;
 	int issued; /* to me, before */
 	int wanted;
-	int ret = 0;
+	int reply = 0;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
 	struct timespec mtime, atime, ctime;
@@ -890,10 +890,25 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n", 
 	     inode, ci, mds, seq);
-	dout(10, " size %llu max_size %llu\n", size, max_size);
+	dout(10, " size %llu max_size %llu, i_size %llu\n", size, max_size,
+		inode->i_size);
+
+	spin_lock(&inode->i_lock);
+
+	/* do we have this cap? */
+	cap = __get_cap_for_mds(inode, mds);
+	if (!cap) {
+		/*
+		 * then ignore.  never reply to cap messages out of turn,
+		 * or we'll be mixing up different instances of caps on the
+		 * same inode, and confuse the mds.
+		 */
+		dout(10, "no cap on ino %llx from mds%d, ignoring\n",
+		     ci->i_ceph_ino, mds);
+		goto out;
+	} 
 
 	/* size change? */
-	spin_lock(&inode->i_lock);
 	if (size > inode->i_size) {
 		dout(10, "size %lld -> %llu\n", inode->i_size, size);
 		inode->i_size = size;
@@ -903,6 +918,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	if (max_size != ci->i_max_size) {
 		dout(10, "max_size %lld -> %llu\n", ci->i_max_size, max_size);
 		ci->i_max_size = max_size;
+		wake = 1;
 	}
 
 	/* mtime/atime? */
@@ -931,19 +947,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		}
 	}
 
-	/* do we have this cap? */
-	cap = __get_cap_for_mds(inode, mds);
-	if (!cap) {
-		/*
-		 * then ignore.  never reply to cap messages out of turn,
-		 * or we'll be mixing up different instances of caps on the
-		 * same inode, and confuse the mds.
-		 */
-		dout(10, "no cap on ino %llx from mds%d, ignoring\n",
-		     ci->i_ceph_ino, mds);
-		goto out;
-	} 
-
+	/* check cap bits */
 	wanted = __ceph_caps_wanted(ci);
 	used = __ceph_caps_used(ci);
 	dout(10, " my wanted = %d, used = %d\n", wanted, used);
@@ -965,7 +969,11 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 			writeback_now = 1; /* will delay ack */
 		else {
 			cap->implemented = newcaps;
-			ret = 1; /* ack now */
+			/* ack now.  re-use incoming message. */
+			grant->size = le64_to_cpu(inode->i_size);
+			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
+			ceph_encode_timespec(&grant->atime, &inode->i_atime);
+			reply = 1; 
 		}
 		cap->issued = newcaps;
 		goto out;
@@ -988,7 +996,7 @@ out:
 		write_inode_now(inode, 0);
 	if (invalidate)
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
-	return ret;	
+	return reply;
 }
 
 void apply_truncate(struct inode *inode, loff_t size)
@@ -1038,13 +1046,19 @@ void ceph_take_cap_refs(struct ceph_inode_info *ci, int got)
 	spin_unlock(&ci->vfs_inode.i_lock);
 }	
 
-int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
+int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
+		      loff_t offset)
 {
 	int ret = 0;
 	int have;
 	dout(10, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
 	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
+	if (offset >= 0 && offset >= (loff_t)ci->i_max_size) {
+		dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
+		     offset, ci->i_max_size);
+		goto sorry;
+	}
 	have = __ceph_caps_issued(ci);
 	dout(20, "get_cap_refs have %d\n", have);
 	if ((have & need) == need) {
@@ -1052,6 +1066,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got)
 		__take_cap_refs(ci, *got);
 		ret = 1;
 	}
+sorry:
 	spin_unlock(&ci->vfs_inode.i_lock);
 	dout(10, "get_cap_refs on %p ret %d got %d\n", &ci->vfs_inode,
 	     ret, *got);
