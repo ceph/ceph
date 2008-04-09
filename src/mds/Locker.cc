@@ -558,9 +558,8 @@ bool Locker::issue_caps(CInode *in)
   // should we increase max_size?
   if (!in->is_dir() && (allowed & CEPH_CAP_WR)) {
     inode_t *latest = in->get_projected_inode();
-    int64_t inc = latest->max_size ? latest->max_size:in->get_layout_size_increment();
-    if (latest->size + inc >= latest->max_size) {
-      int64_t new_max = latest->max_size ? (latest->max_size << 1):inc;
+    if ((latest->size << 1) >= latest->max_size) {
+      int64_t new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
       dout(10) << "increasing max_size " << latest->max_size << " -> " << new_max << dendl;
       
       inode_t *pi = in->project_inode();
@@ -906,9 +905,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   
   // increase max_size?
   bool increase_max = false;
-  int64_t inc = latest->max_size ? latest->max_size:in->get_layout_size_increment();
   if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      size + inc >= latest->max_size &&
+      (size << 1) >= latest->max_size &&
       in->filelock.can_wrlock()) {
     dout(10) << "hey, wr caps wanted, and size " << size
 	     << " > max " << latest->max_size << " *2, increasing" << dendl;
@@ -924,8 +922,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << " last wr-wanted cap, max_size=0" << dendl;
       pi->max_size = 0;
     } else if (increase_max) {
-      int64_t inc = in->get_layout_size_increment();
-      int64_t new_max = latest->max_size ? (latest->max_size << 1):inc;
+      int64_t new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
       dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
       pi->max_size = new_max;
     }    
@@ -2817,12 +2814,13 @@ void Locker::file_eval(FileLock *lock)
   }
 
   // * -> mixed?
-  else if (!lock->is_rdlocked() &&
-	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   (wanted & CEPH_CAP_RD) &&
-	   (wanted & CEPH_CAP_WR) &&
-	   !(loner && lock->get_state() == LOCK_LONER) &&
-	   lock->get_state() != LOCK_MIXED) {
+  else if ((!lock->is_rdlocked() &&
+	    !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+	    (wanted & CEPH_CAP_RD) &&
+	    (wanted & CEPH_CAP_WR) &&
+	    !(loner && lock->get_state() == LOCK_LONER) &&
+	    lock->get_state() != LOCK_MIXED) ||
+	   (!loner && lock->get_state() == LOCK_LONER)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
   }
