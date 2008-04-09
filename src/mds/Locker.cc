@@ -895,7 +895,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   if (had_or_has_wr) {
     if (mtime > latest->mtime || (excl && mtime != latest->mtime)) 
       dirty_mtime = true;
-    if (ctime > latest->ctime || (excl && ctime != latest->ctime)) 
+    if (ctime > latest->ctime)
       dirty_ctime = true;
     if (size > latest->size) 
       dirty_size = true;
@@ -930,12 +930,12 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       pi->max_size = new_max;
     }    
     if (dirty_mtime) {
-      dout(7) << "  mtime " << pi->mtime << " -> " <<  mtime
+      dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
     }
     if (dirty_ctime) {
-      dout(7) << "  ctime " << pi->ctime << " -> " <<  ctime
+      dout(7) << "  ctime " << pi->ctime << " -> " << ctime
 	      << " for " << *in << dendl;
       pi->ctime = ctime;
     }
