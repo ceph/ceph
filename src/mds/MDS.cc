@@ -237,7 +237,7 @@ void MDS::send_message_mds(Message *m, int mds)
 {
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_message(new MMDSMap(mdsmap), 
+    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), 
 			    mdsmap->get_inst(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -659,7 +659,7 @@ void MDS::bcast_mds_map()
   for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p) 
-    messenger->send_message(new MMDSMap(mdsmap), (*p)->inst);
+    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), (*p)->inst);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 

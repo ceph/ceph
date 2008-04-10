@@ -1627,8 +1627,15 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mdsmap *newmap, *oldmap;
 	int from = le32_to_cpu(msg->hdr.src.name.num);
 	int newstate;
+	struct ceph_fsid fsid;
 
-	ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
+	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(__u32), bad);
+	ceph_decode_64(&p, fsid.major);
+	ceph_decode_64(&p, fsid.minor);
+	if (!ceph_fsid_equal(&fsid, &mdsc->client->monc.monmap->fsid)) {
+		derr(0, "got mdsmap with wrong fsid\n");
+		return;
+	}
 	ceph_decode_32(&p, epoch);
 	ceph_decode_32(&p, maplen);
 	dout(2, "handle_map epoch %u len %d\n", epoch, (int)maplen);

@@ -44,7 +44,8 @@ class MMDSMap : public Message {
     return e;
   }
   */
-
+  
+  ceph_fsid fsid;
   epoch_t epoch;
   bufferlist encoded;
 
@@ -53,8 +54,9 @@ class MMDSMap : public Message {
 
   MMDSMap() : 
     Message(CEPH_MSG_MDS_MAP) {}
-  MMDSMap(MDSMap *mm) :
-    Message(CEPH_MSG_MDS_MAP) {
+  MMDSMap(ceph_fsid &f, MDSMap *mm) :
+    Message(CEPH_MSG_MDS_MAP),
+    fsid(f) {
     epoch = mm->get_epoch();
     mm->encode(encoded);
   }
@@ -67,10 +69,12 @@ class MMDSMap : public Message {
   // marshalling
   void decode_payload() {
     int off = 0;
+    ::_decode(fsid, payload, off);
     ::_decode(epoch, payload, off);
     ::_decode(encoded, payload, off);
   }
   void encode_payload() {
+    ::_encode(fsid, payload);
     ::_encode(epoch, payload);
     ::_encode(encoded, payload);
   }

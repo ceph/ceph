@@ -604,7 +604,7 @@ void MDSMonitor::bcast_latest_mds()
 void MDSMonitor::send_full(entity_inst_t dest)
 {
   dout(11) << "send_full to " << dest << dendl;
-  mon->messenger->send_message(new MMDSMap(&mdsmap), dest);
+  mon->messenger->send_message(new MMDSMap(mon->monmap->fsid, &mdsmap), dest);
 }
 
 void MDSMonitor::send_to_waiting()
