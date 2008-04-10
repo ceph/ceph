@@ -18,7 +18,7 @@
 #define __MPING_H
 
 #include "msg/Message.h"
-#include "include/encodable.h"
+#include "include/encoding.h"
 
 class MPing : public Message {
  public:
@@ -32,12 +32,12 @@ class MPing : public Message {
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(seq, p);
-    ::_decode_simple(stamp, p);
+    ::decode(seq, p);
+    ::decode(stamp, p);
   }
   void encode_payload() {
-    ::_encode_simple(seq, payload);
-    ::_encode_simple(stamp, payload);
+    ::encode(seq, payload);
+    ::encode(stamp, payload);
   }
 
   const char *get_type_name() { return "ping"; }

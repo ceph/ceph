@@ -21,12 +21,13 @@
 #include "ceph_fs.h"
 
 #include "buffer.h"
-#include "encodable.h"
+#include "encoding.h"
 
 // --------
 // utime_t
 
 class utime_t {
+public:
   struct {
     __u32 tv_sec, tv_usec;
   } tv;
@@ -78,6 +79,15 @@ class utime_t {
     tv.tv_usec = v->tv_usec;
   }
 
+  void encode(bufferlist &bl) const {
+    ::encode(tv.tv_sec, bl);
+    ::encode(tv.tv_usec, bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    ::decode(tv.tv_sec, p);
+    ::decode(tv.tv_usec, p);
+  }
+
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = cpu_to_le32(tv.tv_sec);
     t->tv_nsec = cpu_to_le32(tv.tv_usec*1000);
@@ -86,20 +96,14 @@ class utime_t {
     tv.tv_sec = le32_to_cpu(t->tv_sec);
     tv.tv_usec = le32_to_cpu(t->tv_nsec) / 1000;
   }
-  void _encode(bufferlist &bl) {
-    ::_encode_simple(tv.tv_sec, bl);
-    ::_encode_simple(tv.tv_usec, bl);
-  }
-  void _decode(bufferlist &bl, int& off) {
-    ::_decode(tv.tv_sec, bl, off);
-    ::_decode(tv.tv_usec, bl, off);
-  }
 
   // cast to double
   operator double() {
     return (double)sec() + ((double)usec() / 1000000.0L);
   }
 };
+ENCODABLE_CLASS(utime_t)
+
 
 // arithmetic operators
 inline utime_t operator+(const utime_t& l, const utime_t& r) {

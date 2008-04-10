@@ -34,14 +34,14 @@ class MPingAck : public Message {
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(seq, p);
-    ::_decode_simple(sender_stamp, p);
-    ::_decode_simple(reply_stamp, p);
+    ::decode(seq, p);
+    ::decode(sender_stamp, p);
+    ::decode(reply_stamp, p);
   }
   void encode_payload() {
-    ::_encode_simple(seq, payload);
-    ::_encode_simple(sender_stamp, payload);
-    ::_encode_simple(reply_stamp, payload);
+    ::encode(seq, payload);
+    ::encode(sender_stamp, payload);
+    ::encode(reply_stamp, payload);
   }
 
   const char *get_type_name() { return "pinga"; }

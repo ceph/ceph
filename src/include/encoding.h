@@ -20,6 +20,15 @@
 #include "buffer.h"
 
 
+#define ENCODABLE_CLASS(cl) \
+  inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
+
+#define WRITE_RAW_ENCODER(type)						\
+  inline void encode(type v, bufferlist& bl) { encode_raw(v, bl); }	\
+  inline void decode(type v, bufferlist::iterator& p) { decode_raw(v, p); }
+
+
 // --------------------------------------
 // base types
 
@@ -54,10 +63,6 @@ WRITE_ENCODER(s32, le32)
 WRITE_ENCODER(u16, le16)
 WRITE_ENCODER(s16, le16)
 
-
-#define WRITE_RAW_ENCODER(type)						\
-  inline void encode(type v, bufferlist& bl) { encode_raw(v, bl); }	\
-  inline void decode(type v, bufferlist::iterator& p) { decode_raw(v, p); }
 
 WRITE_RAW_ENCODER(__u8)
 WRITE_RAW_ENCODER(__s8)
