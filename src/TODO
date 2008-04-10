@@ -17,10 +17,9 @@ userspace client
 
 yehuda:
 - apply_truncate needs to truncate page cache, or something?
+- less heavy-handed writeback?
 
 kernel client
-- somehow get a max_size bump if we lseek into a (sparse) file ...
-- why is mds_client delayed work not working?
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - trim expired leases so we don't indefinitely hold dcache/icache refs...
@@ -33,12 +32,9 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
-  - fix writeback_now on cap revocation
   - kick requests when new map arrives
   - osd ack vs commit handling.  hmm!
 - unmount
-/  - close open file handles, mds sessions
-    - flush data before unmount.
   - send (+deliver!) unmount message
 
 client

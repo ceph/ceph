@@ -223,7 +223,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 
 /* 
  * wrap do_sync_read and friends with checks for cap bits on the inode.
- * atomically grab references, so that those bits are released mid-read.
+ * atomically grab references, so that those bits are not released mid-read.
  */
 ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 {
