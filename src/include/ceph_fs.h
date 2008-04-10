@@ -411,7 +411,6 @@ struct ceph_mds_request_head {
 	__u32 op;
 	__u32 caller_uid, caller_gid;
 
-	// fixed size arguments.  in a union.
 	union { 
 		struct {
 			__u32 mask;
@@ -423,11 +422,11 @@ struct ceph_mds_request_head {
 			ceph_frag_t frag;
 		} readdir;
 		struct {
-			__u32 mask;
 			struct ceph_timespec mtime;
 			struct ceph_timespec atime;
 			struct ceph_timespec ctime;
-		} utime;
+			__u32 mask;
+		} __attribute__ ((packed)) utime;
 		struct {
 			__u32 mode;
 		} chmod; 
@@ -449,7 +448,7 @@ struct ceph_mds_request_head {
 		struct {
 			__s64 length;
 		} truncate;
-	} args;
+	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
 
