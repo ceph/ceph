@@ -2788,6 +2788,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     Fh *f = new Fh;
     if (fhp) *fhp = f;
     f->mode = cmode;
+    if (flags & O_APPEND)
+      f->append = true;
 
     // inode
     assert(in);
@@ -3185,6 +3187,12 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
+    /* 
+     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and inode.size may
+     * change out from under us.
+     */
+    if (f->append)
+      f->pos = in->inode.size;   // O_APPEND.
     offset = f->pos;
     f->pos = offset+size;    
     unlock_fh_pos(f);

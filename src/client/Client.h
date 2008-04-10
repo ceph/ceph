@@ -355,10 +355,11 @@ struct Fh {
 
   bool is_lazy() { return mode & O_LAZY; }
 
+  bool append;
   bool pos_locked;           // pos is currently in use
   list<Cond*> pos_waiters;   // waiters for pos
 
-  Fh() : inode(0), pos(0), mds(0), mode(0), pos_locked(false) {}
+  Fh() : inode(0), pos(0), mds(0), mode(0), append(false), pos_locked(false) {}
 };
 
 
