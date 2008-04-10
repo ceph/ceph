@@ -144,6 +144,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 
+	ci->i_wanted_max_size = 0;
+	ci->i_requested_max_size = 0;
+
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
 
@@ -413,6 +416,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	dout(10, "set_super %p data %p\n", s, data);
 
 	s->s_flags = args->mntflags;
+	s->s_maxbytes = 1ULL << (32 + 20);  /* assuming objects >= 1MB */
 
 	/* create client */
 	client = ceph_create_client(args, s);

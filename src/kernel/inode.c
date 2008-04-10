@@ -765,7 +765,7 @@ void ceph_remove_cap(struct ceph_inode_cap *cap)
  * examine currently used, wanted versus held caps.
  *  release, ack revoked caps to mds as appropriate.
  */
-void ceph_check_caps(struct ceph_inode_info *ci, gfp_t gfpmask)
+void ceph_check_caps(struct ceph_inode_info *ci)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -786,6 +786,10 @@ retry:
 	list_for_each(p, &ci->i_caps) {
 		int revoking, dropping;
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
+
+		if (ci->i_wanted_max_size > ci->i_max_size &&
+		    ci->i_wanted_max_size > ci->i_requested_max_size)
+			goto ack;
 
 		/* completed revocation? */
 		revoking = cap->implemented & ~cap->issued;
@@ -811,20 +815,14 @@ retry:
 			continue;     /* nothing extra, all good */
 
 	ack:
-		if (gfpmask != GFP_KERNEL) {
-			/* put on examine list */
-			dout(10, "** dropping caps, but bad gfpmask, "
-			     "IMPLEMENT ME *************\n");
-			goto out;
-		}
-
 		dropping = cap->issued & ~wanted;
 		cap->issued &= wanted;  /* drop bits we don't want */
 
 		keep = cap->issued;
 		seq = cap->seq;
 		size = ci->vfs_inode.i_size;
-		max_size = ci->i_max_size;
+		max_size = ci->i_wanted_max_size;
+		ci->i_requested_max_size = max_size;
 		mtime = ci->vfs_inode.i_mtime;
 		atime = ci->vfs_inode.i_atime;
 		mds = cap->mds;
@@ -834,7 +832,7 @@ retry:
 
 		ceph_mdsc_send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), 
 				       keep, wanted, seq, 
-				       size, 0, &mtime, &atime, mds);
+				       size, max_size, &mtime, &atime, mds);
 
 		if (dropping & CEPH_CAP_RDCACHE) {
 			dout(20, "invalidating pages on %p\n", &ci->vfs_inode);
@@ -846,7 +844,6 @@ retry:
 	}
 
 	/* okay */
-out:
 	spin_unlock(&ci->vfs_inode.i_lock);
 }
 
@@ -863,7 +860,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, GFP_KERNEL);
+		ceph_check_caps(ci);
 	} else
 		spin_unlock(&inode->i_lock);
 }
@@ -889,7 +886,7 @@ void ceph_put_mode(struct ceph_inode_info *ci, int mode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last)
-		ceph_check_caps(ci, GFP_KERNEL);
+		ceph_check_caps(ci);
 }
 
 
@@ -946,6 +943,10 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	if (max_size != ci->i_max_size) {
 		dout(10, "max_size %lld -> %llu\n", ci->i_max_size, max_size);
 		ci->i_max_size = max_size;
+		if (max_size >= ci->i_wanted_max_size) {
+			ci->i_wanted_max_size = 0;  /* reset */
+			ci->i_requested_max_size = 0;
+		}
 		wake = 1;
 	}
 
@@ -1091,17 +1092,13 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 {
 	int ret = 0;
 	int have;
+
 	dout(10, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
 	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
 	if (offset >= 0 && offset >= (loff_t)ci->i_max_size) {
-		if (offset > (ci->vfs_inode.i_size << 1)) {
-			dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
-			     offset, ci->i_max_size);
-			
-		} else 
-			dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
-			     offset, ci->i_max_size);
+		dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
+		     offset, ci->i_max_size);
 		goto sorry;
 	}
 	have = __ceph_caps_issued(ci);
@@ -1141,7 +1138,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	     last ? "last":"");
 	
 	if (last) 
-		ceph_check_caps(ci, GFP_KERNEL);
+		ceph_check_caps(ci);
 }
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
@@ -1159,7 +1156,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	     last ? "last":"");
 	
 	if (last) 
-		ceph_check_caps(ci, GFP_KERNEL);
+		ceph_check_caps(ci);
 }
 
 

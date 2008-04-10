@@ -158,6 +158,8 @@ struct ceph_inode_info {
 	int i_nr_by_mode[4];
 	loff_t i_max_size;      /* size authorized by mds */
 	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
+	loff_t i_wanted_max_size;  /* offset we'd like to write too */
+	loff_t i_requested_max_size;  /* max_size we've requested */
 	struct timespec i_old_atime;
 
 	/* held references to caps */
@@ -376,7 +378,7 @@ extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_check_caps(struct ceph_inode_info *ci, gfp_t gfpmask);
+extern void ceph_check_caps(struct ceph_inode_info *ci);
 extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);

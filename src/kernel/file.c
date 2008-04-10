@@ -265,6 +265,21 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	ssize_t ret;
 	int got = 0;
+	int check = 0;
+
+	/* do we need to explicitly request a larger max_size? */
+	spin_lock(&inode->i_lock);
+	if (*ppos > ci->i_max_size && 
+	    *ppos > (inode->i_size << 1) &&
+	    *ppos > ci->i_wanted_max_size) {
+		dout(10, "write %p at large offset %llu, requesting max_size\n",
+		     inode, *ppos);
+		ci->i_wanted_max_size = *ppos;				
+		check = 1;
+	}
+ 	spin_unlock(&inode->i_lock);
+	if (check)
+		ceph_check_caps(ci);
 
 	dout(10, "write trying to get caps. i_size %llu\n", inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,
