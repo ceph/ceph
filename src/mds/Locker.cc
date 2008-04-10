@@ -905,12 +905,21 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   
   // increase max_size?
   bool increase_max = false;
+  int64_t new_max = latest->max_size;
   if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
       (size << 1) >= latest->max_size &&
       in->filelock.can_wrlock()) {
-    dout(10) << "hey, wr caps wanted, and size " << size
-	     << " > max " << latest->max_size << " *2, increasing" << dendl;
+    dout(10) << "wr caps wanted, and size " << size
+	     << " *2 >= max " << latest->max_size << ", increasing" << dendl;
     increase_max = true;
+    new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
+  }
+  if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+      m->get_max_size() > new_max) {
+    dout(10) << "client requests file_max " << m->get_max_size()
+	     << " > max " << latest->max_size << dendl;
+    increase_max = true;
+    new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
   }
 
   if ((dirty || no_wr || increase_max) &&
@@ -919,11 +928,10 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
     if (no_wr) {
-      dout(7) << " last wr-wanted cap, max_size=0" << dendl;
+      dout(7) << " max_size " << pi->max_size << " -> 0 (last writer released)" << dendl;
       pi->max_size = 0;
     } else if (increase_max) {
-      int64_t new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-      dout(7) << " increasing max_size " << pi->max_size << " to " << new_max << dendl;
+      dout(7) << " max_size " << pi->max_size << " -> " << new_max << dendl;
       pi->max_size = new_max;
     }    
     if (dirty_mtime) {
