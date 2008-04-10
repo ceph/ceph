@@ -1476,11 +1476,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg_t pgid = it->first;
     PG *pg = it->second;
     
-    // did i finish this epoch?
-    if (pg->is_active()) {
-      pg->info.last_epoch_finished = osdmap->get_epoch()-1;
-    }      
-    
     // get new acting set
     vector<int> tacting;
     int nrep = osdmap->pg_to_acting_osds(pgid, tacting);

@@ -68,7 +68,6 @@ public:
 
     epoch_t epoch_created;       // epoch in which it was created
     epoch_t last_epoch_started;  // last epoch started.
-    epoch_t last_epoch_finished; // last epoch finished.
 
     struct History {
       epoch_t same_since;          // same acting set since
@@ -80,7 +79,8 @@ public:
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
 		     epoch_created(0),
-                     last_epoch_started(0), last_epoch_finished(0) {}
+                     last_epoch_started(0)
+    { }
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return epoch_created == 0; }
@@ -658,7 +658,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
         << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
   //out << " c " << pgi.epoch_created;
-  out << " e " << pgi.last_epoch_started << "/" << pgi.last_epoch_finished
+  out << " e " << pgi.last_epoch_started
       << " " << pgi.history
       << ")";
   return out;
