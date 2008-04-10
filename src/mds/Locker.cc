@@ -1459,8 +1459,6 @@ bool Locker::simple_rdlock_try(SimpleLock *lock, Context *con)
   if (lock->can_rdlock(0)) 
     return true;
   
-  assert(!lock->get_parent()->is_auth());
-
   // wait!
   dout(7) << "simple_rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
