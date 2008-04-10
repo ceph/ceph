@@ -1024,19 +1024,26 @@ out:
 		wake_up(&ci->i_cap_wq);
 	if (writeback_now) {
 		/*
-		 * _queue_ inode for writeback, but don't actually
-		 * call writepages from this context!!
+		 * queue inode for writeback; we can't actually call
+		 * write_inode_now, writepages, etc. from this
+		 * context.
 		 */
 		dout(10, "queueing %p for writeback\n", inode);
-		spin_lock(&inode_lock);
-		list_move(&inode->i_list, &inode->i_sb->s_more_io);
-		spin_unlock(&inode_lock);
-		wakeup_pdflush(0);  /* this is overkill? */
+		ceph_queue_writeback(ceph_client(inode->i_sb), ci);
 	}
 	if (invalidate)
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
 	return reply;
 }
+
+void ceph_inode_writeback(struct work_struct *work)
+{
+	struct ceph_inode_info *ci = container_of(work, struct ceph_inode_info,
+						  i_wb_work);
+	dout(10, "writeback %p\n", &ci->vfs_inode);
+	write_inode_now(&ci->vfs_inode, 0);
+}
+
 
 void apply_truncate(struct inode *inode, loff_t size)
 {

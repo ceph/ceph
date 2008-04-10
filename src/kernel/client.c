@@ -177,7 +177,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 {
 	struct ceph_client *cl;
 	struct ceph_entity_addr *myaddr = 0;
-	int err;
+	int err = -ENOMEM;
 
 	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
 	if (cl == NULL)
@@ -186,6 +186,10 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	init_completion(&cl->mount_completion);
 	spin_lock_init(&cl->sb_lock);
 	get_client_counter();
+
+	cl->wb_wq = create_workqueue("ceph-writeback");
+	if (cl->wb_wq == 0)
+		goto fail;
 
 	/* messenger */
 	if (args->flags & CEPH_MOUNT_MYIP)
@@ -231,6 +235,7 @@ void ceph_destroy_client(struct ceph_client *cl)
 
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
+	destroy_workqueue(cl->wb_wq);
 	kfree(cl);
 	dout(10, "destroy_client %p done\n", cl);
 }

@@ -91,12 +91,14 @@ struct ceph_client {
 	struct ceph_mds_client mdsc;
 	struct ceph_osd_client osdc;
 
+	/* writeback */
+	struct workqueue_struct *wb_wq;
+
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;
 	int num_sb;      /* ref count (for each sb_info that points to me) */
 	struct list_head sb_list;
 };
-
 
 /*
  * CEPH per-mount superblock info
@@ -167,6 +169,8 @@ struct ceph_inode_info {
 
 	unsigned long i_hashval;
 
+	struct work_struct i_wb_work;  /* writeback work */
+
 	struct inode vfs_inode; /* at end */
 };
 
@@ -188,6 +192,13 @@ static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
 
 extern void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask);
 extern void ceph_revoke_dentry_lease(struct dentry *dentry);
+
+static inline void ceph_queue_writeback(struct ceph_client *cl, 
+					struct ceph_inode_info *ci)
+{
+	queue_work(cl->wb_wq, &ci->i_wb_work);
+}
+
 
 /*
  * ino_t is <64 bits on many architectures... blech
@@ -382,6 +393,7 @@ extern void ceph_check_caps(struct ceph_inode_info *ci);
 extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
+extern void ceph_inode_writeback(struct work_struct *work);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
