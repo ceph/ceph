@@ -834,7 +834,7 @@ retry:
 
 		ceph_mdsc_send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), 
 				       keep, wanted, seq, 
-				       size, max_size, &mtime, &atime, mds);
+				       size, 0, &mtime, &atime, mds);
 
 		if (dropping & CEPH_CAP_RDCACHE) {
 			dout(20, "invalidating pages on %p\n", &ci->vfs_inode);
@@ -999,6 +999,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 			cap->implemented = newcaps;
 			/* ack now.  re-use incoming message. */
 			grant->size = le64_to_cpu(inode->i_size);
+			grant->max_size = 0;  /* don't re-request */
 			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
 			reply = 1; 
@@ -1094,8 +1095,13 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
 	if (offset >= 0 && offset >= (loff_t)ci->i_max_size) {
-		dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
-		     offset, ci->i_max_size);
+		if (offset > (ci->vfs_inode.i_size << 1)) {
+			dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
+			     offset, ci->i_max_size);
+			
+		} else 
+			dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
+			     offset, ci->i_max_size);
 		goto sorry;
 	}
 	have = __ceph_caps_issued(ci);

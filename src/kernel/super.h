@@ -157,7 +157,7 @@ struct ceph_inode_info {
 
 	int i_nr_by_mode[4];
 	loff_t i_max_size;      /* size authorized by mds */
-	loff_t i_reported_size; /* size we're reported to mds(s) */
+	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
 	struct timespec i_old_atime;
 
 	/* held references to caps */

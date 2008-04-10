@@ -43,7 +43,7 @@ do
 done
 
 # mds
-$CEPH_BIN/cmds $ARGS --debug_mds 20 --debug_timer 50 --debug_ms 20 --debug 50
+$CEPH_BIN/cmds $ARGS --debug_mds 20 --debug_ms 1
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

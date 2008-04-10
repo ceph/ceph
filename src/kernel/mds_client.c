@@ -1327,7 +1327,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
 		ceph_mdsc_send_cap_ack(mdsc, ino, 0, 0, seq, 
-				       size, max_size, 0, 0, mds);
+				       size, 0, 0, 0, mds);
 		return;
 	}
 
