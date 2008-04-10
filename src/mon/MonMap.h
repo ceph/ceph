@@ -91,16 +91,18 @@ class MonMap {
   }
 
   void encode(bufferlist& blist) {
-    ::_encode(epoch, blist);
-    ::_encode(fsid, blist);
-    ::_encode(mon_inst, blist);
-  }
-  
+    ::encode(epoch, blist);
+    ::encode_raw(fsid, blist);
+    ::encode(mon_inst, blist);
+  }  
   void decode(bufferlist& blist) {
-    int off = 0;
-    ::_decode(epoch, blist, off);
-    ::_decode(fsid, blist, off);
-    ::_decode(mon_inst, blist, off);
+    bufferlist::iterator p = blist.begin();
+    decode(p);
+  }
+  void decode(bufferlist::iterator &p) {
+    ::decode(epoch, p);
+    ::decode_raw(fsid, p);
+    ::decode(mon_inst, p);
   }
 
 
@@ -114,5 +116,12 @@ class MonMap {
   int read(const char *fn);
 
 };
+
+inline void encode(MonMap &m, bufferlist &bl) {
+  m.encode(bl);
+}
+inline void decode(MonMap &m, bufferlist::iterator &p) {
+  m.decode(p);
+}
 
 #endif
