@@ -222,13 +222,13 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
-      dout(10) << " killing capability on " << *in << dendl;
+      dout(20) << " killing capability on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
       MDSCacheObject *p = r->parent;
-      dout(10) << " killing client lease of " << *p << dendl;
+      dout(20) << " killing client lease of " << *p << dendl;
       p->remove_client_lease(r, r->mask, mds->locker);
     }
 
