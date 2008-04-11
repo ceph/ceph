@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2004-2008 Sage Weil <sage@newdream.net>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -43,7 +43,7 @@ struct crush_grammar : public grammar<crush_grammar>
   static const int _step = 22;
   static const int _crushrule = 23;
 
-  static const int _crushmap = 23;
+  static const int _crushmap = 24;
 
   template <typename ScannerT>
   struct definition
