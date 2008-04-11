@@ -5,6 +5,7 @@ code cleanup
 - addr=?
 
 userspace client
+- move the size check(s) on read from _read() into FileCache
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
 - obey file_max
@@ -17,7 +18,6 @@ userspace client
 
 yehuda:
 - apply_truncate needs to truncate page cache, or something?
-- less heavy-handed writeback?
 
 kernel client
 - file_data_version stuff!
@@ -38,19 +38,13 @@ kernel client
   - send (+deliver!) unmount message
 
 client
-- obey file_max
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
 
-
 osdmon
-- actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
-- bootstrap crush map
 
 crush
 - xml import/export?
@@ -67,7 +61,6 @@ pgmon
 
 mon
 - some sort of tester for PaxosService...
-
 
 mds mustfix
 - rename slave in-memory rollback on failure
