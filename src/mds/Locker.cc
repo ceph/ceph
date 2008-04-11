@@ -557,6 +557,14 @@ bool Locker::issue_caps(CInode *in)
   // count conflicts with
   int nissued = 0;        
 
+  bool sizemtime_is_projected = false;
+  if (&in->inode != in->get_projected_inode() &&
+      (in->inode.size != in->get_projected_inode()->size ||
+       in->inode.mtime != in->get_projected_inode()->mtime)) {
+    dout(10) << " new size|mtime is projected" << dendl;
+    sizemtime_is_projected = true;
+  }
+
   // should we increase max_size?
   if (!in->is_dir() && (allowed & CEPH_CAP_WR) && in->is_auth())
     check_inode_max_size(in);
@@ -569,6 +577,11 @@ bool Locker::issue_caps(CInode *in)
     if (cap->pending() != (cap->wanted() & allowed)) {
       // issue
       nissued++;
+
+      // do not issue _new_ bits when size|mtime is projected
+      int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
+      if (sizemtime_is_projected)
+	allowed &= careful & cap->issued();   // only allow if already issued
 
       int before = cap->pending();
       long seq = cap->issue(cap->wanted() & allowed);
@@ -2866,7 +2879,7 @@ void Locker::file_eval(FileLock *lock)
 	    (wanted & CEPH_CAP_WR) &&
 	    !(loner && lock->get_state() == LOCK_LONER) &&
 	    lock->get_state() != LOCK_MIXED) ||
-	   (!loner && lock->get_state() == LOCK_LONER)) {
+	   (!loner && in->is_any_caps() && lock->get_state() == LOCK_LONER)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
   }
