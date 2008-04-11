@@ -646,6 +646,8 @@ static void remove_session_leases(struct ceph_mds_session *session)
 		ceph_revoke_dentry_lease(di->dentry);
 		spin_lock(&session->s_cap_lock);
 	}
+
+	spin_unlock(&session->s_cap_lock);
 }
 
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
