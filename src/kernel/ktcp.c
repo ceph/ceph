@@ -114,7 +114,7 @@ int ceph_tcp_connect(struct ceph_connection *con)
 
         ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
         if (ret < 0) {
-                derr(1, "ceph_tcp_connect sock_create_kern error: %d\n", ret);
+                derr(1, "connect sock_create_kern error: %d\n", ret);
                 goto done;
         }
 
@@ -123,12 +123,13 @@ int ceph_tcp_connect(struct ceph_connection *con)
 	ret = con->sock->ops->connect(con->sock, paddr,
                                       sizeof(struct sockaddr_in), O_NONBLOCK);
         if (ret == -EINPROGRESS) {
-        	dout(20, "ceph_tcp_connect EINPROGRESS sk_state = = %u\n",con->sock->sk->sk_state);
+        	dout(20, "connect EINPROGRESS sk_state = = %u\n",con->sock->sk->sk_state);
 		return 0;
 	}
         if (ret < 0) {
                 /* TBD check for fatal errors, retry if not fatal.. */
-                derr(1, "ceph_tcp_connect kernel_connect error: %d\n", ret);
+                derr(1, "connect %u.%u.%u.%u:%u error: %d\n", 
+		     IPQUADPORT(*(struct sockaddr_in *)paddr), ret);
                 sock_release(con->sock);
                 con->sock = NULL;
         }
@@ -261,11 +262,11 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;		/* length read */
 
-	//dout(30, "ceph_tcp_recvmsg %p len %d %p-%p\n", sock, (int)len, buf, buf+len);
+	//dout(30, "recvmsg %p len %d %p-%p\n", sock, (int)len, buf, buf+len);
 	msg.msg_flags |= MSG_DONTWAIT | MSG_NOSIGNAL;
 	/* receive one kvec for now...  */
 	rlen = kernel_recvmsg(sock, &msg, &iov, 1, len, msg.msg_flags);
-	//dout(30, "ceph_tcp_recvmsg %p len %d ret = %d\n", sock, (int)len, rlen);
+	//dout(30, "recvmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
 }
 
@@ -278,10 +279,10 @@ int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;
 
-	//dout(30, "ceph_tcp_sendmsg %p len %d\n", sock, (int)len);
+	//dout(30, "sendmsg %p len %d\n", sock, (int)len);
 	msg.msg_flags |=  MSG_DONTWAIT | MSG_NOSIGNAL;
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
-	//dout(30, "ceph_tcp_sendmsg %p len %d ret = %d\n", sock, (int)len, rlen);
+	//dout(30, "sendmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
 }
 
