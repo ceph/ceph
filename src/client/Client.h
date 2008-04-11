@@ -238,6 +238,29 @@ class Inode {
     return w;
   }
 
+  int get_effective_lease_mask(utime_t now) {
+    int havemask = 0;
+    if (now < lease_ttl && lease_mds >= 0)
+      havemask |= lease_mask;
+    if (file_caps() & CEPH_CAP_EXCL) 
+      havemask |= CEPH_LOCK_ICONTENT;
+    if (havemask & CEPH_LOCK_ICONTENT)
+      havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
+    return havemask;
+  }
+
+  bool have_valid_size() {
+    // RD+RDCACHE or WR+WRBUFFER => valid size
+    if ((file_caps() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
+      return true;
+    if ((file_caps() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
+      return true;
+    // otherwise, look for lease or EXCL...
+    if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_ICONTENT)
+      return true;
+    return false;
+  }
+
   void add_open(int cmode) {
     if (cmode & FILE_MODE_R) num_open_rd++;
     if (cmode & FILE_MODE_W) num_open_wr++;

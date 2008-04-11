@@ -2122,16 +2122,7 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
 
   int havemask = 0;
   if (dn) {
-    if (now < dn->inode->lease_ttl &&
-	dn->inode->lease_mds >= 0)
-      havemask = dn->inode->lease_mask;
-    if (dn->inode->file_caps() & CEPH_CAP_EXCL) {
-      dout(10) << "_lstat has inode " << fpath << " with CAP_EXCL, yay" << dendl;
-      havemask |= CEPH_LOCK_ICONTENT;
-    }
-    if (havemask & CEPH_LOCK_ICONTENT)
-      havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
- 
+    havemask = dn->inode->get_effective_lease_mask(now);
     dout(10) << "_lstat has inode " << fpath << " with mask " << havemask
 	     << ", want " << mask << dendl;
   } else {
@@ -3058,37 +3049,59 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
 
   bool lazy = f->mode == FILE_MODE_LAZY;
 
-  // wait for RD cap before checking size
-  while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
-    dout(7) << " don't have read cap, waiting" << dendl;
+  // wait for RD cap and/or a valid file size
+  while (1) {
+
+    if (lazy) {
+      // wait for lazy cap
+      if ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
+	dout(7) << " don't have lazy cap, waiting" << dendl;
+	goto wait;
+      }
+    } else {
+      // wait for RD cap?
+      while ((in->file_caps() & CEPH_CAP_RD) == 0) {
+	dout(7) << " don't have read cap, waiting" << dendl;
+	goto wait;
+      }
+    }
+    
+    // async i/o?
+    if ((in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
+
+      // FIXME: this logic needs to move info FileCache!
+
+      // wait for valid file size
+      if (!in->have_valid_size()) {
+	dout(7) << " don't have (rd+rdcache)|lease|excl for valid file size, waiting" << dendl;
+	goto wait;
+      }
+
+      dout(10) << "file size: " << in->inode.size << dendl;
+      if (offset > 0 && offset >= in->inode.size) {
+	if (movepos) unlock_fh_pos(f);
+	return 0;
+      }
+      if (offset + size > (off_t)in->inode.size) 
+	size = (off_t)in->inode.size - offset;
+      
+      if (size == 0) {
+	dout(10) << "read is size=0, returning 0" << dendl;
+	if (movepos) unlock_fh_pos(f);
+	return 0;
+      }
+      break;
+    } else {
+      // unbuffered, sync i/o.  defer to osd.
+      break;
+    }
+
+  wait:
     Cond cond;
     in->waitfor_read.push_back(&cond);
     cond.Wait(client_lock);
   }
 
-  // determine whether read range overlaps with file
-  // ...ONLY if we're doing async io
-  if (!lazy && (in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
-    // we're doing buffered i/o.  make sure we're inside the file.
-    // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(10) << "file size: " << in->inode.size << dendl;
-    if (offset > 0 && offset >= in->inode.size) {
-      if (movepos) unlock_fh_pos(f);
-      return 0;
-    }
-    if (offset + size > (off_t)in->inode.size) 
-      size = (off_t)in->inode.size - offset;
-    
-    if (size == 0) {
-      dout(10) << "read is size=0, returning 0" << dendl;
-      if (movepos) unlock_fh_pos(f);
-      return 0;
-    }
-  } else {
-    // unbuffered, synchronous file i/o.  
-    // or lazy.
-    // defer to OSDs for file bounds.
-  }
   
   int r = 0;
   int rvalue = 0;
@@ -3098,15 +3111,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     rvalue = r = in->fc.read(offset, size, *bl, client_lock);  // may block.
   } else {
     // object cache OFF -- legacy inconsistent way.
-
-    // lazy cap?
-    while (lazy && (in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << dendl;
-      Cond cond;
-      in->waitfor_lazy.push_back(&cond);
-      cond.Wait(client_lock);
-    }
-    
+  
     // do sync read
     Cond cond;
     bool done = false;
