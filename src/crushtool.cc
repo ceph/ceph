@@ -54,16 +54,24 @@ void parse_device(iter_t const& i, CrushWrapper &crush) {
   string name = string(i->children[2].value.begin(), i->children[2].value.end());
   cout << "name: " << name << std::endl;
 
+  //  crush.crush->device_offload[1000] = 0; 
+
   float offload = 0;
+  unsigned offload_fixed = 0;
   bool have_offload = false;
   if (size == 5) {
     have_offload = true;
     string offload_str = string(i->children[4].value.begin(), i->children[4].value.end()); 
     istringstream offloadStream(offload_str);
     if (offloadStream>>offload) {
-      cout << "offload: " << offload << std::endl;
-    } 
+      offload_fixed = static_cast<unsigned int>( offload * 65536 );
+      // mem not allocated for: crush.set_offload(id, offload_fixed) until crush.finalize()
+      
+    }
   }
+
+  crush.set_item_name(id, name.c_str());
+
 }
 
 
@@ -381,7 +389,9 @@ int main(int argc, const char **argv)
   }
 
   if (cinfn) {
+    crush.create();
     int r = compile_crush_file(cinfn, crush);
+    crush.finalize();
     if (r < 0) 
       exit(1);
 
