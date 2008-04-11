@@ -83,6 +83,7 @@ class MClientFileCaps : public Message {
     h.migrate_seq = cpu_to_le32(mseq);
     inode.mtime.encode_timeval(&h.mtime);
     inode.atime.encode_timeval(&h.atime);
+    inode.ctime.encode_timeval(&h.ctime);
   }
 
   const char *get_type_name() { return "Cfcap";}
