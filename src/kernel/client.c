@@ -103,11 +103,16 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 		
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
-		err = wait_for_completion_timeout(&client->mount_completion, 
-						  6*HZ);
+		//err = wait_for_completion_timeout(&client->mount_completion, 
+		//6*HZ);
+		err = wait_event_interruptible_timeout(
+			client->mount_wq,
+			ceph_have_all_maps(client),
+			6*HZ);
+		dout(10, "mount wait got %d\n", err);
 		if (err == -EINTR)
 			return err; 
-		if (client->mounting == 7) 
+		if (ceph_have_all_maps(client))
 			break;  /* success */
 		dout(10, "mount still waiting for mount, attempts=%d\n", 
 		     attempts);
@@ -160,11 +165,11 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 void got_first_map(struct ceph_client *client, int num)
 {
 	set_bit(num, &client->mounting);
-	dout(10, "got_first_map num %d mounting now %lu bits %d\n", 
-	     num, client->mounting, (int)find_first_zero_bit(&client->mounting, 4));
-	if (find_first_zero_bit(&client->mounting, 4) == 3) {
+	dout(10, "got_first_map num %d mounting now %lu  done=%d\n", 
+	     num, client->mounting, ceph_have_all_maps(client));
+	if (ceph_have_all_maps(client)) {
 		dout(10, "got_first_map kicking mount\n");
-		complete(&client->mount_completion);
+		wake_up(&client->mount_wq);
 	}
 }
 
@@ -183,7 +188,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	if (cl == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	init_completion(&cl->mount_completion);
+	init_waitqueue_head(&cl->mount_wq);
 	spin_lock_init(&cl->sb_lock);
 	get_client_counter();
 

@@ -1192,9 +1192,8 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	if (myaddr)
 		msgr->inst.addr.ipaddr.sin_addr = myaddr->ipaddr.sin_addr;
 
-	dout(1, "create %p listening on %x:%d\n", msgr,
-	     ntohl(msgr->inst.addr.ipaddr.sin_addr.s_addr),
-	     ntohs(msgr->inst.addr.ipaddr.sin_port));
+	dout(1, "create %p listening on %u.%u.%u.%u:%u\n", msgr,
+	     IPQUADPORT(msgr->inst.addr.ipaddr));
 	return msgr;
 }
 

@@ -45,11 +45,11 @@ extern int ceph_debug_addr;
 #define CEPH_BLOCK  (1 << CEPH_BLOCK_SHIFT)
 
 #define IPQUADPORT(n)							\
-	(unsigned int)((n.sin_addr.s_addr)) & 0xFF,			\
-		(unsigned int)((n.sin_addr.s_addr)>>8) & 0xFF,		\
-		(unsigned int)((n.sin_addr.s_addr)>>16) & 0xFF,		\
-		(unsigned int)((n.sin_addr.s_addr)>>24) & 0xFF,		\
-		(unsigned int)(ntohs(n.sin_port))
+	(unsigned int)(((n).sin_addr.s_addr)) & 0xFF,			\
+		(unsigned int)(((n).sin_addr.s_addr)>>8) & 0xFF,	\
+		(unsigned int)(((n).sin_addr.s_addr)>>16) & 0xFF,	\
+		(unsigned int)(((n).sin_addr.s_addr)>>24) & 0xFF,	\
+		(unsigned int)(ntohs((n).sin_port))
 
 /*
  * mount options
@@ -84,8 +84,8 @@ struct ceph_client {
 	struct super_block *sb;
 
 	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
-	struct completion mount_completion;
-
+	wait_queue_head_t mount_wq;
+	
 	struct ceph_messenger *msgr;   /* messenger instance */
 	struct ceph_mon_client monc;
 	struct ceph_mds_client mdsc;
@@ -99,6 +99,11 @@ struct ceph_client {
 	int num_sb;      /* ref count (for each sb_info that points to me) */
 	struct list_head sb_list;
 };
+
+static inline int ceph_have_all_maps(struct ceph_client *client)
+{
+	return find_first_zero_bit(&client->mounting, 4) == 3;
+}
 
 /*
  * CEPH per-mount superblock info
