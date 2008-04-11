@@ -75,7 +75,7 @@ public:
   //string    ref_dn;   // referring dentry
   int       nref;     // reference count
 
-  Anchor() {}
+  Anchor() : nref(0) {}
   Anchor(inodeno_t i, dirfrag_t df, 
 	 //string& rd, 
 	 int nr=0) :
