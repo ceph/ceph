@@ -669,6 +669,7 @@ void MDSMonitor::tick()
       case MDSMap::STATE_REJOIN:
       case MDSMap::STATE_ACTIVE:
       case MDSMap::STATE_STOPPING:
+      case MDSMap::STATE_FAILED:
 	newstate = MDSMap::STATE_FAILED;
 	pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	break;
