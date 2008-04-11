@@ -785,6 +785,7 @@ int Rank::Pipe::accept()
       state = STATE_CLOSED;
       return -1;
     }
+    peer_addr.ipaddr.sin_port = old_addr.ipaddr.sin_port;
     dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
   }
   
