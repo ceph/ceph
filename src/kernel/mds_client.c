@@ -1535,7 +1535,7 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	/*
 	 * renew at 1/2 the advertised timeout period.
 	 */
-	int delay = mdsc->mdsmap->m_cap_bit_timeout >> 2;
+	int delay = mdsc->mdsmap->m_cap_bit_timeout >> 1;
 	unsigned hz = round_jiffies_relative(HZ * delay);
 	int r;
 	dout(10, "schedule_delayed for %d seconds (%u hz)\n", delay, hz);
