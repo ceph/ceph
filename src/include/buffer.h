@@ -232,13 +232,16 @@ public:
     }
     ptr& operator= (const ptr& p) {
       // be careful -- we need to properly handle self-assignment.
-      if (p._raw) {
-	p._raw->nref.inc();                              // inc new
-      }
+      if (p._raw)
+	p._raw->nref.inc();                      // inc new
       release();                                 // dec (+ dealloc) old (if any)
-      _raw = p._raw;                               // change my ref
-      _off = p._off;
-      _len = p._len;
+      if (p._raw) {
+	_raw = p._raw;
+	_off = p._off;
+	_len = p._len;
+      } else {
+	_off = _len = 0;
+      }
       return *this;
     }
     ~ptr() {
