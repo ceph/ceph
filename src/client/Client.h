@@ -89,12 +89,13 @@ class Dentry : public LRUObject {
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
-  utime_t ttl;
+  int lease_mds;
+  utime_t lease_ttl;
   
   void get() { assert(ref == 0); ref++; lru_pin(); }
   void put() { assert(ref == 1); ref--; lru_unpin(); }
   
-  Dentry() : dir(0), inode(0), ref(0) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
 
   /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
   Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
@@ -129,8 +130,8 @@ class InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
-  int       mask;
-  utime_t   ttl;
+  int       lease_mask, lease_mds;
+  utime_t   lease_ttl;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -193,17 +194,19 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(inode_t _inode, ObjectCacher *_oc) : 
-    inode(_inode),
-    mask(0),
+  Inode(inodeno_t ino, ceph_file_layout *layout, ObjectCacher *_oc) : 
+    //inode(_inode),
+    lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
-    fc(_oc, _inode),
+    fc(_oc, ino, layout),
     sync_reads(0), sync_writes(0),
     hack_balance_reads(false)
-  { }
+  {
+    inode.ino = ino;
+  }
   ~Inode() {
     if (symlink) { delete symlink; symlink = 0; }
   }
@@ -352,10 +355,11 @@ struct Fh {
 
   bool is_lazy() { return mode & O_LAZY; }
 
+  bool append;
   bool pos_locked;           // pos is currently in use
   list<Cond*> pos_waiters;   // waiters for pos
 
-  Fh() : inode(0), pos(0), mds(0), mode(0), pos_locked(false) {}
+  Fh() : inode(0), pos(0), mds(0), mode(0), append(false), pos_locked(false) {}
 };
 
 
@@ -677,6 +681,8 @@ protected:
   void handle_mds_map(class MMDSMap *m);
 
   void handle_lease(MClientLease *m);
+
+  void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);

@@ -57,6 +57,7 @@ struct ceph_mds_session {
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
 	spinlock_t        s_cap_lock;
 	struct list_head  s_caps;
+	struct list_head  s_inode_leases, s_dentry_leases;
 	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct completion s_completion;
@@ -67,16 +68,17 @@ struct ceph_mds_session {
  */
 struct ceph_mds_request {
 	__u64             r_tid;
-	struct ceph_msg * r_request;  /* original request */
-	struct ceph_msg * r_reply;
+	struct ceph_msg  *r_request;  /* original request */
+	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info r_reply_info;
-	struct inode    * r_last_inode;
-	struct dentry   * r_last_dentry;
-	int				r_expects_cap;
+	struct inode     *r_last_inode;
+	struct dentry    *r_last_dentry;
+	struct dentry    *r_old_dentry;   /* for rename */
+	int			r_expects_cap;
 	unsigned long           r_from_time;
-	struct ceph_inode_cap * r_cap;
-	struct ceph_mds_session * r_session;
-	struct ceph_mds_session * r_mds[2];
+	struct ceph_inode_cap  *r_cap;
+	struct ceph_mds_session *r_session;
+	struct ceph_mds_session *r_mds[2];
 	int               r_num_mds;    /* items in r_mds */
 
 	int               r_attempts;   /* resend attempts */
@@ -100,11 +102,7 @@ struct ceph_mds_client {
 	struct radix_tree_root  request_tree;  /* pending mds requests */
 	__u64                   last_requested_map;
 	struct completion       map_waiters, session_close_waiters;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct delayed_work     delayed_work;  /* delayed work */
-#else
-	struct work_struct		delayed_work;  /* delayed work */
-#endif
 };
 
 extern const char* ceph_mds_op_name(int op);
@@ -124,11 +122,13 @@ extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 
 extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 				      struct ceph_msg *msg);
-struct ceph_inode_info;
-extern int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted);
 
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
+
+extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, 
+				    struct inode *inode,
+				    struct dentry *dn, int mask);
 
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
@@ -138,4 +138,11 @@ extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
+extern void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, 
+				   int caps, int wanted, __u32 seq, 
+				   __u64 size, __u64 max_size, 
+				   struct timespec *mtime, 
+				   struct timespec *atime,
+				   int mds);
+	
 #endif

@@ -41,6 +41,7 @@ private:
     // subop metadata
     tid_t rep_tid;
     eversion_t version;
+    uint32_t inc_lock;
 
     // piggybacked osd/og state
     eversion_t pg_trim_to;   // primary->replica: trim to here
@@ -72,6 +73,9 @@ public:
   const eversion_t get_pg_trim_to() { return st.pg_trim_to; }
   void set_pg_trim_to(eversion_t v) { st.pg_trim_to = v; }
 
+  unsigned get_inc_lock() { return st.inc_lock; }
+  void set_inc_lock(unsigned i) { st.inc_lock = i; }
+
   map<string,bufferptr>& get_attrset() { return attrset; }
   void set_attrset(map<string,bufferptr> &as) { attrset.swap(as); }
 
@@ -79,7 +83,7 @@ public:
   const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
  
   MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, off_t of, off_t le,
-	    epoch_t mape, tid_t rtid, eversion_t v) :
+	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
     Message(MSG_OSD_SUBOP) {
     memset(&st, 0, sizeof(st));
     st.reqid = r;
@@ -91,6 +95,7 @@ public:
     st.length = le;
     st.map_epoch = mape;
     st.rep_tid = rtid;
+    st.inc_lock = il;
     st.version = v;
   }
   MOSDSubOp() {}

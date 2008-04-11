@@ -5,7 +5,7 @@
 #include <linux/highmem.h>	/* kmap, kunmap */
 #include <linux/pagemap.h>	/* read_cache_pages */
 
-int ceph_debug_osdc = 50;
+int ceph_debug_osdc = -1;
 #define DOUT_VAR ceph_debug_osdc
 #define DOUT_PREFIX "osdc: "
 #include "super.h"
@@ -21,14 +21,6 @@ struct ceph_readdesc {
 	loff_t off;
 	loff_t len;
 };
-
-static int ceph_readpage_async(struct ceph_osd_client *osdc,
-			  struct ceph_msg *reqm, 
-			  struct page *page);
-static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			  struct ceph_file_layout *layout, 
-			  loff_t off, loff_t len,
-			  char *write_data);
 
 void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 {
@@ -49,15 +41,25 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	__u32 epoch;
 	struct ceph_osdmap *newmap = 0;
 	int err;
+	struct ceph_fsid fsid;
 
-	dout(1, "handle_map\n");
+	dout(1, "handle_map, have %u\n", osdc->osdmap ? osdc->osdmap->epoch:0);
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
+
+	/* verify fsid */
+	ceph_decode_need(&p, end, sizeof(fsid), bad);
+	ceph_decode_64(&p, fsid.major);
+	ceph_decode_64(&p, fsid.minor);
+	if (!ceph_fsid_equal(&fsid, &osdc->client->monc.monmap->fsid)) {
+		derr(0, "got map with wrong fsid, ignoring\n");
+		return;
+	}
 
 	/* incremental maps */
 	ceph_decode_32_safe(&p, end, nr_maps, bad);
 	dout(10, " %d inc maps\n", nr_maps);
-	while (nr_maps--) {
+	while (nr_maps > 0) {
 		ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
 		ceph_decode_32(&p, epoch);
 		ceph_decode_32(&p, maplen);
@@ -76,9 +78,11 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 				osdc->osdmap = newmap;
 			}
 		} else {
-			dout(10, "ignoring incremental map %u len %d\n", epoch, maplen);
+			dout(10, "ignoring incremental map %u len %d\n",
+			     epoch, maplen);
 		}
 		p = next;
+		nr_maps--;
 	}
 	if (newmap) 
 		goto out;
@@ -94,6 +98,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		dout(5, "skipping non-latest full map %u len %d\n", 
 		     epoch, maplen);
 		p += maplen;
+		nr_maps--;
 	}
 	if (nr_maps) {
 		ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
@@ -119,6 +124,8 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	}
 	dout(1, "handle_map done\n");
 	
+	ceph_monc_got_osdmap(&osdc->client->monc, osdc->osdmap->epoch);
+
 	/* kick any pending requests that need kicking */
 	/* WRITE ME */
 
@@ -165,36 +172,43 @@ struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op)
 	head->op = cpu_to_le32(op);
 	head->client_inst = osdc->client->msgr->inst;
 	head->client_inc = 1; /* always, for now. */
+	head->flags = 0;   
 
 	return req;
 }
 
-struct ceph_osd_request *register_request(struct ceph_osd_client *osdc,
-					  struct ceph_msg *msg,
-					  int nr_pages)
+static struct ceph_osd_request *alloc_request(int nr_pages, 
+					      struct ceph_msg *msg)
 {
 	struct ceph_osd_request *req;
-	struct ceph_osd_request_head *head = msg->front.iov_base;
 
 	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void*), GFP_KERNEL);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
+	req->r_request = msg;
+	req->r_nr_pages = nr_pages;
+	return req;
+}
+
+static int register_request(struct ceph_osd_client *osdc,
+			    struct ceph_osd_request *req)
+{
+	struct ceph_osd_request_head *head = req->r_request->front.iov_base;
+
 	req->r_tid = head->tid = ++osdc->last_tid;
 	req->r_flags = 0;
-	req->r_request = msg;
-	req->r_pgid = head->layout.ol_pgid;
+	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 	req->r_reply = 0;
 	req->r_result = 0;
 	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
-	req->r_nr_pages = nr_pages;
 
-	dout(30, "register_request %p tid %lld with %d pages\n", req, req->r_tid, nr_pages);
-	radix_tree_insert(&osdc->request_tree, req->r_tid, (void*)req);
-	return req;
+	dout(30, "register_request %p tid %lld\n", req, req->r_tid);
+	return radix_tree_insert(&osdc->request_tree, req->r_tid, (void*)req);
 }
 
-static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
+static void send_request(struct ceph_osd_client *osdc, 
+			 struct ceph_osd_request *req)
 {
 	int ruleno;
 	int osds[10];
@@ -230,7 +244,9 @@ static void send_request(struct ceph_osd_client *osdc, struct ceph_osd_request *
 		ceph_msg_get(req->r_request); /* send consumes a ref */
 		ceph_msg_send(osdc->client->msgr, req->r_request, 0);
 	} else {
-		dout(10, "send_request no osds in pg are up\n");
+		dout(10, "send_request no osds in this pg are up\n");
+		ceph_monc_request_osdmap(&osdc->client->monc, 
+					 osdc->osdmap->epoch, 0);
 	}
 }
 
@@ -304,18 +320,154 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 		dout(10, "prepare_pages unknown tid %llu\n", tid);
 		goto out;
 	}
-	if (likely(req->r_nr_pages == want)) {
-		dout(10, "prepare_pages tid %llu using existing page vec\n", tid);
+	dout(10, "prepare_pages tid %llu have %d pages, want %d\n", 
+	     tid, req->r_nr_pages, want);
+	if (likely(req->r_nr_pages >= want)) {
 		m->pages = req->r_pages;
 		m->nr_pages = req->r_nr_pages;
 		ret = 0; /* success */
-	} else {
-		dout(10, "prepare_pages tid %llu have %d pages, reply wants %d\n", 
-		     tid, req->r_nr_pages, want);
 	}
 out:
 	spin_unlock(&osdc->lock);
 	return ret;
+}
+
+
+int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
+{
+	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
+	struct ceph_osd_reply_head *replyhead;
+	__s32 rc;
+	int bytes;
+
+	/* register+send request */
+	spin_lock(&osdc->lock);
+	rc = register_request(osdc, req);
+	if (rc < 0) {
+		spin_unlock(&osdc->lock);
+		return rc;
+	}
+	reqhead->osdmap_epoch = osdc->osdmap->epoch;
+	send_request(osdc, req);
+	spin_unlock(&osdc->lock);
+	
+	/* wait */
+	dout(10, "do_request tid %llu waiting on %p\n", req->r_tid, req);
+	wait_for_completion(&req->r_completion);
+	dout(10, "do_request tid %llu got reply on %p\n", req->r_tid, req);
+
+	spin_lock(&osdc->lock);
+	unregister_request(osdc, req);
+	spin_unlock(&osdc->lock);
+
+	/* parse reply */
+	replyhead = req->r_reply->front.iov_base;
+	rc = le32_to_cpu(replyhead->result);
+	bytes = le32_to_cpu(req->r_reply->hdr.data_len);
+	dout(10, "do_request result %d, %d bytes\n", rc, bytes); 
+	if (rc < 0)
+		return rc;
+	return bytes;
+}
+
+/*
+ * calculate the mapping of an extent onto an object, and fill out the
+ * request accordingly.  shorten extent as necessary if it hits an
+ * object boundary.
+ */
+__u64 calc_layout(struct ceph_osd_client *osdc, 
+		  ceph_ino_t ino, struct ceph_file_layout *layout,
+		  __u64 off, __u64 len,
+		  struct ceph_osd_request *req)
+{
+	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
+	__u64 toff = off, tlen = len;
+
+	reqhead->oid.ino = ino;
+	reqhead->oid.rev = 0;
+
+	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
+				 &off, &len);
+	if (tlen != 0) 
+		dout(10, " skipping last %llu, writing  %llu~%llu\n", 
+		     tlen, off, len);
+	reqhead->offset = cpu_to_le64(off);
+	reqhead->length = cpu_to_le64(len);
+
+	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, 
+			   osdc->osdmap);
+
+	dout(10, "calc_layout bno %u on %llu~%llu pgid %llx\n", 
+	     le32_to_cpu(reqhead->oid.bno), off, len, 
+	     le64_to_cpu(reqhead->layout.ol_pgid));
+
+	return len;
+}
+
+/*
+ * synchronous read direct to user buffer
+ */
+int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
+			struct ceph_file_layout *layout, 
+			__u64 off, __u64 len,
+			char __user *data)
+{
+	struct ceph_msg *reqm;
+	struct ceph_osd_request *req;
+	int nr_pages, i, po, left, l;
+	__s32 rc;
+
+	dout(10, "sync_read on ino %llx at %llu~%llu\n", ino, off, len);
+
+	/* request msg */
+	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
+	if (IS_ERR(reqm))
+		return PTR_ERR(reqm);
+
+	nr_pages = calc_pages_for(off, len);
+	req = alloc_request(nr_pages, reqm);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	len = calc_layout(osdc, ino, layout, off, len, req);
+	nr_pages = calc_pages_for(off, len);  /* recalc */
+	dout(10, "sync_read %llu~%llu -> %d pages\n", off, len, nr_pages);
+
+	/* allocate temp pages to hold data */
+	for (i=0; i<nr_pages; i++) {
+		req->r_pages[i] = alloc_page(GFP_KERNEL);
+		if (req->r_pages[i] == NULL) {
+			req->r_nr_pages = i+1;
+			put_request(req);
+			return -ENOMEM;
+		}
+	}
+	reqm->nr_pages = nr_pages;
+	reqm->pages = req->r_pages;
+	reqm->hdr.data_len = cpu_to_le32(len);
+	reqm->hdr.data_off = cpu_to_le32(off);
+
+	rc = do_request(osdc, req);
+	if (rc > 0) {
+		/* copy into user buffer */
+		po = off & ~PAGE_CACHE_MASK;
+		left = rc;
+		i = 0;
+		while (left > 0) {
+			l = min_t(int, left, PAGE_CACHE_SIZE-po);
+			dout(20, "copy po %d left %d l %d page %d\n",
+			     po, left, l, i);
+			copy_to_user(data, page_address(req->r_pages[i]) + po,
+				     l);
+			data += l;
+			left -= l;
+			po = 0;
+			i++;
+		}
+	}
+	put_request(req);
+	dout(10, "sync_read result %d\n", rc); 
+	return rc;
 }
 
 /*
@@ -327,8 +479,9 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 		       struct page *page)
 {
 	struct ceph_msg *reqm;
-	struct ceph_osd_request_head *reqhead;
-	int ret;
+ 	struct ceph_osd_request_head *reqhead;
+	struct ceph_osd_request *req;
+	__s32 rc;
 
 	dout(10, "readpage on ino %llx at %lld~%lld\n", ino, off, len);
 
@@ -337,78 +490,39 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
 	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	BUG_ON(len != 0);
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
-	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	ret = ceph_readpage_async(osdc, reqm, page);
-	if (ret < 0)
-		return ret;
-	return 0;
+
+	req = alloc_request(1, reqm);
+	if (IS_ERR(req)) {
+		ceph_msg_put(reqm);
+		return PTR_ERR(req);
+	}
+	req->r_pages[0] = page;
+
+	len = calc_layout(osdc, ino, layout, off, len, req);
+	BUG_ON(len != PAGE_CACHE_SIZE);
+		
+	rc = do_request(osdc, req);
+	put_request(req);
+	dout(10, "readpage result %d\n", rc); 
+	return rc;
 }
 
 /*
- * read multiple pages (readahead)
+ * read some contiguous pages from page_list.  
+ *  - we stop if pages aren't contiguous, or when we hit an object boundary
  */
-
-int ceph_osdc_readpages_filler(void *data, struct page *page)
-{
-	struct ceph_readdesc *pdesc = (struct ceph_readdesc *)data;
-	struct ceph_osd_client *osdc = pdesc->osdc;
-	struct ceph_file_layout *layout = pdesc->layout;
-	loff_t off = pdesc->off;
-	loff_t len = pdesc->len;
-
-	struct ceph_osd_request_head *reqhead;
-	struct ceph_msg *reqm;
-	struct inode *inode = page->mapping->host;
-	ceph_ino_t ino = ceph_ino(inode);
-	int ret;
-
-	/* request msg */
-	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
-	if (IS_ERR(reqm))
-		return PTR_ERR(reqm);
-	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	BUG_ON(len != 0);
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
-	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	ret = ceph_readpage_async(osdc, reqm, page);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
-
-/* FIXME: Since this macro list_to_page is already defined in mm/readahead.c,
- *        it's not good to define it again at this point.
- */
-#define list_to_page(head) (list_entry((head)->prev, struct page, lru))
-
 int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct address_space *mapping,
-			ceph_ino_t ino,
-			struct ceph_file_layout *layout, 
-			struct list_head *pagels, int nr_pages)
+			ceph_ino_t ino, struct ceph_file_layout *layout, 
+			__u64 off, __u64 len,
+			struct list_head *page_list, int nr_pages)
 {
-	struct ceph_msg *reqm, *reply;
-	struct ceph_osd_request_head *reqhead;
+	struct ceph_msg *reqm;
 	struct ceph_osd_request *req;
-	struct ceph_osd_reply_head *replyhead;
-	__u64 off, len;
-	struct ceph_readdesc desc = {
-		.osdc = osdc,
-		.layout = layout
-	};
+	struct page *page;
+	pgoff_t next_index;
+	int contig_pages;
+	__s32 rc;
 
 	/*
 	 * for now, our strategy is simple: start with the 
@@ -417,408 +531,158 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	 * nr_pages.
 	 */
 
-	dout(10, "readpage on ino %llx at %lld~%lld\n", ino, off, len);
+	dout(10, "readpages on ino %llx on %llu~%llu\n", ino, off, len);
 
-	/* request msg */
+	/* alloc request, w/ page vector */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
-	if (IS_ERR(reqm))
+	if (IS_ERR(reqm)) 
 		return PTR_ERR(reqm);
-	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	off = list_to_page(pagels)->index << PAGE_SHIFT;
-	len = nr_pages << PAGE_SHIFT;
-	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	BUG_ON(len != 0);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
-	nr_pages = DIV_ROUND_UP(reqhead->length, PAGE_SIZE);
-#else
-	nr_pages = (reqhead->length + PAGE_SIZE - 1) / PAGE_SIZE;
-#endif
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
-	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	/* register request */
-	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, nr_pages);
-	if (IS_ERR(req)) {
+	req = alloc_request(nr_pages, reqm);
+	if (req == 0) {
 		ceph_msg_put(reqm);
-		spin_unlock(&osdc->lock);
-		return PTR_ERR(req);
+		return -ENOMEM;
 	}
 
-	/* prepage pages (add to page cache, request vector) */
-	desc.off = off;
-	desc.len = len;
-	read_cache_pages(mapping, pagels, ceph_osdc_readpages_filler, &desc);
-
-	/* send request */
-	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	send_request(osdc, req);
-	spin_unlock(&osdc->lock);
+	/* find adjacent pages */
+	next_index = list_entry(page_list->prev, struct page, lru)->index;
+	contig_pages = 0;
+	list_for_each_entry_reverse(page, page_list, lru) {
+		if (page->index == next_index) {
+			req->r_pages[contig_pages] = page;
+			contig_pages++;
+			next_index++;
+		} else
+			break;
+	}
+	dout(10, "readpages found %d/%d contig\n", contig_pages, nr_pages);
+	if (contig_pages == 0) {
+		put_request(req);
+		return 0;
+	}
+	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
+		  len);
+	dout(10, "readpages contig page extent is %llu~%llu\n", off, len);
 	
-	/* wait */
-	dout(10, "readpage tid %llu waiting for reply on %p\n", req->r_tid, req);
-	wait_for_completion(&req->r_completion);
-	dout(10, "readpage tid %llu got reply on %p\n", req->r_tid, req);
+	/* request msg */
+	len = calc_layout(osdc, ino, layout, off, len, req);
+	req->r_nr_pages = calc_pages_for(off, len);
 
-	spin_lock(&osdc->lock);
-	unregister_request(osdc, req);
-	spin_unlock(&osdc->lock);
-
-	reply = req->r_reply;
-	replyhead = reply->front.iov_base;
-	dout(10, "readpage result %d\n", replyhead->result);
-	ceph_msg_put(reply);
+	dout(10, "readpages final extent is %llu~%llu -> %d pages\n", 
+	     off, len, req->r_nr_pages);
+	
+	rc = do_request(osdc, req);
 	put_request(req);
-	return 0;
+	dout(10, "readpages result %d\n", rc);
+	return rc;
 }
 
 
 /*
- * silly hack.
+ * synchronous write.  from userspace.
  */
-int ceph_osdc_silly_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			  struct ceph_file_layout *layout, 
-			  __u64 len, __u64 off, const char __user *data)
+int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+			 struct ceph_file_layout *layout, 
+			 __u64 off, __u64 len, const char __user *data)
 {
-	struct ceph_msg *reqm, *reply;
+	struct ceph_msg *reqm;
 	struct ceph_osd_request_head *reqhead;
 	struct ceph_osd_request *req;
-	struct ceph_osd_reply_head *replyhead;
-	__u64 toff = off, tlen = len;
-	int nrp, i, po, l, left;
+	int nr_pages, i, po, l, left;
+	__s32 rc;
 
-	dout(10, "silly_write on ino %llx at %llu~%llu\n", ino, off, len);
+	dout(10, "sync_write on ino %llx at %llu~%llu\n", ino, off, len);
 
 	/* request msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE);
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
 	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	reqhead->flags = CEPH_OSD_OP_ACK|CEPH_OSD_OP_SAFE;  /* want them both */
-	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	if (tlen != 0) {
-		dout(10, "not writing complete bit.. skipping last %llu, doing %llu~%llu\n", tlen, off, len);
-		len -= tlen;
-	}
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
-	dout(10, "silly_write object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	/* how many pages? */
-	nrp = calc_pages_for(len, off);
-	dout(10, "%d~%d -> %d pages\n", (int)off, (int)len, nrp);
+	reqhead->flags = CEPH_OSD_OP_ACK;  /* just ack.. FIXME */
 
-	/* register+send request */
-	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, nrp);
+	/* how many pages? */
+	nr_pages = calc_pages_for(off, len);
+	req = alloc_request(nr_pages, reqm);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
-		spin_unlock(&osdc->lock);
 		return PTR_ERR(req);
 	}
 
-	/* data into a set of pages */
-	for (i=0; i<nrp; i++)
-		req->r_pages[i] = alloc_page(GFP_KERNEL);
+	len = calc_layout(osdc, ino, layout, off, len, req);
+	nr_pages = calc_pages_for(off, len);  /* recalc */
+	dout(10, "sync_write %llu~%llu -> %d pages\n", off, len, nr_pages);
+
+	/* copy data into a set of pages */
 	left = len;
 	po = off & ~PAGE_MASK;
-	for (i=0; i<nrp; i++) {
+	for (i=0; i<nr_pages; i++) {
+		req->r_pages[i] = alloc_page(GFP_KERNEL);
+		if (req->r_pages[i] == NULL) {
+			req->r_nr_pages = i+1;
+			put_request(req);
+			return -ENOMEM;
+		}
 		l = min_t(int, PAGE_SIZE-po, left);
 		copy_from_user(page_address(req->r_pages[i]) + po, data, l);
 		data += l;
 		left -= l;
 		po = 0;
 	}
-	req->r_request->pages = req->r_pages;
-	req->r_request->nr_pages = req->r_nr_pages;
-	req->r_request->hdr.data_len = cpu_to_le32(len);
-	req->r_request->hdr.data_off = cpu_to_le32(off);
+	reqm->pages = req->r_pages;
+	reqm->nr_pages = nr_pages;
+	reqm->hdr.data_len = cpu_to_le32(len);
+	reqm->hdr.data_off = cpu_to_le32(off);
 
-	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	send_request(osdc, req);
-	spin_unlock(&osdc->lock);
-	
-	/* wait */
-	dout(10, "silly_write tid %llu waiting for reply on %p\n", req->r_tid, req);
-	wait_for_completion(&req->r_completion);
-	dout(10, "silly_write tid %llu got reply on %p\n", req->r_tid, req);
-
-	spin_lock(&osdc->lock);
-	unregister_request(osdc, req);
-	spin_unlock(&osdc->lock);
-
-	reply = req->r_reply;
-	replyhead = reply->front.iov_base;
-	dout(10, "silly_write result %d, returning %d\n", replyhead->result, (int)len);
-	ceph_msg_put(reply);
+	rc = do_request(osdc, req);
 	put_request(req);
-	return (int)len;
-}
-
-
-
-/*
- * Make a page up to date to be written later to remote OSDs
- */
-int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
-                      struct ceph_file_layout *layout, 
-                      loff_t off, loff_t len,
-                      struct page *page)
-{
-	int rc;
-	char *read_data;
-	struct ceph_msg *reqm;
-	struct ceph_osd_request_head *reqhead;
-	
-	dout(10, "osdc_prepare_write on ino %llx at %lld~%lld\n", ino, off, len);
-	
-	get_page(page);
-	read_data = kmap(page);
-	
-	/*
-	 *  1. Read a page by calling ceph_osdc_readpage()
-	 *  2. Fill the rest bytes by 0, to align by PAGE_SIZE
-	 */
-	
-	/* request msg */
-	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
-	if (IS_ERR(reqm))
-		return PTR_ERR(reqm);
-	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	calc_file_object_mapping(layout, &off, &len, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	BUG_ON(len != 0);
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout, osdc->osdmap);
-	dout(10, "readpage object block %u %llu~%llu\n", reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	rc = ceph_readpage_async(osdc, reqm, page);
-	if (rc < 0)
-		goto io_error;
-	
-	if (rc < PAGE_SIZE)
-		memset(read_data + rc, 0, PAGE_SIZE - rc);
-	
-	SetPageUptodate(page);
-	
-	rc = 0;
-	
-io_error:
-	kunmap(page);
-	put_page(page);
+	if (rc == 0)
+		rc = len;
+	dout(10, "sync_write result %d\n", rc); 
 	return rc;
 }
 
 /*
- * Mark a page as dirty to be written into remote OSDs
+ * do a write job for N pages
  */
-int ceph_osdc_commit_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			   struct ceph_file_layout *layout, 
-			   loff_t off, loff_t len,
-			   struct page *page)
+int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
+			 struct ceph_file_layout *layout, 
+			 loff_t off, loff_t len,
+			 struct page **pages, int nr_pages)
 {
-	char *write_data;
-	int ret = 0;
-	
-	dout(10, "osdc_commit_write on ino %llx at %lld~%lld\n", ino, off, len);
-	
-	/*
-	 * if it is not up-to-date, then force it to be so.
-	 */
-	
-	write_data = kmap(page);
-	write_data += off;
-	
-	if (len > PAGE_SIZE) {
-		kunmap(page);
-		return -EIO;
-	}
-	
-	ret = ceph_writepage_async(osdc, ino, layout, off, len, write_data);
-	if (ret) {
-		kunmap(page);
-		return ret;
-	}
-	
-	kunmap(page);
-	return ret;
-}
-
-/*
- * Do write a single page, sending data to remote OSDs.
- */
-int ceph_osdc_writepage(struct ceph_osd_client *osdc, ceph_ino_t ino,
-                         struct ceph_file_layout *layout, 
-                         loff_t off, loff_t len,
-                         struct page *page)
-{
-	int ret = 0;
-	char *write_data;
-	
-	dout(10, "writepage on ino %llx at %lld~%lld\n", ino, off, len);
-	
-	write_data = kmap(page);
-	write_data += off;
-	
-	if (len > PAGE_SIZE) {
-		kunmap(page);
-		return -EIO;
-	}
-	
-	ret = ceph_writepage_async(osdc, ino, layout, off, len, write_data);
-	if (ret) {
-		kunmap(page);
-		return ret;
-	}
-
-	kunmap(page);
-	return ret;
-}
-
-
-/*
- * do a read job for one page
- */
-static int ceph_readpage_async(struct ceph_osd_client *osdc,
-			       struct ceph_msg *reqm, 
-			       struct page *page)
-{
-	struct ceph_msg *reply;
+	struct ceph_msg *reqm;
 	struct ceph_osd_request_head *reqhead;
 	struct ceph_osd_request *req;
-	struct ceph_osd_reply_head *replyhead;
-
-	reqhead = reqm->front.iov_base;
-
-	/* register+send request */
-	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, 1);
-	if (IS_ERR(req)) {
-		ceph_msg_put(reqm);
-		spin_unlock(&osdc->lock);
-		return PTR_ERR(req);
-	}
-	req->r_pages[0] = page;
-	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	send_request(osdc, req);
-	spin_unlock(&osdc->lock);
+	int rc = 0;
 	
-	/* wait */
-	dout(10, "readpage tid %llu waiting for reply on %p\n", req->r_tid, req);
-	wait_for_completion(&req->r_completion);
-	dout(10, "readpage tid %llu got reply on %p\n", req->r_tid, req);
-
-	spin_lock(&osdc->lock);
-	unregister_request(osdc, req);
-	spin_unlock(&osdc->lock);
-
-	reply = req->r_reply;
-	replyhead = reply->front.iov_base;
-	dout(10, "readpage result %d\n", replyhead->result);
-	ceph_msg_put(reply);
-	put_request(req);
-
-	return 0;
-}
-
-/*
- * do a write job for one page
- */
-static int ceph_writepage_async(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			  struct ceph_file_layout *layout, 
-			  loff_t off, loff_t len,
-			  char *write_data)
-{
-	struct ceph_msg *reqm, *reply;
-	struct ceph_osd_request_head *reqhead;
-	struct ceph_osd_request *req;
-	struct ceph_osd_reply_head *replyhead;
-	__u64 toff = off, tlen = len;
-	int po, l;
-	int ret = 0;
-	
-	/* request msg */
+	/* request + msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE);
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
-	reqhead = reqm->front.iov_base;
-	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
-	reqhead->flags = CEPH_OSD_OP_ACK|CEPH_OSD_OP_SAFE;  /* want them both */
-	dout(10, "writepage_async getting object mapping on %llx %llu~%llu\n",
-	     ino, off, len);
-	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
-				 &reqhead->offset, &reqhead->length);
-	if (tlen != 0) {
-		dout(10, "not writing complete bit.. "
-		     "skipping last %llu, doing %llu~%llu\n", tlen, off, len);
-		len -= tlen;
-	}
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
-			   osdc->osdmap);
-	dout(10, "writepage_async object block %u %llu~%llu\n",
-	     reqhead->oid.bno, reqhead->offset, reqhead->length);
-	
-	/* register+send request */
-	spin_lock(&osdc->lock);
-	req = register_request(osdc, reqm, 1);
+	req = alloc_request(nr_pages, reqm);
 	if (IS_ERR(req)) {
 		ceph_msg_put(reqm);
-		spin_unlock(&osdc->lock);
 		return PTR_ERR(req);
 	}
+
+	reqhead = reqm->front.iov_base;
+	reqhead->flags = CEPH_OSD_OP_ACK;    /* just ACK for now */
+
+	len = calc_layout(osdc, ino, layout, off, len, req);
+	nr_pages = calc_pages_for(off, len);
+	dout(10, "writepages %llu~%llu -> %d pages\n", off, len, nr_pages);
 	
-	/* copy data into a page in a request message */
-	dout(10, "writepage_async alloc\n");
-	req->r_pages[0] = alloc_pages(GFP_KERNEL, 1);
-	po = off & ~PAGE_MASK;
-	
-	dout(10, "writepage_async copy\n");
-	l = min_t(int, PAGE_SIZE-po, len);
-	if (copy_from_user(page_address(req->r_pages[0]) + po, write_data, l)) {
-		dout(10, "writepage_async fault\n");
-		ret = -EFAULT;
-		unregister_request(osdc, req);
-		spin_unlock(&osdc->lock);
-		goto out;
-	}
-	
-	req->r_request->pages = req->r_pages;
-	req->r_request->nr_pages = req->r_nr_pages;
-	req->r_request->hdr.data_len = len;
-	req->r_request->hdr.data_off = off;
-	
-	reqhead->osdmap_epoch = osdc->osdmap->epoch;
-	dout(10, "writepage_async send\n");
-	send_request(osdc, req);
-	spin_unlock(&osdc->lock);
-	
-	/* wait */
-	dout(10, "writepage_async tid %llu waiting for reply on %p\n", 
-	     req->r_tid, req);
-	wait_for_completion(&req->r_completion);
-	dout(10, "writepage_async tid %llu got reply on %p\n", req->r_tid, req);
-	
-	spin_lock(&osdc->lock);
-	unregister_request(osdc, req);
-	spin_unlock(&osdc->lock);
-	
-	reply = req->r_reply;
-	replyhead = reply->front.iov_base;
-	dout(10, "writepage_async result %d, returning %d\n", 
-	     replyhead->result, (int)len);
-	ceph_msg_put(reply);
+	/* copy pages */
+	memcpy(req->r_pages, pages, nr_pages * sizeof(struct page *));
+	reqm->pages = req->r_pages;
+	reqm->nr_pages = req->r_nr_pages = nr_pages;
+	reqm->hdr.data_len = len;
+	reqm->hdr.data_off = off;
+
+	rc = do_request(osdc, req);
 	put_request(req);
-	
-	ret = len;
-	
-out:
-	put_request(req);
-	return ret;
+	if (rc == 0)
+		rc = len;
+	dout(10, "writepages result %d\n", rc);
+	return rc;
 }
+
+

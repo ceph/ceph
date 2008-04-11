@@ -360,6 +360,11 @@ public:
       return client_caps[client];
     return 0;
   }
+  int get_client_cap_pending(int client) {
+    Capability *c = get_client_cap(client);
+    if (c) return c->pending();
+    return 0;
+  }
   Capability *add_client_cap(int client, CInode *in) {
     if (client_caps.empty())
       get(PIN_CAPS);

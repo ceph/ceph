@@ -29,7 +29,7 @@
 
 void FileCache::flush_dirty(Context *onflush)
 {
-  if (oc->flush_set(inode.ino, onflush)) {
+  if (oc->flush_set(ino, onflush)) {
     onflush->finish(0);
     delete onflush;
   }
@@ -37,23 +37,23 @@ void FileCache::flush_dirty(Context *onflush)
 
 off_t FileCache::release_clean()
 {
-  return oc->release_set(inode.ino);
+  return oc->release_set(ino);
 }
 
 bool FileCache::is_cached()
 {
-  return oc->set_is_cached(inode.ino);
+  return oc->set_is_cached(ino);
 }
 
 bool FileCache::is_dirty() 
 {
-  return oc->set_is_dirty_or_committing(inode.ino);
+  return oc->set_is_dirty_or_committing(ino);
 }
 
 void FileCache::empty(Context *onempty)
 {
   off_t unclean = release_clean();
-  bool clean = oc->flush_set(inode.ino, onempty);
+  bool clean = oc->flush_set(ino, onempty);
   assert(!unclean == clean);
 
   if (clean) {
@@ -68,7 +68,7 @@ void FileCache::tear_down()
   off_t unclean = release_clean();
   if (unclean) {
     dout(0) << "tear_down " << unclean << " unclean bytes, purging" << dendl;
-    oc->purge_set(inode.ino);
+    oc->purge_set(ino);
   }
 }
 
@@ -80,8 +80,8 @@ void FileCache::truncate(off_t olds, off_t news)
 
   // map range to objects
   list<ObjectExtent> ls;
-  oc->filer.file_to_extents(inode, news, olds-news, ls);
-  oc->truncate_set(inode.ino, ls);
+  oc->filer.file_to_extents(ino, &layout, news, olds-news, ls);
+  oc->truncate_set(ino, ls);
 }
 
 // caps
@@ -124,9 +124,9 @@ int FileCache::get_used_caps()
 {
   int used = 0;
   if (num_reading) used |= CEPH_CAP_RD;
-  if (oc->set_is_cached(inode.ino)) used |= CEPH_CAP_RDCACHE;
+  if (oc->set_is_cached(ino)) used |= CEPH_CAP_RDCACHE;
   if (num_writing) used |= CEPH_CAP_WR;
-  if (oc->set_is_dirty_or_committing(inode.ino)) used |= CEPH_CAP_WRBUFFER;
+  if (oc->set_is_dirty_or_committing(ino)) used |= CEPH_CAP_WRBUFFER;
   return used;
 }
 
@@ -194,7 +194,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
     int rvalue = 0;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
     
-    r = oc->file_read(inode, offset, size, &blist, onfinish);
+    r = oc->file_read(ino, &layout, offset, size, &blist, 0, onfinish);
     
     if (r == 0) {
       // block
@@ -206,7 +206,7 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
       delete onfinish;
     }
   } else {
-    r = oc->file_atomic_sync_read(inode, offset, size, &blist, client_lock);
+    r = oc->file_atomic_sync_read(ino, &layout, offset, size, &blist, 0, client_lock);
   }
 
   // dec reading counter
@@ -238,10 +238,10 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
       oc->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-      oc->file_write(inode, offset, size, blist);
+      oc->file_write(ino, &layout, offset, size, blist, 0);
     } else {
       // atomic, synchronous, blocking.
-      oc->file_atomic_sync_write(inode, offset, size, blist, client_lock);
+      oc->file_atomic_sync_write(ino, &layout, offset, size, blist, 0, client_lock);
     }    
   }
     
@@ -253,12 +253,12 @@ void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& clien
 
 bool FileCache::all_safe()
 {
-  return !oc->set_is_dirty_or_committing(inode.ino);
+  return !oc->set_is_dirty_or_committing(ino);
 }
 
 void FileCache::add_safe_waiter(Context *c) 
 {
-  bool safe = oc->commit_set(inode.ino, c);
+  bool safe = oc->commit_set(ino, c);
   if (safe) {
     c->finish(0);
     delete c;

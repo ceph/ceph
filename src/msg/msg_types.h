@@ -71,7 +71,7 @@ public:
     return n;
   }
 
-};
+} __attribute__ ((packed));
 
 inline bool operator== (const entity_name_t& l, const entity_name_t& r) { 
   return (l.type() == r.type()) && (l.num() == r.num()); }
@@ -149,7 +149,7 @@ struct entity_addr_t {
       nonce == other.nonce &&
       memcmp(&ipaddr, &other.ipaddr, sizeof(ipaddr)) == 0;
   }
-};
+} __attribute__ ((packed));
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
@@ -189,7 +189,7 @@ struct entity_inst_t {
     ceph_entity_inst i = {name, addr};
     return i;
   }
-};
+} __attribute__ ((packed));
 
 
 inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }

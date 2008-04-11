@@ -8,8 +8,8 @@
 #include "messenger.h"
 #include "decode.h"
 
-int ceph_mdsmap_debug = 50;
-#define DOUT_VAR ceph_mdsmap_debug
+int ceph_debug_mdsmap = -1;
+#define DOUT_VAR ceph_debug_mdsmap
 #define DOUT_PREFIX "mdsmap: "
 #include "super.h"
 
@@ -65,6 +65,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_need(p, end, 10*sizeof(__u32), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
+	ceph_decode_32(p, m->m_last_failure);
 	ceph_decode_32(p, m->m_created.tv_sec);
 	ceph_decode_32(p, m->m_created.tv_nsec);
 	ceph_decode_32(p, m->m_anchortable);

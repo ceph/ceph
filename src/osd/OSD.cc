@@ -222,6 +222,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
 
   state = STATE_BOOTING;
 
+  memset(&my_stat, 0, sizeof(my_stat));
+
   stat_ops = 0;
   stat_qlen = 0;
   stat_rd_ops = stat_rd_ops_shed_in = stat_rd_ops_shed_out = 0;
@@ -807,7 +809,7 @@ osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
 void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
 {
   Mutex::Locker lock(peer_stat_lock);
-  dout(10) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
+  dout(15) << "take_peer_stat peer osd" << peer << " " << stat << dendl;
   peer_stat[peer] = stat;
 }
 
@@ -880,14 +882,12 @@ void OSD::heartbeat()
       if (heartbeat_from_stamp[*p] < grace) {
 	dout(0) << "no heartbeat from osd" << *p << " since " << heartbeat_from_stamp[*p]
 		<< " (cutoff " << grace << ")" << dendl;
-	int mon = monmap->pick_mon();
-	messenger->send_message(new MOSDFailure(messenger->get_myinst(), osdmap->get_inst(*p), osdmap->get_epoch()),
-				monmap->get_inst(mon));
+	queue_failure(*p);
       }
     } else
       heartbeat_from_stamp[*p] = now;  // fake initial
   }
-
+  maybe_report_failures();
 
   if (logger) logger->set("hbto", heartbeat_to.size());
   if (logger) logger->set("hbfrom", heartbeat_from.size());
@@ -918,7 +918,26 @@ void OSD::heartbeat()
   timer.add_event_after(wait, new C_Heartbeat(this));
 }
 
+void OSD::maybe_report_failures()
+{
+  if (pending_failures.empty())
+    return;  // nothing to report
 
+  utime_t now = g_clock.now();
+  if (last_failure_report + g_conf.osd_failure_report_interval > now)
+    return;  // not yet
+
+  last_failure_report = now;
+
+  int mon = monmap->pick_mon();
+  for (set<int>::iterator p = pending_failures.begin();
+       p != pending_failures.end();
+       p++)
+    messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), 
+					    osdmap->get_inst(*p), osdmap->get_epoch()),
+			    monmap->get_inst(mon));
+  pending_failures.clear();
+}
 
 void OSD::send_pg_stats()
 {
@@ -1150,38 +1169,22 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
     return;
   }
 
-  if (dest.is_osd()) {
-    // failed osd.  drop message, report to mon.
-    if (!osdmap->have_inst(dest.num()) ||
-	(osdmap->get_inst(dest.num()) != inst)) {
-      dout(1) << "ms_handle_failure " << inst 
-	      << ", already dropped/changed in osdmap, dropping " << *m
-	      << dendl;
-    } else {
-      int mon = monmap->pick_mon();
-      dout(1) << "ms_handle_failure " << inst 
-	      << ", dropping and reporting to mon" << mon 
-	      << " " << *m
-	      << dendl;
-      messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()),
-			      monmap->get_inst(mon));
+  if (dest.is_mon()) {
+    if (m->get_type() == MSG_PGSTATS) {
+      MPGStats *pgstats = (MPGStats*)m;
+      dout(10) << "ms_handle_failure on " << *m << ", requeuing pg stats" << dendl;
+      pg_stat_queue_lock.Lock();
+      for (map<pg_t,pg_stat_t>::iterator p = pgstats->pg_stat.begin(); 
+	   p != pgstats->pg_stat.end(); 
+	   p++)
+	pg_stat_queue.insert(p->first);
+      pg_stat_queue_lock.Unlock();
     }
-    delete m;
-  } else if (dest.is_mon()) {
-    // resend to a different monitor.
-    int mon = monmap->pick_mon(true);
-    dout(1) << "ms_handle_failure " << inst 
-            << ", resending to mon" << mon 
-	    << " " << *m
-            << dendl;
-    messenger->send_message(m, monmap->get_inst(mon));
   }
-  else {
-    // client?
-    dout(1) << "ms_handle_failure " << inst 
-            << ", dropping " << *m << dendl;
-    delete m;
-  }
+
+  dout(1) << "ms_handle_failure " << inst 
+	  << ", dropping " << *m << dendl;
+  delete m;
 }
 
 
@@ -1211,7 +1214,7 @@ void OSD::wait_for_new_map(Message *m)
   // ask 
   if (waiting_for_osdmap.empty()) {
     int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDGetMap(osdmap->get_epoch()+1),
+    messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
                             monmap->get_inst(mon));
   }
   
@@ -1222,8 +1225,27 @@ void OSD::wait_for_new_map(Message *m)
 /** update_map
  * assimilate new OSDMap(s).  scan pgs, etc.
  */
+
+void OSD::note_down_osd(int osd)
+{
+  messenger->mark_down(osdmap->get_addr(osd));
+  peer_map_epoch.erase(entity_name_t::OSD(osd));
+  pending_failures.erase(osd);
+  heartbeat_from_stamp.erase(osd);
+}
+void OSD::note_up_osd(int osd)
+{
+  peer_map_epoch.erase(entity_name_t::OSD(osd));
+}
+
 void OSD::handle_osd_map(MOSDMap *m)
 {
+  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    delete m;
+    return;
+  }
+
   wait_for_no_ops();
   
   assert(osd_lock.is_locked());
@@ -1333,14 +1355,13 @@ void OSD::handle_osd_map(MOSDMap *m)
            i++) {
         int osd = i->first;
         if (osd == whoami) continue;
-        messenger->mark_down(osdmap->get_addr(i->first));
-        peer_map_epoch.erase(entity_name_t::OSD(i->first));
+	note_down_osd(i->first);
       }
       for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
            i != inc.new_up.end();
            i++) {
         if (i->first == whoami) continue;
-        peer_map_epoch.erase(entity_name_t::OSD(i->first));
+	note_up_osd(i->first);
       }
     }
     else if (m->maps.count(cur+1) ||
@@ -1359,17 +1380,16 @@ void OSD::handle_osd_map(MOSDMap *m)
       set<int> old;
       osdmap->get_all_osds(old);
       for (set<int>::iterator p = old.begin(); p != old.end(); p++)
-	if (osdmap->is_up(*p) && 
-	    (!newmap->exists(*p) || !newmap->is_up(*p)))
-	  messenger->mark_down(osdmap->get_addr(*p));
-
+	if (osdmap->is_up(*p) && (!newmap->exists(*p) || !newmap->is_up(*p))) 
+	  note_down_osd(*p);
+      // NOTE: note_up_osd isn't called at all for full maps... FIXME?
       delete osdmap;
       osdmap = newmap;
     }
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
       int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(cur+1), monmap->get_inst(mon));
+      messenger->send_message(new MOSDGetMap(monmap->fsid, cur+1), monmap->get_inst(mon));
       break;
     }
 
@@ -1455,11 +1475,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
        it++) {
     pg_t pgid = it->first;
     PG *pg = it->second;
-    
-    // did i finish this epoch?
-    if (pg->is_active()) {
-      pg->info.last_epoch_finished = osdmap->get_epoch()-1;
-    }      
     
     // get new acting set
     vector<int> tacting;
@@ -1632,7 +1647,7 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
   
-  MOSDMap *m = new MOSDMap;
+  MOSDMap *m = new MOSDMap(monmap->fsid);
   
   for (epoch_t e = osdmap->get_epoch();
        e > since;
@@ -1886,8 +1901,8 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), parentid.size(),
 						      parentid.pool(), parentid.preferred());
-    if (l.ol_pgid.pg64 != parentid.u.pg64) {
-      pg_t pgid(l.ol_pgid);
+    if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {
+      pg_t pgid(le64_to_cpu(l.ol_pgid));
       dout(20) << "  moving " << poid << " from " << parentid << " -> " << pgid << dendl;
       PG *child = children[pgid];
       assert(child);

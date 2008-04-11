@@ -41,8 +41,8 @@ using namespace __gnu_cxx;
 class Rank {
 public:
   struct Policy {
-    float retry_interval;               // (initial)
-    float fail_interval;                // before we call ms_handle_failure
+    float retry_interval;               // (initial).  <0 => lossy channel, fail immediately.
+    float fail_interval;                // before we call ms_handle_failure  <0 => retry forever.
     bool drop_msg_callback;
     bool fail_callback;
     bool remote_reset_callback;
@@ -52,6 +52,16 @@ public:
       drop_msg_callback(true),
       fail_callback(true),
       remote_reset_callback(true) {}
+
+    Policy(float r, float f, bool dmc, bool fc, bool rrc) :
+      retry_interval(r), fail_interval(f),
+      drop_msg_callback(dmc),
+      fail_callback(fc),
+      remote_reset_callback(rrc) {}
+
+    static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
+    static Policy fail_after(float f) { return Policy(MIN(g_conf.ms_retry_interval, f), f, true, true, true); }
+    static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, -1, false, true, true); }
   };
 
 
@@ -87,9 +97,8 @@ private:
       STATE_OPEN,
       STATE_STANDBY,
       STATE_CLOSED,
-      STATE_CLOSING
-      //STATE_GOTCLOSE,  // got (but haven't sent) a close
-      //STATE_SENTCLOSE  // sent (but haven't got) a close
+      STATE_CLOSING,
+      STATE_WAIT       // just wait for racing connection
     };
 
     int sd;
@@ -107,7 +116,6 @@ private:
     utime_t last_attempt;  // time of last reconnect attempt
 
     bool reader_running;
-    bool kick_reader_on_join;
     bool writer_running;
 
     list<Message*> q;
@@ -132,6 +140,8 @@ private:
     void fault(bool silent=false);
     void fail();
 
+    void was_session_reset();
+
     void report_failures();
 
     // threads
@@ -155,7 +165,7 @@ private:
     Pipe(int st) : 
       sd(-1),
       state(st), 
-      reader_running(false), kick_reader_on_join(false), writer_running(false),
+      reader_running(false), writer_running(false),
       connect_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
@@ -181,10 +191,7 @@ private:
     void dirty_close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
-      if (reader_thread.is_started()) {
-	//if (kick_reader_on_join) reader_thread.kill(SIGUSR1);
-	reader_thread.join();
-      }
+      if (reader_thread.is_started()) reader_thread.join();
     }
     void stop();
 

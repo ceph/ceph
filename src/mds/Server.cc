@@ -222,13 +222,13 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
-      dout(10) << " killing capability on " << *in << dendl;
+      dout(20) << " killing capability on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
       MDSCacheObject *p = r->parent;
-      dout(10) << " killing client lease of " << *p << dendl;
+      dout(20) << " killing client lease of " << *p << dendl;
       p->remove_client_lease(r, r->mask, mds->locker);
     }
 
@@ -538,29 +538,37 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   */
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-  
-  // send reply
-  if (req->get_client_inst().name.is_mds())
-    delete reply;   // mds doesn't need a reply
-  else {
-    // include trace
-    if (!tracei && !tracedn && mdr->ref) {
-      tracei = mdr->ref;
-      dout(20) << "inferring tracei to be " << *tracei << dendl;
-      if (!mdr->trace.empty()) {
-	tracedn = mdr->trace.back();
-	dout(20) << "inferring tracedn to be " << *tracedn << dendl;
-      }
-    }
-    if (tracei || tracedn)
-      set_trace_dist(mdr->session, reply, tracei, tracedn);
 
-    messenger->send_message(reply, req->get_client_inst());
+
+  // infer tracei/tracedn from mdr?
+  if (!tracei && !tracedn && mdr->ref) {
+    tracei = mdr->ref;
+    dout(20) << "inferring tracei to be " << *tracei << dendl;
+    if (!mdr->trace.empty()) {
+      tracedn = mdr->trace.back();
+      dout(20) << "inferring tracedn to be " << *tracedn << dendl;
+    }
+  }
+
+  // clean up request, drop locks, etc.
+  // do this before replying, so that we can issue leases
+  Session *session = mdr->session;
+  entity_inst_t client_inst = req->get_client_inst();
+  mdcache->request_finish(mdr);
+  mdr = 0;
+
+  // reply at all?
+  if (client_inst.name.is_mds()) {
+    delete reply;   // mds doesn't need a reply
+    reply = 0;
+  } else {
+    // send reply, with trace, and possible leases
+    if (tracei || tracedn)
+      set_trace_dist(session, reply, tracei, tracedn);
+    messenger->send_message(reply, client_inst);
   }
   
-  // finish request
-  mdcache->request_finish(mdr);
-
+  // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
       tracei->get_parent_dn() &&
       tracei->get_parent_dn()->is_remote())
@@ -668,9 +676,6 @@ void Server::handle_client_request(MClientRequest *req)
     // they have a high request rate.
   }
 
-  // okay, i want
-  CInode *ref = 0;
-
   // retry?
   if (req->get_retry_attempt()) {
     assert(session);
@@ -691,12 +696,6 @@ void Server::handle_client_request(MClientRequest *req)
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) return;
   mdr->session = session;
-
-  if (ref) {
-    dout(10) << "inode op on ref " << *ref << dendl;
-    mdr->ref = ref;
-    mdr->pin(ref);
-  }
 
   dispatch_client_request(mdr);
   return;
@@ -1172,7 +1171,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir)
   in->inode.uid = mdr->client_request->get_caller_uid();
   in->inode.gid = mdr->client_request->get_caller_gid();
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
-  dout(10) << "prepare_new_inode " << *in << dendl;
+  dout(10) << "prepare_new_inode " 
+	   << in->inode.uid << "." << in->inode.gid << " "
+	   << *in << dendl;
 
   return in;
 }
@@ -1224,9 +1225,17 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 {
+  dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
+
   // already got ref?
-  if (mdr->ref) 
+  if (mdr->ref) {
+    if (mdr->trace.size()) {
+      CDentry *last = mdr->trace[mdr->trace.size()-1];
+      assert(last->get_inode() == mdr->ref);
+    }
+    dout(10) << "rdlock_path_pin_ref had " << *mdr->ref << dendl;
     return mdr->ref;
+  }
 
   MClientRequest *req = mdr->client_request;
 
@@ -1322,6 +1331,15 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 {
   MClientRequest *req = mdr->client_request;
 
+  dout(10) << "rdlock_path_xlock_dentry " << *mdr << dendl;
+
+  if (mdr->ref) {
+    CDentry *last = mdr->trace[mdr->trace.size()-1];
+    assert(last->get_inode() == mdr->ref);
+    dout(10) << "rdlock_path_xlock_dentry had " << *last << " " << *mdr->ref << dendl;
+    return last;
+  }
+
   vector<CDentry*> trace;
   CDir *dir = traverse_to_auth_dir(mdr, trace, req->get_filepath());
   if (!dir) return 0;
@@ -1371,11 +1389,11 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
   for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
-  if (dn->is_null()) {
+  if (dn->is_null())
     xlocks.insert(&dn->lock);                 // new dn, xlock
-    wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
-  } else
+  else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
+  wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
@@ -1576,6 +1594,7 @@ void Server::handle_client_utime(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
+  __u32 mask;
   if (!cur) return;
 
   if (cur->is_root()) {
@@ -1593,8 +1612,14 @@ void Server::handle_client_utime(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->mtime = req->head.args.utime.mtime;
-  pi->atime = req->head.args.utime.atime;
+  
+  mask = req->head.args.utime.mask;
+
+  if (mask & CEPH_UTIME_MTIME)
+    pi->mtime = req->head.args.utime.mtime;
+  if (mask & CEPH_UTIME_ATIME)
+    pi->atime = req->head.args.utime.atime;
+
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
 
@@ -1633,10 +1658,11 @@ void Server::handle_client_chmod(MDRequest *mdr)
   // project update
   inode_t *pi = cur->project_inode();
   pi->mode = 
-    (pi->mode & ~04777) | 
-    (req->head.args.chmod.mode & 04777);
+    (pi->mode & ~07777) | 
+    (req->head.args.chmod.mode & 07777);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
+  dout(10) << "chmod " << oct << pi->mode << " (" << req->head.args.chmod.mode << ")" << dec << *cur << dendl;
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -2139,7 +2165,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
-  dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
+  dn->dir->link_remote_inode(dn, targeti);
   dn->mark_dirty(dnpv, mdr->ls);
 
   // target inode
@@ -2224,7 +2250,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << dendl;
 
   // link the new dentry
-  dn->dir->link_remote_inode(dn, targeti->ino(), MODE_TO_DT(targeti->inode.mode));
+  dn->dir->link_remote_inode(dn, targeti);
   dn->mark_dirty(dpv, mdr->ls);
 
   // dir inode's mtime
@@ -3203,17 +3229,19 @@ void Server::_rename_prepare(MDRequest *mdr,
       mdr->more()->pvmap[srcdn->dir->inode] = predirty_dn_diri(mdr, srcdn, metablob); 
   }
 
-  inode_t *ji = 0;     // journaled inode getting nlink--
-  version_t ipv = 0;   // it's version
-  
+  inode_t *tji = 0;     // journaled inode getting nlink--
+  version_t tipv = 0;   // it's version
+  inode_t *sji = 0;     // renamed inode, if different that tji
+  version_t sipv = 0;
+
   if (linkmerge) {
     dout(10) << "will merge remote+primary links" << dendl;
 
     // destdn -> primary
     metablob->add_dir_context(destdn->dir);
     if (destdn->is_auth())
-      ipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
-    ji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
+      tipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
+    tji = metablob->add_primary_dentry(destdn, true, destdn->inode); 
     destdn->inode->projected_parent = destdn;
     
     // do src dentry
@@ -3231,8 +3259,8 @@ void Server::_rename_prepare(MDRequest *mdr,
       // link-- inode, move to stray dir.
       metablob->add_dir_context(straydn->dir);
       if (straydn->is_auth())
-	ipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
-      ji = metablob->add_primary_dentry(straydn, true, destdn->inode);
+	tipv = mdr->more()->pvmap[straydn] = straydn->pre_dirty(destdn->inode->inode.version);
+      tji = metablob->add_primary_dentry(straydn, true, destdn->inode);
       destdn->inode->projected_parent = straydn;
     } 
     else if (destdn->is_remote()) {
@@ -3240,8 +3268,8 @@ void Server::_rename_prepare(MDRequest *mdr,
       // nlink-- targeti
       metablob->add_dir_context(destdn->inode->get_parent_dir());
       if (destdn->inode->is_auth())
-	ipv = mdr->more()->pvmap[destdn->inode] = destdn->inode->pre_dirty();
-      ji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
+	tipv = mdr->more()->pvmap[destdn->inode] = destdn->inode->pre_dirty();
+      tji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode);  // update primary
       dout(10) << "remote targeti (nlink--) is " << *destdn->inode << dendl;
     }
     else {
@@ -3250,14 +3278,24 @@ void Server::_rename_prepare(MDRequest *mdr,
 
     // add dest dentry
     metablob->add_dir_context(destdn->dir);
-    if (srcdn->is_primary()) {
+    if (srcdn->is_remote()) {
+      dout(10) << "src is a remote dentry" << dendl;
+      if (destdn->is_auth())
+	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
+      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
+				  srcdn->get_remote_d_type());
+      if (srcdn->inode->is_auth()) {
+	sipv = srcdn->inode->pre_dirty();
+	sji = metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true);
+      }
+    } else {
+      assert(srcdn->is_primary());
       dout(10) << "src is a primary dentry" << dendl;
       if (destdn->is_auth()) {
-	version_t siv;
 	if (srcdn->is_auth())
-	  siv = srcdn->inode->get_projected_version();
+	  sipv = srcdn->inode->get_projected_version();
 	else {
-	  siv = mdr->more()->inode_import_v;
+	  sipv = mdr->more()->inode_import_v;
 
 	  /* import node */
 	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
@@ -3280,18 +3318,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  srcdn->inode->state_clear(CInode::STATE_AUTH);
 	  srcdn->inode->mark_clean();
 	}
-	mdr->more()->pvmap[destdn] = destdn->pre_dirty(siv+1);
+	sipv = mdr->more()->pvmap[destdn] = destdn->pre_dirty(sipv+1);
       }
-      metablob->add_primary_dentry(destdn, true, srcdn->inode); 
+      sji = metablob->add_primary_dentry(destdn, true, srcdn->inode); 
       srcdn->inode->projected_parent = destdn;
-
-    } else {
-      assert(srcdn->is_remote());
-      dout(10) << "src is a remote dentry" << dendl;
-      if (destdn->is_auth())
-	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
-      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
-				  srcdn->get_remote_d_type()); 
     }
     
     // remove src dentry
@@ -3311,13 +3341,20 @@ void Server::_rename_prepare(MDRequest *mdr,
     }       
   }
 
-  if (ipv) {
-    // update journaled target inode
+  if (tipv) {
+    // update journaled target/overwritten inode
     inode_t *pi = destdn->inode->project_inode();
     pi->nlink--;
     pi->ctime = mdr->now;
-    pi->version = ipv;
-    *ji = *pi;  // copy into journal
+    pi->version = tipv;
+    *tji = *pi;  // copy into journal
+  }
+  if (sji) {
+    // update renamed inode
+    inode_t *pi = srcdn->inode->project_inode();
+    pi->ctime = mdr->now;
+    pi->version = sipv;
+    *sji = *pi;  // copy into journal
   }
 
   // anchor updates?
@@ -3404,7 +3441,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (srcdn->is_remote()) {
       // srcdn was remote.
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_remote_inode(destdn, in->ino(), MODE_TO_DT(in->inode.mode));    
+      destdn->dir->link_remote_inode(destdn, in);
       destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
@@ -3426,9 +3463,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	// hack: fix auth bit
 	destdn->inode->state_set(CInode::STATE_AUTH);
       }
-      if (destdn->inode->is_auth())
-	destdn->inode->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     }
+    if (destdn->inode->is_auth())
+      destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
 
     if (srcdn->is_auth())
       srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
@@ -3691,16 +3728,16 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       if (mdr->more()->destdn_was_remote_inode) {
 	destdn->dir->unlink_inode(destdn);
 	srcdn->dir->link_primary_inode(srcdn, in);
-	destdn->dir->link_remote_inode(destdn, in->ino(),  MODE_TO_DT(in->inode.mode));
+	destdn->dir->link_remote_inode(destdn, in);
       } else {
-	srcdn->dir->link_remote_inode(srcdn, in->ino(), MODE_TO_DT(in->inode.mode));
+	srcdn->dir->link_remote_inode(srcdn, in);
       }
     } else {
       // normal
 
       // revert srcdn
       if (destdn->is_remote()) {
-	srcdn->dir->link_remote_inode(srcdn, destdn->inode->ino(), MODE_TO_DT(destdn->inode->inode.mode));
+	srcdn->dir->link_remote_inode(srcdn, destdn->inode);
 	destdn->dir->unlink_inode(destdn);
       } else {
 	// renamed a primary
@@ -3711,9 +3748,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       
       // revert destdn
       if (mdr->more()->destdn_was_remote_inode) {
-	destdn->dir->link_remote_inode(destdn, 
-				       mdr->more()->destdn_was_remote_inode->ino(), 
-				       MODE_TO_DT(mdr->more()->destdn_was_remote_inode->inode.mode));
+	destdn->dir->link_remote_inode(destdn, mdr->more()->destdn_was_remote_inode);
 	mdr->more()->destdn_was_remote_inode->inode.nlink++;
       } else if (straydn && straydn->inode) {
 	CInode *in = straydn->inode;
@@ -3888,16 +3923,22 @@ void Server::handle_client_open(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   int flags = req->head.args.open.flags;
-  int cmode = req->get_open_file_mode();
-  bool need_auth = ((cmode != FILE_MODE_R && cmode != FILE_MODE_LAZY) ||
-		    (flags & O_TRUNC));
+  int cmode = file_flags_to_mode(req->head.args.open.flags);
+
+  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
+
+  dout(7) << "open on " << req->get_filepath() << dendl;
+
+  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
+  if (!cur) return;
+
+  // can only open a dir with mode FILE_MODE_PIN, at least for now.
+  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
+
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
 	   << ", need_auth = " << need_auth
 	   << dendl;
-
-  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
-  if (!cur) return;
   
   // regular file?
   if (!cur->inode.is_file() && !cur->inode.is_dir()) {
@@ -3905,13 +3946,12 @@ void Server::handle_client_open(MDRequest *mdr)
     reply_request(mdr, -EINVAL);                 // FIXME what error do we want?
     return;
   }
-  // can only open a dir rdonly, no flags.
-  if (cur->inode.is_dir() && (cmode != FILE_MODE_R || (flags | O_DIRECTORY) == 0)) {
-    dout(10) << "bad open flags " << flags << " cmode " << cmode << " on dir " << *cur << dendl;
+  if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
+    dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
-
+  
   // hmm, check permissions or something.
 
   // O_TRUNC
@@ -3939,7 +3979,8 @@ void Server::handle_client_open(MDRequest *mdr)
 void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
   MClientRequest *req = mdr->client_request;
-  int cmode = req->get_open_file_mode();
+  int cmode = file_flags_to_mode(req->head.args.open.flags);
+  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
 
   // register new cap
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
@@ -4064,11 +4105,11 @@ class C_MDS_openc_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
-  version_t pv;
+  version_t pv, dirpv;
 public:
-  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
+  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dpv) :
     mds(m), mdr(r), dn(d), newi(ni),
-    pv(d->get_projected_version()) {}
+    pv(d->get_projected_version()), dirpv(dpv) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -4077,6 +4118,9 @@ public:
 
     // dirty inode, dn, dir
     newi->mark_dirty(pv, mdr->ls);
+
+    // dir inode's mtime
+    mds->server->dirty_dn_diri(mdr, dn, dirpv);
 
     // downgrade xlock to rdlock
     //mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
@@ -4111,6 +4155,8 @@ void Server::handle_client_openc(MDRequest *mdr)
     } 
     
     // pass to regular open handler.
+    mdr->trace.push_back(dn);
+    mdr->ref = dn->get_inode();
     handle_client_open(mdr);
     return;
   }
@@ -4129,15 +4175,16 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.max_size = in->get_layout_size_increment();
   
   // prepare finisher
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
+  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   
   // log + wait
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, dirpv);
   mdlog->submit_entry(le, fin);
   
   /*

@@ -22,6 +22,7 @@
 #include "mds/MDSMap.h"
 
 class MMDSBeacon : public Message {
+  ceph_fsid fsid;
   entity_inst_t inst;
   epoch_t last_epoch_seen;  // include last mdsmap epoch mds has seen to avoid race with monitor decree
   int state;
@@ -30,10 +31,11 @@ class MMDSBeacon : public Message {
 
  public:
   MMDSBeacon() : Message(MSG_MDS_BEACON) {}
-  MMDSBeacon(entity_inst_t i, epoch_t les, int st, version_t se, int wr) : 
+  MMDSBeacon(ceph_fsid &f, entity_inst_t i, epoch_t les, int st, version_t se, int wr) : 
     Message(MSG_MDS_BEACON), 
-    inst(i), last_epoch_seen(les), state(st), seq(se), want_rank(wr) { }
+    fsid(f), inst(i), last_epoch_seen(les), state(st), seq(se), want_rank(wr) { }
 
+  ceph_fsid& get_fsid() { return fsid; }
   entity_inst_t& get_mds_inst() { return inst; }
   epoch_t get_last_epoch_seen() { return last_epoch_seen; }
   int get_state() { return state; }
@@ -48,6 +50,7 @@ class MMDSBeacon : public Message {
   }
   
   void encode_payload() {
+    ::_encode(fsid, payload);
     ::_encode(inst, payload);
     ::_encode(last_epoch_seen, payload);
     ::_encode(state, payload);
@@ -56,6 +59,7 @@ class MMDSBeacon : public Message {
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(fsid, payload, off);
     ::_decode(inst, payload, off);
     ::_decode(last_epoch_seen, payload, off);
     ::_decode(state, payload, off);

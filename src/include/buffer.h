@@ -114,6 +114,7 @@ private:
   public:
     raw_mmap_pages(unsigned l) : raw(l) {
       data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+      assert(data);
       inc_total_alloc(len);
     }
     ~raw_mmap_pages() {
@@ -131,8 +132,10 @@ private:
 #ifdef DARWIN
       data = (char *) valloc (len);
 #else
+      data = 0;
       ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
 #endif /* DARWIN */
+      assert(data);
       inc_total_alloc(len);
     }
     ~raw_posix_aligned() {

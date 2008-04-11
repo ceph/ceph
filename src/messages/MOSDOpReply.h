@@ -35,37 +35,38 @@ class MOSDOpReply : public Message {
  public:
   long     get_tid() { return le64_to_cpu(head.tid); }
   object_t get_oid() { return head.oid; }
-  pg_t     get_pg() { return head.layout.ol_pgid; }
-  int      get_op()  { return head.op; }
-  bool     is_safe() { return head.flags & CEPH_OSD_OP_SAFE; }
+  pg_t     get_pg() { return pg_t(le64_to_cpu(head.layout.ol_pgid)); }
+  int      get_op()  { return le32_to_cpu(head.op); }
+  int      get_flags() { return le32_to_cpu(head.flags); }
+  bool     is_safe() { return get_flags() & CEPH_OSD_OP_SAFE; }
   
-  int    get_result() { return head.result; }
-  off_t get_length() { return head.length; }
-  off_t get_offset() { return head.offset; }
+  __s32 get_result() { return le32_to_cpu(head.result); }
+  __u64 get_length() { return le64_to_cpu(head.length); }
+  __u64 get_offset() { return le64_to_cpu(head.offset); }
   eversion_t get_version() { return head.reassert_version; }
 
-  void set_result(int r) { head.result = r; }
-  void set_length(off_t s) { head.length = s; }
-  void set_offset(off_t o) { head.offset = o; }
+  void set_result(int r) { head.result = cpu_to_le32(r); }
+  void set_length(off_t s) { head.length = cpu_to_le64(s); }
+  void set_offset(off_t o) { head.offset = cpu_to_le64(o); }
   void set_version(eversion_t v) { head.reassert_version = v; }
 
-  void set_op(int op) { head.op = op; }
+  void set_op(int op) { head.op = cpu_to_le32(op); }
 
   // osdmap
   epoch_t get_map_epoch() { return le32_to_cpu(head.osdmap_epoch); }
 
 
 public:
-  MOSDOpReply(MOSDOp *req, int result, epoch_t e, bool commit) :
+  MOSDOpReply(MOSDOp *req, __s32 result, epoch_t e, bool commit) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
     head.tid = req->head.tid;
     head.op = req->head.op;
-    head.flags = commit ? CEPH_OSD_OP_SAFE:0;
+    head.flags = cpu_to_le32(commit ? CEPH_OSD_OP_SAFE:0);
     head.oid = req->head.oid;
     head.layout = req->head.layout;
     head.osdmap_epoch = cpu_to_le32(e);
-    head.result = result;
+    head.result = cpu_to_le32(result);
     head.offset = req->head.offset;
     head.length = req->head.length;  // speculative... OSD should ensure these are correct
     head.reassert_version = req->head.reassert_version;
@@ -80,23 +81,23 @@ public:
   }
   virtual void encode_payload() {
     ::_encode(head, payload);
-    env.data_off = cpu_to_le32(head.offset);
+    env.data_off = cpu_to_le32(get_offset());
   }
 
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
     out << "osd_op_reply(" << get_tid()
-	<< " " << MOSDOp::get_opname(head.op)
+	<< " " << MOSDOp::get_opname(get_op())
 	<< " " << head.oid;
-    if (head.length) out << " " << head.offset << "~" << head.length;
-    if (head.op >= 10) {
+    if (get_length()) out << " " << get_offset() << "~" << get_length();
+    if (get_op() >= 10) {
       if (is_safe())
 	out << " commit";
       else
 	out << " ack";
     }
-    out << " = " << head.result;
+    out << " = " << get_result();
     out << ")";
   }
 

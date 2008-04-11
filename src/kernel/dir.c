@@ -1,5 +1,5 @@
-int ceph_dir_debug = 50;
-#define DOUT_VAR ceph_dir_debug
+int ceph_debug_dir = -1;
+#define DOUT_VAR ceph_debug_dir
 #define DOUT_PREFIX "dir: "
 #include "super.h"
 
@@ -94,74 +94,6 @@ static unsigned fpos_off(loff_t p)
 	return p & 0xffffffff;
 }
 
-
-static int prepopulate_dir(struct dentry *parent,
-			   struct ceph_mds_reply_info *rinfo,
-			   int from_time)
-{
-	struct qstr dname;
-	struct dentry *dn;
-	struct inode *in;
-	int i;
-
-	for (i = 0; i < rinfo->dir_nr; i++) {
-		/* dentry */
-		dname.name = rinfo->dir_dname[i];
-		dname.len = rinfo->dir_dname_len[i];
-		dname.hash = full_name_hash(dname.name, dname.len);
-
-		dn = d_lookup(parent, &dname);
-		dout(30, "calling d_lookup on parent=%p name=%.*s"
-		     " returned %p\n", parent, dname.len, dname.name, dn);
-
-		if (!dn) {
-			dn = d_alloc(parent, &dname);
-			if (dn == NULL) {
-				dout(30, "d_alloc badness\n");
-				return -1;
-			}
-			ceph_init_dentry(dn);
-		}
-		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], from_time);
-
-		/* inode */
-		if (dn->d_inode == NULL) {
-			in = new_inode(parent->d_sb);
-			if (in == NULL) {
-				dout(30, "new_inode badness\n");
-				d_delete(dn);
-				return -1;
-			}
-		} else {
-			in = dn->d_inode;
-		}
-
-		if (ceph_ino(in) !=
-		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
-			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				iput(in);
-				d_delete(dn);
-				return -1;
-			}
-			d_instantiate(dn, in);
-			if (d_unhashed(dn))
-				d_rehash(dn);
-			dout(10, "dir_readdir added dentry %p ino %llx %d/%d\n",
-			     dn, ceph_ino(in), i, rinfo->dir_nr);
-		} else {
-			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				return -1;
-			}
-		}
-		ceph_update_inode_lease(in, rinfo->dir_ilease[i], from_time);
-
-		dput(dn);
-	}
-	return 0;
-}
-
 static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
@@ -201,10 +133,6 @@ nextfrag:
 		dout(10, "dir_readdir got and parsed readdir result=%d"
 		     " on frag %u\n", err, frag);
 		fi->last_readdir = req;
-
-		/* pre-populate dentry cache */
-		prepopulate_dir(filp->f_dentry, &req->r_reply_info, 
-				req->r_from_time);
 	}
 
 	/* include . and .. with first fragment */
@@ -281,6 +209,9 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 	struct ceph_mds_request_head *rhead;
 	int err;
 
+	if (dentry->d_name.len > NAME_MAX)
+		return -ENAMETOOLONG;
+
 	dout(10, "do_lookup %p mask %d\n", dentry, CEPH_STAT_MASK_INODE_ALL);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
@@ -317,7 +248,8 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	/* open (but not create!) intent? */
 	if (nd->flags & LOOKUP_OPEN &&
 	    !(nd->intent.open.flags & O_CREAT)) {
-		err = ceph_lookup_open(dir, dentry, nd);
+		int mode = nd->intent.open.create_mode & ~current->fs->umask;
+		err = ceph_lookup_open(dir, dentry, nd, mode);
 		return ERR_PTR(err);
 	}
 
@@ -337,7 +269,7 @@ static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-	err = ceph_lookup_open(dir, dentry, nd);
+	err = ceph_lookup_open(dir, dentry, nd, mode);
 	return err;
 }
 
@@ -365,6 +297,7 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
@@ -397,6 +330,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	if (err < 0)
@@ -426,6 +360,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);
 	err = ceph_mdsc_do_request(mdsc, req);
@@ -466,15 +401,21 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-	
+
+	dget(dentry);                /* to match put_request below */
+	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
+	igrab(old_dentry->d_inode);
+	req->r_last_inode = old_dentry->d_inode;
+
+	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
-
 	ceph_mdsc_put_request(req);
-
 	if (!err) {
+	/*
 		igrab(old_dentry->d_inode);
 		inc_nlink(old_dentry->d_inode);
 		d_instantiate(dentry, old_dentry->d_inode);
+	*/
 	} else
 		d_drop(dentry);
 	
@@ -504,6 +445,9 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	ceph_mdsc_lease_release(mdsc, dir, dentry, 
+				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
+	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -543,21 +487,53 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	kfree(newpath);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	dget(old_dentry);
+	req->r_old_dentry = old_dentry;
+	dget(new_dentry);
+	req->r_last_dentry = new_dentry;
+	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
+				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
+	if (new_dentry->d_inode)
+		ceph_mdsc_lease_release(mdsc, new_dentry->d_inode, 0, 
+					CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;
 }
 
-static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
+
+
+/*
+ * check if dentry lease, or parent directory inode lease or cap says
+ * this dentry is still valid
+ */
+static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
-	dout(20, "d_revalidate ttl %lu now %lu\n", dentry->d_time, jiffies);
-	if (time_after(jiffies, dentry->d_time)) {
-		dout(20, "d_revalidate - dentry %p expired\n", dentry);
-		d_drop(dentry);
-		return 0;
+	struct inode *dir = dentry->d_parent->d_inode;
+
+	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
+		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
+		     dentry, dir);
+		return 1;
 	}
-	dout(20, "d_revalidate - dentry %p ok\n", dentry);
-	return 1;
+	if (ceph_dentry_lease_valid(dentry)) {
+		dout(20, "dentry_revalidate %p lease valid\n", dentry);
+		return 1;
+	}
+
+	dout(20, "dentry_revalidate %p no lease\n", dentry);
+	d_drop(dentry);
+	return 0;
+}
+
+static void ceph_dentry_release(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+	if (dentry->d_fsdata) {
+		di = ceph_dentry(dentry);
+		list_del(&di->lease_item);
+		kfree(di);
+	}
 }
 
 
@@ -576,6 +552,7 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 struct dentry_operations ceph_dentry_ops = {
-	.d_revalidate = ceph_d_revalidate,
+	.d_revalidate = ceph_dentry_revalidate,
+	.d_release = ceph_dentry_release,
 };
 

@@ -77,7 +77,7 @@ crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
 libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
 	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
 
-BUILT_SOURCES = libCrushWrapper.so
+#BUILT_SOURCES = libCrushWrapper.so
 
 
 ## libcephclient.so
@@ -101,6 +101,8 @@ libcephclient_so_a_SOURCES = \
 	osdc/Journaler.cc
 libcephclient_so_a_CXXFLAGS = ${AM_CXXFLAGS} -fPIC
 libcephclient_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
+
+#BUILT_SOURCES += libcephclient_so.a
 
 #libcephclient.so: libcephclient_so.a libcrush_so.a
 #	${CXX} -I. -fPIC -shared -Wl,-soname,$@.1 ${AM_CXXFLAGS} ${LIBS} $^ -o $@
@@ -132,8 +134,9 @@ bin_PROGRAMS = \
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a libebofs.a \
-	libcrush_so.a libcephclient_so.a
+	libos.a libebofs.a 
+
+noinst_LIBRARIES += libcrush_so.a libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = start.sh stop.sh crushtool.pl

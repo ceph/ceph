@@ -95,19 +95,8 @@ public:
     return metareqid_t(head.client_inst.name, le64_to_cpu(head.tid)); 
   }
 
-  int get_open_file_mode() {
-    if (head.args.open.flags & O_LAZY) 
-      return FILE_MODE_LAZY;
-    if (head.args.open.flags & O_WRONLY) 
-      return FILE_MODE_W;
-    if (head.args.open.flags & O_RDWR) 
-      return FILE_MODE_RW;
-    if (head.args.open.flags & O_APPEND) 
-      return FILE_MODE_W;
-    return FILE_MODE_R;
-  }
   bool open_file_mode_is_readonly() {
-    return get_open_file_mode() == FILE_MODE_R;
+    return file_mode_is_readonly(file_flags_to_mode(head.args.open.flags));
   }
   bool is_idempotent() {
     if (head.op == CEPH_MDS_OP_OPEN) 

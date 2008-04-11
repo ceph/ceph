@@ -33,14 +33,14 @@ ClientLease *MDSCacheObject::add_client_lease(int c, int mask)
   }
   
   int adding = ~l->mask & mask;
-  dout(10) << " had " << l->mask << " adding " << mask << " -> new " << adding << dendl;
+  dout(20) << " had " << l->mask << " adding " << mask << " -> new " << adding << dendl;
   int b = 0;
   while (adding) {
     if (adding & 1) {
       SimpleLock *lock = get_lock(1 << b);
       if (lock) {
 	lock->get_client_lease();
-	dout(10) << "get_client_lease on " << (1 << b) << " " << *lock << dendl;
+	dout(20) << "get_client_lease on " << (1 << b) << " " << *lock << dendl;
       }
     }
     b++;
@@ -56,14 +56,14 @@ int MDSCacheObject::remove_client_lease(ClientLease *l, int mask, Locker *locker
   assert(l->parent == this);
   
   int removing = l->mask & mask;
-  dout(10) << "had " << l->mask << " removing " << mask << " -> " << removing << dendl;
+  dout(20) << "had " << l->mask << " removing " << mask << " -> " << removing << dendl;
   int b = 0;
   while (removing) {
     if (removing & 1) {
       SimpleLock *lock = get_lock(1 << b);
       if (lock) {
 	lock->put_client_lease();
-	dout(10) << "put_client_lease on " << (1 << b) << " " << *lock << dendl;
+	dout(20) << "put_client_lease on " << (1 << b) << " " << *lock << dendl;
 	if (lock->get_num_client_lease() == 0 && !lock->is_stable())
 	  locker->eval_gather(lock);
       }

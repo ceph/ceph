@@ -6,18 +6,15 @@
 #include <linux/fs.h>
 #include <linux/mount.h>
 
-/* debug level; defined in super.h */
-int ceph_debug = 0;
-
-int ceph_client_debug = 50;
-#define DOUT_VAR ceph_client_debug
+int ceph_debug_client = -1;
+#define DOUT_VAR ceph_debug_client
 #define DOUT_PREFIX "client: "
 #include "super.h"
 #include "ktcp.h"
 
 
 void ceph_dispatch(void *p, struct ceph_msg *msg);
-void ceph_peer_reset(void *c);
+void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name);
 
 
 /*
@@ -95,21 +92,25 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
 		if (IS_ERR(mount_msg))
 			return PTR_ERR(mount_msg);
-		mount_msg->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
+		mount_msg->hdr.dst.name.type = 
+			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		mount_msg->hdr.dst.name.num = cpu_to_le32(which);
 		mount_msg->hdr.dst.addr = args->mon_addr[which];
 		
 		ceph_msg_send(client->msgr, mount_msg, 0);
-		dout(10, "mount from mon%d, %d attempts left\n", which, attempts);
+		dout(10, "mount from mon%d, %d attempts left\n", 
+		     which, attempts);
 		
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
-		err = wait_for_completion_timeout(&client->mount_completion, 6*HZ);
+		err = wait_for_completion_timeout(&client->mount_completion, 
+						  6*HZ);
 		if (err == -EINTR)
 			return err; 
 		if (client->mounting == 7) 
 			break;  /* success */
-		dout(10, "mount still waiting for mount, attempts=%d\n", attempts);
+		dout(10, "mount still waiting for mount, attempts=%d\n", 
+		     attempts);
 		if (--attempts == 0)
 			return -EIO;
 	}
@@ -149,7 +150,9 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	if (first) {
 		client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
 		client->msgr->inst.name = msg->hdr.dst.name;
-		dout(1, "i am client%d\n", client->whoami);
+		dout(1, "i am client%d, fsid is %llx.%llx\n", client->whoami,
+		     le64_to_cpu(client->monc.monmap->fsid.major),
+		     le64_to_cpu(client->monc.monmap->fsid.minor));
 	}
 }
 
@@ -174,7 +177,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 {
 	struct ceph_client *cl;
 	struct ceph_entity_addr *myaddr = 0;
-	int err;
+	int err = -ENOMEM;
 
 	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
 	if (cl == NULL)
@@ -183,6 +186,10 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	init_completion(&cl->mount_completion);
 	spin_lock_init(&cl->sb_lock);
 	get_client_counter();
+
+	cl->wb_wq = create_workqueue("ceph-writeback");
+	if (cl->wb_wq == 0)
+		goto fail;
 
 	/* messenger */
 	if (args->flags & CEPH_MOUNT_MYIP)
@@ -214,6 +221,11 @@ fail:
 	return ERR_PTR(err);
 }
 
+void ceph_umount_start(struct ceph_client *cl)
+{
+	ceph_mdsc_stop(&cl->mdsc);	
+}
+
 void ceph_destroy_client(struct ceph_client *cl)
 {
 	dout(10, "destroy_client %p\n", cl);
@@ -221,10 +233,9 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
-	ceph_mdsc_stop(&cl->mdsc);	
-
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
+	destroy_workqueue(cl->wb_wq);
 	kfree(cl);
 	dout(10, "destroy_client %p done\n", cl);
 }
@@ -325,7 +336,12 @@ const char *ceph_msg_type_name(int type)
 	return "unknown";
 }
 
-void ceph_peer_reset(void *c)
+void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
 {
-	return;
+	struct ceph_client *client = p;
+	
+	dout(30, "ceph_peer_reset peer_name = %s%d\n", 
+	     ceph_name_type_str(peer_name->type), le32_to_cpu(peer_name->num));
+
+	/* write me */
 }

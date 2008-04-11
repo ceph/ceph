@@ -256,6 +256,8 @@ private:
 
   void wait_for_new_map(Message *m);
   void handle_osd_map(class MOSDMap *m);
+  void note_down_osd(int osd);
+  void note_up_osd(int osd);
   
   void advance_map(ObjectStore::Transaction& t);
   void activate_map(ObjectStore::Transaction& t);
@@ -331,6 +333,14 @@ private:
   void send_pg_stats(); 
 
 
+  // -- failures --
+  set<int> pending_failures;
+  utime_t last_failure_report;
+  void queue_failure(int n) {
+    pending_failures.insert(n);
+  }
+  void maybe_report_failures();
+
   // -- tids --
   // for ops i issue
   tid_t               last_tid;
@@ -396,6 +406,7 @@ private:
   void handle_sub_op_reply(class MOSDSubOpReply *m);
 
   void force_remount();
+
 };
 
 #endif

@@ -44,6 +44,7 @@ class Objecter {
  private:
   tid_t last_tid;
   int client_inc;
+  int inc_lock;       // optional
   int num_unacked;
   int num_uncommitted;
 
@@ -70,6 +71,8 @@ class Objecter {
   class OSDOp {
   public:
     list<ObjectExtent> extents;
+    int inc_lock;
+    OSDOp() : inc_lock(0) {}
     virtual ~OSDOp() {}
   };
 
@@ -79,41 +82,59 @@ class Objecter {
     Context *onfinish;
     map<tid_t, ObjectExtent> ops;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
-    int balance_reads;  // if non-zero, direct reads to a pseudo-random replica
+    int flags;
 
-    OSDRead(bufferlist *b) : bl(b), onfinish(0), balance_reads(0) {
+    OSDRead(bufferlist *b, int f) : bl(b), onfinish(0), flags(f) {
       bl->clear();
     }
   };
+
+  OSDRead *prepare_read(bufferlist *b, int f) {
+    return new OSDRead(b, f);
+  }
 
   class OSDStat : public OSDOp {
   public:
     tid_t tid;
     off_t *size;  // where the size goes.
+    int flags;
     Context *onfinish;
-    OSDStat(off_t *s) : tid(0), size(s), onfinish(0) { }
+    OSDStat(off_t *s, int f) : tid(0), size(s), flags(f), onfinish(0) { }
   };
+
+  OSDStat *prepare_stat(off_t *s, int f) {
+    return new OSDStat(s, f);
+  }
 
   // generic modify
   class OSDModify : public OSDOp {
   public:
     int op;
     list<ObjectExtent> extents;
+    int flags;
     Context *onack;
     Context *oncommit;
     map<tid_t, ObjectExtent> waitfor_ack;
     map<tid_t, eversion_t>   tid_version;
     map<tid_t, ObjectExtent> waitfor_commit;
 
-    OSDModify(int o) : op(o), onack(0), oncommit(0) {}
+    OSDModify(int o, int f) : op(o), flags(f), onack(0), oncommit(0) {}
   };
+
+  OSDModify *prepare_modify(int o, int f) { 
+    return new OSDModify(o, f); 
+  }
   
   // write (includes the bufferlist)
   class OSDWrite : public OSDModify {
   public:
     bufferlist bl;
-    OSDWrite(bufferlist &b) : OSDModify(CEPH_OSD_OP_WRITE), bl(b) {}
+    OSDWrite(bufferlist &b, int f) : OSDModify(CEPH_OSD_OP_WRITE, f), bl(b) {}
   };
+
+  OSDWrite *prepare_write(bufferlist &b, int f) { 
+    return new OSDWrite(b, f); 
+  }
 
   
 
@@ -170,7 +191,7 @@ class Objecter {
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
     messenger(m), monmap(mm), osdmap(om), 
-    last_tid(0), client_inc(-1),
+    last_tid(0), client_inc(-1), inc_lock(0),
     num_unacked(0), num_uncommitted(0),
     last_epoch_requested(0),
     client_lock(l), timer(l)
@@ -200,26 +221,29 @@ class Objecter {
   bool is_active() {
     return !(op_read.empty() && op_modify.empty());
   }
+  void dump_active();
 
-  int get_client_incarnation() { return client_inc; }
-  void set_client_incarnation(int inc) {
-	client_inc = inc;
-  }
+  int get_client_incarnation() const { return client_inc; }
+  void set_client_incarnation(int inc) { client_inc = inc; }
+
+  //int get_inc_lock() const { return inc_lock; }
+  void set_inc_lock(int l) { inc_lock = l; }
+    
 
   // med level
   tid_t readx(OSDRead *read, Context *onfinish);
   tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
 
   // even lazier
-  tid_t read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, 
+  tid_t read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags,
              Context *onfinish);
-  tid_t write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, 
+  tid_t write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
               Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,  
+  tid_t zero(object_t oid, off_t off, size_t len, ceph_object_layout ol, int flags,
              Context *onack, Context *oncommit);
-  tid_t stat(object_t oid, off_t *size, ceph_object_layout ol, Context *onfinish);
+  tid_t stat(object_t oid, off_t *size, ceph_object_layout ol, int flags, Context *onfinish);
   
-  tid_t lock(int op, object_t oid, ceph_object_layout ol, Context *onack, Context *oncommit);
+  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
 
 
   void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);

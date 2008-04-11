@@ -38,6 +38,23 @@
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".pg v" << pg_map.version << " "
 
+struct kb_t {
+  uint64_t v;
+  kb_t(uint64_t _v) : v(_v) {}
+};
+ostream& operator<<(ostream& out, const kb_t& kb)
+{
+  if (kb.v > 2048*1024*1024*1024ULL)
+    return out << (kb.v >> 40) << " PB";    
+  if (kb.v > 2048*1024*1024ULL)
+    return out << (kb.v >> 30) << " TB";    
+  if (kb.v > 2048*1024ULL)
+    return out << (kb.v >> 20) << " GB";    
+  if (kb.v > 2048ULL)
+    return out << (kb.v >> 10) << " MB";
+  return out << kb.v << " KB";
+}
+
 ostream& operator<<(ostream& out, PGMonitor& pm)
 {
   std::stringstream ss;
@@ -51,7 +68,10 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
   string states = ss.str();
   return out << "v" << pm.pg_map.version << ": "
 	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states;
+	     << states
+	     << "; " << kb_t(pm.pg_map.total_used_kb()) << " used, "
+	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
+	     << kb_t(pm.pg_map.total_kb()) << " free";
 }
 
 /*
@@ -206,9 +226,9 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   memset(&reply->stfs, 0, sizeof(reply->stfs));
 
   // these are in KB.
-  reply->stfs.f_total = cpu_to_le64(4*pg_map.total_osd_num_blocks);
-  reply->stfs.f_free = cpu_to_le64(4*pg_map.total_osd_num_blocks_avail);
-  reply->stfs.f_avail = cpu_to_le64(4*pg_map.total_osd_num_blocks_avail);
+  reply->stfs.f_total = cpu_to_le64(pg_map.total_kb());
+  reply->stfs.f_free = cpu_to_le64(pg_map.total_avail_kb());
+  reply->stfs.f_avail = cpu_to_le64(pg_map.total_avail_kb());
   reply->stfs.f_objects = cpu_to_le64(pg_map.total_osd_num_objects);
 
   // reply
@@ -279,37 +299,87 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 
 // ------------------------
 
-struct RetryRegisterNewPgs : public Context {
+struct RetryCheckOSDMap : public Context {
   PGMonitor *pgmon;
-  RetryRegisterNewPgs(PGMonitor *p) : pgmon(p) {}
+  epoch_t epoch;
+  RetryCheckOSDMap(PGMonitor *p, epoch_t e) : pgmon(p), epoch(e) {}
   void finish(int r) {
-    pgmon->register_new_pgs();
+    pgmon->check_osd_map(epoch);
   }
 };
 
-void PGMonitor::register_new_pgs()
+void PGMonitor::check_osd_map(epoch_t epoch)
 {
   if (mon->is_peon()) 
     return; // whatever.
 
+  if (pg_map.last_osdmap_epoch >= epoch) {
+    dout(10) << "check_osd_map already seen " << pg_map.last_osdmap_epoch << " >= " << epoch << dendl;
+    return;
+  }
+
   if (!mon->osdmon->paxos->is_readable()) {
     dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
-    mon->osdmon->paxos->wait_for_readable(new RetryRegisterNewPgs(this));
+    mon->osdmon->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
   if (!paxos->is_writeable()) {
     dout(10) << "register_new_pgs -- pgmap not writeable, waiting" << dendl;
-    paxos->wait_for_writeable(new RetryRegisterNewPgs(this));
+    paxos->wait_for_writeable(new RetryCheckOSDMap(this, epoch));
     return;
   }
+
+  // apply latest map(s)
+  for (epoch_t e = pg_map.last_osdmap_epoch+1;
+       e <= epoch;
+       e++) {
+    dout(10) << "check_osd_map applying osdmap e" << e << " to pg_map" << dendl;
+    bufferlist bl;
+    mon->store->get_bl_sn(bl, "osdmap", e);
+    assert(bl.length());
+    OSDMap::Incremental inc;
+    int off = 0;
+    inc.decode(bl, off);
+    for (map<int32_t,uint32_t>::iterator p = inc.new_offload.begin();
+	 p != inc.new_offload.end();
+	 p++)
+      if (p->second == 0x10000) {
+	dout(10) << "check_osd_map  osd" << p->first << " went OUT" << dendl;
+	pending_inc.osd_stat_rm.insert(p->first);
+      } else {
+	dout(10) << "check_osd_map  osd" << p->first << " is IN" << dendl;
+	pending_inc.osd_stat_rm.erase(p->first);
+	pending_inc.osd_stat_updates[p->first]; 
+      }
+  }
+
+  bool propose = false;
+  if (pg_map.last_osdmap_epoch < epoch) {
+    pending_inc.osdmap_epoch = epoch;
+    propose = true;
+  }
+
+  // scan pg space?
+  if (register_new_pgs())
+    propose = true;
+  
+  if (propose)
+    propose_pending();
+
+  send_pg_creates();
+}
+
+bool PGMonitor::register_new_pgs()
+{
+
 
   dout(10) << "osdmap last_pg_change " << mon->osdmon->osdmap.get_last_pg_change()
 	   << ", pgmap last_pg_scan " << pg_map.last_pg_scan << dendl;
   if (mon->osdmon->osdmap.get_last_pg_change() <= pg_map.last_pg_scan ||
       mon->osdmon->osdmap.get_last_pg_change() <= pending_inc.pg_scan) {
     dout(10) << "register_new_pgs -- i've already scanned pg space since last significant osdmap update" << dendl;
-    return;
+    return false;
   }
 
   // iterate over crush mapspace
@@ -378,8 +448,9 @@ void PGMonitor::register_new_pgs()
   if (created) {
     last_sent_pg_create.clear();  // reset pg_create throttle timer
     pending_inc.pg_scan = epoch;
-    propose_pending();
+    return true;
   }
+  return false;
 }
 
 void PGMonitor::send_pg_creates()

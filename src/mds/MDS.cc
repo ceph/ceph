@@ -237,7 +237,7 @@ void MDS::send_message_mds(Message *m, int mds)
 {
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_message(new MMDSMap(mdsmap), 
+    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), 
 			    mdsmap->get_inst(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -379,7 +379,7 @@ void MDS::beacon_send()
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
   int mon = monmap->pick_mon();
-  messenger->send_message(new MMDSBeacon(messenger->get_myinst(), mdsmap->get_epoch(), 
+  messenger->send_message(new MMDSBeacon(monmap->fsid, messenger->get_myinst(), mdsmap->get_epoch(), 
 					 want_state, beacon_last_seq, want_rank),
 			  monmap->get_inst(mon));
 
@@ -509,7 +509,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (oldwhoami < 0) {
       // we need an osdmap too.
       int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(0),
+      messenger->send_message(new MOSDGetMap(monmap->fsid, 0),
 			      monmap->get_inst(mon));
     }
   }
@@ -520,6 +520,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     assert(mdsmap->get_inc(whoami) > 0);
     objecter->set_client_incarnation(mdsmap->get_inc(whoami));
   }
+  // and inc_lock
+  objecter->set_inc_lock(mdsmap->get_last_failure());
 
   // for debug
   if (g_conf.mds_dump_cache_on_map)
@@ -657,7 +659,7 @@ void MDS::bcast_mds_map()
   for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p) 
-    messenger->send_message(new MMDSMap(mdsmap), (*p)->inst);
+    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), (*p)->inst);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
@@ -776,11 +778,17 @@ class C_MDS_BootStart : public Context {
   int nextstep;
 public:
   C_MDS_BootStart(MDS *m, int n) : mds(m), nextstep(n) {}
-  void finish(int r) { mds->boot_start(nextstep); }
+  void finish(int r) { mds->boot_start(nextstep, r); }
 };
 
-void MDS::boot_start(int step)
+void MDS::boot_start(int step, int r)
 {
+  if (r < 0) {
+    dout(0) << "boot_start encountered an error, failing" << dendl;
+    suicide();
+    return;
+  }
+
   switch (step) {
   case 0:
     step = 1;  // fall-thru.

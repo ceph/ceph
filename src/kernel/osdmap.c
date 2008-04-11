@@ -1,8 +1,8 @@
 
 #include <asm/div64.h>
 
-int ceph_osdmap_debug = 50;
-#define DOUT_VAR ceph_osdmap_debug
+int ceph_debug_osdmap = -1;
+#define DOUT_VAR ceph_debug_osdmap
 #define DOUT_PREFIX "osdmap: "
 #include "super.h"
 
@@ -391,7 +391,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	__u32 epoch;
 	struct ceph_timespec ctime;
 	__u32 len;
-	__u32 max;
+	__s32 max;
 	int err = -EINVAL;
 
 	ceph_decode_need(p, end, 2*sizeof(__u64)+4*sizeof(__u32), bad);
@@ -405,6 +405,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* full map? */
 	ceph_decode_32(p, len);
 	if (len > 0) {
+		dout(20, "apply_incremental full map len %d, %p to %p\n",
+		     len, *p, end);
 		newmap = osdmap_decode(p, min(*p+len, end));
 		return newmap;  /* error or not */
 	}
@@ -412,6 +414,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* new crush? */
 	ceph_decode_32_safe(p, end, len, bad);
 	if (len > 0) {
+		dout(20, "apply_incremental new crush map len %d, %p to %p\n",
+		     len, *p, end);
 		newcrush = crush_decode(p, min(*p+len, end));
 		if (IS_ERR(newcrush))
 			return ERR_PTR(PTR_ERR(newcrush));
@@ -426,7 +430,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_decode_need(p, end, 3*sizeof(__u32), bad);
 	ceph_decode_32(p, max);
 	*p += 4*sizeof(__u32);  /* skip new_pg_num et al for now.  FIXME. */
-	if (max > 0) {
+	if (max >= 0) {
 		if ((err = osdmap_set_max_osd(map, max)) < 0)
 			goto bad;
 	}
@@ -474,7 +478,15 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		if (osd < map->max_osd) 
 			map->crush->device_offload[osd] = off;
 	}
-	
+
+	/* skip old/new pg_swap stuff */
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * (sizeof(__u64) + sizeof(__u32));
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * sizeof(__u64);
+
+	if (*p != end)
+		goto bad;
 	return map;
 
 bad:
@@ -543,6 +555,10 @@ void calc_object_layout(struct ceph_object_layout *ol,
 			struct ceph_osdmap *osdmap)
 {
 	unsigned num, num_mask;
+	union ceph_pg pgid;
+	ceph_ino_t ino = le64_to_cpu(oid->ino);
+	unsigned bno = le32_to_cpu(oid->bno);
+
 	if (fl->fl_pg_preferred >= 0) {
 		num = osdmap->lpg_num;
 		num_mask = osdmap->lpg_num_mask;
@@ -550,12 +566,14 @@ void calc_object_layout(struct ceph_object_layout *ol,
 		num = osdmap->pg_num;
 		num_mask = osdmap->pg_num_mask;
 	}
-	ol->ol_pgid.pg.ps = 
-		ceph_stable_mod(oid->bno + crush_hash32_2(oid->ino, 
-							  oid->ino>>32), 
-				num, num_mask);
-	ol->ol_pgid.pg.preferred = fl->fl_pg_preferred;
-	ol->ol_pgid.pg.type = fl->fl_pg_type;
-	ol->ol_pgid.pg.size = fl->fl_pg_size;
-	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
+
+	pgid.pg64 = 0;   /* start with it zeroed out */
+	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32), 
+				     num, num_mask);
+	pgid.pg.preferred = fl->fl_pg_preferred;
+	pgid.pg.type = fl->fl_pg_type;
+	pgid.pg.size = fl->fl_pg_size;
+
+	ol->ol_pgid = cpu_to_le64(pgid.pg64);
+	ol->ol_stripe_unit = cpu_to_le32(fl->fl_object_stripe_unit);
 }

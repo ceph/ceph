@@ -53,6 +53,7 @@ class Filer {
     inode_t inode;
     off_t from;
     off_t *end;
+    int flags;
     Context *onfinish;
     
     list<ObjectExtent> probing;
@@ -61,8 +62,8 @@ class Filer {
     map<object_t, off_t> known;
     map<object_t, tid_t> ops;
 
-    Probe(inode_t &i, off_t f, off_t *e, Context *c) : 
-      inode(i), from(f), end(e), onfinish(c), probing_len(0) {}
+    Probe(inode_t &i, off_t f, off_t *e, int fl, Context *c) : 
+      inode(i), from(f), end(e), flags(fl), onfinish(c), probing_len(0) {}
   };
   
   class C_Probe;
@@ -83,17 +84,19 @@ class Filer {
   Objecter::OSDRead *prepare_read(inode_t& inode,
 				  off_t offset, 
 				  size_t len, 
-				  bufferlist *bl) {
-    Objecter::OSDRead *rd = new Objecter::OSDRead(bl);
-    file_to_extents(inode, offset, len, rd->extents);
+				  bufferlist *bl, 
+				  int flags) {
+    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
+    file_to_extents(inode.ino, &inode.layout, offset, len, rd->extents);
     return rd;
   }
   int read(inode_t& inode,
            off_t offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
+	   int flags,
            Context *onfinish) {
-    Objecter::OSDRead *rd = prepare_read(inode, offset, len, bl);
+    Objecter::OSDRead *rd = prepare_read(inode, offset, len, bl, flags);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 
@@ -105,34 +108,37 @@ class Filer {
             Context *onack,
             Context *oncommit,
 	    objectrev_t rev=0) {
-    Objecter::OSDWrite *wr = new Objecter::OSDWrite(bl);
-    file_to_extents(inode, offset, len, wr->extents, rev);
+    Objecter::OSDWrite *wr = objecter->prepare_write(bl, flags);
+    file_to_extents(inode.ino, &inode.layout, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
   int zero(inode_t& inode,
            off_t offset,
            size_t len,
+	   int flags,
            Context *onack,
            Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_ZERO);
-    file_to_extents(inode, offset, len, z->extents);
+    Objecter::OSDModify *z = objecter->prepare_modify(CEPH_OSD_OP_ZERO, flags);
+    file_to_extents(inode.ino, &inode.layout, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
   int remove(inode_t& inode,
 	     off_t offset,
 	     size_t len,
+	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
-    Objecter::OSDModify *z = new Objecter::OSDModify(CEPH_OSD_OP_DELETE);
-    file_to_extents(inode, offset, len, z->extents);
+    Objecter::OSDModify *z = objecter->prepare_modify(CEPH_OSD_OP_DELETE, flags);
+    file_to_extents(inode.ino, &inode.layout, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
   int probe_fwd(inode_t& inode,
 		off_t start_from,
 		off_t *end,
+		int flags,
 		Context *onfinish);
 
 
@@ -152,7 +158,7 @@ class Filer {
 
   /* map (ino, offset, len) to a (list of) OSDExtents 
      (byte ranges in objects on (primary) osds) */
-  void file_to_extents(inode_t inode,
+  void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
 		       off_t offset,
 		       size_t len,
 		       list<ObjectExtent>& extents,

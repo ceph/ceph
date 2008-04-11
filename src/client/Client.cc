@@ -323,14 +323,48 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
   ttl += (float)lease->duration_ms * 1000.0;
 
   dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
+
   if (lease->mask & CEPH_STAT_MASK_INODE) {
-    in->inode = st->inode;
+    int issued = in->file_caps();
+    
+    in->inode.ino = st->ino;
+    in->inode.layout = st->layout;
+    in->inode.rdev = st->rdev;
+
+    in->inode.mode = st->mode;
+    in->inode.uid = st->uid;
+    in->inode.gid = st->gid;
+
+    in->inode.nlink = st->nlink;
+    in->inode.anchored = false;  /* lie */
+
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+
+    in->inode.ctime = st->ctime;
+    in->inode.max_size = st->max_size;  // right?
+
+    // be careful with size, mtime, atime
+    if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+      if ((issued & CEPH_CAP_EXCL) == 0) {
+	if (st->size > in->inode.size)
+	  in->inode.size = st->size;
+	if (st->mtime > in->inode.mtime) 
+	  in->inode.mtime = st->mtime;
+	if (st->atime > in->inode.atime)
+	  in->inode.atime = st->atime;
+      }
+    } else {
+      in->inode.size = st->size;
+      in->inode.mtime = st->mtime;
+      in->inode.atime = st->atime;
+    }
   }
 
-  in->mask = lease->mask;
-  if (ttl > in->ttl) 
-    in->ttl = ttl;
+  if (lease->mask && ttl > in->lease_ttl) {
+    in->lease_ttl = ttl;
+    in->lease_mask = lease->mask;
+    in->lease_mds = from;
+  }
 
   // symlink?
   if (in->inode.is_symlink()) {
@@ -357,15 +391,15 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->inode.ino 
-           << "  size " << ist->inode.size
-           << "  mtime " << ist->inode.mtime
+  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->ino
+           << "  size " << ist->size
+           << "  mtime " << ist->mtime
 	   << " dmask " << dmask
 	   << " in dir " << dir->parent_inode->inode.ino
            << dendl;
   
   if (dn) {
-    if (dn->inode->inode.ino == ist->inode.ino) {
+    if (dn->inode->inode.ino == ist->ino) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
                << " with correct ino " << dn->inode->inode.ino
@@ -381,8 +415,8 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   
   if (!dn) {
     // have inode linked elsewhere?  -> unlink and relink!
-    if (inode_map.count(ist->inode.ino)) {
-      Inode *in = inode_map[ist->inode.ino];
+    if (inode_map.count(ist->ino)) {
+      Inode *in = inode_map[ist->ino];
       assert(in);
 
       if (in->dn) {
@@ -400,13 +434,23 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   }
 
   if (!dn) {
-    Inode *in = new Inode(ist->inode, objectcacher);
-    inode_map[ist->inode.ino] = in;
+    Inode *in = new Inode(ist->ino, &ist->layout, objectcacher);
+    inode_map[ist->ino] = in;
     dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with ino " << ist->inode.ino << dendl;
+    dout(12) << " new dentry+node with ino " << ist->ino << dendl;
   } 
 
   assert(dn && dn->inode);
+
+  if (dlease->mask & CEPH_LOCK_DN) {
+    utime_t ttl = from;
+    ttl += (float)dlease->duration_ms * 1000.0;
+    if (ttl > dn->lease_ttl) {
+      dout(10) << "got dentry lease on " << dname << " ttl " << ttl << dendl;
+      dn->lease_ttl = ttl;
+      dn->lease_mds = from;
+    }
+  }
 
   update_inode(dn->inode, ist, ilease, from);
 
@@ -499,9 +543,9 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   // insert into cache --
   // first inode
   Inode *curi = 0;
-  inodeno_t ino = ist[0].inode.ino;
+  inodeno_t ino = ist[0].ino;
   if (!root && ino == 1) {
-    curi = root = new Inode(ist[0].inode, objectcacher);
+    curi = root = new Inode(ino, &ist[0].layout, objectcacher);
     dout(10) << "insert_trace new root is " << root << dendl;
     inode_map[ino] = root;
     root->dir_auth = 0;
@@ -558,7 +602,8 @@ Dentry *Client::lookup(filepath& path)
       Dir *dir = cur->dir;
       if (dir->dentries.count(path[i])) {
         dn = dir->dentries[path[i]];
-        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << " ttl " << dn->inode->ttl << dendl;
+        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode
+		 << " ttl " << dn->inode->lease_ttl << dendl;
       } else {
         dout(14) << " dentry " << path[i] << " dne" << dendl;
         return NULL;
@@ -573,7 +618,8 @@ Dentry *Client::lookup(filepath& path)
   if (!dn) 
     dn = cur->dn;
   if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << " ttl " << dn->inode->ttl << dendl;
+    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino
+	     << " ttl " << dn->inode->lease_ttl << dendl;
   }
 
   return dn;
@@ -722,7 +768,7 @@ MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, utime_t *p
       if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
 	int mon = monmap->pick_mon();
-	messenger->send_message(new MMDSGetMap(mdsmap->get_epoch()),
+	messenger->send_message(new MMDSGetMap(monmap->fsid, mdsmap->get_epoch()),
 				monmap->get_inst(mon));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
@@ -1153,7 +1199,7 @@ void Client::kick_requests(int mds)
 
 
 /************
- * locks
+ * leases
  */
 
 void Client::handle_lease(MClientLease *m)
@@ -1175,13 +1221,14 @@ void Client::handle_lease(MClientLease *m)
       goto revoke;
     }
     Dentry *dn = in->dir->dentries[m->dname];
-    dout(10) << " reset ttl on " << dn << dendl;
-    dn->ttl = utime_t();
-  } else {
-    int newmask = in->mask & ~m->get_mask();
-    dout(10) << " reset inode " << in->ino() 
-	     << " mask " << in->mask << " -> " << newmask << dendl;
-    in->mask = newmask;
+    dout(10) << " revoked DN lease on " << dn << dendl;
+    dn->lease_mds = -1;
+  } 
+  if (m->get_mask() & in->lease_mask) {
+    int newmask = in->lease_mask & ~m->get_mask();
+    dout(10) << " revoked inode lease on " << in->ino() 
+	     << " mask " << in->lease_mask << " -> " << newmask << dendl;
+    in->lease_mask = newmask;
   }
   
  revoke:
@@ -1190,6 +1237,36 @@ void Client::handle_lease(MClientLease *m)
 			  m->get_source_inst());
   delete m;
 }
+
+
+void Client::release_lease(Inode *in, Dentry *dn, int mask)
+{
+  int havemask = 0;
+  int mds = -1;
+  utime_t now = g_clock.now();
+  string dname;
+
+  // inode?
+  if (in->lease_mds >= 0 && (in->lease_mask & mask) && now < in->lease_ttl) {
+    havemask |= (in->lease_mask & mask);
+    mds = in->lease_mds;
+  }
+
+  // dentry?
+  if (dn && dn->lease_mds >= 0 && now < in->lease_ttl) {
+    havemask |= CEPH_LOCK_DN;
+    mds = dn->lease_mds;
+    dname = dn->name;
+  }
+
+  if (mds >= 0 && mdsmap->is_up(mds)) {
+    dout(10) << "release_lease mds" << mds << " mask " << mask
+	     << " on " << in->ino() << " " << dname << dendl;
+    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, mask, in->ino(), dname),
+			    mdsmap->get_inst(mds));
+  }
+}
+
 
 
 /****
@@ -1312,6 +1389,20 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
 
+  // don't have cap?   
+  //   (it may be that we've reopened the file locally,
+  //    and thus want caps, but don't have a cap yet.
+  //    we should never reply to a cap out of turn.)
+  if (in->caps.count(mds) == 0) {
+    // silently drop.
+    dout(5) << "handle_file_caps on ino " << m->get_ino() 
+            << " seq " << m->get_seq() 
+            << " " << cap_string(m->get_caps()) 
+            << ", don't have this cap, silently dropping." << dendl;
+    delete m;
+    return;
+  }
+
   // don't want?
   int wanted = in->file_caps_wanted();
   if (wanted == 0) {
@@ -1325,8 +1416,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
     messenger->send_message(m, m->get_source_inst());
     return;
   }
-
-  assert(in->caps.count(mds));
 
   // update per-mds caps
   const int old_caps = in->caps[mds].caps;
@@ -1604,6 +1693,9 @@ int Client::unmount()
 
   dout(2) << "unmounting" << dendl;
   unmounting = true;
+
+  timer.cancel_event(tick_event);
+  tick_event = 0;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
   assert(fd_map.empty());
@@ -2030,12 +2122,9 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
 
   int havemask = 0;
   if (dn) {
-    if (now > dn->inode->ttl) {
-      dout(10) << "_lstat has EXPIRED (" << dn->inode->ttl << ") inode " << fpath
-	       << " with mask " << havemask << dendl;
-    } else {
-      havemask = dn->inode->mask;
-    }
+    if (now < dn->inode->lease_ttl &&
+	dn->inode->lease_mds >= 0)
+      havemask = dn->inode->lease_mask;
     if (dn->inode->file_caps() & CEPH_CAP_EXCL) {
       dout(10) << "_lstat has inode " << fpath << " with CAP_EXCL, yay" << dendl;
       havemask |= CEPH_LOCK_ICONTENT;
@@ -2043,13 +2132,14 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
     if (havemask & CEPH_LOCK_ICONTENT)
       havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
  
-    dout(10) << "_lstat has inode " << fpath << " with mask " << havemask << ", want " << mask << dendl;
+    dout(10) << "_lstat has inode " << fpath << " with mask " << havemask
+	     << ", want " << mask << dendl;
   } else {
     dout(10) << "_lstat has no dn for path " << fpath << dendl;
   }
   
   if (dn && dn->inode && (havemask & mask) == mask) {
-    dout(10) << "lstat cache hit w/ sufficient mask, valid until " << dn->inode->ttl << dendl;
+    dout(10) << "lstat cache hit w/ sufficient mask, until " << dn->inode->lease_ttl << dendl;
     *in = dn->inode;
   } else {  
     req = new MClientRequest(CEPH_MDS_OP_LSTAT, messenger->get_myinst());
@@ -2085,7 +2175,7 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_size = in->inode.size;
   st->st_blocks = in->inode.size ? ((in->inode.size - 1) / 4096 + 1):0;
   st->st_blksize = 4096;
-  return in->mask;
+  return in->lease_mask;
 }
 
 
@@ -2254,6 +2344,7 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
   req->set_path(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
   atime.encode_timeval(&req->head.args.utime.atime);
+  req->head.args.utime.mask = CEPH_UTIME_ATIME | CEPH_UTIME_MTIME;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2671,7 +2762,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
   req->head.args.open.flags = flags;
   req->head.args.open.mode = mode;
 
-  int cmode = req->get_open_file_mode();
+  int cmode = file_flags_to_mode(flags);
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2697,6 +2788,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     Fh *f = new Fh;
     if (fhp) *fhp = f;
     f->mode = cmode;
+    if (flags & O_APPEND)
+      f->append = true;
 
     // inode
     assert(in);
@@ -3019,10 +3112,10 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     bool done = false;
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
     if (in->hack_balance_reads ||
 	g_conf.client_hack_balance_reads)
-      rd->balance_reads = true;
+      rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
     assert(r >= 0);
 
@@ -3094,6 +3187,12 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
+    /* 
+     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and inode.size may
+     * change out from under us.
+     */
+    if (f->append)
+      f->pos = in->inode.size;   // O_APPEND.
     offset = f->pos;
     f->pos = offset+size;    
     unlock_fh_pos(f);
@@ -3526,7 +3625,7 @@ int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr)
   if (diri->dir &&
       diri->dir->dentries.count(dname)) {
     Dentry *dn = diri->dir->dentries[dname];
-    if (dn->ttl > now) {
+    if (dn->lease_mds >= 0 && dn->lease_ttl > now) {
       touch_dn(dn);
       in = dn->inode;
       dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry" << dendl;
@@ -4082,7 +4181,7 @@ int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  filer->file_to_extents(in->inode, offset, length, result);
+  filer->file_to_extents(in->inode.ino, &in->inode.layout, offset, length, result);
 
   dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;

@@ -237,7 +237,7 @@ class MDS : public Dispatcher {
 
   void boot();
   void boot_create();             // i am new mds.
-  void boot_start(int step=0);    // starting|replay
+  void boot_start(int step=0, int r=0);    // starting|replay
 
   void replay_start();
   void creating_done();

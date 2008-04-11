@@ -21,11 +21,13 @@
 
 class MOSDGetMap : public Message {
  public:
+  ceph_fsid fsid;
   epoch_t start, want;
 
-  MOSDGetMap(epoch_t s=0, epoch_t w=0) : 
+  MOSDGetMap() : Message(CEPH_MSG_OSD_GETMAP) {}
+  MOSDGetMap(ceph_fsid& f, epoch_t s=0, epoch_t w=0) : 
     Message(CEPH_MSG_OSD_GETMAP),
-    start(s), want(w) { }
+    fsid(f), start(s), want(w) { }
 
   epoch_t get_start_epoch() { return start; }
   epoch_t get_want_epoch() { return want; }
@@ -38,11 +40,13 @@ class MOSDGetMap : public Message {
   }
   
   void encode_payload() {
+    ::_encode(fsid, payload);
     ::_encode(start, payload);
     ::_encode(want, payload);
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(fsid, payload, off);
     ::_decode(start, payload, off);
     ::_decode(want, payload, off);
   }

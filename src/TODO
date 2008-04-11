@@ -4,20 +4,8 @@ code cleanup
   - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
 - addr=?
 
-- switch to nsec in ceph_timespec
-
-client leases
-- lease length heuristics
-  - mds lock last_change stamp?
-- client: preemptively release lease on dentry we are unlinking, renaming from/to, etc.
-  - ICONTENT on file open
-  - DN on unlink, rename
-  - IAUTH on setattr
-  - ICONTENT on utimes
-  - or inode fields we are chmodding, etc.
-- lease renewals (to avoid blocking client ops?)
-
 userspace client
+- validate dn leases
 - clean up ll_ interface, now that we have leases!
 - obey file_max
 - revoke own caps when they time out,
@@ -27,39 +15,37 @@ userspace client
   - also needs cope with mds failures
 - reference count lease validations on path lookup?
 
+yehuda:
+- apply_truncate needs to truncate page cache, or something?
+- less heavy-handed writeback?
+
 kernel client
-- strip i_wr_size etc out of ceph_inode_info
-  - take mds provided versions when appropriate
-- carry wrbuffer/rdcache caps until data is flushed
-  - this should make the utimes bit kick in
-- make sure link/unlink results reflected by inode/dentry cache  (let fill_trace do it?  invalidate?  do actual update?)
+- file_data_version stuff!
+- deal with CAP_RDCACHE properly: invalidate cache pages?
+- trim expired leases so we don't indefinitely hold dcache/icache refs...
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- msgr layer
-  - standby state, to keep connect_seq around after a disconnect
-- audit locking
-- audit use of kmalloc vs spinlocks
 - convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
-- mds client
-  - test ceph_fill_trace when files/directories are moved around by another client
-- osd client
-  - readpages (readahead)
-  - async (caching) mode
-  - sync mode (write-through)
-  - capability changes (flush.. need way to initiate/block on writeback initiated by mds)
+- io / osd client
+  - kick requests when new map arrives
   - osd ack vs commit handling.  hmm!
-  - handle map changes (resubmit ops)
-- mon client
-  - work out message resend logic..?
 - unmount
-/  - close open file handles, mds sessions
-    - flush data before unmount.
   - send (+deliver!) unmount message
+
+client
+- obey file_max
+- client needs to be smart about all of this..
+  - revoke own caps when they time out,
+- clean up client mds session vs mdsmap behavior?
+- client caps migration races
+  - caps need a seq number; reap logic needs to be a bit smarter
+  - also needs cope with mds failures
+
 
 osdmon
 - actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
@@ -92,8 +78,13 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
+- lease length heuristics
+  - mds lock last_change stamp?
+
 - fix file_data_version
 - on recovery, validate file sizes when max_size > size
+
+- coalesce lease revocations on dir inode + dentry, where possible
 
 - fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
@@ -123,8 +114,6 @@ mds
 
 - efficient stat for single writers
 - add FILE_CAP_EXTEND capability bit
-
-
 
 
 journaler
@@ -186,11 +175,10 @@ osd/rados
 - transaction prepare/commit
   - rollback
   - rollback logging (to fix slow prepare vs rollback race)
-- read+floor_lockout for clean STOGITH-like/fencing semantics after failover.
+
+- a more general fencing mechanism?  per-object granularity isn't usually a good match.
 
 - consider implications of nvram writeahead logs
-- clean shutdown?
-- pgmonitor should supplement failure detection
 
 - flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
 

@@ -5,7 +5,7 @@
 #include "mds_client.h"
 #include "mon_client.h"
 
-int ceph_debug_mdsc = 50;
+int ceph_debug_mdsc = -1;
 #define DOUT_VAR ceph_debug_mdsc
 #define DOUT_PREFIX "mds: "
 #include "super.h"
@@ -289,6 +289,8 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	s->s_cap_seq = 0;
 	spin_lock_init(&s->s_cap_lock);
 	INIT_LIST_HEAD(&s->s_caps);
+	INIT_LIST_HEAD(&s->s_inode_leases);
+	INIT_LIST_HEAD(&s->s_dentry_leases);
 	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
@@ -402,6 +404,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_reply = 0;
 	req->r_last_inode = 0;
 	req->r_last_dentry = 0;
+	req->r_old_dentry = 0;
 	req->r_expects_cap = 0;
 	req->r_cap = 0;
 	req->r_session = 0;
@@ -544,7 +547,7 @@ static int resume_session(struct ceph_mds_client *mdsc,
 	spin_lock(&session->s_cap_lock);
 	list_for_each(cp, &session->s_caps) {
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
-		cap->caps = 0;
+		cap->issued = cap->implemented = 0;
 	}
 	spin_unlock(&session->s_cap_lock);
 
@@ -605,16 +608,44 @@ static void remove_session_caps(struct ceph_mds_session *session)
 		cap = list_entry(session->s_caps.next, struct ceph_inode_cap,
 				 session_caps);
 		ci = cap->ci;
-		igrab(&ci->vfs_inode);
 		dout(10, "removing cap %p, ci is %p, inode is %p\n",
 		     cap, ci, &ci->vfs_inode);
 		spin_unlock(&session->s_cap_lock);
 		ceph_remove_cap(cap);
 		spin_lock(&session->s_cap_lock);
-		iput(&ci->vfs_inode);
 	}
 	BUG_ON(session->s_nr_caps > 0);
 	spin_unlock(&session->s_cap_lock);
+}
+
+static void remove_session_leases(struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci;
+	struct ceph_dentry_info *di;
+
+	dout(10, "remove_session_leases on %p\n", session);
+
+	spin_lock(&session->s_cap_lock);
+
+	/* inodes */
+	while (!list_empty(&session->s_inode_leases)) {
+		ci = list_entry(session->s_inode_leases.next, 
+				struct ceph_inode_info, i_lease_item);
+		dout(10, "removing lease from inode %p\n", &ci->vfs_inode);
+		spin_unlock(&session->s_cap_lock);
+		ceph_revoke_inode_lease(ci, ci->i_lease_mask);
+		spin_lock(&session->s_cap_lock);
+	}
+
+	/* dentries */
+	while (!list_empty(&session->s_dentry_leases)) {
+		di = list_entry(session->s_dentry_leases.next, 
+				struct ceph_dentry_info, lease_item);
+		dout(10, "removing lease from dentry %p\n", di->dentry);
+		spin_unlock(&session->s_cap_lock);
+		ceph_revoke_dentry_lease(di->dentry);
+		spin_lock(&session->s_cap_lock);
+	}
 }
 
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
@@ -656,6 +687,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 			     seq, session->s_cap_seq);
 		}
 		remove_session_caps(session);
+		remove_session_leases(session);
 		complete(&mdsc->session_close_waiters);
 		break;
 
@@ -732,8 +764,10 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/* head->retry_attempt = 0; set by do_request */
 	head->mds_wants_replica_in_dirino = 0;
 	head->op = cpu_to_le32(op);
-	head->caller_uid = cpu_to_le32(current->uid);
-	head->caller_gid = cpu_to_le32(current->gid);
+	head->caller_uid = cpu_to_le32(current->euid);
+	head->caller_gid = cpu_to_le32(current->egid);
+	dout(10, "create_request euid.egid %d.%d\n", 
+	     current->euid, current->egid);
 
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
@@ -892,20 +926,26 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
 	/* insert trace into our cache */
-	err = ceph_fill_trace(mdsc->client->sb, req);
+	err = ceph_fill_trace(mdsc->client->sb, req, req->r_session);
 	if (err)
 		goto done;
-	if (result == 0 && req->r_expects_cap) {
-		cap = le32_to_cpu(rinfo->head->file_caps);
-		capseq = le32_to_cpu(rinfo->head->file_caps_seq);
-		req->r_cap = ceph_add_cap(req->r_last_inode,
-					  req->r_session,
-					  cap, capseq);
-		if (IS_ERR(req->r_cap)) {
-			err = PTR_ERR(req->r_cap);
-			req->r_cap = 0;
-			goto done;
+	if (result == 0) {
+		/* caps? */
+		if (req->r_expects_cap) {
+			cap = le32_to_cpu(rinfo->head->file_caps);
+			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
+			req->r_cap = ceph_add_cap(req->r_last_inode,
+						  req->r_session,
+						  cap, capseq);
+			if (IS_ERR(req->r_cap)) {
+				err = PTR_ERR(req->r_cap);
+				req->r_cap = 0;
+				goto done;
+			}
 		}
+
+		/* readdir result? */
+		ceph_readdir_prepopulate(req);
 	}
 
 done:
@@ -1088,11 +1128,13 @@ retry:
 		rec = p;
 		p += sizeof(*rec);
 		BUG_ON(p > end);
-		rec->wanted = cpu_to_le32(ceph_caps_wanted(ci));
-		rec->issued = cpu_to_le32(ceph_caps_issued(ci));
+		spin_lock(&ci->vfs_inode.i_lock);
+		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
+		rec->issued = cpu_to_le32(__ceph_caps_issued(ci));
 		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
 		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
 		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
+		spin_unlock(&ci->vfs_inode.i_lock);
 		dentry = d_find_alias(&ci->vfs_inode);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {
@@ -1197,10 +1239,10 @@ void check_new_map(struct ceph_mds_client *mdsc,
 
 /* caps */
 
-void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-		  int wanted, __u32 seq, __u64 size, __u64 max_size, 
-		  struct timespec *mtime, struct timespec *atime,
-		  int mds)
+void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
+			    int wanted, __u32 seq, __u64 size, __u64 max_size, 
+			    struct timespec *mtime, struct timespec *atime,
+			    int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1284,7 +1326,8 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, max_size, 0, 0, mds);
+		ceph_mdsc_send_cap_ack(mdsc, ino, 0, 0, seq, 
+				       size, 0, 0, 0, mds);
 		return;
 	}
 
@@ -1312,36 +1355,6 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 bad:
 	dout(10, "corrupt filecaps message\n");
 	return;
-}
-
-int ceph_mdsc_update_cap_wanted(struct ceph_inode_info *ci, int wanted)
-{
-	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_inode_cap *cap;
-	struct ceph_mds_session *session;
-	struct list_head *p;
-
-	dout(10, "update_cap_wanted %d -> %d\n", ci->i_cap_wanted, wanted);
-
-	list_for_each(p, &ci->i_caps) {
-		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
-
-		session = __get_session(mdsc, cap->mds);
-		BUG_ON(!session);
-
-		cap->caps &= wanted;  /* drop caps we don't want */
-		send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), cap->caps, wanted,
-			     cap->seq, ci->vfs_inode.i_size, ci->i_max_size,
-			     &ci->vfs_inode.i_mtime, &ci->vfs_inode.i_atime, 
-			     cap->mds);
-	}
-
-	ci->i_cap_wanted = wanted;
-	if (wanted == 0)
-		ceph_remove_all_caps(ci);
-
-	return 0;
 }
 
 int send_renewcaps(struct ceph_mds_client *mdsc, int mds)
@@ -1378,6 +1391,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
 	struct inode *inode;
+	struct ceph_mds_session *session;
 	struct ceph_inode_info *ci;
 	struct dentry *parent, *dentry;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
@@ -1397,6 +1411,14 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dname.name = (void *)(h + 1);
 	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(__u32);
 
+	/* find session */
+	session = __get_session(mdsc, mds);
+	if (!session) {
+		dout(10, "WTF, got lease but no session for mds%d\n", mds);
+		return;
+	}
+	session->s_cap_seq++;
+
 	/* lookup inode */
 	inot = ceph_ino_to_ino(ino);
 #if BITS_PER_LONG == 64
@@ -1413,8 +1435,12 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		goto release;
 	}
 
+	/* inode */
+	ci = ceph_inode(inode);
+	ceph_revoke_inode_lease(ci, mask);
+
+	/* dentry */
 	if (mask & CEPH_LOCK_DN) {
-		/* dentry */
 		parent = d_find_alias(inode);
 		if (!parent) {
 			dout(10, "no parent dentry on inode %p\n", inode);
@@ -1424,17 +1450,13 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dentry = d_lookup(parent, &dname);
 		if (!dentry)
 			goto release;
-		dentry->d_time = 0;
+		ceph_revoke_dentry_lease(dentry);
 		dout(10, "lease revoked on dentry %p\n", dentry);
-	} else {
-		/* inode */
-		ci = ceph_inode(inode);
-		ci->i_lease_mask &= ~mask;
-		dout(10, "lease mask %d revoked on inode %p, still have %d\n", 
-		     mask, inode, ci->i_lease_mask);
-	}
+		dput(dentry);
+	} 
 
 release:
+	iput(inode);
 	dout(10, "sending release\n");
 	h->action = CEPH_MDS_LEASE_RELEASE;
 	ceph_msg_get(msg);
@@ -1447,6 +1469,65 @@ bad:
 
 
 /*
+ * pass inode always.  dentry is optional.
+ */
+void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
+			     struct dentry *dentry, int mask)
+{
+	struct ceph_msg *msg;
+	struct ceph_mds_lease *lease;
+	struct ceph_inode_info *ci;
+	struct ceph_dentry_info *di;
+	int origmask = mask;
+	int mds = -1;
+	int len = sizeof(*lease) + sizeof(__u32);
+	int dnamelen = 0;
+	__u64 ino;
+
+	BUG_ON(inode == 0);
+	if ((mask & CEPH_LOCK_DN) && dentry->d_fsdata) {
+		di = ceph_dentry(dentry);
+		mds = di->lease_session->s_mds;
+		if (mds >= 0 && time_before(jiffies, dentry->d_time)) {
+			dnamelen = dentry->d_name.len;
+			len += dentry->d_name.len;
+		} else
+			mask &= ~CEPH_LOCK_DN;  /* nothing to release */
+	} 
+	ci = ceph_inode(inode);
+	ino = ci->i_ceph_ino;
+	if (ci->i_lease_session && time_after(ci->i_lease_ttl, jiffies)) {
+		mask &= ci->i_lease_mask;     /* lease is valid */
+		mds = ci->i_lease_session->s_mds;
+	} else
+		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
+	if (mask == 0) {
+		dout(10, "lease_release inode %p (%d) dentry %p -- "
+		     "no lease on %d \n",
+		     inode, ci->i_lease_mask, dentry, origmask);
+		return;  /* nothing to drop */
+	}
+	BUG_ON(mds < 0);
+
+	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n", inode,
+	     dentry, mask, mds);
+
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, 0);
+	if (IS_ERR(msg))
+		return;
+	lease = msg->front.iov_base;
+	lease->action = CEPH_MDS_LEASE_RELEASE;
+	lease->mask = mask;
+	lease->ino = cpu_to_le64(ino); /* ?? */
+	*(__le32*)(lease+1) = cpu_to_le32(dnamelen);
+	if (dentry)
+		memcpy((void *)(lease + 1) + 4, dentry->d_name.name, dnamelen);
+
+	send_msg_mds(mdsc, msg, mds);
+}
+
+
+/*
  * delayed work -- renew caps with mds
  */
 void schedule_delayed(struct ceph_mds_client *mdsc)
@@ -1454,23 +1535,18 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	/*
 	 * renew at 1/2 the advertised timeout period.
 	 */
-	unsigned hz = (HZ * mdsc->mdsmap->m_cap_bit_timeout) >> 1;
-	schedule_delayed_work(&mdsc->delayed_work, hz);
+	int delay = mdsc->mdsmap->m_cap_bit_timeout >> 2;
+	unsigned hz = round_jiffies_relative(HZ * delay);
+	int r;
+	dout(10, "schedule_delayed for %d seconds (%u hz)\n", delay, hz);
+	r = schedule_delayed_work(&mdsc->delayed_work, hz);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 void delayed_work(struct work_struct *work)
-#else
-void delayed_work(void *arg)
-#endif
 {
 	int i;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct ceph_mds_client *mdsc =
 		container_of(work, struct ceph_mds_client, delayed_work.work);
-#else
-	struct ceph_mds_client *mdsc = arg;
-#endif
 
 	dout(10, "delayed_work on %p\n", mdsc);
 
@@ -1502,11 +1578,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->last_requested_map = 0;
 	init_completion(&mdsc->map_waiters);
 	init_completion(&mdsc->session_close_waiters);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
-#else
-	INIT_WORK(&mdsc->delayed_work, delayed_work, mdsc);
-#endif
 }
 
 void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
@@ -1538,12 +1610,7 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 		spin_lock(&mdsc->lock);
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
-#else
-	cancel_delayed_work(&mdsc->delayed_work); /* cancel timer */
-	flush_scheduled_work();
-#endif
 	spin_unlock(&mdsc->lock);
 }
 
@@ -1560,8 +1627,15 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mdsmap *newmap, *oldmap;
 	int from = le32_to_cpu(msg->hdr.src.name.num);
 	int newstate;
+	struct ceph_fsid fsid;
 
-	ceph_decode_need(&p, end, 2*sizeof(__u32), bad);
+	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(__u32), bad);
+	ceph_decode_64(&p, fsid.major);
+	ceph_decode_64(&p, fsid.minor);
+	if (!ceph_fsid_equal(&fsid, &mdsc->client->monc.monmap->fsid)) {
+		derr(0, "got mdsmap with wrong fsid\n");
+		return;
+	}
 	ceph_decode_32(&p, epoch);
 	ceph_decode_32(&p, maplen);
 	dout(2, "handle_map epoch %u len %d\n", epoch, (int)maplen);

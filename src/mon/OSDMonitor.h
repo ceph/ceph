@@ -62,9 +62,6 @@ private:
   bool should_propose(double &delay);
 
   // ...
-  bool get_map_bl(epoch_t epoch, bufferlist &bl);
-  bool get_inc_map_bl(epoch_t epoch, bufferlist &bl);
-  
   void send_to_waiting();     // send current map to waiters.
   void send_full(entity_inst_t dest);
   void send_incremental(entity_inst_t dest, epoch_t since);

@@ -70,6 +70,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(osdmap); 
 
+  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    delete m;
+    return;
+  }
+
   if (m->get_last() <= osdmap->get_epoch()) {
     dout(3) << "handle_osd_map ignoring epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -107,7 +113,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       else {
         dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
         int mon = monmap->pick_mon();
-        messenger->send_message(new MOSDGetMap(osdmap->get_epoch()+1), 
+        messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1), 
                                 monmap->get_inst(mon));
         break;
       }
@@ -140,7 +146,7 @@ void Objecter::maybe_request_map()
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
   last_epoch_requested = osdmap->get_epoch()+1;
-  messenger->send_message(new MOSDGetMap(osdmap->get_epoch(), last_epoch_requested),
+  messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch(), last_epoch_requested),
 			  monmap->get_inst(monmap->pick_mon()));
 }
 
@@ -208,6 +214,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
     tids.swap( pg.active_tids );
     close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
     
+    dout(10) << "kick_requests pg " << pgid << " tids " << tids << dendl;
     for (set<tid_t>::iterator p = tids.begin();
          p != tids.end();
          p++) {
@@ -216,22 +223,33 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
       if (op_modify.count(tid)) {
         OSDModify *wr = op_modify[tid];
         op_modify.erase(tid);
-        
+
+	if (wr->onack)
+	  num_unacked--;
+	if (wr->oncommit)
+	  num_uncommitted--;
+	
         // WRITE
-        if (wr->tid_version.count(tid)) {
-          if (wr->op == CEPH_OSD_OP_WRITE &&
-              !g_conf.objecter_buffer_uncommitted) {
-            dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << dendl;
-          } else {
-            dout(3) << "kick_requests missing commit, replay write " << tid
-                    << " v " << wr->tid_version[tid] << dendl;
-            modifyx_submit(wr, wr->waitfor_commit[tid], tid);
-          }
-        } 
-        else if (wr->waitfor_ack.count(tid)) {
+	if (wr->waitfor_ack.count(tid)) {
           dout(3) << "kick_requests missing ack, resub write " << tid << dendl;
           modifyx_submit(wr, wr->waitfor_ack[tid], tid);
-        }
+        } else {
+	  assert(wr->waitfor_commit.count(tid));
+	  
+	  if (wr->tid_version.count(tid)) {
+	    if (wr->op == CEPH_OSD_OP_WRITE &&
+		!g_conf.objecter_buffer_uncommitted) {
+	      dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << dendl;
+	      assert(0);  // crap. fixme.
+	    } else {
+	      dout(3) << "kick_requests missing commit, replay write " << tid
+		      << " v " << wr->tid_version[tid] << dendl;
+	    }
+	  } else {
+	    dout(3) << "kick_requests missing commit, resub write " << tid << dendl;
+	  }
+	  modifyx_submit(wr, wr->waitfor_commit[tid], tid);
+        } 
       }
 
       else if (op_read.count(tid)) {
@@ -320,9 +338,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, Context *onfinish)
+tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, int flags, Context *onfinish)
 {
-  OSDStat *st = new OSDStat(size);
+  OSDStat *st = prepare_stat(size, flags);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
   st->extents.front().layout = ol;
   st->onfinish = onfinish;
@@ -334,7 +352,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
 {
   // find OSD
   ObjectExtent &ex = st->extents.front();
-  PG &pg = get_pg( ex.layout.ol_pgid );
+  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
 
   // pick tid
   last_tid++;
@@ -355,10 +373,17 @@ tid_t Objecter::stat_submit(OSDStat *st)
            << dendl;
 
   if (pg.acker() >= 0) {
-	MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
-						   ex.oid, ex.layout, osdmap->get_epoch(), 
-						   CEPH_OSD_OP_STAT);
+    int flags = st->flags;
+    if (st->onfinish) flags |= CEPH_OSD_OP_ACK;
 
+    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+			   ex.oid, ex.layout, osdmap->get_epoch(), 
+			   CEPH_OSD_OP_STAT, flags);
+    if (inc_lock > 0) {
+      st->inc_lock = inc_lock;
+      m->set_inc_lock(inc_lock);
+    }
+    
     messenger->send_message(m, osdmap->get_inst(pg.acker()));
   }
   
@@ -390,19 +415,25 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   if (pg.active_tids.empty()) close_pg( m->get_pg() );
   
   // success?
+  if (m->get_result() == -EINCLOCKED &&
+      st->flags & CEPH_OSD_OP_INCLOCK_FAIL == 0) {
+    dout(7) << " got -EINCLOCKED, resubmitting" << dendl;
+    stat_submit(st);
+    delete m;
+    return;
+  }
   if (m->get_result() == -EAGAIN) {
     dout(7) << " got -EAGAIN, resubmitting" << dendl;
     stat_submit(st);
     delete m;
     return;
   }
-  //assert(m->get_result() >= 0);
 
   // ok!
   if (m->get_result() < 0) {
-	*st->size = -1;
+    *st->size = -1;
   } else {
-	*st->size = m->get_length();
+    *st->size = m->get_length();
   }
 
   // finish, clean up
@@ -411,8 +442,8 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   // done
   delete st;
   if (onfinish) {
-	onfinish->finish(m->get_result());
-	delete onfinish;
+    onfinish->finish(m->get_result());
+    delete onfinish;
   }
 
   delete m;
@@ -422,10 +453,10 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl,
+tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
                      Context *onfinish)
 {
-  OSDRead *rd = new OSDRead(bl);
+  OSDRead *rd = prepare_read(bl, flags);
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().layout = ol;
   readx(rd, onfinish);
@@ -449,7 +480,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry) 
 {
   // find OSD
-  PG &pg = get_pg( ex.layout.ol_pgid );
+  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
 
   // pick tid
   last_tid++;
@@ -471,15 +502,21 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
            << dendl;
 
   if (pg.acker() >= 0) {
+    int flags = rd->flags;
+    if (rd->onfinish) flags |= CEPH_OSD_OP_ACK;
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
-			   CEPH_OSD_OP_READ);
+			   CEPH_OSD_OP_READ, flags);
+    if (inc_lock > 0) {
+      rd->inc_lock = inc_lock;
+      m->set_inc_lock(inc_lock);
+    }
     m->set_length(ex.length);
     m->set_offset(ex.start);
     m->set_retry_attempt(retry);
     
     int who = pg.acker();
-    if (rd->balance_reads) {
+    if (rd->flags & CEPH_OSD_OP_BALANCE_READS) {
       int replica = messenger->get_myname().num() % pg.acting.size();
       who = pg.acting[replica];
       dout(-10) << "readx_submit reading from random replica " << replica
@@ -517,14 +554,27 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   // our op finished
   rd->ops.erase(tid);
 
+  // fail?
+  if (m->get_result() == -EINCLOCKED &&
+      rd->flags & CEPH_OSD_OP_INCLOCK_FAIL) {
+    dout(7) << " got -EINCLOCKED, failing" << dendl;
+    if (rd->onfinish) {
+      rd->onfinish->finish(-EINCLOCKED);
+      delete rd->onfinish;
+    }
+    delete rd;
+    delete m;
+    return;
+  }
+
   // success?
-  if (m->get_result() == -EAGAIN) {
-    dout(7) << " got -EAGAIN, resubmitting" << dendl;
+  if (m->get_result() == -EAGAIN ||
+      m->get_result() == -EINCLOCKED) {
+    dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
     readx_submit(rd, rd->ops[tid], true);
     delete m;
     return;
   }
-  //assert(m->get_result() >= 0);
 
   // what buffer offset are we?
   dout(7) << " got frag from " << m->get_oid() << " "
@@ -660,10 +710,10 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, 
+tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
-  OSDWrite *wr = new OSDWrite(bl);
+  OSDWrite *wr = prepare_write(bl, flags);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
@@ -674,10 +724,10 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
+tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol, int flags, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *z = new OSDModify(CEPH_OSD_OP_ZERO);
+  OSDModify *z = prepare_modify(CEPH_OSD_OP_ZERO, flags);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
   modifyx(z, onack, oncommit);
@@ -687,10 +737,10 @@ tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, ceph_object_layout ol, 
+tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *l = new OSDModify(op);
+  OSDModify *l = prepare_modify(op, flags);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().layout = ol;
   modifyx(l, onack, oncommit);
@@ -719,7 +769,7 @@ tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 {
   // find
-  PG &pg = get_pg( ex.layout.ol_pgid );
+  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
     
   // pick tid
   tid_t tid;
@@ -729,15 +779,25 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     tid = ++last_tid;
   assert(client_inc >= 0);
 
-  // add to gather set
-  wr->waitfor_ack[tid] = ex;
-  wr->waitfor_commit[tid] = ex;
+  // add to gather set(s)
+  int flags = wr->flags;
+  if (wr->onack) {
+    flags |= CEPH_OSD_OP_ACK;
+    wr->waitfor_ack[tid] = ex;
+    ++num_unacked;
+  } else {
+    dout(20) << " note: not requesting ack" << dendl;
+  }
+  if (wr->oncommit) {
+    flags |= CEPH_OSD_OP_SAFE;
+    wr->waitfor_commit[tid] = ex;
+    ++num_uncommitted;
+  } else {
+    dout(20) << " note: not requesting commit" << dendl;
+  }
   op_modify[tid] = wr;
   pg.active_tids.insert(tid);
   pg.last = g_clock.now();
-
-  ++num_unacked;
-  ++num_uncommitted;
 
   // send?
   dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
@@ -749,7 +809,11 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   if (pg.primary() >= 0) {
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
-			   wr->op);
+			   wr->op, flags);
+    if (inc_lock > 0) {
+      wr->inc_lock = inc_lock;
+      m->set_inc_lock(inc_lock);
+    }
     m->set_length(ex.length);
     m->set_offset(ex.start);
     if (usetid > 0)
@@ -816,43 +880,50 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     delete m;
     return;
   }
+  
+  int rc = 0;
+  if (m->get_result() == -EINCLOCKED && wr->flags & CEPH_OSD_OP_INCLOCK_FAIL) {
+    dout(7) << " got -EINCLOCKED, failing" << dendl;
+    rc = -EINCLOCKED;
+    if (wr->onack) {
+      onack = wr->onack;
+      wr->onack = 0;
+      num_unacked--;
+    }
+    if (wr->oncommit) {
+      oncommit = wr->oncommit;
+      wr->oncommit = 0;
+      num_uncommitted--;
+    }
+    goto done;
+  }
+
+  if (m->get_result() == -EAGAIN ||
+      m->get_result() == -EINCLOCKED) {
+    dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
+    if (wr->onack) num_unacked--;
+    if (wr->oncommit) num_uncommitted--;
+    if (wr->waitfor_ack.count(tid)) 
+      modifyx_submit(wr, wr->waitfor_ack[tid]);
+    else if (wr->waitfor_commit.count(tid)) 
+      modifyx_submit(wr, wr->waitfor_commit[tid]);
+    else assert(0);
+    delete m;
+    return;
+  }
 
   assert(m->get_result() >= 0);
 
-  // ack or safe?
-  if (m->is_safe()) {
-    assert(wr->tid_version.count(tid) == 0 ||
-           m->get_version() == wr->tid_version[tid]);
-
-    // remove from tid/osd maps
-    assert(pg.active_tids.count(tid));
-    pg.active_tids.erase(tid);
-    dout(15) << "handle_osd_modify_reply pg " << m->get_pg() << " still has " << pg.active_tids << dendl;
-    if (pg.active_tids.empty()) close_pg( m->get_pg() );
-
-    // commit.
-    op_modify.erase( tid );
+  // ack|commit -> ack
+  if (wr->waitfor_ack.count(tid)) {
     wr->waitfor_ack.erase(tid);
-    wr->waitfor_commit.erase(tid);
-
-    num_uncommitted--;
-
-    if (wr->waitfor_commit.empty()) {
-      onack = wr->onack;
-      oncommit = wr->oncommit;
-      delete wr;
-    }
-  } else {
-    // ack.
-    assert(wr->waitfor_ack.count(tid));
-    wr->waitfor_ack.erase(tid);
-    
     num_unacked--;
-
+    dout(15) << "handle_osd_modify_reply ack" << dendl;
+    
     if (wr->tid_version.count(tid) &&
-        wr->tid_version[tid].version != m->get_version().version) {
+	wr->tid_version[tid].version != m->get_version().version) {
       dout(-10) << "handle_osd_modify_reply WARNING: replay of tid " << tid 
-                << " did not achieve previous ordering" << dendl;
+		<< " did not achieve previous ordering" << dendl;
     }
     wr->tid_version[tid] = m->get_version();
     
@@ -862,22 +933,50 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
       
       // buffer uncommitted?
       if (!g_conf.objecter_buffer_uncommitted &&
-          wr->op == CEPH_OSD_OP_WRITE) {
-        // discard buffer!
-        ((OSDWrite*)wr)->bl.clear();
+	  wr->op == CEPH_OSD_OP_WRITE) {
+	// discard buffer!
+	((OSDWrite*)wr)->bl.clear();
       }
     }
+  }
+  if (m->is_safe()) {
+    // safe
+    assert(wr->tid_version.count(tid) == 0 ||
+           m->get_version() == wr->tid_version[tid]);
+
+    wr->waitfor_commit.erase(tid);
+    num_uncommitted--;
+    dout(15) << "handle_osd_modify_reply safe" << dendl;
+    
+    if (wr->waitfor_commit.empty()) {
+      oncommit = wr->oncommit;
+      wr->oncommit = 0;
+    }
+  }
+
+  // done?
+ done:
+  if (wr->onack == 0 && wr->oncommit == 0) {
+    // remove from tid/osd maps
+    assert(pg.active_tids.count(tid));
+    pg.active_tids.erase(tid);
+    dout(15) << "handle_osd_modify_reply completed.  pg " << m->get_pg()
+	     << " still has " << pg.active_tids << dendl;
+    if (pg.active_tids.empty()) 
+      close_pg( m->get_pg() );
+    op_modify.erase( tid );
+    delete wr;
   }
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
 
   // do callbacks
   if (onack) {
-    onack->finish(0);
+    onack->finish(rc);
     delete onack;
   }
   if (oncommit) {
-    oncommit->finish(0);
+    oncommit->finish(rc);
     delete oncommit;
   }
 
@@ -906,7 +1005,8 @@ void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_in
       dout(0) << "ms_handle_failure " << dest << " inst " << inst 
 	      << ", dropping, reporting to mon" << mon 
 	      << dendl;
-      messenger->send_message(new MOSDFailure(messenger->get_myinst(), inst, osdmap->get_epoch()), 
+      messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), inst, 
+					      osdmap->get_epoch()), 
 			      monmap->get_inst(mon));
     }
     delete m;
@@ -915,4 +1015,18 @@ void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_in
             << ", dropping" << dendl;
     delete m;
   }
+}
+
+
+void Objecter::dump_active()
+{
+  dout(10) << "dump_active" << dendl;
+  
+  for (hash_map<tid_t,OSDStat*>::iterator p = op_stat.begin(); p != op_stat.end(); p++)
+    dout(10) << " stat " << p->first << dendl;
+  for (hash_map<tid_t,OSDRead*>::iterator p = op_read.begin(); p != op_read.end(); p++)
+    dout(10) << " read " << p->first << dendl;
+  for (hash_map<tid_t,OSDModify*>::iterator p = op_modify.begin(); p != op_modify.end(); p++)
+    dout(10) << " modify " << p->first << dendl;
+
 }

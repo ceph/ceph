@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
+#include <linux/pagemap.h>
 
 #include "messenger.h"
 #include "mon_client.h"
@@ -19,13 +20,11 @@ extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
 
-extern int ceph_lookup_cache;
-
 #define CEPH_DUMP_ERROR_ALWAYS
 
 #define dout(x, args...) do {						\
-		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
-		    (ceph_debug < 0 && x <= DOUT_VAR))			\
+		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
+		    (DOUT_VAR < 0 && x <= ceph_debug))			\
 			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 
@@ -35,13 +34,15 @@ extern int ceph_lookup_cache;
 	} while (0)
 #else
 #define derr(x, args...) do {						\
-		if ((ceph_debug >= 0 && x <= ceph_debug) ||		\
-		    (ceph_debug < 0 && x <= DOUT_VAR))			\
+		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
+		    (DOUT_VAR < 0 && x <= ceph_debug))			\
 			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
 	} while (0)
 #endif
 
 #define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
+#define CEPH_BLOCK_SHIFT 20    /* 1 MB */
+#define CEPH_BLOCK  (1 << CEPH_BLOCK_SHIFT)
 
 #define IPQUADPORT(n)							\
 	(unsigned int)((n.sin_addr.s_addr)) & 0xFF,			\
@@ -65,14 +66,7 @@ struct ceph_mount_args {
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
 	char path[100];
-};
-
-
-enum {
-	MOUNTING,
-	MOUNTED,
-	UNMOUNTING,
-	UNMOUNTED
+	int wsize;
 };
 
 /*
@@ -97,12 +91,14 @@ struct ceph_client {
 	struct ceph_mds_client mdsc;
 	struct ceph_osd_client osdc;
 
+	/* writeback */
+	struct workqueue_struct *wb_wq;
+
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;
 	int num_sb;      /* ref count (for each sb_info that points to me) */
 	struct list_head sb_list;
 };
-
 
 /*
  * CEPH per-mount superblock info
@@ -118,7 +114,8 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
 
 struct ceph_inode_cap {
 	int mds;    /* -1 if not used */
-	int caps;
+	int issued;       /* latest, from the mds */
+	int implemented;  /* what we've implemneted (for tracking revocation) */
 	u64 seq;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
@@ -148,7 +145,9 @@ struct ceph_inode_info {
 	char *i_symlink;
 
 	int i_lease_mask;
+	struct ceph_mds_session *i_lease_session;
 	long unsigned i_lease_ttl;  /* jiffies */
+	struct list_head i_lease_item; /* mds session list */
 
 	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
 	int i_frag_map_nr;
@@ -159,13 +158,18 @@ struct ceph_inode_info {
 	wait_queue_head_t i_cap_wq;
 
 	int i_nr_by_mode[4];
-	int i_cap_wanted;      /* what we've told the mds(s) */
-	loff_t i_max_size;     /* size authorized by mds */
+	loff_t i_max_size;      /* size authorized by mds */
+	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
+	loff_t i_wanted_max_size;  /* offset we'd like to write too */
+	loff_t i_requested_max_size;  /* max_size we've requested */
 	struct timespec i_old_atime;
 
+	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
 
 	unsigned long i_hashval;
+
+	struct work_struct i_wb_work;  /* writeback work */
 
 	struct inode vfs_inode; /* at end */
 };
@@ -174,6 +178,27 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 {
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
+
+struct ceph_dentry_info {
+	struct dentry *dentry;
+	struct ceph_mds_session *lease_session;
+	struct list_head lease_item; /* mds session list */
+};
+
+static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
+{
+	return (struct ceph_dentry_info *)dentry->d_fsdata;
+}
+
+extern void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask);
+extern void ceph_revoke_dentry_lease(struct dentry *dentry);
+
+static inline void ceph_queue_writeback(struct ceph_client *cl, 
+					struct ceph_inode_info *ci)
+{
+	queue_work(cl->wb_wq, &ci->i_wb_work);
+}
+
 
 /*
  * ino_t is <64 bits on many architectures... blech
@@ -184,7 +209,6 @@ static inline ino_t ceph_ino_to_ino(u64 cephino)
 #if BITS_PER_LONG == 32
 	ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
 #endif
-
 	return ino;
 }
 
@@ -198,7 +222,6 @@ static inline void ceph_set_ino(struct inode *inode, __u64 ino)
 static inline int ceph_set_ino_cb(struct inode *inode, void *data)
 {
 	ceph_set_ino(inode, *(__u64 *)data);
-
 	return 0;
 }
 
@@ -218,9 +241,32 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
 /*
  * caps helpers
  */
-extern int ceph_caps_issued(struct ceph_inode_info *ci);
+extern int __ceph_caps_issued(struct ceph_inode_info *ci);
 
-static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
+static inline int ceph_caps_issued(struct ceph_inode_info *ci)
+{
+	int issued;
+	spin_lock(&ci->vfs_inode.i_lock);
+	issued = __ceph_caps_issued(ci);
+	spin_unlock(&ci->vfs_inode.i_lock);
+	return issued;
+}
+
+static inline int __ceph_caps_used(struct ceph_inode_info *ci)
+{
+	int used = 0;
+	if (ci->i_rd_ref)
+		used |= CEPH_CAP_RD;
+	if (ci->i_rdcache_ref)
+		used |= CEPH_CAP_RDCACHE;
+	if (ci->i_wr_ref)
+		used |= CEPH_CAP_WR;
+	if (ci->i_wrbuffer_ref)
+		used |= CEPH_CAP_WRBUFFER;
+	return used;
+}
+
+static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 {
 	int want = 0;
 	if (ci->i_nr_by_mode[0])
@@ -236,18 +282,12 @@ static inline int ceph_caps_wanted(struct ceph_inode_info *ci)
 	return want;
 }
 
-static inline int ceph_caps_used(struct ceph_inode_info *ci)
+static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
-	int used = 0;
-	if (ci->i_rd_ref)
-		used |= CEPH_CAP_RD;
-	if (ci->i_rdcache_ref)
-		used |= CEPH_CAP_RDCACHE;
-	if (ci->i_wr_ref)
-		used |= CEPH_CAP_WR;
-	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_WRBUFFER;
-	return used;
+	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
+	if (w & CEPH_CAP_WRBUFFER)
+		w |= CEPH_CAP_EXCL;  /* want EXCL if we have dirty data */
+	return w;
 }
 
 static inline int ceph_file_mode(int flags)
@@ -260,9 +300,7 @@ static inline int ceph_file_mode(int flags)
 		return FILE_MODE_WRONLY;
 	if ((flags & O_ACCMODE) == O_RDONLY)
 		return FILE_MODE_RDONLY;
-	BUG_ON(1);
-
-	return 0; /* remove compilation warning */
+	return FILE_MODE_RDWR;  /* not -EINVAL under Linux, strangely */
 }
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -288,8 +326,11 @@ struct ceph_file_info {
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
  */
-static inline int calc_pages_for(int len, int off)
+static inline int calc_pages_for(int off, int len)
 {
+	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) - 
+		(off >> PAGE_CACHE_SHIFT);
+	/*
 	int nr = 0;
 	if (len == 0)
 		return 0;
@@ -298,6 +339,7 @@ static inline int calc_pages_for(int len, int off)
 	if (len & ~PAGE_MASK)
 		nr++;
 	return nr;
+	*/
 }
 
 
@@ -308,23 +350,30 @@ extern void ceph_destroy_client(struct ceph_client *cl);
 extern int ceph_mount(struct ceph_client *client, 
 		      struct ceph_mount_args *args, 
 		      struct vfsmount *mnt);
+extern void ceph_umount_start(struct ceph_client *cl);
 extern const char *ceph_msg_type_name(int type);
 
 
 /* inode.c */
-extern int ceph_get_inode(struct super_block *sb, u64 ino,
-			  struct inode **pinode);
+extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
+extern int ceph_fill_trace(struct super_block *sb, 
+			   struct ceph_mds_request *req,
+			   struct ceph_mds_session *session);
+extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 
 extern void ceph_update_inode_lease(struct inode *inode, 
 				    struct ceph_mds_reply_lease *lease,
+				    struct ceph_mds_session *seesion,
 				    unsigned long from_time);
 extern void ceph_update_dentry_lease(struct dentry *dentry, 
 				     struct ceph_mds_reply_lease *lease,
+				     struct ceph_mds_session *session,
 				     unsigned long from_time);
+extern int ceph_inode_lease_valid(struct inode *inode, int mask);
+extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
-extern struct ceph_inode_cap *ceph_find_cap(struct inode *inode, int want);
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
 					   u32 cap, u32 seq);
@@ -336,8 +385,15 @@ extern int ceph_handle_cap_grant(struct inode *inode,
 extern int ceph_handle_cap_trunc(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
-extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got);
+extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
+extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
+extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
+extern void ceph_check_caps(struct ceph_inode_info *ci);
+extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
+extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
+extern void ceph_inode_set_size(struct inode *inode, loff_t size);
+extern void ceph_inode_writeback(struct work_struct *work);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
@@ -352,7 +408,7 @@ extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-			    struct nameidata *nd);
+			    struct nameidata *nd, int mode);
 extern int ceph_release(struct inode *inode, struct file *filp);
 extern int ceph_inode_revalidate(struct inode *inode, int mask);
 
@@ -363,7 +419,6 @@ extern const struct file_operations ceph_dir_fops;
 extern struct dentry_operations ceph_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
-extern int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req);
 extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int m);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {

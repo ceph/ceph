@@ -152,8 +152,8 @@ static inline int ceph_stable_mod(int x, int b, int bmask) {
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	union ceph_pg ol_pgid;
-	__u32         ol_stripe_unit;  
+	__le64 ol_pgid;
+	__le32 ol_stripe_unit;
 } __attribute__ ((packed));
 
 /*
@@ -197,11 +197,13 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_CLIENT 4
 #define CEPH_ENTITY_TYPE_ADMIN  5
 
-#define CEPH_MSGR_TAG_READY   1  /* server -> client + cseq: ready for messages */
-#define CEPH_MSGR_TAG_REJECT  2  /* server -> client + cseq: decline socket */
-#define CEPH_MSGR_TAG_MSG     3  /* message */
-#define CEPH_MSGR_TAG_ACK     4  /* message ack */
-#define CEPH_MSGR_TAG_CLOSE   5  /* closing pipe */
+#define CEPH_MSGR_TAG_READY         1  /* server -> client: ready for messages */
+#define CEPH_MSGR_TAG_RESETSESSION  2  /* server -> client: reset, try again */
+#define CEPH_MSGR_TAG_WAIT          3  /* server -> client: wait for racing incoming connection */
+#define CEPH_MSGR_TAG_RETRY         4  /* server -> client + cseq: try again with higher cseq */
+#define CEPH_MSGR_TAG_CLOSE         5  /* closing pipe */
+#define CEPH_MSGR_TAG_MSG          10  /* message */
+#define CEPH_MSGR_TAG_ACK          11  /* message ack */
 
 
 /*
@@ -284,6 +286,17 @@ struct ceph_statfs {
 	__le64 f_objects;
 };
 
+struct ceph_osd_getmap {
+	struct ceph_fsid fsid;
+	__le64 start, want;
+} __attribute__ ((packed));
+
+struct ceph_mds_getmap {
+	struct ceph_fsid fsid;
+	__le64 have;
+} __attribute__ ((packed));
+
+
 /*
  * mds states 
  *   > 0 -> in
@@ -340,6 +353,9 @@ struct ceph_statfs {
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
 #define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
 
+#define CEPH_UTIME_ATIME		1
+#define CEPH_UTIME_MTIME		2
+#define CEPH_UTIME_CTIME		4
 
 /* client_session */
 enum {
@@ -395,7 +411,6 @@ struct ceph_mds_request_head {
 	__u32 op;
 	__u32 caller_uid, caller_gid;
 
-	// fixed size arguments.  in a union.
 	union { 
 		struct {
 			__u32 mask;
@@ -409,7 +424,9 @@ struct ceph_mds_request_head {
 		struct {
 			struct ceph_timespec mtime;
 			struct ceph_timespec atime;
-		} utime;
+			struct ceph_timespec ctime;
+			__u32 mask;
+		} __attribute__ ((packed)) utime;
 		struct {
 			__u32 mode;
 		} chmod; 
@@ -431,7 +448,7 @@ struct ceph_mds_request_head {
 		struct {
 			__s64 length;
 		} truncate;
-	} args;
+	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
 
@@ -502,7 +519,7 @@ struct ceph_mds_file_caps {
 	__le64 ino;
 	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
-	struct ceph_timespec mtime, atime;
+	struct ceph_timespec mtime, atime, ctime;
 } __attribute__ ((packed));
 
 
@@ -548,7 +565,6 @@ enum {
 	CEPH_OSD_OP_RDUNLOCK   = 23,
 	CEPH_OSD_OP_UPLOCK     = 24,
 	CEPH_OSD_OP_DNLOCK     = 25,
-	CEPH_OSD_OP_MININCLOCK = 26, /* minimum incarnation lock */
 
 	CEPH_OSD_OP_PULL       = 30,
 	CEPH_OSD_OP_PUSH       = 31,
@@ -561,9 +577,11 @@ enum {
  * osd op flags
  */
 enum {
-	CEPH_OSD_OP_ACK = 1,   /* want (or is) "ack" ack */
-	CEPH_OSD_OP_SAFE = 2,  /* want (or is) "safe" ack */
-	CEPH_OSD_OP_RETRY = 4  /* resend attempt */
+	CEPH_OSD_OP_ACK = 1,          /* want (or is) "ack" ack */
+	CEPH_OSD_OP_SAFE = 2,         /* want (or is) "safe" ack */
+	CEPH_OSD_OP_RETRY = 4,        /* resend attempt */
+	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
+	CEPH_OSD_OP_BALANCE_READS = 16
 };
 
 struct ceph_osd_peer_stat {
@@ -580,14 +598,15 @@ struct ceph_osd_peer_stat {
 struct ceph_osd_request_head {
 	struct ceph_entity_inst   client_inst;
 	ceph_tid_t                tid;
-	__u32                     client_inc;
-	__u32                     op;
-	__u64                     offset, length;
+	__le32                    client_inc;
+	__le32                    op;
+	__le64                    offset, length;
 	struct ceph_object        oid;
 	struct ceph_object_layout layout;
 	ceph_epoch_t              osdmap_epoch;
 
-	__u32                     flags;
+	__le32                    flags;
+	__le32                    inc_lock;
 
 	struct ceph_eversion      reassert_version;
 
@@ -598,13 +617,13 @@ struct ceph_osd_request_head {
 
 struct ceph_osd_reply_head {
 	ceph_tid_t           tid;
-	__u32                op;
-	__u32                flags;
+	__le32               op;
+	__le32               flags;
 	struct ceph_object   oid;
 	struct ceph_object_layout layout;
 	ceph_epoch_t         osdmap_epoch;
-	__s32                result;
-	__u64                offset, length;
+	__le32               result;
+	__le64               offset, length;
 	struct ceph_eversion reassert_version;
 } __attribute__ ((packed));
 

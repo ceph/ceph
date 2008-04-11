@@ -289,6 +289,11 @@ void CDir::remove_dentry(CDentry *dn)
   //assert(nnull == null_items.size());         
 }
 
+void CDir::link_remote_inode(CDentry *dn, CInode *in)
+{
+  link_remote_inode(dn, in->ino(), MODE_TO_DT(in->get_projected_inode()->mode));
+}
+
 void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 {
   dout(12) << "link_remote_inode " << *dn << " remote " << ino << dendl;
@@ -854,7 +859,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
 			      0, 0,   // whole object
 			      cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										   g_default_mds_dir_layout ),
-			      &fin->bl,
+			      &fin->bl, 0,
 			      fin );
 }
 
@@ -1190,7 +1195,7 @@ void CDir::_commit(version_t want)
 			       0, bl.length(),
 			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										    g_default_mds_dir_layout ),
-			       bl,
+			       bl, 0,
 			       NULL, new C_Dir_Committed(this, version) );
 }
 

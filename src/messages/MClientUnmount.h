@@ -20,21 +20,11 @@
 class MClientUnmount : public Message {
 public:
   MClientUnmount() : Message(CEPH_MSG_CLIENT_UNMOUNT) { }
-  /*
-  MClientUnmount(entity_inst_t i) : 
-    Message(CEPH_MSG_CLIENT_UNMOUNT),
-    inst(i) { }
-  */
-  
+ 
   const char *get_type_name() { return "client_unmount"; }
 
-  void decode_payload() { 
-    //int off = 0;
-    //::_decode(inst, payload, off);
-  }
-  void encode_payload() { 
-    //::_encode(inst, payload);
-  }
+  void decode_payload() { }
+  void encode_payload() { }
 };
 
 #endif

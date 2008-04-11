@@ -98,7 +98,13 @@ struct DirStat {
 };
 
 struct InodeStat {
-  inode_t inode;
+  //inode_t inode;
+  inodeno_t ino;
+  ceph_file_layout layout;
+  utime_t ctime, mtime, atime;
+  unsigned mode, uid, gid, nlink, rdev;
+  loff_t size, max_size;
+  
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
 
@@ -111,18 +117,18 @@ struct InodeStat {
   void _decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
     ::_decode_simple(e, p);
-    inode.ino = le64_to_cpu(e.ino);
-    inode.layout = e.layout;
-    inode.ctime.decode_timeval(&e.ctime);
-    inode.mtime.decode_timeval(&e.mtime);
-    inode.atime.decode_timeval(&e.atime);
-    inode.mode = e.mode;
-    inode.uid = e.uid;
-    inode.gid = e.gid;
-    inode.nlink = e.nlink;
-    inode.size = e.size;
-    inode.max_size = e.max_size;
-    inode.rdev = e.rdev;
+    ino = le64_to_cpu(e.ino);
+    layout = e.layout;
+    ctime.decode_timeval(&e.ctime);
+    mtime.decode_timeval(&e.mtime);
+    atime.decode_timeval(&e.atime);
+    mode = e.mode;
+    uid = e.uid;
+    gid = e.gid;
+    nlink = e.nlink;
+    size = e.size;
+    max_size = e.max_size;
+    rdev = e.rdev;
 
     int n = e.fragtree.nsplits;
     while (n) {

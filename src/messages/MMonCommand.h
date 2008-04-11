@@ -22,13 +22,14 @@ using std::vector;
 
 class MMonCommand : public Message {
  public:
+  ceph_fsid fsid;
   entity_inst_t inst;
   vector<string> cmd;
 
   MMonCommand() : Message(MSG_MON_COMMAND) {}
-  MMonCommand(entity_inst_t i) : 
+  MMonCommand(ceph_fsid &f, entity_inst_t i) : 
     Message(MSG_MON_COMMAND),
-    inst(i) { }
+    fsid(f), inst(i) { }
   
   const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
@@ -41,11 +42,13 @@ class MMonCommand : public Message {
   }
   
   void encode_payload() {
+    ::_encode(fsid, payload);
     ::_encode(inst, payload);
     ::_encode(cmd, payload);
   }
   void decode_payload() {
     int off = 0;
+    ::_decode(fsid, payload, off);
     ::_decode(inst, payload, off);
     ::_decode(cmd, payload, off);
   }

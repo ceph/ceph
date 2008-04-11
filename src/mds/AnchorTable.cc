@@ -576,7 +576,7 @@ void AnchorTable::save(Context *onfinish)
   mds->objecter->write(oid,
 		       0, bl.length(),
 		       mds->objecter->osdmap->file_to_object_layout(oid, g_default_mds_anchortable_layout),
-		       bl, 
+		       bl, 0,
 		       NULL, new C_AT_Saved(this, version));
 }
 
@@ -617,7 +617,8 @@ void AnchorTable::load(Context *onfinish)
   mds->objecter->read(oid,
 		      0, 0,
 		      mds->objecter->osdmap->file_to_object_layout(oid, g_default_mds_anchortable_layout),
-		      &fin->bl, fin);
+		      &fin->bl, 0,
+		      fin);
 }
 
 void AnchorTable::_loaded(bufferlist& bl)
