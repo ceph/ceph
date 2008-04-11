@@ -1769,6 +1769,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
     return;
   }
 
+  mdr->now = g_clock.real_now();
+
   // build dir contents
   bufferlist dirbl, dnbl;
   DirStat::_encode(dirbl, dir, mds->get_nodeid());
