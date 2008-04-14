@@ -134,7 +134,7 @@ static void __add_connection(struct ceph_messenger *msgr,
 	atomic_inc(&con->nref);
 
 	if (test_and_clear_bit(ACCEPTING, &con->state)) {
-		list_del(&con->list_bucket);
+		list_del_init(&con->list_bucket);
 		put_connection(con);
 	} else {
 		list_add(&con->list_all, &msgr->con_all);
@@ -200,7 +200,7 @@ static void __remove_connection(struct ceph_messenger *msgr,
 				radix_tree_replace_slot(slot, 
 							con->list_bucket.next);
 			}
-			list_del(&con->list_bucket);
+			list_del_init(&con->list_bucket);
 		}
 	}
 	put_connection(con);
@@ -393,7 +393,7 @@ static void prepare_write_message(struct ceph_connection *con)
 					struct ceph_msg, list_head);
 
 	/* move to sending/sent list */
-	list_del(&m->list_head);
+	list_del_init(&m->list_head);
 	list_add_tail(&m->list_head, &con->out_sent);
 	con->out_msg = m;  /* FIXME: do we want to take a reference here? */
 
@@ -739,7 +739,7 @@ static void process_ack(struct ceph_connection *con, __u32 ack)
 			break;
 		dout(5, "got ack for seq %llu type %d at %p\n", seq,
 		     le32_to_cpu(m->hdr.type), m);
-		list_del(&m->list_head);
+		list_del_init(&m->list_head);
 		ceph_msg_put(m);
 	}
 }
@@ -805,7 +805,7 @@ static void reset_connection(struct ceph_connection *con)
 	while (!list_empty(&con->out_queue)) {
 		struct ceph_msg *m;
 		m = list_entry(con->out_queue.next, struct ceph_msg, list_head);
-		list_del(&m->list_head);
+		list_del_init(&m->list_head);
 		ceph_msg_put(m);
 	}
 	con->connect_seq = 0;
@@ -925,7 +925,7 @@ static void __replace_connection(struct ceph_messenger *msgr,
 	/* replace list entry */
 	spin_lock(&msgr->con_lock);
 	list_add(&new->list_bucket, &old->list_bucket);
-	list_del(&old->list_bucket);
+	list_del_init(&old->list_bucket);
 	spin_unlock(&msgr->con_lock);
 
 	set_bit(CLOSED, &old->state);
