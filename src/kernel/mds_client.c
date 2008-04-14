@@ -923,7 +923,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		goto done;
 	if (result == 0) {
 		/* caps? */
-		if (req->r_expects_cap) {
+		if (req->r_expects_cap && req->r_last_inode) {
 			cap = le32_to_cpu(rinfo->head->file_caps);
 			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
 			req->r_cap = ceph_add_cap(req->r_last_inode,

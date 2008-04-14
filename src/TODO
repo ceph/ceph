@@ -23,6 +23,7 @@ kernel client
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - trim expired leases so we don't indefinitely hold dcache/icache refs...
+- what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
