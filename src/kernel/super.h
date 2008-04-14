@@ -175,6 +175,7 @@ struct ceph_inode_info {
 	unsigned long i_hashval;
 
 	struct work_struct i_wb_work;  /* writeback work */
+	struct work_struct i_cap_work;  /* cap work */
 
 	struct inode vfs_inode; /* at end */
 };

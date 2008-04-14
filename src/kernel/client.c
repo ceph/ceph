@@ -202,6 +202,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	cl->msgr = ceph_messenger_create(myaddr);
 	if (IS_ERR(cl->msgr)) {
 		err = PTR_ERR(cl->msgr);
+		cl->msgr = 0;
 		goto fail;
 	}
 	cl->msgr->parent = cl;
@@ -238,9 +239,10 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
+	if (cl->wb_wq)
+		destroy_workqueue(cl->wb_wq);
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
-	destroy_workqueue(cl->wb_wq);
 	kfree(cl);
 	dout(10, "destroy_client %p done\n", cl);
 }
