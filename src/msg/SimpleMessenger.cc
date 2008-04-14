@@ -1167,7 +1167,8 @@ void Rank::Pipe::fault(bool onconnect)
     return;
   }
 
-  ::close(sd);
+  if (sd >= 0)
+    ::close(sd);
   sd = -1;
 
   // lossy channel?
@@ -1278,7 +1279,8 @@ void Rank::Pipe::stop()
 
   cond.Signal();
   state = STATE_CLOSED;
-  ::close(sd);
+  if (sd >= 0)
+    ::close(sd);
   sd = -1;
 
   // deactivate myself
