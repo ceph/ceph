@@ -399,7 +399,7 @@ public:
 	bl(l), ls(bl->_buffers), off(0), p(ip), p_off(po) { }
 
       iterator operator=(const iterator& other) {
-	return iterator(bl, off, p, p_off);
+	return iterator(other.bl, other.off, other.p, other.p_off);
       }
 
       unsigned get_off() { return off; }
@@ -549,6 +549,9 @@ public:
       other._len = t;
       _buffers.swap(other._buffers);
       append_buffer.swap(other.append_buffer);
+      //last_p.swap(other.last_p);
+      last_p = begin();
+      other.last_p = other.begin();
     }
 
     unsigned length() const {
@@ -584,6 +587,7 @@ public:
     void clear() {
       _buffers.clear();
       _len = 0;
+      last_p = begin();
     }
     void push_front(ptr& bp) {
       _buffers.push_front(bp);
@@ -665,6 +669,7 @@ public:
       _len += bl._len;
       _buffers.splice( _buffers.end(), bl._buffers );
       bl._len = 0;
+      bl.last_p = bl.begin();
     }
 
 
@@ -895,6 +900,8 @@ public:
       }
       
       // splice in *replace (implement me later?)
+
+      last_p = begin();  // just in case we were in the removed region.
     };
 
     void hexdump(std::ostream &out) {
