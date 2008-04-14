@@ -1562,8 +1562,8 @@ void delayed_work(struct work_struct *work)
 		spin_lock(&mdsc->lock);
 	}
 
-	schedule_delayed(mdsc);
 	spin_unlock(&mdsc->lock);
+	schedule_delayed(mdsc);
 }
 
 
@@ -1588,6 +1588,9 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 	int n;
 
 	dout(10, "stop\n");
+
+	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
+
 	spin_lock(&mdsc->lock);
 
 	/* close sessions, caps */
@@ -1611,7 +1614,6 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 		spin_lock(&mdsc->lock);
 	}
 
-	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
 	spin_unlock(&mdsc->lock);
 }
 
@@ -1682,13 +1684,15 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(2, "got first mdsmap %u\n", newmap->m_epoch);
 		mdsc->mdsmap = newmap;
 	}
+
 	/* stop asking */
 	ceph_monc_got_mdsmap(&mdsc->client->monc, newmap->m_epoch);
+
+	spin_unlock(&mdsc->lock);
 
 	/* (re)schedule work */
 	schedule_delayed(mdsc);
 
-	spin_unlock(&mdsc->lock);
 	complete(&mdsc->map_waiters);
 	return;
 
