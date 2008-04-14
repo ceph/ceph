@@ -809,7 +809,6 @@ retry:
 				dout(10, "inverting session/inode locking\n");
 				spin_unlock(&ci->vfs_inode.i_lock);
 				down(&session->s_mutex);
-				spin_unlock(&ci->vfs_inode.i_lock);
 				goto retry;
 			}
 		}
