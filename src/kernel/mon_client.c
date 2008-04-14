@@ -95,7 +95,7 @@ static void work_monc_request_mdsmap(struct work_struct *work)
 	dout(5, "work_monc_request_mdsmap from mon%d have %u\n", mon, 
 	     monc->have_mdsmap);
 
-	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(__u32), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, 0);
 	if (IS_ERR(msg))
 		return;
 	h = msg->front.iov_base;
@@ -124,7 +124,7 @@ void work_monc_request_osdmap(struct work_struct *work)
 	
 	dout(5, "ceph_monc_request_osdmap from mon%d have %u\n", mon, 
 	     monc->have_osdmap);
-	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, 2*sizeof(__u32), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, 0);
 	if (IS_ERR(msg))
 		return;
 	h = msg->front.iov_base;
