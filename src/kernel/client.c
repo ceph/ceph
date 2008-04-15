@@ -45,7 +45,8 @@ static void put_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_mount_args *args)
+static struct dentry *open_root_dentry(struct ceph_client *client, 
+				       struct ceph_mount_args *args)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req = 0;
@@ -55,7 +56,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_m
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 
+				       1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	req->r_expects_cap = 1;
@@ -76,7 +78,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_m
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct vfsmount *mnt)
+int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, 
+	       struct vfsmount *mnt)
 {
 	struct ceph_msg *mount_msg;
 	struct dentry *root;

@@ -46,20 +46,19 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 }
 
 
-static int ceph_init_file(struct inode *inode, struct file *file,
-				       int flags)
+static int ceph_init_file(struct inode *inode, struct file *file, int flags)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf;
-	int mode = ceph_file_mode(flags);
+	int fmode = ceph_file_mode(flags);
 
 	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
 	if (cf == NULL)
 		return -ENOMEM;
 	file->private_data = cf;
 
-	cf->mode = mode;
-	ceph_get_mode(ci, mode);
+	cf->mode = fmode;
+	ceph_get_mode(ci, fmode);
 	return 0;
 }
 
@@ -73,10 +72,15 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	int err;
+	int fmode, wantcaps;
 
 	/* filter out O_CREAT|O_EXCL; vfs did that already.  yuck. */
 	int flags = file->f_flags & ~(O_CREAT|O_EXCL);
-	int mode = ceph_file_mode(flags);
+	if (S_ISDIR(inode->i_mode))
+		flags = O_DIRECTORY;
+	
+	fmode = ceph_file_mode(flags);
+	wantcaps = ceph_caps_for_mode(fmode);
 
 	dout(5, "open inode %p ino %llx file %p\n", inode,
 	     ceph_ino(inode), file);
@@ -87,16 +91,16 @@ int ceph_open(struct inode *inode, struct file *file)
 
 	/* can we re-use existing caps? */
 	spin_lock(&inode->i_lock);
-	if ((__ceph_caps_issued(ci) & mode) == mode) {
-		dout(10, "open mode %d using existing caps on %p\n", 
-		     mode, inode);
+	if ((__ceph_caps_issued(ci) & wantcaps) == wantcaps) {
+		dout(10, "open fmode %d caps %d using existing on %p\n", 
+		     fmode, wantcaps, inode);
 		spin_unlock(&inode->i_lock);
 		err = ceph_init_file(inode, file, flags);
 		BUG_ON(err); /* fixme */
 		return 0;
 	} 
 	spin_unlock(&inode->i_lock);
-	dout(10, "open mode %d, don't have caps\n", mode);
+	dout(10, "open mode %d, don't have caps %d\n", fmode, wantcaps);
 
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req))
@@ -131,7 +135,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	int flags = nd->intent.open.flags;
 	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n", 
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
-	
+
 	/* do the open */
 	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
 	if (IS_ERR(req))
