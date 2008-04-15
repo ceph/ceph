@@ -210,7 +210,7 @@ class MClientReply : public Message {
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "creply(" << env.dst.name << "." << le64_to_cpu(st.tid);
+    o << "client_reply(" << env.dst.name << "." << le64_to_cpu(st.tid);
     o << " = " << st.result;
     if (st.result <= 0)
       o << " " << strerror(-st.result);

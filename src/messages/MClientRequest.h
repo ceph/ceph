@@ -195,7 +195,7 @@ public:
 
   const char *get_type_name() { return "creq"; }
   void print(ostream& out) {
-    out << "clientreq(" << get_client() 
+    out << "client_request(" << get_client() 
 	<< "." << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
     //if (!get_filepath().empty()) 
