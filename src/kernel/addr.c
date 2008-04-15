@@ -487,27 +487,6 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 
 
 
-/* 
- * page accounting
- */
-
-/*
-static int ceph_releasepage(struct page *page, gfp_t gfpmask)
-{
-	struct ceph_inode_info *ci = ceph_inode(page->mapping->host);
-	int last = 0;
-	spin_lock(&ci->vfs_inode.i_lock);
-	dout(10, "releasepage %p gfpmask %d : %d -> %d \n", page, gfpmask,
-	     ci->i_nr_pages, ci->i_nr_pages - 1);
-	if (--ci->i_nr_pages == 0)
-		last++;
-	spin_lock(&ci->vfs_inode.i_lock);
-	if (last)
-		ceph_check_caps_wanted(ci, gfpmask);
-	return 0;
-}
-*/
-
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
 	.readpages = ceph_readpages,
@@ -515,6 +494,4 @@ const struct address_space_operations ceph_aops = {
 	.writepages = ceph_writepages,
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
-//	.set_page_dirty = ceph_set_page_dirty,
-	//.releasepage = ceph_releasepage,
 };
