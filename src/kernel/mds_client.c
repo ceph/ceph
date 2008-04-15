@@ -267,8 +267,8 @@ void put_session(struct ceph_mds_session *s)
 	dout(10, "put_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref)) {
+		dout(10, "KFREE %p\n", s);
 		kfree(s);
-		s = NULL;
 	}
 }
 
@@ -414,7 +414,6 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_resend_mds = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
-	ceph_msg_get(msg);  /* grab reference */
 
 	return req;
 }
@@ -849,6 +848,7 @@ retry:
 	/* send and wait */
 	spin_unlock(&mdsc->lock);
 	dout(10, "do_request %p r_expects_cap=%d\n", req, req->r_expects_cap);
+	ceph_msg_get(req->r_request);
 	send_msg_mds(mdsc, req->r_request, mds);
 	wait_for_completion(&req->r_completion);
 	spin_lock(&mdsc->lock);

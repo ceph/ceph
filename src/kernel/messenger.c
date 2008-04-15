@@ -1243,9 +1243,10 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 
 
 /*
- * queue up an outgoing message
+ * queue up an outgoing message.  
  *
- * will take+drop msgr, then connection locks.
+ * this consumes a msg reference.  that is, if the caller wants to
+ * keep @msg around, it had better call ceph_msg_get first.
  */
 int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg, 
 		  unsigned long timeout)
@@ -1304,7 +1305,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	     le64_to_cpu(msg->hdr.seq),
 	     ceph_name_type_str(le32_to_cpu(msg->hdr.dst.name.type)),
 	     le32_to_cpu(msg->hdr.dst.name.num), con);
-	ceph_msg_get(msg);
+	//ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);
 	spin_unlock(&con->out_queue_lock);
 
@@ -1319,6 +1320,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 /*
  * construct a new message with given type, size
+ * the new msg has a ref count of 1.
  */
 struct ceph_msg *ceph_msg_new(int type, int front_len,
 			      int page_len, int page_off, struct page **pages)
@@ -1349,6 +1351,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->pages = pages;
 
 	INIT_LIST_HEAD(&m->list_head);
+	dout(0, "ceph_msg_new %p\n", m);
 	return m;
 
 out2:
@@ -1361,8 +1364,10 @@ out:
 void ceph_msg_put(struct ceph_msg *m)
 {
 	BUG_ON(atomic_read(&m->nref) <= 0);
+	dout(0, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
+	     atomic_read(&m->nref)-1);
 	if (atomic_dec_and_test(&m->nref)) {
-		dout(30, "ceph_msg_put last one on %p\n", m);
+		dout(0, "ceph_msg_put last one on %p\n", m);
 		BUG_ON(!list_empty(&m->list_head));
 		if (m->front.iov_base)
 			kfree(m->front.iov_base);

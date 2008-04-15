@@ -131,6 +131,8 @@ extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
+	printk("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
+	       atomic_read(&msg->nref)+1);
 	atomic_inc(&msg->nref);
 }
 extern void ceph_msg_put(struct ceph_msg *msg);
