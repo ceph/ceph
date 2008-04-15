@@ -117,6 +117,23 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n", 
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 	
+	/* can we re-use an existing CAP_PIN? */
+	if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode)) {
+		struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
+		spin_lock(&ci->vfs_inode.i_lock);
+		if (__ceph_caps_issued(ci) & CEPH_CAP_PIN) {
+			dout(10, "using existing CAP_PIN on %p\n",
+			     dentry->d_inode);
+			ci->i_nr_by_mode[FILE_MODE_PIN]++;
+			spin_unlock(&ci->vfs_inode.i_lock);
+			err = ceph_init_file(&ci->vfs_inode, file, flags);
+			BUG_ON(err); /* fixme */
+			return 0;
+		}
+		spin_unlock(&ci->vfs_inode.i_lock);
+	}
+
+	/* do the open */
 	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
