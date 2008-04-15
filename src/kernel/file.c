@@ -65,6 +65,7 @@ static int ceph_init_file(struct inode *inode, struct file *file,
 
 int ceph_open(struct inode *inode, struct file *file)
 {
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct dentry *dentry = list_entry(inode->i_dentry.next, struct dentry,
@@ -75,6 +76,7 @@ int ceph_open(struct inode *inode, struct file *file)
 
 	/* filter out O_CREAT|O_EXCL; vfs did that already.  yuck. */
 	int flags = file->f_flags & ~(O_CREAT|O_EXCL);
+	int mode = ceph_file_mode(flags);
 
 	dout(5, "open inode %p ino %llx file %p\n", inode,
 	     ceph_ino(inode), file);
@@ -82,6 +84,19 @@ int ceph_open(struct inode *inode, struct file *file)
 		dout(5, "open file %p is already opened\n", file);
 		return 0;
 	}
+
+	/* can we re-use existing caps? */
+	spin_lock(&inode->i_lock);
+	if ((__ceph_caps_issued(ci) & mode) == mode) {
+		dout(10, "open mode %d using existing caps on %p\n", 
+		     mode, inode);
+		spin_unlock(&inode->i_lock);
+		err = ceph_init_file(inode, file, flags);
+		BUG_ON(err); /* fixme */
+		return 0;
+	} 
+	spin_unlock(&inode->i_lock);
+	dout(10, "open mode %d, don't have caps\n", mode);
 
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req))
@@ -117,22 +132,6 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n", 
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 	
-	/* can we re-use an existing CAP_PIN? */
-	if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode)) {
-		struct ceph_inode_info *ci = ceph_inode(dentry->d_inode);
-		spin_lock(&ci->vfs_inode.i_lock);
-		if (__ceph_caps_issued(ci) & CEPH_CAP_PIN) {
-			dout(10, "using existing CAP_PIN on %p\n",
-			     dentry->d_inode);
-			ci->i_nr_by_mode[FILE_MODE_PIN]++;
-			spin_unlock(&ci->vfs_inode.i_lock);
-			err = ceph_init_file(&ci->vfs_inode, file, flags);
-			BUG_ON(err); /* fixme */
-			return 0;
-		}
-		spin_unlock(&ci->vfs_inode.i_lock);
-	}
-
 	/* do the open */
 	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
 	if (IS_ERR(req))
@@ -296,7 +295,7 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	}
  	spin_unlock(&inode->i_lock);
 	if (check)
-		ceph_check_caps(ci);
+		ceph_check_caps(ci, 1);
 
 	dout(10, "write trying to get caps. i_size %llu\n", inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,

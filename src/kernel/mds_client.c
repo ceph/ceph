@@ -848,6 +848,7 @@ retry:
 
 	/* send and wait */
 	spin_unlock(&mdsc->lock);
+	dout(10, "do_request %p r_expects_cap=%d\n", req, req->r_expects_cap);
 	send_msg_mds(mdsc, req->r_request, mds);
 	wait_for_completion(&req->r_completion);
 	spin_lock(&mdsc->lock);
@@ -898,6 +899,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(1, "handle_reply on unknown tid %llu\n", tid);
 		return;
 	}
+	dout(10, "handle_reply %p r_expects_cap=%d\n", req, req->r_expects_cap);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
 	req->r_session = __get_session(mdsc, mds);
 	BUG_ON(req->r_session == 0);

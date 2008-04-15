@@ -162,6 +162,7 @@ struct ceph_inode_info {
 	struct list_head i_caps;
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;
+	unsigned long i_hold_caps_until; /* jiffies */
 
 	int i_nr_by_mode[4];
 	loff_t i_max_size;      /* size authorized by mds */
@@ -176,7 +177,7 @@ struct ceph_inode_info {
 	unsigned long i_hashval;
 
 	struct work_struct i_wb_work;  /* writeback work */
-	struct work_struct i_cap_work;  /* cap work */
+	struct delayed_work i_cap_dwork;  /* cap work */
 
 	struct inode vfs_inode; /* at end */
 };
@@ -273,19 +274,34 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 	return used;
 }
 
+static inline int ceph_caps_for_mode(int mode)
+{
+	switch (mode) {
+	case FILE_MODE_PIN: 
+		return CEPH_CAP_PIN;
+	case FILE_MODE_RDONLY: 
+		return CEPH_CAP_PIN | 
+			CEPH_CAP_RD | CEPH_CAP_RDCACHE;
+	case FILE_MODE_RDWR:
+		return CEPH_CAP_PIN | 
+			CEPH_CAP_RD | CEPH_CAP_RDCACHE |
+			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
+			CEPH_CAP_EXCL;
+	case FILE_MODE_WRONLY:
+		return CEPH_CAP_PIN | 
+			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
+			CEPH_CAP_EXCL;
+	}
+	return 0;
+}
+
 static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 {
 	int want = 0;
-	if (ci->i_nr_by_mode[0])
-		want |= CEPH_CAP_PIN;
-	if (ci->i_nr_by_mode[1])
-		want |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
-	if (ci->i_nr_by_mode[2])
-		want |= CEPH_CAP_RD|CEPH_CAP_RDCACHE|
-			CEPH_CAP_WR|CEPH_CAP_WRBUFFER|
-			CEPH_CAP_EXCL;
-	if (ci->i_nr_by_mode[3])
-		want |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
+	int mode;
+	for (mode = 0; mode < 4; mode++)
+		if (ci->i_nr_by_mode[mode])
+			want |= ceph_caps_for_mode(mode);
 	return want;
 }
 
@@ -396,7 +412,8 @@ extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_check_caps(struct ceph_inode_info *ci);
+extern void ceph_cap_delayed_work(struct work_struct *work);
+extern void ceph_check_caps(struct ceph_inode_info *ci, int was_last);
 extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);

@@ -756,11 +756,27 @@ void ceph_remove_cap(struct ceph_inode_cap *cap)
 	iput(inode);
 }
 
+void ceph_cap_delayed_work(struct work_struct *work)
+{
+	struct ceph_inode_info *ci = container_of(work, 
+						  struct ceph_inode_info, 
+						  i_cap_dwork.work);
+	if (ci->i_hold_caps_until > jiffies) {
+		dout(10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
+		schedule_delayed_work(&ci->i_cap_dwork, 
+				      ci->i_hold_caps_until - jiffies);
+	} else {
+		dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
+		ceph_check_caps(ci, 0);
+	}
+}
+
 /*
  * examine currently used, wanted versus held caps.
  *  release, ack revoked caps to mds as appropriate.
+ * @was_last if caller just dropped a cap ref, and we probably want to delay
  */
-void ceph_check_caps(struct ceph_inode_info *ci)
+void ceph_check_caps(struct ceph_inode_info *ci, int was_last)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -778,6 +794,18 @@ retry:
 	spin_lock(&ci->vfs_inode.i_lock);
 	wanted = __ceph_caps_wanted(ci);
 	used = __ceph_caps_used(ci);
+	dout(10, "check_caps %p wanted %d used %d issued %d\n", &ci->vfs_inode, 
+	     wanted, used, __ceph_caps_issued(ci));
+
+	if (was_last) {
+		unsigned long until = round_jiffies(jiffies + HZ * 5);
+		if (until > ci->i_hold_caps_until) {
+			ci->i_hold_caps_until = until;
+			dout(10, "hold_caps_until %lu\n", until);
+			schedule_delayed_work(&ci->i_cap_dwork, 
+					      until - jiffies);
+		}
+	}
 
 	list_for_each(p, &ci->i_caps) {
 		int revoking, dropping;
@@ -807,6 +835,12 @@ retry:
 		
 		if ((cap->issued & ~wanted) == 0)
 			continue;     /* nothing extra, all good */
+		
+		if (jiffies < ci->i_hold_caps_until) {
+			/* delaying cap release for a bit */
+			dout(30, "delaying cap release\n");
+			continue;
+		}
 
 	ack:
 		/* take s_mutex, one way or another */
@@ -879,7 +913,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci);
+		ceph_check_caps(ci, 0);
 	} else
 		spin_unlock(&inode->i_lock);
 }
@@ -900,12 +934,14 @@ void ceph_put_mode(struct ceph_inode_info *ci, int mode)
 	int last = 0;
 
 	spin_lock(&ci->vfs_inode.i_lock);
+	dout(20, "put_mode %p mode %d %d -> %d\n", &ci->vfs_inode, mode,
+	     ci->i_nr_by_mode[mode], ci->i_nr_by_mode[mode]-1);
 	if (--ci->i_nr_by_mode[mode] == 0)
 		last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last)
-		ceph_check_caps(ci);
+		ceph_check_caps(ci, 1);
 }
 
 
@@ -1163,7 +1199,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	     last ? "last":"");
 	
 	if (last) 
-		ceph_check_caps(ci);
+		ceph_check_caps(ci, 1);
 }
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
@@ -1181,7 +1217,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	     last ? "last":"");
 	
 	if (last) 
-		ceph_check_caps(ci);
+		ceph_check_caps(ci, 1);
 }
 
 
