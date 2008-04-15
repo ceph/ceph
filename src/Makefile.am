@@ -20,6 +20,9 @@ crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 
+psim_SOURCES = psim.cc
+psim_LDADD = libcommon.a libcrush.a
+
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
@@ -116,6 +119,8 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
 #BUILT_SOURCES += libhadoopcephfs.so
 
 
+
+
 ##
 INCLUDES = 
 LDADD = -lpthread 
@@ -129,7 +134,7 @@ bin_PROGRAMS = \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
-	streamtest dupstore \
+	streamtest dupstore psim \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
