@@ -3888,8 +3888,8 @@ void Server::handle_client_truncate(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
   
-  // already small enough?
-  if (cur->inode.size <= req->head.args.truncate.length) {
+  // already the correct size?
+  if (cur->inode.size == req->head.args.truncate.length) {
     reply_request(mdr, 0);
     return;
   }

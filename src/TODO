@@ -61,7 +61,9 @@ pgmon
 - watch osd utilization; adjust overload in cluster map
 
 mon
+- paxos need to clean up old states.
 - some sort of tester for PaxosService...
+- osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds mustfix
 - rename slave in-memory rollback on failure
