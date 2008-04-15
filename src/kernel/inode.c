@@ -71,6 +71,14 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	     su, blkbits, blksize, blocks);	
 
 	ceph_set_ino(inode, le64_to_cpu(info->ino));
+
+	spin_lock(&inode->i_lock);
+	dout(30, " got version %llu, had %llu\n", 
+	     le64_to_cpu(info->version), ci->i_version);
+	if (le64_to_cpu(info->version) > 0 &&
+	    ci->i_version == le64_to_cpu(info->version))
+		goto no_change;
+	ci->i_version = le64_to_cpu(info->version);	    
 	inode->i_mode = le32_to_cpu(info->mode);
 	inode->i_uid = le32_to_cpu(info->uid);
 	inode->i_gid = le32_to_cpu(info->gid);
@@ -82,7 +90,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
 	issued = __ceph_caps_issued(ci);
-	spin_lock(&inode->i_lock);
 	if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
 		if ((issued & CEPH_CAP_EXCL) == 0) {
 			if (size > inode->i_size) {
@@ -104,12 +111,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 		inode->i_mtime = mtime;
 		inode->i_atime = atime;
 		inode->i_ctime = ctime;
-	}
-	spin_unlock(&inode->i_lock);
-
-	if (ci->i_hashval != inode->i_ino) {
-		insert_inode_hash(inode);
-		ci->i_hashval = inode->i_ino;
 	}
 
 	/* ceph inode */
@@ -137,6 +138,14 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ci->i_reported_size = inode->i_size;  /* reset */
 
 	inode->i_mapping->a_ops = &ceph_aops;
+
+no_change:
+	spin_unlock(&inode->i_lock);
+
+	if (ci->i_hashval != inode->i_ino) {
+		insert_inode_hash(inode);
+		ci->i_hashval = inode->i_ino;
+	}
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFIFO:

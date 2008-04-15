@@ -145,8 +145,9 @@ enum {
 struct ceph_inode_info {
 	u64 i_ceph_ino;
 
-	struct ceph_file_layout i_layout;
+	u64 i_version;
 
+	struct ceph_file_layout i_layout;
 	char *i_symlink;
 
 	int i_lease_mask;

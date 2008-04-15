@@ -124,6 +124,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	dout(10, "alloc_inode %p vfsi %p\n", ci, &ci->vfs_inode);
 
+	ci->i_version = 0;
 	ci->i_symlink = 0;
 
 	ci->i_lease_session = 0;
