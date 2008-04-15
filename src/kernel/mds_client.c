@@ -1348,6 +1348,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	iput(inode);
 no_inode:
 	up(&session->s_mutex);
+	put_session(session);
 	return;
 
 bad:

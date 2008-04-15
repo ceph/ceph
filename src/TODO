@@ -21,6 +21,7 @@ yehuda:
 
 kernel client
 - take file_mode refs on inode safely/atomically on open
+- fix session close seq interaction with mds (sessions don't currently close all the way)
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - trim expired leases so we don't indefinitely hold dcache/icache refs...
