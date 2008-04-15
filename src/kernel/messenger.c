@@ -1351,7 +1351,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->pages = pages;
 
 	INIT_LIST_HEAD(&m->list_head);
-	dout(0, "ceph_msg_new %p\n", m);
+	dout(20, "ceph_msg_new %p\n", m);
 	return m;
 
 out2:
@@ -1364,10 +1364,10 @@ out:
 void ceph_msg_put(struct ceph_msg *m)
 {
 	BUG_ON(atomic_read(&m->nref) <= 0);
-	dout(0, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
+	dout(20, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
 	     atomic_read(&m->nref)-1);
 	if (atomic_dec_and_test(&m->nref)) {
-		dout(0, "ceph_msg_put last one on %p\n", m);
+		dout(20, "ceph_msg_put last one on %p\n", m);
 		BUG_ON(!list_empty(&m->list_head));
 		if (m->front.iov_base)
 			kfree(m->front.iov_base);
