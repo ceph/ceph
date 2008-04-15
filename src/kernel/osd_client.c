@@ -237,8 +237,10 @@ static void send_request(struct ceph_osd_client *osdc,
 			break;
 	}
 	if (i < nr_osds) {
-		dout(10, "send_request %p tid %llu to osd%d flags %d\n", req, req->r_tid, osds[i], req->r_flags);
-		req->r_request->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
+		dout(10, "send_request %p tid %llu to osd%d flags %d\n", 
+		     req, req->r_tid, osds[i], req->r_flags);
+		req->r_request->hdr.dst.name.type = 
+			cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 		req->r_request->hdr.dst.name.num = cpu_to_le32(osds[i]);
 		req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osds[i]];
 		ceph_msg_get(req->r_request); /* send consumes a ref */
@@ -287,7 +289,8 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	} else {
 		dout(10, "handle_reply tid %llu already had a reply\n", tid);
 	}
-	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags, rhead->flags);
+	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags,
+	     rhead->flags);
 	req->r_flags |= rhead->flags;
 	spin_unlock(&osdc->lock);
 	complete(&req->r_completion);

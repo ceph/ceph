@@ -332,9 +332,9 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	}
 }
 
-static void unregister_session(struct ceph_mds_client *mdsc, int mds)
+static void __unregister_session(struct ceph_mds_client *mdsc, int mds)
 {
-	dout(10, "unregister_session mds%d %p\n", mds, mdsc->sessions[mds]);
+	dout(10, "__unregister_session mds%d %p\n", mds, mdsc->sessions[mds]);
 	put_session(mdsc->sessions[mds]);
 	mdsc->sessions[mds] = 0;
 }
@@ -668,7 +668,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		if (session->s_cap_seq == seq) {
 			dout(1, "session close from mds%d\n", mds);
 			complete(&session->s_completion); /* for good measure */
-			unregister_session(mdsc, mds);
+			__unregister_session(mdsc, mds);
 		} else {
 			dout(1, "ignoring session close from mds%d, "
 			     "seq %llu < my seq %llu\n",
@@ -697,10 +697,10 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		dout(0, "bad session op %d\n", op);
 		BUG_ON(1);
 	}
-	put_session(session);
 	spin_unlock(&mdsc->lock);
 
 	up(&session->s_mutex);
+	put_session(session);
 	return;
 
 bad:
@@ -1225,7 +1225,7 @@ void check_new_map(struct ceph_mds_client *mdsc,
 		switch (session->s_state) {
 		case CEPH_MDS_SESSION_OPENING:
 			complete(&session->s_completion);
-			unregister_session(mdsc, i);
+			__unregister_session(mdsc, i);
 			break;
 		case CEPH_MDS_SESSION_OPEN:
 			kick_requests(mdsc, i);
