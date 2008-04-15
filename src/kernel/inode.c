@@ -34,8 +34,11 @@ struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
 #endif
 	if (inode == NULL) 
 		return ERR_PTR(-ENOMEM);
-	if (inode->i_state & I_NEW)
+	if (inode->i_state & I_NEW) {
+		dout(40, "get_inode created new inode %p %llx\n", inode,
+		     ceph_ino(inode));
 		unlock_new_inode(inode);
+	}
 
 	ci = ceph_inode(inode);
 #if BITS_PER_LONG == 64
@@ -569,55 +572,55 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 		dname.len = rinfo->dir_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
 
+	retry_lookup:
 		dn = d_lookup(parent, &dname);
 		dout(30, "calling d_lookup on parent=%p name=%.*s"
 		     " returned %p\n", parent, dname.len, dname.name, dn);
 
+		if (dn && dn->d_inode &&
+		    ceph_ino(dn->d_inode) != 
+		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
+			dout(10, " dn %p points to wrong inode %p\n",
+			     dn, dn->d_inode);
+			d_delete(dn);
+			goto retry_lookup;
+		}
 		if (!dn) {
 			dn = d_alloc(parent, &dname);
+			dout(40, "d_alloc %p/%.*s\n", parent, 
+			     dname.len, dname.name);
 			if (dn == NULL) {
 				dout(30, "d_alloc badness\n");
 				return -1;
 			}
 			ceph_init_dentry(dn);
 		}
-		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], 
-					 req->r_session, req->r_from_time);
 
 		/* inode */
-		if (dn->d_inode == NULL) {
-			in = new_inode(parent->d_sb);
+		if (dn->d_inode) 
+			in = dn->d_inode;
+		else {
+			in = ceph_get_inode(parent->d_sb, 
+					    rinfo->dir_in[i].in->ino);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
 				return -1;
 			}
-		} else {
-			in = dn->d_inode;
 		}
-
-		if (ceph_ino(in) !=
-		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
-			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				iput(in);
-				d_delete(dn);
-				return -1;
-			}
+		if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
+			dout(30, "ceph_fill_inode badness\n");
+			return -1;
+		}
+		if (!dn->d_inode) {
 			d_instantiate(dn, in);
 			if (d_unhashed(dn))
 				d_rehash(dn);
-			dout(10, "added dentry %p ino %llx %d/%d\n",
-			     dn, ceph_ino(in), i, rinfo->dir_nr);
-		} else {
-			if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				return -1;
-			}
 		}
+		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i], 
+					 req->r_session, req->r_from_time);
 		ceph_update_inode_lease(in, rinfo->dir_ilease[i], 
 					req->r_session, req->r_from_time);
-
 		dput(dn);
 	}
 	dout(10, "readdir_prepopulate done\n");
