@@ -796,7 +796,7 @@ void Locker::check_inode_max_size(CInode *in)
   assert(in->is_auth());
   if (!in->filelock.can_wrlock()) {
     // try again later
-    in->filelock.add_waiter(SimpleLock::WAIT_WR, new C_MDL_CheckMaxSize(this, in));
+    in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
     dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
     return;    
   }
