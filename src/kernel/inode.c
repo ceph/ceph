@@ -193,7 +193,7 @@ no_change:
 }
 
 /* 
- * caller should hold session s_mutex.
+ * caller must hold session s_mutex.
  */
 void ceph_update_inode_lease(struct inode *inode, 
 			     struct ceph_mds_reply_lease *lease,
@@ -215,40 +215,24 @@ void ceph_update_inode_lease(struct inode *inode,
 		return;
 
 	spin_lock(&inode->i_lock);
-	if (ttl > ci->i_lease_ttl) {
+	/*
+	 * be careful: we can't remove lease from a different session
+	 * without holding that other session's s_mutex.  so don't.
+	 */
+	if (ttl > ci->i_lease_ttl &&
+	    (!ci->i_lease_session || ci->i_lease_session == session)) {
 		ci->i_lease_ttl = ttl;
 		ci->i_lease_mask = le16_to_cpu(lease->mask);
-		if (ci->i_lease_session) {
-			list_del(&ci->i_lease_item);
-		} else
+		if (!ci->i_lease_session) {
+			ci->i_lease_session = session;
 			is_new = 1;
-		ci->i_lease_session = session;
-		list_add(&ci->i_lease_item, &session->s_inode_leases);
+		} 
+		list_move_tail(&ci->i_lease_item, &session->s_inode_leases);
 	}
 	spin_unlock(&inode->i_lock);
 	if (is_new) {
 		dout(10, "lease iget on %p\n", inode);
 		igrab(inode);
-	}
-}
-
-void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask)
-{
-	int drop = 0;
-
-	spin_lock(&ci->vfs_inode.i_lock);
-	dout(10, "revoke_inode_lease on inode %p, mask %d -> %d\n", 
-	     &ci->vfs_inode, ci->i_lease_mask, ci->i_lease_mask & ~mask);
-	ci->i_lease_mask &= ~mask;
-	if (ci->i_lease_mask == 0) {
-		list_del(&ci->i_lease_item);
-		ci->i_lease_session = 0;
-		drop = 1;
-	}
-	spin_unlock(&ci->vfs_inode.i_lock);
-	if (drop) {
-		dout(10, "lease iput on %p\n", &ci->vfs_inode);
-		iput(&ci->vfs_inode);
 	}
 }
 
@@ -320,20 +304,18 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 			kfree(di);
 			goto fail_unlock;
 		}
-		is_new = 1;
 		di->dentry = dentry;
 		dentry->d_fsdata = di;
+		di->lease_session = session;
+		list_add(&di->lease_item, &session->s_dentry_leases);
+		is_new = 1;
+	} else {
+		/* touch existing */
+		if (di->lease_session != session)
+			goto fail_unlock;
+		list_move_tail(&di->lease_item, &session->s_dentry_leases);
 	}
-
-	/* update */
 	dentry->d_time = ttl;
-
-	/* (re)add to session lru */
-	if (!is_new && di->lease_session)
-		list_del(&di->lease_item);
-	di->lease_session = session;	      
-	list_add(&di->lease_item, &session->s_dentry_leases);
-	
 	spin_unlock(&dentry->d_lock);
 	if (is_new) {
 		dout(10, "lease dget on %p\n", dentry);
@@ -343,29 +325,6 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 
 fail_unlock:
 	spin_unlock(&dentry->d_lock);    
-}
-
-void ceph_revoke_dentry_lease(struct dentry *dentry)
-{
-	struct ceph_dentry_info *di;
-	struct ceph_mds_session *session;
-	int drop = 0;
-
-	/* detach from dentry */
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	if (di) {
-		session = di->lease_session;
-		list_del(&di->lease_item);
-		kfree(di);
-		drop = 1;
-		dentry->d_fsdata = 0;
-	}
-	spin_unlock(&dentry->d_lock);
-	if (drop) {
-		dout(10, "lease dput on %p\n", dentry);
-		dput(dentry);
-	}
 }
 
 /*

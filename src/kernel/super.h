@@ -198,9 +198,6 @@ static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
 	return (struct ceph_dentry_info *)dentry->d_fsdata;
 }
 
-extern void ceph_revoke_inode_lease(struct ceph_inode_info *ci, int mask);
-extern void ceph_revoke_dentry_lease(struct dentry *dentry);
-
 static inline void ceph_queue_writeback(struct ceph_client *cl, 
 					struct ceph_inode_info *ci)
 {

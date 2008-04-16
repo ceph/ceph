@@ -105,6 +105,7 @@ struct ceph_mds_client {
 	__u64                   last_requested_map;
 	struct completion       map_waiters, session_close_waiters;
 	struct delayed_work     delayed_work;  /* delayed work */
+	unsigned long last_renew_caps;
 };
 
 extern const char* ceph_mds_op_name(int op);

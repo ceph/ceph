@@ -264,12 +264,10 @@ static struct ceph_mds_session *__get_session(struct ceph_mds_client *mdsc,
 void put_session(struct ceph_mds_session *s)
 {
 	BUG_ON(s == NULL);
-	dout(10, "put_session %p %d -> %d\n", s,
+	dout(30, "put_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
-	if (atomic_dec_and_test(&s->s_ref)) {
-		dout(10, "KFREE %p\n", s);
+	if (atomic_dec_and_test(&s->s_ref))
 		kfree(s);
-	}
 }
 
 /*
@@ -591,6 +589,9 @@ static int close_session(struct ceph_mds_client *mdsc,
 	return 0;
 }
 
+/*
+ * caller must hold session s_mutex
+ */
 static void remove_session_caps(struct ceph_mds_session *session)
 {
 	struct ceph_inode_cap *cap;
@@ -612,6 +613,107 @@ static void remove_session_caps(struct ceph_mds_session *session)
 	BUG_ON(session->s_nr_caps > 0);
 }
 
+/*
+ * caller must hold session s_mutex
+ */
+void revoke_dentry_lease(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+	struct ceph_mds_session *session;
+	int drop = 0;
+
+	/* detach from dentry */
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (di) {
+		session = di->lease_session;
+		list_del(&di->lease_item);
+		kfree(di);
+		drop = 1;
+		dentry->d_fsdata = 0;
+	}
+	spin_unlock(&dentry->d_lock);
+	if (drop) {
+		dout(10, "lease dput on %p\n", dentry);
+		dput(dentry);
+	}
+}
+
+/*
+ * caller must hold session s_mutex
+ */
+void revoke_inode_lease(struct ceph_inode_info *ci, int mask)
+{
+	int drop = 0;
+
+	spin_lock(&ci->vfs_inode.i_lock);
+	dout(10, "revoke_inode_lease on inode %p, mask %d -> %d\n", 
+	     &ci->vfs_inode, ci->i_lease_mask, ci->i_lease_mask & ~mask);
+	ci->i_lease_mask &= ~mask;
+	if (ci->i_lease_mask == 0) {
+		list_del_init(&ci->i_lease_item);
+		ci->i_lease_session = 0;
+		drop = 1;
+	}
+	spin_unlock(&ci->vfs_inode.i_lock);
+	if (drop) {
+		dout(10, "lease iput on %p\n", &ci->vfs_inode);
+		iput(&ci->vfs_inode);
+	}
+}
+
+/*
+ * remove expire leases for this session.  unpint parent
+ * inode/dentries, so that [di]cache can prune them.
+ */
+static void trim_session_leases(struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci;
+	struct ceph_dentry_info *di;
+	struct dentry *dentry;
+	
+	dout(20, "trim_session_leases on session %p\n", session);
+
+	/* inodes */
+	while (!list_empty(&session->s_inode_leases)) {
+		ci = list_first_entry(&session->s_inode_leases, 
+				      struct ceph_inode_info, i_lease_item);
+		spin_lock(&ci->vfs_inode.i_lock);
+		if (ci->i_lease_ttl > jiffies) {
+			spin_unlock(&ci->vfs_inode.i_lock);
+			break;
+		}
+		dout(20, "trim_session_leases inode %p mask %d\n", 
+		     &ci->vfs_inode, ci->i_lease_mask);
+		ci->i_lease_session = 0;
+		ci->i_lease_mask = 0;
+		list_del_init(&ci->i_lease_item);
+		spin_unlock(&ci->vfs_inode.i_lock);
+		iput(&ci->vfs_inode);
+	}
+
+	/* dentries */
+	while (!list_empty(&session->s_dentry_leases)) {
+		di = list_first_entry(&session->s_dentry_leases, 
+				      struct ceph_dentry_info, lease_item);
+		dentry = di->dentry;
+		spin_lock(&dentry->d_lock);
+		if (dentry->d_time > jiffies) {
+			spin_unlock(&dentry->d_lock);
+			break;
+		}
+		dout(20, "trim_session_leases dentry %p\n", dentry);
+		list_del(&di->lease_item);
+		kfree(di);
+		dentry->d_fsdata = 0;
+		spin_unlock(&dentry->d_lock);
+		dput(dentry);
+	}
+}
+
+/*
+ * caller must hold session s_mutex
+ */
 static void remove_session_leases(struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci;
@@ -624,7 +726,7 @@ static void remove_session_leases(struct ceph_mds_session *session)
 		ci = list_entry(session->s_inode_leases.next, 
 				struct ceph_inode_info, i_lease_item);
 		dout(10, "removing lease from inode %p\n", &ci->vfs_inode);
-		ceph_revoke_inode_lease(ci, ci->i_lease_mask);
+		revoke_inode_lease(ci, ci->i_lease_mask);
 	}
 
 	/* dentries */
@@ -632,7 +734,7 @@ static void remove_session_leases(struct ceph_mds_session *session)
 		di = list_entry(session->s_dentry_leases.next, 
 				struct ceph_dentry_info, lease_item);
 		dout(10, "removing lease from dentry %p\n", di->dentry);
-		ceph_revoke_dentry_lease(di->dentry);
+		revoke_dentry_lease(di->dentry);
 	}
 }
 
@@ -1370,20 +1472,6 @@ int send_renewcaps(struct ceph_mds_client *mdsc, int mds)
 	return 0;
 }
 
-int ceph_mdsc_renew_caps(struct ceph_mds_client *mdsc)
-{
-	int i;
-	dout(10, "renew_caps\n");
-	for (i = 0; i < mdsc->max_sessions; i++) {
-		if (mdsc->sessions[i] == 0 ||
-		    mdsc->sessions[i]->s_state < CEPH_MDS_SESSION_OPEN)
-			continue;
-		send_renewcaps(mdsc, i);
-	}
-	return 0;
-}
-
-
 /*
  * leases
  */
@@ -1442,7 +1530,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* inode */
 	ci = ceph_inode(inode);
-	ceph_revoke_inode_lease(ci, mask);
+	revoke_inode_lease(ci, mask);
 
 	/* dentry */
 	if (mask & CEPH_LOCK_DN) {
@@ -1455,7 +1543,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dentry = d_lookup(parent, &dname);
 		if (!dentry)
 			goto release;
-		ceph_revoke_dentry_lease(dentry);
+		revoke_dentry_lease(dentry);
 		dout(10, "lease revoked on dentry %p\n", dentry);
 		dput(dentry);
 	} 
@@ -1541,11 +1629,10 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	/*
 	 * renew at 1/2 the advertised timeout period.
 	 */
-	int delay = mdsc->mdsmap->m_cap_bit_timeout >> 1;
+	int delay = 5;
 	unsigned hz = round_jiffies_relative(HZ * delay);
-	int r;
 	dout(-10, "schedule_delayed for %d seconds (%u hz)\n", delay, hz);
-	r = schedule_delayed_work(&mdsc->delayed_work, hz);
+	schedule_delayed_work(&mdsc->delayed_work, hz);
 }
 
 void delayed_work(struct work_struct *work)
@@ -1553,20 +1640,34 @@ void delayed_work(struct work_struct *work)
 	int i;
 	struct ceph_mds_client *mdsc =
 		container_of(work, struct ceph_mds_client, delayed_work.work);
-
-	dout(-10, "delayed_work on %p\n", mdsc);
+	struct ceph_mds_session *session;
+	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 1;
+	int renew_caps = (jiffies >= HZ*renew_interval + mdsc->last_renew_caps);
+	
+	dout(-10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
 
 	/* renew caps */
 	spin_lock(&mdsc->lock);
+	if (renew_caps)
+		mdsc->last_renew_caps = jiffies;
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		if (mdsc->sessions[i] == 0 ||
-		    mdsc->sessions[i]->s_state < CEPH_MDS_SESSION_OPEN)
+		session = __get_session(mdsc, i);
+		if (session == 0 ||
+		    session->s_state < CEPH_MDS_SESSION_OPEN) {
+			put_session(session);
 			continue;
+		}
 		spin_unlock(&mdsc->lock);
-		send_renewcaps(mdsc, i);
+		down(&session->s_mutex);
+
+		if (renew_caps)
+			send_renewcaps(mdsc, i);
+		trim_session_leases(session);
+
+		up(&session->s_mutex);
+		put_session(session);
 		spin_lock(&mdsc->lock);
 	}
-
 	spin_unlock(&mdsc->lock);
 	schedule_delayed(mdsc);
 }
@@ -1585,6 +1686,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	init_completion(&mdsc->map_waiters);
 	init_completion(&mdsc->session_close_waiters);
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
+	mdsc->last_renew_caps = jiffies;
 }
 
 void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
