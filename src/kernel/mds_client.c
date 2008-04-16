@@ -759,7 +759,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	session = __get_session(mdsc, mds);
 	down(&session->s_mutex);
 	
-	dout(-1, "handle_session %p op %d seq %llu\n", session, op, seq);
+	dout(1, "handle_session %p op %d seq %llu\n", session, op, seq);
 	switch (op) {
 	case CEPH_SESSION_OPEN:
 		dout(1, "session open from mds%d\n", mds);
@@ -1631,7 +1631,7 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	 */
 	int delay = 5;
 	unsigned hz = round_jiffies_relative(HZ * delay);
-	dout(-10, "schedule_delayed for %d seconds (%u hz)\n", delay, hz);
+	dout(10, "schedule_delayed for %d seconds (%u hz)\n", delay, hz);
 	schedule_delayed_work(&mdsc->delayed_work, hz);
 }
 
@@ -1644,7 +1644,7 @@ void delayed_work(struct work_struct *work)
 	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 1;
 	int renew_caps = (jiffies >= HZ*renew_interval + mdsc->last_renew_caps);
 	
-	dout(-10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
+	dout(10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
 
 	/* renew caps */
 	spin_lock(&mdsc->lock);

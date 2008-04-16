@@ -222,7 +222,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
-      dout(20) << " killing capability on " << *in << dendl;
+      dout(20) << " killing capability " << cap_string(cap->issued()) << " on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
     while (!session->leases.empty()) {

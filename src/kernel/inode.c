@@ -724,17 +724,17 @@ void ceph_cap_delayed_work(struct work_struct *work)
 						  i_cap_dwork.work);
 	spin_lock(&ci->vfs_inode.i_lock);
 	if (ci->i_hold_caps_until > jiffies) {
-		dout(-10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
+		dout(10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
 		schedule_delayed_work(&ci->i_cap_dwork, 
 				      ci->i_hold_caps_until - jiffies);
 		spin_unlock(&ci->vfs_inode.i_lock);
 		goto out;
 	}
-	dout(-10, "cap_dwork on %p\n", &ci->vfs_inode);
+	dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
 	spin_unlock(&ci->vfs_inode.i_lock);
 	ceph_check_caps(ci, 0);
 out:
-	dout(-10, "cap_dwork on %p done\n", &ci->vfs_inode);
+	dout(10, "cap_dwork on %p done\n", &ci->vfs_inode);
 }
 
 /*

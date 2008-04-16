@@ -163,7 +163,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	dout(-30, "destroy_inode %p ino %llx\n", inode, ceph_ino(inode));
+	dout(30, "destroy_inode %p ino %llx\n", inode, ceph_ino(inode));
 	cancel_delayed_work_sync(&ci->i_cap_dwork);
 	kfree(ci->i_symlink);
 	kmem_cache_free(ceph_inode_cachep, ci);
