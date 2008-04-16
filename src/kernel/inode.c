@@ -769,6 +769,7 @@ retry:
 		if (until > ci->i_hold_caps_until) {
 			ci->i_hold_caps_until = until;
 			dout(10, "hold_caps_until %lu\n", until);
+			cancel_delayed_work(&ci->i_cap_dwork);
 			schedule_delayed_work(&ci->i_cap_dwork, 
 					      until - jiffies);
 		}
