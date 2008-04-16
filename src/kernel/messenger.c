@@ -327,7 +327,8 @@ static int write_partial_kvec(struct ceph_connection *con)
 	while (con->out_kvec_bytes > 0) {
 		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur,
 				       con->out_kvec_left, con->out_kvec_bytes);
-		if (ret <= 0) goto out;
+		if (ret <= 0) 
+			goto out;
 		con->out_kvec_bytes -= ret;
 		if (con->out_kvec_bytes == 0)
 			break;            /* done */
@@ -335,6 +336,7 @@ static int write_partial_kvec(struct ceph_connection *con)
 			if (ret >= con->out_kvec_cur->iov_len) {
 				ret -= con->out_kvec_cur->iov_len;
 				con->out_kvec_cur++;
+				con->out_kvec_left--;
 			} else {
 				con->out_kvec_cur->iov_len -= ret;
 				con->out_kvec_cur->iov_base += ret;
@@ -368,8 +370,8 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
 		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len);
-		if (ret < 0) return ret;
-		if (ret == 0) return 0;   /* socket full */
+		if (ret <= 0) 
+			goto out;
 		con->out_msg_pos.data_pos += ret;
 		con->out_msg_pos.page_pos += ret;
 		if (ret == kv.iov_len) {
@@ -379,8 +381,11 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	}
 
 	/* done */
+	dout(30, "write_partial_msg_pages wrote all pages on %p\n", con);
 	con->out_msg = 0;
-	return 1;
+	ret = 1;
+out:
+	return ret;
 }
 
 
@@ -538,15 +543,6 @@ more:
 			goto done;
 		}
 	}
-
-	/* check if connect handshake finished.. if not requeue and return.. */
-/*
-	if (!test_bit(OPEN, &con->state)) {
-	        dout(5, "try_write state = %lu, need to requeue and exit\n",
-		con->state);
-	        goto done;
-	}
-*/
 
 	/* msg pages? */
 	if (con->out_msg) {
