@@ -3056,7 +3056,10 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
       // wait for lazy cap
       if ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
 	dout(7) << " don't have lazy cap, waiting" << dendl;
-	goto wait;
+	Cond cond;
+	in->waitfor_lazy.push_back(&cond);
+	cond.Wait(client_lock);
+	continue;
       }
     } else {
       // wait for RD cap?
