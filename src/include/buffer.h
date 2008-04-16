@@ -396,10 +396,17 @@ public:
 	advance(o);
       }
       iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
-	bl(l), ls(bl->_buffers), off(0), p(ip), p_off(po) { }
+	bl(l), ls(bl->_buffers), off(o), p(ip), p_off(po) { }
 
       iterator operator=(const iterator& other) {
-	return iterator(other.bl, other.off, other.p, other.p_off);
+	if (this != &other) {
+	  bl = other.bl;
+	  ls = bl->_buffers;
+	  off = other.off;
+	  p = other.p;
+	  p_off = other.p_off;
+	}
+	return *this;
       }
 
       unsigned get_off() { return off; }
