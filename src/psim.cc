@@ -25,7 +25,7 @@ int main()
     count[i] = 0;
   }
 
-  for (int f = 1; f < 1000; f++) {  // files
+  for (int f = 1; f < 10000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
       object_t oid(f, b);
       //cout << "oid " << oid << std::endl;

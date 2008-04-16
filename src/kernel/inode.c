@@ -763,15 +763,19 @@ void ceph_cap_delayed_work(struct work_struct *work)
 						  i_cap_dwork.work);
 	spin_lock(&ci->vfs_inode.i_lock);
 	if (ci->i_hold_caps_until > jiffies) {
-		dout(10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
-		schedule_delayed_work(&ci->i_cap_dwork, 
-				      ci->i_hold_caps_until - jiffies);
+		dout(-10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
+		if (schedule_delayed_work(&ci->i_cap_dwork, 
+					  ci->i_hold_caps_until - jiffies))
+			igrab(&ci->vfs_inode);
 		spin_unlock(&ci->vfs_inode.i_lock);
-		return;
+		goto out;
 	}
-	dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
+	dout(-10, "cap_dwork on %p\n", &ci->vfs_inode);
 	spin_unlock(&ci->vfs_inode.i_lock);
 	ceph_check_caps(ci, 0);
+out:
+	iput(&ci->vfs_inode);
+	dout(-10, "cap_dwork on %p done\n", &ci->vfs_inode);
 }
 
 /*
@@ -783,6 +787,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int was_last)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct inode *inode = &ci->vfs_inode;
 	struct ceph_inode_cap *cap;
 	struct list_head *p;
 	int wanted, used;
@@ -794,10 +799,10 @@ void ceph_check_caps(struct ceph_inode_info *ci, int was_last)
 	struct ceph_mds_session *session = 0;  /* if non-NULL, i hold s_mutex */
 
 retry:
-	spin_lock(&ci->vfs_inode.i_lock);
+	spin_lock(&inode->i_lock);
 	wanted = __ceph_caps_wanted(ci);
 	used = __ceph_caps_used(ci);
-	dout(10, "check_caps %p wanted %d used %d issued %d\n", &ci->vfs_inode, 
+	dout(10, "check_caps %p wanted %d used %d issued %d\n", inode, 
 	     wanted, used, __ceph_caps_issued(ci));
 
 	if (was_last) {
@@ -805,8 +810,9 @@ retry:
 		if (until > ci->i_hold_caps_until) {
 			ci->i_hold_caps_until = until;
 			dout(10, "hold_caps_until %lu\n", until);
-			schedule_delayed_work(&ci->i_cap_dwork, 
-					      until - jiffies);
+			if (schedule_delayed_work(&ci->i_cap_dwork, 
+						  until - jiffies))
+				igrab(inode);
 		}
 	}
 
@@ -830,7 +836,7 @@ retry:
 
 		/* approaching file_max? */
 		if ((cap->issued & CEPH_CAP_WR) &&
-		    (ci->vfs_inode.i_size << 1) >= ci->i_max_size &&
+		    (inode->i_size << 1) >= ci->i_max_size &&
 		    (ci->i_reported_size << 1) < ci->i_max_size) {
 			dout(10, "i_size approaching max_size\n");
 			goto ack;
@@ -856,7 +862,7 @@ retry:
 			session = cap->session;
 			if (down_trylock(&session->s_mutex) != 0) {
 				dout(10, "inverting session/inode locking\n");
-				spin_unlock(&ci->vfs_inode.i_lock);
+				spin_unlock(&inode->i_lock);
 				down(&session->s_mutex);
 				goto retry;
 			}
@@ -864,10 +870,6 @@ retry:
 
 		/* ok */
 		dropping = cap->issued & ~wanted;
-		if (dropping & CEPH_CAP_RDCACHE) {
-			dout(20, "invalidating pages on %p\n", &ci->vfs_inode);
-			invalidate_mapping_pages(&ci->vfs_inode.i_data, 0, -1);
-		}
 		cap->issued &= wanted;  /* drop bits we don't want */
 
 		if (revoking && (revoking && used) == 0) 
@@ -875,29 +877,35 @@ retry:
 		
 		keep = cap->issued;
 		seq = cap->seq;
-		size = ci->vfs_inode.i_size;
+		size = inode->i_size;
 		ci->i_reported_size = size;
 		max_size = ci->i_wanted_max_size;
 		ci->i_requested_max_size = max_size;
-		mtime = ci->vfs_inode.i_mtime;
-		atime = ci->vfs_inode.i_atime;
+		mtime = inode->i_mtime;
+		atime = inode->i_atime;
 		mds = cap->mds;
 		if (wanted == 0)
 			__ceph_remove_cap(cap);
-		spin_unlock(&ci->vfs_inode.i_lock);
+		spin_unlock(&inode->i_lock);
 
-		ceph_mdsc_send_cap_ack(mdsc, ceph_ino(&ci->vfs_inode), 
+		if (dropping & CEPH_CAP_RDCACHE) {
+			dout(20, "invalidating pages on %p\n", inode);
+			invalidate_mapping_pages(&inode->i_data, 0, -1);
+			dout(20, "done invalidating pages on %p\n", inode);
+		}
+
+		ceph_mdsc_send_cap_ack(mdsc, ceph_ino(inode), 
 				       keep, wanted, seq, 
 				       size, max_size, &mtime, &atime, mds);
 
 		if (wanted == 0)
-			iput(&ci->vfs_inode);  /* removed cap */
+			iput(inode);  /* removed cap */
 		up(&session->s_mutex);
 		goto retry;
 	}
 
 	/* okay */
-	spin_unlock(&ci->vfs_inode.i_lock);
+	spin_unlock(&inode->i_lock);
 
 	if (session)
 		up(&session->s_mutex);
