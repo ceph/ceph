@@ -76,6 +76,7 @@ struct ceph_mds_request {
 	struct dentry    *r_last_dentry;
 	struct dentry    *r_old_dentry;   /* for rename */
 	int			r_expects_cap;
+	int                     r_fmode;  /* if expecting cap */
 	unsigned long           r_from_time;
 	struct ceph_inode_cap  *r_cap;
 	struct ceph_mds_session *r_session;

@@ -406,6 +406,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_last_dentry = 0;
 	req->r_old_dentry = 0;
 	req->r_expects_cap = 0;
+	req->r_fmode = 0;
 	req->r_cap = 0;
 	req->r_session = 0;
 	req->r_num_mds = 0;
@@ -930,6 +931,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
 			req->r_cap = ceph_add_cap(req->r_last_inode,
 						  req->r_session,
+						  req->r_fmode,
 						  cap, capseq);
 			if (IS_ERR(req->r_cap)) {
 				err = PTR_ERR(req->r_cap);

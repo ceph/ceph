@@ -15,7 +15,7 @@ int ceph_debug_file = -1;
 /*
  * if err==0, caller is responsible for a put_session on *psession
  */
-struct ceph_mds_request *
+static struct ceph_mds_request *
 prepare_open_request(struct super_block *sb, struct dentry *dentry,
 		     int flags, int create_mode)
 {
@@ -36,6 +36,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
 				       0, 0);
 	req->r_expects_cap = 1;
+	req->r_fmode = ceph_file_mode(flags);
 	kfree(path);
 	if (!IS_ERR(req)) {
 		rhead = req->r_request->front.iov_base;
@@ -45,20 +46,21 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	return req;
 }
 
-
-static int ceph_init_file(struct inode *inode, struct file *file, int flags)
+/*
+ * initialize private struct file data.
+ * if we fail, clean up by dropping fmode reference on the ceph_inode
+ */
+static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 {
-	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_file_info *cf;
-	int fmode = ceph_file_mode(flags);
 
 	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
-	if (cf == NULL)
+	if (cf == NULL) {
+		ceph_put_fmode(ceph_inode(inode), fmode);  /* clean up */
 		return -ENOMEM;
+	}
 	file->private_data = cf;
-
 	cf->mode = fmode;
-	ceph_get_mode(ci, fmode);
 	return 0;
 }
 
@@ -94,10 +96,9 @@ int ceph_open(struct inode *inode, struct file *file)
 	if ((__ceph_caps_issued(ci) & wantcaps) == wantcaps) {
 		dout(10, "open fmode %d caps %d using existing on %p\n", 
 		     fmode, wantcaps, inode);
+		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
-		err = ceph_init_file(inode, file, flags);
-		BUG_ON(err); /* fixme */
-		return 0;
+		return ceph_init_file(inode, file, fmode);
 	} 
 	spin_unlock(&inode->i_lock);
 	dout(10, "open mode %d, don't have caps %d\n", fmode, wantcaps);
@@ -106,8 +107,8 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err == 0) 
-		err = ceph_init_file(inode, file, flags);
+	if (err == 0)
+		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
 	dout(5, "ceph_open result=%d on %llx\n", err, ceph_ino(inode));
 	return err;
@@ -146,7 +147,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (err == 0)
-		err = ceph_init_file(req->r_last_inode, file, flags);
+		err = ceph_init_file(req->r_last_inode, file, req->r_fmode);
 	else if (err == -ENOENT) {
 		ceph_init_dentry(dentry);
 		d_add(dentry, NULL);
@@ -173,7 +174,7 @@ int ceph_release(struct inode *inode, struct file *file)
 	 * for now, store the open mode in ceph_file_info.
 	 */
 
-	ceph_put_mode(ci, cf->mode);
+	ceph_put_fmode(ci, cf->mode);
 	if (cf->last_readdir)
 		ceph_mdsc_put_request(cf->last_readdir);
 	kfree(cf);

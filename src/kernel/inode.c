@@ -651,6 +651,7 @@ static struct ceph_inode_cap *__get_cap_for_mds(struct inode *inode, int mds)
  */
 struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 				    struct ceph_mds_session *session, 
+				    int fmode,
 				    u32 issued, u32 seq)
 {
 	int mds = session->s_mds;
@@ -701,6 +702,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 	cap->issued |= issued;
 	cap->implemented |= issued;
 	cap->seq = seq;
+	__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
 	if (is_new)
 		igrab(inode);
@@ -929,25 +931,14 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 		spin_unlock(&inode->i_lock);
 }
 
-/*
- * called on struct file init and release, to safely track which
- * capabilities we want due to currently open files
- */
-void ceph_get_mode(struct ceph_inode_info *ci, int mode)
-{
-	spin_lock(&ci->vfs_inode.i_lock);
-	ci->i_nr_by_mode[mode]++;
-	spin_unlock(&ci->vfs_inode.i_lock);
-}
-
-void ceph_put_mode(struct ceph_inode_info *ci, int mode)
+void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 {
 	int last = 0;
 
 	spin_lock(&ci->vfs_inode.i_lock);
-	dout(20, "put_mode %p mode %d %d -> %d\n", &ci->vfs_inode, mode,
-	     ci->i_nr_by_mode[mode], ci->i_nr_by_mode[mode]-1);
-	if (--ci->i_nr_by_mode[mode] == 0)
+	dout(20, "put_mode %p fmode %d %d -> %d\n", &ci->vfs_inode, fmode,
+	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
+	if (--ci->i_nr_by_mode[fmode] == 0)
 		last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
 

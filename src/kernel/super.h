@@ -326,6 +326,12 @@ static inline int ceph_file_mode(int flags)
 	return FILE_MODE_RDWR;  /* not -EINVAL under Linux, strangely */
 }
 
+static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode) 
+{
+	ci->i_nr_by_mode[mode]++;
+}
+extern void ceph_put_fmode(struct ceph_inode_info *ci, int mode);
+
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 {
 	return (struct ceph_client *)inode->i_sb->s_fs_info;
@@ -399,6 +405,7 @@ extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 					   struct ceph_mds_session *session,
+					   int fmode,
 					   u32 cap, u32 seq);
 extern void ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
@@ -414,8 +421,6 @@ extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
 extern void ceph_cap_delayed_work(struct work_struct *work);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int was_last);
-extern void ceph_get_mode(struct ceph_inode_info *ci, int mode);
-extern void ceph_put_mode(struct ceph_inode_info *ci, int mode);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 

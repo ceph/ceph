@@ -190,15 +190,6 @@ nextfrag:
 	return 0;
 }
 
-
-const struct file_operations ceph_dir_fops = {
-	.read = generic_read_dir,
-	.readdir = ceph_dir_readdir,
-	.open = ceph_open,
-	.release = ceph_release,
-};
-
-
 int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
@@ -538,6 +529,12 @@ static void ceph_dentry_release(struct dentry *dentry)
 	}
 }
 
+const struct file_operations ceph_dir_fops = {
+	.read = generic_read_dir,
+	.readdir = ceph_dir_readdir,
+	.open = ceph_open,
+	.release = ceph_release,
+};
 
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_dir_lookup,
