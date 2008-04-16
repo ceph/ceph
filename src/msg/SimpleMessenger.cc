@@ -1495,7 +1495,7 @@ void Rank::Pipe::writer()
       continue;
     }
 
-    if (state != STATE_CONNECTING && state != STATE_WAIT &&
+    if (state != STATE_CONNECTING && state != STATE_WAIT && state != STATE_STANDBY &&
 	(!q.empty() || in_seq > in_seq_acked)) {
 
       // send ack?
