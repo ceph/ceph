@@ -43,7 +43,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	int err;
 	struct ceph_fsid fsid;
 
-	dout(1, "handle_map, have %u\n", osdc->osdmap ? osdc->osdmap->epoch:0);
+	dout(2, "handle_map, have %u\n", osdc->osdmap ? osdc->osdmap->epoch:0);
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
 
@@ -122,7 +122,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			osdc->osdmap = newmap;
 		}
 	}
-	dout(1, "handle_map done\n");
+	dout(2, "handle_map done\n");
 	
 	ceph_monc_got_osdmap(&osdc->client->monc, osdc->osdmap->epoch);
 
@@ -354,20 +354,20 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	send_request(osdc, req);
 	spin_unlock(&osdc->lock);
 	
-	/* wait */
-	dout(10, "do_request tid %llu waiting on %p\n", req->r_tid, req);
-	wait_for_completion(&req->r_completion);
-	dout(10, "do_request tid %llu got reply on %p\n", req->r_tid, req);
+	rc = wait_for_completion_interruptible(&req->r_completion);
 
 	spin_lock(&osdc->lock);
 	unregister_request(osdc, req);
 	spin_unlock(&osdc->lock);
 
-	/* parse reply */
-	replyhead = req->r_reply->front.iov_base;
-	rc = le32_to_cpu(replyhead->result);
-	bytes = le32_to_cpu(req->r_reply->hdr.data_len);
-	dout(10, "do_request result %d, %d bytes\n", rc, bytes); 
+	if (rc >= 0) {
+		/* parse reply */
+		replyhead = req->r_reply->front.iov_base;
+		rc = le32_to_cpu(replyhead->result);
+		bytes = le32_to_cpu(req->r_reply->hdr.data_len);
+		dout(10, "do_request tid %llu result %d, %d bytes\n", 
+		     req->r_tid, rc, bytes); 
+	}
 	if (rc < 0)
 		return rc;
 	return bytes;
