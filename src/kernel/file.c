@@ -326,7 +326,6 @@ out:
 	return ret;
 }
 
-
 static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	struct inode *inode = dentry->d_inode;
@@ -334,15 +333,14 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 
 	dout(10, "fsync on inode %p\n", inode);
 	ret = write_inode_now(inode, 1);
-
+	if (ret < 0)
+		return ret;
 	/*
 	 * fixme: also ensure that caps are flushed to mds
 	 */
 
-	return ret;
+	return 0;
 }
-
-
 
 const struct file_operations ceph_file_fops = {
 	.open = ceph_open,

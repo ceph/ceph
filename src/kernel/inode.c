@@ -1414,7 +1414,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
-    const unsigned int ia_valid = attr->ia_valid;
+	const unsigned int ia_valid = attr->ia_valid;
 	int err;
 
 	err = inode_change_ok(inode, attr);
@@ -1444,7 +1444,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr: ATTR_FILE ... hrm!\n");
 
 	/* chown */
-    if (ia_valid & (ATTR_UID|ATTR_GID)) {
+	if (ia_valid & (ATTR_UID|ATTR_GID)) {
 		err = ceph_setattr_chown(dentry, attr);
 		if (err)
 			return err;
