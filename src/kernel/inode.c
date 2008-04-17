@@ -1058,7 +1058,7 @@ void ceph_inode_writeback(struct work_struct *work)
 	write_inode_now(&ci->vfs_inode, 0);
 }
 
-void apply_truncate(struct inode *inode, loff_t size)
+static int __apply_truncate(struct inode *inode, loff_t size, int check_limit)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct address_space *mapping = inode->i_mapping;
@@ -1079,21 +1079,36 @@ void apply_truncate(struct inode *inode, loff_t size)
 	truncate_inode_pages(mapping, size);
 	unmap_mapping_range(mapping, size + PAGE_SIZE - 1, 0, 1);
 
-	return;
+	return 0;
 do_expand:
-	limit = current->signal->rlim[RLIMIT_FSIZE].rlim_cur;
-	if (limit != RLIM_INFINITY && size > limit) {
-		spin_unlock(&inode->i_lock);
-		goto out_sig;
-	}
-	if (size > inode->i_sb->s_maxbytes) {
-		spin_unlock(&inode->i_lock);
-		return;
+	if (check_limit) {
+		limit = current->signal->rlim[RLIMIT_FSIZE].rlim_cur;
+		if (limit != RLIM_INFINITY && size > limit) {
+			spin_unlock(&inode->i_lock);
+			goto out_sig;
+		}
+		if (size > inode->i_sb->s_maxbytes) {
+			spin_unlock(&inode->i_lock);
+			return -EFBIG;
+		}
 	}
 	i_size_write(inode, size);
 	spin_unlock(&inode->i_lock);
+
+	return 0;
 out_sig:
 	send_sig(SIGXFSZ, current, 0);
+	return -EFBIG;
+}
+
+static int apply_truncate(struct inode *inode, loff_t size)
+{
+	return __apply_truncate(inode, size, 1);
+}
+
+static int apply_cap_truncate(struct inode *inode, loff_t size)
+{
+	return __apply_truncate(inode, size, 0);
 }
 
 int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
@@ -1102,10 +1117,14 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(trunc->seq);
+	int err;
 	u64 size = le64_to_cpu(trunc->size);
 	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci, 
 	     mds, seq);
-	apply_truncate(inode, size);
+	err = apply_cap_truncate(inode, size);
+	if (err)
+		return err;
+
 	return 0;
 }
 
@@ -1317,7 +1336,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
 	    !(((ia_valid & ATTR_ATIME) &&
 	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
-	      ((ia_valid & ATTR_MTIME) && 
+			((ia_valid & ATTR_MTIME) && 
 	       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
 		dout(10, "lease indicates utimes is a no-op\n");
 		return 0;
@@ -1358,7 +1377,9 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 
 	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 		dout(10, "holding EXCL, doing truncate locally\n");
-		apply_truncate(inode, attr->ia_size);
+		err = apply_truncate(inode, attr->ia_size);
+		if (err)
+			return err;
 		return 0;
 	}
 	dout(10, "truncate: ia_size %d i_size %d\n",
