@@ -38,6 +38,7 @@ static int ceph_readpage(struct file *filp, struct page *page)
 
 	/* TODO: update info in ci? */
 out:
+	unlock_page(page);
 	return err;
 }
 
