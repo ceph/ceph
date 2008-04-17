@@ -75,6 +75,10 @@ static void ceph_state_change(struct sock *sk)
 		case TCP_CLOSE_WAIT:
 			dout(30, "ceph_state_change TCP_CLOSE_WAIT\n");
 			set_bit(SOCK_CLOSE, &con->state);
+			if (test_bit(CONNECTING, &con->state))
+				con->error_msg = "connection refused";
+			else 
+				con->error_msg = "socket closed";
 			ceph_queue_write(con);
 			break;
 		case TCP_ESTABLISHED:

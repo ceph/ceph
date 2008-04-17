@@ -26,6 +26,10 @@ static __inline__ const char *ceph_name_type_str(int t) {
 	}
 }
 
+/* use format string %s%d */
+#define ENTITY_NAME(n)				   \
+	ceph_name_type_str(le32_to_cpu((n).type)), \
+		le32_to_cpu((n).num)
 
 struct ceph_messenger {
 	void *parent;
@@ -56,7 +60,7 @@ struct ceph_msg_pos {
 };
 
 /* ceph connection fault delay defaults */
-#define BASE_DELAY_INTERVAL	1
+#define BASE_DELAY_INTERVAL	(HZ/2)
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
@@ -76,6 +80,7 @@ struct ceph_connection {
 	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
 	unsigned long state;	/* connection state */
+	const char *error_msg;
 
 	atomic_t nref;
 

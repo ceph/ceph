@@ -27,7 +27,7 @@ static void get_client_counter(void)
 {
 	spin_lock(&ceph_client_spinlock);
 	if (ceph_num_clients == 0) {
-		dout(1, "first client, setting up workqueues\n");
+		dout(10, "first client, setting up workqueues\n");
 		ceph_workqueue_init();
 	}
 	ceph_num_clients++;
@@ -39,7 +39,7 @@ static void put_client_counter(void)
 	spin_lock(&ceph_client_spinlock);
 	ceph_num_clients--;
 	if (ceph_num_clients == 0) {
-		dout(1, "last client, shutting down workqueues\n");
+		dout(10, "last client, shutting down workqueues\n");
 		ceph_workqueue_shutdown();
 	}
 	spin_unlock(&ceph_client_spinlock);
@@ -144,7 +144,7 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	int first = (client->monc.monmap->epoch == 0);
 	void *new;
 
-	dout(1, "handle_monmap had epoch %d\n", client->monc.monmap->epoch);
+	dout(2, "handle_monmap had epoch %d\n", client->monc.monmap->epoch);
 	new = ceph_monmap_decode(msg->front.iov_base, 
 				 msg->front.iov_base + msg->front.iov_len);
 	if (IS_ERR(new)) {
@@ -350,8 +350,7 @@ void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
 {
 	struct ceph_client *client = p;
 	
-	dout(30, "ceph_peer_reset peer_name = %s%d\n", 
-	     ceph_name_type_str(peer_name->type), le32_to_cpu(peer_name->num));
+	dout(30, "ceph_peer_reset peer_name = %s%d\n", ENTITY_NAME(*peer_name));
 
 	/* write me */
 }

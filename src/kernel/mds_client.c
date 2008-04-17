@@ -759,21 +759,21 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	session = __get_session(mdsc, mds);
 	down(&session->s_mutex);
 	
-	dout(1, "handle_session %p op %d seq %llu\n", session, op, seq);
+	dout(2, "handle_session %p op %d seq %llu\n", session, op, seq);
 	switch (op) {
 	case CEPH_SESSION_OPEN:
-		dout(1, "session open from mds%d\n", mds);
+		dout(2, "session open from mds%d\n", mds);
 		session->s_state = CEPH_MDS_SESSION_OPEN;
 		complete(&session->s_completion);
 		break;
 
 	case CEPH_SESSION_CLOSE:
 		if (session->s_cap_seq == seq) {
-			dout(1, "session close from mds%d\n", mds);
+			dout(2, "session close from mds%d\n", mds);
 			complete(&session->s_completion); /* for good measure */
 			__unregister_session(mdsc, mds);
 		} else {
-			dout(1, "ignoring session close from mds%d, "
+			dout(2, "ignoring session close from mds%d, "
 			     "seq %llu < my seq %llu\n",
 			     le32_to_cpu(msg->hdr.src.name.num),
 			     seq, session->s_cap_seq);
@@ -807,7 +807,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	return;
 
 bad:
-	dout(1, "corrupt session message, len %d, expected %d\n",
+	derr(1, "corrupt session message, len %d, expected %d\n",
 	     (int)msg->front.iov_len, (int)sizeof(*h));
 	return;
 }
@@ -991,7 +991,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* extract tid */
 	if (msg->front.iov_len < sizeof(*head)) {
-		dout(1, "handle_reply got corrupt (short) reply\n");
+		derr(1, "handle_reply got corrupt (short) reply\n");
 		return;
 	}
 	tid = le64_to_cpu(head->tid);
@@ -1804,10 +1804,10 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	return;
 
 bad:
-	dout(1, "corrupt map\n");
+	derr(1, "corrupt mds map\n");
 	return;
 bad2:
-	dout(1, "no memory to decode new mdsmap\n");
+	derr(1, "no memory to decode new mdsmap\n");
 	return;
 }
 

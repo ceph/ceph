@@ -30,7 +30,7 @@ extern int ceph_debug_addr;
 
 #ifdef CEPH_DUMP_ERROR_ALWAYS
 #define derr(x, args...) do {						\
-		printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
+		printk(KERN_ERR "ceph: " args);	\
 	} while (0)
 #else
 #define derr(x, args...) do {						\

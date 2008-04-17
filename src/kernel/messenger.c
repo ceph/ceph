@@ -232,7 +232,8 @@ void ceph_queue_delayed_write(struct ceph_connection *con)
 {
 	dout(40, "ceph_queue_delayed_write %p delay %lu\n", con, con->delay);
 	atomic_inc(&con->nref);
-	if (!queue_delayed_work(send_wq, &con->swork, con->delay)) {
+	if (!queue_delayed_work(send_wq, &con->swork, 
+				round_jiffies_relative(con->delay))) {
 		dout(40, "ceph_queue_delayed_write %p - already queued\n", con);
 		put_connection(con);
 	}
@@ -258,18 +259,19 @@ void ceph_queue_read(struct ceph_connection *con)
  */
 static void ceph_send_fault(struct ceph_connection *con)
 {
-	derr(1, "ceph_send_fault %p state %lu to peer %u.%u.%u.%u:%u\n",
-	     con, con->state,
-	     IPQUADPORT(con->peer_addr.ipaddr));
+	derr(1, "%s%d %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
+	     IPQUADPORT(con->peer_addr.ipaddr), con->error_msg);
+	dout(10, "fault %p state %lu to peer %u.%u.%u.%u:%u\n",
+	     con, con->state, IPQUADPORT(con->peer_addr.ipaddr));
 
 	/* PW if never get here remove */
 	if (test_bit(WAIT, &con->state)) {
-		derr(30, "ceph_send_fault socket close during WAIT state\n");
+		derr(30, "fault socket close during WAIT state\n");
 		return;
 	}
 
 	if (con->delay) {
-		derr(30, "ceph_send_fault tcp_close delay != 0\n");
+		dout(30, "fault tcp_close delay != 0\n");
 		if (con->sock)
 			sock_release(con->sock);
 		con->sock = NULL;
@@ -301,7 +303,7 @@ static void ceph_send_fault(struct ceph_connection *con)
 		else
 			con->delay = MAX_DELAY_INTERVAL;
 	} else {
-		dout(30, "ceph_send_fault tcp_close delay = 0\n");
+		dout(30, "fault tcp_close delay = 0\n");
 		remove_connection(con->msgr, con);
 	}
 }
@@ -567,7 +569,8 @@ more:
 		/* hmm, nothing to do! No more writes pending? */
 		dout(30, "try_write nothing else to write.\n");
 		spin_unlock(&con->out_queue_lock);
-		if (con->delay > 1) con->delay = BASE_DELAY_INTERVAL;
+		if (con->delay > 0) 
+			con->delay = BASE_DELAY_INTERVAL;
 		goto done;
 	}
 	spin_unlock(&con->out_queue_lock);
@@ -855,7 +858,8 @@ static void process_connect(struct ceph_connection *con)
 		break;
 	default:
 		derr(1, "process_connect protocol error, will retry\n");
-		con->delay = 10 * HZ;  /* maybe use default.. */
+		con->delay = BASE_DELAY_INTERVAL;
+		con->error_msg = "protocol error";
 		ceph_send_fault(con);
 	}
 	if (test_bit(WRITE_PENDING, &con->state)) {
@@ -1075,8 +1079,7 @@ more:
 
 		dout(1, "===== %p from %s%d %d=%s len %d+%d =====\n", 
 		     con->in_msg,
-		     ceph_name_type_str(le32_to_cpu(con->in_msg->hdr.src.name.type)),
-		     le32_to_cpu(con->in_msg->hdr.src.name.num),
+		     ENTITY_NAME(con->in_msg->hdr.src.name),
 		     le32_to_cpu(con->in_msg->hdr.type),
 		     ceph_msg_type_name(le32_to_cpu(con->in_msg->hdr.type)),
 		     le32_to_cpu(con->in_msg->hdr.front_len),
@@ -1188,7 +1191,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	if (myaddr)
 		msgr->inst.addr.ipaddr.sin_addr = myaddr->ipaddr.sin_addr;
 
-	dout(1, "create %p listening on %u.%u.%u.%u:%u\n", msgr,
+	dout(1, "messenger %p listening on %u.%u.%u.%u:%u\n", msgr,
 	     IPQUADPORT(msgr->inst.addr.ipaddr));
 	return msgr;
 }
@@ -1197,14 +1200,14 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 
-	dout(1, "destroy %p\n", msgr);
+	dout(2, "destroy %p\n", msgr);
 
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
 	while (!list_empty(&msgr->con_all)) {
-		dout(1, "con_all isn't empty\n");
 		con = list_entry(msgr->con_all.next, struct ceph_connection,
 				 list_all);
+		dout(10, "destroy removing connection %p\n", con);
 		__remove_connection(msgr, con);
 	}
 	spin_unlock(&msgr->con_lock);
@@ -1223,13 +1226,15 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 {
 	struct ceph_connection *con;
 
-	dout(1, "mark_down peer %u.%u.%u.%u:%u\n",
+	dout(2, "mark_down peer %u.%u.%u.%u:%u\n",
 	     IPQUADPORT(addr->ipaddr));
 
 	spin_lock(&msgr->con_lock);
 	con = __get_connection(msgr, addr);
 	if (con) {
-		dout(10, "mark_down dropping %p\n", con);
+		dout(1, "mark_down %s%d %u.%u.%u.%u:%u (%p)\n", 
+		     ENTITY_NAME(con->peer_name),
+		     IPQUADPORT(con->peer_addr.ipaddr), con);
 		set_bit(CLOSED, &con->state);  /* in case there's queued work */
 		__remove_connection(msgr, con);
 		put_connection(con);
@@ -1291,16 +1296,13 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = cpu_to_le64(++con->out_seq);
 	dout(1, "----- %p to %s%d %d=%s len %d+%d -----\n", msg,
-	     ceph_name_type_str(le32_to_cpu(msg->hdr.dst.name.type)),
-	     le32_to_cpu(msg->hdr.dst.name.num),
+	     ENTITY_NAME(msg->hdr.dst.name),
 	     le32_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le32_to_cpu(msg->hdr.type)),
 	     le32_to_cpu(msg->hdr.front_len),
 	     le32_to_cpu(msg->hdr.data_len));
 	dout(2, "ceph_msg_send queuing %p seq %llu for %s%d on %p\n", msg,
-	     le64_to_cpu(msg->hdr.seq),
-	     ceph_name_type_str(le32_to_cpu(msg->hdr.dst.name.type)),
-	     le32_to_cpu(msg->hdr.dst.name.num), con);
+	     le64_to_cpu(msg->hdr.seq), ENTITY_NAME(msg->hdr.dst.name), con);
 	//ceph_msg_get(msg);
 	list_add_tail(&msg->list_head, &con->out_queue);
 	spin_unlock(&con->out_queue_lock);

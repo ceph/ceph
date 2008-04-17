@@ -15,7 +15,7 @@
  * if the per-file debug level >= 0, then that overrides this  global
  * debug level.
  */
-int ceph_debug = 0;
+int ceph_debug = 1;
 
 /* for this file */
 int ceph_debug_super = -1;
@@ -290,7 +290,7 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 	return 0;
 
 bad:
-	dout(1, "parse_ip bad ip '%s'\n", c);
+	derr(1, "parse_ip bad ip '%s'\n", c);
 	return -EINVAL;
 }
 
