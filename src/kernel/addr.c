@@ -136,6 +136,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 		if (was_dirty)
 			ceph_put_wrbuffer_cap_refs(ci, 1);
 		SetPageUptodate(page);
+		err = 0;  /* vfs expects us to return 0 */
 	} else
 		redirty_page_for_writepage(wbc, page);  /* is this right?? */
 	unlock_page(page);
@@ -381,6 +382,8 @@ retry:
 		mapping->writeback_index = index;
 
 	kfree(pages);
+	if (rc > 0) 
+		rc = 0;  /* vfs expects us to return 0 */
 	dout(10, "writepages done, rc = %d\n", rc);
 	return rc;
 }
