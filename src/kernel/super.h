@@ -136,12 +136,6 @@ struct ceph_inode_frag_map_item {
 
 #define STATIC_CAPS 2
 
-enum {
-	FILE_MODE_PIN,
-	FILE_MODE_RDONLY,
-	FILE_MODE_RDWR,
-	FILE_MODE_WRONLY
-};
 struct ceph_inode_info {
 	u64 i_ceph_ino;
 
@@ -164,7 +158,7 @@ struct ceph_inode_info {
 	wait_queue_head_t i_cap_wq;
 	unsigned long i_hold_caps_until; /* jiffies */
 
-	int i_nr_by_mode[4];
+	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
 	loff_t i_max_size;      /* size authorized by mds */
 	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
 	loff_t i_wanted_max_size;  /* offset we'd like to write too */
@@ -271,27 +265,6 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 	return used;
 }
 
-static inline int ceph_caps_for_mode(int mode)
-{
-	switch (mode) {
-	case FILE_MODE_PIN: 
-		return CEPH_CAP_PIN;
-	case FILE_MODE_RDONLY: 
-		return CEPH_CAP_PIN | 
-			CEPH_CAP_RD | CEPH_CAP_RDCACHE;
-	case FILE_MODE_RDWR:
-		return CEPH_CAP_PIN | 
-			CEPH_CAP_RD | CEPH_CAP_RDCACHE |
-			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
-			CEPH_CAP_EXCL;
-	case FILE_MODE_WRONLY:
-		return CEPH_CAP_PIN | 
-			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
-			CEPH_CAP_EXCL;
-	}
-	return 0;
-}
-
 static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 {
 	int want = 0;
@@ -308,19 +281,6 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 	if (w & CEPH_CAP_WRBUFFER)
 		w |= CEPH_CAP_EXCL;  /* want EXCL if we have dirty data */
 	return w;
-}
-
-static inline int ceph_file_mode(int flags)
-{
-	if ((flags & O_DIRECTORY) == O_DIRECTORY)
-		return FILE_MODE_PIN;
-	if ((flags & O_ACCMODE) == O_RDWR)
-		return FILE_MODE_RDWR;
-	if ((flags & O_ACCMODE) == O_WRONLY)
-		return FILE_MODE_WRONLY;
-	if ((flags & O_ACCMODE) == O_RDONLY)
-		return FILE_MODE_RDONLY;
-	return FILE_MODE_RDWR;  /* not -EINVAL under Linux, strangely */
 }
 
 static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode) 

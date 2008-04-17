@@ -262,14 +262,14 @@ class Inode {
   }
 
   void add_open(int cmode) {
-    if (cmode & FILE_MODE_R) num_open_rd++;
-    if (cmode & FILE_MODE_W) num_open_wr++;
-    if (cmode & FILE_MODE_LAZY) num_open_lazy++;
+    if (cmode & CEPH_FILE_MODE_RD) num_open_rd++;
+    if (cmode & CEPH_FILE_MODE_WR) num_open_wr++;
+    if (cmode & CEPH_FILE_MODE_LAZY) num_open_lazy++;
   }
   void sub_open(int cmode) {
-    if (cmode & FILE_MODE_R) num_open_rd--;
-    if (cmode & FILE_MODE_W) num_open_wr--;
-    if (cmode & FILE_MODE_LAZY) num_open_lazy--;
+    if (cmode & CEPH_FILE_MODE_RD) num_open_rd--;
+    if (cmode & CEPH_FILE_MODE_WR) num_open_wr--;
+    if (cmode & CEPH_FILE_MODE_LAZY) num_open_lazy--;
   }
   
   int authority(const string& dname) {

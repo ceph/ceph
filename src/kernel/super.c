@@ -141,7 +141,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ci->i_caps);
 	for (i = 0; i < STATIC_CAPS; i++)
 		ci->i_static_caps[i].mds = -1;
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 

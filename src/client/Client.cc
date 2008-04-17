@@ -2753,7 +2753,7 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
   req->head.args.open.flags = flags;
   req->head.args.open.mode = mode;
 
-  int cmode = file_flags_to_mode(flags);
+  int cmode = ceph_flags_to_mode(flags);
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -3047,7 +3047,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     movepos = true;
   }
 
-  bool lazy = f->mode == FILE_MODE_LAZY;
+  bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   // wait for RD cap and/or a valid file size
   while (1) {
@@ -3206,7 +3206,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
     unlock_fh_pos(f);
   }
 
-  bool lazy = f->mode == FILE_MODE_LAZY;
+  bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   dout(10) << "cur file size is " << in->inode.size << dendl;
 
@@ -3530,7 +3530,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
-  if (f->mode & FILE_MODE_LAZY) {
+  if (f->mode & CEPH_FILE_MODE_LAZY) {
     // wait for lazy cap
     while ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
@@ -3566,7 +3566,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   Fh *f = fd_map[fd];
   Inode *in = f->inode;
   
-  if (f->mode & FILE_MODE_LAZY) {
+  if (f->mode & CEPH_FILE_MODE_LAZY) {
     // wait for lazy cap
     while ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;

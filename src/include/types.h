@@ -151,28 +151,8 @@ namespace __gnu_cxx {
 }
 
 
-// these are bit masks
-#define FILE_MODE_R          1
-#define FILE_MODE_W          2
-#define FILE_MODE_RW         (1|2)
-#define FILE_MODE_LAZY       4
-#define FILE_MODE_PIN        8
-
-static inline int file_flags_to_mode(int flags) {
-  if (flags & O_DIRECTORY)
-    return FILE_MODE_PIN;
-  if (flags & O_LAZY) 
-    return FILE_MODE_LAZY;
-  if (flags & O_WRONLY) 
-    return FILE_MODE_W;
-  if (flags & O_RDWR) 
-    return FILE_MODE_RW;
-  if (flags & O_APPEND) 
-    return FILE_MODE_W;
-  return FILE_MODE_R;
-}
 static inline bool file_mode_is_readonly(int mode) {
-  return (mode & FILE_MODE_W) == 0;
+  return (mode & CEPH_FILE_MODE_WR) == 0;
 }
 
 

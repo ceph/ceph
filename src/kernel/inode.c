@@ -691,11 +691,11 @@ void __ceph_remove_cap(struct ceph_inode_cap *cap)
 	dout(10, "__ceph_remove_cap %p from %p\n", cap, &cap->ci->vfs_inode);
 
 	/* remove from session list */
-	list_del(&cap->session_caps);
+	list_del_init(&cap->session_caps);
 	session->s_nr_caps--;
 
 	/* remove from inode list */
-	list_del(&cap->ci_caps);
+	list_del_init(&cap->ci_caps);
 	cap->session = 0;
 	cap->mds = -1;  /* mark unused */
 		

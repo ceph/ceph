@@ -96,7 +96,7 @@ public:
   }
 
   bool open_file_mode_is_readonly() {
-    return file_mode_is_readonly(file_flags_to_mode(head.args.open.flags));
+    return file_mode_is_readonly(ceph_flags_to_mode(head.args.open.flags));
   }
   bool is_idempotent() {
     if (head.op == CEPH_MDS_OP_OPEN) 

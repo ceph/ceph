@@ -36,7 +36,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
 				       0, 0);
 	req->r_expects_cap = 1;
-	req->r_fmode = ceph_file_mode(flags);
+	req->r_fmode = ceph_flags_to_mode(flags);
 	kfree(path);
 	if (!IS_ERR(req)) {
 		rhead = req->r_request->front.iov_base;
@@ -81,7 +81,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
 	
-	fmode = ceph_file_mode(flags);
+	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
 	dout(5, "open inode %p ino %llx file %p\n", inode,

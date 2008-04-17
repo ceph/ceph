@@ -3925,7 +3925,7 @@ void Server::handle_client_open(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   int flags = req->head.args.open.flags;
-  int cmode = file_flags_to_mode(req->head.args.open.flags);
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
 
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
@@ -3935,7 +3935,7 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur) return;
 
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
+  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
 
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
@@ -3981,8 +3981,8 @@ void Server::handle_client_open(MDRequest *mdr)
 void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
   MClientRequest *req = mdr->client_request;
-  int cmode = file_flags_to_mode(req->head.args.open.flags);
-  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
 
   // register new cap
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
@@ -3998,8 +3998,8 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   
   // hit pop
   mdr->now = g_clock.now();
-  if (cmode == FILE_MODE_RW ||
-      cmode == FILE_MODE_W) 
+  if (cmode == CEPH_FILE_MODE_RDWR ||
+      cmode == CEPH_FILE_MODE_WR) 
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 

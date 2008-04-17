@@ -9,10 +9,12 @@
 #ifdef __KERNEL__
 # include <linux/in.h>
 # include <linux/types.h>
+# include <asm/fcntl.h>
 #else
 # include <netinet/in.h>
 # include "inttypes.h"
 # include "byteorder.h"
+# include <fcntl.h>
 #endif
 
 #define CEPH_MON_PORT 12345
@@ -494,6 +496,33 @@ struct ceph_mds_reply_dirfrag {
 	__u32 dist[];
 } __attribute__ ((packed));
 
+/* file access modes */
+#define CEPH_FILE_MODE_PIN        0
+#define CEPH_FILE_MODE_RD         1
+#define CEPH_FILE_MODE_WR         2
+#define CEPH_FILE_MODE_RDWR       3  /* RD | WR */
+#define CEPH_FILE_MODE_LAZY       4
+#define CEPH_FILE_MODE_NUM        8  /* bc these are bit fields.. mostly */
+
+static inline int ceph_flags_to_mode(int flags)
+{
+	if ((flags & O_DIRECTORY) == O_DIRECTORY)
+		return CEPH_FILE_MODE_PIN;
+#ifdef O_LAZY
+	if (flags & O_LAZY) 
+		return CEPH_FILE_MODE_LAZY;
+#endif
+	if ((flags & O_APPEND) == O_APPEND) 
+		flags |= O_WRONLY;
+	
+	flags &= O_ACCMODE;
+	if ((flags & O_RDWR) == O_RDWR) 
+		return CEPH_FILE_MODE_RDWR;
+	if ((flags & O_WRONLY) == O_WRONLY) 
+		return CEPH_FILE_MODE_WR;
+	return CEPH_FILE_MODE_RD;
+}
+
 /* client file caps */
 #define CEPH_CAP_PIN       1  /* no specific capabilities beyond the pin */
 #define CEPH_CAP_RDCACHE   2  /* client can cache reads */
@@ -503,6 +532,27 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_CAP_WREXTEND 32  /* client can extend eof */
 #define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
 #define CEPH_CAP_EXCL    128  /* exclusive/loner access */
+
+static inline int ceph_caps_for_mode(int mode)
+{
+	switch (mode) {
+	case CEPH_FILE_MODE_PIN: 
+		return CEPH_CAP_PIN;
+	case CEPH_FILE_MODE_RD: 
+		return CEPH_CAP_PIN | 
+			CEPH_CAP_RD | CEPH_CAP_RDCACHE;
+	case CEPH_FILE_MODE_RDWR:
+		return CEPH_CAP_PIN | 
+			CEPH_CAP_RD | CEPH_CAP_RDCACHE |
+			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
+			CEPH_CAP_EXCL;
+	case CEPH_FILE_MODE_WR:
+		return CEPH_CAP_PIN | 
+			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
+			CEPH_CAP_EXCL;
+	}
+	return 0;
+}
 
 enum {
 	CEPH_CAP_OP_GRANT,   /* mds->client grant */
