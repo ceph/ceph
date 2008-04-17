@@ -74,18 +74,20 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	int err;
-	int fmode, wantcaps;
+	int flags, fmode, wantcaps;
 
 	/* filter out O_CREAT|O_EXCL; vfs did that already.  yuck. */
-	int flags = file->f_flags & ~(O_CREAT|O_EXCL);
+	flags = file->f_flags & ~(O_CREAT|O_EXCL);
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
+
+	dout(5, "open inode %p ino %llx file %p flags %d (%d)\n", inode,
+	     ceph_ino(inode), file, flags, file->f_flags);
+
 
 	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
-	dout(5, "open inode %p ino %llx file %p\n", inode,
-	     ceph_ino(inode), file);
 	if (cf) {
 		dout(5, "open file %p is already opened\n", file);
 		return 0;
@@ -133,7 +135,8 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	struct file *file = nd->intent.open.file;
 	struct ceph_mds_request *req;
 	int err;
-	int flags = nd->intent.open.flags;
+	int flags = nd->intent.open.flags - 1;  /* silly vfs! */
+
 	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n",
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 
