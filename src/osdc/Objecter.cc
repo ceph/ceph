@@ -912,7 +912,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     return;
   }
 
-  assert(m->get_result() >= 0);
+  assert(m->get_result() >= 0); // FIXME
 
   // ack|commit -> ack
   if (wr->waitfor_ack.count(tid)) {
@@ -937,6 +937,9 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 	// discard buffer!
 	((OSDWrite*)wr)->bl.clear();
       }
+    } else {
+      dout(15) << "handle_osd_modify_reply still need " 
+	       << wr->waitfor_ack.size() << " acks" << dendl;
     }
   }
   if (m->is_safe()) {
@@ -951,20 +954,25 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     if (wr->waitfor_commit.empty()) {
       oncommit = wr->oncommit;
       wr->oncommit = 0;
+    } else {
+      dout(15) << "handle_osd_modify_reply still need "
+	       << wr->waitfor_commit.size() << " safes" << dendl;
     }
   }
 
   // done?
  done:
+  // remove from tid/osd maps
+  assert(pg.active_tids.count(tid));
+  pg.active_tids.erase(tid);
+  dout(15) << "handle_osd_modify_reply pg " << m->get_pg()
+	   << " still has " << pg.active_tids << dendl;
+  if (pg.active_tids.empty()) 
+    close_pg( m->get_pg() );
+  op_modify.erase( tid );
+
   if (wr->onack == 0 && wr->oncommit == 0) {
-    // remove from tid/osd maps
-    assert(pg.active_tids.count(tid));
-    pg.active_tids.erase(tid);
-    dout(15) << "handle_osd_modify_reply completed.  pg " << m->get_pg()
-	     << " still has " << pg.active_tids << dendl;
-    if (pg.active_tids.empty()) 
-      close_pg( m->get_pg() );
-    op_modify.erase( tid );
+    dout(15) << "handle_osd_modify_reply completed" << dendl;
     delete wr;
   }
   
