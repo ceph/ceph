@@ -1485,7 +1485,8 @@ void Locker::simple_lock(SimpleLock *lock)
   assert(lock->get_state() == LOCK_SYNC);
   
   if (lock->get_parent()->is_replicated() ||
-      lock->get_num_client_lease()) {
+      lock->get_num_client_lease() ||
+      lock->is_rdlocked()) {
     // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
 
@@ -1566,7 +1567,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     // auth
 
     // lock.
-    if (lock->get_state() == LOCK_SYNC) 
+    if (lock->get_state() == LOCK_SYNC)
       simple_lock(lock);
 
     // already locked?
