@@ -1653,7 +1653,9 @@ void delayed_work(struct work_struct *work)
 		mdsc->last_renew_caps = jiffies;
 	for (i = 0; i < mdsc->max_sessions; i++) {
 		struct ceph_mds_session *session = __get_session(mdsc, i);
-		if (session == 0 || session->s_state < CEPH_MDS_SESSION_OPEN) {
+		if (session == 0)
+			continue;
+		if (session->s_state < CEPH_MDS_SESSION_OPEN) {
 			put_session(session);
 			continue;
 		}
