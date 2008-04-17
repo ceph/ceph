@@ -1061,17 +1061,39 @@ void ceph_inode_writeback(struct work_struct *work)
 void apply_truncate(struct inode *inode, loff_t size)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct address_space *mapping = inode->i_mapping;
+	unsigned long limit;
 
 	spin_lock(&inode->i_lock);
 	dout(10, "apply_truncate %p size %lld -> %llu\n", inode,
 	     inode->i_size, size);
-	inode->i_size = size;
+
+	if (inode->i_size < size)
+		goto do_expand;
+	i_size_write(inode, size);
 	ci->i_reported_size = size;
 	spin_unlock(&inode->i_lock);
 
-	/*
-	 * FIXME: how to truncate the page cache here?
-	 */
+	/* from fs/cifs */
+	unmap_mapping_range(mapping, size + PAGE_SIZE - 1, 0, 1);
+	truncate_inode_pages(mapping, size);
+	unmap_mapping_range(mapping, size + PAGE_SIZE - 1, 0, 1);
+
+	return;
+do_expand:
+	limit = current->signal->rlim[RLIMIT_FSIZE].rlim_cur;
+	if (limit != RLIM_INFINITY && size > limit) {
+		spin_unlock(&inode->i_lock);
+		goto out_sig;
+	}
+	if (size > inode->i_sb->s_maxbytes) {
+		spin_unlock(&inode->i_lock);
+		return;
+	}
+	i_size_write(inode, size);
+	spin_unlock(&inode->i_lock);
+out_sig:
+	send_sig(SIGXFSZ, current, 0);
 }
 
 int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
@@ -1216,16 +1238,162 @@ struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 	return req;
 }
 
+static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+    const unsigned int ia_valid = attr->ia_valid;
+	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *reqh;
+	int err;
 
-int ceph_setattr(struct dentry *dentry, struct iattr *attr)
+	req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHOWN);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	reqh = req->r_request->front.iov_base;
+	if (ia_valid & ATTR_UID)
+		reqh->args.chown.uid = cpu_to_le32(attr->ia_uid);
+	else
+		reqh->args.chown.uid = cpu_to_le32(-1);
+	if (ia_valid & ATTR_GID)
+		reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
+	else
+		reqh->args.chown.gid = cpu_to_le32(-1);
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IAUTH);
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
+	dout(10, "chown result %d\n", err);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *reqh;
+	int err;
+
+	req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHMOD);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	reqh = req->r_request->front.iov_base;
+	reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IAUTH);
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
+	dout(10, "chmod result %d\n", err);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-        const unsigned int ia_valid = attr->ia_valid;
+    const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
+	int err;
+
+	/* do i hold CAP_EXCL? */
+	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+		dout(10, "utime holding EXCL, doing locally\n");
+		if (ia_valid & ATTR_ATIME)
+			inode->i_atime = attr->ia_atime;
+		if (ia_valid & ATTR_MTIME)
+			inode->i_mtime = attr->ia_mtime;
+		return 0;
+	}
+	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
+	    !(((ia_valid & ATTR_ATIME) &&
+	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
+	      ((ia_valid & ATTR_MTIME) && 
+	       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
+		dout(10, "lease indicates utimes is a no-op\n");
+		return 0;
+	}
+	req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	reqh = req->r_request->front.iov_base;
+	ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
+	ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
+
+	reqh->args.utime.mask = 0;
+	if (ia_valid & ATTR_ATIME)
+		reqh->args.utime.mask |= CEPH_UTIME_ATIME;
+	if (ia_valid & ATTR_MTIME)
+		reqh->args.utime.mask |= CEPH_UTIME_MTIME;
+
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
+	dout(10, "utime result %d\n", err);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+    const unsigned int ia_valid = attr->ia_valid;
+	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *reqh;
+	int err;
+
+	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+		dout(10, "holding EXCL, doing truncate locally\n");
+		apply_truncate(inode, attr->ia_size);
+		return 0;
+	}
+	dout(10, "truncate: ia_size %d i_size %d\n",
+	     (int)attr->ia_size, (int)inode->i_size);
+	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
+	    attr->ia_size < inode->i_size) {
+		dout(10, "lease indicates truncate is a no-op\n");
+		return 0; 
+	}
+	if (ia_valid & ATTR_FILE) 
+		req = ceph_mdsc_create_request(mdsc, 
+			       CEPH_MDS_OP_TRUNCATE, 
+			       ceph_ino(dentry->d_inode), "", 0, 0);
+	else
+		req = prepare_setattr(mdsc, dentry, 
+				      CEPH_MDS_OP_TRUNCATE);
+	if (IS_ERR(req)) 
+		return PTR_ERR(req);
+	reqh = req->r_request->front.iov_base;
+	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
+	dout(10, "truncate result %d\n", err);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+
+int ceph_setattr(struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *inode = dentry->d_inode;
+    const unsigned int ia_valid = attr->ia_valid;
 	int err;
 
 	err = inode_change_ok(inode, attr);
@@ -1255,111 +1423,29 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr: ATTR_FILE ... hrm!\n");
 
 	/* chown */
-        if (ia_valid & (ATTR_UID|ATTR_GID)) {
-		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHOWN);
-		if (IS_ERR(req)) 
-			return PTR_ERR(req);
-		reqh = req->r_request->front.iov_base;
-		if (ia_valid & ATTR_UID)
-			reqh->args.chown.uid = cpu_to_le32(attr->ia_uid);
-		else
-			reqh->args.chown.uid = cpu_to_le32(-1);
-		if (ia_valid & ATTR_GID)
-			reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
-		else
-			reqh->args.chown.gid = cpu_to_le32(-1);
-		ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IAUTH);
-		err = ceph_mdsc_do_request(mdsc, req);
-		ceph_mdsc_put_request(req);
-		dout(10, "chown result %d\n", err);
+    if (ia_valid & (ATTR_UID|ATTR_GID)) {
+		err = ceph_setattr_chown(dentry, attr);
 		if (err)
 			return err;
 	}
 	
 	/* chmod? */
 	if (ia_valid & ATTR_MODE) {
-		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHMOD);
-		if (IS_ERR(req)) 
-			return PTR_ERR(req);
-		reqh = req->r_request->front.iov_base;
-		reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
-		ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IAUTH);
-		err = ceph_mdsc_do_request(mdsc, req);
-		ceph_mdsc_put_request(req);
-		dout(10, "chmod result %d\n", err);
+		err = ceph_setattr_chmod(dentry, attr);
 		if (err)
 			return err;
 	}
 
 	/* utimes */
 	if (ia_valid & (ATTR_ATIME|ATTR_MTIME)) {
-		/* do i hold CAP_EXCL? */
-		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
-			dout(10, "utime holding EXCL, doing locally\n");
-			if (ia_valid & ATTR_ATIME)
-				inode->i_atime = attr->ia_atime;
-			if (ia_valid & ATTR_MTIME)
-				inode->i_mtime = attr->ia_mtime;
-			return 0;
-		}
-		if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
-		    !(((ia_valid & ATTR_ATIME) &&
-		       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
-		      ((ia_valid & ATTR_MTIME) && 
-		       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
-			dout(10, "lease indicates utimes is a no-op\n");
-			return 0;
-		}
-		req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
-		if (IS_ERR(req)) 
-			return PTR_ERR(req);
-		reqh = req->r_request->front.iov_base;
-		ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
-		ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
-
-		reqh->args.utime.mask = 0;
-		if (ia_valid & ATTR_ATIME)
-			reqh->args.utime.mask |= CEPH_UTIME_ATIME;
-		if (ia_valid & ATTR_MTIME)
-			reqh->args.utime.mask |= CEPH_UTIME_MTIME;
-
-		ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
-		err = ceph_mdsc_do_request(mdsc, req);
-		ceph_mdsc_put_request(req);
-		dout(10, "utime result %d\n", err);
+		err = ceph_setattr_time(dentry, attr);
 		if (err)
 			return err;
 	}
 
 	/* truncate? */
 	if (ia_valid & ATTR_SIZE) {
-		if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
-			dout(10, "holding EXCL, doing truncate locally\n");
-			apply_truncate(inode, attr->ia_size);
-			return 0;
-		}
-		dout(10, "truncate: ia_size %d i_size %d\n",
-		     (int)attr->ia_size, (int)inode->i_size);
-		if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
-		    attr->ia_size < inode->i_size) {
-			dout(10, "lease indicates truncate is a no-op\n");
-			return 0; 
-		}
-		if (ia_valid & ATTR_FILE) 
-			req = ceph_mdsc_create_request(mdsc, 
-				       CEPH_MDS_OP_TRUNCATE, 
-				       ceph_ino(dentry->d_inode), "", 0, 0);
-		else
-			req = prepare_setattr(mdsc, dentry, 
-					      CEPH_MDS_OP_TRUNCATE);
-		if (IS_ERR(req)) 
-			return PTR_ERR(req);
-		reqh = req->r_request->front.iov_base;
-		reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-		ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
-		err = ceph_mdsc_do_request(mdsc, req);
-		ceph_mdsc_put_request(req);
-		dout(10, "truncate result %d\n", err);
+		err = ceph_setattr_size(dentry, attr);
 		if (err)
 			return err;
 	}
