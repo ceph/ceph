@@ -1299,6 +1299,8 @@ void Rank::Pipe::dirty_close()
   lock.Lock();
   state = STATE_CLOSING;
   cond.Signal();
+  dout(10) << "dirty_close sending SIGUSR1" << dendl;
+  reader_thread.kill(SIGUSR1);
   lock.Unlock();
 }
 
