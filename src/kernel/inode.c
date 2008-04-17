@@ -417,7 +417,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			dout(10, "fill_trace d_lookup of '%.*s' got %p\n", 
 			     (int)dname.len, dname.name, dn);
 			if (d+1 < rinfo->trace_numi &&
-			    dn->d_inode &&
+			    dn && dn->d_inode &&
 			    ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino)) {
 				dout(10, "fill_trace dn points to wrong ino\n");
 				d_delete(dn);
