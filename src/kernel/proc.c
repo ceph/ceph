@@ -9,8 +9,9 @@ static int ceph_debug_level_read(char *page, char **start, off_t off,
 		       int count, int *eof, void *data)
 {
 	int len;
+	int *debug = data;
 
-	len = sprintf(page, "%d\n", ceph_debug);
+	len = sprintf(page, "%d\n", *debug);
 
 	if ((len < 0) || (len <= off)) {
 		*start = page;
@@ -36,6 +37,7 @@ static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 #define PROC_STR_LEN	16
 	char level_str[PROC_STR_LEN];
 	int new_dl;
+	int *debug = data;
 
 	if ((count < 1) || (count > sizeof(level_str)-1))
 		return -EINVAL;
@@ -49,7 +51,7 @@ static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 
 	new_dl = simple_strtol(level_str, NULL, 0);
 
-	ceph_debug = new_dl;
+	*debug = new_dl;
 
 	return count;
 }
@@ -66,9 +68,14 @@ void ceph_fs_proc_init(void)
 		return;
 
 	proc_fs_ceph->owner = THIS_MODULE;
-	pde = create_proc_read_entry("debug_level", 0, 
-				proc_fs_ceph, ceph_debug_level_read, NULL);
-
+	pde = create_proc_read_entry("debug", 0, 
+				     proc_fs_ceph, ceph_debug_level_read, 
+				     &ceph_debug);
+	if (pde)
+		pde->write_proc = ceph_debug_level_write;
+	pde = create_proc_read_entry("debug_msgr", 0, 
+				     proc_fs_ceph, ceph_debug_level_read, 
+				     &ceph_debug_msgr);
 	if (pde)
 		pde->write_proc = ceph_debug_level_write;
 

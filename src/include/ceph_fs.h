@@ -286,6 +286,17 @@ struct ceph_statfs {
 	__le64 f_objects;
 };
 
+struct ceph_osd_getmap {
+	struct ceph_fsid fsid;
+	__le64 start, want;
+} __attribute__ ((packed));
+
+struct ceph_mds_getmap {
+	struct ceph_fsid fsid;
+	__le64 have;
+} __attribute__ ((packed));
+
+
 /*
  * mds states 
  *   > 0 -> in
@@ -342,6 +353,9 @@ struct ceph_statfs {
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
 #define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
 
+#define CEPH_UTIME_ATIME		1
+#define CEPH_UTIME_MTIME		2
+#define CEPH_UTIME_CTIME		4
 
 /* client_session */
 enum {
@@ -397,7 +411,6 @@ struct ceph_mds_request_head {
 	__u32 op;
 	__u32 caller_uid, caller_gid;
 
-	// fixed size arguments.  in a union.
 	union { 
 		struct {
 			__u32 mask;
@@ -411,7 +424,9 @@ struct ceph_mds_request_head {
 		struct {
 			struct ceph_timespec mtime;
 			struct ceph_timespec atime;
-		} utime;
+			struct ceph_timespec ctime;
+			__u32 mask;
+		} __attribute__ ((packed)) utime;
 		struct {
 			__u32 mode;
 		} chmod; 
@@ -433,7 +448,7 @@ struct ceph_mds_request_head {
 		struct {
 			__s64 length;
 		} truncate;
-	} args;
+	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
 
@@ -454,6 +469,7 @@ struct ceph_frag_tree_head {
 
 struct ceph_mds_reply_inode {
 	ceph_ino_t ino;
+	__le64 version;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
 	__u32 mode, uid, gid;
@@ -504,7 +520,7 @@ struct ceph_mds_file_caps {
 	__le64 ino;
 	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
-	struct ceph_timespec mtime, atime;
+	struct ceph_timespec mtime, atime, ctime;
 } __attribute__ ((packed));
 
 

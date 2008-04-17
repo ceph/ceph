@@ -768,7 +768,7 @@ MClientReply *Client::make_request(MClientRequest *req, Inode **ppin, utime_t *p
       if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
 	int mon = monmap->pick_mon();
-	messenger->send_message(new MMDSGetMap(mdsmap->get_epoch()),
+	messenger->send_message(new MMDSGetMap(monmap->fsid, mdsmap->get_epoch()),
 				monmap->get_inst(mon));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
@@ -2122,16 +2122,7 @@ int Client::_do_lstat(filepath &fpath, int mask, Inode **in)
 
   int havemask = 0;
   if (dn) {
-    if (now < dn->inode->lease_ttl &&
-	dn->inode->lease_mds >= 0)
-      havemask = dn->inode->lease_mask;
-    if (dn->inode->file_caps() & CEPH_CAP_EXCL) {
-      dout(10) << "_lstat has inode " << fpath << " with CAP_EXCL, yay" << dendl;
-      havemask |= CEPH_LOCK_ICONTENT;
-    }
-    if (havemask & CEPH_LOCK_ICONTENT)
-      havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
- 
+    havemask = dn->inode->get_effective_lease_mask(now);
     dout(10) << "_lstat has inode " << fpath << " with mask " << havemask
 	     << ", want " << mask << dendl;
   } else {
@@ -2344,6 +2335,7 @@ int Client::_utimes(const char *path, utime_t mtime, utime_t atime)
   req->set_path(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
   atime.encode_timeval(&req->head.args.utime.atime);
+  req->head.args.utime.mask = CEPH_UTIME_ATIME | CEPH_UTIME_MTIME;
 
   // FIXME where does FUSE maintain user information
   req->set_caller_uid(getuid());
@@ -2787,6 +2779,8 @@ int Client::_open(const char *path, int flags, mode_t mode, Fh **fhp)
     Fh *f = new Fh;
     if (fhp) *fhp = f;
     f->mode = cmode;
+    if (flags & O_APPEND)
+      f->append = true;
 
     // inode
     assert(in);
@@ -3055,37 +3049,62 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
 
   bool lazy = f->mode == FILE_MODE_LAZY;
 
-  // wait for RD cap before checking size
-  while (!lazy && (in->file_caps() & CEPH_CAP_RD) == 0) {
-    dout(7) << " don't have read cap, waiting" << dendl;
+  // wait for RD cap and/or a valid file size
+  while (1) {
+
+    if (lazy) {
+      // wait for lazy cap
+      if ((in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
+	dout(7) << " don't have lazy cap, waiting" << dendl;
+	Cond cond;
+	in->waitfor_lazy.push_back(&cond);
+	cond.Wait(client_lock);
+	continue;
+      }
+    } else {
+      // wait for RD cap?
+      while ((in->file_caps() & CEPH_CAP_RD) == 0) {
+	dout(7) << " don't have read cap, waiting" << dendl;
+	goto wait;
+      }
+    }
+    
+    // async i/o?
+    if ((in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
+
+      // FIXME: this logic needs to move info FileCache!
+
+      // wait for valid file size
+      if (!in->have_valid_size()) {
+	dout(7) << " don't have (rd+rdcache)|lease|excl for valid file size, waiting" << dendl;
+	goto wait;
+      }
+
+      dout(10) << "file size: " << in->inode.size << dendl;
+      if (offset > 0 && offset >= in->inode.size) {
+	if (movepos) unlock_fh_pos(f);
+	return 0;
+      }
+      if (offset + size > (off_t)in->inode.size) 
+	size = (off_t)in->inode.size - offset;
+      
+      if (size == 0) {
+	dout(10) << "read is size=0, returning 0" << dendl;
+	if (movepos) unlock_fh_pos(f);
+	return 0;
+      }
+      break;
+    } else {
+      // unbuffered, sync i/o.  defer to osd.
+      break;
+    }
+
+  wait:
     Cond cond;
     in->waitfor_read.push_back(&cond);
     cond.Wait(client_lock);
   }
 
-  // determine whether read range overlaps with file
-  // ...ONLY if we're doing async io
-  if (!lazy && (in->file_caps() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
-    // we're doing buffered i/o.  make sure we're inside the file.
-    // we can trust size info bc we get accurate info when buffering/caching caps are issued.
-    dout(10) << "file size: " << in->inode.size << dendl;
-    if (offset > 0 && offset >= in->inode.size) {
-      if (movepos) unlock_fh_pos(f);
-      return 0;
-    }
-    if (offset + size > (off_t)in->inode.size) 
-      size = (off_t)in->inode.size - offset;
-    
-    if (size == 0) {
-      dout(10) << "read is size=0, returning 0" << dendl;
-      if (movepos) unlock_fh_pos(f);
-      return 0;
-    }
-  } else {
-    // unbuffered, synchronous file i/o.  
-    // or lazy.
-    // defer to OSDs for file bounds.
-  }
   
   int r = 0;
   int rvalue = 0;
@@ -3095,15 +3114,7 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
     rvalue = r = in->fc.read(offset, size, *bl, client_lock);  // may block.
   } else {
     // object cache OFF -- legacy inconsistent way.
-
-    // lazy cap?
-    while (lazy && (in->file_caps() & CEPH_CAP_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << dendl;
-      Cond cond;
-      in->waitfor_lazy.push_back(&cond);
-      cond.Wait(client_lock);
-    }
-    
+  
     // do sync read
     Cond cond;
     bool done = false;
@@ -3184,6 +3195,12 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
+    /* 
+     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and inode.size may
+     * change out from under us.
+     */
+    if (f->append)
+      f->pos = in->inode.size;   // O_APPEND.
     offset = f->pos;
     f->pos = offset+size;    
     unlock_fh_pos(f);

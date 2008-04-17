@@ -21,14 +21,15 @@
 
 class MOSDFailure : public Message {
  public:
+  ceph_fsid fsid;
   entity_inst_t from;
   entity_inst_t failed;
   epoch_t       epoch;
 
-  MOSDFailure() {}
-  MOSDFailure(entity_inst_t fr, entity_inst_t f, epoch_t e) : 
+  MOSDFailure() : Message(MSG_OSD_FAILURE) {}
+  MOSDFailure(ceph_fsid &fs, entity_inst_t fr, entity_inst_t f, epoch_t e) : 
     Message(MSG_OSD_FAILURE),
-    from(fr), failed(f), epoch(e) {}
+    fsid(fs), from(fr), failed(f), epoch(e) {}
  
   entity_inst_t get_from() { return from; }
   entity_inst_t get_failed() { return failed; }
@@ -36,11 +37,13 @@ class MOSDFailure : public Message {
 
   void decode_payload() {
     int off = 0;
+    ::_decode(fsid, payload, off);
     ::_decode(from, payload, off);
     ::_decode(failed, payload, off);
     ::_decode(epoch, payload, off);
   }
   void encode_payload() {
+    ::_encode(fsid, payload);
     ::_encode(from, payload);
     ::_encode(failed, payload);
     ::_encode(epoch, payload);

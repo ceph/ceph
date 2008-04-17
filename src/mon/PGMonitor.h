@@ -60,14 +60,16 @@ private:
 
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
+  bool register_new_pgs();
+  void send_pg_creates();
+
  public:
   PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
   void tick();  // check state, take actions
 
 
-  void register_new_pgs();
-  void send_pg_creates();
+  void check_osd_map(epoch_t epoch);
 
 
 

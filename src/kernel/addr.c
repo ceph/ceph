@@ -38,6 +38,7 @@ static int ceph_readpage(struct file *filp, struct page *page)
 
 	/* TODO: update info in ci? */
 out:
+	unlock_page(page);
 	return err;
 }
 
@@ -108,6 +109,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	int len = PAGE_CACHE_SIZE;
 	loff_t i_size;
 	int err = 0;
+	int was_dirty;
 	
 	if (!page->mapping || !page->mapping->host)
 		return -EFAULT;
@@ -124,19 +126,39 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	     inode, page, page->index, page_off, len);
 	
 	page_cache_get(page);
+	was_dirty = PageDirty(page);
 	set_page_writeback(page);
 	kmap(page);
 	err = ceph_osdc_writepages(osdc, ceph_ino(inode), &ci->i_layout,
 				   page_off, len, &page, 1);
 	kunmap(page);
-	if (err >= 0)
+	if (err >= 0) {
+		if (was_dirty)
+			ceph_put_wrbuffer_cap_refs(ci, 1);
 		SetPageUptodate(page);
-	else
+	} else
 		redirty_page_for_writepage(wbc, page);  /* is this right?? */
 	unlock_page(page);
 	end_page_writeback(page);
 	page_cache_release(page);
 	return err;
+}
+
+
+/*
+ * lame release_pages helper.  release_pages() isn't exported to
+ * modules.
+ */
+void ceph_release_pages(struct page **pages, int num)
+{
+	struct pagevec pvec;
+	int i;
+	pagevec_init(&pvec, 0);
+	for (i = 0; i < num; i++) {
+		if (pagevec_add(&pvec, pages[i]) == 0)
+			pagevec_release(&pvec);
+	}
+	pagevec_release(&pvec);
 }
 
 /*
@@ -222,11 +244,14 @@ retry:
 						want);
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
+
 			if (locked_pages == 0) 
 				lock_page(page);
 			else if (TestSetPageLocked(page))
 				break;
-			if (unlikely(page->mapping != mapping)) {
+			/* only dirty pages, or wrbuffer accounting breaks! */
+			if (unlikely(!PageDirty(page)) ||
+			    unlikely(page->mapping != mapping)) {
 				unlock_page(page);
 				break;
 			}
@@ -242,6 +267,7 @@ retry:
 			}
 			if (wbc->sync_mode != WB_SYNC_NONE)
 				wait_on_page_writeback(page);
+
 			if (PageWriteback(page) ||
 			    !clear_page_dirty_for_io(page)) {
 				unlock_page(page);
@@ -250,15 +276,17 @@ retry:
 
 			/* ok */
 			set_page_writeback(page);
+
 			if (page_offset(page) >= i_size_read(inode)) {
 				done = 1;
 				unlock_page(page);
 				end_page_writeback(page);
 				break;
 			}
-
+			
 			dout(50, "writepages locked page %p index %lu\n",
 			     page, page->index);
+
 			kmap(page);
 			if (pages)
 				pages[locked_pages] = page;
@@ -295,6 +323,7 @@ retry:
 			loff_t offset = pagep[0]->index << PAGE_CACHE_SHIFT;
 			loff_t len = min(i_size_read(inode) - offset,
 				 (loff_t)locked_pages << PAGE_CACHE_SHIFT);
+			unsigned wrote;
 			dout(10, "writepages got %d pages at %llu~%llu\n",
 			     locked_pages, offset, len);
 			rc = ceph_osdc_writepages(&client->osdc, 
@@ -303,22 +332,27 @@ retry:
 						  offset, len,
 						  pagep,
 						  locked_pages);
-			dout(20, "writepages rc %d\n", rc);
+			if (rc >= 0)
+				wrote = (rc + (offset & ~PAGE_CACHE_MASK) 
+					 + ~PAGE_CACHE_MASK) 
+					>> PAGE_CACHE_SHIFT;
+			else 
+				wrote = 0;				
+			dout(20, "writepages rc %d wrote %d\n", rc, wrote);
 						     
 			/* unmap+unlock pages */
-			if (rc >= 0)
-				rc += offset & ~PAGE_CACHE_MASK;
 			for (i = 0; i < locked_pages; i++) {
 				page = pagep[i];
-				if (rc > (i << PAGE_CACHE_SHIFT))
+				if (i < wrote)
 					SetPageUptodate(page);
 				else if (rc < 0)
-					SetPageError(page);
+					redirty_page_for_writepage(wbc, page);
 				kunmap(page);
 				dout(50, "unlocking %d %p\n", i, page);
 				unlock_page(page);
 				end_page_writeback(page);
 			}				
+			ceph_put_wrbuffer_cap_refs(ci, wrote);
 
 			/* continue? */
 			index = next;
@@ -330,7 +364,7 @@ retry:
 		if (pages) {
 			/* hmm, pagevec_release also does lru_add_drain()...? */
 			dout(50, "release_pages on %d\n", locked_pages);
-			release_pages(pages, locked_pages, 0);  /* cold? */
+			ceph_release_pages(pages, locked_pages);
 		}
 		dout(50, "pagevec_release on %d pages\n", (int)pvec.nr);
 		pagevec_release(&pvec);
@@ -434,12 +468,16 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	
 	/* did file size increase? */
 	/* (no need for i_size_read(); we caller holds i_mutex */
-	if (pos+copied > inode->i_size)
-		i_size_write(inode, pos + copied);
+	if (pos+copied > inode->i_size) 
+		ceph_inode_set_size(inode, pos+copied);
 
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
 
+	if (!PageDirty(page))
+		ceph_take_cap_refs(ceph_inode(inode), CEPH_CAP_WRBUFFER);
+	else
+		dout(10, "page %p already dirty\n", page);
 	set_page_dirty(page);
 
 	unlock_page(page);
@@ -450,44 +488,11 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 
 
 
-/* 
- * page accounting
- */
-
-static int ceph_set_page_dirty(struct page *page)
-{
-	struct ceph_inode_info *ci = ceph_inode(page->mapping->host);
-	spin_lock(&ci->vfs_inode.i_lock);
-	dout(10, "set_page_dirty %p : %d -> %d \n", page,
-	     ci->i_nr_dirty_pages, ci->i_nr_dirty_pages + 1);
-	ci->i_nr_dirty_pages++;
-	spin_lock(&ci->vfs_inode.i_lock);
-	return 0;
-}
-
-static int ceph_releasepage(struct page *page, gfp_t gfpmask)
-{
-	struct ceph_inode_info *ci = ceph_inode(page->mapping->host);
-	int last = 0;
-	spin_lock(&ci->vfs_inode.i_lock);
-	dout(10, "releasepage %p gfpmask %d : %d -> %d \n", page, gfpmask,
-	     ci->i_nr_pages, ci->i_nr_pages - 1);
-	if (--ci->i_nr_pages == 0)
-		last++;
-	spin_lock(&ci->vfs_inode.i_lock);
-	if (last)
-		ceph_check_caps_wanted(ci, gfpmask);
-	return 0;
-}
-
-
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
 	.readpages = ceph_readpages,
 	.writepage = ceph_writepage,
 	.writepages = ceph_writepages,
 	.write_begin = ceph_write_begin,
-	.write_end = simple_write_end, /*ceph_write_end,*/
-//	.set_page_dirty = ceph_set_page_dirty,
-	.releasepage = ceph_releasepage,
+	.write_end = ceph_write_end,
 };

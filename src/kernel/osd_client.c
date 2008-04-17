@@ -41,10 +41,20 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	__u32 epoch;
 	struct ceph_osdmap *newmap = 0;
 	int err;
+	struct ceph_fsid fsid;
 
 	dout(1, "handle_map, have %u\n", osdc->osdmap ? osdc->osdmap->epoch:0);
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
+
+	/* verify fsid */
+	ceph_decode_need(&p, end, sizeof(fsid), bad);
+	ceph_decode_64(&p, fsid.major);
+	ceph_decode_64(&p, fsid.minor);
+	if (!ceph_fsid_equal(&fsid, &osdc->client->monc.monmap->fsid)) {
+		derr(0, "got map with wrong fsid, ignoring\n");
+		return;
+	}
 
 	/* incremental maps */
 	ceph_decode_32_safe(&p, end, nr_maps, bad);
@@ -227,8 +237,10 @@ static void send_request(struct ceph_osd_client *osdc,
 			break;
 	}
 	if (i < nr_osds) {
-		dout(10, "send_request %p tid %llu to osd%d flags %d\n", req, req->r_tid, osds[i], req->r_flags);
-		req->r_request->hdr.dst.name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
+		dout(10, "send_request %p tid %llu to osd%d flags %d\n", 
+		     req, req->r_tid, osds[i], req->r_flags);
+		req->r_request->hdr.dst.name.type = 
+			cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 		req->r_request->hdr.dst.name.num = cpu_to_le32(osds[i]);
 		req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osds[i]];
 		ceph_msg_get(req->r_request); /* send consumes a ref */
@@ -277,7 +289,8 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	} else {
 		dout(10, "handle_reply tid %llu already had a reply\n", tid);
 	}
-	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags, rhead->flags);
+	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags,
+	     rhead->flags);
 	req->r_flags |= rhead->flags;
 	spin_unlock(&osdc->lock);
 	complete(&req->r_completion);
@@ -494,6 +507,8 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	rc = do_request(osdc, req);
 	put_request(req);
 	dout(10, "readpage result %d\n", rc); 
+	if (rc == -ENOENT) 
+		rc = 0;		/* object page dne; zero it */
 	return rc;
 }
 

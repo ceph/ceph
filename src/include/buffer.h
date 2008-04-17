@@ -114,6 +114,7 @@ private:
   public:
     raw_mmap_pages(unsigned l) : raw(l) {
       data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+      assert(data);
       inc_total_alloc(len);
     }
     ~raw_mmap_pages() {
@@ -131,8 +132,10 @@ private:
 #ifdef DARWIN
       data = (char *) valloc (len);
 #else
+      data = 0;
       ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
 #endif /* DARWIN */
+      assert(data);
       inc_total_alloc(len);
     }
     ~raw_posix_aligned() {
@@ -229,13 +232,16 @@ public:
     }
     ptr& operator= (const ptr& p) {
       // be careful -- we need to properly handle self-assignment.
-      if (p._raw) {
-	p._raw->nref.inc();                              // inc new
-      }
+      if (p._raw)
+	p._raw->nref.inc();                      // inc new
       release();                                 // dec (+ dealloc) old (if any)
-      _raw = p._raw;                               // change my ref
-      _off = p._off;
-      _len = p._len;
+      if (p._raw) {
+	_raw = p._raw;
+	_off = p._off;
+	_len = p._len;
+      } else {
+	_off = _len = 0;
+      }
       return *this;
     }
     ~ptr() {
@@ -390,10 +396,17 @@ public:
 	advance(o);
       }
       iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
-	bl(l), ls(bl->_buffers), off(0), p(ip), p_off(po) { }
+	bl(l), ls(bl->_buffers), off(o), p(ip), p_off(po) { }
 
       iterator operator=(const iterator& other) {
-	return iterator(bl, off, p, p_off);
+	if (this != &other) {
+	  bl = other.bl;
+	  ls = bl->_buffers;
+	  off = other.off;
+	  p = other.p;
+	  p_off = other.p_off;
+	}
+	return *this;
       }
 
       unsigned get_off() { return off; }
@@ -543,6 +556,9 @@ public:
       other._len = t;
       _buffers.swap(other._buffers);
       append_buffer.swap(other.append_buffer);
+      //last_p.swap(other.last_p);
+      last_p = begin();
+      other.last_p = other.begin();
     }
 
     unsigned length() const {
@@ -578,6 +594,7 @@ public:
     void clear() {
       _buffers.clear();
       _len = 0;
+      last_p = begin();
     }
     void push_front(ptr& bp) {
       _buffers.push_front(bp);
@@ -659,6 +676,7 @@ public:
       _len += bl._len;
       _buffers.splice( _buffers.end(), bl._buffers );
       bl._len = 0;
+      bl.last_p = bl.begin();
     }
 
 
@@ -889,6 +907,8 @@ public:
       }
       
       // splice in *replace (implement me later?)
+
+      last_p = begin();  // just in case we were in the removed region.
     };
 
     void hexdump(std::ostream &out) {

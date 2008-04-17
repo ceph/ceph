@@ -5,6 +5,7 @@ code cleanup
 - addr=?
 
 userspace client
+- move the size check(s) on read from _read() into FileCache
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
 - obey file_max
@@ -15,9 +16,17 @@ userspace client
   - also needs cope with mds failures
 - reference count lease validations on path lookup?
 
+yehuda:
+- apply_truncate needs to truncate page cache, or something?
+
 kernel client
-- setattr should check lease before believing something is a no-op
-- trim expired leases so we don't indefinitely hold dcache refs...
+- flush caps on sync, fsync, etc.
+  - hmm, should these go in a per-session "check" list, instead of independently scheduling delayed_work for each inode?
+- fsync should flush cap file size to mds.  not sure how to block on that, however.. maybe a want_reply flag in the cap msg?
+- fix session close seq interaction with mds (sessions don't currently close all the way)
+- file_data_version stuff!
+- deal with CAP_RDCACHE properly: invalidate cache pages?
+- what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
@@ -27,36 +36,19 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
-  - writepages should do io on more than 14 pages at a time!
-  - carry wrbuffer/rdcache caps until data is flushed
-    - this should make the utimes bit kick in
-    - invalidate cache pages?
   - kick requests when new map arrives
-  - sync?
-  - sync on unmount?
-  - capability changes (flush.. need way to initiate/block on writeback initiated by mds)
   - osd ack vs commit handling.  hmm!
-- mon client
-  - work out message resend logic..?
 - unmount
-/  - close open file handles, mds sessions
-    - flush data before unmount.
   - send (+deliver!) unmount message
 
 client
-- obey file_max
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
 
-
 osdmon
-- actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
-- bootstrap crush map
 
 crush
 - xml import/export?
@@ -72,8 +64,9 @@ pgmon
 - watch osd utilization; adjust overload in cluster map
 
 mon
+- paxos need to clean up old states.
 - some sort of tester for PaxosService...
-
+- osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds mustfix
 - rename slave in-memory rollback on failure

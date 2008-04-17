@@ -66,10 +66,10 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 	/* fill in kstatfs */
 	buf->f_type = CEPH_SUPER_MAGIC;  /* ?? */
-	buf->f_bsize = 1 << 20;   /* 1 MB */
-	buf->f_blocks = st.f_total >> 2;
-	buf->f_bfree = st.f_free >> 2;
-	buf->f_bavail = st.f_avail >> 2;
+	buf->f_bsize = 1 << CEPH_BLOCK_SHIFT;     /* 1 MB */
+	buf->f_blocks = st.f_total >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_bfree = st.f_free >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_bavail = st.f_avail >> (CEPH_BLOCK_SHIFT-10);
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
 	/* fsid? */
@@ -124,6 +124,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	dout(10, "alloc_inode %p vfsi %p\n", ci, &ci->vfs_inode);
 
+	ci->i_version = 0;
 	ci->i_symlink = 0;
 
 	ci->i_lease_session = 0;
@@ -144,11 +145,17 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 
+	ci->i_wanted_max_size = 0;
+	ci->i_requested_max_size = 0;
+
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
-	ci->i_nr_pages = ci->i_nr_dirty_pages = 0;
+	ci->i_hold_caps_until = 0;
 
 	ci->i_hashval = 0;
+
+	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
+	INIT_DELAYED_WORK(&ci->i_cap_dwork, ceph_cap_delayed_work);
 
 	return &ci->vfs_inode;
 }
@@ -156,12 +163,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-
-	dout(30, "destroy_inode %p ino %lu=%llx\n", inode,
-	     inode->i_ino, ceph_ino(inode));
-
+	dout(30, "destroy_inode %p ino %llx\n", inode, ceph_ino(inode));
+	cancel_delayed_work_sync(&ci->i_cap_dwork);
 	kfree(ci->i_symlink);
-
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
@@ -414,6 +418,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	dout(10, "set_super %p data %p\n", s, data);
 
 	s->s_flags = args->mntflags;
+	s->s_maxbytes = 1ULL << (32 + 20);  /* assuming objects >= 1MB */
 
 	/* create client */
 	client = ceph_create_client(args, s);
@@ -537,7 +542,7 @@ static struct file_system_type ceph_fs_type = {
 	.name		= "ceph",
 	.get_sb		= ceph_get_sb,
 	.kill_sb	= ceph_kill_sb,
-/*	.fs_flags	=   */
+	.fs_flags	= FS_RENAME_DOES_D_MOVE,
 };
 
 static int __init init_ceph(void)

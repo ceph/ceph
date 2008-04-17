@@ -60,9 +60,13 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.is_remote()) {
     out << " REMOTE(";
     switch (dn.get_remote_d_type() << 12) {
-    case S_IFREG: out << "reg"; break;
-    case S_IFDIR: out << "dir"; break;
+    case S_IFSOCK: out << "sock"; break;
     case S_IFLNK: out << "lnk"; break;
+    case S_IFREG: out << "reg"; break;
+    case S_IFBLK: out << "blk"; break;
+    case S_IFDIR: out << "dir"; break;
+    case S_IFCHR: out << "chr"; break;
+    case S_IFIFO: out << "fifo"; break;
     default: assert(0);
     }
     out << ")";

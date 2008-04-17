@@ -785,6 +785,7 @@ int Rank::Pipe::accept()
       state = STATE_CLOSED;
       return -1;
     }
+    peer_addr.ipaddr.sin_port = old_addr.ipaddr.sin_port;
     dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
   }
   
@@ -1166,8 +1167,15 @@ void Rank::Pipe::fault(bool onconnect)
     return;
   }
 
-  ::close(sd);
+  if (sd >= 0)
+    ::close(sd);
   sd = -1;
+
+  // lossy channel?
+  if (policy.retry_interval < 0) {
+    fail();
+    return;
+  }
 
   if (q.empty()) {
     if (state == STATE_CLOSING || onconnect) {
@@ -1271,7 +1279,8 @@ void Rank::Pipe::stop()
 
   cond.Signal();
   state = STATE_CLOSED;
-  ::close(sd);
+  if (sd >= 0)
+    ::close(sd);
   sd = -1;
 
   // deactivate myself
@@ -1374,6 +1383,10 @@ void Rank::Pipe::reader()
       }
       in_seq++;
       assert(in_seq == m->get_seq());
+
+      if (in_seq == 1) 
+	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
+
       cond.Signal();  // wake up writer, to ack this
       lock.Unlock();
       
@@ -1482,7 +1495,7 @@ void Rank::Pipe::writer()
       continue;
     }
 
-    if (state != STATE_CONNECTING && state != STATE_WAIT &&
+    if (state != STATE_CONNECTING && state != STATE_WAIT && state != STATE_STANDBY &&
 	(!q.empty() || in_seq > in_seq_acked)) {
 
       // send ack?

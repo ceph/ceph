@@ -45,7 +45,8 @@ static void put_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_mount_args *args)
+static struct dentry *open_root_dentry(struct ceph_client *client, 
+				       struct ceph_mount_args *args)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req = 0;
@@ -55,7 +56,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_m
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 1, args->path, 0, 0);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 
+				       1, args->path, 0, 0);
 	if (IS_ERR(req)) 
 		return ERR_PTR(PTR_ERR(req));
 	req->r_expects_cap = 1;
@@ -76,7 +78,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client, struct ceph_m
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct vfsmount *mnt)
+int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, 
+	       struct vfsmount *mnt)
 {
 	struct ceph_msg *mount_msg;
 	struct dentry *root;
@@ -103,11 +106,16 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, struct 
 		
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
-		err = wait_for_completion_timeout(&client->mount_completion, 
-						  6*HZ);
+		//err = wait_for_completion_timeout(&client->mount_completion, 
+		//6*HZ);
+		err = wait_event_interruptible_timeout(
+			client->mount_wq,
+			ceph_have_all_maps(client),
+			6*HZ);
+		dout(10, "mount wait got %d\n", err);
 		if (err == -EINTR)
 			return err; 
-		if (client->mounting == 7) 
+		if (ceph_have_all_maps(client))
 			break;  /* success */
 		dout(10, "mount still waiting for mount, attempts=%d\n", 
 		     attempts);
@@ -160,11 +168,11 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 void got_first_map(struct ceph_client *client, int num)
 {
 	set_bit(num, &client->mounting);
-	dout(10, "got_first_map num %d mounting now %lu bits %d\n", 
-	     num, client->mounting, (int)find_first_zero_bit(&client->mounting, 4));
-	if (find_first_zero_bit(&client->mounting, 4) == 3) {
+	dout(10, "got_first_map num %d mounting now %lu  done=%d\n", 
+	     num, client->mounting, ceph_have_all_maps(client));
+	if (ceph_have_all_maps(client)) {
 		dout(10, "got_first_map kicking mount\n");
-		complete(&client->mount_completion);
+		wake_up(&client->mount_wq);
 	}
 }
 
@@ -177,15 +185,19 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 {
 	struct ceph_client *cl;
 	struct ceph_entity_addr *myaddr = 0;
-	int err;
+	int err = -ENOMEM;
 
 	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
 	if (cl == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	init_completion(&cl->mount_completion);
+	init_waitqueue_head(&cl->mount_wq);
 	spin_lock_init(&cl->sb_lock);
 	get_client_counter();
+
+	cl->wb_wq = create_workqueue("ceph-writeback");
+	if (cl->wb_wq == 0)
+		goto fail;
 
 	/* messenger */
 	if (args->flags & CEPH_MOUNT_MYIP)
@@ -193,6 +205,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	cl->msgr = ceph_messenger_create(myaddr);
 	if (IS_ERR(cl->msgr)) {
 		err = PTR_ERR(cl->msgr);
+		cl->msgr = 0;
 		goto fail;
 	}
 	cl->msgr->parent = cl;
@@ -229,6 +242,8 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
+	if (cl->wb_wq)
+		destroy_workqueue(cl->wb_wq);
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
 	kfree(cl);

@@ -2627,6 +2627,27 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 void SyntheticClient::foo()
 {
   if (1) {
+    // bug1.cpp
+    const char *fn = "blah";
+    char buffer[8192]; 
+    client->unlink(fn);
+    int handle = client->open(fn,O_CREAT|O_RDWR,S_IRWXU);
+    assert(handle>=0);
+    int r=client->write(handle,buffer,8192);
+    assert(r>=0);
+    r=client->close(handle);
+    assert(r>=0);
+         
+    handle = client->open(fn,O_RDWR); // open the same  file, it must have some data already
+    assert(handle>=0);      
+    r=client->read(handle,buffer,8192);
+    assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
+    r=client->close(handle);
+    assert(r>=0);
+
+    return;
+  }
+  if (1) {
     dout(0) << "first" << dendl;
     int fd = client->open("tester", O_WRONLY|O_CREAT);
     client->write(fd, "hi there", 0, 8);

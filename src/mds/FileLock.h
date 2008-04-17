@@ -183,52 +183,52 @@ class FileLock : public SimpleLock {
   // client caps allowed
   int caps_allowed_ever() {
     if (parent->is_auth())
-      return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
+      return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
     else
-      return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+      return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
   }
   int caps_allowed() {
     if (parent->is_auth())
       switch (state) {
       case LOCK_SYNC:
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
       case LOCK_GLOCKL:
-        return CEPH_CAP_RDCACHE;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
 
       case LOCK_GLOCKM:
-        return 0;
+        return CEPH_CAP_PIN;
 
       case LOCK_MIXED:
-        return CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDR:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDL:
-        return 0;
+        return CEPH_CAP_PIN;
 
       case LOCK_LONER:  // single client writer, of course.
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO | CEPH_CAP_EXCL;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO | CEPH_CAP_EXCL;
       case LOCK_GLONERR:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GLONERM:
-        return CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
 
       case LOCK_GSYNCL:
-        return CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
       case LOCK_GSYNCM:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
     else
       switch (state) {
       case LOCK_SYNC:
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
-        return CEPH_CAP_RDCACHE;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
       case LOCK_GMIXEDR:
       case LOCK_MIXED:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
     assert(0);
     return 0;

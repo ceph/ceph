@@ -32,7 +32,8 @@ static void ceph_accept_ready(struct sock *sk, int count_unused)
 /* Data available on socket or listen socket received a connect */
 static void ceph_data_ready(struct sock *sk, int count_unused)
 {
-        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+        struct ceph_connection *con =
+		(struct ceph_connection *)sk->sk_user_data;
 	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
 		dout(30, "ceph_data_ready on %p state = %lu, queuing rwork\n",
 		     con, con->state);
@@ -43,7 +44,8 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
 /* socket has bufferspace for writing */
 static void ceph_write_space(struct sock *sk)
 {
-        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+        struct ceph_connection *con =
+		(struct ceph_connection *)sk->sk_user_data;
 
         dout(30, "ceph_write_space %p state = %lu\n", con, con->state);
 
@@ -59,7 +61,8 @@ static void ceph_write_space(struct sock *sk)
 /* sockets state has change */
 static void ceph_state_change(struct sock *sk)
 {
-        struct ceph_connection *con = (struct ceph_connection *)sk->sk_user_data;
+        struct ceph_connection *con =
+		(struct ceph_connection *)sk->sk_user_data;
 	if (con == NULL)
 		return;
 
@@ -82,24 +85,19 @@ static void ceph_state_change(struct sock *sk)
 }
 
 /* make a listening socket active by setting up the data ready call back */
-static void listen_sock_callbacks(struct socket *sock, void *user_data)
+static void listen_sock_callbacks(struct socket *sock, 
+				  struct ceph_messenger *msgr)
 {
 	struct sock *sk = sock->sk;
-	sk->sk_user_data = user_data;
-        dout(20, "listen_sock_callbacks\n");
-
-	/* Install callback */
+	sk->sk_user_data = (void *)msgr;
 	sk->sk_data_ready = ceph_accept_ready;
 }
 
 /* make a socket active by setting up the call back functions */
-static void set_sock_callbacks(struct socket *sock, void *user_data)
+static void set_sock_callbacks(struct socket *sock, struct ceph_connection *con)
 {
         struct sock *sk = sock->sk;
-        sk->sk_user_data = user_data;
-        dout(20, "set_sock_callbacks\n");
-
-        /* Install callbacks */
+        sk->sk_user_data = (void *)con;
         sk->sk_data_ready = ceph_data_ready;
         sk->sk_write_space = ceph_write_space;
         sk->sk_state_change = ceph_state_change;
@@ -114,21 +112,22 @@ int ceph_tcp_connect(struct ceph_connection *con)
 
         ret = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &con->sock);
         if (ret < 0) {
-                derr(1, "ceph_tcp_connect sock_create_kern error: %d\n", ret);
+                derr(1, "connect sock_create_kern error: %d\n", ret);
                 goto done;
         }
-
-        set_sock_callbacks(con->sock, (void *)con);
+        set_sock_callbacks(con->sock, con);
         
 	ret = con->sock->ops->connect(con->sock, paddr,
                                       sizeof(struct sockaddr_in), O_NONBLOCK);
         if (ret == -EINPROGRESS) {
-        	dout(20, "ceph_tcp_connect EINPROGRESS sk_state = = %u\n",con->sock->sk->sk_state);
+        	dout(20, "connect EINPROGRESS sk_state = = %u\n",
+		     con->sock->sk->sk_state);
 		return 0;
 	}
         if (ret < 0) {
                 /* TBD check for fatal errors, retry if not fatal.. */
-                derr(1, "ceph_tcp_connect kernel_connect error: %d\n", ret);
+                derr(1, "connect %u.%u.%u.%u:%u error: %d\n", 
+		     IPQUADPORT(*(struct sockaddr_in *)paddr), ret);
                 sock_release(con->sock);
                 con->sock = NULL;
         }
@@ -152,11 +151,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		derr(0, "sock_create_kern error: %d\n", ret);
 		return ret;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-#else
-	ret = sock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-#endif
 				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
 		derr(0, "Failed to set SO_REUSEADDR: %d\n", ret);
@@ -181,11 +176,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	}
 	dout(10, "listen on port %d\n", ntohs(myaddr->sin_port));
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 19)
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
-#else
-	ret = sock_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE,
-#endif
 				(char *)&optval, sizeof(optval)); 
 	if (ret < 0) {
 		derr(0, "Failed to set SO_KEEPALIVE: %d\n", ret);
@@ -203,7 +194,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	}
 
         /* setup callbacks */
-        listen_sock_callbacks(msgr->listen_sock, (void *)msgr);
+        listen_sock_callbacks(msgr->listen_sock, msgr);
 
 	return ret;
 err:
@@ -235,7 +226,7 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 	}
 
         /* setup callbacks */
-        set_sock_callbacks(con->sock, (void *)con);
+        set_sock_callbacks(con->sock, con);
 
 	con->sock->ops = sock->ops;
 	con->sock->type = sock->type;
@@ -261,11 +252,11 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;		/* length read */
 
-	//dout(30, "ceph_tcp_recvmsg %p len %d %p-%p\n", sock, (int)len, buf, buf+len);
+	//dout(30, "recvmsg %p len %d %p-%p\n", sock, (int)len, buf, buf+len);
 	msg.msg_flags |= MSG_DONTWAIT | MSG_NOSIGNAL;
 	/* receive one kvec for now...  */
 	rlen = kernel_recvmsg(sock, &msg, &iov, 1, len, msg.msg_flags);
-	//dout(30, "ceph_tcp_recvmsg %p len %d ret = %d\n", sock, (int)len, rlen);
+	//dout(30, "recvmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
 }
 
@@ -273,15 +264,16 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
 /*
  * Send a message this may return after partial send
  */
-int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov, size_t kvlen, size_t len)
+int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov, 
+		     size_t kvlen, size_t len)
 {
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;
 
-	//dout(30, "ceph_tcp_sendmsg %p len %d\n", sock, (int)len);
+	//dout(30, "sendmsg %p len %d\n", sock, (int)len);
 	msg.msg_flags |=  MSG_DONTWAIT | MSG_NOSIGNAL;
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
-	//dout(30, "ceph_tcp_sendmsg %p len %d ret = %d\n", sock, (int)len, rlen);
+	//dout(30, "sendmsg %p len %d ret = %d\n", sock, (int)len, rlen);
 	return(rlen);
 }
 

@@ -208,6 +208,16 @@ void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
 
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
+  int from = m->get_mds_inst().name.num();
+  entity_addr_t addr = m->get_mds_inst().addr;
+  int state = m->get_state();
+  version_t seq = m->get_seq();
+
+  if (!ceph_fsid_equal(&m->get_fsid(), &mon->monmap->fsid)) {
+    dout(0) << "preprocess_beacon on fsid " << m->get_fsid() << " != " << mon->monmap->fsid << dendl;
+    goto out;
+  }
+
   dout(12) << "preprocess_beacon " << *m
 	   << " from " << m->get_mds_inst()
 	   << dendl;
@@ -218,12 +228,6 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     mon->messenger->send_message(m, mon->monmap->get_inst(mon->get_leader()));
     return true;
   }
-
-  // let's see.
-  int from = m->get_mds_inst().name.num();
-  entity_addr_t addr = m->get_mds_inst().addr;
-  int state = m->get_state();
-  version_t seq = m->get_seq();
 
   // can i handle this query without a map update?
   
@@ -268,7 +272,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // note time and reply
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr] = g_clock.now();  
-  mon->messenger->send_message(new MMDSBeacon(m->get_mds_inst(), mdsmap.get_epoch(), state, seq, 0), 
+  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_mds_inst(), 
+					      mdsmap.get_epoch(), state, seq, 0), 
 			       m->get_mds_inst());
 
   // done
@@ -599,7 +604,7 @@ void MDSMonitor::bcast_latest_mds()
 void MDSMonitor::send_full(entity_inst_t dest)
 {
   dout(11) << "send_full to " << dest << dendl;
-  mon->messenger->send_message(new MMDSMap(&mdsmap), dest);
+  mon->messenger->send_message(new MMDSMap(mon->monmap->fsid, &mdsmap), dest);
 }
 
 void MDSMonitor::send_to_waiting()
@@ -664,6 +669,7 @@ void MDSMonitor::tick()
       case MDSMap::STATE_REJOIN:
       case MDSMap::STATE_ACTIVE:
       case MDSMap::STATE_STOPPING:
+      case MDSMap::STATE_FAILED:
 	newstate = MDSMap::STATE_FAILED;
 	pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	break;

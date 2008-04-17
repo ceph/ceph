@@ -153,7 +153,7 @@ CInode *MDCache::create_inode()
   
   // assign ino
   in->inode.ino = mds->idalloc->alloc_id();
-
+  in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
 
   in->inode.layout = g_default_file_layout;
@@ -211,6 +211,7 @@ CInode *MDCache::create_root_inode()
   CInode *root = new CInode(this);
   memset(&root->inode, 0, sizeof(inode_t));
   root->inode.ino = MDS_INO_ROOT;
+  root->inode.version = 1;
   
   // make it up (FIXME)
   root->inode.mode = 0755 | S_IFDIR;

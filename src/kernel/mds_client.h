@@ -55,6 +55,7 @@ struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	struct semaphore  s_mutex;
 	spinlock_t        s_cap_lock;
 	struct list_head  s_caps;
 	struct list_head  s_inode_leases, s_dentry_leases;
@@ -68,16 +69,18 @@ struct ceph_mds_session {
  */
 struct ceph_mds_request {
 	__u64             r_tid;
-	struct ceph_msg * r_request;  /* original request */
-	struct ceph_msg * r_reply;
+	struct ceph_msg  *r_request;  /* original request */
+	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info r_reply_info;
-	struct inode    * r_last_inode;
-	struct dentry   * r_last_dentry;
-	int				r_expects_cap;
+	struct inode     *r_last_inode;
+	struct dentry    *r_last_dentry;
+	struct dentry    *r_old_dentry;   /* for rename */
+	int			r_expects_cap;
+	int                     r_fmode;  /* if expecting cap */
 	unsigned long           r_from_time;
-	struct ceph_inode_cap * r_cap;
-	struct ceph_mds_session * r_session;
-	struct ceph_mds_session * r_mds[2];
+	struct ceph_inode_cap  *r_cap;
+	struct ceph_mds_session *r_session;
+	struct ceph_mds_session *r_mds[2];
 	int               r_num_mds;    /* items in r_mds */
 
 	int               r_attempts;   /* resend attempts */
@@ -101,11 +104,8 @@ struct ceph_mds_client {
 	struct radix_tree_root  request_tree;  /* pending mds requests */
 	__u64                   last_requested_map;
 	struct completion       map_waiters, session_close_waiters;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 20)
 	struct delayed_work     delayed_work;  /* delayed work */
-#else
-	struct work_struct		delayed_work;  /* delayed work */
-#endif
+	unsigned long last_renew_caps;
 };
 
 extern const char* ceph_mds_op_name(int op);
