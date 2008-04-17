@@ -335,6 +335,7 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	ret = write_inode_now(inode, 1);
 	if (ret < 0)
 		return ret;
+
 	/*
 	 * fixme: also ensure that caps are flushed to mds
 	 */

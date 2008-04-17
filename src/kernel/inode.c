@@ -1240,20 +1240,29 @@ const struct inode_operations ceph_symlink_iops = {
 /*
  * generics
  */
-struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc, 
-					 struct dentry *dentry, int op)
+static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc, 
+						struct dentry *dentry, 
+						int ia_valid, int op)
 {
 	char *path;
 	int pathlen;
 	struct ceph_mds_request *req;
 	__u64 baseino = ceph_ino(dentry->d_inode->i_sb->s_root->d_inode);
 
-	dout(5, "prepare_setattr dentry %p\n", dentry);
-	path = ceph_build_dentry_path(dentry, &pathlen);
-	if (IS_ERR(path))
-		return ERR_PTR(PTR_ERR(path));
-	req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0);
-	kfree(path);
+	if (ia_valid & ATTR_FILE) {
+		dout(5, "prepare_setattr dentry %p (inode %llx)\n", dentry,
+		     ceph_ino(dentry->d_inode));
+		req = ceph_mdsc_create_request(mdsc, op, 
+					       ceph_ino(dentry->d_inode), "",
+					       0, 0);
+	} else {
+		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
+		path = ceph_build_dentry_path(dentry, &pathlen);
+		if (IS_ERR(path))
+			return ERR_PTR(PTR_ERR(path));
+		req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0);
+		kfree(path);
+	}
 	return req;
 }
 
@@ -1262,12 +1271,12 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	struct inode *inode = dentry->d_inode;
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-    const unsigned int ia_valid = attr->ia_valid;
+	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
 	int err;
 
-	req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHOWN);
+	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_CHOWN);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
@@ -1298,7 +1307,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_request_head *reqh;
 	int err;
 
-	req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_CHMOD);
+	req = prepare_setattr(mdsc, dentry, attr->ia_valid, CEPH_MDS_OP_CHMOD);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
@@ -1319,12 +1328,12 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-    const unsigned int ia_valid = attr->ia_valid;
+	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
 	int err;
-
-	/* do i hold CAP_EXCL? */
+	
+	/* if i hold CAP_EXCL, i can change [am]time any way i like */
 	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 		dout(10, "utime holding EXCL, doing locally\n");
 		if (ia_valid & ATTR_ATIME)
@@ -1333,6 +1342,22 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 			inode->i_mtime = attr->ia_mtime;
 		return 0;
 	}
+
+	/* if i hold CAP_WR, i can _increase_ [am]time safely */
+	if ((ceph_caps_issued(ci) & CEPH_CAP_WR) &&
+	    ((ia_valid & ATTR_MTIME) == 0 ||
+	     timespec_compare(&inode->i_mtime, &attr->ia_mtime) < 0) &&
+	    ((ia_valid & ATTR_ATIME) == 0 ||
+	     timespec_compare(&inode->i_atime, &attr->ia_atime) < 0)) {
+		dout(10, "utime holding WR, doing [am]time increase locally\n");
+		if (ia_valid & ATTR_ATIME)
+			inode->i_atime = attr->ia_atime;
+		if (ia_valid & ATTR_MTIME)
+			inode->i_mtime = attr->ia_mtime;
+		return 0;
+	}
+
+	/* if i have valid values, this may be a no-op */
 	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
 	    !(((ia_valid & ATTR_ATIME) &&
 	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
@@ -1341,7 +1366,8 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		dout(10, "lease indicates utimes is a no-op\n");
 		return 0;
 	}
-	req = prepare_setattr(mdsc, dentry, CEPH_MDS_OP_UTIME);
+
+	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_UTIME);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
@@ -1389,13 +1415,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		dout(10, "lease indicates truncate is a no-op\n");
 		return 0; 
 	}
-	if (ia_valid & ATTR_FILE) 
-		req = ceph_mdsc_create_request(mdsc, 
-			       CEPH_MDS_OP_TRUNCATE, 
-			       ceph_ino(dentry->d_inode), "", 0, 0);
-	else
-		req = prepare_setattr(mdsc, dentry, 
-				      CEPH_MDS_OP_TRUNCATE);
+        req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_TRUNCATE);
 	if (IS_ERR(req)) 
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
