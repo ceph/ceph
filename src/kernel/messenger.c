@@ -1075,7 +1075,12 @@ more:
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
 		ret = read_message_partial(con);
-		if (ret <= 0) goto done;
+		if (ret <= 0) 
+			goto done;
+
+		/* if first message, set peer_name */
+		if (con->peer_name.type == 0)
+			con->peer_name = con->in_msg->hdr.src.name;
 
 		dout(1, "===== %p from %s%d %d=%s len %d+%d =====\n", 
 		     con->in_msg,

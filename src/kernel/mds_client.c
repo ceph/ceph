@@ -922,13 +922,15 @@ retry:
 	dout(30, "do_request session %p state %d\n", session, session->s_state);
 
 	/* open? */
+	err = 0;
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
 	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
 		err = open_session(mdsc, session);
 		dout(30, "do_request session err=%d\n", err);
 		BUG_ON(err && err != -EAGAIN);
 	}
-	if (session->s_state != CEPH_MDS_SESSION_OPEN) {
+	if (session->s_state != CEPH_MDS_SESSION_OPEN ||
+		err == -EAGAIN) {
 		dout(30, "do_request session %p not open, state=%d, waiting\n",
 		     session, session->s_state);
 		put_session(session);
@@ -1640,7 +1642,6 @@ void delayed_work(struct work_struct *work)
 	int i;
 	struct ceph_mds_client *mdsc =
 		container_of(work, struct ceph_mds_client, delayed_work.work);
-	struct ceph_mds_session *session;
 	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 1;
 	int renew_caps = (jiffies >= HZ*renew_interval + mdsc->last_renew_caps);
 	
@@ -1651,9 +1652,8 @@ void delayed_work(struct work_struct *work)
 	if (renew_caps)
 		mdsc->last_renew_caps = jiffies;
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		session = __get_session(mdsc, i);
-		if (session == 0 ||
-		    session->s_state < CEPH_MDS_SESSION_OPEN) {
+		struct ceph_mds_session *session = __get_session(mdsc, i);
+		if (session == 0 || session->s_state < CEPH_MDS_SESSION_OPEN) {
 			put_session(session);
 			continue;
 		}
