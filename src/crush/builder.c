@@ -209,11 +209,16 @@ crush_make_list_bucket(int type, int size,
 	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->sum_weights = malloc(sizeof(__u32)*size);
 	w = 0;
-	for (i=size-1; i>=0; i--) {
-		bucket->h.items[i] = items[i];
-		bucket->item_weights[i] = weights[i];
+	/*
+	 * caller will place new items at end.  so, we reverse things,
+	 * since we put new items at the beginning.
+	 */ 
+	for (i=0; i<size; i++) {
+		int pos = size - i - 1;
+		bucket->h.items[pos] = items[i];
+		bucket->item_weights[pos] = weights[i];
 		w += weights[i];
-		bucket->sum_weights[i] = w;
+		bucket->sum_weights[pos] = w;
 		/*printf("%d item %d weight %d sum %d\n",
 		  i, items[i], weights[i], bucket->sum_weights[i]);*/
 	}

@@ -68,6 +68,15 @@ enum {
 	CRUSH_BUCKET_TREE = 3,
 	CRUSH_BUCKET_STRAW = 4
 };
+static inline const char *crush_bucket_alg_name(int alg) {
+	switch (alg) {
+	case CRUSH_BUCKET_UNIFORM: return "uniform";
+	case CRUSH_BUCKET_LIST: return "list";
+	case CRUSH_BUCKET_TREE: return "tree";
+	case CRUSH_BUCKET_STRAW: return "straw";
+	default: return "unknown";
+	}
+}
 
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
