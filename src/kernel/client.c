@@ -20,10 +20,10 @@ void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name);
 /*
  * share work queue between clients.
  */
-static spinlock_t ceph_client_spinlock = SPIN_LOCK_UNLOCKED;
-static int ceph_num_clients = 0;
+spinlock_t ceph_client_spinlock;
+int ceph_num_clients = 0;
 
-static void get_client_counter(void) 
+static void get_client_counter(void)
 {
 	spin_lock(&ceph_client_spinlock);
 	if (ceph_num_clients == 0) {
@@ -34,7 +34,7 @@ static void get_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-static void put_client_counter(void) 
+static void put_client_counter(void)
 {
 	spin_lock(&ceph_client_spinlock);
 	ceph_num_clients--;
@@ -45,7 +45,7 @@ static void put_client_counter(void)
 	spin_unlock(&ceph_client_spinlock);
 }
 
-static struct dentry *open_root_dentry(struct ceph_client *client, 
+static struct dentry *open_root_dentry(struct ceph_client *client,
 				       struct ceph_mount_args *args)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -56,9 +56,9 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", args->path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, 
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN,
 				       1, args->path, 0, 0);
-	if (IS_ERR(req)) 
+	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	req->r_expects_cap = 1;
 	reqhead = req->r_request->front.iov_base;
@@ -78,7 +78,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args, 
+int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 	       struct vfsmount *mnt)
 {
 	struct ceph_msg *mount_msg;
@@ -95,29 +95,27 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
 		if (IS_ERR(mount_msg))
 			return PTR_ERR(mount_msg);
-		mount_msg->hdr.dst.name.type = 
+		mount_msg->hdr.dst.name.type =
 			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		mount_msg->hdr.dst.name.num = cpu_to_le32(which);
 		mount_msg->hdr.dst.addr = args->mon_addr[which];
-		
+
 		ceph_msg_send(client->msgr, mount_msg, 0);
-		dout(10, "mount from mon%d, %d attempts left\n", 
+		dout(10, "mount from mon%d, %d attempts left\n",
 		     which, attempts);
-		
+
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
-		//err = wait_for_completion_timeout(&client->mount_completion, 
-		//6*HZ);
 		err = wait_event_interruptible_timeout(
 			client->mount_wq,
 			ceph_have_all_maps(client),
 			6*HZ);
 		dout(10, "mount wait got %d\n", err);
 		if (err == -EINTR)
-			return err; 
+			return err;
 		if (ceph_have_all_maps(client))
 			break;  /* success */
-		dout(10, "mount still waiting for mount, attempts=%d\n", 
+		dout(10, "mount still waiting for mount, attempts=%d\n",
 		     attempts);
 		if (--attempts == 0)
 			return -EIO;
@@ -145,7 +143,7 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	void *new;
 
 	dout(2, "handle_monmap had epoch %d\n", client->monc.monmap->epoch);
-	new = ceph_monmap_decode(msg->front.iov_base, 
+	new = ceph_monmap_decode(msg->front.iov_base,
 				 msg->front.iov_base + msg->front.iov_len);
 	if (IS_ERR(new)) {
 		err = PTR_ERR(new);
@@ -168,7 +166,7 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 void got_first_map(struct ceph_client *client, int num)
 {
 	set_bit(num, &client->mounting);
-	dout(10, "got_first_map num %d mounting now %lu  done=%d\n", 
+	dout(10, "got_first_map num %d mounting now %lu  done=%d\n",
 	     num, client->mounting, ceph_have_all_maps(client));
 	if (ceph_have_all_maps(client)) {
 		dout(10, "got_first_map kicking mount\n");
@@ -181,7 +179,8 @@ void got_first_map(struct ceph_client *client, int num)
 /*
  * create a fresh client instance
  */
-struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct super_block *sb)
+struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
+				       struct super_block *sb)
 {
 	struct ceph_client *cl;
 	struct ceph_entity_addr *myaddr = 0;
@@ -212,9 +211,10 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args, struct supe
 	cl->msgr->dispatch = ceph_dispatch;
 	cl->msgr->prepare_pages = ceph_osdc_prepare_pages;
 	cl->msgr->peer_reset = ceph_peer_reset;
-	
+
 	cl->whoami = -1;
-	if ((err = ceph_monc_init(&cl->monc, cl)) < 0)
+	err = ceph_monc_init(&cl->monc, cl);
+	if (err < 0)
 		goto fail;
 	ceph_mdsc_init(&cl->mdsc, cl);
 	ceph_osdc_init(&cl->osdc, cl);
@@ -232,7 +232,7 @@ fail:
 
 void ceph_umount_start(struct ceph_client *cl)
 {
-	ceph_mdsc_stop(&cl->mdsc);	
+	ceph_mdsc_stop(&cl->mdsc);
 }
 
 void ceph_destroy_client(struct ceph_client *cl)
@@ -281,7 +281,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_MDS_MAP:
 		had = client->mdsc.mdsmap ? 1:0;
 		ceph_mdsc_handle_map(&client->mdsc, msg);
-		if (!had && client->mdsc.mdsmap) 
+		if (!had && client->mdsc.mdsmap)
 			got_first_map(client, 1);
 		break;
 	case CEPH_MSG_CLIENT_SESSION:
@@ -304,7 +304,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_OSD_MAP:
 		had = client->osdc.osdmap ? 1:0;
 		ceph_osdc_handle_map(&client->osdc, msg);
-		if (!had && client->osdc.osdmap) 
+		if (!had && client->osdc.osdmap)
 			got_first_map(client, 2);
 		break;
 	case CEPH_MSG_OSD_OPREPLY:
@@ -318,7 +318,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	ceph_msg_put(msg);
 }
 
-const char *ceph_msg_type_name(int type) 
+const char *ceph_msg_type_name(int type)
 {
 	switch (type) {
 	case CEPH_MSG_SHUTDOWN: return "shutdown";
@@ -349,7 +349,7 @@ const char *ceph_msg_type_name(int type)
 void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
 {
 	struct ceph_client *client = p;
-	
+
 	dout(30, "ceph_peer_reset peer_name = %s%d\n", ENTITY_NAME(*peer_name));
 
 	/* write me */

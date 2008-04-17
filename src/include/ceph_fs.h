@@ -43,7 +43,7 @@ struct ceph_fsid {
 };
 
 static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_fsid *b) {
-	return le64_to_cpu(a->major) == le64_to_cpu(b->major) && 
+	return le64_to_cpu(a->major) == le64_to_cpu(b->major) &&
 		le64_to_cpu(a->minor) == le64_to_cpu(b->minor);
 }
 
@@ -68,7 +68,7 @@ struct ceph_timespec {
 
 /*
  * dir fragments
- */ 
+ */
 typedef __le32 ceph_frag_t;
 
 static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
@@ -87,7 +87,7 @@ static inline __u32 frag_next(__u32 f) { return frag_make(frag_bits(f), frag_val
 /*
  * pg layout -- how PGs are mapped into (sets of) OSDs
  */
-#define CEPH_PG_LAYOUT_CRUSH  0   
+#define CEPH_PG_LAYOUT_CRUSH  0
 #define CEPH_PG_LAYOUT_HASH   1
 #define CEPH_PG_LAYOUT_LINEAR 2
 #define CEPH_PG_LAYOUT_HYBRID 3
@@ -101,7 +101,7 @@ struct ceph_file_layout {
 	__u32 fl_stripe_count;    /* over this many objects */
 	__u32 fl_object_size;     /* until objects are this big, then move to new objects */
 	__u32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
-	
+
 	/* pg -> disk layout */
 	__u32 fl_object_stripe_unit;  /* for per-object parity, if any */
 
@@ -144,7 +144,7 @@ union ceph_pg {
  *  e.g., b=12 -> bmask=15, b=123 -> bmask=127
  */
 static inline int ceph_stable_mod(int x, int b, int bmask) {
-  if ((x & bmask) < b) 
+  if ((x & bmask) < b)
     return x & bmask;
   else
     return (x & (bmask>>1));
@@ -300,7 +300,7 @@ struct ceph_mds_getmap {
 
 
 /*
- * mds states 
+ * mds states
  *   > 0 -> in
  *  <= 0 -> out
  */
@@ -369,7 +369,7 @@ enum {
 	CEPH_SESSION_RENEWCAPS,
 	CEPH_SESSION_STALE,           // caps not renewed.
 	CEPH_SESSION_REQUEST_RESUME,
-	CEPH_SESSION_RESUME	
+	CEPH_SESSION_RESUME
 };
 
 struct ceph_mds_session_head {
@@ -413,7 +413,7 @@ struct ceph_mds_request_head {
 	__u32 op;
 	__u32 caller_uid, caller_gid;
 
-	union { 
+	union {
 		struct {
 			__u32 mask;
 		} stat;
@@ -431,7 +431,7 @@ struct ceph_mds_request_head {
 		} __attribute__ ((packed)) utime;
 		struct {
 			__u32 mode;
-		} chmod; 
+		} chmod;
 		struct {
 			__s32 uid;
 			__s32 gid;
@@ -439,10 +439,10 @@ struct ceph_mds_request_head {
 		struct {
 			__u32 mode;
 			__u32 rdev;
-		} mknod; 
+		} mknod;
 		struct {
 			__u32 mode;
-		} mkdir; 
+		} mkdir;
 		struct {
 			__u32 flags;
 			__u32 mode;
@@ -509,16 +509,16 @@ static inline int ceph_flags_to_mode(int flags)
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)
 		return CEPH_FILE_MODE_PIN;
 #ifdef O_LAZY
-	if (flags & O_LAZY) 
+	if (flags & O_LAZY)
 		return CEPH_FILE_MODE_LAZY;
 #endif
-	if ((flags & O_APPEND) == O_APPEND) 
+	if ((flags & O_APPEND) == O_APPEND)
 		flags |= O_WRONLY;
-	
+
 	flags &= O_ACCMODE;
-	if ((flags & O_RDWR) == O_RDWR) 
+	if ((flags & O_RDWR) == O_RDWR)
 		return CEPH_FILE_MODE_RDWR;
-	if ((flags & O_WRONLY) == O_WRONLY) 
+	if ((flags & O_WRONLY) == O_WRONLY)
 		return CEPH_FILE_MODE_WR;
 	return CEPH_FILE_MODE_RD;
 }
@@ -536,18 +536,18 @@ static inline int ceph_flags_to_mode(int flags)
 static inline int ceph_caps_for_mode(int mode)
 {
 	switch (mode) {
-	case CEPH_FILE_MODE_PIN: 
+	case CEPH_FILE_MODE_PIN:
 		return CEPH_CAP_PIN;
-	case CEPH_FILE_MODE_RD: 
-		return CEPH_CAP_PIN | 
+	case CEPH_FILE_MODE_RD:
+		return CEPH_CAP_PIN |
 			CEPH_CAP_RD | CEPH_CAP_RDCACHE;
 	case CEPH_FILE_MODE_RDWR:
-		return CEPH_CAP_PIN | 
+		return CEPH_CAP_PIN |
 			CEPH_CAP_RD | CEPH_CAP_RDCACHE |
 			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
 			CEPH_CAP_EXCL;
 	case CEPH_FILE_MODE_WR:
-		return CEPH_CAP_PIN | 
+		return CEPH_CAP_PIN |
 			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
 			CEPH_CAP_EXCL;
 	}

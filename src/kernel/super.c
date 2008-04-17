@@ -9,8 +9,8 @@
 /* debug levels; defined in super.h */
 
 /*
- * global debug value.  
- *  0 = quiet. 
+ * global debug value.
+ *  0 = quiet.
  *
  * if the per-file debug level >= 0, then that overrides this  global
  * debug level.
@@ -169,11 +169,7 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
-static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
-#else
 static void init_once(struct kmem_cache *cachep, void *foo)
-#endif
 {
 	struct ceph_inode_info *ci = foo;
 	dout(10, "init_once on %p\n", foo);
@@ -182,20 +178,11 @@ static void init_once(struct kmem_cache *cachep, void *foo)
 
 static int init_inodecache(void)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 23)
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
 					      init_once);
-#else
-	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
-					      sizeof(struct ceph_inode_info),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      init_once,
-						  NULL);
-#endif
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;
@@ -210,7 +197,7 @@ static const struct super_operations ceph_sops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
 	.write_inode    = ceph_write_inode,
-	.sync_fs        = ceph_syncfs, 
+	.sync_fs        = ceph_syncfs,
 	.put_super	= ceph_put_super,
 	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
@@ -284,7 +271,7 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
 		goto bad;
 
 	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
-	dout(15, "parse_ip got %u.%u.%u.%u\n", 
+	dout(15, "parse_ip got %u.%u.%u.%u\n",
 	     ip >> 24, (ip >> 16) & 0xff,
 	     (ip >> 8) & 0xff, ip & 0xff);
 	return 0;
@@ -343,7 +330,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		if (token < 0) {
 			derr(0, "bad mount option at '%s'\n", c);
 			return -EINVAL;
-			
+
 		}
 		if (token < Opt_ip) {
 			ret = match_int(&argstr[0], &intval);
@@ -377,7 +364,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 				return err;
 			args->flags |= CEPH_MOUNT_MYIP;
 			break;
-			
+
 			/* debug levels */
 		case Opt_debug:
 			ceph_debug = intval;
@@ -550,6 +537,8 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
+
+	spin_lock_init(&ceph_client_spinlock);
 
 	ceph_fs_proc_init();
 

@@ -30,7 +30,7 @@ struct ceph_mds_reply_info {
 	char                          **trace_dname;
 	__u32                         *trace_dname_len;
 	struct ceph_mds_reply_lease   **trace_dlease;
-	
+
 	struct ceph_mds_reply_dirfrag *dir_dir;
 	int                           dir_nr;
 	struct ceph_mds_reply_lease   **dir_ilease;
@@ -108,7 +108,7 @@ struct ceph_mds_client {
 	unsigned long last_renew_caps;
 };
 
-extern const char* ceph_mds_op_name(int op);
+extern const char *ceph_mds_op_name(int op);
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
@@ -129,7 +129,7 @@ extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
 
-extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, 
+extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc,
 				    struct inode *inode,
 				    struct dentry *dn, int mask);
 
@@ -141,11 +141,11 @@ extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
-extern void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, 
-				   int caps, int wanted, __u32 seq, 
-				   __u64 size, __u64 max_size, 
-				   struct timespec *mtime, 
+extern void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino,
+				   int caps, int wanted, __u32 seq,
+				   __u64 size, __u64 max_size,
+				   struct timespec *mtime,
 				   struct timespec *atime,
 				   int mds);
-	
+
 #endif

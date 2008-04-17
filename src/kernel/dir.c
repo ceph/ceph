@@ -371,7 +371,7 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 	int oldpathlen, pathlen;
 	int err;
 
-	dout(5, "dir_link in dir %p old_dentry %p dentry %p\n", dir, 
+	dout(5, "dir_link in dir %p old_dentry %p dentry %p\n", dir,
 	     old_dentry, dentry);
 	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen);
 	if (IS_ERR(oldpath))
@@ -409,7 +409,7 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 	*/
 	} else
 		d_drop(dentry);
-	
+
 	return err;
 }
 
@@ -436,7 +436,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	ceph_mdsc_lease_release(mdsc, dir, dentry, 
+	ceph_mdsc_lease_release(mdsc, dir, dentry,
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
 	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
@@ -482,10 +482,10 @@ static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
 	req->r_old_dentry = old_dentry;
 	dget(new_dentry);
 	req->r_last_dentry = new_dentry;
-	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, 
+	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry,
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
 	if (new_dentry->d_inode)
-		ceph_mdsc_lease_release(mdsc, new_dentry->d_inode, 0, 
+		ceph_mdsc_lease_release(mdsc, new_dentry->d_inode, 0,
 					CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);

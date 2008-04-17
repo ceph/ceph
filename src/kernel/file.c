@@ -80,7 +80,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	int flags = file->f_flags & ~(O_CREAT|O_EXCL);
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
-	
+
 	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
@@ -94,12 +94,12 @@ int ceph_open(struct inode *inode, struct file *file)
 	/* can we re-use existing caps? */
 	spin_lock(&inode->i_lock);
 	if ((__ceph_caps_issued(ci) & wantcaps) == wantcaps) {
-		dout(10, "open fmode %d caps %d using existing on %p\n", 
+		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, wantcaps, inode);
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
 		return ceph_init_file(inode, file, fmode);
-	} 
+	}
 	spin_unlock(&inode->i_lock);
 	dout(10, "open mode %d, don't have caps %d\n", fmode, wantcaps);
 
@@ -134,7 +134,7 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	struct ceph_mds_request *req;
 	int err;
 	int flags = nd->intent.open.flags;
-	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n", 
+	dout(5, "ceph_lookup_open dentry %p '%.*s' flags %d mode 0%o\n",
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 
 	/* do the open */
@@ -168,9 +168,11 @@ int ceph_release(struct inode *inode, struct file *file)
 	 * FIXME mystery: why is file->f_flags now different than
 	 * file->f_flags (actually, nd->intent.open.flags) on
 	 * open?  e.g., on ceph_lookup_open,
-	 *   ceph_file: opened 000000006fa3ebd0 flags 0101102 mode 2 nr now 1.  wanted 0 -> 30
+	 *   ceph_file: opened 000000006fa3ebd0 flags 0101102 mode 2 nr now 1.\
+	 *  wanted 0 -> 30
 	 * and on release,
-	 *   ceph_file: released 000000006fa3ebd0 flags 0100001 mode 3 nr now -1.  wanted 30 was 30
+	 *   ceph_file: released 000000006fa3ebd0 flags 0100001 mode 3 nr now \
+	 * -1.  wanted 30 was 30
 	 * for now, store the open mode in ceph_file_info.
 	 */
 
@@ -206,7 +208,7 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 
 	dout(10, "sync_read on file %p %lld~%u\n", file, *offset,
 	     (unsigned)count);
-	
+
 	ret = ceph_osdc_sync_read(&client->osdc, ceph_ino(inode),
 				  &ci->i_layout,
 				  pos, count, data);
@@ -236,13 +238,13 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	if (ret > 0) {
 		pos += ret;
 		*offset = pos;
-		if (pos > i_size_read(inode)) 
+		if (pos > i_size_read(inode))
 			ceph_inode_set_size(inode, pos);
 	}
 	return ret;
 }
 
-/* 
+/*
  * wrap do_sync_read and friends with checks for cap bits on the inode.
  * atomically grab references, so that those bits are not released mid-read.
  */
@@ -256,16 +258,16 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	dout(10, "read %llx %llu~%u trying to get caps\n",
 	     ceph_ino(inode), *ppos, (unsigned)len);
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_RD, 
-							 CEPH_CAP_RDCACHE, 
+				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
+							 CEPH_CAP_RDCACHE,
 							 &got, -1));
-	if (ret < 0) 
+	if (ret < 0)
 		goto out;
 	dout(10, "read %llx %llu~%u got cap refs %d\n",
 	     ceph_ino(inode), *ppos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_RDCACHE) == 0 ||
-	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) 
+	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		ret = ceph_sync_read(filp, buf, len, ppos);
 	else
 		ret = do_sync_read(filp, buf, len, ppos);
@@ -279,7 +281,7 @@ out:
 /*
  * ditto
  */
-ssize_t ceph_write(struct file *filp, const char __user *buf, 
+ssize_t ceph_write(struct file *filp, const char __user *buf,
 		   size_t len, loff_t *ppos)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
@@ -290,37 +292,37 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 
 	/* do we need to explicitly request a larger max_size? */
 	spin_lock(&inode->i_lock);
-	if (*ppos > ci->i_max_size && 
+	if (*ppos > ci->i_max_size &&
 	    *ppos > (inode->i_size << 1) &&
 	    *ppos > ci->i_wanted_max_size) {
 		dout(10, "write %p at large offset %llu, requesting max_size\n",
 		     inode, *ppos);
-		ci->i_wanted_max_size = *ppos;				
+		ci->i_wanted_max_size = *ppos;
 		check = 1;
 	}
- 	spin_unlock(&inode->i_lock);
+	spin_unlock(&inode->i_lock);
 	if (check)
 		ceph_check_caps(ci, 1);
 
-	dout(10, "write %p %llu~%u getting caps. i_size %llu\n", 
+	dout(10, "write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, *ppos, (unsigned)len, inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_WR, 
+				       ceph_get_cap_refs(ci, CEPH_CAP_WR,
 							 CEPH_CAP_WRBUFFER,
 							 &got, *ppos));
-	if (ret < 0) 
+	if (ret < 0)
 		goto out;
-	dout(10, "write %p %llu~%u  got cap refs on %d\n", 
+	dout(10, "write %p %llu~%u  got cap refs on %d\n",
 	     inode, *ppos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
-	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) 
+	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		ret = ceph_sync_write(filp, buf, len, ppos);
 	else
 		ret = do_sync_write(filp, buf, len, ppos);
 
 out:
-	dout(10, "write %p %llu~%u  dropping cap refs on %d\n", 
+	dout(10, "write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, *ppos, (unsigned)len, got);
 	ceph_put_cap_refs(ci, got);
 	return ret;

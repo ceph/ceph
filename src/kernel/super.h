@@ -85,7 +85,7 @@ struct ceph_client {
 
 	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
 	wait_queue_head_t mount_wq;
-	
+
 	struct ceph_messenger *msgr;   /* messenger instance */
 	struct ceph_mon_client monc;
 	struct ceph_mds_client mdsc;
@@ -192,7 +192,7 @@ static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
 	return (struct ceph_dentry_info *)dentry->d_fsdata;
 }
 
-static inline void ceph_queue_writeback(struct ceph_client *cl, 
+static inline void ceph_queue_writeback(struct ceph_client *cl,
 					struct ceph_inode_info *ci)
 {
 	queue_work(cl->wb_wq, &ci->i_wb_work);
@@ -283,7 +283,7 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 	return w;
 }
 
-static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode) 
+static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode)
 {
 	ci->i_nr_by_mode[mode]++;
 }
@@ -314,7 +314,7 @@ struct ceph_file_info {
  */
 static inline int calc_pages_for(int off, int len)
 {
-	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) - 
+	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) -
 		(off >> PAGE_CACHE_SHIFT);
 	/*
 	int nr = 0;
@@ -330,11 +330,14 @@ static inline int calc_pages_for(int off, int len)
 
 
 /* client.c */
+extern spinlock_t ceph_client_spinlock;
+extern int ceph_num_clients;
+
 extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 					      struct super_block *sb);
 extern void ceph_destroy_client(struct ceph_client *cl);
-extern int ceph_mount(struct ceph_client *client, 
-		      struct ceph_mount_args *args, 
+extern int ceph_mount(struct ceph_client *client,
+		      struct ceph_mount_args *args,
 		      struct vfsmount *mnt);
 extern void ceph_umount_start(struct ceph_client *cl);
 extern const char *ceph_msg_type_name(int type);
@@ -344,16 +347,16 @@ extern const char *ceph_msg_type_name(int type);
 extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
-extern int ceph_fill_trace(struct super_block *sb, 
+extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_request *req,
 			   struct ceph_mds_session *session);
 extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 
-extern void ceph_update_inode_lease(struct inode *inode, 
+extern void ceph_update_inode_lease(struct inode *inode,
 				    struct ceph_mds_reply_lease *lease,
 				    struct ceph_mds_session *seesion,
 				    unsigned long from_time);
-extern void ceph_update_dentry_lease(struct dentry *dentry, 
+extern void ceph_update_dentry_lease(struct dentry *dentry,
 				     struct ceph_mds_reply_lease *lease,
 				     struct ceph_mds_session *session,
 				     unsigned long from_time);
