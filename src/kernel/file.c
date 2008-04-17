@@ -302,14 +302,16 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	if (check)
 		ceph_check_caps(ci, 1);
 
-	dout(10, "write trying to get caps. i_size %llu\n", inode->i_size);
+	dout(10, "write %p %llu~%u getting caps. i_size %llu\n", 
+	     inode, *ppos, (unsigned)len, inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_WR, 
 							 CEPH_CAP_WRBUFFER,
 							 &got, *ppos));
 	if (ret < 0) 
 		goto out;
-	dout(10, "write got cap refs on %d\n", got);
+	dout(10, "write %p %llu~%u  got cap refs on %d\n", 
+	     inode, *ppos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) 
@@ -318,8 +320,25 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 		ret = do_sync_write(filp, buf, len, ppos);
 
 out:
-	dout(10, "write dropping cap refs on %d\n", got);
+	dout(10, "write %p %llu~%u  dropping cap refs on %d\n", 
+	     inode, *ppos, (unsigned)len, got);
 	ceph_put_cap_refs(ci, got);
+	return ret;
+}
+
+
+static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
+{
+	struct inode *inode = dentry->d_inode;
+	int ret;
+
+	dout(10, "fsync on inode %p\n", inode);
+	ret = write_inode_now(inode, 1);
+
+	/*
+	 * fixme: also ensure that caps are flushed to mds
+	 */
+
 	return ret;
 }
 
@@ -334,4 +353,7 @@ const struct file_operations ceph_file_fops = {
 	.aio_read = generic_file_aio_read,
 	.aio_write = generic_file_aio_write,
 	.mmap = generic_file_mmap,
+	.fsync = ceph_fsync,
+	.splice_read = generic_file_splice_read,
+	.splice_write = generic_file_splice_write,
 };

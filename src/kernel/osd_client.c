@@ -507,6 +507,8 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	rc = do_request(osdc, req);
 	put_request(req);
 	dout(10, "readpage result %d\n", rc); 
+	if (rc == -ENOENT) 
+		rc = 0;		/* object page dne; zero it */
 	return rc;
 }
 
