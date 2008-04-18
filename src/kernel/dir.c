@@ -4,6 +4,7 @@ int ceph_debug_dir = -1;
 #include "super.h"
 
 #include <linux/namei.h>
+#include <linux/sched.h>
 
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
