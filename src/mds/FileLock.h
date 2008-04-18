@@ -241,6 +241,8 @@ class FileLock : public SimpleLock {
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
     if (get_num_client_lease())
       out << " c=" << get_num_client_lease();
+    if (is_wrlocked())
+      out << " w=" << get_num_wrlocks();
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())

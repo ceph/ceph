@@ -3988,7 +3988,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
 
   // drop our locks (they may interfere with us issuing new caps)
-  mds->locker->drop_locks(mdr);
+  mdcache->request_drop_locks(mdr);
 
   cap->set_suppress(false);  // stop suppressing messages on this cap
 

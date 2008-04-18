@@ -2592,7 +2592,7 @@ void Locker::file_wrlock_finish(FileLock *lock)
   lock->put_wrlock();
   
   if (!lock->is_wrlocked())
-    file_eval_gather(lock);  
+    file_eval_gather(lock);
 }
 
 
@@ -2904,6 +2904,9 @@ void Locker::file_eval(FileLock *lock)
     file_lock(lock);
   }
 */
+
+  else
+    issue_caps(in);
 }
 
 

@@ -4491,15 +4491,9 @@ void MDCache::request_forget_foreign_locks(MDRequest *mdr)
   }
 }
 
-void MDCache::request_cleanup(MDRequest *mdr)
+
+void MDCache::request_drop_locks(MDRequest *mdr)
 {
-  dout(15) << "request_cleanup " << *mdr << dendl;
-  metareqid_t ri = mdr->reqid;
-
-  // clear ref, trace
-  mdr->ref = 0;
-  mdr->trace.clear();
-
   // clean up slaves
   //  (will implicitly drop remote dn pins)
   for (set<int>::iterator p = mdr->more()->slaves.begin();
@@ -4508,12 +4502,25 @@ void MDCache::request_cleanup(MDRequest *mdr)
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
     mds->send_message_mds(r, *p);
   }
+
   // strip foreign xlocks out of lock lists, since the OP_FINISH drops them implicitly.
   request_forget_foreign_locks(mdr);
 
 
   // drop locks
   mds->locker->drop_locks(mdr);
+}
+
+void MDCache::request_cleanup(MDRequest *mdr)
+{
+  dout(15) << "request_cleanup " << *mdr << dendl;
+  metareqid_t ri = mdr->reqid;
+
+  request_drop_locks(mdr);
+
+  // clear ref, trace
+  mdr->ref = 0;
+  mdr->trace.clear();
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();
