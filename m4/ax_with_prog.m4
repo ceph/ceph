@@ -34,7 +34,7 @@
 #   the copyright notice and this notice are preserved.
 
 AC_DEFUN([AX_WITH_PROG],[
-    AC_PREREQ([2.61])
+    AC_PREREQ([2.59])
 
     pushdef([VARIABLE],$1)
     pushdef([EXECUTABLE],$2)
