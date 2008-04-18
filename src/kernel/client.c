@@ -232,7 +232,14 @@ fail:
 
 void ceph_umount_start(struct ceph_client *cl)
 {
+	int rc;
+	int seconds = 15;
+
 	ceph_mdsc_stop(&cl->mdsc);
+	ceph_monc_request_umount(&cl->monc);
+	rc = wait_event_timeout(cl->mount_wq, (cl->mounting == 0), seconds*HZ);
+	if (rc == 0)
+		derr(0, "umount timed out after %d seconds\n", seconds);
 }
 
 void ceph_destroy_client(struct ceph_client *cl)
@@ -276,6 +283,9 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_STATFS_REPLY:
 		ceph_monc_handle_statfs_reply(&client->monc, msg);
 		break;
+	case CEPH_MSG_CLIENT_UNMOUNT:
+		ceph_monc_handle_umount(&client->monc, msg);
+		break;
 
 		/* mds client */
 	case CEPH_MSG_MDS_MAP:
@@ -312,7 +322,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		break;
 
 	default:
-		derr(1, "dispatch unknown message type %d\n", type);
+		derr(0, "received unknown message type %d\n", type);
 	}
 
 	ceph_msg_put(msg);

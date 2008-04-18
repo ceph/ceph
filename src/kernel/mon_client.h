@@ -33,8 +33,10 @@ struct ceph_mon_client {
 
 	struct delayed_work mds_delayed_work;  /* mds delayed work */
 	struct delayed_work osd_delayed_work;  /* osd delayed work */
+	struct delayed_work umount_delayed_work;
 	unsigned long mds_delay;
 	unsigned long osd_delay;
+	unsigned long umount_delay;
 
 	u32 have_mdsmap;  /* protected by caller's lock */
 	u32 want_osdmap;  /* protected by caller's lock */
@@ -42,7 +44,8 @@ struct ceph_mon_client {
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);
-extern int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr);
+extern int ceph_monmap_contains(struct ceph_monmap *m, 
+				struct ceph_entity_addr *addr);
 
 extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 
@@ -54,9 +57,16 @@ extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc,
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have);
 
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
-extern void ceph_monc_report_failure(struct ceph_mon_client *monc, struct ceph_entity_inst *who);
+extern void ceph_monc_report_failure(struct ceph_mon_client *monc, 
+				     struct ceph_entity_inst *who);
 
-extern int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf);
-extern void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg *msg);
+extern int ceph_monc_do_statfs(struct ceph_mon_client *monc, 
+			       struct ceph_statfs *buf);
+extern void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, 
+					  struct ceph_msg *msg);
+
+extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
+extern void ceph_monc_handle_umount(struct ceph_mon_client *monc, 
+				    struct ceph_msg *msg);
 
 #endif
