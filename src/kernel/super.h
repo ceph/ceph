@@ -22,10 +22,12 @@ extern int ceph_debug_addr;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
+#define DEBUG_TO KERN_DEBUG
+
 #define dout(x, args...) do {						\
 		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
 		    (DOUT_VAR < 0 && x <= ceph_debug))			\
-			printk(KERN_INFO "ceph_" DOUT_PREFIX args);	\
+			printk(DEBUG_TO "ceph_" DOUT_PREFIX args); \
 	} while (0)
 
 #ifdef CEPH_DUMP_ERROR_ALWAYS
