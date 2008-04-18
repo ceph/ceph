@@ -1095,11 +1095,9 @@ more:
 		/* if first message, set peer_name */
 		if (con->peer_name.type == 0)
 			con->peer_name = con->in_msg->hdr.src.name;
-		con->in_seq++;
-		
-		dout(1, "===== %p %u from %s%d %d=%s len %d+%d =====\n",
+
+		dout(1, "===== %p from %s%d %d=%s len %d+%d =====\n",
 		     con->in_msg,
-		     (unsigned)con->in_seq,
 		     ENTITY_NAME(con->in_msg->hdr.src.name),
 		     le32_to_cpu(con->in_msg->hdr.type),
 		     ceph_msg_type_name(le32_to_cpu(con->in_msg->hdr.type)),
