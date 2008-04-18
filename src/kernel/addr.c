@@ -133,8 +133,10 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 				   page_off, len, &page, 1);
 	kunmap(page);
 	if (err >= 0) {
-		if (was_dirty)
+		if (was_dirty) {
+			dout(10, "cleaned page %p\n", page);
 			ceph_put_wrbuffer_cap_refs(ci, 1);
+		}
 		SetPageUptodate(page);
 		err = 0;  /* vfs expects us to return 0 */
 	} else
@@ -477,9 +479,10 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
 
-	if (!PageDirty(page))
+	if (!PageDirty(page)) {
+		dout(10, "dirtying page %p\n", page);
 		ceph_take_cap_refs(ceph_inode(inode), CEPH_CAP_WRBUFFER);
-	else
+	} else
 		dout(10, "page %p already dirty\n", page);
 	set_page_dirty(page);
 

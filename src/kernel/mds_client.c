@@ -1424,7 +1424,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 #else
 	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
 #endif
-	dout(20, "op is %d, ino %llx %p\n", op, ino, inode);
+	dout(20, "op %d ino %llx inode %p\n", op, ino, inode);
 
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
