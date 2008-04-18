@@ -103,7 +103,7 @@ struct ceph_connection {
 	struct list_head out_sent;   /* sending/sent but unacked */
 
 	__le32 out32;
-	struct kvec out_kvec[4],
+	struct kvec out_kvec[6],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */

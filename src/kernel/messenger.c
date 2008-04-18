@@ -401,6 +401,19 @@ static void prepare_write_message(struct ceph_connection *con)
 {
 	struct ceph_msg *m = list_entry(con->out_queue.next,
 					struct ceph_msg, list_head);
+	int v = 0;
+	con->out_kvec_bytes = 0;
+
+	/* ack? */
+	if (con->in_seq > con->in_seq_acked) {
+		con->in_seq_acked = con->in_seq;
+		con->out_kvec[v].iov_base = &tag_ack;
+		con->out_kvec[v++].iov_len = 1;
+		con->out32 = cpu_to_le32(con->in_seq_acked);
+		con->out_kvec[v].iov_base = &con->out32;
+		con->out_kvec[v++].iov_len = 4;
+		con->out_kvec_bytes = 1 + 4;
+	}
 
 	/* move to sending/sent list */
 	list_del_init(&m->list_head);
@@ -414,13 +427,13 @@ static void prepare_write_message(struct ceph_connection *con)
 	BUG_ON(le32_to_cpu(m->hdr.front_len) != m->front.iov_len);
 
 	/* tag + hdr + front */
-	con->out_kvec[0].iov_base = &tag_msg;
-	con->out_kvec[0].iov_len = 1;
-	con->out_kvec[1].iov_base = &m->hdr;
-	con->out_kvec[1].iov_len = sizeof(m->hdr);
-	con->out_kvec[2] = m->front;
-	con->out_kvec_left = 3;
-	con->out_kvec_bytes = 1 + sizeof(m->hdr) + m->front.iov_len;
+	con->out_kvec[v].iov_base = &tag_msg;
+	con->out_kvec[v++].iov_len = 1;
+	con->out_kvec[v].iov_base = &m->hdr;
+	con->out_kvec[v++].iov_len = sizeof(m->hdr);
+	con->out_kvec[v++] = m->front;
+	con->out_kvec_left = v;
+	con->out_kvec_bytes += 1 + sizeof(m->hdr) + m->front.iov_len;
 	con->out_kvec_cur = con->out_kvec;
 
 	/* pages */
@@ -436,6 +449,8 @@ static void prepare_write_message(struct ceph_connection *con)
  */
 static void prepare_write_ack(struct ceph_connection *con)
 {
+	dout(20, "prepare_write_ack %p %u -> %u\n", con, 
+	     con->in_seq_acked, con->in_seq);
 	con->in_seq_acked = con->in_seq;
 
 	con->out_kvec[0].iov_base = &tag_ack;
@@ -563,10 +578,10 @@ more:
 
 	/* anything else pending? */
 	spin_lock(&con->out_queue_lock);
-	if (con->in_seq > con->in_seq_acked) {
-		prepare_write_ack(con);
-	} else if (!list_empty(&con->out_queue)) {
+	if (!list_empty(&con->out_queue)) {
 		prepare_write_message(con);
+	} else if (con->in_seq > con->in_seq_acked + 1) {  /* only if > 1 */
+		prepare_write_ack(con);
 	} else {
 		clear_bit(WRITE_PENDING, &con->state);
 		/* hmm, nothing to do! No more writes pending? */
@@ -1099,7 +1114,7 @@ more:
 		spin_lock(&con->out_queue_lock);
 		con->in_seq++;
 		spin_unlock(&con->out_queue_lock);
-		ceph_queue_read(con);
+		ceph_queue_write(con);
 		
 		dout(1, "===== %p %u from %s%d %d=%s len %d+%d =====\n",
 		     con->in_msg, le32_to_cpu(con->in_msg->hdr.seq),
