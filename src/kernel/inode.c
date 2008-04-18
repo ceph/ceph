@@ -714,10 +714,15 @@ void __ceph_remove_cap(struct ceph_inode_cap *cap)
 void ceph_remove_cap(struct ceph_inode_cap *cap)
 {
 	struct inode *inode = &cap->ci->vfs_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int was_last;
 
 	spin_lock(&inode->i_lock);
 	__ceph_remove_cap(cap);
+	was_last = list_empty(&ci->i_caps);
 	spin_unlock(&inode->i_lock);
+	if (was_last)
+		cancel_delayed_work_sync(&ci->i_cap_dwork);
 	iput(inode);
 }
 
@@ -732,21 +737,20 @@ void ceph_cap_delayed_work(struct work_struct *work)
 		schedule_delayed_work(&ci->i_cap_dwork,
 				      ci->i_hold_caps_until - jiffies);
 		spin_unlock(&ci->vfs_inode.i_lock);
-		goto out;
+	} else {
+		dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
+		spin_unlock(&ci->vfs_inode.i_lock);
+		ceph_check_caps(ci, 1);
 	}
-	dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
-	spin_unlock(&ci->vfs_inode.i_lock);
-	ceph_check_caps(ci, 0);
-out:
 	dout(10, "cap_dwork on %p done\n", &ci->vfs_inode);
 }
 
 /*
  * examine currently used, wanted versus held caps.
  *  release, ack revoked caps to mds as appropriate.
- * @was_last if caller just dropped a cap ref, and we probably want to delay
+ * @is_delayed if caller just dropped a cap ref, and we probably want to delay
  */
-void ceph_check_caps(struct ceph_inode_info *ci, int was_last)
+void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -760,6 +764,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int was_last)
 	struct timespec mtime, atime;
 	int mds;
 	struct ceph_mds_session *session = 0;  /* if non-NULL, i hold s_mutex */
+	int removed_last = 0;
 
 retry:
 	spin_lock(&inode->i_lock);
@@ -768,7 +773,7 @@ retry:
 	dout(10, "check_caps %p wanted %d used %d issued %d\n", inode,
 	     wanted, used, __ceph_caps_issued(ci));
 
-	if (was_last) {
+	if (!is_delayed) {
 		unsigned long until = round_jiffies(jiffies + HZ * 5);
 		if (until > ci->i_hold_caps_until) {
 			ci->i_hold_caps_until = until;
@@ -847,8 +852,10 @@ ack:
 		mtime = inode->i_mtime;
 		atime = inode->i_atime;
 		mds = cap->mds;
-		if (wanted == 0)
+		if (wanted == 0) {
 			__ceph_remove_cap(cap);
+			removed_last = list_empty(&ci->i_caps);
+		}
 		spin_unlock(&inode->i_lock);
 
 		if (dropping & CEPH_CAP_RDCACHE) {
@@ -861,15 +868,21 @@ ack:
 				       keep, wanted, seq,
 				       size, max_size, &mtime, &atime, mds);
 
-		if (wanted == 0)
+		if (wanted == 0) {
+			if (removed_last && !is_delayed)
+				cancel_delayed_work_sync(&ci->i_cap_dwork);
 			iput(inode);  /* removed cap */
+			if (removed_last)
+				goto out;
+		}
 		up(&session->s_mutex);
 		goto retry;
 	}
 
 	/* okay */
 	spin_unlock(&inode->i_lock);
-
+	
+out:
 	if (session)
 		up(&session->s_mutex);
 }
@@ -904,7 +917,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last)
-		ceph_check_caps(ci, 1);
+		ceph_check_caps(ci, 0);
 }
 
 
@@ -1209,7 +1222,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	     last ? "last":"");
 
 	if (last)
-		ceph_check_caps(ci, 1);
+		ceph_check_caps(ci, 0);
 }
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
@@ -1226,7 +1239,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	     &ci->vfs_inode, last+nr, last, last == 0 ? " LAST":"");
 
 	if (last == 0)
-		ceph_check_caps(ci, 1);
+		ceph_check_caps(ci, 0);
 }
 
 

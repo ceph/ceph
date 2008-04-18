@@ -305,7 +305,7 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	}
 	spin_unlock(&inode->i_lock);
 	if (check)
-		ceph_check_caps(ci, 1);
+		ceph_check_caps(ci, 0);
 
 	dout(10, "write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, *ppos, (unsigned)len, inode->i_size);
