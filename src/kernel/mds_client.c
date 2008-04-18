@@ -1237,6 +1237,8 @@ retry:
 		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
 		spin_unlock(&ci->vfs_inode.i_lock);
 		dentry = d_find_alias(&ci->vfs_inode);
+		if (dentry == NULL)
+			continue;
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path)) {
 			err = PTR_ERR(path);
@@ -1573,7 +1575,6 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
 	struct ceph_inode_info *ci;
-	struct ceph_dentry_info *di;
 	int origmask = mask;
 	int mds = -1;
 	int len = sizeof(*lease) + sizeof(__u32);
@@ -1581,25 +1582,26 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	__u64 ino;
 
 	BUG_ON(inode == 0);
-	if ((mask & CEPH_LOCK_DN) && dentry->d_fsdata) {
-		di = ceph_dentry(dentry);
-		mds = di->lease_session->s_mds;
-		if (mds >= 0 && time_before(jiffies, dentry->d_time)) {
-			dnamelen = dentry->d_name.len;
-			len += dentry->d_name.len;
-		} else
-			mask &= ~CEPH_LOCK_DN;  /* nothing to release */
-	}
+	if ((mask & CEPH_LOCK_DN) &&
+	    dentry && dentry->d_fsdata &&
+	    ceph_dentry(dentry)->lease_session->s_mds >= 0 &&
+	    time_before(jiffies, dentry->d_time)) {
+		dnamelen = dentry->d_name.len;
+		len += dentry->d_name.len;
+		mds = ceph_dentry(dentry)->lease_session->s_mds;
+	} else
+		mask &= ~CEPH_LOCK_DN;  /* nothing to release */
 	ci = ceph_inode(inode);
 	ino = ci->i_ceph_ino;
-	if (ci->i_lease_session && time_after(ci->i_lease_ttl, jiffies)) {
-		mask &= ci->i_lease_mask;     /* lease is valid */
+	if (ci->i_lease_session && time_after(ci->i_lease_ttl, jiffies) &&
+	    ci->i_lease_session->s_mds >= 0) {
+		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
 		mds = ci->i_lease_session->s_mds;
 	} else
 		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
 	if (mask == 0) {
 		dout(10, "lease_release inode %p (%d) dentry %p -- "
-		     "no lease on %d \n",
+		     "no lease on %d\n",
 		     inode, ci->i_lease_mask, dentry, origmask);
 		return;  /* nothing to drop */
 	}
