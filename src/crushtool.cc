@@ -46,7 +46,7 @@ int verbose = 0;
 
 map<string, int> item_id;
 map<int, string> id_item;
-map<int, int> item_weight;
+map<int, float> item_weight;
 
 map<int, int> device_offload;  // may or may not be set.
 
