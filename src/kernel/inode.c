@@ -50,6 +50,18 @@ struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
 	return inode;
 }
 
+
+const struct inode_operations ceph_file_iops = {
+	.setattr = ceph_setattr,
+	.getattr = ceph_inode_getattr,
+};
+
+const struct inode_operations ceph_special_iops = {
+	.setattr = ceph_setattr,
+	.getattr = ceph_inode_getattr,
+};
+
+
 /*
  * populate an inode based on info from mds.
  * may be called on new or existing inodes.
@@ -156,6 +168,7 @@ no_change:
 	case S_IFSOCK:
 		dout(20, "%p is special\n", inode);
 		init_special_inode(inode, inode->i_mode, inode->i_rdev);
+		inode->i_op = &ceph_special_iops;
 		break;
 	case S_IFREG:
 		dout(20, "%p is a file\n", inode);
@@ -244,7 +257,8 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int havemask;
-	int valid = 0;
+	int valid;
+	int ret = 0;
 
 	spin_lock(&inode->i_lock);
 	havemask = ci->i_lease_mask;
@@ -253,18 +267,19 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 		dout(20, "lease_valid inode %p EXCL cap -> ICONTENT\n", inode);
 		havemask |= CEPH_LOCK_ICONTENT;
 	}
-	/* any ICONTENT bits imply all bits */
+	/* any ICONTENT bits imply all ICONTENT bits */
 	if (havemask & CEPH_LOCK_ICONTENT)
 		havemask |= CEPH_LOCK_ICONTENT;
 
-	if ((havemask & mask) != mask)
-		goto out;
-
 	valid = time_before(jiffies, ci->i_lease_ttl);
-out:
+
+	if (valid && (havemask & mask) == mask)
+		ret = 1;
+
 	spin_unlock(&inode->i_lock);
-	dout(10, "lease_valid inode %p mask %d = %d\n", inode, mask, valid);
-	return valid;
+	dout(10, "lease_valid inode %p have %d want %d valid %d = %d\n", inode, 
+	     havemask, mask, valid, ret);
+	return ret;
 }
 
 
@@ -450,6 +465,7 @@ retry_lookup:
 				if (d_unhashed(dn))
 					d_rehash(dn);
 			}
+			in = 0;
 			break;
 		}
 
@@ -511,7 +527,8 @@ retry_lookup:
 		iput(req->r_last_inode);
 	req->r_last_dentry = dn;
 	req->r_last_inode = in;
-	igrab(in);
+	if (in)
+		igrab(in);
 	return err;
 }
 
@@ -1434,7 +1451,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	dout(10, "truncate: ia_size %d i_size %d\n",
 	     (int)attr->ia_size, (int)inode->i_size);
 	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
-	    attr->ia_size < inode->i_size) {
+	    attr->ia_size == inode->i_size) {
 		dout(10, "lease indicates truncate is a no-op\n");
 		return 0;
 	}
@@ -1533,7 +1550,8 @@ int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		       struct kstat *stat)
 {
 	int err = 0;
-	dout(30, "ceph_inode_getattr\n");
+	dout(30, "ceph_inode_getattr dentry %p inode %p\n", dentry, 
+	     dentry->d_inode);
 
 	err = ceph_inode_revalidate(dentry->d_inode, CEPH_STAT_MASK_INODE_ALL);
 

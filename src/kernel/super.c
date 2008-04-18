@@ -404,7 +404,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	dout(10, "set_super %p data %p\n", s, data);
 
 	s->s_flags = args->mntflags;
-	s->s_maxbytes = 1ULL << (32 + 20);  /* assuming objects >= 1MB */
+	s->s_maxbytes = min((u64)MAX_LFS_FILESIZE, CEPH_FILE_MAX_SIZE);
 
 	/* create client */
 	client = ceph_create_client(args, s);
@@ -417,7 +417,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	memcpy(&client->mount_args, args, sizeof(*args));
 
 	/* set time granularity */
-	s->s_time_gran = 1000;  /* 1 us == 1000 ns */
+	s->s_time_gran = 1000;  /* 1000 ns == 1 us */
 
 	ret = set_anon_super(s, 0);  /* what is the second arg for? */
 	if (ret != 0)

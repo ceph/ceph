@@ -187,15 +187,6 @@ int ceph_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-const struct inode_operations ceph_file_iops = {
-	.setattr = ceph_setattr,
-/*	.getattr = ceph_vfs_getattr,
-	.setattr = ceph_vfs_setattr,
-*/
-};
-
-
-
 /*
  * completely synchronous read and write methods.  direct from __user
  * buffer to osd.

@@ -346,6 +346,8 @@ extern const char *ceph_msg_type_name(int type);
 
 
 /* inode.c */
+extern const struct inode_operations ceph_file_iops;
+extern const struct inode_operations ceph_special_iops;
 extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
@@ -394,7 +396,6 @@ extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 extern const struct address_space_operations ceph_aops;
 
 /* file.c */
-extern const struct inode_operations ceph_file_iops;
 extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);

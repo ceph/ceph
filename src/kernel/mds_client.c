@@ -1589,14 +1589,16 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 		dnamelen = dentry->d_name.len;
 		len += dentry->d_name.len;
 		mds = ceph_dentry(dentry)->lease_session->s_mds;
+		ceph_dentry(dentry)->lease_session->s_mds = -1;
 	} else
 		mask &= ~CEPH_LOCK_DN;  /* nothing to release */
 	ci = ceph_inode(inode);
 	ino = ci->i_ceph_ino;
 	if (ci->i_lease_session && time_after(ci->i_lease_ttl, jiffies) &&
 	    ci->i_lease_session->s_mds >= 0) {
-		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
 		mds = ci->i_lease_session->s_mds;
+		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
+		ci->i_lease_mask &= ~mask;
 	} else
 		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
 	if (mask == 0) {

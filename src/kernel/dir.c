@@ -443,6 +443,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
+	/* hmm? */
 	if (!err) {
 		if (dentry->d_inode)
 			drop_nlink(dentry->d_inode);
@@ -503,6 +504,8 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
 
+	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry, 
+	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 	dout(10, "nd flags %d chdir=%d\n", nd->flags, nd->flags & LOOKUP_CHDIR);
 
 	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
