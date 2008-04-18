@@ -1361,7 +1361,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_ATIME)
 			inode->i_atime = attr->ia_atime;
 		if (ia_valid & ATTR_MTIME)
-			inode->i_mtime = attr->ia_mtime;
+			inode->i_ctime = inode->i_mtime = attr->ia_mtime;
 		return 0;
 	}
 
@@ -1375,7 +1375,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_ATIME)
 			inode->i_atime = attr->ia_atime;
 		if (ia_valid & ATTR_MTIME)
-			inode->i_mtime = attr->ia_mtime;
+			inode->i_ctime = inode->i_mtime = attr->ia_mtime;
 		return 0;
 	}
 
@@ -1425,6 +1425,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 
 	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 		dout(10, "holding EXCL, doing truncate locally\n");
+		inode->i_ctime = attr->ia_ctime;
 		err = apply_truncate(inode, attr->ia_size);
 		if (err)
 			return err;
@@ -1482,6 +1483,10 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr: mtime %ld.%ld -> %ld.%ld\n",
 		     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec,
 		     attr->ia_mtime.tv_sec, attr->ia_mtime.tv_nsec);
+	if (ia_valid & ATTR_MTIME)
+		dout(10, "setattr: ctime %ld.%ld -> %ld.%ld\n",
+		     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec,
+		     attr->ia_ctime.tv_sec, attr->ia_ctime.tv_nsec);
 	if (ia_valid & ATTR_FILE)
 		dout(10, "setattr: ATTR_FILE ... hrm!\n");
 
