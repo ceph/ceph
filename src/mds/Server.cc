@@ -3875,6 +3875,12 @@ public:
 void Server::handle_client_truncate(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+
+  if (req->head.args.truncate.length > CEPH_FILE_MAX_SIZE) {
+    reply_request(mdr, -EFBIG);
+    return;
+  }
+
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 

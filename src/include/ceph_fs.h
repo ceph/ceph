@@ -18,6 +18,7 @@
 #endif
 
 #define CEPH_MON_PORT 12345
+#define CEPH_FILE_MAX_SIZE (1ULL << 40) // 1 TB
 
 /*
  * types in this file are defined as little-endian, and are
