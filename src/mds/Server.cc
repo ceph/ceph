@@ -3876,7 +3876,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  if (req->head.args.truncate.length > CEPH_FILE_MAX_SIZE) {
+  if ((__u64)req->head.args.truncate.length > CEPH_FILE_MAX_SIZE) {
     reply_request(mdr, -EFBIG);
     return;
   }

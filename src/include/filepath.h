@@ -33,12 +33,10 @@ using namespace std;
 #include "encodable.h"
 
 class filepath {
-  /** path
-   */
-  inodeno_t ino;   // base inode
+  inodeno_t ino;   // base inode.  ino=0 implies relative path
   string path;     // relative path
 
-  /** bits - path segemtns
+  /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
    *
    * NOTE: this value is LAZILY maintained... i.e. it's a cache
@@ -48,7 +46,7 @@ class filepath {
   void rebuild_path() {
     if (absolute()) 
       path = "/";
-    else 
+    else
       path.clear();
     for (unsigned i=0; i<bits.size(); i++) {
       if (i) path += "/";
@@ -75,13 +73,51 @@ class filepath {
 
  public:
   filepath() : ino(0) {}
-  filepath(const string& s, inodeno_t i=1) : ino(i), path(s) { }
-  filepath(const char* s, inodeno_t i=1) : ino(i), path(s) { }
+  filepath(const char *s) : path(s) {
+    if (s[0] == '/') 
+      ino = 1;
+    else 
+      ino = 0;
+  }
+  filepath(const string &s) : path(s) {
+    if (s[0] == '/') 
+      ino = 1;
+    else 
+      ino = 0;
+  }
+  filepath(const string& s, inodeno_t i) : ino(i), path(s) { 
+    assert(s[0] != '/');
+  }
+  filepath(const char* s, inodeno_t i) : ino(i), path(s) {
+    assert(s[0] != '/');
+  }
   filepath(const filepath& o) {
     ino = o.ino;
     path = o.path;
     bits = o.bits;
   }
+  filepath(inodeno_t i) : ino(i) {
+    if (i > 0)
+      path = "/";
+  }
+  
+  void set_path(const string& s) {
+    path = s;
+    if (s[0] == '/')
+      ino = 1;
+    else
+      ino = 0;
+    bits.clear();
+  }
+  void set_path(const char *s) {
+    path = s;
+    if (s[0] == '/')
+      ino = 1;
+    else
+      ino = 0;
+    bits.clear();
+  }
+
 
   // accessors
   inodeno_t get_ino() const { return ino; }
@@ -109,8 +145,7 @@ class filepath {
   }
 
   filepath prefixpath(int s) const {
-    filepath t;
-    t.ino = ino;    
+    filepath t(ino);
     for (int i=0; i<s; i++)
       t.push_dentry(bits[i]);
     return t;
@@ -125,26 +160,6 @@ class filepath {
 
   // modifiers
   //  string can be relative "a/b/c" (ino=0) or absolute "/a/b/c" (ino=1)
-  void set_path(const string& s) {
-    if (s.length() && s[0] == '/') {
-      ino = 1;  // relative to root
-      path = string(s, 1);
-    } else {
-      ino = 0;  // strictly relative   
-      path = s;
-    }
-    bits.clear();
-  }
-  void set_path(const char *s) {
-    if (s[0] == '/') {
-      ino = 1;  // relative to root
-      path = s + 1;
-    } else {
-      ino = 0;  // strictly relative   
-      path = s;
-    }
-    bits.clear();
-  }
   void set_ino(inodeno_t i) { ino = i; }
   void clear() {
     ino = 0;
@@ -153,18 +168,21 @@ class filepath {
   }
 
   void pop_dentry() {
-    if (bits.empty() && path.length() > 0) parse_bits();
+    if (bits.empty() && path.length() > 0) 
+      parse_bits();
     bits.pop_back();
     rebuild_path();
   }    
   void push_dentry(const string& s) {
-    if (bits.empty() && path.length() > 0) parse_bits();
-    bits.push_back(s);
-    if (path.length() && path[path.length()-1] != '/')
+    if (bits.empty() && path.length() > 0) 
+      parse_bits();
+    if (!bits.empty())
       path += "/";
     path += s;
+    bits.push_back(s);
   }
   void append(const filepath& a) {
+    assert(a.relative());
     for (unsigned i=0; i<a.depth(); i++) 
       push_dentry(a[i]);
   }
@@ -191,8 +209,6 @@ inline ostream& operator<<(ostream& out, filepath& path)
 {
   if (path.get_ino() > 1)
     out << '#' << hex << path.get_ino() << dec;
-  if (path.get_ino() > 0 && path.depth())
-    out << '/';
   return out << path.get_path();
 }
 
