@@ -97,7 +97,7 @@ class filepath {
     bits = o.bits;
   }
   filepath(inodeno_t i) : ino(i) {
-    if (i > 0)
+    if (i == 1)
       path = "/";
   }
   
@@ -160,7 +160,7 @@ class filepath {
 
   // modifiers
   //  string can be relative "a/b/c" (ino=0) or absolute "/a/b/c" (ino=1)
-  void set_ino(inodeno_t i) { ino = i; }
+  void _set_ino(inodeno_t i) { ino = i; }
   void clear() {
     ino = 0;
     path = "";
@@ -205,10 +205,10 @@ class filepath {
 
 };
 
-inline ostream& operator<<(ostream& out, filepath& path)
+inline ostream& operator<<(ostream& out, const filepath& path)
 {
   if (path.get_ino() > 1)
-    out << '#' << hex << path.get_ino() << dec;
+    out << '#' << hex << path.get_ino() << dec << '/';
   return out << path.get_path();
 }
 

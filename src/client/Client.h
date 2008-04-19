@@ -168,13 +168,13 @@ class Inode {
   bool hack_balance_reads;
   // </hack>
 
-  void make_path(string& p) {
+  void make_path(filepath& p) {
     if (dn) {
-      if (dn->dir && dn->dir->parent_inode)
-	dn->dir->parent_inode->make_path(p);
-      p += "/";
-      p += dn->name;
-    }
+      assert(dn->dir && dn->dir->parent_inode);
+      dn->dir->parent_inode->make_path(p);
+      p.push_dentry(dn->name);
+    } else
+      p = filepath(inode.ino);
   }
 
   void get() { 
@@ -469,6 +469,8 @@ public:
     tid_t tid;
     MClientRequest *request;    
     bufferlist request_payload;  // in case i have to retry
+    
+    int uid, gid;
 
     utime_t  sent_stamp;
     bool     idempotent;         // is request idempotent?
@@ -500,7 +502,9 @@ public:
   };
   map<tid_t,StatfsRequest*> statfs_requests;
   
-  MClientReply *make_request(MClientRequest *req, Inode **ppin=0, utime_t *pfrom=0, int use_mds=-1);
+  MClientReply *make_request(MClientRequest *req, int uid, int gid,
+			     Inode **ppin=0, utime_t *pfrom=0, 
+			     int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds);
@@ -533,7 +537,7 @@ protected:
 
 
   // file handles, etc.
-  string                 cwd;
+  filepath cwd;
   interval_set<int> free_fd_set;  // unused fds
   hash_map<int, Fh*> fd_map;
   
@@ -546,14 +550,14 @@ protected:
     free_fd_set.insert(fd, 1);
   }
 
-  void mkabspath(const char *rel, string& abs) {
-    if (rel[0] == '/') {
-      abs = rel;
-    } else {
-      abs = cwd;
-      abs += "/";
-      abs += rel;
-    }
+  filepath mkpath(const char *rel) {
+    if (rel[0] == '/') 
+      return filepath(rel, 1);
+    
+    filepath t = cwd;
+    filepath r(rel);
+    t.append(r);
+    return t;
   }
 
 
@@ -674,7 +678,7 @@ protected:
   void dump_cache();  // debug
   
   // find dentry based on filepath
-  Dentry *lookup(filepath& path);
+  Dentry *lookup(const filepath& path);
 
   int fill_stat(Inode *in, struct stat *st);
 
@@ -746,8 +750,8 @@ private:
   };
 
   // some helpers
-  int _do_lstat(filepath &fpath, int mask, Inode **in);
-  int _opendir(const char *name, DirResult **dirpp);
+  int _do_lstat(const filepath &path, int mask, Inode **in, int uid=-1, int gid=-1);
+  int _opendir(const filepath &path, DirResult **dirpp, int uid=-1, int gid=-1);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
   bool _readdir_have_frag(DirResult *dirp);
@@ -761,24 +765,24 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _link(const char *existing, const char *newname);
-  int _unlink(const char *path);
-  int _rename(const char *from, const char *to);
-  int _mkdir(const char *path, mode_t mode);
-  int _rmdir(const char *path);
-  int _readlink(const char *path, char *buf, off_t size);
-  int _symlink(const char *existing, const char *newname);
-  int _lstat(const char *path, struct stat *stbuf);
-  int _chmod(const char *relpath, mode_t mode);
-  int _chown(const char *relpath, uid_t uid, gid_t gid);
-  int _utimes(const char *relpath, utime_t mtime, utime_t atime);
-  int _mknod(const char *path, mode_t mode, dev_t rdev);
-  int _open(const char *path, int flags, mode_t mode, Fh **fhp);
+  int _link(const filepath &existing, const filepath &newname, int uid=-1, int gid=-1);
+  int _unlink(const filepath &path, int uid=-1, int gid=-1);
+  int _rename(const filepath &from, const filepath &to, int uid=-1, int gid=-1);
+  int _mkdir(const filepath &path, mode_t mode, int uid=-1, int gid=-1);
+  int _rmdir(const filepath &path, int uid=-1, int gid=-1);
+  int _readlink(const filepath &path, char *buf, off_t size, int uid=-1, int gid=-1);
+  int _symlink(const filepath &path, const char *target, int uid=-1, int gid=-1);
+  int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1);
+  int _chmod(const filepath &path, mode_t mode, int uid=-1, int gid=-1);
+  int _chown(const filepath &path, uid_t uid, gid_t gid, int cuid=-1, int cgid=-1);
+  int _utimes(const filepath &path, utime_t mtime, utime_t atime, int uid=-1, int gid=-1);
+  int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
+  int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
   int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
   int _write(Fh *fh, off_t offset, off_t size, const char *buf);
   int _flush(Fh *fh);
-  int _truncate(const char *file, off_t length);
+  int _truncate(const filepath &path, off_t length, int uid=-1, int gid=-1);
   int _ftruncate(Fh *fh, off_t length);
   int _fsync(Fh *fh, bool syncdataonly);
   int _fstat(Fh *fh, struct stat *stbuf);
@@ -794,7 +798,7 @@ public:
 
   // crap
   int chdir(const char *s);
-  const string getcwd() { return cwd; }
+  const char *getcwd() { return cwd.c_str(); }
 
   // namespace ops
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
@@ -858,23 +862,23 @@ public:
 		       off_t length, off_t offset);
 
   // low-level interface
-  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr);
+  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
   bool ll_forget(inodeno_t ino, int count);
   Inode *_ll_get_inode(inodeno_t ino);
-  int ll_getattr(inodeno_t ino, struct stat *st);
-  int ll_setattr(inodeno_t ino, struct stat *st, int mask);
-  int ll_opendir(inodeno_t ino, void **dirpp);
+  int ll_getattr(inodeno_t ino, struct stat *st, int uid = -1, int gid = -1);
+  int ll_setattr(inodeno_t ino, struct stat *st, int mask, int uid = -1, int gid = -1);
+  int ll_opendir(inodeno_t ino, void **dirpp, int uid = -1, int gid = -1);
   void ll_releasedir(void *dirp);
-  int ll_readlink(inodeno_t ino, const char **value);
-  int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr);
-  int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr);
-  int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr);
-  int ll_unlink(inodeno_t ino, const char *name);
-  int ll_rmdir(inodeno_t ino, const char *name);
-  int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname);
-  int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr);
-  int ll_open(inodeno_t ino, int flags, Fh **fh);
-  int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh);
+  int ll_readlink(inodeno_t ino, const char **value, int uid = -1, int gid = -1);
+  int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_unlink(inodeno_t ino, const char *name, int uid = -1, int gid = -1);
+  int ll_rmdir(inodeno_t ino, const char *name, int uid = -1, int gid = -1);
+  int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
+  int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_open(inodeno_t ino, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
   int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
   int ll_write(Fh *fh, off_t off, off_t len, const char *data);
   int ll_flush(Fh *fh);

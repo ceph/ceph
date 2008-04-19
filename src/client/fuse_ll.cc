@@ -33,11 +33,12 @@ static Client *client;
 
 static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   int stmask;
 
   memset(&fe, 0, sizeof(fe));
-  stmask = client->ll_lookup(parent, name, &fe.attr);
+  stmask = client->ll_lookup(parent, name, &fe.attr, ctx->uid, ctx->gid);
   if (stmask >= 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -55,11 +56,12 @@ static void ceph_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup
 static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 			    struct fuse_file_info *fi)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct stat stbuf;
   
   (void) fi;
 
-  if (client->ll_getattr(ino, &stbuf) == 0) 
+  if (client->ll_getattr(ino, &stbuf, ctx->uid, ctx->gid) == 0) 
     fuse_reply_attr(req, &stbuf, 0);
   else
     fuse_reply_err(req, ENOENT);
@@ -68,7 +70,8 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 			    int to_set, struct fuse_file_info *fi)
 {
-  int r = client->ll_setattr(ino, attr, to_set);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  int r = client->ll_setattr(ino, attr, to_set, ctx->uid, ctx->gid);
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
   else
@@ -77,8 +80,9 @@ static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 
 static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   void *dirp;
-  int r = client->ll_opendir(ino, &dirp);
+  int r = client->ll_opendir(ino, &dirp, ctx->uid, ctx->gid);
   if (r >= 0) {
     fi->fh = (long)dirp;
     fuse_reply_open(req, fi);
@@ -89,8 +93,9 @@ static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
 
 static void ceph_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   const char *value;
-  int r = client->ll_readlink(ino, &value);
+  int r = client->ll_readlink(ino, &value, ctx->uid, ctx->gid);
   if (r == 0) 
     fuse_reply_readlink(req, value);
   else
@@ -100,10 +105,11 @@ static void ceph_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode, dev_t rdev)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_mknod(parent, name, mode, rdev, &fe.attr);
+  int r = client->ll_mknod(parent, name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -115,10 +121,11 @@ static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_mkdir(parent, name, mode, &fe.attr);
+  int r = client->ll_mkdir(parent, name, mode, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -129,22 +136,25 @@ static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 static void ceph_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  int r = client->ll_unlink(parent, name);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  int r = client->ll_unlink(parent, name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
 static void ceph_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  int r = client->ll_rmdir(parent, name);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  int r = client->ll_rmdir(parent, name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
 static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t parent, const char *name)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_symlink(parent, name, existing, &fe.attr);
+  int r = client->ll_symlink(parent, name, existing, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -156,17 +166,19 @@ static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t par
 static void ceph_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   fuse_ino_t newparent, const char *newname)
 {
-  int r = client->ll_rename(parent, name, newparent, newname);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  int r = client->ll_rename(parent, name, newparent, newname, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
 static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 			 const char *newname)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
   
-  int r = client->ll_link(ino, newparent, newname, &fe.attr);
+  int r = client->ll_link(ino, newparent, newname, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -177,8 +189,9 @@ static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 
 static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Fh *fh;
-  int r = client->ll_open(ino, fi->flags, &fh);
+  int r = client->ll_open(ino, fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
     fuse_reply_open(req, fi);
@@ -290,10 +303,11 @@ static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   mode_t mode, struct fuse_file_info *fi)
 {
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
   Fh *fh;
-  int r = client->ll_create(parent, name, mode, fi->flags, &fe.attr, &fh);
+  int r = client->ll_create(parent, name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
     fe.ino = fe.attr.st_ino;

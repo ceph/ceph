@@ -378,7 +378,7 @@ void CInode::make_path(filepath& fp)
   if (parent) 
     parent->make_path(fp);
   else
-    fp.set_ino(ino());
+    fp = filepath(ino());
 }
 
 void CInode::make_anchor_trace(vector<Anchor>& trace)
