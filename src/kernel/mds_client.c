@@ -21,10 +21,12 @@ const char *ceph_mds_op_name(int op)
   switch (op) {
   case CEPH_MDS_OP_STAT:  return "stat";
   case CEPH_MDS_OP_LSTAT: return "lstat";
-  case CEPH_MDS_OP_FSTAT: return "fstat";
   case CEPH_MDS_OP_UTIME: return "utime";
+  case CEPH_MDS_OP_LUTIME: return "lutime";
   case CEPH_MDS_OP_CHMOD: return "chmod";
+  case CEPH_MDS_OP_LCHMOD: return "lchmod";
   case CEPH_MDS_OP_CHOWN: return "chown";
+  case CEPH_MDS_OP_LCHOWN: return "lchown";
   case CEPH_MDS_OP_READDIR: return "readdir";
   case CEPH_MDS_OP_MKNOD: return "mknod";
   case CEPH_MDS_OP_LINK: return "link";
@@ -35,6 +37,7 @@ const char *ceph_mds_op_name(int op)
   case CEPH_MDS_OP_SYMLINK: return "symlink";
   case CEPH_MDS_OP_OPEN: return "open";
   case CEPH_MDS_OP_TRUNCATE: return "truncate";
+  case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
   case CEPH_MDS_OP_FSYNC: return "fsync";
   default: return "unknown";
   }

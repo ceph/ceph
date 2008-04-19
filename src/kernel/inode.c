@@ -1346,7 +1346,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_request_head *reqh;
 	int err;
 
-	req = prepare_setattr(mdsc, dentry, attr->ia_valid, CEPH_MDS_OP_CHMOD);
+	req = prepare_setattr(mdsc, dentry, attr->ia_valid, CEPH_MDS_OP_LCHMOD);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
@@ -1406,7 +1406,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		return 0;
 	}
 
-	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_UTIME);
+	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LUTIME);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
@@ -1455,7 +1455,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		dout(10, "lease indicates truncate is a no-op\n");
 		return 0;
 	}
-	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_TRUNCATE);
+	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LTRUNCATE);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;

@@ -722,16 +722,18 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // inodes ops.
   case CEPH_MDS_OP_STAT:
   case CEPH_MDS_OP_LSTAT:
-  case CEPH_MDS_OP_FSTAT:
     handle_client_stat(mdr);
     break;
   case CEPH_MDS_OP_UTIME:
+  case CEPH_MDS_OP_LUTIME:
     handle_client_utime(mdr);
     break;
   case CEPH_MDS_OP_CHMOD:
+  case CEPH_MDS_OP_LCHMOD:
     handle_client_chmod(mdr);
     break;
   case CEPH_MDS_OP_CHOWN:
+  case CEPH_MDS_OP_LCHOWN:
     handle_client_chown(mdr);
     break;
   case CEPH_MDS_OP_TRUNCATE:
@@ -1244,7 +1246,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
-				 trace, false, //req->follow_trailing_symlink(),
+				 trace, req->follow_trailing_symlink(),
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error

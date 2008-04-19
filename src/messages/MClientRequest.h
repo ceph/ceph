@@ -47,11 +47,13 @@
 static inline const char* ceph_mds_op_name(int op) {
   switch (op) {
   case CEPH_MDS_OP_STAT:  return "stat";
-  case CEPH_MDS_OP_LSTAT: return "lstat";
-  case CEPH_MDS_OP_FSTAT: return "fstat";
+  case CEPH_MDS_OP_LSTAT:  return "lstat";
   case CEPH_MDS_OP_UTIME: return "utime";
+  case CEPH_MDS_OP_LUTIME: return "lutime";
   case CEPH_MDS_OP_CHMOD: return "chmod";
+  case CEPH_MDS_OP_LCHMOD: return "lchmod";
   case CEPH_MDS_OP_CHOWN: return "chown";
+  case CEPH_MDS_OP_LCHOWN: return "lchown";
   case CEPH_MDS_OP_READDIR: return "readdir";
   case CEPH_MDS_OP_MKNOD: return "mknod";
   case CEPH_MDS_OP_LINK: return "link";
@@ -62,13 +64,13 @@ static inline const char* ceph_mds_op_name(int op) {
   case CEPH_MDS_OP_SYMLINK: return "symlink";
   case CEPH_MDS_OP_OPEN: return "open";
   case CEPH_MDS_OP_TRUNCATE: return "truncate";
+  case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
   case CEPH_MDS_OP_FSYNC: return "fsync";
   default: return "unknown";
   }
 }
 
 // metadata ops.
-//  >=1000 --> an update, non-idempotent (i.e. an update)
 
 class MClientRequest : public Message {
 public:
@@ -101,7 +103,7 @@ public:
   bool is_idempotent() {
     if (head.op == CEPH_MDS_OP_OPEN) 
       return open_file_mode_is_readonly();
-    return (head.op < 1000);
+    return (head.op & CEPH_MDS_OP_WRITE) == 0;
   }
   bool auth_is_best() {
     if (!is_idempotent()) return true;
@@ -109,33 +111,7 @@ public:
     return false;    
   }
   bool follow_trailing_symlink() {
-    switch (head.op) {
-    case CEPH_MDS_OP_LSTAT:
-    case CEPH_MDS_OP_FSTAT:
-    case CEPH_MDS_OP_LINK:
-    case CEPH_MDS_OP_UNLINK:
-    case CEPH_MDS_OP_RENAME:
-      return false;
-      
-    case CEPH_MDS_OP_STAT:
-    case CEPH_MDS_OP_UTIME:
-    case CEPH_MDS_OP_CHMOD:
-    case CEPH_MDS_OP_CHOWN:
-    case CEPH_MDS_OP_READDIR:
-    case CEPH_MDS_OP_OPEN:
-    case CEPH_MDS_OP_TRUNCATE:
-
-    case CEPH_MDS_OP_FSYNC:
-    case CEPH_MDS_OP_MKNOD:
-    case CEPH_MDS_OP_MKDIR:
-    case CEPH_MDS_OP_RMDIR:
-    case CEPH_MDS_OP_SYMLINK:
-      return true;
-
-    default:
-      assert(0);
-      return false;
-    }
+    return head.op & CEPH_MDS_OP_FOLLOW_LINK;
   }
 
 
