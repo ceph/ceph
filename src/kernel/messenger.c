@@ -1069,6 +1069,8 @@ more:
 		if (ret <= 0)
 			goto done;
 		process_connect(con);
+		if (con->in_tag == CEPH_MSGR_TAG_RETRY)
+			goto more;
 		if (test_bit(CLOSED, &con->state))
 			goto done;
 	}
