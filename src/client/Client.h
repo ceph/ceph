@@ -773,19 +773,18 @@ private:
   int _readlink(const filepath &path, char *buf, off_t size, int uid=-1, int gid=-1);
   int _symlink(const filepath &path, const char *target, int uid=-1, int gid=-1);
   int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1);
-  int _chmod(const filepath &path, mode_t mode, int uid=-1, int gid=-1);
-  int _chown(const filepath &path, uid_t uid, gid_t gid, int cuid=-1, int cgid=-1);
-  int _utimes(const filepath &path, utime_t mtime, utime_t atime, int uid=-1, int gid=-1);
+  int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
+  int _chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid=-1, int cgid=-1);
+  int _utimes(const filepath &path, utime_t mtime, utime_t atime, bool followsym, int uid=-1, int gid=-1);
   int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
   int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
   int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
   int _write(Fh *fh, off_t offset, off_t size, const char *buf);
   int _flush(Fh *fh);
-  int _truncate(const filepath &path, off_t length, int uid=-1, int gid=-1);
+  int _truncate(const filepath &path, off_t length, bool followsym, int uid=-1, int gid=-1);
   int _ftruncate(Fh *fh, off_t length);
   int _fsync(Fh *fh, bool syncdataonly);
-  int _fstat(Fh *fh, struct stat *stbuf);
   int _statfs(struct statvfs *stbuf);
 
 

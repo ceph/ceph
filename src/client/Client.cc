@@ -2205,13 +2205,22 @@ int Client::chmod(const char *relpath, mode_t mode)
   tout << relpath << std::endl;
   tout << mode << std::endl;
   filepath path = mkpath(relpath);
-  return _chmod(path, mode);
+  return _chmod(path, mode, true);
 }
 
-int Client::_chmod(const filepath &path, mode_t mode, int uid, int gid) 
+static int symop(int op, bool follow) 
+{
+  if (follow)
+    return op & CEPH_MDS_OP_FOLLOW_LINK;
+  else
+    return op & ~CEPH_MDS_OP_FOLLOW_LINK;
+}
+
+int Client::_chmod(const filepath &path, mode_t mode, bool followsym, int uid, int gid) 
 {
   dout(3) << "_chmod(" << path << ", 0" << oct << mode << dec << ")" << dendl;
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CHMOD, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHMOD, followsym),
+					   messenger->get_myinst());
   req->set_filepath(path); 
   req->head.args.chmod.mode = mode;
 
@@ -2232,13 +2241,14 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   tout << uid << std::endl;
   tout << gid << std::endl;
   filepath path = mkpath(relpath);
-  return _chown(path, uid, gid);
+  return _chown(path, uid, gid, true);
 }
 
-int Client::_chown(const filepath &path, uid_t uid, gid_t gid, int cuid, int cgid)
+int Client::_chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid, int cgid)
 {
   dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << dendl;
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CHOWN, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHOWN, followsym),
+					   messenger->get_myinst());
   req->set_filepath(path); 
   req->head.args.chown.uid = uid;
   req->head.args.chown.gid = gid;
@@ -2261,10 +2271,11 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   tout << buf->modtime << std::endl;
   tout << buf->actime << std::endl;
   filepath path = mkpath(relpath);
-  return _utimes(path, utime_t(buf->modtime,0), utime_t(buf->actime,0));
+  return _utimes(path, utime_t(buf->modtime,0), utime_t(buf->actime,0), true);
 }
 
-int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, int uid, int gid)
+int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, bool followsym,
+		    int uid, int gid)
 {
   dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
 
@@ -2278,7 +2289,8 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, int uid,
     return 0;
   }
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UTIME, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_UTIME, followsym),
+					   messenger->get_myinst());
   req->set_filepath(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
   atime.encode_timeval(&req->head.args.utime.atime);
@@ -3240,12 +3252,13 @@ int Client::truncate(const char *relpath, off_t length)
   tout << relpath << std::endl;
   tout << length << std::endl;
   filepath path = mkpath(relpath);
-  return _truncate(path, length);
+  return _truncate(path, length, true);
 }
 
-int Client::_truncate(const filepath &path, off_t length, int uid, int gid) 
+int Client::_truncate(const filepath &path, off_t length, bool followsym, int uid, int gid) 
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_TRUNCATE, messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_TRUNCATE, followsym),
+					   messenger->get_myinst());
   req->set_filepath(path); 
   req->head.args.truncate.length = length;
 
@@ -3271,17 +3284,8 @@ int Client::ftruncate(int fd, off_t length)
 
 int Client::_ftruncate(Fh *fh, off_t length) 
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_TRUNCATE, messenger->get_myinst());
   filepath path(fh->inode->inode.ino);
-  req->set_filepath(path);
-  req->head.args.truncate.length = length;
-
-  MClientReply *reply = make_request(req, -1, -1);
-  int res = reply->get_result();
-  delete reply;
-
-  dout(3) << "ftruncate(\"" << fh << "\", " << length << ") = " << res << dendl;
-  return res;
+  return _truncate(path, length, false);
 }
 
 
@@ -3321,8 +3325,6 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   return r;
 }
 
-
-
 int Client::fstat(int fd, struct stat *stbuf) 
 {
   Mutex::Locker lock(client_lock);
@@ -3331,25 +3333,10 @@ int Client::fstat(int fd, struct stat *stbuf)
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
-  int r = _fstat(f, stbuf);
+  filepath path(f->inode->ino());
+  int r = _lstat(path, stbuf);
   dout(3) << "fstat(" << fd << ", " << stbuf << ") = " << r << dendl;
   return r;
-}
-
-int Client::_fstat(Fh *f, struct stat *stbuf)
-{
-  Inode *in = 0;
-  filepath fpath(f->inode->ino());
-  int res = _do_lstat(fpath, CEPH_STAT_MASK_INODE_ALL, &in);
-  if (res == 0) {
-    assert(in);
-    fill_stat(in, stbuf);
-    dout(10) << "stat sez size = " << in->inode.size << " mode = 0" << oct << stbuf->st_mode << dec << " ino = " << stbuf->st_ino << dendl;
-  }
-
-  trim_cache();
-  dout(3) << "fstat(\"" << f << "\", " << stbuf << ") = " << res << dendl;
-  return res;
 }
 
 
@@ -3687,22 +3674,22 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask, int uid, int 
 
   int r = 0;
   if ((mask & FUSE_SET_ATTR_MODE) &&
-      ((r = _chmod(path.c_str(), attr->st_mode, uid, gid)) < 0)) return r;
+      ((r = _chmod(path.c_str(), attr->st_mode, false, uid, gid)) < 0)) return r;
 
   if ((mask & FUSE_SET_ATTR_UID) && (mask & FUSE_SET_ATTR_GID) &&
-      ((r = _chown(path.c_str(), attr->st_uid, attr->st_gid, uid, gid)) < 0)) return r;
+      ((r = _chown(path.c_str(), attr->st_uid, attr->st_gid, false, uid, gid)) < 0)) return r;
   //if ((mask & FUSE_SET_ATTR_GID) &&
   //(r = client->_chgrp(path.c_str(), attr->st_gid) < 0)) return r;
 
   if ((mask & FUSE_SET_ATTR_SIZE) &&
-      ((r = _truncate(path.c_str(), attr->st_size, uid, gid)) < 0)) return r;
+      ((r = _truncate(path.c_str(), attr->st_size, false, uid, gid)) < 0)) return r;
   
   if ((mask & FUSE_SET_ATTR_MTIME) && (mask & FUSE_SET_ATTR_ATIME)) {
-    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0), uid, gid)) < 0) return r;
+    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0), false, uid, gid)) < 0) return r;
   } else if (mask & FUSE_SET_ATTR_MTIME) {
-    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(), uid, gid)) < 0) return r;
+    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(), false, uid, gid)) < 0) return r;
   } else if (mask & FUSE_SET_ATTR_ATIME) {
-    if ((r = _utimes(path.c_str(), utime_t(), utime_t(attr->st_atime,0), uid, gid)) < 0) return r;
+    if ((r = _utimes(path.c_str(), utime_t(), utime_t(attr->st_atime,0), false, uid, gid)) < 0) return r;
   }
   
   assert(r == 0);

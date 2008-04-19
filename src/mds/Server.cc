@@ -737,6 +737,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     handle_client_chown(mdr);
     break;
   case CEPH_MDS_OP_TRUNCATE:
+  case CEPH_MDS_OP_LTRUNCATE:
     handle_client_truncate(mdr);
     break;
   case CEPH_MDS_OP_READDIR:
