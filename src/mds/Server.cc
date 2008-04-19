@@ -1195,7 +1195,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
   // traverse to parent dir
   int r = mdcache->path_traverse(mdr, mdr->client_request,
-				 refpath, trace, true,
+				 refpath, trace, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
@@ -1244,7 +1244,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
-				 trace, req->follow_trailing_symlink(),
+				 trace, false, //req->follow_trailing_symlink(),
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
