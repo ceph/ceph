@@ -234,7 +234,7 @@ void ceph_update_inode_lease(struct inode *inode,
 	 * be careful: we can't remove lease from a different session
 	 * without holding that other session's s_mutex.  so don't.
 	 */
-	if (ttl > ci->i_lease_ttl &&
+	if (ttl >= ci->i_lease_ttl &&
 	    (!ci->i_lease_session || ci->i_lease_session == session)) {
 		ci->i_lease_ttl = ttl;
 		ci->i_lease_mask = mask;
