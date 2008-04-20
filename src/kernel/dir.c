@@ -539,12 +539,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 
 static void ceph_dentry_release(struct dentry *dentry)
 {
-	struct ceph_dentry_info *di;
-	if (dentry->d_fsdata) {
-		di = ceph_dentry(dentry);
-		list_del(&di->lease_item);
-		kfree(di);
-	}
+	BUG_ON(dentry->d_fsdata);
 }
 
 const struct file_operations ceph_dir_fops = {

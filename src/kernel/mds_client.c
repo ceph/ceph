@@ -620,21 +620,17 @@ static void remove_session_caps(struct ceph_mds_session *session)
 void revoke_dentry_lease(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
-	struct ceph_mds_session *session;
-	int drop = 0;
 
 	/* detach from dentry */
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
 	if (di) {
-		session = di->lease_session;
 		list_del(&di->lease_item);
 		kfree(di);
-		drop = 1;
 		dentry->d_fsdata = 0;
 	}
 	spin_unlock(&dentry->d_lock);
-	if (drop)
+	if (di)
 		dput(dentry);
 }
 
