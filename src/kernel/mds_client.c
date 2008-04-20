@@ -375,7 +375,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			iput(req->r_last_inode);
 		if (req->r_last_dentry) {
 			dput(req->r_last_dentry);
-			dout(10, "dput %p\n", req->r_last_dentry);
+			dout(10, "dput %p %d\n", req->r_last_dentry, req->r_last_dentry->d_count);
 		}
 		drop_request_session_attempt_refs(req);
 		kfree(req);
@@ -637,7 +637,7 @@ void revoke_dentry_lease(struct dentry *dentry)
 	}
 	spin_unlock(&dentry->d_lock);
 	if (drop) {
-		dout(10, "lease dput on %p\n", dentry);
+		dout(10, "lease dput on %p %d\n", dentry, dentry->d_count);
 		dput(dentry);
 	}
 }
@@ -710,6 +710,7 @@ static void trim_session_leases(struct ceph_mds_session *session)
 		kfree(di);
 		dentry->d_fsdata = 0;
 		spin_unlock(&dentry->d_lock);
+		dout(10, "dput %p %d\n", dentry, dentry->d_count);
 		dput(dentry);
 	}
 }
@@ -1250,6 +1251,7 @@ retry:
 		ceph_decode_need(&p, end, pathlen+4, needmore);
 		ceph_encode_string(&p, end, path, pathlen);
 		kfree(path);
+		dout(10, "dput %p %d\n", dentry, dentry->d_count);
 		dput(dentry);
 		count++;
 	}
@@ -1552,6 +1554,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			goto release;
 		revoke_dentry_lease(dentry);
 		dout(10, "lease revoked on dentry %p\n", dentry);
+		dout(10, "dput %p %d\n", dentry, dentry->d_count);
 		dput(dentry);
 	}
 

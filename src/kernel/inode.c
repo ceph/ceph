@@ -217,15 +217,16 @@ void ceph_update_inode_lease(struct inode *inode,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
 	int is_new = 0;
+	int mask = le16_to_cpu(lease->mask);
 
 	do_div(ttl, 1000);
 	ttl += from_time;
 
 	dout(10, "update_inode_lease %p mask %d duration %d ms ttl %llu\n",
-	     inode, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
+	     inode, mask, le32_to_cpu(lease->duration_ms),
 	     ttl);
 
-	if (lease->mask == 0)
+	if (mask == 0)
 		return;
 
 	spin_lock(&inode->i_lock);
@@ -236,7 +237,7 @@ void ceph_update_inode_lease(struct inode *inode,
 	if (ttl > ci->i_lease_ttl &&
 	    (!ci->i_lease_session || ci->i_lease_session == session)) {
 		ci->i_lease_ttl = ttl;
-		ci->i_lease_mask = le16_to_cpu(lease->mask);
+		ci->i_lease_mask = mask;
 		if (!ci->i_lease_session) {
 			ci->i_lease_session = session;
 			is_new = 1;
@@ -306,7 +307,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 
 	spin_lock(&dentry->d_lock);
 	if (ttl < dentry->d_time)
-		goto fail_unlock;  /* older. */
+		goto fail_unlock;  /* we already have a newer lease. */
 
 	di = ceph_dentry(dentry);
 	if (!di) {
@@ -512,17 +513,24 @@ retry_lookup:
 		}
 		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
 					session, req->r_from_time);
+		dout(10, "dput %p %d\n", parent, parent->d_count);
 		dput(parent);
 		parent = NULL;
 	}
-	if (parent)
+	if (parent) {
+		dout(10, "dput %p %d\n", parent, parent->d_count);
 		dput(parent);
+	}
 
 	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
-	if (req->r_old_dentry)
+	if (req->r_old_dentry) {
+		dout(10, "dput %p %d\n", req->r_old_dentry, req->r_old_dentry->d_count);
 		dput(req->r_old_dentry);
-	if (req->r_last_dentry)
+	}
+	if (req->r_last_dentry) {
+		dout(10, "dput %p %d\n", req->r_last_dentry, req->r_last_dentry->d_count);
 		dput(req->r_last_dentry);
+	}
 	if (req->r_last_inode)
 		iput(req->r_last_inode);
 	req->r_last_dentry = dn;
@@ -601,6 +609,7 @@ retry_lookup:
 					 req->r_session, req->r_from_time);
 		ceph_update_inode_lease(in, rinfo->dir_ilease[i],
 					req->r_session, req->r_from_time);
+		dout(10, "dput %p %d\n", dn, dn->d_count);
 		dput(dn);
 	}
 	dout(10, "readdir_prepopulate done\n");
@@ -1538,23 +1547,23 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
-
-int ceph_inode_revalidate(struct inode *inode, int mask)
-{
-	if (ceph_inode_lease_valid(inode, mask))
-		return 0;
-	return ceph_do_lookup(inode->i_sb, d_find_alias(inode), mask);
-}
-
 int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		       struct kstat *stat)
 {
 	int err = 0;
+	int mask = CEPH_STAT_MASK_INODE_ALL;
+
 	dout(30, "ceph_inode_getattr dentry %p inode %p\n", dentry, 
 	     dentry->d_inode);
 
-	err = ceph_inode_revalidate(dentry->d_inode, CEPH_STAT_MASK_INODE_ALL);
-
+	if (!ceph_inode_lease_valid(dentry->d_inode, mask))
+		/*
+		 * if the dentry is unhashed, stat the ino directly: we
+		 * presumably have an open capability.
+		 */
+		err = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
+				     d_unhashed(dentry));
+	
 	dout(30, "ceph_inode_getattr returned %d\n", err);
 	if (!err)
 		generic_fillattr(dentry->d_inode, stat);
