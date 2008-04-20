@@ -81,13 +81,13 @@ struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 	
 	if (fh_len < 6)
 		return ERR_PTR(-ESTALE);
+	gen = fh[5];
 
 	inode = ceph_get_inode(sb, ino);
 	if (!inode) {
 		dout(10, "fh_to_parent %llx.%d -- no inode\n", ino, gen);
 		return ERR_PTR(-ESTALE);
 	}
-	gen = fh[5];
 	if (inode->i_generation != gen) {
 		dout(10, "fh_to_parent %llx.%d -- %p bad gen %d\n", ino, gen,
 		     inode, inode->i_generation);

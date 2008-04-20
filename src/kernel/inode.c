@@ -278,7 +278,7 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 		ret = 1;
 
 	spin_unlock(&inode->i_lock);
-	dout(10, "lease_valid inode %p have %d want %d valid %d = %d\n", inode, 
+	dout(10, "lease_valid inode %p have %d want %d valid %d = %d\n", inode,
 	     havemask, mask, valid, ret);
 	return ret;
 }
@@ -698,6 +698,13 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 
 	list_for_each(p, &ci->i_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
+		if (time_after(jiffies, cap->session->s_cap_ttl)) {
+			dout(20, "__ceph_caps_issued %p cap %p issued %d "
+			     "but STALE\n", &ci->vfs_inode, cap, cap->issued);
+			continue;
+		}
+		dout(20, "__ceph_caps_issued %p cap %p issued %d\n",
+		     &ci->vfs_inode, cap, cap->issued);
 		have |= cap->issued;
 	}
 	return have;
@@ -856,6 +863,8 @@ ack:
 
 		/* ok */
 		dropping = cap->issued & ~wanted;
+		dout(10, " cap %p %d -> %d\n", cap, cap->issued,
+		     cap->issued & wanted);
 		cap->issued &= wanted;  /* drop bits we don't want */
 
 		if (revoking && (revoking && used) == 0)
@@ -899,7 +908,7 @@ ack:
 
 	/* okay */
 	spin_unlock(&inode->i_lock);
-	
+
 out:
 	if (session)
 		up(&session->s_mutex);
@@ -977,10 +986,11 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		 * or we'll be mixing up different instances of caps on the
 		 * same inode, and confuse the mds.
 		 */
-		dout(10, "no cap on ino %llx from mds%d, ignoring\n",
-		     ci->i_ceph_ino, mds);
+		dout(10, "no cap on %p ino %llx from mds%d, ignoring\n",
+		     inode, ci->i_ceph_ino, mds);
 		goto out;
 	}
+	dout(10, " cap %p\n", cap);
 
 	/* size change? */
 	if (size > inode->i_size) {
@@ -1173,7 +1183,7 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 		ci->i_wr_ref++;
 	if (got & CEPH_CAP_WRBUFFER) {
 		ci->i_wrbuffer_ref++;
-		dout(20, "__take_cap_refs %p wrbuffer %d -> %d\n", 
+		dout(20, "__take_cap_refs %p wrbuffer %d -> %d\n",
 		     &ci->vfs_inode, ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref);
 	}
 }
@@ -1231,7 +1241,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	if (had & CEPH_CAP_WRBUFFER) {
 		if (--ci->i_wrbuffer_ref == 0)
 			last++;
-		dout(10, "put_cap_refs %p wrbuffer %d -> %d\n", 
+		dout(10, "put_cap_refs %p wrbuffer %d -> %d\n",
 		     &ci->vfs_inode, ci->i_wrbuffer_ref+1,ci->i_wrbuffer_ref);
 	}
 	spin_unlock(&ci->vfs_inode.i_lock);
@@ -1253,7 +1263,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	BUG_ON(ci->i_wrbuffer_ref < 0);
 	spin_unlock(&ci->vfs_inode.i_lock);
 
-	dout(10, "put_wrbuffer_cap_refs on %p %d -> %d%s\n", 
+	dout(10, "put_wrbuffer_cap_refs on %p %d -> %d%s\n",
 	     &ci->vfs_inode, last+nr, last, last == 0 ? " LAST":"");
 
 	if (last == 0)
@@ -1545,7 +1555,7 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	int err = 0;
 	int mask = CEPH_STAT_MASK_INODE_ALL;
 
-	dout(30, "getattr dentry %p inode %p\n", dentry, 
+	dout(30, "getattr dentry %p inode %p\n", dentry,
 	     dentry->d_inode);
 
 	if (!ceph_inode_lease_valid(dentry->d_inode, mask))
@@ -1555,7 +1565,7 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		 */
 		err = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
 				     d_unhashed(dentry));
-	
+
 	dout(30, "getattr returned %d\n", err);
 	if (!err)
 		generic_fillattr(dentry->d_inode, stat);

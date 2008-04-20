@@ -289,6 +289,9 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_cap_seq = 0;
 	init_MUTEX(&s->s_mutex);
+	spin_lock_init(&s->s_cap_lock);
+	s->s_cap_ttl = 0;
+	s->s_renew_requested = 0;
 	INIT_LIST_HEAD(&s->s_caps);
 	INIT_LIST_HEAD(&s->s_inode_leases);
 	INIT_LIST_HEAD(&s->s_dentry_leases);
@@ -514,6 +517,7 @@ static int open_session(struct ceph_mds_client *mdsc,
 	}
 
 	session->s_state = CEPH_MDS_SESSION_OPENING;
+	session->s_renew_requested = jiffies;
 	spin_unlock(&mdsc->lock);
 
 	/* send connect message */
@@ -537,18 +541,14 @@ static int resume_session(struct ceph_mds_client *mdsc,
 {
 	int mds = session->s_mds;
 	struct ceph_msg *msg;
-	struct list_head *cp;
-	struct ceph_inode_cap *cap;
+
+	if (time_after(jiffies, session->s_cap_ttl) &&
+	    session->s_renew_requested < session->s_cap_ttl)
+		dout(1, "mds%d session caps stale\n", session->s_mds);
 
 	dout(10, "resume_session to mds%d\n", mds);
-
-	/* note cap staleness */
-	list_for_each(cp, &session->s_caps) {
-		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
-		cap->issued = cap->implemented = 0;
-	}
-
 	session->s_state = CEPH_MDS_SESSION_RESUMING;
+	session->s_renew_requested = jiffies;
 
 	/* send request_resume message */
 	spin_unlock(&mdsc->lock);
@@ -733,6 +733,21 @@ static void remove_session_leases(struct ceph_mds_session *session)
 	}
 }
 
+/*
+ * wake up any threads waiting on caps
+ */
+static void wake_up_session_caps(struct ceph_mds_session *session)
+{
+	struct list_head *p;
+	struct ceph_inode_cap *cap;
+
+	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
+	list_for_each(p, &session->s_caps) {
+		cap = list_entry(p, struct ceph_inode_cap, session_caps);
+		wake_up(&cap->ci->i_cap_wq);
+	}
+}
+
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 			      struct ceph_msg *msg)
 {
@@ -741,6 +756,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	struct ceph_mds_session *session = 0;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	struct ceph_mds_session_head *h = msg->front.iov_base;
+	int was_stale;
 
 	if (msg->front.iov_len != sizeof(*h))
 		goto bad;
@@ -754,11 +770,15 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	session = __get_session(mdsc, mds);
 	down(&session->s_mutex);
 
+	was_stale = time_after(jiffies, session->s_cap_ttl);
+
 	dout(2, "handle_session %p op %d seq %llu\n", session, op, seq);
 	switch (op) {
 	case CEPH_SESSION_OPEN:
 		dout(2, "session open from mds%d\n", mds);
 		session->s_state = CEPH_MDS_SESSION_OPEN;
+		session->s_cap_ttl = session->s_renew_requested +
+			mdsc->mdsmap->m_cap_bit_timeout*HZ;
 		complete(&session->s_completion);
 		break;
 
@@ -779,16 +799,23 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_SESSION_RENEWCAPS:
-		dout(10, "session renewed caps from mds%d\n", mds);
+		session->s_cap_ttl = session->s_renew_requested +
+			mdsc->mdsmap->m_cap_bit_timeout*HZ;
+		dout(10, "session renewed caps from mds%d, ttl now %lu\n", mds,
+			session->s_cap_ttl);
 		break;
 
 	case CEPH_SESSION_STALE:
 		dout(10, "session stale from mds%d\n", mds);
+		session->s_cap_ttl = 0;  /* not really necessary */
 		resume_session(mdsc, session);
 		break;
 
 	case CEPH_SESSION_RESUME:
-		dout(10, "session resumed by mds%d\n", mds);
+		session->s_cap_ttl = session->s_renew_requested +
+			mdsc->mdsmap->m_cap_bit_timeout*HZ;
+		dout(10, "session resumed by mds%d, ttl now %lu\n", mds,
+		     session->s_cap_ttl);
 		break;
 
 	default:
@@ -796,6 +823,11 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		BUG_ON(1);
 	}
 	spin_unlock(&mdsc->lock);
+
+	if (was_stale && time_before(jiffies, session->s_cap_ttl)) {
+		dout(1, "mds%d session caps resumed\n", session->s_mds);
+		wake_up_session_caps(session);
+	}
 
 	up(&session->s_mutex);
 	put_session(session);
@@ -1459,15 +1491,21 @@ bad:
 	return;
 }
 
-int send_renewcaps(struct ceph_mds_client *mdsc, int mds)
+int send_renewcaps(struct ceph_mds_client *mdsc,
+		   struct ceph_mds_session *session)
 {
 	struct ceph_msg *msg;
 
-	dout(10, "send_renew_caps to mds%d\n", mds);
+	if (time_after(jiffies, session->s_cap_ttl) &&
+	    session->s_renew_requested < session->s_cap_ttl)
+		dout(1, "mds%d session caps stale\n", session->s_mds);
+
+	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
+	session->s_renew_requested = jiffies;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
-	send_msg_mds(mdsc, msg, mds);
+	send_msg_mds(mdsc, msg, session->s_mds);
 	return 0;
 }
 
@@ -1662,7 +1700,7 @@ void delayed_work(struct work_struct *work)
 		down(&session->s_mutex);
 
 		if (renew_caps)
-			send_renewcaps(mdsc, i);
+			send_renewcaps(mdsc, session);
 		trim_session_leases(session);
 
 		up(&session->s_mutex);
