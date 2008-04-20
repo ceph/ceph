@@ -2863,7 +2863,7 @@ void Locker::file_eval(FileLock *lock)
   // * -> loner?
   if (!lock->is_rdlocked() &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-      (wanted & CEPH_CAP_WR) &&
+      (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
       loner &&
       lock->get_state() != LOCK_LONER) {
     dout(7) << "file_eval stable, bump to loner " << *lock << " on " << *lock->get_parent() << dendl;
