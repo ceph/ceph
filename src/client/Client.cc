@@ -2129,8 +2129,8 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_atime = in->inode.atime;
   st->st_mtime = in->inode.mtime;
   st->st_size = in->inode.size;
-  st->st_blocks = in->inode.size ? ((in->inode.size - 1) / 4096 + 1):0;
-  st->st_blksize = 4096;
+  st->st_blksize = MAX(in->inode.layout.fl_stripe_unit, 4096);
+  st->st_blocks = in->inode.size ? DIV_ROUND_UP(in->inode.size, st->st_blksize):0;
   return in->lease_mask;
 }
 
