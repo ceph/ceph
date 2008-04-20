@@ -390,7 +390,7 @@ extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
-extern int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
+extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			      struct kstat *stat);
 
 /* addr.c */

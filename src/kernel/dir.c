@@ -95,7 +95,7 @@ static unsigned fpos_off(loff_t p)
 	return p & 0xffffffff;
 }
 
-static int ceph_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
+static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
 	struct inode *inode = filp->f_dentry->d_inode;
@@ -243,7 +243,7 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 	return err;
 }
 
-static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
+static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nd)
 {
 	int err;
@@ -252,7 +252,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
 	/* open (but not create!) intent? */
-	if (nd->flags & LOOKUP_OPEN &&
+	if (nd && nd->flags & LOOKUP_OPEN &&
 	    !(nd->intent.open.flags & O_CREAT)) {
 		int mode = nd->intent.open.create_mode & ~current->fs->umask;
 		err = ceph_lookup_open(dir, dentry, nd, mode);
@@ -268,7 +268,7 @@ static struct dentry *ceph_dir_lookup(struct inode *dir, struct dentry *dentry,
 	return NULL;
 }
 
-static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
+static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 			   struct nameidata *nd)
 {
 	int err;
@@ -279,7 +279,7 @@ static int ceph_dir_create(struct inode *dir, struct dentry *dentry, int mode,
 	return err;
 }
 
-static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry,
+static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 			  int mode, dev_t rdev)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
@@ -314,7 +314,7 @@ static int ceph_dir_mknod(struct inode *dir, struct dentry *dentry,
 	return err;
 }
 
-static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry,
+static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 			    const char *dest)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
@@ -344,7 +344,7 @@ static int ceph_dir_symlink(struct inode *dir, struct dentry *dentry,
 	return err;
 }
 
-static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
+static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -376,7 +376,7 @@ static int ceph_dir_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	return err;
 }
 
-static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
+static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 			 struct dentry *dentry)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
@@ -428,7 +428,7 @@ static int ceph_dir_link(struct dentry *old_dentry, struct inode *dir,
 	return err;
 }
 
-static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
+static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -466,7 +466,7 @@ static int ceph_dir_unlink(struct inode *dir, struct dentry *dentry)
 	return err;
 }
 
-static int ceph_dir_rename(struct inode *old_dir, struct dentry *old_dentry,
+static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 			   struct inode *new_dir, struct dentry *new_dentry)
 {
 	struct ceph_client *client = ceph_sb_to_client(old_dir->i_sb);
@@ -549,23 +549,23 @@ static void ceph_dentry_release(struct dentry *dentry)
 
 const struct file_operations ceph_dir_fops = {
 	.read = generic_read_dir,
-	.readdir = ceph_dir_readdir,
+	.readdir = ceph_readdir,
 	.open = ceph_open,
 	.release = ceph_release,
 };
 
 const struct inode_operations ceph_dir_iops = {
-	.lookup = ceph_dir_lookup,
-	.getattr = ceph_inode_getattr,
+	.lookup = ceph_lookup,
+	.getattr = ceph_getattr,
 	.setattr = ceph_setattr,
-	.mknod = ceph_dir_mknod,
-	.symlink = ceph_dir_symlink,
-	.mkdir = ceph_dir_mkdir,
-	.link = ceph_dir_link,
-	.unlink = ceph_dir_unlink,
-	.rmdir = ceph_dir_unlink,
-	.rename = ceph_dir_rename,
-	.create = ceph_dir_create,
+	.mknod = ceph_mknod,
+	.symlink = ceph_symlink,
+	.mkdir = ceph_mkdir,
+	.link = ceph_link,
+	.unlink = ceph_unlink,
+	.rmdir = ceph_unlink,
+	.rename = ceph_rename,
+	.create = ceph_create,
 };
 
 struct dentry_operations ceph_dentry_ops = {

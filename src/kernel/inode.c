@@ -53,12 +53,12 @@ struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
 
 const struct inode_operations ceph_file_iops = {
 	.setattr = ceph_setattr,
-	.getattr = ceph_inode_getattr,
+	.getattr = ceph_getattr,
 };
 
 const struct inode_operations ceph_special_iops = {
 	.setattr = ceph_setattr,
-	.getattr = ceph_inode_getattr,
+	.getattr = ceph_getattr,
 };
 
 
@@ -1539,13 +1539,13 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
-int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
+int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		       struct kstat *stat)
 {
 	int err = 0;
 	int mask = CEPH_STAT_MASK_INODE_ALL;
 
-	dout(30, "ceph_inode_getattr dentry %p inode %p\n", dentry, 
+	dout(30, "getattr dentry %p inode %p\n", dentry, 
 	     dentry->d_inode);
 
 	if (!ceph_inode_lease_valid(dentry->d_inode, mask))
@@ -1556,7 +1556,7 @@ int ceph_inode_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		err = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
 				     d_unhashed(dentry));
 	
-	dout(30, "ceph_inode_getattr returned %d\n", err);
+	dout(30, "getattr returned %d\n", err);
 	if (!err)
 		generic_fillattr(dentry->d_inode, stat);
 	return err;
