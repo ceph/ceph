@@ -70,7 +70,45 @@ struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 	return dentry;	
 }
 
+struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
+				 int fh_len, int fh_type)
+{
+	u32 *fh = fid->raw;
+	u64 ino = *(u64 *)(fh + 3);
+	u32 gen;
+	struct inode *inode;
+	struct dentry *dentry;
+	
+	if (fh_len < 6)
+		return ERR_PTR(-ESTALE);
+
+	inode = ceph_get_inode(sb, ino);
+	if (!inode) {
+		dout(10, "fh_to_parent %llx.%d -- no inode\n", ino, gen);
+		return ERR_PTR(-ESTALE);
+	}
+	gen = fh[5];
+	if (inode->i_generation != gen) {
+		dout(10, "fh_to_parent %llx.%d -- %p bad gen %d\n", ino, gen,
+		     inode, inode->i_generation);
+		iput(inode);
+		return ERR_PTR(-ESTALE);
+	}
+	
+	dentry = d_alloc_anon(inode);
+	if (!dentry) {
+		dout(10, "fh_to_parent %llx.%d -- inode %p but ENOMEM\n", 
+		     ino, gen, inode);
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	dout(10, "fh_to_parent %llx.%d -- inode %p dentry %p\n", ino, gen,
+	     inode, dentry);
+	return dentry;	
+}
+
 const struct export_operations ceph_export_ops = {
 	.encode_fh = ceph_encode_fh,
 	.fh_to_dentry = ceph_fh_to_dentry,
+	.fh_to_parent = ceph_fh_to_parent,
 };
