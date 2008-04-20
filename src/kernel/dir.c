@@ -210,10 +210,7 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 	if (dentry->d_name.len > NAME_MAX)
 		return -ENAMETOOLONG;
 
-	dout(10, "do_lookup %p %d mask %d\n", dentry, dentry->d_count, mask);
-	if (atomic_read(&dentry->d_count) > 1) {
-		dout(10, "hey!\n");
-	}
+	dout(10, "do_lookup %p mask %d\n", dentry, mask);
 	if (on_inode) {
 		/* stat ino directly */
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
@@ -242,7 +239,7 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 		d_add(dentry, NULL);
 		err = 0;
 	}
-	dout(20, "do_lookup %p %d result=%d\n", dentry, dentry->d_count, err);
+	dout(20, "do_lookup %p result=%d\n", dentry, err);
 	return err;
 }
 
@@ -521,7 +518,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
 
-	dout(10, "d_revalidate %p %d '%.*s' inode %p\n", dentry, dentry->d_count,
+	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 	dout(10, "nd flags %d chdir=%d\n", nd->flags, nd->flags & LOOKUP_CHDIR);
 

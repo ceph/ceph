@@ -513,24 +513,17 @@ retry_lookup:
 		}
 		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
 					session, req->r_from_time);
-		dout(10, "dput %p %d\n", parent, parent->d_count);
 		dput(parent);
 		parent = NULL;
 	}
-	if (parent) {
-		dout(10, "dput %p %d\n", parent, parent->d_count);
+	if (parent)
 		dput(parent);
-	}
 
 	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
-	if (req->r_old_dentry) {
-		dout(10, "dput %p %d\n", req->r_old_dentry, req->r_old_dentry->d_count);
+	if (req->r_old_dentry)
 		dput(req->r_old_dentry);
-	}
-	if (req->r_last_dentry) {
-		dout(10, "dput %p %d\n", req->r_last_dentry, req->r_last_dentry->d_count);
+	if (req->r_last_dentry)
 		dput(req->r_last_dentry);
-	}
 	if (req->r_last_inode)
 		iput(req->r_last_inode);
 	req->r_last_dentry = dn;
@@ -609,7 +602,6 @@ retry_lookup:
 					 req->r_session, req->r_from_time);
 		ceph_update_inode_lease(in, rinfo->dir_ilease[i],
 					req->r_session, req->r_from_time);
-		dout(10, "dput %p %d\n", dn, dn->d_count);
 		dput(dn);
 	}
 	dout(10, "readdir_prepopulate done\n");
