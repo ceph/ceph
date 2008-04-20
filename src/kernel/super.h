@@ -6,6 +6,7 @@
 #include <linux/wait.h>
 #include <linux/completion.h>
 #include <linux/pagemap.h>
+#include <linux/exportfs.h>
 
 #include "messenger.h"
 #include "mon_client.h"
@@ -418,7 +419,10 @@ static inline void ceph_init_dentry(struct dentry *dentry) {
 	dentry->d_time = 0;
 }
 
+/* export.c */
+extern const struct export_operations ceph_export_ops;
+
 /* proc.c */
 extern void ceph_fs_proc_init(void);
 
-#endif /* _FS_CEPH_CEPH_H */
+#endif /* _FS_CEPH_SUPER_H */

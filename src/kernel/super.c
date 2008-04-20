@@ -192,7 +192,7 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(ceph_inode_cachep);
 }
 
-static const struct super_operations ceph_sops = {
+static const struct super_operations ceph_super_ops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
 	.write_inode    = ceph_write_inode,
@@ -413,7 +413,8 @@ static int ceph_set_super(struct super_block *s, void *data)
 	s->s_fs_info = client;
 
 	/* fill sbinfo */
-	s->s_op = &ceph_sops;
+	s->s_op = &ceph_super_ops;
+	s->s_export_op = &ceph_export_ops;
 	memcpy(&client->mount_args, args, sizeof(*args));
 
 	/* set time granularity */
