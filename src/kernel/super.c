@@ -222,6 +222,7 @@ enum {
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
+	Opt_osdtimeout,
 	/* int args above */
 	Opt_ip,
 };
@@ -237,6 +238,7 @@ static match_table_t arg_tokens = {
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
+	{Opt_osdtimeout, "osdtimeout=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{-1, NULL}
@@ -293,6 +295,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* defaults */
 	args->mntflags = flags;
 	args->flags = 0;
+	args->osd_timeout = 5;  /* seconds */
 
 	/* ip1[,ip2...]:/server/path */
 	c = strchr(dev_name, ':');
@@ -384,6 +387,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			/* misc */
 		case Opt_wsize:
 			args->wsize = intval;
+			break;
+		case Opt_osdtimeout:
+			args->osd_timeout = intval;
 			break;
 
 		default:

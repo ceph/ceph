@@ -146,7 +146,7 @@ void Objecter::maybe_request_map()
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
   last_epoch_requested = osdmap->get_epoch()+1;
-  messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch(), last_epoch_requested),
+  messenger->send_message(new MOSDGetMap(monmap->fsid, last_epoch_requested),
 			  monmap->get_inst(monmap->pick_mon()));
 }
 

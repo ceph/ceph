@@ -388,7 +388,8 @@ bad:
 }
 
 struct ceph_osdmap *apply_incremental(void **p, void *end,
-				      struct ceph_osdmap *map)
+				      struct ceph_osdmap *map,
+				      struct ceph_messenger *msgr)
 {
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
@@ -468,9 +469,13 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	while (len--) {
 		__u32 osd;
 		ceph_decode_32_safe(p, end, osd, bad);
+		(*p)++;  /* clean flag */
 		dout(1, "osd%d down\n", osd);
-		if (osd < map->max_osd)
+		if (osd < map->max_osd) {
 			map->osd_state[osd] &= ~CEPH_OSD_UP;
+			ceph_messenger_mark_down(msgr,
+						 &map->osd_addr[osd]);
+		}
 	}
 
 	/* new_offload */
@@ -491,11 +496,14 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * sizeof(__u64);
 
-	if (*p != end)
+	if (*p != end) {
+		dout(10, "trailing gunk\n");
 		goto bad;
+	}
 	return map;
 
 bad:
+	derr(10, "corrupt incremantal osdmap at %p / %p\n", *p, end);
 	return ERR_PTR(err);
 }
 

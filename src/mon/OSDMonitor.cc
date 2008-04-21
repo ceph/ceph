@@ -343,7 +343,9 @@ bool OSDMonitor::should_propose(double& delay)
 
 void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 {
-  dout(7) << "handle_osd_getmap from " << m->get_source() << " from " << m->get_start_epoch() << dendl;
+  dout(7) << "handle_osd_getmap from " << m->get_source()
+	  << " start " << m->get_start_epoch()
+	  << dendl;
   
   if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_osd_getmap on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
@@ -351,11 +353,10 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
   }
 
   if (m->get_start_epoch()) {
-    if (m->get_want_epoch() <= osdmap.get_epoch())
+    if (m->get_start_epoch() <= osdmap.get_epoch())
 	send_incremental(m->get_source_inst(), m->get_start_epoch());
     else
-      waiting_for_map[m->get_source_inst()] = pair<epoch_t,epoch_t>(m->get_start_epoch(),
-								    m->get_want_epoch());
+      waiting_for_map[m->get_source_inst()] = m->get_start_epoch();
   } else
     send_full(m->get_source_inst());
   
@@ -540,15 +541,14 @@ void OSDMonitor::send_to_waiting()
 {
   dout(10) << "send_to_waiting " << osdmap.get_epoch() << dendl;
 
-  map<entity_inst_t,pair<epoch_t,epoch_t> >::iterator i = waiting_for_map.begin();
+  map<entity_inst_t,epoch_t>::iterator i = waiting_for_map.begin();
   while (i != waiting_for_map.end()) {
-    if (i->second.first) {
-      if (i->second.second <= osdmap.get_epoch())
-	send_incremental(i->first, i->second.first);
+    if (i->second) {
+      if (i->second <= osdmap.get_epoch())
+	send_incremental(i->first, i->second);
       else {
 	dout(10) << "send_to_waiting skipping " << i->first
-		 << " has " << i->second.first
-		 << " wants " << i->second.second
+		 << " wants " << i->second
 		 << dendl;
 	i++;
 	continue;
@@ -570,7 +570,7 @@ void OSDMonitor::send_latest(entity_inst_t who, epoch_t start)
       send_incremental(who, start);
   } else {
     dout(5) << "send_latest to " << who << " later" << dendl;
-    waiting_for_map[who] = pair<epoch_t,epoch_t>(start, 0);
+    waiting_for_map[who] = start;
   }
 }
 

@@ -158,8 +158,7 @@ static void do_request_osdmap(struct work_struct *work)
 		return;
 	h = msg->front.iov_base;
 	h->fsid = monc->monmap->fsid;
-	h->start = cpu_to_le32(monc->have_osdmap);
-	h->want = cpu_to_le32(monc->want_osdmap);
+	h->start = cpu_to_le32(monc->have_osdmap + 1);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 
@@ -168,35 +167,29 @@ static void do_request_osdmap(struct work_struct *work)
 		delayed_work(&monc->osd_delayed_work, &monc->osd_delay);
 }
 
-void ceph_monc_request_osdmap(struct ceph_mon_client *monc,
-			     __u32 have, __u32 want)
+void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u32 have)
 {
-	dout(5, "ceph_monc_request_osdmap have %u want %u\n", have, want);
+	dout(5, "ceph_monc_request_osdmap have %u\n", have);
 	monc->osd_delay = BASE_DELAY_INTERVAL;
 	monc->have_osdmap = have;
-	monc->want_osdmap = want;
 	do_request_osdmap(&monc->osd_delayed_work.work);
 }
 
-int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have)
+int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 got)
 {
-	dout(5, "ceph_monc_got_osdmap calling cancel_delayed_work_sync\n");
-
-	/* we got map so take map request out of queue */
-	cancel_delayed_work_sync(&monc->osd_delayed_work);
-	monc->osd_delay = BASE_DELAY_INTERVAL;
-
-	if (have > monc->want_osdmap) {
-		monc->want_osdmap = 0;
-		monc->have_osdmap = 0;
-		dout(5, "ceph_monc_got_osdmap have %u > wanted %u\n",
-		     have, monc->want_osdmap);
-		return 0;
-	} else {
-		dout(5, "ceph_monc_got_osdmap have %u <= wanted %u *****\n",
-		     have, monc->want_osdmap);
+	if (got <= monc->have_osdmap) {
+		dout(5, "ceph_monc_got_osdmap got %u <= had %u, will retry\n",
+		     got, monc->have_osdmap);
 		return -EAGAIN;
 	}
+
+	/* we got map so take map request out of queue */
+	dout(5, "ceph_monc_got_osdmap got %u > had %u\n",
+	     got, monc->have_osdmap);
+	cancel_delayed_work_sync(&monc->osd_delayed_work);
+	monc->osd_delay = BASE_DELAY_INTERVAL;
+	monc->have_osdmap = 0;
+	return 0;
 }
 
 
@@ -331,6 +324,5 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	monc->last_tid = 0;
 	monc->have_mdsmap = 0;
 	monc->have_osdmap = 0;
-	monc->want_osdmap = 0;
 	return 0;
 }

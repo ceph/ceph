@@ -35,8 +35,17 @@ static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
 	return (osd < map->max_osd) && (map->osd_state[osd] & CEPH_OSD_UP);
 }
 
+static inline struct ceph_entity_addr *
+ceph_osd_addr(struct ceph_osdmap *map, int osd) 
+{
+	if (osd >= map->max_osd)
+		return 0;
+	return &map->osd_addr[osd];
+}
+
 extern struct ceph_osdmap *apply_incremental(void **p, void *end,
-					     struct ceph_osdmap *map);
+					     struct ceph_osdmap *map,
+					     struct ceph_messenger *msgr);
 extern void osdmap_destroy(struct ceph_osdmap *map);
 extern struct ceph_osdmap *osdmap_decode(void **p, void *end);
 
