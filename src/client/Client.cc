@@ -2211,9 +2211,9 @@ int Client::chmod(const char *relpath, mode_t mode)
 static int symop(int op, bool follow) 
 {
   if (follow)
-    return op & CEPH_MDS_OP_FOLLOW_LINK;
+    return op | CEPH_MDS_OP_FOLLOW_LINK;
   else
-    return op & ~CEPH_MDS_OP_FOLLOW_LINK;
+    return op & ~CEPH_MDS_OP_FOLLOW_LINK;  // just to be safe
 }
 
 int Client::_chmod(const filepath &path, mode_t mode, bool followsym, int uid, int gid) 
