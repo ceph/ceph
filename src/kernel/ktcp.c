@@ -106,6 +106,19 @@ static void set_sock_callbacks(struct socket *sock, struct ceph_connection *con)
 	sk->sk_write_space = ceph_write_space;
 	sk->sk_state_change = ceph_state_change;
 }
+
+void ceph_sock_release(struct socket *sock)
+{
+	if (!sock)
+		return;
+	struct sock *sk = sock->sk;
+	sk->sk_user_data = 0;
+	sk->sk_data_ready = 0;
+	sk->sk_write_space = 0;
+	sk->sk_state_change = 0;
+	sock_release(sock);
+}
+
 /*
  * initiate connection to a remote socket.
  */

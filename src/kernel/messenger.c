@@ -117,8 +117,7 @@ static void put_connection(struct ceph_connection *con)
 		dout(20, "put_connection destroying %p\n", con);
 		ceph_msg_put_list(&con->out_queue);
 		ceph_msg_put_list(&con->out_sent);
-		if (con->sock)
-			sock_release(con->sock);
+		ceph_sock_release(con->sock);
 		kfree(con);
 	}
 }
@@ -274,8 +273,7 @@ static void ceph_send_fault(struct ceph_connection *con)
 
 	if (con->delay) {
 		dout(30, "fault tcp_close delay != 0\n");
-		if (con->sock)
-			sock_release(con->sock);
+		ceph_sock_release(con->sock);
 		con->sock = NULL;
 		set_bit(NEW, &con->state);
 
@@ -873,8 +871,7 @@ static void process_connect(struct ceph_connection *con)
 	case CEPH_MSGR_TAG_WAIT:
 		dout(10, "process_connect peer connecting WAIT\n");
 		set_bit(WAIT, &con->state);
-		if (con->sock)
-			sock_release(con->sock);
+		ceph_sock_release(con->sock);
 		con->sock = NULL;
 		break;
 	case CEPH_MSGR_TAG_READY:
@@ -1257,7 +1254,7 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	spin_unlock(&msgr->con_lock);
 
 	/* stop listener */
-	sock_release(msgr->listen_sock);
+	ceph_sock_release(msgr->listen_sock);
 
 	kfree(msgr);
 }
