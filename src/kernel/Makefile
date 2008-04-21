@@ -18,10 +18,21 @@ else
 #Otherwise we were called directly from the command
 # line; invoke the kernel build system.
 
-	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
-	PWD := $(shell pwd)
+KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+PWD := $(shell pwd)
 
-default:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+default: all
+
+all: ceph_fs.h 
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) CONFIG_CEPH_FS=m modules
+
+modules_install:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) CONFIG_CEPH_FS=m modules_install
+
+clean:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
+
+ceph_fs.h:
+	ln -s ../include/ceph_fs.h ceph_fs.h
 
 endif

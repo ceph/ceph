@@ -1,8 +1,8 @@
-#include <linux/ceph_fs.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
+#include "ceph_fs.h"
 #include "super.h"
 
 static int ceph_debug_level_read(char *page, char **start, off_t off,

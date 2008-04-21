@@ -3,10 +3,10 @@
 
 /* this will be equivalent to osdc/Objecter.h */
 
-#include <linux/ceph_fs.h>
 #include <linux/radix-tree.h>
 #include <linux/completion.h>
 
+#include "ceph_fs.h"
 #include "osdmap.h"
 
 struct ceph_msg;

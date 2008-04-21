@@ -1,13 +1,13 @@
 #ifndef _FS_CEPH_SUPER_H
 #define _FS_CEPH_SUPER_H
 
-#include <linux/ceph_fs.h>
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
 
+#include "ceph_fs.h"
 #include "messenger.h"
 #include "mon_client.h"
 #include "mds_client.h"

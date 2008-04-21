@@ -1,10 +1,11 @@
 
-#include <linux/ceph_fs.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/random.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
+
+#include "ceph_fs.h"
 
 int ceph_debug_client = -1;
 #define DOUT_VAR ceph_debug_client

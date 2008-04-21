@@ -1,5 +1,6 @@
-#include <linux/ceph_fs.h>
 #include <linux/exportfs.h>
+
+#include "ceph_fs.h"
 
 int ceph_debug_export = -1;
 #define DOUT_VAR ceph_debug_export

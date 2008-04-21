@@ -5,9 +5,10 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
-#include <linux/ceph_fs.h>
 #include <linux/namei.h>
 #include <linux/writeback.h>
+
+#include "ceph_fs.h"
 
 int ceph_debug_inode = -1;
 #define DOUT_VAR ceph_debug_inode

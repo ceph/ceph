@@ -3,8 +3,9 @@
 #include <linux/net.h>
 #include <linux/string.h>
 #include <linux/highmem.h>
-#include <linux/ceph_fs.h>
 #include <net/tcp.h>
+
+#include "ceph_fs.h"
 #include "messenger.h"
 #include "ktcp.h"
 

@@ -5,8 +5,9 @@
 #include <linux/net.h>
 #include <linux/radix-tree.h>
 #include <linux/workqueue.h>
-#include <linux/ceph_fs.h>
 #include <linux/version.h>
+
+#include "ceph_fs.h"
 
 struct ceph_msg;
 
