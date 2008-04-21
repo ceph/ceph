@@ -23,6 +23,11 @@ osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 psim_SOURCES = psim.cc
 psim_LDADD = libcommon.a libcrush.a
 
+test_ebofs_SOURCES = ebofs/test.ebofs.cc
+test_ebofs_LDADD = libebofs.a libcommon.a libos.a
+mkfs_ebofs_SOURCES = ebofs/mkfs.ebofs.cc
+mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
+
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
@@ -135,6 +140,7 @@ bin_PROGRAMS = \
 	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
 	streamtest dupstore psim \
+	test.ebofs mkfs.ebofs \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \

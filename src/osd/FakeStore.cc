@@ -207,7 +207,7 @@ int FakeStore::mkfs()
   // journal?
   struct stat st;
   sprintf(fn, "%s.journal", basedir.c_str());
-  if (::stat(fn, &st) == 0) {
+  if (::lstat(fn, &st) == 0) {
     journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
     if (journal->create() < 0) {
       dout(0) << "mkfs error creating journal on " << fn << dendl;
@@ -381,7 +381,6 @@ bool FakeStore::exists(pobject_t oid)
   else 
     return false;
 }
-
   
 int FakeStore::stat(pobject_t oid, struct stat *st)
 {
@@ -392,7 +391,7 @@ int FakeStore::stat(pobject_t oid, struct stat *st)
   dout(20) << "stat " << oid << " at " << fn << " = " << r << dendl;
   return r;
 }
- 
+
  
 int FakeStore::remove(pobject_t oid, Context *onsafe) 
 {
@@ -532,7 +531,7 @@ void FakeStore::sync_entry()
     ::close(fd);
 
     commit_finish();
-    dout(10) << "sync_entry committed " << super_epoch << dendl;
+    dout(-10) << "sync_entry committed " << super_epoch << dendl;
   }
   lock.Unlock();
 }
