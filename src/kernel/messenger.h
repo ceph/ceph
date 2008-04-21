@@ -154,6 +154,8 @@ static inline void ceph_msg_put_list(struct list_head *head)
 	}
 }
 
+extern struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *msg);
+
 extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 			 unsigned long timeout);
 

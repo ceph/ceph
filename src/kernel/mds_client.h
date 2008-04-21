@@ -81,8 +81,7 @@ struct ceph_mds_request {
 	unsigned long           r_from_time;
 	struct ceph_inode_cap  *r_cap;
 	struct ceph_mds_session *r_session;
-	struct ceph_mds_session *r_mds[2];
-	int               r_num_mds;    /* items in r_mds */
+	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */

@@ -1288,6 +1288,34 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 
 
 /*
+ * a single ceph_msg can't be queued for send twice, unless it's
+ * already been delivered (i.e. we have the only remaining reference).
+ * so, dup the message if there is more than once reference.
+ */
+struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
+{
+	struct ceph_msg *dup;
+
+	if (atomic_read(&old->nref) == 1)
+		return old;  /* we have only ref, all is well */
+	
+	dup = ceph_msg_new(le32_to_cpu(old->hdr.type), 
+			   le32_to_cpu(old->hdr.front_len),
+			   le32_to_cpu(old->hdr.data_len), 
+			   le32_to_cpu(old->hdr.data_off),
+			   old->pages);
+	BUG_ON(!dup);
+	memcpy(dup->front.iov_base, old->front.iov_base,
+	       le32_to_cpu(old->hdr.front_len));
+	if (old->pages)
+		derr(0, "WARNING: unsafely referenced old pages for %p\n",
+		     old);
+	ceph_msg_put(old);
+	return dup;
+}
+
+
+/*
  * queue up an outgoing message.
  *
  * this consumes a msg reference.  that is, if the caller wants to

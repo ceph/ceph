@@ -165,32 +165,6 @@ static int pick_osd(struct ceph_osd_client *osdc,
 }
 
 /*
- * a single ceph_msg can't be queued for send twice, unless it's
- * already been delivered (i.e. we have the only remaining reference).
- */
-static struct ceph_msg *redup_request(struct ceph_msg *old)
-{
-	struct ceph_msg *dup;
-
-	if (atomic_read(&old->nref) == 1)
-		return old;  /* we have only ref, all good */
-	
-	dup = ceph_msg_new(le32_to_cpu(old->hdr.type), 
-			   le32_to_cpu(old->hdr.front_len),
-			   le32_to_cpu(old->hdr.data_len), 
-			   le32_to_cpu(old->hdr.data_off),
-			   old->pages);
-	BUG_ON(!dup);
-	memcpy(dup->front.iov_base, old->front.iov_base,
-	       le32_to_cpu(old->hdr.front_len));
-	if (old->pages)
-		derr(0, "WARNING: unsafely referenced old pages for %p\n",
-		     old);
-	ceph_msg_put(old);
-	return dup;
-}
-
-/*
  * caller should hold map_sem (for read)
  */
 static void send_request(struct ceph_osd_client *osdc,
@@ -291,7 +265,7 @@ more:
 		dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
 		get_request(req);
 		spin_unlock(&osdc->request_lock);
-		req->r_request = redup_request(req->r_request);  
+		req->r_request = ceph_msg_maybe_dup(req->r_request);  
 		send_request(osdc, req, osd);
 		put_request(req);
 		goto more;
