@@ -33,8 +33,8 @@ using namespace std;
 #include "encodable.h"
 
 class filepath {
-  inodeno_t ino;   // base inode.  ino=0 implies relative path
-  string path;     // relative path
+  inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
+  string path;     // relative path.  leading / IFF ino=1.
 
   /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
@@ -86,10 +86,10 @@ class filepath {
       ino = 0;
   }
   filepath(const string& s, inodeno_t i) : ino(i), path(s) { 
-    assert(s[0] != '/');
+    assert((ino == 1) == (s[0] == '/'));
   }
   filepath(const char* s, inodeno_t i) : ino(i), path(s) {
-    assert(s[0] != '/');
+    assert((ino == 1) == (s[0] == '/'));
   }
   filepath(const filepath& o) {
     ino = o.ino;
@@ -131,8 +131,9 @@ class filepath {
   }
   bool empty() const { return path.length() == 0; }
 
-  bool absolute() const { return ino > 0; }
-  bool relative() const { return !absolute(); }
+  bool absolute() const { return ino == 1; }
+  bool pure_relative() const { return ino == 0; }
+  bool ino_relative() const { return ino > 0; }
   
   const string& operator[](int i) const {
     if (bits.empty() && path.length() > 0) parse_bits();
@@ -182,7 +183,7 @@ class filepath {
     bits.push_back(s);
   }
   void append(const filepath& a) {
-    assert(a.relative());
+    assert(a.pure_relative());
     for (unsigned i=0; i<a.depth(); i++) 
       push_dentry(a[i]);
   }

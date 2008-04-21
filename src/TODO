@@ -40,10 +40,8 @@ kernel client
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
-  - kick requests when new map arrives
   - osd ack vs commit handling.  hmm!
-- unmount
-  - send (+deliver!) unmount message
+  - fix handling of resent message pages
 
 client
 - clean up client mds session vs mdsmap behavior?
