@@ -278,24 +278,28 @@ more:
 	spin_lock(&osdc->request_lock);
 	got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req, 
 				     next_tid, 1);
-	if (got) {
-		next_tid = req->r_tid + 1;
-		osd = pick_osd(osdc, req);
-		if (osd < 0)
-			ret = 1;  /* request a newer map */
-		else if (!ceph_entity_addr_equal(&req->r_last_osd,
-					 &osdc->osdmap->osd_addr[osd])) {
-			dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
-			get_request(req);
-			spin_unlock(&osdc->request_lock);
-			req->r_request = redup_request(req->r_request);  
-			send_request(osdc, req, osd);
-			put_request(req);
-			goto more;
-		}
+	if (got == 0)
+		goto done;
+
+	next_tid = req->r_tid + 1;
+	osd = pick_osd(osdc, req);
+	if (osd < 0) {
+		ret = 1;  /* request a newer map */
+		memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
+	} else if (!ceph_entity_addr_equal(&req->r_last_osd,
+					   &osdc->osdmap->osd_addr[osd])) {
+		dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
+		get_request(req);
 		spin_unlock(&osdc->request_lock);
+		req->r_request = redup_request(req->r_request);  
+		send_request(osdc, req, osd);
+		put_request(req);
 		goto more;
 	}
+	spin_unlock(&osdc->request_lock);
+	goto more;
+
+done:
 	spin_unlock(&osdc->request_lock);
 	if (ret)
 		dout(10, "%d requests still pending on down osds\n", ret);
