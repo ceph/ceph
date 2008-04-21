@@ -1252,7 +1252,7 @@ retry:
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
 		ci = cap->ci;
 		dentry = d_find_alias(&ci->vfs_inode);
-		if (dentry == NULL)
+		if (dentry == NULL) /* fixme */
 			continue;
 		ceph_decode_need(&p, end, sizeof(u64) +
 				 sizeof(struct ceph_mds_cap_reconnect),
@@ -1264,6 +1264,7 @@ retry:
 		p += sizeof(*rec);
 		BUG_ON(p > end);
 		spin_lock(&ci->vfs_inode.i_lock);
+		cap->seq = 0;  /* reset cap seq */
 		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(__ceph_caps_issued(ci));
 		rec->size = cpu_to_le64(ci->vfs_inode.i_size);

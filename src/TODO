@@ -21,7 +21,7 @@ kernel client
 - flush caps on sync, fsync, etc.
   - hmm, should these go in a per-session "check" list, instead of independently scheduling delayed_work for each inode?
 - fsync should flush cap file size to mds.  not sure how to block on that, however.. maybe a want_reply flag in the cap msg?
-- fix session close seq interaction with mds (sessions don't currently close all the way)
+- timeout mds session clone on umount
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
