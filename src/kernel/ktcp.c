@@ -109,9 +109,10 @@ static void set_sock_callbacks(struct socket *sock, struct ceph_connection *con)
 
 void ceph_sock_release(struct socket *sock)
 {
+	struct sock *sk;
 	if (!sock)
 		return;
-	struct sock *sk = sock->sk;
+	sk = sock->sk;
 	sk->sk_user_data = 0;
 	sk->sk_data_ready = 0;
 	sk->sk_write_space = 0;
