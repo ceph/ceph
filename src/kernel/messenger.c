@@ -115,6 +115,8 @@ static void put_connection(struct ceph_connection *con)
 	dout(20, "put_connection nref = %d\n", atomic_read(&con->nref));
 	if (atomic_dec_and_test(&con->nref)) {
 		dout(20, "put_connection destroying %p\n", con);
+		ceph_msg_put_list(&con->out_queue);
+		ceph_msg_put_list(&con->out_sent);
 		if (con->sock)
 			sock_release(con->sock);
 		kfree(con);

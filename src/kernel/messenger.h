@@ -135,12 +135,25 @@ extern void ceph_queue_read(struct ceph_connection *con);
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
+
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
 	/*printk("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
 	  atomic_read(&msg->nref)+1);*/
 	atomic_inc(&msg->nref);
 }
+
 extern void ceph_msg_put(struct ceph_msg *msg);
+
+static inline void ceph_msg_put_list(struct list_head *head)
+{
+	while (!list_empty(head)) {
+		struct ceph_msg *msg = list_first_entry(head, struct ceph_msg,
+							list_head);
+		list_del_init(&msg->list_head);
+		ceph_msg_put(msg);
+	}
+}
+
 extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 			 unsigned long timeout);
 
