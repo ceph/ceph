@@ -318,13 +318,15 @@ public:
     }
   };
 
-
-
-  /* this implementation is here only for naive ObjectStores that
-   * do not do atomic transactions natively.  it is not atomic.
+  /*
+   * these stubs should be implemented if we want to use the
+   * apply_transaction() below and we want atomic transactions.
    */
+  virtual int transaction_start() { return 0; }
+  virtual void transaction_end(int id) { }
   virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) {
     // non-atomic implementation
+    int id = transaction_start();
     while (t.have_op()) {
       int op = t.get_op();
       switch (op) {
@@ -528,6 +530,7 @@ public:
         assert(0);
       }
     }
+    transaction_end(id);
 
     if (onsafe) sync(onsafe);
 

@@ -38,6 +38,8 @@ class FakeStore : public JournalingObjectStore {
   string basedir;
   __u64 fsid;
   
+  bool btrfs;
+
   // fake attrs?
   FakeStoreAttrs attrs;
   bool fake_attrs;
@@ -72,6 +74,7 @@ class FakeStore : public JournalingObjectStore {
  public:
   FakeStore(const char *base) : 
     basedir(base),
+    btrfs(false),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     stop(false), sync_thread(this) { }
