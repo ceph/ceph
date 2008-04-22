@@ -153,14 +153,14 @@ void FileCache::check_caps()
   while (p != caps_callbacks.end()) {
     if (used == 0 || (~(p->first) & used) == 0) {
       // implemented.
-      dout(10) << "used is " << cap_string(used) 
+      dout(10) << "check_caps used is " << cap_string(used) 
                << ", caps " << cap_string(p->first) << " implemented, doing callback(s)" << dendl;
       finish_contexts(p->second);
       map<int, list<Context*> >::iterator o = p;
       p++;
       caps_callbacks.erase(o);
     } else {
-      dout(10) << "used is " << cap_string(used) 
+      dout(10) << "check_caps used is " << cap_string(used) 
                << ", caps " << cap_string(p->first) << " not yet implemented" << dendl;
       p++;
     }

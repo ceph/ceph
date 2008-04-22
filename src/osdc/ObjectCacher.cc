@@ -1259,7 +1259,13 @@ bool ObjectCacher::set_is_cached(inodeno_t ino)
        i != s.end();
        i++) {
     Object *ob = *i;
-    if (!ob->data.empty()) return true;
+    for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
+         p != ob->data.end();
+         p++) {
+      BufferHead *bh = p->second;
+      if (!bh->is_dirty() && !bh->is_tx()) 
+        return true;
+    }
   }
 
   return false;
@@ -1275,7 +1281,7 @@ bool ObjectCacher::set_is_dirty_or_committing(inodeno_t ino)
        i != s.end();
        i++) {
     Object *ob = *i;
-
+    
     for (map<off_t,BufferHead*>::iterator p = ob->data.begin();
          p != ob->data.end();
          p++) {
@@ -1284,7 +1290,7 @@ bool ObjectCacher::set_is_dirty_or_committing(inodeno_t ino)
         return true;
     }
   }  
-
+  
   return false;
 }
 
