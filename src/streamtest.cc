@@ -32,7 +32,7 @@ Mutex lock;
 void pr(off_t off)
 {
   io &i = writes[off];
-  dout(0) << off << "\t" 
+  dout(2) << off << "\t" 
 	  << (i.ack - i.start) << "\t"
 	  << (i.commit - i.start) << dendl;
   writes.erase(off);
@@ -119,7 +119,9 @@ int main(int argc, const char **argv)
     pobject_t poid(0, 0, object_t(1, 1));
     utime_t start = now;
     set_start(pos, now);
-    fs->write(poid, pos, bytes, bl, new C_Commit(pos));
+    ObjectStore::Transaction t;
+    t.write(poid, pos, bytes, bl);
+    fs->apply_transaction(t, new C_Commit(pos));
     now = g_clock.now();
     set_ack(pos, now);
     pos += bytes;

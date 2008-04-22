@@ -48,7 +48,7 @@
 # define BTRFS_IOCTL_MAGIC 0x94
 # define BTRFS_IOC_TRANS_START  _IO(BTRFS_IOCTL_MAGIC, 6)
 # define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
-# define BTRFS_IOC_TRANS_COMMIT _IO(BTRFS_IOCTL_MAGIC, 8)
+# define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
 #endif
 #endif
 
@@ -273,13 +273,14 @@ int FakeStore::mount()
   char fn[100];
   int fd;
 
-#ifndef BTRFS_IOC_TRANS_COMMIT
+#ifdef BTRFS_IOC_SYNC
   // is this btrfs?
   btrfs_fd = ::open(basedir.c_str(), O_DIRECTORY);
-  int r = ::ioctl(fd, BTRFS_IOC_TRANS_COMMIT);
+  r = ::ioctl(btrfs_fd, BTRFS_IOC_SYNC);
   if (r == 0) {
     dout(0) << "mount detected btrfs" << dendl;
   } else {
+    dout(0) << "mount did NOT detect btrfs: " << strerror(r) << dendl;
     ::close(btrfs_fd);
   }
 #endif
@@ -334,7 +335,7 @@ int FakeStore::umount()
   if (btrfs_fd >= 0) {
     ::close(btrfs_fd);
     btrfs_fd = -1;
-  }    
+  } 
 
   if (g_conf.fakestore_dev) {
     char cmd[100];
@@ -353,20 +354,26 @@ int FakeStore::transaction_start()
   if (!btrfs_fd < 0)
     return 0;
 
-  int id = ::ioctl(btrfs_fd, BTRFS_IOC_TRANS_START);
-  if (id < 0) 
-    derr(0) << "transaction_start got " << strerror(id) << " from btrfs" << dendl;
-  return id;
+  int fd = ::open(basedir.c_str(), O_RDONLY);
+  if (fd < 0) 
+    derr(0) << "transaction_start got " << strerror(fd)
+	    << " from btrfs open" << dendl;
+  if (int err = ::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
+    derr(0) << "transaction_start got " << strerror(err)
+	    << " from btrfs ioctl" << dendl;    
+    ::close(fd);
+    return err;
+  }
+  dout(10) << "transaction_start " << fd << dendl;
+  return fd;
 }
 
-void FakeStore::transaction_end(int id)
+void FakeStore::transaction_end(int fd)
 {
   if (!btrfs_fd < 0)
     return;
-
-  int r = ::ioctl(btrfs_fd, BTRFS_IOC_TRANS_END, id);
-  if (r)
-    derr(0) << "transaction_end got " << strerror(r) << " from btrfs" << dendl;
+  dout(10) << "transaction_end " << fd << dendl;
+  ::close(fd);
 }
 
 
@@ -518,7 +525,9 @@ void FakeStore::sync_entry()
   while (!stop) {
     dout(10) << "sync_entry waiting for " << interval << dendl;
     sync_cond.WaitInterval(lock, interval);
-    dout(10) << "sync_entry committing " << super_epoch << dendl;
+    lock.Unlock();
+
+    dout(-10) << "sync_entry committing " << super_epoch << dendl;
     commit_start();
 
     // induce an fs sync.
@@ -531,6 +540,8 @@ void FakeStore::sync_entry()
     ::close(fd);
 
     commit_finish();
+
+    lock.Lock();
     dout(-10) << "sync_entry committed " << super_epoch << dendl;
   }
   lock.Unlock();
