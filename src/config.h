@@ -274,13 +274,14 @@ struct md_config_t {
   bool osd_auto_weight;
 
   // fakestore
+  bool fakestore;
   double   fakestore_sync_interval;
   bool  fakestore_fake_attrs;
   bool  fakestore_fake_collections;
   const char  *fakestore_dev;
   
   // ebofs
-  int   ebofs;
+  bool  ebofs;
   bool  ebofs_cloneable;
   bool  ebofs_verify;
   int   ebofs_commit_ms;

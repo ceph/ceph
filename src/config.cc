@@ -375,13 +375,14 @@ md_config_t g_conf = {
 
   
   // --- fakestore ---
+  fakestore: false,
   fakestore_sync_interval: .2,    // seconds
   fakestore_fake_attrs: false,
   fakestore_fake_collections: false,   
   fakestore_dev: 0,
 
   // --- ebofs ---
-  ebofs: 1,
+  ebofs: false,
   ebofs_cloneable: false,
   ebofs_verify: false,
   ebofs_commit_ms:      1000,       // 0 = no forced commit timeout (for debugging/tracing)
@@ -848,7 +849,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.client_hack_balance_reads = atoi(args[++i]);
 
     else if (strcmp(args[i], "--ebofs") == 0) 
-      g_conf.ebofs = 1;
+      g_conf.ebofs = true;
     else if (strcmp(args[i], "--ebofs_cloneable") == 0)
       g_conf.ebofs_cloneable = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_verify") == 0)
@@ -869,7 +870,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)
       g_conf.ebofs_realloc = atoi(args[++i]);
-\
+
     else if (strcmp(args[i], "--journal_dio") == 0)
       g_conf.journal_dio = atoi(args[++i]);      
     else if (strcmp(args[i], "--journal_max_write_entries") == 0)
@@ -877,11 +878,8 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--journal_max_write_bytes") == 0)
       g_conf.journal_max_write_bytes = atoi(args[++i]);      
 
-    else if (strcmp(args[i], "--fakestore") == 0) {
-      g_conf.ebofs = 0;
-      //g_conf.osd_pg_bits = 5;
-      //g_conf.osd_maxthreads = 1;   // fucking hell
-    }
+    else if (strcmp(args[i], "--fakestore") == 0)
+      g_conf.fakestore = true;
     else if (strcmp(args[i], "--fakestore_sync_interval") == 0)
       g_conf.fakestore_sync_interval = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 
