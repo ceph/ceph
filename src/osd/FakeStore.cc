@@ -31,15 +31,27 @@
 #include <cassert>
 #include <errno.h>
 #include <dirent.h>
+#include <sys/ioctl.h>
 #ifndef __CYGWIN__
 # include <sys/xattr.h>
 #endif
-//#include <sys/vfs.h>
 
 #ifdef DARWIN
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
+
+
+#ifndef __CYGWIN__
+#ifndef DARWIN
+# include <linux/ioctl.h>
+# define BTRFS_IOCTL_MAGIC 0x94
+# define BTRFS_IOC_TRANS_START  _IO(BTRFS_IOCTL_MAGIC, 6)
+# define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
+# define BTRFS_IOC_TRANS_COMMIT _IO(BTRFS_IOCTL_MAGIC, 8)
+#endif
+#endif
+
 
 #include "config.h"
 
@@ -261,6 +273,17 @@ int FakeStore::mount()
   char fn[100];
   int fd;
 
+#ifndef BTRFS_IOC_TRANS_COMMIT
+  // is this btrfs?
+  btrfs_fd = ::open(basedir.c_str(), O_DIRECTORY);
+  int r = ::ioctl(fd, BTRFS_IOC_TRANS_COMMIT);
+  if (r == 0) {
+    dout(0) << "mount detected btrfs" << dendl;
+  } else {
+    ::close(btrfs_fd);
+  }
+#endif
+
   // get fsid
   sprintf(fn, "%s/fsid", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
@@ -308,6 +331,11 @@ int FakeStore::umount()
   lock.Unlock();
   sync_thread.join();
 
+  if (btrfs_fd >= 0) {
+    ::close(btrfs_fd);
+    btrfs_fd = -1;
+  }    
+
   if (g_conf.fakestore_dev) {
     char cmd[100];
     dout(0) << "umounting" << dendl;
@@ -320,9 +348,30 @@ int FakeStore::umount()
 }
 
 
+int FakeStore::transaction_start()
+{
+  if (!btrfs_fd < 0)
+    return 0;
+
+  int id = ::ioctl(btrfs_fd, BTRFS_IOC_TRANS_START);
+  if (id < 0) 
+    derr(0) << "transaction_start got " << strerror(id) << " from btrfs" << dendl;
+  return id;
+}
+
+void FakeStore::transaction_end(int id)
+{
+  if (!btrfs_fd < 0)
+    return;
+
+  int r = ::ioctl(btrfs_fd, BTRFS_IOC_TRANS_END, id);
+  if (r)
+    derr(0) << "transaction_end got " << strerror(r) << " from btrfs" << dendl;
+}
+
+
 // --------------------
 // objects
-
 
 bool FakeStore::exists(pobject_t oid)
 {
@@ -477,10 +526,9 @@ void FakeStore::sync_entry()
     // we assume data=ordered or similar semantics
     char fn[100];
     sprintf(fn, "%s/commit_epoch", basedir.c_str());
-    int fd = ::open(fn, O_CREAT|O_WRONLY);
+    int fd = ::open(fn, O_CREAT|O_WRONLY, 0644);
     ::write(fd, &super_epoch, sizeof(super_epoch));
-    ::fchmod(fd, 0644);
-    ::fsync(fd);  // this should cause the fs's journal to commit.
+    ::fsync(fd);  // this should cause the fs's journal to commit.  (on btrfs too.)
     ::close(fd);
 
     commit_finish();
