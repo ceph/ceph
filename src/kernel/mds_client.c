@@ -991,7 +991,7 @@ retry:
 	}
 
 	/* make request? */
-	if (req->r_from_time == 0) {
+	if (req->r_session == 0) {
 		req->r_from_time = jiffies;
 		dout(30, "do_request from_time %lu\n", req->r_from_time);
 	}

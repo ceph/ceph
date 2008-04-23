@@ -216,16 +216,13 @@ void ceph_update_inode_lease(struct inode *inode,
 			     unsigned long from_time)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
 	int is_new = 0;
 	int mask = le16_to_cpu(lease->mask);
+	long unsigned duration = le32_to_cpu(lease->duration_ms);
+	long unsigned ttl = (duration * HZ) / 1000;
 
-	do_div(ttl, 1000);
-	ttl += from_time;
-
-	dout(10, "update_inode_lease %p mask %d duration %d ms ttl %llu\n",
-	     inode, mask, le32_to_cpu(lease->duration_ms),
-	     ttl);
+	dout(10, "update_inode_lease %p mask %d duration %lu ms ttl %lu\n",
+	     inode, mask, duration, ttl);
 
 	if (mask == 0)
 		return;
@@ -274,11 +271,11 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 		havemask |= CEPH_LOCK_ICONTENT;
 
 	valid = time_before(jiffies, ci->i_lease_ttl);
+	spin_unlock(&inode->i_lock);
 
 	if (valid && (havemask & mask) == mask)
 		ret = 1;
 
-	spin_unlock(&inode->i_lock);
 	dout(10, "lease_valid inode %p have %d want %d valid %d = %d\n", inode,
 	     havemask, mask, valid, ret);
 	return ret;
@@ -293,16 +290,13 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 			      struct ceph_mds_session *session,
 			      unsigned long from_time)
 {
-	__u64 ttl = le32_to_cpu(lease->duration_ms) * HZ;
 	struct ceph_dentry_info *di;
 	int is_new = 0;
+	long unsigned duration = le32_to_cpu(lease->duration_ms);
+	long unsigned ttl = (duration * HZ) / 1000;
 
-	do_div(ttl, 1000);
-	ttl += from_time;
-
-	dout(10, "update_dentry_lease %p mask %d duration %d ms ttl %llu\n",
-	     dentry, le16_to_cpu(lease->mask), le32_to_cpu(lease->duration_ms),
-	     ttl);
+	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
+	     dentry, le16_to_cpu(lease->mask), duration, ttl);
 	if (lease->mask == 0)
 		return;
 
