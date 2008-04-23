@@ -122,6 +122,8 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
 
   mdsmap = 0;
 
+  cwd = filepath(1);  // root directory
+
   // 
   root = 0;
 
