@@ -547,8 +547,8 @@ Capability* Locker::issue_new_caps(CInode *in,
 bool Locker::issue_caps(CInode *in)
 {
   // allowed caps are determined by the lock mode.
-  int allowed = in->filelock.caps_allowed();
-  dout(7) << "issue_caps filelock allows=" << cap_string(allowed) 
+  int all_allowed = in->filelock.caps_allowed();
+  dout(7) << "issue_caps filelock allows=" << cap_string(all_allowed) 
           << " on " << *in << dendl;
 
   // count conflicts with
@@ -563,7 +563,7 @@ bool Locker::issue_caps(CInode *in)
   }
 
   // should we increase max_size?
-  if (!in->is_dir() && (allowed & CEPH_CAP_WR) && in->is_auth())
+  if (!in->is_dir() && (all_allowed & CEPH_CAP_WR) && in->is_auth())
     check_inode_max_size(in);
 
   // client caps
@@ -571,14 +571,22 @@ bool Locker::issue_caps(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
+
+    // do not issue _new_ bits when size|mtime is projected
+    int allowed = all_allowed;
+    int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
+    int issued = cap->issued();
+    if (sizemtime_is_projected)
+      allowed &= ~careful | issued;   // only allow "careful" bits if already issued
+    dout(20) << " all_allowed " << cap_string(all_allowed) 
+	     << " issued " << cap_string(issued) 
+	     << " allowed " << cap_string(allowed) 
+	     << " wanted " << cap_string(cap->wanted())
+	     << dendl;
+
     if (cap->pending() != (cap->wanted() & allowed)) {
       // issue
       nissued++;
-
-      // do not issue _new_ bits when size|mtime is projected
-      int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
-      if (sizemtime_is_projected)
-	allowed &= ~careful | cap->issued();   // only allow "careful" bits if already issued
 
       int before = cap->pending();
       long seq = cap->issue(cap->wanted() & allowed);

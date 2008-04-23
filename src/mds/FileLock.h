@@ -183,9 +183,13 @@ class FileLock : public SimpleLock {
   // client caps allowed
   int caps_allowed_ever() {
     if (parent->is_auth())
-      return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
+      return CEPH_CAP_PIN | 
+	CEPH_CAP_RDCACHE | CEPH_CAP_RD | 
+	CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_EXCL |
+	CEPH_CAP_LAZYIO;
     else
-      return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+      return CEPH_CAP_PIN | 
+	CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
   }
   int caps_allowed() {
     if (parent->is_auth())
