@@ -578,7 +578,7 @@ bool Locker::issue_caps(CInode *in)
       // do not issue _new_ bits when size|mtime is projected
       int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
       if (sizemtime_is_projected)
-	allowed &= careful & cap->issued();   // only allow if already issued
+	allowed &= ~careful | cap->issued();   // only allow "careful" bits if already issued
 
       int before = cap->pending();
       long seq = cap->issue(cap->wanted() & allowed);
