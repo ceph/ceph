@@ -291,7 +291,7 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	    *ppos > ci->i_wanted_max_size) {
 		dout(10, "write %p at large offset %llu, requesting max_size\n",
 		     inode, *ppos);
-		ci->i_wanted_max_size = *ppos;
+		ci->i_wanted_max_size = *ppos+len;
 		check = 1;
 	}
 	spin_unlock(&inode->i_lock);
@@ -303,7 +303,7 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_WR,
 							 CEPH_CAP_WRBUFFER,
-							 &got, *ppos));
+							 &got, *ppos+len));
 	if (ret < 0)
 		goto out;
 	dout(10, "write %p %llu~%u  got cap refs on %d\n",
