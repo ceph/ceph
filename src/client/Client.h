@@ -92,8 +92,14 @@ class Dentry : public LRUObject {
   int lease_mds;
   utime_t lease_ttl;
   
-  void get() { assert(ref == 0); ref++; lru_pin(); }
-  void put() { assert(ref == 1); ref--; lru_unpin(); }
+  void get() { 
+    assert(ref == 0); ref++; lru_pin(); 
+    //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
+  }
+  void put() { 
+    assert(ref == 1); ref--; lru_unpin(); 
+    //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
+  }
   
   Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
 
@@ -179,11 +185,11 @@ class Inode {
 
   void get() { 
     ref++; 
-    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << endl;
+    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
   }
   void put(int n=1) { 
     ref -= n; assert(ref >= 0); 
-    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << endl;
+    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
   }
 
   void ll_get() {

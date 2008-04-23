@@ -81,23 +81,13 @@ class C_Client_CloseRelease : public Context {
   Client *cl;
   Inode *in;
 public:
-  C_Client_CloseRelease(Client *c, Inode *i) : cl(c), in(i) {}
+  C_Client_CloseRelease(Client *c, Inode *i) : cl(c), in(i) {
+    in->get();
+  }
   void finish(int) {
     cl->close_release(in);
   }
 };
-
-class C_Client_CloseSafe : public Context {
-  Client *cl;
-  Inode *in;
-public:
-  C_Client_CloseSafe(Client *c, Inode *i) : cl(c), in(i) {}
-  void finish(int) {
-    cl->close_safe(in);
-  }
-};
-
-
 
 
 
@@ -2800,6 +2790,7 @@ void Client::close_release(Inode *in)
   if (in->num_open_rd || in->fc.is_cached()) retain |= CEPH_CAP_RD | CEPH_CAP_RDCACHE;
 
   release_caps(in, retain);              // release caps now.
+  put_inode(in);
 }
 
 void Client::close_safe(Inode *in)
@@ -2860,13 +2851,6 @@ int Client::_release(Fh *f)
     else if (in->num_open_wr == 0) {
       dout(20) << "calling flush dirty" << dendl;
       in->fc.flush_dirty(new C_Client_CloseRelease(this,in));
-    }
-
-    // pin until safe?
-    if (in->num_open_wr == 0 && !in->fc.all_safe()) {
-      dout(10) << "pinning ino " << in->ino() << " until safe" << dendl;
-      in->get();
-      in->fc.add_safe_waiter(new C_Client_CloseSafe(this, in));
     }
   } else {
     // caching off.
