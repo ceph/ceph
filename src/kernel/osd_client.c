@@ -90,6 +90,8 @@ static int register_request(struct ceph_osd_client *osdc,
 	struct ceph_osd_request_head *head = req->r_request->front.iov_base;
 	int rc;
 
+	radix_tree_preload(GFP_NOFS);
+
 	spin_lock(&osdc->request_lock);
 	req->r_tid = head->tid = ++osdc->last_tid;
 	req->r_flags = 0;
@@ -437,9 +439,8 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	int bytes;
 
 	/* register+send request */
-	down_read(&osdc->map_sem);
-	radix_tree_preload(GFP_NOFS);
 	register_request(osdc, req);
+	down_read(&osdc->map_sem);
 	send_request(osdc, req, -1);
 	up_read(&osdc->map_sem);
 
