@@ -118,7 +118,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	struct ceph_inode_info *ci;
 	int i;
 
-	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_KERNEL);
+	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_NOFS);
 	if (!ci)
 		return NULL;
 

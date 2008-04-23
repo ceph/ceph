@@ -95,7 +95,7 @@ static int parse_reply_info_trace(void **p, void *end,
 					 sizeof(*info->trace_dir) +
 					 sizeof(*info->trace_dname) +
 					 sizeof(*info->trace_dname_len)),
-				 GFP_KERNEL);
+				 GFP_NOFS);
 	if (info->trace_in == NULL)
 		goto badmem;
 
@@ -171,7 +171,7 @@ int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
 				      sizeof(*info->dir_dname) +
 				      sizeof(*info->dir_dname_len) +
 				      sizeof(*info->dir_dlease)),
-			       GFP_KERNEL);
+			       GFP_NOFS);
 	if (info->dir_in == NULL)
 		goto badmem;
 	info->dir_ilease = (void *)(info->dir_in + num);
@@ -285,7 +285,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 
 	spin_unlock(&mdsc->lock);
 
-	s = kmalloc(sizeof(struct ceph_mds_session), GFP_KERNEL);
+	s = kmalloc(sizeof(struct ceph_mds_session), GFP_NOFS);
 	s->s_mds = mds;
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_cap_seq = 0;
@@ -310,7 +310,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 
 		dout(50, "register_session realloc to %d\n", newmax);
 		spin_unlock(&mdsc->lock);
-		sa = kzalloc(newmax * sizeof(void *), GFP_KERNEL);
+		sa = kzalloc(newmax * sizeof(void *), GFP_NOFS);
 		spin_lock(&mdsc->lock);
 		if (sa == NULL)
 			return ERR_PTR(-ENOMEM);
@@ -404,7 +404,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
 
-	req = kmalloc(sizeof(*req), GFP_KERNEL);
+	req = kmalloc(sizeof(*req), GFP_NOFS);
 	req->r_request = msg;
 	req->r_reply = 0;
 	req->r_last_inode = 0;
@@ -953,7 +953,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	BUG_ON(le32_to_cpu(req->r_request->hdr.type) !=
 	       CEPH_MSG_CLIENT_REQUEST);
 
-	radix_tree_preload(GFP_KERNEL);
+	radix_tree_preload(GFP_NOFS);
 	spin_lock(&mdsc->lock);
 	__register_request(mdsc, req);
 

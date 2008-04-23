@@ -54,7 +54,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 {
 	struct ceph_file_info *cf;
 
-	cf = kzalloc(sizeof(*cf), GFP_KERNEL);
+	cf = kzalloc(sizeof(*cf), GFP_NOFS);
 	if (cf == NULL) {
 		ceph_put_fmode(ceph_inode(inode), fmode);  /* clean up */
 		return -ENOMEM;

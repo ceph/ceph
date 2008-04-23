@@ -59,7 +59,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	__u32 mds;
 	int err = -EINVAL;
 
-	m = kzalloc(sizeof(*m), GFP_KERNEL);
+	m = kzalloc(sizeof(*m), GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -75,8 +75,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_32(p, m->m_session_autoclose);
 	ceph_decode_32(p, m->m_max_mds);
 
-	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_KERNEL);
-	m->m_state = kzalloc(m->m_max_mds*sizeof(*m->m_state), GFP_KERNEL);
+	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_NOFS);
+	m->m_state = kzalloc(m->m_max_mds*sizeof(*m->m_state), GFP_NOFS);
 	if (m->m_addr == NULL || m->m_state == NULL)
 		goto badmem;
 

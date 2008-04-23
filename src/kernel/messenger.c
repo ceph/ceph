@@ -38,7 +38,7 @@ static void try_accept(struct work_struct *);
 static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
-	con = kzalloc(sizeof(struct ceph_connection), GFP_KERNEL);
+	con = kzalloc(sizeof(struct ceph_connection), GFP_NOFS);
 	if (con == NULL)
 		return NULL;
 
@@ -650,7 +650,7 @@ static int read_message_partial(struct ceph_connection *con)
 	front_len = le32_to_cpu(m->hdr.front_len);
 	while (m->front.iov_len < front_len) {
 		if (m->front.iov_base == NULL) {
-			m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
+			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
 			if (m->front.iov_base == NULL)
 				return -ENOMEM;
 		}
@@ -970,7 +970,7 @@ static void process_accept(struct ceph_connection *con)
 	__u32 peer_cseq = le32_to_cpu(con->in_connect_seq);
 
 	/* do we have an existing connection for this peer? */
-	radix_tree_preload(GFP_KERNEL);
+	radix_tree_preload(GFP_NOFS);
 	spin_lock(&msgr->con_lock);
 	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
@@ -1394,7 +1394,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 {
 	struct ceph_msg *m;
 
-	m = kmalloc(sizeof(*m), GFP_KERNEL);
+	m = kmalloc(sizeof(*m), GFP_NOFS);
 	if (m == NULL)
 		goto out;
 	atomic_set(&m->nref, 1);
@@ -1405,7 +1405,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 
 	/* front */
 	if (front_len) {
-		m->front.iov_base = kmalloc(front_len, GFP_KERNEL);
+		m->front.iov_base = kmalloc(front_len, GFP_NOFS);
 		if (m->front.iov_base == NULL)
 			goto out2;
 	} else {

@@ -37,7 +37,7 @@ retry:
 	if (len)
 		len--;  /* no leading '/' */
 
-	path = kmalloc(len+1, GFP_KERNEL);
+	path = kmalloc(len+1, GFP_NOFS);
 	if (path == NULL)
 		return ERR_PTR(-ENOMEM);
 	pos = len;

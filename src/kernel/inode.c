@@ -183,7 +183,7 @@ no_change:
 						ci->i_fragtree->nsplits));
 		dout(20, "symlink len is %d\n", symlen);
 		BUG_ON(symlen != ci->vfs_inode.i_size);
-		ci->i_symlink = kmalloc(symlen+1, GFP_KERNEL);
+		ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
 		if (ci->i_symlink == NULL)
 			return -ENOMEM;
 		memcpy(ci->i_symlink,
@@ -308,7 +308,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 	if (!di) {
 		spin_unlock(&dentry->d_lock);
 		di = kmalloc(sizeof(struct ceph_dentry_info),
-			     GFP_KERNEL);
+			     GFP_NOFS);
 		if (!di)
 			return;          /* oh well */
 		spin_lock(&dentry->d_lock);
@@ -651,7 +651,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 				cap = new_cap;
 			else {
 				spin_unlock(&inode->i_lock);
-				new_cap = kmalloc(sizeof(*cap), GFP_KERNEL);
+				new_cap = kmalloc(sizeof(*cap), GFP_NOFS);
 				if (new_cap == 0)
 					return ERR_PTR(-ENOMEM);
 				spin_lock(&inode->i_lock);

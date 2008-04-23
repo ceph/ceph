@@ -17,7 +17,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	int i, err = -EINVAL;
 
 	dout(30, "monmap_decode %p %p\n", p, end);
-	m = kmalloc(end-p, GFP_KERNEL);
+	m = kmalloc(end-p, GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -317,7 +317,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	if (monc->monmap == NULL)
 		return -ENOMEM;
 	spin_lock_init(&monc->lock);
-	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_KERNEL);
+	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&monc->mds_delayed_work, do_request_mdsmap);
 	INIT_DELAYED_WORK(&monc->osd_delayed_work, do_request_osdmap);
 	INIT_DELAYED_WORK(&monc->umount_delayed_work, do_request_umount);

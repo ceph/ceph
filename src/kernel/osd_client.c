@@ -67,7 +67,7 @@ static struct ceph_osd_request *alloc_request(int nr_pages,
 {
 	struct ceph_osd_request *req;
 
-	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void *), GFP_KERNEL);
+	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void *), GFP_NOFS);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
 	req->r_request = msg;
@@ -438,7 +438,7 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 
 	/* register+send request */
 	down_read(&osdc->map_sem);
-	radix_tree_preload(GFP_KERNEL);
+	radix_tree_preload(GFP_NOFS);
 	register_request(osdc, req);
 	send_request(osdc, req, -1);
 	up_read(&osdc->map_sem);
@@ -483,7 +483,7 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	spin_lock_init(&osdc->request_lock);
 	osdc->last_tid = 0;
 	osdc->nr_requests = 0;
-	INIT_RADIX_TREE(&osdc->request_tree, GFP_KERNEL);
+	INIT_RADIX_TREE(&osdc->request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
 }
 
@@ -554,7 +554,7 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
 
 	/* allocate temp pages to hold data */
 	for (i = 0; i < nr_pages; i++) {
-		req->r_pages[i] = alloc_page(GFP_KERNEL);
+		req->r_pages[i] = alloc_page(GFP_NOFS);
 		if (req->r_pages[i] == NULL) {
 			req->r_nr_pages = i+1;
 			put_request(req);
@@ -736,7 +736,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	left = len;
 	po = off & ~PAGE_MASK;
 	for (i = 0; i < nr_pages; i++) {
-		req->r_pages[i] = alloc_page(GFP_KERNEL);
+		req->r_pages[i] = alloc_page(GFP_NOFS);
 		if (req->r_pages[i] == NULL) {
 			req->r_nr_pages = i+1;
 			put_request(req);

@@ -77,7 +77,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		list_del(&page->lru);
 
 		if (add_to_page_cache(page, mapping, page->index,
-				      GFP_KERNEL)) {
+				      GFP_NOFS)) {
 			page_cache_release(page);
 			dout(20, "readpages add_to_page_cache failed on %p\n",
 			     page);
@@ -196,7 +196,7 @@ static int ceph_writepages(struct address_space *mapping,
 	/* larger page vector? */
 	max_pages = wsize >> PAGE_CACHE_SHIFT;
 	if (max_pages > PAGEVEC_SIZE) {
-		pages = kmalloc(max_pages * sizeof(*pages), GFP_KERNEL);
+		pages = kmalloc(max_pages * sizeof(*pages), GFP_NOFS);
 		if (!pages)
 			return generic_writepages(mapping, wbc);
 	} else
