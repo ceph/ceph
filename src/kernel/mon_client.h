@@ -17,6 +17,7 @@ struct ceph_monmap {
 
 struct ceph_mon_statfs_request {
 	u64 tid;
+	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;
 	u64 last_attempt; /* jiffies */

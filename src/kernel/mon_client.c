@@ -246,25 +246,27 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 
 	spin_lock(&monc->lock);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
-	dout(30, "got req %p\n", req);
 	if (req) {
+		radix_tree_delete(&monc->statfs_request_tree, tid);
+		req->result = -EIO;
 		ceph_decode_need(&p, end, 4*sizeof(__u64), bad_locked);
 		ceph_decode_64(&p, req->buf->f_total);
 		ceph_decode_64(&p, req->buf->f_free);
 		ceph_decode_64(&p, req->buf->f_avail);
 		ceph_decode_64(&p, req->buf->f_objects);
-		dout(30, "decoded ok\n");
+		req->result = 0;
 	}
-	radix_tree_delete(&monc->statfs_request_tree, tid);
+out_locked:
 	spin_unlock(&monc->lock);
 	if (req)
 		complete(&req->completion);
 	return;
 
 bad_locked:
-	spin_unlock(&monc->lock);
+	derr(10, "corrupt statfs reply, EIO\n");
+	goto out_locked;
 bad:
-	dout(10, "corrupt statfs reply\n");
+	derr(10, "corrupt statfs reply, no tid\n");
 }
 
 int send_statfs(struct ceph_mon_client *monc, u64 tid)
@@ -303,8 +305,10 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		return err;
 
 	dout(20, "do_statfs waiting for reply\n");
-	wait_for_completion(&req.completion);
-	return 0;
+	err = wait_for_completion_interruptible(&req.completion);
+	if (err == -EINTR)
+		return err;
+	return req.result;
 }
 
 
