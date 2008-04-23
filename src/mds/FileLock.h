@@ -32,9 +32,9 @@ using namespace std;
 #define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync (*)
 #define LOCK_GSYNCM  -13 // A    . . / . R . . . L
 
-#define LOCK_LOCK_    2  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
+#define LOCK_LOCK_    2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_GLOCKR_ -3  // AR   R . / C . . . . .   . . / C . . . . .
-#define LOCK_GLOCKL  -4  // A    . . / C . . . . .                       loner -> lock
+#define LOCK_GLOCKL  -4  // A    . . / C . . . B .                       loner -> lock
 #define LOCK_GLOCKM  -5  // A    . . / . . . . . .
 
 #define LOCK_MIXED    6  // AR   . . / . R W A . L   . . / . R . . . L
@@ -196,10 +196,11 @@ class FileLock : public SimpleLock {
       switch (state) {
       case LOCK_SYNC:
         return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_LOCK:
       case LOCK_GLOCKR:
+         return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
+      case LOCK_LOCK:
       case LOCK_GLOCKL:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_WRBUFFER;
 
       case LOCK_GLOCKM:
         return CEPH_CAP_PIN;
