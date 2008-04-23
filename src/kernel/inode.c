@@ -219,7 +219,7 @@ void ceph_update_inode_lease(struct inode *inode,
 	int is_new = 0;
 	int mask = le16_to_cpu(lease->mask);
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
-	long unsigned ttl = (duration * HZ) / 1000;
+	long unsigned ttl = from_time + (duration * HZ) / 1000;
 
 	dout(10, "update_inode_lease %p mask %d duration %lu ms ttl %lu\n",
 	     inode, mask, duration, ttl);
@@ -293,7 +293,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 	struct ceph_dentry_info *di;
 	int is_new = 0;
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
-	long unsigned ttl = (duration * HZ) / 1000;
+	long unsigned ttl = from_time + (duration * HZ) / 1000;
 
 	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
 	     dentry, le16_to_cpu(lease->mask), duration, ttl);
