@@ -1211,6 +1211,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	session = __get_session(mdsc, mds);
 	if (session) {
 		session->s_state = CEPH_MDS_SESSION_RECONNECTING;
+		session->s_cap_seq = 0;
 
 		/* estimate needed space */
 		len += session->s_nr_caps *
