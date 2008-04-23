@@ -73,6 +73,13 @@ struct ceph_mount_args {
 	int osd_timeout;
 };
 
+enum {
+	CEPH_MOUNT_MOUNTING,
+	CEPH_MOUNT_MOUNTED,
+	CEPH_MOUNT_UNMOUNTING,
+	CEPH_MOUNT_UNMOUNTED,
+};
+
 /*
  * per-filesystem client state
  *
@@ -87,7 +94,7 @@ struct ceph_client {
 
 	struct super_block *sb;
 
-	unsigned long mounting;   /* map bitset; 4=mon, 2=mds, 1=osd map */
+	unsigned long mount_state; 
 	wait_queue_head_t mount_wq;
 
 	struct ceph_messenger *msgr;   /* messenger instance */
@@ -103,11 +110,6 @@ struct ceph_client {
 	int num_sb;      /* ref count (for each sb_info that points to me) */
 	struct list_head sb_list;
 };
-
-static inline int ceph_have_all_maps(struct ceph_client *client)
-{
-	return find_first_zero_bit(&client->mounting, 4) == 3;
-}
 
 /*
  * CEPH per-mount superblock info

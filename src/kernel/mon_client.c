@@ -225,7 +225,7 @@ void ceph_monc_handle_umount(struct ceph_mon_client *monc,
 {
 	dout(5, "ceph_monc_handle_umount\n");
 	cancel_delayed_work_sync(&monc->umount_delayed_work);
-	monc->client->mounting = 0;
+	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
 	wake_up(&monc->client->mount_wq);
 }
 

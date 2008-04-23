@@ -76,6 +76,13 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	return root;
 }
 
+static int have_all_maps(struct ceph_client *client)
+{
+	return client->osdc.osdmap && client->osdc.osdmap->epoch &&
+		client->monc.monmap && client->monc.monmap->epoch &&
+		client->mdsc.mdsmap && client->mdsc.mdsmap->m_epoch;
+}
+
 /*
  * mount: join the ceph cluster.
  */
@@ -90,7 +97,7 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 	char r;
 
 	dout(10, "mount start\n");
-	while (client->mounting < 7) {
+	while (1) {
 		get_random_bytes(&r, 1);
 		which = r % args->num_mon;
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
@@ -107,14 +114,13 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
-		err = wait_event_interruptible_timeout(
-			client->mount_wq,
-			ceph_have_all_maps(client),
-			6*HZ);
+		err = wait_event_interruptible_timeout(client->mount_wq,
+						       have_all_maps(client),
+						       6*HZ);
 		dout(10, "mount wait got %d\n", err);
 		if (err == -EINTR)
 			return err;
-		if (ceph_have_all_maps(client))
+		if (have_all_maps(client))
 			break;  /* success */
 		dout(10, "mount still waiting for mount, attempts=%d\n",
 		     attempts);
@@ -128,6 +134,7 @@ int ceph_mount(struct ceph_client *client, struct ceph_mount_args *args,
 		return PTR_ERR(root);
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
+	client->mount_state = CEPH_MOUNT_MOUNTED;
 	dout(10, "mount success\n");
 	return 0;
 }
@@ -162,20 +169,6 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 		     le64_to_cpu(client->monc.monmap->fsid.minor));
 	}
 }
-
-
-void got_first_map(struct ceph_client *client, int num)
-{
-	set_bit(num, &client->mounting);
-	dout(10, "got_first_map num %d mounting now %lu  done=%d\n",
-	     num, client->mounting, ceph_have_all_maps(client));
-	if (ceph_have_all_maps(client)) {
-		dout(10, "got_first_map kicking mount\n");
-		wake_up(&client->mount_wq);
-	}
-}
-
-
 
 /*
  * create a fresh client instance
@@ -221,7 +214,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 	ceph_osdc_init(&cl->osdc, cl);
 
 	cl->sb = sb;
-	cl->mounting = 0;  /* wait for mon+mds+osd */
+	cl->mount_state = CEPH_MOUNT_MOUNTING;
 
 	return cl;
 
@@ -238,7 +231,9 @@ void ceph_umount_start(struct ceph_client *cl)
 
 	ceph_mdsc_stop(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
-	rc = wait_event_timeout(cl->mount_wq, (cl->mounting == 0), seconds*HZ);
+	rc = wait_event_timeout(cl->mount_wq,
+				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
+				seconds*HZ);
 	if (rc == 0)
 		derr(0, "umount timed out after %d seconds\n", seconds);
 }
@@ -276,8 +271,8 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_MON_MAP:
 		had = client->monc.monmap->epoch ? 1:0;
 		handle_monmap(client, msg);
-		if (!had && client->monc.monmap->epoch)
-			got_first_map(client, 0);
+		if (!had && client->monc.monmap->epoch && have_all_maps(client))
+			wake_up(&client->mount_wq);
 		break;
 
 		/* mon client */
@@ -292,8 +287,8 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_MDS_MAP:
 		had = client->mdsc.mdsmap ? 1:0;
 		ceph_mdsc_handle_map(&client->mdsc, msg);
-		if (!had && client->mdsc.mdsmap)
-			got_first_map(client, 1);
+		if (!had && client->mdsc.mdsmap && have_all_maps(client))
+			wake_up(&client->mount_wq);
 		break;
 	case CEPH_MSG_CLIENT_SESSION:
 		ceph_mdsc_handle_session(&client->mdsc, msg);
@@ -315,8 +310,8 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_OSD_MAP:
 		had = client->osdc.osdmap ? 1:0;
 		ceph_osdc_handle_map(&client->osdc, msg);
-		if (!had && client->osdc.osdmap)
-			got_first_map(client, 2);
+		if (!had && client->osdc.osdmap && have_all_maps(client))
+			wake_up(&client->mount_wq);
 		break;
 	case CEPH_MSG_OSD_OPREPLY:
 		ceph_osdc_handle_reply(&client->osdc, msg);
