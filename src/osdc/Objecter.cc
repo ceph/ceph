@@ -962,15 +962,20 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   // done?
  done:
-  // remove from tid/osd maps
-  assert(pg.active_tids.count(tid));
-  pg.active_tids.erase(tid);
-  dout(15) << "handle_osd_modify_reply pg " << m->get_pg()
-	   << " still has " << pg.active_tids << dendl;
-  if (pg.active_tids.empty()) 
-    close_pg( m->get_pg() );
-  op_modify.erase( tid );
 
+  // done with this tid?
+  if (wr->waitfor_commit.count(tid) == 0 &&
+      wr->waitfor_ack.count(tid) == 0) {
+    assert(pg.active_tids.count(tid));
+    pg.active_tids.erase(tid);
+    dout(15) << "handle_osd_modify_reply pg " << m->get_pg()
+	     << " still has " << pg.active_tids << dendl;
+    if (pg.active_tids.empty()) 
+      close_pg( m->get_pg() );
+    op_modify.erase( tid );
+  }
+  
+  // done with this overall op?
   if (wr->onack == 0 && wr->oncommit == 0) {
     dout(15) << "handle_osd_modify_reply completed" << dendl;
     delete wr;
