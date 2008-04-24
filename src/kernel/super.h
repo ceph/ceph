@@ -28,7 +28,7 @@ extern int ceph_debug_addr;
 		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
 		    (DOUT_VAR < 0 && x <= ceph_debug)) {		\
 			if (ceph_debug_console)				\
-				printk(KERN_INFO "ceph_" DOUT_PREFIX args); \
+				printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
 			else						\
 				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
 		}							\
