@@ -42,8 +42,8 @@ struct ceph_messenger {
 	struct work_struct awork;	 /* accept work */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
-	struct list_head con_accepting;  /*  doing handshake, or */
-	struct radix_tree_root con_open; /*  established */
+	struct list_head con_accepting;  /* accepting */
+	struct radix_tree_root con_tree; /*  established */
 };
 
 struct ceph_msg {
@@ -76,6 +76,7 @@ struct ceph_msg_pos {
 #define CLOSED		8  /* we've closed the connection */
 #define SOCK_CLOSE	9  /* socket state changed to close */
 #define STANDBY		10 /* standby, when socket state close, no messages */
+#define REGISTERED      11
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
@@ -86,7 +87,7 @@ struct ceph_connection {
 	atomic_t nref;
 
 	struct list_head list_all;   /* msgr->con_all */
-	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
+	struct list_head list_bucket;  /* msgr->con_tree or con_accepting */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
