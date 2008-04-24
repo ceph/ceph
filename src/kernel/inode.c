@@ -694,11 +694,11 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 	list_for_each(p, &ci->i_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
 		if (time_after(jiffies, cap->session->s_cap_ttl)) {
-			dout(20, "__ceph_caps_issued %p cap %p issued %d "
+			dout(30, "__ceph_caps_issued %p cap %p issued %d "
 			     "but STALE\n", &ci->vfs_inode, cap, cap->issued);
 			continue;
 		}
-		dout(20, "__ceph_caps_issued %p cap %p issued %d\n",
+		dout(30, "__ceph_caps_issued %p cap %p issued %d\n",
 		     &ci->vfs_inode, cap, cap->issued);
 		have |= cap->issued;
 	}
@@ -712,7 +712,7 @@ void __ceph_remove_cap(struct ceph_inode_cap *cap)
 {
 	struct ceph_mds_session *session = cap->session;
 
-	dout(10, "__ceph_remove_cap %p from %p\n", cap, &cap->ci->vfs_inode);
+	dout(20, "__ceph_remove_cap %p from %p\n", cap, &cap->ci->vfs_inode);
 
 	/* remove from session list */
 	list_del_init(&cap->session_caps);
@@ -914,7 +914,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
 	spin_lock(&inode->i_lock);
-	dout(20, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
+	dout(30, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
 	inode->i_size = size;
 	inode->i_blocks = (size + (1 << inode->i_blkbits) - 1) >>
 		inode->i_blkbits;
@@ -1178,14 +1178,14 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 		ci->i_wr_ref++;
 	if (got & CEPH_CAP_WRBUFFER) {
 		ci->i_wrbuffer_ref++;
-		dout(20, "__take_cap_refs %p wrbuffer %d -> %d\n",
+		dout(30, "__take_cap_refs %p wrbuffer %d -> %d\n",
 		     &ci->vfs_inode, ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref);
 	}
 }
 
 void ceph_take_cap_refs(struct ceph_inode_info *ci, int got)
 {
-	dout(20, "take_cap_refs on %p taking %d\n", &ci->vfs_inode, got);
+	dout(30, "take_cap_refs on %p taking %d\n", &ci->vfs_inode, got);
 	spin_lock(&ci->vfs_inode.i_lock);
 	__take_cap_refs(ci, got);
 	spin_unlock(&ci->vfs_inode.i_lock);
@@ -1197,7 +1197,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 	int ret = 0;
 	int have;
 
-	dout(10, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
+	dout(30, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
 	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
 	if (offset >= 0 && offset >= (loff_t)ci->i_max_size) {
@@ -1206,7 +1206,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		goto sorry;
 	}
 	have = __ceph_caps_issued(ci);
-	dout(20, "get_cap_refs have %d\n", have);
+	dout(30, "get_cap_refs have %d\n", have);
 	if ((have & need) == need) {
 		*got = need | (have & want);
 		__take_cap_refs(ci, *got);
@@ -1214,7 +1214,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 	}
 sorry:
 	spin_unlock(&ci->vfs_inode.i_lock);
-	dout(10, "get_cap_refs on %p ret %d got %d\n", &ci->vfs_inode,
+	dout(30, "get_cap_refs on %p ret %d got %d\n", &ci->vfs_inode,
 	     ret, *got);
 	return ret;
 }
@@ -1236,12 +1236,12 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	if (had & CEPH_CAP_WRBUFFER) {
 		if (--ci->i_wrbuffer_ref == 0)
 			last++;
-		dout(10, "put_cap_refs %p wrbuffer %d -> %d\n",
+		dout(30, "put_cap_refs %p wrbuffer %d -> %d\n",
 		     &ci->vfs_inode, ci->i_wrbuffer_ref+1,ci->i_wrbuffer_ref);
 	}
 	spin_unlock(&ci->vfs_inode.i_lock);
 
-	dout(10, "put_cap_refs on %p had %d %s\n", &ci->vfs_inode, had,
+	dout(30, "put_cap_refs on %p had %d %s\n", &ci->vfs_inode, had,
 	     last ? "last":"");
 
 	if (last)
@@ -1258,7 +1258,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	BUG_ON(ci->i_wrbuffer_ref < 0);
 	spin_unlock(&ci->vfs_inode.i_lock);
 
-	dout(10, "put_wrbuffer_cap_refs on %p %d -> %d%s\n",
+	dout(30, "put_wrbuffer_cap_refs on %p %d -> %d%s\n",
 	     &ci->vfs_inode, last+nr, last, last == 0 ? " LAST":"");
 
 	if (last == 0)

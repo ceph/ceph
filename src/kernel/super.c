@@ -17,6 +17,11 @@
  */
 int ceph_debug = 1;
 
+/*
+ * if true, send output to KERN_INFO (console) instead of KERN_DEBUG.
+ */
+int ceph_debug_console;
+
 /* for this file */
 int ceph_debug_super = -1;
 
@@ -215,6 +220,7 @@ enum {
 	Opt_fsidmajor,
 	Opt_fsidminor,
 	Opt_debug,
+	Opt_debug_console,
 	Opt_debug_msgr,
 	Opt_debug_tcp,
 	Opt_debug_mdsc,
@@ -243,6 +249,7 @@ static match_table_t arg_tokens = {
 	{Opt_osdtimeout, "osdtimeout=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
+	{Opt_debug_console, "debug_console"},
 	{-1, NULL}
 };
 
@@ -387,6 +394,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_debug_addr:
 			ceph_debug_addr = intval;
+			break;
+		case Opt_debug_console:
+			ceph_debug_console = 1;
 			break;
 
 			/* misc */

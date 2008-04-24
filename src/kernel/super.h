@@ -13,6 +13,7 @@
 #include "mds_client.h"
 #include "osd_client.h"
 
+extern int ceph_debug_console;
 extern int ceph_debug;
 extern int ceph_debug_msgr;
 extern int ceph_debug_super;
@@ -23,12 +24,14 @@ extern int ceph_debug_addr;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
-#define DEBUG_TO KERN_DEBUG
-
 #define dout(x, args...) do {						\
 		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
-		    (DOUT_VAR < 0 && x <= ceph_debug))			\
-			printk(DEBUG_TO "ceph_" DOUT_PREFIX args); \
+		    (DOUT_VAR < 0 && x <= ceph_debug)) {		\
+			if (ceph_debug_console)				\
+				printk(KERN_INFO "ceph_" DOUT_PREFIX args); \
+			else						\
+				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
+		}							\
 	} while (0)
 
 #ifdef CEPH_DUMP_ERROR_ALWAYS
