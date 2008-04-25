@@ -49,6 +49,7 @@
 # define BTRFS_IOC_TRANS_START  _IO(BTRFS_IOCTL_MAGIC, 6)
 # define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
 # define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
+# define BTRFS_IOC_CLONE        _IOW(BTRFS_IOCTL_MAGIC, 9, int)
 #endif
 #endif
 
@@ -198,9 +199,8 @@ int FakeStore::mkfs()
   fsid = rand();
   char fn[100];
   sprintf(fn, "%s/fsid", basedir.c_str());
-  int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY);
+  int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   ::write(fd, &fsid, sizeof(fsid));
-  ::fchmod(fd, 0644);
   ::close(fd);
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
@@ -470,16 +470,12 @@ int FakeStore::write(pobject_t oid,
 
   dout(20) << "write " << fn << " len " << len << " off " << offset << dendl;
 
-  
-  ::mknod(fn, 0644, 0);  // in case it doesn't exist yet.
-
-  int flags = O_WRONLY;//|O_CREAT;
-  int fd = ::open(fn, flags);
+  int flags = O_WRONLY|O_CREAT;
+  int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
     return fd;
   }
-  ::fchmod(fd, 0644);
   ::flock(fd, LOCK_EX);    // lock for safety
   
   // seek
@@ -514,6 +510,38 @@ int FakeStore::write(pobject_t oid,
   ::close(fd);
   
   return did;
+}
+
+int FakeStore::clone(pobject_t oldoid, pobject_t newoid)
+{
+  char ofn[200], nfn[200];
+  get_oname(oldoid, ofn);
+  get_oname(newoid, nfn);
+
+  dout(20) << "clone " << ofn << " -> " << nfn << dendl;
+
+  int o = ::open(ofn, O_RDONLY);
+  if (o < 0)
+      return -errno;
+  int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (n < 0)
+      return -errno;
+  int r = 0;
+  if (btrfs_fd >= 0)
+    r = ::ioctl(n, BTRFS_IOC_CLONE, o);
+  else {
+    struct stat st;
+    ::fstat(o, &st);
+    loff_t op = 0, np = 0;
+    while (op < st.st_size && r >= 0)
+      r = ::splice(o, &op, n, &np, st.st_size-op, 0);
+  }
+  if (r < 0)
+    return -errno;
+
+  ::close(n);
+  ::close(o);
+  return 0;
 }
 
 

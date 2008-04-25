@@ -599,7 +599,7 @@ public:
                      Context *onsafe=0) {return 0;}
 
   virtual int clone(pobject_t oid, pobject_t noid) {
-    return -1; 
+    return -1;
   }
   
   virtual int list_objects(list<pobject_t>& ls) = 0;//{ return -1; }

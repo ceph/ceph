@@ -99,6 +99,7 @@ class FakeStore : public JournalingObjectStore {
   int truncate(pobject_t oid, off_t size, Context *onsafe);
   int read(pobject_t oid, off_t offset, size_t len, bufferlist& bl);
   int write(pobject_t oid, off_t offset, size_t len, const bufferlist& bl, Context *onsafe);
+  int clone(pobject_t oldoid, pobject_t newoid);
 
   void sync();
   void sync(Context *onsafe);
