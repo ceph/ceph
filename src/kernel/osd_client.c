@@ -447,15 +447,17 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	rc = wait_for_completion_interruptible(&req->r_completion);
 
 	unregister_request(osdc, req);
-
-	if (rc >= 0) {
-		/* parse reply */
-		replyhead = req->r_reply->front.iov_base;
-		rc = le32_to_cpu(replyhead->result);
-		bytes = le32_to_cpu(req->r_reply->hdr.data_len);
-		dout(10, "do_request tid %llu result %d, %d bytes\n",
-		     req->r_tid, rc, bytes);
+	if (rc < 0) {
+		printk(KERN_ERR "osdc do_request err %d, watch out\n", rc);
+		return rc;
 	}
+
+	/* parse reply */
+	replyhead = req->r_reply->front.iov_base;
+	rc = le32_to_cpu(replyhead->result);
+	bytes = le32_to_cpu(req->r_reply->hdr.data_len);
+	dout(10, "do_request tid %llu result %d, %d bytes\n",
+	     req->r_tid, rc, bytes);
 	if (rc < 0)
 		return rc;
 	return bytes;
