@@ -291,7 +291,9 @@ int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov,
 	int rlen = 0;
 
 	msg.msg_flags |=  MSG_DONTWAIT | MSG_NOSIGNAL;
+	/*printk(KERN_DEBUG "before sendmsg %d\n", len);*/
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
+	/*printk(KERN_DEBUG "after sendmsg %d\n", rlen);*/
 	return(rlen);
 }
 

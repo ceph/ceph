@@ -672,6 +672,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	contig_pages = 0;
 	list_for_each_entry_reverse(page, page_list, lru) {
 		if (page->index == next_index) {
+			kmap(page);
 			req->r_pages[contig_pages] = page;
 			contig_pages++;
 			next_index++;

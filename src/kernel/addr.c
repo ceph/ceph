@@ -17,27 +17,26 @@ static int ceph_readpage(struct file *filp, struct page *page)
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
+	void *kaddr;
 	int err = 0;
 
 	dout(10, "ceph_readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
+	kaddr = kmap(page);
 	err = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (err < 0)
 		goto out;
 
 	if (err < PAGE_CACHE_SIZE) {
-		void *kaddr;
 		dout(10, "readpage zeroing tail %d bytes of page %p\n",
 		     (int)PAGE_CACHE_SIZE - err, page);
-		kaddr = kmap(page);
 		memset(kaddr + err, 0, PAGE_CACHE_SIZE - err);
-		kunmap(page);
 	}
 	SetPageUptodate(page);
 
-	/* TODO: update info in ci? */
 out:
+	kunmap(page);
 	unlock_page(page);
 	return err;
 }
@@ -84,6 +83,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 			continue;
 		}
 		dout(10, "readpages adding page %p\n", page);
+		kunmap(page);
 		flush_dcache_page(page);
 		SetPageUptodate(page);
 		unlock_page(page);
@@ -128,10 +128,8 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	page_cache_get(page);
 	was_dirty = PageDirty(page);
 	set_page_writeback(page);
-	kmap(page);
 	err = ceph_osdc_writepages(osdc, ceph_ino(inode), &ci->i_layout,
 				   page_off, len, &page, 1);
-	kunmap(page);
 	if (err >= 0) {
 		if (was_dirty) {
 			dout(10, "cleaned page %p\n", page);
@@ -247,11 +245,12 @@ get_more_pages:
 						want);
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
-
+			
 			if (locked_pages == 0)
 				lock_page(page);
 			else if (TestSetPageLocked(page))
 				break;
+
 			/* only dirty pages, or wrbuffer accounting breaks! */
 			if (unlikely(!PageDirty(page)) ||
 			    unlikely(page->mapping != mapping)) {
@@ -289,8 +288,7 @@ get_more_pages:
 
 			dout(50, "writepages locked page %p index %lu\n",
 			     page, page->index);
-
-			kmap(page);
+			
 			if (pages)
 				pages[locked_pages] = page;
 			else if (locked_pages == 0)
@@ -350,7 +348,6 @@ get_more_pages:
 					SetPageUptodate(page);
 				else if (rc < 0)
 					redirty_page_for_writepage(wbc, page);
-				kunmap(page);
 				dout(50, "unlocking %d %p\n", i, page);
 				unlock_page(page);
 				end_page_writeback(page);
@@ -441,17 +438,17 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 		return r;
 	if (r < pos_in_page) {
 		/* we didn't read up to our write start pos, zero the gap */
-		void *kaddr = kmap_atomic(page, KM_USER0);
+		void *kaddr = kmap_atomic(page, KM_USER1);
 		memset(kaddr+r, 0, pos_in_page-r);
 		flush_dcache_page(page);
-		kunmap_atomic(kaddr, KM_USER0);
+		kunmap_atomic(kaddr, KM_USER1);
 	}
 	return 0;
 }
 
 /*
- * hey, we don't do anything in here that simple_write_end doesn't do.
- * let's use that instead.
+ * we don't do anything in here that simple_write_end doesn't do
+ * except adjust dirty page accounting.
  */
 static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  loff_t pos, unsigned len, unsigned copied,

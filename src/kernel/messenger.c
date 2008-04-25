@@ -372,11 +372,13 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	     con->out_msg_pos.page_pos);
 
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
-		kv.iov_base = kmap(msg->pages[con->out_msg_pos.page]) +
-			con->out_msg_pos.page_pos;
+		struct page *page = msg->pages[con->out_msg_pos.page];
+		void *kaddr = kmap(page);
+		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
 		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len);
+		kunmap(page);
 		if (ret <= 0)
 			goto out;
 		con->out_msg_pos.data_pos += ret;
@@ -691,9 +693,11 @@ static int read_message_partial(struct ceph_connection *con)
 	while (con->in_msg_pos.data_pos < data_len) {
 		left = min((int)(data_len - con->in_msg_pos.data_pos),
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
-		p = kmap(m->pages[con->in_msg_pos.page]);
+		//p = kmap_atomic(m->pages[con->in_msg_pos.page], KM_USER1);
+		p = page_address(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
+		//kunmap_atomic(p, KM_USER1);
 		if (ret <= 0)
 			return ret;
 		con->in_msg_pos.data_pos += ret;
