@@ -134,7 +134,7 @@ int ceph_tcp_connect(struct ceph_connection *con)
 		goto done;
 	}
 	
-	sk->sk_allocation = GFP_NOFS;
+	con->sock->sk->sk_allocation = GFP_NOFS;
 
 	set_sock_callbacks(con->sock, con);
 
@@ -173,7 +173,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		return ret;
 	}
 
-	sk->sk_allocation = GFP_NOFS;
+	sock->sk->sk_allocation = GFP_NOFS;
 
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
 				(char *)&optval, sizeof(optval));
@@ -239,7 +239,7 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 		goto done;
 	}
 
-	sk->sk_allocation = GFP_NOFS;
+	con->sock->sk->sk_allocation = GFP_NOFS;
 
 	ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
 	/* ret = kernel_accept(sock, &new_sock, sock->file->f_flags); */
