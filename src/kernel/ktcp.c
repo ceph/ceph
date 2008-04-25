@@ -133,6 +133,9 @@ int ceph_tcp_connect(struct ceph_connection *con)
 		derr(1, "connect sock_create_kern error: %d\n", ret);
 		goto done;
 	}
+	
+	sk->sk_allocation = GFP_NOFS;
+
 	set_sock_callbacks(con->sock, con);
 
 	ret = con->sock->ops->connect(con->sock, paddr,
@@ -169,6 +172,9 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 		derr(0, "sock_create_kern error: %d\n", ret);
 		return ret;
 	}
+
+	sk->sk_allocation = GFP_NOFS;
+
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
 				(char *)&optval, sizeof(optval));
 	if (ret < 0) {
@@ -232,6 +238,8 @@ int ceph_tcp_accept(struct socket *sock, struct ceph_connection *con)
 		derr(0, "sock_create_kern error: %d\n", ret);
 		goto done;
 	}
+
+	sk->sk_allocation = GFP_NOFS;
 
 	ret = sock->ops->accept(sock, con->sock, O_NONBLOCK);
 	/* ret = kernel_accept(sock, &new_sock, sock->file->f_flags); */
