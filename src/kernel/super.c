@@ -78,7 +78,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
 	/* fsid? */
-	buf->f_namelen = 1024;
+	buf->f_namelen = PATH_MAX;
 	buf->f_frsize = 4096;
 
 	return 0;

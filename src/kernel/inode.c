@@ -72,19 +72,18 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
 	int symlen;
-	u32 su = le32_to_cpu(info->layout.fl_stripe_unit);
-	int blkbits = fls(su)-1;
-	unsigned blksize = 1 << blkbits;
-	u64 size = le64_to_cpu(info->size);
 	int issued;
 	struct timespec mtime, atime, ctime;
-	u64 blocks = (size + blksize - 1) >> blkbits;
+	u64 size = le64_to_cpu(info->size);
+	u32 su = le32_to_cpu(info->layout.fl_stripe_unit);
+	int blkbits = fls(su) - 1;
+	u64 blocks = (size + (1<<9) - 1) >> 9;
 
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
 	     inode->i_size, inode->i_mode, inode->i_nlink);
-	dout(30, " su %d, blkbits %d, blksize %u, blocks %llu\n",
-	     su, blkbits, blksize, blocks);
+	dout(30, " su %d, blkbits %d, blocks %llu\n",
+	     su, blkbits, blocks);
 
 	ceph_set_ino(inode, le64_to_cpu(info->ino));
 
@@ -888,8 +887,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	spin_lock(&inode->i_lock);
 	dout(30, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
 	inode->i_size = size;
-	inode->i_blocks = (size + (1 << inode->i_blkbits) - 1) >>
-		inode->i_blkbits;
+	inode->i_blocks = (size + (1 << 9) - 1) >> 9;
 
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
