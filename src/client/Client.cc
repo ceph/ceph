@@ -1294,8 +1294,6 @@ public:
 void Client::handle_file_caps(MClientFileCaps *m)
 {
   int mds = m->get_source().num();
-  Inode *in = 0;
-  if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
 
   m->clear_payload();  // for if/when we send back to MDS
 
@@ -1305,6 +1303,18 @@ void Client::handle_file_caps(MClientFileCaps *m)
   //assert(mds_sessions.count(mds));   // HACK FIXME SOON
   mds_sessions[mds]++;
 
+  Inode *in = 0;
+  if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
+  if (!in) {
+    /*
+     * this can happen if we release caps, and then trim the inode from our cache,
+     * but are racing with, e.g., an mds callback.
+     */
+    dout(5) << "handle_file_caps don't have ino " << m->get_ino() << dendl;
+    delete m;
+    return;
+  }
+  
   // reap?
   if (m->get_op() == CEPH_CAP_OP_IMPORT) {
     int other = m->get_migrate_mds();
@@ -1344,8 +1354,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
     }
   }
 
-  assert(in);
-  
   // stale?
   if (m->get_op() == CEPH_CAP_OP_EXPORT) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now exported/stale" << dendl;
