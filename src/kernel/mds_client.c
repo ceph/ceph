@@ -573,26 +573,6 @@ static int resume_session(struct ceph_mds_client *mdsc,
 	return 0;
 }
 
-static int close_session(struct ceph_mds_client *mdsc,
-			 struct ceph_mds_session *session)
-{
-	int mds = session->s_mds;
-	struct ceph_msg *msg;
-
-	dout(10, "close_session to mds%d\n", mds);
-	session->s_state = CEPH_MDS_SESSION_CLOSING;
-	spin_unlock(&mdsc->lock);
-	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
-				 session->s_cap_seq);
-	if (IS_ERR(msg)) {
-		spin_lock(&mdsc->lock);
-		return PTR_ERR(msg);
-	}
-	send_msg_mds(mdsc, msg, mds);
-	spin_lock(&mdsc->lock);
-	return 0;
-}
-
 /*
  * caller must hold session s_mutex
  */
@@ -1379,10 +1359,10 @@ void check_new_map(struct ceph_mds_client *mdsc,
 
 /* caps */
 
-void ceph_mdsc_send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-			    int wanted, __u32 seq, __u64 size, __u64 max_size,
-			    struct timespec *mtime, struct timespec *atime,
-			    int mds)
+void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
+		  int wanted, __u32 seq, __u64 size, __u64 max_size,
+		  struct timespec *mtime, struct timespec *atime,
+		  int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1463,8 +1443,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
-		ceph_mdsc_send_cap_ack(mdsc, ino, 0, 0, seq,
-				       size, 0, 0, 0, mds);
+		send_cap_ack(mdsc, ino, 0, 0, seq, size, 0, 0, 0, mds);
 		goto no_inode;
 	}
 
@@ -1513,6 +1492,115 @@ int send_renewcaps(struct ceph_mds_client *mdsc,
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 	send_msg_mds(mdsc, msg, session->s_mds);
+	return 0;
+}
+
+
+/*
+ * called with i_lock, then drops it.
+ * 
+ * returns true if we removed the last cap on this inode.
+ */
+int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
+			 struct ceph_mds_session *session,
+			 struct ceph_inode_cap *cap,
+			 int used, int wanted, int cancel_work)
+{
+	struct ceph_inode_info *ci = cap->ci;
+	struct inode *inode = &ci->vfs_inode;
+	int revoking = cap->implemented & ~cap->issued;
+	int dropping = cap->issued & ~wanted;
+	int keep;
+	__u64 seq;
+	__u64 size, max_size;
+	struct timespec mtime, atime;
+	int removed_last = 0;
+
+	dout(10, "__send_cap cap %p session %p %d -> %d\n", cap, cap->session,
+	     cap->issued, cap->issued & wanted);
+	cap->issued &= wanted;  /* drop bits we don't want */
+	
+	if (revoking && (revoking && used) == 0)
+		cap->implemented = cap->issued;
+	
+	keep = cap->issued;
+	seq = cap->seq;
+	size = inode->i_size;
+	ci->i_reported_size = size;
+	max_size = ci->i_wanted_max_size;
+	ci->i_requested_max_size = max_size;
+	mtime = inode->i_mtime;
+	atime = inode->i_atime;
+	if (wanted == 0) {
+		__ceph_remove_cap(cap);
+		removed_last = list_empty(&ci->i_caps);
+	}
+	spin_unlock(&inode->i_lock);
+
+	if (dropping & CEPH_CAP_RDCACHE) {
+		dout(20, "invalidating pages on %p\n", inode);
+		invalidate_mapping_pages(&inode->i_data, 0, -1);
+		dout(20, "done invalidating pages on %p\n", inode);
+	}
+
+	send_cap_ack(mdsc, ceph_ino(inode),
+		     keep, wanted, seq,
+		     size, max_size, &mtime, &atime, session->s_mds);
+	
+	if (wanted == 0) {
+		if (removed_last && cancel_work)
+			cancel_delayed_work_sync(&ci->i_cap_dwork);
+		iput(inode);  /* removed cap */
+	}
+	return removed_last;
+}
+
+
+static void flush_write_caps(struct ceph_mds_client *mdsc,
+			     struct ceph_mds_session *session)
+{
+	struct list_head *p, *n;
+	
+	list_for_each_safe (p, n, &session->s_caps) {
+		struct ceph_inode_cap *cap = 
+			list_entry(p, struct ceph_inode_cap, session_caps);
+		struct inode *inode = &cap->ci->vfs_inode;
+		int used, wanted;
+
+		spin_lock(&inode->i_lock);
+		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
+			spin_unlock(&inode->i_lock);
+			continue;
+		}
+		used = __ceph_caps_used(cap->ci);
+		wanted = __ceph_caps_wanted(cap->ci);
+		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1);
+	}
+}
+
+static int close_session(struct ceph_mds_client *mdsc,
+			 struct ceph_mds_session *session)
+{
+	int mds = session->s_mds;
+	struct ceph_msg *msg;
+
+	dout(10, "close_session mds%d\n", mds);
+	down(&session->s_mutex);
+	
+	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
+		goto done;
+
+	flush_write_caps(mdsc, session);
+	
+	session->s_state = CEPH_MDS_SESSION_CLOSING;
+	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
+				 session->s_cap_seq);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
+	send_msg_mds(mdsc, msg, mds);
+
+done:
+	up(&session->s_mutex);
 	return 0;
 }
 
@@ -1737,6 +1825,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 
 void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 {
+	struct ceph_mds_session *session;
 	int i;
 	int n;
 
@@ -1751,11 +1840,12 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 		dout(10, "closing sessions\n");
 		n = 0;
 		for (i = 0; i < mdsc->max_sessions; i++) {
-			if (mdsc->sessions[i] == 0 ||
-			    mdsc->sessions[i]->s_state >=
-			     CEPH_MDS_SESSION_CLOSING)
+			session = __get_session(mdsc, i);
+			if (!session)
 				continue;
-			close_session(mdsc, mdsc->sessions[i]);
+			spin_unlock(&mdsc->lock);
+			close_session(mdsc, session);
+			spin_lock(&mdsc->lock);
 			n++;
 		}
 		if (n == 0)

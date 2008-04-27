@@ -778,13 +778,8 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
 	struct ceph_inode_cap *cap;
 	struct list_head *p;
 	int wanted, used;
-	int keep;
-	__u64 seq;
-	__u64 size, max_size;
-	struct timespec mtime, atime;
-	int mds;
 	struct ceph_mds_session *session = 0;  /* if non-NULL, i hold s_mutex */
-	int removed_last = 0;
+	int removed_last;
 
 retry:
 	spin_lock(&inode->i_lock);
@@ -805,7 +800,7 @@ retry:
 	}
 
 	list_for_each(p, &ci->i_caps) {
-		int revoking, dropping;
+		int revoking;
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
 
 		/* note: no side-effects allowed, until we take s_mutex */
@@ -857,46 +852,10 @@ ack:
 		}
 
 		/* ok */
-		dropping = cap->issued & ~wanted;
-		dout(10, " cap %p %d -> %d\n", cap, cap->issued,
-		     cap->issued & wanted);
-		cap->issued &= wanted;  /* drop bits we don't want */
-
-		if (revoking && (revoking && used) == 0)
-			cap->implemented = cap->issued;
-
-		keep = cap->issued;
-		seq = cap->seq;
-		size = inode->i_size;
-		ci->i_reported_size = size;
-		max_size = ci->i_wanted_max_size;
-		ci->i_requested_max_size = max_size;
-		mtime = inode->i_mtime;
-		atime = inode->i_atime;
-		mds = cap->mds;
-		if (wanted == 0) {
-			__ceph_remove_cap(cap);
-			removed_last = list_empty(&ci->i_caps);
-		}
-		spin_unlock(&inode->i_lock);
-
-		if (dropping & CEPH_CAP_RDCACHE) {
-			dout(20, "invalidating pages on %p\n", inode);
-			invalidate_mapping_pages(&inode->i_data, 0, -1);
-			dout(20, "done invalidating pages on %p\n", inode);
-		}
-
-		ceph_mdsc_send_cap_ack(mdsc, ceph_ino(inode),
-				       keep, wanted, seq,
-				       size, max_size, &mtime, &atime, mds);
-
-		if (wanted == 0) {
-			if (removed_last && !is_delayed)
-				cancel_delayed_work_sync(&ci->i_cap_dwork);
-			iput(inode);  /* removed cap */
-			if (removed_last)
-				goto out;
-		}
+		removed_last = __ceph_mdsc_send_cap(mdsc, session, cap,
+						    used, wanted, !is_delayed);
+		if (removed_last)
+			goto out;
 		up(&session->s_mutex);
 		goto retry;
 	}
