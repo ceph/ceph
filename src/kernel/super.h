@@ -58,6 +58,15 @@ extern int ceph_debug_addr;
 		(unsigned int)(ntohs((n).sin_port))
 
 /*
+ * subtract jiffies
+ */
+static inline unsigned long time_sub(unsigned long a, unsigned long b)
+{
+	BUG_ON(time_after(b, a));
+	return (long)a - (long)b;
+}
+
+/*
  * mount options
  */
 #define CEPH_MOUNT_FSID     1

@@ -347,7 +347,7 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
 	int valid = 0;
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (di && time_after(dentry->d_time, jiffies))
+	if (di && time_before(jiffies, dentry->d_time))
 		valid = 1;
 	spin_unlock(&dentry->d_lock);
 	dout(20, "dentry_lease_valid - dentry %p = %d\n", dentry, valid);
@@ -705,7 +705,7 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 
 	list_for_each(p, &ci->i_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
-		if (time_after(jiffies, cap->session->s_cap_ttl)) {
+		if (time_after_eq(jiffies, cap->session->s_cap_ttl)) {
 			dout(30, "__ceph_caps_issued %p cap %p issued %d "
 			     "but STALE\n", &ci->vfs_inode, cap, cap->issued);
 			continue;
@@ -764,10 +764,11 @@ void ceph_cap_delayed_work(struct work_struct *work)
 						  struct ceph_inode_info,
 						  i_cap_dwork.work);
 	spin_lock(&ci->vfs_inode.i_lock);
-	if (ci->i_hold_caps_until > jiffies) {
+	if (ci->i_hold_caps_until &&
+	    time_before(jiffies, ci->i_hold_caps_until)) {
 		dout(10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
-		schedule_delayed_work(&ci->i_cap_dwork,
-				      ci->i_hold_caps_until - jiffies);
+		schedule_delayed_work(&ci->i_cap_dwork, 
+				      time_sub(ci->i_hold_caps_until, jiffies));
 		spin_unlock(&ci->vfs_inode.i_lock);
 	} else {
 		dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
@@ -802,12 +803,12 @@ retry:
 
 	if (!is_delayed) {
 		unsigned long until = round_jiffies(jiffies + HZ * 5);
-		if (until > ci->i_hold_caps_until) {
+		if (time_after(until, ci->i_hold_caps_until)) {
 			ci->i_hold_caps_until = until;
 			dout(10, "hold_caps_until %lu\n", until);
 			cancel_delayed_work(&ci->i_cap_dwork);
 			schedule_delayed_work(&ci->i_cap_dwork,
-					      until - jiffies);
+					      time_sub(until, jiffies));
 		}
 	}
 
@@ -840,7 +841,7 @@ retry:
 		if ((cap->issued & ~wanted) == 0)
 			continue;     /* nothing extra, all good */
 
-		if (jiffies < ci->i_hold_caps_until) {
+		if (time_before(jiffies, ci->i_hold_caps_until)) {
 			/* delaying cap release for a bit */
 			dout(30, "delaying cap release\n");
 			continue;

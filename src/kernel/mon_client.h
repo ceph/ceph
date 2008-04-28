@@ -20,7 +20,7 @@ struct ceph_mon_statfs_request {
 	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;
-	u64 last_attempt; /* jiffies */
+	unsigned long last_attempt; /* jiffies */
 };
 
 struct ceph_mon_client {

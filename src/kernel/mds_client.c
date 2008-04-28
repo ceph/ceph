@@ -545,8 +545,8 @@ static int resume_session(struct ceph_mds_client *mdsc,
 	int mds = session->s_mds;
 	struct ceph_msg *msg;
 
-	if (time_after(jiffies, session->s_cap_ttl) &&
-	    session->s_renew_requested < session->s_cap_ttl)
+	if (time_after_eq(jiffies, session->s_cap_ttl) &&
+	    time_before(session->s_renew_requested, session->s_cap_ttl))
 		dout(1, "mds%d session caps stale\n", session->s_mds);
 
 	dout(10, "resume_session to mds%d\n", mds);
@@ -659,7 +659,7 @@ static void trim_session_leases(struct ceph_mds_session *session)
 		ci = list_first_entry(&session->s_inode_leases,
 				      struct ceph_inode_info, i_lease_item);
 		spin_lock(&ci->vfs_inode.i_lock);
-		if (ci->i_lease_ttl > jiffies) {
+		if (time_before(jiffies, ci->i_lease_ttl)) {
 			spin_unlock(&ci->vfs_inode.i_lock);
 			break;
 		}
@@ -678,7 +678,7 @@ static void trim_session_leases(struct ceph_mds_session *session)
 				      struct ceph_dentry_info, lease_item);
 		dentry = di->dentry;
 		spin_lock(&dentry->d_lock);
-		if (dentry->d_time > jiffies) {
+		if (time_before(jiffies, dentry->d_time)) {
 			spin_unlock(&dentry->d_lock);
 			break;
 		}
@@ -784,7 +784,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	session = __get_session(mdsc, mds);
 	down(&session->s_mutex);
 
-	was_stale = time_after(jiffies, session->s_cap_ttl);
+	was_stale = time_after_eq(jiffies, session->s_cap_ttl);
 
 	dout(2, "handle_session %p op %d seq %llu\n", session, op, seq);
 	switch (op) {
@@ -1502,8 +1502,8 @@ int send_renewcaps(struct ceph_mds_client *mdsc,
 {
 	struct ceph_msg *msg;
 
-	if (time_after(jiffies, session->s_cap_ttl) &&
-	    session->s_renew_requested < session->s_cap_ttl)
+	if (time_after_eq(jiffies, session->s_cap_ttl) &&
+	    time_before_eq(session->s_renew_requested, session->s_cap_ttl))
 		dout(1, "mds%d session caps stale\n", session->s_mds);
 
 	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
@@ -1741,7 +1741,8 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 		mask &= ~CEPH_LOCK_DN;  /* nothing to release */
 	ci = ceph_inode(inode);
 	ino = ci->i_ceph_ino;
-	if (ci->i_lease_session && time_after(ci->i_lease_ttl, jiffies) &&
+	if (ci->i_lease_session && 
+	    time_before(jiffies, ci->i_lease_ttl) &&
 	    ci->i_lease_session->s_mds >= 0) {
 		mds = ci->i_lease_session->s_mds;
 		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
@@ -1794,7 +1795,8 @@ void delayed_work(struct work_struct *work)
 	struct ceph_mds_client *mdsc =
 		container_of(work, struct ceph_mds_client, delayed_work.work);
 	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 1;
-	int renew_caps = (jiffies >= HZ*renew_interval + mdsc->last_renew_caps);
+	int renew_caps = time_after_eq(jiffies, HZ*renew_interval + 
+				       mdsc->last_renew_caps);
 
 	dout(10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
 
