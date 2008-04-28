@@ -627,11 +627,13 @@ void revoke_inode_lease(struct ceph_inode_info *ci, int mask)
 	spin_lock(&ci->vfs_inode.i_lock);
 	dout(10, "revoke_inode_lease on inode %p, mask %d -> %d\n",
 	     &ci->vfs_inode, ci->i_lease_mask, ci->i_lease_mask & ~mask);
-	ci->i_lease_mask &= ~mask;
-	if (ci->i_lease_mask == 0) {
-		list_del_init(&ci->i_lease_item);
-		ci->i_lease_session = 0;
-		drop = 1;
+	if (ci->i_lease_mask & mask) {
+		ci->i_lease_mask &= ~mask;
+		if (ci->i_lease_mask == 0) {
+			list_del_init(&ci->i_lease_item);
+			ci->i_lease_session = 0;
+			drop = 1;
+		}
 	}
 	spin_unlock(&ci->vfs_inode.i_lock);
 	if (drop) {
