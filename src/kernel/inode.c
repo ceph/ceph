@@ -369,18 +369,21 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct inode *in;
 	struct ceph_mds_reply_inode *ininfo;
 	int d = 0;
+	u64 ino;
 
 	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
 		return 0;
 	}
 
+	ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
 	if (dn) {
 		in = dn->d_inode;
+		/* trace should start at root, or have only 1 dentry */
+		WARN_ON(ino != 1 && rinfo->trace_numd != 1);
 	} else {
 		/* first reply (i.e. mount) */
-		in = ceph_get_inode(sb,
-				    le64_to_cpu(rinfo->trace_in[0].in->ino));
+		in = ceph_get_inode(sb, ino);
 		if (IS_ERR(in))
 			return PTR_ERR(in);
 		dn = d_alloc_root(in);
@@ -390,14 +393,15 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 	}
 
-	err = ceph_fill_inode(in, rinfo->trace_in[0].in);
-	if (err < 0)
-		return err;
-	ceph_update_inode_lease(in, rinfo->trace_ilease[0], session,
-				req->r_from_time);
-
-	if (sb->s_root == NULL)
-		sb->s_root = dn;
+	if (ino == 1) {
+		err = ceph_fill_inode(in, rinfo->trace_in[0].in);
+		if (err < 0)
+			return err;
+		ceph_update_inode_lease(in, rinfo->trace_ilease[0], session,
+					req->r_from_time);
+		if (sb->s_root == NULL)
+			sb->s_root = dn;
+	}
 
 	dget(dn);
 	for (d = 0; d < rinfo->trace_numd; d++) {
@@ -466,11 +470,10 @@ retry_lookup:
 			dout(10, "fill_trace has dentry but no inode\n");
 			if (dn->d_inode)
 				d_delete(dn);  /* is this right? */
-			else {
+			else
 				d_instantiate(dn, NULL);
-				if (d_unhashed(dn))
-					d_rehash(dn);
-			}
+			if (d_unhashed(dn))
+				d_rehash(dn);
 			in = 0;
 			break;
 		}
