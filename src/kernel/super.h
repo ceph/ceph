@@ -330,20 +330,10 @@ struct ceph_file_info {
  * calculate the number of pages a given length and offset map onto,
  * if we align the data.
  */
-static inline int calc_pages_for(int off, int len)
+static inline int calc_pages_for(u64 off, u64 len)
 {
 	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) -
 		(off >> PAGE_CACHE_SHIFT);
-	/*
-	int nr = 0;
-	if (len == 0)
-		return 0;
-	len += off & ~PAGE_MASK;
-	nr += len >> PAGE_SHIFT;
-	if (len & ~PAGE_MASK)
-		nr++;
-	return nr;
-	*/
 }
 
 
