@@ -1717,7 +1717,6 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 		dnamelen = dentry->d_name.len;
 		len += dentry->d_name.len;
 		mds = ceph_dentry(dentry)->lease_session->s_mds;
-		ceph_dentry(dentry)->lease_session->s_mds = -1;
 	} else
 		mask &= ~CEPH_LOCK_DN;  /* nothing to release */
 	ci = ceph_inode(inode);
