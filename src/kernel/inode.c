@@ -414,9 +414,19 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			ceph_init_dentry(dn);  /* just in case */
 			req->r_last_dentry = NULL;
 			if (req->r_old_dentry) {
+				dout(10, " src %p '%.*s' dst %p '%.*s'\n", 
+				     req->r_old_dentry,
+				     req->r_old_dentry->d_name.len,
+				     req->r_old_dentry->d_name.name,
+				     dn, dn->d_name.len, dn->d_name.name);
 				dout(10, "fill_trace doing d_move %p -> %p\n",
 				     req->r_old_dentry, dn);
 				d_move(req->r_old_dentry, dn);
+				dout(10, " src %p '%.*s' dst %p '%.*s'\n", 
+				     req->r_old_dentry,
+				     req->r_old_dentry->d_name.len,
+				     req->r_old_dentry->d_name.name,
+				     dn, dn->d_name.len, dn->d_name.name);
 				dput(dn);  /* dn is dropped */
 				dn = req->r_old_dentry;  /* use old_dentry */
 				req->r_old_dentry = 0;
