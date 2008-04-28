@@ -1163,7 +1163,7 @@ void ceph_take_cap_refs(struct ceph_inode_info *ci, int got)
 }
 
 int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
-		      loff_t offset)
+		      loff_t endoff)
 {
 	int ret = 0;
 	int have;
@@ -1171,9 +1171,9 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 	dout(30, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
 	     need, want);
 	spin_lock(&ci->vfs_inode.i_lock);
-	if (offset >= 0 && offset >= (loff_t)ci->i_max_size) {
-		dout(20, "get_cap_refs offset %llu >= max_size %llu\n",
-		     offset, ci->i_max_size);
+	if (endoff >= 0 && endoff > (loff_t)ci->i_max_size) {
+		dout(20, "get_cap_refs endoff %llu > max_size %llu\n",
+		     endoff, ci->i_max_size);
 		goto sorry;
 	}
 	have = __ceph_caps_issued(ci);
