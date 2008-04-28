@@ -535,6 +535,7 @@ static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
+	ceph_mdsc_drop_leases(&client->mdsc);
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
 	ceph_destroy_client(client);
 }

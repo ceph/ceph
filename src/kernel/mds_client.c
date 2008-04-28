@@ -848,6 +848,24 @@ bad:
 }
 
 
+/*
+ * drop all leases (and dentry refs) in preparation for umount
+ */
+void ceph_mdsc_drop_leases(struct ceph_mds_client *mdsc)
+{
+	int i;
+	
+	spin_lock(&mdsc->lock);
+	for (i = 0; i < mdsc->max_sessions; i++) {
+		struct ceph_mds_session *session = __get_session(mdsc, i);
+		if (!session)
+			continue;
+		spin_unlock(&mdsc->lock);
+		remove_session_leases(session);
+		spin_lock(&mdsc->lock);
+	}
+	spin_unlock(&mdsc->lock);
+}
 
 
 /* exported functions */
