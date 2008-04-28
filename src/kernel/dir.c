@@ -233,12 +233,15 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
-	ceph_mdsc_put_request(req);  /* will dput(dentry) */
-	if (err == -ENOENT) {
+	/* no trace? */
+	if (err == -ENOENT && req->r_reply_info.trace_numd == 0) {
+		dout(20, "ENOENT and no trace, dentry %p inode %p\n",
+		     dentry, dentry->d_inode);
 		ceph_init_dentry(dentry);
 		d_add(dentry, NULL);
 		err = 0;
 	}
+	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	dout(20, "do_lookup %p result=%d\n", dentry, err);
 	return err;
 }
@@ -260,9 +263,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	}
 
 	err = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0);
-	if (err == -ENOENT)
-		d_add(dentry, NULL);
-	else if (err < 0)
+	if (err < 0)
 		return ERR_PTR(err);
 
 	return NULL;
