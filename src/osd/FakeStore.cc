@@ -532,9 +532,31 @@ int FakeStore::clone(pobject_t oldoid, pobject_t newoid)
   else {
     struct stat st;
     ::fstat(o, &st);
+
+#ifdef SPLICE_F_MOVE
     loff_t op = 0, np = 0;
     while (op < st.st_size && r >= 0)
       r = ::splice(o, &op, n, &np, st.st_size-op, 0);
+#else
+    loff_t pos = 0;
+    int buflen = 4096*10;
+    char buf[buflen];
+    while (pos < st.st_size) {
+      int l = MIN(st.st_size-pos, buflen);
+      r = ::read(o, buf, l);
+      if (r < 0)
+	break;
+      int op = 0;
+      while (op < l) {
+	int r2 = ::write(n, buf+op, l-op);
+	
+	if (r2 < 0) { r = r2; break; }
+	op += r2;	  
+      }
+      if (r < 0) break;
+      pos += r;
+    }
+#endif
   }
   if (r < 0)
     return -errno;
