@@ -232,7 +232,7 @@ void ceph_update_inode_lease(struct inode *inode,
 	 * be careful: we can't remove lease from a different session
 	 * without holding that other session's s_mutex.  so don't.
 	 */
-	if (!time_before(ttl, ci->i_lease_ttl) &&
+	if ((ci->i_lease_ttl == 0 || !time_before(ttl, ci->i_lease_ttl)) &&
 	    (!ci->i_lease_session || ci->i_lease_session == session)) {
 		ci->i_lease_ttl = ttl;
 		ci->i_lease_mask = mask;
@@ -301,7 +301,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 		return;
 
 	spin_lock(&dentry->d_lock);
-	if (time_before(ttl, dentry->d_time))
+	if (dentry->d_time != 0 && time_before(ttl, dentry->d_time))
 		goto fail_unlock;  /* we already have a newer lease. */
 
 	di = ceph_dentry(dentry);
