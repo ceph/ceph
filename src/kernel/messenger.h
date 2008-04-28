@@ -1,11 +1,12 @@
 #ifndef __FS_CEPH_MESSENGER_H
 #define __FS_CEPH_MESSENGER_H
 
-#include <linux/uio.h>
+#include <linux/mutex.h>
 #include <linux/net.h>
 #include <linux/radix-tree.h>
-#include <linux/workqueue.h>
+#include <linux/uio.h>
 #include <linux/version.h>
+#include <linux/workqueue.h>
 
 #include "ceph_fs.h"
 
@@ -44,12 +45,16 @@ struct ceph_messenger {
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /* accepting */
 	struct radix_tree_root con_tree; /*  established */
+	struct page *zero_page;
 };
 
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
+	struct ceph_msg_footer footer;	/* footer */
 	struct kvec front;              /* first bit of message */
+	struct mutex page_mutex;
 	struct page **pages;            /* data payload.  NOT OWNER. */
+	int pages_revoked;              /* if true, pages revoked before sent */
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
 	atomic_t nref;
@@ -109,6 +114,7 @@ struct ceph_connection {
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
+	struct ceph_msg_footer out_footer;
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
 

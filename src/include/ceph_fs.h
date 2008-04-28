@@ -232,7 +232,7 @@ struct ceph_entity_inst {
 
 
 /*
- * message header
+ * message header, footer
  */
 struct ceph_msg_header {
 	__le64 seq;    /* message seq# for this session */
@@ -243,6 +243,10 @@ struct ceph_msg_header {
 	struct ceph_entity_inst src, dst;
 } __attribute__ ((packed));
 
+struct ceph_msg_footer {
+	__le32 aborted;
+	__le32 csum;
+} __attribute__ ((packed));
 
 /*
  * message types

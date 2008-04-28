@@ -1139,7 +1139,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
       (diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0 &&
       dn->lock.can_lease())
     mask |= CEPH_LOCK_DN;
-
+  mask |= CEPH_LOCK_DN;
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
 }

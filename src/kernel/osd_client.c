@@ -449,7 +449,12 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 
 	unregister_request(osdc, req);
 	if (rc < 0) {
-		printk(KERN_ERR "osdc do_request err %d, watch out\n", rc);
+		struct ceph_msg *msg = req->r_request;
+		printk(KERN_ERR "osdc do_request err %d on %p\n", rc, msg);
+		mutex_lock(&msg->page_mutex);
+		msg->pages_revoked = 1;
+		memset(&msg->pages, 0, sizeof(void *) * msg->nr_pages);
+		mutex_unlock(&msg->page_mutex);
 		return rc;
 	}
 

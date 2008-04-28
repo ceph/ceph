@@ -1647,15 +1647,26 @@ Message *Rank::Pipe::read_message()
       dout(20) << "reader got data tail " << left << dendl;
     }
   }
-  
-  // unmarshall message
-  dout(20) << "reader got " << front.length() << " + " << data.length() << " byte message from " 
-           << env.src << dendl;
 
-  Message *m = decode_message(env, front, data);
+  // footer
+  ceph_msg_footer footer;
+  if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
+    return 0;
 
-  
-  return m;
+  dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
+  if (le32_to_cpu(footer.aborted)) {
+    dout(0) << "reader got " << front.length() << " + " << data.length()
+	     << " byte message from " << env.src << ".. ABORTED" << dendl;
+    // MEH FIXME 
+    Message *m = new MGenericMessage(CEPH_MSG_PING);
+    env.type = cpu_to_le32(CEPH_MSG_PING);
+    m->set_env(env);
+    return m;
+  } 
+
+  dout(20) << "reader got " << front.length() << " + " << data.length()
+	   << " byte message from " << env.src << dendl;
+  return decode_message(env, front, data);
 }
 
 
@@ -1780,7 +1791,7 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
 	     << " writing " << donow 
 	     << dendl;
     
-    if (msg.msg_iovlen >= IOV_MAX-1) {
+    if (msg.msg_iovlen >= IOV_MAX-2) {
       if (do_sendmsg(sd, &msg, msglen)) 
 	return -1;	
       
@@ -1806,7 +1817,15 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
     }
   }
   assert(left == 0);
-  
+
+  // send footer
+  struct ceph_msg_footer f;
+  memset(&f, 0, sizeof(f));
+  msgvec[msg.msg_iovlen].iov_base = (void*)&f;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(f);
+  msglen += sizeof(f);
+  msg.msg_iovlen++;
+
   // send
   if (do_sendmsg(sd, &msg, msglen)) 
     return -1;	

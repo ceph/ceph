@@ -372,13 +372,24 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	     con->out_msg_pos.page_pos);
 
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
-		struct page *page = msg->pages[con->out_msg_pos.page];
-		void *kaddr = kmap(page);
+		struct page *page;
+		void *kaddr;
+		mutex_lock(&msg->page_mutex);
+		page = msg->pages[con->out_msg_pos.page];
+		if (page) 
+			kaddr = kmap(page);
+		else {
+			derr(0, "using zero page\n");
+			kaddr = page_address(page);
+			page = 0;
+		}
 		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
 		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len);
-		kunmap(page);
+		if (page)
+			kunmap(page);
+		mutex_unlock(&msg->page_mutex);
 		if (ret <= 0)
 			goto out;
 		con->out_msg_pos.data_pos += ret;
@@ -391,7 +402,6 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 
 	/* done */
 	dout(30, "write_partial_msg_pages wrote all pages on %p\n", con);
-	con->out_msg = 0;
 	ret = 1;
 out:
 	return ret;
@@ -558,6 +568,7 @@ more:
 	}
 
 	/* kvec data queued? */
+more_kvec:
 	if (con->out_kvec_left) {
 		ret = write_partial_kvec(con);
 		if (ret == 0)
@@ -578,6 +589,19 @@ more:
 			     ret);
 			goto done;
 		}
+	}
+
+	/* msg footer */
+	if (con->out_msg) {
+		con->out_footer.aborted =
+			cpu_to_le32(con->out_msg->pages_revoked);
+		con->out_kvec[0].iov_base = &con->out_footer;
+		con->out_kvec_bytes = con->out_kvec[0].iov_len = 
+			sizeof(con->out_footer);
+		con->out_kvec_left = 1;
+		con->out_kvec_cur = con->out_kvec;
+		con->out_msg = 0;
+		goto more_kvec;
 	}
 
 	/* anything else pending? */
@@ -638,15 +662,13 @@ static int read_message_partial(struct ceph_connection *con)
 	dout(20, "read_message_partial con %p msg %p\n", con, m);
 
 	/* header */
-	while (con->in_base_pos < sizeof(struct ceph_msg_header)) {
-		left = sizeof(struct ceph_msg_header) - con->in_base_pos;
+	while (con->in_base_pos < sizeof(m->hdr)) {
+		left = sizeof(m->hdr) - con->in_base_pos;
 		ret = ceph_tcp_recvmsg(con->sock, &m->hdr + con->in_base_pos,
 				       left);
 		if (ret <= 0)
 			return ret;
 		con->in_base_pos += ret;
-		if (con->in_base_pos == sizeof(struct ceph_msg_header))
-			break;
 	}
 
 	/* front */
@@ -669,7 +691,7 @@ static int read_message_partial(struct ceph_connection *con)
 	data_len = le32_to_cpu(m->hdr.data_len);
 	data_off = le32_to_cpu(m->hdr.data_off);
 	if (data_len == 0)
-		goto done;
+		goto no_data;
 	if (m->nr_pages == 0) {
 		con->in_msg_pos.page = 0;
 		con->in_msg_pos.page_pos = data_off & ~PAGE_MASK;
@@ -708,7 +730,23 @@ static int read_message_partial(struct ceph_connection *con)
 		}
 	}
 
-done:
+no_data:
+	/* footer */
+	dout(0, "reading footer, pos %d / %d\n", 
+	     con->in_base_pos, sizeof(m->hdr) + sizeof(m->footer));
+	while (con->in_base_pos < sizeof(m->hdr) + sizeof(m->footer)) {
+		left = sizeof(m->hdr) + sizeof(m->footer) - con->in_base_pos;
+		dout(0, "left %d\n", left);
+		ret = ceph_tcp_recvmsg(con->sock, &m->footer +
+				       (con->in_base_pos - sizeof(m->hdr)),
+				       left);
+		dout(0, "got %d\n", ret);
+		if (ret <= 0)
+			return ret;
+		con->in_base_pos += ret;
+		dout(0, "new pos %d\n", con->in_base_pos);
+	}
+
 	dout(20, "read_message_partial got msg %p\n", m);
 
 	/* did i learn my ip? */
@@ -1219,6 +1257,13 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	INIT_LIST_HEAD(&msgr->con_accepting);
 	INIT_RADIX_TREE(&msgr->con_tree, GFP_KERNEL);
 
+	msgr->zero_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!msgr->zero_page) {
+		kfree(msgr);
+		return ERR_PTR(-ENOMEM);
+	}
+	kmap(msgr->zero_page);
+
 	/* pick listening address */
 	if (myaddr) {
 		msgr->inst.addr = *myaddr;
@@ -1262,6 +1307,8 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	/* stop listener */
 	ceph_sock_release(msgr->listen_sock);
 
+	kunmap(msgr->zero_page);
+	__free_page(msgr->zero_page);
 	kfree(msgr);
 }
 
@@ -1403,6 +1450,8 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	if (m == NULL)
 		goto out;
 	atomic_set(&m->nref, 1);
+	mutex_init(&m->page_mutex);
+
 	m->hdr.type = cpu_to_le32(type);
 	m->hdr.front_len = cpu_to_le32(front_len);
 	m->hdr.data_len = cpu_to_le32(page_len);
@@ -1421,6 +1470,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	/* pages */
 	m->nr_pages = calc_pages_for(page_off, page_len);
 	m->pages = pages;
+	m->pages_revoked = 0;
 
 	INIT_LIST_HEAD(&m->list_head);
 	dout(20, "ceph_msg_new %p\n", m);
