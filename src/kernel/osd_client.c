@@ -72,6 +72,7 @@ static struct ceph_osd_request *alloc_request(int nr_pages,
 		return ERR_PTR(-ENOMEM);
 	req->r_request = msg;
 	req->r_nr_pages = nr_pages;
+	atomic_set(&req->r_ref, 1);
 	memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
 	return req;
 }
@@ -98,10 +99,10 @@ static int register_request(struct ceph_osd_client *osdc,
 	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 	req->r_reply = 0;
 	req->r_result = 0;
-	atomic_set(&req->r_ref, 2);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
 
 	dout(30, "register_request %p tid %lld\n", req, req->r_tid);
+	get_request(req);
 	rc = radix_tree_insert(&osdc->request_tree, req->r_tid, (void *)req);
 
 	if (osdc->nr_requests == 0) 
