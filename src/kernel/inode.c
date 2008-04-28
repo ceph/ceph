@@ -232,7 +232,7 @@ void ceph_update_inode_lease(struct inode *inode,
 	 * be careful: we can't remove lease from a different session
 	 * without holding that other session's s_mutex.  so don't.
 	 */
-	if (ttl >= ci->i_lease_ttl &&
+	if (!time_before(ttl, ci->i_lease_ttl) &&
 	    (!ci->i_lease_session || ci->i_lease_session == session)) {
 		ci->i_lease_ttl = ttl;
 		ci->i_lease_mask = mask;
@@ -301,7 +301,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 		return;
 
 	spin_lock(&dentry->d_lock);
-	if (ttl < dentry->d_time)
+	if (time_before(ttl, dentry->d_time))
 		goto fail_unlock;  /* we already have a newer lease. */
 
 	di = ceph_dentry(dentry);
@@ -409,8 +409,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		/* dentry */
 		ininfo = rinfo->trace_in[d+1].in;
 		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
-			dout(10, "fill_trace using provided dentry\n");
 			dn = req->r_last_dentry;
+			dout(10, "fill_trace using provided dentry %p\n", dn);
 			ceph_init_dentry(dn);  /* just in case */
 			req->r_last_dentry = NULL;
 			if (req->r_old_dentry) {
