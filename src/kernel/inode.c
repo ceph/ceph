@@ -1516,7 +1516,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 }
 
 int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
-		       struct kstat *stat)
+		 struct kstat *stat)
 {
 	int err = 0;
 	int mask = CEPH_STAT_MASK_INODE_ALL;
@@ -1524,13 +1524,21 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	dout(30, "getattr dentry %p inode %p\n", dentry,
 	     dentry->d_inode);
 
-	if (!ceph_inode_lease_valid(dentry->d_inode, mask))
+	if (!ceph_inode_lease_valid(dentry->d_inode, mask)) {
 		/*
 		 * if the dentry is unhashed, stat the ino directly: we
 		 * presumably have an open capability.
 		 */
-		err = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
-				     d_unhashed(dentry));
+		struct dentry *ret =
+			ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
+				       d_unhashed(dentry));
+		if (IS_ERR(ret))
+			return PTR_ERR(ret);
+		if (ret)
+			dentry = ret;
+		if (!dentry->d_inode)
+			return -ENOENT;
+	}
 
 	dout(30, "getattr returned %d\n", err);
 	if (!err)

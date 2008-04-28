@@ -427,8 +427,9 @@ extern const struct file_operations ceph_dir_fops;
 extern struct dentry_operations ceph_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
-extern int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, 
-			  int mask, int on_inode);
+extern struct dentry *ceph_do_lookup(struct super_block *sb, 
+				     struct dentry *dentry, 
+				     int mask, int on_inode);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
 	dentry->d_op = &ceph_dentry_ops;

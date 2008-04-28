@@ -226,8 +226,8 @@ loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
  * @on_inode indicates that we should stat the ino, and not a path
  * built from @dentry.
  */
-int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
-		   int on_inode)
+struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry, 
+			      int mask, int on_inode)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -238,7 +238,7 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 	int err;
 
 	if (dentry->d_name.len > NAME_MAX)
-		return -ENAMETOOLONG;
+		return ERR_PTR(-ENAMETOOLONG);
 
 	dout(10, "do_lookup %p mask %d\n", dentry, mask);
 	if (on_inode) {
@@ -250,14 +250,14 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 		/* build path */
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path))
-			return PTR_ERR(path);
+			return ERR_PTR(PTR_ERR(path));
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
 					       ceph_ino(sb->s_root->d_inode),
 					       path, 0, 0);
 		kfree(path);
 	}
 	if (IS_ERR(req))
-		return PTR_ERR(req);
+		return ERR_PTR(PTR_ERR(req));
 	rhead = req->r_request->front.iov_base;
 	rhead->args.stat.mask = cpu_to_le32(mask);
 	dget(dentry);                /* to match put_request below */
@@ -268,19 +268,26 @@ int ceph_do_lookup(struct super_block *sb, struct dentry *dentry, int mask,
 		dout(20, "ENOENT and no trace, dentry %p inode %p\n",
 		     dentry, dentry->d_inode);
 		ceph_init_dentry(dentry);
-		d_add(dentry, NULL);
+		if (dentry->d_inode) {
+			struct dentry *new = 
+				d_alloc(dentry->d_parent, &dentry->d_name);
+			d_drop(dentry);
+			dentry = new;
+		} else {
+			d_add(dentry, NULL);
+			dentry = 0;
+		}
 		err = 0;
-	}
+	} else if (err)
+		dentry = ERR_PTR(err);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
-	dout(20, "do_lookup %p result=%d\n", dentry, err);
-	return err;
+	dout(20, "do_lookup result=%p\n", dentry);
+	return dentry;
 }
 
 static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 				      struct nameidata *nd)
 {
-	int err;
-
 	dout(5, "dir_lookup in dir %p dentry %p '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
@@ -288,15 +295,11 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	if (nd && nd->flags & LOOKUP_OPEN &&
 	    !(nd->intent.open.flags & O_CREAT)) {
 		int mode = nd->intent.open.create_mode & ~current->fs->umask;
-		err = ceph_lookup_open(dir, dentry, nd, mode);
+		int err = ceph_lookup_open(dir, dentry, nd, mode);
 		return ERR_PTR(err);
 	}
 
-	err = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0);
-	if (err < 0)
-		return ERR_PTR(err);
-
-	return NULL;
+	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0);
 }
 
 static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
@@ -492,6 +495,9 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	if (!err) {
 		if (dentry->d_inode)
 			drop_nlink(dentry->d_inode);
+	}
+	if (err == -ENOENT) {
+		dout(10, "HMMM!\n");
 	}
 
 	return err;
