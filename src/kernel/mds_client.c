@@ -1637,7 +1637,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct dentry *parent, *dentry;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	struct ceph_mds_lease *h = msg->front.iov_base;
-	__u64 ino;
+	u64 ino;
 	int mask;
 	struct qstr dname;
 	ino_t inot;
@@ -1645,12 +1645,14 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_lease from mds%d\n", mds);
 
 	/* decode */
-	if (msg->front.iov_len < sizeof(*h) + sizeof(__u32))
+	if (msg->front.iov_len < sizeof(*h) + sizeof(u32))
 		goto bad;
 	ino = le64_to_cpu(h->ino);
 	mask = le16_to_cpu(h->mask);
-	dname.name = (void *)(h + 1);
-	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(__u32);
+	dname.name = (void *)h + sizeof(*h) + sizeof(u32);
+	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(u32);
+	if (dname.len != le32_to_cpu(*(u32 *)(h+1)))
+		goto bad;
 
 	/* find session */
 	spin_lock(&mdsc->lock);
@@ -1671,7 +1673,8 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 #else
 	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
 #endif
-	dout(20, "action is %d, ino %llx %p\n", h->action, ino, inode);
+	dout(20, "action is %d, mask %d, ino %llx %p\n", h->action, 
+	     mask, ino, inode);
 
 	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
 
@@ -1686,9 +1689,11 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* dentry */
 	if (mask & CEPH_LOCK_DN) {
+		dout(10, "dname %.*s\n", dname.len, dname.name);
 		parent = d_find_alias(inode);
 		if (!parent) {
 			dout(10, "no parent dentry on inode %p\n", inode);
+			WARN_ON(1);
 			goto release;  /* hrm... */
 		}
 		dname.hash = full_name_hash(dname.name, dname.len);
