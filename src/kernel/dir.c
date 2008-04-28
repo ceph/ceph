@@ -114,10 +114,6 @@ nextfrag:
 		struct ceph_mds_request_head *rhead;
 
 		/* query mds */
-		if (fi->last_readdir) {
-			ceph_mdsc_put_request(fi->last_readdir);
-			fi->last_readdir = 0;
-		}
 		dout(10, "dir_readdir querying mds for ino %llx frag %u\n",
 		     ceph_ino(inode), frag);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR,
@@ -133,6 +129,8 @@ nextfrag:
 		}
 		dout(10, "dir_readdir got and parsed readdir result=%d"
 		     " on frag %u\n", err, frag);
+		if (fi->last_readdir)
+			ceph_mdsc_put_request(fi->last_readdir);
 		fi->last_readdir = req;
 	}
 
@@ -161,9 +159,10 @@ nextfrag:
 
 	rinfo = &fi->last_readdir->r_reply_info;
 	while (off+skew < rinfo->dir_nr) {
-		dout(10, "dir_readdir off %d -> %d / %d name '%s'\n",
+		dout(10, "dir_readdir off %d -> %d / %d name '%.*s'\n",
 		     off, off+skew,
-		     rinfo->dir_nr, rinfo->dir_dname[off+skew]);
+		     rinfo->dir_nr, rinfo->dir_dname_len[off+skew],
+		     rinfo->dir_dname[off+skew]);
 		ftype = le32_to_cpu(rinfo->dir_in[off+skew].in->mode >> 12);
 		if (filldir(dirent,
 			    rinfo->dir_dname[off+skew],
@@ -189,6 +188,37 @@ nextfrag:
 
 	dout(20, "dir_readdir done.\n");
 	return 0;
+}
+
+loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
+{
+	struct ceph_file_info *fi = file->private_data;
+	struct inode *inode = file->f_mapping->host;
+	loff_t retval;
+
+	mutex_lock(&inode->i_mutex);
+	switch (origin) {
+	case SEEK_END:
+		offset += inode->i_size;
+		break;
+	case SEEK_CUR:
+		offset += file->f_pos;
+	}
+	retval = -EINVAL;
+	if (offset >= 0 && offset <= inode->i_sb->s_maxbytes) {
+		if (offset != file->f_pos) {
+			file->f_pos = offset;
+			file->f_version = 0;
+		}
+		retval = offset;
+		if (offset == 0 && fi->last_readdir) {
+			dout(10, "llseek dropping %p readdir content\n", file);
+			ceph_mdsc_put_request(fi->last_readdir);
+			fi->last_readdir = 0;
+		}
+	}
+	mutex_unlock(&inode->i_mutex);
+	return retval;
 }
 
 /*
@@ -546,6 +576,7 @@ static void ceph_dentry_release(struct dentry *dentry)
 const struct file_operations ceph_dir_fops = {
 	.read = generic_read_dir,
 	.readdir = ceph_readdir,
+	.llseek = ceph_dir_llseek,
 	.open = ceph_open,
 	.release = ceph_release,
 };
