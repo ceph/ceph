@@ -72,8 +72,8 @@ retry:
 		goto retry;
 	}
 
-	dout(10, "build_path_dentry on %p build '%.*s'\n",
-	     dentry, len, path);
+	dout(10, "build_path_dentry on %p %d build '%.*s'\n",
+	     dentry, atomic_read(&dentry->d_count), len, path);
 	*plen = len;
 	return path;
 }
@@ -280,8 +280,11 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 		err = 0;
 	} else if (err)
 		dentry = ERR_PTR(err);
+	else
+		dentry = 0;
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
-	dout(20, "do_lookup result=%p\n", dentry);
+	dout(20, "do_lookup result=%p %d\n", dentry,
+	     dentry ? atomic_read(&dentry->d_count):0);
 	return dentry;
 }
 
