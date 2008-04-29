@@ -563,9 +563,11 @@ static int __init init_ceph(void)
 	dout(1, "init_ceph\n");
 	spin_lock_init(&ceph_client_spinlock);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	ceph_kobj = kobject_create_and_add("ceph", fs_kobj);
 	if (!ceph_kobj)
 		return -ENOMEM;
+#endif
 	
 	ceph_fs_proc_init();
 
@@ -583,8 +585,10 @@ static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_put(ceph_kobj);
 	ceph_kobj = 0;
+#endif
 
 	unregister_filesystem(&ceph_fs_type);
 	destroy_inodecache();

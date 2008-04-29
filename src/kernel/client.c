@@ -170,9 +170,11 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 		     le64_to_cpu(client->monc.monmap->fsid.major),
 		     le64_to_cpu(client->monc.monmap->fsid.minor));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 		client->client_kobj = kobject_create_and_add(name, ceph_kobj);
 		//client->fsid_kobj = kobject_create_and_add("fsid", 
 		//client->client_kobj);
+#endif
 	}
 }
 
@@ -251,8 +253,10 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	if (cl->client_kobj)
 		kobject_put(cl->client_kobj);
+#endif
 	if (cl->wb_wq)
 		destroy_workqueue(cl->wb_wq);
 	ceph_messenger_destroy(cl->msgr);
