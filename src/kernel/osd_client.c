@@ -34,6 +34,8 @@ static void get_request(struct ceph_osd_request *req)
 
 static void put_request(struct ceph_osd_request *req)
 {
+	dout(10, "put_request %p %d -> %d\n", req, atomic_read(&req->r_ref),
+	     atomic_read(&req->r_ref)-1);
 	BUG_ON(atomic_read(&req->r_ref) <= 0);
 	if (atomic_dec_and_test(&req->r_ref)) {
 		ceph_msg_put(req->r_request);
@@ -450,10 +452,9 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	unregister_request(osdc, req);
 	if (rc < 0) {
 		struct ceph_msg *msg = req->r_request;
-		printk(KERN_ERR "osdc do_request err %d on %p\n", rc, msg);
+		dout(0, "tid %llu err %d, revoking %p pages\n", rc, msg);
 		mutex_lock(&msg->page_mutex);
-		msg->pages_revoked = 1;
-		memset(&msg->pages, 0, sizeof(void *) * msg->nr_pages);
+		msg->pages = 0;
 		mutex_unlock(&msg->page_mutex);
 		return rc;
 	}

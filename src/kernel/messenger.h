@@ -54,7 +54,6 @@ struct ceph_msg {
 	struct kvec front;              /* first bit of message */
 	struct mutex page_mutex;
 	struct page **pages;            /* data payload.  NOT OWNER. */
-	int pages_revoked;              /* if true, pages revoked before sent */
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
 	atomic_t nref;

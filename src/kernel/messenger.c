@@ -376,19 +376,18 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		struct page *page;
 		void *kaddr;
 		mutex_lock(&msg->page_mutex);
-		page = msg->pages[con->out_msg_pos.page];
-		if (page) 
+		if (msg->pages) {
+			page = msg->pages[con->out_msg_pos.page];
 			kaddr = kmap(page);
-		else {
-			derr(0, "using zero page\n");
-			kaddr = page_address(page);
-			page = 0;
+		} else {
+			/*dout(60, "using zero page\n");*/
+			kaddr = page_address(con->msgr->zero_page);
 		}
 		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
 		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len);
-		if (page)
+		if (msg->pages)
 			kunmap(page);
 		mutex_unlock(&msg->page_mutex);
 		if (ret <= 0)
@@ -404,8 +403,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	/* done */
 	dout(30, "write_partial_msg_pages wrote all pages on %p\n", con);
 
-	con->out_footer.aborted =
-		cpu_to_le32(con->out_msg->pages_revoked);
+	con->out_footer.aborted = cpu_to_le32(con->out_msg->pages == 0);
 	con->out_kvec[0].iov_base = &con->out_footer;
 	con->out_kvec_bytes = con->out_kvec[0].iov_len = 
 		sizeof(con->out_footer);
@@ -1472,7 +1470,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	/* pages */
 	m->nr_pages = calc_pages_for(page_off, page_len);
 	m->pages = pages;
-	m->pages_revoked = 0;
 
 	INIT_LIST_HEAD(&m->list_head);
 	dout(20, "ceph_msg_new %p page %d~%d -> %d\n", m, page_off, page_len, m->nr_pages);
