@@ -886,6 +886,10 @@ out:
  */
 static void reset_connection(struct ceph_connection *con)
 {
+	derr(1, "%s%d %u.%u.%u.%u:%u connection reset\n", 
+	     ENTITY_NAME(con->peer_name),
+	     IPQUADPORT(con->peer_addr.ipaddr));
+
 	/* reset connection, out_queue, msg_ and connect_seq */
 	/* discard existing out_queue and msg_seq */
 	while (!list_empty(&con->out_queue)) {
@@ -1365,9 +1369,12 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	BUG_ON(!dup);
 	memcpy(dup->front.iov_base, old->front.iov_base,
 	       le32_to_cpu(old->hdr.front_len));
-	if (old->pages)
-		derr(0, "WARNING: unsafely referenced old pages for %p\n",
-		     old);
+	
+	/* revoke old message's pages */
+	mutex_lock(&old->page_mutex);
+	old->pages = 0;
+	mutex_unlock(&old->page_mutex);
+
 	ceph_msg_put(old);
 	return dup;
 }

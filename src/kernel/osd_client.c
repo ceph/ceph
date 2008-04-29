@@ -72,6 +72,7 @@ static struct ceph_osd_request *alloc_request(int nr_pages,
 	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void *), GFP_NOFS);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
+	req->r_aborted = 0;
 	req->r_request = msg;
 	req->r_nr_pages = nr_pages;
 	atomic_set(&req->r_ref, 1);
@@ -253,8 +254,8 @@ static int kick_requests(struct ceph_osd_client *osdc)
 	int osd;
 	int ret = 0;
 	
-more:
 	spin_lock(&osdc->request_lock);
+more:
 	got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req, 
 				     next_tid, 1);
 	if (got == 0)
@@ -270,9 +271,11 @@ more:
 		dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
 		get_request(req);
 		spin_unlock(&osdc->request_lock);
-		req->r_request = ceph_msg_maybe_dup(req->r_request);  
-		req->r_flags |= CEPH_OSD_OP_RETRY;
-		send_request(osdc, req, osd);
+		req->r_request = ceph_msg_maybe_dup(req->r_request);
+		if (req->r_aborted) {
+			req->r_flags |= CEPH_OSD_OP_RETRY;
+			send_request(osdc, req, osd);
+		}
 		put_request(req);
 		goto more;
 	}
@@ -451,9 +454,17 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 
 	unregister_request(osdc, req);
 	if (rc < 0) {
-		struct ceph_msg *msg = req->r_request;
+		struct ceph_msg *msg;
 		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid, 
-		     rc, msg);
+		     rc, req->r_request);
+		/* 
+		 * mark req aborted _before_ revoking pages, so that
+		 * if a racing kick_request _does_ dup the page vec
+		 * pointer, it will definitely then see the aborted
+		 * flag and not send the request.
+		 */
+		req->r_aborted = 1;
+		msg = req->r_request;
 		mutex_lock(&msg->page_mutex);
 		msg->pages = 0;
 		mutex_unlock(&msg->page_mutex);

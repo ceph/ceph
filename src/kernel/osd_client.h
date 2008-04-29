@@ -22,6 +22,7 @@ enum {
 
 struct ceph_osd_request {
 	__u64             r_tid;
+	int               r_aborted;
 	int               r_flags;
 	struct ceph_msg  *r_request;
 	struct ceph_entity_addr r_last_osd;  /* last osd we sent request to */
