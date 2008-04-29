@@ -1295,10 +1295,16 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 		con = list_entry(msgr->con_all.next, struct ceph_connection,
 				 list_all);
 		dout(10, "destroy removing connection %p\n", con);
-		set_bit(CLOSED, &con->state);  /* in case there's queued work */
+		set_bit(CLOSED, &con->state);
+		atomic_inc(&con->nref);
+		__remove_connection(msgr, con);
+		
+		/* in case there's queued work... */
+		spin_unlock(&msgr->con_lock);
 		cancel_work_sync(&con->rwork);
 		cancel_delayed_work_sync(&con->swork);
-		__remove_connection(msgr, con);
+		put_connection(con);
+		spin_lock(&msgr->con_lock);
 	}
 	spin_unlock(&msgr->con_lock);
 
@@ -1451,6 +1457,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 		goto out;
 	atomic_set(&m->nref, 1);
 	mutex_init(&m->page_mutex);
+	INIT_LIST_HEAD(&m->list_head);
 
 	m->hdr.type = cpu_to_le32(type);
 	m->hdr.front_len = cpu_to_le32(front_len);
@@ -1460,8 +1467,11 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	/* front */
 	if (front_len) {
 		m->front.iov_base = kmalloc(front_len, GFP_NOFS);
-		if (m->front.iov_base == NULL)
+		if (m->front.iov_base == NULL) {
+			derr(0, "ceph_msg_new can't allocate %d bytes\n",
+			     front_len);
 			goto out2;
+		}
 	} else {
 		m->front.iov_base = 0;
 	}
@@ -1471,7 +1481,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->nr_pages = calc_pages_for(page_off, page_len);
 	m->pages = pages;
 
-	INIT_LIST_HEAD(&m->list_head);
 	dout(20, "ceph_msg_new %p page %d~%d -> %d\n", m, page_off, page_len, m->nr_pages);
 	return m;
 
