@@ -731,19 +731,14 @@ static int read_message_partial(struct ceph_connection *con)
 	}
 
 	/* footer */
-	dout(0, "reading footer, pos %d / %d\n", 
-	     con->in_base_pos, sizeof(m->hdr) + sizeof(m->footer));
 	while (con->in_base_pos < sizeof(m->hdr) + sizeof(m->footer)) {
 		left = sizeof(m->hdr) + sizeof(m->footer) - con->in_base_pos;
-		dout(0, "left %d\n", left);
 		ret = ceph_tcp_recvmsg(con->sock, &m->footer +
 				       (con->in_base_pos - sizeof(m->hdr)),
 				       left);
-		dout(0, "got %d\n", ret);
 		if (ret <= 0)
 			return ret;
 		con->in_base_pos += ret;
-		dout(0, "new pos %d\n", con->in_base_pos);
 	}
 
 no_data:
@@ -1300,15 +1295,20 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 		con = list_entry(msgr->con_all.next, struct ceph_connection,
 				 list_all);
 		dout(10, "destroy removing connection %p\n", con);
+		set_bit(CLOSED, &con->state);  /* in case there's queued work */
+		cancel_work_sync(&con->rwork);
+		cancel_delayed_work_sync(&con->swork);
 		__remove_connection(msgr, con);
 	}
 	spin_unlock(&msgr->con_lock);
 
 	/* stop listener */
 	ceph_sock_release(msgr->listen_sock);
+	cancel_work_sync(&msgr->awork);
 
 	kunmap(msgr->zero_page);
 	__free_page(msgr->zero_page);
+
 	kfree(msgr);
 }
 
