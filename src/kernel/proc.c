@@ -78,5 +78,10 @@ void ceph_fs_proc_init(void)
 				     &ceph_debug_msgr);
 	if (pde)
 		pde->write_proc = ceph_debug_level_write;
+	pde = create_proc_read_entry("debug_console", 0,
+				     proc_fs_ceph, ceph_debug_level_read,
+				     &ceph_debug_console);
+	if (pde)
+		pde->write_proc = ceph_debug_level_write;
 
 }
