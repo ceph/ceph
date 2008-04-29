@@ -554,14 +554,19 @@ static struct file_system_type ceph_fs_type = {
 	.fs_flags	= FS_RENAME_DOES_D_MOVE,
 };
 
+struct kobject *ceph_kobj;
+
 static int __init init_ceph(void)
 {
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
-
 	spin_lock_init(&ceph_client_spinlock);
 
+	ceph_kobj = kobject_create_and_add("ceph", fs_kobj);
+	if (!ceph_kobj)
+		return -ENOMEM;
+	
 	ceph_fs_proc_init();
 
 	ret = init_inodecache();
@@ -577,6 +582,9 @@ out:
 static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
+
+	kobject_put(ceph_kobj);
+	ceph_kobj = 0;
 
 	unregister_filesystem(&ceph_fs_type);
 	destroy_inodecache();

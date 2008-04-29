@@ -6,6 +6,7 @@
 #include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
+#include <linux/sysfs.h>
 
 #include "ceph_fs.h"
 #include "messenger.h"
@@ -92,6 +93,9 @@ enum {
 	CEPH_MOUNT_UNMOUNTED,
 };
 
+
+extern struct kobject *ceph_kobj;
+
 /*
  * per-filesystem client state
  *
@@ -116,6 +120,8 @@ struct ceph_client {
 
 	/* writeback */
 	struct workqueue_struct *wb_wq;
+
+	struct kobject *client_kobj;
 
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;

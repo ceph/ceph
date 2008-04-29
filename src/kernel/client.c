@@ -162,11 +162,17 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	client->monc.monmap = new;
 
 	if (first) {
+		char name[10];
 		client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
 		client->msgr->inst.name = msg->hdr.dst.name;
-		dout(1, "i am client%d, fsid is %llx.%llx\n", client->whoami,
+		sprintf(name, "client%d", client->whoami);
+		dout(1, "i am %s, fsid is %llx.%llx\n", name,
 		     le64_to_cpu(client->monc.monmap->fsid.major),
 		     le64_to_cpu(client->monc.monmap->fsid.minor));
+
+		client->client_kobj = kobject_create_and_add(name, ceph_kobj);
+		//client->fsid_kobj = kobject_create_and_add("fsid", 
+		//client->client_kobj);
 	}
 }
 
@@ -245,6 +251,8 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
+	if (cl->client_kobj)
+		kobject_put(cl->client_kobj);
 	if (cl->wb_wq)
 		destroy_workqueue(cl->wb_wq);
 	ceph_messenger_destroy(cl->msgr);

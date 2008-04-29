@@ -18,7 +18,6 @@ userspace client
 - reference count lease validations on path lookup?
 
 kernel client
-- flush all WRITE caps on session close
 - flush caps on sync, fsync, etc.
   - hmm, should these go in a per-session "check" list, instead of independently scheduling delayed_work for each inode?
 - fsync should flush cap file size to mds.  not sure how to block on that, however.. maybe a want_reply flag in the cap msg?
