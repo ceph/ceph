@@ -452,7 +452,8 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	unregister_request(osdc, req);
 	if (rc < 0) {
 		struct ceph_msg *msg = req->r_request;
-		dout(0, "tid %llu err %d, revoking %p pages\n", rc, msg);
+		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid, 
+		     rc, msg);
 		mutex_lock(&msg->page_mutex);
 		msg->pages = 0;
 		mutex_unlock(&msg->page_mutex);
