@@ -851,15 +851,15 @@ ack:
 		/* take s_mutex, one way or another */
 		if (session && session != cap->session) {
 			dout(30, "oops, wrong session mutex\n");
-			up(&session->s_mutex);
+			mutex_unlock(&session->s_mutex);
 			session = 0;
 		}
 		if (!session) {
 			session = cap->session;
-			if (down_trylock(&session->s_mutex) != 0) {
+			if (mutex_trylock(&session->s_mutex) == 0) {
 				dout(10, "inverting session/inode locking\n");
 				spin_unlock(&inode->i_lock);
-				down(&session->s_mutex);
+				mutex_lock(&session->s_mutex);
 				goto retry;
 			}
 		}
@@ -869,7 +869,7 @@ ack:
 						    used, wanted, !is_delayed);
 		if (removed_last)
 			goto out;
-		up(&session->s_mutex);
+		mutex_unlock(&session->s_mutex);
 		goto retry;
 	}
 
@@ -878,7 +878,7 @@ ack:
 
 out:
 	if (session)
-		up(&session->s_mutex);
+		mutex_unlock(&session->s_mutex);
 }
 
 void ceph_inode_set_size(struct inode *inode, loff_t size)

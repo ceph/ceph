@@ -55,7 +55,7 @@ struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
-	struct semaphore  s_mutex;
+	struct mutex      s_mutex;
 	spinlock_t        s_cap_lock;
 	unsigned long     s_cap_ttl, s_renew_requested;
 	struct list_head  s_caps;

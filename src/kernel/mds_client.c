@@ -289,7 +289,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	s->s_mds = mds;
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_cap_seq = 0;
-	init_MUTEX(&s->s_mutex);
+	mutex_init(&s->s_mutex);
 	spin_lock_init(&s->s_cap_lock);
 	s->s_cap_ttl = 0;
 	s->s_renew_requested = 0;
@@ -748,7 +748,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	/* handle */
 	spin_lock(&mdsc->lock);
 	session = __get_session(mdsc, mds);
-	down(&session->s_mutex);
+	mutex_lock(&session->s_mutex);
 
 	was_stale = time_after_eq(jiffies, session->s_cap_ttl);
 
@@ -789,7 +789,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	}
 	spin_unlock(&mdsc->lock);
 
-	up(&session->s_mutex);
+	mutex_unlock(&session->s_mutex);
 	put_session(session);
 	return;
 
@@ -1024,7 +1024,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	BUG_ON(req->r_reply);
 	spin_unlock(&mdsc->lock);
 
-	down(&req->r_session->s_mutex);
+	mutex_lock(&req->r_session->s_mutex);
 
 	/* parse */
 	rinfo = &req->r_reply_info;
@@ -1062,7 +1062,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 
 done:
-	up(&req->r_session->s_mutex);
+	mutex_unlock(&req->r_session->s_mutex);
 	spin_lock(&mdsc->lock);
 	if (err) {
 		req->r_reply = ERR_PTR(err);
@@ -1179,7 +1179,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	spin_unlock(&mdsc->lock);  /* drop lock for duration */
 
 	if (session)
-		down(&session->s_mutex);
+		mutex_lock(&session->s_mutex);
 
 retry:
 	/* build reply */
@@ -1260,7 +1260,7 @@ send:
 	}
 out:
 	if (session) {
-		up(&session->s_mutex);
+		mutex_unlock(&session->s_mutex);
 		put_session(session);
 	}
 	return;
@@ -1404,7 +1404,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 		return;
 	}
 
-	down(&session->s_mutex);
+	mutex_lock(&session->s_mutex);
 	session->s_cap_seq++;
 
 	/* lookup ino */
@@ -1444,7 +1444,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 
 	iput(inode);
 no_inode:
-	up(&session->s_mutex);
+	mutex_unlock(&session->s_mutex);
 	put_session(session);
 	return;
 
@@ -1561,7 +1561,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 	struct ceph_msg *msg;
 
 	dout(10, "close_session mds%d\n", mds);
-	down(&session->s_mutex);
+	mutex_lock(&session->s_mutex);
 	
 	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
 		goto done;
@@ -1576,7 +1576,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 	send_msg_mds(mdsc, msg, mds);
 
 done:
-	up(&session->s_mutex);
+	mutex_unlock(&session->s_mutex);
 	return 0;
 }
 
@@ -1620,7 +1620,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	session->s_cap_seq++;
 
-	down(&session->s_mutex);
+	mutex_lock(&session->s_mutex);
 
 	/* lookup inode */
 	inot = ceph_ino_to_ino(ino);
@@ -1667,7 +1667,7 @@ release:
 	h->action = CEPH_MDS_LEASE_RELEASE;
 	ceph_msg_get(msg);
 	send_msg_mds(mdsc, msg, mds);
-	up(&session->s_mutex);
+	mutex_unlock(&session->s_mutex);
 	return;
 
 bad:
@@ -1774,13 +1774,13 @@ void delayed_work(struct work_struct *work)
 			continue;
 		}
 		spin_unlock(&mdsc->lock);
-		down(&session->s_mutex);
+		mutex_lock(&session->s_mutex);
 
 		if (renew_caps)
 			send_renewcaps(mdsc, session);
 		trim_session_leases(session);
 
-		up(&session->s_mutex);
+		mutex_unlock(&session->s_mutex);
 		put_session(session);
 		spin_lock(&mdsc->lock);
 	}
