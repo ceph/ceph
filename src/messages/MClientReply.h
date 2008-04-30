@@ -184,20 +184,20 @@ class MClientReply : public Message {
 
  public:
   long get_tid() { return le64_to_cpu(st.tid); }
-  int get_op() { return st.op; }
+  int get_op() { return le32_to_cpu(st.op); }
 
-  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
-  epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
+  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = cpu_to_le32(e); }
+  epoch_t get_mdsmap_epoch() { return le32_to_cpu(st.mdsmap_epoch); }
 
-  int get_result() { return st.result; }
+  int get_result() { return (__s32)(le32_to_cpu(st.result)); }
 
-  unsigned char get_file_caps() { return st.file_caps; }
-  long get_file_caps_seq() { return st.file_caps_seq; }
+  unsigned get_file_caps() { return le32_to_cpu(st.file_caps); }
+  unsigned get_file_caps_seq() { return le32_to_cpu(st.file_caps_seq); }
   //uint64_t get_file_data_version() { return st.file_data_version; }
   
-  void set_result(int r) { st.result = r; }
-  void set_file_caps(unsigned char c) { st.file_caps = c; }
-  void set_file_caps_seq(long s) { st.file_caps_seq = s; }
+  void set_result(int r) { st.result = cpu_to_le32(r); }
+  void set_file_caps(unsigned char c) { st.file_caps = cpu_to_le32(c); }
+  void set_file_caps_seq(long s) { st.file_caps_seq = cpu_to_le32(s); }
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
   MClientReply() {}
@@ -205,15 +205,15 @@ class MClientReply : public Message {
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
     this->st.tid = cpu_to_le64(req->get_tid());
-    this->st.op = req->get_op();
-    this->st.result = result;
+    this->st.op = cpu_to_le32(req->get_op());
+    this->st.result = cpu_to_le32(result);
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
     o << "client_reply(" << env.dst.name << "." << le64_to_cpu(st.tid);
-    o << " = " << st.result;
-    if (st.result <= 0)
-      o << " " << strerror(-st.result);
+    o << " = " << get_result();
+    if (get_result() <= 0)
+      o << " " << strerror(-get_result());
     o << ")";
   }
 

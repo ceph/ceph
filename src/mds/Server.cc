@@ -739,7 +739,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // funky.
   case CEPH_MDS_OP_OPEN:
-    if ((req->head.args.open.flags & O_CREAT) == 0) {
+    if ((le32_to_cpu(req->head.args.open.flags) & O_CREAT) == 0) {
       handle_client_open(mdr);
       break;
     }
@@ -1528,7 +1528,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   
-  int mask = req->head.args.stat.mask;
+  int mask = le32_to_cpu(req->head.args.stat.mask);
   if (mask & CEPH_LOCK_ILINK) rdlocks.insert(&ref->linklock);
   if (mask & CEPH_LOCK_IAUTH) rdlocks.insert(&ref->authlock);
   if (ref->is_file() && 
@@ -1606,7 +1606,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   // project update
   inode_t *pi = cur->project_inode();
   
-  mask = req->head.args.utime.mask;
+  mask = le32_to_cpu(req->head.args.utime.mask);
 
   if (mask & CEPH_UTIME_MTIME)
     pi->mtime = req->head.args.utime.mtime;
@@ -1652,10 +1652,10 @@ void Server::handle_client_chmod(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->mode = 
     (pi->mode & ~07777) | 
-    (req->head.args.chmod.mode & 07777);
+    (le32_to_cpu(req->head.args.chmod.mode) & 07777);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
-  dout(10) << "chmod " << oct << pi->mode << " (" << req->head.args.chmod.mode << ")" << dec << *cur << dendl;
+  dout(10) << "chmod " << oct << pi->mode << " (" << le32_to_cpu(req->head.args.chmod.mode) << ")" << dec << *cur << dendl;
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -1691,10 +1691,10 @@ void Server::handle_client_chown(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  if (req->head.args.chown.uid != -1)
-    pi->uid = req->head.args.chown.uid;
-  if (req->head.args.chown.gid != -1)
-    pi->gid = req->head.args.chown.gid;
+  if ((__s32)le32_to_cpu(req->head.args.chown.uid) != -1)
+    pi->uid = le32_to_cpu(req->head.args.chown.uid);
+  if ((__s32)le32_to_cpu(req->head.args.chown.gid) != -1)
+    pi->gid = le32_to_cpu(req->head.args.chown.gid);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   
@@ -1889,8 +1889,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
-  newi->inode.rdev = req->head.args.mknod.rdev;
-  newi->inode.mode = req->head.args.mknod.mode;
+  newi->inode.rdev = le32_to_cpu(req->head.args.mknod.rdev);
+  newi->inode.mode = le32_to_cpu(req->head.args.mknod.mode);
   if ((newi->inode.mode & S_IFMT) == 0)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
@@ -1927,7 +1927,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   assert(newi);
 
   // it's a directory.
-  newi->inode.mode = req->head.args.mkdir.mode;
+  newi->inode.mode = le32_to_cpu(req->head.args.mkdir.mode);
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFDIR;
   newi->inode.layout = g_default_mds_dir_layout;
@@ -3839,10 +3839,10 @@ class C_MDS_truncate_logged : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  off_t size;
+  uint64_t size;
   utime_t ctime;
 public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, utime_t ct) :
+  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, uint64_t sz, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }
@@ -3869,7 +3869,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  if ((__u64)req->head.args.truncate.length > CEPH_FILE_MAX_SIZE) {
+  if (le64_to_cpu(req->head.args.truncate.length) > (__u64)CEPH_FILE_MAX_SIZE) {
     reply_request(mdr, -EFBIG);
     return;
   }
@@ -3888,7 +3888,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   
   // already the correct size?
-  if (cur->inode.size == req->head.args.truncate.length) {
+  if (cur->inode.size == le64_to_cpu(req->head.args.truncate.length)) {
     reply_request(mdr, 0);
     return;
   }
@@ -3897,19 +3897,19 @@ void Server::handle_client_truncate(MDRequest *mdr)
   version_t pdv = cur->pre_dirty();
   utime_t ctime = g_clock.real_now();
   Context *fin = new C_MDS_truncate_logged(mds, mdr, cur, 
-					   pdv, req->head.args.truncate.length, ctime);
+					   pdv, le64_to_cpu(req->head.args.truncate.length), ctime);
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_dir_context(cur->get_parent_dir());
-  le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
+  le->metablob.add_inode_truncate(cur->ino(), le64_to_cpu(req->head.args.truncate.length), cur->inode.size);
   inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
-  pi->size = req->head.args.truncate.length;
+  pi->size = le64_to_cpu(req->head.args.truncate.length);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
@@ -3923,8 +3923,8 @@ void Server::handle_client_open(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  int flags = req->head.args.open.flags;
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  int flags = le32_to_cpu(req->head.args.open.flags);
+  int cmode = ceph_flags_to_mode(le32_to_cpu(req->head.args.open.flags));
 
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
@@ -3947,7 +3947,7 @@ void Server::handle_client_open(MDRequest *mdr)
     reply_request(mdr, -EINVAL);                 // FIXME what error do we want?
     return;
   }
-  if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
+  if ((le32_to_cpu(req->head.args.open.flags) & O_DIRECTORY) && !cur->inode.is_dir()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     reply_request(mdr, -EINVAL);
     return;
@@ -3980,7 +3980,7 @@ void Server::handle_client_open(MDRequest *mdr)
 void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
   MClientRequest *req = mdr->client_request;
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  int cmode = ceph_flags_to_mode(le32_to_cpu(req->head.args.open.flags));
   if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
 
   // register new cap
@@ -4143,13 +4143,13 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
   
-  bool excl = (req->head.args.open.flags & O_EXCL);
+  bool excl = (le32_to_cpu(req->head.args.open.flags) & O_EXCL);
   CDentry *dn = rdlock_path_xlock_dentry(mdr, !excl, false);
   if (!dn) return;
 
   if (!dn->is_null()) {
     // it existed.  
-    if (req->head.args.open.flags & O_EXCL) {
+    if (le32_to_cpu(req->head.args.open.flags) & O_EXCL) {
       dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
       reply_request(mdr, -EEXIST, dn->get_inode(), dn);
       return;
@@ -4170,7 +4170,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   assert(in);
   
   // it's a file.
-  in->inode.mode = req->head.args.open.mode;
+  in->inode.mode = le32_to_cpu(req->head.args.open.mode);
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
   in->inode.max_size = in->get_layout_size_increment();

@@ -23,7 +23,7 @@
 /*
  * types in this file are defined as little-endian, and are
  * primarily intended to describe data structures that pass
- * over the wire or are stored on disk.
+ * over the wire or that are stored on disk.
  */
 
 
@@ -418,19 +418,19 @@ enum {
 struct ceph_mds_request_head {
 	struct ceph_entity_inst client_inst;
 	ceph_tid_t tid, oldest_client_tid;
-	__u64 mdsmap_epoch; /* on client */
-	__u32 num_fwd;
-	__u32 retry_attempt;
+	ceph_epoch_t mdsmap_epoch; /* on client */
+	__le32 num_fwd;
+	__le32 retry_attempt;
 	ceph_ino_t mds_wants_replica_in_dirino;
-	__u32 op;
-	__u32 caller_uid, caller_gid;
+	__le32 op;
+	__le32 caller_uid, caller_gid;
 
 	union {
 		struct {
-			__u32 mask;
+			__le32 mask;
 		} stat;
 		struct {
-			__u32 mask;
+			__le32 mask;
 		} fstat;
 		struct {
 			ceph_frag_t frag;
@@ -439,28 +439,28 @@ struct ceph_mds_request_head {
 			struct ceph_timespec mtime;
 			struct ceph_timespec atime;
 			struct ceph_timespec ctime;
-			__u32 mask;
+			__le32 mask;
 		} __attribute__ ((packed)) utime;
 		struct {
-			__u32 mode;
+			__le32 mode;
 		} chmod;
 		struct {
-			__s32 uid;
-			__s32 gid;
+			__le32 uid;
+			__le32 gid;
 		} chown;
 		struct {
-			__u32 mode;
-			__u32 rdev;
+			__le32 mode;
+			__le32 rdev;
 		} mknod;
 		struct {
-			__u32 mode;
+			__le32 mode;
 		} mkdir;
 		struct {
-			__u32 flags;
-			__u32 mode;
+			__le32 flags;
+			__le32 mode;
 		} open;
 		struct {
-			__s64 length;
+			__le64 length;
 		} truncate;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
@@ -469,11 +469,11 @@ struct ceph_mds_request_head {
 /* client reply */
 struct ceph_mds_reply_head {
 	ceph_tid_t tid;
-	__u32 op;
-	__s32 result;
-	__u32 file_caps;
-	__u32 file_caps_seq;
-	__u64 mdsmap_epoch;
+	__le32 op;
+	__le32 result;
+	__le32 file_caps;
+	__le32 file_caps_seq;
+	__le32 mdsmap_epoch;
 } __attribute__ ((packed));
 
 struct ceph_frag_tree_head {

@@ -338,7 +338,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     // be careful with size, mtime, atime
     if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
       if ((issued & CEPH_CAP_EXCL) == 0) {
-	if (st->size > in->inode.size)
+	if ((uint64_t)st->size > in->inode.size)
 	  in->inode.size = st->size;
 	if (st->mtime > in->inode.mtime) 
 	  in->inode.mtime = st->mtime;
@@ -1960,7 +1960,7 @@ int Client::_mkdir(const filepath &path, mode_t mode, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKDIR, messenger->get_myinst());
   req->set_filepath(path);
-  req->head.args.mkdir.mode = mode;
+  req->head.args.mkdir.mode = cpu_to_le32(mode);
  
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -2089,7 +2089,7 @@ int Client::_do_lstat(const filepath &path, int mask, Inode **in, int uid, int g
     *in = dn->inode;
   } else {  
     req = new MClientRequest(CEPH_MDS_OP_LSTAT, messenger->get_myinst());
-    req->head.args.stat.mask = mask;
+    req->head.args.stat.mask = cpu_to_le32(mask);
     req->set_filepath(path);
 
     MClientReply *reply = make_request(req, uid, gid, in, 0);
@@ -2212,7 +2212,7 @@ int Client::_chmod(const filepath &path, mode_t mode, bool followsym, int uid, i
   MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHMOD, followsym),
 					   messenger->get_myinst());
   req->set_filepath(path); 
-  req->head.args.chmod.mode = mode;
+  req->head.args.chmod.mode = cpu_to_le32(mode);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -2240,8 +2240,8 @@ int Client::_chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, i
   MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHOWN, followsym),
 					   messenger->get_myinst());
   req->set_filepath(path); 
-  req->head.args.chown.uid = uid;
-  req->head.args.chown.gid = gid;
+  req->head.args.chown.uid = cpu_to_le32(uid);
+  req->head.args.chown.gid = cpu_to_le32(gid);
 
   MClientReply *reply = make_request(req, cuid, cgid);
   int res = reply->get_result();
@@ -2284,7 +2284,7 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, bool fol
   req->set_filepath(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
   atime.encode_timeval(&req->head.args.utime.atime);
-  req->head.args.utime.mask = CEPH_UTIME_ATIME | CEPH_UTIME_MTIME;
+  req->head.args.utime.mask = cpu_to_le32(CEPH_UTIME_ATIME | CEPH_UTIME_MTIME);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -2314,8 +2314,8 @@ int Client::_mknod(const filepath &path, mode_t mode, dev_t rdev, int uid, int g
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKNOD, messenger->get_myinst());
   req->set_filepath(path); 
-  req->head.args.mknod.mode = mode;
-  req->head.args.mknod.rdev = rdev;
+  req->head.args.mknod.mode = cpu_to_le32(mode);
+  req->head.args.mknod.rdev = cpu_to_le32(rdev);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -2680,8 +2680,8 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
   // go
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN, messenger->get_myinst());
   req->set_filepath(path); 
-  req->head.args.open.flags = flags;
-  req->head.args.open.mode = mode;
+  req->head.args.open.flags = cpu_to_le32(flags);
+  req->head.args.open.mode = cpu_to_le32(mode);
 
   int cmode = ceph_flags_to_mode(flags);
 
@@ -2956,7 +2956,7 @@ int Client::read(int fd, char *buf, off_t size, off_t offset)
   return r;
 }
 
-int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
+int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 {
   Inode *in = f->inode;
 
@@ -3001,12 +3001,12 @@ int Client::_read(Fh *f, off_t offset, off_t size, bufferlist *bl)
       }
 
       dout(10) << "file size: " << in->inode.size << dendl;
-      if (offset > 0 && offset >= in->inode.size) {
+      if (offset > 0 && (__u64)offset >= in->inode.size) {
 	if (movepos) unlock_fh_pos(f);
 	return 0;
       }
-      if (offset + size > (off_t)in->inode.size) 
-	size = (off_t)in->inode.size - offset;
+      if ((__u64)(offset + size) > in->inode.size) 
+	size = in->inode.size - offset;
       
       if (size == 0) {
 	dout(10) << "read is size=0, returning 0" << dendl;
@@ -3107,7 +3107,7 @@ int Client::write(int fd, const char *buf, off_t size, off_t offset)
 }
 
 
-int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
+int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 {
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
@@ -3205,7 +3205,7 @@ int Client::_write(Fh *f, off_t offset, off_t size, const char *buf)
   }
     
   // assume success for now.  FIXME.
-  off_t totalwritten = size;
+  __u64 totalwritten = size;
   
   // extend file?
   if (totalwritten + offset > in->inode.size) {
@@ -3239,12 +3239,12 @@ int Client::truncate(const char *relpath, off_t length)
   return _truncate(path, length, true);
 }
 
-int Client::_truncate(const filepath &path, off_t length, bool followsym, int uid, int gid) 
+int Client::_truncate(const filepath &path, loff_t length, bool followsym, int uid, int gid) 
 {
   MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_TRUNCATE, followsym),
 					   messenger->get_myinst());
   req->set_filepath(path); 
-  req->head.args.truncate.length = length;
+  req->head.args.truncate.length = cpu_to_le64(length);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();

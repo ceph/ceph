@@ -245,7 +245,7 @@ private:
   version_t alloc_tablev;
 
   // inodes i've destroyed.
-  list< triple<inodeno_t,off_t,off_t> > truncated_inodes;
+  list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
 
   // idempotent op(s)
   list<metareqid_t> client_reqs;
@@ -286,8 +286,8 @@ private:
     alloc_tablev = tablev;
   }
 
-  void add_inode_truncate(inodeno_t ino, off_t newsize, off_t oldsize) {
-    truncated_inodes.push_back(triple<inodeno_t,off_t,off_t>(ino, newsize, oldsize));
+  void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
+    truncated_inodes.push_back(triple<inodeno_t,uint64_t,uint64_t>(ino, newsize, oldsize));
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {

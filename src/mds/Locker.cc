@@ -807,7 +807,7 @@ void Locker::check_inode_max_size(CInode *in)
   }
 
   inode_t *latest = in->get_projected_inode();
-  int64_t new_max;
+  uint64_t new_max;
   if (!in->is_any_caps())
     new_max = 0;
   else if ((latest->size << 1) >= latest->max_size)
@@ -931,7 +931,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   utime_t atime = m->get_atime();
   utime_t mtime = m->get_mtime();
   utime_t ctime = m->get_ctime();
-  off_t size = m->get_size();
+  uint64_t size = m->get_size();
 
   // atime|mtime|size?
   bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
@@ -954,7 +954,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   
   // increase or zero max_size?
   bool change_max = false;
-  int64_t new_max = latest->max_size;
+  uint64_t new_max = latest->max_size;
 
   if (in->is_auth()) {
     if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {

@@ -785,11 +785,11 @@ private:
   int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
   int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
-  int _read(Fh *fh, off_t offset, off_t size, bufferlist *bl);
-  int _write(Fh *fh, off_t offset, off_t size, const char *buf);
+  int _read(Fh *fh, __s64 offset, __u64 size, bufferlist *bl);
+  int _write(Fh *fh, __s64 offset, __u64 size, const char *buf);
   int _flush(Fh *fh);
-  int _truncate(const filepath &path, off_t length, bool followsym, int uid=-1, int gid=-1);
-  int _ftruncate(Fh *fh, off_t length);
+  int _truncate(const filepath &path, loff_t length, bool followsym, int uid=-1, int gid=-1);
+  int _ftruncate(Fh *fh, loff_t length);
   int _fsync(Fh *fh, bool syncdataonly);
   int _statfs(struct statvfs *stbuf);
 
