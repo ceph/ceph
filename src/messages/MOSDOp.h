@@ -96,8 +96,8 @@ public:
   void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
   const ceph_osd_peer_stat& get_peer_stat() { return head.peer_stat; }
 
-  void inc_shed_count() { head.shed_count++; }
-  int get_shed_count() { return head.shed_count; }
+  void inc_shed_count() { head.shed_count = cpu_to_le32(get_shed_count() + 1); }
+  int get_shed_count() { return le32_to_cpu(head.shed_count); }
   
 
 

@@ -124,15 +124,15 @@ struct InodeStat {
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
-    mode = e.mode;
-    uid = e.uid;
-    gid = e.gid;
-    nlink = e.nlink;
-    size = e.size;
-    max_size = e.max_size;
-    rdev = e.rdev;
+    mode = le32_to_cpu(e.mode);
+    uid = le32_to_cpu(e.uid);
+    gid = le32_to_cpu(e.gid);
+    nlink = le32_to_cpu(e.nlink);
+    size = le64_to_cpu(e.size);
+    max_size = le64_to_cpu(e.max_size);
+    rdev = le32_to_cpu(e.rdev);
 
-    int n = e.fragtree.nsplits;
+    int n = le32_to_cpu(e.fragtree.nsplits);
     while (n) {
       __u32 s, by;
       ::_decode_simple(s, p);
@@ -155,14 +155,14 @@ struct InodeStat {
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
     in->inode.atime.encode_timeval(&e.atime);
-    e.mode = in->inode.mode;
-    e.uid = in->inode.uid;
-    e.gid = in->inode.gid;
-    e.nlink = in->inode.nlink;
-    e.size = in->inode.size;
-    e.max_size = in->inode.max_size;
-    e.rdev = in->inode.rdev;
-    e.fragtree.nsplits = in->dirfragtree._splits.size();
+    e.mode = cpu_to_le32(in->inode.mode);
+    e.uid = cpu_to_le32(in->inode.uid);
+    e.gid = cpu_to_le32(in->inode.gid);
+    e.nlink = cpu_to_le32(in->inode.nlink);
+    e.size = cpu_to_le64(in->inode.size);
+    e.max_size = cpu_to_le64(in->inode.max_size);
+    e.rdev = cpu_to_le32(in->inode.rdev);
+    e.fragtree.nsplits = cpu_to_le32(in->dirfragtree._splits.size());
     ::_encode_simple(e, bl);
     for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
 	 p != in->dirfragtree._splits.end();

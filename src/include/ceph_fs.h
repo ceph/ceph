@@ -119,11 +119,11 @@ struct ceph_file_layout {
 #define ceph_file_layout_period(l) (l.fl_object_size * l.fl_stripe_count)
 
 /*
- * placement group
+ * placement group.
+ * we encode this into one __le64.
  */
 #define CEPH_PG_TYPE_REP   1
 #define CEPH_PG_TYPE_RAID4 2
-
 union ceph_pg {
 	__u64 pg64;
 	struct {
@@ -477,8 +477,8 @@ struct ceph_mds_reply_head {
 } __attribute__ ((packed));
 
 struct ceph_frag_tree_head {
-	__u32 nsplits;
-	__s32 splits[0];
+	__le32 nsplits;
+	__le32 splits[0];
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
@@ -486,10 +486,10 @@ struct ceph_mds_reply_inode {
 	__le64 version;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
-	__u32 mode, uid, gid;
-	__u32 nlink;
-	__u64 size, max_size;
-	__u32 rdev;
+	__le32 mode, uid, gid;
+	__le32 nlink;
+	__le64 size, max_size;
+	__le32 rdev;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));
 /* followed by frag array, then symlink string */
@@ -501,11 +501,11 @@ struct ceph_mds_reply_lease {
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_dirfrag {
-	__u32 frag;
-	__s32 auth;
+	__le32 frag;
+	__le32 auth;
 	__u8 is_rep;
-	__u32 ndist;
-	__u32 dist[];
+	__le32 ndist;
+	__le32 dist[];
 } __attribute__ ((packed));
 
 /* file access modes */
@@ -674,7 +674,7 @@ struct ceph_osd_request_head {
 	struct ceph_eversion      reassert_version;
 
 	/* semi-hack, fix me */
-	__u32                     shed_count;
+	__le32                    shed_count;
 	struct ceph_osd_peer_stat peer_stat;
 } __attribute__ ((packed));
 
