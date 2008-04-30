@@ -165,26 +165,14 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
     mds->sessionmap.touch_session(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->stamp), session->inst);
-    break;
-
-  case CEPH_SESSION_REQUEST_RESUME:
-    if (!session) {
-      dout(10) << "dne, replying with close" << dendl;
-      mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());      
-      return;
+    if (session->is_stale()) {
+      mds->sessionmap.set_state(session, Session::STATE_OPEN);
+      mds->locker->resume_stale_caps(session);
     }
-    if (!session->is_stale()) {
-      dout(10) << "hmm, got request_resume on non-stale session for " << session->inst << dendl;
-      assert(0);
-      return;
-    }
-    mds->sessionmap.set_state(session, Session::STATE_OPEN);
-    mds->sessionmap.touch_session(session);
-    mds->locker->resume_stale_caps(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RESUME, m->stamp), session->inst);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->stamp), 
+				 session->inst);
     break;
-
+    
   case CEPH_SESSION_REQUEST_CLOSE:
     if (!session || session->is_closing()) {
       dout(10) << "already closing|dne, dropping this req" << dendl;
@@ -320,8 +308,10 @@ void Server::find_idle_sessions()
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
+    /* pointless
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()),
 				 session->inst);
+    */
   }
 
   // dead
