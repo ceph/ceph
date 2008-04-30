@@ -865,9 +865,10 @@ ack:
 			}
 		}
 
-		/* send_cap drops i_lock */
+		/* send_cap drops i_lock AND s_mutex */
 		removed_last = __ceph_mdsc_send_cap(mdsc, session, cap,
 						    used, wanted, !is_delayed);
+		session = 0;
 		if (removed_last)
 			goto out;
 		goto retry;

@@ -1524,6 +1524,8 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 		     keep, wanted, seq,
 		     size, max_size, &mtime, &atime, session->s_mds);
 	
+	mutex_unlock(&session->s_mutex);
+
 	if (wanted == 0) {
 		if (removed_last && cancel_work)
 			cancel_delayed_work_sync(&ci->i_cap_dwork);
@@ -1551,7 +1553,7 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		}
 		used = __ceph_caps_used(cap->ci);
 		wanted = __ceph_caps_wanted(cap->ci);
-		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1);
+		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 0);
 	}
 }
 
