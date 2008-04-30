@@ -1157,7 +1157,7 @@ void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_mds_cap_reconnect *rec;
 	int count;
 
-	dout(10, "send_mds_reconnect mds%d\n", mds);
+	dout(1, "reconnect to recovering mds%d\n", mds);
 
 	/* find session */
 	session = __get_session(mdsc, mds);
@@ -1205,9 +1205,6 @@ retry:
 	list_for_each(cp, &session->s_caps) {
 		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
 		ci = cap->ci;
-		dentry = d_find_alias(&ci->vfs_inode);
-		if (dentry == NULL) /* fixme */
-			continue;
 		ceph_decode_need(&p, end, sizeof(u64) +
 				 sizeof(struct ceph_mds_cap_reconnect),
 				 needmore);
@@ -1225,10 +1222,17 @@ retry:
 		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
 		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
 		spin_unlock(&ci->vfs_inode.i_lock);
-		path = ceph_build_dentry_path(dentry, &pathlen);
-		if (IS_ERR(path)) {
-			err = PTR_ERR(path);
-			BUG_ON(err);
+
+		dentry = d_find_alias(&ci->vfs_inode);
+		if (dentry) {
+			path = ceph_build_dentry_path(dentry, &pathlen);
+			if (IS_ERR(path)) {
+				err = PTR_ERR(path);
+				BUG_ON(err);
+			}
+		} else {
+			path = 0;
+			pathlen = 0;
 		}
 		ceph_decode_need(&p, end, pathlen+4, needmore);
 		ceph_encode_string(&p, end, path, pathlen);
