@@ -267,10 +267,6 @@ static void ceph_fault(struct ceph_connection *con)
 	dout(10, "fault %p state %lu to peer %u.%u.%u.%u:%u\n",
 	     con, con->state, IPQUADPORT(con->peer_addr.ipaddr));
 
-	ceph_debug_console = 1;
-	ceph_debug_msgr = 40;
-	ceph_debug = 40;
-
 	/* PW if never get here remove */
 	if (test_bit(WAIT, &con->state)) {
 		derr(30, "fault socket close during WAIT state\n");
