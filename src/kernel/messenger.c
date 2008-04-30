@@ -637,7 +637,7 @@ more_kvec:
 	spin_lock(&con->out_queue_lock);
 	if (!list_empty(&con->out_queue)) {
 		prepare_write_message(con);
-	} else if (con->in_seq > con->in_seq_acked + 1) {  /* only if > 1 */
+	} else if (con->in_seq > con->in_seq_acked) {
 		prepare_write_ack(con);
 	} else {
 		clear_bit(WRITE_PENDING, &con->state);
