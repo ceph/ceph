@@ -323,7 +323,10 @@ private:
   }
 
   void apply_incremental(Incremental &inc) {
-    assert(ceph_fsid_equal(&inc.fsid, &fsid) || inc.epoch == 1);
+    if (inc.epoch == 1)
+      fsid = inc.fsid;
+    else
+      assert(ceph_fsid_equal(&inc.fsid, &fsid));
     assert(inc.epoch == epoch+1);
     epoch++;
     ctime = inc.ctime;

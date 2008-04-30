@@ -35,8 +35,8 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
 }
 
 #define WRITE_RAW_ENCODER(type)						\
-  inline void encode(type v, bufferlist& bl) { encode_raw(v, bl); }	\
-  inline void decode(type v, bufferlist::iterator& p) { decode_raw(v, p); }
+  inline void encode(const type &v, bufferlist& bl) { encode_raw(v, bl); } \
+  inline void decode(type &v, bufferlist::iterator& p) { decode_raw(v, p); }
 
 WRITE_RAW_ENCODER(__u8)
 WRITE_RAW_ENCODER(__s8)
