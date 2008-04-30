@@ -1474,6 +1474,7 @@ int send_renewcaps(struct ceph_mds_client *mdsc,
 
 /*
  * called with i_lock, then drops it.
+ * caller should hold s_mutex.
  * 
  * returns true if we removed the last cap on this inode.
  */

@@ -850,26 +850,26 @@ retry:
 ack:
 		/* take s_mutex, one way or another */
 		if (session && session != cap->session) {
-			dout(30, "oops, wrong session mutex\n");
+			dout(30, "oops, wrong session %p mutex\n");
 			mutex_unlock(&session->s_mutex);
 			session = 0;
 		}
 		if (!session) {
 			session = cap->session;
 			if (mutex_trylock(&session->s_mutex) == 0) {
-				dout(10, "inverting session/inode locking\n");
+				dout(10, "inverting session/ino locks on %p\n",
+				     session);
 				spin_unlock(&inode->i_lock);
 				mutex_lock(&session->s_mutex);
 				goto retry;
 			}
 		}
 
-		/* ok */
+		/* send_cap drops i_lock */
 		removed_last = __ceph_mdsc_send_cap(mdsc, session, cap,
 						    used, wanted, !is_delayed);
 		if (removed_last)
 			goto out;
-		mutex_unlock(&session->s_mutex);
 		goto retry;
 	}
 
