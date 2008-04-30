@@ -113,6 +113,7 @@ struct ceph_connection {
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
+	int out_more;        /* there is more data after this kvec */
 	struct ceph_msg_footer out_footer;
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;

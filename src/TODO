@@ -62,7 +62,6 @@ pgmon
 - watch osd utilization; adjust overload in cluster map
 
 mon
-- use standby mds on mds failure.. not just mds boot
 - paxos need to clean up old states.
 - some sort of tester for PaxosService...
 - osdmon needs to lower-bound old osdmap versions it keeps around?

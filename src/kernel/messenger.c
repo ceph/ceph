@@ -334,7 +334,8 @@ static int write_partial_kvec(struct ceph_connection *con)
 	dout(10, "write_partial_kvec have %d left\n", con->out_kvec_bytes);
 	while (con->out_kvec_bytes > 0) {
 		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur,
-				       con->out_kvec_left, con->out_kvec_bytes);
+				       con->out_kvec_left, con->out_kvec_bytes,
+				       con->out_more);
 		if (ret <= 0)
 			goto out;
 		con->out_kvec_bytes -= ret;
@@ -375,6 +376,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
 		struct page *page;
 		void *kaddr;
+
 		mutex_lock(&msg->page_mutex);
 		if (msg->pages) {
 			page = msg->pages[con->out_msg_pos.page];
@@ -386,7 +388,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
-		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len);
+		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
 		if (msg->pages)
 			kunmap(page);
 		mutex_unlock(&msg->page_mutex);
@@ -410,6 +412,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	con->out_kvec_left = 1;
 	con->out_kvec_cur = con->out_kvec;
 	con->out_msg = 0;
+	con->out_more = 0;  /* end of message */
 	
 	ret = 1;
 out:
@@ -459,6 +462,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_kvec_left = v;
 	con->out_kvec_bytes += 1 + sizeof(m->hdr) + m->front.iov_len;
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = le32_to_cpu(m->hdr.data_len);  /* data? */
 
 	/* pages */
 	con->out_msg_pos.page = 0;
@@ -485,6 +489,7 @@ static void prepare_write_ack(struct ceph_connection *con)
 	con->out_kvec_left = 2;
 	con->out_kvec_bytes = 1 + 4;
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 1;  /* more will follow.. eventually.. */
 	set_bit(WRITE_PENDING, &con->state);
 }
 
@@ -504,6 +509,7 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 	con->out_kvec_left = 2;
 	con->out_kvec_bytes = sizeof(msgr->inst.addr) + 4;
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
@@ -516,6 +522,7 @@ static void prepare_write_connect_retry(struct ceph_messenger *msgr,
 	con->out_kvec_left = 1;
 	con->out_kvec_bytes = 4;
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
@@ -527,6 +534,7 @@ static void prepare_write_accept_announce(struct ceph_messenger *msgr,
 	con->out_kvec_left = 1;
 	con->out_kvec_bytes = sizeof(msgr->inst.addr);
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
@@ -537,6 +545,7 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 	con->out_kvec_left = 1;
 	con->out_kvec_bytes = 1;
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
 }
 
@@ -550,6 +559,7 @@ static void prepare_write_accept_retry(struct ceph_connection *con, char *ptag)
 	con->out_kvec_left = 2;
 	con->out_kvec_bytes = 1 + 4;
 	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
 }
 

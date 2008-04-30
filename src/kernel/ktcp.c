@@ -285,12 +285,17 @@ int ceph_tcp_recvmsg(struct socket *sock, void *buf, size_t len)
  * Send a message this may return after partial send
  */
 int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov,
-		     size_t kvlen, size_t len)
+		     size_t kvlen, size_t len, int more)
 {
 	struct msghdr msg = {.msg_flags = 0};
 	int rlen = 0;
 
-	msg.msg_flags |=  MSG_DONTWAIT | MSG_NOSIGNAL;
+	msg.msg_flags |= MSG_DONTWAIT | MSG_NOSIGNAL;
+	if (more)
+		msg.msg_flags |= MSG_MORE;
+	else
+		msg.msg_flags |= MSG_EOR;  /* superfluous, but what the hell */
+
 	/*printk(KERN_DEBUG "before sendmsg %d\n", len);*/
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
 	/*printk(KERN_DEBUG "after sendmsg %d\n", rlen);*/
