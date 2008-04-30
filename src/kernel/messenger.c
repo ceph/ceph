@@ -920,12 +920,9 @@ static void reset_connection(struct ceph_connection *con)
 
 	/* reset connection, out_queue, msg_ and connect_seq */
 	/* discard existing out_queue and msg_seq */
-	while (!list_empty(&con->out_queue)) {
-		struct ceph_msg *m;
-		m = list_entry(con->out_queue.next, struct ceph_msg, list_head);
-		list_del_init(&m->list_head);
-		ceph_msg_put(m);
-	}
+	ceph_msg_put_list(&con->out_queue);
+	ceph_msg_put_list(&con->out_sent);
+
 	con->connect_seq = 0;
 	con->out_seq = 0;
 	con->out_msg = 0;
