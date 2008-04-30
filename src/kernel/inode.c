@@ -850,7 +850,7 @@ retry:
 ack:
 		/* take s_mutex, one way or another */
 		if (session && session != cap->session) {
-			dout(30, "oops, wrong session %p mutex\n");
+			dout(30, "oops, wrong session %p mutex\n", session);
 			mutex_unlock(&session->s_mutex);
 			session = 0;
 		}
