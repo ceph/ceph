@@ -425,6 +425,7 @@ static inline void ceph_init_dentry(struct dentry *dentry) {
 extern const struct export_operations ceph_export_ops;
 
 /* proc.c */
-extern void ceph_fs_proc_init(void);
+extern void ceph_proc_init(void);
+extern void ceph_proc_cleanup(void);
 
 #endif /* _FS_CEPH_SUPER_H */

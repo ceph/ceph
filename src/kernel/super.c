@@ -921,8 +921,7 @@ static int __init init_ceph(void)
 	if (!ceph_kobj)
 		return -ENOMEM;
 #endif
-	
-	ceph_fs_proc_init();
+	ceph_proc_init();
 
 	ret = init_inodecache();
 	if (ret)
@@ -942,6 +941,7 @@ static void __exit exit_ceph(void)
 	kobject_put(ceph_kobj);
 	ceph_kobj = 0;
 #endif
+	ceph_proc_cleanup();
 
 	unregister_filesystem(&ceph_fs_type);
 	destroy_inodecache();

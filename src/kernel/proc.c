@@ -58,7 +58,7 @@ static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 
 static struct proc_dir_entry *proc_fs_ceph;
 
-void ceph_fs_proc_init(void)
+void ceph_proc_init(void)
 {
 	struct proc_dir_entry *pde;
 
@@ -84,4 +84,12 @@ void ceph_fs_proc_init(void)
 	if (pde)
 		pde->write_proc = ceph_debug_level_write;
 
+}
+
+void ceph_proc_cleanup()
+{
+	remove_proc_entry("debug", proc_fs_ceph);
+	remove_proc_entry("debug_msgr", proc_fs_ceph);
+	remove_proc_entry("debug_console", proc_fs_ceph);
+	remove_proc_entry("ceph", proc_root_fs);
 }
