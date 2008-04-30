@@ -211,13 +211,14 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
 	struct ceph_osd_request *req;
-	ceph_tid_t tid;
+	u64 tid;
 
-	dout(10, "handle_reply %p tid %llu\n", msg, le64_to_cpu(rhead->tid));
+	if (msg->front.iov_len != sizeof(*rhead))
+		goto bad;
+	tid = le64_to_cpu(rhead->tid);
+	dout(10, "handle_reply %p tid %llu\n", msg, tid);
 
 	/* lookup */
-	tid = le64_to_cpu(rhead->tid);
-
 	spin_lock(&osdc->request_lock);
 	req = radix_tree_lookup(&osdc->request_tree, tid);
 	if (req == NULL) {
@@ -240,6 +241,10 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	spin_unlock(&osdc->request_lock);
 	complete(&req->r_completion);
 	put_request(req);
+	return;
+
+bad:
+	derr(0, "got corrupt osd_op_reply\n");
 }
 
 
