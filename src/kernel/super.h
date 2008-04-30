@@ -343,19 +343,8 @@ static inline int calc_pages_for(u64 off, u64 len)
 }
 
 
-/* client.c */
-extern spinlock_t ceph_client_spinlock;
-extern int ceph_num_clients;
-
-extern struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
-					      struct super_block *sb);
-extern void ceph_destroy_client(struct ceph_client *cl);
-extern int ceph_mount(struct ceph_client *client,
-		      struct ceph_mount_args *args,
-		      struct vfsmount *mnt);
-extern void ceph_umount_start(struct ceph_client *cl);
+/* super.c */
 extern const char *ceph_msg_type_name(int type);
-
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;

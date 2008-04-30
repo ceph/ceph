@@ -311,7 +311,6 @@ noinst_HEADERS = \
 	kernel/crush/hash.h\
 	kernel/Makefile\
 	kernel/addr.c\
-	kernel/client.c\
 	kernel/decode.h\
 	kernel/dir.c\
 	kernel/export.c\
