@@ -6,6 +6,7 @@ code cleanup
 - addr=?
 
 userspace client
+- per-mds session struct.. and put the cap_ttl in there!
 - move the size check(s) on read from _read() into FileCache
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
@@ -32,7 +33,6 @@ kernel client
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
 - nfs exporting
  - fill_trace needs to use d_splice_alias
  - lookup needs to return last_dentry if it gets swapped by fill_trace/d_splice_alias
