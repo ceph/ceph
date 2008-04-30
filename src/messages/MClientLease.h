@@ -34,22 +34,22 @@ struct MClientLease : public Message {
   string dname;
   
   int get_action() { return h.action; }
-  int get_mask() { return le16_to_cpu(h.mask); }
-  inodeno_t get_ino() { return inodeno_t(le64_to_cpu(h.ino)); }
+  int get_mask() { return h.mask; }
+  inodeno_t get_ino() { return inodeno_t(h.ino); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(int ac, int m, __u64 i) :
     Message(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
-    h.mask = cpu_to_le16(m);
-    h.ino = cpu_to_le64(i);
+    h.mask = m;
+    h.ino = i;
   }
   MClientLease(int ac, int m, __u64 i, const string& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;
-    h.mask = cpu_to_le16(m);
-    h.ino = cpu_to_le64(i);
+    h.mask = m;
+    h.ino = i;
   }
 
   const char *get_type_name() { return "client_lease"; }

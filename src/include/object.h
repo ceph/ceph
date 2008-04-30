@@ -41,15 +41,15 @@ struct object_t {
 
   // IMPORTANT: make this match struct ceph_object ****
   object_t(const ceph_object& co) {
-    ino = le64_to_cpu(co.ino);
-    bno = le32_to_cpu(co.bno);
-    rev = le32_to_cpu(co.rev);
+    ino = co.ino;
+    bno = co.bno;
+    rev = co.rev;
   }  
   operator ceph_object() {
     ceph_object oid;
-    oid.ino = cpu_to_le64(ino);
-    oid.bno = cpu_to_le32(bno);
-    oid.rev = cpu_to_le32(rev);
+    oid.ino = ino;
+    oid.bno = bno;
+    oid.rev = rev;
     return oid;
   }
 } __attribute__ ((packed));

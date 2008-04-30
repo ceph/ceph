@@ -130,7 +130,7 @@ public:
 
     Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), 
 			       new_pg_num(0), new_pgp_num(0), new_lpg_num(0), new_lpgp_num(0) {
-      fsid.major = fsid.minor = cpu_to_le64(0);
+      fsid.major = fsid.minor = 0;
     }
   };
 
@@ -180,7 +180,7 @@ private:
 	     pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
 	     last_pg_change(0),
 	     max_osd(0) { 
-    fsid.major = fsid.minor = cpu_to_le64(0);
+    fsid.major = fsid.minor = 0;
     calc_pg_masks();
   }
 
@@ -479,8 +479,8 @@ private:
     // construct object layout
     pg_t pgid = pg_t(pg_type, pg_size, ps, pg_pool, preferred);
     ceph_object_layout layout;
-    layout.ol_pgid = cpu_to_le64(pgid.u.pg64);
-    layout.ol_stripe_unit = cpu_to_le32(object_stripe_unit);
+    layout.ol_pgid = pgid.u.pg64;
+    layout.ol_stripe_unit = object_stripe_unit;
     return layout;
   }
 

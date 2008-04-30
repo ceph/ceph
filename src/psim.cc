@@ -31,7 +31,7 @@ int main()
       //cout << "oid " << oid << std::endl;
       ceph_object_layout l = osdmap.file_to_object_layout(oid, g_default_file_layout);
       vector<int> osds;
-      osdmap.pg_to_osds(pg_t(le64_to_cpu(l.ol_pgid)), osds);
+      osdmap.pg_to_osds(pg_t(l.ol_pgid), osds);
       for (unsigned i=0; i<osds.size(); i++) {
 	//cout << " rep " << i << " on " << osds[i] << std::endl;
 	count[osds[i]]++;

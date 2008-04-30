@@ -118,21 +118,21 @@ struct InodeStat {
   void _decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
     ::_decode_simple(e, p);
-    ino = le64_to_cpu(e.ino);
-    version = le64_to_cpu(e.version);
+    ino = inodeno_t(e.ino);
+    version = e.version;
     layout = e.layout;
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
-    mode = le32_to_cpu(e.mode);
-    uid = le32_to_cpu(e.uid);
-    gid = le32_to_cpu(e.gid);
-    nlink = le32_to_cpu(e.nlink);
-    size = le64_to_cpu(e.size);
-    max_size = le64_to_cpu(e.max_size);
-    rdev = le32_to_cpu(e.rdev);
+    mode = e.mode;
+    uid = e.uid;
+    gid = e.gid;
+    nlink = e.nlink;
+    size = e.size;
+    max_size = e.max_size;
+    rdev = e.rdev;
 
-    int n = le32_to_cpu(e.fragtree.nsplits);
+    int n = e.fragtree.nsplits;
     while (n) {
       __u32 s, by;
       ::_decode_simple(s, p);
@@ -149,20 +149,20 @@ struct InodeStat {
      */
     struct ceph_mds_reply_inode e;
     memset(&e, 0, sizeof(e));
-    e.ino = cpu_to_le64(in->inode.ino);
-    e.version = cpu_to_le64(in->inode.version);
+    e.ino = in->inode.ino;
+    e.version = in->inode.version;
     e.layout = in->inode.layout;
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
     in->inode.atime.encode_timeval(&e.atime);
-    e.mode = cpu_to_le32(in->inode.mode);
-    e.uid = cpu_to_le32(in->inode.uid);
-    e.gid = cpu_to_le32(in->inode.gid);
-    e.nlink = cpu_to_le32(in->inode.nlink);
-    e.size = cpu_to_le64(in->inode.size);
-    e.max_size = cpu_to_le64(in->inode.max_size);
-    e.rdev = cpu_to_le32(in->inode.rdev);
-    e.fragtree.nsplits = cpu_to_le32(in->dirfragtree._splits.size());
+    e.mode = in->inode.mode;
+    e.uid = in->inode.uid;
+    e.gid = in->inode.gid;
+    e.nlink = in->inode.nlink;
+    e.size = in->inode.size;
+    e.max_size = in->inode.max_size;
+    e.rdev = in->inode.rdev;
+    e.fragtree.nsplits = in->dirfragtree._splits.size();
     ::_encode_simple(e, bl);
     for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
 	 p != in->dirfragtree._splits.end();
@@ -183,34 +183,34 @@ class MClientReply : public Message {
   bufferlist dir_bl;
 
  public:
-  long get_tid() { return le64_to_cpu(st.tid); }
-  int get_op() { return le32_to_cpu(st.op); }
+  long get_tid() { return st.tid; }
+  int get_op() { return st.op; }
 
-  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = cpu_to_le32(e); }
-  epoch_t get_mdsmap_epoch() { return le32_to_cpu(st.mdsmap_epoch); }
+  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
+  epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
 
-  int get_result() { return (__s32)(le32_to_cpu(st.result)); }
+  int get_result() { return (__s32)(__u32)st.result; }
 
-  unsigned get_file_caps() { return le32_to_cpu(st.file_caps); }
-  unsigned get_file_caps_seq() { return le32_to_cpu(st.file_caps_seq); }
+  unsigned get_file_caps() { return st.file_caps; }
+  unsigned get_file_caps_seq() { return st.file_caps_seq; }
   //uint64_t get_file_data_version() { return st.file_data_version; }
   
-  void set_result(int r) { st.result = cpu_to_le32(r); }
-  void set_file_caps(unsigned char c) { st.file_caps = cpu_to_le32(c); }
-  void set_file_caps_seq(long s) { st.file_caps_seq = cpu_to_le32(s); }
+  void set_result(int r) { st.result = r; }
+  void set_file_caps(unsigned char c) { st.file_caps = c; }
+  void set_file_caps_seq(long s) { st.file_caps_seq = s; }
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
   MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.tid = cpu_to_le64(req->get_tid());
-    this->st.op = cpu_to_le32(req->get_op());
-    this->st.result = cpu_to_le32(result);
+    this->st.tid = req->get_tid();
+    this->st.op = req->get_op();
+    this->st.result = result;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "client_reply(" << env.dst.name << "." << le64_to_cpu(st.tid);
+    o << "client_reply(" << env.dst.name << "." << st.tid;
     o << " = " << get_result();
     if (get_result() <= 0)
       o << " " << strerror(-get_result());

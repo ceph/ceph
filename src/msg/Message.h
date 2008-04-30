@@ -125,8 +125,8 @@ protected:
 public:
   Message() { };
   Message(int t) {
-    env.type = cpu_to_le32(t);
-    env.data_off = cpu_to_le32(0);
+    env.type = t;
+    env.data_off = 0;
   }
   virtual ~Message() { }
 
@@ -150,11 +150,11 @@ public:
   // ENVELOPE ----
 
   // type
-  int get_type() { return le32_to_cpu(env.type); }
-  void set_type(int t) { env.type = cpu_to_le32(t); }
+  int get_type() { return env.type; }
+  void set_type(int t) { env.type = t; }
 
-  unsigned get_seq() { return le64_to_cpu(env.seq); }
-  void set_seq(unsigned s) { env.seq = cpu_to_le64(s); }
+  unsigned get_seq() { return env.seq; }
+  void set_seq(unsigned s) { env.seq = s; }
 
   // source/dest
   entity_inst_t get_dest_inst() { return entity_inst_t(env.dst); }

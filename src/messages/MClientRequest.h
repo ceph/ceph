@@ -84,53 +84,53 @@ public:
   MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
   MClientRequest(int op, entity_inst_t ci) : Message(CEPH_MSG_CLIENT_REQUEST) {
     memset(&head, 0, sizeof(head));
-    this->head.op = cpu_to_le32(op);
+    this->head.op = op;
     this->head.client_inst.name = ci.name;
     this->head.client_inst.addr = ci.addr;
   }
 
-  void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = cpu_to_le32(e); }
-  epoch_t get_mdsmap_epoch() { return le32_to_cpu(head.mdsmap_epoch); }
+  void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
+  epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(head.client_inst.name, le64_to_cpu(head.tid)); 
+    return metareqid_t(head.client_inst.name, head.tid); 
   }
 
   bool open_file_mode_is_readonly() {
-    return file_mode_is_readonly(ceph_flags_to_mode(le32_to_cpu(head.args.open.flags)));
+    return file_mode_is_readonly(ceph_flags_to_mode(head.args.open.flags));
   }
   bool is_idempotent() {
-    if (le32_to_cpu(head.op) == CEPH_MDS_OP_OPEN) 
+    if (head.op == CEPH_MDS_OP_OPEN) 
       return open_file_mode_is_readonly();
-    return (le32_to_cpu(head.op) & CEPH_MDS_OP_WRITE) == 0;
+    return (head.op & CEPH_MDS_OP_WRITE) == 0;
   }
   bool auth_is_best() {
     if (!is_idempotent()) return true;
-    if (le32_to_cpu(head.op) == CEPH_MDS_OP_READDIR) return true;
+    if (head.op == CEPH_MDS_OP_READDIR) return true;
     return false;    
   }
   bool follow_trailing_symlink() {
-    return le32_to_cpu(head.op) & CEPH_MDS_OP_FOLLOW_LINK;
+    return head.op & CEPH_MDS_OP_FOLLOW_LINK;
   }
 
 
 
   // normal fields
-  void set_tid(tid_t t) { head.tid = cpu_to_le64(t); }
-  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = cpu_to_le64(t); }
-  void inc_num_fwd() { head.num_fwd = cpu_to_le32(le32_to_cpu(head.num_fwd) + 1 ); }
-  void set_retry_attempt(int a) { head.retry_attempt = cpu_to_le32(a); }
+  void set_tid(tid_t t) { head.tid = t; }
+  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
+  void set_retry_attempt(int a) { head.retry_attempt = a; }
   void set_path(string& p) { path.set_path(p); }
   void set_path(const char *p) { path.set_path(p); }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_path2(string& p) { path2.set_path(p); }
   void set_path2(const char *p) { path2.set_path(p); }
   void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_caller_uid(unsigned u) { head.caller_uid = cpu_to_le32(u); }
-  void set_caller_gid(unsigned g) { head.caller_gid = cpu_to_le32(g); }
+  void set_caller_uid(unsigned u) { head.caller_uid = u; }
+  void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
-    head.mds_wants_replica_in_dirino = cpu_to_le64(dirino); }
+    head.mds_wants_replica_in_dirino = dirino; }
   
   void set_client_inst(const entity_inst_t& i) { 
     head.client_inst.name = i.name; 
@@ -140,13 +140,13 @@ public:
     return entity_inst_t(head.client_inst);
   }
   entity_name_t get_client() { return head.client_inst.name; }
-  tid_t get_tid() { return le64_to_cpu(head.tid); }
-  tid_t get_oldest_client_tid() { return le64_to_cpu(head.oldest_client_tid); }
-  int get_num_fwd() { return le32_to_cpu(head.num_fwd); }
-  int get_retry_attempt() { return le32_to_cpu(head.retry_attempt); }
-  int get_op() { return le32_to_cpu(head.op); }
-  unsigned get_caller_uid() { return le32_to_cpu(head.caller_uid); }
-  unsigned get_caller_gid() { return le32_to_cpu(head.caller_gid); }
+  tid_t get_tid() { return head.tid; }
+  tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
+  int get_num_fwd() { return head.num_fwd; }
+  int get_retry_attempt() { return head.retry_attempt; }
+  int get_op() { return head.op; }
+  unsigned get_caller_uid() { return head.caller_uid; }
+  unsigned get_caller_gid() { return head.caller_gid; }
 
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }
@@ -154,7 +154,7 @@ public:
   filepath& get_filepath2() { return path2; }
 
   inodeno_t get_mds_wants_replica_in_dirino() { 
-    return le64_to_cpu(head.mds_wants_replica_in_dirino); }
+    return inodeno_t(head.mds_wants_replica_in_dirino); }
 
   void decode_payload() {
     int off = 0;
@@ -178,8 +178,8 @@ public:
       out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
-    if (le32_to_cpu(head.retry_attempt))
-      out << " RETRY=" << le32_to_cpu(head.retry_attempt);
+    if (head.retry_attempt)
+      out << " RETRY=" << head.retry_attempt;
     out << ")";
   }
 

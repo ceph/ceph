@@ -41,11 +41,10 @@ typedef __le32 ceph_epoch_t;
 struct ceph_fsid {
 	__le64 major;
 	__le64 minor;
-};
+} __attribute__ ((packed));
 
 static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_fsid *b) {
-	return le64_to_cpu(a->major) == le64_to_cpu(b->major) &&
-		le64_to_cpu(a->minor) == le64_to_cpu(b->minor);
+	return a->major == b->major && a->minor == b->minor;
 }
 
 
@@ -65,7 +64,7 @@ struct ceph_object {
 struct ceph_timespec {
 	__le32 tv_sec;
 	__le32 tv_nsec;
-};
+} __attribute__ ((packed));
 
 /*
  * dir fragments
@@ -201,7 +200,7 @@ struct ceph_eversion {
 struct ceph_entity_name {
 	__le32 type;
 	__le32 num;
-};
+} __attribute__ ((packed));
 
 #define CEPH_ENTITY_TYPE_MON    1
 #define CEPH_ENTITY_TYPE_MDS    2
@@ -225,7 +224,7 @@ struct ceph_entity_addr {
 	__le32 erank;  /* entity's rank in process */
 	__le32 nonce;  /* unique id for process (e.g. pid) */
 	struct sockaddr_in ipaddr;
-};
+} __attribute ((packed));
 
 #define ceph_entity_addr_is_local(a,b)					\
 	(le32_to_cpu((a).nonce) == le32_to_cpu((b).nonce) &&		\
@@ -237,7 +236,7 @@ struct ceph_entity_addr {
 struct ceph_entity_inst {
 	struct ceph_entity_name name;
 	struct ceph_entity_addr addr;
-};
+} __attribute__ ((packed));
 
 
 /*
@@ -437,13 +436,13 @@ struct ceph_mds_request_head {
 	union {
 		struct {
 			__le32 mask;
-		} stat;
+		} __attribute__ ((packed)) stat;
 		struct {
 			__le32 mask;
-		} fstat;
+		} __attribute__ ((packed)) fstat;
 		struct {
 			ceph_frag_t frag;
-		} readdir;
+		} __attribute__ ((packed)) readdir;
 		struct {
 			struct ceph_timespec mtime;
 			struct ceph_timespec atime;
@@ -452,25 +451,25 @@ struct ceph_mds_request_head {
 		} __attribute__ ((packed)) utime;
 		struct {
 			__le32 mode;
-		} chmod;
+		} __attribute__ ((packed)) chmod;
 		struct {
 			__le32 uid;
 			__le32 gid;
-		} chown;
+		} __attribute__ ((packed)) chown;
 		struct {
 			__le32 mode;
 			__le32 rdev;
-		} mknod;
+		} __attribute__ ((packed)) mknod;
 		struct {
 			__le32 mode;
-		} mkdir;
+		} __attribute__ ((packed)) mkdir;
 		struct {
 			__le32 flags;
 			__le32 mode;
-		} open;
+		} __attribute__ ((packed)) open;
 		struct {
 			__le64 length;
-		} truncate;
+		} __attribute__ ((packed)) truncate;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 

@@ -7,9 +7,6 @@
 #ifndef _CEPH_BYTEORDER_H
 #define _CEPH_BYTEORDER_H
 
-// type-safe?
-#define CEPH_TYPE_SAFE_BYTEORDER
-
 static __inline__ __u16 swab16(__u16 val) 
 {
   return (val >> 8) | (val << 8);
@@ -33,50 +30,47 @@ static __inline__ __u64 swab64(__u64 val)
 	  ((val << 56)));
 }
 
-#ifdef CEPH_TYPE_SAFE_BYTEORDER
-
-struct __le64 { __u64 v; } __attribute__ ((packed));
-struct __le32 { __u32 v; } __attribute__ ((packed));
-struct __le16 { __u16 v; } __attribute__ ((packed));
-
+// mswab == maybe swab (if not LE)
 #if __BYTEORDER == __BIG_ENDIAN
-static inline __le64 cpu_to_le64(__u64 v) {  __le64 r = { swab64(v) };  return r; }
-static inline __le32 cpu_to_le32(__u32 v) {  __le32 r = { swab32(v) };  return r; }
-static inline __le16 cpu_to_le16(__u16 v) {  __le16 r = { swab16(v) };  return r; }
-static inline __u64 le64_to_cpu(__le64 v) { return swab64(v.v); }
-static inline __u32 le32_to_cpu(__le32 v) { return swab32(v.v); }
-static inline __u16 le16_to_cpu(__le16 v) { return swab16(v.v); }
+# define mswab64(a) swab64(a)
+# define mswab32(a) swab32(a)
+# define mswab16(a) swab16(a)
 #else
-static inline __le64 cpu_to_le64(__u64 v) {  __le64 r = { v };  return r; }
-static inline __le32 cpu_to_le32(__u32 v) {  __le32 r = { v };  return r; }
-static inline __le16 cpu_to_le16(__u16 v) {  __le16 r = { v };  return r; }
-static inline __u64 le64_to_cpu(__le64 v) { return v.v; }
-static inline __u32 le32_to_cpu(__le32 v) { return v.v; }
-static inline __u16 le16_to_cpu(__le16 v) { return v.v; }
+# define mswab64(a) (a)
+# define mswab32(a) (a)
+# define mswab16(a) (a)
 #endif
 
-#else
 
-typedef __u64 __le64;
-typedef __u32 __le32;
-typedef __u16 __le16;
+#define MAKE_LE_CLASS(bits)						\
+  struct __le##bits {							\
+    __u##bits v;							\
+    __le##bits &operator=(__u##bits nv) {				\
+      v = mswab##bits(nv);						\
+      return *this;							\
+    }									\
+    operator __u##bits() const { return mswab##bits(v); }		\
+  } __attribute__ ((packed));						\
+  static inline bool operator==(__le##bits a, __le##bits b) {		\
+    return a.v == b.v;							\
+  }
+  
+MAKE_LE_CLASS(64)
+MAKE_LE_CLASS(32)
+MAKE_LE_CLASS(16)
+#undef MAKE_LE_CLASS
 
-#if __BYTEORDER == __BIG_ENDIAN
-# define cpu_to_le64(x) swab64((x))
-# define le64_to_cpu(x) swab64((x))
-# define cpu_to_le32(x) swab32((x))
-# define le32_to_cpu(x) swab32((x))
-# define cpu_to_le16(x) swab16((x))
-# define le16_to_cpu(x) swab16((x))
-#else
-# define cpu_to_le64(x) ((__u64)(x))
-# define le64_to_cpu(x) ((__u64)(x))
-# define cpu_to_le32(x) ((__u32)(x))
-# define le32_to_cpu(x) ((__u32)(x))
-# define cpu_to_le16(x) ((__u16)(x))
-# define le16_to_cpu(x) ((__u16)(x))
-#endif
+#define init_le64(x) { mswab64(x) }
+#define init_le32(x) { mswab32(x) }
+#define init_le16(x) { mswab16(x) }
 
-#endif
+  /*
+#define cpu_to_le64(x) (x)
+#define cpu_to_le32(x) (x)
+#define cpu_to_le16(x) (x)
+  */
+#define le64_to_cpu(x) ((__u64)x)
+#define le32_to_cpu(x) ((__u32)x)
+#define le16_to_cpu(x) ((__u16)x)
 
 #endif

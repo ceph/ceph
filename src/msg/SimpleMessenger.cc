@@ -1586,11 +1586,11 @@ Message *Rank::Pipe::read_message()
   if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
     return 0;
   
-  dout(20) << "reader got envelope type=" << le32_to_cpu(env.type)
+  dout(20) << "reader got envelope type=" << env.type
            << " src " << env.src << " dst " << env.dst
-           << " front=" << le32_to_cpu(env.front_len)
-	   << " data=" << le32_to_cpu(env.data_len)
-	   << " off " << le32_to_cpu(env.data_off)
+           << " front=" << env.front_len
+	   << " data=" << env.data_len
+	   << " off " << env.data_off
            << dendl;
   
   if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
@@ -1601,7 +1601,7 @@ Message *Rank::Pipe::read_message()
   // read front
   bufferlist front;
   bufferptr bp;
-  int front_len = le32_to_cpu(env.front_len);
+  int front_len = env.front_len;
   if (front_len) {
     bp = buffer::create(front_len);
     if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
@@ -1658,7 +1658,7 @@ Message *Rank::Pipe::read_message()
 	      << " byte message from " << env.src << ".. ABORTED" << dendl;
       // MEH FIXME 
       Message *m = new MGenericMessage(CEPH_MSG_PING);
-      env.type = cpu_to_le32(CEPH_MSG_PING);
+      env.type = CEPH_MSG_PING;
       m->set_env(env);
       return m;
     }
@@ -1744,8 +1744,8 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
 			      bufferlist &payload, bufferlist &data)
 {
   // get envelope, buffers
-  env->front_len = cpu_to_le32(payload.length());
-  env->data_len = cpu_to_le32(data.length());
+  env->front_len = payload.length();
+  env->data_len = data.length();
 
   bufferlist blist;
   blist.claim(payload);

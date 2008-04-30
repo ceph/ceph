@@ -85,48 +85,48 @@ int _num_threads = 0;
 
 // file layouts
 struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: cpu_to_le32(1<<22),
- fl_stripe_count: cpu_to_le32(1),
- fl_object_size: cpu_to_le32(1<<22),
- fl_cas_hash: cpu_to_le32(0),
- fl_object_stripe_unit: cpu_to_le32(0),
- fl_pg_preferred: cpu_to_le32(-1),
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
 
 struct ceph_file_layout g_default_mds_dir_layout = {
- fl_stripe_unit: cpu_to_le32(1<<22),
- fl_stripe_count: cpu_to_le32(1),
- fl_object_size: cpu_to_le32(1<<22),
- fl_cas_hash: cpu_to_le32(0),
- fl_object_stripe_unit: cpu_to_le32(0),
- fl_pg_preferred: cpu_to_le32(-1),
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
 
 struct ceph_file_layout g_default_mds_log_layout = {
- fl_stripe_unit: cpu_to_le32(1<<20),
- fl_stripe_count: cpu_to_le32(1),
- fl_object_size: cpu_to_le32(1<<20),
- fl_cas_hash: cpu_to_le32(0),
- fl_object_stripe_unit: cpu_to_le32(0),
- fl_pg_preferred: cpu_to_le32(-1),
+ fl_stripe_unit: init_le32(1<<20),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<20),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
 
 struct ceph_file_layout g_default_mds_anchortable_layout = {
- fl_stripe_unit: cpu_to_le32(1<<20),
- fl_stripe_count: cpu_to_le32(1),
- fl_object_size: cpu_to_le32(1<<20),
- fl_cas_hash: cpu_to_le32(0),
- fl_object_stripe_unit: cpu_to_le32(0),
- fl_pg_preferred: cpu_to_le32(-1),
+ fl_stripe_unit: init_le32(1<<20),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<20),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
@@ -982,33 +982,33 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.tick = atoi(args[++i]);
 
     else if (strcmp(args[i], "--file_layout_unit") == 0) 
-      g_default_file_layout.fl_stripe_unit = cpu_to_le32(atoi(args[++i]));
+      g_default_file_layout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_count") == 0) 
-      g_default_file_layout.fl_stripe_count = cpu_to_le32(atoi(args[++i]));
+      g_default_file_layout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_osize") == 0) 
-      g_default_file_layout.fl_object_size = cpu_to_le32(atoi(args[++i]));
+      g_default_file_layout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_pg_type") == 0) 
       g_default_file_layout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--file_layout_pg_size") == 0) 
       g_default_file_layout.fl_pg_size = atoi(args[++i]);
 
     else if (strcmp(args[i], "--meta_dir_layout_unit") == 0) 
-      g_default_mds_dir_layout.fl_stripe_unit = cpu_to_le32(atoi(args[++i]));
+      g_default_mds_dir_layout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_scount") == 0) 
-      g_default_mds_dir_layout.fl_stripe_count = cpu_to_le32(atoi(args[++i]));
+      g_default_mds_dir_layout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_osize") == 0) 
-      g_default_mds_dir_layout.fl_object_size = cpu_to_le32(atoi(args[++i]));
+      g_default_mds_dir_layout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_pg_type") == 0) 
       g_default_mds_dir_layout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_dir_layout_pg_size") == 0) 
       g_default_mds_dir_layout.fl_pg_size = atoi(args[++i]);
 
     else if (strcmp(args[i], "--meta_log_layout_unit") == 0) 
-      g_default_mds_log_layout.fl_stripe_unit = cpu_to_le32(atoi(args[++i]));
+      g_default_mds_log_layout.fl_stripe_unit = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_scount") == 0) 
-      g_default_mds_log_layout.fl_stripe_count = cpu_to_le32(atoi(args[++i]));
+      g_default_mds_log_layout.fl_stripe_count = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
-      g_default_mds_log_layout.fl_object_size = cpu_to_le32(atoi(args[++i]));
+      g_default_mds_log_layout.fl_object_size = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_pg_type") == 0) 
       g_default_mds_log_layout.fl_pg_type = atoi(args[++i]);
     else if (strcmp(args[i], "--meta_log_layout_pg_size") == 0) {

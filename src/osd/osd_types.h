@@ -160,8 +160,8 @@ namespace __gnu_cxx {
 
 inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
-  out << pg_t(le64_to_cpu(ol.ol_pgid));
-  int su = le32_to_cpu(ol.ol_stripe_unit);
+  out << pg_t(ol.ol_pgid);
+  int su = ol.ol_stripe_unit;
   if (su)
     out << ".su=" << su;
   return out;
@@ -178,12 +178,12 @@ public:
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e) {}
 
   eversion_t(const ceph_eversion& ce) : 
-    version(le64_to_cpu(ce.version)),
-    epoch(le32_to_cpu(ce.epoch)) {}
+    version(ce.version),
+    epoch(ce.epoch) {}
   operator ceph_eversion() {
     ceph_eversion c;
-    c.epoch = cpu_to_le32(epoch);
-    c.version = cpu_to_le64(version);
+    c.epoch = epoch;
+    c.version = version;
     return c;
   }
 } __attribute__ ((packed));

@@ -36,7 +36,7 @@ public:
   entity_name_t() : _type(0), _num(0) { }
   entity_name_t(int t, int n) : _type(t), _num(n) { }
   entity_name_t(const ceph_entity_name &n) : 
-    _type(le32_to_cpu(n.type)), _num(le32_to_cpu(n.num)) { }
+    _type(n.type), _num(n.num) { }
 
   // static cons
   static entity_name_t MON(int i=NEW) { return entity_name_t(TYPE_MON, i); }
@@ -67,7 +67,7 @@ public:
   bool is_admin() const { return type() == TYPE_ADMIN; }
 
   operator ceph_entity_name() const {
-    ceph_entity_name n = { cpu_to_le32(_type), cpu_to_le32(_num) };
+    ceph_entity_name n = { init_le32(_type), init_le32(_num) };
     return n;
   }
 
@@ -119,8 +119,8 @@ struct entity_addr_t {
     ipaddr.sin_family = AF_INET;
   }
   entity_addr_t(const ceph_entity_addr &v) {
-    erank = le32_to_cpu(v.erank);
-    nonce = le32_to_cpu(v.nonce);
+    erank = v.erank;
+    nonce = v.nonce;
     ipaddr = v.ipaddr;
   }
 
@@ -137,9 +137,9 @@ struct entity_addr_t {
 
   operator ceph_entity_addr() const { 
     ceph_entity_addr a = { 
-      cpu_to_le32(erank), 
-      cpu_to_le32(nonce),
-      ipaddr
+    erank: init_le32(erank), 
+    nonce: init_le32(nonce),
+    ipaddr: ipaddr
     };
     return a;
   }

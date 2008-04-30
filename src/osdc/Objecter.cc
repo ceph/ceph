@@ -352,7 +352,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
 {
   // find OSD
   ObjectExtent &ex = st->extents.front();
-  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
+  PG &pg = get_pg( pg_t(ex.layout.ol_pgid) );
 
   // pick tid
   last_tid++;
@@ -480,7 +480,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry) 
 {
   // find OSD
-  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
+  PG &pg = get_pg( pg_t(ex.layout.ol_pgid) );
 
   // pick tid
   last_tid++;
@@ -769,7 +769,7 @@ tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 {
   // find
-  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
+  PG &pg = get_pg( pg_t(ex.layout.ol_pgid) );
     
   // pick tid
   tid_t tid;

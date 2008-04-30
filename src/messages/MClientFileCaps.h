@@ -36,30 +36,30 @@ class MClientFileCaps : public Message {
   struct ceph_mds_file_caps h;
 
  public:
-  int       get_caps() { return le32_to_cpu(h.caps); }
-  int       get_wanted() { return le32_to_cpu(h.wanted); }
-  capseq_t  get_seq() { return le32_to_cpu(h.seq); }
+  int       get_caps() { return h.caps; }
+  int       get_wanted() { return h.wanted; }
+  capseq_t  get_seq() { return h.seq; }
 
-  inodeno_t get_ino() { return le64_to_cpu(h.ino); }
-  __u64 get_size() { return le64_to_cpu(h.size);  }
-  __u64 get_max_size() { return le64_to_cpu(h.max_size);  }
+  inodeno_t get_ino() { return inodeno_t(h.ino); }
+  __u64 get_size() { return h.size;  }
+  __u64 get_max_size() { return h.max_size;  }
   utime_t get_ctime() { return utime_t(h.ctime); }
   utime_t get_mtime() { return utime_t(h.mtime); }
   utime_t get_atime() { return utime_t(h.atime); }
 
   // for cap migration
-  int       get_migrate_mds() { return le32_to_cpu(h.migrate_mds); }
-  int       get_migrate_seq() { return le32_to_cpu(h.migrate_seq); }
-  int       get_op() { return le32_to_cpu(h.op); }
+  int       get_migrate_mds() { return h.migrate_mds; }
+  int       get_migrate_seq() { return h.migrate_seq; }
+  int       get_op() { return h.op; }
 
-  void set_caps(int c) { h.caps = cpu_to_le32(c); }
-  void set_wanted(int w) { h.wanted = cpu_to_le32(w); }
+  void set_caps(int c) { h.caps = c; }
+  void set_wanted(int w) { h.wanted = w; }
 
-  void set_migrate_mds(int m) { h.migrate_mds = cpu_to_le32(m); }
-  void set_migrate_seq(int m) { h.migrate_seq = cpu_to_le32(m); }
-  void set_op(int o) { h.op = cpu_to_le32(o); }
+  void set_migrate_mds(int m) { h.migrate_mds = m; }
+  void set_migrate_seq(int m) { h.migrate_seq = m; }
+  void set_op(int o) { h.op = o; }
 
-  void set_size(loff_t s) { h.size = cpu_to_le64(s); }
+  void set_size(loff_t s) { h.size = s; }
   void set_mtime(const utime_t &t) { t.encode_timeval(&h.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&h.atime); }
 
@@ -72,15 +72,15 @@ class MClientFileCaps : public Message {
                   int mmds=0,
 		  int mseq=0) :
     Message(CEPH_MSG_CLIENT_FILECAPS) {
-    h.op = cpu_to_le32(op);
-    h.seq = cpu_to_le32(seq);
-    h.caps = cpu_to_le32(caps);
-    h.wanted = cpu_to_le32(wanted);
-    h.ino = cpu_to_le64(inode.ino);
-    h.size = cpu_to_le64(inode.size);
-    h.max_size = cpu_to_le64(inode.max_size);
-    h.migrate_mds = cpu_to_le32(mmds);
-    h.migrate_seq = cpu_to_le32(mseq);
+    h.op = op;
+    h.seq = seq;
+    h.caps = caps;
+    h.wanted = wanted;
+    h.ino = inode.ino;
+    h.size = inode.size;
+    h.max_size = inode.max_size;
+    h.migrate_mds = mmds;
+    h.migrate_seq = mseq;
     inode.mtime.encode_timeval(&h.mtime);
     inode.atime.encode_timeval(&h.atime);
     inode.ctime.encode_timeval(&h.ctime);
@@ -88,12 +88,12 @@ class MClientFileCaps : public Message {
 
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
-    out << "client_file_caps(" << get_opname(le32_to_cpu(h.op))
-	<< " ino " << inodeno_t(le64_to_cpu(h.ino))
-	<< " seq " << le32_to_cpu(h.seq) 
-	<< " caps " << cap_string(le32_to_cpu(h.caps)) 
-	<< " wanted" << cap_string(le32_to_cpu(h.wanted)) 
-	<< " size " << le64_to_cpu(h.size) << "/" << le64_to_cpu(h.max_size)
+    out << "client_file_caps(" << get_opname(h.op)
+	<< " ino " << inodeno_t(h.ino)
+	<< " seq " << h.seq 
+	<< " caps " << cap_string(h.caps)
+	<< " wanted" << cap_string(h.wanted)
+	<< " size " << h.size << "/" << h.max_size
 	<< ")";
   }
   
