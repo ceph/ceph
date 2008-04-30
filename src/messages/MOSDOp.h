@@ -66,37 +66,37 @@ private:
 
 public:
   osd_reqid_t get_reqid() { return osd_reqid_t(head.client_inst.name, 
-					       le32_to_cpu(head.client_inc),
-					       le64_to_cpu(head.tid)); }
-  int get_client_inc() { return le32_to_cpu(head.client_inc); }
-  tid_t get_client_tid() { return le64_to_cpu(head.tid); }
+					       head.client_inc,
+					       head.tid); }
+  int get_client_inc() { return head.client_inc; }
+  tid_t get_client_tid() { return head.tid; }
   
   entity_name_t get_client() { return head.client_inst.name; }
   entity_inst_t get_client_inst() { return head.client_inst; }
   void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a; }
 
   object_t get_oid() { return object_t(head.oid); }
-  pg_t     get_pg() { return pg_t(le64_to_cpu(head.layout.ol_pgid)); }
+  pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   ceph_object_layout get_layout() { return head.layout; }
-  epoch_t  get_map_epoch() { return le32_to_cpu(head.osdmap_epoch); }
+  epoch_t  get_map_epoch() { return head.osdmap_epoch; }
 
   eversion_t get_version() { return head.reassert_version; }
   
-  const int    get_op() { return le32_to_cpu(head.op); }
-  void set_op(int o) { head.op = cpu_to_le32(o); }
+  const int    get_op() { return head.op; }
+  void set_op(int o) { head.op = o; }
   bool is_read() { 
     return get_op() < 10;
   }
 
-  off_t get_length() const { return le64_to_cpu(head.length); }
-  off_t get_offset() const { return le64_to_cpu(head.offset); }
+  off_t get_length() const { return head.length; }
+  off_t get_offset() const { return head.offset; }
 
-  unsigned get_inc_lock() const { return le32_to_cpu(head.inc_lock); }
+  unsigned get_inc_lock() const { return head.inc_lock; }
 
   void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
   const ceph_osd_peer_stat& get_peer_stat() { return head.peer_stat; }
 
-  void inc_shed_count() { head.shed_count++; }
+  void inc_shed_count() { head.shed_count = get_shed_count() + 1; }
   int get_shed_count() { return head.shed_count; }
   
 
@@ -108,34 +108,34 @@ public:
     memset(&head, 0, sizeof(head));
     head.client_inst.name = asker.name;
     head.client_inst.addr = asker.addr;
-    head.tid = cpu_to_le64(tid);
-    head.client_inc = cpu_to_le32(inc);
+    head.tid = tid;
+    head.client_inc = inc;
     head.oid = oid;
     head.layout = ol;
-    head.osdmap_epoch = cpu_to_le32(mapepoch);
-    head.op = cpu_to_le32(op);
-    head.flags = cpu_to_le32(flags);
+    head.osdmap_epoch = mapepoch;
+    head.op = op;
+    head.flags = flags;
   }
   MOSDOp() {}
 
   void set_inc_lock(__u32 l) {
-    head.inc_lock = cpu_to_le32(l);
+    head.inc_lock = l;
   }
 
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
 
-  void set_length(off_t l) { head.length = cpu_to_le64(l); }
-  void set_offset(off_t o) { head.offset = cpu_to_le64(o); }
+  void set_length(off_t l) { head.length = l; }
+  void set_offset(off_t o) { head.offset = o; }
   void set_version(eversion_t v) { head.reassert_version = v; }
   
-  int get_flags() const { return le32_to_cpu(head.flags); }
+  int get_flags() const { return head.flags; }
   bool wants_ack() const { return get_flags() & CEPH_OSD_OP_ACK; }
   bool wants_commit() const { return get_flags() & CEPH_OSD_OP_SAFE; }
   bool is_retry_attempt() const { return get_flags() & CEPH_OSD_OP_RETRY; }
 
-  void set_want_ack(bool b) { head.flags = cpu_to_le32(get_flags() | CEPH_OSD_OP_ACK); }
-  void set_want_commit(bool b) { head.flags = cpu_to_le32(get_flags() | CEPH_OSD_OP_SAFE); }
-  void set_retry_attempt(bool a) { head.flags = cpu_to_le32(get_flags() | CEPH_OSD_OP_RETRY); }
+  void set_want_ack(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ACK; }
+  void set_want_commit(bool b) { head.flags = get_flags() | CEPH_OSD_OP_SAFE; }
+  void set_retry_attempt(bool a) { head.flags = get_flags() | CEPH_OSD_OP_RETRY; }
 
   // marshalling
   virtual void decode_payload() {
@@ -145,7 +145,7 @@ public:
 
   virtual void encode_payload() {
     ::_encode(head, payload);
-    env.data_off = cpu_to_le32(get_offset());
+    env.data_off = get_offset();
   }
 
   const char *get_type_name() { return "osd_op"; }

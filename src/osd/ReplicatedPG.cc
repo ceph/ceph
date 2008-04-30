@@ -158,8 +158,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	dout(-10) << "preprocess_op balance-reads on " << oid << dendl;
 	balancing_reads.insert(oid);
 	ceph_object_layout layout;
-	layout.ol_pgid = cpu_to_le64(info.pgid.u.pg64);
-	layout.ol_stripe_unit = cpu_to_le32(0);
+	layout.ol_pgid = info.pgid.u.pg64;
+	layout.ol_stripe_unit = 0;
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 				 oid,
 				 layout,
@@ -172,8 +172,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	dout(-10) << "preprocess_op unbalance-reads on " << oid << dendl;
 	unbalancing_reads.insert(oid);
 	ceph_object_layout layout;
-	layout.ol_pgid = cpu_to_le64(info.pgid.u.pg64);
-	layout.ol_stripe_unit = cpu_to_le32(0);
+	layout.ol_pgid = info.pgid.u.pg64;
+	layout.ol_stripe_unit = 0;
 	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 				 oid,
 				 layout,
@@ -1179,8 +1179,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       unbalancing_reads.insert(poid.oid);
       
       ceph_object_layout layout;
-      layout.ol_pgid = cpu_to_le64(info.pgid.u.pg64);
-      layout.ol_stripe_unit = cpu_to_le32(0);
+      layout.ol_pgid = info.pgid.u.pg64;
+      layout.ol_stripe_unit = 0;
       MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
 			       poid.oid,
 			       layout,

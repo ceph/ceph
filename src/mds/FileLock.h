@@ -32,9 +32,9 @@ using namespace std;
 #define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync (*)
 #define LOCK_GSYNCM  -13 // A    . . / . R . . . L
 
-#define LOCK_LOCK_    2  // AR   R W / C . . . . .   . . / C . . . . .   truncate()
+#define LOCK_LOCK_    2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_GLOCKR_ -3  // AR   R . / C . . . . .   . . / C . . . . .
-#define LOCK_GLOCKL  -4  // A    . . / C . . . . .                       loner -> lock
+#define LOCK_GLOCKL  -4  // A    . . / C . . . B .                       loner -> lock
 #define LOCK_GLOCKM  -5  // A    . . / . . . . . .
 
 #define LOCK_MIXED    6  // AR   . . / . R W A . L   . . / . R . . . L
@@ -183,52 +183,57 @@ class FileLock : public SimpleLock {
   // client caps allowed
   int caps_allowed_ever() {
     if (parent->is_auth())
-      return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO;
+      return CEPH_CAP_PIN | 
+	CEPH_CAP_RDCACHE | CEPH_CAP_RD | 
+	CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_EXCL |
+	CEPH_CAP_LAZYIO;
     else
-      return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+      return CEPH_CAP_PIN | 
+	CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
   }
   int caps_allowed() {
     if (parent->is_auth())
       switch (state) {
       case LOCK_SYNC:
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_LOCK:
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GLOCKR:
+         return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
+      case LOCK_LOCK:
       case LOCK_GLOCKL:
-        return CEPH_CAP_RDCACHE;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_WRBUFFER;
 
       case LOCK_GLOCKM:
-        return 0;
+        return CEPH_CAP_PIN;
 
       case LOCK_MIXED:
-        return CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDR:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDL:
-        return 0;
+        return CEPH_CAP_PIN;
 
       case LOCK_LONER:  // single client writer, of course.
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO | CEPH_CAP_EXCL;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO | CEPH_CAP_EXCL;
       case LOCK_GLONERR:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GLONERM:
-        return CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
 
       case LOCK_GSYNCL:
-        return CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
       case LOCK_GSYNCM:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
     else
       switch (state) {
       case LOCK_SYNC:
-        return CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_LOCK:
       case LOCK_GLOCKR:
-        return CEPH_CAP_RDCACHE;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
       case LOCK_GMIXEDR:
       case LOCK_MIXED:
-        return CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
     assert(0);
     return 0;
@@ -241,6 +246,8 @@ class FileLock : public SimpleLock {
     if (!get_gather_set().empty()) out << " g=" << get_gather_set();
     if (get_num_client_lease())
       out << " c=" << get_num_client_lease();
+    if (is_wrlocked())
+      out << " w=" << get_num_wrlocks();
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_xlocked())

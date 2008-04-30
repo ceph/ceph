@@ -296,6 +296,9 @@ public:
     crush_finalize(crush);
   }
 
+  void set_max_devices(int m) {
+    crush->max_devices = m;
+  }
   void set_offload(int i, unsigned o) {
     assert(i < crush->max_devices);
     crush->device_offload[i] = o;

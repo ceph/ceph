@@ -375,6 +375,7 @@ public:
   void request_forward(MDRequest *mdr, int mds, int port=0);
   void dispatch_request(MDRequest *mdr);
   void request_forget_foreign_locks(MDRequest *mdr);
+  void request_drop_locks(MDRequest *r);
   void request_cleanup(MDRequest *r);
 
 

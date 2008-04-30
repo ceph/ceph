@@ -100,6 +100,7 @@ struct DirStat {
 struct InodeStat {
   //inode_t inode;
   inodeno_t ino;
+  version_t version;
   ceph_file_layout layout;
   utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;
@@ -117,7 +118,8 @@ struct InodeStat {
   void _decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
     ::_decode_simple(e, p);
-    ino = le64_to_cpu(e.ino);
+    ino = inodeno_t(e.ino);
+    version = e.version;
     layout = e.layout;
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
@@ -147,7 +149,8 @@ struct InodeStat {
      */
     struct ceph_mds_reply_inode e;
     memset(&e, 0, sizeof(e));
-    e.ino = cpu_to_le64(in->inode.ino);
+    e.ino = in->inode.ino;
+    e.version = in->inode.version;
     e.layout = in->inode.layout;
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
@@ -180,16 +183,16 @@ class MClientReply : public Message {
   bufferlist dir_bl;
 
  public:
-  long get_tid() { return le64_to_cpu(st.tid); }
+  long get_tid() { return st.tid; }
   int get_op() { return st.op; }
 
   void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
 
-  int get_result() { return st.result; }
+  int get_result() { return (__s32)(__u32)st.result; }
 
-  unsigned char get_file_caps() { return st.file_caps; }
-  long get_file_caps_seq() { return st.file_caps_seq; }
+  unsigned get_file_caps() { return st.file_caps; }
+  unsigned get_file_caps_seq() { return st.file_caps_seq; }
   //uint64_t get_file_data_version() { return st.file_data_version; }
   
   void set_result(int r) { st.result = r; }
@@ -201,16 +204,16 @@ class MClientReply : public Message {
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.tid = cpu_to_le64(req->get_tid());
+    this->st.tid = req->get_tid();
     this->st.op = req->get_op();
     this->st.result = result;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "creply(" << env.dst.name << "." << le64_to_cpu(st.tid);
-    o << " = " << st.result;
-    if (st.result <= 0)
-      o << " " << strerror(-st.result);
+    o << "client_reply(" << env.dst.name << "." << st.tid;
+    o << " = " << get_result();
+    if (get_result() <= 0)
+      o << " " << strerror(-get_result());
     o << ")";
   }
 

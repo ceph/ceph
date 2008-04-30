@@ -151,30 +151,9 @@ namespace __gnu_cxx {
 }
 
 
-// these are bit masks
-#define FILE_MODE_R          1
-#define FILE_MODE_W          2
-#define FILE_MODE_RW         (1|2)
-#define FILE_MODE_LAZY       4
-#define FILE_MODE_PIN        8
-
-static inline int file_flags_to_mode(int flags) {
-  if (flags & O_DIRECTORY)
-    return FILE_MODE_PIN;
-  if (flags & O_LAZY) 
-    return FILE_MODE_LAZY;
-  if (flags & O_WRONLY) 
-    return FILE_MODE_W;
-  if (flags & O_RDWR) 
-    return FILE_MODE_RW;
-  if (flags & O_APPEND) 
-    return FILE_MODE_W;
-  return FILE_MODE_R;
-}
 static inline bool file_mode_is_readonly(int mode) {
-  return (mode & FILE_MODE_W) == 0;
+  return (mode & CEPH_FILE_MODE_WR) == 0;
 }
-
 
 inline int DT_TO_MODE(int dt) {
   return dt << 12;
@@ -182,6 +161,23 @@ inline int DT_TO_MODE(int dt) {
 inline unsigned char MODE_TO_DT(int mode) {
   return mode >> 12;
 }
+
+struct FileLayout {
+  /* file -> object mapping */
+  __u32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
+  __u32 fl_stripe_count;    /* over this many objects */
+  __u32 fl_object_size;     /* until objects are this big, then move to new objects */
+  __u32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
+  
+  /* pg -> disk layout */
+  __u32 fl_object_stripe_unit;  /* for per-object parity, if any */
+  
+  /* object -> pg layout */
+  __s32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
+  __u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
+  __u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
+  __u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
+};
 
 struct inode_t {
   // base (immutable)
@@ -202,8 +198,8 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
-  int64_t    size;
-  int64_t    max_size; // client(s) are auth to write this much...
+  uint64_t    size;
+  uint64_t    max_size; // client(s) are auth to write this much...
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   utime_t    rmtime;  // recursive mtime?
@@ -231,7 +227,7 @@ struct inode_t {
 // --
 
 inline ostream& operator<<(ostream& out, ceph_fsid& f) {
-  return out << hex << le64_to_cpu(f.major) << '.' << le64_to_cpu(f.minor) << dec;
+  return out << hex << f.major << '.' << f.minor << dec;
 }
 
 

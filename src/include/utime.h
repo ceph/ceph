@@ -89,12 +89,12 @@ public:
   }
 
   void encode_timeval(struct ceph_timespec *t) const {
-    t->tv_sec = cpu_to_le32(tv.tv_sec);
-    t->tv_nsec = cpu_to_le32(tv.tv_usec*1000);
+    t->tv_sec = tv.tv_sec;
+    t->tv_nsec = tv.tv_usec*1000;
   }
   void decode_timeval(const struct ceph_timespec *t) {
-    tv.tv_sec = le32_to_cpu(t->tv_sec);
-    tv.tv_usec = le32_to_cpu(t->tv_nsec) / 1000;
+    tv.tv_sec = t->tv_sec;
+    tv.tv_usec = t->tv_nsec / 1000;
   }
 
   // cast to double

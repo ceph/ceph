@@ -24,6 +24,7 @@
 #include "crush/CrushWrapper.h"
 #include "crush/grammar.h"
 
+
 #include <iostream>
 #include <fstream>
 #include <stack>
@@ -39,100 +40,349 @@ using namespace std;
 typedef char const*         iterator_t;                                                                              
 typedef tree_match<iterator_t> parse_tree_match_t;                                                                   
 typedef parse_tree_match_t::tree_iterator iter_t;
+typedef parse_tree_match_t::node_t node_t;
 
-long eval_term(iter_t const& i);                                                                                                                   
-long evaluate(parse_tree_match_t hit);                                                                               
-long eval_expression(iter_t const& i);                                                                               
-long evaluate(tree_parse_info<> info)                                                                                
-{                                                                                                                    
+int verbose = 0;
 
-  std::cout << "t_id(info.trees.begin()).name(): " << typeid(info.trees.begin()).name() << '\n';
-  std::cout << "info.trees.size(): " <<  info.trees.size() <<std::endl;
+map<string, int> item_id;
+map<int, string> id_item;
+map<int, float> item_weight;
 
-  for (unsigned int i=0; i<info.trees.size();i++) {
-    std::cout << "i: " << i << std::endl;
-    std::cout << "DOWN A LEVEL\n";
-    std::cout << "info.trees[index_i].children.size() :" <<  info.trees[i].children.size() <<std::endl;
-    //boost::spirit::parser_id id = info.trees[i].value.id();
-    
-    std::cout << "In eval_expression. info.trees[index_i].value = " << string(info.trees[i].value.begin(), info.trees[i].value.end()) << std::endl 
-	      << "info.trees[index_i].children.size() = " << info.trees[i].children.size() << std::endl;      
-    std::cout << "t_id(info.trees[index_ii].value.begin()).name(): " << typeid(info.trees[i].value.begin()).name() << '\n';
-    std::cout << "t_id(info.trees[index_i].value).name: " << typeid(info.trees[i].value).name() << '\n';
-    
-    if (info.trees[i].value.is_root()) {
-      printf("is root!\n");
+map<int, int> device_offload;  // may or may not be set.
+
+map<string, int> type_id;
+
+map<string, int> rule_id;
+
+string string_node(node_t &node)
+{
+  return string(node.value.begin(), node.value.end());
+}
+
+int int_node(node_t &node) 
+{
+  string str = string_node(node);
+  return strtol(str.c_str(), 0, 10);
+}
+
+float float_node(node_t &node)
+{
+  string s = string_node(node);
+  return strtof(s.c_str(), 0);
+}
+
+void parse_device(iter_t const& i, CrushWrapper &crush)
+{
+  int size = i->children.size();
+  int id = int_node(i->children[1]);
+
+  string name = string_node(i->children[2]);
+  crush.set_item_name(id, name.c_str());
+  if (item_id.count(name)) {
+    cerr << "item " << name << " defined twice" << std::endl;
+    exit(1);
+  }    
+  item_id[name] = id;
+  id_item[id] = name;
+
+  if (verbose) cout << "device " << id << " " << name;
+
+  if (size >= 4) {
+    string tag = string_node(i->children[3]);
+    float offload;
+    if (tag == "offload") 
+      offload = float_node(i->children[4]);
+    else if (tag == "load") 
+      offload = 1.0 - float_node(i->children[4]);
+    else if (tag == "down") 
+      offload = 1.0;
+    else
+      assert(0);
+
+    if (verbose) cout << " offload " << offload;
+    if (offload < 0 || offload > 1.0) {
+      cerr << "illegal device offload " << offload << " on device " << id << " " << name
+	   << " (valid range is [0,1])" << std::endl;
+      exit(1);
     }
-    
-    std::cout << "typeid( (info.trees[index_i].value).value() ).name(): " << typeid( info.trees[i].value.value() ).name() << std::endl;
-    
-    string blah(info.trees[i].value.begin(), info.trees[i].value.end());
-    //string integerB(info.trees[i].value.value.begin(), info.trees[i].value.value.end());
-
-    std::cout << "value: " << blah << std::endl;
-    //printf("IB: %s\n", integerB);
-    
-    for (unsigned int j = 0; j < info.trees[i].children.size(); j++) {                        
-      std::cout<< "index_j: " << j << std::endl;
-      std::cout << "typeid(info.trees[index_i].children[index_j]).name(): " << typeid(info.trees[i].children[j]).name() << '\n';
-      std::cout << "typeid(info.trees[index_i].children[index_j].value).name(): " << typeid(info.trees[i].children[j].value).name() << '\n';
-      
-      //string temp = typeid(info.trees[i].children[j]).name() 
-
-      //string blah(info.trees[i].children[j].value.begin(), info.trees[i].children[j].value.end());
-      //std::cout << "value string: " << blah << std::endl;
-
-      //string blah2(info.trees[i].children[j].begin(), info.trees[i].children[j].end());
-      //std::cout << "child string: " << blah2 << std::endl;
-
-      // eval_expression( info.trees[i].children[j].begin );
-      
-      
-      //      const type_info tp = typeid(info.trees[i].children[j]);
-      //const char *nm = tp.name();
-      //std::cout << nm<<std::endl;
-      // next node points to the operator.  The text of the operator is                                                     
-      // stored in value (a vector<char>) 
-      //for (iter_t j = chi->value.begin(); j != chi->value.end(); ij+) { 
-      //std::cout << "here: " << *j <<std::endl;
-      //char op = *(chi->value.begin());
-      //std::cout << chi->value <<std::endl;
-      //printf("op: %c\n", op);
-      //}
-    }                                                                                                                         
-  
-    cout << "evalutaing info..." << std::endl;                                                                         
-    //printf("%d\n", (int)info.trees[i].value.id());
-    
-    if (info.trees[i].value.id() == crush_grammar::_int) {                                                                        
-      return 1;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_posint) {                                                              
-      return 2;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_name) {                                                                
-      return 3;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_device) {                                                              
-      return 4;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_bucket_type) {                                                         
-      return 5;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_bucket_id) {                                                           
-      return 6;                                                                                                        
-    } else if (info.trees[i].value.id() == crush_grammar::_bucket_alg) {                                                          
-      return 7;                                                                                                        
-    } else {                                                                                                           
-      return 0;                                                                                                        
-    }                                                                                                                  
+    device_offload[id] = (unsigned)(offload * 0x10000);
   }
-  cout << "should never get here." << std::endl;                                                                     
-  return -1;                                                                                                         
-}                                                                                                                    
+  if (verbose) cout << std::endl;
 
+  if (id >= crush.get_max_devices())
+    crush.set_max_devices(id+1);
+}
+
+void parse_bucket_type(iter_t const& i, CrushWrapper &crush)
+{
+  int id = int_node(i->children[1]);
+  string name = string_node(i->children[2]);
+  if (verbose) cout << "type " << id << " " << name << std::endl;
+  type_id[name] = id;
+  crush.set_type_name(id, name.c_str());
+}
+
+void parse_bucket(iter_t const& i, CrushWrapper &crush)
+{
+  string tname = string_node(i->children[0]);
+  if (!type_id.count(tname)) {
+    cerr << "bucket type '" << tname << "' is not defined" << std::endl;
+    exit(1);
+  }
+  int type = type_id[tname];
+
+  string name = string_node(i->children[1]);
+  if (item_id.count(name)) {
+    cerr << "bucket or device '" << name << "' is already defined" << std::endl;
+    exit(1);
+  }
+
+  int id = 0;  // none, yet!
+  int alg = -1;
+  set<int> used_items;
+  int size = 0;
+  
+  for (unsigned p=3; p<i->children.size()-1; p++) {
+    iter_t sub = i->children.begin() + p;
+    string tag = string_node(sub->children[0]);
+    //cout << "tag " << tag << std::endl;
+    if (tag == "id") 
+      id = int_node(sub->children[1]);
+    else if (tag == "alg") {
+      string a = string_node(sub->children[1]);
+      if (a == "uniform")
+	alg = CRUSH_BUCKET_UNIFORM;
+      else if (a == "list")
+	alg = CRUSH_BUCKET_LIST;
+      else if (a == "tree")
+	alg = CRUSH_BUCKET_TREE;
+      else if (a == "straw")
+	alg = CRUSH_BUCKET_STRAW;
+      else {
+	cerr << "unknown bucket alg '" << a << "'" << std::endl;
+	exit(1);
+      }
+    }
+    else if (tag == "item") {
+      // first, just determine which item pos's are already used
+      size++;
+      for (unsigned q = 2; q < sub->children.size(); q++) {
+	string tag = string_node(sub->children[q++]);
+	if (tag == "pos") {
+	  int pos = int_node(sub->children[q]);
+	  used_items.insert(pos);
+	}
+      }
+    }
+    else assert(0);
+  }
+
+  // now do the items.
+  if (!used_items.empty())
+    size = MAX(size, *used_items.rbegin());
+  vector<int> items(size);
+  vector<int> weights(size);
+
+  int curpos = 0;
+  float bucketweight = 0;
+  for (unsigned p=3; p<i->children.size()-1; p++) {
+    iter_t sub = i->children.begin() + p;
+    string tag = string_node(sub->children[0]);
+    if (tag == "item") {
+
+      string iname = string_node(sub->children[1]);
+      if (!item_id.count(iname)) {
+	cerr << "item '" << iname << "' in bucket '" << name << "' is not defined" << std::endl;
+	exit(1);
+      }
+      int itemid = item_id[iname];
+
+      float weight = 1.0;
+      if (item_weight.count(itemid))
+	weight = item_weight[itemid];
+
+      int pos = -1;
+      for (unsigned q = 2; q < sub->children.size(); q++) {
+	string tag = string_node(sub->children[q++]);
+	if (tag == "weight")
+	  weight = float_node(sub->children[q]);
+	else if (tag == "pos") 
+	  pos = int_node(sub->children[q]);
+	else
+	  assert(0);
+      }
+      if (pos < 0) {
+	while (used_items.count(curpos)) curpos++;
+	pos = curpos++;
+      }
+      //cout << " item " << iname << " (" << itemid << ") pos " << pos << " weight " << weight << std::endl;
+      items[pos] = itemid;
+      weights[pos] = (unsigned)(weight * 0x10000);
+      bucketweight += weight;
+    }
+  }
+
+  if (id == 0) {
+    for (id=-1; id_item.count(id); id--) ;
+    //cout << "assigned id " << id << std::endl;
+  }
+
+  if (verbose) cout << "bucket " << name << " (" << id << ") " << size << " items and weight " << bucketweight << std::endl;
+  id_item[id] = name;
+  item_id[name] = id;
+  item_weight[id] = bucketweight;
+  
+  crush.add_bucket(id, alg, type, size, &items[0], &weights[0]);
+  crush.set_item_name(id, name.c_str());
+}
+
+void parse_rule(iter_t const& i, CrushWrapper &crush)
+{
+  int start;  // rule name is optional!
+ 
+  string rname = string_node(i->children[1]);
+  if (rname != "{") {
+    if (rule_id.count(rname)) {
+      cerr << "rule name '" << rname << "' already defined\n" << std::endl;
+      exit(1);
+    }
+    start = 4;
+  } else {
+    rname = string();
+    start = 3;
+  }
+
+  int pool = int_node(i->children[start]);
+
+  string tname = string_node(i->children[start+2]);
+  int type;
+  if (tname == "replicated")
+    type = CEPH_PG_TYPE_REP;
+  else if (tname == "raid4") 
+    type = CEPH_PG_TYPE_RAID4;
+  else 
+    assert(0);    
+
+  int minsize = int_node(i->children[start+4]);
+  int maxsize = int_node(i->children[start+6]);
+  
+  int steps = i->children.size() - start - 8;
+  //cout << "num steps " << steps << std::endl;
+  
+  int ruleno = crush.add_rule(steps, pool, type, minsize, maxsize, -1);
+  if (rname.length()) {
+    crush.set_rule_name(ruleno, rname.c_str());
+    rule_id[rname] = ruleno;
+  }
+
+  int step = 0;
+  for (iter_t p = i->children.begin() + start + 7; step < steps; p++) {
+    iter_t s = p->children.begin() + 1;
+    int stepid = s->value.id().to_long();
+    switch (stepid) {
+    case crush_grammar::_step_take: 
+      {
+	string item = string_node(s->children[1]);
+	if (!item_id.count(item)) {
+	  cerr << "in rule '" << rname << "' item '" << item << "' not defined" << std::endl;
+	  exit(1);
+	}
+	crush.set_rule_step_take(ruleno, step++, item_id[item]);
+      }
+      break;
+
+    case crush_grammar::_step_choose:
+      {
+	string type = string_node(s->children[4]);
+	if (!type_id.count(type)) {
+	  cerr << "in rule '" << rname << "' type '" << type << "' not defined" << std::endl;
+	  exit(1);
+	}
+	string mode = string_node(s->children[1]);
+	if (mode == "firstn")
+	  crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	else if (mode == "indep")
+	  crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	else 
+	  assert(0);
+      }
+      break;
+
+    case crush_grammar::_step_emit:
+      crush.set_rule_step_emit(ruleno, step++);
+      break;
+
+    default:
+      cerr << "bad crush step " << stepid << std::endl;
+      assert(0);
+    }
+  }
+  assert(step == steps);
+}
+
+void dump(iter_t const& i, int ind=1) 
+{
+  cout << "dump"; 
+  for (int j=0; j<ind; j++) cout << "\t"; 
+  long id = i->value.id().to_long();
+  cout << id << "\t"; 
+  cout << "'" << string(i->value.begin(), i->value.end())  
+       << "' " << i->children.size() << " children" << std::endl; 
+  for (unsigned int j = 0; j < i->children.size(); j++)  
+    dump(i->children.begin() + j, ind+1); 
+}
+
+void find_used_bucket_ids(iter_t const& i)
+{
+  for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
+      iter_t firstline = p->children.begin() + 3;
+      string tag = string_node(firstline->children[0]);
+      if (tag == "id") {
+	int id = int_node(firstline->children[1]);
+	//cout << "saw bucket id " << id << std::endl;
+	id_item[id] = string();
+      }
+    }
+  }
+}
+
+void parse_crush(iter_t const& i, CrushWrapper &crush) 
+{ 
+  find_used_bucket_ids(i);
+
+  for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    switch (p->value.id().to_long()) {
+    case crush_grammar::_device: 
+      parse_device(p, crush);
+      break;
+    case crush_grammar::_bucket_type: 
+      parse_bucket_type(p, crush);
+      break;
+    case crush_grammar::_bucket: 
+      parse_bucket(p, crush);
+      break;
+    case crush_grammar::_crushrule: 
+      parse_rule(p, crush);
+      break;
+    default:
+      assert(0);
+    }
+  }
+
+  //cout << "max_devices " << crush.get_max_devices() << std::endl;
+  crush.finalize();
+  for (int i=0; i<crush.get_max_devices(); i++)
+    if (device_offload.count(i))
+      crush.set_offload(i, device_offload[i]);
+  
+} 
 
 const char *infn = "stdin";
 
 
 ////////////////////////////////////////////////////////////////////////////
 
-int verbose = 0;
 
 int compile_crush_file(const char *infn, CrushWrapper &crush)
 { 
@@ -161,21 +411,21 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     if (n >= 0)
       str.erase(n, str.length()-n);
     
-    if (verbose) cout << line << ": " << str << std::endl;
+    if (verbose>1) cout << line << ": " << str << std::endl;
 
     if (big.length()) big += " ";
     line_pos[big.length()] = line;
     line++;
     big += str;
   }
-
-  if (verbose >= 2) cout << "whole file is: \"" << big << "\"" << std::endl;
+  
+  if (verbose > 2) cout << "whole file is: \"" << big << "\"" << std::endl;
   
   crush_grammar crushg;
   const char *start = big.c_str();
   //tree_parse_info<const char *> info = ast_parse(start, crushg, space_p);
   tree_parse_info<> info = ast_parse(start, crushg, space_p);
-
+  
   // parse error?
   if (!info.full) {
     int cpos = info.stop - start;
@@ -190,32 +440,11 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
 	 << " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
     return 1;
   }
-  {
-    // dump parse tree as XML
-    std::map<parser_id, std::string> rule_names;
-    rule_names[crush_grammar::_int] = "int";
-    rule_names[crush_grammar::_posint] = "posint";
-    rule_names[crush_grammar::_name] = "name";
-    rule_names[crush_grammar::_device] = "device";
-    rule_names[crush_grammar::_bucket_type] = "bucket_type";
-    rule_names[crush_grammar::_bucket_id] = "bucket_id";
-    rule_names[crush_grammar::_bucket_alg] = "bucket_alg";
-    rule_names[crush_grammar::_bucket_item] = "bucket_item";
-    rule_names[crush_grammar::_bucket] = "bucket";
-    rule_names[crush_grammar::_step_take] = "step_take";
-    rule_names[crush_grammar::_step_choose_indep] = "step_choose_indep";
-    rule_names[crush_grammar::_step_choose_firstn] = "step_choose_firstn";
-    rule_names[crush_grammar::_step_emit] = "step_emit";
-    rule_names[crush_grammar::_crushrule] = "rule";
-    rule_names[crush_grammar::_crushmap] = "map";
-    //tree_to_xml(cout, info.trees, big.c_str(), rule_names);
 
-
-    // print the result
-    cout << "parsing succeeded\n";
-    cout << "result = " << evaluate(info) << "\n\n";
-  }
-
+  //cout << "parsing succeeded\n";
+  //dump(info.trees.begin());
+  parse_crush(info.trees.begin(), crush);
+  
   return 0;
 }
 
@@ -252,7 +481,9 @@ void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 
 void print_fixedpoint(ostream& out, int i)
 {
-  out << (i / 0x10000);
+  char s[20];
+  sprintf(s, "%.3f", (float)i / (float)0x10000);
+  out << s;
 }
 
 int decompile_crush(CrushWrapper &crush, ostream &out)
@@ -261,6 +492,8 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
 
   out << "# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
+    //if (crush.get_item_name(i) == 0)
+    //continue;
     out << "device " << i << " ";
     print_item_name(out, i, crush);
     if (crush.get_device_offload(i)) {
@@ -290,10 +523,30 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
     out << " ";
     print_item_name(out, i, crush);
     out << " {\n";
-    out << "\tid " << i << "\n";
-    out << "\talg " << crush.get_bucket_alg(i) << "\n";
+    out << "\tid " << i << "\t\t# do not change unnecessarily\n";
+
     int n = crush.get_bucket_size(i);
+
+    int alg = crush.get_bucket_alg(i);
+    out << "\talg " << crush_bucket_alg_name(alg);
+
+    // notate based on alg type
     bool dopos = false;
+    switch (alg) {
+    case CRUSH_BUCKET_UNIFORM:
+      out << "\t# do not change bucket size (" << n << ") unnecessarily";
+      dopos = true;
+      break;
+    case CRUSH_BUCKET_LIST:
+      out << "\t# add new items at the end; do not change order unnecessarily";
+      break;
+    case CRUSH_BUCKET_TREE:
+      out << "\t# do not change pos for existing items unnecessarily";
+      dopos = true;
+      break;
+    }
+    out << "\n";
+
     for (int j=0; j<n; j++) {
       int item = crush.get_bucket_item(i, j);
       int w = crush.get_bucket_item_weight(i, j);
@@ -305,8 +558,12 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
       print_item_name(out, item, crush);
       out << " weight ";
       print_fixedpoint(out, w);
-      if (dopos)
-	out << " pos " << j;
+      if (dopos) {
+	if (alg == CRUSH_BUCKET_TREE)
+	  out << " pos " << (j-1)/2;
+	else 
+	  out << " pos " << j;
+      }
       out << "\n";
     }
     out << "}\n";
@@ -316,7 +573,8 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
   for (int i=0; i<crush.get_max_rules(); i++) {
     if (!crush.rule_exists(i)) continue;
     out << "rule ";
-    print_rule_name(out, i, crush);
+    if (crush.get_rule_name(i))
+      print_rule_name(out, i, crush);
     out << " {\n";
     out << "\tpool " << crush.get_rule_mask_pool(i) << "\n";
     switch (crush.get_rule_mask_type(i)) {
@@ -431,7 +689,9 @@ int main(int argc, const char **argv)
   }
 
   if (cinfn) {
+    crush.create();
     int r = compile_crush_file(cinfn, crush);
+    crush.finalize();
     if (r < 0) 
       exit(1);
 
@@ -443,6 +703,8 @@ int main(int argc, const char **argv)
 	cerr << me << ": error writing '" << outfn << "': " << strerror(-r) << std::endl;
 	exit(1);
       }
+      if (verbose)
+	cout << "wrote crush map to " << outfn << std::endl;
     } else {
       cout << me << " successfully compiled '" << cinfn << "'.  Use -o file to write it out." << std::endl;
     }

@@ -33,7 +33,10 @@ ClientLease *MDSCacheObject::add_client_lease(int c, int mask)
   }
   
   int adding = ~l->mask & mask;
-  dout(20) << " had " << l->mask << " adding " << mask << " -> new " << adding << dendl;
+  dout(20) << " had " << l->mask << " adding " << mask 
+	   << " -> " << adding
+	   << " ... now " << (l->mask | mask)
+	   << dendl;
   int b = 0;
   while (adding) {
     if (adding & 1) {
@@ -54,9 +57,12 @@ ClientLease *MDSCacheObject::add_client_lease(int c, int mask)
 int MDSCacheObject::remove_client_lease(ClientLease *l, int mask, Locker *locker) 
 {
   assert(l->parent == this);
-  
+
+  list<SimpleLock*> to_gather;
+
   int removing = l->mask & mask;
-  dout(20) << "had " << l->mask << " removing " << mask << " -> " << removing << dendl;
+  dout(20) << "had " << l->mask << " removing " << mask << " -> " << removing
+	   << " ... now " << (l->mask & ~mask) << dendl;
   int b = 0;
   while (removing) {
     if (removing & 1) {
@@ -65,7 +71,7 @@ int MDSCacheObject::remove_client_lease(ClientLease *l, int mask, Locker *locker
 	lock->put_client_lease();
 	dout(20) << "put_client_lease on " << (1 << b) << " " << *lock << dendl;
 	if (lock->get_num_client_lease() == 0 && !lock->is_stable())
-	  locker->eval_gather(lock);
+	  to_gather.push_back(lock);
       }
     }
     b++;
@@ -73,14 +79,22 @@ int MDSCacheObject::remove_client_lease(ClientLease *l, int mask, Locker *locker
   }
 
   l->mask &= ~mask;
-  if (l->mask)
-    return l->mask;
+  int rc = l->mask;
 
-  // remove!
-  client_lease_map.erase(l->client);
-  delete l;
-  if (client_lease_map.empty())
-    put(PIN_CLIENTLEASE);
-  return 0;
+  if (rc == 0) {
+    dout(20) << "removing lease for client" << l->client << dendl;
+    client_lease_map.erase(l->client);
+    delete l;
+    if (client_lease_map.empty())
+      put(PIN_CLIENTLEASE);
+  }
+
+  // do pending gathers.
+  while (!to_gather.empty()) {
+    locker->eval_gather(to_gather.front());
+    to_gather.pop_front();
+  }
+   
+  return rc;
 }
 

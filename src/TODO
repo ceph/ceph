@@ -1,3 +1,4 @@
+
 code cleanup
 - userspace encoding/decoding needs major cleanup
   - use le32 etc annotation
@@ -5,6 +6,8 @@ code cleanup
 - addr=?
 
 userspace client
+- per-mds session struct.. and put the cap_ttl in there!
+- move the size check(s) on read from _read() into FileCache
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
 - obey file_max
@@ -15,48 +18,41 @@ userspace client
   - also needs cope with mds failures
 - reference count lease validations on path lookup?
 
-yehuda:
-- apply_truncate needs to truncate page cache, or something?
-- less heavy-handed writeback?
-
 kernel client
+- flush caps on sync, fsync, etc.
+  - hmm, should these go in a per-session "check" list, instead of independently scheduling delayed_work for each inode?
+- fsync should flush cap file size to mds.  not sure how to block on that, however.. maybe a want_reply flag in the cap msg?
+- timeout mds session close on umount
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
-- trim expired leases so we don't indefinitely hold dcache/icache refs...
+- what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
+  - fallback in each case (in ceph_unlink, _rename, etc.) when reply has no trace?
+  - what about open(O_WR or O_CREAT)?  pbly needs fix in mds... tho it's racey now...
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- convert rest of ceph_fs.h to le32/le64 notation, cleaning up userspace appropriately
+- nfs exporting
+ - fill_trace needs to use d_splice_alias
+ - lookup needs to return last_dentry if it gets swapped by fill_trace/d_splice_alias
+ - build fat fh's with multiple ancestors.. filenames..?
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
-  - kick requests when new map arrives
   - osd ack vs commit handling.  hmm!
-- unmount
-  - send (+deliver!) unmount message
+  - fix handling of resent message pages
 
 client
-- obey file_max
-- client needs to be smart about all of this..
-  - revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
 
-
 osdmon
-- actually, MasterOSDMap?  and clean out OSDMap, parsing in kernel client, etc.
 - monitor needs to monitor some osds...
-- bootstrap crush map
 
 crush
-- xml import/export?
- - named storage "pools"?
- - generic rule definition
-- crush tools
 - more efficient failure when all/too many osds are down
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 - "knob" bucket
@@ -66,8 +62,9 @@ pgmon
 - watch osd utilization; adjust overload in cluster map
 
 mon
+- paxos need to clean up old states.
 - some sort of tester for PaxosService...
-
+- osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds mustfix
 - rename slave in-memory rollback on failure

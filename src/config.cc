@@ -85,48 +85,48 @@ int _num_threads = 0;
 
 // file layouts
 struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: 1<<22,
- fl_stripe_count: 1,
- fl_object_size: 1<<22,
- fl_cas_hash: 0,
- fl_object_stripe_unit: 0,
- fl_pg_preferred: -1,
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
 
 struct ceph_file_layout g_default_mds_dir_layout = {
- fl_stripe_unit: 1<<22,
- fl_stripe_count: 1,
- fl_object_size: 1<<22,
- fl_cas_hash: 0,
- fl_object_stripe_unit: 0,
- fl_pg_preferred: -1,
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
 
 struct ceph_file_layout g_default_mds_log_layout = {
- fl_stripe_unit: 1<<20,
- fl_stripe_count: 1,
- fl_object_size: 1<<20,
- fl_cas_hash: 0,
- fl_object_stripe_unit: 0,
- fl_pg_preferred: -1,
+ fl_stripe_unit: init_le32(1<<20),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<20),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
 
 struct ceph_file_layout g_default_mds_anchortable_layout = {
- fl_stripe_unit: 1<<20,
- fl_stripe_count: 1,
- fl_object_size: 1<<20,
- fl_cas_hash: 0,
- fl_object_stripe_unit: 0,
- fl_pg_preferred: -1,
+ fl_stripe_unit: init_le32(1<<20),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<20),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
  fl_pg_pool: 0
@@ -271,7 +271,8 @@ md_config_t g_conf = {
   journaler_cache: false, // cache writes for later readback
   journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
   journaler_batch_interval: .001,   // seconds.. max add'l latency we artificially incur
-  journaler_batch_max: 16384,        // max bytes we'll delay flushing
+  //journaler_batch_max: 16384,        // max bytes we'll delay flushing
+  journaler_batch_max: 0,  // disable, for now....
 
   // --- mds ---
   mds_cache_size: 300000,
@@ -350,7 +351,7 @@ md_config_t g_conf = {
 
   osd_stat_refresh_interval: .5,
 
-  osd_pg_bits: 4,  // bits per osd
+  osd_pg_bits: 6,  // bits per osd
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_max_rep: 4,
@@ -374,13 +375,14 @@ md_config_t g_conf = {
 
   
   // --- fakestore ---
-  fakestore_sync_interval: 2,    // seconds
+  fakestore: false,
+  fakestore_sync_interval: .2,    // seconds
   fakestore_fake_attrs: false,
   fakestore_fake_collections: false,   
   fakestore_dev: 0,
 
   // --- ebofs ---
-  ebofs: 1,
+  ebofs: false,
   ebofs_cloneable: false,
   ebofs_verify: false,
   ebofs_commit_ms:      1000,       // 0 = no forced commit timeout (for debugging/tracing)
@@ -847,7 +849,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.client_hack_balance_reads = atoi(args[++i]);
 
     else if (strcmp(args[i], "--ebofs") == 0) 
-      g_conf.ebofs = 1;
+      g_conf.ebofs = true;
     else if (strcmp(args[i], "--ebofs_cloneable") == 0)
       g_conf.ebofs_cloneable = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_verify") == 0)
@@ -868,7 +870,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
     else if (strcmp(args[i], "--ebofs_realloc") == 0)
       g_conf.ebofs_realloc = atoi(args[++i]);
-\
+
     else if (strcmp(args[i], "--journal_dio") == 0)
       g_conf.journal_dio = atoi(args[++i]);      
     else if (strcmp(args[i], "--journal_max_write_entries") == 0)
@@ -876,11 +878,8 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--journal_max_write_bytes") == 0)
       g_conf.journal_max_write_bytes = atoi(args[++i]);      
 
-    else if (strcmp(args[i], "--fakestore") == 0) {
-      g_conf.ebofs = 0;
-      //g_conf.osd_pg_bits = 5;
-      //g_conf.osd_maxthreads = 1;   // fucking hell
-    }
+    else if (strcmp(args[i], "--fakestore") == 0)
+      g_conf.fakestore = true;
     else if (strcmp(args[i], "--fakestore_sync_interval") == 0)
       g_conf.fakestore_sync_interval = atoi(args[++i]);
     else if (strcmp(args[i], "--fakestore_dev") == 0) 

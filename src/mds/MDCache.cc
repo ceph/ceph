@@ -153,7 +153,7 @@ CInode *MDCache::create_inode()
   
   // assign ino
   in->inode.ino = mds->idalloc->alloc_id();
-
+  in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
 
   in->inode.layout = g_default_file_layout;
@@ -211,6 +211,7 @@ CInode *MDCache::create_root_inode()
   CInode *root = new CInode(this);
   memset(&root->inode, 0, sizeof(inode_t));
   root->inode.ino = MDS_INO_ROOT;
+  root->inode.version = 1;
   
   // make it up (FIXME)
   root->inode.mode = 0755 | S_IFDIR;
@@ -2846,8 +2847,8 @@ void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
   in->get(CInode::PIN_PURGING);
 
   // remove
-  if (in->inode.size > 0) {
-    mds->filer->remove(in->inode, newsize, oldsize, 0,
+  if (newsize < oldsize) {
+    mds->filer->remove(in->inode, newsize, oldsize-newsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
     // no need, empty file, just log it
@@ -4490,15 +4491,9 @@ void MDCache::request_forget_foreign_locks(MDRequest *mdr)
   }
 }
 
-void MDCache::request_cleanup(MDRequest *mdr)
+
+void MDCache::request_drop_locks(MDRequest *mdr)
 {
-  dout(15) << "request_cleanup " << *mdr << dendl;
-  metareqid_t ri = mdr->reqid;
-
-  // clear ref, trace
-  mdr->ref = 0;
-  mdr->trace.clear();
-
   // clean up slaves
   //  (will implicitly drop remote dn pins)
   for (set<int>::iterator p = mdr->more()->slaves.begin();
@@ -4507,12 +4502,25 @@ void MDCache::request_cleanup(MDRequest *mdr)
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_FINISH);
     mds->send_message_mds(r, *p);
   }
+
   // strip foreign xlocks out of lock lists, since the OP_FINISH drops them implicitly.
   request_forget_foreign_locks(mdr);
 
 
   // drop locks
   mds->locker->drop_locks(mdr);
+}
+
+void MDCache::request_cleanup(MDRequest *mdr)
+{
+  dout(15) << "request_cleanup " << *mdr << dendl;
+  metareqid_t ri = mdr->reqid;
+
+  request_drop_locks(mdr);
+
+  // clear ref, trace
+  mdr->ref = 0;
+  mdr->trace.clear();
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();

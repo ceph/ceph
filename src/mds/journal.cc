@@ -439,7 +439,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   }
 
   // truncated inodes
-  for (list< triple<inodeno_t,off_t,off_t> >::iterator p = truncated_inodes.begin();
+  for (list< triple<inodeno_t,uint64_t,uint64_t> >::iterator p = truncated_inodes.begin();
        p != truncated_inodes.end();
        ++p) {
     CInode *in = mds->mdcache->get_inode(p->first);

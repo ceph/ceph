@@ -785,6 +785,7 @@ int Rank::Pipe::accept()
       state = STATE_CLOSED;
       return -1;
     }
+    peer_addr.ipaddr.sin_port = old_addr.ipaddr.sin_port;
     dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
   }
   
@@ -1166,7 +1167,8 @@ void Rank::Pipe::fault(bool onconnect)
     return;
   }
 
-  ::close(sd);
+  if (sd >= 0)
+    ::close(sd);
   sd = -1;
 
   // lossy channel?
@@ -1277,7 +1279,8 @@ void Rank::Pipe::stop()
 
   cond.Signal();
   state = STATE_CLOSED;
-  ::close(sd);
+  if (sd >= 0)
+    ::close(sd);
   sd = -1;
 
   // deactivate myself
@@ -1296,6 +1299,8 @@ void Rank::Pipe::dirty_close()
   lock.Lock();
   state = STATE_CLOSING;
   cond.Signal();
+  dout(10) << "dirty_close sending SIGUSR1" << dendl;
+  reader_thread.kill(SIGUSR1);
   lock.Unlock();
 }
 
@@ -1492,7 +1497,7 @@ void Rank::Pipe::writer()
       continue;
     }
 
-    if (state != STATE_CONNECTING && state != STATE_WAIT &&
+    if (state != STATE_CONNECTING && state != STATE_WAIT && state != STATE_STANDBY &&
 	(!q.empty() || in_seq > in_seq_acked)) {
 
       // send ack?
@@ -1581,11 +1586,11 @@ Message *Rank::Pipe::read_message()
   if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
     return 0;
   
-  dout(20) << "reader got envelope type=" << le32_to_cpu(env.type)
+  dout(20) << "reader got envelope type=" << env.type
            << " src " << env.src << " dst " << env.dst
-           << " front=" << le32_to_cpu(env.front_len)
-	   << " data=" << le32_to_cpu(env.data_len)
-	   << " off " << le32_to_cpu(env.data_off)
+           << " front=" << env.front_len
+	   << " data=" << env.data_len
+	   << " off " << env.data_off
            << dendl;
   
   if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
@@ -1596,7 +1601,7 @@ Message *Rank::Pipe::read_message()
   // read front
   bufferlist front;
   bufferptr bp;
-  int front_len = le32_to_cpu(env.front_len);
+  int front_len = env.front_len;
   if (front_len) {
     bp = buffer::create(front_len);
     if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
@@ -1641,16 +1646,27 @@ Message *Rank::Pipe::read_message()
       data.push_back(bp);
       dout(20) << "reader got data tail " << left << dendl;
     }
+
+    // footer
+    ceph_msg_footer footer;
+    if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
+      return 0;
+
+    dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
+    if (le32_to_cpu(footer.aborted)) {
+      dout(0) << "reader got " << front.length() << " + " << data.length()
+	      << " byte message from " << env.src << ".. ABORTED" << dendl;
+      // MEH FIXME 
+      Message *m = new MGenericMessage(CEPH_MSG_PING);
+      env.type = CEPH_MSG_PING;
+      m->set_env(env);
+      return m;
+    }
   }
-  
-  // unmarshall message
-  dout(20) << "reader got " << front.length() << " + " << data.length() << " byte message from " 
-           << env.src << dendl;
 
-  Message *m = decode_message(env, front, data);
-
-  
-  return m;
+  dout(20) << "reader got " << front.length() << " + " << data.length()
+	   << " byte message from " << env.src << dendl;
+  return decode_message(env, front, data);
 }
 
 
@@ -1728,8 +1744,8 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
 			      bufferlist &payload, bufferlist &data)
 {
   // get envelope, buffers
-  env->front_len = cpu_to_le32(payload.length());
-  env->data_len = cpu_to_le32(data.length());
+  env->front_len = payload.length();
+  env->data_len = data.length();
 
   bufferlist blist;
   blist.claim(payload);
@@ -1775,7 +1791,7 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
 	     << " writing " << donow 
 	     << dendl;
     
-    if (msg.msg_iovlen >= IOV_MAX-1) {
+    if (msg.msg_iovlen >= IOV_MAX-2) {
       if (do_sendmsg(sd, &msg, msglen)) 
 	return -1;	
       
@@ -1801,7 +1817,17 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
     }
   }
   assert(left == 0);
-  
+
+  if (data.length()) {
+    // send data footer
+    struct ceph_msg_footer f;
+    memset(&f, 0, sizeof(f));
+    msgvec[msg.msg_iovlen].iov_base = (void*)&f;
+    msgvec[msg.msg_iovlen].iov_len = sizeof(f);
+    msglen += sizeof(f);
+    msg.msg_iovlen++;
+  }
+
   // send
   if (do_sendmsg(sd, &msg, msglen)) 
     return -1;	

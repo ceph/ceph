@@ -2,7 +2,7 @@
 #define __CEPH_DECODE_H
 
 /*
- * in all cases, 
+ * in all cases,
  *   void **p     pointer to position pointer
  *   void *end    pointer to end of buffer (last byte + 1)
  */
@@ -67,7 +67,7 @@
 
 /*
  * struct ceph_timespec <-> struct timespec
- */ 
+ */
 #define ceph_decode_timespec(ts, tv)					\
 	do {								\
 		(ts)->tv_sec = le32_to_cpu((tv)->tv_sec);		\
@@ -82,7 +82,7 @@
 
 /*
  * encoders
- */ 
+ */
 
 #define ceph_encode_64(p, v)			  \
 	do {					  \
@@ -105,23 +105,23 @@
 		(*(p))++;			  \
 	} while (0)
 
-/* 
- * filepath, string encoders 
+/*
+ * filepath, string encoders
  */
 
-static __inline__ void ceph_encode_filepath(void **p, void *end, 
+static __inline__ void ceph_encode_filepath(void **p, void *end,
 					    ceph_ino_t ino, const char *path)
 {
 	__u32 len = path ? strlen(path):0;
 	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
 	ceph_encode_64(p, ino);
 	ceph_encode_32(p, len);
-	if (len) 
+	if (len)
 		memcpy(*p, path, len);
 	*p += len;
 }
 
-static __inline__ void ceph_encode_string(void **p, void *end, 
+static __inline__ void ceph_encode_string(void **p, void *end,
 					  const char *s, __u32 len)
 {
 	BUG_ON(*p + sizeof(len) + len > end);

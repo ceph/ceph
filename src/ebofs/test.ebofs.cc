@@ -39,8 +39,8 @@ public:
   void *entry() {
 
     while (!stop) {
-      object_t oid;
-      oid.ino = (rand() % 1000) + 0x10000000;
+      pobject_t oid;
+      oid.oid.ino = (rand() % 1000) + 0x10000000;
       coll_t cid = rand() % 50;
       off_t off = rand() % 10000;//0;//rand() % 1000000;
       off_t len = 1+rand() % 100000;
@@ -51,7 +51,7 @@ public:
       switch (rand() % 5) {//10) {
       case 0:
         {
-	  oid.rev = rand() % 10;
+	  oid.oid.rev = rand() % 10;
           cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << std::endl;
           bufferlist bl;
           fs.read(oid, off, len, bl);
@@ -60,7 +60,7 @@ public:
             cout << t << " got " << l << std::endl;
             char *p = bl.c_str();
             while (l--) {
-	      char want = fingerprint_byte_at(off, oid.ino);
+	      char want = fingerprint_byte_at(off, oid.oid.ino);
               if (*p != 0 && *p != want) {
 		cout << t << " bad fingerprint at " << off << " got " << (int)*p << " want " << (int)want << std::endl;
 		assert(0);
@@ -77,7 +77,7 @@ public:
           cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << std::endl;
 	  char b[len];
           for (int j=0;j<len;j++)
-            b[j] = fingerprint_byte_at(off+j, oid.ino);
+            b[j] = fingerprint_byte_at(off+j, oid.oid.ino);
           bufferlist w;
 	  w.append(b, len);
           fs.write(oid, off, len, w, 0);
@@ -136,8 +136,8 @@ public:
         
       case 10:
 	{
-	  object_t newoid = oid;
-	  newoid.rev = rand() % 10;
+	  pobject_t newoid = oid;
+	  newoid.oid.rev = rand() % 10;
 	  cout << t << " clone " << oid << " to " << newoid << std::endl;
 	  fs.clone(oid, newoid, 0);
 	}
@@ -172,7 +172,7 @@ int main(int argc, const char **argv)
   // explicit tests
   if (0) {
     // verify that clone() plays nice with partial writes
-    object_t oid(1,1);
+    pobject_t oid(0, 0, object_t(1,1));
     bufferptr bp(10000);
     bp.zero();
     bufferlist bl;
@@ -188,9 +188,9 @@ int main(int argc, const char **argv)
     fs.write(oid, 100, 100, bl2, 0);
 
     // clone it
-    object_t oid2;
+    pobject_t oid2;
     oid2 = oid;
-    oid2.rev = 1;
+    oid2.oid.rev = 1;
     fs.clone(oid, oid2, 0);
 
     // ... 

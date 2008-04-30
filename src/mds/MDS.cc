@@ -967,6 +967,8 @@ void MDS::recovery_done()
   
   // tell connected clients
   bcast_mds_map();  
+
+  queue_waiters(waiting_for_active);
 }
 
 void MDS::handle_mds_recovery(int who) 

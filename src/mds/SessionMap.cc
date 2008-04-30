@@ -63,7 +63,7 @@ void SessionMap::load(Context *onload)
   
   C_SM_Load *c = new C_SM_Load(this);
   mds->filer->read(inode,
-                   0, inode.layout.fl_stripe_unit,
+                   0, ceph_file_layout_su(inode.layout),
                    &c->bl, 0,
                    c);
 

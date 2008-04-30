@@ -20,6 +20,14 @@ crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
 
+psim_SOURCES = psim.cc
+psim_LDADD = libcommon.a libcrush.a
+
+test_ebofs_SOURCES = ebofs/test.ebofs.cc
+test_ebofs_LDADD = libebofs.a libcommon.a libos.a
+mkfs_ebofs_SOURCES = ebofs/mkfs.ebofs.cc
+mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
+
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
@@ -116,6 +124,8 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
 #BUILT_SOURCES += libhadoopcephfs.so
 
 
+
+
 ##
 INCLUDES = 
 LDADD = -lpthread 
@@ -129,7 +139,8 @@ bin_PROGRAMS = \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
-	streamtest dupstore \
+	streamtest dupstore psim \
+	test.ebofs mkfs.ebofs \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
@@ -252,6 +263,8 @@ noinst_HEADERS = \
 	crush/CrushWrapper.h\
 	crush/CrushWrapper.i\
 	crush/crush.h\
+	crush/grammar.h\
+	crush/sample.txt\
 	ebofs/Table.h\
 	ebofs/csum.h\
 	ebofs/BlockDevice.h\
@@ -291,17 +304,35 @@ noinst_HEADERS = \
 	include/page.h\
 	include/xlist.h\
 	include/types.h\
+	kernel/crush/crush.c\
 	kernel/crush/crush.h\
-	kernel/crush/hash.h\
+	kernel/crush/mapper.c\
 	kernel/crush/mapper.h\
-	kernel/osdmap.h\
-	kernel/mdsmap.h\
-	kernel/super.h\
-	kernel/mon_client.h\
-	kernel/messenger.h\
+	kernel/crush/hash.h\
+	kernel/Makefile\
+	kernel/addr.c\
+	kernel/decode.h\
+	kernel/dir.c\
+	kernel/export.c\
+	kernel/file.c\
+	kernel/inode.c\
+	kernel/ktcp.c\
 	kernel/ktcp.h\
+	kernel/mds_client.c\
 	kernel/mds_client.h\
+	kernel/mdsmap.c\
+	kernel/mdsmap.h\
+	kernel/messenger.c\
+	kernel/messenger.h\
+	kernel/mon_client.c\
+	kernel/mon_client.h\
+	kernel/osd_client.c\
 	kernel/osd_client.h\
+	kernel/osdmap.c\
+	kernel/osdmap.h\
+	kernel/proc.c\
+	kernel/super.c\
+	kernel/super.h\
 	mds/Anchor.h\
 	mds/AnchorClient.h\
 	mds/AnchorTable.h\
@@ -372,6 +403,7 @@ noinst_HEADERS = \
 	messages/MMDSBoot.h\
 	messages/MClientMount.h\
 	messages/MClientFileCaps.h\
+	messages/MClientLease.h\
 	messages/MOSDMap.h\
 	messages/MOSDOp.h\
 	messages/MOSDOut.h\
@@ -408,6 +440,7 @@ noinst_HEADERS = \
 	messages/MClientSession.h\
 	messages/MMonPaxos.h\
 	messages/MOSDBoot.h\
+	messages/MOSDPGCreate.h\
 	messages/MStatfsReply.h\
 	messages/MAnchor.h\
 	messages/MCacheExpire.h\

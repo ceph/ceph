@@ -31,15 +31,28 @@
 #include <cassert>
 #include <errno.h>
 #include <dirent.h>
+#include <sys/ioctl.h>
 #ifndef __CYGWIN__
 # include <sys/xattr.h>
 #endif
-//#include <sys/vfs.h>
 
 #ifdef DARWIN
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
+
+
+#ifndef __CYGWIN__
+#ifndef DARWIN
+# include <linux/ioctl.h>
+# define BTRFS_IOCTL_MAGIC 0x94
+# define BTRFS_IOC_TRANS_START  _IO(BTRFS_IOCTL_MAGIC, 6)
+# define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
+# define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
+# define BTRFS_IOC_CLONE        _IOW(BTRFS_IOCTL_MAGIC, 9, int)
+#endif
+#endif
+
 
 #include "config.h"
 
@@ -186,16 +199,15 @@ int FakeStore::mkfs()
   fsid = rand();
   char fn[100];
   sprintf(fn, "%s/fsid", basedir.c_str());
-  int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY);
+  int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   ::write(fd, &fsid, sizeof(fsid));
-  ::fchmod(fd, 0644);
   ::close(fd);
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
   // journal?
   struct stat st;
   sprintf(fn, "%s.journal", basedir.c_str());
-  if (::stat(fn, &st) == 0) {
+  if (::lstat(fn, &st) == 0) {
     journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
     if (journal->create() < 0) {
       dout(0) << "mkfs error creating journal on " << fn << dendl;
@@ -261,6 +273,18 @@ int FakeStore::mount()
   char fn[100];
   int fd;
 
+#ifdef BTRFS_IOC_SYNC
+  // is this btrfs?
+  btrfs_fd = ::open(basedir.c_str(), O_DIRECTORY);
+  r = ::ioctl(btrfs_fd, BTRFS_IOC_SYNC);
+  if (r == 0) {
+    dout(0) << "mount detected btrfs" << dendl;
+  } else {
+    dout(0) << "mount did NOT detect btrfs: " << strerror(r) << dendl;
+    ::close(btrfs_fd);
+  }
+#endif
+
   // get fsid
   sprintf(fn, "%s/fsid", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
@@ -308,6 +332,11 @@ int FakeStore::umount()
   lock.Unlock();
   sync_thread.join();
 
+  if (btrfs_fd >= 0) {
+    ::close(btrfs_fd);
+    btrfs_fd = -1;
+  } 
+
   if (g_conf.fakestore_dev) {
     char cmd[100];
     dout(0) << "umounting" << dendl;
@@ -320,9 +349,36 @@ int FakeStore::umount()
 }
 
 
+int FakeStore::transaction_start()
+{
+  if (!btrfs_fd < 0)
+    return 0;
+
+  int fd = ::open(basedir.c_str(), O_RDONLY);
+  if (fd < 0) 
+    derr(0) << "transaction_start got " << strerror(fd)
+	    << " from btrfs open" << dendl;
+  if (int err = ::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
+    derr(0) << "transaction_start got " << strerror(err)
+	    << " from btrfs ioctl" << dendl;    
+    ::close(fd);
+    return err;
+  }
+  dout(10) << "transaction_start " << fd << dendl;
+  return fd;
+}
+
+void FakeStore::transaction_end(int fd)
+{
+  if (!btrfs_fd < 0)
+    return;
+  dout(10) << "transaction_end " << fd << dendl;
+  ::close(fd);
+}
+
+
 // --------------------
 // objects
-
 
 bool FakeStore::exists(pobject_t oid)
 {
@@ -332,7 +388,6 @@ bool FakeStore::exists(pobject_t oid)
   else 
     return false;
 }
-
   
 int FakeStore::stat(pobject_t oid, struct stat *st)
 {
@@ -343,7 +398,7 @@ int FakeStore::stat(pobject_t oid, struct stat *st)
   dout(20) << "stat " << oid << " at " << fn << " = " << r << dendl;
   return r;
 }
- 
+
  
 int FakeStore::remove(pobject_t oid, Context *onsafe) 
 {
@@ -415,16 +470,12 @@ int FakeStore::write(pobject_t oid,
 
   dout(20) << "write " << fn << " len " << len << " off " << offset << dendl;
 
-  
-  ::mknod(fn, 0644, 0);  // in case it doesn't exist yet.
-
-  int flags = O_WRONLY;//|O_CREAT;
-  int fd = ::open(fn, flags);
+  int flags = O_WRONLY|O_CREAT;
+  int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
     return fd;
   }
-  ::fchmod(fd, 0644);
   ::flock(fd, LOCK_EX);    // lock for safety
   
   // seek
@@ -461,6 +512,60 @@ int FakeStore::write(pobject_t oid,
   return did;
 }
 
+int FakeStore::clone(pobject_t oldoid, pobject_t newoid)
+{
+  char ofn[200], nfn[200];
+  get_oname(oldoid, ofn);
+  get_oname(newoid, nfn);
+
+  dout(20) << "clone " << ofn << " -> " << nfn << dendl;
+
+  int o = ::open(ofn, O_RDONLY);
+  if (o < 0)
+      return -errno;
+  int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (n < 0)
+      return -errno;
+  int r = 0;
+  if (btrfs_fd >= 0)
+    r = ::ioctl(n, BTRFS_IOC_CLONE, o);
+  else {
+    struct stat st;
+    ::fstat(o, &st);
+
+#ifdef SPLICE_F_MOVE
+    loff_t op = 0, np = 0;
+    while (op < st.st_size && r >= 0)
+      r = ::splice(o, &op, n, &np, st.st_size-op, 0);
+#else
+    loff_t pos = 0;
+    int buflen = 4096*10;
+    char buf[buflen];
+    while (pos < st.st_size) {
+      int l = MIN(st.st_size-pos, buflen);
+      r = ::read(o, buf, l);
+      if (r < 0)
+	break;
+      int op = 0;
+      while (op < l) {
+	int r2 = ::write(n, buf+op, l-op);
+	
+	if (r2 < 0) { r = r2; break; }
+	op += r2;	  
+      }
+      if (r < 0) break;
+      pos += r;
+    }
+#endif
+  }
+  if (r < 0)
+    return -errno;
+
+  ::close(n);
+  ::close(o);
+  return 0;
+}
+
 
 void FakeStore::sync_entry()
 {
@@ -470,21 +575,24 @@ void FakeStore::sync_entry()
   while (!stop) {
     dout(10) << "sync_entry waiting for " << interval << dendl;
     sync_cond.WaitInterval(lock, interval);
-    dout(10) << "sync_entry committing " << super_epoch << dendl;
+    lock.Unlock();
+
+    dout(-10) << "sync_entry committing " << super_epoch << dendl;
     commit_start();
 
     // induce an fs sync.
     // we assume data=ordered or similar semantics
     char fn[100];
     sprintf(fn, "%s/commit_epoch", basedir.c_str());
-    int fd = ::open(fn, O_CREAT|O_WRONLY);
+    int fd = ::open(fn, O_CREAT|O_WRONLY, 0644);
     ::write(fd, &super_epoch, sizeof(super_epoch));
-    ::fchmod(fd, 0644);
-    ::fsync(fd);  // this should cause the fs's journal to commit.
+    ::fsync(fd);  // this should cause the fs's journal to commit.  (on btrfs too.)
     ::close(fd);
 
     commit_finish();
-    dout(10) << "sync_entry committed " << super_epoch << dendl;
+
+    lock.Lock();
+    dout(-10) << "sync_entry committed " << super_epoch << dendl;
   }
   lock.Unlock();
 }

@@ -117,7 +117,7 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
 {
   // make message
   Message *m = 0;
-  int type = le32_to_cpu(env.type);
+  int type = env.type;
   switch (type) {
 
     // -- with payload --

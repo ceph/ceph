@@ -87,6 +87,7 @@ int main(int argc, const char **argv)
   // done
   //delete mds;
 
+  generic_dout(0) << "stopped." << dendl;
   return 0;
 }
 

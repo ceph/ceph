@@ -59,8 +59,8 @@ int main(int argc, const char **argv)
 	  start = now;
 	  cout << i << " / " << n << " in " << end << std::endl;
 	}
-	object_t oid(i,0);
-	fs.write(oid, 0, sz, bl, (Context*)0);
+	pobject_t poid(0, 0, object_t(i,0));
+	fs.write(poid, 0, sz, bl, (Context*)0);
       }
     }
 
@@ -70,7 +70,7 @@ int main(int argc, const char **argv)
       memset(crap, 0, 1024*1024);
       
 
-      object_t oid(1,2);
+      pobject_t oid(0, 0, object_t(1,2));
       off_t pos = 0;
       off_t sz = 16;
 

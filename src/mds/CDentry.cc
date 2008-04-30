@@ -205,11 +205,11 @@ void CDentry::make_path(filepath& fp)
 {
   assert(dir);
   if (dir->inode->is_base())
-    fp.set_ino(dir->inode->ino());               // base case
+    fp = filepath(dir->inode->ino());               // base case
   else if (dir->inode->get_parent_dn())
     dir->inode->get_parent_dn()->make_path(fp);  // recurse
   else
-    fp.set_ino(dir->inode->ino());               // relative but not base?  hrm!
+    fp = filepath(dir->inode->ino());               // relative but not base?  hrm!
   fp.push_dentry(name);
 }
 

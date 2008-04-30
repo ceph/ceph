@@ -1,12 +1,14 @@
 #ifndef __FS_CEPH_MESSENGER_H
 #define __FS_CEPH_MESSENGER_H
 
-#include <linux/uio.h>
+#include <linux/mutex.h>
 #include <linux/net.h>
 #include <linux/radix-tree.h>
-#include <linux/workqueue.h>
-#include <linux/ceph_fs.h>
+#include <linux/uio.h>
 #include <linux/version.h>
+#include <linux/workqueue.h>
+
+#include "ceph_fs.h"
 
 struct ceph_msg;
 
@@ -26,6 +28,10 @@ static __inline__ const char *ceph_name_type_str(int t) {
 	}
 }
 
+/* use format string %s%d */
+#define ENTITY_NAME(n)				   \
+	ceph_name_type_str(le32_to_cpu((n).type)), \
+		le32_to_cpu((n).num)
 
 struct ceph_messenger {
 	void *parent;
@@ -37,13 +43,16 @@ struct ceph_messenger {
 	struct work_struct awork;	 /* accept work */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
-	struct list_head con_accepting;  /*  doing handshake, or */
-	struct radix_tree_root con_open; /*  established */
+	struct list_head con_accepting;  /* accepting */
+	struct radix_tree_root con_tree; /*  established */
+	struct page *zero_page;
 };
 
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
+	struct ceph_msg_footer footer;	/* footer */
 	struct kvec front;              /* first bit of message */
+	struct mutex page_mutex;
 	struct page **pages;            /* data payload.  NOT OWNER. */
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
@@ -56,7 +65,7 @@ struct ceph_msg_pos {
 };
 
 /* ceph connection fault delay defaults */
-#define BASE_DELAY_INTERVAL	1
+#define BASE_DELAY_INTERVAL	(HZ/2)
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
 /* ceph_connection state bit flags */
@@ -71,16 +80,18 @@ struct ceph_msg_pos {
 #define CLOSED		8  /* we've closed the connection */
 #define SOCK_CLOSE	9  /* socket state changed to close */
 #define STANDBY		10 /* standby, when socket state close, no messages */
+#define REGISTERED      11
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
 	struct socket *sock;	/* connection socket */
 	unsigned long state;	/* connection state */
+	const char *error_msg;
 
 	atomic_t nref;
 
 	struct list_head list_all;   /* msgr->con_all */
-	struct list_head list_bucket;  /* msgr->con_open or con_accepting */
+	struct list_head list_bucket;  /* msgr->con_tree or con_accepting */
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
@@ -98,10 +109,12 @@ struct ceph_connection {
 	struct list_head out_sent;   /* sending/sent but unacked */
 
 	__le32 out32;
-	struct kvec out_kvec[4],
+	struct kvec out_kvec[6],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
+	int out_more;        /* there is more data after this kvec */
+	struct ceph_msg_footer out_footer;
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
 
@@ -130,10 +143,27 @@ extern void ceph_queue_read(struct ceph_connection *con);
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
+
 static __inline__ void ceph_msg_get(struct ceph_msg *msg) {
+	/*printk("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
+	  atomic_read(&msg->nref)+1);*/
 	atomic_inc(&msg->nref);
 }
+
 extern void ceph_msg_put(struct ceph_msg *msg);
+
+static inline void ceph_msg_put_list(struct list_head *head)
+{
+	while (!list_empty(head)) {
+		struct ceph_msg *msg = list_first_entry(head, struct ceph_msg,
+							list_head);
+		list_del_init(&msg->list_head);
+		ceph_msg_put(msg);
+	}
+}
+
+extern struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *msg);
+
 extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 			 unsigned long timeout);
 

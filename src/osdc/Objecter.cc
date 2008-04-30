@@ -146,7 +146,7 @@ void Objecter::maybe_request_map()
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
   last_epoch_requested = osdmap->get_epoch()+1;
-  messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch(), last_epoch_requested),
+  messenger->send_message(new MOSDGetMap(monmap->fsid, last_epoch_requested),
 			  monmap->get_inst(monmap->pick_mon()));
 }
 
@@ -352,7 +352,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
 {
   // find OSD
   ObjectExtent &ex = st->extents.front();
-  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
+  PG &pg = get_pg( pg_t(ex.layout.ol_pgid) );
 
   // pick tid
   last_tid++;
@@ -480,7 +480,7 @@ tid_t Objecter::readx(OSDRead *rd, Context *onfinish)
 tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry) 
 {
   // find OSD
-  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
+  PG &pg = get_pg( pg_t(ex.layout.ol_pgid) );
 
   // pick tid
   last_tid++;
@@ -769,7 +769,7 @@ tid_t Objecter::modifyx(OSDModify *wr, Context *onack, Context *oncommit)
 tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 {
   // find
-  PG &pg = get_pg( pg_t(le64_to_cpu(ex.layout.ol_pgid)) );
+  PG &pg = get_pg( pg_t(ex.layout.ol_pgid) );
     
   // pick tid
   tid_t tid;
@@ -912,7 +912,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     return;
   }
 
-  assert(m->get_result() >= 0);
+  assert(m->get_result() >= 0); // FIXME
 
   // ack|commit -> ack
   if (wr->waitfor_ack.count(tid)) {
@@ -937,6 +937,9 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 	// discard buffer!
 	((OSDWrite*)wr)->bl.clear();
       }
+    } else {
+      dout(15) << "handle_osd_modify_reply still need " 
+	       << wr->waitfor_ack.size() << " acks" << dendl;
     }
   }
   if (m->is_safe()) {
@@ -951,20 +954,30 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     if (wr->waitfor_commit.empty()) {
       oncommit = wr->oncommit;
       wr->oncommit = 0;
+    } else {
+      dout(15) << "handle_osd_modify_reply still need "
+	       << wr->waitfor_commit.size() << " safes" << dendl;
     }
   }
 
   // done?
  done:
-  if (wr->onack == 0 && wr->oncommit == 0) {
-    // remove from tid/osd maps
+
+  // done with this tid?
+  if (wr->waitfor_commit.count(tid) == 0 &&
+      wr->waitfor_ack.count(tid) == 0) {
     assert(pg.active_tids.count(tid));
     pg.active_tids.erase(tid);
-    dout(15) << "handle_osd_modify_reply completed.  pg " << m->get_pg()
+    dout(15) << "handle_osd_modify_reply pg " << m->get_pg()
 	     << " still has " << pg.active_tids << dendl;
     if (pg.active_tids.empty()) 
       close_pg( m->get_pg() );
     op_modify.erase( tid );
+  }
+  
+  // done with this overall op?
+  if (wr->onack == 0 && wr->oncommit == 0) {
+    dout(15) << "handle_osd_modify_reply completed" << dendl;
     delete wr;
   }
   

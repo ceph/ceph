@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2004-2008 Sage Weil <sage@newdream.net>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -37,13 +37,12 @@ struct crush_grammar : public grammar<crush_grammar>
   static const int _bucket = 17;
 
   static const int _step_take = 18;
-  static const int _step_choose_firstn = 19;
-  static const int _step_choose_indep = 20;
+  static const int _step_choose = 19;
   static const int _step_emit = 21;
   static const int _step = 22;
   static const int _crushrule = 23;
 
-  static const int _crushmap = 23;
+  static const int _crushmap = 24;
 
   template <typename ScannerT>
   struct definition
@@ -63,8 +62,7 @@ struct crush_grammar : public grammar<crush_grammar>
     rule<ScannerT, parser_context<>, parser_tag<_bucket> >      bucket;
 
     rule<ScannerT, parser_context<>, parser_tag<_step_take> >      step_take;
-    rule<ScannerT, parser_context<>, parser_tag<_step_choose_firstn> >      step_choose_firstn;
-    rule<ScannerT, parser_context<>, parser_tag<_step_choose_indep> >      step_choose_indep;
+    rule<ScannerT, parser_context<>, parser_tag<_step_choose> >      step_choose;
     rule<ScannerT, parser_context<>, parser_tag<_step_emit> >      step_emit;
     rule<ScannerT, parser_context<>, parser_tag<_step> >      step;
     rule<ScannerT, parser_context<>, parser_tag<_crushrule> >      crushrule;
@@ -82,14 +80,20 @@ struct crush_grammar : public grammar<crush_grammar>
       name = leaf_node_d[ lexeme_d[ +alnum_p ] ];
 
       // devices
-      device = str_p("device") >> posint >> name >> !( str_p("offload") >> real_p );
+      device = str_p("device") >> posint >> name
+			       >> !( ( str_p("offload") >> real_p ) |
+				     ( str_p("load") >> real_p ) |
+				     str_p("down"));
       
       // bucket types
       bucket_type = str_p("type") >> posint >> name;
 
       // buckets
       bucket_id = str_p("id") >> negint;
-      bucket_alg = str_p("alg") >> ( str_p("uniform") | str_p("list") | str_p("tree") | str_p("straw") );
+      bucket_alg = str_p("alg") >> ( str_p("uniform") | 
+				     str_p("list") | 
+				     str_p("tree") | 
+				     str_p("straw") );
       bucket_item = str_p("item") >> name
 				  >> !( str_p("weight") >> real_p )
 				  >> !( str_p("pos") >> posint );
@@ -97,10 +101,13 @@ struct crush_grammar : public grammar<crush_grammar>
       
       // rules
       step_take = str_p("take") >> str_p("root");
-      step_choose_indep = str_p("choose_indep") >> integer >> name;
-      step_choose_firstn = str_p("choose_firstn") >> integer >> name;
+      step_choose = str_p("choose") >> ( str_p("indep") | str_p("firstn") )
+				    >> integer
+				    >> str_p("type") >> name;
       step_emit = str_p("emit");
-      step = str_p("step") >> ( step_take | step_choose_indep | step_choose_firstn | step_emit );
+      step = str_p("step") >> ( step_take | 
+				step_choose | 
+				step_emit );
       crushrule = str_p("rule") >> !name >> '{' 
 			   >> str_p("pool") >> posint
 			   >> str_p("type") >> ( str_p("replicated") | str_p("raid4") )

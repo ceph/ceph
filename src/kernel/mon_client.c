@@ -1,6 +1,7 @@
 
 #include <linux/types.h>
 #include <linux/random.h>
+#include <linux/sched.h>
 #include "mon_client.h"
 
 int ceph_debug_mon = -1;
@@ -16,7 +17,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	int i, err = -EINVAL;
 
 	dout(30, "monmap_decode %p %p\n", p, end);
-	m = kmalloc(end-p, GFP_KERNEL);
+	m = kmalloc(end-p, GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -30,11 +31,11 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	if (p != end)
 		goto bad;
 
-	for (i=0; i<m->num_mon; i++) {
+	for (i = 0; i < m->num_mon; i++) {
 		dout(30, "monmap_decode mon%d is %u.%u.%u.%u:%u\n", i,
 		     IPQUADPORT(m->mon_inst[i].addr.ipaddr));
 	}
-	dout(30, "monmap_decode got epoch %d, num_mon %d\n", m->epoch, 
+	dout(30, "monmap_decode got epoch %d, num_mon %d\n", m->epoch,
 	     m->num_mon);
 	return m;
 
@@ -49,8 +50,8 @@ bad:
 int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr)
 {
 	int i;
-	for (i=0; i<m->num_mon; i++) 
-		if (ceph_entity_addr_equal(addr, &m->mon_inst[i].addr)) 
+	for (i = 0; i < m->num_mon; i++)
+		if (ceph_entity_addr_equal(addr, &m->mon_inst[i].addr))
 			return 1;
 	return 0;
 }
@@ -69,33 +70,34 @@ static int pick_mon(struct ceph_mon_client *monc, int notmon)
 /*
  * delay work with exponential backoff
  */
-void ceph_monc_delayed_work(struct delayed_work *dwork, unsigned long *delay)
+static void delayed_work(struct delayed_work *dwork, unsigned long *delay)
 {
 
-        dout(5, "ceph_monc_delayed_work started\n");
+	dout(5, "delayed_work started\n");
 	schedule_delayed_work(dwork, *delay);
 	if (*delay < MAX_DELAY_INTERVAL)
 		*delay *= 2;
 	else
 		*delay = MAX_DELAY_INTERVAL;
-
+	dout(5, "delayed_work finished\n");
 }
 
+
 /*
- * worker function for request mdsmap 
+ * mds map 
  */
-static void work_monc_request_mdsmap(struct work_struct *work)
+static void do_request_mdsmap(struct work_struct *work)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_getmap *h;
 	struct ceph_mon_client *monc =
-		container_of(work, struct ceph_mon_client, mds_delayed_work.work);
+		container_of(work, struct ceph_mon_client,
+			     mds_delayed_work.work);
 	int mon = pick_mon(monc, -1);
 
-	dout(5, "work_monc_request_mdsmap from mon%d have %u\n", mon, 
-	     monc->have_mdsmap);
+	dout(5, "request_mdsmap from mon%d have %u\n", mon, monc->have_mdsmap);
 
-	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(__u32), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, 0);
 	if (IS_ERR(msg))
 		return;
 	h = msg->front.iov_base;
@@ -107,69 +109,19 @@ static void work_monc_request_mdsmap(struct work_struct *work)
 
 	/* keep sending request until we receive mds map */
 	if (monc->have_mdsmap)
-		ceph_monc_delayed_work(&monc->mds_delayed_work, 
-				       &monc->mds_delay);
-}
-
-/*
- * worker function for request osdmap 
- */
-void work_monc_request_osdmap(struct work_struct *work)
-{
-	struct ceph_msg *msg;
-	struct ceph_osd_getmap *h;
-	struct ceph_mon_client *monc =
-		container_of(work, struct ceph_mon_client, osd_delayed_work.work);
-	int mon = pick_mon(monc, -1);
-	
-	dout(5, "ceph_monc_request_osdmap from mon%d have %u\n", mon, 
-	     monc->have_osdmap);
-	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, 2*sizeof(__u32), 0, 0, 0);
-	if (IS_ERR(msg))
-		return;
-	h = msg->front.iov_base;
-	h->fsid = monc->monmap->fsid;
-	h->start = cpu_to_le32(monc->have_osdmap);
-	h->want = cpu_to_le32(monc->want_osdmap);
-	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, 0);
-
-        /* keep sending request until we receive osd map */
-        if (monc->have_osdmap)
-                ceph_monc_delayed_work(&monc->osd_delayed_work, 
-				       &monc->osd_delay);
-}
-
-int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
-{
-	dout(5, "ceph_monc_init\n");
-	memset(monc, 0, sizeof(*monc));
-	monc->client = cl;
-	monc->monmap = kzalloc(sizeof(struct ceph_monmap), GFP_KERNEL);
-	if (monc->monmap == NULL) 
-		return -ENOMEM;
-	spin_lock_init(&monc->lock);
-	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_KERNEL);
-	INIT_DELAYED_WORK(&monc->mds_delayed_work, work_monc_request_mdsmap);
-	INIT_DELAYED_WORK(&monc->osd_delayed_work, work_monc_request_osdmap);
-	monc->mds_delay = BASE_DELAY_INTERVAL;
-	monc->osd_delay = BASE_DELAY_INTERVAL;
-	monc->last_tid = 0;
-	monc->have_mdsmap = 0;
-	monc->have_osdmap = 0;
-	monc->want_osdmap = 0;
-	return 0;
+		delayed_work(&monc->mds_delayed_work, &monc->mds_delay);
 }
 
 void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have)
 {
+	monc->mds_delay = BASE_DELAY_INTERVAL;
 	monc->have_mdsmap = have;
-	ceph_monc_delayed_work(&monc->mds_delayed_work, &monc->mds_delay);
+	do_request_mdsmap(&monc->mds_delayed_work.work);
 }
 
 int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have)
 {
-	dout(5, "ceph_monc_got_mdsmap calling cancel_delayed_work_sync\n"); 
+	dout(5, "ceph_monc_got_mdsmap calling cancel_delayed_work_sync\n");
 
 	/* we got map so take map request out of queue */
 	cancel_delayed_work_sync(&monc->mds_delayed_work);
@@ -177,83 +129,144 @@ int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have)
 
 	if (have > monc->have_mdsmap) {
 		monc->have_mdsmap = 0;
-		dout(5, "ceph_monc_got_mdsmap have %u > wanted %u\n", 
+		dout(5, "ceph_monc_got_mdsmap have %u > wanted %u\n",
 		     have, monc->have_mdsmap);
 		return 0;
 	} else {
-		dout(5, "ceph_monc_got_mdsmap have %u <= wanted %u *****\n", 
+		dout(5, "ceph_monc_got_mdsmap have %u <= wanted %u *****\n",
 		     have, monc->have_mdsmap);
 		return -EAGAIN;
 	}
 }
 
-void ceph_monc_request_osdmap(struct ceph_mon_client *monc,
-			     __u32 have, __u32 want)
+
+/*
+ * osd map
+ */
+static void do_request_osdmap(struct work_struct *work)
 {
-	dout(5, "ceph_monc_request_osdmap have %u want %u\n", have, want);
-	monc->have_osdmap = have;
-	monc->want_osdmap = want;
-	ceph_monc_delayed_work(&monc->osd_delayed_work, &monc->osd_delay);
+	struct ceph_msg *msg;
+	struct ceph_osd_getmap *h;
+	struct ceph_mon_client *monc =
+		container_of(work, struct ceph_mon_client,
+			     osd_delayed_work.work);
+	int mon = pick_mon(monc, -1);
+
+	dout(5, "request_osdmap from mon%d have %u\n", mon, monc->have_osdmap);
+	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, 0);
+	if (IS_ERR(msg))
+		return;
+	h = msg->front.iov_base;
+	h->fsid = monc->monmap->fsid;
+	h->start = cpu_to_le32(monc->have_osdmap + 1);
+	msg->hdr.dst = monc->monmap->mon_inst[mon];
+	ceph_msg_send(monc->client->msgr, msg, 0);
+
+	/* keep sending request until we receive osd map */
+	if (monc->have_osdmap)
+		delayed_work(&monc->osd_delayed_work, &monc->osd_delay);
 }
 
-int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have)
+void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u32 have)
 {
-	dout(5, "ceph_monc_got_osdmap calling cancel_delayed_work_sync\n"); 
+	dout(5, "ceph_monc_request_osdmap have %u\n", have);
+	monc->osd_delay = BASE_DELAY_INTERVAL;
+	monc->have_osdmap = have;
+	do_request_osdmap(&monc->osd_delayed_work.work);
+}
+
+int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 got)
+{
+	if (got <= monc->have_osdmap) {
+		dout(5, "ceph_monc_got_osdmap got %u <= had %u, will retry\n",
+		     got, monc->have_osdmap);
+		return -EAGAIN;
+	}
 
 	/* we got map so take map request out of queue */
+	dout(5, "ceph_monc_got_osdmap got %u > had %u\n",
+	     got, monc->have_osdmap);
 	cancel_delayed_work_sync(&monc->osd_delayed_work);
 	monc->osd_delay = BASE_DELAY_INTERVAL;
-
-	if (have > monc->want_osdmap) {
-		monc->want_osdmap = 0;
-		monc->have_osdmap = 0;
-		dout(5, "ceph_monc_got_osdmap have %u > wanted %u\n", 
-		     have, monc->want_osdmap);
-		return 0;
-	} else {
-		dout(5, "ceph_monc_got_osdmap have %u <= wanted %u *****\n", 
-		     have, monc->want_osdmap);
-		return -EAGAIN;
-	}
+	monc->have_osdmap = 0;
+	return 0;
 }
 
+
+/*
+ * umount
+ */
+static void do_request_umount(struct work_struct *work)
+{
+	struct ceph_msg *msg;
+	struct ceph_mon_client *monc =
+		container_of(work, struct ceph_mon_client,
+			     umount_delayed_work.work);
+	int mon = pick_mon(monc, -1);
+
+	dout(5, "do_request_umount from mon%d\n", mon);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, 0, 0, 0, 0);
+	if (IS_ERR(msg))
+		return;
+	msg->hdr.dst = monc->monmap->mon_inst[mon];
+	ceph_msg_send(monc->client->msgr, msg, 0);
+
+	delayed_work(&monc->umount_delayed_work, &monc->umount_delay);
+}
+
+void ceph_monc_request_umount(struct ceph_mon_client *monc)
+{
+	monc->umount_delay = BASE_DELAY_INTERVAL;
+	do_request_umount(&monc->umount_delayed_work.work);
+}
+
+void ceph_monc_handle_umount(struct ceph_mon_client *monc,
+			     struct ceph_msg *msg)
+{
+	dout(5, "ceph_monc_handle_umount\n");
+	cancel_delayed_work_sync(&monc->umount_delayed_work);
+	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
+	wake_up(&monc->client->mount_wq);
+}
 
 
 /*
  * statfs
  */
-
-void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc, struct ceph_msg *msg)
+void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
+				   struct ceph_msg *msg)
 {
 	__u64 tid;
 	struct ceph_mon_statfs_request *req;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
-	
+
 	ceph_decode_64_safe(&p, end, tid, bad);
 	dout(10, "handle_statfs_reply %p tid %llu\n", msg, tid);
 
 	spin_lock(&monc->lock);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
-	dout(30, "got req %p\n", req);
 	if (req) {
+		radix_tree_delete(&monc->statfs_request_tree, tid);
+		req->result = -EIO;
 		ceph_decode_need(&p, end, 4*sizeof(__u64), bad_locked);
 		ceph_decode_64(&p, req->buf->f_total);
 		ceph_decode_64(&p, req->buf->f_free);
 		ceph_decode_64(&p, req->buf->f_avail);
 		ceph_decode_64(&p, req->buf->f_objects);
-		dout(30, "decoded ok\n");
+		req->result = 0;
 	}
-	radix_tree_delete(&monc->statfs_request_tree, tid);
+out_locked:
 	spin_unlock(&monc->lock);
 	if (req)
 		complete(&req->completion);
 	return;
 
 bad_locked:
-	spin_unlock(&monc->lock);
+	derr(10, "corrupt statfs reply, EIO\n");
+	goto out_locked;
 bad:
-	dout(10, "corrupt statfs reply\n");
+	derr(10, "corrupt statfs reply, no tid\n");
 }
 
 int send_statfs(struct ceph_mon_client *monc, u64 tid)
@@ -265,7 +278,7 @@ int send_statfs(struct ceph_mon_client *monc, u64 tid)
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(tid), 0, 0, 0);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
-	*(__le64*)msg->front.iov_base = cpu_to_le64(tid);
+	*(__le64 *)msg->front.iov_base = cpu_to_le64(tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;
@@ -285,12 +298,35 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	req.last_attempt = jiffies;
 	radix_tree_insert(&monc->statfs_request_tree, req.tid, &req);
 	spin_unlock(&monc->lock);
-	
+
 	/* send request */
-	if ((err = send_statfs(monc, req.tid)) < 0)
+	err = send_statfs(monc, req.tid);
+	if (err < 0)
 		return err;
 
 	dout(20, "do_statfs waiting for reply\n");
-	wait_for_completion(&req.completion);
+	err = wait_for_completion_interruptible(&req.completion);
+	if (err == -EINTR)
+		return err;
+	return req.result;
+}
+
+
+int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
+{
+	dout(5, "ceph_monc_init\n");
+	memset(monc, 0, sizeof(*monc));
+	monc->client = cl;
+	monc->monmap = kzalloc(sizeof(struct ceph_monmap), GFP_KERNEL);
+	if (monc->monmap == NULL)
+		return -ENOMEM;
+	spin_lock_init(&monc->lock);
+	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
+	INIT_DELAYED_WORK(&monc->mds_delayed_work, do_request_mdsmap);
+	INIT_DELAYED_WORK(&monc->osd_delayed_work, do_request_osdmap);
+	INIT_DELAYED_WORK(&monc->umount_delayed_work, do_request_umount);
+	monc->last_tid = 0;
+	monc->have_mdsmap = 0;
+	monc->have_osdmap = 0;
 	return 0;
 }

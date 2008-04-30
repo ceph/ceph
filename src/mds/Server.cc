@@ -165,26 +165,14 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
     mds->sessionmap.touch_session(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->stamp), session->inst);
-    break;
-
-  case CEPH_SESSION_REQUEST_RESUME:
-    if (!session) {
-      dout(10) << "dne, replying with close" << dendl;
-      mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());      
-      return;
+    if (session->is_stale()) {
+      mds->sessionmap.set_state(session, Session::STATE_OPEN);
+      mds->locker->resume_stale_caps(session);
     }
-    if (!session->is_stale()) {
-      dout(10) << "hmm, got request_resume on non-stale session for " << session->inst << dendl;
-      assert(0);
-      return;
-    }
-    mds->sessionmap.set_state(session, Session::STATE_OPEN);
-    mds->sessionmap.touch_session(session);
-    mds->locker->resume_stale_caps(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RESUME, m->stamp), session->inst);
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->stamp), 
+				 session->inst);
     break;
-
+    
   case CEPH_SESSION_REQUEST_CLOSE:
     if (!session || session->is_closing()) {
       dout(10) << "already closing|dne, dropping this req" << dendl;
@@ -222,7 +210,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
-      dout(20) << " killing capability on " << *in << dendl;
+      dout(20) << " killing capability " << cap_string(cap->issued()) << " on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
     }
     while (!session->leases.empty()) {
@@ -320,8 +308,10 @@ void Server::find_idle_sessions()
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
+    /* pointless
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()),
 				 session->inst);
+    */
   }
 
   // dead
@@ -722,19 +712,22 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // inodes ops.
   case CEPH_MDS_OP_STAT:
   case CEPH_MDS_OP_LSTAT:
-  case CEPH_MDS_OP_FSTAT:
     handle_client_stat(mdr);
     break;
   case CEPH_MDS_OP_UTIME:
+  case CEPH_MDS_OP_LUTIME:
     handle_client_utime(mdr);
     break;
   case CEPH_MDS_OP_CHMOD:
+  case CEPH_MDS_OP_LCHMOD:
     handle_client_chmod(mdr);
     break;
   case CEPH_MDS_OP_CHOWN:
+  case CEPH_MDS_OP_LCHOWN:
     handle_client_chown(mdr);
     break;
   case CEPH_MDS_OP_TRUNCATE:
+  case CEPH_MDS_OP_LTRUNCATE:
     handle_client_truncate(mdr);
     break;
   case CEPH_MDS_OP_READDIR:
@@ -1195,7 +1188,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
   // traverse to parent dir
   int r = mdcache->path_traverse(mdr, mdr->client_request,
-				 refpath, trace, true,
+				 refpath, trace, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
@@ -1698,9 +1691,9 @@ void Server::handle_client_chown(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  if (req->head.args.chown.uid != -1)
+  if ((__s32)req->head.args.chown.uid != -1)
     pi->uid = req->head.args.chown.uid;
-  if (req->head.args.chown.gid != -1)
+  if ((__s32)req->head.args.chown.gid != -1)
     pi->gid = req->head.args.chown.gid;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
@@ -1740,7 +1733,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   // which frag?
-  frag_t fg = le32_to_cpu(req->head.args.readdir.frag);
+  frag_t fg = (__u32)req->head.args.readdir.frag;
 
   // does the frag exist?
   if (diri->dirfragtree[fg] != fg) {
@@ -1768,6 +1761,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
+
+  mdr->now = g_clock.real_now();
 
   // build dir contents
   bufferlist dirbl, dnbl;
@@ -3844,10 +3839,10 @@ class C_MDS_truncate_logged : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  off_t size;
+  uint64_t size;
   utime_t ctime;
 public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, utime_t ct) :
+  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, uint64_t sz, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }
@@ -3873,6 +3868,12 @@ public:
 void Server::handle_client_truncate(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+
+  if (req->head.args.truncate.length > (__u64)CEPH_FILE_MAX_SIZE) {
+    reply_request(mdr, -EFBIG);
+    return;
+  }
+
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
@@ -3886,8 +3887,8 @@ void Server::handle_client_truncate(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
   
-  // already small enough?
-  if (cur->inode.size <= req->head.args.truncate.length) {
+  // already the correct size?
+  if (cur->inode.size == req->head.args.truncate.length) {
     reply_request(mdr, 0);
     return;
   }
@@ -3908,7 +3909,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
-  pi->size = req->head.args.truncate.length;
+  pi->size = le64_to_cpu(req->head.args.truncate.length);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
@@ -3923,7 +3924,7 @@ void Server::handle_client_open(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   int flags = req->head.args.open.flags;
-  int cmode = file_flags_to_mode(req->head.args.open.flags);
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
 
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
@@ -3933,7 +3934,7 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur) return;
 
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
+  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
 
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
@@ -3979,14 +3980,14 @@ void Server::handle_client_open(MDRequest *mdr)
 void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
   MClientRequest *req = mdr->client_request;
-  int cmode = file_flags_to_mode(req->head.args.open.flags);
-  if (cur->inode.is_dir()) cmode = FILE_MODE_PIN;
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
 
   // register new cap
   Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
 
   // drop our locks (they may interfere with us issuing new caps)
-  mds->locker->drop_locks(mdr);
+  mdcache->request_drop_locks(mdr);
 
   cap->set_suppress(false);  // stop suppressing messages on this cap
 
@@ -3996,8 +3997,8 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   
   // hit pop
   mdr->now = g_clock.now();
-  if (cmode == FILE_MODE_RW ||
-      cmode == FILE_MODE_W) 
+  if (cmode == CEPH_FILE_MODE_RDWR ||
+      cmode == CEPH_FILE_MODE_WR) 
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 

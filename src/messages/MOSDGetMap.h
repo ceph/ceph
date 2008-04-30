@@ -22,33 +22,29 @@
 class MOSDGetMap : public Message {
  public:
   ceph_fsid fsid;
-  epoch_t start, want;
+  epoch_t start;  // this is the first incremental the sender wants (he has start-1)
 
   MOSDGetMap() : Message(CEPH_MSG_OSD_GETMAP) {}
-  MOSDGetMap(ceph_fsid& f, epoch_t s=0, epoch_t w=0) : 
+  MOSDGetMap(ceph_fsid& f, epoch_t s=0) : 
     Message(CEPH_MSG_OSD_GETMAP),
-    fsid(f), start(s), want(w) { }
+    fsid(f), start(s) { }
 
   epoch_t get_start_epoch() { return start; }
-  epoch_t get_want_epoch() { return want; }
 
   const char *get_type_name() { return "get_osd_map"; }
   void print(ostream& out) {
-    out << "get_osd_map(have " << start;
-    if (want) out << " want " << want;
+    out << "get_osd_map(start " << start;
     out << ")";
   }
   
   void encode_payload() {
     ::_encode(fsid, payload);
     ::_encode(start, payload);
-    ::_encode(want, payload);
   }
   void decode_payload() {
     int off = 0;
     ::_decode(fsid, payload, off);
     ::_decode(start, payload, off);
-    ::_decode(want, payload, off);
   }
 };
 

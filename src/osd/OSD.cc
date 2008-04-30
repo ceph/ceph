@@ -120,18 +120,19 @@ int OSD::find_osd_dev(char *result, int whoami)
 
 ObjectStore *OSD::create_object_store(const char *dev)
 {
-  ObjectStore *store = 0;
-  
-  if (g_conf.ebofs) 
-    store = new Ebofs(dev);
-#ifdef USE_OSBDB
-  else if (g_conf.bdbstore)
-    store = new OSBDB(dev);
-#endif // USE_OSBDB
-  else
-    store = new FakeStore(dev);
+  struct stat st;
+  if (::stat(dev, &st) != 0)
+    return 0;
 
-  return store;
+  if (g_conf.ebofs) 
+    return new Ebofs(dev);
+  if (g_conf.fakestore)
+    return new FakeStore(dev);
+
+  if (S_ISDIR(st.st_mode))
+    return new FakeStore(dev);
+  else
+    return new Ebofs(dev);
 }
 
 

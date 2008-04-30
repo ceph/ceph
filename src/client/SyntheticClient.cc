@@ -1435,7 +1435,7 @@ int SyntheticClient::full_walk(string& basedir)
       // print
       char *tm = ctime(&st.st_mtime);
       tm[strlen(tm)-1] = 0;
-      printf("%llx %c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8d %12s %s\n",
+      printf("%llx %c%c%c%c%c%c%c%c%c%c %2d %5d %5d %8llu %12s %s\n",
 	     (long long)st.st_ino,
 	     S_ISDIR(st.st_mode) ? 'd':'-',
 	     (st.st_mode & 0400) ? 'r':'-',
@@ -1449,7 +1449,7 @@ int SyntheticClient::full_walk(string& basedir)
 	     (st.st_mode & 01) ? 'x':'-',
 	     (int)st.st_nlink,
 	     (int)st.st_uid, (int)st.st_gid,
-	     (int)st.st_size,
+	     (long long unsigned)st.st_size,
 	     tm,
 	     file.c_str());
 
@@ -1730,7 +1730,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 int SyntheticClient::check_first_primary(int fh) {
   list<ObjectExtent> extents;
   client->enumerate_layout(fh, extents, 1, 0);  
-  return client->osdmap->get_pg_primary(pg_t(le64_to_cpu((extents.begin())->layout.ol_pgid)));
+  return client->osdmap->get_pg_primary(pg_t((extents.begin())->layout.ol_pgid));
 }
 
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
@@ -2626,6 +2626,27 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
+  if (1) {
+    // bug1.cpp
+    const char *fn = "blah";
+    char buffer[8192]; 
+    client->unlink(fn);
+    int handle = client->open(fn,O_CREAT|O_RDWR,S_IRWXU);
+    assert(handle>=0);
+    int r=client->write(handle,buffer,8192);
+    assert(r>=0);
+    r=client->close(handle);
+    assert(r>=0);
+         
+    handle = client->open(fn,O_RDWR); // open the same  file, it must have some data already
+    assert(handle>=0);      
+    r=client->read(handle,buffer,8192);
+    assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
+    r=client->close(handle);
+    assert(r>=0);
+
+    return;
+  }
   if (1) {
     dout(0) << "first" << dendl;
     int fd = client->open("tester", O_WRONLY|O_CREAT);

@@ -482,7 +482,7 @@ void Locker::file_update_finish(CInode *in, LogSegment *ls, bool share)
   in->put(CInode::PIN_PTRWAITER);
   file_wrlock_finish(&in->filelock);
   if (share && in->is_auth() && in->filelock.is_stable())
-    share_new_file_max(in);
+    share_inode_max_size(in);
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -494,10 +494,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   // my needs
   assert(session->inst.name.is_client());
   int my_client = session->inst.name.num();
-  int my_want = 0;
-  if (mode & FILE_MODE_PIN) my_want |= CEPH_CAP_PIN;
-  if (mode & FILE_MODE_R) my_want |= CEPH_CAP_RDCACHE  | CEPH_CAP_RD;
-  if (mode & FILE_MODE_W) my_want |= CEPH_CAP_WRBUFFER | CEPH_CAP_WR | CEPH_CAP_EXCL;
+  int my_want = ceph_caps_for_mode(mode);
 
   // register a capability
   Capability *cap = in->get_client_cap(my_client);
@@ -545,42 +542,48 @@ Capability* Locker::issue_new_caps(CInode *in,
 }
 
 
+
+
 bool Locker::issue_caps(CInode *in)
 {
   // allowed caps are determined by the lock mode.
-  int allowed = in->filelock.caps_allowed();
-  dout(7) << "issue_caps filelock allows=" << cap_string(allowed) 
+  int all_allowed = in->filelock.caps_allowed();
+  dout(7) << "issue_caps filelock allows=" << cap_string(all_allowed) 
           << " on " << *in << dendl;
 
   // count conflicts with
   int nissued = 0;        
 
-  // should we increase max_size?
-  if (!in->is_dir() && (allowed & CEPH_CAP_WR)) {
-    inode_t *latest = in->get_projected_inode();
-    if ((latest->size << 1) >= latest->max_size) {
-      int64_t new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-      dout(10) << "increasing max_size " << latest->max_size << " -> " << new_max << dendl;
-      
-      inode_t *pi = in->project_inode();
-      pi->version = in->pre_dirty();
-      pi->max_size = new_max;
-      EOpen *le = new EOpen(mds->mdlog);
-      le->metablob.add_dir_context(in->get_parent_dir());
-      le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-      LogSegment *ls = mds->mdlog->get_current_segment();
-      le->add_ino(in->ino());
-      ls->open_files.push_back(&in->xlist_open_file);
-      mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
-      file_wrlock_start(&in->filelock);  // wrlock for duration of journal
-    }
+  bool sizemtime_is_projected = false;
+  if (&in->inode != in->get_projected_inode() &&
+      (in->inode.size != in->get_projected_inode()->size ||
+       in->inode.mtime != in->get_projected_inode()->mtime)) {
+    dout(10) << " new size|mtime is projected" << dendl;
+    sizemtime_is_projected = true;
   }
+
+  // should we increase max_size?
+  if (!in->is_dir() && (all_allowed & CEPH_CAP_WR) && in->is_auth())
+    check_inode_max_size(in);
 
   // client caps
   for (map<int, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
+
+    // do not issue _new_ bits when size|mtime is projected
+    int allowed = all_allowed;
+    int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
+    int issued = cap->issued();
+    if (sizemtime_is_projected)
+      allowed &= ~careful | issued;   // only allow "careful" bits if already issued
+    dout(20) << " all_allowed " << cap_string(all_allowed) 
+	     << " issued " << cap_string(issued) 
+	     << " allowed " << cap_string(allowed) 
+	     << " wanted " << cap_string(cap->wanted())
+	     << dendl;
+
     if (cap->pending() != (cap->wanted() & allowed)) {
       // issue
       nissued++;
@@ -778,23 +781,74 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 }
 
 
+class C_MDL_CheckMaxSize : public Context {
+  Locker *locker;
+  CInode *in;
+public:
+  C_MDL_CheckMaxSize(Locker *l, CInode *i) : locker(l), in(i) {
+    in->get(CInode::PIN_PTRWAITER);
+  }
+  void finish(int r) {
+    in->put(CInode::PIN_PTRWAITER);
+    if (in->is_auth())
+      locker->check_inode_max_size(in);
+  }
+};
 
 
-void Locker::share_new_file_max(CInode *in)
+void Locker::check_inode_max_size(CInode *in)
+{
+  assert(in->is_auth());
+  if (!in->filelock.can_wrlock()) {
+    // try again later
+    in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
+    dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
+    return;    
+  }
+
+  inode_t *latest = in->get_projected_inode();
+  uint64_t new_max;
+  if (!in->is_any_caps())
+    new_max = 0;
+  else if ((latest->size << 1) >= latest->max_size)
+    new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
+  else
+    return;  // nothing.
+  if (new_max == latest->max_size)
+    return;  // no change.
+
+  dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
+	   << " on " << *in << dendl;
+    
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  pi->max_size = new_max;
+  EOpen *le = new EOpen(mds->mdlog);
+  le->metablob.add_dir_context(in->get_parent_dir());
+  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+  LogSegment *ls = mds->mdlog->get_current_segment();
+  le->add_ino(in->ino());
+  ls->open_files.push_back(&in->xlist_open_file);
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
+  file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+}
+
+
+void Locker::share_inode_max_size(CInode *in)
 {
   /*
    * only share if currently issued a WR cap.  if client doesn't have it,
    * file_max doesn't matter, and the client will get it if/when they get
    * the cap later.
    */
-  dout(10) << "share_new_file_max on " << *in << dendl;
+  dout(10) << "share_inode_max_size on " << *in << dendl;
   for (map<int,Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
     const int client = it->first;
     Capability *cap = it->second;
     if (cap->pending() & CEPH_CAP_WR) {
-      dout(10) << "share_new_file_max with client" << client << dendl;
+      dout(10) << "share_inode_max_size with client" << client << dendl;
       mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
 						   in->inode,
 						   cap->get_last_seq(),
@@ -874,15 +928,10 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   inode_t *latest = in->get_projected_inode();
 
-  // no more writers?
-  bool no_wr = false;
-  if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
-    no_wr = true;
-
   utime_t atime = m->get_atime();
   utime_t mtime = m->get_mtime();
   utime_t ctime = m->get_ctime();
-  off_t size = m->get_size();
+  uint64_t size = m->get_size();
 
   // atime|mtime|size?
   bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
@@ -903,34 +952,43 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     dirty_atime = true;
   bool dirty = dirty_atime || dirty_mtime || dirty_ctime || dirty_size;
   
-  // increase max_size?
-  bool increase_max = false;
-  int64_t new_max = latest->max_size;
-  if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      (size << 1) >= latest->max_size &&
-      in->filelock.can_wrlock()) {
-    dout(10) << "wr caps wanted, and size " << size
-	     << " *2 >= max " << latest->max_size << ", increasing" << dendl;
-    increase_max = true;
-    new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-  }
-  if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
-      m->get_max_size() > new_max) {
-    dout(10) << "client requests file_max " << m->get_max_size()
-	     << " > max " << latest->max_size << dendl;
-    increase_max = true;
-    new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
+  // increase or zero max_size?
+  bool change_max = false;
+  uint64_t new_max = latest->max_size;
+
+  if (in->is_auth()) {
+    if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
+      change_max = true;
+      new_max = 0;
+    }
+    else if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+	(size << 1) >= latest->max_size) {
+      dout(10) << "wr caps wanted, and size " << size
+	       << " *2 >= max " << latest->max_size << ", increasing" << dendl;
+      change_max = true;
+      new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
+    }
+    if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+	m->get_max_size() > new_max) {
+      dout(10) << "client requests file_max " << m->get_max_size()
+	       << " > max " << latest->max_size << dendl;
+      change_max = true;
+      new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
+    }
+
+    if (change_max && !in->filelock.can_wrlock()) {
+      dout(10) << "want to change file_max, but lock won't allow it; will retry" << dendl;
+      check_inode_max_size(in);  // this will fail, and schedule a waiter.
+      change_max = false;
+    }
   }
 
-  if ((dirty || no_wr || increase_max) &&
+  if ((dirty || change_max) &&
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
     EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
-    if (no_wr) {
-      dout(7) << " max_size " << pi->max_size << " -> 0 (last writer released)" << dendl;
-      pi->max_size = 0;
-    } else if (increase_max) {
+    if (change_max) {
       dout(7) << " max_size " << pi->max_size << " -> " << new_max << dendl;
       pi->max_size = new_max;
     }    
@@ -957,7 +1015,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     LogSegment *ls = mds->mdlog->get_current_segment();
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, increase_max));
+    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, change_max));
     file_wrlock_start(&in->filelock);  // wrlock for duration of journal
   }
 
@@ -1081,7 +1139,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
       (diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0 &&
       dn->lock.can_lease())
     mask |= CEPH_LOCK_DN;
-
+  mask |= CEPH_LOCK_DN;
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
 }
@@ -1432,7 +1490,8 @@ void Locker::simple_lock(SimpleLock *lock)
   assert(lock->get_state() == LOCK_SYNC);
   
   if (lock->get_parent()->is_replicated() ||
-      lock->get_num_client_lease()) {
+      lock->get_num_client_lease() ||
+      lock->is_rdlocked()) {
     // bcast to mds replicas
     send_lock_message(lock, LOCK_AC_LOCK);
 
@@ -1459,8 +1518,6 @@ bool Locker::simple_rdlock_try(SimpleLock *lock, Context *con)
   if (lock->can_rdlock(0)) 
     return true;
   
-  assert(!lock->get_parent()->is_auth());
-
   // wait!
   dout(7) << "simple_rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
@@ -1515,7 +1572,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     // auth
 
     // lock.
-    if (lock->get_state() == LOCK_SYNC) 
+    if (lock->get_state() == LOCK_SYNC)
       simple_lock(lock);
 
     // already locked?
@@ -2543,7 +2600,7 @@ void Locker::file_wrlock_finish(FileLock *lock)
   lock->put_wrlock();
   
   if (!lock->is_wrlocked())
-    file_eval_gather(lock);  
+    file_eval_gather(lock);
 }
 
 
@@ -2814,7 +2871,7 @@ void Locker::file_eval(FileLock *lock)
   // * -> loner?
   if (!lock->is_rdlocked() &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-      (wanted & CEPH_CAP_WR) &&
+      (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
       loner &&
       lock->get_state() != LOCK_LONER) {
     dout(7) << "file_eval stable, bump to loner " << *lock << " on " << *lock->get_parent() << dendl;
@@ -2828,7 +2885,7 @@ void Locker::file_eval(FileLock *lock)
 	    (wanted & CEPH_CAP_WR) &&
 	    !(loner && lock->get_state() == LOCK_LONER) &&
 	    lock->get_state() != LOCK_MIXED) ||
-	   (!loner && lock->get_state() == LOCK_LONER)) {
+	   (!loner && in->is_any_caps() && lock->get_state() == LOCK_LONER)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
   }
@@ -2855,6 +2912,9 @@ void Locker::file_eval(FileLock *lock)
     file_lock(lock);
   }
 */
+
+  else
+    issue_caps(in);
 }
 
 

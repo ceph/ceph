@@ -13,7 +13,7 @@ int ceph_debug_osdmap = -1;
 
 /* maps */
 
-static int calc_bits_of(unsigned t) 
+static int calc_bits_of(unsigned t)
 {
 	int b = 0;
 	while (t) {
@@ -31,16 +31,16 @@ static void calc_pg_masks(struct ceph_osdmap *map)
 	map->lpgp_num_mask = (1 << calc_bits_of(map->lpgp_num-1)) - 1;
 }
 
-static int crush_decode_uniform_bucket(void **p, void *end, 
+static int crush_decode_uniform_bucket(void **p, void *end,
 				       struct crush_bucket_uniform *b)
 {
 	int j;
 	dout(30, "crush_decode_uniform_bucket %p to %p\n", *p, end);
-	b->primes = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	b->primes = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
 	if (b->primes == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, (1+b->h.size) * sizeof(__u32), bad);
-	for (j=0; j<b->h.size; j++)
+	for (j = 0; j < b->h.size; j++)
 		ceph_decode_32(p, b->primes[j]);
 	ceph_decode_32(p, b->item_weight);
 	return 0;
@@ -53,14 +53,14 @@ static int crush_decode_list_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_list_bucket %p to %p\n", *p, end);
-	b->item_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	b->item_weights = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
 	if (b->item_weights == NULL)
 		return -ENOMEM;
-	b->sum_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	b->sum_weights = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
 	if (b->sum_weights == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, 2 * b->h.size * sizeof(__u32), bad);
-	for (j=0; j<b->h.size; j++) {
+	for (j = 0; j < b->h.size; j++) {
 		ceph_decode_32(p, b->item_weights[j]);
 		ceph_decode_32(p, b->sum_weights[j]);
 	}
@@ -69,32 +69,32 @@ bad:
 	return -EINVAL;
 }
 
-static int crush_decode_tree_bucket(void **p, void *end, 
+static int crush_decode_tree_bucket(void **p, void *end,
 				    struct crush_bucket_tree *b)
 {
 	int j;
 	dout(30, "crush_decode_tree_bucket %p to %p\n", *p, end);
-	b->node_weights = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	b->node_weights = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
 	if (b->node_weights == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, b->h.size * sizeof(__u32), bad);
-	for (j=0; j<b->h.size; j++) 
+	for (j = 0; j < b->h.size; j++)
 		ceph_decode_32(p, b->node_weights[j]);
 	return 0;
 bad:
 	return -EINVAL;
 }
 
-static int crush_decode_straw_bucket(void **p, void *end, 
+static int crush_decode_straw_bucket(void **p, void *end,
 				     struct crush_bucket_straw *b)
 {
 	int j;
 	dout(30, "crush_decode_straw_bucket %p to %p\n", *p, end);
-	b->straws = kmalloc(b->h.size * sizeof(__u32), GFP_KERNEL);
+	b->straws = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
 	if (b->straws == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, 2 * b->h.size * sizeof(__u32), bad);
-	for (j=0; j<b->h.size; j++) {
+	for (j = 0; j < b->h.size; j++) {
 		ceph_decode_32(p, b->item_weights[j]);
 		ceph_decode_32(p, b->straws[j]);
 	}
@@ -112,7 +112,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 
 	dout(30, "crush_decode %p to %p\n", *p, end);
 
-	c = kzalloc(sizeof(*c), GFP_KERNEL);
+	c = kzalloc(sizeof(*c), GFP_NOFS);
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -121,35 +121,35 @@ static struct crush_map *crush_decode(void **p, void *end)
 	ceph_decode_32(p, c->max_rules);
 	ceph_decode_32(p, c->max_devices);
 
-	c->device_offload = kmalloc(c->max_devices * sizeof(__u32), GFP_KERNEL);
-	if (c->device_offload == NULL) 
+	c->device_offload = kmalloc(c->max_devices * sizeof(__u32), GFP_NOFS);
+	if (c->device_offload == NULL)
 		goto badmem;
-	c->device_parents = kmalloc(c->max_devices * sizeof(__u32), GFP_KERNEL);
-	if (c->device_parents == NULL) 
+	c->device_parents = kmalloc(c->max_devices * sizeof(__u32), GFP_NOFS);
+	if (c->device_parents == NULL)
 		goto badmem;
-	c->bucket_parents = kmalloc(c->max_buckets * sizeof(__u32), GFP_KERNEL);
-	if (c->bucket_parents == NULL) 
+	c->bucket_parents = kmalloc(c->max_buckets * sizeof(__u32), GFP_NOFS);
+	if (c->bucket_parents == NULL)
 		goto badmem;
 
-	c->buckets = kmalloc(c->max_buckets * sizeof(*c->buckets), GFP_KERNEL);
-	if (c->buckets == NULL) 
+	c->buckets = kmalloc(c->max_buckets * sizeof(*c->buckets), GFP_NOFS);
+	if (c->buckets == NULL)
 		goto badmem;
-	c->rules = kmalloc(c->max_rules * sizeof(*c->rules), GFP_KERNEL);
+	c->rules = kmalloc(c->max_rules * sizeof(*c->rules), GFP_NOFS);
 	if (c->rules == NULL)
 		goto badmem;
 
 	ceph_decode_need(p, end, c->max_devices * sizeof(__u32), bad);
-	for (i=0; i<c->max_devices; i++)
+	for (i = 0; i < c->max_devices; i++)
 		ceph_decode_32(p, c->device_offload[i]);
-	
+
 	/* buckets */
-	for (i=0; i<c->max_buckets; i++) {
+	for (i = 0; i < c->max_buckets; i++) {
 		int size = 0;
 		__u32 type;
 		struct crush_bucket *b;
 
 		dout(30, "crush_decode bucket %d off %x %p to %p\n",
-		     i, (int)(*p-start), *p, end); 
+		     i, (int)(*p-start), *p, end);
 
 		ceph_decode_32_safe(p, end, type, bad);
 		if (type == 0) {
@@ -172,7 +172,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 			break;
 		}
 		BUG_ON(size == 0);
-		b = c->buckets[i] = kzalloc(size, GFP_KERNEL);
+		b = c->buckets[i] = kzalloc(size, GFP_NOFS);
 		if (b == NULL)
 			goto badmem;
 
@@ -183,47 +183,51 @@ static struct crush_map *crush_decode(void **p, void *end)
 		ceph_decode_32(p, b->weight);
 		ceph_decode_32(p, b->size);
 
-		dout(30, "crush_decode bucket size %d off %x %p to %p\n", 
+		dout(30, "crush_decode bucket size %d off %x %p to %p\n",
 		     b->size, (int)(*p-start), *p, end);
 
-		b->items = kmalloc(b->size * sizeof(__s32), GFP_KERNEL);
+		b->items = kmalloc(b->size * sizeof(__s32), GFP_NOFS);
 		if (b->items == NULL)
 			goto badmem;
 
 		ceph_decode_need(p, end, b->size*sizeof(__u32), bad);
-		for (j=0; j<b->size; j++)
+		for (j = 0; j < b->size; j++)
 			ceph_decode_32(p, b->items[j]);
-		
+
 		switch (b->type) {
 		case CRUSH_BUCKET_UNIFORM:
-			if ((err = crush_decode_uniform_bucket(p, end, 
-				      (struct crush_bucket_uniform*)b)) < 0)
+			err = crush_decode_uniform_bucket(p, end,
+				  (struct crush_bucket_uniform *)b);
+			if (err < 0)
 				goto bad;
 			break;
 		case CRUSH_BUCKET_LIST:
-			if ((err = crush_decode_list_bucket(p, end, 
-				      (struct crush_bucket_list*)b)) < 0)
+			err = crush_decode_list_bucket(p, end,
+			       (struct crush_bucket_list *)b);
+			if (err < 0)
 				goto bad;
 			break;
 		case CRUSH_BUCKET_TREE:
-			if ((err = crush_decode_tree_bucket(p, end, 
-				      (struct crush_bucket_tree*)b)) < 0)
+			err = crush_decode_tree_bucket(p, end,
+				(struct crush_bucket_tree *)b);
+			if (err < 0)
 				goto bad;
 			break;
 		case CRUSH_BUCKET_STRAW:
-			if ((err = crush_decode_straw_bucket(p, end, 
-				      (struct crush_bucket_straw*)b)) < 0)
+			err = crush_decode_straw_bucket(p, end,
+				(struct crush_bucket_straw *)b);
+			if (err < 0)
 				goto bad;
 			break;
 		}
 	}
 
 	/* rules */
-	for (i=0; i<c->max_rules; i++) {
+	for (i = 0; i < c->max_rules; i++) {
 		__u32 yes;
 		struct crush_rule *r;
 
-		dout(30, "crush_decode rule %d off %x %p to %p\n", 
+		dout(30, "crush_decode rule %d off %x %p to %p\n",
 		     i, (int)(*p-start), *p, end);
 
 		ceph_decode_32_safe(p, end, yes, bad);
@@ -232,18 +236,18 @@ static struct crush_map *crush_decode(void **p, void *end)
 			continue;
 		}
 
-		// len
+		/* len */
 		ceph_decode_32_safe(p, end, yes, bad);
 
 		r = c->rules[i] = kmalloc(sizeof(**c->rules) +
 					  yes*sizeof(struct crush_rule_step),
-					  GFP_KERNEL);
+					  GFP_NOFS);
 		if (r == NULL)
 			goto badmem;
 		r->len = yes;
 		ceph_decode_copy_safe(p, end, &r->mask, 4, bad); /* 4 u8's */
 		ceph_decode_need(p, end, r->len*3*sizeof(__u32), bad);
-		for (j=0; j<r->len; j++) {
+		for (j = 0; j < r->len; j++) {
 			ceph_decode_32(p, r->steps[j].op);
 			ceph_decode_32(p, r->steps[j].arg1);
 			ceph_decode_32(p, r->steps[j].arg2);
@@ -251,10 +255,10 @@ static struct crush_map *crush_decode(void **p, void *end)
 	}
 
 	/* ignore trailing name maps */
-		
+
 	dout(30, "crush_decode success\n");
 	return c;
-	
+
 badmem:
 	err = -ENOMEM;
 bad:
@@ -265,8 +269,8 @@ bad:
 
 void osdmap_destroy(struct ceph_osdmap *map)
 {
-	if (map->osd_state) kfree(map->osd_state);
-	if (map->crush) kfree(map->crush);
+	kfree(map->osd_state);
+	kfree(map->crush);
 	kfree(map);
 }
 
@@ -275,12 +279,12 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 	__u8 *state;
 	struct ceph_entity_addr *addr;
 
-	state = kzalloc(max * (sizeof(__u32) + 
+	state = kzalloc(max * (sizeof(__u32) +
 			       sizeof(struct ceph_entity_addr)),
-			GFP_KERNEL);
-	if (state == NULL) 
+			GFP_NOFS);
+	if (state == NULL)
 		return -ENOMEM;
-	addr = (void*)((__u32*)state + max);
+	addr = (void *)((__u32 *)state + max);
 
 	/* copy old? */
 	if (map->osd_state) {
@@ -305,8 +309,8 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 	dout(30, "osdmap_decode from %p to %p\n", *p, end);
 
-	map = kzalloc(sizeof(*map), GFP_KERNEL);
-	if (map == NULL) 
+	map = kzalloc(sizeof(*map), GFP_NOFS);
+	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
 
 	ceph_decode_need(p, end, 2*sizeof(__u64)+9*sizeof(__u32), bad);
@@ -328,13 +332,14 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_32(p, max);
 
 	/* (re)alloc osd arrays */
-	if ((err = osdmap_set_max_osd(map, max)) < 0)
+	err = osdmap_set_max_osd(map, max);
+	if (err < 0)
 		goto bad;
 	dout(30, "osdmap_decode max_osd = %d\n", map->max_osd);
-	
+
 	/* osds */
 	err = -EINVAL;
-	ceph_decode_need(p, end, 2*sizeof(__u32) + 
+	ceph_decode_need(p, end, 2*sizeof(__u32) +
 			 map->max_osd*(1+sizeof(*map->osd_addr)), bad);
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_state, map->max_osd);
@@ -344,14 +349,14 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	/* pg primary swapping */
 	ceph_decode_32_safe(p, end, len, bad);
 	if (len) {
-		map->pg_swap_primary = kmalloc(len * 
-					       sizeof(*map->pg_swap_primary), 
-					       GFP_KERNEL);
-		if (map->pg_swap_primary == NULL) 
+		map->pg_swap_primary = kmalloc(len *
+					       sizeof(*map->pg_swap_primary),
+					       GFP_NOFS);
+		if (map->pg_swap_primary == NULL)
 			goto badmem;
 		map->num_pg_swap_primary = len;
 		ceph_decode_need(p, end, sizeof(__u64)+sizeof(__u32), bad);
-		for (i=0; i<len; i++) {
+		for (i = 0; i < len; i++) {
 			ceph_decode_64(p, map->pg_swap_primary[i].pg.pg64);
 			ceph_decode_32(p, map->pg_swap_primary[i].osd);
 		}
@@ -359,7 +364,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 	/* crush */
 	ceph_decode_32_safe(p, end, len, bad);
-	dout(30, "osdmap_decode crush len %d from off %x\n", 
+	dout(30, "osdmap_decode crush len %d from off %x\n",
 	     len, (int)(*p - start));
 	map->crush = crush_decode(p, end);
 	if (IS_ERR(map->crush)) {
@@ -383,7 +388,8 @@ bad:
 }
 
 struct ceph_osdmap *apply_incremental(void **p, void *end,
-				      struct ceph_osdmap *map)
+				      struct ceph_osdmap *map,
+				      struct ceph_messenger *msgr)
 {
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
@@ -423,7 +429,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 
 	/*
 	 * FIXME: from this point on i'm optimisticaly assuming the message
-	 * is complete 
+	 * is complete
 	 */
 
 	/* new max? */
@@ -431,14 +437,15 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_decode_32(p, max);
 	*p += 4*sizeof(__u32);  /* skip new_pg_num et al for now.  FIXME. */
 	if (max >= 0) {
-		if ((err = osdmap_set_max_osd(map, max)) < 0)
+		err = osdmap_set_max_osd(map, max);
+		if (err < 0)
 			goto bad;
 	}
 
 	map->epoch++;
 	map->ctime = map->ctime;
 	if (newcrush) {
-		if (map->crush) 
+		if (map->crush)
 			crush_destroy(map->crush);
 		map->crush = newcrush;
 	}
@@ -462,9 +469,13 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	while (len--) {
 		__u32 osd;
 		ceph_decode_32_safe(p, end, osd, bad);
+		(*p)++;  /* clean flag */
 		dout(1, "osd%d down\n", osd);
-		if (osd < map->max_osd) 
+		if (osd < map->max_osd) {
 			map->osd_state[osd] &= ~CEPH_OSD_UP;
+			ceph_messenger_mark_down(msgr,
+						 &map->osd_addr[osd]);
+		}
 	}
 
 	/* new_offload */
@@ -475,7 +486,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		ceph_decode_32(p, osd);
 		ceph_decode_32(p, off);
 		dout(1, "osd%d offload %x\n", osd, off);
-		if (osd < map->max_osd) 
+		if (osd < map->max_osd)
 			map->crush->device_offload[osd] = off;
 	}
 
@@ -485,11 +496,14 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * sizeof(__u64);
 
-	if (*p != end)
+	if (*p != end) {
+		dout(10, "trailing gunk\n");
 		goto bad;
+	}
 	return map;
 
 bad:
+	derr(10, "corrupt incremantal osdmap at %p / %p\n", *p, end);
 	return ERR_PTR(err);
 }
 
@@ -500,7 +514,7 @@ bad:
  * update file offset,length to end of extent, or
  * the next file extent not included in current mapping.
  */
-void calc_file_object_mapping(struct ceph_file_layout *layout, 
+void calc_file_object_mapping(struct ceph_file_layout *layout,
 			      loff_t *off, loff_t *len,
 			      struct ceph_object *oid,
 			      __u64 *oxoff, __u64 *oxlen)
@@ -512,41 +526,42 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	loff_t t;
 
 	/*su_per_object = layout->fl_object_size / layout->fl_stripe_unit; */
-	su_per_object = layout->fl_object_size;
-	do_div(su_per_object, layout->fl_stripe_unit);
+	su_per_object = le32_to_cpu(layout->fl_object_size);
+	do_div(su_per_object, le32_to_cpu(layout->fl_stripe_unit));
 
-	BUG_ON((layout->fl_stripe_unit & ~PAGE_MASK) != 0);
+	BUG_ON((le32_to_cpu(layout->fl_stripe_unit) & ~PAGE_MASK) != 0);
 	/* su = *off / layout->fl_stripe_unit; */
 	su = *off;
-	do_div(su, layout->fl_stripe_unit);
+	do_div(su, le32_to_cpu(layout->fl_stripe_unit));
 	/* stripeno = su / layout->fl_stripe_count;
 	   stripepos = su % layout->fl_stripe_count; */
 	stripeno = su;
-	stripepos = do_div(stripeno, layout->fl_stripe_count);
+	stripepos = do_div(stripeno, le32_to_cpu(layout->fl_stripe_count));
 	/* objsetno = stripeno / su_per_object; */
 	objsetno = stripeno;
 	do_div(objsetno, su_per_object);
 
-	oid->bno = objsetno * layout->fl_stripe_count + stripepos;
+	oid->bno = objsetno * le32_to_cpu(layout->fl_stripe_count) + stripepos;
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = *off;
-	*oxoff = do_div(t, layout->fl_stripe_unit);
-	first_oxlen = min_t(loff_t, *len, layout->fl_stripe_unit);
+	*oxoff = do_div(t, le32_to_cpu(layout->fl_stripe_unit));
+	first_oxlen = min_t(loff_t, *len, le32_to_cpu(layout->fl_stripe_unit));
 	*oxlen = first_oxlen;
-	
+
 	/* multiple stripe units across this object? */
 	t = *len;
-	while (t > stripe_len && *oxoff + *oxlen < layout->fl_object_size) {
-		*oxlen += min_t(loff_t, layout->fl_stripe_unit, t);
+	while (t > stripe_len && *oxoff + *oxlen < 
+	       le32_to_cpu(layout->fl_object_size)) {
+		*oxlen += min_t(loff_t, le32_to_cpu(layout->fl_stripe_unit), t);
 		t -= stripe_len;
 	}
-		
+
 	*off += first_oxlen;
 	*len -= *oxlen;
 }
 
 /*
- * calculate an object layout (i.e. pgid) from an oid, 
+ * calculate an object layout (i.e. pgid) from an oid,
  * file_layout, and osdmap
  */
 void calc_object_layout(struct ceph_object_layout *ol,
@@ -558,8 +573,9 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	union ceph_pg pgid;
 	ceph_ino_t ino = le64_to_cpu(oid->ino);
 	unsigned bno = le32_to_cpu(oid->bno);
+	s32 preferred = (s32)le32_to_cpu(fl->fl_pg_preferred);
 
-	if (fl->fl_pg_preferred >= 0) {
+	if (preferred >= 0) {
 		num = osdmap->lpg_num;
 		num_mask = osdmap->lpg_num_mask;
 	} else {
@@ -568,12 +584,12 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	}
 
 	pgid.pg64 = 0;   /* start with it zeroed out */
-	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32), 
+	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32),
 				     num, num_mask);
-	pgid.pg.preferred = fl->fl_pg_preferred;
+	pgid.pg.preferred = preferred;
 	pgid.pg.type = fl->fl_pg_type;
 	pgid.pg.size = fl->fl_pg_size;
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);
-	ol->ol_stripe_unit = cpu_to_le32(fl->fl_object_stripe_unit);
+	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
 }

@@ -28,17 +28,18 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 	char r;
 
 	/* count */
-	for (i=0; i<m->m_max_mds; i++)
-		if (m->m_state > 0) n++;
-	if (n == 0) 
+	for (i = 0; i < m->m_max_mds; i++)
+		if (m->m_state > 0)
+			n++;
+	if (n == 0)
 		return -1;
-	
+
 	/* pick */
 	get_random_bytes(&r, 1);
 	n = r % n;
 	i = 0;
-	for (i=0; n>0; i++, n--)
-		while (m->m_state[i] <= 0) 
+	for (i = 0; n > 0; i++, n--)
+		while (m->m_state[i] <= 0)
 			i++;
 
 	return i;
@@ -57,9 +58,9 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	int i, n;
 	__u32 mds;
 	int err = -EINVAL;
-	
-	m = kzalloc(sizeof(*m), GFP_KERNEL);
-	if (m == NULL) 
+
+	m = kzalloc(sizeof(*m), GFP_NOFS);
+	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
 	ceph_decode_need(p, end, 10*sizeof(__u32), bad);
@@ -74,15 +75,15 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_32(p, m->m_session_autoclose);
 	ceph_decode_32(p, m->m_max_mds);
 
-	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_KERNEL);
-	m->m_state = kzalloc(m->m_max_mds*sizeof(*m->m_state), GFP_KERNEL);
+	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_NOFS);
+	m->m_state = kzalloc(m->m_max_mds*sizeof(*m->m_state), GFP_NOFS);
 	if (m->m_addr == NULL || m->m_state == NULL)
 		goto badmem;
-	
+
 	/* state */
 	ceph_decode_32(p, n);
 	ceph_decode_need(p, end, n*2*sizeof(__u32), bad);
-	for (i=0; i<n; i++) {
+	for (i = 0; i < n; i++) {
 		ceph_decode_32(p, mds);
 		if (mds >= m->m_max_mds)
 			goto bad;
@@ -92,14 +93,14 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	/* state_seq */
 	ceph_decode_32_safe(p, end, n, bad);
 	*p += n*(sizeof(__u32)+sizeof(__u64));
-	
+
 	/* mds_inst */
 	ceph_decode_32_safe(p, end, n, bad);
-	ceph_decode_need(p, end, 
+	ceph_decode_need(p, end,
 			 n*(sizeof(__u32)+sizeof(struct ceph_entity_name)+
-			    sizeof(struct ceph_entity_addr)), 
+			    sizeof(struct ceph_entity_addr)),
 			 bad);
-	for (i=0; i<n; i++) {
+	for (i = 0; i < n; i++) {
 		ceph_decode_32(p, mds);
 		if (mds >= m->m_max_mds)
 			goto bad;
