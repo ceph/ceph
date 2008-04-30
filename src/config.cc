@@ -351,7 +351,7 @@ md_config_t g_conf = {
 
   osd_stat_refresh_interval: .5,
 
-  osd_pg_bits: 4,  // bits per osd
+  osd_pg_bits: 6,  // bits per osd
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_max_rep: 4,
