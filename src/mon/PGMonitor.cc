@@ -338,9 +338,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     bufferlist bl;
     mon->store->get_bl_sn(bl, "osdmap", e);
     assert(bl.length());
-    OSDMap::Incremental inc;
-    int off = 0;
-    inc.decode(bl, off);
+    OSDMap::Incremental inc(bl);
     for (map<int32_t,uint32_t>::iterator p = inc.new_offload.begin();
 	 p != inc.new_offload.end();
 	 p++)

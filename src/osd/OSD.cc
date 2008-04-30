@@ -1339,10 +1339,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         get_inc_map_bl(cur+1, bl);
       }
 
-      OSDMap::Incremental inc;
-      int off = 0;
-      inc.decode(bl, off);
-
+      OSDMap::Incremental inc(bl);
       osdmap->apply_incremental(inc);
 
       // archive the full map
@@ -1712,8 +1709,8 @@ bool OSD::get_inc_map(epoch_t e, OSDMap::Incremental &inc)
   bufferlist bl;
   if (!get_inc_map_bl(e, bl)) 
     return false;
-  int off = 0;
-  inc.decode(bl, off);
+  bufferlist::iterator p = bl.begin();
+  inc.decode(p);
   return true;
 }
 

@@ -155,9 +155,7 @@ bool OSDMonitor::update_from_paxos()
     assert(success);
     
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
-    OSDMap::Incremental inc;
-    int off = 0;
-    inc.decode(bl, off);
+    OSDMap::Incremental inc(bl);
     osdmap.apply_incremental(inc);
 
     // write out the full map, too.

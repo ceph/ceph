@@ -15,6 +15,8 @@
 #ifndef __ENCODABLE_H
 #define __ENCODABLE_H
 
+//#warning "deprecated"
+
 #include "buffer.h"
 
 #include <set>

@@ -117,14 +117,14 @@ public:
     cap_push_seq(0) { }
 
   void _encode(bufferlist& bl) const {
-    ::_encode_simple(inst, bl);
-    ::_encode_simple(cap_push_seq, bl);
-    ::_encode_simple(completed_requests, bl);
+    ::encode(inst, bl);
+    ::encode(cap_push_seq, bl);
+    ::encode(completed_requests, bl);
   }
   void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(inst, p);
-    ::_decode_simple(cap_push_seq, p);
-    ::_decode_simple(completed_requests, p);
+    ::decode(inst, p);
+    ::decode(cap_push_seq, p);
+    ::decode(completed_requests, p);
   }
 };
 

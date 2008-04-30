@@ -94,43 +94,50 @@ public:
     list<pg_t> old_pg_swap_primary;
     
     void encode(bufferlist& bl) {
-      ::_encode(fsid, bl);
-      ::_encode(epoch, bl); 
-      ctime._encode(bl);
-      ::_encode(fullmap, bl);
-      ::_encode(crush, bl);
-      ::_encode(new_max_osd, bl);
-      ::_encode(new_pg_num, bl);
-      ::_encode(new_pgp_num, bl);
-      ::_encode(new_lpg_num, bl);
-      ::_encode(new_lpgp_num, bl);
-      ::_encode(new_up, bl);
-      ::_encode(new_down, bl);
-      ::_encode(new_offload, bl);
-      ::_encode(new_pg_swap_primary, bl);
-      ::_encode(old_pg_swap_primary, bl);
+      ::encode(fsid, bl);
+      ::encode(epoch, bl); 
+      ::encode(ctime, bl);
+      ::encode(fullmap, bl);
+      ::encode(crush, bl);
+      ::encode(new_max_osd, bl);
+      ::encode(new_pg_num, bl);
+      ::encode(new_pgp_num, bl);
+      ::encode(new_lpg_num, bl);
+      ::encode(new_lpgp_num, bl);
+      ::encode(new_up, bl);
+      ::encode(new_down, bl);
+      ::encode(new_offload, bl);
+      ::encode(new_pg_swap_primary, bl);
+      ::encode(old_pg_swap_primary, bl);
     }
-    void decode(bufferlist& bl, int& off) {
-      ::_decode(fsid, bl, off);
-      ::_decode(epoch, bl, off);
-      ctime._decode(bl, off);
-      ::_decode(fullmap, bl, off);
-      ::_decode(crush, bl, off);
-      ::_decode(new_max_osd, bl, off);
-      ::_decode(new_pg_num, bl, off);
-      ::_decode(new_pgp_num, bl, off);
-      ::_decode(new_lpg_num, bl, off);
-      ::_decode(new_lpgp_num, bl, off);
-      ::_decode(new_up, bl, off);
-      ::_decode(new_down, bl, off);
-      ::_decode(new_offload, bl, off);
-      ::_decode(new_pg_swap_primary, bl, off);
-      ::_decode(old_pg_swap_primary, bl, off);
+    void decode(bufferlist::iterator &p) {
+      ::decode(fsid, p);
+      ::decode(epoch, p);
+      ::decode(ctime, p);
+      ::decode(fullmap, p);
+      ::decode(crush, p);
+      ::decode(new_max_osd, p);
+      ::decode(new_pg_num, p);
+      ::decode(new_pgp_num, p);
+      ::decode(new_lpg_num, p);
+      ::decode(new_lpgp_num, p);
+      ::decode(new_up, p);
+      ::decode(new_down, p);
+      ::decode(new_offload, p);
+      ::decode(new_pg_swap_primary, p);
+      ::decode(old_pg_swap_primary, p);
     }
 
     Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), 
 			       new_pg_num(0), new_pgp_num(0), new_lpg_num(0), new_lpgp_num(0) {
       fsid.major = fsid.minor = 0;
+    }
+    Incremental(bufferlist &bl) {
+      bufferlist::iterator p = bl.begin();
+      decode(p);
+    }
+    Incremental(bufferlist::iterator &p) {
+      decode(p);
     }
   };
 
@@ -390,46 +397,46 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& blist) {
-    ::_encode(fsid, blist);
-    ::_encode(epoch, blist);
-    ::_encode(ctime, blist);
-    ::_encode(mtime, blist);
-    ::_encode(pg_num, blist);
-    ::_encode(pgp_num, blist);
-    ::_encode(lpg_num, blist);
-    ::_encode(lpgp_num, blist);
-    ::_encode(last_pg_change, blist);
+    ::encode(fsid, blist);
+    ::encode(epoch, blist);
+    ::encode(ctime, blist);
+    ::encode(mtime, blist);
+    ::encode(pg_num, blist);
+    ::encode(pgp_num, blist);
+    ::encode(lpg_num, blist);
+    ::encode(lpgp_num, blist);
+    ::encode(last_pg_change, blist);
     
-    ::_encode(max_osd, blist);
-    ::_encode(osd_state, blist);
-    ::_encode(osd_addr, blist);
-    ::_encode(pg_swap_primary, blist);
+    ::encode(max_osd, blist);
+    ::encode(osd_state, blist);
+    ::encode(osd_addr, blist);
+    ::encode(pg_swap_primary, blist);
     
     bufferlist cbl;
     crush._encode(cbl);
-    ::_encode(cbl, blist);
+    ::encode(cbl, blist);
   }
   
   void decode(bufferlist& blist) {
-    int off = 0;
-    ::_decode(fsid, blist, off);
-    ::_decode(epoch, blist, off);
-    ::_decode(ctime, blist, off);
-    ::_decode(mtime, blist, off);
-    ::_decode(pg_num, blist, off);
-    ::_decode(pgp_num, blist, off);
-    ::_decode(lpg_num, blist, off);
-    ::_decode(lpgp_num, blist, off);
+    bufferlist::iterator p = blist.begin();
+    ::decode(fsid, p);
+    ::decode(epoch, p);
+    ::decode(ctime, p);
+    ::decode(mtime, p);
+    ::decode(pg_num, p);
+    ::decode(pgp_num, p);
+    ::decode(lpg_num, p);
+    ::decode(lpgp_num, p);
     calc_pg_masks();
-    ::_decode(last_pg_change, blist, off);
+    ::decode(last_pg_change, p);
 
-    ::_decode(max_osd, blist, off);
-    ::_decode(osd_state, blist, off);
-    ::_decode(osd_addr, blist, off);
-    ::_decode(pg_swap_primary, blist, off);
+    ::decode(max_osd, p);
+    ::decode(osd_state, p);
+    ::decode(osd_addr, p);
+    ::decode(pg_swap_primary, p);
     
     bufferlist cbl;
-    ::_decode(cbl, blist, off);
+    ::decode(cbl, p);
     bufferlist::iterator cblp = cbl.begin();
     crush._decode(cblp);
   }

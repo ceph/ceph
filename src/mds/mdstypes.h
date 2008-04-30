@@ -114,6 +114,16 @@ struct dirfrag_t {
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f), _pad(0) { }
 };
 
+inline void encode(const dirfrag_t &f, bufferlist& bl) { 
+  encode(f.ino, bl);
+  encode(f.frag, bl);
+}
+inline void decode(dirfrag_t &f, bufferlist::iterator& p) { 
+  decode(f.ino, p);
+  decode(f.frag, p);
+}
+
+
 inline ostream& operator<<(ostream& out, const dirfrag_t df) {
   out << df.ino;
   if (!df.frag.is_root()) out << "." << df.frag;
@@ -377,9 +387,9 @@ public:
   MDSCacheObjectInfo() : ino(0) {}
 
   void _encode(bufferlist& bl) const {
-    ::_encode(ino, bl);
-    ::_encode(dirfrag, bl);
-    ::_encode(dname, bl);
+    ::encode(ino, bl);
+    ::encode(dirfrag, bl);
+    ::encode(dname, bl);
   }
   void _decode(bufferlist& bl, int& off) {
     ::_decode(ino, bl, off);
@@ -387,9 +397,9 @@ public:
     ::_decode(dname, bl, off);
   }
   void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(ino, p);
-    ::_decode_simple(dirfrag, p);
-    ::_decode_simple(dname, p);
+    ::decode(ino, p);
+    ::decode(dirfrag, p);
+    ::decode(dname, p);
   }
 };
 

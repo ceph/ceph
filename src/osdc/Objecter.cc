@@ -94,9 +94,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
          e++) {
       if (m->incremental_maps.count(e)) {
         dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
-        OSDMap::Incremental inc;
-        int off = 0;
-        inc.decode(m->incremental_maps[e], off);
+        OSDMap::Incremental inc(m->incremental_maps[e]);
         osdmap->apply_incremental(inc);
     
         // notify messenger

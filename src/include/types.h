@@ -108,6 +108,11 @@ struct ltstr
 
 
 
+#include "encoding.h"
+
+WRITE_RAW_ENCODER(ceph_fsid);
+
+
 // ----------------------
 // some basic types
 
@@ -134,6 +139,9 @@ struct inodeno_t {
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
   operator _inodeno_t() const { return val; }
 };
+
+inline void encode(inodeno_t i, bufferlist &bl) { encode(i.val, bl); }
+inline void decode(inodeno_t &i, bufferlist::iterator &p) { decode(i.val, p); }
 
 inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;

@@ -102,7 +102,7 @@ public:
     return (double)sec() + ((double)usec() / 1000000.0L);
   }
 };
-ENCODABLE_CLASS(utime_t)
+WRITE_CLASS_ENCODERS(utime_t)
 
 
 // arithmetic operators

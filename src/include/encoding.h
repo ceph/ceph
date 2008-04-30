@@ -20,7 +20,7 @@
 #include "buffer.h"
 
 
-#define ENCODABLE_CLASS(cl) \
+#define WRITE_CLASS_ENCODERS(cl) \
   inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
@@ -47,13 +47,13 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
 // __u32, __s64, etc.
 #define WRITE_ENCODER(type, etype)					\
   inline void encode(__##type v, bufferlist& bl) {			\
-    __##etype e = cpu_to_##etype(v);					\
+    __##etype e = init_##etype(v);					\
     encode_raw(e, bl);							\
   }									\
   inline void decode(__##type &v, bufferlist::iterator& p) {		\
     __##etype e;							\
     decode_raw(e, p);							\
-    v = etype##_to_cpu(e);						\
+    v = e;								\
   }
 
 WRITE_ENCODER(u64, le64)
@@ -67,6 +67,9 @@ WRITE_ENCODER(s16, le16)
 WRITE_RAW_ENCODER(__u8)
 WRITE_RAW_ENCODER(__s8)
 WRITE_RAW_ENCODER(bool)
+WRITE_RAW_ENCODER(__le64)
+WRITE_RAW_ENCODER(__le32)
+WRITE_RAW_ENCODER(__le16)
 
 
 

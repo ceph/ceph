@@ -107,13 +107,6 @@ public:
   int pool() { return u.pg.pool; }
   int preferred() { return u.pg.preferred; }   // hack: avoid negative.
   
-  /*
-  pg_t operator=(uint64_t v) { u.val = v; return *this; }
-  pg_t operator&=(uint64_t v) { u.val &= v; return *this; }
-  pg_t operator+=(pg_t o) { u.val += o.val; return *this; }
-  pg_t operator-=(pg_t o) { u.val -= o.val; return *this; }
-  pg_t operator++() { ++u.val; return *this; }
-  */
   operator uint64_t() const { return u.pg64; }
 
   pobject_t to_pobject() const { 
@@ -122,6 +115,14 @@ public:
 		     object_t(u.pg64, 0));
   }
 } __attribute__ ((packed));
+
+inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.u.pg64, bl); }
+inline void decode(pg_t &pgid, bufferlist::iterator& p) { 
+  __u64 v;
+  decode_raw(v, p); 
+  pgid.u.pg64 = v;
+}
+
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
 {
