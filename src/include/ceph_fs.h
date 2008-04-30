@@ -98,25 +98,34 @@ static inline __u32 frag_next(__u32 f) { return frag_make(frag_bits(f), frag_val
  */
 struct ceph_file_layout {
 	/* file -> object mapping */
-	__u32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
-	__u32 fl_stripe_count;    /* over this many objects */
-	__u32 fl_object_size;     /* until objects are this big, then move to new objects */
-	__u32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
+	__le32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
+	__le32 fl_stripe_count;    /* over this many objects */
+	__le32 fl_object_size;     /* until objects are this big, then move to new objects */
+	__le32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
 
 	/* pg -> disk layout */
-	__u32 fl_object_stripe_unit;  /* for per-object parity, if any */
+	__le32 fl_object_stripe_unit;  /* for per-object parity, if any */
 
 	/* object -> pg layout */
-	__s32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
+	__le32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
 	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
 	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
 	__u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
-};
+} __attribute__ ((packed));
 
-#define ceph_file_layout_stripe_width(l) (l.fl_stripe_unit * l.fl_stripe_count)
+#define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
+#define ceph_file_layout_stripe_count(l) ((__s32)le32_to_cpu((l).fl_stripe_count))
+#define ceph_file_layout_object_size(l) ((__s32)le32_to_cpu((l).fl_object_size))
+#define ceph_file_layout_cas_hash(l) ((__s32)le32_to_cpu((l).fl_cas_hash))
+#define ceph_file_layout_object_su(l) ((__s32)le32_to_cpu((l).fl_object_stripe_unit))
+#define ceph_file_layout_pg_preferred(l) ((__s32)le32_to_cpu((l).fl_pg_preferred))
+
+#define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
+					  le32_to_cpu((l).fl_stripe_count))
 
 /* period = bytes before i start on a new set of objects */
-#define ceph_file_layout_period(l) (l.fl_object_size * l.fl_stripe_count)
+#define ceph_file_layout_period(l) (le32_to_cpu((l).fl_object_size) *	\
+				    le32_to_cpu((l).fl_stripe_count))
 
 /*
  * placement group.

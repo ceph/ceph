@@ -133,7 +133,7 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
   if (end == 0) {
     // keep probing!
     dout(10) << "_probed didn't find end, probing further" << dendl;
-    off_t period = probe->inode.layout.fl_object_size * probe->inode.layout.fl_stripe_count;
+    off_t period = ceph_file_layout_period(probe->inode.layout);
     probe->from += probe->probing_len;
     probe->probing_len = period;
     _probe(probe);
@@ -171,19 +171,22 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
    */
   map< object_t, ObjectExtent > object_extents;
   
-  assert(layout->fl_object_size >= layout->fl_stripe_unit);
-  off_t stripes_per_object = layout->fl_object_size / layout->fl_stripe_unit;
+  __u32 object_size = ceph_file_layout_object_size(*layout);
+  __u32 su = ceph_file_layout_su(*layout);
+  __u32 stripe_count = ceph_file_layout_stripe_count(*layout);
+  assert(object_size >= su);
+  off_t stripes_per_object = object_size / su;
   dout(20) << " stripes_per_object " << stripes_per_object << dendl;
 
   off_t cur = offset;
   off_t left = len;
   while (left > 0) {
     // layout into objects
-    off_t blockno = cur / layout->fl_stripe_unit;          // which block
-    off_t stripeno = blockno / layout->fl_stripe_count;    // which horizontal stripe        (Y)
-    off_t stripepos = blockno % layout->fl_stripe_count;   // which object in the object set (X)
+    off_t blockno = cur / su;          // which block
+    off_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
+    off_t stripepos = blockno % stripe_count;   // which object in the object set (X)
     off_t objectsetno = stripeno / stripes_per_object;       // which object set
-    off_t objectno = objectsetno * layout->fl_stripe_count + stripepos;  // object id
+    off_t objectno = objectsetno * stripe_count + stripepos;  // object id
     
     // find oid, extent
     ObjectExtent *ex = 0;
@@ -197,9 +200,9 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     }
     
     // map range into object
-    off_t block_start = (stripeno % stripes_per_object)*layout->fl_stripe_unit;
-    off_t block_off = cur % layout->fl_stripe_unit;
-    off_t max = layout->fl_stripe_unit - block_off;
+    off_t block_start = (stripeno % stripes_per_object)*su;
+    off_t block_off = cur % su;
+    off_t max = su - block_off;
     
     off_t x_offset = block_start + block_off;
     off_t x_len;

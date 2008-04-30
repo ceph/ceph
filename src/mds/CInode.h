@@ -289,7 +289,7 @@ public:
   }
 
   int64_t get_layout_size_increment() {
-    return inode.layout.fl_object_size * inode.layout.fl_stripe_count;
+    return ceph_file_layout_period(inode.layout);
   }
 
   // -- misc -- 

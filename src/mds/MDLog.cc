@@ -82,7 +82,7 @@ void MDLog::init_journaler()
   log_inode.layout = g_default_mds_log_layout;
   
   if (g_conf.mds_local_osd) 
-    log_inode.layout.fl_pg_preferred = mds->get_nodeid() + g_conf.num_osd;  // hack
+    log_inode.layout.fl_pg_preferred = cpu_to_le32(mds->get_nodeid() + g_conf.num_osd);  // hack
   
   // log streamer
   if (journaler) delete journaler;

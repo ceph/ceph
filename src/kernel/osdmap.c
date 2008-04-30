@@ -526,32 +526,33 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	loff_t t;
 
 	/*su_per_object = layout->fl_object_size / layout->fl_stripe_unit; */
-	su_per_object = layout->fl_object_size;
-	do_div(su_per_object, layout->fl_stripe_unit);
+	su_per_object = le32_to_cpu(layout->fl_object_size);
+	do_div(su_per_object, le32_to_cpu(layout->fl_stripe_unit));
 
-	BUG_ON((layout->fl_stripe_unit & ~PAGE_MASK) != 0);
+	BUG_ON((le32_to_cpu(layout->fl_stripe_unit) & ~PAGE_MASK) != 0);
 	/* su = *off / layout->fl_stripe_unit; */
 	su = *off;
-	do_div(su, layout->fl_stripe_unit);
+	do_div(su, le32_to_cpu(layout->fl_stripe_unit));
 	/* stripeno = su / layout->fl_stripe_count;
 	   stripepos = su % layout->fl_stripe_count; */
 	stripeno = su;
-	stripepos = do_div(stripeno, layout->fl_stripe_count);
+	stripepos = do_div(stripeno, le32_to_cpu(layout->fl_stripe_count));
 	/* objsetno = stripeno / su_per_object; */
 	objsetno = stripeno;
 	do_div(objsetno, su_per_object);
 
-	oid->bno = objsetno * layout->fl_stripe_count + stripepos;
+	oid->bno = objsetno * le32_to_cpu(layout->fl_stripe_count) + stripepos;
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = *off;
-	*oxoff = do_div(t, layout->fl_stripe_unit);
-	first_oxlen = min_t(loff_t, *len, layout->fl_stripe_unit);
+	*oxoff = do_div(t, le32_to_cpu(layout->fl_stripe_unit));
+	first_oxlen = min_t(loff_t, *len, le32_to_cpu(layout->fl_stripe_unit));
 	*oxlen = first_oxlen;
 
 	/* multiple stripe units across this object? */
 	t = *len;
-	while (t > stripe_len && *oxoff + *oxlen < layout->fl_object_size) {
-		*oxlen += min_t(loff_t, layout->fl_stripe_unit, t);
+	while (t > stripe_len && *oxoff + *oxlen < 
+	       le32_to_cpu(layout->fl_object_size)) {
+		*oxlen += min_t(loff_t, le32_to_cpu(layout->fl_stripe_unit), t);
 		t -= stripe_len;
 	}
 
@@ -572,8 +573,9 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	union ceph_pg pgid;
 	ceph_ino_t ino = le64_to_cpu(oid->ino);
 	unsigned bno = le32_to_cpu(oid->bno);
+	s32 preferred = (s32)le32_to_cpu(fl->fl_pg_preferred);
 
-	if (fl->fl_pg_preferred >= 0) {
+	if (preferred >= 0) {
 		num = osdmap->lpg_num;
 		num_mask = osdmap->lpg_num_mask;
 	} else {
@@ -584,10 +586,10 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	pgid.pg64 = 0;   /* start with it zeroed out */
 	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32),
 				     num, num_mask);
-	pgid.pg.preferred = fl->fl_pg_preferred;
+	pgid.pg.preferred = preferred;
 	pgid.pg.type = fl->fl_pg_type;
 	pgid.pg.size = fl->fl_pg_size;
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);
-	ol->ol_stripe_unit = cpu_to_le32(fl->fl_object_stripe_unit);
+	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
 }
