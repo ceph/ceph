@@ -51,11 +51,21 @@ class CInode;
 class Capability {
 public:
   struct Export {
-    int wanted;
-    int issued;
-    int pending;
+    int32_t wanted;
+    int32_t issued;
+    int32_t pending;
     Export() {}
     Export(int w, int i, int p) : wanted(w), issued(i), pending(p) {}
+    void encode(bufferlist &bl) const {
+      ::encode(wanted, bl);
+      ::encode(issued, bl);
+      ::encode(pending, bl);
+    }
+    void decode(bufferlist::iterator &p) {
+      ::decode(wanted, p);
+      ::decode(issued, p);
+      ::decode(pending, p);
+    }
   };
 
 private:
@@ -238,7 +248,7 @@ public:
   }
 
   // serializers
-  void _encode(bufferlist& bl) {
+  void encode(bufferlist& bl) {
     bl.append((char*)&wanted_caps, sizeof(wanted_caps));
     bl.append((char*)&last_sent, sizeof(last_sent));
     bl.append((char*)&last_recv, sizeof(last_recv));
@@ -256,7 +266,7 @@ public:
   
 };
 
-
+WRITE_CLASS_ENCODERS(Capability::Export)
 
 
 

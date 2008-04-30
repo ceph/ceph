@@ -171,7 +171,16 @@ public:
     for (int i=0; i<NUM; i++) 
       vec[i].reset(now);
   }
+  void encode(bufferlist &bl) const {
+    for (int i=0; i<NUM; i++)
+      ::encode(vec[i], bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    for (int i=0; i<NUM; i++)
+      ::decode(vec[i], p);
+  }
 };
+WRITE_CLASS_ENCODERS(inode_load_vec_t)
 
 class dirfrag_load_vec_t {
 public:

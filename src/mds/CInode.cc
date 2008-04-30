@@ -789,16 +789,16 @@ CInodeDiscover* CInode::replicate_to( int rep )
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ::_encode_simple(inode, bl);
-  ::_encode_simple(symlink, bl);
+  ::encode(inode, bl);
+  ::encode(symlink, bl);
   dirfragtree._encode(bl);
 
   bool dirty = is_dirty();
-  ::_encode_simple(dirty, bl);
+  ::encode(dirty, bl);
 
-  ::_encode_simple(pop, bl);
+  ::encode(pop, bl);
  
-  ::_encode_simple(replica_map, bl);
+  ::encode(replica_map, bl);
 
   authlock._encode(bl);
   linklock._encode(bl);
@@ -823,23 +823,23 @@ void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
   utime_t old_mtime = inode.mtime;
-  ::_decode_simple(inode, p);
+  ::decode(inode, p);
   if (old_mtime > inode.mtime) {
     assert(dirlock.is_updated());
     inode.mtime = old_mtime;     // preserve our mtime, if it is larger
   }
 
-  ::_decode_simple(symlink, p);
+  ::decode(symlink, p);
   dirfragtree._decode(p);
 
   bool dirty;
-  ::_decode_simple(dirty, p);
+  ::decode(dirty, p);
   if (dirty) 
     _mark_dirty(ls);
 
-  ::_decode_simple(pop, p);
+  ::decode(pop, p);
 
-  ::_decode_simple(replica_map, p);
+  ::decode(replica_map, p);
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
   authlock._decode(p);

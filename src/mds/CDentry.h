@@ -214,11 +214,11 @@ public:
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export(bufferlist& bl) {
-    ::_encode_simple(state, bl);
-    ::_encode_simple(version, bl);
-    ::_encode_simple(projected_version, bl);
+    ::encode(state, bl);
+    ::encode(version, bl);
+    ::encode(projected_version, bl);
     lock._encode(bl);
-    ::_encode_simple(replica_map, bl);
+    ::encode(replica_map, bl);
     get(PIN_TEMPEXPORTING);
   }
   void finish_export() {
@@ -235,11 +235,11 @@ public:
   }
   void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
     int nstate;
-    ::_decode_simple(nstate, blp);
-    ::_decode_simple(version, blp);
-    ::_decode_simple(projected_version, blp);
+    ::decode(nstate, blp);
+    ::decode(version, blp);
+    ::decode(projected_version, blp);
     lock._decode(blp);
-    ::_decode_simple(replica_map, blp);
+    ::decode(replica_map, blp);
 
     // twiddle
     state = 0;

@@ -784,7 +784,7 @@ void EImportStart::replay(MDS *mds)
 	     << " < " << cmapv << dendl;
     map<int,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
-    ::_decode_simple(cm, blp);
+    ::decode(cm, blp);
     mds->sessionmap.open_sessions(cm);
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;

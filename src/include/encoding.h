@@ -20,19 +20,9 @@
 #include "buffer.h"
 
 
-#define WRITE_CLASS_ENCODERS(cl) \
-  inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
-  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
-
-#define WRITE_RAW_ENCODER(type)						\
-  inline void encode(type v, bufferlist& bl) { encode_raw(v, bl); }	\
-  inline void decode(type v, bufferlist::iterator& p) { decode_raw(v, p); }
-
-
 // --------------------------------------
 // base types
 
-// raw
 template<class T>
 inline void encode_raw(const T& t, bufferlist& bl)
 {
@@ -44,8 +34,28 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
   p.copy(sizeof(t), (char*)&t);
 }
 
-// __u32, __s64, etc.
-#define WRITE_ENCODER(type, etype)					\
+#define WRITE_RAW_ENCODER(type)						\
+  inline void encode(type v, bufferlist& bl) { encode_raw(v, bl); }	\
+  inline void decode(type v, bufferlist::iterator& p) { decode_raw(v, p); }
+
+WRITE_RAW_ENCODER(__u8)
+WRITE_RAW_ENCODER(__s8)
+WRITE_RAW_ENCODER(bool)
+WRITE_RAW_ENCODER(char)
+WRITE_RAW_ENCODER(__le64)
+WRITE_RAW_ENCODER(__le32)
+WRITE_RAW_ENCODER(__le16)
+
+// FIXME: we need to choose some portable floating point encoding here
+WRITE_RAW_ENCODER(float)
+WRITE_RAW_ENCODER(double)
+
+
+
+// -----------------------------------
+// int types
+
+#define WRITE_INTTYPE_ENCODER(type, etype)				\
   inline void encode(__##type v, bufferlist& bl) {			\
     __##etype e = init_##etype(v);					\
     encode_raw(e, bl);							\
@@ -56,20 +66,18 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
     v = e;								\
   }
 
-WRITE_ENCODER(u64, le64)
-WRITE_ENCODER(s64, le64)
-WRITE_ENCODER(u32, le32)
-WRITE_ENCODER(s32, le32)
-WRITE_ENCODER(u16, le16)
-WRITE_ENCODER(s16, le16)
+WRITE_INTTYPE_ENCODER(u64, le64)
+WRITE_INTTYPE_ENCODER(s64, le64)
+WRITE_INTTYPE_ENCODER(u32, le32)
+WRITE_INTTYPE_ENCODER(s32, le32)
+WRITE_INTTYPE_ENCODER(u16, le16)
+WRITE_INTTYPE_ENCODER(s16, le16)
 
 
-WRITE_RAW_ENCODER(__u8)
-WRITE_RAW_ENCODER(__s8)
-WRITE_RAW_ENCODER(bool)
-WRITE_RAW_ENCODER(__le64)
-WRITE_RAW_ENCODER(__le32)
-WRITE_RAW_ENCODER(__le16)
+
+#define WRITE_CLASS_ENCODERS(cl) \
+  inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
 

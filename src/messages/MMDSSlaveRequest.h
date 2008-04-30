@@ -110,8 +110,8 @@ public:
     ::_encode(lock_type, payload);
     object_info._encode(payload);
     ::_encode_complex(authpins, payload);
-    srcdnpath._encode(payload);
-    destdnpath._encode(payload);
+    ::encode(srcdnpath, payload);
+    ::encode(destdnpath, payload);
     ::_encode(witnesses, payload);
     ::_encode(now, payload);
     ::_encode(inode_export, payload);
@@ -126,8 +126,8 @@ public:
     ::_decode_simple(lock_type, p);
     object_info._decode(p);
     ::_decode_complex(authpins, p);
-    srcdnpath._decode(p);
-    destdnpath._decode(p);
+    ::decode(srcdnpath, p);
+    ::decode(destdnpath, p);
     ::_decode_simple(witnesses, p);
     ::_decode_simple(now, p);
     ::_decode_simple(inode_export, p);

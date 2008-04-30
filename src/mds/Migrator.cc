@@ -864,7 +864,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
   dout(7) << "encode_export_inode " << *in << dendl;
   assert(!in->is_replica(mds->get_nodeid()));
 
-  ::_encode_simple(in->inode.ino, enc_state);
+  ::encode(in->inode.ino, enc_state);
   in->encode_export(enc_state);
 
   // caps 
@@ -877,7 +877,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
   // encode caps
   map<int,Capability::Export> cap_map;
   in->export_client_caps(cap_map);
-  ::_encode_simple(cap_map, bl);
+  ::encode(cap_map, bl);
 
   in->state_set(CInode::STATE_EXPORTINGCAPS);
 
@@ -963,11 +963,11 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
 
   // dir 
   dirfrag_t df = dir->dirfrag();
-  ::_encode_simple(df, exportbl);
+  ::encode(df, exportbl);
   dir->encode_export(exportbl);
   
   long nden = dir->items.size();
-  ::_encode_simple(nden, exportbl);
+  ::encode(nden, exportbl);
   
   // dentries
   list<CDir*> subdirs;
@@ -1658,7 +1658,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   bufferlist::iterator blp = m->get_dirstate().begin();
 
   // new client sessions, open these after we journal
-  ::_decode_simple(onlogged->imported_client_map, blp);
+  ::decode(onlogged->imported_client_map, blp);
   mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
 
   int num_imported_inodes = 0;
@@ -1970,7 +1970,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   dout(15) << "decode_import_inode on " << *dn << dendl;
 
   inodeno_t ino;
-  ::_decode_simple(ino, blp);
+  ::decode(ino, blp);
   
   bool added = false;
   CInode *in = cache->get_inode(ino);
@@ -2024,7 +2024,7 @@ void Migrator::decode_import_inode_caps(CInode *in,
 					map<CInode*, map<int,Capability::Export> >& cap_imports)
 {
   map<int,Capability::Export> cap_map;
-  ::_decode_simple(cap_map, blp);
+  ::decode(cap_map, blp);
   if (!cap_map.empty()) {
     cap_imports[in].swap(cap_map);
     in->get(CInode::PIN_IMPORTINGCAPS);
@@ -2072,7 +2072,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 {
   // set up dir
   dirfrag_t df;
-  ::_decode_simple(df, blp);
+  ::decode(df, blp);
 
   CInode *diri = cache->get_inode(df.ino);
   assert(diri);
@@ -2117,14 +2117,14 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
   
   // contents
   long nden;
-  ::_decode_simple(nden, blp);
+  ::decode(nden, blp);
   
   for (; nden>0; nden--) {
     num_imported++;
     
     // dentry
     string dname;
-    ::_decode_simple(dname, blp);
+    ::decode(dname, blp);
     
     CDentry *dn = dir->lookup(dname);
     if (!dn)
@@ -2140,7 +2140,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     // points to...
     char icode;
-    ::_decode_simple(icode, blp);
+    ::decode(icode, blp);
     
     if (icode == 'N') {
       // null dentry
@@ -2152,8 +2152,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      ::_decode_simple(ino, blp);
-      ::_decode_simple(d_type, blp);
+      ::decode(ino, blp);
+      ::decode(d_type, blp);
       if (dn->is_remote()) {
 	assert(dn->get_remote_ino() == ino);
       } else {

@@ -99,10 +99,10 @@ class MClientFileCaps : public Message {
   
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(h, p);
+    ::decode(h, p);
   }
   void encode_payload() {
-    ::_encode_simple(h, payload);
+    ::encode(h, payload);
   }
 };
 
