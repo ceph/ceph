@@ -191,7 +191,8 @@ struct ceph_inode_info {
 	struct timespec i_old_atime;
 
 	/* held references to caps */
-	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
+	int i_rd_ref, i_rdcache_ref, i_wr_ref;
+	atomic_t i_wrbuffer_ref;
 
 	unsigned long i_hashval;
 
@@ -284,7 +285,7 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 		used |= CEPH_CAP_RDCACHE;
 	if (ci->i_wr_ref)
 		used |= CEPH_CAP_WR;
-	if (ci->i_wrbuffer_ref)
+	if (atomic_read(&ci->i_wrbuffer_ref))
 		used |= CEPH_CAP_WRBUFFER;
 	return used;
 }

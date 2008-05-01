@@ -1139,9 +1139,10 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 	if (got & CEPH_CAP_WR)
 		ci->i_wr_ref++;
 	if (got & CEPH_CAP_WRBUFFER) {
-		ci->i_wrbuffer_ref++;
-		dout(30, "__take_cap_refs %p wrbuffer %d -> %d\n",
-		     &ci->vfs_inode, ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref);
+		atomic_inc(&ci->i_wrbuffer_ref);
+		dout(30, "__take_cap_refs %p wrbuffer %d -> %d (?)\n",
+		     &ci->vfs_inode, atomic_read(&ci->i_wrbuffer_ref)-1,
+		     atomic_read(&ci->i_wrbuffer_ref));
 	}
 }
 
@@ -1196,10 +1197,11 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		if (--ci->i_wr_ref == 0)
 			last++;
 	if (had & CEPH_CAP_WRBUFFER) {
-		if (--ci->i_wrbuffer_ref == 0)
+		if (atomic_dec_and_test(&ci->i_wrbuffer_ref))
 			last++;
-		dout(30, "put_cap_refs %p wrbuffer %d -> %d\n",
-		     &ci->vfs_inode, ci->i_wrbuffer_ref+1,ci->i_wrbuffer_ref);
+		dout(30, "put_cap_refs %p wrbuffer %d -> %d (?)\n",
+		     &ci->vfs_inode, atomic_read(&ci->i_wrbuffer_ref)+1,
+		     atomic_read(&ci->i_wrbuffer_ref));
 	}
 	spin_unlock(&ci->vfs_inode.i_lock);
 
@@ -1213,15 +1215,16 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 {
 	int last = 0;
+	int v;
 
 	spin_lock(&ci->vfs_inode.i_lock);
-	ci->i_wrbuffer_ref -= nr;
-	last = ci->i_wrbuffer_ref;
+	last = atomic_sub_and_test(nr, &ci->i_wrbuffer_ref);
+	v = atomic_read(&ci->i_wrbuffer_ref);
 	spin_unlock(&ci->vfs_inode.i_lock);
 
-	dout(30, "put_wrbuffer_cap_refs on %p %d -> %d%s\n",
-	     &ci->vfs_inode, last+nr, last, last == 0 ? " LAST":"");
-	BUG_ON(ci->i_wrbuffer_ref < 0);
+	dout(30, "put_wrbuffer_cap_refs on %p %d -> %d (?)%s\n",
+	     &ci->vfs_inode, v+nr, v, last == 0 ? " LAST":"");
+	BUG_ON(v < 0);
 
 	if (last == 0)
 		ceph_check_caps(ci, 0);

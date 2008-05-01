@@ -1,9 +1,11 @@
 
+#include <linux/backing-dev.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/writeback.h>	/* generic_writepages */
 #include <linux/pagevec.h>
+#include <linux/task_io_accounting_ops.h>
 
 int ceph_debug_addr = -1;
 #define DOUT_VAR ceph_debug_addr
@@ -349,7 +351,6 @@ get_more_pages:
 				if (i < wrote)
 					SetPageUptodate(page);
 				else if (rc < 0) {
-					cleaned--;
 					dout(20, "%p redirtying page %p\n", 
 					     inode, page);
 					redirty_page_for_writepage(wbc, page);
@@ -493,11 +494,6 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
 
-	if (!PageDirty(page)) {
-		dout(20, "%p dirtying page %p\n", inode, page);
-		ceph_take_cap_refs(ceph_inode(inode), CEPH_CAP_WRBUFFER);
-	} else
-		dout(20, "%p page %p already dirty\n", inode, page);
 	set_page_dirty(page);
 
 	unlock_page(page);
@@ -507,6 +503,45 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 }
 
 
+static int ceph_set_page_dirty(struct page *page)
+{
+	struct address_space *mapping = page->mapping;
+	struct ceph_inode_info *ci;
+
+	if (unlikely(!mapping))
+		return !TestSetPageDirty(page);
+
+	if (TestSetPageDirty(page)) {
+		dout(20, "set_page_dirty %p -- already dirty\n", page);
+		return 0;
+	}
+
+	write_lock_irq(&mapping->tree_lock);
+	if (page->mapping) {	/* Race with truncate? */
+		WARN_ON_ONCE(!PageUptodate(page));
+
+		if (mapping_cap_account_dirty(mapping)) {
+			__inc_zone_page_state(page, NR_FILE_DIRTY);
+			__inc_bdi_stat(mapping->backing_dev_info,
+					BDI_RECLAIMABLE);
+			task_io_account_write(PAGE_CACHE_SIZE);
+		}
+		radix_tree_tag_set(&mapping->page_tree,
+				page_index(page), PAGECACHE_TAG_DIRTY);
+
+		ci = ceph_inode(mapping->host);
+		atomic_inc(&ci->i_wrbuffer_ref);
+		dout(20, "set_page_dirty %p %p %d -> %d (?)\n", page,
+		     &ci->vfs_inode,
+		     atomic_read(&ci->i_wrbuffer_ref)-1,
+		     atomic_read(&ci->i_wrbuffer_ref));
+	}
+	write_unlock_irq(&mapping->tree_lock);
+	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
+
+	return 1;
+}
+
 
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
@@ -515,4 +550,5 @@ const struct address_space_operations ceph_aops = {
 	.writepages = ceph_writepages,
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
+	.set_page_dirty = ceph_set_page_dirty,
 };
