@@ -697,6 +697,7 @@ static void wake_up_session_caps(struct ceph_mds_session *session)
 	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
 	list_for_each(p, &session->s_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, session_caps);
+		dout(20, "waking up waiters on %p\n", &cap->ci->vfs_inode);
 		wake_up(&cap->ci->i_cap_wq);
 	}
 }
@@ -1542,6 +1543,9 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_RDCACHE) {
+		/*
+		 * FIXME: this will block if there is a locked page..
+		 */
 		dout(20, "invalidating pages on %p\n", inode);
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
 		dout(20, "done invalidating pages on %p\n", inode);
@@ -1804,17 +1808,17 @@ static void delayed_work(struct work_struct *work)
 	int i;
 	struct ceph_mds_client *mdsc =
 		container_of(work, struct ceph_mds_client, delayed_work.work);
-	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 1;
+	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 2;
 	int renew_caps = time_after_eq(jiffies, HZ*renew_interval + 
 				       mdsc->last_renew_caps);
 
 	dout(10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
 
+	check_delayed_caps(mdsc);
+
 	spin_lock(&mdsc->lock);
 	if (renew_caps)
 		mdsc->last_renew_caps = jiffies;
-
-	check_delayed_caps(mdsc);
 
 	for (i = 0; i < mdsc->max_sessions; i++) {
 		struct ceph_mds_session *session = __get_session(mdsc, i);

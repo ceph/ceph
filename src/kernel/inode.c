@@ -708,7 +708,8 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 
 		if (cap->gen < gen || time_after_eq(jiffies, ttl)) {
 			dout(30, "__ceph_caps_issued %p cap %p issued %d "
-			     "but STALE\n", &ci->vfs_inode, cap, cap->issued);
+			     "but STALE (gen %llu vs %llu)\n", &ci->vfs_inode,
+			     cap, cap->issued, cap->gen, gen);
 			continue;
 		}
 		dout(30, "__ceph_caps_issued %p cap %p issued %d\n",
