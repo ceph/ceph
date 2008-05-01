@@ -1325,9 +1325,6 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 
-	ceph_debug_msgr = 50;
-	ceph_debug_console = 1;
-
 	dout(2, "destroy %p\n", msgr);
 	
 	/* stop listener */
