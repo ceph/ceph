@@ -54,7 +54,7 @@ enum {
 struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
-	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	__u64             s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;
 	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
 	__u64             s_cap_gen;  /* inc each time we get mds stale msg */

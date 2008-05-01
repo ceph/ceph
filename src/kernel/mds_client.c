@@ -290,7 +290,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	s = kmalloc(sizeof(struct ceph_mds_session), GFP_NOFS);
 	s->s_mds = mds;
 	s->s_state = CEPH_MDS_SESSION_NEW;
-	s->s_cap_seq = 0;
+	s->s_seq = 0;
 	mutex_init(&s->s_mutex);
 	spin_lock_init(&s->s_cap_lock);
 	s->s_cap_ttl = 0;
@@ -526,7 +526,7 @@ static int open_session(struct ceph_mds_client *mdsc,
 	spin_unlock(&mdsc->lock);
 
 	/* send connect message */
-	msg = create_session_msg(CEPH_SESSION_REQUEST_OPEN, session->s_cap_seq);
+	msg = create_session_msg(CEPH_SESSION_REQUEST_OPEN, session->s_seq);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 	send_msg_mds(mdsc, msg, mds);
@@ -1195,7 +1195,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	session = __get_session(mdsc, mds);
 	if (session) {
 		session->s_state = CEPH_MDS_SESSION_RECONNECTING;
-		session->s_cap_seq = 0;
+		session->s_seq = 0;
 
 		/* estimate needed space */
 		len += session->s_nr_caps *
@@ -1437,7 +1437,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	}
 
 	mutex_lock(&session->s_mutex);
-	session->s_cap_seq++;
+	session->s_seq++;
 
 	/* lookup ino */
 	inot = ceph_ino_to_ino(ino);
@@ -1619,7 +1619,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 	
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
-				 session->s_cap_seq);
+				 session->s_seq);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 	send_msg_mds(mdsc, msg, mds);
@@ -1667,7 +1667,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(10, "WTF, got lease but no session for mds%d\n", mds);
 		return;
 	}
-	session->s_cap_seq++;
+	session->s_seq++;
 
 	mutex_lock(&session->s_mutex);
 

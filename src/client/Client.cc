@@ -1201,7 +1201,10 @@ void Client::handle_lease(MClientLease *m)
   dout(10) << "handle_lease " << *m << dendl;
 
   assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
-  
+
+  int mds = m->get_source().num();
+  mds_sessions[mds].seq++;
+
   Inode *in;
   if (inode_map.count(m->get_ino()) == 0) {
     dout(10) << " don't have inode " << m->get_ino() << dendl;
