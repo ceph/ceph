@@ -868,7 +868,7 @@ void Client::handle_client_session(MClientSession *m)
   switch (m->op) {
   case CEPH_SESSION_OPEN:
     assert(mds_sessions.count(from) == 0);
-    mds_sessions[from] = 0;
+    mds_sessions[from].seq = 0;
     break;
 
   case CEPH_SESSION_CLOSE:
@@ -877,7 +877,8 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_RENEWCAPS:
-    last_cap_renew = g_clock.now();
+    mds_sessions[from].cap_ttl = 
+      mds_sessions[from].last_cap_renew_request + mdsmap->get_cap_timeout();
     break;
 
   default:
@@ -1166,7 +1167,7 @@ void Client::send_reconnect(int mds)
     }
 
     // reset my cap seq number
-    mds_sessions[mds] = 0;
+    mds_sessions[mds].seq = 0;
   } else {
     dout(10) << " i had no session with this mds";
     m->closed = true;
@@ -1291,7 +1292,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (mds_sessions.count(mds) == 0) 
     dout(0) << "got file_caps without session from mds" << mds << " msg " << *m << dendl;
   //assert(mds_sessions.count(mds));   // HACK FIXME SOON
-  mds_sessions[mds]++;
+  mds_sessions[mds].seq++;
 
   Inode *in = 0;
   if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
@@ -1325,7 +1326,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
       // fresh from new mds?
       if (!in->caps.count(mds)) {
-	caps_by_mds[mds]++;
+	mds_sessions[mds].num_caps++;
         if (in->caps.empty()) in->get();
         in->caps[mds].seq = m->get_seq();
         in->caps[mds].caps = m->get_caps();
@@ -1356,7 +1357,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 
     assert(in->caps.count(mds));
     in->caps.erase(mds);
-    caps_by_mds[mds]--;
+    mds_sessions[mds].num_caps--;
     if (in->caps.empty()) in->put();
 
     // delayed reap?
@@ -1536,7 +1537,7 @@ void Client::release_caps(Inode *in,
       messenger->send_message(m, mdsmap->get_inst(it->first));
     }
     if (wanted == 0)
-      caps_by_mds[it->first]--;
+      mds_sessions[it->first].num_caps--;
   }
   if (wanted == 0 && !in->caps.empty()) {
     in->caps.clear();
@@ -1562,7 +1563,7 @@ void Client::update_caps_wanted(Inode *in)
                                              wanted);
     messenger->send_message(m, mdsmap->get_inst(it->first));
     if (wanted == 0)
-      caps_by_mds[it->first]--;
+      mds_sessions[it->first].num_caps--;
   }
   if (wanted == 0 && !in->caps.empty()) {
     in->caps.clear();
@@ -1761,11 +1762,12 @@ int Client::unmount()
 
   
   // send session closes!
-  for (map<int,version_t>::iterator p = mds_sessions.begin();
+  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
-    dout(2) << "sending client_session close to mds" << p->first << " seq " << p->second << dendl;
-    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second),
+    dout(2) << "sending client_session close to mds" << p->first
+	    << " seq " << p->second.seq << dendl;
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second.seq),
 			    mdsmap->get_inst(p->first));
   }
 
@@ -1815,22 +1817,22 @@ void Client::tick()
   timer.add_event_after(g_conf.client_tick_interval, tick_event);
   
   utime_t now = g_clock.now();
-  utime_t el = now - last_cap_renew_request;
-  if (el > g_conf.mds_cap_timeout / 3.0) {
+  utime_t el = now - last_cap_renew;
+  if (mdsmap && el > mdsmap->get_cap_timeout() / 3.0)
     renew_caps();
-  }
   
 }
 
 void Client::renew_caps()
 {
   dout(10) << "renew_caps" << dendl;
-  last_cap_renew_request = g_clock.now();
+  last_cap_renew = g_clock.now();
   
-  for (map<int,version_t>::iterator p = mds_sessions.begin();
+  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
     dout(15) << "renew_caps requesting from mds" << p->first << dendl;
+    p->second.last_cap_renew_request = g_clock.now();
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
 			    mdsmap->get_inst(p->first));
   }
@@ -2727,7 +2729,7 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     }
 
     if (in->caps.count(mds) == 0)
-      caps_by_mds[mds]++;
+      mds_sessions[mds].num_caps++;
 
     int new_caps = reply->get_file_caps();
 
@@ -4101,13 +4103,13 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
   dout(0) << "ms_handle_remote_reset on " << addr << ", last " << last << dendl;
   if (last.is_mds()) {
     int mds = last.num();
-    dout(0) << "ms_handle_remote_reset on " << last << ", " << caps_by_mds[mds]
+    dout(0) << "ms_handle_remote_reset on " << last << ", " << mds_sessions[mds].num_caps
 	    << " caps, kicking requests" << dendl;
 
     mds_sessions.erase(mds); // "kill" session
 
     // reopen if caps
-    if (caps_by_mds[mds] > 0) {
+    if (mds_sessions[mds].num_caps > 0) {
       waiting_for_session[mds].size();  // make sure entry exists
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
 			      mdsmap->get_inst(mds));

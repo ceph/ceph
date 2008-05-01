@@ -6,17 +6,15 @@ code cleanup
 - addr=?
 
 userspace client
-- per-mds session struct.. and put the cap_ttl in there!
 - move the size check(s) on read from _read() into FileCache
+- time out caps, wake up waiters on renewal
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
 - obey file_max
-- revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
-- reference count lease validations on path lookup?
 
 kernel client
 - flush caps on sync, fsync, etc.
