@@ -1217,11 +1217,11 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	spin_lock(&ci->vfs_inode.i_lock);
 	ci->i_wrbuffer_ref -= nr;
 	last = ci->i_wrbuffer_ref;
-	BUG_ON(ci->i_wrbuffer_ref < 0);
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	dout(30, "put_wrbuffer_cap_refs on %p %d -> %d%s\n",
 	     &ci->vfs_inode, last+nr, last, last == 0 ? " LAST":"");
+	BUG_ON(ci->i_wrbuffer_ref < 0);
 
 	if (last == 0)
 		ceph_check_caps(ci, 0);

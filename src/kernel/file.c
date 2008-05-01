@@ -287,8 +287,8 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 
 	/* do we need to explicitly request a larger max_size? */
 	spin_lock(&inode->i_lock);
-	if (endoff >= ci->i_max_size &&
-	    endoff > (inode->i_size << 1) &&
+	if ((endoff >= ci->i_max_size ||
+	     endoff > (inode->i_size << 1)) &&
 	    endoff > ci->i_wanted_max_size) {
 		dout(10, "write %p at large endoff %llu, req max_size\n",
 		     inode, endoff);
