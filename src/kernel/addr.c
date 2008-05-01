@@ -401,6 +401,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
 	loff_t page_off = pos & PAGE_MASK;
 	int pos_in_page = pos & ~PAGE_MASK;
+	int end_in_page = pos_in_page + len;
 	loff_t i_size;
 	int r;
 
@@ -424,7 +425,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	i_size = inode->i_size;   /* caller holds i_mutex */
 	if (page_off >= i_size ||
 	    (pos_in_page == 0 && (pos+len) >= i_size)) {
-		simple_prepare_write(file, page, pos_in_page, pos_in_page+len);
+		simple_prepare_write(file, page, pos_in_page, end_in_page);
 		return 0;
 	}
 
@@ -437,9 +438,18 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	if (r < 0)
 		return r;
 	if (r < pos_in_page) {
-		/* we didn't read up to our write start pos, zero the gap */
 		void *kaddr = kmap_atomic(page, KM_USER1);
+		dout(20, "write_begin zeroing pre %d~%d\n", r, pos_in_page-r);
 		memset(kaddr+r, 0, pos_in_page-r);
+		flush_dcache_page(page);
+		kunmap_atomic(kaddr, KM_USER1);
+	}
+	end_in_page = pos_in_page + len;
+	if (end_in_page < PAGE_SIZE && r < PAGE_SIZE) {
+		void *kaddr = kmap_atomic(page, KM_USER1);
+		dout(20, "write_begin zeroing post %d~%d\n", end_in_page,
+		     (int)PAGE_SIZE - end_in_page);
+		memset(kaddr+end_in_page, 0, PAGE_SIZE-end_in_page);
 		flush_dcache_page(page);
 		kunmap_atomic(kaddr, KM_USER1);
 	}
