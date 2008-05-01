@@ -3000,7 +3000,7 @@ bool Locker::file_sync(FileLock *lock)
 void Locker::file_lock(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "inode_file_lock " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "file_lock " << *lock << " on " << *lock->get_parent() << dendl;  
 
   assert(in->is_auth());
   assert(lock->is_stable());
@@ -3020,12 +3020,12 @@ void Locker::file_lock(FileLock *lock)
       lock->get_parent()->auth_pin();
 
       // call back caps
-      if (issued) 
+      if (issued & ~lock->caps_allowed()) 
         issue_caps(in);
     } else {
-      if (issued) {
+      lock->set_state(LOCK_GLOCKR);
+      if (issued & ~lock->caps_allowed()) {
         // call back caps
-        lock->set_state(LOCK_GLOCKR);
 	lock->get_parent()->auth_pin();
         issue_caps(in);
       } else {
