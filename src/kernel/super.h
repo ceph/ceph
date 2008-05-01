@@ -181,6 +181,7 @@ struct ceph_inode_info {
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;
 	unsigned long i_hold_caps_until; /* jiffies */
+	struct list_head i_cap_delay_list;
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
 	loff_t i_max_size;      /* size authorized by mds */
@@ -195,7 +196,6 @@ struct ceph_inode_info {
 	unsigned long i_hashval;
 
 	struct work_struct i_wb_work;  /* writeback work */
-	struct delayed_work i_cap_dwork;  /* cap work */
 
 	struct inode vfs_inode; /* at end */
 };
@@ -385,7 +385,6 @@ extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_cap_delayed_work(struct work_struct *work);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);

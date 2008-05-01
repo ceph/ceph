@@ -174,11 +174,11 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
 	ci->i_hold_caps_until = 0;
+	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
 	ci->i_hashval = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
-	INIT_DELAYED_WORK(&ci->i_cap_dwork, ceph_cap_delayed_work);
 
 	return &ci->vfs_inode;
 }
@@ -548,6 +548,7 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 
 	init_waitqueue_head(&cl->mount_wq);
 	spin_lock_init(&cl->sb_lock);
+
 	get_client_counter();
 
 	cl->wb_wq = create_workqueue("ceph-writeback");

@@ -1471,6 +1471,17 @@ int send_renewcaps(struct ceph_mds_client *mdsc,
 	return 0;
 }
 
+void __cap_delay_cancel(struct ceph_mds_client *mdsc,
+			struct ceph_inode_info *ci)
+{
+	dout(10, "__cap_delay_cancel %p\n", &ci->vfs_inode);
+	if (list_empty(&ci->i_cap_delay_list))
+		return;
+	spin_lock(&mdsc->cap_delay_lock);
+	list_del_init(&ci->i_cap_delay_list);
+	spin_unlock(&mdsc->cap_delay_lock);
+	iput(&ci->vfs_inode);
+}
 
 /*
  * called with i_lock, then drops it.
@@ -1511,6 +1522,8 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	if (wanted == 0) {
 		__ceph_remove_cap(cap);
 		removed_last = list_empty(&ci->i_caps);
+		if (removed_last && cancel_work)
+			__cap_delay_cancel(mdsc, ci);
 	}
 	spin_unlock(&inode->i_lock);
 
@@ -1523,17 +1536,37 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	send_cap_ack(mdsc, ceph_ino(inode),
 		     keep, wanted, seq,
 		     size, max_size, &mtime, &atime, session->s_mds);
-	
-	mutex_unlock(&session->s_mutex);
 
-	if (wanted == 0) {
-		if (removed_last && cancel_work)
-			cancel_delayed_work_sync(&ci->i_cap_dwork);
+	if (wanted == 0)
 		iput(inode);  /* removed cap */
-	}
+
 	return removed_last;
 }
 
+static void check_delayed_caps(struct ceph_mds_client *mdsc)
+{
+	struct ceph_inode_info *ci;
+
+	dout(10, "check_delayed_caps\n");
+	while (1) {
+		spin_lock(&mdsc->cap_delay_lock);
+		if (list_empty(&mdsc->cap_delay_list))
+			goto out_unlock;
+		ci = list_first_entry(&mdsc->cap_delay_list,
+				      struct ceph_inode_info,
+				      i_cap_delay_list);
+		if (time_before(jiffies, ci->i_hold_caps_until))
+			break;
+		list_del_init(&ci->i_cap_delay_list);
+		spin_unlock(&mdsc->cap_delay_lock);
+		dout(10, "check_delayed_caps on %p\n", &ci->vfs_inode);
+		ceph_check_caps(ci, 1);
+		iput(&ci->vfs_inode);
+	}
+
+out_unlock:
+	spin_unlock(&mdsc->cap_delay_lock);
+}
 
 static void flush_write_caps(struct ceph_mds_client *mdsc,
 			     struct ceph_mds_session *session)
@@ -1553,8 +1586,8 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		}
 		used = __ceph_caps_used(cap->ci);
 		wanted = __ceph_caps_wanted(cap->ci);
-		/* FIXME: this drops s_mutex, which we dont want, ugh */
-		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 0);
+
+		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1);
 	}
 }
 
@@ -1765,10 +1798,12 @@ void delayed_work(struct work_struct *work)
 
 	dout(10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
 
-	/* renew caps */
 	spin_lock(&mdsc->lock);
 	if (renew_caps)
 		mdsc->last_renew_caps = jiffies;
+
+	check_delayed_caps(mdsc);
+
 	for (i = 0; i < mdsc->max_sessions; i++) {
 		struct ceph_mds_session *session = __get_session(mdsc, i);
 		if (session == 0)
@@ -1807,6 +1842,8 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	init_completion(&mdsc->session_close_waiters);
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
 	mdsc->last_renew_caps = jiffies;
+	INIT_LIST_HEAD(&mdsc->cap_delay_list);
+	spin_lock_init(&mdsc->cap_delay_lock);
 }
 
 void ceph_mdsc_stop(struct ceph_mds_client *mdsc)

@@ -746,37 +746,32 @@ void __ceph_remove_cap(struct ceph_inode_cap *cap)
 void ceph_remove_cap(struct ceph_inode_cap *cap)
 {
 	struct inode *inode = &cap->ci->vfs_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int was_last;
 
 	spin_lock(&inode->i_lock);
 	__ceph_remove_cap(cap);
-	was_last = list_empty(&ci->i_caps);
 	spin_unlock(&inode->i_lock);
-	if (was_last)
-		cancel_delayed_work_sync(&ci->i_cap_dwork);
 	iput(inode);
 }
 
-void ceph_cap_delayed_work(struct work_struct *work)
+/*
+ * caller holds i_lock
+ *    -> client->cap_delay_lock
+ */
+void __ceph_cap_delay_requeue(struct ceph_mds_client *mdsc,
+			      struct ceph_inode_info *ci)
 {
-	struct ceph_inode_info *ci = container_of(work,
-						  struct ceph_inode_info,
-						  i_cap_dwork.work);
-	spin_lock(&ci->vfs_inode.i_lock);
-	if (ci->i_hold_caps_until &&
-	    time_before(jiffies, ci->i_hold_caps_until)) {
-		dout(10, "cap_dwork on %p -- rescheduling\n", &ci->vfs_inode);
-		schedule_delayed_work(&ci->i_cap_dwork, 
-				      time_sub(ci->i_hold_caps_until, jiffies));
-		spin_unlock(&ci->vfs_inode.i_lock);
-	} else {
-		dout(10, "cap_dwork on %p\n", &ci->vfs_inode);
-		spin_unlock(&ci->vfs_inode.i_lock);
-		ceph_check_caps(ci, 1);
-	}
-	dout(10, "cap_dwork on %p done\n", &ci->vfs_inode);
+	ci->i_hold_caps_until = round_jiffies(jiffies + HZ * 5);
+	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
+	     ci->i_hold_caps_until);
+	spin_lock(&mdsc->cap_delay_lock);
+	if (list_empty(&ci->i_cap_delay_list))
+		igrab(&ci->vfs_inode);
+	else
+		list_del_init(&ci->i_cap_delay_list);
+	list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
+	spin_unlock(&mdsc->cap_delay_lock);
 }
+
 
 /*
  * examine currently used, wanted versus held caps.
@@ -801,16 +796,8 @@ retry:
 	dout(10, "check_caps %p wanted %d used %d issued %d\n", inode,
 	     wanted, used, __ceph_caps_issued(ci));
 
-	if (!is_delayed) {
-		unsigned long until = round_jiffies(jiffies + HZ * 5);
-		if (time_after(until, ci->i_hold_caps_until)) {
-			ci->i_hold_caps_until = until;
-			dout(10, "hold_caps_until %lu\n", until);
-			cancel_delayed_work(&ci->i_cap_dwork);
-			schedule_delayed_work(&ci->i_cap_dwork,
-					      time_sub(until, jiffies));
-		}
-	}
+	if (!is_delayed)
+		__ceph_cap_delay_requeue(mdsc, ci);
 
 	list_for_each(p, &ci->i_caps) {
 		int revoking;
@@ -865,10 +852,9 @@ ack:
 			}
 		}
 
-		/* send_cap drops i_lock AND s_mutex */
+		/* send_cap drops i_lock */
 		removed_last = __ceph_mdsc_send_cap(mdsc, session, cap,
 						    used, wanted, !is_delayed);
-		session = 0;
 		if (removed_last)
 			goto out;
 		goto retry;
