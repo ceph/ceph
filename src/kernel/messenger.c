@@ -1470,9 +1470,9 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = cpu_to_le64(++con->out_seq);
-	dout(1, "----- %p to %s%d %d=%s len %d+%d -----\n", msg,
-	     ENTITY_NAME(msg->hdr.dst.name),
-	     le32_to_cpu(msg->hdr.type),
+	dout(1, "----- %p %u to %s%d %d=%s len %d+%d -----\n", msg,
+	     (unsigned)con->out_seq,
+	     ENTITY_NAME(msg->hdr.dst.name), le32_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le32_to_cpu(msg->hdr.type)),
 	     le32_to_cpu(msg->hdr.front_len),
 	     le32_to_cpu(msg->hdr.data_len));
