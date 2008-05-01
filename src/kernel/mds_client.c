@@ -148,7 +148,8 @@ bad:
 	return err;
 }
 
-int parse_reply_info_dir(void **p, void *end, struct ceph_mds_reply_info *info)
+static int parse_reply_info_dir(void **p, void *end, 
+				struct ceph_mds_reply_info *info)
 {
 	__u32 num, i = 0;
 	int err = -EINVAL;
@@ -210,7 +211,8 @@ bad:
 	return err;
 }
 
-int parse_reply_info(struct ceph_msg *msg, struct ceph_mds_reply_info *info)
+static int parse_reply_info(struct ceph_msg *msg, 
+			    struct ceph_mds_reply_info *info)
 {
 	void *p, *end;
 	__u32 len;
@@ -243,7 +245,7 @@ bad:
 	return err;
 }
 
-void destroy_reply_info(struct ceph_mds_reply_info *info)
+static void destroy_reply_info(struct ceph_mds_reply_info *info)
 {
 	kfree(info->trace_in);
 	kfree(info->dir_in);
@@ -265,7 +267,7 @@ static struct ceph_mds_session *__get_session(struct ceph_mds_client *mdsc,
 	return session;
 }
 
-void put_session(struct ceph_mds_session *s)
+static void put_session(struct ceph_mds_session *s)
 {
 	BUG_ON(s == NULL);
 	dout(30, "put_session %p %d -> %d\n", s,
@@ -292,6 +294,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 	mutex_init(&s->s_mutex);
 	spin_lock_init(&s->s_cap_lock);
 	s->s_cap_ttl = 0;
+	s->s_cap_gen = 0;
 	s->s_renew_requested = 0;
 	INIT_LIST_HEAD(&s->s_caps);
 	INIT_LIST_HEAD(&s->s_inode_leases);
@@ -428,8 +431,8 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
  * register an in-flight request.
  * fill in tid in msg request header
  */
-void __register_request(struct ceph_mds_client *mdsc,
-			struct ceph_mds_request *req)
+static void __register_request(struct ceph_mds_client *mdsc,
+			       struct ceph_mds_request *req)
 {
 	struct ceph_mds_request_head *head = req->r_request->front.iov_base;
 	req->r_tid = head->tid = ++mdsc->last_tid;
@@ -565,7 +568,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
 /*
  * caller must hold session s_mutex
  */
-void revoke_dentry_lease(struct dentry *dentry)
+static void revoke_dentry_lease(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
 
@@ -585,7 +588,7 @@ void revoke_dentry_lease(struct dentry *dentry)
 /*
  * caller must hold session s_mutex
  */
-void revoke_inode_lease(struct ceph_inode_info *ci, int mask)
+static void revoke_inode_lease(struct ceph_inode_info *ci, int mask)
 {
 	int drop = 0;
 
@@ -701,7 +704,7 @@ static void wake_up_session_caps(struct ceph_mds_session *session)
 /*
  * kick outstanding requests
  */
-void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
+static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 {
 	struct ceph_mds_request *reqs[10];
 	u64 nexttid = 0;
@@ -727,6 +730,28 @@ void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 	}
 }
 
+/*
+ * caller hols s_mutex
+ */
+static int send_renew_caps(struct ceph_mds_client *mdsc,
+			   struct ceph_mds_session *session)
+{
+	struct ceph_msg *msg;
+
+	if (time_after_eq(jiffies, session->s_cap_ttl) &&
+	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
+		dout(1, "mds%d session caps stale\n", session->s_mds);
+
+	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
+	session->s_renew_requested = jiffies;
+	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
+	send_msg_mds(mdsc, msg, session->s_mds);
+	return 0;
+}
+
+
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 			      struct ceph_msg *msg)
 {
@@ -749,15 +774,19 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	session = __get_session(mdsc, mds);
 	mutex_lock(&session->s_mutex);
 
-	was_stale = time_after_eq(jiffies, session->s_cap_ttl);
+	was_stale = session->s_cap_ttl == 0 ||
+		time_after_eq(jiffies, session->s_cap_ttl);
 
-	dout(2, "handle_session %p op %d seq %llu\n", session, op, seq);
+	dout(2, "handle_session %p op %d seq %llu %s\n", session, op, seq, 
+	     was_stale ? "stale":"not stale");
 	switch (op) {
 	case CEPH_SESSION_OPEN:
 		dout(2, "session open from mds%d\n", mds);
 		session->s_state = CEPH_MDS_SESSION_OPEN;
+		spin_lock(&session->s_cap_lock);
 		session->s_cap_ttl = session->s_renew_requested +
 			mdsc->mdsmap->m_cap_bit_timeout*HZ;
+		spin_unlock(&session->s_cap_lock);
 		complete(&session->s_completion);
 		break;
 
@@ -772,14 +801,26 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_SESSION_RENEWCAPS:
+		spin_lock(&session->s_cap_lock);
 		session->s_cap_ttl = session->s_renew_requested +
 			mdsc->mdsmap->m_cap_bit_timeout*HZ;
+		spin_unlock(&session->s_cap_lock);
 		dout(10, "session renewed caps from mds%d, ttl now %lu\n", mds,
 			session->s_cap_ttl);
 		if (was_stale && time_before(jiffies, session->s_cap_ttl)) {
 			dout(1, "mds%d session caps renewed\n", session->s_mds);
 			wake_up_session_caps(session);
 		}
+		break;
+
+	case CEPH_SESSION_STALE:
+		dout(1, "mds%d session caps went stale, renewing\n", 
+		     session->s_mds);
+		spin_lock(&session->s_cap_lock);
+		session->s_cap_gen++;
+		session->s_cap_ttl = 0;
+		spin_unlock(&session->s_cap_lock);
+		send_renew_caps(mdsc, session);
 		break;
 
 	default:
@@ -880,7 +921,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 /*
  * return oldest (lowest) tid in request tree, 0 if none.
  */
-__u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
+static __u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_request *first;
 	if (radix_tree_gang_lookup(&mdsc->request_tree,
@@ -1133,7 +1174,7 @@ bad:
 /*
  * send an reconnect to a recovering mds
  */
-void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
+static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 {
 	struct ceph_mds_session *session;
 	struct ceph_msg *reply;
@@ -1283,9 +1324,9 @@ bad:
  * compare old and new mdsmaps, kicking requests
  * and closing out old connections as necessary
  */
-void check_new_map(struct ceph_mds_client *mdsc,
-		   struct ceph_mdsmap *newmap,
-		   struct ceph_mdsmap *oldmap)
+static void check_new_map(struct ceph_mds_client *mdsc,
+			  struct ceph_mdsmap *newmap,
+			  struct ceph_mdsmap *oldmap)
 {
 	int i;
 	int oldstate, newstate;
@@ -1326,10 +1367,10 @@ void check_new_map(struct ceph_mds_client *mdsc,
 
 /* caps */
 
-void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-		  int wanted, __u32 seq, __u64 size, __u64 max_size,
-		  struct timespec *mtime, struct timespec *atime,
-		  int mds)
+static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
+			 int wanted, __u32 seq, __u64 size, __u64 max_size,
+			 struct timespec *mtime, struct timespec *atime,
+			 int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1444,26 +1485,8 @@ bad:
 	return;
 }
 
-int send_renewcaps(struct ceph_mds_client *mdsc,
-		   struct ceph_mds_session *session)
-{
-	struct ceph_msg *msg;
-
-	if (time_after_eq(jiffies, session->s_cap_ttl) &&
-	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
-		dout(1, "mds%d session caps stale\n", session->s_mds);
-
-	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
-	session->s_renew_requested = jiffies;
-	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
-	if (IS_ERR(msg))
-		return PTR_ERR(msg);
-	send_msg_mds(mdsc, msg, session->s_mds);
-	return 0;
-}
-
-void __cap_delay_cancel(struct ceph_mds_client *mdsc,
-			struct ceph_inode_info *ci)
+static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
+			       struct ceph_inode_info *ci)
 {
 	dout(10, "__cap_delay_cancel %p\n", &ci->vfs_inode);
 	if (list_empty(&ci->i_cap_delay_list))
@@ -1765,7 +1788,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 /*
  * delayed work -- renew caps with mds
  */
-void schedule_delayed(struct ceph_mds_client *mdsc)
+static void schedule_delayed(struct ceph_mds_client *mdsc)
 {
 	/*
 	 * renew at 1/2 the advertised timeout period.
@@ -1776,7 +1799,7 @@ void schedule_delayed(struct ceph_mds_client *mdsc)
 	schedule_delayed_work(&mdsc->delayed_work, hz);
 }
 
-void delayed_work(struct work_struct *work)
+static void delayed_work(struct work_struct *work)
 {
 	int i;
 	struct ceph_mds_client *mdsc =
@@ -1805,7 +1828,7 @@ void delayed_work(struct work_struct *work)
 		mutex_lock(&session->s_mutex);
 
 		if (renew_caps)
-			send_renewcaps(mdsc, session);
+			send_renew_caps(mdsc, session);
 		trim_session_leases(session);
 
 		mutex_unlock(&session->s_mutex);

@@ -2885,7 +2885,7 @@ void Locker::file_eval(FileLock *lock)
 	    (wanted & CEPH_CAP_WR) &&
 	    !(loner && lock->get_state() == LOCK_LONER) &&
 	    lock->get_state() != LOCK_MIXED) ||
-	   (!loner && in->is_any_caps() && lock->get_state() == LOCK_LONER)) {
+	   (!loner && in->is_any_nonstale_caps() && lock->get_state() == LOCK_LONER)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
   }

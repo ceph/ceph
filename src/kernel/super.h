@@ -145,7 +145,7 @@ struct ceph_inode_cap {
 	int mds;    /* -1 if not used */
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemneted (for tracking revocation) */
-	u64 seq;
+	u64 seq, gen;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
 	struct list_head ci_caps;       /* per-ci caplist */

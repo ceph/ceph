@@ -682,6 +682,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 	cap->issued |= issued;
 	cap->implemented |= issued;
 	cap->seq = seq;
+	cap->gen = session->s_cap_gen;
 	__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
 	if (is_new)
@@ -694,10 +695,18 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 	int have = 0;
 	struct ceph_inode_cap *cap;
 	struct list_head *p;
+	u64 gen;
+	unsigned long ttl;
 
 	list_for_each(p, &ci->i_caps) {
 		cap = list_entry(p, struct ceph_inode_cap, ci_caps);
-		if (time_after_eq(jiffies, cap->session->s_cap_ttl)) {
+
+		spin_lock(&cap->session->s_cap_lock);
+		gen = cap->session->s_cap_gen;
+		ttl = cap->session->s_cap_ttl;
+		spin_unlock(&cap->session->s_cap_lock);
+
+		if (cap->gen < gen || time_after_eq(jiffies, ttl)) {
 			dout(30, "__ceph_caps_issued %p cap %p issued %d "
 			     "but STALE\n", &ci->vfs_inode, cap, cap->issued);
 			continue;
@@ -894,8 +903,10 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 
 
 /*
- * 0 - ok
- * 1 - send the msg back to mds
+ * caller holds s_mutex.
+ * return value:
+ *  0 - ok
+ *  1 - send the msg back to mds
  */
 int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 			  struct ceph_mds_session *session)
@@ -936,6 +947,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		goto out;
 	}
 	dout(10, " cap %p\n", cap);
+	cap->gen = session->s_cap_gen;
 
 	/* size change? */
 	if (size > inode->i_size) {

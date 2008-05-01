@@ -56,7 +56,8 @@ struct ceph_mds_session {
 	int               s_state;
 	__u64             s_cap_seq;    /* cap message count/seq from mds */
 	struct mutex      s_mutex;
-	spinlock_t        s_cap_lock;
+	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
+	__u64             s_cap_gen;  /* inc each time we get mds stale msg */
 	unsigned long     s_cap_ttl, s_renew_requested;
 	struct list_head  s_caps;
 	struct list_head  s_inode_leases, s_dentry_leases;
