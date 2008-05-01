@@ -82,14 +82,12 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
 	     inode->i_size, inode->i_mode, inode->i_nlink);
-	dout(30, " su %d, blkbits %d, blocks %llu\n",
-	     su, blkbits, blocks);
 
 	ceph_set_ino(inode, le64_to_cpu(info->ino));
 
 	spin_lock(&inode->i_lock);
-	dout(30, " got version %llu, had %llu\n",
-	     le64_to_cpu(info->version), ci->i_version);
+	dout(30, " su %d, blkbits %d, blocks %llu.  v %llu, had %llu\n",
+	     su, blkbits, blocks, le64_to_cpu(info->version), ci->i_version);
 	if (le64_to_cpu(info->version) > 0 &&
 	    ci->i_version == le64_to_cpu(info->version))
 		goto no_change;
@@ -166,21 +164,17 @@ no_change:
 	case S_IFBLK:
 	case S_IFCHR:
 	case S_IFSOCK:
-		dout(20, "%p is special\n", inode);
 		init_special_inode(inode, inode->i_mode, inode->i_rdev);
 		inode->i_op = &ceph_special_iops;
 		break;
 	case S_IFREG:
-		dout(20, "%p is a file\n", inode);
 		inode->i_op = &ceph_file_iops;
 		inode->i_fop = &ceph_file_fops;
 		break;
 	case S_IFLNK:
-		dout(20, "%p is a symlink\n", inode);
 		inode->i_op = &ceph_symlink_iops;
 		symlen = le32_to_cpu(*(__u32 *)(info->fragtree.splits +
 						ci->i_fragtree->nsplits));
-		dout(20, "symlink len is %d\n", symlen);
 		BUG_ON(symlen != ci->vfs_inode.i_size);
 		ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
 		if (ci->i_symlink == NULL)
@@ -190,10 +184,8 @@ no_change:
 				ci->i_fragtree->nsplits) + 4,
 		       symlen);
 		ci->i_symlink[symlen] = 0;
-		dout(20, "symlink is '%s'\n", ci->i_symlink);
 		break;
 	case S_IFDIR:
-		dout(20, "%p is a dir\n", inode);
 		inode->i_op = &ceph_dir_iops;
 		inode->i_fop = &ceph_dir_fops;
 		break;

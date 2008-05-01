@@ -49,8 +49,8 @@ retry:
 		} else {
 			strncpy(path + pos, temp->d_name.name,
 				temp->d_name.len);
-			dout(30, "build_path_dentry path+%d: '%.*s'\n",
-			     pos, temp->d_name.len, path + pos);
+			dout(50, "build_path_dentry path+%d: %p '%.*s'\n",
+			     pos, temp, temp->d_name.len, path + pos);
 			if (pos)
 				path[--pos] = '/';
 		}

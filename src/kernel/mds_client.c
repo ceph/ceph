@@ -862,8 +862,6 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	head->op = cpu_to_le32(op);
 	head->caller_uid = cpu_to_le32(current->euid);
 	head->caller_gid = cpu_to_le32(current->egid);
-	dout(10, "create_request euid.egid %d.%d\n",
-	     current->euid, current->egid);
 
 	/* encode paths */
 	ceph_encode_filepath(&p, end, ino1, path1);
@@ -882,13 +880,12 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 /*
  * return oldest (lowest) tid in request tree, 0 if none.
  */
-__u64 get_oldest_tid(struct ceph_mds_client *mdsc)
+__u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_request *first;
 	if (radix_tree_gang_lookup(&mdsc->request_tree,
 				   (void **)&first, 0, 1) <= 0)
 		return 0;
-	dout(10, "oldest tid is %llu\n", first->r_tid);
 	return first->r_tid;
 }
 
@@ -915,22 +912,20 @@ retry:
 		wait_for_new_map(mdsc);
 		goto retry;
 	}
-	dout(30, "do_request chose mds%d\n", mds);
 
 	/* get session */
 	session = __get_session(mdsc, mds);
-	dout(30, "do_request __get_session returned %p state %d\n",
-	     session, (session ? session->s_state:0));
 	if (!session)
 		session = __register_session(mdsc, mds);
-	dout(30, "do_request session %p state %d\n", session, session->s_state);
+	dout(30, "do_request mds%d session %p state %d\n", mds, session, 
+	     session->s_state);
 
 	/* open? */
 	err = 0;
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
 	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
 		err = open_session(mdsc, session);
-		dout(30, "do_request session err=%d\n", err);
+		dout(30, "do_request open_session err=%d\n", err);
 		BUG_ON(err && err != -EAGAIN);
 	}
 	if (session->s_state != CEPH_MDS_SESSION_OPEN ||
@@ -942,17 +937,15 @@ retry:
 	}
 
 	/* make request? */
-	if (req->r_session == 0) {
+	if (req->r_session == 0)
 		req->r_from_time = jiffies;
-		dout(30, "do_request from_time %lu\n", req->r_from_time);
-	}
 	BUG_ON(req->r_session);
 	req->r_session = session;
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
 	req->r_attempts++;
 	rhead = req->r_request->front.iov_base;
 	rhead->retry_attempt = cpu_to_le32(req->r_attempts-1);
-	rhead->oldest_client_tid = cpu_to_le64(get_oldest_tid(mdsc));
+	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
 
 	/* send and wait */
 	spin_unlock(&mdsc->lock);
