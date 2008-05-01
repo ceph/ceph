@@ -54,25 +54,22 @@ static int ceph_write_inode(struct inode *inode, int unused)
 	return 0;
 }
 
-
-static void ceph_umount_start(struct ceph_client *cl)
+static void ceph_put_super(struct super_block *s)
 {
+	struct ceph_client *cl = ceph_client(s);
 	int rc;
 	int seconds = 15;
 
+	dout(30, "put_super\n");
 	ceph_mdsc_stop(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
+
 	rc = wait_event_timeout(cl->mount_wq,
 				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
 				seconds*HZ);
 	if (rc == 0)
 		derr(0, "umount timed out after %d seconds\n", seconds);
-}
 
-static void ceph_put_super(struct super_block *s)
-{
-	dout(30, "ceph_put_super\n");
-	ceph_umount_start(ceph_client(s));
 	return;
 }
 
@@ -891,7 +888,7 @@ static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
-	ceph_mdsc_drop_leases(&client->mdsc);
+	ceph_mdsc_pre_umount(&client->mdsc);
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
 	ceph_destroy_client(client);
 }

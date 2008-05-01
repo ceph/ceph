@@ -841,25 +841,6 @@ bad:
 }
 
 
-/*
- * drop all leases (and dentry refs) in preparation for umount
- */
-void ceph_mdsc_drop_leases(struct ceph_mds_client *mdsc)
-{
-	int i;
-	
-	spin_lock(&mdsc->lock);
-	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *session = __get_session(mdsc, i);
-		if (!session)
-			continue;
-		spin_unlock(&mdsc->lock);
-		remove_session_leases(session);
-		spin_lock(&mdsc->lock);
-	}
-	spin_unlock(&mdsc->lock);
-}
-
 
 /* exported functions */
 
@@ -1862,6 +1843,38 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	spin_lock_init(&mdsc->cap_delay_lock);
 }
 
+/*
+ * drop all leases (and dentry refs) in preparation for umount
+ */
+static void drop_leases(struct ceph_mds_client *mdsc)
+{
+	int i;
+	
+	spin_lock(&mdsc->lock);
+	for (i = 0; i < mdsc->max_sessions; i++) {
+		struct ceph_mds_session *session = __get_session(mdsc, i);
+		if (!session)
+			continue;
+		spin_unlock(&mdsc->lock);
+		remove_session_leases(session);
+		spin_lock(&mdsc->lock);
+	}
+	spin_unlock(&mdsc->lock);
+}
+
+/*
+ * called before mount is ro, and before dentries are torn down.
+ * (hmm, does this still race with new lookups?)
+ */
+void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
+{
+	drop_leases(mdsc);
+	check_delayed_caps(mdsc);
+}
+
+/*
+ * called after sb is ro.
+ */
 void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_session *session;
@@ -1897,6 +1910,7 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 	}
 
 	spin_unlock(&mdsc->lock);
+	dout(10, "stopped\n");
 }
 
 
