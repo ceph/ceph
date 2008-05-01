@@ -1130,7 +1130,6 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	}
 
 	ceph_mdsc_put_request(req);
-	spin_unlock(&mdsc->lock);
 	return;
 
 bad:
@@ -1278,7 +1277,7 @@ bad:
 	spin_lock(&mdsc->lock);
 	derr(0, "error %d generating reconnect.  what to do?\n", err);
 	/* fixme */
-	BUG_ON(1);
+	WARN_ON(1);
 	goto out;
 }
 
@@ -1551,7 +1550,7 @@ static void check_delayed_caps(struct ceph_mds_client *mdsc)
 	while (1) {
 		spin_lock(&mdsc->cap_delay_lock);
 		if (list_empty(&mdsc->cap_delay_list))
-			goto out_unlock;
+			break;
 		ci = list_first_entry(&mdsc->cap_delay_list,
 				      struct ceph_inode_info,
 				      i_cap_delay_list);
@@ -1563,8 +1562,6 @@ static void check_delayed_caps(struct ceph_mds_client *mdsc)
 		ceph_check_caps(ci, 1);
 		iput(&ci->vfs_inode);
 	}
-
-out_unlock:
 	spin_unlock(&mdsc->cap_delay_lock);
 }
 
