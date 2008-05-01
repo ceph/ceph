@@ -1553,6 +1553,7 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		}
 		used = __ceph_caps_used(cap->ci);
 		wanted = __ceph_caps_wanted(cap->ci);
+		/* FIXME: this drops s_mutex, which we dont want, ugh */
 		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 0);
 	}
 }

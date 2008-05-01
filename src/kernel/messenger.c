@@ -1325,7 +1325,15 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 
+	ceph_debug_msgr = 50;
+	ceph_debug_console = 1;
+
 	dout(2, "destroy %p\n", msgr);
+	
+	/* stop listener */
+	ceph_cancel_sock_callbacks(msgr->listen_sock);
+	cancel_work_sync(&msgr->awork);
+	ceph_sock_release(msgr->listen_sock);
 
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
@@ -1339,21 +1347,22 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 		
 		/* in case there's queued work... */
 		spin_unlock(&msgr->con_lock);
+		ceph_cancel_sock_callbacks(con->sock);
 		cancel_work_sync(&con->rwork);
 		cancel_delayed_work_sync(&con->swork);
 		put_connection(con);
+		dout(10, "destroy removed connection %p\n", con);
+
 		spin_lock(&msgr->con_lock);
 	}
 	spin_unlock(&msgr->con_lock);
-
-	/* stop listener */
-	ceph_sock_release(msgr->listen_sock);
-	cancel_work_sync(&msgr->awork);
 
 	kunmap(msgr->zero_page);
 	__free_page(msgr->zero_page);
 
 	kfree(msgr);
+
+	dout(10, "destroyed messenger %p\n", msgr);
 }
 
 /*
