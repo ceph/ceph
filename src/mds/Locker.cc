@@ -571,15 +571,17 @@ bool Locker::issue_caps(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
+    if (cap->is_stale())
+      continue;
 
     // do not issue _new_ bits when size|mtime is projected
     int allowed = all_allowed;
     int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
-    int issued = cap->issued();
+    int pending = cap->pending();
     if (sizemtime_is_projected)
-      allowed &= ~careful | issued;   // only allow "careful" bits if already issued
+      allowed &= ~careful | pending;   // only allow "careful" bits if already issued
     dout(20) << " all_allowed " << cap_string(all_allowed) 
-	     << " issued " << cap_string(issued) 
+	     << " pending " << cap_string(pending) 
 	     << " allowed " << cap_string(allowed) 
 	     << " wanted " << cap_string(cap->wanted())
 	     << dendl;
@@ -644,6 +646,7 @@ void Locker::revoke_stale_caps(Session *session)
   
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
+    cap->set_stale(true);
     CInode *in = cap->get_inode();
     int issued = cap->issued();
     if (issued) {
@@ -659,7 +662,6 @@ void Locker::revoke_stale_caps(Session *session)
     } else {
       dout(10) << " nothing issued on " << *in << dendl;
     }
-    cap->set_stale(true);
   }
 }
 
@@ -675,7 +677,8 @@ void Locker::resume_stale_caps(Session *session)
       cap->set_stale(false);
       if (in->is_auth() && in->filelock.is_stable())
 	file_eval(&in->filelock);
-      issue_caps(in);
+      else
+	issue_caps(in);
     }
   }
 }
