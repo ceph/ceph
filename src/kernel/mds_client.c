@@ -392,11 +392,10 @@ find_request_and_lock(struct ceph_mds_client *mdsc, __u64 tid)
 	struct ceph_mds_request *req;
 	spin_lock(&mdsc->lock);
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
-	if (!req) {
+	if (req)
+		get_request(req);
+	else
 		spin_unlock(&mdsc->lock);
-		return NULL;
-	}
-	get_request(req);
 	return req;
 }
 
