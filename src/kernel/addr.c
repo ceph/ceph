@@ -20,7 +20,7 @@ static int ceph_readpage(struct file *filp, struct page *page)
 	void *kaddr;
 	int err = 0;
 
-	dout(10, "ceph_readpage inode %p file %p page %p index %lu\n",
+	dout(10, "readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
 	kaddr = kmap(page);
 	err = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
@@ -132,7 +132,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 				   page_off, len, &page, 1);
 	if (err >= 0) {
 		if (was_dirty) {
-			dout(10, "cleaned page %p\n", page);
+			dout(20, "cleaned page %p\n", page);
 			ceph_put_wrbuffer_cap_refs(ci, 1);
 		}
 		SetPageUptodate(page);
@@ -231,10 +231,12 @@ retry:
 		struct page *page, **pagep;
 		int pvec_pages, locked_pages;
 		int want;
+		int cleaned;
 
 		pagep = pages;
 		next = 0;
 		locked_pages = 0;
+		cleaned = 0;
 
 get_more_pages:
 		want = min(end - index,
@@ -270,6 +272,12 @@ get_more_pages:
 			if (wbc->sync_mode != WB_SYNC_NONE)
 				wait_on_page_writeback(page);
 
+			if (page_offset(page) >= i_size_read(inode)) {
+				done = 1;
+				unlock_page(page);
+				break;
+			}
+
 			if (PageWriteback(page) ||
 			    !clear_page_dirty_for_io(page)) {
 				unlock_page(page);
@@ -278,16 +286,10 @@ get_more_pages:
 
 			/* ok */
 			set_page_writeback(page);
+			cleaned++;
 
-			if (page_offset(page) >= i_size_read(inode)) {
-				done = 1;
-				unlock_page(page);
-				end_page_writeback(page);
-				break;
-			}
-
-			dout(50, "writepages locked page %p index %lu\n",
-			     page, page->index);
+			dout(20, "%p locked+cleaned page %p idx %lu\n",
+			     inode, page, page->index);
 			
 			if (pages)
 				pages[locked_pages] = page;
@@ -346,13 +348,18 @@ get_more_pages:
 				page = pagep[i];
 				if (i < wrote)
 					SetPageUptodate(page);
-				else if (rc < 0)
+				else if (rc < 0) {
+					cleaned--;
+					dout(20, "%p redirtying page %p\n", 
+					     inode, page);
 					redirty_page_for_writepage(wbc, page);
+				}
 				dout(50, "unlocking %d %p\n", i, page);
 				unlock_page(page);
 				end_page_writeback(page);
 			}
-			ceph_put_wrbuffer_cap_refs(ci, wrote);
+			dout(20, "%p cleaned %d pages\n", inode, cleaned);
+			ceph_put_wrbuffer_cap_refs(ci, cleaned);
 
 			/* continue? */
 			index = next;
@@ -487,10 +494,10 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 		SetPageUptodate(page);
 
 	if (!PageDirty(page)) {
-		dout(10, "dirtying page %p\n", page);
+		dout(20, "%p dirtying page %p\n", inode, page);
 		ceph_take_cap_refs(ceph_inode(inode), CEPH_CAP_WRBUFFER);
 	} else
-		dout(10, "page %p already dirty\n", page);
+		dout(20, "%p page %p already dirty\n", inode, page);
 	set_page_dirty(page);
 
 	unlock_page(page);
