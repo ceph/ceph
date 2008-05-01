@@ -4059,6 +4059,9 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
     
+    // notify any clients
+    mds->locker->issue_truncate(in);
+
     // hit pop
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 

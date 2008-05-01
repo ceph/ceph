@@ -632,6 +632,10 @@ void Locker::issue_truncate(CInode *in)
 						 cap->wanted()),
 			     it->first);
   }
+
+  // should we increase max_size?
+  if (in->is_auth() && !in->is_dir())
+    check_inode_max_size(in);
 }
 
 void Locker::revoke_stale_caps(Session *session)
