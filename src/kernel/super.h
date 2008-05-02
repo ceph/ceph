@@ -120,6 +120,7 @@ struct ceph_client {
 
 	/* writeback */
 	struct workqueue_struct *wb_wq;
+	struct workqueue_struct *trunc_wq;
 
 	struct kobject *client_kobj;
 
@@ -197,6 +198,9 @@ struct ceph_inode_info {
 	unsigned long i_hashval;
 
 	struct work_struct i_wb_work;  /* writeback work */
+
+	loff_t i_vmtruncate_from;
+	struct work_struct i_vmtruncate_work;
 
 	struct inode vfs_inode; /* at end */
 };
@@ -389,6 +393,7 @@ extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
+extern void ceph_vmtruncate_work(struct work_struct *work);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,

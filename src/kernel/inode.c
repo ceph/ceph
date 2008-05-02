@@ -1061,57 +1061,61 @@ void ceph_inode_writeback(struct work_struct *work)
 	write_inode_now(&ci->vfs_inode, 0);
 }
 
-static int __apply_truncate(struct inode *inode, loff_t size, int check_limit)
+/*
+ * called by setattr
+ */
+static int apply_truncate(struct inode *inode, loff_t size)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct address_space *mapping = inode->i_mapping;
-	unsigned long limit;
+	int rc;
+	
+	rc = vmtruncate(inode, size);
+	if (rc == 0) {
+		spin_lock(&inode->i_lock);
+		ci->i_reported_size = size;
+		spin_unlock(&inode->i_lock);
+	}
+	return rc;
+}
 
+/*
+ * called by trunc_wq; take i_mutex ourselves
+ */
+void ceph_vmtruncate_work(struct work_struct *work)
+{
+	struct ceph_inode_info *ci = container_of(work, struct ceph_inode_info,
+						  i_vmtruncate_work);
+	struct inode *inode = &ci->vfs_inode;
+
+	dout(10, "vmtruncate_work %p\n", inode);
+	mutex_lock(&inode->i_mutex);
+	if (inode->i_size < ci->i_vmtruncate_from)
+		vmtruncate(inode, inode->i_size);
+	mutex_unlock(&inode->i_mutex);
+}
+
+static void apply_cap_truncate(struct inode *inode, loff_t size)
+{
+	struct ceph_client *client = ceph_client(inode->i_sb);
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int queue = 0;
+
+	/*
+	 * vmtruncate lazily; we can't block on i_mutex in the message
+	 * handler path, or we deadlock against osd op replies needed
+	 * to complete the writes holding the lock...
+	 */
 	spin_lock(&inode->i_lock);
-	dout(10, "apply_truncate %p size %lld -> %llu\n", inode,
-	     inode->i_size, size);
-
-	if (inode->i_size < size)
-		goto do_expand;
+	if (size < inode->i_size) {
+		ci->i_vmtruncate_from = inode->i_size;
+		queue = 1;
+	}
 	i_size_write(inode, size);
 	ci->i_reported_size = size;
 	spin_unlock(&inode->i_lock);
 
-	/* from fs/cifs */
-	unmap_mapping_range(mapping, size + PAGE_SIZE - 1, 0, 1);
-	truncate_inode_pages(mapping, size);
-	unmap_mapping_range(mapping, size + PAGE_SIZE - 1, 0, 1);
-
-	return 0;
-do_expand:
-	if (check_limit) {
-		limit = current->signal->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit != RLIM_INFINITY && size > limit) {
-			spin_unlock(&inode->i_lock);
-			goto out_sig;
-		}
-		if (size > inode->i_sb->s_maxbytes) {
-			spin_unlock(&inode->i_lock);
-			return -EFBIG;
-		}
-	}
-	i_size_write(inode, size);
-	spin_unlock(&inode->i_lock);
-
-	return 0;
-out_sig:
-	send_sig(SIGXFSZ, current, 0);
-	return -EFBIG;
-}
-
-static int apply_truncate(struct inode *inode, loff_t size)
-{
-	return __apply_truncate(inode, size, 1);
-}
-
-static int apply_cap_truncate(struct inode *inode, loff_t size)
-{
-	return __apply_truncate(inode, size, 0);
+	if (queue)
+		queue_work(client->trunc_wq, &ci->i_vmtruncate_work);
 }
 
 int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
@@ -1120,14 +1124,10 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(trunc->seq);
-	int err;
 	u64 size = le64_to_cpu(trunc->size);
 	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci,
 	     mds, seq);
-	err = apply_cap_truncate(inode, size);
-	if (err)
-		return err;
-
+	apply_cap_truncate(inode, size);
 	return 0;
 }
 

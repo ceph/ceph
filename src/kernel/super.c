@@ -177,6 +177,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_hashval = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
+	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
 
 	return &ci->vfs_inode;
 }
@@ -552,6 +553,9 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 	cl->wb_wq = create_workqueue("ceph-writeback");
 	if (cl->wb_wq == 0)
 		goto fail;
+	cl->trunc_wq = create_workqueue("ceph-trunc");
+	if (cl->trunc_wq == 0)
+		goto fail;
 
 	/* messenger */
 	if (args->flags & CEPH_MOUNT_MYIP)
@@ -598,6 +602,8 @@ void ceph_destroy_client(struct ceph_client *cl)
 #endif
 	if (cl->wb_wq)
 		destroy_workqueue(cl->wb_wq);
+	if (cl->trunc_wq)
+		destroy_workqueue(cl->trunc_wq);
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
 	kfree(cl);
