@@ -1086,35 +1086,60 @@ void ceph_vmtruncate_work(struct work_struct *work)
 	struct ceph_inode_info *ci = container_of(work, struct ceph_inode_info,
 						  i_vmtruncate_work);
 	struct inode *inode = &ci->vfs_inode;
-
+	
 	dout(10, "vmtruncate_work %p\n", inode);
 	mutex_lock(&inode->i_mutex);
-	if (inode->i_size < ci->i_vmtruncate_from)
-		vmtruncate(inode, inode->i_size);
+	__ceph_do_pending_vmtruncate(inode);
 	mutex_unlock(&inode->i_mutex);
+}
+
+void __ceph_do_pending_vmtruncate(struct inode *inode)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	loff_t to;
+
+	spin_lock(&inode->i_lock);
+	to = ci->i_vmtruncate_to;
+	ci->i_vmtruncate_to = -1;
+	spin_unlock(&inode->i_lock);
+
+	if (to >= 0) {
+		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
+		vmtruncate(inode, to);
+	} else
+		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }
 
 static void apply_cap_truncate(struct inode *inode, loff_t size)
 {
 	struct ceph_client *client = ceph_client(inode->i_sb);
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int queue = 0;
+	int queue_trunc = 0;
 
+	spin_lock(&inode->i_lock);
 	/*
 	 * vmtruncate lazily; we can't block on i_mutex in the message
 	 * handler path, or we deadlock against osd op replies needed
 	 * to complete the writes holding the lock...
+	 *
+	 * if its an expansion, and there is no truncate pending, we
+	 * don't need to truncate.
 	 */
-	spin_lock(&inode->i_lock);
-	if (size < inode->i_size) {
-		ci->i_vmtruncate_from = inode->i_size;
-		queue = 1;
+	if (ci->i_vmtruncate_to < 0 && size > inode->i_size)
+		dout(10, "clean fwd truncate, no vmtruncate needed\n");
+	else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to)
+		dout(10, "trunc to %lld < %lld already queued\n", 
+		     ci->i_vmtruncate_to, size);
+	else {
+		/* we need to trunc even smaller */
+		dout(10, "queueing trunc %lld -> %lld\n", inode->i_size, size);
+		ci->i_vmtruncate_to = size;
+		queue_trunc = 1;
 	}
 	i_size_write(inode, size);
 	ci->i_reported_size = size;
 	spin_unlock(&inode->i_lock);
-
-	if (queue)
+	if (queue_trunc)
 		queue_work(client->trunc_wq, &ci->i_vmtruncate_work);
 }
 
@@ -1437,6 +1462,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);
+	__ceph_do_pending_vmtruncate(inode);
 	if (err)
 		return err;
 
@@ -1449,6 +1475,8 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	struct inode *inode = dentry->d_inode;
 	const unsigned int ia_valid = attr->ia_valid;
 	int err;
+
+	__ceph_do_pending_vmtruncate(inode);
 
 	err = inode_change_ok(inode, attr);
 	if (err != 0)

@@ -199,7 +199,7 @@ struct ceph_inode_info {
 
 	struct work_struct i_wb_work;  /* writeback work */
 
-	loff_t i_vmtruncate_from;
+	loff_t i_vmtruncate_to;
 	struct work_struct i_vmtruncate_work;
 
 	struct inode vfs_inode; /* at end */
@@ -394,6 +394,7 @@ extern void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
+extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,

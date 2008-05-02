@@ -249,6 +249,8 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	ssize_t ret;
 	int got = 0;
 
+	__ceph_do_pending_vmtruncate(inode);
+
 	dout(10, "read %llx %llu~%u trying to get caps on %p\n",
 	     ceph_ino(inode), *ppos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
@@ -284,6 +286,8 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	int got = 0;
 	int check = 0;
 	loff_t endoff = *ppos + len;
+
+	__ceph_do_pending_vmtruncate(inode);
 
 	/* do we need to explicitly request a larger max_size? */
 	spin_lock(&inode->i_lock);
