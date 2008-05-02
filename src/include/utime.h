@@ -57,7 +57,7 @@ class utime_t {
 
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
-    tv.tv_usec = (__u32)((d - tv.tv_sec) / (double)1000000.0);
+    tv.tv_usec = (__u32)((d - (double)tv.tv_sec) * (double)1000000.0);
   }
 
   // accessors
