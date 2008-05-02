@@ -1110,21 +1110,29 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }
 
-static void apply_cap_truncate(struct inode *inode, loff_t size)
+int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
+			  struct ceph_mds_session *session)
 {
-	struct ceph_client *client = ceph_client(inode->i_sb);
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	int mds = session->s_mds;
+	int seq = le32_to_cpu(trunc->seq);
+	u64 size = le64_to_cpu(trunc->size);
 	int queue_trunc = 0;
 
-	spin_lock(&inode->i_lock);
+	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci,
+	     mds, seq);
+
 	/*
 	 * vmtruncate lazily; we can't block on i_mutex in the message
 	 * handler path, or we deadlock against osd op replies needed
-	 * to complete the writes holding the lock...
+	 * to complete the writes holding i_lock.  vmtruncate will
+	 * also block on page locks held by writes...
 	 *
 	 * if its an expansion, and there is no truncate pending, we
 	 * don't need to truncate.
 	 */
+
+	spin_lock(&inode->i_lock);
 	if (ci->i_vmtruncate_to < 0 && size > inode->i_size)
 		dout(10, "clean fwd truncate, no vmtruncate needed\n");
 	else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to)
@@ -1139,20 +1147,10 @@ static void apply_cap_truncate(struct inode *inode, loff_t size)
 	i_size_write(inode, size);
 	ci->i_reported_size = size;
 	spin_unlock(&inode->i_lock);
-	if (queue_trunc)
-		queue_work(client->trunc_wq, &ci->i_vmtruncate_work);
-}
 
-int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
-			  struct ceph_mds_session *session)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int mds = session->s_mds;
-	int seq = le32_to_cpu(trunc->seq);
-	u64 size = le64_to_cpu(trunc->size);
-	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci,
-	     mds, seq);
-	apply_cap_truncate(inode, size);
+	if (queue_trunc)
+		queue_work(ceph_client(inode->i_sb)->trunc_wq,
+			   &ci->i_vmtruncate_work);
 	return 0;
 }
 
