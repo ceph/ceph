@@ -1407,21 +1407,22 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-    const unsigned int ia_valid = attr->ia_valid;
+	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
 	int err;
 
-	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
-		dout(10, "holding EXCL, doing truncate locally\n");
+	dout(10, "truncate: ia_size %d i_size %d\n",
+	     (int)attr->ia_size, (int)inode->i_size);
+	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL &&
+	    attr->ia_size > inode->i_size) {
+		dout(10, "holding EXCL, doing truncate (fwd) locally\n");
 		inode->i_ctime = attr->ia_ctime;
 		err = apply_truncate(inode, attr->ia_size);
 		if (err)
 			return err;
 		return 0;
 	}
-	dout(10, "truncate: ia_size %d i_size %d\n",
-	     (int)attr->ia_size, (int)inode->i_size);
 	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
 	    attr->ia_size == inode->i_size) {
 		dout(10, "lease indicates truncate is a no-op\n");
