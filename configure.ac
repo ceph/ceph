@@ -64,7 +64,7 @@ AC_ARG_WITH([ccgnu],
             [],
             [with_ccgnu=check])
 LIBCCGNU2=
-AS_IF([test "x$with_ccgnu" != xno],
+AS_IF([test "x$with_ccgnu" == xyes],
 	    [AC_CHECK_LIB([ccgnu2], [main],
              [AC_SUBST([LIBCCGNU2], ["-lccgnu2"])
               AC_DEFINE([WITH_CCGNU], [1],
