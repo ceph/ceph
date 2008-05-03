@@ -1061,6 +1061,7 @@ void ceph_inode_writeback(struct work_struct *work)
 	write_inode_now(&ci->vfs_inode, 0);
 }
 
+
 /*
  * called by setattr
  */
@@ -1075,6 +1076,8 @@ static int apply_truncate(struct inode *inode, loff_t size)
 		ci->i_reported_size = size;
 		spin_unlock(&inode->i_lock);
 	}
+	if (atomic_read(&ci->i_wrbuffer_ref) == 0)
+		ceph_check_caps(ci, 0);
 	return rc;
 }
 
@@ -1106,6 +1109,8 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 	if (to >= 0) {
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
 		vmtruncate(inode, to);
+		if (atomic_read(&ci->i_wrbuffer_ref) == 0)
+			ceph_check_caps(ci, 0);
 	} else
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }
@@ -1238,19 +1243,19 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 {
-	int last = 0;
+	int was_last;
 	int v;
 
 	spin_lock(&ci->vfs_inode.i_lock);
-	last = atomic_sub_and_test(nr, &ci->i_wrbuffer_ref);
+	was_last = atomic_sub_and_test(nr, &ci->i_wrbuffer_ref);
 	v = atomic_read(&ci->i_wrbuffer_ref);
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	dout(30, "put_wrbuffer_cap_refs on %p %d -> %d (?)%s\n",
-	     &ci->vfs_inode, v+nr, v, last == 0 ? " LAST":"");
-	BUG_ON(v < 0);
+	     &ci->vfs_inode, v+nr, v, was_last ? " LAST":"");
+	WARN_ON(v < 0);
 
-	if (last == 0)
+	if (was_last)
 		ceph_check_caps(ci, 0);
 }
 

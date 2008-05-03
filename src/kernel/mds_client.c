@@ -1566,7 +1566,8 @@ static void check_delayed_caps(struct ceph_mds_client *mdsc)
 }
 
 static void flush_write_caps(struct ceph_mds_client *mdsc,
-			     struct ceph_mds_session *session)
+			     struct ceph_mds_session *session, 
+			     int purge)
 {
 	struct list_head *p, *n;
 	
@@ -1576,13 +1577,23 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		struct inode *inode = &cap->ci->vfs_inode;
 		int used, wanted;
 
+		/* invalidate any dirty remaining pages */
+		__ceph_do_pending_vmtruncate(inode);
+
 		spin_lock(&inode->i_lock);
 		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
 			spin_unlock(&inode->i_lock);
 			continue;
 		}
+
 		used = __ceph_caps_used(cap->ci);
 		wanted = __ceph_caps_wanted(cap->ci);
+
+		if (purge && (used || wanted)) {
+			derr(0, "residual caps on %p used %d wanted %d %llu\n", 
+			     inode, used, wanted, inode->i_size);
+			used = wanted = 0;
+		}
 
 		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1);
 	}
@@ -1600,7 +1611,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
 		goto done;
 
-	flush_write_caps(mdsc, session);
+	flush_write_caps(mdsc, session, 1);
 	
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,

@@ -290,7 +290,7 @@ get_more_pages:
 			set_page_writeback(page);
 			cleaned++;
 
-			dout(20, "%p locked+cleaned page %p idx %lu\n",
+			derr(20, "%p locked+cleaned page %p idx %lu\n",
 			     inode, page, page->index);
 			
 			if (pages)
@@ -351,7 +351,7 @@ get_more_pages:
 				if (i < wrote)
 					SetPageUptodate(page);
 				else if (rc < 0) {
-					dout(20, "%p redirtying page %p\n", 
+					derr(20, "%p redirtying page %p\n", 
 					     inode, page);
 					redirty_page_for_writepage(wbc, page);
 				}
@@ -512,7 +512,8 @@ static int ceph_set_page_dirty(struct page *page)
 		return !TestSetPageDirty(page);
 
 	if (TestSetPageDirty(page)) {
-		dout(20, "set_page_dirty %p -- already dirty\n", page);
+		dout(20, "%p set_page_dirty %p -- already dirty\n", 
+		     mapping->host, page);
 		return 0;
 	}
 
@@ -531,8 +532,13 @@ static int ceph_set_page_dirty(struct page *page)
 
 		ci = ceph_inode(mapping->host);
 		atomic_inc(&ci->i_wrbuffer_ref);
-		dout(20, "set_page_dirty %p %p %d -> %d (?)\n", page,
-		     &ci->vfs_inode,
+		/*
+		 * set PagePrivate so that we get invalidatepage callback
+		 * on truncate for proper dirty page accounting for mmap
+		 */
+		SetPagePrivate(page);
+		derr(20, "%p set_page_dirty %p %d -> %d (?)\n", 
+		     mapping->host, page,
 		     atomic_read(&ci->i_wrbuffer_ref)-1,
 		     atomic_read(&ci->i_wrbuffer_ref));
 	}
@@ -542,6 +548,36 @@ static int ceph_set_page_dirty(struct page *page)
 	return 1;
 }
 
+void ceph_invalidatepage(struct page *page, unsigned long offset)
+{
+	struct ceph_inode_info *ci;
+
+	ClearPagePrivate(page);
+	if (!PageDirty(page))
+		return;
+	if (!page->mapping)
+		return;
+	ci = ceph_inode(page->mapping->host);
+	if (offset <= (page->index << PAGE_CACHE_SHIFT)) {
+		derr(20, "%p invalidatepage %p idx %lu full dirty page\n", 
+		     &ci->vfs_inode, page, page->index);
+		atomic_dec(&ci->i_wrbuffer_ref);
+		/*
+		 * pretty sure this is fundamentally racy.  help!
+		 */
+		ClearPageDirty(page);
+	} else
+		derr(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
+		     &ci->vfs_inode, page, page->index);
+}
+
+int ceph_releasepage(struct page *page, gfp_t g)
+{
+	struct inode *inode = page->mapping ? page->mapping->host:0;
+	dout(20, "%p releasepage %p\n", inode, page);
+	WARN_ON(PageDirty(page));
+	return 0;
+}
 
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
@@ -551,4 +587,6 @@ const struct address_space_operations ceph_aops = {
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
 	.set_page_dirty = ceph_set_page_dirty,
+	.invalidatepage = ceph_invalidatepage,
+	.releasepage = ceph_releasepage,
 };
