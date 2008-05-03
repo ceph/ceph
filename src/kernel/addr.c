@@ -301,13 +301,12 @@ get_more_pages:
 			next = page->index + 1;
 		}
 
-		if (locked_pages == 0)
-			break;
-
-		if (pages) {
+		if (pages && i) {
 			int j;
+			BUG_ON(!locked_pages);
+
 			if (pvec_pages && i == pvec_pages &&
-			    locked_pages && locked_pages < max_pages) {
+			    locked_pages < max_pages) {
 				dout(50, "reached end pvec, trying for more\n");
 				pagevec_reinit(&pvec);
 				goto get_more_pages;
@@ -376,6 +375,9 @@ get_more_pages:
 		}
 		dout(50, "pagevec_release on %d pages\n", (int)pvec.nr);
 		pagevec_release(&pvec);
+
+		if (locked_pages == 0)
+			break;
 	}
 
 	if (should_loop && !done) {
