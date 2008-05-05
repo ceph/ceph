@@ -305,7 +305,7 @@ get_more_pages:
 			cleaned++;
 			ClearPagePrivate(page);
 
-			derr(20, "%p locked+cleaned page %p idx %lu\n",
+			dout(20, "%p locked+cleaned page %p idx %lu\n",
 			     inode, page, page->index);
 			
 			if (pages)
@@ -365,7 +365,7 @@ get_more_pages:
 				if (i < wrote)
 					SetPageUptodate(page);
 				else if (rc < 0) {
-					derr(20, "%p redirtying page %p\n", 
+					dout(20, "%p redirtying page %p\n", 
 					     inode, page);
 					redirty_page_for_writepage(wbc, page);
 				}
@@ -554,12 +554,12 @@ static int ceph_set_page_dirty(struct page *page)
 		 * on truncate for proper dirty page accounting for mmap
 		 */
 		SetPagePrivate(page);
-		derr(20, "%p set_page_dirty %p %d -> %d (?)\n", 
+		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
 		     mapping->host, page,
 		     atomic_read(&ci->i_wrbuffer_ref)-1,
 		     atomic_read(&ci->i_wrbuffer_ref));
 	} else
-		derr(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
+		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
 	write_unlock_irq(&mapping->tree_lock);
 	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
 
@@ -579,12 +579,12 @@ void ceph_invalidatepage(struct page *page, unsigned long offset)
 		return;
 	ci = ceph_inode(page->mapping->host);
 	if (offset == 0) {
-		derr(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
+		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
 		     &ci->vfs_inode, page, page->index, offset);
 		atomic_dec(&ci->i_wrbuffer_ref);
 		ClearPagePrivate(page);
 	} else
-		derr(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
+		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
 		     &ci->vfs_inode, page, page->index);
 }
 
