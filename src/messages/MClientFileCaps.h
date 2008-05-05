@@ -94,6 +94,7 @@ class MClientFileCaps : public Message {
 	<< " caps " << cap_string(h.caps)
 	<< " wanted" << cap_string(h.wanted)
 	<< " size " << h.size << "/" << h.max_size
+	<< " mtime " << utime_t(h.mtime)
 	<< ")";
   }
   

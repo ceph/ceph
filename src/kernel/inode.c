@@ -103,20 +103,21 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
 	issued = __ceph_caps_issued(ci);
-	if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
-		if ((issued & CEPH_CAP_EXCL) == 0) {
-			if (size > inode->i_size) {
-				inode->i_size = size;
-				inode->i_blkbits = blkbits;
-				inode->i_blocks = blocks;
-			}
-			if (timespec_compare(&mtime, &inode->i_mtime) > 0)
-				inode->i_mtime = mtime;
-			if (timespec_compare(&atime, &inode->i_atime) > 0)
-				inode->i_atime = atime;
-			if (timespec_compare(&ctime, &inode->i_ctime) > 0)
-				inode->i_ctime = ctime;
+	if (issued & CEPH_CAP_EXCL) {
+		if (timespec_compare(&ctime, &inode->i_ctime) > 0)
+			inode->i_ctime = ctime;
+	} else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+		if (size > inode->i_size) {
+			inode->i_size = size;
+			inode->i_blkbits = blkbits;
+			inode->i_blocks = blocks;
 		}
+		if (timespec_compare(&mtime, &inode->i_mtime) > 0)
+			inode->i_mtime = mtime;
+		if (timespec_compare(&atime, &inode->i_atime) > 0)
+			inode->i_atime = atime;
+		if (timespec_compare(&ctime, &inode->i_ctime) > 0)
+			inode->i_ctime = ctime;
 	} else {
 		inode->i_size = size;
 		inode->i_blkbits = blkbits;
