@@ -1,3 +1,90 @@
+[376940.226925] 
+[376940.226926] =======================================================
+[376940.230749] [ INFO: possible circular locking dependency detected ]
+[376940.230749] 2.6.25 #23
+[376940.230749] -------------------------------------------------------
+[376940.230749] events/0/9 is trying to acquire lock:
+[376940.230749]  (&osdc->map_sem){----}, at: [<ffffffff880143d9>] handle_timeout+0x51/0x76 [ceph]
+[376940.230749] 
+[376940.230749] but task is already holding lock:
+[376940.230749]  (&(&osdc->timeout_work)->work){--..}, at: [<ffffffff802432d3>] run_workqueue+0x9f/0x1f6
+[376940.230749] 
+[376940.230749] which lock already depends on the new lock.
+[376940.230749] 
+[376940.230749] 
+[376940.230749] the existing dependency chain (in reverse order) is:
+[376940.230749] 
+[376940.230749] -> #2 (&(&osdc->timeout_work)->work){--..}:
+[376940.230749]        [<ffffffff8025189f>] __lock_acquire+0xa8b/0xc8a
+[376940.230749]        [<ffffffff80251b2c>] lock_acquire+0x8e/0xb2
+[376940.230749]        [<ffffffff80243adb>] __cancel_work_timer+0xe8/0x1ea
+[376940.230749]        [<ffffffff80243bea>] cancel_delayed_work_sync+0xd/0xf
+[376940.230749]        [<ffffffff88014855>] do_request+0x1af/0x2bc [ceph]
+[376940.230749]        [<ffffffff88015b2e>] ceph_osdc_writepages+0x135/0x190 [ceph]
+[376940.230749]        [<ffffffff88009612>] ceph_writepages+0x92f/0xcdc [ceph]
+[376940.230749]        [<ffffffff8026d78d>] do_writepages+0x2b/0x3a
+[376940.230749]        [<ffffffff802aac86>] __writeback_single_inode+0x151/0x282
+[376940.230749]        [<ffffffff802ab1c0>] sync_sb_inodes+0x1ab/0x26f
+[376940.230749]        [<ffffffff802ab4ab>] writeback_inodes+0x85/0xe9
+[376940.230749]        [<ffffffff8026df2a>] background_writeout+0x87/0xba
+[376940.230749]        [<ffffffff8026e551>] pdflush+0x134/0x1df
+[376940.230749]        [<ffffffff80246968>] kthread+0x49/0x79
+[376940.230749]        [<ffffffff8020cd38>] child_rip+0xa/0x12
+[376940.230749]        [<ffffffffffffffff>] 0xffffffffffffffff
+[376940.230749] 
+[376940.230749] -> #1 (&osdc->request_lock){--..}:
+[376940.230749]        [<ffffffff8025189f>] __lock_acquire+0xa8b/0xc8a
+[376940.230749]        [<ffffffff80251b2c>] lock_acquire+0x8e/0xb2
+[376940.230749]        [<ffffffff80564c07>] _spin_lock+0x26/0x53
+[376940.230749]        [<ffffffff88015151>] ceph_osdc_handle_map+0x41c/0x5ea [ceph]
+[376940.230749]        [<ffffffff88000884>] ceph_dispatch+0x2cf/0x339 [ceph]
+[376940.230749]        [<ffffffff8800cf52>] try_read+0xf42/0x1199 [ceph]
+[376940.230749]        [<ffffffff80243322>] run_workqueue+0xee/0x1f6
+[376940.230749]        [<ffffffff80243e9e>] worker_thread+0xdb/0xe8
+[376940.230749]        [<ffffffff80246968>] kthread+0x49/0x79
+[376940.230749]        [<ffffffff8020cd38>] child_rip+0xa/0x12
+[376940.230749]        [<ffffffffffffffff>] 0xffffffffffffffff
+[376940.230749] 
+[376940.230749] -> #0 (&osdc->map_sem){----}:
+[376940.230749]        [<ffffffff802517a1>] __lock_acquire+0x98d/0xc8a
+[376940.230749]        [<ffffffff80251b2c>] lock_acquire+0x8e/0xb2
+[376940.230749]        [<ffffffff80563bed>] down_read+0x3b/0x68
+[376940.230749]        [<ffffffff880143d9>] handle_timeout+0x51/0x76 [ceph]
+[376940.230749]        [<ffffffff80243322>] run_workqueue+0xee/0x1f6
+[376940.230749]        [<ffffffff80243e9e>] worker_thread+0xdb/0xe8
+[376940.230749]        [<ffffffff80246968>] kthread+0x49/0x79
+[376940.230749]        [<ffffffff8020cd38>] child_rip+0xa/0x12
+[376940.230749]        [<ffffffffffffffff>] 0xffffffffffffffff
+[376940.230749] 
+[376940.230749] other info that might help us debug this:
+[376940.230749] 
+[376940.230749] 2 locks held by events/0/9:
+[376940.230749]  #0:  (events){--..}, at: [<ffffffff802432d3>] run_workqueue+0x9f/0x1f6
+[376940.230749]  #1:  (&(&osdc->timeout_work)->work){--..}, at: [<ffffffff802432d3>] run_workqueue+0x9f/0x1f6
+[376940.230749] 
+[376940.230749] stack backtrace:
+[376940.230749] Pid: 9, comm: events/0 Not tainted 2.6.25 #23
+[376940.230749] 
+[376940.230749] Call Trace:
+[376940.230749]  [<ffffffff8024f716>] print_circular_bug_tail+0x70/0x7b
+[376940.230749]  [<ffffffff8024ee10>] ? print_circular_bug_entry+0x48/0x4f
+[376940.230749]  [<ffffffff802517a1>] __lock_acquire+0x98d/0xc8a
+[376940.230749]  [<ffffffff880143d9>] ? :ceph:handle_timeout+0x51/0x76
+[376940.230749]  [<ffffffff80251b2c>] lock_acquire+0x8e/0xb2
+[376940.230749]  [<ffffffff880143d9>] ? :ceph:handle_timeout+0x51/0x76
+[376940.230749]  [<ffffffff88014388>] ? :ceph:handle_timeout+0x0/0x76
+[376940.230749]  [<ffffffff80563bed>] down_read+0x3b/0x68
+[376940.230749]  [<ffffffff880143d9>] :ceph:handle_timeout+0x51/0x76
+[376940.230749]  [<ffffffff80243322>] run_workqueue+0xee/0x1f6
+[376940.230749]  [<ffffffff80243e9e>] worker_thread+0xdb/0xe8
+[376940.230749]  [<ffffffff80246a86>] ? autoremove_wake_function+0x0/0x38
+[376940.230749]  [<ffffffff80243dc3>] ? worker_thread+0x0/0xe8
+[376940.230749]  [<ffffffff80246968>] kthread+0x49/0x79
+[376940.230749]  [<ffffffff8020cd38>] child_rip+0xa/0x12
+[376940.230749]  [<ffffffff8020c44f>] ? restore_args+0x0/0x30
+[376940.230749]  [<ffffffff8024691f>] ? kthread+0x0/0x79
+[376940.230749]  [<ffffffff8020cd2e>] ? child_rip+0x0/0x12
+[376940.230749] 
 
 code cleanup
 - userspace encoding/decoding needs major cleanup

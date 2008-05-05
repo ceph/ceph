@@ -670,7 +670,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	struct page *page;
 	pgoff_t next_index;
 	int contig_pages;
-	__s32 rc;
+	int rc;
 
 	/*
 	 * for now, our strategy is simple: start with the
