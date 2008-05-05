@@ -42,9 +42,7 @@ struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
 	}
 
 	ci = ceph_inode(inode);
-#if BITS_PER_LONG == 64
 	ceph_set_ino(inode, ino);
-#endif
 	ci->i_hashval = inode->i_ino;
 
 	dout(30, "get_inode on %lu=%llx got %p\n", inode->i_ino, ino, inode);
@@ -83,8 +81,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
 	     inode->i_size, inode->i_mode, inode->i_nlink);
-
-	ceph_set_ino(inode, le64_to_cpu(info->ino));
 
 	spin_lock(&inode->i_lock);
 	dout(30, " su %d, blkbits %d, blocks %llu.  v %llu, had %llu\n",
@@ -377,7 +373,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
 	int err = 0;
 	struct qstr dname;
-	struct dentry *dn = sb->s_root;
+	struct dentry *dn = sb->s_root, *realdn;
 	struct dentry *parent = NULL;
 	struct inode *in;
 	struct ceph_mds_reply_inode *ininfo;
@@ -392,7 +388,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
 	if (dn) {
 		in = dn->d_inode;
-		/* trace should start at root, or have only 1 dentry */
+		/* trace should start at root, or have only 1 dentry
+		 * (if it is in mds stray dir) */
 		WARN_ON(ino != 1 && rinfo->trace_numd != 1);
 	} else {
 		/* first reply (i.e. mount) */
@@ -418,18 +415,24 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 	dget(dn);
 	for (d = 0; d < rinfo->trace_numd; d++) {
-		dout(10, "fill_trace dn %d/%d dn %p in %p\n",
-		     (d+1), rinfo->trace_numd,
-		     dn, dn->d_inode);
+		dname.name = rinfo->trace_dname[d];
+		dname.len = rinfo->trace_dname_len[d];
 		parent = dn;
 
+		dout(10, "fill_trace %d/%d parent %p in %p d '%.*s'\n",
+		     (d+1), rinfo->trace_numd, parent, parent->d_inode,
+		     (int)dname.len, dname.name);
+
 		/* dentry */
-		ininfo = rinfo->trace_in[d+1].in;
+		dn = 0;
 		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
 			dn = req->r_last_dentry;
-			dout(10, "fill_trace using provided dentry %p\n", dn);
+			dout(10, "fill_trace provided dn %p '%.*s'\n", dn,
+			     dn->d_name.len, dn->d_name.name);
 			ceph_init_dentry(dn);  /* just in case */
 			req->r_last_dentry = NULL;
+
+			/* rename? */
 			if (req->r_old_dentry) {
 				dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 				     req->r_old_dentry,
@@ -448,23 +451,18 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dn = req->r_old_dentry;  /* use old_dentry */
 				req->r_old_dentry = 0;
 			}
-		} else {
-			dname.name = rinfo->trace_dname[d];
-			dname.len = rinfo->trace_dname_len[d];
+			if (dn->d_parent != parent)
+				dout(10, "warning: d_parent %p != %p\n",
+				     dn->d_parent, parent);
+		}
+		
+		if (!dn) {
 			dname.hash = full_name_hash(dname.name, dname.len);
-retry_lookup:
+		retry_lookup:
 			dn = d_lookup(parent, &dname);
 			dout(10, "fill_trace d_lookup of '%.*s' got %p\n",
 			     (int)dname.len, dname.name, dn);
-			if (d+1 < rinfo->trace_numi &&
-			    dn && dn->d_inode &&
-			    ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino)) {
-				dout(10, "fill_trace dn points to wrong ino\n");
-				d_delete(dn);
-				goto retry_lookup; /* may drop, be neg */
-			}
 			if (!dn) {
-				dout(10, "fill_trace calling d_alloc\n");
 				dn = d_alloc(parent, &dname);
 				if (!dn) {
 					derr(0, "d_alloc enomem\n");
@@ -474,63 +472,85 @@ retry_lookup:
 				ceph_init_dentry(dn);
 			}
 		}
-		if (dn->d_parent == parent)
-			ceph_update_dentry_lease(dn, rinfo->trace_dlease[d],
-						 session, req->r_from_time);
+		BUG_ON(!dn);
 
-		/* inode */
+		/* null dentry? */
 		if (d+1 == rinfo->trace_numi) {
-			dout(10, "fill_trace has dentry but no inode\n");
-			if (dn->d_inode)
-				d_delete(dn);  /* is this right? */
-			else
-				d_instantiate(dn, NULL);
+			dout(10, "fill_trace null dentry\n");
+			if (dn->d_inode) {
+				dout(20, "d_delete %p\n", dn);
+				d_delete(dn);
+				dput(dn);
+				goto retry_lookup;
+			}
+			dout(20, "d_instantiate %p NULL\n", dn);
+			d_instantiate(dn, NULL);
 			if (d_unhashed(dn))
 				d_rehash(dn);
 			in = 0;
+			ceph_update_dentry_lease(dn, rinfo->trace_dlease[d],
+						 session, req->r_from_time);
 			break;
 		}
 
-		if (!dn->d_inode) {
-			dout(10, "fill_trace attaching inode\n");
-			if (req->r_last_inode && ceph_ino(req->r_last_inode) ==
-			    le64_to_cpu(ininfo->ino)) {
-				in = req->r_last_inode;
-				igrab(in);
-				inc_nlink(in);
-			} else {
-				in = ceph_get_inode(dn->d_sb,
-						    le64_to_cpu(ininfo->ino));
-				if (IS_ERR(in)) {
-					dout(30, "new_inode badness\n");
-					err = PTR_ERR(in);
-					d_delete(dn);
-					dn = NULL;
-					in = NULL;
-					break;
-				}
+		/* attach proper inode */
+		ininfo = rinfo->trace_in[d+1].in;
+		if (dn->d_inode) {
+			if (ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino)) {
+				dout(10, "dn %p wrong %p ino %llx\n",
+				     dn, dn->d_inode, ceph_ino(dn->d_inode));
+				d_delete(dn);
+				dput(dn);
+				goto retry_lookup;
 			}
-			err = ceph_fill_inode(in, ininfo);
-			if (err < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				iput(in);
+			dout(10, "dn %p correct %p ino %llx\n",
+			     dn, dn->d_inode, ceph_ino(dn->d_inode));
+			in = dn->d_inode;
+		} else {
+			in = ceph_get_inode(dn->d_sb, le64_to_cpu(ininfo->ino));
+			if (IS_ERR(in)) {
+				derr(30, "get_inode badness\n");
+				err = PTR_ERR(in);
 				d_delete(dn);
 				dn = NULL;
+				in = NULL;
 				break;
 			}
-			dout(10, "fill_trace d_instantiate\n");
-			d_instantiate(dn, in);
-			if (d_unhashed(dn))
-				d_rehash(dn);
-			dout(10, "ceph_fill_trace added dentry %p"
-			     " inode %llx\n", dn, ceph_ino(in));
-		} else {
-			in = dn->d_inode;
-			err = ceph_fill_inode(in, ininfo);
-			if (err < 0) {
-				dout(30, "ceph_fill_inode badness\n");
-				break;
+			/* d_splice_alias wants dn unhashed */
+			if (!d_unhashed(dn)) {
+				dout(20, "d_drop %p\n", dn);
+				d_drop(dn);
 			}
+			realdn = d_splice_alias(in, dn);
+			if (realdn) {
+				derr(10, "dn %p spliced with %p inode %p "
+				     "ino %llx\n", dn, realdn, realdn->d_inode, 
+				     ceph_ino(realdn->d_inode));
+				if (dn == req->r_last_dentry) {
+					dput(dn);
+					req->r_last_dentry = realdn;
+				}
+				dn = realdn;
+				ceph_init_dentry(dn);
+			} else
+				dout(10, "dn %p attached to %p ino %llx\n",
+				     dn, dn->d_inode, ceph_ino(dn->d_inode));
+		}
+		if (dn->d_parent == parent)
+			ceph_update_dentry_lease(dn, rinfo->trace_dlease[d],
+						 session, req->r_from_time);
+		else
+			derr(10, "sloppy tailing dentry %p, not doing lease\n",
+			     dn);
+		BUG_ON(d_unhashed(dn));
+		
+		err = ceph_fill_inode(in, ininfo);
+		if (err < 0) {
+			derr(30, "ceph_fill_inode badness\n");
+			iput(in);
+			d_delete(dn);
+			dn = NULL;
+			break;
 		}
 		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
 					session, req->r_from_time);

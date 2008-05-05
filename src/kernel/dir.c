@@ -263,28 +263,29 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
-	/* no trace? */
-	if (err == -ENOENT && req->r_reply_info.trace_numd == 0) {
-		dout(20, "ENOENT and no trace, dentry %p inode %p\n",
-		     dentry, dentry->d_inode);
-		ceph_init_dentry(dentry);
-		if (dentry->d_inode) {
-			struct dentry *new = 
-				d_alloc(dentry->d_parent, &dentry->d_name);
-			d_drop(dentry);
-			dentry = new;
-		} else {
-			d_add(dentry, NULL);
-			dentry = 0;
+	if (err == -ENOENT) {
+		/* no trace? */
+		if (req->r_reply_info.trace_numd == 0) {
+			dout(20, "ENOENT and no trace, dentry %p inode %p\n",
+			     dentry, dentry->d_inode);
+			ceph_init_dentry(dentry);
+			if (dentry->d_inode) {
+				req->r_last_dentry = d_alloc(dentry->d_parent,
+							     &dentry->d_name);
+				d_drop(dentry);
+			} else
+				d_add(dentry, NULL);
 		}
 		err = 0;
-	} else if (err)
+	}
+	if (err)
 		dentry = ERR_PTR(err);
+	else if (dentry != req->r_last_dentry)
+		dentry = req->r_last_dentry;   /* we got d_splice_alias'd */
 	else
 		dentry = 0;
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
-	dout(20, "do_lookup result=%p %d\n", dentry,
-	     dentry ? atomic_read(&dentry->d_count):0);
+	dout(20, "do_lookup result=%p\n", dentry);
 	return dentry;
 }
 
@@ -448,20 +449,18 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	igrab(old_dentry->d_inode);
-	req->r_last_inode = old_dentry->d_inode;
 
 	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-	if (!err) {
-	/*
+	if (err)
+		d_drop(dentry);
+	else if (req->r_reply_info.trace_numd == 0) {
+		/* no trace */
 		igrab(old_dentry->d_inode);
 		inc_nlink(old_dentry->d_inode);
 		d_instantiate(dentry, old_dentry->d_inode);
-	*/
-	} else
-		d_drop(dentry);
-
+	}
 	return err;
 }
 

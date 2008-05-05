@@ -162,7 +162,7 @@ struct ceph_inode_frag_map_item {
 #define STATIC_CAPS 2
 
 struct ceph_inode_info {
-	u64 i_ceph_ino;
+	u64 i_ceph_ino;   /* make this ifdef away on 64 bit */
 
 	u64 i_version;
 	u64 i_time_warp_seq;

@@ -196,7 +196,7 @@ static void ceph_destroy_inode(struct inode *inode)
 static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct ceph_inode_info *ci = foo;
-	dout(10, "init_once on %p\n", foo);
+	dout(10, "init_once on %p\n", &ci->vfs_inode);
 	inode_init_once(&ci->vfs_inode);
 }
 
