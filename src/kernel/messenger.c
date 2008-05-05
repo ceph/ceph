@@ -745,11 +745,22 @@ static int read_message_partial(struct ceph_connection *con)
 	while (con->in_msg_pos.data_pos < data_len) {
 		left = min((int)(data_len - con->in_msg_pos.data_pos),
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
+		mutex_lock(&m->page_mutex);
+		if (!m->pages) {
+			dout(10, "pages revoked during msg read\n");
+			mutex_unlock(&m->page_mutex);
+			con->in_base_pos = con->in_msg_pos.data_pos - data_len;
+			ceph_msg_put(m);
+			con->in_msg = 0;
+			con->in_tag = CEPH_MSGR_TAG_READY;
+			return 0;
+		}
 		//p = kmap_atomic(m->pages[con->in_msg_pos.page], KM_USER1);
 		p = page_address(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
 		//kunmap_atomic(p, KM_USER1);
+		mutex_unlock(&m->page_mutex);
 		if (ret <= 0)
 			return ret;
 		con->in_msg_pos.data_pos += ret;
@@ -1200,6 +1211,8 @@ more:
 		ret = read_message_partial(con);
 		if (ret <= 0)
 			goto done;
+		if (con->in_tag == CEPH_MSGR_TAG_READY)
+			goto more;
 		process_message(con);
 		goto more;
 	}
