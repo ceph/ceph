@@ -1577,8 +1577,11 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		struct inode *inode = &cap->ci->vfs_inode;
 		int used, wanted;
 
-		/* invalidate any dirty remaining pages */
 		__ceph_do_pending_vmtruncate(inode);
+
+		mutex_lock(&inode->i_mutex);
+                filemap_write_and_wait(inode->i_mapping);
+		mutex_unlock(&inode->i_mutex);
 
 		spin_lock(&inode->i_lock);
 		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
@@ -1590,8 +1593,9 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		wanted = __ceph_caps_wanted(cap->ci);
 
 		if (purge && (used || wanted)) {
-			derr(0, "residual caps on %p used %d wanted %d %llu\n", 
-			     inode, used, wanted, inode->i_size);
+			derr(0, "residual caps on %p used %d wanted %d s=%llu wrb=%d\n", 
+			     inode, used, wanted, inode->i_size,
+			     atomic_read(&cap->ci->i_wrbuffer_ref));
 			used = wanted = 0;
 		}
 

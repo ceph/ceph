@@ -247,41 +247,55 @@ get_more_pages:
 		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
+		dout(20, "got %d\n", pvec_pages);
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
-			
+			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);
-			else if (TestSetPageLocked(page))
+			else if (TestSetPageLocked(page)) {
+				dout(20, "couldn't TestSetPageLocked %p\n", page);
 				break;
+			}
 
 			/* only dirty pages, or wrbuffer accounting breaks! */
 			if (unlikely(!PageDirty(page)) ||
 			    unlikely(page->mapping != mapping)) {
+				dout(20, "!dirty or !mapping %p\n", page);
 				unlock_page(page);
 				break;
 			}
 			if (!wbc->range_cyclic && page->index > end) {
+				dout(20, "end of range %p\n", page);
 				done = 1;
 				unlock_page(page);
 				break;
 			}
 			if (next && (page->index != next)) {
 				/* Not next consecutive page */
+				dout(20, "not consecutive %p\n", page);
 				unlock_page(page);
 				break;
 			}
-			if (wbc->sync_mode != WB_SYNC_NONE)
+			if (wbc->sync_mode != WB_SYNC_NONE) {
+				dout(20, "waiting on writeback %p\n", page);
 				wait_on_page_writeback(page);
+			}
 
 			if (page_offset(page) >= i_size_read(inode)) {
+				dout(20, "past eof %p\n", page);
 				done = 1;
 				unlock_page(page);
 				break;
 			}
 
-			if (PageWriteback(page) ||
-			    !clear_page_dirty_for_io(page)) {
+			if (PageWriteback(page)) {
+				dout(20, "%p under writeback\n", page);
+				unlock_page(page);
+				break;
+			}
+			if (!clear_page_dirty_for_io(page)) {
+				dout(20, "%p !clear_page_dirty_for_io\n", page);
 				unlock_page(page);
 				break;
 			}
@@ -289,6 +303,7 @@ get_more_pages:
 			/* ok */
 			set_page_writeback(page);
 			cleaned++;
+			ClearPagePrivate(page);
 
 			derr(20, "%p locked+cleaned page %p idx %lu\n",
 			     inode, page, page->index);
@@ -543,7 +558,8 @@ static int ceph_set_page_dirty(struct page *page)
 		     mapping->host, page,
 		     atomic_read(&ci->i_wrbuffer_ref)-1,
 		     atomic_read(&ci->i_wrbuffer_ref));
-	}
+	} else
+		derr(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
 	write_unlock_irq(&mapping->tree_lock);
 	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
 
@@ -554,20 +570,19 @@ void ceph_invalidatepage(struct page *page, unsigned long offset)
 {
 	struct ceph_inode_info *ci;
 
-	ClearPagePrivate(page);
+	BUG_ON(!PageLocked(page));
+	if (offset == 0)
+		ClearPageChecked(page);
 	if (!PageDirty(page))
 		return;
 	if (!page->mapping)
 		return;
 	ci = ceph_inode(page->mapping->host);
-	if (offset <= (page->index << PAGE_CACHE_SHIFT)) {
-		derr(20, "%p invalidatepage %p idx %lu full dirty page\n", 
-		     &ci->vfs_inode, page, page->index);
+	if (offset == 0) {
+		derr(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
+		     &ci->vfs_inode, page, page->index, offset);
 		atomic_dec(&ci->i_wrbuffer_ref);
-		/*
-		 * pretty sure this is fundamentally racy.  help!
-		 */
-		ClearPageDirty(page);
+		ClearPagePrivate(page);
 	} else
 		derr(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
 		     &ci->vfs_inode, page, page->index);
@@ -576,8 +591,9 @@ void ceph_invalidatepage(struct page *page, unsigned long offset)
 int ceph_releasepage(struct page *page, gfp_t g)
 {
 	struct inode *inode = page->mapping ? page->mapping->host:0;
-	dout(20, "%p releasepage %p\n", inode, page);
+	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
 	WARN_ON(PageDirty(page));
+	ClearPagePrivate(page);
 	return 0;
 }
 
