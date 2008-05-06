@@ -14,6 +14,85 @@ int ceph_debug_addr = -1;
 
 #include "osd_client.h"
 
+
+static int ceph_set_page_dirty(struct page *page)
+{
+	struct address_space *mapping = page->mapping;
+	struct ceph_inode_info *ci;
+
+	if (unlikely(!mapping))
+		return !TestSetPageDirty(page);
+
+	if (TestSetPageDirty(page)) {
+		dout(20, "%p set_page_dirty %p -- already dirty\n", 
+		     mapping->host, page);
+		return 0;
+	}
+
+	write_lock_irq(&mapping->tree_lock);
+	if (page->mapping) {	/* Race with truncate? */
+		WARN_ON_ONCE(!PageUptodate(page));
+
+		if (mapping_cap_account_dirty(mapping)) {
+			__inc_zone_page_state(page, NR_FILE_DIRTY);
+			__inc_bdi_stat(mapping->backing_dev_info,
+					BDI_RECLAIMABLE);
+			task_io_account_write(PAGE_CACHE_SIZE);
+		}
+		radix_tree_tag_set(&mapping->page_tree,
+				page_index(page), PAGECACHE_TAG_DIRTY);
+
+		ci = ceph_inode(mapping->host);
+		atomic_inc(&ci->i_wrbuffer_ref);
+		/*
+		 * set PagePrivate so that we get invalidatepage callback
+		 * on truncate for proper dirty page accounting for mmap
+		 */
+		SetPagePrivate(page);
+		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
+		     mapping->host, page,
+		     atomic_read(&ci->i_wrbuffer_ref)-1,
+		     atomic_read(&ci->i_wrbuffer_ref));
+	} else
+		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
+	write_unlock_irq(&mapping->tree_lock);
+	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
+
+	return 1;
+}
+
+static void ceph_invalidatepage(struct page *page, unsigned long offset)
+{
+	struct ceph_inode_info *ci;
+
+	BUG_ON(!PageLocked(page));
+	if (offset == 0)
+		ClearPageChecked(page);
+	if (!PageDirty(page))
+		return;
+	if (!page->mapping)
+		return;
+	ci = ceph_inode(page->mapping->host);
+	if (offset == 0) {
+		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
+		     &ci->vfs_inode, page, page->index, offset);
+		atomic_dec(&ci->i_wrbuffer_ref);
+		ClearPagePrivate(page);
+	} else
+		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
+		     &ci->vfs_inode, page, page->index);
+}
+
+static int ceph_releasepage(struct page *page, gfp_t g)
+{
+	struct inode *inode = page->mapping ? page->mapping->host:0;
+	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
+	WARN_ON(PageDirty(page));
+	ClearPagePrivate(page);
+	return 0;
+}
+
+
 static int ceph_readpage(struct file *filp, struct page *page)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
@@ -137,8 +216,10 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 		}
 		SetPageUptodate(page);
 		err = 0;  /* vfs expects us to return 0 */
-	} else
-		redirty_page_for_writepage(wbc, page);  /* is this right?? */
+	} else {
+		wbc->pages_skipped++;
+		ceph_set_page_dirty(page);
+	}
 	unlock_page(page);
 	end_page_writeback(page);
 	page_cache_release(page);
@@ -365,7 +446,8 @@ get_more_pages:
 				else {
 					dout(20, "%p redirtying page %p\n", 
 					     inode, page);
-					redirty_page_for_writepage(wbc, page);
+					wbc->pages_skipped++;
+					ceph_set_page_dirty(page);
 				}
 				dout(50, "unlocking %d %p\n", i, page);
 				unlock_page(page);
@@ -518,82 +600,6 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 }
 
 
-static int ceph_set_page_dirty(struct page *page)
-{
-	struct address_space *mapping = page->mapping;
-	struct ceph_inode_info *ci;
-
-	if (unlikely(!mapping))
-		return !TestSetPageDirty(page);
-
-	if (TestSetPageDirty(page)) {
-		dout(20, "%p set_page_dirty %p -- already dirty\n", 
-		     mapping->host, page);
-		return 0;
-	}
-
-	write_lock_irq(&mapping->tree_lock);
-	if (page->mapping) {	/* Race with truncate? */
-		WARN_ON_ONCE(!PageUptodate(page));
-
-		if (mapping_cap_account_dirty(mapping)) {
-			__inc_zone_page_state(page, NR_FILE_DIRTY);
-			__inc_bdi_stat(mapping->backing_dev_info,
-					BDI_RECLAIMABLE);
-			task_io_account_write(PAGE_CACHE_SIZE);
-		}
-		radix_tree_tag_set(&mapping->page_tree,
-				page_index(page), PAGECACHE_TAG_DIRTY);
-
-		ci = ceph_inode(mapping->host);
-		atomic_inc(&ci->i_wrbuffer_ref);
-		/*
-		 * set PagePrivate so that we get invalidatepage callback
-		 * on truncate for proper dirty page accounting for mmap
-		 */
-		SetPagePrivate(page);
-		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
-		     mapping->host, page,
-		     atomic_read(&ci->i_wrbuffer_ref)-1,
-		     atomic_read(&ci->i_wrbuffer_ref));
-	} else
-		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
-	write_unlock_irq(&mapping->tree_lock);
-	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
-
-	return 1;
-}
-
-void ceph_invalidatepage(struct page *page, unsigned long offset)
-{
-	struct ceph_inode_info *ci;
-
-	BUG_ON(!PageLocked(page));
-	if (offset == 0)
-		ClearPageChecked(page);
-	if (!PageDirty(page))
-		return;
-	if (!page->mapping)
-		return;
-	ci = ceph_inode(page->mapping->host);
-	if (offset == 0) {
-		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
-		     &ci->vfs_inode, page, page->index, offset);
-		atomic_dec(&ci->i_wrbuffer_ref);
-		ClearPagePrivate(page);
-	} else
-		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
-		     &ci->vfs_inode, page, page->index);
-}
-
-int ceph_releasepage(struct page *page, gfp_t g)
-{
-	struct inode *inode = page->mapping ? page->mapping->host:0;
-	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
-	WARN_ON(PageDirty(page));
-	ClearPagePrivate(page);
-	return 0;
-}
 
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
