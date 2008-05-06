@@ -475,8 +475,10 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 	struct ceph_mds_session_head *h;
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_SESSION, sizeof(*h), 0, 0, 0);
-	if (IS_ERR(msg))
+	if (IS_ERR(msg)) {
+		derr("ENOMEM creating session msg\n");
 		return ERR_PTR(-ENOMEM);
+	}
 	h = msg->front.iov_base;
 	h->op = cpu_to_le32(op);
 	h->seq = cpu_to_le64(seq);
@@ -1608,6 +1610,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 {
 	int mds = session->s_mds;
 	struct ceph_msg *msg;
+	int err = 0;
 
 	dout(10, "close_session mds%d\n", mds);
 	mutex_lock(&session->s_mutex);
@@ -1620,13 +1623,15 @@ static int close_session(struct ceph_mds_client *mdsc,
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
 				 session->s_seq);
-	if (IS_ERR(msg))
-		return PTR_ERR(msg);
+	if (IS_ERR(msg)) {
+		err = PTR_ERR(msg);
+		goto done;
+	}
 	send_msg_mds(mdsc, msg, mds);
 
 done:
 	mutex_unlock(&session->s_mutex);
-	return 0;
+	return err;
 }
 
 /*
