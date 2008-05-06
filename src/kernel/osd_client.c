@@ -466,7 +466,7 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	unregister_request(osdc, req);
 	if (rc < 0) {
 		struct ceph_msg *msg;
-		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid, 
+		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid,
 		     rc, req->r_request);
 		/* 
 		 * mark req aborted _before_ revoking pages, so that
@@ -523,6 +523,16 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	osdc->nr_requests = 0;
 	INIT_RADIX_TREE(&osdc->request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
+}
+
+void ceph_osdc_stop(struct ceph_osd_client *osdc)
+{
+	cancel_delayed_work_sync(&osdc->timeout_work);
+
+	if (osdc->osdmap) {
+		osdmap_destroy(osdc->osdmap);
+		osdc->osdmap = 0;
+	}
 }
 
 
