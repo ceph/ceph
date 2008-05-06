@@ -1613,6 +1613,7 @@ void Server::handle_client_utime(MDRequest *mdr)
 
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
+  pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();

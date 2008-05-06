@@ -1354,7 +1354,7 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 			 int wanted, __u32 seq, __u64 size, __u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
-			 int mds)
+			 u64 time_warp_seq, int mds)
 {
 	struct ceph_mds_file_caps *fc;
 	struct ceph_msg *msg;
@@ -1381,6 +1381,7 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 		ceph_encode_timespec(&fc->mtime, mtime);
 	if (atime)
 		ceph_encode_timespec(&fc->atime, atime);
+	fc->time_warp_seq = cpu_to_le64(time_warp_seq);
 
 	send_msg_mds(mdsc, msg, mds);
 }
@@ -1435,7 +1436,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
 		     inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, 0, 0, 0, mds);
+		send_cap_ack(mdsc, ino, 0, 0, seq, size, 0, 0, 0, 0, mds);
 		goto no_inode;
 	}
 
@@ -1497,7 +1498,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~wanted;
 	int keep;
-	__u64 seq;
+	__u64 seq, time_warp_seq;
 	__u64 size, max_size;
 	struct timespec mtime, atime;
 	int removed_last = 0;
@@ -1517,6 +1518,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	ci->i_requested_max_size = max_size;
 	mtime = inode->i_mtime;
 	atime = inode->i_atime;
+	time_warp_seq = ci->i_time_warp_seq;
 	if (wanted == 0) {
 		__ceph_remove_cap(cap);
 		removed_last = list_empty(&ci->i_caps);
@@ -1536,7 +1538,8 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 
 	send_cap_ack(mdsc, ceph_ino(inode),
 		     keep, wanted, seq,
-		     size, max_size, &mtime, &atime, session->s_mds);
+		     size, max_size, &mtime, &atime, time_warp_seq,
+		     session->s_mds);
 
 	if (wanted == 0)
 		iput(inode);  /* removed cap */

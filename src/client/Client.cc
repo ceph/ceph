@@ -340,10 +340,13 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
       if ((issued & CEPH_CAP_EXCL) == 0) {
 	if ((uint64_t)st->size > in->inode.size)
 	  in->inode.size = st->size;
-	if (st->mtime > in->inode.mtime) 
-	  in->inode.mtime = st->mtime;
-	if (st->atime > in->inode.atime)
-	  in->inode.atime = st->atime;
+	if (st->time_warp_seq >= in->inode.time_warp_seq) {
+	  if (st->mtime > in->inode.mtime) 
+	    in->inode.mtime = st->mtime;
+	  if (st->atime > in->inode.atime)
+	    in->inode.atime = st->atime;
+	  in->inode.time_warp_seq = st->time_warp_seq;
+	}
       }
     } else {
       in->inode.size = st->size;
@@ -1435,10 +1438,13 @@ void Client::handle_file_caps(MClientFileCaps *m)
   // update inode
   if (m->get_size() > in->inode.size)
     in->inode.size = m->get_size();
-  if (m->get_mtime() > in->inode.mtime && (old_caps & CEPH_CAP_EXCL) == 0) 
-    in->inode.mtime = m->get_mtime();
-  if (m->get_atime() > in->inode.atime && (old_caps & CEPH_CAP_EXCL) == 0) 
-    in->inode.atime = m->get_atime();
+  if (m->get_time_warp_seq() >= in->inode.time_warp_seq) {
+    if (m->get_mtime() > in->inode.mtime && (old_caps & CEPH_CAP_EXCL) == 0) 
+      in->inode.mtime = m->get_mtime();
+    if (m->get_atime() > in->inode.atime && (old_caps & CEPH_CAP_EXCL) == 0) 
+      in->inode.atime = m->get_atime();
+    in->inode.time_warp_seq = m->get_time_warp_seq();
+  }
 
   // share our (possibly newer) file size, mtime, atime
   m->set_size(in->inode.size);
@@ -2279,6 +2285,7 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, bool fol
   if (dn && dn->inode &&
       (dn->inode->file_caps() & want) == want) {
     dout(5) << " have WR and EXCL caps, just updating our m/atime" << dendl;
+    dn->inode->inode.time_warp_seq++;
     dn->inode->inode.mtime = mtime;
     dn->inode->inode.atime = atime;
     return 0;

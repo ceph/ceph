@@ -203,6 +203,7 @@ struct inode_t {
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   utime_t    rmtime;  // recursive mtime?
+  uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
  
   // special stuff
   version_t version;           // auth only

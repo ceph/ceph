@@ -46,6 +46,7 @@ class MClientFileCaps : public Message {
   utime_t get_ctime() { return utime_t(h.ctime); }
   utime_t get_mtime() { return utime_t(h.mtime); }
   utime_t get_atime() { return utime_t(h.atime); }
+  __u64 get_time_warp_seq() { return h.time_warp_seq; }
 
   // for cap migration
   int       get_migrate_mds() { return h.migrate_mds; }
@@ -84,6 +85,7 @@ class MClientFileCaps : public Message {
     inode.mtime.encode_timeval(&h.mtime);
     inode.atime.encode_timeval(&h.atime);
     inode.ctime.encode_timeval(&h.ctime);
+    h.time_warp_seq = inode.time_warp_seq;
   }
 
   const char *get_type_name() { return "Cfcap";}

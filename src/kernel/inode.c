@@ -78,6 +78,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	u32 su = le32_to_cpu(info->layout.fl_stripe_unit);
 	int blkbits = fls(su) - 1;
 	u64 blocks = (size + (1<<9) - 1) >> 9;
+	u64 time_warp_seq;
 
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
@@ -102,29 +103,49 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	ceph_decode_timespec(&atime, &info->atime);
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
+	time_warp_seq = le64_to_cpu(info->time_warp_seq);
+
 	issued = __ceph_caps_issued(ci);
 	if (issued & CEPH_CAP_EXCL) {
 		if (timespec_compare(&ctime, &inode->i_ctime) > 0)
 			inode->i_ctime = ctime;
+		if (time_warp_seq > ci->i_time_warp_seq)
+			derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
+			     inode, time_warp_seq, ci->i_time_warp_seq);
 	} else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
 		if (size > inode->i_size) {
 			inode->i_size = size;
 			inode->i_blkbits = blkbits;
 			inode->i_blocks = blocks;
 		}
-		if (timespec_compare(&mtime, &inode->i_mtime) > 0)
-			inode->i_mtime = mtime;
-		if (timespec_compare(&atime, &inode->i_atime) > 0)
-			inode->i_atime = atime;
-		if (timespec_compare(&ctime, &inode->i_ctime) > 0)
-			inode->i_ctime = ctime;
+		if (time_warp_seq >= ci->i_time_warp_seq) {
+			if (timespec_compare(&mtime, &inode->i_mtime) > 0)
+				inode->i_mtime = mtime;
+			if (timespec_compare(&atime, &inode->i_atime) > 0)
+				inode->i_atime = atime;
+			if (timespec_compare(&ctime, &inode->i_ctime) > 0)
+				inode->i_ctime = ctime;
+			ci->i_time_warp_seq = time_warp_seq;
+		} else
+			dout(10, " mds time_warp_seq %llu < %llu\n",
+			     time_warp_seq, ci->i_time_warp_seq);
 	} else {
+		if (timespec_compare(&mtime, &inode->i_mtime) != 0)
+			dout(10, "%p issued %d .. full update, "
+			     "mtime %lu.%lu -> %lu.%lu\n", inode, issued,
+			     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec,
+			     mtime.tv_sec, mtime.tv_nsec);
 		inode->i_size = size;
 		inode->i_blkbits = blkbits;
 		inode->i_blocks = blocks;
-		inode->i_mtime = mtime;
-		inode->i_atime = atime;
-		inode->i_ctime = ctime;
+		if (time_warp_seq >= ci->i_time_warp_seq) {
+			inode->i_mtime = mtime;
+			inode->i_atime = atime;
+			inode->i_ctime = ctime;
+			ci->i_time_warp_seq = time_warp_seq;
+		} else
+			dout(10, " mds time_warp_seq %llu < %llu\n",
+			     time_warp_seq, ci->i_time_warp_seq);
 	}
 
 	/* ceph inode */
@@ -410,7 +431,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			ceph_init_dentry(dn);  /* just in case */
 			req->r_last_dentry = NULL;
 			if (req->r_old_dentry) {
-				dout(10, " src %p '%.*s' dst %p '%.*s'\n", 
+				dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 				     req->r_old_dentry,
 				     req->r_old_dentry->d_name.len,
 				     req->r_old_dentry->d_name.name,
@@ -418,7 +439,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dout(10, "fill_trace doing d_move %p -> %p\n",
 				     req->r_old_dentry, dn);
 				d_move(req->r_old_dentry, dn);
-				dout(10, " src %p '%.*s' dst %p '%.*s'\n", 
+				dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 				     req->r_old_dentry,
 				     req->r_old_dentry->d_name.len,
 				     req->r_old_dentry->d_name.name,
@@ -917,11 +938,12 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(grant->seq);
-	int newcaps;
+	int newcaps = le32_to_cpu(grant->caps);
 	int used;
 	int issued; /* to me, before */
 	int wanted;
 	int reply = 0;
+	u64 time_warp_seq;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
 	struct timespec mtime, atime, ctime;
@@ -968,30 +990,45 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 		wake = 1;
 	}
 
+	/* ctime? */
+	ceph_decode_timespec(&ctime, &grant->ctime);
+	if (timespec_compare(&ctime, &inode->i_ctime) > 0) {
+		dout(10, "ctime %lu.%09ld -> %lu.%.09ld\n",
+		     ctime.tv_sec, ctime.tv_nsec,
+		     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec);
+		inode->i_ctime = ctime;
+	}
+
 	/* mtime/atime? */
 	issued = __ceph_caps_issued(ci);
-	if ((issued & CEPH_CAP_EXCL) == 0) {
+	time_warp_seq = le64_to_cpu(grant->time_warp_seq);
+	if (issued & CEPH_CAP_EXCL) {
+		if (time_warp_seq > ci->i_time_warp_seq)
+			derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
+			     inode, time_warp_seq, ci->i_time_warp_seq);
+	} else {
 		ceph_decode_timespec(&mtime, &grant->mtime);
 		ceph_decode_timespec(&atime, &grant->atime);
-		ceph_decode_timespec(&ctime, &grant->ctime);
-		if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
-			dout(10, "mtime %lu.%09ld -> %lu.%.09ld\n",
-			     mtime.tv_sec, mtime.tv_nsec,
-			     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec);
-			inode->i_mtime = mtime;
-		}
-		if (timespec_compare(&ctime, &inode->i_ctime) > 0) {
-			dout(10, "ctime %lu.%09ld -> %lu.%.09ld\n",
-			     ctime.tv_sec, ctime.tv_nsec,
-			     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec);
-			inode->i_ctime = ctime;
-		}
-		if (timespec_compare(&atime, &inode->i_atime) > 0) {
-			dout(10, "atime %lu.%09ld -> %lu.%09ld\n",
-			     atime.tv_sec, atime.tv_nsec,
-			     inode->i_atime.tv_sec, inode->i_atime.tv_nsec);
-			inode->i_atime = atime;
-		}
+		if (time_warp_seq >= ci->i_time_warp_seq) {
+			if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
+				dout(10, "%p mtime %lu.%09ld -> %lu.%.09ld\n",
+				     inode, mtime.tv_sec, mtime.tv_nsec,
+				     inode->i_mtime.tv_sec,
+				     inode->i_mtime.tv_nsec);
+				inode->i_mtime = mtime;
+			}
+			if (timespec_compare(&atime, &inode->i_atime) > 0) {
+				dout(10, "%p atime %lu.%09ld -> %lu.%09ld\n",
+				     inode,
+				     atime.tv_sec, atime.tv_nsec,
+				     inode->i_atime.tv_sec,
+				     inode->i_atime.tv_nsec);
+				inode->i_atime = atime;
+			}
+			ci->i_time_warp_seq = time_warp_seq;
+		} else
+			dout(10, " mds time_warp_seq %llu < %llu\n",
+			     time_warp_seq, ci->i_time_warp_seq);
 	}
 
 	/* check cap bits */
@@ -1007,7 +1044,6 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	cap->seq = seq;
 
 	/* revocation? */
-	newcaps = le32_to_cpu(grant->caps);
 	if (cap->issued & ~newcaps) {
 		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
 		if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
@@ -1021,6 +1057,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 			grant->max_size = 0;  /* don't re-request */
 			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
+			grant->time_warp_seq = cpu_to_le64(ci->i_time_warp_seq);
 			reply = 1;
 		}
 		cap->issued = newcaps;
@@ -1070,7 +1107,7 @@ static int apply_truncate(struct inode *inode, loff_t size)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int rc;
-	
+
 	rc = vmtruncate(inode, size);
 	if (rc == 0) {
 		spin_lock(&inode->i_lock);
@@ -1090,7 +1127,7 @@ void ceph_vmtruncate_work(struct work_struct *work)
 	struct ceph_inode_info *ci = container_of(work, struct ceph_inode_info,
 						  i_vmtruncate_work);
 	struct inode *inode = &ci->vfs_inode;
-	
+
 	dout(10, "vmtruncate_work %p\n", inode);
 	mutex_lock(&inode->i_mutex);
 	__ceph_do_pending_vmtruncate(inode);
@@ -1142,7 +1179,7 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	if (ci->i_vmtruncate_to < 0 && size > inode->i_size)
 		dout(10, "clean fwd truncate, no vmtruncate needed\n");
 	else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to)
-		dout(10, "trunc to %lld < %lld already queued\n", 
+		dout(10, "trunc to %lld < %lld already queued\n",
 		     ci->i_vmtruncate_to, size);
 	else {
 		/* we need to trunc even smaller */
@@ -1376,6 +1413,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	/* if i hold CAP_EXCL, i can change [am]time any way i like */
 	if (ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 		dout(10, "utime holding EXCL, doing locally\n");
+		ci->i_time_warp_seq++;
 		if (ia_valid & ATTR_ATIME)
 			inode->i_atime = attr->ia_atime;
 		if (ia_valid & ATTR_MTIME)
@@ -1488,29 +1526,31 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 
 	/* gratuitous debug output */
 	if (ia_valid & ATTR_UID)
-		dout(10, "setattr: uid %d -> %d\n", inode->i_uid, attr->ia_uid);
+		dout(10, "setattr: %p uid %d -> %d\n", inode,
+		     inode->i_uid, attr->ia_uid);
 	if (ia_valid & ATTR_GID)
-		dout(10, "setattr: gid %d -> %d\n", inode->i_uid, attr->ia_uid);
+		dout(10, "setattr: %p gid %d -> %d\n", inode,
+		     inode->i_uid, attr->ia_uid);
 	if (ia_valid & ATTR_MODE)
-		dout(10, "setattr: mode %o -> %o\n", inode->i_mode,
+		dout(10, "setattr: %p mode %o -> %o\n", inode, inode->i_mode,
 		     attr->ia_mode);
 	if (ia_valid & ATTR_SIZE)
-		dout(10, "setattr: size %lld -> %lld\n", inode->i_size,
-		     attr->ia_size);
+		dout(10, "setattr: %p size %lld -> %lld\n", inode,
+		     inode->i_size, attr->ia_size);
 	if (ia_valid & ATTR_ATIME)
-		dout(10, "setattr: atime %ld.%ld -> %ld.%ld\n",
+		dout(10, "setattr: %p atime %ld.%ld -> %ld.%ld\n", inode,
 		     inode->i_atime.tv_sec, inode->i_atime.tv_nsec,
 		     attr->ia_atime.tv_sec, attr->ia_atime.tv_nsec);
 	if (ia_valid & ATTR_MTIME)
-		dout(10, "setattr: mtime %ld.%ld -> %ld.%ld\n",
+		dout(10, "setattr: %p mtime %ld.%ld -> %ld.%ld\n", inode,
 		     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec,
 		     attr->ia_mtime.tv_sec, attr->ia_mtime.tv_nsec);
 	if (ia_valid & ATTR_MTIME)
-		dout(10, "setattr: ctime %ld.%ld -> %ld.%ld\n",
+		dout(10, "setattr: %p ctime %ld.%ld -> %ld.%ld\n", inode,
 		     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec,
 		     attr->ia_ctime.tv_sec, attr->ia_ctime.tv_nsec);
 	if (ia_valid & ATTR_FILE)
-		dout(10, "setattr: ATTR_FILE ... hrm!\n");
+		dout(10, "setattr: %p ATTR_FILE ... hrm!\n", inode);
 
 	/* chown */
 	if (ia_valid & (ATTR_UID|ATTR_GID)) {

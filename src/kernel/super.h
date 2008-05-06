@@ -165,6 +165,7 @@ struct ceph_inode_info {
 	u64 i_ceph_ino;
 
 	u64 i_version;
+	u64 i_time_warp_seq;
 
 	struct ceph_file_layout i_layout;
 	char *i_symlink;

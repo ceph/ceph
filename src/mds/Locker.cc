@@ -603,7 +603,8 @@ bool Locker::issue_caps(CInode *in)
 
       if (seq > 0 && 
           !cap->is_suppress()) {
-        dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << cap->get_last_seq()
+        dout(7) << "   sending MClientFileCaps to client" << it->first
+		<< " seq " << cap->get_last_seq()
 		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
 		<< dendl;
         mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
@@ -1018,6 +1019,11 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << "  atime " << pi->atime << " -> " << atime
 	      << " for " << *in << dendl;
       pi->atime = atime;
+    }
+    if (excl && pi->time_warp_seq < m->get_time_warp_seq()) {
+      dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
+	      << " for " << *in << dendl;
+      pi->time_warp_seq = m->get_time_warp_seq();
     }
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
