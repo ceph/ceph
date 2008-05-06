@@ -670,7 +670,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	struct page *page;
 	pgoff_t next_index;
 	int contig_pages;
-	int rc;
+	int rc = 0;
 
 	/*
 	 * for now, our strategy is simple: start with the
@@ -678,10 +678,9 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	 * we can that falls within the range specified by
 	 * nr_pages.
 	 */
-
 	dout(10, "readpages on ino %llx on %llu~%llu\n", ino, off, len);
 
-	/* alloc request, w/ page vector */
+	/* alloc request, w/ optimistically-sized page vector */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
@@ -696,7 +695,6 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	contig_pages = 0;
 	list_for_each_entry_reverse(page, page_list, lru) {
 		if (page->index == next_index) {
-			kmap(page);
 			req->r_pages[contig_pages] = page;
 			contig_pages++;
 			next_index++;
@@ -704,10 +702,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			break;
 	}
 	dout(10, "readpages found %d/%d contig\n", contig_pages, nr_pages);
-	if (contig_pages == 0) {
-		put_request(req);
-		return 0;
-	}
+	if (contig_pages == 0)
+		goto out;
 	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
 		  len);
 	dout(10, "readpages contig page extent is %llu~%llu\n", off, len);
@@ -715,13 +711,15 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	/* request msg */
 	len = calc_layout(osdc, ino, layout, off, len, req);
 	req->r_nr_pages = calc_pages_for(off, len);
-
 	dout(10, "readpages final extent is %llu~%llu -> %d pages\n",
 	     off, len, req->r_nr_pages);
-
 	rc = do_request(osdc, req);
+
+out:
 	put_request(req);
 	dout(10, "readpages result %d\n", rc);
+	if (rc < 0)
+		dout(10, "hrm!\n");
 	return rc;
 }
 

@@ -756,11 +756,10 @@ static int read_message_partial(struct ceph_connection *con)
 			con->in_tag = CEPH_MSGR_TAG_READY;
 			return 0;
 		}
-		//p = kmap_atomic(m->pages[con->in_msg_pos.page], KM_USER1);
-		p = page_address(m->pages[con->in_msg_pos.page]);
+		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
-		//kunmap_atomic(p, KM_USER1);
+		kunmap(m->pages[con->in_msg_pos.page]);
 		mutex_unlock(&m->page_mutex);
 		if (ret <= 0)
 			return ret;

@@ -19,26 +19,25 @@ static int ceph_readpage(struct file *filp, struct page *page)
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
-	void *kaddr;
 	int err = 0;
 
 	dout(10, "readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
-	kaddr = kmap(page);
 	err = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
-	if (err < 0)
+	if (unlikely(err < 0))
 		goto out;
 
-	if (err < PAGE_CACHE_SIZE) {
+	if (unlikely(err < PAGE_CACHE_SIZE)) {
+		void *kaddr = kmap_atomic(page, KM_USER0);
 		dout(10, "readpage zeroing tail %d bytes of page %p\n",
 		     (int)PAGE_CACHE_SIZE - err, page);
 		memset(kaddr + err, 0, PAGE_CACHE_SIZE - err);
+		kunmap_atomic(kaddr, KM_USER0);
 	}
 	SetPageUptodate(page);
 
 out:
-	kunmap(page);
 	unlock_page(page);
 	return err;
 }
@@ -85,7 +84,6 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 			continue;
 		}
 		dout(10, "readpages adding page %p\n", page);
-		kunmap(page);
 		flush_dcache_page(page);
 		SetPageUptodate(page);
 		unlock_page(page);
