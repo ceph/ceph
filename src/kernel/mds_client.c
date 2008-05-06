@@ -1908,6 +1908,19 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
 
+	spin_lock(&mdsc->cap_delay_lock);
+	while (!list_empty(&mdsc->cap_delay_list)) {
+		struct ceph_inode_info *ci;
+		ci = list_first_entry(&mdsc->cap_delay_list,
+				      struct ceph_inode_info,
+				      i_cap_delay_list);
+		list_del_init(&ci->i_cap_delay_list);
+		spin_unlock(&mdsc->cap_delay_lock);
+		iput(&ci->vfs_inode);
+		spin_lock(&mdsc->cap_delay_lock);
+	}
+	spin_unlock(&mdsc->cap_delay_lock);
+
 	spin_lock(&mdsc->lock);
 
 	/* close sessions, caps */
@@ -1931,6 +1944,8 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 		wait_for_completion(&mdsc->session_close_waiters);
 		spin_lock(&mdsc->lock);
 	}
+
+	WARN_ON(!list_empty(&mdsc->cap_delay_list));
 
 	spin_unlock(&mdsc->lock);
 	dout(10, "stopped\n");
