@@ -232,14 +232,18 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		dout(10, "handle_reply tid %llu saving reply\n", tid);
 		ceph_msg_get(msg);
 		req->r_reply = msg;
-	} else {
-		dout(10, "handle_reply tid %llu already had a reply\n", tid);
+	} else if (req->r_reply == msg)
+		dout(10, "handle_reply tid %llu already had this reply\n", tid);
+	else {
+		dout(10, "handle_reply tid %llu had OTHER reply?\n", tid);
+		goto done;
 	}
 	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags,
 	     rhead->flags);
 	req->r_flags |= rhead->flags;
 	spin_unlock(&osdc->request_lock);
 	complete(&req->r_completion);
+done:
 	put_request(req);
 	return;
 
@@ -433,6 +437,8 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	if (likely(req->r_nr_pages >= want)) {
 		m->pages = req->r_pages;
 		m->nr_pages = req->r_nr_pages;
+		ceph_msg_get(m);
+		req->r_reply = m;
 		ret = 0; /* success */
 	}
 out:
@@ -473,6 +479,11 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 		mutex_lock(&msg->page_mutex);
 		msg->pages = 0;
 		mutex_unlock(&msg->page_mutex);
+		if (req->r_reply) {
+			mutex_lock(&req->r_reply->page_mutex);
+			req->r_reply->pages = 0;
+			mutex_unlock(&req->r_reply->page_mutex);
+		}
 		return rc;
 	}
 
