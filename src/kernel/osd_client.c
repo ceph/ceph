@@ -124,7 +124,7 @@ static void unregister_request(struct ceph_osd_client *osdc,
 	radix_tree_delete(&osdc->request_tree, req->r_tid);
 
 	osdc->nr_requests--;
-	cancel_delayed_work_sync(&osdc->timeout_work);
+	cancel_delayed_work(&osdc->timeout_work);
 	if (osdc->nr_requests)
 		reschedule_timeout(osdc);
 
