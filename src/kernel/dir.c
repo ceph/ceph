@@ -490,18 +490,12 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		return PTR_ERR(req);
 	ceph_mdsc_lease_release(mdsc, dir, dentry,
 				CEPH_LOCK_DN|CEPH_LOCK_ICONTENT);
-	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_ILINK);
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
-	/* hmm? */
-	if (!err) {
-		if (dentry->d_inode)
-			drop_nlink(dentry->d_inode);
-	}
-	if (err == -ENOENT) {
+	if (err == -ENOENT)
 		dout(10, "HMMM!\n");
-	}
 
 	return err;
 }
