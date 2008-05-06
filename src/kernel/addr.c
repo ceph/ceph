@@ -364,7 +364,7 @@ get_more_pages:
 				page = pagep[i];
 				if (i < wrote)
 					SetPageUptodate(page);
-				else if (rc < 0) {
+				else {
 					dout(20, "%p redirtying page %p\n", 
 					     inode, page);
 					redirty_page_for_writepage(wbc, page);
