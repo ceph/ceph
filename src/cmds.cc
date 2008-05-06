@@ -69,6 +69,7 @@ int main(int argc, const char **argv)
   rank.start();
   
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::fast_fail());
+  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::retry_forever());  // mds does its own timeout/markdown
   //rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::retry_forever());
 
   // start mds
