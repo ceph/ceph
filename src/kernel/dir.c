@@ -552,7 +552,6 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
-	dout(10, "nd flags %d chdir=%d\n", nd->flags, nd->flags & LOOKUP_CHDIR);
 
 	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
 		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
