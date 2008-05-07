@@ -449,7 +449,6 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
-	igrab(old_dentry->d_inode);
 
 	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
@@ -458,7 +457,6 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 	else if (req->r_reply_info.trace_numd == 0) {
 		/* no trace */
-		igrab(old_dentry->d_inode);
 		inc_nlink(old_dentry->d_inode);
 		d_instantiate(dentry, old_dentry->d_inode);
 	}
