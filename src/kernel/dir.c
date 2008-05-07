@@ -307,17 +307,6 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0);
 }
 
-static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
-			   struct nameidata *nd)
-{
-	int err;
-	dout(5, "create in dir %p dentry %p name '%.*s'\n",
-	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
-	BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-	err = ceph_lookup_open(dir, dentry, nd, mode);
-	return err;
-}
-
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 			  int mode, dev_t rdev)
 {
@@ -351,6 +340,23 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	if (err < 0)
 		d_drop(dentry);
 	return err;
+}
+
+static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
+			   struct nameidata *nd)
+{
+	int err;
+
+	dout(5, "create in dir %p dentry %p name '%.*s'\n",
+	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
+	if (nd) {
+		BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
+		err = ceph_lookup_open(dir, dentry, nd, mode);
+		return err;
+	}
+
+	/* fall back to mknod */
+	return ceph_mknod(dir, dentry, mode, 0);
 }
 
 static int ceph_symlink(struct inode *dir, struct dentry *dentry,
