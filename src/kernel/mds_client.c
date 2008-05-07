@@ -1584,12 +1584,6 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 		struct inode *inode = &cap->ci->vfs_inode;
 		int used, wanted;
 
-		__ceph_do_pending_vmtruncate(inode);
-
-		mutex_lock(&inode->i_mutex);
-                filemap_write_and_wait(inode->i_mapping);
-		mutex_unlock(&inode->i_mutex);
-
 		spin_lock(&inode->i_lock);
 		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
 			spin_unlock(&inode->i_lock);
