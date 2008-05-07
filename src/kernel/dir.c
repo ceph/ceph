@@ -270,9 +270,10 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 			     dentry, dentry->d_inode);
 			ceph_init_dentry(dentry);
 			if (dentry->d_inode) {
+				d_drop(dentry);
 				req->r_last_dentry = d_alloc(dentry->d_parent,
 							     &dentry->d_name);
-				d_drop(dentry);
+				d_rehash(req->r_last_dentry);
 			} else
 				d_add(dentry, NULL);
 		}
