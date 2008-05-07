@@ -599,14 +599,6 @@ retry_lookup:
 		dout(30, "calling d_lookup on parent=%p name=%.*s"
 		     " returned %p\n", parent, dname.len, dname.name, dn);
 
-		if (dn && dn->d_inode &&
-		    ceph_ino(dn->d_inode) !=
-		    le64_to_cpu(rinfo->dir_in[i].in->ino)) {
-			dout(10, " dn %p points to wrong inode %p\n",
-			     dn, dn->d_inode);
-			d_delete(dn);
-			goto retry_lookup;
-		}
 		if (!dn) {
 			dn = d_alloc(parent, &dname);
 			dout(40, "d_alloc %p/%.*s\n", parent,
@@ -616,28 +608,40 @@ retry_lookup:
 				return -1;
 			}
 			ceph_init_dentry(dn);
+		} else if (dn->d_inode &&
+			   ceph_ino(dn->d_inode) !=
+			   le64_to_cpu(rinfo->dir_in[i].in->ino)) {
+			dout(10, " dn %p points to wrong inode %p\n",
+			     dn, dn->d_inode);
+			d_delete(dn);
+			dput(dn);
+			goto retry_lookup;
 		}
 
 		/* inode */
 		if (dn->d_inode)
 			in = dn->d_inode;
 		else {
+			struct dentry *new;
 			in = ceph_get_inode(parent->d_sb,
 					    rinfo->dir_in[i].in->ino);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
 				return -1;
-			}
+			}			
+			if (!d_unhashed(dn))
+				d_drop(dn);
+			new = d_splice_alias(in, dn);
+			if (new)
+				dn = new;
 		}
+		BUG_ON(d_unhashed(dn));
+
 		if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
-			dout(30, "ceph_fill_inode badness\n");
-			return -1;
-		}
-		if (!dn->d_inode) {
-			d_instantiate(dn, in);
-			if (d_unhashed(dn))
-				d_rehash(dn);
+			dout(0, "ceph_fill_inode badness on %p\n", in);
+			dput(dn);
+			continue;
 		}
 		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i],
 					 req->r_session, req->r_from_time);
