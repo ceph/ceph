@@ -147,7 +147,9 @@ class FileLock : public SimpleLock {
   }
   bool can_rdlock_soon() {
     if (parent->is_auth())
-      return (state == LOCK_GLOCKL);
+      return
+	(state == LOCK_GLOCKL) ||
+	(state == LOCK_LOCK && xlock_by);
     else
       return false;
   }
