@@ -384,6 +384,8 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			iput(req->r_last_inode);
 		if (req->r_last_dentry)
 			dput(req->r_last_dentry);
+		if (req->r_old_dentry)
+			dput(req->r_old_dentry);
 		put_request_sessions(req);
 		kfree(req);
 	}
