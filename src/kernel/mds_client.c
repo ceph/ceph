@@ -1711,6 +1711,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		}
 		dname.hash = full_name_hash(dname.name, dname.len);
 		dentry = d_lookup(parent, &dname);
+		dput(parent);
 		if (!dentry)
 			goto release;
 		revoke_dentry_lease(dentry);
