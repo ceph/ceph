@@ -775,7 +775,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	spin_lock(&mdsc->lock);
 	session = __get_session(mdsc, mds);
 	if (session && mdsc->mdsmap)
-		session->s_ttl = jiffies + mdsc->mdsmap->m_session_autoclose;
+		session->s_ttl = jiffies + HZ*mdsc->mdsmap->m_session_autoclose;
 	spin_unlock(&mdsc->lock);
 
 	mutex_lock(&session->s_mutex);
