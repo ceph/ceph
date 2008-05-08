@@ -218,12 +218,15 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
-  uint64_t    size;
-  uint64_t    max_size; // client(s) are auth to write this much...
+  uint64_t   size;        // on directory, # dentries
+  uint64_t   max_size;    // client(s) are auth to write this much...
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  utime_t    rmtime;  // recursive mtime?
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+
+  // recursive accounting
+  uint64_t nested_size;       // \sum_{children}(size + nested_size)
+  utime_t  nested_ctime;      // \max_{children}(ctime, nested_ctime)
  
   // special stuff
   version_t version;           // auth only

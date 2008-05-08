@@ -118,6 +118,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_VERSIONLOCK_OFFSET = 5 + 5*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET = 5 + 6*SimpleLock::WAIT_BITS;
+  static const int WAIT_NESTEDLOCK_OFFSET = 5 + 7*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY_MASK	= (0xffffffff);
 
@@ -253,7 +254,8 @@ public:
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET)
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
+    nestedlock(this, CEPH_LOCK_INESTED, WAIT_NESTEDLOCK_OFFSET)
   {
     memset(&inode, 0, sizeof(inode));
     state = 0;  
@@ -340,7 +342,7 @@ public:
   FileLock   filelock;
   ScatterLock dirlock;
   SimpleLock xattrlock;
-
+  ScatterLock nestedlock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -350,9 +352,11 @@ public:
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
     case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
+    case CEPH_LOCK_INESTED: return &nestedlock;
     }
     return 0;
   }
+
   void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);

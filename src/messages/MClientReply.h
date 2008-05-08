@@ -101,13 +101,12 @@ struct DirStat {
 };
 
 struct InodeStat {
-  //inode_t inode;
   inodeno_t ino;
   version_t version;
   ceph_file_layout layout;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, mtime, atime, nested_ctime;
   unsigned mode, uid, gid, nlink, rdev;
-  loff_t size, max_size;
+  loff_t size, max_size, nested_size;
   version_t time_warp_seq;
   
   string  symlink;   // symlink content (if symlink)
@@ -138,6 +137,9 @@ struct InodeStat {
     max_size = e.max_size;
     rdev = e.rdev;
 
+    nested_ctime.decode_timeval(&e.nested_ctime);
+    nested_size = e.nested_size;
+
     int n = e.fragtree.nsplits;
     while (n) {
       ceph_frag_tree_split s;
@@ -165,6 +167,7 @@ struct InodeStat {
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
     in->inode.atime.encode_timeval(&e.atime);
+    in->inode.nested_ctime.encode_timeval(&e.nested_ctime);
     e.time_warp_seq = in->inode.time_warp_seq;
     e.mode = in->inode.mode;
     e.uid = in->inode.uid;
@@ -172,6 +175,7 @@ struct InodeStat {
     e.nlink = in->inode.nlink;
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
+    e.nested_size = in->inode.nested_size;
     e.rdev = in->inode.rdev;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
     ::encode(e, bl);

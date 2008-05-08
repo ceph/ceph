@@ -539,6 +539,11 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     ::encode(xattrs, bl);
     break;
   
+  case CEPH_LOCK_INESTED:
+    //_encode(inode.nested_ctime, bl);
+    //_encode(inode.nested_size, bl);
+    break;
+
   default:
     assert(0);
   }
@@ -609,6 +614,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IXATTR:
     ::decode(xattrs, p);
+    break;
+
+  case CEPH_LOCK_INESTED:
+    // ***
     break;
 
   default:
