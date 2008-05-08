@@ -348,42 +348,42 @@ class MDSMap {
 
   // serialize, unserialize
   void encode(bufferlist& bl) {
-    ::_encode(epoch, bl);
-    ::_encode(client_epoch, bl);
-    ::_encode(last_failure, bl);
-    ::_encode(created, bl);
-    ::_encode(anchortable, bl);
-    ::_encode(root, bl);
-    ::_encode(cap_bit_timeout, bl);
-    ::_encode(session_autoclose, bl);
-    ::_encode(max_mds, bl);
-    ::_encode(mds_state, bl);
-    ::_encode(mds_state_seq, bl);
-    ::_encode(mds_inst, bl);
-    ::_encode(mds_inc, bl);
-    ::_encode(standby, bl);
-    ::_encode(standby_for, bl);
-    ::_encode(standby_any, bl);
+    ::encode(epoch, bl);
+    ::encode(client_epoch, bl);
+    ::encode(last_failure, bl);
+    ::encode(created, bl);
+    ::encode(anchortable, bl);
+    ::encode(root, bl);
+    ::encode(cap_bit_timeout, bl);
+    ::encode(session_autoclose, bl);
+    ::encode(max_mds, bl);
+    ::encode(mds_state, bl);
+    ::encode(mds_state_seq, bl);
+    ::encode(mds_inst, bl);
+    ::encode(mds_inc, bl);
+    ::encode(standby, bl);
+    ::encode(standby_for, bl);
+    ::encode(standby_any, bl);
   }
   
   void decode(bufferlist& bl) {
-    int off = 0;
-    ::_decode(epoch, bl, off);
-    ::_decode(client_epoch, bl, off);
-    ::_decode(last_failure, bl, off);
-    ::_decode(created, bl, off);
-    ::_decode(anchortable, bl, off);
-    ::_decode(root, bl, off);
-    ::_decode(cap_bit_timeout, bl, off);
-    ::_decode(session_autoclose, bl, off);
-    ::_decode(max_mds, bl, off);
-    ::_decode(mds_state, bl, off);
-    ::_decode(mds_state_seq, bl, off);
-    ::_decode(mds_inst, bl, off);
-    ::_decode(mds_inc, bl, off);
-    ::_decode(standby, bl, off);
-    ::_decode(standby_for, bl, off);
-    ::_decode(standby_any, bl, off);
+    bufferlist::iterator p = bl.begin();
+    ::decode(epoch, p);
+    ::decode(client_epoch, p);
+    ::decode(last_failure, p);
+    ::decode(created, p);
+    ::decode(anchortable, p);
+    ::decode(root, p);
+    ::decode(cap_bit_timeout, p);
+    ::decode(session_autoclose, p);
+    ::decode(max_mds, p);
+    ::decode(mds_state, p);
+    ::decode(mds_state_seq, p);
+    ::decode(mds_inst, p);
+    ::decode(mds_inc, p);
+    ::decode(standby, p);
+    ::decode(standby_for, p);
+    ::decode(standby_any, p);
   }
 
 
