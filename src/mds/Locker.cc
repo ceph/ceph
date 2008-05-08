@@ -2673,7 +2673,7 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
   assert(lock->get_parent()->is_auth());  // or implement remote xlocks
 
   // others waiting?
-  lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
+  lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_RD, 0); 
 
   if (lock->get_parent()->is_auth())
     file_eval(lock);
