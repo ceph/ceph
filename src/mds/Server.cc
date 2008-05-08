@@ -600,7 +600,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     goto done;
 
  dentry:
-  ::_encode_simple(dn->get_name(), bl);
+  ::encode(dn->get_name(), bl);
   lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   numdn++;
   dout(20) << " trace added " << lmask << " " << *dn << dendl;
@@ -1812,7 +1812,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     // touch dn
     mdcache->lru.lru_touch(dn);
   }
-  ::_encode_simple(numfiles, dirbl);
+  ::encode(numfiles, dirbl);
   dirbl.claim_append(dnbl);
   
   // yay, reply
@@ -3295,8 +3295,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
 	  
 	  // imported caps
-	  ::_decode_simple(mdr->more()->imported_client_map, blp);
-	  ::_encode_simple(mdr->more()->imported_client_map, *client_map_bl);
+	  ::decode(mdr->more()->imported_client_map, blp);
+	  ::encode(mdr->more()->imported_client_map, *client_map_bl);
 	  prepare_force_open_sessions(mdr->more()->imported_client_map);
 
 	  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below

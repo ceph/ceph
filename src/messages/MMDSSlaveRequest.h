@@ -18,7 +18,6 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
-#include "include/encodable.h"
 
 class MMDSSlaveRequest : public Message {
  public:
@@ -105,35 +104,35 @@ public:
     Message(MSG_MDS_SLAVE_REQUEST),
     reqid(ri), op(o) { }
   void encode_payload() {
-    ::_encode(reqid, payload);
-    ::_encode(op, payload);
-    ::_encode(lock_type, payload);
-    object_info._encode(payload);
-    ::_encode_complex(authpins, payload);
+    ::encode(reqid, payload);
+    ::encode(op, payload);
+    ::encode(lock_type, payload);
+    ::encode(object_info, payload);
+    ::encode(authpins, payload);
     ::encode(srcdnpath, payload);
     ::encode(destdnpath, payload);
-    ::_encode(witnesses, payload);
-    ::_encode(now, payload);
-    ::_encode(inode_export, payload);
-    ::_encode(inode_export_v, payload);
-    ::_encode(srci_replica, payload);
-    ::_encode(stray, payload);
+    ::encode(witnesses, payload);
+    ::encode(now, payload);
+    ::encode(inode_export, payload);
+    ::encode(inode_export_v, payload);
+    ::encode(srci_replica, payload);
+    ::encode(stray, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(reqid, p);
-    ::_decode_simple(op, p);
-    ::_decode_simple(lock_type, p);
-    object_info._decode(p);
-    ::_decode_complex(authpins, p);
+    ::decode(reqid, p);
+    ::decode(op, p);
+    ::decode(lock_type, p);
+    ::decode(object_info, p);
+    ::decode(authpins, p);
     ::decode(srcdnpath, p);
     ::decode(destdnpath, p);
-    ::_decode_simple(witnesses, p);
-    ::_decode_simple(now, p);
-    ::_decode_simple(inode_export, p);
-    ::_decode_simple(inode_export_v, p);
-    ::_decode_simple(srci_replica, p);
-    ::_decode_simple(stray, p);
+    ::decode(witnesses, p);
+    ::decode(now, p);
+    ::decode(inode_export, p);
+    ::decode(inode_export_v, p);
+    ::decode(srci_replica, p);
+    ::decode(stray, p);
   }
 
   const char *get_type_name() { return "slave_request"; }

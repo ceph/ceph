@@ -18,7 +18,6 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
-#include "include/encodable.h"
 
 // sent from replica to auth
 
@@ -49,13 +48,33 @@ class MMDSCacheRejoin : public Message {
     int32_t linklock;
     int32_t dirfragtreelock;
     int32_t filelock;
-    __int32_t dirlock;
+    int32_t dirlock;
     inode_strong() {}
     inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0, int dl=0) : 
       caps_wanted(cw),
       nonce(n),
       authlock(a), linklock(l), dirfragtreelock(dft), filelock(f), dirlock(dl) { }
+    void encode(bufferlist &bl) const {
+      ::encode(caps_wanted, bl);
+      ::encode(nonce, bl);
+      ::encode(authlock, bl);
+      ::encode(linklock, bl);
+      ::encode(dirfragtreelock, bl);
+      ::encode(filelock, bl);
+      ::encode(dirlock, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(caps_wanted, bl);
+      ::decode(nonce, bl);
+      ::decode(authlock, bl);
+      ::decode(linklock, bl);
+      ::decode(dirfragtreelock, bl);
+      ::decode(filelock, bl);
+      ::decode(dirlock, bl);
+    }
   };
+  WRITE_CLASS_ENCODERS(inode_strong)
+
   struct inode_full {
     inode_t inode;
     string symlink;
@@ -64,24 +83,35 @@ class MMDSCacheRejoin : public Message {
     inode_full(const inode_t& i, const string& s, const fragtree_t& f) :
       inode(i), symlink(s), dirfragtree(f) {}
 
-    void _decode(bufferlist::iterator& p) {
-      ::_decode_simple(inode, p);
-      ::_decode_simple(symlink, p);
+    void decode(bufferlist::iterator& p) {
+      ::decode(inode, p);
+      ::decode(symlink, p);
       dirfragtree._decode(p);
     }
-    void _encode(bufferlist& bl) const {
-      ::_encode(inode, bl);
-      ::_encode(symlink, bl);
+    void encode(bufferlist& bl) const {
+      ::encode(inode, bl);
+      ::encode(symlink, bl);
       dirfragtree._encode(bl);
     }
   };
+  WRITE_CLASS_ENCODERS(inode_full)
 
   struct dirfrag_strong {
     int32_t nonce;
     int8_t  dir_rep;
     dirfrag_strong() {}
     dirfrag_strong(int n, int dr) : nonce(n), dir_rep(dr) {}
+    void encode(bufferlist &bl) const {
+      ::encode(nonce, bl);
+      ::encode(dir_rep, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(nonce, bl);
+      ::decode(dir_rep, bl);
+    }
   };
+  WRITE_CLASS_ENCODERS(dirfrag_strong)
+
   struct dn_strong {
     inodeno_t ino;
     inodeno_t remote_ino;
@@ -95,13 +125,35 @@ class MMDSCacheRejoin : public Message {
     bool is_primary() { return ino > 0; }
     bool is_remote() { return remote_ino > 0; }
     bool is_null() { return ino == 0 && remote_ino == 0; }
+    void encode(bufferlist &bl) const {
+      ::encode(ino, bl);
+      ::encode(remote_ino, bl);
+      ::encode(remote_d_type, bl);
+      ::encode(nonce, bl);
+      ::encode(lock, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(ino, bl);
+      ::decode(remote_ino, bl);
+      ::decode(remote_d_type, bl);
+      ::decode(nonce, bl);
+      ::decode(lock, bl);
+    }
   };
+  WRITE_CLASS_ENCODERS(dn_strong)
 
   struct dn_weak {
     inodeno_t ino;
     dn_weak() : ino(0) {}
     dn_weak(inodeno_t pi) : ino(pi) {}
+    void encode(bufferlist &bl) const {
+      ::encode(ino, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(ino, bl);
+    }
   };
+  WRITE_CLASS_ENCODERS(dn_weak)
 
   // -- data --
   int32_t op;
@@ -191,40 +243,46 @@ class MMDSCacheRejoin : public Message {
 
   // -- encoding --
   void encode_payload() {
-    ::_encode(op, payload);
-    ::_encode(strong_inodes, payload);
-    ::_encode_complex(full_inodes, payload);
-    ::_encode(authpinned_inodes, payload);
-    ::_encode(xlocked_inodes, payload);
-    ::_encode(cap_export_bl, payload);
-    ::_encode(strong_dirfrags, payload);
-    ::_encode(weak, payload);
-    ::_encode(weak_inodes, payload);
-    ::_encode(strong_dentries, payload);
-    ::_encode(authpinned_dentries, payload);
-    ::_encode(xlocked_dentries, payload);
+    ::encode(op, payload);
+    ::encode(strong_inodes, payload);
+    ::encode(full_inodes, payload);
+    ::encode(authpinned_inodes, payload);
+    ::encode(xlocked_inodes, payload);
+    ::encode(cap_export_bl, payload);
+    ::encode(strong_dirfrags, payload);
+    ::encode(weak, payload);
+    ::encode(weak_inodes, payload);
+    ::encode(strong_dentries, payload);
+    ::encode(authpinned_dentries, payload);
+    ::encode(xlocked_dentries, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(op, p);
-    ::_decode_simple(strong_inodes, p);
-    ::_decode_complex(full_inodes, p);
-    ::_decode_simple(authpinned_inodes, p);
-    ::_decode_simple(xlocked_inodes, p);
-    ::_decode_simple(cap_export_bl, p);
+    ::decode(op, p);
+    ::decode(strong_inodes, p);
+    ::decode(full_inodes, p);
+    ::decode(authpinned_inodes, p);
+    ::decode(xlocked_inodes, p);
+    ::decode(cap_export_bl, p);
     if (cap_export_bl.length()) {
       bufferlist::iterator q = cap_export_bl.begin();
-      ::_decode_simple(cap_exports, q);
-      ::_decode_simple(cap_export_paths, q);
+      ::decode(cap_exports, q);
+      ::decode(cap_export_paths, q);
     }
-    ::_decode_simple(strong_dirfrags, p);
-    ::_decode_simple(weak, p);
-    ::_decode_simple(weak_inodes, p);
-    ::_decode_simple(strong_dentries, p);
-    ::_decode_simple(authpinned_dentries, p);
-    ::_decode_simple(xlocked_dentries, p);
+    ::decode(strong_dirfrags, p);
+    ::decode(weak, p);
+    ::decode(weak_inodes, p);
+    ::decode(strong_dentries, p);
+    ::decode(authpinned_dentries, p);
+    ::decode(xlocked_dentries, p);
   }
 
 };
+
+WRITE_CLASS_ENCODERS(MMDSCacheRejoin::inode_strong)
+WRITE_CLASS_ENCODERS(MMDSCacheRejoin::inode_full)
+WRITE_CLASS_ENCODERS(MMDSCacheRejoin::dirfrag_strong)
+WRITE_CLASS_ENCODERS(MMDSCacheRejoin::dn_strong)
+WRITE_CLASS_ENCODERS(MMDSCacheRejoin::dn_weak)
 
 #endif

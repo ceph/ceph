@@ -500,8 +500,8 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   }
 
   __u16 numi, numd;
-  ::_decode_simple(numi, p);
-  ::_decode_simple(numd, p);
+  ::decode(numi, p);
+  ::decode(numd, p);
   dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries" << dendl;
 
   // decode
@@ -522,15 +522,15 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
  inode:
   if (!ileft) goto done;
   ileft--;
-  ist[ileft]._decode(p);
-  ::_decode_simple(ilease[ileft], p);
+  ist[ileft].decode(p);
+  ::decode(ilease[ileft], p);
 
  dentry:
   if (!dleft) goto done;
   dleft--;
-  ::_decode_simple(dname[dleft], p);
-  ::_decode_simple(dlease[dleft], p);
-  dst[dleft]._decode(p);
+  ::decode(dname[dleft], p);
+  ::decode(dlease[dleft], p);
+  dst[dleft].decode(p);
   goto inode;
 
  done:
@@ -2529,15 +2529,15 @@ int Client::_readdir_get_frag(DirResult *dirp)
       // dirstat
       DirStat dst(p);
       __u32 numdn;
-      ::_decode_simple(numdn, p);
+      ::decode(numdn, p);
 
       string dname;
       LeaseStat dlease, ilease;
       while (numdn) {
-	::_decode_simple(dname, p);
-	::_decode_simple(dlease, p);
+	::decode(dname, p);
+	::decode(dlease, p);
 	InodeStat ist(p);
-	::_decode_simple(ilease, p);
+	::decode(ilease, p);
 
 	// cache
 	Inode *in = this->insert_dentry_inode(dir, dname, &dlease, &ist, &ilease, from);

@@ -293,7 +293,6 @@ noinst_HEADERS = \
 	include/statlite.h\
 	include/triple.h\
 	include/uofs.h\
-	include/encodable.h\
 	include/byteorder.h\
 	include/inttypes.h\
 	include/utime.h\

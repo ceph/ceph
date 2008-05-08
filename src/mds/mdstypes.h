@@ -56,6 +56,17 @@ struct metareqid_t {
   metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
 };
 
+static inline void encode(const metareqid_t &r, bufferlist &bl)
+{
+  ::encode(r.name, bl);
+  ::encode(r.tid, bl);
+}
+static inline void decode( metareqid_t &r, bufferlist::iterator &p)
+{
+  ::decode(r.name, p);
+  ::decode(r.tid, p);
+}
+
 inline ostream& operator<<(ostream& out, const metareqid_t& r) {
   return out << r.name << ":" << r.tid;
 }
@@ -426,22 +437,19 @@ public:
 
   MDSCacheObjectInfo() : ino(0) {}
 
-  void _encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const {
     ::encode(ino, bl);
     ::encode(dirfrag, bl);
     ::encode(dname, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(ino, bl, off);
-    ::_decode(dirfrag, bl, off);
-    ::_decode(dname, bl, off);
-  }
-  void _decode(bufferlist::iterator& p) {
+  void decode(bufferlist::iterator& p) {
     ::decode(ino, p);
     ::decode(dirfrag, p);
     ::decode(dname, p);
   }
 };
+
+WRITE_CLASS_ENCODERS(MDSCacheObjectInfo)
 
 
 class MDSCacheObject {
