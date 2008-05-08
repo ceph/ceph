@@ -101,6 +101,23 @@ struct inode_caps_reconnect_t {
     wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
 };
 
+static inline void encode(const inode_caps_reconnect_t &ic, bufferlist &bl)
+{
+  ::encode(ic.wanted, bl);
+  ::encode(ic.issued, bl);
+  ::encode(ic.size, bl);
+  ::encode(ic.mtime, bl);
+  ::encode(ic.atime, bl);
+}
+static inline void decode(inode_caps_reconnect_t &ic, bufferlist::iterator &p)
+{
+  ::decode(ic.wanted, p);
+  ::decode(ic.issued, p);
+  ::decode(ic.size, p);
+  ::decode(ic.mtime, p);
+  ::decode(ic.atime, p);
+}
+
 
 // ================================================================
 // dir frag
@@ -186,6 +203,16 @@ class dirfrag_load_vec_t {
 public:
   static const int NUM = 5;
   DecayCounter vec[NUM];
+
+  void encode(bufferlist &bl) const {
+    for (int i=0; i<NUM; i++)
+      ::encode(vec[i], bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    for (int i=0; i<NUM; i++)
+      ::decode(vec[i], p);
+  }
+
   DecayCounter &get(int t) { 
     assert(t < NUM);
     return vec[t]; 
@@ -215,6 +242,8 @@ public:
       4*vec[META_POP_STORE].get_last();
   }
 };
+
+WRITE_CLASS_ENCODERS(dirfrag_load_vec_t)
 
 inline dirfrag_load_vec_t& operator+=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
 {
@@ -247,6 +276,8 @@ inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 	     << " " << dl.meta_load(now)
 	     << "]";
 }
+
+
 
 
 

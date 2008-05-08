@@ -343,7 +343,7 @@ private:
 
     if (inc.crush.length()) {
       bufferlist::iterator blp = inc.crush.begin();
-      crush._decode(blp);
+      crush.decode(blp);
     }
 
     // nope, incremental.
@@ -416,7 +416,7 @@ private:
     ::encode(pg_swap_primary, blist);
     
     bufferlist cbl;
-    crush._encode(cbl);
+    crush.encode(cbl);
     ::encode(cbl, blist);
   }
   
@@ -441,7 +441,7 @@ private:
     bufferlist cbl;
     ::decode(cbl, p);
     bufferlist::iterator cblp = cbl.begin();
-    crush._decode(cblp);
+    crush.decode(cblp);
   }
  
 

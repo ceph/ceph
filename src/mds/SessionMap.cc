@@ -132,9 +132,9 @@ void SessionMap::_save_finish(version_t v)
 
 void SessionMap::encode(bufferlist& bl)
 {
-  ::_encode_simple(version, bl);
+  ::encode(version, bl);
   __u32 n = session_map.size();
-  ::_encode_simple(n, bl);
+  ::encode(n, bl);
   for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
        p != session_map.end(); 
        ++p) 
@@ -145,9 +145,9 @@ void SessionMap::decode(bufferlist::iterator& p)
 {
   utime_t now = g_clock.now();
 
-  ::_decode_simple(version, p);
+  ::decode(version, p);
   __u32 n;
-  ::_decode_simple(n, p);
+  ::decode(n, p);
   while (n--) {
     Session *s = new Session;
     s->_decode(p);

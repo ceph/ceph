@@ -132,14 +132,14 @@ int main(int argc, const char **argv)
     CrushWrapper cw;
     //cw._decode(cbl,    FIXME
     bufferlist::iterator p = cbl.begin();
-    osdmap.crush._decode(p);
+    osdmap.crush.decode(p);
     cout << me << ": imported crush map from " << import_crush << std::endl;
     modified = true;
   }
 
   if (export_crush) {
     bufferlist cbl;
-    osdmap.crush._encode(cbl);
+    osdmap.crush.encode(cbl);
     r = cbl.write_file(export_crush);
     if (r < 0) {
       cerr << me << ": error writing crush map to " << import_crush << std::endl;

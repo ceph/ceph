@@ -325,7 +325,7 @@ bool OSDMonitor::should_propose(double& delay)
       if (g_conf.osd_auto_weight) {
 	CrushWrapper crush;
 	OSDMap::build_simple_crush_map(crush, osdmap.get_max_osd(), osd_weight);
-	crush._encode(pending_inc.crush);
+	crush.encode(pending_inc.crush);
       }
       return true;
     } else 
@@ -758,7 +758,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "getcrushmap") {
-      osdmap.crush._encode(rdata);
+      osdmap.crush.encode(rdata);
       ss << "got crush map from osdmap epoch " << osdmap.get_epoch();
       r = 0;
     }

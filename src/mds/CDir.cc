@@ -1284,18 +1284,18 @@ void CDir::_committed(version_t v)
 
 void CDir::encode_export(bufferlist& bl)
 {
-  ::_encode_simple(version, bl);
-  ::_encode_simple(committed_version, bl);
-  ::_encode_simple(committed_version_equivalent, bl);
+  ::encode(version, bl);
+  ::encode(committed_version, bl);
+  ::encode(committed_version_equivalent, bl);
 
-  ::_encode_simple(state, bl);
-  ::_encode_simple(dir_rep, bl);
+  ::encode(state, bl);
+  ::encode(dir_rep, bl);
 
-  ::_encode_simple(pop_me, bl);
-  ::_encode_simple(pop_auth_subtree, bl);
+  ::encode(pop_me, bl);
+  ::encode(pop_auth_subtree, bl);
 
-  ::_encode_simple(dir_rep_by, bl);  
-  ::_encode_simple(replica_map, bl);
+  ::encode(dir_rep_by, bl);  
+  ::encode(replica_map, bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -1310,26 +1310,26 @@ void CDir::finish_export(utime_t now)
 
 void CDir::decode_import(bufferlist::iterator& blp)
 {
-  ::_decode_simple(version, blp);
-  ::_decode_simple(committed_version, blp);
-  ::_decode_simple(committed_version_equivalent, blp);
+  ::decode(version, blp);
+  ::decode(committed_version, blp);
+  ::decode(committed_version_equivalent, blp);
   committing_version = committed_version;
   projected_version = version;
 
   unsigned s;
-  ::_decode_simple(s, blp);
+  ::decode(s, blp);
   state &= MASK_STATE_IMPORT_KEPT;
   state |= (s & MASK_STATE_EXPORTED);
   if (is_dirty()) get(PIN_DIRTY);
 
-  ::_decode_simple(dir_rep, blp);
+  ::decode(dir_rep, blp);
 
-  ::_decode_simple(pop_me, blp);
-  ::_decode_simple(pop_auth_subtree, blp);
+  ::decode(pop_me, blp);
+  ::decode(pop_auth_subtree, blp);
   pop_auth_subtree_nested += pop_auth_subtree;
 
-  ::_decode_simple(dir_rep_by, blp);
-  ::_decode_simple(replica_map, blp);
+  ::decode(dir_rep_by, blp);
+  ::decode(replica_map, blp);
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
   replica_nonce = 0;  // no longer defined
