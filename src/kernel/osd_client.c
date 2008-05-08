@@ -795,6 +795,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	po = off & ~PAGE_MASK;
 	rc = -EFAULT;
 	for (i = 0; i < nr_pages; i++) {
+		int bad;
 		req->r_pages[i] = alloc_page(GFP_NOFS);
 		if (req->r_pages[i] == NULL) {
 			req->r_nr_pages = i+1;
