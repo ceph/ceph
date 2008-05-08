@@ -52,15 +52,15 @@ public:
   }
   
   void encode_payload() {
-    ::_encode(op, payload);
-    ::_encode(epoch, payload);
-    ::_encode(monmap_bl, payload);
+    ::encode(op, payload);
+    ::encode(epoch, payload);
+    ::encode(monmap_bl, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(op, payload, off);
-    ::_decode(epoch, payload, off);
-    ::_decode(monmap_bl, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(op, p);
+    ::decode(epoch, p);
+    ::decode(monmap_bl, p);
   }
   
 };

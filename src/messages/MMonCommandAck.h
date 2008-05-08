@@ -32,14 +32,13 @@ class MMonCommandAck : public Message {
   }
   
   void encode_payload() {
-    payload.append((char*)&r, sizeof(r));
-    ::_encode(rs, payload);
+    ::encode(r, payload);
+    ::encode(rs, payload);
   }
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(r), (char*)&r);
-    off += sizeof(r);
-    ::_decode(rs, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(r, p);
+    ::decode(rs, p);
   }
 };
 

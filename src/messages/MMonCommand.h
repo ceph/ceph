@@ -42,15 +42,15 @@ class MMonCommand : public Message {
   }
   
   void encode_payload() {
-    ::_encode(fsid, payload);
-    ::_encode(inst, payload);
-    ::_encode(cmd, payload);
+    ::encode(fsid, payload);
+    ::encode(inst, payload);
+    ::encode(cmd, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(fsid, payload, off);
-    ::_decode(inst, payload, off);
-    ::_decode(cmd, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
+    ::decode(inst, p);
+    ::decode(cmd, p);
   }
 };
 
