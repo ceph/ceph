@@ -286,6 +286,7 @@ md_config_t g_conf = {
   mds_cap_timeout: 100,       // cap bits time out if client idle
   mds_session_autoclose: 300, // autoclose idle session 
   mds_client_lease: 100,
+  mds_reconnect_timeout: 30,  // seconds to wait for clients during mds restart
 
   mds_tick_interval: 5,
 

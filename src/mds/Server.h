@@ -70,7 +70,7 @@ public:
   void process_reconnected_caps();
   void client_reconnect_failure(int from);
   void reconnect_gather_finish();
-
+  void reconnect_tick();
   
   // -- requests --
   void handle_client_request(MClientRequest *m);
