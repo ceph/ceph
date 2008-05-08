@@ -28,7 +28,18 @@ struct osd_reqid_t {
   int32_t       inc;  // incarnation
   osd_reqid_t() : tid(0), inc(0) {}
   osd_reqid_t(const entity_name_t& a, int i, tid_t t) : name(a), tid(t), inc(i) {}
+  void encode(bufferlist &bl) const {
+    ::encode(name, bl);
+    ::encode(tid, bl);
+    ::encode(inc, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(name, bl);
+    ::decode(tid, bl);
+    ::decode(inc, bl);
+  }
 };
+WRITE_CLASS_ENCODERS(osd_reqid_t)
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;

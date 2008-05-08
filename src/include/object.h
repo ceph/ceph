@@ -26,6 +26,8 @@ using namespace __gnu_cxx;
 
 #include "hash.h"
 
+#include "encoding.h"
+
 typedef uint32_t objectrev_t;
 
 struct object_t {
@@ -52,7 +54,23 @@ struct object_t {
     oid.rev = rev;
     return oid;
   }
+  void encode(bufferlist &bl) const {
+    ::encode(ino, bl);
+    ::encode(bno, bl);
+    ::encode(rev, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    __u64 i;
+    __u32 b, r;
+    ::decode(i, bl);
+    ::decode(b, bl);
+    ::decode(r, bl);
+    ino = i;
+    bno = b;
+    rev = r;
+  }
 } __attribute__ ((packed));
+WRITE_CLASS_ENCODERS(object_t)
 
 inline bool operator==(const object_t l, const object_t r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
