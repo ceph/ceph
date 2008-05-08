@@ -105,6 +105,7 @@ struct InodeStat {
   utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
+  version_t time_warp_seq;
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
@@ -124,6 +125,7 @@ struct InodeStat {
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
+    time_warp_seq = e.time_warp_seq;
     mode = e.mode;
     uid = e.uid;
     gid = e.gid;
@@ -155,6 +157,7 @@ struct InodeStat {
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
     in->inode.atime.encode_timeval(&e.atime);
+    e.time_warp_seq = in->inode.time_warp_seq;
     e.mode = in->inode.mode;
     e.uid = in->inode.uid;
     e.gid = in->inode.gid;

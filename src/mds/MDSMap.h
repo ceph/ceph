@@ -129,6 +129,10 @@ class MDSMap {
     session_autoclose = (int)g_conf.mds_session_autoclose;
   }
 
+  utime_t get_cap_timeout() {
+    return utime_t(cap_bit_timeout,0);
+  }
+  
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 

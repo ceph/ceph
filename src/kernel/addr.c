@@ -1,9 +1,11 @@
 
+#include <linux/backing-dev.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/writeback.h>	/* generic_writepages */
 #include <linux/pagevec.h>
+#include <linux/task_io_accounting_ops.h>
 
 int ceph_debug_addr = -1;
 #define DOUT_VAR ceph_debug_addr
@@ -12,31 +14,109 @@ int ceph_debug_addr = -1;
 
 #include "osd_client.h"
 
+
+static int ceph_set_page_dirty(struct page *page)
+{
+	struct address_space *mapping = page->mapping;
+	struct ceph_inode_info *ci;
+
+	if (unlikely(!mapping))
+		return !TestSetPageDirty(page);
+
+	if (TestSetPageDirty(page)) {
+		dout(20, "%p set_page_dirty %p -- already dirty\n", 
+		     mapping->host, page);
+		return 0;
+	}
+
+	write_lock_irq(&mapping->tree_lock);
+	if (page->mapping) {	/* Race with truncate? */
+		WARN_ON_ONCE(!PageUptodate(page));
+
+		if (mapping_cap_account_dirty(mapping)) {
+			__inc_zone_page_state(page, NR_FILE_DIRTY);
+			__inc_bdi_stat(mapping->backing_dev_info,
+					BDI_RECLAIMABLE);
+			task_io_account_write(PAGE_CACHE_SIZE);
+		}
+		radix_tree_tag_set(&mapping->page_tree,
+				page_index(page), PAGECACHE_TAG_DIRTY);
+
+		ci = ceph_inode(mapping->host);
+		atomic_inc(&ci->i_wrbuffer_ref);
+		/*
+		 * set PagePrivate so that we get invalidatepage callback
+		 * on truncate for proper dirty page accounting for mmap
+		 */
+		SetPagePrivate(page);
+		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
+		     mapping->host, page,
+		     atomic_read(&ci->i_wrbuffer_ref)-1,
+		     atomic_read(&ci->i_wrbuffer_ref));
+	} else
+		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
+	write_unlock_irq(&mapping->tree_lock);
+	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
+
+	return 1;
+}
+
+static void ceph_invalidatepage(struct page *page, unsigned long offset)
+{
+	struct ceph_inode_info *ci;
+
+	BUG_ON(!PageLocked(page));
+	if (offset == 0)
+		ClearPageChecked(page);
+	if (!PageDirty(page))
+		return;
+	if (!page->mapping)
+		return;
+	ci = ceph_inode(page->mapping->host);
+	if (offset == 0) {
+		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
+		     &ci->vfs_inode, page, page->index, offset);
+		atomic_dec(&ci->i_wrbuffer_ref);
+		ClearPagePrivate(page);
+	} else
+		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
+		     &ci->vfs_inode, page, page->index);
+}
+
+static int ceph_releasepage(struct page *page, gfp_t g)
+{
+	struct inode *inode = page->mapping ? page->mapping->host:0;
+	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
+	WARN_ON(PageDirty(page));
+	ClearPagePrivate(page);
+	return 0;
+}
+
+
 static int ceph_readpage(struct file *filp, struct page *page)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
-	void *kaddr;
 	int err = 0;
 
-	dout(10, "ceph_readpage inode %p file %p page %p index %lu\n",
+	dout(10, "readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
-	kaddr = kmap(page);
 	err = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
-	if (err < 0)
+	if (unlikely(err < 0))
 		goto out;
 
-	if (err < PAGE_CACHE_SIZE) {
+	if (unlikely(err < PAGE_CACHE_SIZE)) {
+		void *kaddr = kmap_atomic(page, KM_USER0);
 		dout(10, "readpage zeroing tail %d bytes of page %p\n",
 		     (int)PAGE_CACHE_SIZE - err, page);
 		memset(kaddr + err, 0, PAGE_CACHE_SIZE - err);
+		kunmap_atomic(kaddr, KM_USER0);
 	}
 	SetPageUptodate(page);
 
 out:
-	kunmap(page);
 	unlock_page(page);
 	return err;
 }
@@ -83,7 +163,6 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 			continue;
 		}
 		dout(10, "readpages adding page %p\n", page);
-		kunmap(page);
 		flush_dcache_page(page);
 		SetPageUptodate(page);
 		unlock_page(page);
@@ -132,13 +211,15 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 				   page_off, len, &page, 1);
 	if (err >= 0) {
 		if (was_dirty) {
-			dout(10, "cleaned page %p\n", page);
+			dout(20, "cleaned page %p\n", page);
 			ceph_put_wrbuffer_cap_refs(ci, 1);
 		}
 		SetPageUptodate(page);
 		err = 0;  /* vfs expects us to return 0 */
-	} else
-		redirty_page_for_writepage(wbc, page);  /* is this right?? */
+	} else {
+		wbc->pages_skipped++;
+		ceph_set_page_dirty(page);
+	}
 	unlock_page(page);
 	end_page_writeback(page);
 	page_cache_release(page);
@@ -231,10 +312,12 @@ retry:
 		struct page *page, **pagep;
 		int pvec_pages, locked_pages;
 		int want;
+		int cleaned;
 
 		pagep = pages;
 		next = 0;
 		locked_pages = 0;
+		cleaned = 0;
 
 get_more_pages:
 		want = min(end - index,
@@ -243,51 +326,66 @@ get_more_pages:
 		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
+		dout(20, "got %d\n", pvec_pages);
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
-			
+			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);
-			else if (TestSetPageLocked(page))
+			else if (TestSetPageLocked(page)) {
+				dout(20, "couldn't TestSetPageLocked %p\n", page);
 				break;
+			}
 
 			/* only dirty pages, or wrbuffer accounting breaks! */
 			if (unlikely(!PageDirty(page)) ||
 			    unlikely(page->mapping != mapping)) {
+				dout(20, "!dirty or !mapping %p\n", page);
 				unlock_page(page);
 				break;
 			}
 			if (!wbc->range_cyclic && page->index > end) {
+				dout(20, "end of range %p\n", page);
 				done = 1;
 				unlock_page(page);
 				break;
 			}
 			if (next && (page->index != next)) {
 				/* Not next consecutive page */
+				dout(20, "not consecutive %p\n", page);
 				unlock_page(page);
 				break;
 			}
-			if (wbc->sync_mode != WB_SYNC_NONE)
+			if (wbc->sync_mode != WB_SYNC_NONE) {
+				dout(20, "waiting on writeback %p\n", page);
 				wait_on_page_writeback(page);
+			}
 
-			if (PageWriteback(page) ||
-			    !clear_page_dirty_for_io(page)) {
+			if (page_offset(page) >= i_size_read(inode)) {
+				dout(20, "past eof %p\n", page);
+				done = 1;
+				unlock_page(page);
+				break;
+			}
+
+			if (PageWriteback(page)) {
+				dout(20, "%p under writeback\n", page);
+				unlock_page(page);
+				break;
+			}
+			if (!clear_page_dirty_for_io(page)) {
+				dout(20, "%p !clear_page_dirty_for_io\n", page);
 				unlock_page(page);
 				break;
 			}
 
 			/* ok */
 			set_page_writeback(page);
+			cleaned++;
+			ClearPagePrivate(page);
 
-			if (page_offset(page) >= i_size_read(inode)) {
-				done = 1;
-				unlock_page(page);
-				end_page_writeback(page);
-				break;
-			}
-
-			dout(50, "writepages locked page %p index %lu\n",
-			     page, page->index);
+			dout(20, "%p locked+cleaned page %p idx %lu\n",
+			     inode, page, page->index);
 			
 			if (pages)
 				pages[locked_pages] = page;
@@ -297,13 +395,12 @@ get_more_pages:
 			next = page->index + 1;
 		}
 
-		if (locked_pages == 0)
-			break;
-
-		if (pages) {
+		if (pages && i) {
 			int j;
+			BUG_ON(!locked_pages);
+
 			if (pvec_pages && i == pvec_pages &&
-			    locked_pages && locked_pages < max_pages) {
+			    locked_pages < max_pages) {
 				dout(50, "reached end pvec, trying for more\n");
 				pagevec_reinit(&pvec);
 				goto get_more_pages;
@@ -346,13 +443,18 @@ get_more_pages:
 				page = pagep[i];
 				if (i < wrote)
 					SetPageUptodate(page);
-				else if (rc < 0)
-					redirty_page_for_writepage(wbc, page);
+				else {
+					dout(20, "%p redirtying page %p\n", 
+					     inode, page);
+					wbc->pages_skipped++;
+					ceph_set_page_dirty(page);
+				}
 				dout(50, "unlocking %d %p\n", i, page);
 				unlock_page(page);
 				end_page_writeback(page);
 			}
-			ceph_put_wrbuffer_cap_refs(ci, wrote);
+			dout(20, "%p cleaned %d pages\n", inode, cleaned);
+			ceph_put_wrbuffer_cap_refs(ci, cleaned);
 
 			/* continue? */
 			index = next;
@@ -368,6 +470,9 @@ get_more_pages:
 		}
 		dout(50, "pagevec_release on %d pages\n", (int)pvec.nr);
 		pagevec_release(&pvec);
+
+		if (locked_pages == 0)
+			break;
 	}
 
 	if (should_loop && !done) {
@@ -401,6 +506,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
 	loff_t page_off = pos & PAGE_MASK;
 	int pos_in_page = pos & ~PAGE_MASK;
+	int end_in_page = pos_in_page + len;
 	loff_t i_size;
 	int r;
 
@@ -424,7 +530,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	i_size = inode->i_size;   /* caller holds i_mutex */
 	if (page_off >= i_size ||
 	    (pos_in_page == 0 && (pos+len) >= i_size)) {
-		simple_prepare_write(file, page, pos_in_page, pos_in_page+len);
+		simple_prepare_write(file, page, pos_in_page, end_in_page);
 		return 0;
 	}
 
@@ -437,9 +543,18 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	if (r < 0)
 		return r;
 	if (r < pos_in_page) {
-		/* we didn't read up to our write start pos, zero the gap */
 		void *kaddr = kmap_atomic(page, KM_USER1);
+		dout(20, "write_begin zeroing pre %d~%d\n", r, pos_in_page-r);
 		memset(kaddr+r, 0, pos_in_page-r);
+		flush_dcache_page(page);
+		kunmap_atomic(kaddr, KM_USER1);
+	}
+	end_in_page = pos_in_page + len;
+	if (end_in_page < PAGE_SIZE && r < PAGE_SIZE) {
+		void *kaddr = kmap_atomic(page, KM_USER1);
+		dout(20, "write_begin zeroing post %d~%d\n", end_in_page,
+		     (int)PAGE_SIZE - end_in_page);
+		memset(kaddr+end_in_page, 0, PAGE_SIZE-end_in_page);
 		flush_dcache_page(page);
 		kunmap_atomic(kaddr, KM_USER1);
 	}
@@ -476,11 +591,6 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
 
-	if (!PageDirty(page)) {
-		dout(10, "dirtying page %p\n", page);
-		ceph_take_cap_refs(ceph_inode(inode), CEPH_CAP_WRBUFFER);
-	} else
-		dout(10, "page %p already dirty\n", page);
 	set_page_dirty(page);
 
 	unlock_page(page);
@@ -498,4 +608,7 @@ const struct address_space_operations ceph_aops = {
 	.writepages = ceph_writepages,
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
+	.set_page_dirty = ceph_set_page_dirty,
+	.invalidatepage = ceph_invalidatepage,
+	.releasepage = ceph_releasepage,
 };

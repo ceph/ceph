@@ -733,7 +733,7 @@ static int read_message_partial(struct ceph_connection *con)
 		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
 		if (ret < 0) {
 			dout(10, "prepare_pages failed, skipping payload\n");
-			con->in_base_pos = -data_len; /* skip payload */
+			con->in_base_pos = -data_len - sizeof(m->footer);
 			ceph_msg_put(con->in_msg);
 			con->in_msg = 0;
 			con->in_tag = CEPH_MSGR_TAG_READY;
@@ -745,11 +745,22 @@ static int read_message_partial(struct ceph_connection *con)
 	while (con->in_msg_pos.data_pos < data_len) {
 		left = min((int)(data_len - con->in_msg_pos.data_pos),
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
-		//p = kmap_atomic(m->pages[con->in_msg_pos.page], KM_USER1);
-		p = page_address(m->pages[con->in_msg_pos.page]);
+		mutex_lock(&m->page_mutex);
+		if (!m->pages) {
+			dout(10, "pages revoked during msg read\n");
+			mutex_unlock(&m->page_mutex);
+			con->in_base_pos = con->in_msg_pos.data_pos - data_len -
+				sizeof(m->footer);
+			ceph_msg_put(m);
+			con->in_msg = 0;
+			con->in_tag = CEPH_MSGR_TAG_READY;
+			return 0;
+		}
+		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
-		//kunmap_atomic(p, KM_USER1);
+		kunmap(m->pages[con->in_msg_pos.page]);
+		mutex_unlock(&m->page_mutex);
 		if (ret <= 0)
 			return ret;
 		con->in_msg_pos.data_pos += ret;
@@ -956,6 +967,7 @@ static void process_connect(struct ceph_connection *con)
 		     le32_to_cpu(con->in_connect_seq));
 		reset_connection(con);
 		prepare_write_connect_retry(con->msgr, con);
+		prepare_read_connect(con);
 		con->msgr->peer_reset(con->msgr->parent, &con->peer_name);
 		break;
 	case CEPH_MSGR_TAG_RETRY:
@@ -965,6 +977,7 @@ static void process_connect(struct ceph_connection *con)
 		     le32_to_cpu(con->in_connect_seq));
 		con->connect_seq = le32_to_cpu(con->in_connect_seq);
 		prepare_write_connect_retry(con->msgr, con);
+		prepare_read_connect(con);
 		break;
 	case CEPH_MSGR_TAG_WAIT:
 		dout(10, "process_connect peer connecting WAIT\n");
@@ -1170,12 +1183,14 @@ more:
 	if (con->in_base_pos < 0) {
 		/* skipping + discarding content */
 		static char buf[1024];
-		ret = ceph_tcp_recvmsg(con->sock, buf,
-				       min(1024, -con->in_base_pos));
+		int skip = min(1024, -con->in_base_pos);
+		dout(20, "skipping %d / %d bytes\n", skip, -con->in_base_pos);
+		ret = ceph_tcp_recvmsg(con->sock, buf, skip);
 		if (ret <= 0)
 			goto done;
 		con->in_base_pos += ret;
-		goto more;
+		if (con->in_base_pos)
+			goto more;
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
 		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
@@ -1200,6 +1215,8 @@ more:
 		ret = read_message_partial(con);
 		if (ret <= 0)
 			goto done;
+		if (con->in_tag == CEPH_MSGR_TAG_READY)
+			goto more;
 		process_message(con);
 		goto more;
 	}
@@ -1326,6 +1343,11 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	struct ceph_connection *con;
 
 	dout(2, "destroy %p\n", msgr);
+	
+	/* stop listener */
+	ceph_cancel_sock_callbacks(msgr->listen_sock);
+	cancel_work_sync(&msgr->awork);
+	ceph_sock_release(msgr->listen_sock);
 
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
@@ -1339,21 +1361,22 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 		
 		/* in case there's queued work... */
 		spin_unlock(&msgr->con_lock);
+		ceph_cancel_sock_callbacks(con->sock);
 		cancel_work_sync(&con->rwork);
 		cancel_delayed_work_sync(&con->swork);
 		put_connection(con);
+		dout(10, "destroy removed connection %p\n", con);
+
 		spin_lock(&msgr->con_lock);
 	}
 	spin_unlock(&msgr->con_lock);
-
-	/* stop listener */
-	ceph_sock_release(msgr->listen_sock);
-	cancel_work_sync(&msgr->awork);
 
 	kunmap(msgr->zero_page);
 	__free_page(msgr->zero_page);
 
 	kfree(msgr);
+
+	dout(10, "destroyed messenger %p\n", msgr);
 }
 
 /*
@@ -1464,9 +1487,9 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = cpu_to_le64(++con->out_seq);
-	dout(1, "----- %p to %s%d %d=%s len %d+%d -----\n", msg,
-	     ENTITY_NAME(msg->hdr.dst.name),
-	     le32_to_cpu(msg->hdr.type),
+	dout(1, "----- %p %u to %s%d %d=%s len %d+%d -----\n", msg,
+	     (unsigned)con->out_seq,
+	     ENTITY_NAME(msg->hdr.dst.name), le32_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le32_to_cpu(msg->hdr.type)),
 	     le32_to_cpu(msg->hdr.front_len),
 	     le32_to_cpu(msg->hdr.data_len));

@@ -124,7 +124,7 @@ static void unregister_request(struct ceph_osd_client *osdc,
 	radix_tree_delete(&osdc->request_tree, req->r_tid);
 
 	osdc->nr_requests--;
-	cancel_delayed_work_sync(&osdc->timeout_work);
+	cancel_delayed_work(&osdc->timeout_work);
 	if (osdc->nr_requests)
 		reschedule_timeout(osdc);
 
@@ -211,13 +211,14 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
 	struct ceph_osd_request *req;
-	ceph_tid_t tid;
+	u64 tid;
 
-	dout(10, "handle_reply %p tid %llu\n", msg, le64_to_cpu(rhead->tid));
+	if (msg->front.iov_len != sizeof(*rhead))
+		goto bad;
+	tid = le64_to_cpu(rhead->tid);
+	dout(10, "handle_reply %p tid %llu\n", msg, tid);
 
 	/* lookup */
-	tid = le64_to_cpu(rhead->tid);
-
 	spin_lock(&osdc->request_lock);
 	req = radix_tree_lookup(&osdc->request_tree, tid);
 	if (req == NULL) {
@@ -231,15 +232,23 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		dout(10, "handle_reply tid %llu saving reply\n", tid);
 		ceph_msg_get(msg);
 		req->r_reply = msg;
-	} else {
-		dout(10, "handle_reply tid %llu already had a reply\n", tid);
+	} else if (req->r_reply == msg)
+		dout(10, "handle_reply tid %llu already had this reply\n", tid);
+	else {
+		dout(10, "handle_reply tid %llu had OTHER reply?\n", tid);
+		goto done;
 	}
 	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags,
 	     rhead->flags);
 	req->r_flags |= rhead->flags;
 	spin_unlock(&osdc->request_lock);
 	complete(&req->r_completion);
+done:
 	put_request(req);
+	return;
+
+bad:
+	derr(0, "got corrupt osd_op_reply\n");
 }
 
 
@@ -428,6 +437,8 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	if (likely(req->r_nr_pages >= want)) {
 		m->pages = req->r_pages;
 		m->nr_pages = req->r_nr_pages;
+		ceph_msg_get(m);
+		req->r_reply = m;
 		ret = 0; /* success */
 	}
 out:
@@ -455,7 +466,7 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	unregister_request(osdc, req);
 	if (rc < 0) {
 		struct ceph_msg *msg;
-		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid, 
+		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid,
 		     rc, req->r_request);
 		/* 
 		 * mark req aborted _before_ revoking pages, so that
@@ -468,6 +479,11 @@ int do_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 		mutex_lock(&msg->page_mutex);
 		msg->pages = 0;
 		mutex_unlock(&msg->page_mutex);
+		if (req->r_reply) {
+			mutex_lock(&req->r_reply->page_mutex);
+			req->r_reply->pages = 0;
+			mutex_unlock(&req->r_reply->page_mutex);
+		}
 		return rc;
 	}
 
@@ -507,6 +523,16 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	osdc->nr_requests = 0;
 	INIT_RADIX_TREE(&osdc->request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
+}
+
+void ceph_osdc_stop(struct ceph_osd_client *osdc)
+{
+	cancel_delayed_work_sync(&osdc->timeout_work);
+
+	if (osdc->osdmap) {
+		osdmap_destroy(osdc->osdmap);
+		osdc->osdmap = 0;
+	}
 }
 
 
@@ -665,7 +691,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	struct page *page;
 	pgoff_t next_index;
 	int contig_pages;
-	__s32 rc;
+	int rc = 0;
 
 	/*
 	 * for now, our strategy is simple: start with the
@@ -673,10 +699,9 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	 * we can that falls within the range specified by
 	 * nr_pages.
 	 */
-
 	dout(10, "readpages on ino %llx on %llu~%llu\n", ino, off, len);
 
-	/* alloc request, w/ page vector */
+	/* alloc request, w/ optimistically-sized page vector */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
@@ -691,7 +716,6 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	contig_pages = 0;
 	list_for_each_entry_reverse(page, page_list, lru) {
 		if (page->index == next_index) {
-			kmap(page);
 			req->r_pages[contig_pages] = page;
 			contig_pages++;
 			next_index++;
@@ -699,10 +723,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			break;
 	}
 	dout(10, "readpages found %d/%d contig\n", contig_pages, nr_pages);
-	if (contig_pages == 0) {
-		put_request(req);
-		return 0;
-	}
+	if (contig_pages == 0)
+		goto out;
 	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
 		  len);
 	dout(10, "readpages contig page extent is %llu~%llu\n", off, len);
@@ -710,13 +732,15 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	/* request msg */
 	len = calc_layout(osdc, ino, layout, off, len, req);
 	req->r_nr_pages = calc_pages_for(off, len);
-
 	dout(10, "readpages final extent is %llu~%llu -> %d pages\n",
 	     off, len, req->r_nr_pages);
-
 	rc = do_request(osdc, req);
+
+out:
 	put_request(req);
 	dout(10, "readpages result %d\n", rc);
+	if (rc < 0)
+		dout(10, "hrm!\n");
 	return rc;
 }
 

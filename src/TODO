@@ -6,22 +6,22 @@ code cleanup
 - addr=?
 
 userspace client
-- per-mds session struct.. and put the cap_ttl in there!
 - move the size check(s) on read from _read() into FileCache
+- time out caps, wake up waiters on renewal
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
 - obey file_max
-- revoke own caps when they time out,
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
-- reference count lease validations on path lookup?
 
 kernel client
+- large directories
+  - frag_map vs frag_tree in ci
+  - readdir
 - flush caps on sync, fsync, etc.
-  - hmm, should these go in a per-session "check" list, instead of independently scheduling delayed_work for each inode?
-- fsync should flush cap file size to mds.  not sure how to block on that, however.. maybe a want_reply flag in the cap msg?
+  - do we need to block?
 - timeout mds session close on umount
 - file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
@@ -34,8 +34,6 @@ kernel client
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
 - nfs exporting
- - fill_trace needs to use d_splice_alias
- - lookup needs to return last_dentry if it gets swapped by fill_trace/d_splice_alias
  - build fat fh's with multiple ancestors.. filenames..?
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?

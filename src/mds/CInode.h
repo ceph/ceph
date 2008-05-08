@@ -353,7 +353,26 @@ public:
 
   // -- caps -- (new)
   // client caps
+  int count_nonstale_caps() {
+    int n = 0;
+    for (map<int,Capability*>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) 
+      if (!it->second->is_stale()) {
+	if (n) return false;
+	n++;
+      }
+    return n;
+  }
+
   bool is_any_caps() { return !client_caps.empty(); }
+  bool is_any_nonstale_caps() { return count_nonstale_caps(); }
+  bool is_loner_cap() {
+    if (!mds_caps_wanted.empty())
+      return false;
+    return count_nonstale_caps() == 1;
+  }
+
   map<int,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(int client) {
     if (client_caps.count(client))
@@ -432,20 +451,6 @@ public:
         //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
       }
     return w;
-  }
-  bool is_loner_cap() {
-    if (!mds_caps_wanted.empty())
-      return false;
-
-    int n = 0;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++) 
-      if (!it->second->is_stale()) {
-	if (n) return false;
-	n++;
-      }
-    return (n == 1);
   }
 
   void replicate_relax_locks() {

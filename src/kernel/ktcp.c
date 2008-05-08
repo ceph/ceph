@@ -107,7 +107,7 @@ static void set_sock_callbacks(struct socket *sock, struct ceph_connection *con)
 	sk->sk_state_change = ceph_state_change;
 }
 
-void ceph_sock_release(struct socket *sock)
+void ceph_cancel_sock_callbacks(struct socket *sock)
 {
 	struct sock *sk;
 	if (!sock)
@@ -117,6 +117,10 @@ void ceph_sock_release(struct socket *sock)
 	sk->sk_data_ready = 0;
 	sk->sk_write_space = 0;
 	sk->sk_state_change = 0;
+}
+void ceph_sock_release(struct socket *sock)
+{
+	ceph_cancel_sock_callbacks(sock);
 	sock_release(sock);
 }
 

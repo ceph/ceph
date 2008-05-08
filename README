@@ -1,10 +1,32 @@
 Ceph - a scalable distributed file system
 -----------------------------------------
 
-Please see http://ceph.sourceforge.net/ for current info.
+Please see http://ceph.newdream.net/ for current info.
 
-INSTALL for basic build instructions.
+----
 
+To build the Linux kernel client,
+
+$ cd src/kernel
+$ make
+or
+$ make KERNELDIR=/path/to/linux
+$ insmod ceph.ko
+$ mount -t ceph 1.2.3.4:/ /mnt/ceph
+...
+
+----
+
+To build the server daemons, and FUSE client,
+
+$ ./autogen.sh
+$ ./configure
+$ cd src
+$ make
+
+(Note that the FUSE client will only be built if libfuse is present.)
+
+----
 
 A quick summary of binaries that will be built in src/
 

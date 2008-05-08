@@ -380,6 +380,7 @@ enum {
 	CEPH_SESSION_CLOSE,
 	CEPH_SESSION_REQUEST_RENEWCAPS,
 	CEPH_SESSION_RENEWCAPS,
+	CEPH_SESSION_STALE,
 };
 
 struct ceph_mds_session_head {
@@ -494,6 +495,7 @@ struct ceph_mds_reply_inode {
 	__le64 version;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
+	__le64 time_warp_seq;
 	__le32 mode, uid, gid;
 	__le32 nlink;
 	__le64 size, max_size;
@@ -591,6 +593,7 @@ struct ceph_mds_file_caps {
 	__le64 size, max_size;
 	__le32 migrate_mds, migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
+	__le64 time_warp_seq;
 } __attribute__ ((packed));
 
 

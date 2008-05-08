@@ -120,6 +120,7 @@ struct ceph_client {
 
 	/* writeback */
 	struct workqueue_struct *wb_wq;
+	struct workqueue_struct *trunc_wq;
 
 	struct kobject *client_kobj;
 
@@ -145,7 +146,7 @@ struct ceph_inode_cap {
 	int mds;    /* -1 if not used */
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemneted (for tracking revocation) */
-	u64 seq;
+	u64 seq, gen;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
 	struct list_head ci_caps;       /* per-ci caplist */
@@ -161,9 +162,10 @@ struct ceph_inode_frag_map_item {
 #define STATIC_CAPS 2
 
 struct ceph_inode_info {
-	u64 i_ceph_ino;
+	u64 i_ceph_ino;   /* make this ifdef away on 64 bit */
 
 	u64 i_version;
+	u64 i_time_warp_seq;
 
 	struct ceph_file_layout i_layout;
 	char *i_symlink;
@@ -181,6 +183,7 @@ struct ceph_inode_info {
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;
 	unsigned long i_hold_caps_until; /* jiffies */
+	struct list_head i_cap_delay_list;
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
 	loff_t i_max_size;      /* size authorized by mds */
@@ -190,12 +193,15 @@ struct ceph_inode_info {
 	struct timespec i_old_atime;
 
 	/* held references to caps */
-	int i_rd_ref, i_rdcache_ref, i_wr_ref, i_wrbuffer_ref;
+	int i_rd_ref, i_rdcache_ref, i_wr_ref;
+	atomic_t i_wrbuffer_ref;
 
 	unsigned long i_hashval;
 
 	struct work_struct i_wb_work;  /* writeback work */
-	struct delayed_work i_cap_dwork;  /* cap work */
+
+	loff_t i_vmtruncate_to;
+	struct work_struct i_vmtruncate_work;
 
 	struct inode vfs_inode; /* at end */
 };
@@ -284,7 +290,7 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 		used |= CEPH_CAP_RDCACHE;
 	if (ci->i_wr_ref)
 		used |= CEPH_CAP_WR;
-	if (ci->i_wrbuffer_ref)
+	if (atomic_read(&ci->i_wrbuffer_ref))
 		used |= CEPH_CAP_WRBUFFER;
 	return used;
 }
@@ -385,10 +391,11 @@ extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_cap_delayed_work(struct work_struct *work);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
+extern void ceph_vmtruncate_work(struct work_struct *work);
+extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,

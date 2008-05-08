@@ -103,7 +103,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
-	dout(10, "open mode %d, don't have caps %d\n", fmode, wantcaps);
+	dout(10, "open fmode %d, don't have caps %d\n", fmode, wantcaps);
 
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req))
@@ -249,8 +249,10 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 	ssize_t ret;
 	int got = 0;
 
-	dout(10, "read %llx %llu~%u trying to get caps\n",
-	     ceph_ino(inode), *ppos, (unsigned)len);
+	__ceph_do_pending_vmtruncate(inode);
+
+	dout(10, "read %llx %llu~%u trying to get caps on %p\n",
+	     ceph_ino(inode), *ppos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
 							 CEPH_CAP_RDCACHE,
@@ -285,10 +287,12 @@ ssize_t ceph_write(struct file *filp, const char __user *buf,
 	int check = 0;
 	loff_t endoff = *ppos + len;
 
+	__ceph_do_pending_vmtruncate(inode);
+
 	/* do we need to explicitly request a larger max_size? */
 	spin_lock(&inode->i_lock);
-	if (endoff >= ci->i_max_size &&
-	    endoff > (inode->i_size << 1) &&
+	if ((endoff >= ci->i_max_size ||
+	     endoff > (inode->i_size << 1)) &&
 	    endoff > ci->i_wanted_max_size) {
 		dout(10, "write %p at large endoff %llu, req max_size\n",
 		     inode, endoff);

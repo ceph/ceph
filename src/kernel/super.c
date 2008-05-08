@@ -54,25 +54,22 @@ static int ceph_write_inode(struct inode *inode, int unused)
 	return 0;
 }
 
-
-static void ceph_umount_start(struct ceph_client *cl)
+static void ceph_put_super(struct super_block *s)
 {
+	struct ceph_client *cl = ceph_client(s);
 	int rc;
 	int seconds = 15;
 
+	dout(30, "put_super\n");
 	ceph_mdsc_stop(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
+
 	rc = wait_event_timeout(cl->mount_wq,
 				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
 				seconds*HZ);
 	if (rc == 0)
 		derr(0, "umount timed out after %d seconds\n", seconds);
-}
 
-static void ceph_put_super(struct super_block *s)
-{
-	dout(30, "ceph_put_super\n");
-	ceph_umount_start(ceph_client(s));
 	return;
 }
 
@@ -148,6 +145,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	dout(10, "alloc_inode %p vfsi %p\n", ci, &ci->vfs_inode);
 
 	ci->i_version = 0;
+	ci->i_time_warp_seq = 0;
 	ci->i_symlink = 0;
 
 	ci->i_lease_session = 0;
@@ -172,13 +170,17 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_requested_max_size = 0;
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
-	ci->i_wr_ref = ci->i_wrbuffer_ref = 0;
+	ci->i_wr_ref = 0;
+	atomic_set(&ci->i_wrbuffer_ref, 0);
 	ci->i_hold_caps_until = 0;
+	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
 	ci->i_hashval = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
-	INIT_DELAYED_WORK(&ci->i_cap_dwork, ceph_cap_delayed_work);
+
+	ci->i_vmtruncate_to = -1;
+	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
 
 	return &ci->vfs_inode;
 }
@@ -194,7 +196,7 @@ static void ceph_destroy_inode(struct inode *inode)
 static void init_once(struct kmem_cache *cachep, void *foo)
 {
 	struct ceph_inode_info *ci = foo;
-	dout(10, "init_once on %p\n", foo);
+	dout(10, "init_once on %p\n", &ci->vfs_inode);
 	inode_init_once(&ci->vfs_inode);
 }
 
@@ -548,10 +550,14 @@ struct ceph_client *ceph_create_client(struct ceph_mount_args *args,
 
 	init_waitqueue_head(&cl->mount_wq);
 	spin_lock_init(&cl->sb_lock);
+
 	get_client_counter();
 
 	cl->wb_wq = create_workqueue("ceph-writeback");
 	if (cl->wb_wq == 0)
+		goto fail;
+	cl->trunc_wq = create_workqueue("ceph-trunc");
+	if (cl->trunc_wq == 0)
 		goto fail;
 
 	/* messenger */
@@ -593,12 +599,16 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
+	ceph_osdc_stop(&cl->osdc);
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	if (cl->client_kobj)
 		kobject_put(cl->client_kobj);
 #endif
 	if (cl->wb_wq)
 		destroy_workqueue(cl->wb_wq);
+	if (cl->trunc_wq)
+		destroy_workqueue(cl->trunc_wq);
 	ceph_messenger_destroy(cl->msgr);
 	put_client_counter();
 	kfree(cl);
@@ -889,7 +899,7 @@ static void ceph_kill_sb(struct super_block *s)
 {
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
-	ceph_mdsc_drop_leases(&client->mdsc);
+	ceph_mdsc_pre_umount(&client->mdsc);
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
 	ceph_destroy_client(client);
 }

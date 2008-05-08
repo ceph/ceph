@@ -571,15 +571,17 @@ bool Locker::issue_caps(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
+    if (cap->is_stale())
+      continue;
 
     // do not issue _new_ bits when size|mtime is projected
     int allowed = all_allowed;
     int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
-    int issued = cap->issued();
+    int pending = cap->pending();
     if (sizemtime_is_projected)
-      allowed &= ~careful | issued;   // only allow "careful" bits if already issued
+      allowed &= ~careful | pending;   // only allow "careful" bits if already issued
     dout(20) << " all_allowed " << cap_string(all_allowed) 
-	     << " issued " << cap_string(issued) 
+	     << " pending " << cap_string(pending) 
 	     << " allowed " << cap_string(allowed) 
 	     << " wanted " << cap_string(cap->wanted())
 	     << dendl;
@@ -601,7 +603,8 @@ bool Locker::issue_caps(CInode *in)
 
       if (seq > 0 && 
           !cap->is_suppress()) {
-        dout(7) << "   sending MClientFileCaps to client" << it->first << " seq " << cap->get_last_seq()
+        dout(7) << "   sending MClientFileCaps to client" << it->first
+		<< " seq " << cap->get_last_seq()
 		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
 		<< dendl;
         mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
@@ -632,6 +635,10 @@ void Locker::issue_truncate(CInode *in)
 						 cap->wanted()),
 			     it->first);
   }
+
+  // should we increase max_size?
+  if (in->is_auth() && !in->is_dir())
+    check_inode_max_size(in);
 }
 
 void Locker::revoke_stale_caps(Session *session)
@@ -640,6 +647,7 @@ void Locker::revoke_stale_caps(Session *session)
   
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
+    cap->set_stale(true);
     CInode *in = cap->get_inode();
     int issued = cap->issued();
     if (issued) {
@@ -655,7 +663,6 @@ void Locker::revoke_stale_caps(Session *session)
     } else {
       dout(10) << " nothing issued on " << *in << dendl;
     }
-    cap->set_stale(true);
   }
 }
 
@@ -671,7 +678,8 @@ void Locker::resume_stale_caps(Session *session)
       cap->set_stale(false);
       if (in->is_auth() && in->filelock.is_stable())
 	file_eval(&in->filelock);
-      issue_caps(in);
+      else
+	issue_caps(in);
     }
   }
 }
@@ -1012,6 +1020,11 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	      << " for " << *in << dendl;
       pi->atime = atime;
     }
+    if (excl && pi->time_warp_seq < m->get_time_warp_seq()) {
+      dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
+	      << " for " << *in << dendl;
+      pi->time_warp_seq = m->get_time_warp_seq();
+    }
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     LogSegment *ls = mds->mdlog->get_current_segment();
@@ -1139,7 +1152,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
       (diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0 &&
       dn->lock.can_lease())
     mask |= CEPH_LOCK_DN;
-  mask |= CEPH_LOCK_DN;
+
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
 }
@@ -2660,7 +2673,7 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
   assert(lock->get_parent()->is_auth());  // or implement remote xlocks
 
   // others waiting?
-  lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
+  lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_RD, 0); 
 
   if (lock->get_parent()->is_auth())
     file_eval(lock);
@@ -2885,7 +2898,7 @@ void Locker::file_eval(FileLock *lock)
 	    (wanted & CEPH_CAP_WR) &&
 	    !(loner && lock->get_state() == LOCK_LONER) &&
 	    lock->get_state() != LOCK_MIXED) ||
-	   (!loner && in->is_any_caps() && lock->get_state() == LOCK_LONER)) {
+	   (!loner && in->is_any_nonstale_caps() && lock->get_state() == LOCK_LONER)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
   }
@@ -3000,7 +3013,7 @@ bool Locker::file_sync(FileLock *lock)
 void Locker::file_lock(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "inode_file_lock " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "file_lock " << *lock << " on " << *lock->get_parent() << dendl;  
 
   assert(in->is_auth());
   assert(lock->is_stable());
@@ -3020,12 +3033,12 @@ void Locker::file_lock(FileLock *lock)
       lock->get_parent()->auth_pin();
 
       // call back caps
-      if (issued) 
+      if (issued & ~lock->caps_allowed()) 
         issue_caps(in);
     } else {
-      if (issued) {
+      lock->set_state(LOCK_GLOCKR);
+      if (issued & ~lock->caps_allowed()) {
         // call back caps
-        lock->set_state(LOCK_GLOCKR);
 	lock->get_parent()->auth_pin();
         issue_caps(in);
       } else {

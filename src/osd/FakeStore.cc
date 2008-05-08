@@ -102,7 +102,9 @@ int do_listxattr(const char *fn, char *names, size_t len) {
 
 int FakeStore::statfs(struct statfs *buf)
 {
-  return ::statfs(basedir.c_str(), buf);
+  if (::statfs(basedir.c_str(), buf) < 0)
+    return -errno;
+  return 0;
 }
 
 
@@ -248,7 +250,7 @@ int FakeStore::mount()
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
     derr(0) << "unable to stat basedir " << basedir << ", " << strerror(errno) << dendl;
-    return r;
+    return -errno;
   }
   
   if (g_conf.fakestore_fake_collections) {
@@ -282,6 +284,7 @@ int FakeStore::mount()
   } else {
     dout(0) << "mount did NOT detect btrfs: " << strerror(r) << dendl;
     ::close(btrfs_fd);
+    btrfs_fd = -1;
   }
 #endif
 
@@ -351,7 +354,7 @@ int FakeStore::umount()
 
 int FakeStore::transaction_start()
 {
-  if (!btrfs_fd < 0)
+  if (btrfs_fd < 0)
     return 0;
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
@@ -362,7 +365,7 @@ int FakeStore::transaction_start()
     derr(0) << "transaction_start got " << strerror(err)
 	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
-    return err;
+    return -errno;
   }
   dout(10) << "transaction_start " << fd << dendl;
   return fd;
@@ -370,7 +373,7 @@ int FakeStore::transaction_start()
 
 void FakeStore::transaction_end(int fd)
 {
-  if (!btrfs_fd < 0)
+  if (btrfs_fd < 0)
     return;
   dout(10) << "transaction_end " << fd << dendl;
   ::close(fd);
@@ -396,7 +399,7 @@ int FakeStore::stat(pobject_t oid, struct stat *st)
   get_oname(oid,fn);
   int r = ::stat(fn, st);
   dout(20) << "stat " << oid << " at " << fn << " = " << r << dendl;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
  
@@ -410,7 +413,7 @@ int FakeStore::remove(pobject_t oid, Context *onsafe)
     journal_remove(oid, onsafe);
   else
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::truncate(pobject_t oid, off_t size, Context *onsafe)
@@ -421,7 +424,7 @@ int FakeStore::truncate(pobject_t oid, off_t size, Context *onsafe)
   get_oname(oid,fn);
   int r = ::truncate(fn, size);
   if (r >= 0) journal_truncate(oid, size, onsafe);
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::read(pobject_t oid, 
@@ -435,7 +438,7 @@ int FakeStore::read(pobject_t oid,
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << dendl;
-    return fd;
+    return -errno;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
   
@@ -474,7 +477,7 @@ int FakeStore::write(pobject_t oid,
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
-    return fd;
+    return -errno;
   }
   ::flock(fd, LOCK_EX);    // lock for safety
   
@@ -573,11 +576,11 @@ void FakeStore::sync_entry()
   utime_t interval;
   interval.set_from_double(g_conf.fakestore_sync_interval);
   while (!stop) {
-    dout(10) << "sync_entry waiting for " << interval << dendl;
+    dout(20) << "sync_entry waiting for " << interval << dendl;
     sync_cond.WaitInterval(lock, interval);
     lock.Unlock();
 
-    dout(-10) << "sync_entry committing " << super_epoch << dendl;
+    dout(20) << "sync_entry committing " << super_epoch << " " << interval << dendl;
     commit_start();
 
     // induce an fs sync.
@@ -592,7 +595,7 @@ void FakeStore::sync_entry()
     commit_finish();
 
     lock.Lock();
-    dout(-10) << "sync_entry committed " << super_epoch << dendl;
+    dout(20) << "sync_entry committed " << super_epoch << dendl;
   }
   lock.Unlock();
 }
@@ -631,7 +634,7 @@ int FakeStore::setattr(pobject_t oid, const char *name,
     journal_setattr(oid, name, value, size, onsafe);
   else
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
@@ -655,7 +658,7 @@ int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
   }
   if (r >= 0)
     journal_setattrs(oid, aset, 0);
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::getattr(pobject_t oid, const char *name,
@@ -669,7 +672,7 @@ int FakeStore::getattr(pobject_t oid, const char *name,
     get_oname(oid, fn);
     r = do_getxattr(fn, name, value, size);
   }
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset) 
@@ -694,7 +697,7 @@ int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset)
       name += strlen(name) + 1;
     }
   }
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe) 
@@ -711,7 +714,7 @@ int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe)
     journal_rmattr(oid, name, onsafe);
   else
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 
@@ -734,7 +737,7 @@ int FakeStore::collection_setattr(coll_t c, const char *name,
     journal_collection_setattr(c, name, value, size, onsafe);
   else 
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::collection_rmattr(coll_t c, const char *name,
@@ -748,7 +751,7 @@ int FakeStore::collection_rmattr(coll_t c, const char *name,
     get_cdir(c, fn);
     r = do_removexattr(fn, name);
   }
-  return 0;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::collection_getattr(coll_t c, const char *name,
@@ -762,7 +765,7 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
     get_cdir(c, fn);
     r = do_getxattr(fn, name, value, size);   
   }
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
@@ -783,7 +786,7 @@ int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   }
   if (r >= 0)
     journal_collection_setattrs(cid, aset, 0);
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
@@ -809,7 +812,7 @@ int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     }
     r = 0;
   }
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 
@@ -883,7 +886,7 @@ int FakeStore::create_collection(coll_t c,
     journal_create_collection(c, onsafe);
   else 
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::destroy_collection(coll_t c,
@@ -911,7 +914,8 @@ int FakeStore::collection_stat(coll_t c, struct stat *st)
 
   char fn[200];
   get_cdir(c, fn);
-  return ::lstat(fn, st);
+  int r = ::lstat(fn, st);
+  return r < 0 ? -errno:r;
 }
 
 bool FakeStore::collection_exists(coll_t c) 
@@ -940,7 +944,7 @@ int FakeStore::collection_add(coll_t c, pobject_t o,
     journal_collection_add(c, o, onsafe);
   else 
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::collection_remove(coll_t c, pobject_t o,
@@ -958,7 +962,7 @@ int FakeStore::collection_remove(coll_t c, pobject_t o,
     journal_collection_remove(c, o, onsafe);
   else
     delete onsafe;
-  return r;
+  return r < 0 ? -errno:r;
 }
 
 int FakeStore::collection_list(coll_t c, list<pobject_t>& ls) 

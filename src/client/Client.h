@@ -450,7 +450,6 @@ class Client : public Dispatcher {
   SafeTimer timer;
 
   Context *tick_event;
-  utime_t last_cap_renew_request;
   utime_t last_cap_renew;
   void renew_caps();
 public:
@@ -462,9 +461,15 @@ public:
   MonMap *monmap;
   
   // mds sessions
-  map<int, version_t> mds_sessions;  // mds -> push seq
+  struct MDSSession {
+    version_t seq;
+    __u64 cap_gen;
+    utime_t cap_ttl, last_cap_renew_request;
+    int num_caps;
+    MDSSession() : seq(0), cap_gen(0), num_caps(0) {}
+  };
+  map<int, MDSSession> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
-  map<int, int> caps_by_mds;
   list<Cond*> waiting_for_mdsmap;
 
   void handle_client_session(MClientSession *m);

@@ -170,8 +170,9 @@ public:
     session_map.erase(s->inst.name);
     delete s;
   }
-  void touch_session(Session *s) {
-    s->last_cap_renew = g_clock.now();
+  void touch_session(Session *session) {
+    by_state[session->state].push_back(&session->session_list_item);
+    session->last_cap_renew = g_clock.now();
   }
   Session *get_oldest_session(int state) {
     if (by_state[state].empty()) return 0;

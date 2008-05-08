@@ -308,10 +308,8 @@ void Server::find_idle_sessions()
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
-    /* pointless
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()),
 				 session->inst);
-    */
   }
 
   // dead
@@ -1615,6 +1613,7 @@ void Server::handle_client_utime(MDRequest *mdr)
 
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
+  pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -4061,6 +4060,9 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
     
+    // notify any clients
+    mds->locker->issue_truncate(in);
+
     // hit pop
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 

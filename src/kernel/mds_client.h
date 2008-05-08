@@ -54,9 +54,10 @@ enum {
 struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
-	__u64             s_cap_seq;    /* cap message count/seq from mds */
+	__u64             s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;
-	spinlock_t        s_cap_lock;
+	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
+	__u64             s_cap_gen;  /* inc each time we get mds stale msg */
 	unsigned long     s_cap_ttl, s_renew_requested;
 	struct list_head  s_caps;
 	struct list_head  s_inode_leases, s_dentry_leases;
@@ -106,6 +107,8 @@ struct ceph_mds_client {
 	struct completion       map_waiters, session_close_waiters;
 	struct delayed_work     delayed_work;  /* delayed work */
 	unsigned long last_renew_caps;
+	struct list_head cap_delay_list;
+	spinlock_t cap_delay_lock;
 };
 
 extern const char *ceph_mds_op_name(int op);
@@ -145,6 +148,6 @@ extern int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 				struct ceph_mds_session *session,
 				struct ceph_inode_cap *cap,
 				int used, int wanted, int cancel_work);
-extern void ceph_mdsc_drop_leases(struct ceph_mds_client *mdsc);
+extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 #endif
