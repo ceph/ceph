@@ -103,7 +103,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
-	dout(10, "open mode %d, don't have caps %d\n", fmode, wantcaps);
+	dout(10, "open fmode %d, don't have caps %d\n", fmode, wantcaps);
 
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req))

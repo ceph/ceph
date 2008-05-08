@@ -78,7 +78,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	u64 blocks = (size + (1<<9) - 1) >> 9;
 	u64 time_warp_seq;
 
-	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode %o nlink %d\n",
+	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode 0%o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
 	     inode->i_size, inode->i_mode, inode->i_nlink);
 
@@ -1556,7 +1556,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr: %p gid %d -> %d\n", inode,
 		     inode->i_uid, attr->ia_uid);
 	if (ia_valid & ATTR_MODE)
-		dout(10, "setattr: %p mode %o -> %o\n", inode, inode->i_mode,
+		dout(10, "setattr: %p mode 0%o -> 0%o\n", inode, inode->i_mode,
 		     attr->ia_mode);
 	if (ia_valid & ATTR_SIZE)
 		dout(10, "setattr: %p size %lld -> %lld\n", inode,

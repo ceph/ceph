@@ -318,7 +318,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	int pathlen;
 	int err;
 
-	dout(5, "dir_mknod in dir %p dentry %p mode %d rdev %d\n",
+	dout(5, "dir_mknod in dir %p dentry %p mode 0%o rdev %d\n",
 	     dir, dentry, mode, rdev);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
@@ -356,7 +356,7 @@ static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 	}
 
 	/* fall back to mknod */
-	return ceph_mknod(dir, dentry, mode, 0);
+	return ceph_mknod(dir, dentry, (mode & ~S_IFMT) | S_IFREG, 0);
 }
 
 static int ceph_symlink(struct inode *dir, struct dentry *dentry,
@@ -399,7 +399,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	int pathlen;
 	int err;
 
-	dout(5, "dir_mkdir in dir %p dentry %p mode %d\n", dir, dentry, mode);
+	dout(5, "dir_mkdir in dir %p dentry %p mode 0%o\n", dir, dentry, mode);
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
