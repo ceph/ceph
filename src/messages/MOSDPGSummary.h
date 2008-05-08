@@ -33,7 +33,7 @@ public:
     Message(MSG_OSD_PG_SUMMARY) {
     this->epoch = mv;
     this->pgid = pgid;
-    summary._encode(sumbl);
+    summary.encode(sumbl);
   }
 
   pg_t get_pgid() { return pgid; }

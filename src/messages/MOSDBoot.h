@@ -38,13 +38,13 @@ class MOSDBoot : public Message {
   }
   
   void encode_payload() {
-    ::_encode(inst, payload);
-    ::_encode(sb, payload);
+    ::encode(inst, payload);
+    ::encode(sb, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(inst, payload, off);
-    ::_decode(sb, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(inst, p);
+    ::decode(sb, p);
   }
 };
 

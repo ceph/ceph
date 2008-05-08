@@ -28,7 +28,20 @@ struct MOSDPGCreate : public Message {
     epoch_t created;   // epoch pg created
     pg_t parent;       // split from parent (if != pg_t())
     int split_bits;
+
+    void encode(bufferlist &bl) const {
+      ::encode(created, bl);
+      ::encode(parent, bl);
+      ::encode(split_bits, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(created, bl);
+      ::decode(parent, bl);
+      ::decode(split_bits, bl);
+    }
   };
+  WRITE_CLASS_ENCODERS(create_rec)
+
   map<pg_t,create_rec> mkpg;
 
   MOSDPGCreate() {}
@@ -39,14 +52,16 @@ struct MOSDPGCreate : public Message {
   const char *get_type_name() { return "pg_create"; }
 
   void encode_payload() {
-    ::_encode(epoch, payload);
-    ::_encode(mkpg, payload);
+    ::encode(epoch, payload);
+    ::encode(mkpg, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(epoch, payload, off);
-    ::_decode(mkpg, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(epoch, p);
+    ::decode(mkpg, p);
   }
 };
+
+WRITE_CLASS_ENCODERS(MOSDPGCreate::create_rec)
 
 #endif

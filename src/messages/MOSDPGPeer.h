@@ -41,17 +41,15 @@ class MOSDPGPeer : public Message {
   char *get_type_name() { return "PGPeer"; }
 
   void encode_payload() {
-    payload.append((char*)&map_version, sizeof(map_version));
-    payload.append((char*)&complete, sizeof(complete));
-    _encode(pg_list, payload);
+    ::encode(map_version, payload);
+    ::encode(complete, payload);
+    ::encode(pg_list, payload);
   }
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(map_version), (char*)&map_version);
-    off += sizeof(map_version);
-    payload.copy(off, sizeof(complete), (char*)&complete);
-    off += sizeof(complete);
-    _decode(pg_list, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(map_version, p);
+    ::decode(complete, p);
+    ::decode(pg_list, p);
   }
 };
 

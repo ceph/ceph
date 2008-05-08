@@ -36,17 +36,17 @@ class MOSDFailure : public Message {
   epoch_t get_epoch() { return epoch; }
 
   void decode_payload() {
-    int off = 0;
-    ::_decode(fsid, payload, off);
-    ::_decode(from, payload, off);
-    ::_decode(failed, payload, off);
-    ::_decode(epoch, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
+    ::decode(from, p);
+    ::decode(failed, p);
+    ::decode(epoch, p);
   }
   void encode_payload() {
-    ::_encode(fsid, payload);
-    ::_encode(from, payload);
-    ::_encode(failed, payload);
-    ::_encode(epoch, payload);
+    ::encode(fsid, payload);
+    ::encode(from, payload);
+    ::encode(failed, payload);
+    ::encode(epoch, payload);
   }
 
   const char *get_type_name() { return "osd_failure"; }

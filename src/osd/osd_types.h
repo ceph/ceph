@@ -323,6 +323,7 @@ struct pg_stat_t {
 WRITE_CLASS_ENCODERS(pg_stat_t)
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
+WRITE_RAW_ENCODER(osd_peer_stat_t)
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
   return out << "stat(" << stat.stamp
@@ -371,12 +372,33 @@ public:
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
   double weight;
+
   OSDSuperblock(int w=0) : 
     magic(MAGIC), whoami(w), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
+
+  void encode(bufferlist &bl) const {
+    ::encode(magic, bl);
+    ::encode(fsid, bl);
+    ::encode(whoami, bl);
+    ::encode(current_epoch, bl);
+    ::encode(oldest_map, bl);
+    ::encode(newest_map, bl);
+    ::encode(weight, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(magic, bl);
+    ::decode(fsid, bl);
+    ::decode(whoami, bl);
+    ::decode(current_epoch, bl);
+    ::decode(oldest_map, bl);
+    ::decode(newest_map, bl);
+    ::decode(weight, bl);
+  }
 };
+WRITE_CLASS_ENCODERS(OSDSuperblock)
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 {
