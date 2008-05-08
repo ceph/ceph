@@ -736,7 +736,7 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 }
 
 /*
- * caller hols s_mutex
+ * caller holds s_mutex
  */
 static int send_renew_caps(struct ceph_mds_client *mdsc,
 			   struct ceph_mds_session *session)
@@ -777,6 +777,8 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	/* handle */
 	spin_lock(&mdsc->lock);
 	session = __get_session(mdsc, mds);
+	spin_unlock(&mdsc->lock);
+
 	mutex_lock(&session->s_mutex);
 
 	was_stale = session->s_cap_ttl == 0 ||
@@ -832,7 +834,6 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		derr(0, "bad session op %d from mds%d\n", op, mds);
 		WARN_ON(1);
 	}
-	spin_unlock(&mdsc->lock);
 
 	mutex_unlock(&session->s_mutex);
 	put_session(session);
@@ -1266,21 +1267,21 @@ send:
 	     (unsigned)reply->front.iov_len, len);
 	send_msg_mds(mdsc, reply, mds);
 
-	spin_lock(&mdsc->lock);
 	if (session) {
 		if (session->s_state == CEPH_MDS_SESSION_RECONNECTING) {
 			session->s_state = CEPH_MDS_SESSION_OPEN;
 			complete(&session->s_completion);
-		} else {
+		} else
 			dout(0, "WARNING: reconnect on %p raced and lost?\n",
 			     session);
-		}
 	}
+
 out:
 	if (session) {
 		mutex_unlock(&session->s_mutex);
 		put_session(session);
 	}
+	spin_lock(&mdsc->lock);
 	return;
 
 needmore:
@@ -1293,7 +1294,6 @@ needmore:
 	goto retry;
 
 bad:
-	spin_lock(&mdsc->lock);
 	derr(0, "error %d generating reconnect.  what to do?\n", err);
 	/* fixme */
 	WARN_ON(1);
