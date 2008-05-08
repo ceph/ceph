@@ -30,13 +30,13 @@ public:
   }
 
   void encode_payload() {
-    ::_encode(osd_stat, payload);
-    ::_encode(pg_stat, payload);
+    ::encode(osd_stat, payload);
+    ::encode(pg_stat, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(osd_stat, payload, off);
-    ::_decode(pg_stat, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(osd_stat, p);
+    ::decode(pg_stat, p);
   }
 };
 

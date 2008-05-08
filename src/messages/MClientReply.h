@@ -65,8 +65,6 @@ struct LeaseStat {
 };
 WRITE_CLASS_ENCODERS(LeaseStat)
 
-
-
 struct DirStat {
   // mds distribution hints
   frag_t frag;
@@ -86,7 +84,7 @@ struct DirStat {
     ::decode(dist, p);
   }
 
-  static void _encode(bufferlist& bl, CDir *dir, int whoami) {
+  static void encode(bufferlist& bl, CDir *dir, int whoami) {
     /*
      * note: encoding matches struct ceph_client_reply_dirfrag
      */
@@ -155,7 +153,7 @@ struct InodeStat {
     ::decode(symlink, p);
   }
 
-  static void _encode(bufferlist &bl, CInode *in) {
+  static void encode(bufferlist &bl, CInode *in) {
     /*
      * note: encoding matches struct ceph_client_reply_inode
      */

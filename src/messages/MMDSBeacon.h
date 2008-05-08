@@ -50,21 +50,21 @@ class MMDSBeacon : public Message {
   }
   
   void encode_payload() {
-    ::_encode(fsid, payload);
-    ::_encode(inst, payload);
-    ::_encode(last_epoch_seen, payload);
-    ::_encode(state, payload);
-    ::_encode(seq, payload);
-    ::_encode(want_rank, payload);
+    ::encode(fsid, payload);
+    ::encode(inst, payload);
+    ::encode(last_epoch_seen, payload);
+    ::encode(state, payload);
+    ::encode(seq, payload);
+    ::encode(want_rank, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(fsid, payload, off);
-    ::_decode(inst, payload, off);
-    ::_decode(last_epoch_seen, payload, off);
-    ::_decode(state, payload, off);
-    ::_decode(seq, payload, off);
-    ::_decode(want_rank, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
+    ::decode(inst, p);
+    ::decode(last_epoch_seen, p);
+    ::decode(state, p);
+    ::decode(seq, p);
+    ::decode(want_rank, p);
   }
 };
 

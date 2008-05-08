@@ -589,7 +589,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
  inode:
-  InodeStat::_encode(bl, in);
+  InodeStat::encode(bl, in);
   lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   numi++;
   dout(20) << " trace added " << lmask << " " << *in << dendl;
@@ -606,7 +606,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   dout(20) << " trace added " << lmask << " " << *dn << dendl;
   
   // dir
-  DirStat::_encode(bl, dn->get_dir(), whoami);
+  DirStat::encode(bl, dn->get_dir(), whoami);
   dout(20) << " trace added " << *dn->get_dir() << dendl;
 
   in = dn->get_dir()->get_inode();
@@ -1765,7 +1765,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   // build dir contents
   bufferlist dirbl, dnbl;
-  DirStat::_encode(dirbl, dir, mds->get_nodeid());
+  DirStat::encode(dirbl, dir, mds->get_nodeid());
 
   __u32 numfiles = 0;
   for (CDir::map_t::iterator it = dir->begin(); 
@@ -1805,7 +1805,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
     // inode
-    InodeStat::_encode(dnbl, in);
+    InodeStat::encode(dnbl, in);
     mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 

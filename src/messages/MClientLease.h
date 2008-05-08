@@ -63,13 +63,13 @@ struct MClientLease : public Message {
   }
   
   void decode_payload() {
-    int off = 0;
-    ::_decode(h, payload, off);
-    ::_decode(dname, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(h, p);
+    ::decode(dname, p);
   }
   virtual void encode_payload() {
-    ::_encode(h, payload);
-    ::_encode(dname, payload);
+    ::encode(h, payload);
+    ::encode(dname, payload);
   }
 
 };
