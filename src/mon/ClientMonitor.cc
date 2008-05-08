@@ -50,8 +50,8 @@ bool ClientMonitor::update_from_paxos()
     dout(7) << "update_from_paxos startup: loading latest full clientmap" << dendl;
     bufferlist bl;
     mon->store->get_bl_ss(bl, "clientmap", "latest");
-    int off = 0;
-    client_map._decode(bl, off);
+    bufferlist::iterator p = bl.begin();
+    client_map.decode(p);
   } 
 
   // walk through incrementals
@@ -61,8 +61,8 @@ bool ClientMonitor::update_from_paxos()
     if (success) {
       dout(7) << "update_from_paxos  applying incremental " << client_map.version+1 << dendl;
       Incremental inc;
-      int off = 0;
-      inc._decode(bl, off);
+      bufferlist::iterator p = bl.begin();
+      inc.decode(p);
       client_map.apply_incremental(inc);
 
       dout(1) << client_map.client_addr.size() << " clients (+" 
@@ -77,7 +77,7 @@ bool ClientMonitor::update_from_paxos()
 
   // save latest
   bufferlist bl;
-  client_map._encode(bl);
+  client_map.encode(bl);
   mon->store->put_bl_ss(bl, "clientmap", "latest");
 
   return true;
@@ -110,7 +110,7 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 	   << ", next is " << pending_inc.next_client
 	   << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
-  pending_inc._encode(bl);
+  pending_inc.encode(bl);
 }
 
 

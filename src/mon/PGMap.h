@@ -41,21 +41,21 @@ public:
     epoch_t osdmap_epoch;
     epoch_t pg_scan;  // osdmap epoch
 
-    void _encode(bufferlist &bl) {
-      ::_encode(version, bl);
-      ::_encode(pg_stat_updates, bl);
-      ::_encode(osd_stat_updates, bl);
-      ::_encode(osd_stat_rm, bl);
-      ::_encode(osdmap_epoch, bl);
-      ::_encode(pg_scan, bl);
+    void encode(bufferlist &bl) const {
+      ::encode(version, bl);
+      ::encode(pg_stat_updates, bl);
+      ::encode(osd_stat_updates, bl);
+      ::encode(osd_stat_rm, bl);
+      ::encode(osdmap_epoch, bl);
+      ::encode(pg_scan, bl);
     }
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(version, bl, off);
-      ::_decode(pg_stat_updates, bl, off);
-      ::_decode(osd_stat_updates, bl, off);
-      ::_decode(osd_stat_rm, bl, off);
-      ::_decode(osdmap_epoch, bl, off);
-      ::_decode(pg_scan, bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(version, bl);
+      ::decode(pg_stat_updates, bl);
+      ::decode(osd_stat_updates, bl);
+      ::decode(osd_stat_rm, bl);
+      ::decode(osdmap_epoch, bl);
+      ::decode(pg_scan, bl);
     }
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
@@ -164,19 +164,19 @@ public:
 	    total_osd_num_blocks_avail(0),
 	    total_osd_num_objects(0) {}
 
-  void _encode(bufferlist &bl) {
-    ::_encode(version, bl);
-    ::_encode(pg_stat, bl);
-    ::_encode(osd_stat, bl);
-    ::_encode(last_osdmap_epoch, bl);
-    ::_encode(last_pg_scan, bl);
+  void encode(bufferlist &bl) {
+    ::encode(version, bl);
+    ::encode(pg_stat, bl);
+    ::encode(osd_stat, bl);
+    ::encode(last_osdmap_epoch, bl);
+    ::encode(last_pg_scan, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(version, bl, off);
-    ::_decode(pg_stat, bl, off);
-    ::_decode(osd_stat, bl, off);
-    ::_decode(last_osdmap_epoch, bl, off);
-    ::_decode(last_pg_scan, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
+    ::decode(pg_stat, bl);
+    ::decode(osd_stat, bl);
+    ::decode(last_osdmap_epoch, bl);
+    ::decode(last_pg_scan, bl);
     stat_zero();
     for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
 	 p != pg_stat.end();

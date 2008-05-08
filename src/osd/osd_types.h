@@ -187,7 +187,16 @@ public:
     c.version = version;
     return c;
   }
-} __attribute__ ((packed));
+  void encode(bufferlist &bl) const {
+    ::encode(version, bl);
+    ::encode(epoch, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
+    ::decode(epoch, bl);
+  }
+};
+WRITE_CLASS_ENCODERS(eversion_t)
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) && (l.version == r.version);
@@ -222,7 +231,19 @@ struct osd_stat_t {
   int64_t num_objects;
 
   osd_stat_t() : num_blocks(0), num_blocks_avail(0), num_objects(0) {}
+
+  void encode(bufferlist &bl) const {
+    ::encode(num_blocks, bl);
+    ::encode(num_blocks_avail, bl);
+    ::encode(num_objects, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(num_blocks, bl);
+    ::decode(num_blocks_avail, bl);
+    ::decode(num_objects, bl);
+  }
 };
+WRITE_CLASS_ENCODERS(osd_stat_t)
 
 
 
@@ -266,8 +287,29 @@ struct pg_stat_t {
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
+  void encode(bufferlist &bl) const {
+    ::encode(reported, bl);
+    ::encode(created, bl);
+    ::encode(parent, bl);
+    ::encode(parent_split_bits, bl);
+    ::encode(state, bl);
+    ::encode(num_bytes, bl);
+    ::encode(num_blocks, bl);
+    ::encode(num_objects, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(reported, bl);
+    ::decode(created, bl);
+    ::decode(parent, bl);
+    ::decode(parent_split_bits, bl);
+    ::decode(state, bl);
+    ::decode(num_bytes, bl);
+    ::decode(num_blocks, bl);
+    ::decode(num_objects, bl);
+  }
   pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
-} __attribute__ ((packed));
+};
+WRITE_CLASS_ENCODERS(pg_stat_t)
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
 

@@ -59,17 +59,17 @@ public:
 	unmount.insert(client);
     }
     
-    void _encode(bufferlist &bl) {
-      ::_encode(version, bl);
-      ::_encode(next_client, bl);
-      ::_encode(mount, bl);
-      ::_encode(unmount, bl);
+    void encode(bufferlist &bl) const {
+      ::encode(version, bl);
+      ::encode(next_client, bl);
+      ::encode(mount, bl);
+      ::encode(unmount, bl);
     }
-    void _decode(bufferlist &bl, int& off) {
-      ::_decode(version, bl, off);
-      ::_decode(next_client, bl, off);
-      ::_decode(mount, bl, off);
-      ::_decode(unmount, bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(version, bl);
+      ::decode(next_client, bl);
+      ::decode(mount, bl);
+      ::decode(unmount, bl);
     }
   };
 
@@ -109,15 +109,15 @@ public:
       }
     }
 
-    void _encode(bufferlist &bl) {
-      ::_encode(version, bl);
-      ::_encode(next_client, bl);
-      ::_encode(client_addr, bl);
+    void encode(bufferlist &bl) const {
+      ::encode(version, bl);
+      ::encode(next_client, bl);
+      ::encode(client_addr, bl);
     }
-    void _decode(bufferlist &bl, int& off) {
-      ::_decode(version, bl, off);
-      ::_decode(next_client, bl, off);
-      ::_decode(client_addr, bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(version, bl);
+      ::decode(next_client, bl);
+      ::decode(client_addr, bl);
       reverse();
     }
   };
