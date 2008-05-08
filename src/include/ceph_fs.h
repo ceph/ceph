@@ -308,7 +308,7 @@ struct ceph_osd_getmap {
 
 struct ceph_mds_getmap {
 	struct ceph_fsid fsid;
-	__le32 have;
+	__le32 want;
 } __attribute__ ((packed));
 
 

@@ -599,6 +599,7 @@ void ceph_destroy_client(struct ceph_client *cl)
 	/* unmount */
 	/* ... */
 
+	ceph_monc_stop(&cl->monc);
 	ceph_osdc_stop(&cl->osdc);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)

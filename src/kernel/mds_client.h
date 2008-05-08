@@ -54,6 +54,7 @@ enum {
 struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
+	unsigned long     s_ttl;      /* time until mds kills us */
 	__u64             s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;
 	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
@@ -103,7 +104,6 @@ struct ceph_mds_client {
 	int                     max_sessions;  /* len of s_mds_sessions */
 	__u64                   last_tid;      /* most recent mds request */
 	struct radix_tree_root  request_tree;  /* pending mds requests */
-	__u64                   last_requested_map;
 	struct completion       map_waiters, session_close_waiters;
 	struct delayed_work     delayed_work;  /* delayed work */
 	unsigned long last_renew_caps;
