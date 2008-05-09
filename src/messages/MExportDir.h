@@ -47,17 +47,16 @@ class MExportDir : public Message {
     bounds.push_back(df); 
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    ::_decode(bounds, payload, off);
-    ::_decode(dirstate, payload, off);
+  void encode_payload() {
+    ::encode(dirfrag, payload);
+    ::encode(bounds, payload);
+    ::encode(dirstate, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&dirfrag, sizeof(dirfrag));
-    ::_encode(bounds, payload);
-    ::_encode(dirstate, payload);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
+    ::decode(bounds, p);
+    ::decode(dirstate, p);
   }
 
 };

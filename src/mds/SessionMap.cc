@@ -138,7 +138,7 @@ void SessionMap::encode(bufferlist& bl)
   for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
        p != session_map.end(); 
        ++p) 
-    p->second->_encode(bl);
+    p->second->encode(bl);
 }
 
 void SessionMap::decode(bufferlist::iterator& p)
@@ -150,7 +150,7 @@ void SessionMap::decode(bufferlist::iterator& p)
   ::decode(n, p);
   while (n--) {
     Session *s = new Session;
-    s->_decode(p);
+    s->decode(p);
     session_map[s->inst.name] = s;
     s->last_cap_renew = now;
   }

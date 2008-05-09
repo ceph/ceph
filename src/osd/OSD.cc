@@ -148,7 +148,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   sb.fsid = fsid;
   sb.whoami = whoami;
   bufferlist bl;
-  bl.append((const char *)&sb, sizeof(sb));
+  ::encode(sb, bl);
   store->write(OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
   store->umount();
   delete store;
@@ -438,7 +438,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
   dout(10) << "write_superblock " << superblock << dendl;
 
   bufferlist bl;
-  bl.append((char*)&superblock, sizeof(superblock));
+  ::encode(superblock, bl);
   t.write(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
 }
 

@@ -61,24 +61,20 @@ class MExportDirNotify : public Message {
       bounds.push_back((*i)->dirfrag());
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(base), (char*)&base);
-    off += sizeof(base);
-    payload.copy(off, sizeof(ack), (char*)&ack);
-    off += sizeof(ack);
-    payload.copy(off, sizeof(old_auth), (char*)&old_auth);
-    off += sizeof(old_auth);
-    payload.copy(off, sizeof(new_auth), (char*)&new_auth);
-    off += sizeof(new_auth);
-    ::_decode(bounds, payload, off);
+  void encode_payload() {
+    ::encode(base, payload);
+    ::encode(ack, payload);
+    ::encode(old_auth, payload);
+    ::encode(new_auth, payload);
+    ::encode(bounds, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&base, sizeof(base));
-    payload.append((char*)&ack, sizeof(ack));
-    payload.append((char*)&old_auth, sizeof(old_auth));
-    payload.append((char*)&new_auth, sizeof(new_auth));
-    ::_encode(bounds, payload);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(base, p);
+    ::decode(ack, p);
+    ::decode(old_auth, p);
+    ::decode(new_auth, p);
+    ::decode(bounds, p);
   }
 };
 

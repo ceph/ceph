@@ -297,8 +297,7 @@ inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
  * mds load
  */
 
-class mds_load_t {
- public:
+struct mds_load_t {
   dirfrag_load_vec_t auth;
   dirfrag_load_vec_t all;
 
@@ -314,8 +313,24 @@ class mds_load_t {
   
   double mds_load();  // defiend in MDBalancer.cc
 
+  void encode(bufferlist &bl) const {
+    ::encode(auth, bl);
+    ::encode(all, bl);
+    ::encode(req_rate, bl);
+    ::encode(cache_hit_rate, bl);
+    ::encode(queue_len, bl);
+    ::encode(cpu_load_avg, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(auth, bl);
+    ::decode(all, bl);
+    ::decode(req_rate, bl);
+    ::decode(cache_hit_rate, bl);
+    ::decode(queue_len, bl);
+    ::decode(cpu_load_avg, bl);
+  }
 };
-
+WRITE_CLASS_ENCODERS(mds_load_t)
 
 inline ostream& operator<<( ostream& out, mds_load_t& load )
 {

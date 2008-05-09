@@ -43,13 +43,13 @@ class MMDSResolveAck : public Message {
   }
 
   void encode_payload() {
-    ::_encode(commit, payload);
-    ::_encode(abort, payload);
+    ::encode(commit, payload);
+    ::encode(abort, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(commit, payload, off);
-    ::_decode(abort, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(commit, p);
+    ::decode(abort, p);
   }
 };
 

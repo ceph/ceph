@@ -61,18 +61,32 @@ class Logger;
 
 class Journaler {
 
+public:
   // this goes at the head of the log "file".
   struct Header {
     off_t trimmed_pos;
     off_t expire_pos;
     off_t read_pos;
     off_t write_pos;
+
     Header() : trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0) {}
+
+    void encode(bufferlist &bl) const {
+      ::encode(trimmed_pos, bl);
+      ::encode(expire_pos, bl);
+      ::encode(read_pos, bl);
+      ::encode(write_pos, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(trimmed_pos, bl);
+      ::decode(expire_pos, bl);
+      ::decode(read_pos, bl);
+      ::decode(write_pos, bl);
+    }
   } last_written, last_committed;
+  WRITE_CLASS_ENCODERS(Header)
 
-  friend ostream& operator<<(ostream& out, Header &h);
-
-
+  private:
   // me
   inode_t inode;
   Objecter *objecter;
@@ -233,6 +247,6 @@ public:
   //bool is_trimmable() { return trimming_pos < expire_pos; }
   //void trim(off_t trim_to=0, Context *c=0);
 };
-
+WRITE_CLASS_ENCODERS(Journaler::Header)
 
 #endif

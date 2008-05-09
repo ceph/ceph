@@ -167,7 +167,7 @@ void Journaler::write_head(Context *oncommit)
   last_wrote_head = g_clock.now();
 
   bufferlist bl;
-  bl.append((char*)&last_written, sizeof(last_written));
+  ::encode(last_written, bl);
   filer.write(inode, 0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
 	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
@@ -270,13 +270,13 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
     dout(10) << "append_entry caching in read_buf too" << dendl;
     assert(requested_pos == received_pos);
     assert(requested_pos == read_pos + read_buf.length());
-    read_buf.append((char*)&s, sizeof(s));
+    ::encode(s, read_buf);
     read_buf.append(bl);
     requested_pos = received_pos = write_pos + sizeof(s) + s;
   }
 
   // append
-  write_buf.append((char*)&s, sizeof(s));
+  ::encode(s, write_buf);
   write_buf.claim_append(bl);
   write_pos += sizeof(s) + s;
 

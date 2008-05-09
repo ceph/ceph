@@ -97,9 +97,8 @@ void IdAllocator::save(Context *onfinish, version_t v)
   assert(is_active());
   
   bufferlist bl;
-
-  bl.append((char*)&version, sizeof(version));
-  ::_encode(free.m, bl);
+  ::encode(version, bl);
+  ::encode(free.m, bl);
 
   committing_version = version;
 
@@ -186,10 +185,9 @@ void IdAllocator::load_2(int r, bufferlist& bl, Context *onfinish)
 
   if (r > 0) {
     dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
-    int off = 0;
-    bl.copy(off, sizeof(version), (char*)&version);
-    off += sizeof(version);
-    ::_decode(free.m, bl, off);
+    bufferlist::iterator p = bl.begin();
+    ::decode(version, p);
+    ::decode(free.m, p);
     committed_version = version;
   }
   else {

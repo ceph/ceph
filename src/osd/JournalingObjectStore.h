@@ -54,7 +54,7 @@ protected:
       Transaction t;
       t.write(oid, off, len, bl);
       bufferlist tbl;
-      t._encode(tbl);
+      t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -65,7 +65,7 @@ protected:
       Transaction t;
       t.zero(oid, off, len);
       bufferlist tbl;
-      t._encode(tbl);
+      t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -76,7 +76,7 @@ protected:
       Transaction t;
       t.remove(oid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -87,7 +87,7 @@ protected:
       Transaction t;
       t.truncate(oid, size);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -98,7 +98,7 @@ protected:
       Transaction t;
       t.clone(from, to);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -109,7 +109,7 @@ protected:
       Transaction t;
       t.setattr(oid, name, value, size);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -120,7 +120,7 @@ protected:
       Transaction t;
       t.setattrs(oid, attrset);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -131,7 +131,7 @@ protected:
       Transaction t;
       t.rmattr(oid, name);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -142,7 +142,7 @@ protected:
       Transaction t;
       t.create_collection(cid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -153,7 +153,7 @@ protected:
       Transaction t;
       t.remove_collection(cid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -164,7 +164,7 @@ protected:
       Transaction t;
       t.collection_add(cid, oid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -175,7 +175,7 @@ protected:
       Transaction t;
       t.collection_remove(cid, oid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -186,7 +186,7 @@ protected:
       Transaction t;
       t.collection_setattr(cid, name, value, size);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -197,7 +197,7 @@ protected:
       Transaction t;
       t.collection_setattrs(cid, aset);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -208,7 +208,7 @@ protected:
       // journal empty transaction
       Transaction t;
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);

@@ -41,18 +41,16 @@ class MHeartbeat : public Message {
 
   const char *get_type_name() { return "HB"; }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off,sizeof(load), (char*)&load);
-    off += sizeof(load);
-    payload.copy(off, sizeof(beat), (char*)&beat);
-    off += sizeof(beat);
-    ::_decode(import_map, payload, off);
+  void encode_payload() {
+    ::encode(load, payload);
+    ::encode(beat, payload);
+    ::encode(import_map, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&load, sizeof(load));
-    payload.append((char*)&beat, sizeof(beat));
-    ::_encode(import_map, payload);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(load, p);
+    ::decode(beat, p);
+    ::decode(import_map, p);
   }
 
 };

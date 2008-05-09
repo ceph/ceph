@@ -154,9 +154,7 @@ int Ebofs::mount()
 	assert(e == super_epoch);
 	
 	dout(3) << "mount replay: applying transaction in epoch " << e << dendl;
-	Transaction t;
-	int off = 0;
-	t._decode(bl, off);
+	Transaction t(bl);
 	_apply_transaction(t);
       }
       
@@ -1403,7 +1401,7 @@ void Ebofs::sync(Context *onsafe)
       // journal empty transaction
       Transaction t;
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -2449,7 +2447,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
   }
   if (journal) {
     bufferlist bl;
-    t._encode(bl);
+    t.encode(bl);
     journal->submit_entry(super_epoch, bl, onsafe);
   } else
     queue_commit_waiter(onsafe);
@@ -2865,7 +2863,7 @@ int Ebofs::write(pobject_t oid,
       Transaction t;
       t.write(oid, off, len, bl);
       bufferlist tbl;
-      t._encode(tbl);
+      t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -2891,7 +2889,7 @@ int Ebofs::zero(pobject_t oid, off_t off, size_t len, Context *onsafe)
       Transaction t;
       t.zero(oid, off, len);
       bufferlist tbl;
-      t._encode(tbl);
+      t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -2932,7 +2930,7 @@ int Ebofs::remove(pobject_t oid, Context *onsafe)
       Transaction t;
       t.remove(oid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3015,7 +3013,7 @@ int Ebofs::truncate(pobject_t oid, off_t size, Context *onsafe)
       Transaction t;
       t.truncate(oid, size);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3041,7 +3039,7 @@ int Ebofs::clone(pobject_t from, pobject_t to, Context *onsafe)
       Transaction t;
       t.clone(from, to);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3225,7 +3223,7 @@ int Ebofs::setattr(pobject_t oid, const char *name, const void *value, size_t si
       Transaction t;
       t.setattr(oid, name, value, size);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3265,7 +3263,7 @@ int Ebofs::setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsa
       Transaction t;
       t.setattrs(oid, attrset);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3377,7 +3375,7 @@ int Ebofs::rmattr(pobject_t oid, const char *name, Context *onsafe)
       Transaction t;
       t.rmattr(oid, name);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3480,7 +3478,7 @@ int Ebofs::create_collection(coll_t cid, Context *onsafe)
       Transaction t;
       t.create_collection(cid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3534,7 +3532,7 @@ int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
       Transaction t;
       t.remove_collection(cid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3595,7 +3593,7 @@ int Ebofs::collection_add(coll_t cid, pobject_t oid, Context *onsafe)
       Transaction t;
       t.collection_add(cid, oid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3643,7 +3641,7 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
       Transaction t;
       t.collection_remove(cid, oid);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3713,7 +3711,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, s
       Transaction t;
       t.collection_setattr(cid, name, value, size);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
@@ -3818,7 +3816,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
       Transaction t;
       t.collection_rmattr(cid, name);
       bufferlist bl;
-      t._encode(bl);
+      t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);

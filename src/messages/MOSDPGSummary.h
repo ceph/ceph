@@ -47,22 +47,17 @@ public:
   }
 
   void encode_payload() {
-    payload.append((char*)&epoch, sizeof(epoch));
-    payload.append((char*)&pgid, sizeof(pgid));
-    payload.append((char*)&info, sizeof(info));
-    payload.claim_append(sumbl);
+    ::encode(epoch, payload);
+    ::encode(pgid, payload);
+    ::encode(info, payload);
+    ::encode(sumbl, payload);
   }
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(epoch), (char*)&epoch);
-    off += sizeof(epoch);
-    payload.copy(off, sizeof(pgid), (char*)&pgid);
-    off += sizeof(pgid);
-    payload.copy(off, sizeof(info), (char*)&info);
-    off += sizeof(info);
-
-    payload.splice(0, off);
-    sumbl.claim(payload);
+    bufferlist::iterator p = payload.begin();
+    ::decode(epoch, payload);
+    ::decode(pgid, payload);
+    ::decode(info, payload);
+    ::decode(sumbl, payload);
   }
 };
 

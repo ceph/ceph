@@ -33,16 +33,16 @@ class MExportCaps : public Message {
     o << "export_caps(" << ino << ")";
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    ::_decode(ino, payload, off);
-    ::_decode(cap_bl, payload, off);
-    ::_decode(client_map, payload, off);
+  void encode_payload() {
+    ::encode(ino, payload);
+    ::encode(cap_bl, payload);
+    ::encode(client_map, payload);
   }
-  virtual void encode_payload() {
-    ::_encode(ino, payload);
-    ::_encode(cap_bl, payload);
-    ::_encode(client_map, payload);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(ino, p);
+    ::decode(cap_bl, p);
+    ::decode(client_map, p);
   }
 
 };

@@ -481,16 +481,16 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   switch (type) {
   case CEPH_LOCK_IAUTH:
-    _encode(inode.ctime, bl);
-    _encode(inode.mode, bl);
-    _encode(inode.uid, bl);
-    _encode(inode.gid, bl);  
+    ::encode(inode.ctime, bl);
+    ::encode(inode.mode, bl);
+    ::encode(inode.uid, bl);
+    ::encode(inode.gid, bl);  
     break;
     
   case CEPH_LOCK_ILINK:
-    _encode(inode.ctime, bl);
-    _encode(inode.nlink, bl);
-    _encode(inode.anchored, bl);
+    ::encode(inode.ctime, bl);
+    ::encode(inode.nlink, bl);
+    ::encode(inode.anchored, bl);
     break;
     
   case CEPH_LOCK_IDFT:
@@ -512,13 +512,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case CEPH_LOCK_IFILE:
-    _encode(inode.size, bl);
-    _encode(inode.mtime, bl);
-    _encode(inode.atime, bl);
+    ::encode(inode.size, bl);
+    ::encode(inode.mtime, bl);
+    ::encode(inode.atime, bl);
     break;
 
   case CEPH_LOCK_IDIR:
-    _encode(inode.mtime, bl);
+    ::encode(inode.mtime, bl);
     if (0) {
       map<frag_t,int> frag_sizes;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -528,7 +528,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  //frag_t fg = (*p)->get_frag();
 	  //frag_sizes[f] = dirfrag_size[fg];
 	}
-      _encode(frag_sizes, bl);
+      ::encode(frag_sizes, bl);
     }
     break;
   
@@ -800,11 +800,11 @@ void CInode::encode_export(bufferlist& bl)
  
   ::encode(replica_map, bl);
 
-  authlock._encode(bl);
-  linklock._encode(bl);
-  dirfragtreelock._encode(bl);
-  filelock._encode(bl);
-  dirlock._encode(bl);
+  ::encode(authlock, bl);
+  ::encode(linklock, bl);
+  ::encode(dirfragtreelock, bl);
+  ::encode(filelock, bl);
+  ::encode(dirlock, bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -842,9 +842,9 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(replica_map, p);
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
-  authlock._decode(p);
-  linklock._decode(p);
-  dirfragtreelock._decode(p);
-  filelock._decode(p);
-  dirlock._decode(p);
+  ::decode(authlock, p);
+  ::decode(linklock, p);
+  ::decode(dirfragtreelock, p);
+  ::decode(filelock, p);
+  ::decode(dirlock, p);
 }

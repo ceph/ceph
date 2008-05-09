@@ -217,7 +217,7 @@ public:
     ::encode(state, bl);
     ::encode(version, bl);
     ::encode(projected_version, bl);
-    lock._encode(bl);
+    ::encode(lock, bl);
     ::encode(replica_map, bl);
     get(PIN_TEMPEXPORTING);
   }
@@ -238,7 +238,7 @@ public:
     ::decode(nstate, blp);
     ::decode(version, blp);
     ::decode(projected_version, blp);
-    lock._decode(blp);
+    ::decode(lock, blp);
     ::decode(replica_map, blp);
 
     // twiddle

@@ -1651,8 +1651,8 @@ void MDCache::rejoin_send_rejoins()
   // encode cap list once.
   bufferlist cap_export_bl;
   if (mds->is_rejoin()) {
-    ::_encode(cap_exports, cap_export_bl);
-    ::_encode(cap_export_paths, cap_export_bl);
+    ::encode(cap_exports, cap_export_bl);
+    ::encode(cap_export_paths, cap_export_bl);
   }
 
   // if i am rejoining, send a rejoin to everyone.

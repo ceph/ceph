@@ -295,22 +295,28 @@ public:
     }
 
     // etc.
-
-    void _encode(bufferlist& bl) {
-      ::_encode(ops, bl);
-      ::_encode(bls, bl);
-      ::_encode(oids, bl);
-      ::_encode(cids, bl);
-      ::_encode(lengths, bl);
-      ::_encode(attrnames, bl);
+    Transaction() {}
+    Transaction(bufferlist::iterator &p) { decode(p); }
+    Transaction(bufferlist &bl) { 
+      bufferlist::iterator p = bl.begin();
+      decode(p); 
     }
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(ops, bl, off);
-      ::_decode(bls, bl, off);
-      ::_decode(oids, bl, off);
-      ::_decode(cids, bl, off);
-      ::_decode(lengths, bl, off);
-      ::_decode(attrnames2, bl, off);
+
+    void encode(bufferlist& bl) const {
+      ::encode(ops, bl);
+      ::encode(bls, bl);
+      ::encode(oids, bl);
+      ::encode(cids, bl);
+      ::encode(lengths, bl);
+      ::encode(attrnames, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(ops, bl);
+      ::decode(bls, bl);
+      ::decode(oids, bl);
+      ::decode(cids, bl);
+      ::decode(lengths, bl);
+      ::decode(attrnames2, bl);
       for (list<string>::iterator p = attrnames2.begin();
 	   p != attrnames2.end();
 	   ++p)

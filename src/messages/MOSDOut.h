@@ -28,13 +28,12 @@ class MOSDOut : public Message {
   }
   MOSDOut() {}
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(map_epoch), (char*)&map_epoch);
-    off += sizeof(map_epoch);
+  void encode_payload() {
+    ::encode(map_epoch, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&map_epoch, sizeof(map_epoch));
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(map_epoch, p);
   }
 
   const char *get_type_name() { return "oout"; }

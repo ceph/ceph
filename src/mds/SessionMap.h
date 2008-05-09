@@ -116,18 +116,18 @@ public:
     session_list_item(this),
     cap_push_seq(0) { }
 
-  void _encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const {
     ::encode(inst, bl);
     ::encode(cap_push_seq, bl);
     ::encode(completed_requests, bl);
   }
-  void _decode(bufferlist::iterator& p) {
+  void decode(bufferlist::iterator& p) {
     ::decode(inst, p);
     ::decode(cap_push_seq, p);
     ::decode(completed_requests, p);
   }
 };
-
+WRITE_CLASS_ENCODERS(Session)
 
 /*
  * session map

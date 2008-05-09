@@ -34,16 +34,14 @@ class MExportDirWarning : public Message {
 
   const char *get_type_name() { return "ExW"; }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    payload.copy(off, sizeof(new_dir_auth), (char*)&new_dir_auth);
-    off += sizeof(new_dir_auth);
+  void encode_payload() {
+    ::encode(ino, payload);
+    ::encode(new_dir_auth, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&ino, sizeof(ino));
-    payload.append((char*)&new_dir_auth, sizeof(new_dir_auth));
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(ino, p);
+    ::decode(new_dir_auth, p);
   }
 };
 

@@ -248,25 +248,23 @@ public:
   }
 
   // serializers
-  void encode(bufferlist& bl) {
-    bl.append((char*)&wanted_caps, sizeof(wanted_caps));
-    bl.append((char*)&last_sent, sizeof(last_sent));
-    bl.append((char*)&last_recv, sizeof(last_recv));
-    ::_encode(cap_history, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(wanted_caps, bl);
+    ::encode(last_sent, bl);
+    ::encode(last_recv, bl);
+    ::encode(cap_history, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(wanted_caps), (char*)&wanted_caps);
-    off += sizeof(wanted_caps);
-    bl.copy(off, sizeof(last_sent), (char*)&last_sent);
-    off += sizeof(last_sent);
-    bl.copy(off, sizeof(last_recv), (char*)&last_recv);
-    off += sizeof(last_recv);
-    ::_decode(cap_history, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(wanted_caps, bl);
+    ::decode(last_sent, bl);
+    ::decode(last_recv, bl);
+    ::decode(cap_history, bl);
   }
   
 };
 
 WRITE_CLASS_ENCODERS(Capability::Export)
+WRITE_CLASS_ENCODERS(Capability)
 
 
 

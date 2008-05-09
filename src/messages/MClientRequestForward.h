@@ -40,19 +40,16 @@ class MClientRequestForward : public Message {
   }
 
   void encode_payload() {
-    payload.append((char*)&tid, sizeof(tid));
-    payload.append((char*)&dest_mds, sizeof(dest_mds));
-    payload.append((char*)&num_fwd, sizeof(num_fwd));
+    ::encode(tid, payload);
+    ::encode(dest_mds, payload);
+    ::encode(num_fwd, payload);
   }
 
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(tid), (char*)&tid);
-    off += sizeof(tid);
-    payload.copy(off, sizeof(dest_mds), (char*)&dest_mds);
-    off += sizeof(dest_mds);
-    payload.copy(off, sizeof(num_fwd), (char*)&num_fwd);
-    off += sizeof(num_fwd);
+    bufferlist::iterator p = payload.begin();
+    ::decode(tid, p);
+    ::decode(dest_mds, p);
+    ::decode(num_fwd, p);
   }
 };
 

@@ -43,17 +43,14 @@ class MExportDirDiscoverAck : public Message {
       o << " failure)";
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    payload.copy(off, sizeof(success), (char*)&success);
-    off += sizeof(success);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
+    ::decode(success, p);
   }
-
-  virtual void encode_payload() {
-    payload.append((char*)&dirfrag, sizeof(dirfrag));
-    payload.append((char*)&success, sizeof(success));
+  void encode_payload() {
+    ::encode(dirfrag, payload);
+    ::encode(success, payload);
   }
 };
 

@@ -616,8 +616,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 done:
   // put numi, numd in front
   bufferlist fbl;
-  ::_encode(numi, fbl);
-  ::_encode(numdn, fbl);
+  ::encode(numi, fbl);
+  ::encode(numdn, fbl);
   fbl.claim_append(bl);
   reply->set_trace(fbl);
 }
@@ -1801,7 +1801,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dout(12) << "including inode " << *in << dendl;
     
     // dentry
-    ::_encode(it->first, dnbl);
+    ::encode(it->first, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
     // inode
@@ -3652,7 +3652,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 					   exported_client_map);
     mdcache->migrator->finish_export_inode(srcdn->inode, mdr->now, finished); 
     mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
-    ::_encode(exported_client_map, reply->inode_export);
+    ::encode(exported_client_map, reply->inode_export);
     reply->inode_export.claim_append(inodebl);
     reply->inode_export_v = srcdn->inode->inode.version;
 

@@ -823,7 +823,7 @@ void Migrator::export_go_synced(CDir *dir)
 					       exported_client_map,
 					       now );
   bufferlist bl;
-  ::_encode(exported_client_map, bl);
+  ::encode(exported_client_map, bl);
   bl.claim_append(export_data);
   export_data.claim(bl);
 
@@ -982,7 +982,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
     // dn name
-    ::_encode(it->first, exportbl);
+    ::encode(it->first, exportbl);
     
     // state
     dn->encode_export(exportbl);
@@ -1001,8 +1001,8 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
       
       inodeno_t ino = dn->get_remote_ino();
       unsigned char d_type = dn->get_remote_d_type();
-      ::_encode(ino, exportbl);
-      ::_encode(d_type, exportbl);
+      ::encode(ino, exportbl);
+      ::encode(d_type, exportbl);
       continue;
     }
     

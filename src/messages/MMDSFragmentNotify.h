@@ -42,19 +42,20 @@ class MMDSFragmentNotify : public Message {
       << " " << (int)bits << ")";
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    ::_decode(ino, payload, off);
-    ::_decode(basefrag, payload, off);
-    ::_decode(bits, payload, off);
-    ::_decode(basebl, payload, off);
+  void encode_payload() {
+    ::encode(ino, payload);
+    ::encode(basefrag, payload);
+    ::encode(bits, payload);
+    ::encode(basebl, payload);
   }
-  virtual void encode_payload() {
-    ::_encode(ino, payload);
-    ::_encode(basefrag, payload);
-    ::_encode(bits, payload);
-    ::_encode(basebl, payload);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(ino, p);
+    ::decode(basefrag, p);
+    ::decode(bits, p);
+    ::decode(basebl, p);
   }
+  
 };
 
 #endif

@@ -224,11 +224,11 @@ public:
   }
 
   // encode/decode
-  void _encode(bufferlist& bl) {
+  void encode(bufferlist& bl) const {
     ::encode(state, bl);
     ::encode(gather_set, bl);
   }
-  void _decode(bufferlist::iterator& p) {
+  void decode(bufferlist::iterator& p) {
     ::decode(state, p);
     ::decode(gather_set, p);
   }
@@ -318,6 +318,7 @@ public:
     out << ")";
   }
 };
+WRITE_CLASS_ENCODERS(SimpleLock)
 
 inline ostream& operator<<(ostream& out, SimpleLock& l) 
 {

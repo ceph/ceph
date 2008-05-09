@@ -40,9 +40,7 @@ int JournalingObjectStore::journal_replay()
     assert(e == super_epoch);
     
     dout(3) << "journal_replay: applying transaction in epoch " << e << dendl;
-    Transaction t;
-    int off = 0;
-    t._decode(bl, off);
+    Transaction t(bl);
     apply_transaction(t);
     count++;
   }
