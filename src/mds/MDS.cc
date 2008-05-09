@@ -447,7 +447,6 @@ void MDS::beacon_kill(utime_t lab)
 
 void MDS::handle_mds_map(MMDSMap *m)
 {
-  version_t hadepoch = mdsmap->get_epoch();
   version_t epoch = m->get_epoch();
   dout(5) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << dendl;
 
@@ -535,14 +534,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // did it change?
   if (oldstate != state) {
-    if (state == want_state) {
-      dout(1) << "handle_mds_map new state " << mdsmap->get_state_name(state) << dendl;
-    } else {
-      dout(1) << "handle_mds_map new state " << mdsmap->get_state_name(state)
-	//	      << ", although i wanted " << mdsmap->get_state_name(want_state)
-	      << dendl;
-      want_state = state;
-    }    
+    dout(1) << "handle_mds_map state change "
+	    << mdsmap->get_state_name(oldstate) << " --> "
+	    << mdsmap->get_state_name(state) << dendl;
+    want_state = state;
 
     // now active?
     if (is_active()) {
@@ -557,6 +552,10 @@ void MDS::handle_mds_map(MMDSMap *m)
       resolve_start();
     } else if (is_reconnect()) {
       reconnect_start();
+    } else if (is_creating()) {
+      boot_create();
+    } else if (is_starting()) {
+      boot_start();
     } else if (is_stopping()) {
       assert(oldstate == MDSMap::STATE_ACTIVE);
       stopping_start();
@@ -637,16 +636,6 @@ void MDS::handle_mds_map(MMDSMap *m)
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
 
-  // just got mdsmap+osdmap?
-  if (hadepoch == 0 && 
-      mdsmap->get_epoch() > 0 &&
-      osdmap->get_epoch() > 0) {
-    boot();
-  } else if (want_state != state) {
-    // resend beacon.
-    beacon_send();
-  }
-
  out:
   delete m;
   delete oldmap;
@@ -667,37 +656,11 @@ void MDS::bcast_mds_map()
 }
 
 
-void MDS::handle_osd_map(MOSDMap *m)
+void MDS::request_state(int s)
 {
-  version_t hadepoch = osdmap->get_epoch();
-  dout(10) << "handle_osd_map had " << hadepoch << dendl;
-  
-  // process
-  objecter->handle_osd_map(m);
-
-  // just got mdsmap+osdmap?
-  if (hadepoch == 0 && 
-      osdmap->get_epoch() > 0 &&
-      mdsmap->get_epoch() > 0) 
-    boot();
-}
-
-
-void MDS::set_want_state(int s)
-{
-  dout(3) << "set_want_state " << MDSMap::get_state_name(s) << dendl;
+  dout(3) << "request_state " << MDSMap::get_state_name(s) << dendl;
   want_state = s;
   beacon_send();
-}
-
-void MDS::boot()
-{   
-  if (is_creating()) 
-    boot_create();    // new tables, journal
-  else if (is_starting() || is_replay())
-    boot_start();    // start|replay, join
-  else 
-    assert(is_standby());
 }
 
 
@@ -772,7 +735,7 @@ void MDS::boot_create()
 void MDS::creating_done()
 {
   dout(1)<< "creating_done" << dendl;
-  set_want_state(MDSMap::STATE_ACTIVE);
+  request_state(MDSMap::STATE_ACTIVE);
 }
 
 
@@ -854,7 +817,7 @@ void MDS::starting_done()
 {
   dout(3) << "starting_done" << dendl;
   assert(is_starting());
-  set_want_state(MDSMap::STATE_ACTIVE);
+  request_state(MDSMap::STATE_ACTIVE);
 
   // start new segment
   mdlog->start_new_segment(0);
@@ -873,9 +836,9 @@ void MDS::replay_start()
   mdcache->set_recovery_set(rs);
 
   // start?
-  if (osdmap->get_epoch() > 0 &&
-      mdsmap->get_epoch() > 0)
-    boot_start();
+  //if (osdmap->get_epoch() > 0 &&
+  //mdsmap->get_epoch() > 0)
+  boot_start();
 }
 
 void MDS::replay_done()
@@ -885,10 +848,10 @@ void MDS::replay_done()
   if (mdsmap->get_num_in_mds() == 1 &&
       mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
     dout(2) << "i am alone, moving to state reconnect" << dendl;      
-    set_want_state(MDSMap::STATE_RECONNECT);
+    request_state(MDSMap::STATE_RECONNECT);
   } else {
     dout(2) << "i am not alone, moving to state resolve" << dendl;
-    set_want_state(MDSMap::STATE_RESOLVE);
+    request_state(MDSMap::STATE_RESOLVE);
   }
 
   // start new segment
@@ -913,7 +876,7 @@ void MDS::resolve_start()
 void MDS::resolve_done()
 {
   dout(1) << "resolve_done" << dendl;
-  set_want_state(MDSMap::STATE_RECONNECT);
+  request_state(MDSMap::STATE_RECONNECT);
 }
 
 void MDS::reconnect_start()
@@ -924,7 +887,7 @@ void MDS::reconnect_start()
 void MDS::reconnect_done()
 {
   dout(1) << "reconnect_done" << dendl;
-  set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state
+  request_state(MDSMap::STATE_REJOIN);    // move to rejoin state
 
   /*
   if (mdsmap->get_num_in_mds() == 1 &&
@@ -933,9 +896,9 @@ void MDS::reconnect_done()
     // finish processing caps (normally, this happens during rejoin, but we're skipping that...)
     mdcache->rejoin_gather_finish();
 
-    set_want_state(MDSMap::STATE_ACTIVE);    // go active
+    request_state(MDSMap::STATE_ACTIVE);    // go active
   } else {
-    set_want_state(MDSMap::STATE_REJOIN);    // move to rejoin state
+    request_state(MDSMap::STATE_REJOIN);    // move to rejoin state
   }
   */
 }
@@ -950,7 +913,7 @@ void MDS::rejoin_done()
   dout(1) << "rejoin_done" << dendl;
   mdcache->show_subtrees();
   mdcache->show_cache();
-  set_want_state(MDSMap::STATE_ACTIVE);
+  request_state(MDSMap::STATE_ACTIVE);
 }
 
 
@@ -1004,7 +967,7 @@ void MDS::stopping_done()
   dout(2) << "stopping_done" << dendl;
 
   // tell monitor we shut down cleanly.
-  set_want_state(MDSMap::STATE_STOPPED);
+  request_state(MDSMap::STATE_STOPPED);
 }
 
   
@@ -1118,7 +1081,7 @@ void MDS::_dispatch(Message *m)
       objecter->handle_osd_op_reply((class MOSDOpReply*)m);
       break;
     case CEPH_MSG_OSD_MAP:
-      handle_osd_map((MOSDMap*)m);
+      objecter->handle_osd_map((MOSDMap*)m);
       break;
       
       // MDS
@@ -1244,7 +1207,7 @@ void MDS::proc_message(Message *m)
     objecter->handle_osd_op_reply((class MOSDOpReply*)m);
     return;
   case CEPH_MSG_OSD_MAP:
-    handle_osd_map((MOSDMap*)m);
+    objecter->handle_osd_map((MOSDMap*)m);
     return;
 
 

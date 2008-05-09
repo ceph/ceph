@@ -680,7 +680,7 @@ void ESubtreeMap::replay(MDS *mds)
   dout(10) << "ESubtreeMap.replay -- reconstructing (auth) subtree spanning tree" << dendl;
   
   // first, stick the spanning tree in my cache
-  //metablob.print(cout);
+  //metablob.print(*_dout);
   metablob.replay(mds, _segment);
   
   // restore import/export maps
