@@ -348,6 +348,9 @@ void MDS::tick()
     server->find_idle_sessions();
   }
 
+  if (is_reconnect())
+    server->reconnect_tick();
+
   if (is_active()) {
     balancer->tick();
   }

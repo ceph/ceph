@@ -263,8 +263,9 @@ static int kick_requests(struct ceph_osd_client *osdc)
 	int osd;
 	int ret = 0;
 	
-	spin_lock(&osdc->request_lock);
 more:
+	spin_lock(&osdc->request_lock);
+more_locked:
 	got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req, 
 				     next_tid, 1);
 	if (got == 0)
@@ -288,8 +289,7 @@ more:
 		put_request(req);
 		goto more;
 	}
-	spin_unlock(&osdc->request_lock);
-	goto more;
+	goto more_locked;
 
 done:
 	spin_unlock(&osdc->request_lock);
@@ -393,7 +393,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 done:
 	downgrade_write(&osdc->map_sem);
 	ceph_monc_got_osdmap(&osdc->client->monc, osdc->osdmap->epoch);
-	if (kick_requests(osdc))
+	if (newmap && kick_requests(osdc))
 		ceph_monc_request_osdmap(&osdc->client->monc,
 					 osdc->osdmap->epoch);
 	up_read(&osdc->map_sem);
@@ -621,17 +621,28 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
 		left = rc;
 		i = 0;
 		while (left > 0) {
+			int bad;
 			l = min_t(int, left, PAGE_CACHE_SIZE-po);
 			dout(20, "copy po %d left %d l %d page %d\n",
 			     po, left, l, i);
-			copy_to_user(data, page_address(req->r_pages[i]) + po,
-				     l);
-			data += l;
-			left -= l;
-			po = 0;
+			bad = copy_to_user(data,
+					   page_address(req->r_pages[i]) + po,
+					   l);
+			if (bad == l) {
+				rc = -EFAULT;
+				goto out;
+			}
+			data += l - bad;
+			left -= l - bad;
+			if (po) {
+				po += l - bad;
+				if (po == PAGE_CACHE_SIZE)
+					po = 0;
+			}
 			i++;
 		}
 	}
+out:
 	put_request(req);
 	dout(10, "sync_read result %d\n", rc);
 	return rc;
@@ -782,7 +793,9 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	/* copy data into a set of pages */
 	left = len;
 	po = off & ~PAGE_MASK;
+	rc = -EFAULT;
 	for (i = 0; i < nr_pages; i++) {
+		int bad;
 		req->r_pages[i] = alloc_page(GFP_NOFS);
 		if (req->r_pages[i] == NULL) {
 			req->r_nr_pages = i+1;
@@ -790,10 +803,17 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 			return -ENOMEM;
 		}
 		l = min_t(int, PAGE_SIZE-po, left);
-		copy_from_user(page_address(req->r_pages[i]) + po, data, l);
-		data += l;
-		left -= l;
-		po = 0;
+		bad = copy_from_user(page_address(req->r_pages[i]) + po, data,
+				     l);
+		if (bad == l)
+			goto out;
+		data += l - bad;
+		left -= l - bad;
+		if (po) {
+			po += l - bad;
+			if (po == PAGE_CACHE_SIZE)
+				po = 0;
+		}
 	}
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = nr_pages;
@@ -801,6 +821,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	reqm->hdr.data_off = cpu_to_le32(off);
 
 	rc = do_request(osdc, req);
+out:
 	put_request(req);
 	if (rc == 0)
 		rc = len;

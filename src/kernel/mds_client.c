@@ -289,6 +289,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 
 	s = kmalloc(sizeof(struct ceph_mds_session), GFP_NOFS);
 	s->s_mds = mds;
+	s->s_ttl = 0;
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_seq = 0;
 	mutex_init(&s->s_mutex);
@@ -494,12 +495,8 @@ static void wait_for_new_map(struct ceph_mds_client *mdsc)
 	__u32 have;
 	dout(30, "wait_for_new_map enter\n");
 	have = mdsc->mdsmap->m_epoch;
-	if (mdsc->last_requested_map < mdsc->mdsmap->m_epoch) {
-		mdsc->last_requested_map = have;
-		spin_unlock(&mdsc->lock);
-		ceph_monc_request_mdsmap(&mdsc->client->monc, have);
-	} else
-		spin_unlock(&mdsc->lock);
+	spin_unlock(&mdsc->lock);
+	ceph_monc_request_mdsmap(&mdsc->client->monc, have+1);
 	wait_for_completion(&mdsc->map_waiters);
 	spin_lock(&mdsc->lock);
 	dout(30, "wait_for_new_map exit\n");
@@ -777,6 +774,8 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	/* handle */
 	spin_lock(&mdsc->lock);
 	session = __get_session(mdsc, mds);
+	if (session && mdsc->mdsmap)
+		session->s_ttl = jiffies + HZ*mdsc->mdsmap->m_session_autoclose;
 	spin_unlock(&mdsc->lock);
 
 	mutex_lock(&session->s_mutex);
@@ -1812,6 +1811,7 @@ static void delayed_work(struct work_struct *work)
 	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 2;
 	int renew_caps = time_after_eq(jiffies, HZ*renew_interval + 
 				       mdsc->last_renew_caps);
+	u32 want_map = 0;
 
 	dout(10, "delayed_work on %p renew_caps=%d\n", mdsc, renew_caps);
 
@@ -1825,6 +1825,11 @@ static void delayed_work(struct work_struct *work)
 		struct ceph_mds_session *session = __get_session(mdsc, i);
 		if (session == 0)
 			continue;
+		if (session->s_ttl && time_after(jiffies, session->s_ttl)) {
+			derr(1, "mds%d session probably timed out, "
+			     "requesting mds map\n", session->s_mds);
+			want_map = mdsc->mdsmap->m_epoch;
+		}
 		if (session->s_state < CEPH_MDS_SESSION_OPEN) {
 			put_session(session);
 			continue;
@@ -1841,6 +1846,10 @@ static void delayed_work(struct work_struct *work)
 		spin_lock(&mdsc->lock);
 	}
 	spin_unlock(&mdsc->lock);
+
+	if (want_map)
+		ceph_monc_request_mdsmap(&mdsc->client->monc, want_map);
+
 	schedule_delayed(mdsc);
 }
 
@@ -1854,7 +1863,6 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->max_sessions = 0;
 	mdsc->last_tid = 0;
 	INIT_RADIX_TREE(&mdsc->request_tree, GFP_ATOMIC);
-	mdsc->last_requested_map = 0;
 	init_completion(&mdsc->map_waiters);
 	init_completion(&mdsc->session_close_waiters);
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
@@ -1976,6 +1984,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* do we need it? */
 	spin_lock(&mdsc->lock);
+	ceph_monc_got_mdsmap(&mdsc->client->monc, epoch);
 	if (mdsc->mdsmap && epoch <= mdsc->mdsmap->m_epoch) {
 		dout(2, "ceph_mdsc_handle_map epoch %u < our %u\n",
 		     epoch, mdsc->mdsmap->m_epoch);
@@ -2015,9 +2024,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(2, "got first mdsmap %u\n", newmap->m_epoch);
 		mdsc->mdsmap = newmap;
 	}
-
-	/* stop asking */
-	ceph_monc_got_mdsmap(&mdsc->client->monc, newmap->m_epoch);
 
 	spin_unlock(&mdsc->lock);
 

@@ -199,7 +199,7 @@ bool MDSMonitor::preprocess_query(Message *m)
 
 void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
 {
-  if (m->have < mdsmap.get_epoch())
+  if (m->want <= mdsmap.get_epoch())
     send_full(m->get_source_inst());
   else
     waiting_for_map.push_back(m->get_source_inst());

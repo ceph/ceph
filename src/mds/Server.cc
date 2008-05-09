@@ -472,6 +472,23 @@ void Server::reconnect_gather_finish()
   mds->reconnect_done();
 }
 
+void Server::reconnect_tick()
+{
+  utime_t reconnect_end = reconnect_start;
+  reconnect_end += g_conf.mds_reconnect_timeout;
+  if (g_clock.now() >= reconnect_end &&
+      !client_reconnect_gather.empty()) {
+    dout(10) << "reconnect timed out" << dendl;
+    for (set<int>::iterator p = client_reconnect_gather.begin();
+	 p != client_reconnect_gather.end();
+	 p++) 
+      dout(1) << "reconnect gave up on "
+	      << mds->sessionmap.get_inst(entity_name_t::CLIENT(*p))
+	      << dendl;
+    client_reconnect_gather.clear();
+    reconnect_gather_finish();
+  }
+}
 
 
 /*******

@@ -1658,7 +1658,9 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
   }
 
   // others waiting?
-  lock->finish_waiters(SimpleLock::WAIT_WR, 0); 
+  lock->finish_waiters(SimpleLock::WAIT_STABLE |
+		       SimpleLock::WAIT_WR | 
+		       SimpleLock::WAIT_RD, 0); 
 
   // eval?
   if (lock->get_parent()->is_auth())
@@ -2497,7 +2499,9 @@ void Locker::local_xlock_finish(LocalLock *lock, MDRequest *mdr)
   mdr->xlocks.erase(lock);
   mdr->locks.erase(lock);
 
-  lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
+  lock->finish_waiters(SimpleLock::WAIT_STABLE | 
+		       SimpleLock::WAIT_WR | 
+		       SimpleLock::WAIT_RD);
 }
 
 
@@ -2673,7 +2677,9 @@ void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
   assert(lock->get_parent()->is_auth());  // or implement remote xlocks
 
   // others waiting?
-  lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_RD, 0); 
+  lock->finish_waiters(SimpleLock::WAIT_STABLE | 
+		       SimpleLock::WAIT_WR | 
+		       SimpleLock::WAIT_RD, 0); 
 
   if (lock->get_parent()->is_auth())
     file_eval(lock);

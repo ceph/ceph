@@ -39,7 +39,7 @@ struct ceph_mon_client {
 	unsigned long osd_delay;
 	unsigned long umount_delay;
 
-	u32 have_mdsmap;  /* protected by caller's lock */
+	u32 want_mdsmap;  /* protected by caller's lock */
 	u32 have_osdmap;  /* protected by caller's lock */
 };
 
@@ -48,8 +48,9 @@ extern int ceph_monmap_contains(struct ceph_monmap *m,
 				struct ceph_entity_addr *addr);
 
 extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
+extern void ceph_monc_stop(struct ceph_mon_client *monc);
 
-extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 have);
+extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 want);
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have);
 
 extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u32 have);
