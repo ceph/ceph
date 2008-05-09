@@ -80,6 +80,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
 
   // decode
   le->decode(p);
+  assert(p.end());
   
   return le;
 }

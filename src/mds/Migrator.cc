@@ -815,21 +815,14 @@ void Migrator::export_go_synced(CDir *dir)
   mds->balancer->subtract_export(dir);
   
   // fill export message with cache data
+  MExportDir *req = new MExportDir(dir->dirfrag());
   utime_t now = g_clock.now();
   map<__u32,entity_inst_t> exported_client_map;
-  bufferlist export_data;
-  int num_exported_inodes = encode_export_dir( export_data,
-					       dir,   // recur start point
-					       exported_client_map,
-					       now );
-  bufferlist bl;
-  ::encode(exported_client_map, bl);
-  bl.claim_append(export_data);
-  export_data.claim(bl);
-
-  // send the export data!
-  MExportDir *req = new MExportDir(dir->dirfrag());
-  req->take_dirstate(export_data);
+  int num_exported_inodes = encode_export_dir(req->export_data,
+					      dir,   // recur start point
+					      exported_client_map,
+					      now);
+  ::encode(exported_client_map, req->client_map);
 
   // add bounds to message
   set<CDir*> bounds;
@@ -1636,7 +1629,7 @@ public:
 
 void Migrator::handle_export_dir(MExportDir *m)
 {
-  CDir *dir = cache->get_dirfrag(m->get_dirfrag());
+  CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
 
   int oldauth = m->get_source().num();
@@ -1648,19 +1641,19 @@ void Migrator::handle_export_dir(MExportDir *m)
   C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num());
 
   // start the journal entry
-  EImportStart *le = new EImportStart(dir->dirfrag(), m->get_bounds());
+  EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds);
   le->metablob.add_dir_context(dir);
   
   // adjust auth (list us _first_)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), oldauth);
 
-  // add this crap to my cache
-  bufferlist::iterator blp = m->get_dirstate().begin();
-
   // new client sessions, open these after we journal
-  ::decode(onlogged->imported_client_map, blp);
+  bufferlist::iterator cmp = m->client_map.begin();
+  ::decode(onlogged->imported_client_map, cmp);
+  assert(cmp.end());
   mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
 
+  bufferlist::iterator blp = m->export_data.begin();
   int num_imported_inodes = 0;
   while (!blp.end()) {
     num_imported_inodes += 
@@ -1672,10 +1665,10 @@ void Migrator::handle_export_dir(MExportDir *m)
 			import_caps[dir],
 			import_updated_scatterlocks[dir]);
   }
-  dout(10) << " " << m->get_bounds().size() << " imported bounds" << dendl;
+  dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
   
   // include imported sessions in EImportStart
-  le->client_map.claim(m->get_dirstate());
+  le->client_map.claim(m->client_map);
 
   // include bounds in EImportStart
   set<CDir*> import_bounds;

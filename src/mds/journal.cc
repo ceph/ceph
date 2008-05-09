@@ -770,6 +770,7 @@ void EExport::replay(MDS *mds)
 void EImportStart::replay(MDS *mds)
 {
   dout(10) << "EImportStart.replay " << base << dendl;
+  metablob.print(*_dout);
   metablob.replay(mds, _segment);
 
   // put in ambiguous import list

@@ -30,7 +30,7 @@ protected:
 
  public:
   EMetaBlob metablob;
-  bufferlist client_map;  // encoded map<int,entity_inst_t>
+  bufferlist client_map;  // encoded map<__u32,entity_inst_t>
   version_t cmapv;
 
   EImportStart(dirfrag_t di,
