@@ -468,7 +468,7 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   }
 
   // replicated
-  in->dir_replicated = dst->is_rep;  // FIXME that's just one frag!
+  in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
   
   // dist
   /*

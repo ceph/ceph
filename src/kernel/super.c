@@ -153,11 +153,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_lease_ttl = 0;
 	INIT_LIST_HEAD(&ci->i_lease_item);
 
-	ci->i_fragtree = ci->i_fragtree_static;
-	ci->i_fragtree->nsplits = 0;
-
-	ci->i_frag_map_nr = 0;
-	ci->i_frag_map = ci->i_frag_map_static;
+	ci->i_fragtree = RB_ROOT;
 
 	INIT_LIST_HEAD(&ci->i_caps);
 	for (i = 0; i < STATIC_CAPS; i++)
@@ -188,8 +184,16 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 static void ceph_destroy_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_inode_frag *frag;
+	struct rb_node *n;
+	
 	dout(30, "destroy_inode %p ino %llx\n", inode, ceph_ino(inode));
 	kfree(ci->i_symlink);
+	while ((n = rb_first(&ci->i_fragtree)) != 0) {
+		frag = rb_entry(n, struct ceph_inode_frag, node);
+		rb_erase(n, &ci->i_fragtree);
+		kfree(frag);
+	}
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 

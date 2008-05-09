@@ -485,9 +485,17 @@ struct ceph_mds_reply_head {
 	__le32 mdsmap_epoch;
 } __attribute__ ((packed));
 
+/*
+ * one for each node split
+ */
+struct ceph_frag_tree_split {
+	__le32 frag;
+	__le32 by;
+} __attribute__ ((packed));
+
 struct ceph_frag_tree_head {
 	__le32 nsplits;
-	__le32 splits[0];
+	struct ceph_frag_tree_split splits[0];
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
@@ -513,7 +521,6 @@ struct ceph_mds_reply_lease {
 struct ceph_mds_reply_dirfrag {
 	__le32 frag;
 	__le32 auth;
-	__u8 is_rep;
 	__le32 ndist;
 	__le32 dist[];
 } __attribute__ ((packed));

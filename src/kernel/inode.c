@@ -62,11 +62,99 @@ const struct inode_operations ceph_special_iops = {
 
 
 /*
+ * find (or create) a frag in the tree
+ */
+struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
+{
+	struct rb_node **p = &ci->i_fragtree.rb_node;
+	struct rb_node *parent = NULL;
+	struct ceph_inode_frag *frag;
+
+	while (*p) {
+		parent = *p;
+		frag = rb_entry(parent, struct ceph_inode_frag, node);
+		if (f < frag->frag)
+			p = &(*p)->rb_left;
+		else if (f > frag->frag)
+			p = &(*p)->rb_right;
+		else
+			return frag;
+	}
+
+	frag = kmalloc(sizeof(*frag), GFP_NOFS);
+	if (!frag)
+		return 0;
+
+	frag->frag = f;
+	frag->split_by = 0;
+	frag->mds = -1;
+	frag->ndist = 0;
+
+	rb_link_node(&frag->node, parent, p);
+	rb_insert_color(&frag->node, &ci->i_fragtree);
+
+	dout(20, "get_frag added %llx frag %x\n", ceph_ino(&ci->vfs_inode), f);
+	return frag;
+}
+
+static int ceph_fill_dirfrag(struct inode *inode,
+			     struct ceph_mds_reply_dirfrag *dirinfo)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_inode_frag *frag;
+	u32 id = le32_to_cpu(dirinfo->frag);
+	int mds = le32_to_cpu(dirinfo->auth);
+	int ndist = le32_to_cpu(dirinfo->ndist);
+	int i;
+
+	if (mds < 0 && ndist == 0) {
+		/* no delegation info needed. */
+		frag = ceph_find_frag(ci, id);
+		if (!frag)
+			return 0;
+		if (frag->split_by == 0) {
+			/* tree leaf, remove */
+			dout(20, "removed %llx frag %x (no referral)\n",
+			     ceph_ino(inode), id);
+			rb_erase(&frag->node, &ci->i_fragtree);
+			kfree(frag);
+		} else {
+			/* tree branch, keep */
+			dout(20, "cleared %llx frag %x referral\n",
+			     ceph_ino(inode), id);
+			frag->mds = -1;
+			frag->ndist = 0;
+		}
+		return 0;
+	}
+
+
+	/* find/add this frag to store mds delegation info */
+	frag = ceph_get_frag(ci, id);
+	if (!frag) {
+		derr(0, "ENOMEM on mds referral ino %llx frag %x\n",
+		     ceph_ino(inode), le32_to_cpu(dirinfo->frag));
+		return -ENOMEM;
+	} else {
+		frag->mds = mds;
+		frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
+		for (i = 0; i < frag->ndist; i++)
+			frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
+		dout(20, "set %llx frag %x referral mds %d ndist=%d\n",
+		     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
+	}
+	return 0;
+}
+
+/*
  * populate an inode based on info from mds.
  * may be called on new or existing inodes.
  */
-int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
+int ceph_fill_inode(struct inode *inode,
+		    struct ceph_mds_reply_info_in *iinfo,
+		    struct ceph_mds_reply_dirfrag *dirinfo)
 {
+	struct ceph_mds_reply_inode *info = iinfo->in;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
 	int symlen;
@@ -77,6 +165,7 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	int blkbits = fls(su) - 1;
 	u64 blocks = (size + (1<<9) - 1) >> 9;
 	u64 time_warp_seq;
+	u32 nsplits;
 
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode 0%o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
@@ -149,19 +238,6 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	kfree(ci->i_symlink);
 	ci->i_symlink = 0;
 
-	if (le32_to_cpu(info->fragtree.nsplits) > 0) {
-		/*ci->i_fragtree = kmalloc(...); */
-		BUG_ON(1); /* write me */
-	}
-	ci->i_fragtree->nsplits = le32_to_cpu(info->fragtree.nsplits);
-	for (i = 0; i < ci->i_fragtree->nsplits; i++)
-		ci->i_fragtree->splits[i] =
-			le32_to_cpu(info->fragtree.splits[i]);
-
-	ci->i_frag_map_nr = 1;
-	ci->i_frag_map[0].frag = 0;
-	ci->i_frag_map[0].mds = 0; /* FIXME */
-
 	ci->i_old_atime = inode->i_atime;
 
 	ci->i_max_size = le64_to_cpu(info->max_size);
@@ -170,6 +246,27 @@ int ceph_fill_inode(struct inode *inode, struct ceph_mds_reply_inode *info)
 	inode->i_mapping->a_ops = &ceph_aops;
 
 no_change:
+	/* populate frag tree */
+	/* FIXME: move me up, if/when version reflects fragtree changes */
+	nsplits = le32_to_cpu(info->fragtree.nsplits);
+	for (i = 0; i < nsplits; i++) {
+		u32 id = le32_to_cpu(info->fragtree.splits[i].frag);
+		struct ceph_inode_frag *frag = ceph_get_frag(ci, id);
+		if (!frag) {
+			derr(0,"ENOMEM on ino %llx frag %x\n",
+			     ceph_ino(inode), id);
+			continue;
+		}
+		frag->split_by =
+			le32_to_cpu(info->fragtree.splits[i].by);
+		dout(20, " frag %x split by %d\n", frag->frag,
+		     frag->split_by);
+	}
+
+	/* set dirinfo? */
+	if (dirinfo)
+		ceph_fill_dirfrag(inode, dirinfo);
+
 	spin_unlock(&inode->i_lock);
 
 	if (ci->i_hashval != inode->i_ino) {
@@ -191,16 +288,12 @@ no_change:
 		break;
 	case S_IFLNK:
 		inode->i_op = &ceph_symlink_iops;
-		symlen = le32_to_cpu(*(__u32 *)(info->fragtree.splits +
-						ci->i_fragtree->nsplits));
+		symlen = iinfo->symlink_len;
 		BUG_ON(symlen != ci->vfs_inode.i_size);
 		ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
 		if (ci->i_symlink == NULL)
 			return -ENOMEM;
-		memcpy(ci->i_symlink,
-		       (char *)(info->fragtree.splits +
-				ci->i_fragtree->nsplits) + 4,
-		       symlen);
+		memcpy(ci->i_symlink, iinfo->symlink, symlen);
 		ci->i_symlink[symlen] = 0;
 		break;
 	case S_IFDIR:
@@ -404,7 +497,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	}
 
 	if (ino == 1) {
-		err = ceph_fill_inode(in, rinfo->trace_in[0].in);
+		err = ceph_fill_inode(in, &rinfo->trace_in[0],
+				      rinfo->trace_numd ?
+				      rinfo->trace_dir[0]:0);
 		if (err < 0)
 			return err;
 		ceph_update_inode_lease(in, rinfo->trace_ilease[0], session,
@@ -455,7 +550,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dout(10, "warning: d_parent %p != %p\n",
 				     dn->d_parent, parent);
 		}
-		
+
 		if (!dn) {
 			dname.hash = full_name_hash(dname.name, dname.len);
 		retry_lookup:
@@ -524,7 +619,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			realdn = d_splice_alias(in, dn);
 			if (realdn) {
 				derr(10, "dn %p spliced with %p inode %p "
-				     "ino %llx\n", dn, realdn, realdn->d_inode, 
+				     "ino %llx\n", dn, realdn, realdn->d_inode,
 				     ceph_ino(realdn->d_inode));
 				if (dn == req->r_last_dentry) {
 					dput(dn);
@@ -543,8 +638,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			derr(10, "sloppy tailing dentry %p, not doing lease\n",
 			     dn);
 		BUG_ON(d_unhashed(dn));
-		
-		err = ceph_fill_inode(in, ininfo);
+
+		err = ceph_fill_inode(in,
+				      &rinfo->trace_in[d+1],
+				      rinfo->trace_numd <= d ?
+				      rinfo->trace_dir[d+1]:0);
 		if (err < 0) {
 			derr(30, "ceph_fill_inode badness\n");
 			iput(in);
@@ -588,6 +686,10 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 
 	dout(10, "readdir_prepopulate %d items under dentry %p\n",
 	     rinfo->dir_nr, parent);
+
+	if (rinfo->dir_dir)
+		ceph_fill_dirfrag(parent->d_inode, rinfo->dir_dir);
+
 	for (i = 0; i < rinfo->dir_nr; i++) {
 		/* dentry */
 		dname.name = rinfo->dir_dname[i];
@@ -629,7 +731,7 @@ retry_lookup:
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
 				return -1;
-			}			
+			}
 			if (!d_unhashed(dn))
 				d_drop(dn);
 			new = d_splice_alias(in, dn);
@@ -638,7 +740,7 @@ retry_lookup:
 		}
 		BUG_ON(d_unhashed(dn));
 
-		if (ceph_fill_inode(in, rinfo->dir_in[i].in) < 0) {
+		if (ceph_fill_inode(in, &rinfo->dir_in[i], 0) < 0) {
 			dout(0, "ceph_fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;

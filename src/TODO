@@ -59,6 +59,7 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds mustfix
+- replay of dir fragmentation  (dont want dir frozen, pins, etc.?)
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing

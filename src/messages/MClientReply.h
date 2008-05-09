@@ -70,7 +70,6 @@ struct DirStat {
   frag_t frag;
   __s32 auth;
   set<__s32> dist;
-  __u8 is_rep;
   
   DirStat() {}
   DirStat(bufferlist::iterator& p) {
@@ -80,7 +79,6 @@ struct DirStat {
   void decode(bufferlist::iterator& p) {
     ::decode(frag, p);
     ::decode(auth, p);
-    ::decode(is_rep, p);
     ::decode(dist, p);
   }
 
@@ -91,16 +89,13 @@ struct DirStat {
     frag_t frag = dir->get_frag();
     __s32 auth;
     set<__s32> dist;
-    __u8 is_rep;
     
     auth = dir->get_dir_auth().first;
     if (dir->is_auth()) 
       dir->get_dist_spec(dist, whoami);
-    is_rep = dir->is_rep();
 
     ::encode(frag, bl);
     ::encode(auth, bl);
-    ::encode(is_rep, bl);
     ::encode(dist, bl);
   }  
 };
@@ -144,10 +139,9 @@ struct InodeStat {
 
     int n = e.fragtree.nsplits;
     while (n) {
-      __u32 s, by;
+      ceph_frag_tree_split s;
       ::decode(s, p);
-      ::decode(by, p);
-      dirfragtree._splits[s] = by;
+      dirfragtree._splits[(__u32)s.frag] = s.by;
       n--;
     }
     ::decode(symlink, p);

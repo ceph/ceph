@@ -154,9 +154,19 @@ struct ceph_inode_cap {
 	struct list_head session_caps;  /* per-session caplist */
 };
 
-struct ceph_inode_frag_map_item {
+#define MAX_DIRFRAG_REP 4
+
+struct ceph_inode_frag {
+	struct rb_node node;
+
+	/* fragtree state */
 	u32 frag;
-	u32 mds;
+	int split_by;
+
+	/* delegation info */
+	int mds;   /* -1 if parent */
+	int ndist;
+	int dist[MAX_DIRFRAG_REP];
 };
 
 #define STATIC_CAPS 2
@@ -175,9 +185,7 @@ struct ceph_inode_info {
 	long unsigned i_lease_ttl;  /* jiffies */
 	struct list_head i_lease_item; /* mds session list */
 
-	struct ceph_frag_tree_head *i_fragtree, i_fragtree_static[1];
-	int i_frag_map_nr;
-	struct ceph_inode_frag_map_item *i_frag_map, i_frag_map_static[1];
+	struct rb_root i_fragtree;
 
 	struct list_head i_caps;
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
@@ -209,6 +217,24 @@ struct ceph_inode_info {
 static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 {
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
+}
+
+static inline struct ceph_inode_frag *ceph_find_frag(struct ceph_inode_info *ci,
+						     u32 f)
+{
+	struct rb_node *n = ci->i_fragtree.rb_node;
+
+	while (n) {
+		struct ceph_inode_frag *frag =
+			rb_entry(n, struct ceph_inode_frag, node);
+		if (f < frag->frag)
+			n = n->rb_left;
+		else if (f > frag->frag)
+			n = n->rb_right;
+		else
+			return frag;
+	}
+	return NULL;
 }
 
 struct ceph_dentry_info {
@@ -364,7 +390,8 @@ extern const struct inode_operations ceph_file_iops;
 extern const struct inode_operations ceph_special_iops;
 extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
-			   struct ceph_mds_reply_inode *info);
+			   struct ceph_mds_reply_info_in *iinfo,
+			   struct ceph_mds_reply_dirfrag *dirinfo);
 extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_request *req,
 			   struct ceph_mds_session *session);

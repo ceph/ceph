@@ -63,7 +63,8 @@ static int parse_reply_info_in(void **p, void *end,
 	int err = -EINVAL;
 	info->in = *p;
 	*p += sizeof(struct ceph_mds_reply_inode) +
-		sizeof(__u32)*le32_to_cpu(info->in->fragtree.nsplits);
+		sizeof(*info->in->fragtree.splits) * 
+		le32_to_cpu(info->in->fragtree.nsplits);
 	ceph_decode_32_safe(p, end, info->symlink_len, bad);
 	ceph_decode_need(p, end, info->symlink_len, bad);
 	info->symlink = *p;
@@ -459,13 +460,19 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 static int choose_mds(struct ceph_mds_client *mdsc,
 		      struct ceph_mds_request *req)
 {
+	int mds;
+
 	/* is there a specific mds we should try? */
 	if (req->r_resend_mds >= 0 &&
-	    ceph_mdsmap_get_state(mdsc->mdsmap, req->r_resend_mds) > 0)
+	    ceph_mdsmap_get_state(mdsc->mdsmap, req->r_resend_mds) > 0) {
+		dout(20, "using resend_mds mds%d\n", req->r_resend_mds);
 		return req->r_resend_mds;
+	}
 
 	/* pick one at random */
-	return ceph_mdsmap_get_random_mds(mdsc->mdsmap);
+	mds = ceph_mdsmap_get_random_mds(mdsc->mdsmap);
+	dout(20, "choose_mds chose random mds%d\n", mds);
+	return mds;
 }
 
 
@@ -1131,16 +1138,20 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	    mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
 		/* yes.  adjust mds set */
 		if (fwd_seq > req->r_num_fwd) {
+			dout(10, "forward %llu to mds%d\n", tid, next_mds);
 			req->r_num_fwd = fwd_seq;
 			req->r_resend_mds = next_mds;
 			put_request_sessions(req);
 			req->r_session = __get_session(mdsc, next_mds);
 			req->r_fwd_session = __get_session(mdsc, from_mds);
-		}
+		} else
+			dout(10, "forward %llu to mds%d - old seq %d <= %d\n",
+			     tid, next_mds, req->r_num_fwd, fwd_seq);
 		spin_unlock(&mdsc->lock);
 	} else {
 		/* no, resend. */
 		/* forward race not possible; mds would drop */
+		dout(10, "forward %llu to mds%d (no session)\n", tid, next_mds);
 		BUG_ON(fwd_seq <= req->r_num_fwd);
 		put_request_sessions(req);
 		req->r_resend_mds = next_mds;
