@@ -232,7 +232,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   mds->sessionmap.version++;  // noop
 }
 
-void Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
+version_t Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
 {
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
@@ -243,6 +243,7 @@ void Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
     if (session->is_undef() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
   }
+  return pv;
 }
 
 void Server::finish_force_open_sessions(map<__u32,entity_inst_t>& cm)

@@ -1648,10 +1648,12 @@ void Migrator::handle_export_dir(MExportDir *m)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), oldauth);
 
   // new client sessions, open these after we journal
+  // include imported sessions in EImportStart
   bufferlist::iterator cmp = m->client_map.begin();
   ::decode(onlogged->imported_client_map, cmp);
   assert(cmp.end());
-  mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
+  le->cmapv = mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
+  le->client_map.claim(m->client_map);
 
   bufferlist::iterator blp = m->export_data.begin();
   int num_imported_inodes = 0;
@@ -1667,9 +1669,6 @@ void Migrator::handle_export_dir(MExportDir *m)
   }
   dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
   
-  // include imported sessions in EImportStart
-  le->client_map.claim(m->client_map);
-
   // include bounds in EImportStart
   set<CDir*> import_bounds;
   cache->get_subtree_bounds(dir, import_bounds);
