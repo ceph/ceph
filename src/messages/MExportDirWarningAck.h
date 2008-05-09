@@ -32,13 +32,12 @@ class MExportDirWarningAck : public Message {
 
   const char *get_type_name() { return "ExWAck"; }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
+  void encode_payload() {
+    ::encode(ino, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&ino, sizeof(ino));
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(ino, p);
   }
 };
 

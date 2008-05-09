@@ -68,15 +68,15 @@ class MMDSMap : public Message {
 
   // marshalling
   void decode_payload() {
-    int off = 0;
-    ::_decode(fsid, payload, off);
-    ::_decode(epoch, payload, off);
-    ::_decode(encoded, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
+    ::decode(epoch, p);
+    ::decode(encoded, p);
   }
   void encode_payload() {
-    ::_encode(fsid, payload);
-    ::_encode(epoch, payload);
-    ::_encode(encoded, payload);
+    ::encode(fsid, payload);
+    ::encode(epoch, payload);
+    ::encode(encoded, payload);
   }
 };
 

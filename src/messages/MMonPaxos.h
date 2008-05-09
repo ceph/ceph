@@ -43,8 +43,8 @@ class MMonPaxos : public Message {
   }
 
   epoch_t epoch;   // monitor epoch
-  int op;          // paxos op
-  int machine_id;  // which state machine?
+  __s32 op;          // paxos op
+  __s32 machine_id;  // which state machine?
 
   version_t last_committed;  // i've committed to
   version_t pn_from;         // i promise to accept after
@@ -71,27 +71,27 @@ class MMonPaxos : public Message {
   }
 
   void encode_payload() {
-    ::_encode(epoch, payload);
-    ::_encode(op, payload);
-    ::_encode(machine_id, payload);
-    ::_encode(last_committed, payload);
-    ::_encode(pn_from, payload);
-    ::_encode(pn, payload);
-    ::_encode(uncommitted_pn, payload);
-    ::_encode(lease_expire, payload);
-    ::_encode(values, payload);
+    ::encode(epoch, payload);
+    ::encode(op, payload);
+    ::encode(machine_id, payload);
+    ::encode(last_committed, payload);
+    ::encode(pn_from, payload);
+    ::encode(pn, payload);
+    ::encode(uncommitted_pn, payload);
+    ::encode(lease_expire, payload);
+    ::encode(values, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(epoch, payload, off);
-    ::_decode(op, payload, off);
-    ::_decode(machine_id, payload, off);
-    ::_decode(last_committed, payload, off);
-    ::_decode(pn_from, payload, off);   
-    ::_decode(pn, payload, off);   
-    ::_decode(uncommitted_pn, payload, off);
-    ::_decode(lease_expire, payload, off);
-    ::_decode(values, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(epoch, p);
+    ::decode(op, p);
+    ::decode(machine_id, p);
+    ::decode(last_committed, p);
+    ::decode(pn_from, p);   
+    ::decode(pn, p);   
+    ::decode(uncommitted_pn, p);
+    ::decode(lease_expire, p);
+    ::decode(values, p);
   }
 };
 

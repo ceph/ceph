@@ -18,7 +18,6 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
-#include "include/encodable.h"
 
 class MMonGetMap : public Message {
  public:

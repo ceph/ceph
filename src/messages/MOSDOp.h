@@ -139,12 +139,12 @@ public:
 
   // marshalling
   virtual void decode_payload() {
-    int off = 0;
-    ::_decode(head, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(head, p);
   }
 
   virtual void encode_payload() {
-    ::_encode(head, payload);
+    ::encode(head, payload);
     env.data_off = get_offset();
   }
 

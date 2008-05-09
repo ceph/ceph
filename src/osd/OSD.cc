@@ -148,7 +148,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   sb.fsid = fsid;
   sb.whoami = whoami;
   bufferlist bl;
-  bl.append((const char *)&sb, sizeof(sb));
+  ::encode(sb, bl);
   store->write(OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
   store->umount();
   delete store;
@@ -438,7 +438,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
   dout(10) << "write_superblock " << superblock << dendl;
 
   bufferlist bl;
-  bl.append((char*)&superblock, sizeof(superblock));
+  ::encode(superblock, bl);
   t.write(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
 }
 
@@ -1339,10 +1339,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         get_inc_map_bl(cur+1, bl);
       }
 
-      OSDMap::Incremental inc;
-      int off = 0;
-      inc.decode(bl, off);
-
+      OSDMap::Incremental inc(bl);
       osdmap->apply_incremental(inc);
 
       // archive the full map
@@ -1712,8 +1709,8 @@ bool OSD::get_inc_map(epoch_t e, OSDMap::Incremental &inc)
   bufferlist bl;
   if (!get_inc_map_bl(e, bl)) 
     return false;
-  int off = 0;
-  inc.decode(bl, off);
+  bufferlist::iterator p = bl.begin();
+  inc.decode(p);
   return true;
 }
 

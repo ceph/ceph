@@ -30,13 +30,13 @@ public:
   }
 
   void encode_payload() {
-    ::_encode(tid, payload);
-    ::_encode(stfs, payload);
+    ::encode(tid, payload);
+    ::encode(stfs, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(tid, payload, off);
-    ::_decode(stfs, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(tid, p);
+    ::decode(stfs, p);
   }
 };
 

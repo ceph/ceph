@@ -33,12 +33,12 @@ class MExportCapsAck : public Message {
     o << "export_caps_ack(" << ino << ")";
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    ::_decode(ino, payload, off);
-  }
   virtual void encode_payload() {
-    ::_encode(ino, payload);
+    ::encode(ino, payload);
+  }
+  virtual void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(ino, p);
   }
 
 };

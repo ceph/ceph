@@ -1651,8 +1651,8 @@ void MDCache::rejoin_send_rejoins()
   // encode cap list once.
   bufferlist cap_export_bl;
   if (mds->is_rejoin()) {
-    ::_encode(cap_exports, cap_export_bl);
-    ::_encode(cap_export_paths, cap_export_bl);
+    ::encode(cap_exports, cap_export_bl);
+    ::encode(cap_export_paths, cap_export_bl);
   }
 
   // if i am rejoining, send a rejoin to everyone.
@@ -5670,24 +5670,21 @@ CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Contex
 CDentry *MDCache::add_replica_stray(bufferlist &bl, CInode *in, int from)
 {
   list<Context*> finished;
-  int off = 0;
+  bufferlist::iterator p = bl.begin();
   
   // inode
-  CInodeDiscover indis;
-  indis._decode(bl, off);
+  CInodeDiscover indis(p);
   CInode *strayin = add_replica_inode(indis, NULL, finished);
   dout(15) << "strayin " << *strayin << dendl;
   
   // dir
-  CDirDiscover dirdis;
-  dirdis._decode(bl, off);
+  CDirDiscover dirdis(p);
   CDir *straydir = add_replica_dir(strayin, dirdis.get_dirfrag().frag, dirdis,
 					    from, finished);
   dout(15) << "straydir " << *straydir << dendl;
   
   // dentry
-  CDentryDiscover dndis;
-  dndis._decode(bl, off);
+  CDentryDiscover dndis(p);
   
   string straydname;
   in->name_stray_dentry(straydname);
@@ -6198,7 +6195,7 @@ void MDCache::fragment_stored(CInode *diri, frag_t basefrag, int bits,
       // freshly replicate basedir to peer on merge
       CDir *base = resultfrags.front();
       CDirDiscover *basedis = base->replicate_to(*p);
-      basedis->_encode(notify->basebl);
+      basedis->encode(notify->basebl);
       delete basedis;
     }
     mds->send_message_mds(notify, *p);
@@ -6254,9 +6251,8 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     // add replica dir (for merge)?
     //  (adjust_dir_fragments expects base to already exist, if non-auth)
     if (notify->get_bits() < 0) {
-      CDirDiscover basedis;
-      int off = 0;
-      basedis._decode(notify->basebl, off);
+      bufferlist::iterator p = notify->basebl.begin();
+      CDirDiscover basedis(p);
       add_replica_dir(diri, notify->get_basefrag(), basedis,
 		      notify->get_source().num(), waiters);
     }

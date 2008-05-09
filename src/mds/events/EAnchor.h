@@ -24,12 +24,12 @@
 
 class EAnchor : public LogEvent {
 protected:
-  int op;
+  __u32 op;
   inodeno_t ino;
   version_t atid; 
   vector<Anchor> trace;
   version_t version;    // anchor table version
-  int reqmds;
+  __s32 reqmds;
 
  public:
   EAnchor() : LogEvent(EVENT_ANCHOR) { }
@@ -43,26 +43,21 @@ protected:
   void set_trace(vector<Anchor>& t) { trace = t; }
   vector<Anchor>& get_trace() { return trace; }
   
-  void encode_payload(bufferlist& bl) {
-    bl.append((char*)&op, sizeof(op));
-    bl.append((char*)&ino, sizeof(ino));
-    bl.append((char*)&atid, sizeof(atid));
-    ::_encode(trace, bl);
-    bl.append((char*)&version, sizeof(version));
-    bl.append((char*)&reqmds, sizeof(reqmds));
+  void encode(bufferlist& bl) const {
+    ::encode(op, bl);
+    ::encode(ino, bl);
+    ::encode(atid, bl);
+    ::encode(trace, bl);
+    ::encode(version, bl);
+    ::encode(reqmds, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(op), (char*)&op);
-    off += sizeof(op);
-    bl.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    bl.copy(off, sizeof(atid), (char*)&atid);
-    off += sizeof(atid);
-    ::_decode(trace, bl, off);
-    bl.copy(off, sizeof(version), (char*)&version);
-    off += sizeof(version);
-    bl.copy(off, sizeof(reqmds), (char*)&reqmds);
-    off += sizeof(reqmds);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(op, bl);
+    ::decode(ino, bl);
+    ::decode(atid, bl);
+    ::decode(trace, bl);
+    ::decode(version, bl);
+    ::decode(reqmds, bl);
   }
 
   void print(ostream& out) {

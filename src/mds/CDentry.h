@@ -214,11 +214,11 @@ public:
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export(bufferlist& bl) {
-    ::_encode_simple(state, bl);
-    ::_encode_simple(version, bl);
-    ::_encode_simple(projected_version, bl);
-    lock._encode(bl);
-    ::_encode_simple(replica_map, bl);
+    ::encode(state, bl);
+    ::encode(version, bl);
+    ::encode(projected_version, bl);
+    ::encode(lock, bl);
+    ::encode(replica_map, bl);
     get(PIN_TEMPEXPORTING);
   }
   void finish_export() {
@@ -235,11 +235,11 @@ public:
   }
   void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
     int nstate;
-    ::_decode_simple(nstate, blp);
-    ::_decode_simple(version, blp);
-    ::_decode_simple(projected_version, blp);
-    lock._decode(blp);
-    ::_decode_simple(replica_map, blp);
+    ::decode(nstate, blp);
+    ::decode(version, blp);
+    ::decode(projected_version, blp);
+    ::decode(lock, blp);
+    ::decode(replica_map, blp);
 
     // twiddle
     state = 0;
@@ -272,9 +272,9 @@ ostream& operator<<(ostream& out, CDentry& dn);
 
 class CDentryDiscover {
   string dname;
-  int    replica_nonce;
-  int    lockstate;
-  off_t  dir_offset;
+  __s32  replica_nonce;
+  __s32  lockstate;
+  __s64  dir_offset;
   inodeno_t remote_ino;
   unsigned char remote_d_type;
 
@@ -285,6 +285,7 @@ public:
     lockstate(dn->lock.get_replica_state()),
     dir_offset(dn->get_dir_offset()),
     remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
+  CDentryDiscover(bufferlist::iterator &p) { decode(p); }
 
   string& get_dname() { return dname; }
   int get_nonce() { return replica_nonce; }
@@ -300,26 +301,25 @@ public:
     dn->lock.set_state( lockstate );
   }
 
-  void _encode(bufferlist& bl) {
-    ::_encode(dname, bl);
-    ::_encode(dir_offset, bl);
-    ::_encode(remote_ino, bl);
-    ::_encode(remote_d_type, bl);
-    ::_encode(replica_nonce, bl);
-    ::_encode(lockstate, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(dname, bl);
+    ::encode(dir_offset, bl);
+    ::encode(remote_ino, bl);
+    ::encode(remote_d_type, bl);
+    ::encode(replica_nonce, bl);
+    ::encode(lockstate, bl);
   }
   
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(dname, bl, off);
-    ::_decode(dir_offset, bl, off);
-    ::_decode(remote_ino, bl, off);
-    ::_decode(remote_d_type, bl, off);
-    ::_decode(replica_nonce, bl, off);
-    ::_decode(lockstate, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(dname, bl);
+    ::decode(dir_offset, bl);
+    ::decode(remote_ino, bl);
+    ::decode(remote_d_type, bl);
+    ::decode(replica_nonce, bl);
+    ::decode(lockstate, bl);
   }
-
 };
-
+WRITE_CLASS_ENCODER(CDentryDiscover)
 
 
 #endif

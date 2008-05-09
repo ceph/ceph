@@ -18,7 +18,6 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
-#include "include/encodable.h"
 
 class MMDSGetMap : public Message {
  public:
@@ -37,13 +36,13 @@ class MMDSGetMap : public Message {
   }
   
   void encode_payload() {
-    ::_encode_simple(fsid, payload);
-    ::_encode_simple(want, payload);
+    ::encode(fsid, payload);
+    ::encode(want, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(fsid, p);
-    ::_decode_simple(want, p);
+    ::decode(fsid, p);
+    ::decode(want, p);
   }
 };
 

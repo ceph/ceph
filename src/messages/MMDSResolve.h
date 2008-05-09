@@ -51,15 +51,15 @@ class MMDSResolve : public Message {
   }
 
   void encode_payload() {
-    ::_encode(subtrees, payload);
-    ::_encode(ambiguous_imports, payload);
-    ::_encode(slave_requests, payload);
+    ::encode(subtrees, payload);
+    ::encode(ambiguous_imports, payload);
+    ::encode(slave_requests, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(subtrees, payload, off);
-    ::_decode(ambiguous_imports, payload, off);
-    ::_decode(slave_requests, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(subtrees, p);
+    ::decode(ambiguous_imports, p);
+    ::decode(slave_requests, p);
   }
 };
 

@@ -56,15 +56,15 @@ class MOSDMap : public Message {
 
   // marshalling
   void decode_payload() {
-    int off = 0;
-    ::_decode(fsid, payload, off);
-    ::_decode(incremental_maps, payload, off);
-    ::_decode(maps, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
+    ::decode(incremental_maps, p);
+    ::decode(maps, p);
   }
   void encode_payload() {
-    ::_encode(fsid, payload);
-    ::_encode(incremental_maps, payload);
-    ::_encode(maps, payload);
+    ::encode(fsid, payload);
+    ::encode(incremental_maps, payload);
+    ::encode(maps, payload);
   }
 
   const char *get_type_name() { return "omap"; }

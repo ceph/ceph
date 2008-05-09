@@ -673,7 +673,7 @@ int main(int argc, const char **argv)
       exit(1);
     }
     bufferlist::iterator p = bl.begin();
-    crush._decode(p);
+    crush.decode(p);
 
     if (outfn) {
       ofstream o;
@@ -697,7 +697,7 @@ int main(int argc, const char **argv)
 
     if (outfn) {
       bufferlist bl;
-      crush._encode(bl);
+      crush.encode(bl);
       int r = bl.write_file(outfn);
       if (r < 0) {
 	cerr << me << ": error writing '" << outfn << "': " << strerror(-r) << std::endl;

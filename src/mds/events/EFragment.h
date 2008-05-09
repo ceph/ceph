@@ -23,7 +23,7 @@ public:
   EMetaBlob metablob;
   inodeno_t ino;
   frag_t basefrag;
-  int bits;         // positive for split (from basefrag), negative for merge (to basefrag)
+  __s32 bits;         // positive for split (from basefrag), negative for merge (to basefrag)
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
   EFragment(MDLog *mdlog, inodeno_t i, frag_t bf, int b) : 
@@ -33,17 +33,17 @@ public:
     out << "EFragment " << ino << " " << basefrag << " by " << bits << " " << metablob;
   }
 
-  void encode_payload(bufferlist& bl) {
-    ::_encode(ino, bl);
-    ::_encode(basefrag, bl);
-    ::_encode(bits, bl);
-    metablob._encode(bl);
+  void encode(bufferlist &bl) const {
+    ::encode(ino, bl);
+    ::encode(basefrag, bl);
+    ::encode(bits, bl);
+    ::encode(metablob, bl);
   } 
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(ino, bl, off);
-    ::_decode(basefrag, bl, off);
-    ::_decode(bits, bl, off);
-    metablob._decode(bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(ino, bl);
+    ::decode(basefrag, bl);
+    ::decode(bits, bl);
+    ::decode(metablob, bl);
   }
 
   void replay(MDS *mds);

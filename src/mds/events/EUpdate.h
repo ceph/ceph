@@ -35,15 +35,15 @@ public:
     out << metablob;
   }
 
-  void encode_payload(bufferlist& bl) {
-    ::_encode(type, bl);
-    metablob._encode(bl);
-    ::_encode(client_map, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(type, bl);
+    ::encode(metablob, bl);
+    ::encode(client_map, bl);
   } 
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(type, bl, off);
-    metablob._decode(bl, off);
-    ::_decode(client_map, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(type, bl);
+    ::decode(metablob, bl);
+    ::decode(client_map, bl);
   }
 
   void update_segment();

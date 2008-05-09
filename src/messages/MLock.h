@@ -104,21 +104,21 @@ class MLock : public Message {
   }
   
   void decode_payload() {
-    int off = 0;
-    ::_decode(asker, payload, off);
-    ::_decode(action, payload, off);
-    ::_decode(reqid, payload, off);
-    ::_decode(lock_type, payload, off);
-    object_info._decode(payload, off);
-    ::_decode(lockdata, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(asker, p);
+    ::decode(action, p);
+    ::decode(reqid, p);
+    ::decode(lock_type, p);
+    ::decode(object_info, p);
+    ::decode(lockdata, p);
   }
   virtual void encode_payload() {
-    ::_encode(asker, payload);
-    ::_encode(action, payload);
-    ::_encode(reqid, payload);
-    ::_encode(lock_type, payload);
-    object_info._encode(payload);
-    ::_encode(lockdata, payload);
+    ::encode(asker, payload);
+    ::encode(action, payload);
+    ::encode(reqid, payload);
+    ::encode(lock_type, payload);
+    ::encode(object_info, payload);
+    ::encode(lockdata, payload);
   }
 
 };

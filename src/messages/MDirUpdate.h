@@ -19,23 +19,21 @@
 #include "msg/Message.h"
 
 class MDirUpdate : public Message {
-  struct {
-    dirfrag_t dirfrag;
-    int dir_rep;
-    int discover;
-  } st;
-  set<int> dir_rep_by;
+  dirfrag_t dirfrag;
+  int32_t dir_rep;
+  int32_t discover;
+  set<int32_t> dir_rep_by;
   filepath path;
 
  public:
-  dirfrag_t get_dirfrag() { return st.dirfrag; }
-  int get_dir_rep() { return st.dir_rep; }
+  dirfrag_t get_dirfrag() { return dirfrag; }
+  int get_dir_rep() { return dir_rep; }
   set<int>& get_dir_rep_by() { return dir_rep_by; } 
-  bool should_discover() { return st.discover > 0; }
+  bool should_discover() { return discover > 0; }
   filepath& get_path() { return path; }
 
   void tried_discover() {
-    if (st.discover) st.discover--;
+    if (discover) discover--;
   }
 
   MDirUpdate() {}
@@ -45,10 +43,10 @@ class MDirUpdate : public Message {
              filepath& path,
              bool discover = false) :
     Message(MSG_MDS_DIRUPDATE) {
-    this->st.dirfrag = dirfrag;
-    this->st.dir_rep = dir_rep;
+    this->dirfrag = dirfrag;
+    this->dir_rep = dir_rep;
     this->dir_rep_by = dir_rep_by;
-    if (discover) this->st.discover = 5;
+    if (discover) this->discover = 5;
     this->path = path;
   }
   const char *get_type_name() { return "dir_update"; }
@@ -57,17 +55,20 @@ class MDirUpdate : public Message {
   }
 
   virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(st), (char*)&st);
-    off += sizeof(st);
-    ::_decode(dir_rep_by, payload, off);
-    path._decode(payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
+    ::decode(dir_rep, p);
+    ::decode(discover, p);
+    ::decode(dir_rep_by, p);
+    ::decode(path, p);
   }
 
   virtual void encode_payload() {
-    payload.append((char*)&st, sizeof(st));
-    ::_encode(dir_rep_by, payload);
-    path._encode(payload);
+    ::encode(dirfrag, payload);
+    ::encode(dir_rep, payload);
+    ::encode(discover, payload);
+    ::encode(dir_rep_by, payload);
+    ::encode(path, payload);
   }
 };
 

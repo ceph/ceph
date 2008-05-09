@@ -28,7 +28,18 @@ struct osd_reqid_t {
   int32_t       inc;  // incarnation
   osd_reqid_t() : tid(0), inc(0) {}
   osd_reqid_t(const entity_name_t& a, int i, tid_t t) : name(a), tid(t), inc(i) {}
-} __attribute__ ((packed));
+  void encode(bufferlist &bl) const {
+    ::encode(name, bl);
+    ::encode(tid, bl);
+    ::encode(inc, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(name, bl);
+    ::decode(tid, bl);
+    ::decode(inc, bl);
+  }
+};
+WRITE_CLASS_ENCODER(osd_reqid_t)
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -107,13 +118,6 @@ public:
   int pool() { return u.pg.pool; }
   int preferred() { return u.pg.preferred; }   // hack: avoid negative.
   
-  /*
-  pg_t operator=(uint64_t v) { u.val = v; return *this; }
-  pg_t operator&=(uint64_t v) { u.val &= v; return *this; }
-  pg_t operator+=(pg_t o) { u.val += o.val; return *this; }
-  pg_t operator-=(pg_t o) { u.val -= o.val; return *this; }
-  pg_t operator++() { ++u.val; return *this; }
-  */
   operator uint64_t() const { return u.pg64; }
 
   pobject_t to_pobject() const { 
@@ -122,6 +126,14 @@ public:
 		     object_t(u.pg64, 0));
   }
 } __attribute__ ((packed));
+
+inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.u.pg64, bl); }
+inline void decode(pg_t &pgid, bufferlist::iterator& p) { 
+  __u64 v;
+  decode_raw(v, p); 
+  pgid.u.pg64 = v;
+}
+
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
 {
@@ -186,7 +198,16 @@ public:
     c.version = version;
     return c;
   }
-} __attribute__ ((packed));
+  void encode(bufferlist &bl) const {
+    ::encode(version, bl);
+    ::encode(epoch, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
+    ::decode(epoch, bl);
+  }
+};
+WRITE_CLASS_ENCODER(eversion_t)
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) && (l.version == r.version);
@@ -221,7 +242,19 @@ struct osd_stat_t {
   int64_t num_objects;
 
   osd_stat_t() : num_blocks(0), num_blocks_avail(0), num_objects(0) {}
+
+  void encode(bufferlist &bl) const {
+    ::encode(num_blocks, bl);
+    ::encode(num_blocks_avail, bl);
+    ::encode(num_objects, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(num_blocks, bl);
+    ::decode(num_blocks_avail, bl);
+    ::decode(num_objects, bl);
+  }
 };
+WRITE_CLASS_ENCODER(osd_stat_t)
 
 
 
@@ -265,10 +298,32 @@ struct pg_stat_t {
   int64_t num_blocks;   // in 4k blocks
   int64_t num_objects;
   
+  void encode(bufferlist &bl) const {
+    ::encode(reported, bl);
+    ::encode(created, bl);
+    ::encode(parent, bl);
+    ::encode(parent_split_bits, bl);
+    ::encode(state, bl);
+    ::encode(num_bytes, bl);
+    ::encode(num_blocks, bl);
+    ::encode(num_objects, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(reported, bl);
+    ::decode(created, bl);
+    ::decode(parent, bl);
+    ::decode(parent_split_bits, bl);
+    ::decode(state, bl);
+    ::decode(num_bytes, bl);
+    ::decode(num_blocks, bl);
+    ::decode(num_objects, bl);
+  }
   pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
-} __attribute__ ((packed));
+};
+WRITE_CLASS_ENCODER(pg_stat_t)
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
+WRITE_RAW_ENCODER(osd_peer_stat_t)
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
   return out << "stat(" << stat.stamp
@@ -317,12 +372,33 @@ public:
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
   double weight;
+
   OSDSuperblock(int w=0) : 
     magic(MAGIC), whoami(w), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
+
+  void encode(bufferlist &bl) const {
+    ::encode(magic, bl);
+    ::encode(fsid, bl);
+    ::encode(whoami, bl);
+    ::encode(current_epoch, bl);
+    ::encode(oldest_map, bl);
+    ::encode(newest_map, bl);
+    ::encode(weight, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(magic, bl);
+    ::decode(fsid, bl);
+    ::decode(whoami, bl);
+    ::decode(current_epoch, bl);
+    ::decode(oldest_map, bl);
+    ::decode(newest_map, bl);
+    ::decode(weight, bl);
+  }
 };
+WRITE_CLASS_ENCODER(OSDSuperblock)
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 {

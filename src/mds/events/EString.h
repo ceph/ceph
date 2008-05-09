@@ -36,11 +36,11 @@ class EString : public LogEvent {
     LogEvent(EVENT_STRING) {
   }
 
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(event, bl, off);
+  void encode(bufferlist& bl) const {
+    ::encode(event, bl);
   }
-  void encode_payload(bufferlist& bl) {
-    ::_encode(event, bl);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(event, bl);
   }
 
   void print(ostream& out) {

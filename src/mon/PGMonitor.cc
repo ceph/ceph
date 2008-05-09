@@ -116,8 +116,8 @@ bool PGMonitor::update_from_paxos()
     dout(7) << "update_from_paxos startup: loading latest full pgmap" << dendl;
     bufferlist bl;
     mon->store->get_bl_ss(bl, "pgmap", "latest");
-    int off = 0;
-    pg_map._decode(bl, off);
+    bufferlist::iterator p = bl.begin();
+    pg_map.decode(p);
   } 
 
   // walk through incrementals
@@ -127,8 +127,8 @@ bool PGMonitor::update_from_paxos()
     if (success) {
       dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
       PGMap::Incremental inc;
-      int off = 0;
-      inc._decode(bl, off);
+      bufferlist::iterator p = bl.begin();
+      inc.decode(p);
       pg_map.apply_incremental(inc);
       
       dout(0) << *this << dendl;
@@ -140,7 +140,7 @@ bool PGMonitor::update_from_paxos()
 
   // save latest
   bufferlist bl;
-  pg_map._encode(bl);
+  pg_map.encode(bl);
   mon->store->put_bl_ss(bl, "pgmap", "latest");
 
   send_pg_creates();
@@ -159,7 +159,7 @@ void PGMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << pending_inc.version << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
-  pending_inc._encode(bl);
+  pending_inc.encode(bl);
 }
 
 bool PGMonitor::preprocess_query(Message *m)
@@ -338,9 +338,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     bufferlist bl;
     mon->store->get_bl_sn(bl, "osdmap", e);
     assert(bl.length());
-    OSDMap::Incremental inc;
-    int off = 0;
-    inc.decode(bl, off);
+    OSDMap::Incremental inc(bl);
     for (map<int32_t,uint32_t>::iterator p = inc.new_offload.begin();
 	 p != inc.new_offload.end();
 	 p++)
@@ -509,7 +507,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "getmap") {
-      pg_map._encode(rdata);
+      pg_map.encode(rdata);
       ss << "got pgmap version " << pg_map.version;
       r = 0;
     }

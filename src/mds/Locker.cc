@@ -1116,7 +1116,7 @@ void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int clie
   LeaseStat e;
   e.mask = mask;
   e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-  ::_encode_simple(e, bl);
+  ::encode(e, bl);
 }
   
 

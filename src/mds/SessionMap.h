@@ -116,18 +116,18 @@ public:
     session_list_item(this),
     cap_push_seq(0) { }
 
-  void _encode(bufferlist& bl) const {
-    ::_encode_simple(inst, bl);
-    ::_encode_simple(cap_push_seq, bl);
-    ::_encode_simple(completed_requests, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(inst, bl);
+    ::encode(cap_push_seq, bl);
+    ::encode(completed_requests, bl);
   }
-  void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(inst, p);
-    ::_decode_simple(cap_push_seq, p);
-    ::_decode_simple(completed_requests, p);
+  void decode(bufferlist::iterator& p) {
+    ::decode(inst, p);
+    ::decode(cap_push_seq, p);
+    ::decode(completed_requests, p);
   }
 };
-
+WRITE_CLASS_ENCODER(Session)
 
 /*
  * session map
@@ -201,8 +201,8 @@ public:
 	s.insert(p->second);
   }
 
-  void open_sessions(map<int,entity_inst_t>& client_map) {
-    for (map<int,entity_inst_t>::iterator p = client_map.begin(); 
+  void open_sessions(map<__u32,entity_inst_t>& client_map) {
+    for (map<__u32,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
       Session *session = get_or_add_session(p->second);

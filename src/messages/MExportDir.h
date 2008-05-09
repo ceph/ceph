@@ -20,12 +20,12 @@
 
 
 class MExportDir : public Message {
-  dirfrag_t dirfrag;
-  
-  bufferlist dirstate;
-  list<dirfrag_t> bounds;
-
  public:  
+  dirfrag_t dirfrag;
+  bufferlist export_data;
+  list<dirfrag_t> bounds;
+  bufferlist client_map;
+
   MExportDir() {}
   MExportDir(dirfrag_t df) : 
     Message(MSG_MDS_EXPORTDIR),
@@ -36,28 +36,22 @@ class MExportDir : public Message {
     o << "export(" << dirfrag << ")";
   }
 
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  bufferlist& get_dirstate() { return dirstate; }
-  list<dirfrag_t>& get_bounds() { return bounds; }
-
-  void take_dirstate(bufferlist& bl) {
-    dirstate.claim(bl);
-  }
   void add_export(dirfrag_t df) { 
     bounds.push_back(df); 
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    ::_decode(bounds, payload, off);
-    ::_decode(dirstate, payload, off);
+  void encode_payload() {
+    ::encode(dirfrag, payload);
+    ::encode(bounds, payload);
+    ::encode(export_data, payload);
+    ::encode(client_map, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&dirfrag, sizeof(dirfrag));
-    ::_encode(bounds, payload);
-    ::_encode(dirstate, payload);
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
+    ::decode(bounds, p);
+    ::decode(export_data, p);
+    ::decode(client_map, p);
   }
 
 };

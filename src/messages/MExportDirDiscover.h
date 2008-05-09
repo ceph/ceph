@@ -46,13 +46,13 @@ class MExportDirDiscover : public Message {
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(dirfrag, p);
-    path._decode(p);
+    ::decode(dirfrag, p);
+    ::decode(path, p);
   }
 
   virtual void encode_payload() {
-    ::_encode_simple(dirfrag, payload);
-    path._encode(payload);
+    ::encode(dirfrag, payload);
+    ::encode(path, payload);
   }
 };
 

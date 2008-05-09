@@ -46,6 +46,7 @@ class LogSegment;
 
 class EMetaBlob {
 
+public:
   /* fullbit - a regular dentry + inode
    */
   struct fullbit {
@@ -60,24 +61,26 @@ class EMetaBlob {
       dn(d), dnv(v), inode(i), dirfragtree(dft), dirty(dr) { }
     fullbit(const string& d, version_t v, inode_t& i, fragtree_t dft, string& sym, bool dr) :
       dn(d), dnv(v), inode(i), dirfragtree(dft), symlink(sym), dirty(dr) { }
-    fullbit(bufferlist& bl, int& off) { _decode(bl, off); }
-    void _encode(bufferlist& bl) {
-      ::_encode(dn, bl);
-      ::_encode(dnv, bl);
-      ::_encode(inode, bl);
-      dirfragtree._encode(bl);
+    fullbit(bufferlist::iterator &p) { decode(p); }
+    fullbit() {}
+
+    void encode(bufferlist& bl) const {
+      ::encode(dn, bl);
+      ::encode(dnv, bl);
+      ::encode(inode, bl);
+      ::encode(dirfragtree, bl);
       if (inode.is_symlink())
-	::_encode(symlink, bl);
-      ::_encode(dirty, bl);
+	::encode(symlink, bl);
+      ::encode(dirty, bl);
     }
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(dn, bl, off);
-      ::_decode(dnv, bl, off);
-      ::_decode(inode, bl, off);
-      dirfragtree._decode(bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(dn, bl);
+      ::decode(dnv, bl);
+      ::decode(inode, bl);
+      ::decode(dirfragtree, bl);
       if (inode.is_symlink())
-	::_decode(symlink, bl, off);
-      ::_decode(dirty, bl, off);
+	::decode(symlink, bl);
+      ::decode(dirty, bl);
     }
     void print(ostream& out) {
       out << " fullbit dn " << dn << " dnv " << dnv
@@ -85,6 +88,7 @@ class EMetaBlob {
 	  << " dirty=" << dirty << std::endl;
     }
   };
+  WRITE_CLASS_ENCODER(fullbit)
   
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
@@ -97,20 +101,22 @@ class EMetaBlob {
 
     remotebit(const string& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnv(v), ino(i), d_type(dt), dirty(dr) { }
-    remotebit(bufferlist& bl, int& off) { _decode(bl, off); }
-    void _encode(bufferlist& bl) {
-      ::_encode(dn, bl);
-      ::_encode(dnv, bl);
-      ::_encode(ino, bl);
-      ::_encode(d_type, bl);
-      ::_encode(dirty, bl);
+    remotebit(bufferlist::iterator &p) { decode(p); }
+    remotebit() {}
+
+    void encode(bufferlist& bl) const {
+      ::encode(dn, bl);
+      ::encode(dnv, bl);
+      ::encode(ino, bl);
+      ::encode(d_type, bl);
+      ::encode(dirty, bl);
     }
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(dn, bl, off);
-      ::_decode(dnv, bl, off);
-      ::_decode(ino, bl, off);
-      ::_decode(d_type, bl, off);
-      ::_decode(dirty, bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(dn, bl);
+      ::decode(dnv, bl);
+      ::decode(ino, bl);
+      ::decode(d_type, bl);
+      ::decode(dirty, bl);
     }
     void print(ostream& out) {
       out << " remotebit dn " << dn << " dnv " << dnv
@@ -118,6 +124,7 @@ class EMetaBlob {
 	  << " dirty=" << dirty << std::endl;
     }
   };
+  WRITE_CLASS_ENCODER(remotebit)
 
   /*
    * nullbit - a null dentry
@@ -126,23 +133,27 @@ class EMetaBlob {
     string dn;
     version_t dnv;
     bool dirty;
+
     nullbit(const string& d, version_t v, bool dr) : dn(d), dnv(v), dirty(dr) { }
-    nullbit(bufferlist& bl, int& off) { _decode(bl, off); }
-    void _encode(bufferlist& bl) {
-      ::_encode(dn, bl);
-      ::_encode(dnv, bl);
-      ::_encode(dirty, bl);
+    nullbit(bufferlist::iterator &p) { decode(p); }
+    nullbit() {}
+
+    void encode(bufferlist& bl) const {
+      ::encode(dn, bl);
+      ::encode(dnv, bl);
+      ::encode(dirty, bl);
     }
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(dn, bl, off);
-      ::_decode(dnv, bl, off);
-      ::_decode(dirty, bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(dn, bl);
+      ::decode(dnv, bl);
+      ::decode(dirty, bl);
     }
     void print(ostream& out) {
       out << " nullbit dn " << dn << " dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
     }
   };
+  WRITE_CLASS_ENCODER(nullbit)
 
 
   /* dirlump - contains metadata for any dir we have contents for.
@@ -153,11 +164,11 @@ public:
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
     version_t  dirv;
-    int state;
-    int nfull, nremote, nnull;
+    __u32 state;
+    __u32 nfull, nremote, nnull;
 
   private:
-    bufferlist dnbl;
+    mutable bufferlist dnbl;
     bool dn_decoded;
     list<fullbit>   dfull;
     list<remotebit> dremote;
@@ -189,45 +200,40 @@ public:
 	p->print(out);
     }
 
-    void _encode_bits() {
-      for (list<fullbit>::iterator p = dfull.begin(); p != dfull.end(); ++p)
-	p->_encode(dnbl);
-      for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
-	p->_encode(dnbl);
-      for (list<nullbit>::iterator p = dnull.begin(); p != dnull.end(); ++p)
-	p->_encode(dnbl);
+    void _encode_bits() const {
+      ::encode(dfull, dnbl);
+      ::encode(dremote, dnbl);
+      ::encode(dnull, dnbl);
     }
     void _decode_bits() { 
       if (dn_decoded) return;
-      int off = 0;
-      for (int i=0; i<nfull; i++) 
-	dfull.push_back(fullbit(dnbl, off));
-      for (int i=0; i<nremote; i++) 
-	dremote.push_back(remotebit(dnbl, off));
-      for (int i=0; i<nnull; i++) 
-	dnull.push_back(nullbit(dnbl, off));
+      bufferlist::iterator p = dnbl.begin();
+      ::decode(dfull, p);
+      ::decode(dremote, p);
+      ::decode(dnull, p);
       dn_decoded = true;
     }
 
-    void _encode(bufferlist& bl) {
-      ::_encode(dirv, bl);
-      ::_encode(state, bl);
-      ::_encode(nfull, bl);
-      ::_encode(nremote, bl);
-      ::_encode(nnull, bl);
+    void encode(bufferlist& bl) const {
+      ::encode(dirv, bl);
+      ::encode(state, bl);
+      ::encode(nfull, bl);
+      ::encode(nremote, bl);
+      ::encode(nnull, bl);
       _encode_bits();
-      ::_encode_destructively(dnbl, bl);
+      ::encode(dnbl, bl);
     }
-    void _decode(bufferlist& bl, int& off) {
-      ::_decode(dirv, bl, off);
-      ::_decode(state, bl, off);
-      ::_decode(nfull, bl, off);
-      ::_decode(nremote, bl, off);
-      ::_decode(nnull, bl, off);
-      ::_decode(dnbl, bl, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(dirv, bl);
+      ::decode(state, bl);
+      ::decode(nfull, bl);
+      ::decode(nremote, bl);
+      ::decode(nnull, bl);
+      ::decode(dnbl, bl);
       dn_decoded = false;      // don't decode bits unless we need them.
     }
   };
+  WRITE_CLASS_ENCODER(dirlump)
 
 private:
   // my lumps.  preserve the order we added them in a list.
@@ -251,6 +257,30 @@ private:
   list<metareqid_t> client_reqs;
 
  public:
+  void encode(bufferlist& bl) const {
+    ::encode(lump_order, bl);
+    ::encode(lump_map, bl);
+    ::encode(atids, bl);
+    ::encode(dirty_inode_mtimes, bl);
+    ::encode(allocated_inos, bl);
+    if (!allocated_inos.empty())
+      ::encode(alloc_tablev, bl);
+    ::encode(truncated_inodes, bl);
+    ::encode(client_reqs, bl);
+  } 
+  void decode(bufferlist::iterator &bl) {
+    ::decode(lump_order, bl);
+    ::decode(lump_map, bl);
+    ::decode(atids, bl);
+    ::decode(dirty_inode_mtimes, bl);
+    ::decode(allocated_inos, bl);
+    if (!allocated_inos.empty())
+      ::decode(alloc_tablev, bl);
+    ::decode(truncated_inodes, bl);
+    ::decode(client_reqs, bl);
+  }
+
+
   // soft state
   off_t last_subtree_map;
   off_t my_offset;
@@ -440,44 +470,8 @@ private:
   }
 
 
-  // encoding
 
-  void _encode(bufferlist& bl) {
-    int32_t n = lump_map.size();
-    ::_encode(n, bl);
-    for (list<dirfrag_t>::iterator i = lump_order.begin();
-	 i != lump_order.end();
-	 ++i) {
-      dirfrag_t dirfrag = *i;
-      ::_encode(dirfrag, bl);
-      lump_map[*i]._encode(bl);
-    }
-    ::_encode(atids, bl);
-    ::_encode(dirty_inode_mtimes, bl);
-    ::_encode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::_encode(alloc_tablev, bl);
-    ::_encode(truncated_inodes, bl);
-    ::_encode(client_reqs, bl);
-  } 
-  void _decode(bufferlist& bl, int& off) {
-    int32_t n;
-    ::_decode(n, bl, off);
-    for (int i=0; i<n; i++) {
-      dirfrag_t dirfrag; 
-      ::_decode(dirfrag, bl, off);
-      lump_order.push_back(dirfrag);
-      lump_map[dirfrag]._decode(bl, off);
-    }
-    ::_decode(atids, bl, off);
-    ::_decode(dirty_inode_mtimes, bl, off);
-    ::_decode(allocated_inos, bl, off);
-    if (!allocated_inos.empty())
-      ::_decode(alloc_tablev, bl, off);
-    ::_decode(truncated_inodes, bl, off);
-    ::_decode(client_reqs, bl, off);
-  }
-  
+ 
   void print(ostream& out) const {
     out << "[metablob";
     if (!lump_order.empty()) 
@@ -492,6 +486,11 @@ private:
   void update_segment(LogSegment *ls);
   void replay(MDS *mds, LogSegment *ls=0);
 };
+WRITE_CLASS_ENCODER(EMetaBlob)
+WRITE_CLASS_ENCODER(EMetaBlob::fullbit)
+WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
+WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
+WRITE_CLASS_ENCODER(EMetaBlob::dirlump)
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {
   t.print(out);

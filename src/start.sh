@@ -27,10 +27,11 @@ $CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --print .ceph_monmap
 $CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 
 # shared args
-ARGS="-d --bind $IP -o out"
+ARGS="-d --bind $IP"
 
 # start monitor
 $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 10 --debug_ms 1
+
 
 # build and inject an initial osd map
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap

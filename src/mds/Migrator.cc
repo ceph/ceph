@@ -815,21 +815,14 @@ void Migrator::export_go_synced(CDir *dir)
   mds->balancer->subtract_export(dir);
   
   // fill export message with cache data
-  utime_t now = g_clock.now();
-  map<int,entity_inst_t> exported_client_map;
-  bufferlist export_data;
-  int num_exported_inodes = encode_export_dir( export_data,
-					       dir,   // recur start point
-					       exported_client_map,
-					       now );
-  bufferlist bl;
-  ::_encode(exported_client_map, bl);
-  bl.claim_append(export_data);
-  export_data.claim(bl);
-
-  // send the export data!
   MExportDir *req = new MExportDir(dir->dirfrag());
-  req->take_dirstate(export_data);
+  utime_t now = g_clock.now();
+  map<__u32,entity_inst_t> exported_client_map;
+  int num_exported_inodes = encode_export_dir(req->export_data,
+					      dir,   // recur start point
+					      exported_client_map,
+					      now);
+  ::encode(exported_client_map, req->client_map);
 
   // add bounds to message
   set<CDir*> bounds;
@@ -859,12 +852,12 @@ void Migrator::export_go_synced(CDir *dir)
  * is pretty arbitrary and dumb.
  */
 void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state, 
-				   map<int,entity_inst_t>& exported_client_map)
+				   map<__u32,entity_inst_t>& exported_client_map)
 {
   dout(7) << "encode_export_inode " << *in << dendl;
   assert(!in->is_replica(mds->get_nodeid()));
 
-  ::_encode_simple(in->inode.ino, enc_state);
+  ::encode(in->inode.ino, enc_state);
   in->encode_export(enc_state);
 
   // caps 
@@ -872,12 +865,12 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
 }
 
 void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl, 
-					map<int,entity_inst_t>& exported_client_map)
+					map<__u32,entity_inst_t>& exported_client_map)
 {
   // encode caps
   map<int,Capability::Export> cap_map;
   in->export_client_caps(cap_map);
-  ::_encode_simple(cap_map, bl);
+  ::encode(cap_map, bl);
 
   in->state_set(CInode::STATE_EXPORTINGCAPS);
 
@@ -952,7 +945,7 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
 
 int Migrator::encode_export_dir(bufferlist& exportbl,
 				CDir *dir,
-				map<int,entity_inst_t>& exported_client_map,
+				map<__u32,entity_inst_t>& exported_client_map,
 				utime_t now)
 {
   int num_exported = 0;
@@ -963,11 +956,11 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
 
   // dir 
   dirfrag_t df = dir->dirfrag();
-  ::_encode_simple(df, exportbl);
+  ::encode(df, exportbl);
   dir->encode_export(exportbl);
   
   long nden = dir->items.size();
-  ::_encode_simple(nden, exportbl);
+  ::encode(nden, exportbl);
   
   // dentries
   list<CDir*> subdirs;
@@ -982,7 +975,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
     // dn name
-    ::_encode(it->first, exportbl);
+    ::encode(it->first, exportbl);
     
     // state
     dn->encode_export(exportbl);
@@ -1001,8 +994,8 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
       
       inodeno_t ino = dn->get_remote_ino();
       unsigned char d_type = dn->get_remote_d_type();
-      ::_encode(ino, exportbl);
-      ::_encode(d_type, exportbl);
+      ::encode(ino, exportbl);
+      ::encode(d_type, exportbl);
       continue;
     }
     
@@ -1624,7 +1617,7 @@ class C_MDS_ImportDirLoggedStart : public Context {
   CDir *dir;
   int from;
 public:
-  map<int,entity_inst_t> imported_client_map;
+  map<__u32,entity_inst_t> imported_client_map;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f) :
     migrator(m), dir(d), from(f) {
@@ -1636,7 +1629,7 @@ public:
 
 void Migrator::handle_export_dir(MExportDir *m)
 {
-  CDir *dir = cache->get_dirfrag(m->get_dirfrag());
+  CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
 
   int oldauth = m->get_source().num();
@@ -1648,19 +1641,21 @@ void Migrator::handle_export_dir(MExportDir *m)
   C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, m->get_source().num());
 
   // start the journal entry
-  EImportStart *le = new EImportStart(dir->dirfrag(), m->get_bounds());
+  EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds);
   le->metablob.add_dir_context(dir);
   
   // adjust auth (list us _first_)
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), oldauth);
 
-  // add this crap to my cache
-  bufferlist::iterator blp = m->get_dirstate().begin();
-
   // new client sessions, open these after we journal
-  ::_decode_simple(onlogged->imported_client_map, blp);
-  mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
+  // include imported sessions in EImportStart
+  bufferlist::iterator cmp = m->client_map.begin();
+  ::decode(onlogged->imported_client_map, cmp);
+  assert(cmp.end());
+  le->cmapv = mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
+  le->client_map.claim(m->client_map);
 
+  bufferlist::iterator blp = m->export_data.begin();
   int num_imported_inodes = 0;
   while (!blp.end()) {
     num_imported_inodes += 
@@ -1672,11 +1667,8 @@ void Migrator::handle_export_dir(MExportDir *m)
 			import_caps[dir],
 			import_updated_scatterlocks[dir]);
   }
-  dout(10) << " " << m->get_bounds().size() << " imported bounds" << dendl;
+  dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
   
-  // include imported sessions in EImportStart
-  le->client_map.claim(m->get_dirstate());
-
   // include bounds in EImportStart
   set<CDir*> import_bounds;
   cache->get_subtree_bounds(dir, import_bounds);
@@ -1801,7 +1793,7 @@ void Migrator::import_reverse(CDir *dir)
   }
 
   // reexport caps
-  for (map<CInode*, map<int,Capability::Export> >::iterator p = import_caps[dir].begin();
+  for (map<CInode*, map<__u32,Capability::Export> >::iterator p = import_caps[dir].begin();
        p != import_caps[dir].end();
        ++p) {
     CInode *in = p->first;
@@ -1878,7 +1870,7 @@ void Migrator::import_reverse_final(CDir *dir)
 
 
 void Migrator::import_logged_start(CDir *dir, int from,
-				   map<int,entity_inst_t>& imported_client_map)
+				   map<__u32,entity_inst_t>& imported_client_map)
 {
   dout(7) << "import_logged " << *dir << dendl;
 
@@ -1888,7 +1880,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   // force open client sessions and finish cap import
   mds->server->finish_force_open_sessions(imported_client_map);
   
-  for (map<CInode*, map<int,Capability::Export> >::iterator p = import_caps[dir].begin();
+  for (map<CInode*, map<__u32,Capability::Export> >::iterator p = import_caps[dir].begin();
        p != import_caps[dir].end();
        ++p) {
     finish_import_inode_caps(p->first, from, p->second);
@@ -1964,13 +1956,13 @@ void Migrator::import_finish(CDir *dir)
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth,
 				   LogSegment *ls,
-				   map<CInode*, map<int,Capability::Export> >& cap_imports,
+				   map<CInode*, map<__u32,Capability::Export> >& cap_imports,
 				   list<ScatterLock*>& updated_scatterlocks)
 {  
   dout(15) << "decode_import_inode on " << *dn << dendl;
 
   inodeno_t ino;
-  ::_decode_simple(ino, blp);
+  ::decode(ino, blp);
   
   bool added = false;
   CInode *in = cache->get_inode(ino);
@@ -2021,10 +2013,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
 
 void Migrator::decode_import_inode_caps(CInode *in,
 					bufferlist::iterator &blp,
-					map<CInode*, map<int,Capability::Export> >& cap_imports)
+					map<CInode*, map<__u32,Capability::Export> >& cap_imports)
 {
-  map<int,Capability::Export> cap_map;
-  ::_decode_simple(cap_map, blp);
+  map<__u32,Capability::Export> cap_map;
+  ::decode(cap_map, blp);
   if (!cap_map.empty()) {
     cap_imports[in].swap(cap_map);
     in->get(CInode::PIN_IMPORTINGCAPS);
@@ -2032,11 +2024,11 @@ void Migrator::decode_import_inode_caps(CInode *in,
 }
 
 void Migrator::finish_import_inode_caps(CInode *in, int from, 
-					map<int,Capability::Export> &cap_map)
+					map<__u32,Capability::Export> &cap_map)
 {
   assert(!cap_map.empty());
   
-  for (map<int,Capability::Export>::iterator it = cap_map.begin();
+  for (map<__u32,Capability::Export>::iterator it = cap_map.begin();
        it != cap_map.end();
        it++) {
     dout(0) << "finish_import_inode_caps for client" << it->first << " on " << *in << dendl;
@@ -2067,12 +2059,12 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 				CDir *import_root,
 				EImportStart *le,
 				LogSegment *ls,
-				map<CInode*, map<int,Capability::Export> >& cap_imports,
+				map<CInode*, map<__u32,Capability::Export> >& cap_imports,
 				list<ScatterLock*>& updated_scatterlocks)
 {
   // set up dir
   dirfrag_t df;
-  ::_decode_simple(df, blp);
+  ::decode(df, blp);
 
   CInode *diri = cache->get_inode(df.ino);
   assert(diri);
@@ -2117,14 +2109,14 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
   
   // contents
   long nden;
-  ::_decode_simple(nden, blp);
+  ::decode(nden, blp);
   
   for (; nden>0; nden--) {
     num_imported++;
     
     // dentry
     string dname;
-    ::_decode_simple(dname, blp);
+    ::decode(dname, blp);
     
     CDentry *dn = dir->lookup(dname);
     if (!dn)
@@ -2140,7 +2132,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     // points to...
     char icode;
-    ::_decode_simple(icode, blp);
+    ::decode(icode, blp);
     
     if (icode == 'N') {
       // null dentry
@@ -2152,8 +2144,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      ::_decode_simple(ino, blp);
-      ::_decode_simple(d_type, blp);
+      ::decode(ino, blp);
+      ::decode(d_type, blp);
       if (dn->is_remote()) {
 	assert(dn->get_remote_ino() == ino);
       } else {
@@ -2265,7 +2257,7 @@ class C_M_LoggedImportCaps : public Context {
   CInode *in;
   int from;
 public:
-  map<CInode*, map<int,Capability::Export> > cap_imports;
+  map<CInode*, map<__u32,Capability::Export> > cap_imports;
 
   C_M_LoggedImportCaps(Migrator *m, CInode *i, int f) : migrator(m), in(i), from(f) {}
   void finish(int r) {
@@ -2304,7 +2296,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
 
 void Migrator::logged_import_caps(CInode *in, 
 				  int from,
-				  map<CInode*, map<int,Capability::Export> >& cap_imports) 
+				  map<CInode*, map<__u32,Capability::Export> >& cap_imports) 
 {
   dout(10) << "logged_import_caps on " << *in << dendl;
   assert(cap_imports.count(in));

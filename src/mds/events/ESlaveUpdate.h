@@ -34,8 +34,8 @@ public:
   EMetaBlob commit, rollback;
   string type;
   metareqid_t reqid;
-  int master;
-  int op;  // prepare, commit, abort
+  __s32 master;
+  __u32 op;  // prepare, commit, abort
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
   ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o) : 
@@ -54,21 +54,21 @@ public:
     out << commit << " " << rollback;
   }
 
-  void encode_payload(bufferlist& bl) {
-    ::_encode(type, bl);
-    ::_encode(reqid, bl);
-    ::_encode(master, bl);
-    ::_encode(op, bl);
-    commit._encode(bl);
-    rollback._encode(bl);
+  void encode(bufferlist &bl) const {
+    ::encode(type, bl);
+    ::encode(reqid, bl);
+    ::encode(master, bl);
+    ::encode(op, bl);
+    ::encode(commit, bl);
+    ::encode(rollback, bl);
   } 
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(type, bl, off);
-    ::_decode(reqid, bl, off);
-    ::_decode(master, bl, off);
-    ::_decode(op, bl, off);
-    commit._decode(bl, off);
-    rollback._decode(bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(type, bl);
+    ::decode(reqid, bl);
+    ::decode(master, bl);
+    ::decode(op, bl);
+    ::decode(commit, bl);
+    ::decode(rollback, bl);
   }
 
   void replay(MDS *mds);

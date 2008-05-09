@@ -42,16 +42,15 @@ public:
     out << "EExport " << base << " " << metablob;
   }
 
-  virtual void encode_payload(bufferlist& bl) {
-    metablob._encode(bl);
-    bl.append((char*)&base, sizeof(base));
-    ::_encode(bounds, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(metablob, bl);
+    ::encode(base, bl);
+    ::encode(bounds, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    metablob._decode(bl, off);
-    bl.copy(off, sizeof(base), (char*)&base);
-    off += sizeof(base);
-    ::_decode(bounds, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(metablob, bl);
+    ::decode(base, bl);
+    ::decode(bounds, bl);
   }
   
   void replay(MDS *mds);

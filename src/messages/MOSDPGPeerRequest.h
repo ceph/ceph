@@ -37,14 +37,13 @@ class MOSDPGPeerRequest : public Message {
   char *get_type_name() { return "PGPR"; }
 
   void encode_payload() {
-    payload.append((char*)&map_version, sizeof(map_version));
-    _encode(pg_list, payload);
+    ::encode(map_version, payload);
+    ::encode(pg_list, payload);
   }
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(map_version), (char*)&map_version);
-    off += sizeof(map_version);
-    _decode(pg_list, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(map_version, p);
+    ::decode(pg_list, p);
   }
 };
 

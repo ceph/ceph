@@ -31,11 +31,11 @@ public:
   }
 
   void encode_payload() {
-    ::_encode(tid, payload);
+    ::encode(tid, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(tid, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(tid, p);
   }
 };
 

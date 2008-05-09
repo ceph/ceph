@@ -53,14 +53,14 @@ public:
 
   void decode_payload() { 
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(op, p);
-    ::_decode_simple(seq, p);
-    ::_decode_simple(stamp, p);
+    ::decode(op, p);
+    ::decode(seq, p);
+    ::decode(stamp, p);
   }
   void encode_payload() { 
-    ::_encode_simple(op, payload);
-    ::_encode_simple(seq, payload);
-    ::_encode_simple(stamp, payload);
+    ::encode(op, payload);
+    ::encode(seq, payload);
+    ::encode(stamp, payload);
   }
 };
 

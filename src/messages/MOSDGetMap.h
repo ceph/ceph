@@ -38,13 +38,13 @@ class MOSDGetMap : public Message {
   }
   
   void encode_payload() {
-    ::_encode(fsid, payload);
-    ::_encode(start, payload);
+    ::encode(fsid, payload);
+    ::encode(start, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(fsid, payload, off);
-    ::_decode(start, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
+    ::decode(start, p);
   }
 };
 

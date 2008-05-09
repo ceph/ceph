@@ -57,8 +57,8 @@ public:
 
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, bool open, version_t pv);
-  void prepare_force_open_sessions(map<int,entity_inst_t> &cm);
-  void finish_force_open_sessions(map<int,entity_inst_t> &cm);
+  version_t prepare_force_open_sessions(map<__u32,entity_inst_t> &cm);
+  void finish_force_open_sessions(map<__u32,entity_inst_t> &cm);
   void terminate_sessions();
   void find_idle_sessions();
   void reconnect_clients();

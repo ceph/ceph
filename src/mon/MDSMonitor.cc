@@ -635,6 +635,39 @@ void MDSMonitor::tick()
 
   dout(10) << *this << dendl;
 
+  // expand mds cluster?
+  int cursize = pending_mdsmap.get_num_in_mds() +
+    pending_mdsmap.get_num_mds(MDSMap::STATE_CREATING) +
+    pending_mdsmap.get_num_mds(MDSMap::STATE_STARTING);
+  if (cursize < pending_mdsmap.get_max_mds() &&
+      !pending_mdsmap.is_degraded() &&
+      pending_mdsmap.get_num_standby_any() > 0) {
+    entity_addr_t addr = *pending_mdsmap.standby_any.begin();    
+    int mds = 0;
+    while (pending_mdsmap.is_in(mds) ||
+	   pending_mdsmap.is_creating(mds) ||
+	   pending_mdsmap.is_starting(mds))
+      mds++;
+    dout(1) << "adding standby " << addr << " as mds" << mds << dendl;
+    
+    pending_mdsmap.mds_inst[mds].addr = addr;
+    pending_mdsmap.mds_inst[mds].name = entity_name_t::MDS(mds);
+    pending_mdsmap.mds_inc[mds]++;
+    if (mdsmap.is_dne(mds))
+      pending_mdsmap.mds_state[mds] = MDSMap::STATE_CREATING;
+    else if (mdsmap.is_stopped(mds))
+      pending_mdsmap.mds_state[mds] = MDSMap::STATE_STARTING;
+    else 
+      assert(0); // whoops!
+    pending_mdsmap.mds_state_seq[mds] = 0;
+
+    // remove from standby list(s)
+    pending_mdsmap.standby.erase(addr);
+    pending_mdsmap.standby_any.erase(addr);
+    propose_pending();
+  }
+
+  // check beacon timestamps
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.mds_beacon_grace;
     

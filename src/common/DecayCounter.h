@@ -40,6 +40,22 @@ public:
   utime_t last_decay;   // time of last decay
 
  public:
+
+  void encode(bufferlist& bl) const {
+    ::encode(half_life, bl);
+    ::encode(k, bl);
+    ::encode(val, bl);
+    ::encode(delta, bl);
+    ::encode(vel, bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    ::decode(half_life, p);
+    ::decode(k, p);
+    ::decode(val, p);
+    ::decode(delta, p);
+    ::decode(vel, p);
+  }
+
   DecayCounter() : val(0), delta(0), vel(0) {
     set_halflife( g_conf.mds_decay_halflife );
     reset();
@@ -133,6 +149,8 @@ public:
     }
   }
 };
+
+WRITE_CLASS_ENCODER(DecayCounter)
 
 
 #endif

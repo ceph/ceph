@@ -56,6 +56,17 @@ struct metareqid_t {
   metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
 };
 
+static inline void encode(const metareqid_t &r, bufferlist &bl)
+{
+  ::encode(r.name, bl);
+  ::encode(r.tid, bl);
+}
+static inline void decode( metareqid_t &r, bufferlist::iterator &p)
+{
+  ::decode(r.name, p);
+  ::decode(r.tid, p);
+}
+
 inline ostream& operator<<(ostream& out, const metareqid_t& r) {
   return out << r.name << ":" << r.tid;
 }
@@ -101,6 +112,23 @@ struct inode_caps_reconnect_t {
     wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
 };
 
+static inline void encode(const inode_caps_reconnect_t &ic, bufferlist &bl)
+{
+  ::encode(ic.wanted, bl);
+  ::encode(ic.issued, bl);
+  ::encode(ic.size, bl);
+  ::encode(ic.mtime, bl);
+  ::encode(ic.atime, bl);
+}
+static inline void decode(inode_caps_reconnect_t &ic, bufferlist::iterator &p)
+{
+  ::decode(ic.wanted, p);
+  ::decode(ic.issued, p);
+  ::decode(ic.size, p);
+  ::decode(ic.mtime, p);
+  ::decode(ic.atime, p);
+}
+
 
 // ================================================================
 // dir frag
@@ -113,6 +141,16 @@ struct dirfrag_t {
   dirfrag_t() : ino(0), _pad(0) { }
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f), _pad(0) { }
 };
+
+inline void encode(const dirfrag_t &f, bufferlist& bl) { 
+  encode(f.ino, bl);
+  encode(f.frag, bl);
+}
+inline void decode(dirfrag_t &f, bufferlist::iterator& p) { 
+  decode(f.ino, p);
+  decode(f.frag, p);
+}
+
 
 inline ostream& operator<<(ostream& out, const dirfrag_t df) {
   out << df.ino;
@@ -161,12 +199,31 @@ public:
     for (int i=0; i<NUM; i++) 
       vec[i].reset(now);
   }
+  void encode(bufferlist &bl) const {
+    for (int i=0; i<NUM; i++)
+      ::encode(vec[i], bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    for (int i=0; i<NUM; i++)
+      ::decode(vec[i], p);
+  }
 };
+WRITE_CLASS_ENCODER(inode_load_vec_t)
 
 class dirfrag_load_vec_t {
 public:
   static const int NUM = 5;
   DecayCounter vec[NUM];
+
+  void encode(bufferlist &bl) const {
+    for (int i=0; i<NUM; i++)
+      ::encode(vec[i], bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    for (int i=0; i<NUM; i++)
+      ::decode(vec[i], p);
+  }
+
   DecayCounter &get(int t) { 
     assert(t < NUM);
     return vec[t]; 
@@ -196,6 +253,8 @@ public:
       4*vec[META_POP_STORE].get_last();
   }
 };
+
+WRITE_CLASS_ENCODER(dirfrag_load_vec_t)
 
 inline dirfrag_load_vec_t& operator+=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
 {
@@ -232,12 +291,13 @@ inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 
 
 
+
+
 /* mds_load_t
  * mds load
  */
 
-class mds_load_t {
- public:
+struct mds_load_t {
   dirfrag_load_vec_t auth;
   dirfrag_load_vec_t all;
 
@@ -253,8 +313,24 @@ class mds_load_t {
   
   double mds_load();  // defiend in MDBalancer.cc
 
+  void encode(bufferlist &bl) const {
+    ::encode(auth, bl);
+    ::encode(all, bl);
+    ::encode(req_rate, bl);
+    ::encode(cache_hit_rate, bl);
+    ::encode(queue_len, bl);
+    ::encode(cpu_load_avg, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(auth, bl);
+    ::decode(all, bl);
+    ::decode(req_rate, bl);
+    ::decode(cache_hit_rate, bl);
+    ::decode(queue_len, bl);
+    ::decode(cpu_load_avg, bl);
+  }
 };
-
+WRITE_CLASS_ENCODER(mds_load_t)
 
 inline ostream& operator<<( ostream& out, mds_load_t& load )
 {
@@ -376,22 +452,19 @@ public:
 
   MDSCacheObjectInfo() : ino(0) {}
 
-  void _encode(bufferlist& bl) const {
-    ::_encode(ino, bl);
-    ::_encode(dirfrag, bl);
-    ::_encode(dname, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(ino, bl);
+    ::encode(dirfrag, bl);
+    ::encode(dname, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(ino, bl, off);
-    ::_decode(dirfrag, bl, off);
-    ::_decode(dname, bl, off);
-  }
-  void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(ino, p);
-    ::_decode_simple(dirfrag, p);
-    ::_decode_simple(dname, p);
+  void decode(bufferlist::iterator& p) {
+    ::decode(ino, p);
+    ::decode(dirfrag, p);
+    ::decode(dname, p);
   }
 };
+
+WRITE_CLASS_ENCODER(MDSCacheObjectInfo)
 
 
 class MDSCacheObject {

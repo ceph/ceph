@@ -157,16 +157,16 @@ public:
     return inodeno_t(head.mds_wants_replica_in_dirino); }
 
   void decode_payload() {
-    int off = 0;
-    ::_decode(head, payload, off);
-    path._decode(payload, off);
-    path2._decode(payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(head, p);
+    ::decode(path, p);
+    ::decode(path2, p);
   }
 
   void encode_payload() {
-    ::_encode(head, payload);
-    path._encode(payload);
-    path2._encode(payload);
+    ::encode(head, payload);
+    ::encode(path, payload);
+    ::encode(path2, payload);
   }
 
   const char *get_type_name() { return "creq"; }

@@ -18,8 +18,8 @@
 
 class MInodeFileCaps : public Message {
   inodeno_t ino;
-  int       from;
-  int       caps;
+  __s32     from;
+  __u32     caps;
 
  public:
   inodeno_t get_ino() { return ino; }
@@ -38,19 +38,16 @@ class MInodeFileCaps : public Message {
 
   const char *get_type_name() { return "Icap";}
   
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(from), (char*)&from);
-    off += sizeof(from);
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    payload.copy(off, sizeof(caps), (char*)&caps);
-    off += sizeof(caps);
+  void encode_payload() {
+    ::encode(from, payload);
+    ::encode(ino, payload);
+    ::encode(caps, payload);
   }
-  virtual void encode_payload() {
-    payload.append((char*)&from, sizeof(from));
-    payload.append((char*)&ino, sizeof(ino));
-    payload.append((char*)&caps, sizeof(caps));
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(from, p);
+    ::decode(ino, p);
+    ::decode(caps, p);
   }
 };
 

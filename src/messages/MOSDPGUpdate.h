@@ -50,21 +50,17 @@ class MOSDPGUpdate : public Message {
   }
 
   void encode_payload() {
-    payload.append((char*)&map_version, sizeof(map_version));
-    payload.append((char*)&pgid, sizeof(pgid));
-    payload.append((char*)&complete, sizeof(complete));
-    payload.append((char*)&last_any_complete, sizeof(last_any_complete));
+    ::encode(map_version, payload);
+    ::encode(pgid, payload);
+    ::encode(complete, payload);
+    ::encode(last_any_complete, payload);
   }
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(map_version), (char*)&map_version);
-    off += sizeof(map_version);
-    payload.copy(off, sizeof(pgid), (char*)&pgid);
-    off += sizeof(pgid);
-    payload.copy(off, sizeof(complete), (char*)&complete);
-    off += sizeof(complete);
-    payload.copy(off, sizeof(last_any_complete), (char*)&last_any_complete);
-    off += sizeof(last_any_complete);
+    bufferlist::iterator p = payload.begin();
+    ::decode(map_version, p);
+    ::decode(pgid, p);
+    ::decode(complete, p);
+    ::decode(last_any_complete, p);
   }
 };
 

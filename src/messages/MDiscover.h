@@ -26,7 +26,7 @@ using namespace std;
 
 
 class MDiscover : public Message {
-  int             asker;
+  __s32             asker;
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
 
@@ -84,23 +84,23 @@ class MDiscover : public Message {
   }
 
   void decode_payload() {
-    int off = 0;
-    ::_decode(asker, payload, off);
-    ::_decode(base_ino, payload, off);
-    ::_decode(base_dir_frag, payload, off);
-    want._decode(payload, off);
-    ::_decode(want_ino, payload, off);
-    ::_decode(want_base_dir, payload, off);
-    ::_decode(want_xlocked, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(asker, p);
+    ::decode(base_ino, p);
+    ::decode(base_dir_frag, p);
+    ::decode(want, p);
+    ::decode(want_ino, p);
+    ::decode(want_base_dir, p);
+    ::decode(want_xlocked, p);
   }
   void encode_payload() {
-    ::_encode(asker, payload);
-    ::_encode(base_ino, payload);
-    ::_encode(base_dir_frag, payload);
-    want._encode(payload);
-    ::_encode(want_ino, payload);
-    ::_encode(want_base_dir, payload);
-    ::_encode(want_xlocked, payload);
+    ::encode(asker, payload);
+    ::encode(base_ino, payload);
+    ::encode(base_dir_frag, payload);
+    ::encode(want, payload);
+    ::encode(want_ino, payload);
+    ::encode(want_base_dir, payload);
+    ::encode(want_xlocked, payload);
   }
 
 };

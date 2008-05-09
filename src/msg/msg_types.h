@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "tcp.h"
+#include "include/encoding.h"
 
 class entity_name_t {
 public:
@@ -71,7 +72,17 @@ public:
     return n;
   }
 
-} __attribute__ ((packed));
+};
+
+inline void encode(const entity_name_t &a, bufferlist& bl) {
+  encode(a._type, bl);
+  encode(a._num, bl);
+}
+
+inline void decode(entity_name_t &a, bufferlist::iterator& p) {
+  decode(a._type, p);
+  decode(a._num, p);
+}
 
 inline bool operator== (const entity_name_t& l, const entity_name_t& r) { 
   return (l.type() == r.type()) && (l.num() == r.num()); }
@@ -149,7 +160,18 @@ struct entity_addr_t {
       nonce == other.nonce &&
       memcmp(&ipaddr, &other.ipaddr, sizeof(ipaddr)) == 0;
   }
-} __attribute__ ((packed));
+};
+
+inline void encode(const entity_addr_t &a, bufferlist& bl) {
+  encode(a.erank, bl);
+  encode(a.nonce, bl);
+  encode_raw(a.ipaddr, bl);
+}
+inline void decode(entity_addr_t &a, bufferlist::iterator& p) {
+  decode(a.erank, p);
+  decode(a.nonce, p);
+  decode_raw(a.ipaddr, p);
+}
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
@@ -189,8 +211,16 @@ struct entity_inst_t {
     ceph_entity_inst i = {name, addr};
     return i;
   }
-} __attribute__ ((packed));
+};
 
+inline void encode(const entity_inst_t &i, bufferlist& bl) {
+  encode(i.name, bl);
+  encode(i.addr, bl);
+}
+inline void decode(entity_inst_t &i, bufferlist::iterator& p) {
+  decode(i.name, p);
+  decode(i.addr, p);
+}
 
 inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }
@@ -209,6 +239,7 @@ namespace __gnu_cxx {
     }
   };
 }
+
 
 inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 {

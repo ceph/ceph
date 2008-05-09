@@ -10,7 +10,7 @@
 #include "builder.h"
 
 #include "include/err.h"
-#include "include/encodable.h"
+#include "include/encoding.h"
 
 #include <stdlib.h>
 #include <map>
@@ -18,6 +18,23 @@
 #include <string>
 
 #include <iostream> //for testing, remove
+
+WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
+
+inline static void encode(const crush_rule_step &s, bufferlist &bl)
+{
+  ::encode(s.op, bl);
+  ::encode(s.arg1, bl);
+  ::encode(s.arg2, bl);
+}
+inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
+{
+  ::decode(s.op, p);
+  ::decode(s.arg1, p);
+  ::decode(s.arg2, p);
+}
+
+
 
 using namespace std;
 class CrushWrapper {
@@ -327,62 +344,63 @@ public:
     int r = bl.read_file(fn);
     if (r < 0) return r;
     bufferlist::iterator blp = bl.begin();
-    _decode(blp);
+    decode(blp);
     return 0;
   }
   int write_to_file(const char *fn) {
     bufferlist bl;
-    _encode(bl);
+    encode(bl);
     return bl.write_file(fn);
   }
 
-  void _encode(bufferlist &bl, bool lean=false) {
+  void encode(bufferlist &bl, bool lean=false) {
     if (!crush) create();  // duh.
-    ::_encode_simple(crush->max_buckets, bl);
-    ::_encode_simple(crush->max_rules, bl);
-    ::_encode_simple(crush->max_devices, bl);
+    ::encode(crush->max_buckets, bl);
+    ::encode(crush->max_rules, bl);
+    ::encode(crush->max_devices, bl);
 
     // simple arrays
-    bl.append((char*)crush->device_offload, sizeof(crush->device_offload[0]) * crush->max_devices);
+    for (int i=0; i < crush->max_devices; i++)
+      ::encode(crush->device_offload[i], bl);
 
     // buckets
     for (unsigned i=0; i<crush->max_buckets; i++) {
       __u32 alg = 0;
       if (crush->buckets[i]) alg = crush->buckets[i]->alg;
-      ::_encode_simple(alg, bl);
+      ::encode(alg, bl);
       if (!alg) continue;
 
-      ::_encode_simple(crush->buckets[i]->id, bl);
-      ::_encode_simple(crush->buckets[i]->type, bl);
-      ::_encode_simple(crush->buckets[i]->alg, bl);
-      ::_encode_simple(crush->buckets[i]->weight, bl);
-      ::_encode_simple(crush->buckets[i]->size, bl);
+      ::encode(crush->buckets[i]->id, bl);
+      ::encode(crush->buckets[i]->type, bl);
+      ::encode(crush->buckets[i]->alg, bl);
+      ::encode(crush->buckets[i]->weight, bl);
+      ::encode(crush->buckets[i]->size, bl);
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	::_encode_simple(crush->buckets[i]->items[j], bl);
+	::encode(crush->buckets[i]->items[j], bl);
       
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::_encode_simple(((crush_bucket_uniform*)crush->buckets[i])->primes[j], bl);
-	::_encode_simple(((crush_bucket_uniform*)crush->buckets[i])->item_weight, bl);
+	  ::encode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], bl);
+	::encode(((crush_bucket_uniform*)crush->buckets[i])->item_weight, bl);
 	break;
 
       case CRUSH_BUCKET_LIST:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	  ::_encode_simple(((crush_bucket_list*)crush->buckets[i])->item_weights[j], bl);
-	  ::_encode_simple(((crush_bucket_list*)crush->buckets[i])->sum_weights[j], bl);
+	  ::encode(((crush_bucket_list*)crush->buckets[i])->item_weights[j], bl);
+	  ::encode(((crush_bucket_list*)crush->buckets[i])->sum_weights[j], bl);
 	}
 	break;
 
       case CRUSH_BUCKET_TREE:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
-	  ::_encode_simple(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], bl);
+	  ::encode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], bl);
 	break;
 
       case CRUSH_BUCKET_STRAW:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	  ::_encode_simple(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], bl);
-	  ::_encode_simple(((crush_bucket_straw*)crush->buckets[i])->straws[j], bl);
+	  ::encode(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], bl);
+	  ::encode(((crush_bucket_straw*)crush->buckets[i])->straws[j], bl);
 	}
 	break;
       }
@@ -391,35 +409,36 @@ public:
     // rules
     for (unsigned i=0; i<crush->max_rules; i++) {
       __u32 yes = crush->rules[i] ? 1:0;
-      ::_encode_simple(yes, bl);
+      ::encode(yes, bl);
       if (!yes) continue;
 
-      ::_encode_simple(crush->rules[i]->len, bl);
-      ::_encode_simple(crush->rules[i]->mask, bl);
+      ::encode(crush->rules[i]->len, bl);
+      ::encode(crush->rules[i]->mask, bl);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
-	::_encode_simple(crush->rules[i]->steps[j], bl);
+	::encode(crush->rules[i]->steps[j], bl);
     }
 
     // name info
-    ::_encode_simple(type_map, bl);
-    ::_encode_simple(name_map, bl);
-    ::_encode_simple(rule_name_map, bl);
+    ::encode(type_map, bl);
+    ::encode(name_map, bl);
+    ::encode(rule_name_map, bl);
   }
 
-  void _decode(bufferlist::iterator &blp) {
+  void decode(bufferlist::iterator &blp) {
     create();
-    ::_decode_simple(crush->max_buckets, blp);
-    ::_decode_simple(crush->max_rules, blp);
-    ::_decode_simple(crush->max_devices, blp);
+    ::decode(crush->max_buckets, blp);
+    ::decode(crush->max_rules, blp);
+    ::decode(crush->max_devices, blp);
 
     crush->device_offload = (__u32*)malloc(sizeof(crush->device_offload[0])*crush->max_devices);
-    blp.copy(sizeof(crush->device_offload[0])*crush->max_devices, (char*)crush->device_offload);
+    for (int i=0; i < crush->max_devices; i++)
+      ::decode(crush->device_offload[i], blp);
     
     // buckets
     crush->buckets = (crush_bucket**)malloc(sizeof(crush_bucket*)*crush->max_buckets);
     for (unsigned i=0; i<crush->max_buckets; i++) {
       __u32 alg;
-      ::_decode_simple(alg, blp);
+      ::decode(alg, blp);
       if (!alg) {
 	crush->buckets[i] = 0;
 	continue;
@@ -445,23 +464,23 @@ public:
       crush->buckets[i] = (crush_bucket*)malloc(size);
       memset(crush->buckets[i], 0, size);
       
-      ::_decode_simple(crush->buckets[i]->id, blp);
-      ::_decode_simple(crush->buckets[i]->type, blp);
-      ::_decode_simple(crush->buckets[i]->alg, blp);
-      ::_decode_simple(crush->buckets[i]->weight, blp);
-      ::_decode_simple(crush->buckets[i]->size, blp);
+      ::decode(crush->buckets[i]->id, blp);
+      ::decode(crush->buckets[i]->type, blp);
+      ::decode(crush->buckets[i]->alg, blp);
+      ::decode(crush->buckets[i]->weight, blp);
+      ::decode(crush->buckets[i]->size, blp);
 
       crush->buckets[i]->items = (__s32*)malloc(sizeof(__s32)*crush->buckets[i]->size);
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	::_decode_simple(crush->buckets[i]->items[j], blp);
+	::decode(crush->buckets[i]->items[j], blp);
 
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	((crush_bucket_uniform*)crush->buckets[i])->primes = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::_decode_simple(((crush_bucket_uniform*)crush->buckets[i])->primes[j], blp);
-	::_decode_simple(((crush_bucket_uniform*)crush->buckets[i])->item_weight, blp);
+	  ::decode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], blp);
+	::decode(((crush_bucket_uniform*)crush->buckets[i])->item_weight, blp);
 	break;
 
       case CRUSH_BUCKET_LIST:
@@ -471,8 +490,8 @@ public:
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	  ::_decode_simple(((crush_bucket_list*)crush->buckets[i])->item_weights[j], blp);
-	  ::_decode_simple(((crush_bucket_list*)crush->buckets[i])->sum_weights[j], blp);
+	  ::decode(((crush_bucket_list*)crush->buckets[i])->item_weights[j], blp);
+	  ::decode(((crush_bucket_list*)crush->buckets[i])->sum_weights[j], blp);
 	}
 	break;
 
@@ -480,7 +499,7 @@ public:
 	((crush_bucket_tree*)crush->buckets[i])->node_weights = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
-	  ::_decode_simple(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], blp);
+	  ::decode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], blp);
 	break;
 
       case CRUSH_BUCKET_STRAW:
@@ -489,8 +508,8 @@ public:
 	((crush_bucket_straw*)crush->buckets[i])->item_weights = 
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	  ::_decode_simple(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], blp);
-	  ::_decode_simple(((crush_bucket_straw*)crush->buckets[i])->straws[j], blp);
+	  ::decode(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], blp);
+	  ::decode(((crush_bucket_straw*)crush->buckets[i])->straws[j], blp);
 	}
 	break;
       }
@@ -500,25 +519,25 @@ public:
     crush->rules = (crush_rule**)malloc(sizeof(crush_rule*)*crush->max_rules);
     for (unsigned i=0; i<crush->max_rules; i++) {
       __u32 yes;
-      ::_decode_simple(yes, blp);
+      ::decode(yes, blp);
       if (!yes) {
 	crush->rules[i] = 0;
 	continue;
       }
 
       __u32 len;
-      ::_decode_simple(len, blp);
+      ::decode(len, blp);
       crush->rules[i] = (crush_rule*)malloc(crush_rule_size(len));
       crush->rules[i]->len = len;
-      ::_decode_simple(crush->rules[i]->mask, blp);
+      ::decode(crush->rules[i]->mask, blp);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
-	::_decode_simple(crush->rules[i]->steps[j], blp);
+	::decode(crush->rules[i]->steps[j], blp);
     }
 
     // name info
-    ::_decode_simple(type_map, blp);
-    ::_decode_simple(name_map, blp);
-    ::_decode_simple(rule_name_map, blp);
+    ::decode(type_map, blp);
+    ::decode(name_map, blp);
+    ::decode(rule_name_map, blp);
     build_rmaps();
 
     finalize();

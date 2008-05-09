@@ -43,13 +43,13 @@ public:
     inos.push_back(ino);
   }
 
-  void encode_payload(bufferlist& bl) {
-    metablob._encode(bl);
-    ::_encode(inos, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(metablob, bl);
+    ::encode(inos, bl);
   } 
-  void decode_payload(bufferlist& bl, int& off) {
-    metablob._decode(bl, off);
-    ::_decode(inos, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(metablob, bl);
+    ::decode(inos, bl);
   }
 
   void update_segment();

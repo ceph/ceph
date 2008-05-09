@@ -32,15 +32,15 @@ class MOSDPing : public Message {
   MOSDPing() {}
 
   void decode_payload() {
-    int off = 0;
-    ::_decode(map_epoch, payload, off);
-    ::_decode(ack, payload, off);
-    ::_decode(peer_stat, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(map_epoch, p);
+    ::decode(ack, p);
+    ::decode(peer_stat, p);
   }
   void encode_payload() {
-    ::_encode(map_epoch, payload);
-    ::_encode(ack, payload);
-    ::_encode(peer_stat, payload);
+    ::encode(map_epoch, payload);
+    ::encode(ack, payload);
+    ::encode(peer_stat, payload);
   }
 
   const char *get_type_name() { return "osd_ping"; }

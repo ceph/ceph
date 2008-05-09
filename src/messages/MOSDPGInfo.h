@@ -37,13 +37,13 @@ public:
   }
 
   void encode_payload() {
-    ::_encode(epoch, payload);
-    ::_encode(pg_info, payload);
+    ::encode(epoch, payload);
+    ::encode(pg_info, payload);
   }
   void decode_payload() {
-    int off = 0;
-    ::_decode(epoch, payload, off);
-    ::_decode(pg_info, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(epoch, p);
+    ::decode(pg_info, p);
   }
 };
 

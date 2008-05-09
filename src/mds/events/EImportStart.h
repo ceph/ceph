@@ -30,7 +30,7 @@ protected:
 
  public:
   EMetaBlob metablob;
-  bufferlist client_map;  // encoded map<int,entity_inst_t>
+  bufferlist client_map;  // encoded map<__u32,entity_inst_t>
   version_t cmapv;
 
   EImportStart(dirfrag_t di,
@@ -42,20 +42,19 @@ protected:
     out << "EImportStart " << base << " " << metablob;
   }
   
-  virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&base, sizeof(base));
-    metablob._encode(bl);
-    ::_encode(bounds, bl);
-    ::_encode(cmapv, bl);
-    ::_encode(client_map, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(base, bl);
+    ::encode(metablob, bl);
+    ::encode(bounds, bl);
+    ::encode(cmapv, bl);
+    ::encode(client_map, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(base), (char*)&base);
-    off += sizeof(base);
-    metablob._decode(bl, off);
-    ::_decode(bounds, bl, off);
-    ::_decode(cmapv, bl, off);
-    ::_decode(client_map, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(base, bl);
+    ::decode(metablob, bl);
+    ::decode(bounds, bl);
+    ::decode(cmapv, bl);
+    ::decode(client_map, bl);
   }
   
   void replay(MDS *mds);

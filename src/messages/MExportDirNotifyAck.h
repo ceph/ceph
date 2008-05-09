@@ -35,14 +35,12 @@ class MExportDirNotifyAck : public Message {
     o << "export_notify_ack(" << dirfrag << ")";
   }
 
-  virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
+  void encode_payload() {
+    ::encode(dirfrag, payload);
   }
-  
-  virtual void encode_payload() {
-    payload.append((char*)&dirfrag, sizeof(dirfrag));
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
   }
   
 };

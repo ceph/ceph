@@ -17,7 +17,6 @@
 #define __MCLIENTREPLY_H
 
 #include "include/types.h"
-#include "include/encodable.h"
 #include "MClientRequest.h"
 
 #include "msg/Message.h"
@@ -55,7 +54,16 @@ struct LeaseStat {
   // this matches ceph_mds_reply_lease
   __u16 mask;
   __u32 duration_ms;  
-} __attribute__ ((packed));
+  void encode(bufferlist &bl) const {
+    ::encode(mask, bl);
+    ::encode(duration_ms, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(mask, bl);
+    ::decode(duration_ms, bl);
+  }
+};
+WRITE_CLASS_ENCODER(LeaseStat)
 
 struct DirStat {
   // mds distribution hints
@@ -66,17 +74,17 @@ struct DirStat {
   
   DirStat() {}
   DirStat(bufferlist::iterator& p) {
-    _decode(p);
+    decode(p);
   }
 
-  void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(frag, p);
-    ::_decode_simple(auth, p);
-    ::_decode_simple(is_rep, p);
-    ::_decode_simple(dist, p);
+  void decode(bufferlist::iterator& p) {
+    ::decode(frag, p);
+    ::decode(auth, p);
+    ::decode(is_rep, p);
+    ::decode(dist, p);
   }
 
-  static void _encode(bufferlist& bl, CDir *dir, int whoami) {
+  static void encode(bufferlist& bl, CDir *dir, int whoami) {
     /*
      * note: encoding matches struct ceph_client_reply_dirfrag
      */
@@ -90,10 +98,10 @@ struct DirStat {
       dir->get_dist_spec(dist, whoami);
     is_rep = dir->is_rep();
 
-    ::_encode_simple(frag, bl);
-    ::_encode_simple(auth, bl);
-    ::_encode_simple(is_rep, bl);
-    ::_encode_simple(dist, bl);
+    ::encode(frag, bl);
+    ::encode(auth, bl);
+    ::encode(is_rep, bl);
+    ::encode(dist, bl);
   }  
 };
 
@@ -113,12 +121,12 @@ struct InodeStat {
  public:
   InodeStat() {}
   InodeStat(bufferlist::iterator& p) {
-    _decode(p);
+    decode(p);
   }
 
-  void _decode(bufferlist::iterator &p) {
+  void decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
-    ::_decode_simple(e, p);
+    ::decode(e, p);
     ino = inodeno_t(e.ino);
     version = e.version;
     layout = e.layout;
@@ -137,15 +145,15 @@ struct InodeStat {
     int n = e.fragtree.nsplits;
     while (n) {
       __u32 s, by;
-      ::_decode_simple(s, p);
-      ::_decode_simple(by, p);
+      ::decode(s, p);
+      ::decode(by, p);
       dirfragtree._splits[s] = by;
       n--;
     }
-    ::_decode_simple(symlink, p);
+    ::decode(symlink, p);
   }
 
-  static void _encode(bufferlist &bl, CInode *in) {
+  static void encode(bufferlist &bl, CInode *in) {
     /*
      * note: encoding matches struct ceph_client_reply_inode
      */
@@ -166,14 +174,14 @@ struct InodeStat {
     e.max_size = in->inode.max_size;
     e.rdev = in->inode.rdev;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
-    ::_encode_simple(e, bl);
+    ::encode(e, bl);
     for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
 	 p != in->dirfragtree._splits.end();
 	 p++) {
-      ::_encode_simple(p->first, bl);
-      ::_encode_simple(p->second, bl);
+      ::encode(p->first, bl);
+      ::encode(p->second, bl);
     }
-    ::_encode_simple(in->symlink, bl);
+    ::encode(in->symlink, bl);
   }
   
 };
@@ -223,15 +231,15 @@ class MClientReply : public Message {
   // serialization
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::_decode_simple(st, p);
-    ::_decode_simple(trace_bl, p);
-    ::_decode_simple(dir_bl, p);
+    ::decode(st, p);
+    ::decode(trace_bl, p);
+    ::decode(dir_bl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
-    ::_encode_simple(st, payload);
-    ::_encode_simple(trace_bl, payload);
-    ::_encode_simple(dir_bl, payload);
+    ::encode(st, payload);
+    ::encode(trace_bl, payload);
+    ::encode(dir_bl, payload);
   }
 
 

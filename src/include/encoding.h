@@ -19,11 +19,9 @@
 #include "byteorder.h"
 #include "buffer.h"
 
-
 // --------------------------------------
 // base types
 
-// raw
 template<class T>
 inline void encode_raw(const T& t, bufferlist& bl)
 {
@@ -35,33 +33,50 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
   p.copy(sizeof(t), (char*)&t);
 }
 
-// __u32, __s64, etc.
-#define WRITE_ENCODER(type, etype)					\
+#define WRITE_RAW_ENCODER(type)						\
+  inline void encode(const type &v, bufferlist& bl) { encode_raw(v, bl); } \
+  inline void decode(type &v, bufferlist::iterator& p) { decode_raw(v, p); }
+
+WRITE_RAW_ENCODER(__u8)
+WRITE_RAW_ENCODER(__s8)
+WRITE_RAW_ENCODER(bool)
+WRITE_RAW_ENCODER(char)
+WRITE_RAW_ENCODER(__le64)
+WRITE_RAW_ENCODER(__le32)
+WRITE_RAW_ENCODER(__le16)
+
+// FIXME: we need to choose some portable floating point encoding here
+WRITE_RAW_ENCODER(float)
+WRITE_RAW_ENCODER(double)
+
+
+
+// -----------------------------------
+// int types
+
+#define WRITE_INTTYPE_ENCODER(type, etype)				\
   inline void encode(__##type v, bufferlist& bl) {			\
-    __##etype e = cpu_to_##etype(v);					\
+    __##etype e = init_##etype(v);					\
     encode_raw(e, bl);							\
   }									\
   inline void decode(__##type &v, bufferlist::iterator& p) {		\
     __##etype e;							\
     decode_raw(e, p);							\
-    v = etype##_to_cpu(e);						\
+    v = e;								\
   }
 
-WRITE_ENCODER(u64, le64)
-WRITE_ENCODER(s64, le64)
-WRITE_ENCODER(u32, le32)
-WRITE_ENCODER(s32, le32)
-WRITE_ENCODER(u16, le16)
-WRITE_ENCODER(s16, le16)
+WRITE_INTTYPE_ENCODER(u64, le64)
+WRITE_INTTYPE_ENCODER(s64, le64)
+WRITE_INTTYPE_ENCODER(u32, le32)
+WRITE_INTTYPE_ENCODER(s32, le32)
+WRITE_INTTYPE_ENCODER(u16, le16)
+WRITE_INTTYPE_ENCODER(s16, le16)
 
 
-#define WRITE_RAW_ENCODER(type)						\
-  inline void encode(type v, bufferlist& bl) { encode_raw(v, bl); }	\
-  inline void decode(type v, bufferlist::iterator& p) { decode_raw(v, p); }
 
-WRITE_RAW_ENCODER(__u8)
-WRITE_RAW_ENCODER(__s8)
-WRITE_RAW_ENCODER(bool)
+#define WRITE_CLASS_ENCODER(cl) \
+  inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
 
@@ -74,6 +89,69 @@ WRITE_RAW_ENCODER(bool)
 #include <vector>
 #include <string>
 #include <ext/hash_map>
+#include "triple.h"
+
+// pair
+template<class A, class B>
+inline void encode(const std::pair<A,B> &p, bufferlist &bl)
+{
+  encode(p.first, bl);
+  encode(p.second, bl);
+}
+template<class A, class B>
+inline void decode(std::pair<A,B> &pa, bufferlist::iterator &p)
+{
+  decode(pa.first, p);
+  decode(pa.second, p);
+}
+
+// triple
+template<class A, class B, class C>
+inline void encode(const triple<A,B,C> &t, bufferlist &bl)
+{
+  encode(t.first, bl);
+  encode(t.second, bl);
+  encode(t.third, bl);
+}
+template<class A, class B, class C>
+inline void decode(triple<A,B,C> &t, bufferlist::iterator &p)
+{
+  decode(t.first, p);
+  decode(t.second, p);
+  decode(t.third, p);
+}
+
+
+// list (pointers)
+template<class T>
+inline void encode(const std::list<T*>& ls, bufferlist& bl)
+{
+  // should i pre- or post- count?
+  if (!ls.empty()) {
+    unsigned pos = bl.length();
+    __u32 n = 0;
+    encode(n, bl);
+    for (typename std::list<T*>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+      n++;
+      encode(**p, bl);
+    }
+    bl.copy_in(pos, sizeof(n), (char*)&n);
+  } else {
+    __u32 n = ls.size();    // FIXME: this is slow on a list.
+    encode(n, bl);
+    for (typename std::list<T*>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+      encode(**p, bl);
+  }
+}
+template<class T>
+inline void decode(std::list<T*>& ls, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  ls.clear();
+  while (n--)
+    ls.push_back(new T(p));
+}
 
 
 // list
@@ -154,6 +232,25 @@ inline void decode(std::set<T>& s, bufferlist::iterator& p)
   }
 }
 
+// vector (pointers)
+template<class T>
+inline void encode(const std::vector<T*>& v, bufferlist& bl)
+{
+  __u32 n = v.size();
+  encode(n, bl);
+  for (typename std::vector<T*>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(**p, bl);
+}
+template<class T>
+inline void decode(std::vector<T*>& v, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  v.resize(n);
+  for (__u32 i=0; i<n; i++) 
+    v[i] = new T(p);
+}
+
 // vector
 template<class T>
 inline void encode(const std::vector<T>& v, bufferlist& bl)
@@ -171,6 +268,30 @@ inline void decode(std::vector<T>& v, bufferlist::iterator& p)
   v.resize(n);
   for (__u32 i=0; i<n; i++) 
     decode(v[i], p);
+}
+
+// map (pointers)
+template<class T, class U>
+inline void encode(const std::map<T,U*>& m, bufferlist& bl)
+{
+  __u32 n = m.size();
+  encode(n, bl);
+  for (typename std::map<T,U*>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl);
+    encode(*p->second, bl);
+  }
+}
+template<class T, class U>
+inline void decode(std::map<T,U*>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    m[k] = new U(p);
+  }
 }
 
 // map

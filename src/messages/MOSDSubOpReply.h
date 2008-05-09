@@ -30,93 +30,112 @@
  */
 
 class MOSDSubOpReply : public Message {
-  struct st_t {
-    epoch_t map_epoch;
-
-    // subop metadata
-    osd_reqid_t reqid;
-    pg_t pgid;
-    tid_t rep_tid;
-    int32_t op;
-    pobject_t poid;
-    off_t length, offset;
-
-    // result
-    bool commit;
-    int32_t result;
-
-    // piggybacked osd state
-    eversion_t pg_complete_thru;
-    osd_peer_stat_t peer_stat;
-  } st;
+  epoch_t map_epoch;
+  
+  // subop metadata
+  osd_reqid_t reqid;
+  pg_t pgid;
+  tid_t rep_tid;
+  int32_t op;
+  pobject_t poid;
+  off_t length, offset;
+  
+  // result
+  bool commit;
+  int32_t result;
+  
+  // piggybacked osd state
+  eversion_t pg_complete_thru;
+  osd_peer_stat_t peer_stat;
 
   map<string,bufferptr> attrset;
 
  public:
-  epoch_t get_map_epoch() { return st.map_epoch; }
+  virtual void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(map_epoch, p);
+    ::decode(reqid, p);
+    ::decode(pgid, p);
+    ::decode(rep_tid, p);
+    ::decode(op, p);
+    ::decode(poid, p);
+    ::decode(length, p);
+    ::decode(offset, p);
+    ::decode(commit, p);
+    ::decode(result, p);
+    ::decode(pg_complete_thru, p);
+    ::decode(peer_stat, p);
+    ::decode(attrset, p);
+  }
+  virtual void encode_payload() {
+    ::encode(map_epoch, payload);
+    ::encode(reqid, payload);
+    ::encode(pgid, payload);
+    ::encode(rep_tid, payload);
+    ::encode(op, payload);
+    ::encode(poid, payload);
+    ::encode(length, payload);
+    ::encode(offset, payload);
+    ::encode(commit, payload);
+    ::encode(result, payload);
+    ::encode(pg_complete_thru, payload);
+    ::encode(peer_stat, payload);
+    ::encode(attrset, payload);
+    env.data_off = offset;
+  }
 
-  pg_t get_pg() { return st.pgid; }
-  tid_t get_rep_tid() { return st.rep_tid; }
-  int get_op()  { return st.op; }
-  pobject_t get_poid() { return st.poid; }
-  const off_t get_length() { return st.length; }
-  const off_t get_offset() { return st.offset; }
+  epoch_t get_map_epoch() { return map_epoch; }
 
-  bool get_commit() { return st.commit; }
-  int get_result() { return st.result; }
+  pg_t get_pg() { return pgid; }
+  tid_t get_rep_tid() { return rep_tid; }
+  int get_op()  { return op; }
+  pobject_t get_poid() { return poid; }
+  const off_t get_length() { return length; }
+  const off_t get_offset() { return offset; }
 
-  void set_pg_complete_thru(eversion_t v) { st.pg_complete_thru = v; }
-  eversion_t get_pg_complete_thru() { return st.pg_complete_thru; }
+  bool get_commit() { return commit; }
+  int get_result() { return result; }
 
-  void set_peer_stat(const osd_peer_stat_t& stat) { st.peer_stat = stat; }
-  const osd_peer_stat_t& get_peer_stat() { return st.peer_stat; }
+  void set_pg_complete_thru(eversion_t v) { pg_complete_thru = v; }
+  eversion_t get_pg_complete_thru() { return pg_complete_thru; }
+
+  void set_peer_stat(const osd_peer_stat_t& stat) { peer_stat = stat; }
+  const osd_peer_stat_t& get_peer_stat() { return peer_stat; }
 
   void set_attrset(map<string,bufferptr> &as) { attrset = as; }
   map<string,bufferptr>& get_attrset() { return attrset; } 
 
 public:
-  MOSDSubOpReply(MOSDSubOp *req, int result, epoch_t e, bool commit) :
-    Message(MSG_OSD_SUBOPREPLY) {
-    st.map_epoch = e;
-    st.reqid = req->get_reqid();
-    st.pgid = req->get_pg();
-    st.rep_tid = req->get_rep_tid();
-    st.op = req->get_op();
-    st.poid = req->get_poid();
-    st.commit = commit;
-    st.result = result;
-    st.length = req->get_length();
-    st.offset = req->get_offset();
+  MOSDSubOpReply(MOSDSubOp *req, int result_, epoch_t e, bool commit_) :
+    Message(MSG_OSD_SUBOPREPLY),
+    map_epoch(e),
+    reqid(req->get_reqid()),
+    pgid(req->get_pg()),
+    rep_tid(req->get_rep_tid()),
+    op(req->get_op()),
+    poid(req->get_poid()),
+    length(req->get_length()),
+    offset(req->get_offset()),
+    commit(commit_),
+    result(result_) {
+    memset(&peer_stat, 0, sizeof(peer_stat));
   }
   MOSDSubOpReply() {}
-
-
-  // marshalling
-  virtual void decode_payload() {
-    int off = 0;
-    ::_decode(st, payload, off);
-    ::_decode(attrset, payload, off);
-  }
-  virtual void encode_payload() {
-    ::_encode(st, payload);
-    ::_encode(attrset, payload);
-    env.data_off = st.offset;
-  }
 
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
-    out << "osd_sub_op_reply(" << st.reqid
-	<< " " << MOSDOp::get_opname(st.op)
-	<< " " << st.poid;
-    if (st.length) out << " " << st.offset << "~" << st.length;
-    if (st.op >= 10) {
-      if (st.commit)
+    out << "osd_sub_op_reply(" << reqid
+	<< " " << MOSDOp::get_opname(op)
+	<< " " << poid;
+    if (length) out << " " << offset << "~" << length;
+    if (op >= 10) {
+      if (commit)
 	out << " commit";
       else
 	out << " ack";
     }
-    out << " = " << st.result;
+    out << " = " << result;
     out << ")";
   }
 

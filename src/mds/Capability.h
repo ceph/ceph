@@ -44,25 +44,35 @@ inline string cap_string(int cap)
   return s;
 }
 
-typedef uint32_t capseq_t;
+typedef __u32 capseq_t;
 
 class CInode;
 
 class Capability {
 public:
   struct Export {
-    int wanted;
-    int issued;
-    int pending;
+    int32_t wanted;
+    int32_t issued;
+    int32_t pending;
     Export() {}
     Export(int w, int i, int p) : wanted(w), issued(i), pending(p) {}
+    void encode(bufferlist &bl) const {
+      ::encode(wanted, bl);
+      ::encode(issued, bl);
+      ::encode(pending, bl);
+    }
+    void decode(bufferlist::iterator &p) {
+      ::decode(wanted, p);
+      ::decode(issued, p);
+      ::decode(pending, p);
+    }
   };
 
 private:
   CInode *inode;
-  int wanted_caps;     // what the client wants (ideally)
+  __u32 wanted_caps;     // what the client wants (ideally)
   
-  map<capseq_t, int>  cap_history;  // seq -> cap, [last_recv,last_sent]
+  map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
   capseq_t last_open;
   
@@ -118,7 +128,7 @@ public:
   // caps issued, potentially still in hands of client
   int issued() { 
     int c = 0;
-    for (map<capseq_t,int>::iterator p = cap_history.begin();
+    for (map<capseq_t,__u32>::iterator p = cap_history.begin();
 	 p != cap_history.end();
 	 p++) {
       c |= p->second;
@@ -197,7 +207,7 @@ public:
     assert(last_recv <= last_sent);
     assert(seq <= last_sent);
     while (!cap_history.empty()) {
-      map<capseq_t,int>::iterator p = cap_history.begin();
+      map<capseq_t,__u32>::iterator p = cap_history.begin();
 
       if (p->first > seq)
 	break;
@@ -238,25 +248,23 @@ public:
   }
 
   // serializers
-  void _encode(bufferlist& bl) {
-    bl.append((char*)&wanted_caps, sizeof(wanted_caps));
-    bl.append((char*)&last_sent, sizeof(last_sent));
-    bl.append((char*)&last_recv, sizeof(last_recv));
-    ::_encode(cap_history, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(wanted_caps, bl);
+    ::encode(last_sent, bl);
+    ::encode(last_recv, bl);
+    ::encode(cap_history, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(wanted_caps), (char*)&wanted_caps);
-    off += sizeof(wanted_caps);
-    bl.copy(off, sizeof(last_sent), (char*)&last_sent);
-    off += sizeof(last_sent);
-    bl.copy(off, sizeof(last_recv), (char*)&last_recv);
-    off += sizeof(last_recv);
-    ::_decode(cap_history, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(wanted_caps, bl);
+    ::decode(last_sent, bl);
+    ::decode(last_recv, bl);
+    ::decode(cap_history, bl);
   }
   
 };
 
-
+WRITE_CLASS_ENCODER(Capability::Export)
+WRITE_CLASS_ENCODER(Capability)
 
 
 

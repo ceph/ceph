@@ -21,6 +21,7 @@ class triple {
   A first;
   B second;
   C third;
+
   triple() {}
   triple(A f, B s, C t) : first(f), second(s), third(t) {}
 };

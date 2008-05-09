@@ -680,7 +680,7 @@ void ESubtreeMap::replay(MDS *mds)
   dout(10) << "ESubtreeMap.replay -- reconstructing (auth) subtree spanning tree" << dendl;
   
   // first, stick the spanning tree in my cache
-  //metablob.print(cout);
+  //metablob.print(*_dout);
   metablob.replay(mds, _segment);
   
   // restore import/export maps
@@ -770,6 +770,7 @@ void EExport::replay(MDS *mds)
 void EImportStart::replay(MDS *mds)
 {
   dout(10) << "EImportStart.replay " << base << dendl;
+  //metablob.print(*_dout);
   metablob.replay(mds, _segment);
 
   // put in ambiguous import list
@@ -782,9 +783,9 @@ void EImportStart::replay(MDS *mds)
   } else {
     dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.version 
 	     << " < " << cmapv << dendl;
-    map<int,entity_inst_t> cm;
+    map<__u32,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
-    ::_decode_simple(cm, blp);
+    ::decode(cm, blp);
     mds->sessionmap.open_sessions(cm);
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;

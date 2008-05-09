@@ -143,7 +143,7 @@ class MDS : public Dispatcher {
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
   bool is_stopped()  { return state == MDSMap::STATE_STOPPED; }
 
-  void set_want_state(int s);
+  void request_state(int s);
 
   tid_t issue_tid() { return ++last_tid; }
     
@@ -235,7 +235,6 @@ class MDS : public Dispatcher {
 
   void bcast_mds_map();  // to mounted clients
 
-  void boot();
   void boot_create();             // i am new mds.
   void boot_start(int step=0, int r=0);    // starting|replay
 
@@ -276,9 +275,6 @@ class MDS : public Dispatcher {
 
   // special message types
   void handle_mds_map(class MMDSMap *m);
-
-  // osds
-  void handle_osd_map(class MOSDMap *m);
 };
 
 

@@ -20,7 +20,6 @@
 #include <list>
 #include <iostream>
 #include "buffer.h"
-#include "encodable.h"
 
 /*
  * 
@@ -74,9 +73,9 @@ class frag_t {
    *  8 upper bits = "bits"
    * 24 lower bits = "value"
    */
+ public:
   _frag_t _enc;  
   
- public:
   frag_t() : _enc(0) { }
   frag_t(unsigned v, unsigned b) : _enc((b << 24) + 
 					(v & (0xffffffffULL >> (32-b)))) { }
@@ -156,6 +155,14 @@ inline std::ostream& operator<<(std::ostream& out, frag_t hb)
 {
   return out << std::hex << hb.value() << std::dec << "/" << hb.bits();
 }
+
+inline void encode(frag_t f, bufferlist& bl) { encode_raw(f._enc, bl); }
+inline void decode(frag_t &f, bufferlist::iterator& p) { 
+  __u32 v;
+  decode_raw(v, p); 
+  f._enc = v;
+}
+
 
 
 /**
@@ -458,14 +465,11 @@ public:
   }
   
   // encoding
-  void _encode(bufferlist& bl) const {
-    ::_encode(_splits, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(_splits, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(_splits, bl, off);
-  }
-  void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(_splits, p);
+  void decode(bufferlist::iterator& p) {
+    ::decode(_splits, p);
   }
 
   void print(std::ostream& out) {
@@ -491,6 +495,7 @@ public:
     out << ")";
   }
 };
+WRITE_CLASS_ENCODER(fragtree_t)
 
 inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
 {

@@ -30,7 +30,7 @@
 using namespace std;
 
 #include "buffer.h"
-#include "encodable.h"
+#include "encoding.h"
 
 class filepath {
   inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
@@ -189,22 +189,18 @@ class filepath {
   }
 
   // encoding
-  void _encode(bufferlist& bl) {
-    ::_encode_simple(ino, bl);
-    ::_encode_simple(path, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(ino, bl);
+    ::encode(path, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
+  void decode(bufferlist::iterator& blp) {
     bits.clear();
-    ::_decode(ino, bl, off);
-    ::_decode(path, bl, off);
+    ::decode(ino, blp);
+    ::decode(path, blp);
   }
-  void _decode(bufferlist::iterator& blp) {
-    bits.clear();
-    ::_decode_simple(ino, blp);
-    ::_decode_simple(path, blp);
-  }
-
 };
+
+WRITE_CLASS_ENCODER(filepath)
 
 inline ostream& operator<<(ostream& out, const filepath& path)
 {

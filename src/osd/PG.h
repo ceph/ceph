@@ -74,7 +74,17 @@ public:
       epoch_t same_primary_since;  // same primary at least back through this epoch.
       epoch_t same_acker_since;    // same acker at least back through this epoch.
       History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
-    } __attribute__ ((packed)) history;
+      void encode(bufferlist &bl) const {
+	::encode(same_since, bl);
+	::encode(same_primary_since, bl);
+	::encode(same_acker_since, bl);
+      }
+      void decode(bufferlist::iterator &bl) {
+	::decode(same_since, bl);
+	::decode(same_primary_since, bl);
+	::decode(same_acker_since, bl);
+      }
+    } history;
     
     Info(pg_t p=0) : pgid(p), 
                      log_backlog(false),
@@ -84,8 +94,31 @@ public:
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return epoch_created == 0; }
-  } __attribute__ ((packed));
-  
+
+    void encode(bufferlist &bl) const {
+      ::encode(pgid, bl);
+      ::encode(last_update, bl);
+      ::encode(last_complete, bl);
+      ::encode(log_bottom, bl);
+      ::encode(log_backlog, bl);
+      ::encode(epoch_created, bl);
+      ::encode(last_epoch_started, bl);
+      history.encode(bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(pgid, bl);
+      ::decode(last_update, bl);
+      ::decode(last_complete, bl);
+      ::decode(log_bottom, bl);
+      ::decode(log_backlog, bl);
+      ::decode(epoch_created, bl);
+      ::decode(last_epoch_started, bl);
+      history.decode(bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(Info::History)
+  WRITE_CLASS_ENCODER(Info)
+
   
   /** 
    * Query - used to ask a peer for information about a pg.
@@ -99,7 +132,7 @@ public:
     const static int BACKLOG = 2;
     const static int FULLLOG = 3;
 
-    int type;
+    __s32 type;
     eversion_t split, floor;
     Info::History history;
 
@@ -108,8 +141,22 @@ public:
       type(t), history(h) { assert(t != LOG); }
     Query(int t, eversion_t s, eversion_t f, Info::History& h) : 
       type(t), split(s), floor(f), history(h) { assert(t == LOG); }
+
+    void encode(bufferlist &bl) const {
+      ::encode(type, bl);
+      ::encode(split, bl);
+      ::encode(floor, bl);
+      history.encode(bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(type, bl);
+      ::decode(split, bl);
+      ::decode(floor, bl);
+      history.decode(bl);
+    }
   };
-  
+  WRITE_CLASS_ENCODER(Query)
+
   
   /*
    * Missing - summary of missing objects.
@@ -165,13 +212,13 @@ public:
       missing.erase(oid);
     }
 
-    void _encode(bufferlist& blist) {
-      ::_encode(missing, blist);
-      ::_encode(loc, blist);
+    void encode(bufferlist &bl) const {
+      ::encode(missing, bl);
+      ::encode(loc, bl);
     }
-    void _decode(bufferlist& blist, int& off) {
-      ::_decode(missing, blist, off);
-      ::_decode(loc, blist, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(missing, bl);
+      ::decode(loc, bl);
 
       for (map<object_t,eversion_t>::iterator it = missing.begin();
            it != missing.end();
@@ -179,6 +226,7 @@ public:
         rmissing[it->second] = it->first;
     }
   };
+  WRITE_CLASS_ENCODER(Missing)
 
 
   /*
@@ -217,7 +265,7 @@ public:
       const static int CLONE = 2;  
       const static int DELETE = 3;
 
-      int        op;   // write, zero, trunc, remove
+      __s32      op;   // write, zero, trunc, remove
       object_t   oid;
       eversion_t version;
       
@@ -232,7 +280,21 @@ public:
       bool is_clone() const { return op == CLONE; }
       bool is_modify() const { return op == MODIFY; }
       bool is_update() const { return is_clone() || is_modify(); }
+
+      void encode(bufferlist &bl) const {
+	::encode(op, bl);
+	::encode(oid, bl);
+	::encode(version, bl);
+	::encode(reqid, bl);
+      }
+      void decode(bufferlist::iterator &bl) {
+	::decode(op, bl);
+	::decode(oid, bl);
+	::decode(version, bl);
+	::decode(reqid, bl);
+      }
     };
+    WRITE_CLASS_ENCODER(Entry)
 
     list<Entry> log;  // the actual log.
 
@@ -248,21 +310,17 @@ public:
       return top.version == 0 && top.epoch == 0;
     }
 
-    void _encode(bufferlist& blist) const {
-      blist.append((char*)&top, sizeof(top));
-      blist.append((char*)&bottom, sizeof(bottom));
-      blist.append((char*)&backlog, sizeof(backlog));
-      ::_encode(log, blist);
+    void encode(bufferlist& bl) const {
+      ::encode(top, bl);
+      ::encode(bottom, bl);
+      ::encode(backlog, bl);
+      ::encode(log, bl);
     }
-    void _decode(bufferlist& blist, int& off) {
-      blist.copy(off, sizeof(top), (char*)&top);
-      off += sizeof(top);
-      blist.copy(off, sizeof(bottom), (char*)&bottom);
-      off += sizeof(bottom);
-      blist.copy(off, sizeof(backlog), (char*)&backlog);
-      off += sizeof(backlog);
-
-      ::_decode(log, blist, off);
+    void decode(bufferlist::iterator &bl) {
+      ::decode(top, bl);
+      ::decode(bottom, bl);
+      ::decode(backlog, bl);
+      ::decode(log, bl);
     }
 
     void copy_after(const Log &other, eversion_t v);
@@ -270,6 +328,7 @@ public:
     void copy_non_backlog(const Log &other);
     ostream& print(ostream& out) const;
   };
+  WRITE_CLASS_ENCODER(Log)
 
   /**
    * IndexLog - adds in-memory index of the log, by oid.
@@ -639,6 +698,12 @@ public:
   virtual void on_change() = 0;
 };
 
+WRITE_CLASS_ENCODER(PG::Info::History)
+WRITE_CLASS_ENCODER(PG::Info)
+WRITE_CLASS_ENCODER(PG::Query)
+WRITE_CLASS_ENCODER(PG::Missing)
+WRITE_CLASS_ENCODER(PG::Log::Entry)
+WRITE_CLASS_ENCODER(PG::Log)
 
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 

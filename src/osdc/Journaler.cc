@@ -59,7 +59,7 @@ public:
 class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
-  off_t end;
+  __s64 end;
   C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
   void finish(int r) {
     ls->_finish_probe_end(r, end);
@@ -115,7 +115,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   filer.probe_fwd(inode, h.write_pos, &fin->end, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
-void Journaler::_finish_probe_end(int r, off_t end)
+void Journaler::_finish_probe_end(int r, __s64 end)
 {
   assert(state == STATE_PROBING);
   
@@ -167,7 +167,7 @@ void Journaler::write_head(Context *oncommit)
   last_wrote_head = g_clock.now();
 
   bufferlist bl;
-  bl.append((char*)&last_written, sizeof(last_written));
+  ::encode(last_written, bl);
   filer.write(inode, 0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
 	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
@@ -190,13 +190,13 @@ void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 
 class Journaler::C_Flush : public Context {
   Journaler *ls;
-  off_t start;
+  __s64 start;
 public:
-  C_Flush(Journaler *l, off_t s) : ls(l), start(s) {}
+  C_Flush(Journaler *l, __s64 s) : ls(l), start(s) {}
   void finish(int r) { ls->_finish_flush(r, start); }
 };
 
-void Journaler::_finish_flush(int r, off_t start)
+void Journaler::_finish_flush(int r, __s64 start)
 {
   assert(r>=0);
 
@@ -233,17 +233,17 @@ void Journaler::_finish_flush(int r, off_t start)
 }
 
 
-off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
+__s64 Journaler::append_entry(bufferlist& bl, Context *onsync)
 {
   uint32_t s = bl.length();
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
     int p = ceph_file_layout_su(inode.layout);
-    if (write_pos / p != (write_pos + (off_t)(bl.length() + sizeof(s))) / p) {
+    if (write_pos / p != (write_pos + (__s64)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
-      off_t owp = write_pos;
+      __s64 owp = write_pos;
       write_pos += p;
       write_pos -= (write_pos % p);
       
@@ -270,13 +270,13 @@ off_t Journaler::append_entry(bufferlist& bl, Context *onsync)
     dout(10) << "append_entry caching in read_buf too" << dendl;
     assert(requested_pos == received_pos);
     assert(requested_pos == read_pos + read_buf.length());
-    read_buf.append((char*)&s, sizeof(s));
+    ::encode(s, read_buf);
     read_buf.append(bl);
     requested_pos = received_pos = write_pos + sizeof(s) + s;
   }
 
   // append
-  write_buf.append((char*)&s, sizeof(s));
+  ::encode(s, write_buf);
   write_buf.claim_append(bl);
   write_pos += sizeof(s) + s;
 
@@ -435,7 +435,7 @@ void Journaler::_finish_read(int r)
  * then discover we need even more for an especially large entry.
  * i don't think that circumstance will arise particularly often.
  */
-void Journaler::_issue_read(off_t len)
+void Journaler::_issue_read(__s64 len)
 {
   // make sure we're fully flushed
   _do_flush();
@@ -478,7 +478,7 @@ void Journaler::_issue_read(off_t len)
 void Journaler::_prefetch()
 {
   // prefetch?
-  off_t left = requested_pos - read_pos;
+  __s64 left = requested_pos - read_pos;
   if (left <= prefetch_from &&      // should read more,
       !_is_reading() &&             // and not reading anything right now
       write_pos > requested_pos) {  // there's something more to read...
@@ -559,7 +559,7 @@ bool Journaler::is_readable()
   // start reading some more?
   if (!_is_reading()) {
     if (s)
-      fetch_len = MAX(fetch_len, (off_t)(sizeof(s)+s-read_buf.length())); 
+      fetch_len = MAX(fetch_len, (__s64)(sizeof(s)+s-read_buf.length())); 
     _issue_read(fetch_len);
   }
 
@@ -613,9 +613,9 @@ void Journaler::wait_for_readable(Context *onreadable)
 
 class Journaler::C_Trim : public Context {
   Journaler *ls;
-  off_t to;
+  __s64 to;
 public:
-  C_Trim(Journaler *l, off_t t) : ls(l), to(t) {}
+  C_Trim(Journaler *l, __s64 t) : ls(l), to(t) {}
   void finish(int r) {
     ls->_trim_finish(r, to);
   }
@@ -623,7 +623,7 @@ public:
 
 void Journaler::trim()
 {
-  off_t trim_to = last_committed.expire_pos;
+  __s64 trim_to = last_committed.expire_pos;
   trim_to -= trim_to % ceph_file_layout_period(inode.layout);
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
@@ -653,7 +653,7 @@ void Journaler::trim()
   trimming_pos = trim_to;  
 }
 
-void Journaler::_trim_finish(int r, off_t to)
+void Journaler::_trim_finish(int r, __s64 to)
 {
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
 	   << ", trimmed/trimming/expire now "

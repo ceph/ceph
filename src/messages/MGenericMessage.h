@@ -32,14 +32,8 @@ class MGenericMessage : public Message {
 
   const char *get_type_name() { return tname; }
 
-  virtual void decode_payload() {
-    //int off = 0;
-    //payload.copy(off, sizeof(pcid), (char*)&pcid);
-    //off += sizeof(pcid);
-  }
-  virtual void encode_payload() {
-    //payload.append((char*)&pcid, sizeof(pcid));
-  }
+  void decode_payload() { }
+  void encode_payload() { }
 };
 
 #endif

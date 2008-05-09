@@ -34,15 +34,15 @@ class EPurgeFinish : public LogEvent {
     out << "purgefinish " << ino << " " << oldsize << " ->" << newsize;
   }
 
-  virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&ino, sizeof(ino));
-    bl.append((char*)&newsize, sizeof(newsize));
-    bl.append((char*)&oldsize, sizeof(oldsize));
+  void encode(bufferlist &bl) const {
+    ::encode(ino, bl);
+    ::encode(newsize, bl);
+    ::encode(oldsize, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(ino, bl, off);
-    ::_decode(newsize, bl, off);
-    ::_decode(oldsize, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(ino, bl);
+    ::decode(newsize, bl);
+    ::decode(oldsize, bl);
   }
   
   void update_segment();

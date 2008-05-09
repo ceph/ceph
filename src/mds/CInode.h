@@ -561,13 +561,13 @@ class CInodeDiscover {
   string     symlink;
   fragtree_t dirfragtree;
 
-  int        replica_nonce;
+  __s32        replica_nonce;
   
-  int        authlock_state;
-  int        linklock_state;
-  int        dirfragtreelock_state;
-  int        filelock_state;
-  int        dirlock_state;
+  __u32      authlock_state;
+  __u32      linklock_state;
+  __u32      dirfragtreelock_state;
+  __u32      filelock_state;
+  __u32      dirlock_state;
 
  public:
   CInodeDiscover() {}
@@ -583,6 +583,9 @@ class CInodeDiscover {
     dirfragtreelock_state = in->dirfragtreelock.get_replica_state();
     filelock_state = in->filelock.get_replica_state();
     dirlock_state = in->dirlock.get_replica_state();
+  }
+  CInodeDiscover(bufferlist::iterator &p) {
+    decode(p);
   }
 
   inodeno_t get_ino() { return inode.ino; }
@@ -602,32 +605,32 @@ class CInodeDiscover {
     in->dirlock.set_state(dirlock_state);
   }
   
-  void _encode(bufferlist& bl) {
-    ::_encode(inode, bl);
-    ::_encode(symlink, bl);
-    dirfragtree._encode(bl);
-    ::_encode(replica_nonce, bl);
-    ::_encode(authlock_state, bl);
-    ::_encode(linklock_state, bl);
-    ::_encode(dirfragtreelock_state, bl);
-    ::_encode(filelock_state, bl);
-    ::_encode(dirlock_state, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(inode, bl);
+    ::encode(symlink, bl);
+    ::encode(dirfragtree, bl);
+    ::encode(replica_nonce, bl);
+    ::encode(authlock_state, bl);
+    ::encode(linklock_state, bl);
+    ::encode(dirfragtreelock_state, bl);
+    ::encode(filelock_state, bl);
+    ::encode(dirlock_state, bl);
   }
 
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(inode, bl, off);
-    ::_decode(symlink, bl, off);
-    dirfragtree._decode(bl, off);
-    ::_decode(replica_nonce, bl, off);
-    ::_decode(authlock_state, bl, off);
-    ::_decode(linklock_state, bl, off);
-    ::_decode(dirfragtreelock_state, bl, off);
-    ::_decode(filelock_state, bl, off);
-    ::_decode(dirlock_state, bl, off);
+  void decode(bufferlist::iterator &p) {
+    ::decode(inode, p);
+    ::decode(symlink, p);
+    ::decode(dirfragtree, p);
+    ::decode(replica_nonce, p);
+    ::decode(authlock_state, p);
+    ::decode(linklock_state, p);
+    ::decode(dirfragtreelock_state, p);
+    ::decode(filelock_state, p);
+    ::decode(dirlock_state, p);
   }  
 
 };
-
+WRITE_CLASS_ENCODER(CInodeDiscover)
 
 
 #endif

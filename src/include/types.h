@@ -108,6 +108,21 @@ struct ltstr
 
 
 
+#include "encoding.h"
+
+WRITE_RAW_ENCODER(ceph_fsid)
+WRITE_RAW_ENCODER(ceph_file_layout)
+WRITE_RAW_ENCODER(ceph_mds_request_head)
+WRITE_RAW_ENCODER(ceph_mds_file_caps)
+WRITE_RAW_ENCODER(ceph_mds_lease)
+WRITE_RAW_ENCODER(ceph_mds_reply_head)
+WRITE_RAW_ENCODER(ceph_mds_reply_inode)
+
+WRITE_RAW_ENCODER(ceph_osd_request_head)
+WRITE_RAW_ENCODER(ceph_osd_reply_head)
+
+WRITE_RAW_ENCODER(ceph_statfs)
+
 // ----------------------
 // some basic types
 
@@ -134,6 +149,9 @@ struct inodeno_t {
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
   operator _inodeno_t() const { return val; }
 };
+
+inline void encode(inodeno_t i, bufferlist &bl) { encode(i.val, bl); }
+inline void decode(inodeno_t &i, bufferlist::iterator &p) { decode(i.val, p); }
 
 inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;
@@ -210,12 +228,47 @@ struct inode_t {
   version_t file_data_version; // auth only
 
   // file type
-  bool is_symlink() { return (mode & S_IFMT) == S_IFLNK; }
-  bool is_dir()     { return (mode & S_IFMT) == S_IFDIR; }
-  bool is_file()    { return (mode & S_IFMT) == S_IFREG; }
+  bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
+  bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
+  bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 };
 
-
+static inline void encode(const inode_t &i, bufferlist &bl) {
+  ::encode(i.ino, bl);
+  ::encode(i.layout, bl);
+  ::encode(i.rdev, bl);
+  ::encode(i.ctime, bl);
+  ::encode(i.mode, bl);
+  ::encode(i.uid, bl);
+  ::encode(i.gid, bl);
+  ::encode(i.nlink, bl);
+  ::encode(i.anchored, bl);
+  ::encode(i.size, bl);
+  ::encode(i.max_size, bl);
+  ::encode(i.mtime, bl);
+  ::encode(i.atime, bl);
+  ::encode(i.rmtime, bl);
+  ::encode(i.version, bl);
+  ::encode(i.file_data_version, bl);
+}
+static inline void decode(inode_t &i, bufferlist::iterator &p) {
+  ::decode(i.ino, p);
+  ::decode(i.layout, p);
+  ::decode(i.rdev, p);
+  ::decode(i.ctime, p);
+  ::decode(i.mode, p);
+  ::decode(i.uid, p);
+  ::decode(i.gid, p);
+  ::decode(i.nlink, p);
+  ::decode(i.anchored, p);
+  ::decode(i.size, p);
+  ::decode(i.max_size, p);
+  ::decode(i.mtime, p);
+  ::decode(i.atime, p);
+  ::decode(i.rmtime, p);
+  ::decode(i.version, p);
+  ::decode(i.file_data_version, p);
+}
 
 
 

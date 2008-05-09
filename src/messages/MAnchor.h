@@ -23,7 +23,7 @@
 
 
 class MAnchor : public Message {
-  int op;
+  __u32 op;
   inodeno_t ino;
   vector<Anchor> trace;
   version_t atid;  // anchor table version.
@@ -53,21 +53,18 @@ class MAnchor : public Message {
   version_t get_atid() { return atid; }
 
   virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(op), (char*)&op);
-    off += sizeof(op);
-    payload.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    payload.copy(off, sizeof(atid), (char*)&atid);
-    off += sizeof(atid);
-    ::_decode(trace, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(op, p);
+    ::decode(ino, p);
+    ::decode(atid, p);
+    ::decode(trace, p);
   }
 
   virtual void encode_payload() {
-    payload.append((char*)&op, sizeof(op));
-    payload.append((char*)&ino, sizeof(ino));
-    payload.append((char*)&atid, sizeof(atid));
-    ::_encode(trace, payload);
+    ::encode(op, payload);
+    ::encode(ino, payload);
+    ::encode(atid, payload);
+    ::encode(trace, payload);
   }
 };
 

@@ -232,20 +232,21 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   mds->sessionmap.version++;  // noop
 }
 
-void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
+version_t Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
 {
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
-  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+  for (map<__u32,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
     if (session->is_undef() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
   }
+  return pv;
 }
 
-void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
+void Server::finish_force_open_sessions(map<__u32,entity_inst_t>& cm)
 {
   /*
    * FIXME: need to carefully consider the race conditions between a
@@ -254,7 +255,7 @@ void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
    */
   dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
 	   << " v " << mds->sessionmap.version << " -> " << (mds->sessionmap.version+1) << dendl;
-  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+  for (map<__u32,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
     if (session->is_opening()) {
@@ -606,7 +607,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
  inode:
-  InodeStat::_encode(bl, in);
+  InodeStat::encode(bl, in);
   lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   numi++;
   dout(20) << " trace added " << lmask << " " << *in << dendl;
@@ -617,13 +618,13 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     goto done;
 
  dentry:
-  ::_encode_simple(dn->get_name(), bl);
+  ::encode(dn->get_name(), bl);
   lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   numdn++;
   dout(20) << " trace added " << lmask << " " << *dn << dendl;
   
   // dir
-  DirStat::_encode(bl, dn->get_dir(), whoami);
+  DirStat::encode(bl, dn->get_dir(), whoami);
   dout(20) << " trace added " << *dn->get_dir() << dendl;
 
   in = dn->get_dir()->get_inode();
@@ -633,8 +634,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 done:
   // put numi, numd in front
   bufferlist fbl;
-  ::_encode(numi, fbl);
-  ::_encode(numdn, fbl);
+  ::encode(numi, fbl);
+  ::encode(numdn, fbl);
   fbl.claim_append(bl);
   reply->set_trace(fbl);
 }
@@ -1782,7 +1783,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   // build dir contents
   bufferlist dirbl, dnbl;
-  DirStat::_encode(dirbl, dir, mds->get_nodeid());
+  DirStat::encode(dirbl, dir, mds->get_nodeid());
 
   __u32 numfiles = 0;
   for (CDir::map_t::iterator it = dir->begin(); 
@@ -1818,18 +1819,18 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dout(12) << "including inode " << *in << dendl;
     
     // dentry
-    ::_encode(it->first, dnbl);
+    ::encode(it->first, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
     // inode
-    InodeStat::_encode(dnbl, in);
+    InodeStat::encode(dnbl, in);
     mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 
     // touch dn
     mdcache->lru.lru_touch(dn);
   }
-  ::_encode_simple(numfiles, dirbl);
+  ::encode(numfiles, dirbl);
   dirbl.claim_append(dnbl);
   
   // yay, reply
@@ -3206,9 +3207,9 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
     CInodeDiscover *indis = straydn->dir->inode->replicate_to(who);
     CDirDiscover *dirdis = straydn->dir->replicate_to(who);
     CDentryDiscover *dndis = straydn->replicate_to(who);
-    indis->_encode(req->stray);
-    dirdis->_encode(req->stray);
-    dndis->_encode(req->stray);
+    indis->encode(req->stray);
+    dirdis->encode(req->stray);
+    dndis->encode(req->stray);
     delete indis;
     delete dirdis;
     delete dndis;
@@ -3312,8 +3313,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
 	  
 	  // imported caps
-	  ::_decode_simple(mdr->more()->imported_client_map, blp);
-	  ::_encode_simple(mdr->more()->imported_client_map, *client_map_bl);
+	  ::decode(mdr->more()->imported_client_map, blp);
+	  ::encode(mdr->more()->imported_client_map, *client_map_bl);
 	  prepare_force_open_sessions(mdr->more()->imported_client_map);
 
 	  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
@@ -3663,13 +3664,13 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // export srci?
   if (srcdn->is_auth() && srcdn->is_primary()) {
     list<Context*> finished;
-    map<int,entity_inst_t> exported_client_map;
+    map<__u32,entity_inst_t> exported_client_map;
     bufferlist inodebl;
     mdcache->migrator->encode_export_inode(srcdn->inode, inodebl, 
 					   exported_client_map);
     mdcache->migrator->finish_export_inode(srcdn->inode, mdr->now, finished); 
     mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
-    ::_encode(exported_client_map, reply->inode_export);
+    ::encode(exported_client_map, reply->inode_export);
     reply->inode_export.claim_append(inodebl);
     reply->inode_export_v = srcdn->inode->inode.version;
 

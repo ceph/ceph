@@ -1051,7 +1051,7 @@ void PG::write_log(ObjectStore::Transaction& t)
        p++) {
     if (bl.length() % 4096 == 0)
       ondisklog.block_map[bl.length()] = p->version;
-    bl.append((char*)&(*p), sizeof(*p));
+    ::encode(*p, bl);
     if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
       bufferptr bp(4096 - sizeof(*p));
       bl.push_back(bp);

@@ -26,14 +26,8 @@ class MMDSBoot : public Message {
 
   char *get_type_name() { return "mdsboot"; }
   
-  void encode_payload() {
-    //payload.append((char*)&sb, sizeof(sb));
-  }
-  void decode_payload() {
-    //int off = 0;
-    //payload.copy(off, sizeof(sb), (char*)&sb);
-    //off += sizeof(sb);
-  }
+  void encode_payload() { }
+  void decode_payload() { }
 };
 
 #endif

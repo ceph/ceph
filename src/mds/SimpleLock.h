@@ -90,8 +90,8 @@ protected:
   int wait_offset;
 
   // lock state
-  int state;
-  set<int> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+  __s32 state;
+  set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
   int num_client_lease;
 
   // local state
@@ -224,13 +224,13 @@ public:
   }
 
   // encode/decode
-  void _encode(bufferlist& bl) {
-    ::_encode_simple(state, bl);
-    ::_encode_simple(gather_set, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(state, bl);
+    ::encode(gather_set, bl);
   }
-  void _decode(bufferlist::iterator& p) {
-    ::_decode_simple(state, p);
-    ::_decode_simple(gather_set, p);
+  void decode(bufferlist::iterator& p) {
+    ::decode(state, p);
+    ::decode(gather_set, p);
   }
 
   
@@ -318,6 +318,7 @@ public:
     out << ")";
   }
 };
+WRITE_CLASS_ENCODER(SimpleLock)
 
 inline ostream& operator<<(ostream& out, SimpleLock& l) 
 {
