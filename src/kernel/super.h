@@ -362,7 +362,6 @@ extern const char *ceph_msg_type_name(int type);
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
 extern const struct inode_operations ceph_special_iops;
-extern struct inode *ceph_get_inode(struct super_block *sb, __u64 ino);
 extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
