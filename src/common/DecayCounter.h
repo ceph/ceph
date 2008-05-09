@@ -150,7 +150,7 @@ public:
   }
 };
 
-WRITE_CLASS_ENCODERS(DecayCounter)
+WRITE_CLASS_ENCODER(DecayCounter)
 
 
 #endif

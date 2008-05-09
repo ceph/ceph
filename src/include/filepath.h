@@ -200,7 +200,7 @@ class filepath {
   }
 };
 
-WRITE_CLASS_ENCODERS(filepath)
+WRITE_CLASS_ENCODER(filepath)
 
 inline ostream& operator<<(ostream& out, const filepath& path)
 {

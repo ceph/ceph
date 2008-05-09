@@ -84,7 +84,7 @@ public:
       ::decode(write_pos, bl);
     }
   } last_written, last_committed;
-  WRITE_CLASS_ENCODERS(Header)
+  WRITE_CLASS_ENCODER(Header)
 
   private:
   // me
@@ -247,6 +247,6 @@ public:
   //bool is_trimmable() { return trimming_pos < expire_pos; }
   //void trim(off_t trim_to=0, Context *c=0);
 };
-WRITE_CLASS_ENCODERS(Journaler::Header)
+WRITE_CLASS_ENCODER(Journaler::Header)
 
 #endif

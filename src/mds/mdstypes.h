@@ -208,7 +208,7 @@ public:
       ::decode(vec[i], p);
   }
 };
-WRITE_CLASS_ENCODERS(inode_load_vec_t)
+WRITE_CLASS_ENCODER(inode_load_vec_t)
 
 class dirfrag_load_vec_t {
 public:
@@ -254,7 +254,7 @@ public:
   }
 };
 
-WRITE_CLASS_ENCODERS(dirfrag_load_vec_t)
+WRITE_CLASS_ENCODER(dirfrag_load_vec_t)
 
 inline dirfrag_load_vec_t& operator+=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
 {
@@ -330,7 +330,7 @@ struct mds_load_t {
     ::decode(cpu_load_avg, bl);
   }
 };
-WRITE_CLASS_ENCODERS(mds_load_t)
+WRITE_CLASS_ENCODER(mds_load_t)
 
 inline ostream& operator<<( ostream& out, mds_load_t& load )
 {
@@ -464,7 +464,7 @@ public:
   }
 };
 
-WRITE_CLASS_ENCODERS(MDSCacheObjectInfo)
+WRITE_CLASS_ENCODER(MDSCacheObjectInfo)
 
 
 class MDSCacheObject {

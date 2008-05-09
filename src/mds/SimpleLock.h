@@ -318,7 +318,7 @@ public:
     out << ")";
   }
 };
-WRITE_CLASS_ENCODERS(SimpleLock)
+WRITE_CLASS_ENCODER(SimpleLock)
 
 inline ostream& operator<<(ostream& out, SimpleLock& l) 
 {

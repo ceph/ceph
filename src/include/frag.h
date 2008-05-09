@@ -495,7 +495,7 @@ public:
     out << ")";
   }
 };
-WRITE_CLASS_ENCODERS(fragtree_t)
+WRITE_CLASS_ENCODER(fragtree_t)
 
 inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
 {

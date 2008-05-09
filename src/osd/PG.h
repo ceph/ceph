@@ -116,8 +116,8 @@ public:
       history.decode(bl);
     }
   };
-  WRITE_CLASS_ENCODERS(Info::History)
-  WRITE_CLASS_ENCODERS(Info)
+  WRITE_CLASS_ENCODER(Info::History)
+  WRITE_CLASS_ENCODER(Info)
 
   
   /** 
@@ -155,7 +155,7 @@ public:
       history.decode(bl);
     }
   };
-  WRITE_CLASS_ENCODERS(Query)
+  WRITE_CLASS_ENCODER(Query)
 
   
   /*
@@ -226,7 +226,7 @@ public:
         rmissing[it->second] = it->first;
     }
   };
-  WRITE_CLASS_ENCODERS(Missing)
+  WRITE_CLASS_ENCODER(Missing)
 
 
   /*
@@ -294,7 +294,7 @@ public:
 	::decode(reqid, bl);
       }
     };
-    WRITE_CLASS_ENCODERS(Entry)
+    WRITE_CLASS_ENCODER(Entry)
 
     list<Entry> log;  // the actual log.
 
@@ -328,7 +328,7 @@ public:
     void copy_non_backlog(const Log &other);
     ostream& print(ostream& out) const;
   };
-  WRITE_CLASS_ENCODERS(Log)
+  WRITE_CLASS_ENCODER(Log)
 
   /**
    * IndexLog - adds in-memory index of the log, by oid.
@@ -698,12 +698,12 @@ public:
   virtual void on_change() = 0;
 };
 
-WRITE_CLASS_ENCODERS(PG::Info::History)
-WRITE_CLASS_ENCODERS(PG::Info)
-WRITE_CLASS_ENCODERS(PG::Query)
-WRITE_CLASS_ENCODERS(PG::Missing)
-WRITE_CLASS_ENCODERS(PG::Log::Entry)
-WRITE_CLASS_ENCODERS(PG::Log)
+WRITE_CLASS_ENCODER(PG::Info::History)
+WRITE_CLASS_ENCODER(PG::Info)
+WRITE_CLASS_ENCODER(PG::Query)
+WRITE_CLASS_ENCODER(PG::Missing)
+WRITE_CLASS_ENCODER(PG::Log::Entry)
+WRITE_CLASS_ENCODER(PG::Log)
 
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 

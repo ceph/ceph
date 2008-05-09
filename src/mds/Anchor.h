@@ -93,7 +93,7 @@ public:
     ::decode(nref, bl);
   }
 };
-WRITE_CLASS_ENCODERS(Anchor)
+WRITE_CLASS_ENCODER(Anchor)
 
 inline ostream& operator<<(ostream& out, Anchor& a)
 {

@@ -319,7 +319,7 @@ public:
     ::decode(lockstate, bl);
   }
 };
-WRITE_CLASS_ENCODERS(CDentryDiscover)
+WRITE_CLASS_ENCODER(CDentryDiscover)
 
 
 #endif

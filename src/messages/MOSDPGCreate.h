@@ -40,7 +40,7 @@ struct MOSDPGCreate : public Message {
       ::decode(split_bits, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(create_rec)
+  WRITE_CLASS_ENCODER(create_rec)
 
   map<pg_t,create_rec> mkpg;
 
@@ -62,6 +62,6 @@ struct MOSDPGCreate : public Message {
   }
 };
 
-WRITE_CLASS_ENCODERS(MOSDPGCreate::create_rec)
+WRITE_CLASS_ENCODER(MOSDPGCreate::create_rec)
 
 #endif

@@ -63,7 +63,7 @@ struct LeaseStat {
     ::decode(duration_ms, bl);
   }
 };
-WRITE_CLASS_ENCODERS(LeaseStat)
+WRITE_CLASS_ENCODER(LeaseStat)
 
 struct DirStat {
   // mds distribution hints

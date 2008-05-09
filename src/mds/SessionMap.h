@@ -127,7 +127,7 @@ public:
     ::decode(completed_requests, p);
   }
 };
-WRITE_CLASS_ENCODERS(Session)
+WRITE_CLASS_ENCODER(Session)
 
 /*
  * session map

@@ -70,7 +70,7 @@ struct object_t {
     rev = r;
   }
 } __attribute__ ((packed));
-WRITE_CLASS_ENCODERS(object_t)
+WRITE_CLASS_ENCODER(object_t)
 
 inline bool operator==(const object_t l, const object_t r) {
   return memcmp(&l, &r, sizeof(l)) == 0;

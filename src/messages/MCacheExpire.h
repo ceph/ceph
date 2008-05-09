@@ -39,7 +39,7 @@ public:
       ::decode(dentries, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(realm)
+  WRITE_CLASS_ENCODER(realm)
 
   map<dirfrag_t, realm> realms;
 
@@ -93,6 +93,6 @@ public:
   }
 };
 
-WRITE_CLASS_ENCODERS(MCacheExpire::realm)
+WRITE_CLASS_ENCODER(MCacheExpire::realm)
 
 #endif

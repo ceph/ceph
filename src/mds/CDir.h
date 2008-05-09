@@ -533,7 +533,7 @@ class CDirDiscover {
   }
 
 };
-WRITE_CLASS_ENCODERS(CDirDiscover)
+WRITE_CLASS_ENCODER(CDirDiscover)
 
 
 

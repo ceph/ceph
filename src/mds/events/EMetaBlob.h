@@ -88,7 +88,7 @@ public:
 	  << " dirty=" << dirty << std::endl;
     }
   };
-  WRITE_CLASS_ENCODERS(fullbit)
+  WRITE_CLASS_ENCODER(fullbit)
   
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
@@ -124,7 +124,7 @@ public:
 	  << " dirty=" << dirty << std::endl;
     }
   };
-  WRITE_CLASS_ENCODERS(remotebit)
+  WRITE_CLASS_ENCODER(remotebit)
 
   /*
    * nullbit - a null dentry
@@ -153,7 +153,7 @@ public:
 	  << " dirty=" << dirty << std::endl;
     }
   };
-  WRITE_CLASS_ENCODERS(nullbit)
+  WRITE_CLASS_ENCODER(nullbit)
 
 
   /* dirlump - contains metadata for any dir we have contents for.
@@ -233,7 +233,7 @@ public:
       dn_decoded = false;      // don't decode bits unless we need them.
     }
   };
-  WRITE_CLASS_ENCODERS(dirlump)
+  WRITE_CLASS_ENCODER(dirlump)
 
 private:
   // my lumps.  preserve the order we added them in a list.
@@ -483,11 +483,11 @@ private:
   void update_segment(LogSegment *ls);
   void replay(MDS *mds, LogSegment *ls=0);
 };
-WRITE_CLASS_ENCODERS(EMetaBlob)
-WRITE_CLASS_ENCODERS(EMetaBlob::fullbit)
-WRITE_CLASS_ENCODERS(EMetaBlob::remotebit)
-WRITE_CLASS_ENCODERS(EMetaBlob::nullbit)
-WRITE_CLASS_ENCODERS(EMetaBlob::dirlump)
+WRITE_CLASS_ENCODER(EMetaBlob)
+WRITE_CLASS_ENCODER(EMetaBlob::fullbit)
+WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
+WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
+WRITE_CLASS_ENCODER(EMetaBlob::dirlump)
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {
   t.print(out);

@@ -263,8 +263,8 @@ public:
   
 };
 
-WRITE_CLASS_ENCODERS(Capability::Export)
-WRITE_CLASS_ENCODERS(Capability)
+WRITE_CLASS_ENCODER(Capability::Export)
+WRITE_CLASS_ENCODER(Capability)
 
 
 

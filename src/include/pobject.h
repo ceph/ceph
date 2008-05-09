@@ -43,7 +43,7 @@ struct pobject_t {
     oid.decode(bl);
   }
 } __attribute__ ((packed));
-WRITE_CLASS_ENCODERS(pobject_t)
+WRITE_CLASS_ENCODER(pobject_t)
 
 inline ostream& operator<<(ostream& out, const pobject_t o) {
   return out << o.volume << '/' << o.rank << '/' << o.oid;

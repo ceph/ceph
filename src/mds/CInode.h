@@ -630,7 +630,7 @@ class CInodeDiscover {
   }  
 
 };
-WRITE_CLASS_ENCODERS(CInodeDiscover)
+WRITE_CLASS_ENCODER(CInodeDiscover)
 
 
 #endif

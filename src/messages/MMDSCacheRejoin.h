@@ -73,7 +73,7 @@ class MMDSCacheRejoin : public Message {
       ::decode(dirlock, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(inode_strong)
+  WRITE_CLASS_ENCODER(inode_strong)
 
   struct inode_full {
     inode_t inode;
@@ -94,7 +94,7 @@ class MMDSCacheRejoin : public Message {
       ::encode(dirfragtree, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(inode_full)
+  WRITE_CLASS_ENCODER(inode_full)
 
   struct dirfrag_strong {
     int32_t nonce;
@@ -110,7 +110,7 @@ class MMDSCacheRejoin : public Message {
       ::decode(dir_rep, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(dirfrag_strong)
+  WRITE_CLASS_ENCODER(dirfrag_strong)
 
   struct dn_strong {
     inodeno_t ino;
@@ -140,7 +140,7 @@ class MMDSCacheRejoin : public Message {
       ::decode(lock, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(dn_strong)
+  WRITE_CLASS_ENCODER(dn_strong)
 
   struct dn_weak {
     inodeno_t ino;
@@ -153,7 +153,7 @@ class MMDSCacheRejoin : public Message {
       ::decode(ino, bl);
     }
   };
-  WRITE_CLASS_ENCODERS(dn_weak)
+  WRITE_CLASS_ENCODER(dn_weak)
 
   // -- data --
   int32_t op;
@@ -279,10 +279,10 @@ class MMDSCacheRejoin : public Message {
 
 };
 
-WRITE_CLASS_ENCODERS(MMDSCacheRejoin::inode_strong)
-WRITE_CLASS_ENCODERS(MMDSCacheRejoin::inode_full)
-WRITE_CLASS_ENCODERS(MMDSCacheRejoin::dirfrag_strong)
-WRITE_CLASS_ENCODERS(MMDSCacheRejoin::dn_strong)
-WRITE_CLASS_ENCODERS(MMDSCacheRejoin::dn_weak)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_full)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::dirfrag_strong)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_strong)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_weak)
 
 #endif

@@ -39,7 +39,7 @@ struct osd_reqid_t {
     ::decode(inc, bl);
   }
 };
-WRITE_CLASS_ENCODERS(osd_reqid_t)
+WRITE_CLASS_ENCODER(osd_reqid_t)
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -207,7 +207,7 @@ public:
     ::decode(epoch, bl);
   }
 };
-WRITE_CLASS_ENCODERS(eversion_t)
+WRITE_CLASS_ENCODER(eversion_t)
 
 inline bool operator==(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) && (l.version == r.version);
@@ -254,7 +254,7 @@ struct osd_stat_t {
     ::decode(num_objects, bl);
   }
 };
-WRITE_CLASS_ENCODERS(osd_stat_t)
+WRITE_CLASS_ENCODER(osd_stat_t)
 
 
 
@@ -320,7 +320,7 @@ struct pg_stat_t {
   }
   pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
 };
-WRITE_CLASS_ENCODERS(pg_stat_t)
+WRITE_CLASS_ENCODER(pg_stat_t)
 
 typedef struct ceph_osd_peer_stat osd_peer_stat_t;
 WRITE_RAW_ENCODER(osd_peer_stat_t)
@@ -398,7 +398,7 @@ public:
     ::decode(weight, bl);
   }
 };
-WRITE_CLASS_ENCODERS(OSDSuperblock)
+WRITE_CLASS_ENCODER(OSDSuperblock)
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 {
