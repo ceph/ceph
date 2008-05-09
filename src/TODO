@@ -1,10 +1,4 @@
 
-code cleanup
-- userspace encoding/decoding needs major cleanup
-  - use le32 etc annotation
-  - probably kill base case in encoder.h, replace with int types, with appropriate swabbing?
-- addr=?
-
 userspace client
 - move the size check(s) on read from _read() into FileCache
 - time out caps, wake up waiters on renewal
