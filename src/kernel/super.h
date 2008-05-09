@@ -267,6 +267,13 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
 	return (ci->i_ceph_ino == ino);
 }
 
+static inline struct inode *ceph_find_inode(struct super_block *sb, __u64 ino)
+{
+	ino_t inot = ceph_ino_to_ino(ino);
+	return ilookup5(sb, inot, ceph_ino_compare, &ino);
+}
+
+
 /*
  * caps helpers
  */
@@ -355,6 +362,7 @@ extern const char *ceph_msg_type_name(int type);
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
 extern const struct inode_operations ceph_special_iops;
+extern struct inode *ceph_get_inode(struct super_block *sb, __u64 ino);
 extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_inode *info);
