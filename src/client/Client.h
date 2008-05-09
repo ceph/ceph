@@ -128,7 +128,7 @@ class Dir {
 class InodeCap {
  public:
   int  caps;
-  long seq;
+  unsigned seq;
   InodeCap() : caps(0), seq(0) {}
 };
 
