@@ -257,6 +257,30 @@ private:
   list<metareqid_t> client_reqs;
 
  public:
+  void encode(bufferlist& bl) const {
+    ::encode(lump_order, bl);
+    ::encode(lump_map, bl);
+    ::encode(atids, bl);
+    ::encode(dirty_inode_mtimes, bl);
+    ::encode(allocated_inos, bl);
+    if (!allocated_inos.empty())
+      ::encode(alloc_tablev, bl);
+    ::encode(truncated_inodes, bl);
+    ::encode(client_reqs, bl);
+  } 
+  void decode(bufferlist::iterator &bl) {
+    ::decode(lump_order, bl);
+    ::decode(lump_map, bl);
+    ::decode(atids, bl);
+    ::decode(dirty_inode_mtimes, bl);
+    ::decode(allocated_inos, bl);
+    if (!allocated_inos.empty())
+      ::decode(alloc_tablev, bl);
+    ::decode(truncated_inodes, bl);
+    ::decode(client_reqs, bl);
+  }
+
+
   // soft state
   off_t last_subtree_map;
   off_t my_offset;
@@ -446,28 +470,7 @@ private:
   }
 
 
-  // encoding
 
-  void encode(bufferlist& bl) const {
-    ::encode(lump_map, bl);
-    ::encode(atids, bl);
-    ::encode(dirty_inode_mtimes, bl);
-    ::encode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::encode(alloc_tablev, bl);
-    ::encode(truncated_inodes, bl);
-    ::encode(client_reqs, bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    ::decode(lump_map, bl);
-    ::decode(atids, bl);
-    ::decode(dirty_inode_mtimes, bl);
-    ::decode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::decode(alloc_tablev, bl);
-    ::decode(truncated_inodes, bl);
-    ::decode(client_reqs, bl);
-  }
  
   void print(ostream& out) const {
     out << "[metablob";
