@@ -113,92 +113,28 @@ class MExportDirPrep : public Message {
   }
 
   virtual void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    
-    ::_decode(bounds, payload, off);
-    
-    // inodes
-    int ni;
-    payload.copy(off, sizeof(int), (char*)&ni);
-    off += sizeof(int);
-    for (int i=0; i<ni; i++) {
-      // inode
-      CInodeDiscover *in = new CInodeDiscover;
-      in->_decode(payload, off);
-      inodes.push_back(in);
-
-      // dentry
-      CDentryDiscover *dn = new CDentryDiscover;
-      dn->_decode(payload, off);
-      dentries.push_back(dn);
-      
-      // dentry
-      string d;
-      _decode(d, payload, off);
-      inode_dentry[in->get_ino()] = d;
-      
-      // dir ino
-      dirfrag_t df;
-      payload.copy(off, sizeof(df), (char*)&df);
-      off += sizeof(df);
-      inode_dirfrag[in->get_ino()] = df;
-
-      // child frags
-      ::_decode(frags_by_ino[in->get_ino()], payload, off);
-    }
-
-    // dirs
-    int nd;
-    payload.copy(off, sizeof(int), (char*)&nd);
-    off += sizeof(int);
-    for (int i=0; i<nd; i++) {
-      CDirDiscover *dir = new CDirDiscover;
-      dir->_decode(payload, off);
-      dirfrags[dir->get_dirfrag()] = dir;
-    }
-    
-    ::_decode(bystanders, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
+    ::decode(bounds, p);
+    ::decode(inodes, p);
+    ::decode(dentries, p);
+    ::decode(inode_dirfrag, p);
+    ::decode(inode_dentry, p);
+    ::decode(frags_by_ino, p);
+    ::decode(dirfrags, p);
+    ::decode(bystanders, p);
   }
 
   virtual void encode_payload() {
-    payload.append((char*)&dirfrag, sizeof(dirfrag));
-
-    ::_encode(bounds, payload);
-
-    // inodes
-    int ni = inodes.size();
-    payload.append((char*)&ni, sizeof(int));
-    list<CDentryDiscover*>::iterator dit = dentries.begin();
-    list<CInodeDiscover*>::iterator iit = inodes.begin();
-    while (iit != inodes.end()) {
-      (*iit)->_encode(payload);
-      (*dit)->_encode(payload);
-
-      // dentry name
-      _encode(inode_dentry[(*iit)->get_ino()], payload);
-
-      // dir ino
-      dirfrag_t df = inode_dirfrag[(*iit)->get_ino()];
-      payload.append((char*)&df, sizeof(df));
-
-      // child frags
-      ::_encode(frags_by_ino[(*iit)->get_ino()], payload);
-
-      iit++;
-      dit++;
-    }
-
-    // dirs
-    int nd = dirfrags.size();
-    payload.append((char*)&nd, sizeof(int));
-    for (map<dirfrag_t,CDirDiscover*>::iterator dit = dirfrags.begin();
-         dit != dirfrags.end();
-         dit++)
-      dit->second->_encode(payload);
-
-    ::_encode(bystanders, payload);
+    ::encode(dirfrag, payload);
+    ::encode(bounds, payload);
+    ::encode(inodes, payload);
+    ::encode(dentries, payload);
+    ::encode(inode_dirfrag, payload);
+    ::encode(inode_dentry, payload);
+    ::encode(frags_by_ino, payload);
+    ::encode(dirfrags, payload);
+    ::encode(bystanders, payload);
   }
 };
 

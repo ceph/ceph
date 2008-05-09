@@ -285,6 +285,7 @@ public:
     lockstate(dn->lock.get_replica_state()),
     dir_offset(dn->get_dir_offset()),
     remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
+  CDentryDiscover(bufferlist::iterator &p) { decode(p); }
 
   string& get_dname() { return dname; }
   int get_nonce() { return replica_nonce; }
@@ -300,26 +301,25 @@ public:
     dn->lock.set_state( lockstate );
   }
 
-  void _encode(bufferlist& bl) {
-    ::_encode(dname, bl);
-    ::_encode(dir_offset, bl);
-    ::_encode(remote_ino, bl);
-    ::_encode(remote_d_type, bl);
-    ::_encode(replica_nonce, bl);
-    ::_encode(lockstate, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(dname, bl);
+    ::encode(dir_offset, bl);
+    ::encode(remote_ino, bl);
+    ::encode(remote_d_type, bl);
+    ::encode(replica_nonce, bl);
+    ::encode(lockstate, bl);
   }
   
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(dname, bl, off);
-    ::_decode(dir_offset, bl, off);
-    ::_decode(remote_ino, bl, off);
-    ::_decode(remote_d_type, bl, off);
-    ::_decode(replica_nonce, bl, off);
-    ::_decode(lockstate, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(dname, bl);
+    ::decode(dir_offset, bl);
+    ::decode(remote_ino, bl);
+    ::decode(remote_d_type, bl);
+    ::decode(replica_nonce, bl);
+    ::decode(lockstate, bl);
   }
-
 };
-
+WRITE_CLASS_ENCODERS(CDentryDiscover)
 
 
 #endif

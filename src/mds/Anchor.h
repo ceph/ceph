@@ -22,7 +22,6 @@ using std::string;
 #include "mdstypes.h"
 #include "include/buffer.h"
 
-
 // anchor ops
 #define ANCHOR_OP_LOOKUP          1
 #define ANCHOR_OP_LOOKUP_REPLY    -2
@@ -83,22 +82,18 @@ public:
     //ref_dn(rd), 
     nref(nr) { }
   
-  void _encode(bufferlist &bl) {
-    bl.append((char*)&ino, sizeof(ino));
-    bl.append((char*)&dirfrag, sizeof(dirfrag));
-    bl.append((char*)&nref, sizeof(nref));
-    //::_encode(ref_dn, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(ino, bl);
+    ::encode(dirfrag, bl);
+    ::encode(nref, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-    bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    bl.copy(off, sizeof(nref), (char*)&nref);
-    off += sizeof(nref);
-    //::_decode(ref_dn, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(ino, bl);
+    ::decode(dirfrag, bl);
+    ::decode(nref, bl);
   }
 };
+WRITE_CLASS_ENCODERS(Anchor)
 
 inline ostream& operator<<(ostream& out, Anchor& a)
 {

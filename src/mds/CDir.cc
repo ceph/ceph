@@ -874,30 +874,30 @@ void CDir::_fetched(bufferlist &bl)
 
   // decode.
   int len = bl.length();
-  int off = 0;
+  bufferlist::iterator p = bl.begin();
   version_t got_version;
   
-  ::_decode(got_version, bl, off);
+  ::decode(got_version, p);
 
   dout(10) << "_fetched version " << got_version
 	   << ", " << len << " bytes"
 	   << dendl;
   
   int32_t n;
-  ::_decode(n, bl, off);
+  ::decode(n, p);
 
   //int num_new_inodes_loaded = 0;
 
   for (int i=0; i<n; i++) {
-    off_t dn_offset = off;
+    off_t dn_offset = p.get_off();
 
     // marker
-    char type = bl[off];
-    ++off;
+    char type;
+    ::decode(type, p);
 
     // dname
     string dname;
-    ::_decode(dname, bl, off);
+    ::decode(dname, p);
     dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname << dendl;
     
     CDentry *dn = lookup(dname);  // existing dentry?
@@ -906,8 +906,8 @@ void CDir::_fetched(bufferlist &bl)
       // hard link
       inodeno_t ino;
       unsigned char d_type;
-      ::_decode(ino, bl, off);
-      ::_decode(d_type, bl, off);
+      ::decode(ino, p);
+      ::decode(d_type, p);
 
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -934,14 +934,14 @@ void CDir::_fetched(bufferlist &bl)
       
       // parse out inode
       inode_t inode;
-      ::_decode(inode, bl, off);
+      ::decode(inode, p);
 
       string symlink;
       if (inode.is_symlink())
-        ::_decode(symlink, bl, off);
+        ::decode(symlink, p);
 
       fragtree_t fragtree;
-      fragtree._decode(bl, off);
+      ::decode(fragtree, p);
       
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -983,8 +983,8 @@ void CDir::_fetched(bufferlist &bl)
 	}
       }
     } else {
-      dout(1) << "corrupt directory, i got tag char '" << type << "' val " << (int)(type) 
-	      << " at pos " << off << dendl;
+      dout(1) << "corrupt directory, i got tag char '" << type << "' val " << (int)(type)
+	      << " at offset " << p.get_off() << dendl;
       assert(0);
     }
     
@@ -1017,7 +1017,7 @@ void CDir::_fetched(bufferlist &bl)
       }
     }
   }
-  //assert(off == len);   no, directories may shrink.  add this back in when we properly truncate objects on write.
+  //assert(off == len);  FIXME  no, directories may shrink.  add this back in when we properly truncate objects on write.
 
   // take the loaded version?
   // only if we are a fresh CDir* with no prior state.
@@ -1142,9 +1142,9 @@ void CDir::_commit(version_t want)
   // encode
   bufferlist bl;
 
-  ::_encode(version, bl);
+  ::encode(version, bl);
   int32_t n = nitems;
-  ::_encode(n, bl);
+  ::encode(n, bl);
 
   for (map_t::iterator it = items.begin();
        it != items.end();
@@ -1164,9 +1164,9 @@ void CDir::_commit(version_t want)
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
-      ::_encode(it->first, bl);
-      ::_encode(ino, bl);
-      ::_encode(d_type, bl);
+      ::encode(it->first, bl);
+      ::encode(ino, bl);
+      ::encode(d_type, bl);
     } else {
       // primary link
       CInode *in = dn->get_inode();
@@ -1176,16 +1176,16 @@ void CDir::_commit(version_t want)
   
       // marker, name, inode, [symlink string]
       bl.append( "I", 1 );         // inode
-      ::_encode(it->first, bl);
-      ::_encode(in->inode, bl);
+      ::encode(it->first, bl);
+      ::encode(in->inode, bl);
       
       if (in->is_symlink()) {
         // include symlink destination!
         dout(18) << "    inlcuding symlink ptr " << in->symlink << dendl;
-	::_encode(in->symlink, bl);
+	::encode(in->symlink, bl);
       }
 
-      in->dirfragtree._encode(bl);
+      ::encode(in->dirfragtree, bl);
     }
   }
   assert(n == 0);

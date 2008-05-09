@@ -48,33 +48,28 @@ class MDentryUnlink : public Message {
   }
   
   void decode_payload() {
-    int off = 0;
-    payload.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    ::_decode(dn, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(dirfrag, p);
+    ::decode(dn, p);
 
     bool isstray;
-    payload.copy(off, sizeof(isstray), (char*)&isstray);
-    off += sizeof(isstray);
+    ::decode(isstray, p);
     if (isstray) {
-      strayin = new CInodeDiscover;
-      strayin->_decode(payload, off);
-      straydir = new CDirDiscover;
-      straydir->_decode(payload, off);
-      straydn = new CDentryDiscover;
-      straydn->_decode(payload, off);
+      strayin = new CInodeDiscover(p);
+      straydir = new CDirDiscover(p);
+      straydn = new CDentryDiscover(p);
     }
   }
   void encode_payload() {
-    payload.append((char*)&dirfrag,sizeof(dirfrag));
-    ::_encode(dn, payload);
+    ::encode(dirfrag, payload);
+    ::encode(dn, payload);
 
     bool isstray = strayin ? true:false;
-    payload.append((char*)&isstray, sizeof(isstray));
+    ::encode(isstray, payload);
     if (isstray) {
-      strayin->_encode(payload);
-      straydir->_encode(payload);
-      straydn->_encode(payload);
+      strayin->encode(payload);
+      straydir->encode(payload);
+      straydn->encode(payload);
     }
   }
 };

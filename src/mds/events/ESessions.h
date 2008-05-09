@@ -34,13 +34,13 @@ public:
     cmapv(v) {
   }
   
-  void encode_payload(bufferlist& bl) {
-    ::_encode(client_map, bl);
-    ::_encode(cmapv, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(client_map, bl);
+    ::encode(cmapv, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(client_map, bl, off);
-    ::_decode(cmapv, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(client_map, bl);
+    ::decode(cmapv, bl);
   }
 
 

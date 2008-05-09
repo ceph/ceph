@@ -584,6 +584,9 @@ class CInodeDiscover {
     filelock_state = in->filelock.get_replica_state();
     dirlock_state = in->dirlock.get_replica_state();
   }
+  CInodeDiscover(bufferlist::iterator &p) {
+    decode(p);
+  }
 
   inodeno_t get_ino() { return inode.ino; }
   int get_replica_nonce() { return replica_nonce; }
@@ -602,32 +605,32 @@ class CInodeDiscover {
     in->dirlock.set_state(dirlock_state);
   }
   
-  void _encode(bufferlist& bl) {
-    ::_encode(inode, bl);
-    ::_encode(symlink, bl);
-    dirfragtree._encode(bl);
-    ::_encode(replica_nonce, bl);
-    ::_encode(authlock_state, bl);
-    ::_encode(linklock_state, bl);
-    ::_encode(dirfragtreelock_state, bl);
-    ::_encode(filelock_state, bl);
-    ::_encode(dirlock_state, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(inode, bl);
+    ::encode(symlink, bl);
+    ::encode(dirfragtree, bl);
+    ::encode(replica_nonce, bl);
+    ::encode(authlock_state, bl);
+    ::encode(linklock_state, bl);
+    ::encode(dirfragtreelock_state, bl);
+    ::encode(filelock_state, bl);
+    ::encode(dirlock_state, bl);
   }
 
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(inode, bl, off);
-    ::_decode(symlink, bl, off);
-    dirfragtree._decode(bl, off);
-    ::_decode(replica_nonce, bl, off);
-    ::_decode(authlock_state, bl, off);
-    ::_decode(linklock_state, bl, off);
-    ::_decode(dirfragtreelock_state, bl, off);
-    ::_decode(filelock_state, bl, off);
-    ::_decode(dirlock_state, bl, off);
+  void decode(bufferlist::iterator &p) {
+    ::decode(inode, p);
+    ::decode(symlink, p);
+    ::decode(dirfragtree, p);
+    ::decode(replica_nonce, p);
+    ::decode(authlock_state, p);
+    ::decode(linklock_state, p);
+    ::decode(dirfragtreelock_state, p);
+    ::decode(filelock_state, p);
+    ::decode(dirlock_state, p);
   }  
 
 };
-
+WRITE_CLASS_ENCODERS(CInodeDiscover)
 
 
 #endif

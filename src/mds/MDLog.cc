@@ -164,8 +164,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   // encode it, with event type
   {
     bufferlist bl;
-    ::_encode(le->_type, bl);
-    le->encode_payload(bl);
+    ::encode(le->_type, bl);
+    le->encode(bl);
     
     // journal it.
     journaler->append_entry(bl);  // bl is destroyed.

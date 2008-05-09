@@ -3189,9 +3189,9 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
     CInodeDiscover *indis = straydn->dir->inode->replicate_to(who);
     CDirDiscover *dirdis = straydn->dir->replicate_to(who);
     CDentryDiscover *dndis = straydn->replicate_to(who);
-    indis->_encode(req->stray);
-    dirdis->_encode(req->stray);
-    dndis->_encode(req->stray);
+    indis->encode(req->stray);
+    dirdis->encode(req->stray);
+    dndis->encode(req->stray);
     delete indis;
     delete dirdis;
     delete dndis;

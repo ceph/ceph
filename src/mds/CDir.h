@@ -505,6 +505,7 @@ class CDirDiscover {
     dir_rep = dir->dir_rep;
     rep_by = dir->dir_rep_by;
   }
+  CDirDiscover(bufferlist::iterator &p) { decode(p); }
 
   void update_dir(CDir *dir) {
     assert(dir->dirfrag() == dirfrag);
@@ -517,24 +518,22 @@ class CDirDiscover {
 
   dirfrag_t get_dirfrag() { return dirfrag; }
 
-  void _encode(bufferlist& bl) {
-    bl.append((char*)&dirfrag, sizeof(dirfrag));
-    bl.append((char*)&nonce, sizeof(nonce));
-    bl.append((char*)&dir_rep, sizeof(dir_rep));
-    ::_encode(rep_by, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(dirfrag, bl);
+    ::encode(nonce, bl);
+    ::encode(dir_rep, bl);
+    ::encode(rep_by, bl);
   }
 
-  void _decode(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(dirfrag), (char*)&dirfrag);
-    off += sizeof(dirfrag);
-    bl.copy(off, sizeof(nonce), (char*)&nonce);
-    off += sizeof(nonce);
-    bl.copy(off, sizeof(dir_rep), (char*)&dir_rep);
-    off += sizeof(dir_rep);
-    ::_decode(rep_by, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(dirfrag, bl);
+    ::decode(nonce, bl);
+    ::decode(dir_rep, bl);
+    ::decode(rep_by, bl);
   }
 
 };
+WRITE_CLASS_ENCODERS(CDirDiscover)
 
 
 

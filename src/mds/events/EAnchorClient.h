@@ -33,15 +33,13 @@ protected:
     LogEvent(EVENT_ANCHORCLIENT),
     op(o), atid(at) { }
 
-  void encode_payload(bufferlist& bl) {
-    bl.append((char*)&op, sizeof(op));
-    bl.append((char*)&atid, sizeof(atid));
+  void encode(bufferlist &bl) const {
+    ::encode(op, bl);
+    ::encode(atid, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(op), (char*)&op);
-    off += sizeof(op);
-    bl.copy(off, sizeof(atid), (char*)&atid);
-    off += sizeof(atid);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(op, bl);
+    ::decode(atid, bl);
   }
 
   void print(ostream& out) {

@@ -465,13 +465,10 @@ public:
   }
   
   // encoding
-  void _encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const {
     ::encode(_splits, bl);
   }
-  void _decode(bufferlist& bl, int& off) {
-    ::_decode(_splits, bl, off);
-  }
-  void _decode(bufferlist::iterator& p) {
+  void decode(bufferlist::iterator& p) {
     ::decode(_splits, p);
   }
 
@@ -498,6 +495,7 @@ public:
     out << ")";
   }
 };
+WRITE_CLASS_ENCODERS(fragtree_t)
 
 inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
 {

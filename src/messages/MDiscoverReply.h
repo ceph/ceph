@@ -219,80 +219,39 @@ class MDiscoverReply : public Message {
 
   // ...
   virtual void decode_payload() {
-    int off = 0;
-    ::_decode(base_ino, payload, off);
-    ::_decode(base_dir_frag, payload, off);
-    ::_decode(wanted_base_dir, payload, off);
-    ::_decode(wanted_xlocked, payload, off);
-    ::_decode(flag_error_dn, payload, off);
-    ::_decode(flag_error_ino, payload, off);
-    ::_decode(flag_error_dir, payload, off);
-    ::_decode(no_base_dir, payload, off);
-    ::_decode(no_base_dentry, payload, off);
-    ::_decode(error_dentry, payload, off);
-    ::_decode(dir_auth_hint, payload, off);
+    bufferlist::iterator p = payload.begin();
+    ::decode(base_ino, p);
+    ::decode(base_dir_frag, p);
+    ::decode(wanted_base_dir, p);
+    ::decode(wanted_xlocked, p);
+    ::decode(flag_error_dn, p);
+    ::decode(flag_error_ino, p);
+    ::decode(flag_error_dir, p);
+    ::decode(no_base_dir, p);
+    ::decode(no_base_dentry, p);
+    ::decode(error_dentry, p);
+    ::decode(dir_auth_hint, p);
     
-    // dirs
-    int n;
-    payload.copy(off, sizeof(int), (char*)&n);
-    off += sizeof(int);
-    for (int i=0; i<n; i++) {
-      dirs.push_back( new CDirDiscover() );
-      dirs[i]->_decode(payload, off);
-    }
-
-    // inodes
-    payload.copy(off, sizeof(int), (char*)&n);
-    off += sizeof(int);
-    for (int i=0; i<n; i++) {
-      inodes.push_back( new CInodeDiscover() );
-      inodes[i]->_decode(payload, off);
-    }
-
-    // dentries
-    payload.copy(off, sizeof(int), (char*)&n);
-    off += sizeof(int);
-    for (int i=0; i<n; i++) {
-      dentries.push_back( new CDentryDiscover() );
-      dentries[i]->_decode(payload, off);
-    }
+    ::decode(dirs, p);
+    ::decode(inodes, p);
+    ::decode(dentries, p);
   }
   void encode_payload() {
-    ::_encode(base_ino, payload);
-    ::_encode(base_dir_frag, payload);
-    ::_encode(wanted_base_dir, payload);
-    ::_encode(wanted_xlocked, payload);
-    ::_encode(flag_error_dn, payload);
-    ::_encode(flag_error_ino, payload);
-    ::_encode(flag_error_dir, payload);
-    ::_encode(no_base_dir, payload);
-    ::_encode(no_base_dentry, payload);
-    ::_encode(error_dentry, payload);
-    ::_encode(dir_auth_hint, payload);
+    ::encode(base_ino, payload);
+    ::encode(base_dir_frag, payload);
+    ::encode(wanted_base_dir, payload);
+    ::encode(wanted_xlocked, payload);
+    ::encode(flag_error_dn, payload);
+    ::encode(flag_error_ino, payload);
+    ::encode(flag_error_dir, payload);
+    ::encode(no_base_dir, payload);
+    ::encode(no_base_dentry, payload);
+    ::encode(error_dentry, payload);
+    ::encode(dir_auth_hint, payload);
 
-    // dirs
-    int n = dirs.size();
-    payload.append((char*)&n, sizeof(int));
-    for (vector<CDirDiscover*>::iterator it = dirs.begin();
-         it != dirs.end();
-         it++) 
-      (*it)->_encode( payload );
-    
-    // inodes
-    n = inodes.size();
-    payload.append((char*)&n, sizeof(int));
-    for (vector<CInodeDiscover*>::iterator it = inodes.begin();
-         it != inodes.end();
-         it++) 
-       (*it)->_encode( payload );
-
-    // dentries
-    n = dentries.size();
-    payload.append((char*)&n, sizeof(int));
-    for (vector<CDentryDiscover*>::iterator it = dentries.begin();
-         it != dentries.end();
-         it++) 
-       (*it)->_encode( payload );
+    ::encode(dirs, payload);
+    ::encode(inodes, payload);
+    ::encode(dentries, payload);
   }
 
 };

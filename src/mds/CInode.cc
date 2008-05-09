@@ -496,7 +496,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IDFT:
     {
       // encode the raw tree
-      dirfragtree._encode(bl);
+      ::encode(dirfragtree, bl);
 
       // also specify which frags are mine
       set<frag_t> myfrags;
@@ -507,7 +507,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  frag_t fg = (*p)->get_frag();
 	  myfrags.insert(fg);
 	}
-      _encode(myfrags, bl);
+      ::encode(myfrags, bl);
     }
     break;
     
@@ -539,31 +539,31 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
 void CInode::decode_lock_state(int type, bufferlist& bl)
 {
-  int off = 0;
+  bufferlist::iterator p = bl.begin();
   utime_t tm;
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
-    _decode(tm, bl, off);
+    ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
-    _decode(inode.mode, bl, off);
-    _decode(inode.uid, bl, off);
-    _decode(inode.gid, bl, off);
+    ::decode(inode.mode, p);
+    ::decode(inode.uid, p);
+    ::decode(inode.gid, p);
     break;
 
   case CEPH_LOCK_ILINK:
-    _decode(tm, bl, off);
+    ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
-    _decode(inode.nlink, bl, off);
-    _decode(inode.anchored, bl, off);
+    ::decode(inode.nlink, p);
+    ::decode(inode.anchored, p);
     break;
 
   case CEPH_LOCK_IDFT:
     {
       fragtree_t temp;
-      temp._decode(bl, off);
+      ::decode(temp, p);
       set<frag_t> authfrags;
-      _decode(authfrags, bl, off);
+      ::decode(authfrags, p);
       if (is_auth()) {
 	// auth.  believe replica's auth frags only.
 	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p) 
@@ -576,14 +576,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IFILE:
-    _decode(inode.size, bl, off);
-    _decode(inode.mtime, bl, off);
-    _decode(inode.atime, bl, off);
+    ::decode(inode.size, p);
+    ::decode(inode.mtime, p);
+    ::decode(inode.atime, p);
     break;
 
   case CEPH_LOCK_IDIR:
-    //::_decode(inode.size, bl, off);
-    _decode(tm, bl, off);
+    //::_decode(inode.size, p);
+    ::decode(tm, p);
     if (inode.mtime < tm) {
       inode.mtime = tm;
       if (is_auth()) {
@@ -595,7 +595,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     }
     if (0) {
       map<frag_t,int> dfsz;
-      ::_decode(dfsz, bl, off);
+      ::decode(dfsz, p);
       // hmm which to keep?
     }
     break;
@@ -791,7 +791,7 @@ void CInode::encode_export(bufferlist& bl)
 {
   ::encode(inode, bl);
   ::encode(symlink, bl);
-  dirfragtree._encode(bl);
+  ::encode(dirfragtree, bl);
 
   bool dirty = is_dirty();
   ::encode(dirty, bl);
@@ -830,7 +830,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   }
 
   ::decode(symlink, p);
-  dirfragtree._decode(p);
+  ::decode(dirfragtree, p);
 
   bool dirty;
   ::decode(dirty, p);

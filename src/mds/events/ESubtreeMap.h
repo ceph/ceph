@@ -30,13 +30,13 @@ public:
 	<< metablob;
   }
 
-  void encode_payload(bufferlist& bl) {
-    metablob._encode(bl);
-    ::_encode(subtrees, bl);
+  void encode(bufferlist& bl) const {
+    ::encode(metablob, bl);
+    ::encode(subtrees, bl);
   } 
-  void decode_payload(bufferlist& bl, int& off) {
-    metablob._decode(bl, off);
-    ::_decode(subtrees, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(metablob, bl);
+    ::decode(subtrees, bl);
   }
 
   void replay(MDS *mds);

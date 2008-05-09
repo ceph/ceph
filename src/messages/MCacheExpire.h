@@ -27,7 +27,20 @@ public:
     map<inodeno_t, int> inodes;
     map<dirfrag_t, int> dirs;
     map<dirfrag_t, map<string,int> > dentries;
+
+    void encode(bufferlist &bl) const {
+      ::encode(inodes, bl);
+      ::encode(dirs, bl);
+      ::encode(dentries, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(inodes, bl);
+      ::decode(dirs, bl);
+      ::decode(dentries, bl);
+    }
   };
+  WRITE_CLASS_ENCODERS(realm)
+
   map<dirfrag_t, realm> realms;
 
   int get_from() { return from; }
@@ -69,59 +82,17 @@ public:
   }
 
   void decode_payload() {
-    int off = 0;
-
-    payload.copy(off, sizeof(from), (char*)&from);
-    off += sizeof(from);
-
-    int nr;
-    payload.copy(off, sizeof(nr), (char*)&nr);
-    off += sizeof(nr);
-
-    while (nr--) {
-      dirfrag_t r;
-      payload.copy(off, sizeof(r), (char*)&r);
-      off += sizeof(r);
-      
-      ::_decode(realms[r].inodes, payload, off);
-      ::_decode(realms[r].dirs, payload, off);
-
-      int n;
-      payload.copy(off, sizeof(int), (char*)&n);
-      off += sizeof(int);
-      for (int i=0; i<n; i++) {
-	dirfrag_t df;
-	payload.copy(off, sizeof(df), (char*)&df);
-	off += sizeof(df);
-	::_decode(realms[r].dentries[df], payload, off);
-      }
-    }
+    bufferlist::iterator p = payload.begin();
+    ::decode(from, p);
+    ::decode(realms, p);
   }
     
   void encode_payload() {
-    payload.append((char*)&from, sizeof(from));
-
-    int nr = realms.size();
-    payload.append((char*)&nr, sizeof(nr));
-
-    for (map<dirfrag_t,realm>::iterator q = realms.begin();
-	 q != realms.end();
-	 ++q) {
-      payload.append((char*)&q->first, sizeof(q->first));
-
-      ::_encode(q->second.inodes, payload);
-      ::_encode(q->second.dirs, payload);
-      
-      int n = q->second.dentries.size();
-      payload.append((char*)&n, sizeof(n));
-      for (map<dirfrag_t, map<string,int> >::iterator p = q->second.dentries.begin();
-	   p != q->second.dentries.end();
-	   ++p) {
-	payload.append((char*)&p->first, sizeof(p->first));
-	::_encode(p->second, payload);
-      }
-    }
+    ::encode(from, payload);
+    ::encode(realms, payload);
   }
 };
+
+WRITE_CLASS_ENCODERS(MCacheExpire::realm)
 
 #endif

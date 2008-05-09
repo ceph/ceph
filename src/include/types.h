@@ -228,9 +228,9 @@ struct inode_t {
   version_t file_data_version; // auth only
 
   // file type
-  bool is_symlink() { return (mode & S_IFMT) == S_IFLNK; }
-  bool is_dir()     { return (mode & S_IFMT) == S_IFDIR; }
-  bool is_file()    { return (mode & S_IFMT) == S_IFREG; }
+  bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
+  bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
+  bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 };
 
 static inline void encode(const inode_t &i, bufferlist &bl) {

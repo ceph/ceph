@@ -36,15 +36,15 @@ class ESession : public LogEvent {
     cmapv(v) {
   }
   
-  void encode_payload(bufferlist& bl) {
-    ::_encode(client_inst, bl);
-    ::_encode(open, bl);
-    ::_encode(cmapv, bl);
+  void encode(bufferlist &bl) const {
+    ::encode(client_inst, bl);
+    ::encode(open, bl);
+    ::encode(cmapv, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    ::_decode(client_inst, bl, off);
-    ::_decode(open, bl, off);
-    ::_decode(cmapv, bl, off);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(client_inst, bl);
+    ::decode(open, bl);
+    ::decode(cmapv, bl);
   }
 
 

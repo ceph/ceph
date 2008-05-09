@@ -542,34 +542,14 @@ void AnchorTable::save(Context *onfinish)
   bufferlist bl;
 
   // version
-  bl.append((char*)&version, sizeof(version));
-
-  // # anchors
-  size_t size = anchor_map.size();
-  bl.append((char*)&size, sizeof(size));
-
-  // anchors
-  for (hash_map<inodeno_t, Anchor>::iterator it = anchor_map.begin();
-       it != anchor_map.end();
-       it++) {
-    it->second._encode(bl);
-    dout(15) << "save encoded " << it->second << dendl;
-  }
+  ::encode(version, bl);
+  ::encode(anchor_map, bl);
 
   // pending
-  ::_encode(pending_reqmds, bl);
-  ::_encode(pending_create, bl);
-  ::_encode(pending_destroy, bl);
-  
-  size_t s = pending_update.size();
-  bl.append((char*)&s, sizeof(s));
-  for (map<version_t, pair<inodeno_t, vector<Anchor> > >::iterator p = pending_update.begin();
-       p != pending_update.end();
-       ++p) {
-    bl.append((char*)&p->first, sizeof(p->first));
-    bl.append((char*)&p->second.first, sizeof(p->second.first));
-    ::_encode(p->second.second, bl);
-  }
+  ::encode(pending_reqmds, bl);
+  ::encode(pending_create, bl);
+  ::encode(pending_destroy, bl);
+  ::encode(pending_update, bl);
 
   // write!
   object_t oid = object_t(MDS_INO_ANCHORTABLE+mds->get_nodeid(), 0);
@@ -625,41 +605,17 @@ void AnchorTable::_loaded(bufferlist& bl)
 {
   dout(10) << "_loaded got " << bl.length() << " bytes" << dendl;
 
-  int off = 0;
-  bl.copy(off, sizeof(version), (char*)&version);
-  off += sizeof(version);
+  bufferlist::iterator p = bl.begin();
 
-  size_t size;
-  bl.copy(off, sizeof(size), (char*)&size);
-  off += sizeof(size);
+  ::decode(version, p);
+  ::decode(anchor_map, p);
 
-  for (size_t n=0; n<size; n++) {
-    Anchor a;
-    a._decode(bl, off);
-    anchor_map[a.ino] = a;   
-    dout(15) << "load_2 decoded " << a << dendl;
-  }
+  ::decode(pending_reqmds, p);
+  ::decode(pending_create, p);
+  ::decode(pending_destroy, p);
+  ::decode(pending_update, p);
 
-  ::_decode(pending_reqmds, bl, off);
-  ::_decode(pending_create, bl, off);
-  ::_decode(pending_destroy, bl, off);
-
-  size_t s;
-  bl.copy(off, sizeof(s), (char*)&s);
-  off += sizeof(s);
-  for (size_t i=0; i<s; i++) {
-    version_t atid;
-    bl.copy(off, sizeof(atid), (char*)&atid);
-    off += sizeof(atid);
-    inodeno_t ino;
-    bl.copy(off, sizeof(ino), (char*)&ino);
-    off += sizeof(ino);
-
-    pending_update[atid].first = ino;
-    ::_decode(pending_update[atid].second, bl, off);
-  }
-
-  assert(off == (int)bl.length());
+  assert(p.end());
 
   // done.
   opened = true;

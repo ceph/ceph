@@ -40,15 +40,13 @@ class EImportFinish : public LogEvent {
       out << " failed";
   }
 
-  virtual void encode_payload(bufferlist& bl) {
-    bl.append((char*)&base, sizeof(base));
-    bl.append((char*)&success, sizeof(success));
+  void encode(bufferlist& bl) const {
+    ::encode(base, bl);
+    ::encode(success, bl);
   }
-  void decode_payload(bufferlist& bl, int& off) {
-    bl.copy(off, sizeof(base), (char*)&base);
-    off += sizeof(base);
-    bl.copy(off, sizeof(success), (char*)&success);
-    off += sizeof(success);
+  void decode(bufferlist::iterator &bl) {
+    ::decode(base, bl);
+    ::decode(success, bl);
   }
   
   void replay(MDS *mds);

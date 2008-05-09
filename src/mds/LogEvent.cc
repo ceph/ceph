@@ -42,12 +42,11 @@
 LogEvent *LogEvent::decode(bufferlist& bl)
 {
   // parse type, length
-  int off = 0;
-  int type;
-  bl.copy(off, sizeof(type), (char*)&type);
-  off += sizeof(type);
+  bufferlist::iterator p = bl.begin();
+  __u32 type;
+  ::decode(type, p);
 
-  int length = bl.length() - off;
+  int length = bl.length() - p.get_off();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
   assert(type > 0);
@@ -80,7 +79,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   }
 
   // decode
-  le->decode_payload(bl, off);
+  le->decode(p);
   
   return le;
 }

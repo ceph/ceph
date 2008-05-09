@@ -50,7 +50,7 @@ class LogSegment;
 // generic log event
 class LogEvent {
  private:
-  int _type;
+  __u32 _type;
   off_t _start_off,_end_off;
 
   friend class MDLog;
@@ -67,8 +67,8 @@ class LogEvent {
   off_t get_end_off() { return _end_off; }
 
   // encoding
-  virtual void encode_payload(bufferlist& bl) = 0;
-  virtual void decode_payload(bufferlist& bl, int& off) = 0;
+  virtual void encode(bufferlist& bl) const = 0;
+  virtual void decode(bufferlist::iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
 
 
