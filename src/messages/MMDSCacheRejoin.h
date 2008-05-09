@@ -169,7 +169,7 @@ class MMDSCacheRejoin : public Message {
 
   // open
   bufferlist cap_export_bl;
-  map<inodeno_t,map<int, inode_caps_reconnect_t> > cap_exports;
+  map<inodeno_t,map<__s32, inode_caps_reconnect_t> > cap_exports;
   map<inodeno_t,string> cap_export_paths;
 
   // full
@@ -177,7 +177,7 @@ class MMDSCacheRejoin : public Message {
 
   // authpins, xlocks
   map<inodeno_t, metareqid_t> authpinned_inodes;
-  map<inodeno_t, map<int, metareqid_t> > xlocked_inodes;
+  map<inodeno_t, map<__s32, metareqid_t> > xlocked_inodes;
   map<dirfrag_t, map<string, metareqid_t> > authpinned_dentries;
   map<dirfrag_t, map<string, metareqid_t> > xlocked_dentries;
 

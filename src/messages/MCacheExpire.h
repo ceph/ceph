@@ -16,7 +16,7 @@
 #define __MCACHEEXPIRE_H
 
 class MCacheExpire : public Message {
-  int from;
+  __s32 from;
 
 public:
   /*
@@ -24,9 +24,9 @@ public:
     that makes it less work to process when exports are in progress.
   */
   struct realm {
-    map<inodeno_t, int> inodes;
-    map<dirfrag_t, int> dirs;
-    map<dirfrag_t, map<string,int> > dentries;
+    map<inodeno_t, __s32> inodes;
+    map<dirfrag_t, __s32> dirs;
+    map<dirfrag_t, map<string,__s32> > dentries;
 
     void encode(bufferlist &bl) const {
       ::encode(inodes, bl);

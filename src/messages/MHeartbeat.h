@@ -21,14 +21,14 @@
 
 class MHeartbeat : public Message {
   mds_load_t load;
-  int        beat;
-  map<int, float> import_map;
+  __s32        beat;
+  map<__s32, float> import_map;
 
  public:
   mds_load_t& get_load() { return load; }
   int get_beat() { return beat; }
 
-  map<int, float>& get_import_map() {
+  map<__s32, float>& get_import_map() {
     return import_map;
   }
 

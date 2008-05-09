@@ -19,7 +19,7 @@
 
 class MMonCommandAck : public Message {
  public:
-  int r;
+  __s32 r;
   string rs;
   
   MMonCommandAck() : Message(MSG_MON_COMMAND_ACK) {}

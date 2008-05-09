@@ -232,20 +232,20 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
   mds->sessionmap.version++;  // noop
 }
 
-void Server::prepare_force_open_sessions(map<int,entity_inst_t>& cm)
+void Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
 {
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
-  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+  for (map<__u32,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
     if (session->is_undef() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
   }
 }
 
-void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
+void Server::finish_force_open_sessions(map<__u32,entity_inst_t>& cm)
 {
   /*
    * FIXME: need to carefully consider the race conditions between a
@@ -254,7 +254,7 @@ void Server::finish_force_open_sessions(map<int,entity_inst_t>& cm)
    */
   dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
 	   << " v " << mds->sessionmap.version << " -> " << (mds->sessionmap.version+1) << dendl;
-  for (map<int,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+  for (map<__u32,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
     if (session->is_opening()) {
@@ -3663,7 +3663,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // export srci?
   if (srcdn->is_auth() && srcdn->is_primary()) {
     list<Context*> finished;
-    map<int,entity_inst_t> exported_client_map;
+    map<__u32,entity_inst_t> exported_client_map;
     bufferlist inodebl;
     mdcache->migrator->encode_export_inode(srcdn->inode, inodebl, 
 					   exported_client_map);

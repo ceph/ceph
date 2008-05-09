@@ -43,8 +43,8 @@ class MMonPaxos : public Message {
   }
 
   epoch_t epoch;   // monitor epoch
-  int op;          // paxos op
-  int machine_id;  // which state machine?
+  __s32 op;          // paxos op
+  __s32 machine_id;  // which state machine?
 
   version_t last_committed;  // i've committed to
   version_t pn_from;         // i promise to accept after

@@ -84,7 +84,7 @@ class MDiscoverReply : public Message {
   bool no_base_dentry;  // no base dentry (but IS inode)
   string error_dentry;   // dentry that was not found (to trigger waiters on asker)
 
-  int dir_auth_hint;
+  __s32 dir_auth_hint;
 
   vector<CDirDiscover*>    dirs;      // not inode-aligned if no_base_dir = true.
   vector<CDentryDiscover*> dentries;  // not inode-aligned if no_base_dentry = true

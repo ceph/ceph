@@ -78,7 +78,7 @@ class MMDSSlaveRequest : public Message {
   // for rename prep
   filepath srcdnpath;
   filepath destdnpath;
-  set<int> witnesses;
+  set<__s32> witnesses;
   bufferlist inode_export;
   version_t inode_export_v;
   bufferlist srci_replica;

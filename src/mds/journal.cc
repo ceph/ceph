@@ -782,7 +782,7 @@ void EImportStart::replay(MDS *mds)
   } else {
     dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.version 
 	     << " < " << cmapv << dendl;
-    map<int,entity_inst_t> cm;
+    map<__u32,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
     ::decode(cm, blp);
     mds->sessionmap.open_sessions(cm);

@@ -26,7 +26,7 @@ using namespace std;
 
 
 class MDiscover : public Message {
-  int             asker;
+  __s32             asker;
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
 

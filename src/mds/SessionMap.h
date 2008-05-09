@@ -201,8 +201,8 @@ public:
 	s.insert(p->second);
   }
 
-  void open_sessions(map<int,entity_inst_t>& client_map) {
-    for (map<int,entity_inst_t>::iterator p = client_map.begin(); 
+  void open_sessions(map<__u32,entity_inst_t>& client_map) {
+    for (map<__u32,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
       Session *session = get_or_add_session(p->second);

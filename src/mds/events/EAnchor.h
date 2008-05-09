@@ -24,12 +24,12 @@
 
 class EAnchor : public LogEvent {
 protected:
-  int op;
+  __u32 op;
   inodeno_t ino;
   version_t atid; 
   vector<Anchor> trace;
   version_t version;    // anchor table version
-  int reqmds;
+  __s32 reqmds;
 
  public:
   EAnchor() : LogEvent(EVENT_ANCHOR) { }

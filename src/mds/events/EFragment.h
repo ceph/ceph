@@ -23,7 +23,7 @@ public:
   EMetaBlob metablob;
   inodeno_t ino;
   frag_t basefrag;
-  int bits;         // positive for split (from basefrag), negative for merge (to basefrag)
+  __s32 bits;         // positive for split (from basefrag), negative for merge (to basefrag)
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
   EFragment(MDLog *mdlog, inodeno_t i, frag_t bf, int b) : 

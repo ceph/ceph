@@ -18,8 +18,8 @@
 
 class MInodeFileCaps : public Message {
   inodeno_t ino;
-  int       from;
-  int       caps;
+  __s32     from;
+  __u32     caps;
 
  public:
   inodeno_t get_ino() { return ino; }

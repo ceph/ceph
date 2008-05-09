@@ -23,7 +23,7 @@
 
 
 class MAnchor : public Message {
-  int op;
+  __u32 op;
   inodeno_t ino;
   vector<Anchor> trace;
   version_t atid;  // anchor table version.

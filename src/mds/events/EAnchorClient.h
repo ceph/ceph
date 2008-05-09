@@ -24,7 +24,7 @@
 
 class EAnchorClient : public LogEvent {
 protected:
-  int op;
+  __u32 op;
   version_t atid; 
 
  public:

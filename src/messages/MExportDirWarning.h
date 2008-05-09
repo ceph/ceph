@@ -21,7 +21,7 @@
 
 class MExportDirWarning : public Message {
   inodeno_t ino;
-  int new_dir_auth;
+  __s32 new_dir_auth;
 
  public:
   inodeno_t get_ino() { return ino; }

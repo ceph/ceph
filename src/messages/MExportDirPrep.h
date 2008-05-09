@@ -38,7 +38,7 @@ class MExportDirPrep : public Message {
   map<inodeno_t,list<frag_t> >   frags_by_ino;
   map<dirfrag_t,CDirDiscover*>   dirfrags;
 
-  set<int>                       bystanders;
+  set<__s32>                       bystanders;
 
   bool b_did_assim;
 
@@ -62,7 +62,7 @@ class MExportDirPrep : public Message {
   CDirDiscover* get_dirfrag_discover(dirfrag_t df) {
     return dirfrags[df];
   }
-  set<int> &get_bystanders() { return bystanders; }
+  set<__s32> &get_bystanders() { return bystanders; }
 
   bool did_assim() { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }

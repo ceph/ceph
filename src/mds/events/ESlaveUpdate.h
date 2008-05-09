@@ -34,8 +34,8 @@ public:
   EMetaBlob commit, rollback;
   string type;
   metareqid_t reqid;
-  int master;
-  int op;  // prepare, commit, abort
+  __s32 master;
+  __u32 op;  // prepare, commit, abort
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
   ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o) : 

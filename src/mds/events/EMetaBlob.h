@@ -164,8 +164,8 @@ public:
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
     version_t  dirv;
-    int state;
-    int nfull, nremote, nnull;
+    __u32 state;
+    __u32 nfull, nremote, nnull;
 
   private:
     mutable bufferlist dnbl;

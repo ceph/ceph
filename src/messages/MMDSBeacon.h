@@ -25,9 +25,9 @@ class MMDSBeacon : public Message {
   ceph_fsid fsid;
   entity_inst_t inst;
   epoch_t last_epoch_seen;  // include last mdsmap epoch mds has seen to avoid race with monitor decree
-  int state;
+  __u32 state;
   version_t seq;
-  int want_rank;
+  __s32 want_rank;
 
  public:
   MMDSBeacon() : Message(MSG_MDS_BEACON) {}
