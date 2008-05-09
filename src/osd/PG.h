@@ -132,7 +132,7 @@ public:
     const static int BACKLOG = 2;
     const static int FULLLOG = 3;
 
-    int type;
+    __s32 type;
     eversion_t split, floor;
     Info::History history;
 
@@ -265,7 +265,7 @@ public:
       const static int CLONE = 2;  
       const static int DELETE = 3;
 
-      int        op;   // write, zero, trunc, remove
+      __s32      op;   // write, zero, trunc, remove
       object_t   oid;
       eversion_t version;
       

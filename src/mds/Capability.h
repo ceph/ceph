@@ -44,7 +44,7 @@ inline string cap_string(int cap)
   return s;
 }
 
-typedef uint32_t capseq_t;
+typedef __u32 capseq_t;
 
 class CInode;
 
@@ -70,9 +70,9 @@ public:
 
 private:
   CInode *inode;
-  int wanted_caps;     // what the client wants (ideally)
+  __u32 wanted_caps;     // what the client wants (ideally)
   
-  map<capseq_t, int>  cap_history;  // seq -> cap, [last_recv,last_sent]
+  map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
   capseq_t last_open;
   
@@ -128,7 +128,7 @@ public:
   // caps issued, potentially still in hands of client
   int issued() { 
     int c = 0;
-    for (map<capseq_t,int>::iterator p = cap_history.begin();
+    for (map<capseq_t,__u32>::iterator p = cap_history.begin();
 	 p != cap_history.end();
 	 p++) {
       c |= p->second;
@@ -207,7 +207,7 @@ public:
     assert(last_recv <= last_sent);
     assert(seq <= last_sent);
     while (!cap_history.empty()) {
-      map<capseq_t,int>::iterator p = cap_history.begin();
+      map<capseq_t,__u32>::iterator p = cap_history.begin();
 
       if (p->first > seq)
 	break;

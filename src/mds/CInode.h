@@ -561,13 +561,13 @@ class CInodeDiscover {
   string     symlink;
   fragtree_t dirfragtree;
 
-  int        replica_nonce;
+  __s32        replica_nonce;
   
-  int        authlock_state;
-  int        linklock_state;
-  int        dirfragtreelock_state;
-  int        filelock_state;
-  int        dirlock_state;
+  __u32      authlock_state;
+  __u32      linklock_state;
+  __u32      dirfragtreelock_state;
+  __u32      filelock_state;
+  __u32      dirlock_state;
 
  public:
   CInodeDiscover() {}

@@ -90,8 +90,8 @@ protected:
   int wait_offset;
 
   // lock state
-  int state;
-  set<int> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+  __s32 state;
+  set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
   int num_client_lease;
 
   // local state

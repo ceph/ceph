@@ -493,9 +493,9 @@ public:
 
 class CDirDiscover {
   dirfrag_t dirfrag;
-  int       nonce;
-  int       dir_rep;
-  set<int>  rep_by;
+  __s32     nonce;
+  __s32     dir_rep;
+  set<__s32> rep_by;
 
  public:
   CDirDiscover() {}

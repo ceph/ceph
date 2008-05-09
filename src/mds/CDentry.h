@@ -272,9 +272,9 @@ ostream& operator<<(ostream& out, CDentry& dn);
 
 class CDentryDiscover {
   string dname;
-  int    replica_nonce;
-  int    lockstate;
-  off_t  dir_offset;
+  __s32  replica_nonce;
+  __s32  lockstate;
+  __s64  dir_offset;
   inodeno_t remote_ino;
   unsigned char remote_d_type;
 
