@@ -164,8 +164,8 @@ md_config_t g_conf = {
 
   logger_calc_variance: true,
 
-  dout_dir: 0, //"out",
-
+  dout_dir: "out",    // if daemonize == true
+  
   fake_clock: false,
   fakemessenger_serialize: true,
 
@@ -1060,7 +1060,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.dout_dir = 0;
   }
   */
-  if (g_conf.dout_dir) {
+  if (g_conf.dout_dir && g_conf.daemonize) {
     char fn[80];
     char hostname[80];
     gethostname(hostname, 79);
