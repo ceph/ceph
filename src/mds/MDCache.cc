@@ -4196,7 +4196,7 @@ int MDCache::inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item> &inopath
   if (!cur->is_dir())
     return -ENOTDIR;
   
-  frag_t fg = cur->dirfragtree[frag_t(inopath[i].dname_hash)];
+  frag_t fg = cur->dirfragtree[inopath[i].dname_hash];
   dout(10) << " hash " << inopath[i].dname_hash << " is frag " << fg << dendl;
 
   CDir *curdir = cur->get_dirfrag(fg);

@@ -227,15 +227,18 @@ static inline struct ceph_inode_frag *ceph_find_frag(struct ceph_inode_info *ci,
 	while (n) {
 		struct ceph_inode_frag *frag =
 			rb_entry(n, struct ceph_inode_frag, node);
-		if (f < frag->frag)
+		int c = frag_compare(f, frag->frag);
+		if (c < 0)
 			n = n->rb_left;
-		else if (f > frag->frag)
+		else if (c > 0)
 			n = n->rb_right;
 		else
 			return frag;
 	}
 	return NULL;
 }
+
+extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v);
 
 struct ceph_dentry_info {
 	struct dentry *dentry;

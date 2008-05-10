@@ -74,6 +74,32 @@ static inline __u32 frag_bits(__u32 f) { return f >> 24; }
 static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
 static inline __u32 frag_mask(__u32 f) { return 0xffffffu >> (24-frag_bits(f)); }
 static inline __u32 frag_next(__u32 f) { return frag_make(frag_bits(f), frag_value(f)+1); }
+static inline bool frag_is_leftmost(__u32 f) {
+	return frag_value(f) == 0;
+}
+static inline bool frag_is_rightmost(__u32 f) {
+	return frag_value(f) == frag_mask(f);
+}
+static inline int frag_compare(__u32 a, __u32 b) {
+	unsigned va = frag_value(a);
+	unsigned vb = frag_value(b);
+	if (va < vb)
+		return -1;
+	if (va > vb)
+		return 1;
+	va = frag_bits(a);
+	vb = frag_bits(b);
+	if (va < vb)
+		return -1;
+	if (va > vb)
+		return 1;
+	return 0;
+}
+static inline bool frag_contains_value(__u32 f, __u32 v)
+{
+	return (v & frag_mask(f)) == frag_value(f);
+}
+
 
 /*
  * object layout - how objects are mapped into PGs

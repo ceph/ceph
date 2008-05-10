@@ -1768,7 +1768,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   frag_t fg = (__u32)req->head.args.readdir.frag;
 
   // does the frag exist?
-  if (diri->dirfragtree[fg] != fg) {
+  if (diri->dirfragtree[fg.value()] != fg) {
     dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << dendl;
     reply_request(mdr, -EAGAIN);
     return;

@@ -77,17 +77,16 @@ class frag_t {
   _frag_t _enc;  
   
   frag_t() : _enc(0) { }
-  frag_t(unsigned v, unsigned b) : _enc((b << 24) + 
-					(v & (0xffffffffULL >> (32-b)))) { }
+  frag_t(unsigned v, unsigned b) : _enc(frag_make(b, v)) { }
   frag_t(_frag_t e) : _enc(e) { }
 
   // constructors
   void from_unsigned(unsigned e) { _enc = e; }
   
   // accessors
-  unsigned value() const { return _enc & 0xffffff; }
-  unsigned bits() const { return _enc >> 24; }
-  unsigned mask() const { return 0xffffffffULL >> (32-bits()); }
+  unsigned value() const { return frag_value(_enc); }
+  unsigned bits() const { return frag_bits(_enc); }
+  unsigned mask() const { return frag_mask(_enc); }
 
   operator _frag_t() const { return _enc; }
 
@@ -119,7 +118,7 @@ class frag_t {
   // binary splitting
   frag_t get_sibling() const {
     assert(!is_root());
-    return frag_t(_enc ^ (1 << (bits()-1)));
+    return frag_t(value() ^ (1 << (bits()-1)), bits());
   }
   bool is_left() const {
     return 
@@ -140,14 +139,14 @@ class frag_t {
 
   // sequencing
   bool is_leftmost() const {
-    return value() == 0;
+    return frag_is_leftmost(_enc);
   }
   bool is_rightmost() const {
-    return value() == mask();
+    return frag_is_rightmost(_enc);
   }
   frag_t next() const {
     assert(!is_rightmost());
-    return frag_t(value() + 1, bits());
+    return frag_t(frag_next(_enc));
   }
 };
 
@@ -221,13 +220,13 @@ public:
     std::list<frag_t> q;
     q.push_back(under);
     while (!q.empty()) {
-      frag_t t = q.front();
-      q.pop_front();
+      frag_t t = q.back();
+      q.pop_back();
       int nb = get_split(t);
       if (nb) 
 	t.split(nb, q);   // queue up children
       else
-	ls.push_back(t);  // not spit, it's a leaf.
+	ls.push_front(t);  // not spit, it's a leaf.
     }
   }
 

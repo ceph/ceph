@@ -102,7 +102,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	unsigned frag = fpos_frag(filp->f_pos);
 	unsigned off = fpos_off(filp->f_pos);
-	unsigned skew = -2;
+	unsigned skew;
 	int err;
 	__u32 ftype;
 	struct ceph_mds_reply_info *rinfo;
@@ -113,8 +113,10 @@ nextfrag:
 		struct ceph_mds_request *req;
 		struct ceph_mds_request_head *rhead;
 
+		frag = ceph_choose_frag(ceph_inode(inode), frag);
+
 		/* query mds */
-		dout(10, "dir_readdir querying mds for ino %llx frag %u\n",
+		dout(10, "dir_readdir querying mds for ino %llx frag %x\n",
 		     ceph_ino(inode), frag);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR,
 					       ceph_ino(inode), "", 0, 0);
@@ -128,14 +130,14 @@ nextfrag:
 			return err;
 		}
 		dout(10, "dir_readdir got and parsed readdir result=%d"
-		     " on frag %u\n", err, frag);
+		     " on frag %x\n", err, frag);
 		if (fi->last_readdir)
 			ceph_mdsc_put_request(fi->last_readdir);
 		fi->last_readdir = req;
 	}
 
 	/* include . and .. with first fragment */
-	if (frag == 0) {
+	if (frag_is_leftmost(frag)) {
 		switch (off) {
 		case 0:
 			dout(10, "dir_readdir off 0 -> '.'\n");
@@ -154,10 +156,13 @@ nextfrag:
 			off++;
 			filp->f_pos++;
 		}
-	} else
 		skew = -2;
+	} else
+		skew = 0;
 
 	rinfo = &fi->last_readdir->r_reply_info;
+	dout(10, "dir_readdir frag %x num %d off %d skew %d\n", frag,
+	     rinfo->dir_nr, off, skew);
 	while (off+skew < rinfo->dir_nr) {
 		dout(10, "dir_readdir off %d -> %d / %d name '%.*s'\n",
 		     off, off+skew,
@@ -182,7 +187,7 @@ nextfrag:
 		frag = frag_next(frag);
 		off = 0;
 		filp->f_pos = make_fpos(frag, off);
-		dout(10, "dir_readdir next frag is %u\n", frag);
+		dout(10, "dir_readdir next frag is %x\n", frag);
 		goto nextfrag;
 	}
 
