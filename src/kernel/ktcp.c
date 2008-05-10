@@ -120,6 +120,8 @@ void ceph_cancel_sock_callbacks(struct socket *sock)
 }
 void ceph_sock_release(struct socket *sock)
 {
+	if (!sock)
+		return;
 	ceph_cancel_sock_callbacks(sock);
 	sock_release(sock);
 }
