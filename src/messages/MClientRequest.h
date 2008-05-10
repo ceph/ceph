@@ -176,10 +176,10 @@ public:
   void encode_payload() {
     ::encode(head, payload);
     if (head.op == CEPH_MDS_OP_FINDINODE) {
+      ::encode(inopath, payload);
+    } else {
       ::encode(path, payload);
       ::encode(path2, payload);
-    } else {
-      ::encode(inopath, payload);
     }
   }
 
