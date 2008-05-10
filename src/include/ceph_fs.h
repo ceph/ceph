@@ -69,8 +69,6 @@ struct ceph_timespec {
 /*
  * dir fragments
  */
-typedef __le32 ceph_frag_t;
-
 static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
 static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
@@ -187,6 +185,45 @@ struct ceph_eversion {
 /* offload weights */
 #define CEPH_OSD_IN  0
 #define CEPH_OSD_OUT 0x10000
+
+
+
+/*
+ * string hash.
+ *
+ * taken from Linux, tho we should probably take care to use this one
+ * in case the upstream hash changes.
+ */
+
+/* Name hashing routines. Initial hash value */
+/* Hash courtesy of the R5 hash in reiserfs modulo sign bits */
+#define ceph_init_name_hash()		0
+
+/* partial hash update function. Assume roughly 4 bits per character */
+static inline unsigned long
+ceph_partial_name_hash(unsigned long c, unsigned long prevhash)
+{
+	return (prevhash + (c << 4) + (c >> 4)) * 11;
+}
+
+/*
+ * Finally: cut down the number of bits to a int value (and try to avoid
+ * losing bits)
+ */
+static inline unsigned long ceph_end_name_hash(unsigned long hash)
+{
+	return (unsigned int) hash;
+}
+
+/* Compute the hash for a name string. */
+static inline unsigned int
+ceph_full_name_hash(const unsigned char *name, unsigned int len)
+{
+	unsigned long hash = ceph_init_name_hash();
+	while (len--)
+		hash = ceph_partial_name_hash(*name++, hash);
+	return ceph_end_name_hash(hash);
+}
 
 
 
@@ -394,10 +431,14 @@ struct ceph_mds_session_head {
  * mds ops.  
  *  & 0x1000  -> write op
  *  & 0x10000 -> follow symlink (e.g. stat(), not lstat()).
+ &  & 0x100000 -> use weird ino/path trace
  */
-#define CEPH_MDS_OP_WRITE        0x1000
+#define CEPH_MDS_OP_WRITE        0x01000
 #define CEPH_MDS_OP_FOLLOW_LINK  0x10000
+#define CEPH_MDS_OP_INO_PATH  0x100000
 enum {
+	CEPH_MDS_OP_FINDINODE = 0x100100,
+
 	CEPH_MDS_OP_LSTAT     = 0x00100,
 	CEPH_MDS_OP_LUTIME    = 0x01101,
 	CEPH_MDS_OP_LCHMOD    = 0x01102,
@@ -442,7 +483,7 @@ struct ceph_mds_request_head {
 			__le32 mask;
 		} __attribute__ ((packed)) fstat;
 		struct {
-			ceph_frag_t frag;
+			__le32 frag;
 		} __attribute__ ((packed)) readdir;
 		struct {
 			struct ceph_timespec mtime;
@@ -474,6 +515,10 @@ struct ceph_mds_request_head {
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
+struct ceph_inopath_item {
+	__le64 ino;
+	__le32 dname_hash;
+} __attribute__ ((packed));
 
 /* client reply */
 struct ceph_mds_reply_head {

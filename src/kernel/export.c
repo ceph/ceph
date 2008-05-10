@@ -7,105 +7,106 @@ int ceph_debug_export = -1;
 #define DOUT_PREFIX "export: "
 #include "super.h"
 
+/*
+ * fh is N tuples of
+ *  <ino, parent's d_name.hash>
+ */
 
 int ceph_encode_fh(struct dentry *dentry, __u32 *fh, int *max_len, 
 		   int connectable)
 {
-	struct inode *inode = dentry->d_inode;
-	int len = *max_len;
+	int len;
 	int type = 1;
 
 	dout(10, "encode_fh %p max_len %d%s\n", dentry, *max_len,
 	     connectable ? " connectable":"");
 	
-	if (len < 2 || (connectable && len < 4))
+	if (*max_len < 3 || (connectable && *max_len < 6))
 		return -ENOSPC;
 
+	/*
+	 * pretty sure this is racy
+	 */
+	/* note: caller holds dentry->d_lock */
+	*(u64 *)fh = ceph_ino(dentry->d_inode);
+	fh[2] = dentry->d_name.hash;
 	len = 3;
-	*(u64 *)fh = ceph_ino(inode);
-	fh[3] = inode->i_generation;
-	if (connectable) {
-		struct inode *parent;
-		spin_lock(&dentry->d_lock);
-		parent = dentry->d_parent->d_inode;
-		*(u64 *)(fh + 3) = ceph_ino(parent);
-		fh[5] = parent->i_generation;
-		spin_unlock(&dentry->d_lock);
-		len = 6;
+	while (len + 3 <= *max_len) {
+		dentry = dentry->d_parent;
+		if (!dentry)
+			break;
+		*(u64 *)(fh + len) = ceph_ino(dentry->d_inode);
+		fh[len + 2] = dentry->d_name.hash;
+		len += 3;
 		type = 2;
+		if (IS_ROOT(dentry))
+			break;
 	}
+
 	*max_len = len;
 	return type;
+}
+
+struct dentry *__fh_to_dentry(struct super_block *sb, u32 *fh, int fh_len)
+{
+	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
+	struct inode *inode;
+	struct dentry *dentry;
+	u64 ino = *(u64 *)fh;
+	u32 hash = fh[2];
+	int err;
+
+	inode = ceph_find_inode(sb, ino);
+	if (!inode) {
+		struct ceph_mds_request *req;
+		derr(10, "__fh_to_dentry %llx.%x -- no inode\n", ino, hash);
+		
+		req = ceph_mdsc_create_request(mdsc,
+					       CEPH_MDS_OP_FINDINODE,
+					       fh_len/3, (char *)fh, 0, 0);
+		if (IS_ERR(req))
+			return ERR_PTR(PTR_ERR(req));
+		err = ceph_mdsc_do_request(mdsc, req);
+		ceph_mdsc_put_request(req);
+		
+		inode = ceph_find_inode(sb, ino);
+		if (!inode)
+			return ERR_PTR(err ? err : -ESTALE);
+	}
+
+	dentry = d_alloc_anon(inode);
+	if (!dentry) {
+		derr(10, "__fh_to_dentry %llx.%x -- inode %p but ENOMEM\n", 
+		     ino, hash, inode);
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	dout(10, "__fh_to_dentry %llx.%x -- inode %p dentry %p\n", ino, hash,
+	     inode, dentry);
+	return dentry;	
+
 }
 
 struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
-	u64 ino = *(u64 *)fh;
-	u32 gen = fh[2];
-	struct inode *inode;
-	struct dentry *dentry;
-
-	inode = ceph_find_inode(sb, ino);
-	if (!inode) {
-		derr(10, "fh_to_dentry %llx.%d -- no inode\n", ino, gen);
-		return ERR_PTR(-ESTALE);
-	}
-	if (inode->i_generation != fh[2]) {
-		derr(10, "fh_to_dentry %llx.%d -- %p gen is %d\n", ino, gen,
-		     inode, inode->i_generation);
-		iput(inode);
-		return ERR_PTR(-ESTALE);
-	}
-	
-	dentry = d_alloc_anon(inode);
-	if (!dentry) {
-		derr(10, "fh_to_dentry %llx.%d -- inode %p but ENOMEM\n", 
-		     ino, gen, inode);
-		iput(inode);
-		return ERR_PTR(-ENOMEM);
-	}
-	dout(10, "fh_to_dentry %llx.%d -- inode %p dentry %p\n", ino, gen,
-	     inode, dentry);
-	return dentry;	
+	return __fh_to_dentry(sb, fh, fh_len);
 }
 
 struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
-	u64 ino = *(u64 *)(fh + 3);
-	u32 gen;
-	struct inode *inode;
-	struct dentry *dentry;
-	
+	u64 ino = *(u64 *)fh;
+	u32 hash = fh[2];
+
+	derr(10, "fh_to_parent %llx.%x\n", ino, hash);
+
 	if (fh_len < 6)
 		return ERR_PTR(-ESTALE);
-	gen = fh[5];
 
-	inode = ceph_find_inode(sb, ino);
-	if (!inode) {
-		derr(10, "fh_to_parent %llx.%d -- no inode\n", ino, gen);
-		return ERR_PTR(-ESTALE);
-	}
-	if (inode->i_generation != gen) {
-		derr(10, "fh_to_parent %llx.%d -- %p gen is %d\n", ino, gen,
-		     inode, inode->i_generation);
-		iput(inode);
-		return ERR_PTR(-ESTALE);
-	}
-	
-	dentry = d_alloc_anon(inode);
-	if (!dentry) {
-		derr(10, "fh_to_parent %llx.%d -- inode %p but ENOMEM\n", 
-		     ino, gen, inode);
-		iput(inode);
-		return ERR_PTR(-ENOMEM);
-	}
-	dout(10, "fh_to_parent %llx.%d -- inode %p dentry %p\n", ino, gen,
-	     inode, dentry);
-	return dentry;	
+	return __fh_to_dentry(sb, fh + 3, fh_len - 3);
 }
 
 const struct export_operations ceph_export_ops = {

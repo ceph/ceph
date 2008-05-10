@@ -20,6 +20,7 @@ int ceph_debug_mdsc = -1;
 const char *ceph_mds_op_name(int op)
 {
   switch (op) {
+  case CEPH_MDS_OP_FINDINODE: return "findinode";
   case CEPH_MDS_OP_STAT:  return "stat";
   case CEPH_MDS_OP_LSTAT: return "lstat";
   case CEPH_MDS_OP_UTIME: return "utime";
@@ -855,6 +856,11 @@ bad:
 
 /* exported functions */
 
+/*
+ * slight hacky weirdness: if op is a FINDINODE, ino1 is the _length_
+ * of path1, and path1 isn't null terminated (it's an nfs filehandle
+ * fragment).  path2 is not used.
+ */
 struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 ceph_ino_t ino1, const char *path1,
@@ -866,11 +872,15 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	void *p, *end;
 	int pathlen;
 
-	pathlen = 2*(sizeof(ino1) + sizeof(__u32));
-	if (path1)
-		pathlen += strlen(path1);
-	if (path2)
-		pathlen += strlen(path2);
+	if (op == CEPH_MDS_OP_FINDINODE)
+		pathlen = sizeof(u32) + ino1*sizeof(struct ceph_inopath_item);
+	else {
+		pathlen = 2*(sizeof(ino1) + sizeof(__u32));
+		if (path1)
+			pathlen += strlen(path1);
+		if (path2)
+			pathlen += strlen(path2);
+	}
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST,
 			   sizeof(struct ceph_mds_request_head) + pathlen,
@@ -898,14 +908,24 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	head->caller_gid = cpu_to_le32(current->egid);
 
 	/* encode paths */
-	ceph_encode_filepath(&p, end, ino1, path1);
-	ceph_encode_filepath(&p, end, ino2, path2);
+	if (op == CEPH_MDS_OP_FINDINODE) {
+		derr(10,"p %p\n", p);
+		ceph_encode_32(&p, ino1);
+		memcpy(p, path1, ino1 * sizeof(struct ceph_inopath_item));
+		p += ino1 * sizeof(struct ceph_inopath_item);
+		derr(10, " p %p end %p len %d\n", p, end, (int)ino1);
+	} else {
+		ceph_encode_filepath(&p, end, ino1, path1);
+		ceph_encode_filepath(&p, end, ino2, path2);
+		if (path1)
+			dout(10, "create_request path1 %llx/%s\n",
+			     ino1, path1);
+		if (path2)
+			dout(10, "create_request path2 %llx/%s\n",
+			     ino2, path2);
+	}
 	dout(10, "create_request op %d=%s -> %p\n", op,
 	     ceph_mds_op_name(op), req);
-	if (path1)
-		dout(10, "create_request  path1 %llx/%s\n", ino1, path1);
-	if (path2)
-		dout(10, "create_request  path2 %llx/%s\n", ino2, path2);
 
 	BUG_ON(p != end);
 	return req;

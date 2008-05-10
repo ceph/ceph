@@ -613,6 +613,8 @@ public:
     return path_is_mine(path);
   }
   CDir *path_traverse_to_dir(filepath& path);
+
+  int inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item>& inopath);
   
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);

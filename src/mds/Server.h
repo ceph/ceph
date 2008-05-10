@@ -103,6 +103,7 @@ public:
 
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
+  void handle_client_findinode(MDRequest *mdr);
   void handle_client_utime(MDRequest *mdr);
   void handle_client_chmod(MDRequest *mdr);
   void handle_client_chown(MDRequest *mdr);

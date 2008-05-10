@@ -724,6 +724,9 @@ void Server::dispatch_client_request(MDRequest *mdr)
   assert(mdr->more()->waiting_on_slave.empty());
   
   switch (req->get_op()) {
+  case CEPH_MDS_OP_FINDINODE:
+    handle_client_findinode(mdr);
+    break;
 
     // inodes ops.
   case CEPH_MDS_OP_STAT:
@@ -1561,6 +1564,18 @@ void Server::handle_client_stat(MDRequest *mdr)
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
   MClientReply *reply = new MClientReply(req);
+  reply_request(mdr, reply);
+}
+
+
+void Server::handle_client_findinode(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  int r = mdcache->inopath_traverse(mdr, req->inopath);
+  if (r > 0)
+    return; // delayed
+  dout(10) << "reply to findinode on " << *mdr->ref << dendl;
+  MClientReply *reply = new MClientReply(req, r);
   reply_request(mdr, reply);
 }
 

@@ -46,6 +46,7 @@
 
 static inline const char* ceph_mds_op_name(int op) {
   switch (op) {
+  case CEPH_MDS_OP_FINDINODE: return "findinode";
   case CEPH_MDS_OP_STAT:  return "stat";
   case CEPH_MDS_OP_LSTAT:  return "lstat";
   case CEPH_MDS_OP_UTIME: return "utime";
@@ -72,12 +73,17 @@ static inline const char* ceph_mds_op_name(int op) {
 
 // metadata ops.
 
+static inline ostream& operator<<(ostream &out, const ceph_inopath_item &i) {
+  return out << i.ino << "." << i.dname_hash;
+}
+
 class MClientRequest : public Message {
 public:
   struct ceph_mds_request_head head;
 
   // path arguments
   filepath path, path2;
+  vector<ceph_inopath_item> inopath;
 
  public:
   // cons
@@ -159,14 +165,22 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    ::decode(path, p);
-    ::decode(path2, p);
+    if (head.op == CEPH_MDS_OP_FINDINODE) {
+      ::decode(inopath, p);
+    } else {
+      ::decode(path, p);
+      ::decode(path2, p);
+    }
   }
 
   void encode_payload() {
     ::encode(head, payload);
-    ::encode(path, payload);
-    ::encode(path2, payload);
+    if (head.op == CEPH_MDS_OP_FINDINODE) {
+      ::encode(path, payload);
+      ::encode(path2, payload);
+    } else {
+      ::encode(inopath, payload);
+    }
   }
 
   const char *get_type_name() { return "creq"; }
@@ -175,9 +189,11 @@ public:
 	<< "." << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
     //if (!get_filepath().empty()) 
-      out << " " << get_filepath();
+    out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
+    if (!inopath.empty())
+      out << " " << inopath;
     if (head.retry_attempt)
       out << " RETRY=" << head.retry_attempt;
     out << ")";

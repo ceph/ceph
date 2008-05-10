@@ -139,8 +139,8 @@ frag_t CInode::pick_dirfrag(const string& dn)
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
 
-  static hash<string> H;
-  return dirfragtree[H(dn)];
+  __u32 h = ceph_full_name_hash((const unsigned char *)dn.data(), dn.length());
+  return dirfragtree[h];
 }
 
 void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)

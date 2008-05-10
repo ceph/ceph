@@ -1,5 +1,6 @@
 
 userspace client
+- rm -rf on fragmented directory
 - move the size check(s) on read from _read() into FileCache
 - time out caps, wake up waiters on renewal
 - validate dn leases
@@ -11,9 +12,8 @@ userspace client
   - also needs cope with mds failures
 
 kernel client
-- large directories
-  - frag_map vs frag_tree in ci
-  - readdir
+- direct mds requests intelligently
+- readdir on large directories
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
