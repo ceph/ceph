@@ -1,3 +1,16 @@
+big items
+- quotas
+  - accounting
+  - enforcement
+- rados cow/snapshot infrastructure
+- mds snapshots
+- mds security enforcement
+- client, user authentication
+- cas
+
+- meta vs data crush rules
+- ip-less startup for userspace items
+- use libuuid
 
 userspace client
 - rm -rf on fragmented directory
@@ -27,8 +40,6 @@ kernel client
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- nfs exporting
- - build fat fh's with multiple ancestors.. filenames..?
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
