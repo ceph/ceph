@@ -27,7 +27,7 @@ $CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --print .ceph_monmap
 $CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 
 # shared args
-ARGS="-d --bind $IP"
+ARGS="-d"
 
 # start monitor
 $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 10 --debug_ms 1
@@ -44,7 +44,7 @@ do
 done
 
 # mds
-$CEPH_BIN/cmds $ARGS # --debug_ms 1 #--debug_mds 20 --debug_ms 20
+$CEPH_BIN/cmds $ARGS  # --debug_ms 1 #--debug_mds 20 --debug_ms 20
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

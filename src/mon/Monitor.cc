@@ -199,6 +199,12 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  // first time we've seen it?
+  if (m->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    m->inst = m->get_source_inst();
+    m->clear_payload();
+  }
+
   dout(0) << "handle_command " << *m << dendl;
   string rs;
   if (!m->cmd.empty()) {

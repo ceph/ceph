@@ -218,6 +218,12 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
 
+  // first time we've seen it?
+  if (m->get_mds_inst().addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    m->get_mds_inst() = m->get_source_inst();
+    m->clear_payload();
+  }
+
   dout(12) << "preprocess_beacon " << *m
 	   << " from " << m->get_mds_inst()
 	   << dendl;

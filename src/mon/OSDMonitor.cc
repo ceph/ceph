@@ -467,6 +467,12 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     return true;
   }
 
+  // first time we've seen it?
+  if (m->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    m->inst = m->get_source_inst();
+    m->clear_payload();
+  }
+
   assert(m->inst.name.is_osd());
   int from = m->inst.name.num();
   

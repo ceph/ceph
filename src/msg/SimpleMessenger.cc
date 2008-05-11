@@ -92,36 +92,6 @@ int Rank::Accepter::bind(int64_t force_nonce)
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
   
-  char hostname[100];
-  memset(hostname, 0, 100);
-  gethostname(hostname, 100);
-  dout(2) << "accepter.bind my hostname is " << hostname << dendl;
-
-  // is there a .ceph_hosts file?
-  if (g_conf.ms_hosts) {
-    ifstream fh;
-    fh.open(g_conf.ms_hosts);
-    if (fh.is_open()) {
-      while (1) {
-	string line;
-	getline(fh, line);
-	if (fh.eof()) break;
-	if (line[0] == '#' || line[0] == ';') continue;
-	int ospace = line.find(" ");
-	if (!ospace) continue;
-	string host = line.substr(0, ospace);
-	string addr = line.substr(ospace+1);
-	dout(15) << g_conf.ms_hosts << ": host '" << host << "' -> '" << addr << "'" << dendl;
-	if (host == hostname) {
-	  parse_ip_port(addr.c_str(), g_my_addr);
-	  dout(1) << g_conf.ms_hosts << ": my addr is " << g_my_addr << dendl;
-	  break;
-	}
-      }
-      fh.close();
-    }
-  }
-
   // use whatever user specified (if anything)
   sockaddr_in listen_addr = g_my_addr.ipaddr;
 
@@ -158,28 +128,9 @@ int Rank::Accepter::bind(int64_t force_nonce)
     return -errno;
   }
   
-  // figure out my_addr
-  if (g_my_addr != entity_addr_t()) {
-    // user specified it, easy peasy.
-    rank.rank_addr = g_my_addr;
-  } else {
-    // my IP is... HELP!
-    struct hostent *myhostname = gethostbyname(hostname); 
-    if (!myhostname) {
-      derr(0) << "accepter.bind unable to resolve hostname '" << hostname 
-	      << "', please specify your ip with --bind x.x.x.x" 
-	      << dendl;
-      return -1;
-    }
-    
-    // look up my hostname.
-    listen_addr.sin_family = myhostname->h_addrtype;
-    memcpy((char*)&listen_addr.sin_addr.s_addr, 
-	   myhostname->h_addr_list[0], 
-	   myhostname->h_length);
-    rank.rank_addr.ipaddr = listen_addr;
-    rank.rank_addr.set_port(0);
-  }
+  rank.rank_addr = g_my_addr;
+  if (rank.rank_addr != entity_addr_t())
+    rank.need_addr = false;
   if (rank.rank_addr.get_port() == 0) {
     entity_addr_t tmp;
     tmp.ipaddr = listen_addr;
@@ -1405,6 +1356,14 @@ void Rank::Pipe::reader()
 	if (erank < rank.max_local && rank.local[erank]) {
 	  // find entity
 	  entity = rank.local[erank];
+
+	  // first message?
+	  if (rank.need_addr) {
+	    entity->_myinst.addr = rank.rank_addr = m->get_dest_inst().addr;
+	    dout(0) << "reader my rank addr is " << rank.rank_addr << dendl;
+	    rank.need_addr = false;
+	  }
+
 	} else {
 	  derr(0) << "reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
 	}

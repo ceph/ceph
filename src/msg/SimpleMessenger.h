@@ -320,6 +320,7 @@ private:
   bool started;
 
   // where i listen
+  bool need_addr;
   entity_addr_t rank_addr;
   
   // local
@@ -344,7 +345,7 @@ private:
   void reaper();
 
 public:
-  Rank() : started(false),
+  Rank() : started(false), need_addr(true),
 	   max_local(0), num_local(0) { }
   ~Rank() { }
 

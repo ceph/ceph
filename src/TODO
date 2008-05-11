@@ -9,7 +9,6 @@ big items
 - cas
 
 - meta vs data crush rules
-- ip-less startup for userspace items
 - use libuuid
 
 userspace client
@@ -26,7 +25,6 @@ userspace client
 
 kernel client
 - direct mds requests intelligently
-- readdir on large directories
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
