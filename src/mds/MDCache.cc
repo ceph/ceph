@@ -6069,6 +6069,11 @@ void MDCache::split_dir(CDir *dir, int bits)
     //assert(0);
     return;
   }
+  if (dir->inode->get_parent_dir() &&
+      dir->inode->get_parent_dir()->get_inode()->is_stray()) {
+    dout(7) << "i won't split anything in stray" << dendl;
+    return;
+  }
   if (dir->state_test(CDir::STATE_FRAGMENTING)) {
     dout(7) << "already fragmenting" << dendl;
     return;

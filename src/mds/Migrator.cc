@@ -556,12 +556,16 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
   }
-
-  if (dir->inode->is_root()) {
-    dout(7) << "i won't export root" << dendl;
+  if (dir->inode->is_base()) {
+    dout(7) << "i won't export root|stray" << dendl;
     //assert(0);
     return;
   }
+  if (dir->inode->get_parent_dir()->get_inode()->is_stray()) {
+    dout(7) << "i won't export anything in stray" << dendl;
+    return;
+  }
+
 
   if (dir->is_frozen() ||
       dir->is_freezing()) {
