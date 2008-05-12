@@ -3884,8 +3884,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     else if (MDS_INO_IS_STRAY(origpath.get_ino())) 
       open_foreign_stray(origpath.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
     else {
-      assert(0);  // hrm.. broken
-      return -EIO;
+      //assert(0);  // hrm.. broken
+      return -ESTALE;
     }
     return 1;
   }
@@ -4059,6 +4059,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  } else {
 	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
 	    MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
+	    reply->mark_unsolicited();
 	    reply->add_dentry( dn->replicate_to( from ) );
 	    if (dn->is_primary())
 	      reply->add_inode( dn->inode->replicate_to( from ) );
@@ -5499,16 +5500,18 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	   << dendl;
   
   // decrement discover counters
-  if (m->get_wanted_base_dir()) {
-    inodeno_t ino = m->get_base_ino();
-    assert(discover_dir[from].count(ino));
-    if (--discover_dir[from][ino] == 0)
-      discover_dir[from].erase(ino);
-  } else if (m->get_base_ino() >= MDS_INO_BASE) {
-    dirfrag_t df(m->get_base_ino(), m->get_base_dir_frag());
-    assert(discover_dir_sub[from].count(df));
-    if (--discover_dir_sub[from][df] == 0)
-      discover_dir_sub[from].erase(df);
+  if (!m->is_unsolicited()) {
+    if (m->get_wanted_base_dir()) {
+      inodeno_t ino = m->get_base_ino();
+      assert(discover_dir[from].count(ino));
+      if (--discover_dir[from][ino] == 0)
+	discover_dir[from].erase(ino);
+    } else if (m->get_base_ino() >= MDS_INO_BASE) {
+      dirfrag_t df(m->get_base_ino(), m->get_base_dir_frag());
+      assert(discover_dir_sub[from].count(df));
+      if (--discover_dir_sub[from][df] == 0)
+	discover_dir_sub[from].erase(df);
+    }
   }
 
   // loop over discover results.

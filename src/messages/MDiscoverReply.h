@@ -83,6 +83,7 @@ class MDiscoverReply : public Message {
   bool no_base_dir;     // no base dir (but IS dentry+inode)
   bool no_base_dentry;  // no base dentry (but IS inode)
   string error_dentry;   // dentry that was not found (to trigger waiters on asker)
+  bool unsolicited;
 
   __s32 dir_auth_hint;
 
@@ -124,6 +125,8 @@ class MDiscoverReply : public Message {
 
   int get_dir_auth_hint() { return dir_auth_hint; }
 
+  bool is_unsolicited() { return unsolicited; }
+  void mark_unsolicited() { unsolicited = true; }
 
   // these index _arguments_ are aligned to each ([[dir, ] dentry, ] inode) set.
   CInodeDiscover& get_inode(int n) { return *(inodes[n]); }
@@ -231,7 +234,8 @@ class MDiscoverReply : public Message {
     ::decode(no_base_dentry, p);
     ::decode(error_dentry, p);
     ::decode(dir_auth_hint, p);
-    
+    ::decode(unsolicited, p);
+
     ::decode(dirs, p);
     ::decode(inodes, p);
     ::decode(dentries, p);
@@ -248,6 +252,7 @@ class MDiscoverReply : public Message {
     ::encode(no_base_dentry, payload);
     ::encode(error_dentry, payload);
     ::encode(dir_auth_hint, payload);
+    ::encode(unsolicited, payload);
 
     ::encode(dirs, payload);
     ::encode(inodes, payload);
