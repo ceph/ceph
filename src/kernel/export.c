@@ -12,17 +12,19 @@ int ceph_debug_export = -1;
  *  <ino, parent's d_name.hash>
  */
 
+#define IPSZ (sizeof(struct ceph_inopath_item) / sizeof(u32))
+
 int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len, 
 		   int connectable)
 {
 	int type = 1;
 	struct ceph_inopath_item *fh =
 		(struct ceph_inopath_item *)rawfh;
-	int max = *max_len / 3;
+	int max = *max_len / IPSZ;
 	int len;
 
-	dout(10, "encode_fh %p max_len %d (%d)%s\n", dentry, *max_len, max,
-	     connectable ? " connectable":"");
+	dout(10, "encode_fh %p max_len %d u32s (%d inopath items)%s\n", dentry,
+	     *max_len, max, connectable ? " connectable":"");
 	
 	if (max < 1 || (connectable && max < 2))
 		return -ENOSPC;
@@ -46,7 +48,7 @@ int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len,
 			break;
 	}
 
-	*max_len = len * 3;
+	*max_len = len * IPSZ;
 	return type;
 }
 
@@ -96,7 +98,7 @@ struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
-	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh, fh_len/3);
+	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh, fh_len/IPSZ);
 }
 
 struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
@@ -112,7 +114,7 @@ struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 		return ERR_PTR(-ESTALE);
 
 	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh + 1,
-			      fh_len/3 - 1);
+			      fh_len/IPSZ - 1);
 }
 
 const struct export_operations ceph_export_ops = {
