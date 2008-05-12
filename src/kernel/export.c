@@ -63,7 +63,8 @@ struct dentry *__fh_to_dentry(struct super_block *sb, u32 *fh, int fh_len)
 		
 		req = ceph_mdsc_create_request(mdsc,
 					       CEPH_MDS_OP_FINDINODE,
-					       fh_len/3, (char *)fh, 0, 0);
+					       fh_len/3, (char *)fh, 0, 0,
+					       NULL, 0, -1);
 		if (IS_ERR(req))
 			return ERR_PTR(PTR_ERR(req));
 		err = ceph_mdsc_do_request(mdsc, req);

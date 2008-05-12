@@ -383,6 +383,8 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			ceph_msg_put(req->r_reply);
 			destroy_reply_info(&req->r_reply_info);
 		}
+		if (req->r_direct_dentry)
+			dput(req->r_direct_dentry);
 		if (req->r_last_inode)
 			iput(req->r_last_inode);
 		if (req->r_last_dentry)
@@ -414,6 +416,9 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req = kmalloc(sizeof(*req), GFP_NOFS);
 	req->r_request = msg;
 	req->r_reply = 0;
+	req->r_direct_dentry = 0;
+	req->r_direct_auth = 1;
+	req->r_direct_frag = -1;
 	req->r_last_inode = 0;
 	req->r_last_dentry = 0;
 	req->r_old_dentry = 0;
@@ -430,7 +435,6 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 
 	return req;
 }
-
 
 /*
  * register an in-flight request.
@@ -864,7 +868,8 @@ bad:
 struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 ceph_ino_t ino1, const char *path1,
-			 ceph_ino_t ino2, const char *path2)
+			 ceph_ino_t ino2, const char *path2,
+			 struct dentry *ref, int want_auth, int want_frag)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_request *req;
@@ -895,6 +900,13 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	head = msg->front.iov_base;
 	p = msg->front.iov_base + sizeof(*head);
 	end = msg->front.iov_base + msg->front.iov_len;
+
+	/* direct request */
+	if (ref)
+		dget(ref);
+	req->r_direct_dentry = ref;
+	req->r_direct_auth = want_auth;
+	req->r_direct_frag = want_frag;
 
 	/* encode head */
 	head->client_inst = mdsc->client->msgr->inst;

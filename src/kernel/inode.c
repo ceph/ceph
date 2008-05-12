@@ -1493,13 +1493,15 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 		     ceph_ino(dentry->d_inode));
 		req = ceph_mdsc_create_request(mdsc, op,
 					       ceph_ino(dentry->d_inode), "",
-					       0, 0);
+					       0, 0,
+					       dentry, 1, -1);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
-		req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0);
+		req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0,
+					       dentry, 1, -1);
 		kfree(path);
 	}
 	return req;

@@ -119,7 +119,8 @@ nextfrag:
 		dout(10, "dir_readdir querying mds for ino %llx frag %x\n",
 		     ceph_ino(inode), frag);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR,
-					       ceph_ino(inode), "", 0, 0);
+					       ceph_ino(inode), "", 0, 0,
+					       filp->f_dentry, 1, frag);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
 		rhead = req->r_request->front.iov_base;
@@ -250,7 +251,8 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 		/* stat ino directly */
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
 					       ceph_ino(dentry->d_inode), 0,
-					       0, 0);
+					       0, 0,
+					       dentry, 0, -1);
 	} else {
 		/* build path */
 		path = ceph_build_dentry_path(dentry, &pathlen);
@@ -258,7 +260,8 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 			return ERR_PTR(PTR_ERR(path));
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
 					       ceph_ino(sb->s_root->d_inode),
-					       path, 0, 0);
+					       path, 0, 0,
+					       dentry, 0, -1);
 		kfree(path);
 	}
 	if (IS_ERR(req))
@@ -330,7 +333,8 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
-				       path, 0, 0);
+				       path, 0, 0,
+				       dentry, 1, -1);
 	kfree(path);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
@@ -380,7 +384,8 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SYMLINK,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
-				       path, 0, dest);
+				       path, 0, dest,
+				       dentry, 1, -1);
 	kfree(path);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
@@ -410,7 +415,8 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKDIR,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
-				       path, 0, 0);
+				       path, 0, 0,
+				       dentry, 1, -1);
 	kfree(path);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
@@ -450,7 +456,8 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
 				       path,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
-				       oldpath);
+				       oldpath,
+				       dentry, 1, -1);
 	kfree(oldpath);
 	kfree(path);
 	if (IS_ERR(req)) {
@@ -493,7 +500,8 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, op,
 				       ceph_ino(dir->i_sb->s_root->d_inode),
-				       path, 0, 0);
+				       path, 0, 0,
+				       dentry, 1, -1);
 	kfree(path);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
@@ -532,7 +540,8 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	}
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME,
 				       ceph_ino(root->d_inode), oldpath,
-				       ceph_ino(root->d_inode), newpath);
+				       ceph_ino(root->d_inode), newpath,
+				       new_dentry, 1, -1);
 	kfree(oldpath);
 	kfree(newpath);
 	if (IS_ERR(req))

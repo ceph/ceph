@@ -8,6 +8,7 @@ big items
 - client, user authentication
 - cas
 
+- mon needs to trim history
 - meta vs data crush rules
 - use libuuid
 
@@ -28,7 +29,6 @@ kernel client
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
-- file_data_version stuff!
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
   - fallback in each case (in ceph_unlink, _rename, etc.) when reply has no trace?
@@ -42,7 +42,6 @@ kernel client
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
   - osd ack vs commit handling.  hmm!
-  - fix handling of resent message pages
 
 client
 - clean up client mds session vs mdsmap behavior?

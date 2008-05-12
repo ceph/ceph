@@ -75,6 +75,12 @@ struct ceph_mds_request {
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info r_reply_info;
+
+	/* to direct request */
+	struct dentry *r_direct_dentry;
+	int r_direct_auth;
+	int r_direct_frag;
+
 	struct inode     *r_last_inode;
 	struct dentry    *r_last_dentry;
 	struct dentry    *r_old_dentry;   /* for rename */
@@ -139,7 +145,8 @@ extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc,
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 ceph_ino_t ino1, const char *path1,
-			 ceph_ino_t ino2, const char *path2);
+			 ceph_ino_t ino2, const char *path2,
+			 struct dentry *ref, int want_auth, int want_frag);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
