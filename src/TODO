@@ -68,6 +68,7 @@ mon
 
 mds mustfix
 - replay of dir fragmentation  (dont want dir frozen, pins, etc.?)
+- fix rm -r vs mds exports
 - rename slave in-memory rollback on failure
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing

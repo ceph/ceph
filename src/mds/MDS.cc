@@ -254,16 +254,20 @@ void MDS::forward_message_mds(Message *req, int mds)
     MClientRequest *creq = (MClientRequest*)req;
     creq->inc_num_fwd();    // inc forward counter
 
+    /*
+     * don't actually forward if non-idempotent!
+     * client has to do it.  although the MDS will ignore duplicate requests,
+     * the affected metadata may migrate, in which case the new authority
+     * won't have the metareq_id in the completed request map.
+     */
+    bool client_must_resend = !creq->is_idempotent();
+
     // tell the client where it should go
-    messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd()),
+    messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd(),
+						      client_must_resend),
 			    creq->get_client_inst());
     
-    if (!creq->is_idempotent()) {
-      /* don't actually forward if non-idempotent!
-       * client has to do it.  although the MDS will ignore duplicate requests,
-       * the affected metadata may migrate, in which case the new authority
-       * won't have the metareq_id in the completed request map.
-       */
+    if (client_must_resend) {
       delete req;
       return; 
     }

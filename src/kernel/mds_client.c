@@ -417,8 +417,9 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_request = msg;
 	req->r_reply = 0;
 	req->r_direct_dentry = 0;
-	req->r_direct_auth = 1;
-	req->r_direct_frag = -1;
+	req->r_direct_mode = USE_ANY_MDS;
+	req->r_direct_hash = 0;
+	req->r_direct_is_hash = false;
 	req->r_last_inode = 0;
 	req->r_last_dentry = 0;
 	req->r_old_dentry = 0;
@@ -458,6 +459,13 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 	ceph_mdsc_put_request(req);
 }
 
+static bool have_session(struct ceph_mds_client *mdsc, int mds)
+{
+	if (mds >= mdsc->max_sessions)
+		return false;
+	return mdsc->sessions[mds] ? true:false;
+}
+
 
 /*
  * choose mds to send request to next
@@ -465,16 +473,83 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 static int choose_mds(struct ceph_mds_client *mdsc,
 		      struct ceph_mds_request *req)
 {
-	int mds;
+	int mds = -1;
+	u32 hash = req->r_direct_hash;
+	bool is_hash = req->r_direct_is_hash;
+	struct dentry *dentry = req->r_direct_dentry;
+	struct ceph_inode_info *ci;
+	struct ceph_inode_frag *frag = 0;
+	int mode = req->r_direct_mode;
 
 	/* is there a specific mds we should try? */
 	if (req->r_resend_mds >= 0 &&
-	    ceph_mdsmap_get_state(mdsc->mdsmap, req->r_resend_mds) > 0) {
-		dout(20, "using resend_mds mds%d\n", req->r_resend_mds);
+	    (!have_session(mdsc, req->r_resend_mds) ||
+	     ceph_mdsmap_get_state(mdsc->mdsmap, req->r_resend_mds) > 0)) {
+		dout(20, "choose_mds using resend_mds mds%d\n",
+		     req->r_resend_mds);
 		return req->r_resend_mds;
 	}
 
-	/* pick one at random */
+	if (mode == USE_CAP_MDS) {
+		mds = ceph_get_cap_mds(dentry->d_inode);
+		if (mds >= 0) {
+			dout(20, "choose_mds %p %llx mds%d (cap)\n", 
+			     dentry->d_inode, ceph_ino(dentry->d_inode), mds);
+			return mds;
+		}
+		derr(0, "choose_mds %p %llx has NO CAPS, using auth\n",
+		     dentry->d_inode, ceph_ino(dentry->d_inode));
+		WARN_ON(1);
+		mode = USE_AUTH_MDS;
+	}
+
+	if (mode == USE_RANDOM_MDS)
+		goto random;
+	
+	while (dentry) {
+		if (is_hash &&
+		    dentry->d_inode &&
+		    S_ISDIR(dentry->d_inode->i_mode)) {
+			ci = ceph_inode(dentry->d_inode);
+			ceph_choose_frag(ci, hash, &frag);
+			if (frag) {
+				/* avoid hitting dir replicas on dir
+				 * auth delegation point.. mds will
+				 * likely forward anyway to avoid
+				 * twiddling scatterlock */
+				if (mode == USE_ANY_MDS && frag->ndist > 0 &&
+				    dentry != req->r_direct_dentry) {
+					u8 r;
+					get_random_bytes(&r, 1);
+					r %= frag->ndist;
+					mds = frag->dist[r];
+					dout(20, "choose_mds %p %llx frag %u "
+					     "mds%d (%d/%d)\n", dentry->d_inode,
+					     ceph_ino(&ci->vfs_inode),
+					     frag->frag, frag->mds,
+					     (int)r, frag->ndist);
+					return mds;
+				}
+				mode = USE_AUTH_MDS;
+				if (frag->mds >= 0) {
+					mds = frag->mds;
+					dout(20, "choose_mds %p %llx frag %u "
+					     "mds%d (auth)\n", dentry->d_inode,
+					     ceph_ino(&ci->vfs_inode),
+					     frag->frag, mds);
+					return mds;
+				}
+			}
+		}
+		if (IS_ROOT(dentry))
+			break;
+		hash = dentry->d_name.hash;
+		is_hash = true;
+		dentry = dentry->d_parent;
+	}
+
+	/* ok, just pick one at random */
+random:
 	mds = ceph_mdsmap_get_random_mds(mdsc->mdsmap);
 	dout(20, "choose_mds chose random mds%d\n", mds);
 	return mds;
@@ -869,7 +944,7 @@ struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 ceph_ino_t ino1, const char *path1,
 			 ceph_ino_t ino2, const char *path2,
-			 struct dentry *ref, int want_auth, int want_frag)
+			 struct dentry *ref, int mode)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_request *req;
@@ -905,8 +980,8 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	if (ref)
 		dget(ref);
 	req->r_direct_dentry = ref;
-	req->r_direct_auth = want_auth;
-	req->r_direct_frag = want_frag;
+	req->r_direct_mode = mode;
+	req->r_direct_hash = -1;
 
 	/* encode head */
 	head->client_inst = mdsc->client->msgr->inst;
@@ -1148,6 +1223,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	__u64 tid;
 	__u32 next_mds;
 	__u32 fwd_seq;
+	__u8 must_resend;
 	int err = -EINVAL;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
@@ -1158,6 +1234,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	ceph_decode_64(&p, tid);
 	ceph_decode_32(&p, next_mds);
 	ceph_decode_32(&p, fwd_seq);
+	ceph_decode_8(&p, must_resend);
 
 	/* handle */
 	req = find_request_and_lock(mdsc, tid);
@@ -1165,25 +1242,25 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		return;  /* dup reply? */
 
 	/* do we have a session with the dest mds? */
-	if (next_mds < mdsc->max_sessions &&
-	    mdsc->sessions[next_mds] &&
-	    mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
-		/* yes.  adjust mds set */
-		if (fwd_seq > req->r_num_fwd) {
-			dout(10, "forward %llu to mds%d\n", tid, next_mds);
-			req->r_num_fwd = fwd_seq;
-			req->r_resend_mds = next_mds;
-			put_request_sessions(req);
-			req->r_session = __get_session(mdsc, next_mds);
-			req->r_fwd_session = __get_session(mdsc, from_mds);
-		} else
-			dout(10, "forward %llu to mds%d - old seq %d <= %d\n",
-			     tid, next_mds, req->r_num_fwd, fwd_seq);
+	/* yes.  adjust mds set, but mds will do the forward. */
+	if (fwd_seq <= req->r_num_fwd) {
+		dout(10, "forward %llu to mds%d - old seq %d <= %d\n",
+		     tid, next_mds, req->r_num_fwd, fwd_seq);
+		spin_unlock(&mdsc->lock);
+	} else if (!must_resend && 
+		   have_session(mdsc, next_mds) &&
+		   mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
+		dout(10, "forward %llu to mds%d (mds fwded)\n", tid, next_mds);
+		req->r_num_fwd = fwd_seq;
+		req->r_resend_mds = next_mds;
+		put_request_sessions(req);
+		req->r_session = __get_session(mdsc, next_mds);
+		req->r_fwd_session = __get_session(mdsc, from_mds);
 		spin_unlock(&mdsc->lock);
 	} else {
 		/* no, resend. */
 		/* forward race not possible; mds would drop */
-		dout(10, "forward %llu to mds%d (no session)\n", tid, next_mds);
+		dout(10, "forward %llu to mds%d (we resend)\n", tid, next_mds);
 		BUG_ON(fwd_seq <= req->r_num_fwd);
 		put_request_sessions(req);
 		req->r_resend_mds = next_mds;

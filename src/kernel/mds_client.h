@@ -70,6 +70,13 @@ struct ceph_mds_session {
 /*
  * an in-flight request
  */
+enum {
+	USE_CAP_MDS,
+	USE_ANY_MDS,
+	USE_AUTH_MDS,
+	USE_RANDOM_MDS
+};
+
 struct ceph_mds_request {
 	__u64             r_tid;
 	struct ceph_msg  *r_request;  /* original request */
@@ -78,8 +85,9 @@ struct ceph_mds_request {
 
 	/* to direct request */
 	struct dentry *r_direct_dentry;
-	int r_direct_auth;
-	int r_direct_frag;
+	int r_direct_mode;
+	u32 r_direct_hash;
+	bool r_direct_is_hash;
 
 	struct inode     *r_last_inode;
 	struct dentry    *r_last_dentry;
@@ -146,7 +154,7 @@ extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 ceph_ino_t ino1, const char *path1,
 			 ceph_ino_t ino2, const char *path2,
-			 struct dentry *ref, int want_auth, int want_frag);
+			 struct dentry *ref, int want_auth);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);

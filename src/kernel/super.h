@@ -156,6 +156,10 @@ struct ceph_inode_cap {
 
 #define MAX_DIRFRAG_REP 4
 
+/*
+ * a _leaf_ frag will be present in the i_fragtree IFF there is
+ * delegation info.  that is, if mds >= 0 || ndist > 0.
+ */
 struct ceph_inode_frag {
 	struct rb_node node;
 
@@ -238,7 +242,8 @@ static inline struct ceph_inode_frag *ceph_find_frag(struct ceph_inode_info *ci,
 	return NULL;
 }
 
-extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v);
+extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
+			      struct ceph_inode_frag **pfrag);
 
 struct ceph_dentry_info {
 	struct dentry *dentry;
@@ -418,6 +423,7 @@ extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 extern void __ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
+extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_handle_cap_grant(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);

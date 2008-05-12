@@ -99,7 +99,8 @@ struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 	return frag;
 }
 
-__u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v)
+__u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
+		       struct ceph_inode_frag **pfrag)
 {
 	u32 t = frag_make(0, 0);
 	struct ceph_inode_frag *frag;
@@ -110,8 +111,13 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v)
 	while (1) {
 		WARN_ON(!frag_contains_value(t, v));
 		frag = ceph_find_frag(ci, t);
-		if (!frag || frag->split_by == 0)
+		if (!frag)
 			break; /* t is a leaf */
+		if (frag->split_by == 0) {
+			if (pfrag)
+				*pfrag = frag;
+			break;
+		}
 
 		/* choose child */
 		nway = 1 << frag->split_by;
@@ -133,6 +139,11 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v)
 	return t;
 }
 
+/*
+ * process dirfrag (delegation) info.  include leaf fragment in tree
+ * ONLY if mds >= 0 || ndist > 0.  (otherwise, only branches/splits
+ * are included in i_fragtree)
+ */
 static int ceph_fill_dirfrag(struct inode *inode,
 			     struct ceph_mds_reply_dirfrag *dirinfo)
 {
@@ -150,13 +161,13 @@ static int ceph_fill_dirfrag(struct inode *inode,
 			return 0;
 		if (frag->split_by == 0) {
 			/* tree leaf, remove */
-			dout(20, "removed %llx frag %x (no referral)\n",
+			dout(20, "fill_dirfrag removed %llx frag %x (no ref)\n",
 			     ceph_ino(inode), id);
 			rb_erase(&frag->node, &ci->i_fragtree);
 			kfree(frag);
 		} else {
 			/* tree branch, keep */
-			dout(20, "cleared %llx frag %x referral\n",
+			dout(20, "fill_dirfrag cleared %llx frag %x referral\n",
 			     ceph_ino(inode), id);
 			frag->mds = -1;
 			frag->ndist = 0;
@@ -168,7 +179,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	/* find/add this frag to store mds delegation info */
 	frag = ceph_get_frag(ci, id);
 	if (!frag) {
-		derr(0, "ENOMEM on mds referral ino %llx frag %x\n",
+		derr(0, "fill_dirfrag ENOMEM on mds ref ino %llx frag %x\n",
 		     ceph_ino(inode), le32_to_cpu(dirinfo->frag));
 		return -ENOMEM;
 	} else {
@@ -176,7 +187,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 		frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
 		for (i = 0; i < frag->ndist; i++)
 			frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
-		dout(20, "set %llx frag %x referral mds %d ndist=%d\n",
+		dout(20, "fill_dirfrag %llx frag %x referral mds %d ndist=%d\n",
 		     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
 	}
 	return 0;
@@ -808,6 +819,22 @@ static struct ceph_inode_cap *__get_cap_for_mds(struct inode *inode, int mds)
 			return cap;
 	}
 	return 0;
+}
+
+int ceph_get_cap_mds(struct inode *inode)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_inode_cap *cap;
+	int mds = -1;
+
+	spin_lock(&inode->i_lock);
+	if (!list_empty(&ci->i_caps)) {
+		cap = list_first_entry(&ci->i_caps, struct ceph_inode_cap,
+				       ci_caps);
+		mds = cap->mds;
+	}
+	spin_unlock(&inode->i_lock);
+	return mds;
 }
 
 /*
@@ -1494,14 +1521,14 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 		req = ceph_mdsc_create_request(mdsc, op,
 					       ceph_ino(dentry->d_inode), "",
 					       0, 0,
-					       dentry, 1, -1);
+					       dentry, USE_CAP_MDS);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
 		path = ceph_build_dentry_path(dentry, &pathlen);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
 		req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0,
-					       dentry, 1, -1);
+					       dentry, USE_ANY_MDS);
 		kfree(path);
 	}
 	return req;

@@ -640,7 +640,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	dout(30, "open_root_inode opening '%s'\n", args->path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN,
 				       1, args->path, 0, 0,
-				       NULL, 1, -1);
+				       NULL, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	req->r_expects_cap = 1;

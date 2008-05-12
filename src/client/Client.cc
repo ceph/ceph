@@ -942,7 +942,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   // reset retry counter
   request->retry_attempt = 0;
 
-  if (request->idempotent && 
+  if (!fwd->must_resend() && 
       mds_sessions.count(fwd->get_dest_mds())) {
     // dest mds has a session, and request was forwarded for us.
 

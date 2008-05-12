@@ -26,10 +26,10 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	int pathlen;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
-	int want_auth = 0;
+	int want_auth = USE_ANY_MDS;
 
 	if (flags & (O_WRONLY|O_RDWR|O_CREAT|O_TRUNC))
-		want_auth = 1;
+		want_auth = USE_AUTH_MDS;
 
 	dout(5, "prepare_open_request dentry %p name '%s' flags %d\n", dentry,
 	     dentry->d_name.name, flags);
@@ -39,7 +39,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
 				       0, 0,
-				       dentry, want_auth, -1);
+				       dentry, want_auth);
 	req->r_expects_cap = 1;
 	req->r_fmode = ceph_flags_to_mode(flags);
 	kfree(path);
