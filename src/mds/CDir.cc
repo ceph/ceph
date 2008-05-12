@@ -942,6 +942,9 @@ void CDir::_fetched(bufferlist &bl)
 
       fragtree_t fragtree;
       ::decode(fragtree, p);
+
+      map<string, bufferptr> xattrs;
+      ::decode(xattrs, p);
       
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -969,7 +972,7 @@ void CDir::_fetched(bufferlist &bl)
 	  
 	  // dirfragtree
 	  in->dirfragtree.swap(fragtree);
-
+	  in->xattrs.swap(xattrs);
 	  // add 
 	  cache->add_inode( in );
 	
@@ -1186,6 +1189,7 @@ void CDir::_commit(version_t want)
       }
 
       ::encode(in->dirfragtree, bl);
+      ::encode(in->xattrs, bl);
     }
   }
   assert(n == 0);

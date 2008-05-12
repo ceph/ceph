@@ -112,6 +112,7 @@ struct InodeStat {
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
+  map<string, bufferptr> xattrs;
 
  public:
   InodeStat() {}
@@ -145,6 +146,7 @@ struct InodeStat {
       n--;
     }
     ::decode(symlink, p);
+    ::decode(xattrs, p);
   }
 
   static void encode(bufferlist &bl, CInode *in) {
@@ -176,6 +178,7 @@ struct InodeStat {
       ::encode(p->second, bl);
     }
     ::encode(in->symlink, bl);
+    ::encode(in->xattrs, bl);
   }
   
 };

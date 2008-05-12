@@ -1233,6 +1233,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IFILE:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_IXATTR:
     {
       CInode *in = mdcache->get_inode(info.ino);
       if (!in) {
@@ -1245,6 +1246,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       case CEPH_LOCK_IDFT: return &in->dirfragtreelock;
       case CEPH_LOCK_IFILE: return &in->filelock;
       case CEPH_LOCK_IDIR: return &in->dirlock;
+      case CEPH_LOCK_IXATTR: return &in->xattrlock;
       }
     }
 

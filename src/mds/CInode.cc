@@ -76,6 +76,7 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.dirfragtreelock;
   out << " " << in.filelock;
   out << " " << in.dirlock;
+  out << " " << in.xattrlock;
   
   if (in.inode.max_size)
     out << " size=" << in.inode.size << "/" << in.inode.max_size;
@@ -533,6 +534,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       ::encode(frag_sizes, bl);
     }
     break;
+
+  case CEPH_LOCK_IXATTR:
+    ::encode(xattrs, bl);
+    break;
   
   default:
     assert(0);
@@ -600,6 +605,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(dfsz, p);
       // hmm which to keep?
     }
+    break;
+
+  case CEPH_LOCK_IXATTR:
+    ::decode(xattrs, p);
     break;
 
   default:
@@ -794,6 +803,7 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(inode, bl);
   ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
+  ::encode(xattrs, bl);
 
   bool dirty = is_dirty();
   ::encode(dirty, bl);
@@ -807,6 +817,7 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(dirfragtreelock, bl);
   ::encode(filelock, bl);
   ::encode(dirlock, bl);
+  ::encode(xattrlock, bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -833,6 +844,7 @@ void CInode::decode_import(bufferlist::iterator& p,
 
   ::decode(symlink, p);
   ::decode(dirfragtree, p);
+  ::decode(xattrs, p);
 
   bool dirty;
   ::decode(dirty, p);
@@ -849,4 +861,5 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(dirfragtreelock, p);
   ::decode(filelock, p);
   ::decode(dirlock, p);
+  ::decode(xattrlock, p);
 }
