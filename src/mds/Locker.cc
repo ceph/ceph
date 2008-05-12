@@ -341,6 +341,7 @@ void Locker::eval_gather(SimpleLock *lock)
     return file_eval_gather((FileLock*)lock);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     return scatter_eval_gather((ScatterLock*)lock);
   default:
     return simple_eval_gather(lock);
@@ -354,6 +355,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
     return file_rdlock_start((FileLock*)lock, mdr);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     return scatter_rdlock_start((ScatterLock*)lock, mdr);
   default:
     return simple_rdlock_start(lock, mdr);
@@ -367,6 +369,7 @@ void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
     return file_rdlock_finish((FileLock*)lock, mdr);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     return scatter_rdlock_finish((ScatterLock*)lock, mdr);
   default:
     return simple_rdlock_finish(lock, mdr);
@@ -378,6 +381,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     return scatter_wrlock_start((ScatterLock*)lock, mdr);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mdr);
@@ -394,6 +398,7 @@ void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     return scatter_wrlock_finish((ScatterLock*)lock, mdr);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_finish((LocalLock*)lock, mdr);
@@ -411,6 +416,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
     return local_xlock_start((LocalLock*)lock, mdr);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     assert(0);
   default:
     return simple_xlock_start(lock, mdr);
@@ -426,6 +432,7 @@ void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
     return local_xlock_finish((LocalLock*)lock, mdr);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     assert(0);
   default:
     return simple_xlock_finish(lock, mdr);
@@ -1235,6 +1242,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_IFILE:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_IXATTR:
+  case CEPH_LOCK_INESTED:
     {
       CInode *in = mdcache->get_inode(info.ino);
       if (!in) {
@@ -1248,6 +1256,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       case CEPH_LOCK_IFILE: return &in->filelock;
       case CEPH_LOCK_IDIR: return &in->dirlock;
       case CEPH_LOCK_IXATTR: return &in->xattrlock;
+      case CEPH_LOCK_INESTED: return &in->nestedlock;
       }
     }
 
@@ -1286,6 +1295,7 @@ void Locker::handle_lock(MLock *m)
     
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INESTED:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;
 

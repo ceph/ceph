@@ -199,6 +199,21 @@ struct FileLayout {
   __u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
 };
 
+struct nested_info_t {
+  uint64_t nested_size;       // \sum_{children}(size + nested_size)
+  utime_t  nested_ctime;      // \max_{children}(ctime, nested_ctime)
+  
+  void encode(bufferlist &bl) const {
+    ::encode(nested_size, bl);
+    ::encode(nested_ctime, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(nested_size, bl);
+    ::decode(nested_ctime, bl);
+  }
+};
+WRITE_CLASS_ENCODER(nested_info_t)
+
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
@@ -224,9 +239,8 @@ struct inode_t {
   utime_t    atime;   // file data access time.
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  // recursive accounting
-  uint64_t nested_size;       // \sum_{children}(size + nested_size)
-  utime_t  nested_ctime;      // \max_{children}(ctime, nested_ctime)
+  // dirfrag, recursive accounting
+  nested_info_t nested;   // inline summation
  
   // special stuff
   version_t version;           // auth only
@@ -252,7 +266,7 @@ static inline void encode(const inode_t &i, bufferlist &bl) {
   ::encode(i.max_size, bl);
   ::encode(i.mtime, bl);
   ::encode(i.atime, bl);
-  ::encode(i.rmtime, bl);
+  ::encode(i.nested, bl);
   ::encode(i.version, bl);
   ::encode(i.file_data_version, bl);
 }
@@ -270,7 +284,7 @@ static inline void decode(inode_t &i, bufferlist::iterator &p) {
   ::decode(i.max_size, p);
   ::decode(i.mtime, p);
   ::decode(i.atime, p);
-  ::decode(i.rmtime, p);
+  ::decode(i.nested, p);
   ::decode(i.version, p);
   ::decode(i.file_data_version, p);
 }

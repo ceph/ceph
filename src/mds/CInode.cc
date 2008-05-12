@@ -521,15 +521,16 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IDIR:
-    ::encode(inode.mtime, bl);
-    if (0) {
+    {
+      ::encode(inode.size, bl);
+      ::encode(inode.mtime, bl);
       map<frag_t,int> frag_sizes;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   ++p) 
 	if (p->second->is_auth()) {
-	  //frag_t fg = (*p)->get_frag();
-	  //frag_sizes[f] = dirfrag_size[fg];
+	  frag_t fg = (*p)->get_frag();
+	  frag_sizes[f] = dirfrag_size[fg];
 	}
       ::encode(frag_sizes, bl);
     }
@@ -540,8 +541,17 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
   
   case CEPH_LOCK_INESTED:
-    //_encode(inode.nested_ctime, bl);
-    //_encode(inode.nested_size, bl);
+    {
+      map<frag_t,nested_info_t> dfn;
+      for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	   p != dirfrags.end();
+	   ++p) 
+	if (p->second->is_auth()) {
+	  frag_t fg = (*p)->get_frag();
+	  dfn[fg] = dirfrag_nested[fg];
+	}
+      ::encode(dfn, bl);
+    }
     break;
 
   default:
@@ -552,7 +562,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 void CInode::decode_lock_state(int type, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
-  utime_t tm;
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
@@ -594,21 +603,31 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IDIR:
-    //::_decode(inode.size, p);
-    ::decode(tm, p);
-    if (inode.mtime < tm) {
-      inode.mtime = tm;
-      if (is_auth()) {
-	dout(10) << "decode_lock_state auth got mtime " << tm << " > my " << inode.mtime
-		 << ", setting dirlock updated flag on " << *this
-		 << dendl;
-	dirlock.set_updated();
-      }
-    }
-    if (0) {
+    {
+      utime_t tm;
+      uint64_t sz;
       map<frag_t,int> dfsz;
+      ::decode(sz, p);
+      ::decode(tm, p);
       ::decode(dfsz, p);
-      // hmm which to keep?
+      
+      if (is_auth()) {
+	if (tm > inode.mtime) {
+	  dout(10) << "decode_lock_state auth got mtime " << tm << " > my " << inode.mtime
+		   << ", setting dirlock updated flag on " << *this
+		   << dendl;
+	  inode.mtime = tm;
+	  dirlock.set_updated();
+	}
+	for (map<frag_t,int>::iterator p = dfsz.begin(); p != dfsz.end(); ++p) {
+	  dirfragtree.force_to_leaf(p->first);
+	  dirfrag_size[p->first] = p->second;
+	}
+      } else {
+	inode.mtime = tm;
+	inode.size = sz;
+	dirfrag_size.swap(dfsz);
+      }
     }
     break;
 
@@ -617,7 +636,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_INESTED:
-    // ***
+    {
+      map<frag_t,nested_info_t> dfn;
+      ::decode(dfn, p);
+      for (map<frag_t,nested_info_t>::iterator p = dfn.begin(); p != dfn.end(); ++p) {
+	dirfragtree.force_to_leaf(p->first);
+	dirfrag_nested[p->first] = p->second;
+      }
+    }
     break;
 
   default:
@@ -631,6 +657,9 @@ void CInode::clear_dirty_scattered(int type)
   switch (type) {
   case CEPH_LOCK_IDIR:
     xlist_dirty_inode_mtime.remove_myself();
+    break;
+  case CEPH_LOCK_INESTED:
+    assert(0); // hmm!
     break;
   default:
     assert(0);
