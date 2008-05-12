@@ -2166,7 +2166,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     }
 
     // ok!
-    
+    dout(10) << *pg << " osd" << from << " " << *it << dendl;
+
     // stray?
     bool acting = pg->is_acting(from);
     if (!acting && (*it).last_epoch_started > 0) {
