@@ -23,7 +23,7 @@ then
 fi
 
 # shared args
-ARGS="-d --bind $IP -o out --debug_ms 1"
+ARGS="-d --debug_ms 1"
 
 # monitor
 $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 20 --debug_ms 1
@@ -31,11 +31,11 @@ $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 20 --debug_ms 1
 # osds
 for osd in 0 1 2 3 
 do
- $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 40
+ $CEPH_BIN/cosd $ARGS dev/osd$osd
 done
 
 # mds
-$CEPH_BIN/cmds $ARGS --debug_mds 20
+$CEPH_BIN/cmds $ARGS
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
