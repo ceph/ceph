@@ -29,8 +29,6 @@ kernel client
   - do we need to block?
 - timeout mds session close on umount
 - deal with CAP_RDCACHE properly: invalidate cache pages?
-- what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
-  - fallback in each case (in ceph_unlink, _rename, etc.) when reply has no trace?
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?

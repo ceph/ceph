@@ -51,3 +51,8 @@ tools:
 development/debugging:
  fakesyn -- simulator with synthetic workload
  fakefuse -- simulator that mounts with fuse
+
+----
+
+see also src/README
+
