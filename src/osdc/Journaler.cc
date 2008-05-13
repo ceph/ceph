@@ -584,7 +584,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
   assert(read_buf.length() >= sizeof(s) + s);
   
   dout(10) << "try_read_entry at " << read_pos << " reading " 
-	   << read_pos << "~" << (sizeof(s)+s) << dendl;
+	   << read_pos << "~" << (sizeof(s)+s) << " (have " << read_buf.length() << ")" << dendl;
 
   // do it
   assert(bl.length() == 0);
