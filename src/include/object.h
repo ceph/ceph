@@ -28,10 +28,10 @@ using namespace __gnu_cxx;
 
 #include "encoding.h"
 
-typedef uint32_t objectrev_t;
+typedef uint64_t objectrev_t;
 
 struct object_t {
-  static const uint32_t MAXREV = 0xffffffffU;
+  static const uint64_t MAXREV = 0xffffffffffffffffULL;
 
   uint64_t ino;    // "file" identifier
   uint32_t bno;    // "block" in that "file"
@@ -39,7 +39,7 @@ struct object_t {
 
   object_t() : ino(0), bno(0), rev(0) {}
   object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}
-  object_t(uint64_t i, uint32_t b, uint32_t r) : ino(i), bno(b), rev(r) {}
+  object_t(uint64_t i, uint32_t b, uint64_t r) : ino(i), bno(b), rev(r) {}
 
   // IMPORTANT: make this match struct ceph_object ****
   object_t(const ceph_object& co) {
@@ -60,8 +60,8 @@ struct object_t {
     ::encode(rev, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u64 i;
-    __u32 b, r;
+    __u64 i, r;
+    __u32 b;
     ::decode(i, bl);
     ::decode(b, bl);
     ::decode(r, bl);

@@ -49,6 +49,7 @@ class FakeStore : public JournalingObjectStore {
   bool fake_collections;
   
   // helper fns
+  void append_oname(const pobject_t &oid, char *s);
   void get_oname(pobject_t oid, char *s);
   void get_cdir(coll_t cid, char *s);
   void get_coname(coll_t cid, pobject_t oid, char *s);

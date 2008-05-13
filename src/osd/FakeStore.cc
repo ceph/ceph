@@ -111,34 +111,40 @@ int FakeStore::statfs(struct statfs *buf)
 /* 
  * sorry, these are sentitive to the pobject_t and coll_t typing.
  */ 
+void FakeStore::append_oname(const pobject_t &oid, char *s)
+{
+  assert(sizeof(oid) == 28);
+  char *t = s + strlen(s);
+#ifdef __LP64__
+  sprintf(t, "/%04x.%04x.%016lx.%08x.%lx", 
+	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.rev);
+#else
+  sprintf(t, "/%04x.%04x.%016llx.%08x.%llx", 
+	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.rev);
+#endif
+  //parse_object(t+1);
+}
+
 void FakeStore::get_oname(pobject_t oid, char *s) 
 {
-  assert(sizeof(oid) == 24);
-#ifdef __LP64__
-  sprintf(s, "%s/objects/%04x.%04x.%016lx.%016lx", basedir.c_str(), 
-	  oid.volume, oid.rank,
-	  *((uint64_t*)&oid.oid),
-	  *(((uint64_t*)&oid.oid) + 1));
-#else
-  sprintf(s, "%s/objects/%04x.%04x.%016llx.%016llx", basedir.c_str(), 
-	  oid.volume, oid.rank,
-	  *((uint64_t*)&oid.oid),
-	  *(((uint64_t*)&oid.oid) + 1));
-#endif
+  sprintf(s, "%s/objects", basedir.c_str());
+  append_oname(oid, s);
 }
 
 pobject_t FakeStore::parse_object(char *s)
 {
   pobject_t o;
-  assert(sizeof(o) == 24);
-  //cout << "  got object " << de->d_name << std::endl;
+  assert(sizeof(o) == 28);
+  dout(0) << "  got object " << s << dendl;
   o.volume = strtoll(s, 0, 16);
   assert(s[4] == '.');
   o.rank = strtoll(s+5, 0, 16);
   assert(s[9] == '.');
-  *(((uint64_t*)&o.oid) + 0) = strtoll(s+10, 0, 16);
+  o.oid.ino = strtoll(s+10, 0, 16);
   assert(s[26] == '.');
-  *(((uint64_t*)&o.oid) + 1) = strtoll(s+27, 0, 16);
+  o.oid.bno = strtoll(s+27, 0, 16);
+  assert(s[35] == '.');
+  o.oid.rev = strtoll(s+36, 0, 16);
   dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
   return o;
 }
@@ -152,28 +158,16 @@ void FakeStore::get_cdir(coll_t cid, char *s)
 {
   assert(sizeof(cid) == 8);
 #ifdef __LP64__
-  sprintf(s, "%s/collections/%016lx", basedir.c_str(), 
-	  cid);
+  sprintf(s, "%s/collections/%016lx", basedir.c_str(), cid);
 #else
-  sprintf(s, "%s/collections/%016llx", basedir.c_str(), 
-	  cid);
+  sprintf(s, "%s/collections/%016llx", basedir.c_str(), cid);
 #endif
 }
 
 void FakeStore::get_coname(coll_t cid, pobject_t oid, char *s) 
 {
-  assert(sizeof(oid) == 24);
-#ifdef __LP64__
-  sprintf(s, "%s/collections/%016lx/%04x.%04x.%016lx.%016lx", basedir.c_str(), cid, 
-	  oid.volume, oid.rank,
-	  *((uint64_t*)&oid.oid),
-	  *(((uint64_t*)&oid.oid) + 1));
-#else
-  sprintf(s, "%s/collections/%016llx/%04x.%04x.%016llx.%016llx", basedir.c_str(), cid, 
-	  oid.volume, oid.rank,
-	  *((uint64_t*)&oid),
-	  *(((uint64_t*)&oid) + 1));
-#endif
+  get_cdir(cid, s);
+  append_oname(oid, s);
 }
 
 
