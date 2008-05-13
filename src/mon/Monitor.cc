@@ -286,6 +286,7 @@ void Monitor::dispatch(Message *m)
     case MSG_OSD_BOOT:
     case MSG_OSD_IN:
     case MSG_OSD_OUT:
+    case MSG_OSD_ALIVE:
       osdmon->dispatch(m);
       break;
 

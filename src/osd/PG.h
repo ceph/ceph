@@ -506,6 +506,7 @@ protected:
   bool        have_master_log;
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
+  bool        must_notify_mon;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
   eversion_t  oldest_update; // lowest (valid) last_update in active set
@@ -610,6 +611,7 @@ public:
     state(0),
     last_epoch_started_any(0),
     have_master_log(true),
+    must_notify_mon(false),
     stat_num_bytes(0), stat_num_blocks(0)
   { }
   virtual ~PG() { }

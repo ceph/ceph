@@ -26,6 +26,7 @@ using namespace std;
 #include "messages/MPingAck.h"
 
 #include "messages/MOSDBoot.h"
+#include "messages/MOSDAlive.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
 #include "messages/MOSDFailure.h"
@@ -163,6 +164,9 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
 
   case MSG_OSD_BOOT:
     m = new MOSDBoot();
+    break;
+  case MSG_OSD_ALIVE:
+    m = new MOSDAlive();
     break;
   case MSG_OSD_IN:
     m = new MOSDIn();

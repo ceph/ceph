@@ -366,6 +366,8 @@ md_config_t g_conf = {
 
   osd_stat_refresh_interval: .5,
 
+  osd_min_pg_size_without_alive: 2,  // smallest pg we allow to activate without telling the monitor
+
   osd_pg_bits: 6,  // bits per osd
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,

@@ -507,32 +507,131 @@ ostream& PG::Log::print(ostream& out) const
 /******* PG ***********/
 void PG::build_prior()
 {
+  
+  // FIXME: roll crashed logic into this function too!
+
+  /*
+   * We have to be careful to gracefully deal with situations like
+   * so. Say we have a power outage or something that takes out both
+   * OSDs, but the monitor doesn't mark them down in the same epoch.
+   * The history may look like
+   *
+   *  1: A B
+   *  2:   B
+   *  3:       let's say B dies for good, too (say, from the power spike) 
+   *  4: A
+   *
+   * which makes it look like B may have applied updates to the PG
+   * that we need in order to proceed.  This sucks...
+   *
+   * To minimize the risk of this happening, we CANNOT go active if
+   * any OSDs in the prior set are down until we send an MOSDAlive to
+   * the monitor such that the OSDMap sets osd_alive_thru to an epoch.
+   * Then, we have something like
+   *
+   *  1: A B
+   *  2:   B   alive_thru[B]=0
+   *  3:
+   *  4: A
+   *
+   * -> we can ignore B, bc it couldn't have gone active (alive_thru
+   *    still 0).
+   *
+   * or,
+   *
+   *  1: A B
+   *  2:   B   alive_thru[B]=0
+   *  3:   B   alive_thru[B]=0
+   *  4:   B   alive_thru[B]=2
+   *  5:   B   alive_thru[B]=2
+   *  6:
+   *  7: A    
+   *
+   * -> we must wait for B, bc it was alive through 2, and could have
+        updated the pg.
+   *
+   * If B is really dead, then an administrator can manually set
+   * alive_thru[b] < 2 to recover with possibly out-of-date pg
+   * content.
+   */
+
   // build prior set.
   prior_set.clear();
   
-  // current
+  // current nodes, of course.
   for (unsigned i=1; i<acting.size(); i++)
     prior_set.insert(acting[i]);
 
-  // and prior map(s), if OSDs are still up
-  for (epoch_t epoch = MAX(1, last_epoch_started_any);
-       epoch < osd->osdmap->get_epoch();
-       epoch++) {
-    OSDMap omap;
-    osd->get_map(epoch, omap);
+  // and prior PG mappings.  move backwards in time.
+  bool some_down = false;
+
+  must_notify_mon = false;
+
+  // for each acting set, we need to know same_since and last_epoch
+  epoch_t first_epoch = info.history.same_since;
+  epoch_t last_epoch = first_epoch - 1;
+  epoch_t stop = MAX(1, last_epoch_started_any);
+
+  dout(10) << "build_prior considering interval " << first_epoch << " down to " << stop << dendl;
+  OSDMap *nextmap = new OSDMap;
+  osd->get_map(last_epoch, *nextmap);
+
+  for (; last_epoch >= stop; last_epoch = first_epoch-1) {
+    OSDMap *lastmap = nextmap;
+    assert(last_epoch == lastmap->get_epoch());
     
     vector<int> acting;
-    omap.pg_to_acting_osds(get_pgid(), acting);
+    lastmap->pg_to_acting_osds(get_pgid(), acting);
+    
+    // calc first_epoch, first_map
+    nextmap = new OSDMap;
+    for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
+      osd->get_map(first_epoch-1, *nextmap);
+      vector<int> t;
+      nextmap->pg_to_acting_osds(get_pgid(), t);
+      if (t != acting)
+	break;
+    }
+
+    if (acting.empty()) {
+      dout(20) << "build_prior epochs " << first_epoch << "-" << last_epoch << " empty" << dendl;
+      continue;
+    }
+
+    bool maybe_went_active = 
+      lastmap->get_up_thru(acting[0]) >= first_epoch &&
+      lastmap->get_up_from(acting[0]) < first_epoch;
+
+    dout(10) << "build_prior epochs " << first_epoch << "-" << last_epoch << " " << acting
+	     << " - primary osd" << acting[0]
+	     << " up [" << lastmap->get_up_from(acting[0]) << ", " << lastmap->get_up_thru(acting[0]) << "]"
+	     << " -> " << maybe_went_active
+	     << dendl;
     
     for (unsigned i=0; i<acting.size(); i++) {
-      dout(10) << "build prior considering epoch " << epoch << " osd" << acting[i] << dendl;
-      if (osd->osdmap->is_up(acting[i]) &&  // is up now
-          acting[i] != osd->whoami)         // and is not me
-        prior_set.insert(acting[i]);
+      if (osd->osdmap->is_up(acting[i])) {  // is up now
+	if (acting[i] != osd->whoami)       // and is not me
+	  prior_set.insert(acting[i]);
+      } else {
+	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
+	must_notify_mon = true;
+
+	if (i == 0) {
+	  if (maybe_went_active) {
+	    dout(10) << "build_prior  prior primary osd" << acting[i] << " possibly went active epoch " 
+		     << (lastmap->get_up_thru(acting[i]) + 1) << dendl;
+	    some_down = true;
+	    prior_set.insert(acting[i]);
+	  }
+	}
+      }
     }
   }
 
-  dout(10) << "build_prior built " << prior_set << dendl;
+  dout(10) << "build_prior = " << prior_set
+	   << (some_down ? " some_down":"")
+	   << (must_notify_mon ? " must_notify_mon":"")
+	   << dendl;
 }
 
 void PG::adjust_prior()
@@ -816,6 +915,20 @@ void PG::peer(ObjectStore::Transaction& t,
   assert(missing.num_lost() == 0);
   assert(info.last_complete >= log.bottom || log.backlog);
 
+  // -- do need to notify the monitor?
+  if (must_notify_mon) {
+    if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_since) {
+      dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
+	       << " < same_since " << info.history.same_since
+	       << ", must notify monitor" << dendl;
+      osd->send_alive(info.history.same_since);
+      return;
+    } else {
+      dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
+	       << " >= same_since " << info.history.same_since
+	       << ", all is well" << dendl;
+    }
+  }
 
   // -- crash recovery?
   if (is_crashed()) {

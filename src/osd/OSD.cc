@@ -59,6 +59,8 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 
+#include "messages/MOSDAlive.h"
+
 #include "messages/MPGStats.h"
 
 #include "common/Logger.h"
@@ -224,6 +226,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   state = STATE_BOOTING;
 
   memset(&my_stat, 0, sizeof(my_stat));
+
+  last_sent_alive = 0;
 
   stat_ops = 0;
   stat_qlen = 0;
@@ -747,6 +751,17 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
   }
 }
 
+
+void OSD::send_alive(epoch_t need)
+{
+  if (need > last_sent_alive) {
+    last_sent_alive = osdmap->get_epoch();
+    /* AAHHH FIXME, may need to retry */
+    int mon = monmap->pick_mon();
+    messenger->send_message(new MOSDAlive(osdmap->get_epoch()),
+			    monmap->get_inst(mon));
+  }
+}
 
 // -------------------------------------
 

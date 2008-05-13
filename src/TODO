@@ -156,9 +156,6 @@ osd/rados
    -> prior_set should be <A,B>, bc B may have independently applied updates.
 
  ideas:
-  - B can't activate, until N peers know that we have epoch 2
-    - monitor can adjust failed_epoch to 1 if ALL peers in 2 confirm they didn't see B with 2
-    - bah!
   - can't activate pg when lone OSD without informing the monitor of alive_thru
     - add alive_thru map to osdmap.  any lone pg will not have activated if the osd is now down, and alive_thru does not include the given epoch.
 
@@ -166,6 +163,14 @@ osd/rados
   2:   B C
   3:
   4: A   C -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
+
+
+1: A B
+2:     C D   .. can't have gone active
+
+1: A B
+2:   B C   B in prior_set, will 
+
 
  -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
  

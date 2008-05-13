@@ -113,6 +113,10 @@ private:
   };
 
 
+  // -- alive --
+  epoch_t last_sent_alive;
+  void send_alive(epoch_t need);
+
   // -- stats --
   DecayCounter stat_oprate;
   int stat_ops;  // ops since last heartbeat

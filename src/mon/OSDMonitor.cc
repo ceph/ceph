@@ -542,7 +542,7 @@ bool OSDMonitor::preprocess_alive(MOSDAlive *m)
   int from = m->get_source().num();
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_source_inst() &&
-      osdmap.get_alive_thru(from) >= m->map_epoch) {
+      osdmap.get_up_thru(from) >= m->map_epoch) {
     // yup.
     dout(7) << "preprocess_alive e" << m->map_epoch << " dup from " << m->get_source_inst() << dendl;
     _alive(m);
@@ -558,7 +558,7 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
   int from = m->get_source().num();
 
   dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
-  pending_inc.new_alive_thru[from] = m->map_epoch;
+  pending_inc.new_up_thru[from] = m->map_epoch;
   paxos->wait_for_commit(new C_Alive(this,m ));
   return true;
 }

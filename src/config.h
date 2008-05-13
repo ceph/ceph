@@ -253,6 +253,8 @@ struct md_config_t {
   bool  osd_exclusive_caching;
   double osd_stat_refresh_interval;
 
+  int osd_min_pg_size_without_alive;
+
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;
