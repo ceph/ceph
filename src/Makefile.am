@@ -32,6 +32,9 @@ mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
 
+dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
+
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
 cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
@@ -139,7 +142,7 @@ bin_PROGRAMS = \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
-	streamtest dupstore psim \
+	streamtest dupstore psim dumpjournal \
 	test.ebofs mkfs.ebofs \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \

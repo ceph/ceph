@@ -719,6 +719,14 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
     }
   }
 
+  // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
+  for (hash_map<pg_t, list<Message*> >::iterator p = waiting_for_pg.begin();
+       p != waiting_for_pg.end();
+       p++)
+    take_waiters(p->second);
+  waiting_for_pg.clear();
+
+
   // finishers?
   finished_lock.Lock();
   if (finished.empty()) {
@@ -2512,8 +2520,10 @@ void OSD::handle_op(MOSDOp *op)
     op_queue_cond.Wait(osd_lock);
   }
 
+  // calc actual pgid
+  pg_t pgid = osdmap->raw_pg_to_pg(op->get_pg());
+
   // get and lock *pg.
-  const pg_t pgid = op->get_pg();
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
 
   logger->set("buf", buffer_total_alloc.test());

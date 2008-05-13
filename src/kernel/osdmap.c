@@ -590,8 +590,7 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	}
 
 	pgid.pg64 = 0;   /* start with it zeroed out */
-	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32),
-				     num, num_mask);
+	pgid.pg.ps = bno + crush_hash32_2(ino, ino>>32);
 	pgid.pg.preferred = preferred;
 	pgid.pg.type = fl->fl_pg_type;
 	pgid.pg.size = fl->fl_pg_size;

@@ -154,6 +154,7 @@ public:
 	<< " " << get_opname(get_op())
 	<< " " << head.oid;
     if (get_length()) out << " " << get_offset() << "~" << get_length();
+    out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
     out << ")";
   }

@@ -187,7 +187,7 @@ static inline int ceph_stable_mod(int x, int b, int bmask) {
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	__le64 ol_pgid;
+	__le64 ol_pgid;           /* raw pg, with _full_ ps precision. */
 	__le32 ol_stripe_unit;
 } __attribute__ ((packed));
 

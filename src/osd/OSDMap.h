@@ -476,26 +476,23 @@ private:
   }
 
   ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
-    int num = preferred >= 0 ? lpg_num:pg_num;
-    int num_mask = preferred >= 0 ? lpg_num_mask:pg_num_mask;
-
     // calculate ps (placement seed)
-    ps_t ps;
+    ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {
     case CEPH_OBJECT_LAYOUT_LINEAR:
-      ps = ceph_stable_mod(oid.bno + oid.ino, num, num_mask);
+      ps = oid.bno + oid.ino;
       break;
       
     case CEPH_OBJECT_LAYOUT_HASHINO:
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
       break;
 
     case CEPH_OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
       break;
 
     default:
@@ -513,15 +510,32 @@ private:
   }
 
 
+  /*
+   * map a raw pg (with full precision ps) into an actual pg, for storage
+   */
+  pg_t raw_pg_to_pg(pg_t pg) {
+    if (pg.preferred() >= 0)
+      pg.u.pg.ps = ceph_stable_mod(pg.ps(), lpg_num, lpg_num_mask);
+    else
+      pg.u.pg.ps = ceph_stable_mod(pg.ps(), pg_num, pg_num_mask);
+    return pg;
+  }
+  
+  /*
+   * map raw pg (full precision ps) into a placement ps
+   */
+  ps_t raw_pg_to_pps(pg_t pg) {
+    if (pg.preferred() >= 0)
+      return ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
+    else
+      return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+  }
+
   // pg -> (osd list)
   int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
 
-    ps_t pps;  // placement ps
-    if (pg.preferred() >= 0)
-      pps = ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
-    else
-      pps = ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+    ps_t pps = raw_pg_to_pps(pg);  // placement ps
 
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
