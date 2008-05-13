@@ -683,7 +683,8 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // retry?
-  if (req->get_retry_attempt()) {
+  if (req->get_retry_attempt() &&
+      req->get_op() != CEPH_MDS_OP_OPEN) {
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
@@ -758,12 +759,12 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // funky.
   case CEPH_MDS_OP_OPEN:
-    if ((req->head.args.open.flags & O_CREAT) == 0) {
+    if ((req->head.args.open.flags & O_CREAT) &&
+	!(req->get_retry_attempt() &&
+	  mdr->session->have_completed_request(req->get_reqid().tid)))
+      handle_client_openc(mdr);
+    else 
       handle_client_open(mdr);
-      break;
-    }
-  case CEPH_MDS_OP_CREATE:
-    handle_client_openc(mdr);
     break;
 
     // namespace.
@@ -3988,7 +3989,9 @@ void Server::handle_client_open(MDRequest *mdr)
   // hmm, check permissions or something.
 
   // O_TRUNC
-  if (flags & O_TRUNC) {
+  if ((flags & O_TRUNC) &&
+      !(req->get_retry_attempt() &&
+	mdr->session->have_completed_request(req->get_reqid().tid))) {
     assert(cur->is_auth());
 
     // xlock file size

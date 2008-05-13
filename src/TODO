@@ -25,14 +25,12 @@ userspace client
   - also needs cope with mds failures
 
 kernel client
-- direct mds requests intelligently
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
 - deal with CAP_RDCACHE properly: invalidate cache pages?
 - what happens after reconnect when we get successful reply but no trace (!) on e.g. rename, unlink, link, open+O_CREAT, etc...
   - fallback in each case (in ceph_unlink, _rename, etc.) when reply has no trace?
-  - what about open(O_WR or O_CREAT)?  pbly needs fix in mds... tho it's racey now...
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
