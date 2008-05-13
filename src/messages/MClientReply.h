@@ -108,7 +108,8 @@ struct InodeStat {
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size, nested_size;
   version_t time_warp_seq;
-  
+  nested_info_t nested;
+
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
   map<string, bufferptr> xattrs;
@@ -128,6 +129,7 @@ struct InodeStat {
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
+    nested.nested_ctime.decode_timeval(&e.nested_ctime);
     time_warp_seq = e.time_warp_seq;
     mode = e.mode;
     uid = e.uid;
@@ -136,6 +138,7 @@ struct InodeStat {
     size = e.size;
     max_size = e.max_size;
     rdev = e.rdev;
+    nested.nested_size = e.nested_size;
 
     nested_ctime.decode_timeval(&e.nested_ctime);
     nested_size = e.nested_size;
@@ -167,7 +170,7 @@ struct InodeStat {
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
     in->inode.atime.encode_timeval(&e.atime);
-    in->inode.nested_ctime.encode_timeval(&e.nested_ctime);
+    in->inode.nested.nested_ctime.encode_timeval(&e.nested_ctime);
     e.time_warp_seq = in->inode.time_warp_seq;
     e.mode = in->inode.mode;
     e.uid = in->inode.uid;
@@ -175,7 +178,7 @@ struct InodeStat {
     e.nlink = in->inode.nlink;
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
-    e.nested_size = in->inode.nested_size;
+    e.nested_size = in->inode.nested.nested_size;
     e.rdev = in->inode.rdev;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
     ::encode(e, bl);
