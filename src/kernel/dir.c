@@ -347,8 +347,20 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
 	err = ceph_mdsc_do_request(mdsc, req);
+	if (!err && req->r_reply_info.trace_numd == 0) {
+		/* no trace.  do lookup, in case we are called from create. */
+		struct dentry *d;
+		d = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL,
+				   0);
+		if (d) {
+			/* ick.  this is untested... */
+			dput(d);
+			err = -ESTALE;
+			dentry = 0;
+		}
+	}
 	ceph_mdsc_put_request(req);
-	if (err < 0)
+	if (err)
 		d_drop(dentry);
 	return err;
 }
@@ -360,7 +372,7 @@ static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
-	if (nd) {
+	if (0 && nd) {
 		BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
 		err = ceph_lookup_open(dir, dentry, nd, mode);
 		return err;
@@ -396,7 +408,7 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-	if (err < 0)
+	if (err)
 		d_drop(dentry);
 	return err;
 }
@@ -477,8 +489,11 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 	else if (req->r_reply_info.trace_numd == 0) {
 		/* no trace */
-		inc_nlink(old_dentry->d_inode);
-		d_instantiate(dentry, old_dentry->d_inode);
+		struct inode *inode = old_dentry->d_inode;
+		inc_nlink(inode);
+		atomic_inc(&inode->i_count);
+		dget(dentry);
+		d_instantiate(dentry, inode);
 	}
 	return err;
 }
@@ -515,6 +530,11 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 
 	if (err == -ENOENT)
 		dout(10, "HMMM!\n");
+	else if (req->r_reply_info.trace_numd == 0) {
+		/* no trace */
+		drop_nlink(dentry->d_inode);
+		dput(dentry);
+	}
 
 	return err;
 }
@@ -558,6 +578,12 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 		ceph_mdsc_lease_release(mdsc, new_dentry->d_inode, 0,
 					CEPH_LOCK_ILINK);
 	err = ceph_mdsc_do_request(mdsc, req);
+	if (!err && req->r_reply_info.trace_numd == 0) {
+		/* no trace */
+		if (new_dentry->d_inode)
+			dput(new_dentry);
+		d_move(old_dentry, new_dentry);
+	}
 	ceph_mdsc_put_request(req);
 	return err;
 }

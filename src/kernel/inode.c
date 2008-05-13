@@ -524,6 +524,21 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dout(10, "fill_trace reply has empty trace!\n");
 		return 0;
 	}
+	
+#if 0
+	/*
+	 * to test op resends against a recovering mds, we pretend that
+	 * write ops have no trace...
+	 */
+	if (rinfo->head->op & CEPH_MDS_OP_WRITE) {
+		dout(0, "fill_trace faking empty trace on %d %s\n",
+		     rinfo->head->op,
+		     ceph_mds_op_name(rinfo->head->op));
+		rinfo->trace_numi = 0;
+		rinfo->trace_numd = 0;
+		return 0;
+	}
+#endif
 
 	ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
 	if (dn) {
