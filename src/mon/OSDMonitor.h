@@ -79,9 +79,9 @@ private:
   bool prepare_boot(class MOSDBoot *m);
   void _booted(MOSDBoot *m);
 
-  bool preprocess_in(class MOSDIn *m);
-  bool prepare_in(class MOSDIn *m);
-  void _in(MOSDIn *m);
+  bool preprocess_alive(class MOSDAlive *m);
+  bool prepare_alive(class MOSDAlive *m);
+  void _alive(MOSDAlive *m);
 
   struct C_Booted : public Context {
     OSDMonitor *cmon;
@@ -95,12 +95,12 @@ private:
 	cmon->dispatch((Message*)m);
     }
   };
-  struct C_In : public Context {
+  struct C_Alive : public Context {
     OSDMonitor *osdmon;
-    MOSDIn *m;
-    C_In(OSDMonitor *o, MOSDIn *mm) : osdmon(o), m(mm) {}
+    MOSDAlive *m;
+    C_Alive(OSDMonitor *o, MOSDAlive *mm) : osdmon(o), m(mm) {}
     void finish(int r) {
-      osdmon->_in(m);
+      osdmon->_alive(m);
     }    
   };
   struct C_Reported : public Context {

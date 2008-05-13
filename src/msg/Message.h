@@ -30,11 +30,12 @@
 #define MSG_OSD_PING         70
 #define MSG_OSD_BOOT         71
 #define MSG_OSD_FAILURE      72
-#define MSG_OSD_IN           73
-#define MSG_OSD_OUT          74
+#define MSG_OSD_ALIVE        73
+#define MSG_OSD_IN           74
+#define MSG_OSD_OUT          75
 
-#define MSG_OSD_SUBOP        75
-#define MSG_OSD_SUBOPREPLY   76
+#define MSG_OSD_SUBOP        76
+#define MSG_OSD_SUBOPREPLY   77
 
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81

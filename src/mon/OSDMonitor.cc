@@ -25,8 +25,7 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 #include "messages/MOSDBoot.h"
-#include "messages/MOSDIn.h"
-#include "messages/MOSDOut.h"
+#include "messages/MOSDAlive.h"
 #include "messages/MMonCommand.h"
 
 #include "common/Timer.h"
@@ -273,8 +272,8 @@ bool OSDMonitor::preprocess_query(Message *m)
     return preprocess_failure((MOSDFailure*)m);
   case MSG_OSD_BOOT:
     return preprocess_boot((MOSDBoot*)m);
-  case MSG_OSD_IN:
-    return preprocess_in((MOSDIn*)m);
+  case MSG_OSD_ALIVE:
+    return preprocess_alive((MOSDAlive*)m);
     /*
   case MSG_OSD_OUT:
     return preprocess_out((MOSDOut*)m);
@@ -297,8 +296,8 @@ bool OSDMonitor::prepare_update(Message *m)
     return prepare_failure((MOSDFailure*)m);
   case MSG_OSD_BOOT:
     return prepare_boot((MOSDBoot*)m);
-  case MSG_OSD_IN:
-    return prepare_in((MOSDIn*)m);
+  case MSG_OSD_ALIVE:
+    return prepare_alive((MOSDAlive*)m);
 
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
@@ -538,38 +537,39 @@ void OSDMonitor::_booted(MOSDBoot *m)
 // -------------
 // in
 
-bool OSDMonitor::preprocess_in(MOSDIn *m)
+bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 {
   int from = m->get_source().num();
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_source_inst() &&
       osdmap.get_alive_thru(from) >= m->map_epoch) {
     // yup.
-    dout(7) << "preprocess_in e" << m->map_epoch << " dup from " << m->get_source_inst() << dendl;
-    _in(m);
+    dout(7) << "preprocess_alive e" << m->map_epoch << " dup from " << m->get_source_inst() << dendl;
+    _alive(m);
     return true;
   }
   
-  dout(10) << "preprocess_in e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
+  dout(10) << "preprocess_alive e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
   return false;
 }
 
-bool OSDMonitor::prepare_in(MOSDIn *m)
+bool OSDMonitor::prepare_alive(MOSDAlive *m)
 {
   int from = m->get_source().num();
 
-  dout(7) << "prepare_in e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
+  dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
   pending_inc.new_alive_thru[from] = m->map_epoch;
-  paxos->wait_for_commit(new C_In(this,m ));
+  paxos->wait_for_commit(new C_Alive(this,m ));
   return true;
 }
 
-void OSDMonitor::_in(MOSDIn *m)
+void OSDMonitor::_alive(MOSDAlive *m)
 {
-  dout(7) << "_in e" << m->map_epoch
+  dout(7) << "_alive e" << m->map_epoch
 	  << " from " << m->get_source_inst()
 	  << dendl;
-  mon->messenger->send_message(m, m->get_source_inst());
+  send_latest(m->get_source_inst(), m->map_epoch);
+  delete m;
 }
 
 
