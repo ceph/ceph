@@ -33,9 +33,14 @@ typedef uint64_t objectrev_t;
 struct object_t {
   static const uint64_t MAXREV = 0xffffffffffffffffULL;
 
-  uint64_t ino;    // "file" identifier
-  uint32_t bno;    // "block" in that "file"
-  objectrev_t rev; // revision.  normally ctime (as epoch).
+  union {
+    __u8 raw[20];
+    struct {
+      uint64_t ino;    // "file" identifier
+      uint32_t bno;    // "block" in that "file"
+      objectrev_t rev; // revision.  normally ctime (as epoch).
+    };
+  };
 
   object_t() : ino(0), bno(0), rev(0) {}
   object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}

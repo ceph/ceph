@@ -54,9 +54,14 @@ static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_f
 typedef __le64 ceph_ino_t;
 
 struct ceph_object {
-	__le64 ino;  /* inode "file" identifier */
-	__le32 bno;  /* "block" (object) in that "file" */
-	__le64 rev;  /* revision.  normally ctime (as epoch). */
+	union {
+		__u8 raw[20];        /* fits a sha1 hash */
+		struct {
+			__le64 ino;  /* inode "file" identifier */
+			__le32 bno;  /* "block" (object) in that "file" */
+			__le64 rev;  /* revision.  normally ctime (as epoch). */
+		};
+	};
 } __attribute__ ((packed));
 
 #define CEPH_INO_ROOT 1
