@@ -996,11 +996,9 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 
 	/* encode paths */
 	if (op == CEPH_MDS_OP_FINDINODE) {
-		derr(10,"p %p\n", p);
 		ceph_encode_32(&p, ino1);
 		memcpy(p, path1, ino1 * sizeof(struct ceph_inopath_item));
 		p += ino1 * sizeof(struct ceph_inopath_item);
-		derr(10, " p %p end %p len %d\n", p, end, (int)ino1);
 	} else {
 		ceph_encode_filepath(&p, end, ino1, path1);
 		ceph_encode_filepath(&p, end, ino2, path2);
