@@ -1359,7 +1359,8 @@ void Rank::Pipe::reader()
 
 	  // first message?
 	  if (rank.need_addr) {
-	    entity->_myinst.addr = rank.rank_addr = m->get_dest_inst().addr;
+	    rank.rank_addr = m->get_dest_inst().addr;
+	    entity->_set_myaddr(rank.rank_addr);
 	    dout(2) << "reader my rank addr is " << rank.rank_addr << dendl;
 	    rank.need_addr = false;
 	  }

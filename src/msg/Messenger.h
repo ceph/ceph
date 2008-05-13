@@ -50,6 +50,7 @@ protected:
   const entity_inst_t& get_myinst() { return _myinst; }
   
   void _set_myname(entity_name_t m) { _myinst.name = m; }
+  void _set_myaddr(entity_addr_t a) { _myinst.addr = a; }
   virtual void reset_myname(entity_name_t m) = 0;
   
   // hrmpf.
