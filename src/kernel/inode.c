@@ -505,8 +505,13 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
 }
 
 
-
-
+/*
+ * assimilate a full trace of inodes and dentries, from the root to
+ * the item relevant for this reply, into our cache.  make any dcache
+ * changes needed to properly reflect the completed operation (e.g.,
+ * call d_move).  make note of the distribution of metadata across the
+ * mds cluster.
+ */
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		    struct ceph_mds_session *session)
 {
@@ -527,8 +532,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	
 #if 0
 	/*
-	 * to test op resends against a recovering mds, we pretend that
-	 * write ops have no trace...
+	 * if we resend completed ops to a recovering mds, we get no
+	 * trace.  pretend this is the case to ensure the 'no trace'
+	 * handlers behave.
 	 */
 	if (rinfo->head->op & CEPH_MDS_OP_WRITE) {
 		dout(0, "fill_trace faking empty trace on %d %s\n",

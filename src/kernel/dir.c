@@ -372,7 +372,7 @@ static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
-	if (0 && nd) {
+	if (nd) {
 		BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
 		err = ceph_lookup_open(dir, dentry, nd, mode);
 		return err;
