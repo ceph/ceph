@@ -1421,6 +1421,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // superblock and commit
   write_superblock(t);
   store->apply_transaction(t);
+  store->sync();
 
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
