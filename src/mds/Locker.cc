@@ -3176,7 +3176,7 @@ void Locker::file_loner(FileLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  assert((in->client_caps.size() == 1) && in->mds_caps_wanted.empty());
+  assert(in->count_nonstale_caps() == 1 && in->mds_caps_wanted.empty());
   
   if (lock->get_state() == LOCK_SYNC) {
     if (in->is_replicated() ||
