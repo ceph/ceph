@@ -586,6 +586,12 @@ bool Journaler::try_read_entry(bufferlist& bl)
   dout(10) << "try_read_entry at " << read_pos << " reading " 
 	   << read_pos << "~" << (sizeof(s)+s) << " (have " << read_buf.length() << ")" << dendl;
 
+  if (s == 0) {
+    derr(0) << "try_read_entry got 0 len entry at offset " << read_pos << dendl;
+    error = -EINVAL;
+    return false;
+  }
+
   // do it
   assert(bl.length() == 0);
   read_buf.splice(0, sizeof(s));
