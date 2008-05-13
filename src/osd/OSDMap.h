@@ -90,6 +90,7 @@ public:
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_offload;
+    map<int32_t,epoch_t> new_alive_thru;
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
     
@@ -107,6 +108,7 @@ public:
       ::encode(new_up, bl);
       ::encode(new_down, bl);
       ::encode(new_offload, bl);
+      ::encode(new_alive_thru, bl);
       ::encode(new_pg_swap_primary, bl);
       ::encode(old_pg_swap_primary, bl);
     }
@@ -124,6 +126,7 @@ public:
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_offload, p);
+      ::decode(new_alive_thru, p);
       ::decode(new_pg_swap_primary, p);
       ::decode(old_pg_swap_primary, p);
     }
@@ -174,6 +177,7 @@ private:
   int32_t max_osd;
   vector<uint8_t>  osd_state;
   vector<entity_addr_t> osd_addr;
+  vector<epoch_t> osd_alive_thru;      // lower bound on _actual_ osd death.  bumped by osd before activating pgs with no replicas.
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   
  public:
@@ -232,8 +236,11 @@ private:
     int o = max_osd;
     max_osd = m;
     osd_state.resize(m);
-    for (; o<max_osd; o++) 
+    osd_alive_thru.resize(m);
+    for (; o<max_osd; o++) {
       osd_state[o] = 0;
+      osd_alive_thru[o] = 0;
+    }
     osd_addr.resize(m);
   }
 
@@ -289,7 +296,7 @@ private:
     return osd_addr[osd];
   }
   entity_inst_t get_inst(int osd) {
-    assert(have_inst(osd));
+    assert(exists(osd));
     return entity_inst_t(entity_name_t::OSD(osd),
 			 osd_addr[osd]);
   }
@@ -300,6 +307,11 @@ private:
       return true;
     } 
     return false;
+  }
+
+  epoch_t get_alive_thru(int osd) {
+    assert(exists(osd));
+    return osd_alive_thru[osd];
   }
   
   int get_any_up_osd() {
@@ -376,9 +388,13 @@ private:
     }
     for (map<int32_t,uint32_t>::iterator i = inc.new_offload.begin();
          i != inc.new_offload.end();
-         i++) {
+         i++)
       crush.set_offload(i->first, i->second);
-    }
+
+    for (map<int32_t,epoch_t>::iterator i = inc.new_alive_thru.begin();
+         i != inc.new_alive_thru.end();
+         i++)
+      osd_alive_thru[i->first] = i->second;
 
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
          i != inc.new_up.end(); 
@@ -413,6 +429,7 @@ private:
     ::encode(max_osd, blist);
     ::encode(osd_state, blist);
     ::encode(osd_addr, blist);
+    ::encode(osd_alive_thru, blist);
     ::encode(pg_swap_primary, blist);
     
     bufferlist cbl;
@@ -436,6 +453,7 @@ private:
     ::decode(max_osd, p);
     ::decode(osd_state, p);
     ::decode(osd_addr, p);
+    ::decode(osd_alive_thru, p);
     ::decode(pg_swap_primary, p);
     
     bufferlist cbl;

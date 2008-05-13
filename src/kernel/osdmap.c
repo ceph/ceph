@@ -345,6 +345,8 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_copy(p, map->osd_state, map->max_osd);
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_addr, map->max_osd*sizeof(*map->osd_addr));
+	*p += 4; /* skip length field (should match max) */
+	*p += map->max_osd * sizeof(u32); /* skip osd_alive_thru */
 
 	/* pg primary swapping */
 	ceph_decode_32_safe(p, end, len, bad);
@@ -489,6 +491,10 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		if (osd < map->max_osd)
 			map->crush->device_offload[osd] = off;
 	}
+
+	/* skip new_alive_thru */
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * sizeof(u32);
 
 	/* skip old/new pg_swap stuff */
 	ceph_decode_32_safe(p, end, len, bad);
