@@ -1778,7 +1778,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   sleep(5);
   // END temporary hack piece 2 --Esteban
 #endif
-
+  client->fsync(fd, true);
   client->close(fd);
   delete[] buf;
 

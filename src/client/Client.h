@@ -164,10 +164,12 @@ class Inode {
   // for sync i/o mode
   int       sync_reads;   // sync reads in progress
   int       sync_writes;  // sync writes in progress
+  int       uncommitted_writes;  // sync writes missing commits
 
   list<Cond*>       waitfor_write;
   list<Cond*>       waitfor_read;
   list<Cond*>       waitfor_lazy;
+  list<Cond*>       waitfor_commit;
   list<Context*>    waitfor_no_read, waitfor_no_write;
 
   // <hack>
@@ -208,7 +210,7 @@ class Inode {
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
     fc(_oc, ino, layout),
-    sync_reads(0), sync_writes(0),
+    sync_reads(0), sync_writes(0), uncommitted_writes(0),
     hack_balance_reads(false)
   {
     inode.ino = ino;
@@ -531,7 +533,7 @@ public:
   int    unsafe_sync_write;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
-  void hack_sync_write_safe();
+  void sync_write_commit(Inode *in);
 
 protected:
   Filer                 *filer;     

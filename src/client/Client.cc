@@ -3077,29 +3077,43 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 
 
 /*
- * hack -- 
- *  until we properly implement synchronous writes wrt buffer cache,
- *  make sure we delay shutdown until they're all safe on disk!
+ * we keep count of uncommitted sync writes on the inode, so that
+ * fsync can DDRT.
  */
-class C_Client_HackUnsafe : public Context {
+class C_Client_SyncCommit : public Context {
   Client *cl;
+  Inode *in;
 public:
-  C_Client_HackUnsafe(Client *c) : cl(c) {}
+  C_Client_SyncCommit(Client *c, Inode *i) : cl(c), in(i) {}
   void finish(int) {
-    cl->hack_sync_write_safe();
+    cl->sync_write_commit(in);
   }
 };
 
-void Client::hack_sync_write_safe()
+void Client::sync_write_commit(Inode *in)
 {
   client_lock.Lock();
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
-  dout(15) << "hack_sync_write_safe unsafe_sync_write = " << unsafe_sync_write << dendl;
+  in->uncommitted_writes--;
+
+  if (in->uncommitted_writes == 0) {
+    dout(15) << "sync_write_commit all sync writes committed on ino " << in->inode.ino << dendl;
+    for (list<Cond*>::iterator p = in->waitfor_commit.begin();
+	 p != in->waitfor_commit.end();
+	 p++)
+      (*p)->Signal();
+    in->waitfor_commit.clear();
+  }
+
+  dout(15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
-    dout(10) << "hack_sync_write_safe -- no more unsafe writes, unmount can proceed" << dendl;
+    dout(10) << "sync_write_comit -- no more unsafe writes, unmount can proceed" << dendl;
     mount_cond.Signal();
   }
+
+  put_inode(in);
+
   client_lock.Unlock();
 }
 
@@ -3175,11 +3189,17 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       cond.Wait(client_lock);
     }
 
+    // avoid livelock with fsync
+    if (in->uncommitted_writes > 0 &&
+	!in->waitfor_commit.empty())
+      _fsync(f, true);
+
     // prepare write
     Cond cond;
     bool done = false;
-    C_Cond *onfinish = new C_Cond(&cond, &done);
-    C_Client_HackUnsafe *onsafe = new C_Client_HackUnsafe(this);
+    Context *onfinish = new C_Cond(&cond, &done);
+    in->get();
+    Context *onsafe = new C_Client_SyncCommit(this, in);
     unsafe_sync_write++;
     in->sync_writes++;
     
@@ -3310,13 +3330,23 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     dout(0) << "fsync - not syncing metadata yet.. implement me" << dendl;
   }
 
-  // data?
-  Cond cond;
-  bool done = false;
-  if (!objectcacher->commit_set(in->ino(),
-                                new C_Cond(&cond, &done))) {
-    // wait for callback
-    while (!done) cond.Wait(client_lock);
+  if (g_conf.client_oc) {
+    // data?
+    Cond cond;
+    bool done = false;
+    if (!objectcacher->commit_set(in->ino(),
+				  new C_Cond(&cond, &done))) {
+      // wait for callback
+      while (!done) cond.Wait(client_lock);
+    }
+  } else {
+    while (in->uncommitted_writes > 0) {
+      Cond cond;
+      dout(10) << "ino " << in->inode.ino << " has " << in->uncommitted_writes << " uncommitted, waiting" << dendl;
+      in->waitfor_commit.push_back(&cond);
+      cond.Wait(client_lock);
+    }    
+    dout(10) << "ino " << in->inode.ino << " has no uncommitted writes" << dendl;
   }
   return r;
 }
