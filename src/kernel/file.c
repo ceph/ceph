@@ -74,8 +74,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct dentry *dentry = list_entry(inode->i_dentry.next, struct dentry,
-					   d_alias);
+	struct dentry *dentry = d_find_alias(inode);
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	int err;
