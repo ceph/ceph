@@ -307,7 +307,7 @@ md_config_t g_conf = {
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
   mds_bal_interval: 10,           // seconds
-  mds_bal_fragment_interval: 2,      // seconds
+  mds_bal_fragment_interval: -1,      // seconds
   mds_bal_idle_threshold: 0, //.1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
@@ -790,6 +790,9 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.mds_bal_merge_rd = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_bal_merge_wr") == 0) 
       g_conf.mds_bal_merge_wr = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--mds_bal_fragment_interval") == 0) 
+      g_conf.mds_bal_fragment_interval = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_bal_mode") == 0) 
       g_conf.mds_bal_mode = atoi(args[++i]);
