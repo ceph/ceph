@@ -705,8 +705,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		else
 			derr(10, "sloppy tailing dentry %p, not doing lease\n",
 			     dn);
-		if (d_unhashed(dn))
-			d_rehash(dn);
 
 		err = ceph_fill_inode(in,
 				      &rinfo->trace_in[d+1],
@@ -1811,18 +1809,18 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		 * the ino directly.  (if its unhashed and we don't have a 
 		 * cap, we may be screwed anyway.)
 		 */
-		struct inode *inode = dentry->d_inode;
-		struct dentry *ret;
 		int want_inode = 0;
+		struct dentry *ret;
 		if (d_unhashed(dentry)) {
-			if (ceph_get_cap_mds(ceph_inode(inode)) >= 0)
+			if (ceph_get_cap_mds(dentry->d_inode) >= 0)
 				want_inode = 1;
 			else
 				derr(10, "WARNING: getattr on unhashed cap-less"
 				     " dentry %p %.*s\n", dentry,
 				     dentry->d_name.len, dentry->d_name.name);
 		}
-		ret = ceph_do_lookup(inode->i_sb, dentry, mask, want_inode);
+		ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
+				     want_inode);
 		if (IS_ERR(ret))
 			return PTR_ERR(ret);
 		if (ret)
