@@ -3067,12 +3067,10 @@ void Locker::file_lock(FileLock *lock)
       issue_caps(in);
     } else {
       //assert(issued);  // ??? -sage 2/19/06
-      if (issued) {
-        // change lock
-        lock->set_state(LOCK_GLOCKM);
-	lock->get_parent()->auth_pin();
-        
+      lock->set_state(LOCK_GLOCKM);
+      if (issued & ~lock->caps_allowed()) {
         // call back caps
+	lock->get_parent()->auth_pin();
         issue_caps(in);
       } else {
         lock->set_state(LOCK_LOCK);
