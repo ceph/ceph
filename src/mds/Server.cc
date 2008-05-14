@@ -461,6 +461,7 @@ void Server::client_reconnect_failure(int from)
   dout(5) << "client_reconnect_failure on client" << from << dendl;
   if (mds->is_reconnect() &&
       client_reconnect_gather.count(from)) {
+    failed_reconnects++;
     client_reconnect_gather.erase(from);
     if (client_reconnect_gather.empty()) 
       reconnect_gather_finish();
@@ -469,7 +470,7 @@ void Server::client_reconnect_failure(int from)
 
 void Server::reconnect_gather_finish()
 {
-  dout(7) << "reconnect_gather_finish" << dendl;
+  dout(7) << "reconnect_gather_finish.  failed on " << failed_reconnects << " clients" << dendl;
   mds->reconnect_done();
 }
 
@@ -482,10 +483,12 @@ void Server::reconnect_tick()
     dout(10) << "reconnect timed out" << dendl;
     for (set<int>::iterator p = client_reconnect_gather.begin();
 	 p != client_reconnect_gather.end();
-	 p++) 
+	 p++) {
+      failed_reconnects++;
       dout(1) << "reconnect gave up on "
 	      << mds->sessionmap.get_inst(entity_name_t::CLIENT(*p))
 	      << dendl;
+    }
     client_reconnect_gather.clear();
     reconnect_gather_finish();
   }

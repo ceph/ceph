@@ -34,11 +34,14 @@ class Server {
   Logger *logger;
 
 public:
+  int failed_reconnects;
+
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
     messenger(mds->messenger),
-    logger(0) {
+    logger(0),
+    failed_reconnects(0) {
   }
   ~Server() {
     delete logger;

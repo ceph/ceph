@@ -1259,7 +1259,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_t oid(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
-      off_t size;
+      __u64 size;
       client->objecter->stat(oid, &size, layout, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();

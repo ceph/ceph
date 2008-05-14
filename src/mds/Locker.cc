@@ -804,26 +804,26 @@ public:
 };
 
 
-void Locker::check_inode_max_size(CInode *in)
+bool Locker::check_inode_max_size(CInode *in)
 {
   assert(in->is_auth());
   if (!in->filelock.can_wrlock()) {
     // try again later
     in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
     dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
-    return;    
+    return false;    
   }
 
   inode_t *latest = in->get_projected_inode();
-  uint64_t new_max;
-  if (!in->is_any_caps())
+  uint64_t new_max = latest->max_size;
+
+  if ((in->get_caps_wanted() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
     new_max = 0;
   else if ((latest->size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-  else
-    return;  // nothing.
-  if (new_max == latest->max_size)
-    return;  // no change.
+  
+  if (new_max == latest->max_size)// && !force_journal)
+    return false;  // no change.
 
   dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
 	   << " on " << *in << dendl;
@@ -839,6 +839,7 @@ void Locker::check_inode_max_size(CInode *in)
   ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
   file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+  return true;
 }
 
 

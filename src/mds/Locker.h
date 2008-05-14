@@ -196,7 +196,9 @@ protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
   void file_update_finish(CInode *in, LogSegment *ls, bool share);
-  void check_inode_max_size(CInode *in);
+public:
+  bool check_inode_max_size(CInode *in);
+private:
   void share_inode_max_size(CInode *in);
 
   friend class C_MDL_CheckMaxSize;

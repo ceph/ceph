@@ -112,7 +112,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   // probe the log
   state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
-  filer.probe_fwd(inode, h.write_pos, &fin->end, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+  filer.probe(inode, h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_probe_end(int r, __s64 end)

@@ -96,13 +96,13 @@ class Objecter {
   class OSDStat : public OSDOp {
   public:
     tid_t tid;
-    off_t *size;  // where the size goes.
+    __u64 *size;  // where the size goes.
     int flags;
     Context *onfinish;
-    OSDStat(off_t *s, int f) : tid(0), size(s), flags(f), onfinish(0) { }
+    OSDStat(__u64 *s, int f) : tid(0), size(s), flags(f), onfinish(0) { }
   };
 
-  OSDStat *prepare_stat(off_t *s, int f) {
+  OSDStat *prepare_stat(__u64 *s, int f) {
     return new OSDStat(s, f);
   }
 
@@ -235,13 +235,13 @@ class Objecter {
   tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
 
   // even lazier
-  tid_t read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags,
+  tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags,
              Context *onfinish);
-  tid_t write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
+  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
               Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, off_t off, size_t len, ceph_object_layout ol, int flags,
+  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, int flags,
              Context *onack, Context *oncommit);
-  tid_t stat(object_t oid, off_t *size, ceph_object_layout ol, int flags, Context *onfinish);
+  tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish);
   
   tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
 

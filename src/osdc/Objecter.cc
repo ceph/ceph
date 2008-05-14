@@ -336,7 +336,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, off_t *size, ceph_object_layout ol, int flags, Context *onfinish)
+tid_t Objecter::stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish)
 {
   OSDStat *st = prepare_stat(size, flags);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
@@ -429,7 +429,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 
   // ok!
   if (m->get_result() < 0) {
-    *st->size = -1;
+    *st->size = 0;
   } else {
     *st->size = m->get_length();
   }
@@ -451,7 +451,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
+tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
                      Context *onfinish)
 {
   OSDRead *rd = prepare_read(bl, flags);
@@ -599,7 +599,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
       rd->read_data[m->get_oid()]->claim( m->get_data() );
 
       // map extents back into buffer
-      map<off_t, bufferlist*> by_off;  // buffer offset -> bufferlist
+      map<__u64, bufferlist*> by_off;  // buffer offset -> bufferlist
 
       // for each object extent...
       for (list<ObjectExtent>::iterator eit = rd->extents.begin();
@@ -647,11 +647,11 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
       }
 
       // sort and string bits together
-      for (map<off_t, bufferlist*>::iterator it = by_off.begin();
+      for (map<__u64, bufferlist*>::iterator it = by_off.begin();
            it != by_off.end();
            it++) {
         assert(it->second->length());
-        if (it->first < (off_t)bytes_read) {
+        if (it->first < (__u64)bytes_read) {
           dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << dendl;
           rd->bl->claim_append(*(it->second));
         } else {
@@ -708,7 +708,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
+tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
   OSDWrite *wr = prepare_write(bl, flags);
@@ -722,7 +722,7 @@ tid_t Objecter::write(object_t oid, off_t off, size_t len, ceph_object_layout ol
 
 // zero
 
-tid_t Objecter::zero(object_t oid, off_t off, size_t len, ceph_object_layout ol, int flags, 
+tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, int flags, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *z = prepare_modify(CEPH_OSD_OP_ZERO, flags);
