@@ -969,9 +969,15 @@ int Rank::Pipe::connect()
   }
   dout(20) << "connect read peer addr " << paddr << " on socket " << newsd << dendl;
   if (!peer_addr.is_local_to(paddr)) {
-    dout(0) << "connect peer identifies itself as " 
-	    << paddr << "... wrong node!" << dendl;
-    goto fail;
+    if (paddr.ipaddr.sin_addr.s_addr == 0 &&
+	peer_addr.ipaddr.sin_port == paddr.ipaddr.sin_port) {
+      dout(0) << "connect claims to be " 
+	      << paddr << " not " << peer_addr << " - presumably this is the same node!" << dendl;
+    } else {
+      dout(0) << "connect claims to be " 
+	      << paddr << " not " << peer_addr << " - wrong node!" << dendl;
+      goto fail;
+    }
   }
 
   // identify myself, and send initial cseq
