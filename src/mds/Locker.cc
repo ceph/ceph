@@ -3024,74 +3024,34 @@ void Locker::file_lock(FileLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
+  // gather?
+  switch (lock->get_state()) {
+  case LOCK_SYNC: lock->set_state(LOCK_GLOCKR); break;
+  case LOCK_MIXED: lock->set_state(LOCK_GLOCKM); break;
+  case LOCK_LONER: lock->set_state(LOCK_GLOCKL); break;
+  default: assert(0);
+  }
+
+  int gather = 0;
+  if (in->is_replicated()) {
+    send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    gather++;
+  }
+  if (lock->get_num_client_lease()) {
+    revoke_client_leases(lock);
+    gather++;
+  }
   int issued = in->get_caps_issued();
-
-  if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated() ||
-	lock->get_num_client_lease()) {
-      // bcast to replicas
-      send_lock_message(lock, LOCK_AC_LOCK);
-      lock->init_gather();
-      revoke_client_leases(lock);
-      
-      // change lock
-      lock->set_state(LOCK_GLOCKR);
-      lock->get_parent()->auth_pin();
-
-      // call back caps
-      if (issued & ~lock->caps_allowed()) 
-        issue_caps(in);
-    } else {
-      lock->set_state(LOCK_GLOCKR);
-      if (issued & ~lock->caps_allowed()) {
-        // call back caps
-	lock->get_parent()->auth_pin();
-        issue_caps(in);
-      } else {
-        lock->set_state(LOCK_LOCK);
-      }
-    }
+  if (issued & ~lock->caps_allowed()) {
+    issue_caps(in);
+    gather++;
   }
 
-  else if (lock->get_state() == LOCK_MIXED) {
-    if (in->is_replicated()) {
-      // bcast to replicas
-      send_lock_message(lock, LOCK_AC_LOCK);
-      lock->init_gather();
-
-      // change lock
-      lock->set_state(LOCK_GLOCKM);
-      lock->get_parent()->auth_pin();
-      
-      // call back caps
-      issue_caps(in);
-    } else {
-      //assert(issued);  // ??? -sage 2/19/06
-      lock->set_state(LOCK_GLOCKM);
-      if (issued & ~lock->caps_allowed()) {
-        // call back caps
-	lock->get_parent()->auth_pin();
-        issue_caps(in);
-      } else {
-        lock->set_state(LOCK_LOCK);
-      }
-    }
-      
-  }
-  else if (lock->get_state() == LOCK_LONER) {
-    if (issued & CEPH_CAP_WR) {
-      // change lock
-      lock->set_state(LOCK_GLOCKL);
-      lock->get_parent()->auth_pin();
-
-      // call back caps
-      issue_caps(in);
-    } else {
-      lock->set_state(LOCK_LOCK);
-    }
-  }
-  else 
-    assert(0); // wtf.
+  if (gather)
+    lock->get_parent()->auth_pin();
+  else
+    lock->set_state(LOCK_LOCK);
 }
 
 
@@ -3103,32 +3063,7 @@ void Locker::file_mixed(FileLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  int issued = in->get_caps_issued();
-
-  if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated() ||
-	lock->get_num_client_lease()) {
-      // bcast to replicas
-      send_lock_message(lock, LOCK_AC_MIXED);
-      revoke_client_leases(lock);
-      lock->init_gather();
-    
-      lock->set_state(LOCK_GMIXEDR);
-      lock->get_parent()->auth_pin();
-      
-      issue_caps(in);
-    } else {
-      if (issued) {
-        lock->set_state(LOCK_GMIXEDR);
-	lock->get_parent()->auth_pin();
-	issue_caps(in);
-      } else {
-        lock->set_state(LOCK_MIXED);
-      }
-    }
-  }
-
-  else if (lock->get_state() == LOCK_LOCK) {
+  if (lock->get_state() == LOCK_LOCK) {
     if (in->is_replicated()) {
       // data
       bufferlist softdata;
@@ -3141,28 +3076,37 @@ void Locker::file_mixed(FileLock *lock)
     // change lock
     lock->set_state(LOCK_MIXED);
     issue_caps(in);
-  }
-
-  else if (lock->get_state() == LOCK_LONER) {
-    if (issued & CEPH_CAP_WRBUFFER) {
-      // gather up WRBUFFER caps
-      lock->set_state(LOCK_GMIXEDL);
-      lock->get_parent()->auth_pin();
-      issue_caps(in);
+  } else {
+    // gather?
+    switch (lock->get_state()) {
+    case LOCK_SYNC: lock->set_state(LOCK_GMIXEDR); break;
+    case LOCK_LONER: lock->set_state(LOCK_GMIXEDL); break;
+    default: assert(0);
     }
-    else if (in->is_replicated()) {
-      // bcast to replicas
+
+    int gather = 0;
+    if (in->is_replicated()) {
       send_lock_message(lock, LOCK_AC_MIXED);
-      lock->set_state(LOCK_MIXED);
+      lock->init_gather();
+      gather++;
+    }
+    if (lock->get_num_client_lease()) {
+      revoke_client_leases(lock);
+      gather++;
+    }
+    int issued = in->get_caps_issued();
+    if (issued & ~lock->caps_allowed()) {
       issue_caps(in);
-    } else {
+      gather++;
+    }
+
+    if (gather)
+      lock->get_parent()->auth_pin();
+    else {
       lock->set_state(LOCK_MIXED);
       issue_caps(in);
     }
   }
-
-  else 
-    assert(0); // wtf.
 }
 
 
@@ -3176,47 +3120,35 @@ void Locker::file_loner(FileLock *lock)
 
   assert(in->count_nonstale_caps() == 1 && in->mds_caps_wanted.empty());
   
-  if (lock->get_state() == LOCK_SYNC) {
-    if (in->is_replicated() ||
-	lock->get_num_client_lease()) {
-      // bcast to replicas
-      send_lock_message(lock, LOCK_AC_LOCK);
-      revoke_client_leases(lock);
-      lock->init_gather();
-      
-      // change lock
-      lock->set_state(LOCK_GLONERR);
-      lock->get_parent()->auth_pin();
-    } else {
-      // only one guy with file open, who gets it all, so
-      lock->set_state(LOCK_LONER);
-      issue_caps(in);
-    }
-  }
-
-  else if (lock->get_state() == LOCK_LOCK) {
+  if (lock->get_state() == LOCK_LOCK) {
     // change lock.  ignore replicas; they don't know about LONER.
     lock->set_state(LOCK_LONER);
     issue_caps(in);
-  }
+  } else {
+    switch (lock->get_state()) {
+    case LOCK_SYNC: lock->set_state(LOCK_GLONERR); break;
+    case LOCK_MIXED: lock->set_state(LOCK_GLONERM); break;
+    default: assert(0);
+    }
+    int gather = 0;
 
-  else if (lock->get_state() == LOCK_MIXED) {
     if (in->is_replicated()) {
-      // bcast to replicas
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
+      gather++;
+    }
+    if (lock->get_num_client_lease()) {
+      revoke_client_leases(lock);
+      gather++;
+    }
       
-      // change lock
-      lock->set_state(LOCK_GLONERM);
+    if (gather)
       lock->get_parent()->auth_pin();
-    } else {
+    else {
       lock->set_state(LOCK_LONER);
       issue_caps(in);
     }
   }
-
-  else 
-    assert(0);
 }
 
 
