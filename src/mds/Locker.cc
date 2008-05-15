@@ -951,7 +951,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   bool dirty_mtime = false;
   bool dirty_ctime = false;
   bool dirty_size = false;
-  if (had_or_has_wr) {
+  if (had_or_has_wr || excl) {
     if (mtime > latest->mtime || (excl && mtime != latest->mtime)) 
       dirty_mtime = true;
     if (ctime > latest->ctime)
