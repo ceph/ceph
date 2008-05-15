@@ -749,12 +749,8 @@ protected:
   void handle_file_caps(class MClientFileCaps *m);
   void check_caps(Inode *in);
   void put_cap_ref(Inode *in, int cap);
-
-
-  void implemented_caps(class MClientFileCaps *m, Inode *in);
-  void release_caps(Inode *in, int retain=0);
-
-
+  void _flush(Inode *in);
+  void _flushed(Inode *in);
 
   void close_release(Inode *in);
   void close_safe(Inode *in);
