@@ -220,15 +220,6 @@ int FileCache::read(off_t offset, size_t size, bufferlist& blist, Mutex& client_
 
 void FileCache::write(off_t offset, size_t size, bufferlist& blist, Mutex& client_lock)
 {
-  // can i write
-  while ((latest_caps & CEPH_CAP_WR) == 0) {
-    dout(10) << "write doesn't have WR cap, blocking" << dendl;
-    Cond c;
-    waitfor_write.insert(&c);
-    c.Wait(client_lock);
-    waitfor_write.erase(&c);
-  }
-
   // inc writing counter
   num_writing++;
 

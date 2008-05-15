@@ -127,9 +127,10 @@ class Dir {
 
 class InodeCap {
  public:
-  int  caps;
+  unsigned issued;
+  unsigned implemented;
   unsigned seq;
-  InodeCap() : caps(0), seq(0) {}
+  InodeCap() : issued(0), implemented(0), seq(0) {}
 };
 
 
@@ -148,7 +149,9 @@ class Inode {
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
+  int open_by_mode[CEPH_FILE_MODE_NUM];
+  map<int,int> cap_refs;
+
   __u64     wanted_max_size, requested_max_size;
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
@@ -162,10 +165,6 @@ class Inode {
   // for caching i/o mode
   FileCache fc;
 
-  // for sync i/o mode
-  int       sync_reads;   // sync reads in progress
-  int       sync_writes;  // sync writes in progress
-  int       uncommitted_writes;  // sync writes missing commits
 
   list<Cond*>       waitfor_write;
   list<Cond*>       waitfor_read;
@@ -207,14 +206,13 @@ class Inode {
     //inode(_inode),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    num_open_rd(0), num_open_wr(0), num_open_lazy(0),
     wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
     fc(_oc, ino, layout),
-    sync_reads(0), sync_writes(0), uncommitted_writes(0),
     hack_balance_reads(false)
   {
+    memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
     inode.ino = ino;
   }
   ~Inode() {
@@ -225,34 +223,60 @@ class Inode {
 
   bool is_dir() { return inode.is_dir(); }
 
-  int file_caps() {
+
+  // CAPS --------
+  void get_open_ref(int mode) {
+    open_by_mode[mode]++;
+  }
+  bool put_open_ref(int mode) {
+    if (--open_by_mode[mode] == 0)
+      return true;
+    return false;
+  }
+
+  void get_cap_ref(int cap);
+  bool put_cap_ref(int cap);
+
+  int caps_issued() {
     int c = 0;
     for (map<int,InodeCap>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second.caps;
+      c |= it->second.issued;
     for (map<int,InodeCap>::iterator it = stale_caps.begin();
          it != stale_caps.end();
          it++)
-      c |= it->second.caps;
+      c |= it->second.issued;
     return c;
   }
 
-  int file_caps_wanted() {
+  int caps_used() {
     int w = 0;
-    if (num_open_rd) w |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
-    if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
-    if (num_open_lazy) w |= CEPH_CAP_LAZYIO;
-    if (fc.is_dirty()) w |= CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
-    if (fc.is_cached()) w |= CEPH_CAP_RDCACHE;
+    for (map<int,int>::iterator p = cap_refs.begin();
+	 p != cap_refs.end();
+	 p++)
+      w |= p->first;
     return w;
+  }
+  int caps_file_wanted() {
+    int want = 0;
+    for (int mode = 0; mode < 4; mode++)
+      if (open_by_mode[mode])
+	want |= ceph_caps_for_mode(mode);
+    return want;
+  }
+  int caps_wanted() {
+    int want = caps_file_wanted() | caps_used();
+    if (want & CEPH_CAP_WRBUFFER)
+      want |= CEPH_CAP_EXCL;
+    return want;
   }
 
   int get_effective_lease_mask(utime_t now) {
     int havemask = 0;
     if (now < lease_ttl && lease_mds >= 0)
       havemask |= lease_mask;
-    if (file_caps() & CEPH_CAP_EXCL) 
+    if (caps_issued() & CEPH_CAP_EXCL) 
       havemask |= CEPH_LOCK_ICONTENT;
     if (havemask & CEPH_LOCK_ICONTENT)
       havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
@@ -261,9 +285,9 @@ class Inode {
 
   bool have_valid_size() {
     // RD+RDCACHE or WR+WRBUFFER => valid size
-    if ((file_caps() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
+    if ((caps_issued() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
       return true;
-    if ((file_caps() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
+    if ((caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
       return true;
     // otherwise, look for lease or EXCL...
     if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_ICONTENT)
@@ -271,17 +295,7 @@ class Inode {
     return false;
   }
 
-  void add_open(int cmode) {
-    if (cmode & CEPH_FILE_MODE_RD) num_open_rd++;
-    if (cmode & CEPH_FILE_MODE_WR) num_open_wr++;
-    if (cmode & CEPH_FILE_MODE_LAZY) num_open_lazy++;
-  }
-  void sub_open(int cmode) {
-    if (cmode & CEPH_FILE_MODE_RD) num_open_rd--;
-    if (cmode & CEPH_FILE_MODE_WR) num_open_wr--;
-    if (cmode & CEPH_FILE_MODE_LAZY) num_open_lazy--;
-  }
-  
+ 
   int authority(const string& dname) {
     if (!dirfragtree.empty()) {
       __gnu_cxx::hash<string> H;
@@ -728,9 +742,14 @@ protected:
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);
+  void check_caps(Inode *in);
+  void put_cap_ref(Inode *in, int cap);
+
+
   void implemented_caps(class MClientFileCaps *m, Inode *in);
   void release_caps(Inode *in, int retain=0);
-  void update_caps_wanted(Inode *in);
+
+
 
   void close_release(Inode *in);
   void close_safe(Inode *in);

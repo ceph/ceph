@@ -456,7 +456,7 @@ class ObjectCacher {
   int writex(Objecter::OSDWrite *wr, inodeno_t ino);
 
   // write blocking
-  void wait_for_write(size_t len, Mutex& lock);
+  bool wait_for_write(size_t len, Mutex& lock);
   
   // blocking.  atomic+sync.
   int atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock);

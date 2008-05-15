@@ -915,8 +915,9 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
  
 
 // blocking wait for write.
-void ObjectCacher::wait_for_write(size_t len, Mutex& lock)
+bool ObjectCacher::wait_for_write(size_t len, Mutex& lock)
 {
+  int blocked = 0;
   while (get_stat_dirty() + get_stat_tx() >= g_conf.client_oc_max_dirty) {
     dout(10) << "wait_for_write waiting on " << len << ", dirty|tx " 
 	     << (get_stat_dirty() + get_stat_tx()) 
@@ -926,8 +927,10 @@ void ObjectCacher::wait_for_write(size_t len, Mutex& lock)
     stat_waiter++;
     stat_cond.Wait(lock);
     stat_waiter--;
+    blocked++;
     dout(10) << "wait_for_write woke up" << dendl;
   }
+  return blocked;
 }
 
 void ObjectCacher::flusher_entry()
