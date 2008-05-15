@@ -35,7 +35,7 @@
 #include "common/Mutex.h"
 #include "common/Timer.h"
 
-#include "FileCache.h"
+//#include "FileCache.h"
 
 
 // stl
@@ -163,10 +163,6 @@ class Inode {
   fragtree_t dirfragtree;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
-  // for caching i/o mode
-  FileCache fc;
-
-
   list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
 
@@ -200,14 +196,13 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(inodeno_t ino, ceph_file_layout *layout, ObjectCacher *_oc) : 
+  Inode(inodeno_t ino, ceph_file_layout *layout) : 
     //inode(_inode),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
-    fc(_oc, ino, layout),
     hack_balance_reads(false)
   {
     //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
@@ -749,8 +744,10 @@ protected:
   void handle_file_caps(class MClientFileCaps *m);
   void check_caps(Inode *in);
   void put_cap_ref(Inode *in, int cap);
-  void _flush(Inode *in);
-  void _flushed(Inode *in);
+
+  void _release(Inode *in, bool checkafter=true);
+  void _flush(Inode *in, bool checkafter=true);
+  void _flushed(Inode *in, bool checkafter);
 
   void close_release(Inode *in);
   void close_safe(Inode *in);

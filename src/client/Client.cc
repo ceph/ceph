@@ -77,20 +77,6 @@ Logger  *client_logger = 0;
 
 
 
-class C_Client_CloseRelease : public Context {
-  Client *cl;
-  Inode *in;
-public:
-  C_Client_CloseRelease(Client *c, Inode *i) : cl(c), in(i) {
-    in->get();
-  }
-  void finish(int) {
-    cl->close_release(in);
-  }
-};
-
-
-
 ostream& operator<<(ostream &out, Inode &in)
 {
   out << in.inode.ino << "("
@@ -440,7 +426,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   }
 
   if (!dn) {
-    Inode *in = new Inode(ist->ino, &ist->layout, objectcacher);
+    Inode *in = new Inode(ist->ino, &ist->layout);
     inode_map[ist->ino] = in;
     dn = link(dir, dname, in);
     dout(12) << " new dentry+node with ino " << ist->ino << dendl;
@@ -551,7 +537,7 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   Inode *curi = 0;
   inodeno_t ino = ist[0].ino;
   if (!root && ino == 1) {
-    curi = root = new Inode(ino, &ist[0].layout, objectcacher);
+    curi = root = new Inode(ino, &ist[0].layout);
     dout(10) << "insert_trace new root is " << root << dendl;
     inode_map[ino] = root;
     root->dir_auth = 0;
@@ -1408,31 +1394,56 @@ void Client::signal_cond_list(list<Cond*>& ls)
 
 // flush dirty data (from objectcache)
 
+void Client::_release(Inode *in, bool checkafter)
+{
+  if (in->cap_refs[CEPH_CAP_RDCACHE]) {
+    objectcacher->release_set(in->inode.ino);
+    if (checkafter)
+      put_cap_ref(in, CEPH_CAP_RDCACHE);
+    else 
+      in->put_cap_ref(CEPH_CAP_RDCACHE);
+  }
+}
+
 struct C_Flush : public Context {
   Client *client;
   Inode *in;
-  C_Flush(Client *c, Inode *i) : client(c), in(i) {}
+  bool checkafter;
+  C_Flush(Client *c, Inode *i, bool ch) : client(c), in(i), checkafter(ch) {}
   void finish(int r) {
-    client->_flushed(in);
+    client->_flushed(in, checkafter);
   }
 };
 
-void Client::_flush(Inode *in)
+void Client::_flush(Inode *in, bool checkafter)
 {
   dout(10) << "_flush " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_WRBUFFER] == 1) {
     in->get_cap_ref(CEPH_CAP_WRBUFFER);  // for the (one!) waiter
-    in->fc.flush_dirty(0);
-    in->fc.add_safe_waiter(new C_Flush(this,  in));
+
+    Context *c = new C_Flush(this,  in, checkafter);
+    bool safe = objectcacher->commit_set(in->inode.ino, c);
+    if (safe) {
+      c->finish(0);
+      delete c;
+    }
   }
 }
 
-void Client::_flushed(Inode *in)
+void Client::_flushed(Inode *in, bool checkafter)
 {
   dout(10) << "_flushed " << *in << dendl;
   assert(in->cap_refs[CEPH_CAP_WRBUFFER] == 2);
+
+  // release clean pages too, if we dont hold RDCACHE reference
+  if (in->cap_refs[CEPH_CAP_RDCACHE] == 0)
+    objectcacher->release_set(in->inode.ino);
+
   put_cap_ref(in, CEPH_CAP_WRBUFFER);
-  put_cap_ref(in, CEPH_CAP_WRBUFFER);
+  if (checkafter)
+    put_cap_ref(in, CEPH_CAP_WRBUFFER);
+  else
+    in->put_cap_ref(CEPH_CAP_WRBUFFER);
 }
 
 
@@ -1542,8 +1553,15 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	     << " size " << in->inode.size << " -> " << m->get_size()
 	     << dendl;
     // trim filecache?
-    if (g_conf.client_oc)
-      in->fc.truncate(in->inode.size, m->get_size());
+    if (g_conf.client_oc &&
+	m->get_size() < in->inode.size) {
+      // map range to objects
+      list<ObjectExtent> ls;
+      filer->file_to_extents(in->inode.ino, &in->inode.layout, 
+			     m->get_size(), in->inode.size - m->get_size(),
+			     ls);
+      objectcacher->truncate_set(in->inode.ino, ls);
+    }
 
     in->inode.size = m->get_size(); 
     delete m;
@@ -1623,10 +1641,10 @@ void Client::handle_file_caps(MClientFileCaps *m)
     cap.issued = new_caps;
 
     if ((cap.issued & ~new_caps) & CEPH_CAP_RDCACHE)
-      in->fc.release_clean();
+      _release(in, false);
 
     if ((used & ~new_caps) & CEPH_CAP_WRBUFFER)
-      _flush(in);
+      _flush(in, false);
     else {
       ack = true;
       cap.implemented = new_caps;
@@ -1802,14 +1820,8 @@ int Client::unmount()
          p++) {
       Inode *in = p->second;
       if (!in->caps.empty()) {
-        in->fc.release_clean();
-        if (in->fc.is_dirty()) {
-          dout(10) << "unmount residual caps on " << in->ino() << ", flushing" << dendl;
-          in->fc.empty(new C_Client_CloseRelease(this, in));
-        } else {
-          dout(10) << "unmount residual caps on " << in->ino()  << ", releasing" << dendl;
-          check_caps(in);
-        }
+	_release(in);
+	_flush(in);
       }
     }
   }
@@ -2801,8 +2813,7 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     if (!dn)
       in->get_open_ref(f->mode);  // i may have alrady added it above!
 
-    dout(10) << in->inode.ino << " mode " << cmode
-	     << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
+    dout(10) << in->inode.ino << " mode " << cmode << dendl;
 
     // add the cap
     int mds = reply->get_source().num();
@@ -2835,9 +2846,6 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
       if (new_caps & ~old_caps)
 	signal_cond_list(in->waitfor_caps);
 
-      if (g_conf.client_oc)
-        in->fc.set_caps(new_caps);
-
     } else {
       dout(7) << "open got SAME caps " << cap_string(new_caps) 
               << " for " << in->ino() 
@@ -2859,24 +2867,6 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
 
 
 
-
-void Client::close_release(Inode *in)
-{
-  dout(10) << "close_release on " << in->ino() << dendl;
-  dout(10) << in->inode.ino
-	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
-
-  check_caps(in);
-  put_inode(in);
-}
-
-void Client::close_safe(Inode *in)
-{
-  dout(10) << "close_safe on " << in->ino() << dendl;
-  put_inode(in);
-  if (unmounting) 
-    mount_cond.Signal();
-}
 
 
 int Client::close(int fd)
@@ -3014,24 +3004,26 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   // wait for RD cap and/or a valid file size
+  int issued;
   while (1) {
+    issued = in->caps_issued();
 
     if (lazy) {
       // wait for lazy cap
-      if ((in->caps_issued() & CEPH_CAP_LAZYIO) == 0) {
+      if ((issued & CEPH_CAP_LAZYIO) == 0) {
 	dout(7) << " don't have lazy cap, waiting" << dendl;
 	goto wait;
       }
     } else {
       // wait for RD cap?
-      while ((in->caps_issued() & CEPH_CAP_RD) == 0) {
+      while ((issued & CEPH_CAP_RD) == 0) {
 	dout(7) << " don't have read cap, waiting" << dendl;
 	goto wait;
       }
     }
     
     // async i/o?
-    if ((in->caps_issued() & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
+    if ((issued & (CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE))) {
 
       // FIXME: this logic needs to move info FileCache!
 
@@ -3056,39 +3048,57 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       }
       break;
     } else {
-      // unbuffered, sync i/o.  defer to osd.
+      // unbuffered, sync i/o.  we will defer to osd.
       break;
     }
-
+    
   wait:
     wait_on_list(in->waitfor_caps);
   }
-
+  
   in->get_cap_ref(CEPH_CAP_RD);
+
+  int rvalue = 0;
+  Cond cond;
+  bool done = false;
+  Context *onfinish = new C_SafeCond(&client_lock, &cond, &done, &rvalue);
   
   int r = 0;
-  int rvalue = 0;
-
   if (g_conf.client_oc) {
-    // object cache ON
-    rvalue = r = in->fc.read(offset, size, *bl, client_lock);  // may block.
+
+    if (issued & CEPH_CAP_RDCACHE) {
+      // we will populate the cache here
+      if (in->cap_refs[CEPH_CAP_RDCACHE] == 0)
+	in->get_cap_ref(CEPH_CAP_RDCACHE);
+
+      // read (and possibly block)
+      r = objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish);
+      
+      if (r == 0) {
+	while (!done) 
+	  cond.Wait(client_lock);
+	r = rvalue;
+      } else {
+	// it was cached.
+	delete onfinish;
+      }
+    } else {
+      r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
+    }
+    
   } else {
-    // object cache OFF -- legacy inconsistent way.
+    // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Cond cond;
-    bool done = false;
-    Context *onfinish = new C_SafeCond(&client_lock, &cond, &done, &rvalue);
-
     Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
     assert(r >= 0);
 
-    // wait!
     while (!done)
       cond.Wait(client_lock);
+    r = rvalue;
   }
  
   if (movepos) {
@@ -3185,8 +3195,8 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   // copy into fresh buffer (since our write may be resub, async)
   bufferptr bp;
   if (size > 0) bp = buffer::copy(buf, size);
-  bufferlist blist;
-  blist.push_back( bp );
+  bufferlist bl;
+  bl.push_back( bp );
 
   // request larger max_size?
   __u64 endoff = offset + size;
@@ -3220,13 +3230,13 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 	in->get_cap_ref(CEPH_CAP_WRBUFFER);
       
       // wait? (this may block!)
-      oc->wait_for_write(size, client_lock);
+      objectcacher->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-      oc->file_write(ino, &layout, offset, size, blist, 0);
+      objectcacher->file_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
     } else {
       // atomic, synchronous, blocking.
-      oc->file_atomic_sync_write(ino, &layout, offset, size, blist, 0, client_lock);
+      objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
     }   
   } else {
     // simple, non-atomic sync write
@@ -3238,8 +3248,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    filer->write(in->inode, offset, size, blist, 0, 
-                 onfinish, onsafe);
+    filer->write(in->inode, offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);
@@ -3344,7 +3353,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
   Inode *in = f->inode;
 
-  dout(3) << "_fsync(" << f << ", " << (syndataonly ? "dataonly)":"data+metadata)") << dendl;
+  dout(3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
   
   // metadata?
   if (!syncdataonly)
@@ -3464,27 +3473,9 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
-  Inode *in = f->inode;
 
-  if (f->mode & CEPH_FILE_MODE_LAZY) {
-    // wait for lazy cap
-    while ((in->caps_issued() & CEPH_CAP_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << dendl;
-      wait_on_list(in->waitfor_caps);
-    }
-
-    if (g_conf.client_oc) {
-      Cond cond;
-      bool done = false;
-      in->fc.flush_dirty(new C_SafeCond(&client_lock, &cond, &done));
-      
-      while (!done)
-        cond.Wait(client_lock);
-      
-    } else {
-      // mmm, nothin to do.
-    }
-  }
+  // for now
+  _fsync(f, true);
 
   client_lock.Unlock();
   return 0;
@@ -3500,20 +3491,8 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   Fh *f = fd_map[fd];
   Inode *in = f->inode;
   
-  if (f->mode & CEPH_FILE_MODE_LAZY) {
-    // wait for lazy cap
-    while ((in->caps_issued() & CEPH_CAP_LAZYIO) == 0) {
-      dout(7) << " don't have lazy cap, waiting" << dendl;
-      wait_on_list(in->waitfor_caps);
-    }
-    
-    if (g_conf.client_oc) {
-      in->fc.flush_dirty(0);       // flush to invalidate.
-      in->fc.release_clean();
-    } else {
-      // mm, nothin to do.
-    }
-  }
+  _fsync(f, true);
+  _release(in);
   
   client_lock.Unlock();
   return 0;
