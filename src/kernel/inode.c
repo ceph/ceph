@@ -211,7 +211,8 @@ static void fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 		if (timespec_compare(ctime, &inode->i_ctime) > 0)
 			inode->i_ctime = *ctime;
 		if (time_warp_seq > ci->i_time_warp_seq)
-			warn = 1;
+			derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
+			     inode, time_warp_seq, ci->i_time_warp_seq);
 	} else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
 		if (size > inode->i_size) {
 			dout(10, "size %lld -> %llu\n", inode->i_size, size);
@@ -244,7 +245,7 @@ static void fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 			warn = 1;
 	}
 	if (warn)
-		derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
+		dout(10, "%p mds time_warp_seq %llu < %llu\n",
 		     inode, time_warp_seq, ci->i_time_warp_seq);
 }
 
