@@ -3211,14 +3211,23 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   in->get_cap_ref(CEPH_CAP_WR);
 
   // avoid livelock with fsync?
+  // FIXME
 
   if (g_conf.client_oc) {
-    // buffer cache
-    
-    if (in->cap_refs[CEPH_CAP_WRBUFFER] == 0)
-      in->get_cap_ref(CEPH_CAP_WRBUFFER);
-
-    in->fc.write(offset, size, blist, client_lock);
+    if (in->caps_issued() & CEPH_CAP_WRBUFFER) {
+      // do buffered write
+      if (in->cap_refs[CEPH_CAP_WRBUFFER] == 0)
+	in->get_cap_ref(CEPH_CAP_WRBUFFER);
+      
+      // wait? (this may block!)
+      oc->wait_for_write(size, client_lock);
+      
+      // async, caching, non-blocking.
+      oc->file_write(ino, &layout, offset, size, blist, 0);
+    } else {
+      // atomic, synchronous, blocking.
+      oc->file_atomic_sync_write(ino, &layout, offset, size, blist, 0, client_lock);
+    }   
   } else {
     // simple, non-atomic sync write
     Cond cond;
