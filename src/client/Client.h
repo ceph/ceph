@@ -149,7 +149,8 @@ class Inode {
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  int open_by_mode[CEPH_FILE_MODE_NUM];
+  //int open_by_mode[CEPH_FILE_MODE_NUM];
+  map<int,int> open_by_mode;
   map<int,int> cap_refs;
 
   __u64     wanted_max_size, requested_max_size;
@@ -166,11 +167,8 @@ class Inode {
   FileCache fc;
 
 
-  list<Cond*>       waitfor_write;
-  list<Cond*>       waitfor_read;
-  list<Cond*>       waitfor_lazy;
+  list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
-  list<Context*>    waitfor_no_read, waitfor_no_write;
 
   // <hack>
   bool hack_balance_reads;
@@ -187,11 +185,11 @@ class Inode {
 
   void get() { 
     ref++; 
-    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
+    cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
   }
   void put(int n=1) { 
     ref -= n; assert(ref >= 0); 
-    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
+    cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
   }
 
   void ll_get() {
@@ -212,7 +210,7 @@ class Inode {
     fc(_oc, ino, layout),
     hack_balance_reads(false)
   {
-    memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
+    //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
     inode.ino = ino;
   }
   ~Inode() {
@@ -261,7 +259,7 @@ class Inode {
   int caps_file_wanted() {
     int want = 0;
     for (int mode = 0; mode < 4; mode++)
-      if (open_by_mode[mode])
+      if (open_by_mode.count(mode) && open_by_mode[mode])
 	want |= ceph_caps_for_mode(mode);
     return want;
   }
@@ -594,6 +592,9 @@ protected:
   //  - protects Client and buffer cache both!
   Mutex                  client_lock;
 
+  // helpers
+  void wait_on_list(list<Cond*>& ls);
+  void signal_cond_list(list<Cond*>& ls);
 
   // -- metadata cache stuff
 

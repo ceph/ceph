@@ -91,6 +91,17 @@ public:
 
 
 
+ostream& operator<<(ostream &out, Inode &in)
+{
+  out << in.inode.ino << "("
+      << " cap_refs=" << in.cap_refs
+      << " open=" << in.open_by_mode
+      << " ref=" << in.ref
+      << ")";
+  return out;
+}
+
+
 
 // cons/des
 
@@ -1282,7 +1293,7 @@ void Inode::get_cap_ref(int cap)
     if (cap & 1) {
       int c = 1 << n;
       cap_refs[c]++;
-      cout << "inode " << inode.ino << " get " << cap_string(c) << " "
+      cout << "inode " << *this << " get " << cap_string(c) << " "
 	   << (cap_refs[c]-1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
@@ -1292,14 +1303,14 @@ void Inode::get_cap_ref(int cap)
 
 bool Inode::put_cap_ref(int cap)
 {
-  bool last;
+  bool last = false;
   int n = 0;
   while (cap) {
     if (cap & 1) {
       int c = 1 << n;
       if (--cap_refs[c] == 0)
 	last = true;      
-      cout << "inode " << inode.ino << " put " << cap_string(c) << " "
+      cout << "inode " << *this << " put " << cap_string(c) << " "
 	   << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
@@ -1310,8 +1321,10 @@ bool Inode::put_cap_ref(int cap)
 
 void Client::put_cap_ref(Inode *in, int cap)
 {
-  if (in->put_cap_ref(cap))
+  if (in->put_cap_ref(cap)) {
     check_caps(in);
+    signal_cond_list(in->waitfor_commit);
+  }
 }
 
 void Client::check_caps(Inode *in)
@@ -1319,7 +1332,7 @@ void Client::check_caps(Inode *in)
   int wanted = in->caps_wanted();
   int used = in->caps_used();
 
-  dout(10) << "check_caps on " << in->inode.ino 
+  dout(10) << "check_caps on " << *in
 	   << " wanted " << cap_string(wanted)
 	   << " used " << cap_string(used)
 	   << dendl;
@@ -1391,7 +1404,14 @@ public:
 };
 
 
-void signal_cond_list(list<Cond*>& ls)
+void Client::wait_on_list(list<Cond*>& ls)
+{
+  Cond cond;
+  ls.push_back(&cond);
+  cond.Wait(client_lock);
+}
+
+void Client::signal_cond_list(list<Cond*>& ls)
 {
   for (list<Cond*>::iterator it = ls.begin(); it != ls.end(); it++)
     (*it)->Signal();
@@ -1609,9 +1629,8 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // wake up waiters
-  if (new_caps & CEPH_CAP_RD) signal_cond_list(in->waitfor_read);
-  if ((new_caps & CEPH_CAP_WR) || kick_writers) signal_cond_list(in->waitfor_write);
-  if ((new_caps & CEPH_CAP_LAZYIO) || kick_writers) signal_cond_list(in->waitfor_lazy);
+  if (new_caps)
+    signal_cond_list(in->waitfor_caps);
 
   if (ack)
     messenger->send_message(m, m->get_source_inst());
@@ -2780,25 +2799,24 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     if (!dn)
       in->get_open_ref(f->mode);  // i may have alrady added it above!
 
-    dout(10) << in->inode.ino << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+    dout(10) << in->inode.ino << " mode " << cmode
 	     << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
 
-    // caps included?
+    // add the cap
     int mds = reply->get_source().num();
-
-    if (in->caps.empty()) {// first caps?
+    if (in->caps.empty()) { // first caps?
       dout(7) << " first caps on " << in->inode.ino << dendl;
       in->get();
     }
-
     if (in->caps.count(mds) == 0)
       mds_sessions[mds].num_caps++;
+    InodeCap &cap = in->caps[mds];
 
-    int new_caps = reply->get_caps_issued();
+    int new_caps = reply->get_file_caps();
 
     assert(reply->get_file_caps_seq() >= cap.seq);
     if (reply->get_file_caps_seq() > cap.seq) {   
-      int old_caps = cap.caps;
+      int old_caps = cap.issued;
 
       dout(7) << "open got caps " << cap_string(new_caps)
 	      << " (had " << cap_string(old_caps) << ")"
@@ -2807,12 +2825,13 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
               << " from mds" << mds 
 	      << dendl;
 
-      cap.caps = new_caps;
+      cap.issued |= new_caps;
+      cap.implemented |= new_caps;
       cap.seq = reply->get_file_caps_seq();
-      
-      // we shouldn't ever lose caps at this point.
-      // actually, we might...?
-      assert((old_caps & ~cap.caps) == 0);
+
+      // any caps?
+      if (new_caps & ~old_caps)
+	signal_cond_list(in->waitfor_caps);
 
       if (g_conf.client_oc)
         in->fc.set_caps(new_caps);
@@ -2842,17 +2861,10 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
 void Client::close_release(Inode *in)
 {
   dout(10) << "close_release on " << in->ino() << dendl;
-  dout(10) << in->inode.ino << " wr " << in->num_open_wr << " rd " << in->num_open_rd
+  dout(10) << in->inode.ino
 	   << " dirty " << in->fc.is_dirty() << " cached " << in->fc.is_cached() << dendl;
 
-  if (!in->num_open_rd) 
-    in->fc.release_clean();
-
-  int retain = 0;
-  if (in->num_open_wr || in->fc.is_dirty()) retain |= CEPH_CAP_WR | CEPH_CAP_WRBUFFER | CEPH_CAP_WREXTEND;
-  if (in->num_open_rd || in->fc.is_cached()) retain |= CEPH_CAP_RD | CEPH_CAP_RDCACHE;
-
-  release_caps(in, retain);              // release caps now.
+  check_caps(in);
   put_inode(in);
 }
 
@@ -2897,32 +2909,6 @@ int Client::_release(Fh *f)
   if (before != after && after)
     check_caps(in);
 
-  // release caps right away?
-  dout(10) << "num_open_rd " << in->num_open_rd << "  num_open_wr " << in->num_open_wr << dendl;
-
-  if (g_conf.client_oc) {
-    // caching on.
-    if (in->num_open_rd == 0 && in->num_open_wr == 0) {
-      dout(20) << "calling empty" << dendl;
-      in->fc.empty(new C_Client_CloseRelease(this, in));
-    } 
-    else if (in->num_open_rd == 0) {
-      dout(20) << "calling release" << dendl;
-      in->fc.release_clean();
-      close_release(in);
-    } 
-    else if (in->num_open_wr == 0) {
-      dout(20) << "calling flush dirty" << dendl;
-      in->fc.flush_dirty(new C_Client_CloseRelease(this,in));
-    }
-  } else {
-    // caching off.
-    if (in->num_open_rd == 0 && in->num_open_wr == 0) {
-      dout(10) << "  releasing caps on " << in->ino() << dendl;
-      release_caps(in);              // release caps now.
-    }
-  }
-  
   put_inode( in );
   return 0;
 }
@@ -3041,10 +3027,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       // wait for lazy cap
       if ((in->caps_issued() & CEPH_CAP_LAZYIO) == 0) {
 	dout(7) << " don't have lazy cap, waiting" << dendl;
-	Cond cond;
-	in->waitfor_lazy.push_back(&cond);
-	cond.Wait(client_lock);
-	continue;
+	goto wait;
       }
     } else {
       // wait for RD cap?
@@ -3085,11 +3068,10 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     }
 
   wait:
-    Cond cond;
-    in->waitfor_read.push_back(&cond);
-    cond.Wait(client_lock);
+    wait_on_list(in->waitfor_caps);
   }
 
+  in->get_cap_ref(CEPH_CAP_RD);
   
   int r = 0;
   int rvalue = 0;
@@ -3106,8 +3088,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     C_Cond *onfinish = new C_Cond(&cond, &done, &rvalue);
 
     Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
-    if (in->hack_balance_reads ||
-	g_conf.client_hack_balance_reads)
+    if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
     assert(r >= 0);
@@ -3116,12 +3097,14 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     while (!done)
       cond.Wait(client_lock);
   }
-  
+ 
   if (movepos) {
     // adjust fd pos
     f->pos = offset+bl->length();
     unlock_fh_pos(f);
   }
+
+  put_cap_ref(in, CEPH_CAP_RD);
 
   // done!
   return rvalue;
@@ -3148,9 +3131,8 @@ void Client::sync_write_commit(Inode *in)
   client_lock.Lock();
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
-  in->uncommitted_writes--;
 
-  cl->put_cap_ref(in, CEPH_CAP_WRBUFFER);
+  put_cap_ref(in, CEPH_CAP_WRBUFFER);
 
   dout(15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
@@ -3228,12 +3210,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     dout(7) << "missing wr|lazy cap OR endoff " << endoff
 	    << " > max_size " << in->inode.max_size 
 	    << ", waiting" << dendl;
-    Cond cond;
-    if (lazy)
-      in->waitfor_lazy.push_back(&cond);
-    else 
-      in->waitfor_write.push_back(&cond);
-    cond.Wait(client_lock);
+    wait_on_list(in->waitfor_caps);
   }
 
   in->get_cap_ref(CEPH_CAP_WR);
@@ -3375,11 +3352,9 @@ int Client::_fsync(Fh *f, bool syncdataonly)
       while (!done) cond.Wait(client_lock);
     }
   } else {
-    while (in->uncommitted_writes > 0) {
-      Cond cond;
-      dout(10) << "ino " << in->inode.ino << " has " << in->uncommitted_writes << " uncommitted, waiting" << dendl;
-      in->waitfor_commit.push_back(&cond);
-      cond.Wait(client_lock);
+    while (in->cap_refs[CEPH_CAP_WRBUFFER] > 0) {
+      dout(10) << "ino " << in->inode.ino << " has " << in->cap_refs[CEPH_CAP_WRBUFFER] << " uncommitted, waiting" << dendl;
+      wait_on_list(in->waitfor_commit);
     }    
     dout(10) << "ino " << in->inode.ino << " has no uncommitted writes" << dendl;
   }
@@ -3494,9 +3469,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
     // wait for lazy cap
     while ((in->caps_issued() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
-      Cond cond;
-      in->waitfor_lazy.push_back(&cond);
-      cond.Wait(client_lock);
+      wait_on_list(in->waitfor_caps);
     }
 
     if (g_conf.client_oc) {
@@ -3530,9 +3503,7 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
     // wait for lazy cap
     while ((in->caps_issued() & CEPH_CAP_LAZYIO) == 0) {
       dout(7) << " don't have lazy cap, waiting" << dendl;
-      Cond cond;
-      in->waitfor_lazy.push_back(&cond);
-      cond.Wait(client_lock);
+      wait_on_list(in->waitfor_caps);
     }
     
     if (g_conf.client_oc) {
