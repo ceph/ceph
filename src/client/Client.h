@@ -227,6 +227,7 @@ class Inode {
     open_by_mode[mode]++;
   }
   bool put_open_ref(int mode) {
+    cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
     if (--open_by_mode[mode] == 0)
       return true;
     return false;
@@ -253,14 +254,17 @@ class Inode {
     for (map<int,int>::iterator p = cap_refs.begin();
 	 p != cap_refs.end();
 	 p++)
-      w |= p->first;
+      if (p->second)
+	w |= p->first;
     return w;
   }
   int caps_file_wanted() {
     int want = 0;
-    for (int mode = 0; mode < 4; mode++)
-      if (open_by_mode.count(mode) && open_by_mode[mode])
-	want |= ceph_caps_for_mode(mode);
+    for (map<int,int>::iterator p = open_by_mode.begin();
+	 p != open_by_mode.end();
+	 p++)
+      if (p->second)
+	want |= ceph_caps_for_mode(p->first);
     return want;
   }
   int caps_wanted() {

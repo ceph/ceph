@@ -1387,6 +1387,7 @@ void Client::check_caps(Inode *in)
 
   if (wanted == 0 && !in->caps.empty()) {
     in->caps.clear();
+    dout(10) << "last caps on " << *in << dendl;
     put_inode(in);
   }
 }
@@ -2898,18 +2899,11 @@ int Client::_release(Fh *f)
   dout(5) << "_release " << f << dendl;
   Inode *in = f->inode;
 
-  // update inode rd/wr counts
-  int before = in->caps_wanted();
-  in->put_open_ref(f->mode);
-  int after = in->caps_wanted();
+  if (in->put_open_ref(f->mode))
+    check_caps(in);
+  put_inode( in );
 
   delete f;
-
-  // does this change what caps we want?
-  if (before != after && after)
-    check_caps(in);
-
-  put_inode( in );
   return 0;
 }
 
@@ -2917,7 +2911,6 @@ int Client::_release(Fh *f)
 
 // ------------
 // read, write
-
 
 off_t Client::lseek(int fd, off_t offset, int whence)
 {
@@ -2953,7 +2946,6 @@ off_t Client::lseek(int fd, off_t offset, int whence)
   dout(3) << "lseek(" << fd << ", " << offset << ", " << whence << ") = " << pos << dendl;
   return pos;
 }
-
 
 
 void Client::lock_fh_pos(Fh *f)
@@ -3120,7 +3112,9 @@ class C_Client_SyncCommit : public Context {
   Client *cl;
   Inode *in;
 public:
-  C_Client_SyncCommit(Client *c, Inode *i) : cl(c), in(i) {}
+  C_Client_SyncCommit(Client *c, Inode *i) : cl(c), in(i) {
+    in->get();
+  }
   void finish(int) {
     cl->sync_write_commit(in);
   }
@@ -3228,7 +3222,6 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
-    in->get();
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
     filer->write(in->inode, offset, size, blist, 0, 
