@@ -250,14 +250,18 @@ int ceph_fill_inode(struct inode *inode,
 			inode->i_blkbits = blkbits;
 			inode->i_blocks = blocks;
 		}
-		if (time_warp_seq >= ci->i_time_warp_seq) {
+		if (time_warp_seq > ci->i_time_warp_seq) {
+			inode->i_mtime = mtime;
+			inode->i_atime = atime;
+			inode->i_ctime = ctime;
+			ci->i_time_warp_seq = time_warp_seq;
+		} else if (time_warp_seq == ci->i_time_warp_seq) {
 			if (timespec_compare(&mtime, &inode->i_mtime) > 0)
 				inode->i_mtime = mtime;
 			if (timespec_compare(&atime, &inode->i_atime) > 0)
 				inode->i_atime = atime;
 			if (timespec_compare(&ctime, &inode->i_ctime) > 0)
 				inode->i_ctime = ctime;
-			ci->i_time_warp_seq = time_warp_seq;
 		} else
 			dout(10, " mds time_warp_seq %llu < %llu\n",
 			     time_warp_seq, ci->i_time_warp_seq);
@@ -1218,7 +1222,11 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	} else {
 		ceph_decode_timespec(&mtime, &grant->mtime);
 		ceph_decode_timespec(&atime, &grant->atime);
-		if (time_warp_seq >= ci->i_time_warp_seq) {
+		if (time_warp_seq > ci->i_time_warp_seq) {
+			inode->i_mtime = mtime;
+			inode->i_atime = atime;
+			ci->i_time_warp_seq = time_warp_seq;
+		} else if (time_warp_seq == ci->i_time_warp_seq) {
 			if (timespec_compare(&mtime, &inode->i_mtime) > 0) {
 				dout(10, "%p mtime %lu.%09ld -> %lu.%.09ld\n",
 				     inode, mtime.tv_sec, mtime.tv_nsec,
@@ -1234,7 +1242,6 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 				     inode->i_atime.tv_nsec);
 				inode->i_atime = atime;
 			}
-			ci->i_time_warp_seq = time_warp_seq;
 		} else
 			dout(10, " mds time_warp_seq %llu < %llu\n",
 			     time_warp_seq, ci->i_time_warp_seq);

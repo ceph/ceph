@@ -328,6 +328,7 @@ enum {
 	Opt_debug_mdsc,
 	Opt_debug_osdc,
 	Opt_debug_addr,
+	Opt_debug_inode,
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
@@ -345,6 +346,7 @@ static match_table_t arg_tokens = {
 	{Opt_debug_mdsc, "debug_mdsc=%d"},
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_debug_addr, "debug_addr=%d"},
+	{Opt_debug_inode, "debug_inode=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
@@ -496,6 +498,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_debug_addr:
 			ceph_debug_addr = intval;
+			break;
+		case Opt_debug_inode:
+			ceph_debug_inode = intval;
 			break;
 		case Opt_debug_console:
 			ceph_debug_console = 1;
