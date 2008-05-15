@@ -74,7 +74,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct dentry *dentry = d_find_alias(inode);
+	struct dentry *dentry;
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	int err;
@@ -87,8 +87,6 @@ int ceph_open(struct inode *inode, struct file *file)
 
 	dout(5, "open inode %p ino %llx file %p flags %d (%d)\n", inode,
 	     ceph_ino(inode), file, flags, file->f_flags);
-
-
 	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
@@ -109,14 +107,21 @@ int ceph_open(struct inode *inode, struct file *file)
 	spin_unlock(&inode->i_lock);
 	dout(10, "open fmode %d, don't have caps %d\n", fmode, wantcaps);
 
+	dentry = d_find_alias(inode);
+	if (!dentry)
+		return -ESTALE;  /* blech */
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
+	if (IS_ERR(req)) {
+		err = PTR_ERR(req);
+		goto out;
+	}
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (err == 0)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
 	dout(5, "ceph_open result=%d on %llx\n", err, ceph_ino(inode));
+out:
+	dput(dentry);
 	return err;
 }
 
