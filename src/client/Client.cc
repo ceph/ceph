@@ -1446,6 +1446,15 @@ void Client::handle_file_caps(MClientFileCaps *m)
     in->inode.time_warp_seq = m->get_time_warp_seq();
   }
 
+  if (m->get_max_size() != in->inode.max_size) {
+    dout(10) << "max_size " << in->inode.max_size << " -> " << m->get_max_size() << dendl;
+    in->inode.max_size = m->get_max_size();
+    if (in->inode.max_size > in->wanted_max_size) {
+      in->wanted_max_size = 0;
+      in->requested_max_size = 0;
+    }
+  }
+
   // share our (possibly newer) file size, mtime, atime
   m->set_size(in->inode.size);
   m->set_mtime(in->inode.mtime);
@@ -1559,6 +1568,7 @@ void Client::update_caps_wanted(Inode *in)
   int wanted = in->file_caps_wanted();
   dout(5) << "updating caps wanted on ino " << in->inode.ino 
           << " to " << cap_string(wanted)
+	  << " max_size " << in->wanted_max_size
           << dendl;
   
   // FIXME: pick a single mds and let the others off the hook..
@@ -1570,6 +1580,8 @@ void Client::update_caps_wanted(Inode *in)
                                              it->second.seq,
                                              it->second.caps,
                                              wanted);
+    m->set_max_size(in->wanted_max_size);
+    in->requested_max_size = in->wanted_max_size;
     messenger->send_message(m, mdsmap->get_inst(it->first));
     if (wanted == 0)
       mds_sessions[it->first].num_caps--;
@@ -3176,8 +3188,21 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     dout(7) << "synchronous write" << dendl;
 
     // do we have write file cap?
-    while (!lazy && (in->file_caps() & CEPH_CAP_WR) == 0) {
-      dout(7) << " don't have write cap, waiting" << dendl;
+    __u64 endoff = offset + size;
+
+    if ((endoff >= in->inode.max_size ||
+	 endoff > (in->inode.size << 1)) &&
+	endoff > in->wanted_max_size) {
+      dout(10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
+      in->wanted_max_size = endoff;
+      update_caps_wanted(in);
+    }
+
+    while (!lazy &&
+	   ((in->file_caps() & CEPH_CAP_WR) == 0 ||
+	    endoff > in->inode.max_size)) {
+      dout(7) << " don't have write cap for endoff " << endoff
+	      << " (max " << in->inode.max_size << "), waiting" << dendl;
       Cond cond;
       in->waitfor_write.push_back(&cond);
       cond.Wait(client_lock);

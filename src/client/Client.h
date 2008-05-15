@@ -149,6 +149,7 @@ class Inode {
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
   int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
+  __u64     wanted_max_size, requested_max_size;
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
@@ -207,6 +208,7 @@ class Inode {
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     num_open_rd(0), num_open_wr(0), num_open_lazy(0),
+    wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
     fc(_oc, ino, layout),

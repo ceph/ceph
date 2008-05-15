@@ -77,9 +77,6 @@ mds
   - mds lock last_change stamp?
 
 - fix file_data_version
-- on recovery, validate file sizes when max_size > size
-
-- coalesce lease revocations on dir inode + dentry, where possible
 
 - fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
@@ -87,7 +84,7 @@ mds
   - dentry versions vs dirfrags...
 - failure during reconnect vs clientmap.  
 
-- inode.rmtime (recursive mtime)?
+- inode.rctime (recursive mtime)?
 - make inode.size reflect directory size (number of entries)?
 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
