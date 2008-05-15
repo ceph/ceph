@@ -65,6 +65,8 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " v" << in.get_version();
 
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
+  if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
+  if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 

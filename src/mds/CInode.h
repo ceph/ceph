@@ -100,6 +100,8 @@ class CInode : public MDSCacheObject {
   static const int STATE_FROZEN =      (1<<8);
   static const int STATE_AMBIGUOUSAUTH = (1<<9);
   static const int STATE_EXPORTINGCAPS = (1<<10);
+  static const int STATE_NEEDSRECOVER = (1<<11);
+  static const int STATE_RECOVERING = (1<<11);
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
@@ -134,12 +136,6 @@ class CInode : public MDSCacheObject {
 
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
-
-  // file recovery flag (when caps go stale)
-  bool _needs_file_recovery;
-  bool needs_file_recover() { return _needs_file_recovery; }
-  void mark_needs_file_recover() { _needs_file_recovery = true; }
-  void clear_needs_file_recover() { _needs_file_recovery = false; }
 
   //bool hack_accessed;
   //utime_t hack_load_stamp;
@@ -241,7 +237,6 @@ public:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     last_journaled(0), last_open_journaled(0), 
-    _needs_file_recovery(false),
     //hack_accessed(true),
     stickydir_ref(0),
     parent(0), projected_parent(0),

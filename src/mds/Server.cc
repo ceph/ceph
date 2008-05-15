@@ -212,6 +212,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << cap_string(cap->issued()) << " on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
+      mds->locker->try_file_eval(&in->filelock);
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();

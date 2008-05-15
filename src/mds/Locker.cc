@@ -653,7 +653,9 @@ void Locker::revoke_stale_caps(Session *session)
     if (issued) {
       dout(10) << " revoking " << cap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
-      file_eval_gather(&in->filelock);
+      in->state_set(CInode::STATE_NEEDSRECOVER);
+      if (!in->filelock.is_stable())
+	file_eval_gather(&in->filelock);
       if (in->is_auth()) {
 	if (in->filelock.is_stable())
 	  file_eval(&in->filelock);
@@ -2588,8 +2590,12 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
   mdr->rdlocks.erase(lock);
   mdr->locks.erase(lock);
 
-  if (!lock->is_rdlocked())
-    file_eval_gather(lock);
+  if (!lock->is_rdlocked()) {
+    if (!lock->is_stable())
+      file_eval_gather(lock);
+    else if (lock->get_parent()->is_auth())
+      file_eval(lock);
+  }
 }
 
 bool Locker::file_wrlock_start(FileLock *lock)
@@ -2757,6 +2763,17 @@ void Locker::file_eval_gather(FileLock *lock)
       !lock->is_wrlocked() &&
       lock->get_num_client_lease() == 0 &&
       ((issued & ~lock->caps_allowed()) == 0)) {
+
+    if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+      dout(7) << "file_eval_gather finished gather, but need to recover" << dendl;
+      mds->mdcache->queue_file_recover(in);
+      mds->mdcache->do_file_recover();
+    }
+    if (in->state_test(CInode::STATE_RECOVERING)) {
+      dout(7) << "file_eval_gather finished gather, but still recovering" << dendl;
+      return;
+    }
+
     dout(7) << "file_eval_gather finished gather" << dendl;
     
     switch (lock->get_state()) {

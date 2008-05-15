@@ -2790,9 +2790,9 @@ void MDCache::rejoin_send_acks()
 void MDCache::queue_file_recover(CInode *in)
 {
   dout(10) << "queue_file_recover " << *in << dendl;
-  in->mark_needs_file_recover();
+  in->state_clear(CInode::STATE_NEEDSRECOVER);
+  in->state_set(CInode::STATE_RECOVERING);
   in->auth_pin();
-  assert(in->filelock.get_state() == LOCK_LOCK);
   //in->filelock.get_xlock(0);
   file_recover_queue.insert(in);
 }
@@ -2856,7 +2856,7 @@ void MDCache::_recovered(CInode *in, int r)
   in->get_projected_inode()->size = in->inode.size;
 
   file_recovering.erase(in);
-  in->clear_needs_file_recover();
+  in->state_clear(CInode::STATE_RECOVERING);
 
   in->auth_unpin();
   //in->filelock.put_xlock();
