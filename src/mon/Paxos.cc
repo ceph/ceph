@@ -385,6 +385,11 @@ void Paxos::commit()
 {
   dout(10) << "commit " << last_committed+1 << dendl;
 
+  // cancel lease - it was for the old value.
+  //  (this would only happen if message layer lost the 'begin', but
+  //   leader still got a majority and committed with out us.)
+  lease_expire = utime_t();  // cancel lease
+
   // commit locally
   last_committed++;
   mon->store->put_int(last_committed, machine_name, "last_committed");
