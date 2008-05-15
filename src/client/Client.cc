@@ -321,7 +321,8 @@ void Client::update_inode_file_bits(Inode *in,
     if (ctime > in->inode.ctime) 
       in->inode.ctime = ctime;
     if (time_warp_seq > in->inode.time_warp_seq)
-      warn = true;
+      dout(0) << "WARNING: " << *in << " mds time_warp_seq "
+	      << time_warp_seq << " > " << in->inode.time_warp_seq << dendl;
   } else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
     if (size > in->inode.size)
       in->inode.size = size;
@@ -350,7 +351,7 @@ void Client::update_inode_file_bits(Inode *in,
       warn = true;
   }
   if (warn) {
-    dout(0) << "WARNING: " << *in << " mds time_warp_seq "
+    dout(0) << *in << " mds time_warp_seq "
 	    << time_warp_seq << " -> "
 	    << in->inode.time_warp_seq
 	    << dendl;
