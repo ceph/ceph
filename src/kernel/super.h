@@ -22,6 +22,7 @@ extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
+extern int ceph_debug_inode;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
