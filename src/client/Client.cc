@@ -306,6 +306,57 @@ void Client::trim_cache()
 }
 
 
+void Client::update_inode_file_bits(Inode *in,
+				    __u64 size,
+				    utime_t ctime,
+				    utime_t mtime,
+				    utime_t atime,
+				    int issued,
+				    __u64 time_warp_seq)
+{
+  bool warn = false;
+
+  // be careful with size, mtime, atime
+  if (issued & CEPH_CAP_EXCL) {
+    if (ctime > in->inode.ctime) 
+      in->inode.ctime = ctime;
+    if (time_warp_seq > in->inode.time_warp_seq)
+      warn = true;
+  } else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+    if (size > in->inode.size)
+      in->inode.size = size;
+    if (time_warp_seq > in->inode.time_warp_seq) {
+      in->inode.ctime = ctime;
+      in->inode.mtime = mtime;
+      in->inode.atime = atime;
+      in->inode.time_warp_seq = time_warp_seq;
+    } else if (time_warp_seq == in->inode.time_warp_seq) {
+      if (ctime > in->inode.ctime) 
+	in->inode.ctime = ctime;
+      if (mtime > in->inode.mtime) 
+	in->inode.mtime = mtime;
+      if (atime > in->inode.atime)
+	in->inode.atime = atime;
+    } else
+      warn = true;
+  } else {
+    in->inode.size = size;
+    if (time_warp_seq >= in->inode.time_warp_seq) {
+      in->inode.ctime = ctime;
+      in->inode.mtime = mtime;
+      in->inode.atime = atime;
+      in->inode.time_warp_seq = time_warp_seq;
+    } else
+      warn = true;
+  }
+  if (warn) {
+    dout(0) << "WARNING: " << *in << " mds time_warp_seq "
+	    << time_warp_seq << " -> "
+	    << in->inode.time_warp_seq
+	    << dendl;
+  }
+}
+
 void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t from)
 {
   utime_t ttl = from;
@@ -314,8 +365,6 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
   dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
 
   if (lease->mask & CEPH_STAT_MASK_INODE) {
-    int issued = in->caps_issued();
-    
     in->inode.ino = st->ino;
     in->inode.layout = st->layout;
     in->inode.rdev = st->rdev;
@@ -332,24 +381,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
 
-    // be careful with size, mtime, atime
-    if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
-      if ((issued & CEPH_CAP_EXCL) == 0) {
-	if ((uint64_t)st->size > in->inode.size)
-	  in->inode.size = st->size;
-	if (st->time_warp_seq >= in->inode.time_warp_seq) {
-	  if (st->mtime > in->inode.mtime) 
-	    in->inode.mtime = st->mtime;
-	  if (st->atime > in->inode.atime)
-	    in->inode.atime = st->atime;
-	  in->inode.time_warp_seq = st->time_warp_seq;
-	}
-      }
-    } else {
-      in->inode.size = st->size;
-      in->inode.mtime = st->mtime;
-      in->inode.atime = st->atime;
-    }
+    update_inode_file_bits(in, st->size, st->ctime, st->mtime, st->atime, in->caps_issued(), st->time_warp_seq);
   }
 
   if (lease->mask && ttl > in->lease_ttl) {
@@ -1609,17 +1641,10 @@ void Client::handle_file_caps(MClientFileCaps *m)
           << " caps now " << cap_string(new_caps) 
           << " was " << cap_string(old_caps) << dendl;
   
-  // update inode
-  if (m->get_size() > in->inode.size)
-    in->inode.size = m->get_size();
-  if (m->get_time_warp_seq() >= in->inode.time_warp_seq) {
-    if (m->get_mtime() > in->inode.mtime && (old_caps & CEPH_CAP_EXCL) == 0) 
-      in->inode.mtime = m->get_mtime();
-    if (m->get_atime() > in->inode.atime && (old_caps & CEPH_CAP_EXCL) == 0) 
-      in->inode.atime = m->get_atime();
-    in->inode.time_warp_seq = m->get_time_warp_seq();
-  }
+  // size/ctime/mtime/atime
+  update_inode_file_bits(in, m->get_size(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps, m->get_time_warp_seq());
 
+  // max_size
   bool kick_writers = false;
   if (m->get_max_size() != in->inode.max_size) {
     dout(10) << "max_size " << in->inode.max_size << " -> " << m->get_max_size() << dendl;
