@@ -324,8 +324,10 @@ void Client::update_inode_file_bits(Inode *in,
       dout(0) << "WARNING: " << *in << " mds time_warp_seq "
 	      << time_warp_seq << " > " << in->inode.time_warp_seq << dendl;
   } else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
-    if (size > in->inode.size)
+    if (size > in->inode.size) {
       in->inode.size = size;
+      in->reported_size = size;
+    }
     if (time_warp_seq > in->inode.time_warp_seq) {
       in->inode.ctime = ctime;
       in->inode.mtime = mtime;
@@ -342,6 +344,7 @@ void Client::update_inode_file_bits(Inode *in,
       warn = true;
   } else {
     in->inode.size = size;
+    in->reported_size = size;
     if (time_warp_seq >= in->inode.time_warp_seq) {
       in->inode.ctime = ctime;
       in->inode.mtime = mtime;
@@ -1368,9 +1371,9 @@ void Client::check_caps(Inode *in)
 
     /* approaching file_max? */
     if ((cap.issued & CEPH_CAP_WR) &&
-	(in->inode.size << 1) >= in->inode.max_size) {
-	//(in->i_reported_size << 1) < in->inode.max_size) {
-	dout(10) << "size approaching max_size" << dendl;
+	(in->inode.size << 1) >= in->inode.max_size &&
+	(in->reported_size << 1) < in->inode.max_size) {
+      dout(10) << "size approaching max_size" << dendl;
       goto ack;
     }
 
@@ -1391,6 +1394,7 @@ void Client::check_caps(Inode *in)
                                              it->second.seq,
                                              it->second.issued,
                                              wanted);
+    in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
     messenger->send_message(m, mdsmap->get_inst(it->first));
@@ -1594,7 +1598,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       objectcacher->truncate_set(in->inode.ino, ls);
     }
 
-    in->inode.size = m->get_size(); 
+    in->reported_size = in->inode.size = m->get_size(); 
     delete m;
     return;
   }
@@ -3292,6 +3296,11 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   // extend file?
   if (totalwritten + offset > in->inode.size) {
     in->inode.size = totalwritten + offset;
+    
+    if ((in->inode.size << 1) >= in->inode.max_size &&
+	(in->reported_size << 1) < in->inode.max_size)
+      check_caps(in);
+      
     dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
     dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->inode.size << dendl;

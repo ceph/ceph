@@ -153,7 +153,7 @@ class Inode {
   map<int,int> open_by_mode;
   map<int,int> cap_refs;
 
-  __u64     wanted_max_size, requested_max_size;
+  __u64     reported_size, wanted_max_size, requested_max_size;
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
@@ -200,7 +200,7 @@ class Inode {
     //inode(_inode),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    wanted_max_size(0), requested_max_size(0),
+    reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
     hack_balance_reads(false)
