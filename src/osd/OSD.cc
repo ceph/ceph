@@ -2214,7 +2214,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       if (pg->is_all_uptodate()) 
 	pg->finish_recovery();
     } else {
-      pg->adjust_prior();
+      pg->build_prior();
       pg->peer(t, query_map, &info_map);
     }
 

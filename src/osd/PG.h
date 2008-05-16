@@ -566,7 +566,6 @@ public:
   bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
   void build_prior();
-  void adjust_prior();  // based on new peer_info.last_epoch_started
 
   bool adjust_peers_complete_thru() {
     eversion_t t = info.last_complete;

@@ -147,6 +147,7 @@ objecter
 - read+floor_lockout
 
 osd/rados
+- how does an admin intervene when a pg needs a dead osd to repeer?
 
 - a more general fencing mechanism?  per-object granularity isn't usually a good match.
 

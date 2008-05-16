@@ -507,8 +507,13 @@ ostream& PG::Log::print(ostream& out) const
 /******* PG ***********/
 void PG::build_prior()
 {
-  
-  // FIXME: roll crashed logic into this function too!
+  if (1) {
+    // sanity check
+    for (map<int,Info>::iterator it = peer_info.begin();
+	 it != peer_info.end();
+	 it++)
+      assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
+  }
 
   /*
    * We have to be careful to gracefully deal with situations like
@@ -526,7 +531,7 @@ void PG::build_prior()
    *
    * To minimize the risk of this happening, we CANNOT go active if
    * any OSDs in the prior set are down until we send an MOSDAlive to
-   * the monitor such that the OSDMap sets osd_alive_thru to an epoch.
+   * the monitor such that the OSDMap sets osd_up_thru to an epoch.
    * Then, we have something like
    *
    *  1: A B
@@ -541,18 +546,15 @@ void PG::build_prior()
    *
    *  1: A B
    *  2:   B   alive_thru[B]=0
-   *  3:   B   alive_thru[B]=0
-   *  4:   B   alive_thru[B]=2
-   *  5:   B   alive_thru[B]=2
-   *  6:
-   *  7: A    
+   *  3:   B   alive_thru[B]=2
+   *  4:
+   *  5: A    
    *
    * -> we must wait for B, bc it was alive through 2, and could have
-        updated the pg.
+        written to the pg.
    *
-   * If B is really dead, then an administrator can manually set
-   * alive_thru[b] < 2 to recover with possibly out-of-date pg
-   * content.
+   * If B is really dead, then an administrator will need to manually
+   * intervene in some as-yet-undetermined way.  :)
    */
 
   // build prior set.
@@ -563,7 +565,7 @@ void PG::build_prior()
     prior_set.insert(acting[i]);
 
   // and prior PG mappings.  move backwards in time.
-  bool crashed = false;
+  state_clear(PG_STATE_CRASHED);
   bool some_down = false;
 
   must_notify_mon = false;
@@ -609,13 +611,17 @@ void PG::build_prior()
 	     << (maybe_went_rw ? " -> maybe went rw":"")
 	     << dendl;
     
+    int num_still_up_or_clean = 0;
     for (unsigned i=0; i<acting.size(); i++) {
       if (osd->osdmap->is_up(acting[i])) {  // is up now
+	num_still_up_or_clean++;
 	if (acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(acting[i]);
       } else {
 	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
+
+	// fixme: how do we identify a "clean" shutdown anyway?
 
 	if (i == 0) {
 	  if (maybe_went_rw) {
@@ -627,38 +633,19 @@ void PG::build_prior()
 	}
       }
     }
+
+    if (num_still_up_or_clean == 0) {
+      dout(10) << "build_prior  none of " << acting << " still up or cleanly shutdown, pg crashed" << dendl;
+      state_set(PG_STATE_CRASHED);
+    }
   }
 
   dout(10) << "build_prior = " << prior_set
+	   << (is_crashed() ? " crashed":"")
 	   << (some_down ? " some_down":"")
 	   << (must_notify_mon ? " must_notify_mon":"")
 	   << dendl;
 }
-
-void PG::adjust_prior()
-{
-  /*
-   * this is just a sanity check, now... remove me
-   */
-
-  // raise last_epoch_started
-  epoch_t max = info.history.last_epoch_started;
-  for (map<int,Info>::iterator it = peer_info.begin();
-       it != peer_info.end();
-       it++) {
-    if (it->second.history.last_epoch_started > max)
-      max = it->second.history.last_epoch_started;
-  }
-
-  dout(10) << "adjust_prior last_epoch_started " 
-           << info.history.last_epoch_started << " -> " << max << dendl;
-  assert(max == info.history.last_epoch_started);
-  info.history.last_epoch_started = max;
-
-  // rebuild prior set
-  build_prior();
-}
-
 
 void PG::clear_primary_state()
 {
@@ -715,61 +702,7 @@ void PG::peer(ObjectStore::Transaction& t,
   
   // -- ok, we have all (prior_set) info.  (and maybe others.)
 
-  // did we crash?
-  dout(10) << " last_epoch_started " << info.history.last_epoch_started << dendl;
-  if (info.history.last_epoch_started) {
-    OSDMap omap;
-    osd->get_map(info.history.last_epoch_started, omap);
-    
-    // start with the last active set of replicas
-    set<int> last_started;
-    vector<int> acting;
-    bool cleanly_down = true;
-    omap.pg_to_acting_osds(get_pgid(), acting);
-    for (unsigned i=0; i<acting.size(); i++)
-      last_started.insert(acting[i]);
-
-    // make sure at least one of them is still up
-    for (epoch_t e = info.history.last_epoch_started+1;
-         e <= osd->osdmap->get_epoch();
-         e++) {
-      OSDMap omap;
-      osd->get_map(e, omap);
-      
-      set<int> still_up;
-
-      for (set<int>::iterator i = last_started.begin();
-           i != last_started.end();
-           i++) {
-        //dout(10) << " down in epoch " << e << " is " << omap.get_down_osds() << dendl;
-        if (omap.is_up(*i))
-          still_up.insert(*i);
-	else if (!omap.is_down_clean(*i))
-	  cleanly_down = false;	   
-      }
-
-      last_started.swap(still_up);
-      //dout(10) << " still active as of epoch " << e << ": " << last_started << dendl;
-    }
-    
-    if (last_started.empty()) {
-      if (cleanly_down) {
-	dout(10) << " cleanly stopped since epoch " << info.history.last_epoch_started << dendl;
-      } else {
-	dout(10) << " crashed since epoch " << info.history.last_epoch_started << dendl;
-	state_set(PG_STATE_CRASHED);
-      }
-    } else {
-      dout(10) << " still active from last started: " << last_started << dendl;
-    }
-  } else if (osd->osdmap->get_epoch() > info.history.epoch_created) {  // FIXME hrm is htis right?
-    dout(10) << " crashed since epoch " << info.history.last_epoch_started << dendl;
-    state_set(PG_STATE_CRASHED);
-  }    
-
-  dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
-
-
+  dout(10) << " have prior_set info.  peers_complete_thru " << peers_complete_thru << dendl;
 
 
   /** CREATE THE MASTER PG::Log *********/
