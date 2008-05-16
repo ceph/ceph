@@ -205,6 +205,7 @@ class Inode {
     dir(0), dn(0), symlink(0),
     hack_balance_reads(false)
   {
+    memset(&inode, 0, sizeof(inode));
     //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
     inode.ino = ino;
   }

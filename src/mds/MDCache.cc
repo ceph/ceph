@@ -148,9 +148,6 @@ CInode *MDCache::create_inode()
 {
   CInode *in = new CInode(this);
 
-  // zero
-  memset(&in->inode, 0, sizeof(inode_t));
-  
   // assign ino
   in->inode.ino = mds->idalloc->alloc_id();
   in->inode.version = 1;
@@ -209,7 +206,6 @@ void MDCache::remove_inode(CInode *o)
 CInode *MDCache::create_root_inode()
 {
   CInode *root = new CInode(this);
-  memset(&root->inode, 0, sizeof(inode_t));
   root->inode.ino = MDS_INO_ROOT;
   root->inode.version = 1;
   
@@ -261,7 +257,6 @@ CInode *MDCache::create_stray_inode(int whose)
   if (whose < 0) whose = mds->get_nodeid();
 
   CInode *in = new CInode(this, whose == mds->get_nodeid());
-  memset(&in->inode, 0, sizeof(inode_t));
   in->inode.ino = MDS_INO_STRAY(whose);
   
   // make it up (FIXME)
@@ -2199,7 +2194,6 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 CInode *MDCache::rejoin_invent_inode(inodeno_t ino)
 {
   CInode *in = new CInode(this);
-  memset(&in->inode, 0, sizeof(inode_t));
   in->inode.ino = ino;
   in->state_set(CInode::STATE_REJOINUNDEF);
   add_inode(in);
