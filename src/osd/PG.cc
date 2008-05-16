@@ -400,17 +400,17 @@ void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
     if (omissing.is_missing(p->first)) {
       assert(omissing.is_missing(p->first, p->second));
       if (omissing.loc.count(p->first)) {
-        dout(10) << "proc_missing missing " << p->first << " " << p->second
-                 << " on osd" << omissing.loc[p->first] << dendl;
+        dout(10) << "proc_missing " << p->first << " " << p->second
+                 << " is on osd" << omissing.loc[p->first] << dendl;
         missing.loc[p->first] = omissing.loc[p->first];
       } else {
-        dout(10) << "proc_missing missing " << p->first << " " << p->second
+        dout(10) << "proc_missing " << p->first << " " << p->second
                  << " also LOST on source, osd" << fromosd << dendl;
       }
     } 
     else if (p->second <= olog.top) {
-      dout(10) << "proc_missing missing " << p->first << " " << p->second
-               << " on source, osd" << fromosd << dendl;
+      dout(10) << "proc_missing " << p->first << " " << p->second
+               << " is on source, osd" << fromosd << dendl;
       missing.loc[p->first] = fromosd;
     } else {
       dout(10) << "proc_missing " << p->first << " " << p->second
@@ -638,8 +638,12 @@ void PG::adjust_prior()
 {
   assert(!prior_set.empty());
 
+  /*
+   * this is just a sanity check, now... remove me
+   */
+
   // raise last_epoch_started
-  epoch_t max = 0;
+  epoch_t max = info.history.last_epoch_started;
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
        it++) {
@@ -649,7 +653,7 @@ void PG::adjust_prior()
 
   dout(10) << "adjust_prior last_epoch_started " 
            << info.history.last_epoch_started << " -> " << max << dendl;
-  assert(max > info.history.last_epoch_started);
+  assert(max == info.history.last_epoch_started);
   info.history.last_epoch_started = max;
 
   // rebuild prior set
@@ -668,6 +672,7 @@ void PG::clear_primary_state()
   uptodate_set.clear();
   peer_info_requested.clear();
   peer_log_requested.clear();
+  peer_summary_requested.clear();
   peer_info.clear();
   peer_missing.clear();
   
