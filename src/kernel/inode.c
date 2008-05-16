@@ -218,6 +218,7 @@ static void fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 			dout(10, "size %lld -> %llu\n", inode->i_size, size);
 			inode->i_size = size;
 			inode->i_blocks = blocks;
+			ci->i_reported_size = size;
 		}
 		if (time_warp_seq > ci->i_time_warp_seq) {
 			inode->i_ctime = *ctime;
@@ -236,6 +237,7 @@ static void fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 	} else {
 		inode->i_size = size;
 		inode->i_blocks = blocks;
+		ci->i_reported_size = size;
 		if (time_warp_seq >= ci->i_time_warp_seq) {
 			inode->i_ctime = *ctime;
 			inode->i_mtime = *mtime;
@@ -297,7 +299,6 @@ int ceph_fill_inode(struct inode *inode,
 	inode->i_blkbits = blkbits;
 
 	ci->i_max_size = le64_to_cpu(info->max_size);
-	ci->i_reported_size = inode->i_size;  /* reset FIXME ??? */
 
 	ci->i_layout = info->layout;
 	kfree(ci->i_symlink);
