@@ -663,8 +663,8 @@ public:
 
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
-  void append_log(ObjectStore::Transaction& t, 
-                  PG::Log::Entry& logentry, 
+  void append_log(ObjectStore::Transaction &t, 
+                  const PG::Log::Entry &logentry, 
                   eversion_t trim_to);
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
@@ -709,9 +709,9 @@ WRITE_CLASS_ENCODER(PG::Log)
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {
-  return out << " ec " << h.epoch_created
-	     << " les " << h.last_epoch_started
-	     << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
+  return out << " ec=" << h.epoch_created
+	     << " les=" << h.last_epoch_started
+	     << " " << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 

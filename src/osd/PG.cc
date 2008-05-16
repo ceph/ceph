@@ -1052,10 +1052,12 @@ void PG::write_log(ObjectStore::Transaction& t)
     if (bl.length() % 4096 == 0)
       ondisklog.block_map[bl.length()] = p->version;
     ::encode(*p, bl);
+    /*
     if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
       bufferptr bp(4096 - sizeof(*p));
       bl.push_back(bp);
     }
+    */
   }
   ondisklog.top = bl.length();
   
@@ -1066,6 +1068,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   t.collection_setattr(info.pgid, "info", &info, sizeof(info)); 
+
+  dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }
 
 void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v) 
@@ -1103,18 +1107,20 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 }
 
 
-void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry, 
+void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry, 
                     eversion_t trim_to)
 {
   dout(10) << "append_log " << ondisklog.top << " " << logentry << dendl;
 
   // write entry on disk
   bufferlist bl;
-  bl.append( (char*)&logentry, sizeof(logentry) );
+  ::encode(logentry, bl);
+  /*
   if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
     bufferptr bp(4096 - sizeof(logentry));
     bl.push_back(bp);
   }
+  */
   t.write( info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
@@ -1160,10 +1166,11 @@ void PG::read_log(ObjectStore *store)
     }
     
     PG::Log::Entry e;
-    off_t pos = ondisklog.bottom;
+    bufferlist::iterator p = bl.begin();
     assert(log.log.empty());
-    while (pos < ondisklog.top) {
-      bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
+    while (!p.end()) {
+      ::decode(e, p);
+      off_t pos = ondisklog.bottom + p.get_off();
       dout(10) << "read_log " << pos << " " << e << dendl;
 
       if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
@@ -1173,11 +1180,13 @@ void PG::read_log(ObjectStore *store)
       } else {
 	dout(10) << "read_log ignoring entry at " << pos << dendl;
       }
-      
+
+      /*
       if (g_conf.osd_pad_pg_log)   // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
 	pos += 4096;
       else
 	pos += sizeof(e);
+      */
     }
   }
   log.top = info.last_update;
