@@ -143,44 +143,10 @@ rados snapshots
 
 objecter
 - maybe_request_map should set a timer event to periodically re-request.
-- transaction prepare/commit
+- transaction prepare/commit?
 - read+floor_lockout
 
 osd/rados
-- fix build_prior_set behavior.  needs to not always exclude currently down nodes.  e.g.,
-
-  1: A B
-  2:   B
-  3:
-  4: A
-   -> prior_set should be <A,B>, bc B may have independently applied updates.
-
- ideas:
-  - can't activate pg when lone OSD without informing the monitor of alive_thru
-    - add alive_thru map to osdmap.  any lone pg will not have activated if the osd is now down, and alive_thru does not include the given epoch.
-
-  1: A B C
-  2:   B C
-  3:
-  4: A   C -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
-
-
-1: A B
-2:     C D   .. can't have gone active
-
-1: A B
-2:   B C   B in prior_set, will 
-
-
- -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
- 
- -> so, use calc_priors_during in build_prior, then make recovery code check for is_up
-
-- paxos replication (i.e. majority voting)?
-
-- transaction prepare/commit
-  - rollback
-  - rollback logging (to fix slow prepare vs rollback race)
 
 - a more general fencing mechanism?  per-object granularity isn't usually a good match.
 
@@ -199,10 +165,7 @@ messenger
 - fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
 
 simplemessenger
-- fix/audit accept() logic to detect reset, do callback
 - close idle connections
-- take a look at RDS?  http://oss.oracle.com/projects/rds/
-
 
 objectcacher
 - merge clean bh's
