@@ -570,7 +570,7 @@ void PG::build_prior()
   // for each acting set, we need to know same_since and last_epoch
   epoch_t first_epoch = info.history.same_since;
   epoch_t last_epoch = first_epoch - 1;
-  epoch_t stop = MAX(1, last_epoch_started_any);
+  epoch_t stop = MAX(1, info.history.last_epoch_started);
 
   dout(10) << "build_prior considering interval " << first_epoch << " down to " << stop << dendl;
   OSDMap *nextmap = new OSDMap;
@@ -638,7 +638,7 @@ void PG::adjust_prior()
 {
   assert(!prior_set.empty());
 
-  // raise last_epoch_started_any
+  // raise last_epoch_started
   epoch_t max = 0;
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
@@ -647,10 +647,10 @@ void PG::adjust_prior()
       max = it->second.history.last_epoch_started;
   }
 
-  dout(10) << "adjust_prior last_epoch_started_any " 
-           << last_epoch_started_any << " -> " << max << dendl;
-  assert(max > last_epoch_started_any);
-  last_epoch_started_any = max;
+  dout(10) << "adjust_prior last_epoch_started " 
+           << info.history.last_epoch_started << " -> " << max << dendl;
+  assert(max > info.history.last_epoch_started);
+  info.history.last_epoch_started = max;
 
   // rebuild prior set
   build_prior();
@@ -672,8 +672,6 @@ void PG::clear_primary_state()
   peer_missing.clear();
   
   stat_object_temp_rd.clear();
-
-  last_epoch_started_any = info.history.last_epoch_started;
 }
 
 void PG::peer(ObjectStore::Transaction& t, 
@@ -714,10 +712,10 @@ void PG::peer(ObjectStore::Transaction& t,
   // -- ok, we have all (prior_set) info.  (and maybe others.)
 
   // did we crash?
-  dout(10) << " last_epoch_started_any " << last_epoch_started_any << dendl;
-  if (last_epoch_started_any) {
+  dout(10) << " last_epoch_started " << info.history.last_epoch_started << dendl;
+  if (info.history.last_epoch_started) {
     OSDMap omap;
-    osd->get_map(last_epoch_started_any, omap);
+    osd->get_map(info.history.last_epoch_started, omap);
     
     // start with the last active set of replicas
     set<int> last_started;
@@ -728,7 +726,7 @@ void PG::peer(ObjectStore::Transaction& t,
       last_started.insert(acting[i]);
 
     // make sure at least one of them is still up
-    for (epoch_t e = last_epoch_started_any+1;
+    for (epoch_t e = info.history.last_epoch_started+1;
          e <= osd->osdmap->get_epoch();
          e++) {
       OSDMap omap;
@@ -752,16 +750,16 @@ void PG::peer(ObjectStore::Transaction& t,
     
     if (last_started.empty()) {
       if (cleanly_down) {
-	dout(10) << " cleanly stopped since epoch " << last_epoch_started_any << dendl;
+	dout(10) << " cleanly stopped since epoch " << info.history.last_epoch_started << dendl;
       } else {
-	dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
+	dout(10) << " crashed since epoch " << info.history.last_epoch_started << dendl;
 	state_set(PG_STATE_CRASHED);
       }
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
   } else if (osd->osdmap->get_epoch() > info.history.epoch_created) {  // FIXME hrm is htis right?
-    dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
+    dout(10) << " crashed since epoch " << info.history.last_epoch_started << dendl;
     state_set(PG_STATE_CRASHED);
   }    
 
@@ -957,7 +955,7 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(PG_STATE_CRASHED);
     state_clear(PG_STATE_REPLAY);
   }
-  last_epoch_started_any = info.history.last_epoch_started = osd->osdmap->get_epoch();
+  info.history.last_epoch_started = osd->osdmap->get_epoch();
   
   if (role == 0) {    // primary state
     peers_complete_thru = eversion_t(0,0);  // we don't know (yet)!

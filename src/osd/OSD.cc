@@ -524,8 +524,7 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
   PG *pg = _create_lock_pg(pgid, t);
   pg->set_role(0);
   pg->acting.swap(acting);
-  pg->last_epoch_started_any = 
-    pg->info.history.epoch_created = 
+  pg->info.history.epoch_created = 
     pg->info.history.last_epoch_started = 
     pg->info.history.same_since = 
     pg->info.history.same_primary_since = 
@@ -2160,7 +2159,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->acting.swap(acting);
 	pg->set_role(role);
 	pg->info.history = history;
-	pg->last_epoch_started_any = history.last_epoch_started;  // _after_ clear_primary_state()
 	pg->clear_primary_state();  // yep, notably, set hml=false
 	pg->build_prior();      
 	pg->write_log(t);
@@ -2188,10 +2186,11 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     // ok!
     dout(10) << *pg << " osd" << from << " " << *it << dendl;
+    pg->info.history.merge(it->history);
 
     // stray?
     bool acting = pg->is_acting(from);
-    if (!acting && (*it).history.last_epoch_started > 0) {
+    if (!acting && (*it).last_update > eversion_t()) {     // FIXME is this right?
       dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
       pg->stray_set.insert(from);
       pg->state_clear(PG_STATE_CLEAN);
@@ -2215,8 +2214,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       if (pg->is_all_uptodate()) 
 	pg->finish_recovery();
     } else {
-      if (it->history.last_epoch_started > pg->last_epoch_started_any) 
-        pg->adjust_prior();
+      pg->adjust_prior();
       pg->peer(t, query_map, &info_map);
     }
 
@@ -2290,6 +2288,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   assert(pg);
 
   dout(10) << *pg << " got " << info << " " << log << " " << missing << dendl;
+  pg->info.history.merge(info.history);
 
   //m->log.print(cout);
 
@@ -2306,14 +2305,16 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     do_queries(query_map);
 
   } else {
-    // i am REPLICA
-    // merge log
-    pg->merge_log(log, missing, from);
-    pg->proc_missing(log, missing, from);
-    assert(pg->missing.num_lost() == 0);
-
-    // ok activate!
-    pg->activate(t, info_map);
+    if (!pg->info.dne()) {
+      // i am REPLICA
+      // merge log
+      pg->merge_log(log, missing, from);
+      pg->proc_missing(log, missing, from);
+      assert(pg->missing.num_lost() == 0);
+      
+      // ok activate!
+      pg->activate(t, info_map);
+    }
   }
 
   unsigned tr = store->apply_transaction(t);
@@ -2431,6 +2432,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
         continue;
       }
     }
+
+    pg->info.history.merge(it->second.history);
 
     // ok, process query!
     assert(!pg->acting.empty());

@@ -67,8 +67,8 @@ public:
     bool       log_backlog;    // do we store a complete log?
 
     struct History {
-      epoch_t epoch_created;       // epoch in which it was created
-      epoch_t last_epoch_started;  // last epoch started.
+      epoch_t epoch_created;       // epoch in which PG was created
+      epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
 
       epoch_t same_since;          // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
@@ -77,6 +77,14 @@ public:
 	epoch_created(0),
 	last_epoch_started(0),
 	same_since(0), same_primary_since(0), same_acker_since(0) {}
+
+      void merge(const History &other) {
+	if (epoch_created < other.epoch_created)
+	  epoch_created = other.epoch_created;
+	if (last_epoch_started < other.last_epoch_started)
+	  last_epoch_started = other.last_epoch_started;
+      }
+
       void encode(bufferlist &bl) const {
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
@@ -498,14 +506,13 @@ protected:
   // primary state
  public:
   vector<int> acting;
-  epoch_t     last_epoch_started_any;
   eversion_t  last_complete_commit;
 
   // [primary only] content recovery state
   eversion_t  peers_complete_thru;
   bool        have_master_log;
  protected:
-  set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
+  set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
   bool        must_notify_mon;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
@@ -559,7 +566,7 @@ public:
   bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
   void build_prior();
-  void adjust_prior();  // based on new peer_info.last_epoch_started_any
+  void adjust_prior();  // based on new peer_info.last_epoch_started
 
   bool adjust_peers_complete_thru() {
     eversion_t t = info.last_complete;
@@ -609,7 +616,6 @@ public:
     info(p),
     role(0),
     state(0),
-    last_epoch_started_any(0),
     have_master_log(true),
     must_notify_mon(false),
     stat_num_bytes(0), stat_num_blocks(0)
