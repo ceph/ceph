@@ -563,6 +563,7 @@ void PG::build_prior()
     prior_set.insert(acting[i]);
 
   // and prior PG mappings.  move backwards in time.
+  bool crashed = false;
   bool some_down = false;
 
   must_notify_mon = false;
@@ -636,8 +637,6 @@ void PG::build_prior()
 
 void PG::adjust_prior()
 {
-  assert(!prior_set.empty());
-
   /*
    * this is just a sanity check, now... remove me
    */
