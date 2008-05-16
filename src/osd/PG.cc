@@ -598,14 +598,14 @@ void PG::build_prior()
       continue;
     }
 
-    bool maybe_went_active = 
+    bool maybe_went_rw = 
       lastmap->get_up_thru(acting[0]) >= first_epoch &&
       lastmap->get_up_from(acting[0]) < first_epoch;
 
     dout(10) << "build_prior epochs " << first_epoch << "-" << last_epoch << " " << acting
 	     << " - primary osd" << acting[0]
 	     << " up [" << lastmap->get_up_from(acting[0]) << ", " << lastmap->get_up_thru(acting[0]) << "]"
-	     << " -> " << maybe_went_active
+	     << (maybe_went_rw ? " -> maybe went rw":"")
 	     << dendl;
     
     for (unsigned i=0; i<acting.size(); i++) {
@@ -617,8 +617,8 @@ void PG::build_prior()
 	must_notify_mon = true;
 
 	if (i == 0) {
-	  if (maybe_went_active) {
-	    dout(10) << "build_prior  prior primary osd" << acting[i] << " possibly went active epoch " 
+	  if (maybe_went_rw) {
+	    dout(10) << "build_prior  pg possibly went active+rw in epoch " 
 		     << (lastmap->get_up_thru(acting[i]) + 1) << dendl;
 	    some_down = true;
 	    prior_set.insert(acting[i]);
