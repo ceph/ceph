@@ -2245,7 +2245,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
  * NOTE: called with opqueue active.
  */
 
-
 void OSD::_process_pg_info(epoch_t epoch, int from,
 			   PG::Info &info, 
 			   PG::Log &log, 
