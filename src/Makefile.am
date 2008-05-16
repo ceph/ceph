@@ -93,7 +93,6 @@ libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
 
 ## libcephclient.so
 libcephclient_so_a_SOURCES = \
-	client/FileCache.cc \
 	client/Client.cc \
 	client/SyntheticClient.cc \
 	client/Trace.cc \
@@ -232,7 +231,6 @@ libosdc_a_SOURCES = \
 	osdc/Journaler.cc
 
 libclient_a_SOURCES = \
-	client/FileCache.cc \
 	client/Client.cc \
 	client/SyntheticClient.cc \
 	client/Trace.cc
@@ -245,7 +243,6 @@ noinst_HEADERS = \
 	client/SyntheticClient.h\
 	client/fuse.h\
 	client/fuse_ll.h\
-	client/FileCache.h\
 	client/Client.h\
 	common/Clock.h\
 	common/Cond.h\

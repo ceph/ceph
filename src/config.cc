@@ -53,7 +53,21 @@ int buffer::list::write_file(const char *fn)
     cerr << "can't write " << fn << ": " << strerror(errno) << std::endl;
     return -errno;
   }
-  ::write(fd, (void*)c_str(), length());
+  for (std::list<ptr>::const_iterator it = _buffers.begin(); 
+       it != _buffers.end(); 
+       it++) {
+    const char *c = it->c_str();
+    int left = it->length();
+    while (left > 0) {
+      int r = ::write(fd, c, left);
+      if (r < 0) {
+	::close(fd);
+	return -errno;
+      }
+      c += r;
+      left -= r;
+    }
+  }
   ::close(fd);
   return 0;
 }
@@ -603,7 +617,7 @@ void parse_config_options(std::vector<const char*>& args)
 
     
     
-    else if (strcmp(args[i], "-o") == 0 ||
+    else if (//strcmp(args[i], "-o") == 0 ||
 	     strcmp(args[i], "--doutdir") == 0) 
       g_conf.dout_dir = args[++i];
 

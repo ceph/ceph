@@ -252,6 +252,7 @@ public:
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET)
   {
+    memset(&inode, 0, sizeof(inode));
     state = 0;  
     if (auth) state_set(STATE_AUTH);
   };

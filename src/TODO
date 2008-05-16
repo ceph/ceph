@@ -14,11 +14,10 @@ big items
 
 userspace client
 - rm -rf on fragmented directory
-- move the size check(s) on read from _read() into FileCache
 - time out caps, wake up waiters on renewal
+  - link caps with mds session
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
-- obey file_max
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
