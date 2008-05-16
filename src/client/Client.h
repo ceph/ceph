@@ -181,11 +181,11 @@ class Inode {
 
   void get() { 
     ref++; 
-    cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
+    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
   }
   void put(int n=1) { 
     ref -= n; assert(ref >= 0); 
-    cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
+    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
   }
 
   void ll_get() {
@@ -222,7 +222,7 @@ class Inode {
     open_by_mode[mode]++;
   }
   bool put_open_ref(int mode) {
-    cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
+    //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
     if (--open_by_mode[mode] == 0)
       return true;
     return false;
