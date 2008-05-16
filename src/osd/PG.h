@@ -66,20 +66,27 @@ public:
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
-    epoch_t epoch_created;       // epoch in which it was created
-    epoch_t last_epoch_started;  // last epoch started.
-
     struct History {
+      epoch_t epoch_created;       // epoch in which it was created
+      epoch_t last_epoch_started;  // last epoch started.
+
       epoch_t same_since;          // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
       epoch_t same_acker_since;    // same acker at least back through this epoch.
-      History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
+      History() : 	      
+	epoch_created(0),
+	last_epoch_started(0),
+	same_since(0), same_primary_since(0), same_acker_since(0) {}
       void encode(bufferlist &bl) const {
+	::encode(epoch_created, bl);
+	::encode(last_epoch_started, bl);
 	::encode(same_since, bl);
 	::encode(same_primary_since, bl);
 	::encode(same_acker_since, bl);
       }
       void decode(bufferlist::iterator &bl) {
+	::decode(epoch_created, bl);
+	::decode(last_epoch_started, bl);
 	::decode(same_since, bl);
 	::decode(same_primary_since, bl);
 	::decode(same_acker_since, bl);
@@ -87,13 +94,11 @@ public:
     } history;
     
     Info(pg_t p=0) : pgid(p), 
-                     log_backlog(false),
-		     epoch_created(0),
-                     last_epoch_started(0)
+                     log_backlog(false)
     { }
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
-    bool dne() const { return epoch_created == 0; }
+    bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
       ::encode(pgid, bl);
@@ -101,8 +106,6 @@ public:
       ::encode(last_complete, bl);
       ::encode(log_bottom, bl);
       ::encode(log_backlog, bl);
-      ::encode(epoch_created, bl);
-      ::encode(last_epoch_started, bl);
       history.encode(bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -111,8 +114,6 @@ public:
       ::decode(last_complete, bl);
       ::decode(log_bottom, bl);
       ::decode(log_backlog, bl);
-      ::decode(epoch_created, bl);
-      ::decode(last_epoch_started, bl);
       history.decode(bl);
     }
   };
@@ -708,7 +709,9 @@ WRITE_CLASS_ENCODER(PG::Log)
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {
-  return out << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
+  return out << " ec " << h.epoch_created
+	     << " les " << h.last_epoch_started
+	     << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
@@ -723,8 +726,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
         << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
   //out << " c " << pgi.epoch_created;
-  out << " e " << pgi.last_epoch_started
-      << " " << pgi.history
+  out << " " << pgi.history
       << ")";
   return out;
 }

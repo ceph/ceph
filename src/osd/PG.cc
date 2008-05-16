@@ -544,8 +544,8 @@ void PG::adjust_prior()
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
        it++) {
-    if (it->second.last_epoch_started > max)
-      max = it->second.last_epoch_started;
+    if (it->second.history.last_epoch_started > max)
+      max = it->second.history.last_epoch_started;
   }
 
   dout(10) << "adjust_prior last_epoch_started_any " 
@@ -574,7 +574,7 @@ void PG::clear_primary_state()
   
   stat_object_temp_rd.clear();
 
-  last_epoch_started_any = info.last_epoch_started;
+  last_epoch_started_any = info.history.last_epoch_started;
 }
 
 void PG::peer(ObjectStore::Transaction& t, 
@@ -661,7 +661,7 @@ void PG::peer(ObjectStore::Transaction& t,
     } else {
       dout(10) << " still active from last started: " << last_started << dendl;
     }
-  } else if (osd->osdmap->get_epoch() > info.epoch_created) {  // FIXME hrm is htis right?
+  } else if (osd->osdmap->get_epoch() > info.history.epoch_created) {  // FIXME hrm is htis right?
     dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
     state_set(PG_STATE_CRASHED);
   }    
@@ -844,7 +844,7 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(PG_STATE_CRASHED);
     state_clear(PG_STATE_REPLAY);
   }
-  last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
+  last_epoch_started_any = info.history.last_epoch_started = osd->osdmap->get_epoch();
   
   if (role == 0) {    // primary state
     peers_complete_thru = eversion_t(0,0);  // we don't know (yet)!

@@ -520,9 +520,9 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
   PG *pg = _create_lock_pg(pgid, t);
   pg->set_role(0);
   pg->acting.swap(acting);
-  pg->info.epoch_created = 
-    pg->last_epoch_started_any = 
-    pg->info.last_epoch_started = 
+  pg->last_epoch_started_any = 
+    pg->info.history.epoch_created = 
+    pg->info.history.last_epoch_started = 
     pg->info.history.same_since = 
     pg->info.history.same_primary_since = 
     pg->info.history.same_acker_since = osdmap->get_epoch();
@@ -1622,7 +1622,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     pg->lock();
     if (pg->is_active()) {
       // update started counter
-      pg->info.last_epoch_started = osdmap->get_epoch();
+      pg->info.history.last_epoch_started = osdmap->get_epoch();
     } 
     else if (pg->get_role() == 0 && !pg->is_active()) {
       // i am (inactive) primary
@@ -2122,8 +2122,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
       assert(role == 0);  // otherwise, probably bug in project_pg_history.
       
-      epoch_t last_epoch_started = it->last_epoch_started;
-
       // DNE on source?
       if (it->dne()) {  
 	// is there a creation pending on this pg?
@@ -2147,8 +2145,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->acting.swap(acting);
 	pg->set_role(role);
 	pg->info.history = history;
-	pg->info.epoch_created = it->epoch_created;
-	pg->last_epoch_started_any = last_epoch_started;  // _after_ clear_primary_state()
+	pg->last_epoch_started_any = history.last_epoch_started;  // _after_ clear_primary_state()
 	pg->clear_primary_state();  // yep, notably, set hml=false
 	pg->build_prior();      
 	pg->write_log(t);
@@ -2179,7 +2176,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     // stray?
     bool acting = pg->is_acting(from);
-    if (!acting && (*it).last_epoch_started > 0) {
+    if (!acting && (*it).history.last_epoch_started > 0) {
       dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
       pg->stray_set.insert(from);
       pg->state_clear(PG_STATE_CLEAN);
@@ -2203,7 +2200,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       if (pg->is_all_uptodate()) 
 	pg->finish_recovery();
     } else {
-      if (it->last_epoch_started > pg->last_epoch_started_any) 
+      if (it->history.last_epoch_started > pg->last_epoch_started_any) 
         pg->adjust_prior();
       pg->peer(t, query_map, &info_map);
     }
