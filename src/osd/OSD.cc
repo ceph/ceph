@@ -1535,6 +1535,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     if (oldrole == 0 || pg->get_role() == 0)
       pg->clear_primary_state();
 
+    dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
+	     << ", role " << oldrole << " -> " << role << dendl; 
+    
     // pg->on_*
     for (unsigned i=0; i<oldacting.size(); i++)
       if (osdmap->is_down(oldacting[i]))
@@ -1556,16 +1559,16 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  ls.push_back(it->second);
 	pg->replay_queue.clear();
 	take_waiters(ls);
-	
-	// take active waiters
-	take_waiters(pg->waiting_for_active);
-	
-	pg->on_role_change();
       }
+
+      pg->on_role_change();
       
+      // take active waiters
+      take_waiters(pg->waiting_for_active);
+
       // new primary?
       if (role == 0) {
-          // i am new primary
+	// i am new primary
 	pg->state_clear(PG_STATE_STRAY);
       } else {
 	// i am now replica|stray.  we need to send a notify.
@@ -1586,10 +1589,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	  }
 	}
       }
-      
-      // my role changed.
-      dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
-	       << ", role " << oldrole << " -> " << role << dendl; 
       
     } else {
       // no role change.
@@ -1614,7 +1613,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	}
       }
     }
-    
+
     pg->unlock();
   }
 }
