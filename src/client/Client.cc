@@ -352,8 +352,8 @@ void Client::update_inode_file_bits(Inode *in,
   }
   if (warn) {
     dout(0) << *in << " mds time_warp_seq "
-	    << time_warp_seq << " -> "
-	    << in->inode.time_warp_seq
+	    << in->inode.time_warp_seq << " -> "
+	    << time_warp_seq
 	    << dendl;
   }
 }
@@ -1308,8 +1308,7 @@ void Inode::get_cap_ref(int cap)
     if (cap & 1) {
       int c = 1 << n;
       cap_refs[c]++;
-      cout << "inode " << *this << " get " << cap_string(c) << " "
-	   << (cap_refs[c]-1) << " -> " << cap_refs[c] << std::endl;
+      //cout << "inode " << *this << " get " << cap_string(c) << " " << (cap_refs[c]-1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
     n++;
@@ -1325,8 +1324,7 @@ bool Inode::put_cap_ref(int cap)
       int c = 1 << n;
       if (--cap_refs[c] == 0)
 	last = true;      
-      cout << "inode " << *this << " put " << cap_string(c) << " "
-	   << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
+      //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
     n++;
