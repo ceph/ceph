@@ -598,7 +598,8 @@ public:
 
   virtual void cancel_recovery() = 0;
   virtual bool do_recovery() = 0;
-  virtual void purge_strays() = 0;
+
+  void purge_strays();
 
   void finish_recovery();
 

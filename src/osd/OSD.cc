@@ -321,7 +321,11 @@ int OSD::init()
     dout(2) << "boot" << dendl;
     
     // read superblock
-    read_superblock();
+    if (read_superblock() < 0) {
+      store->umount();
+      delete store;
+      return -1;
+    }
     
     // load up pgs (as they previously existed)
     load_pgs();
@@ -451,14 +455,19 @@ int OSD::read_superblock()
   bufferlist bl;
   int r = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
   if (bl.length() != sizeof(superblock)) {
-    dout(10) << "read_superblock failed, r = " << r << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << dendl;
+    derr(0) << "read_superblock failed, r = " << r 
+	    << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << dendl;
     return -1;
   }
 
   bl.copy(0, sizeof(superblock), (char*)&superblock);
 
   dout(10) << "read_superblock " << superblock << dendl;
-  assert(whoami == superblock.whoami);  // fixme!
+  if (whoami != superblock.whoami) {
+    derr(0) << "read_superblock superblock says osd" << superblock.whoami
+	    << ", but i (think i) am osd" << whoami << dendl;
+    return -1;
+  }
   
   // load up "current" osdmap
   assert(!osdmap);
@@ -2187,17 +2196,17 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     dout(10) << *pg << " osd" << from << " " << *it << dendl;
     pg->info.history.merge(it->history);
 
+    // save info.
+    bool had = pg->peer_info.count(from);
+    pg->peer_info[from] = *it;
+
     // stray?
     bool acting = pg->is_acting(from);
-    if (!acting && (*it).last_update > eversion_t()) {     // FIXME is this right?
+    if (!acting) {
       dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
       pg->stray_set.insert(from);
       pg->state_clear(PG_STATE_CLEAN);
     }
-
-    // save info.
-    bool had = pg->peer_info.count(from);
-    pg->peer_info[from] = *it;
 
     if (had) {
       if (pg->is_active() && 

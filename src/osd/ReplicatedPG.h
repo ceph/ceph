@@ -117,8 +117,6 @@ protected:
   bool do_recovery();
   void do_peer_recovery();
 
-  void purge_strays();
-
 
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);

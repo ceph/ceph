@@ -158,10 +158,5 @@ bool RAID4PG::do_recovery()
   return false;
 }
 
-void RAID4PG::purge_strays() 
-{
-  //assert(0);
-}
-
 
 
