@@ -761,6 +761,12 @@ int Rank::Pipe::accept()
       existing = rank.rank_pipe[peer_addr];
       existing->lock.Lock();
       
+      if (existing->policy.is_lossy()) {
+	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
+	existing->was_session_reset();
+	goto replace;
+      }
+
       if (peer_cseq < existing->connect_seq) {
 	if (false &&
 	    /*
@@ -1129,13 +1135,14 @@ void Rank::Pipe::fault(bool onconnect)
   sd = -1;
 
   // lossy channel?
-  if (policy.retry_interval < 0) {
+  if (policy.is_lossy()) {
+    dout(10) << "fault on lossy channel, failing" << dendl;
     fail();
     return;
   }
 
   if (q.empty()) {
-    if (state == STATE_CLOSING || onconnect) {
+    if (state == STATE_CLOSING || onconnect || policy.is_lossy()) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
     } else {
