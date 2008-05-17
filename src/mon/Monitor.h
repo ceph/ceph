@@ -90,6 +90,9 @@ public:
   epoch_t get_epoch() { return mon_epoch; }
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
+  bool is_full_quorum() {
+    return quorum.size() == monmap->size();
+  }
 
   void call_election();  // initiate election
   void win_election(epoch_t epoch, set<int>& q);  // end election (called by Elector)

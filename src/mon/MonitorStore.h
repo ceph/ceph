@@ -68,6 +68,17 @@ public:
     return put_bl_ss(bl, a, bs);
   }
 
+  int erase_ss(const char *a, const char *b);
+  int erase_sn(const char *a, version_t b) {
+    char bs[20];
+#ifdef __LP64__
+    sprintf(bs, "%lu", b);
+#else
+    sprintf(bs, "%llu", b);
+#endif
+    return erase_ss(a, bs);
+  }
+
   /*
   version_t get_incarnation() { return get_int("incarnation"); }
   void set_incarnation(version_t i) { set_int(i, "incarnation"); }

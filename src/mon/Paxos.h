@@ -100,6 +100,8 @@ public:
 
 private:
   // recovery (phase 1)
+  version_t first_committed_any;
+  version_t first_committed;
   version_t last_pn;
   version_t last_committed;
   version_t accepted_pn;
@@ -215,12 +217,13 @@ public:
   void leader_init();
   void peon_init();
 
-
   // -- service interface --
   void wait_for_active(Context *c) {
     assert(!is_active());
     waiting_for_active.push_back(c);
   }
+
+  void trim_to(version_t first);
   
   // read
   version_t get_version() { return last_committed; }

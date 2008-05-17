@@ -143,6 +143,11 @@ bool PGMonitor::update_from_paxos()
   pg_map.encode(bl);
   mon->store->put_bl_ss(bl, "pgmap", "latest");
 
+  if (mon->is_leader() &&
+      mon->is_full_quorum() &&
+      paxosv > 10)
+    paxos->trim_to(paxosv-10);
+
   send_pg_creates();
 
   return true;

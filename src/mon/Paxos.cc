@@ -30,6 +30,7 @@ void Paxos::init()
   last_pn = mon->store->get_int(machine_name, "last_pn");
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
+  first_committed = mon->store->get_int(machine_name, "first_committed");
 
   dout(10) << "init" << dendl;
 }
@@ -458,6 +459,8 @@ void Paxos::extend_lease()
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
     lease->last_committed = last_committed;
     lease->lease_expire = lease_expire;
+    if (mon->is_full_quorum())
+      lease->first_committed = first_committed;
     mon->messenger->send_message(lease, mon->monmap->get_inst(*p));
   }
 
@@ -487,7 +490,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
     delete lease;
     return;
   }
-  
+
   // extend lease
   if (lease_expire < lease->lease_expire) 
     lease_expire = lease->lease_expire;
@@ -500,6 +503,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   // ack
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
   ack->last_committed = last_committed;
+  ack->first_committed = first_committed;
   ack->lease_expire = lease_expire;
   mon->messenger->send_message(ack, lease->get_source_inst());
 
@@ -508,6 +512,9 @@ void Paxos::handle_lease(MMonPaxos *lease)
     mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = new C_LeaseTimeout(this);
   mon->timer.add_event_after(g_conf.mon_lease_ack_timeout, lease_timeout_event);
+
+  // trim?
+  trim_to(lease->first_committed);
   
   // kick waiters
   finish_contexts(waiting_for_active);
@@ -574,6 +581,26 @@ void Paxos::lease_renew_timeout()
   extend_lease();
 }
 
+
+
+/*
+ * trim old states
+ */
+
+void Paxos::trim_to(version_t first)
+{
+  dout(10) << "trim_to " << first << " (was " << first_committed << ")" << dendl;
+
+  if (first_committed >= first)
+    return;
+
+  while (first_committed < first) {
+    dout(10) << "trim " << first_committed << dendl;
+    mon->store->erase_sn(machine_name, first_committed);
+    first_committed++;
+  }
+  mon->store->put_int(first_committed, machine_name, "first_committed");
+}
 
 /*
  * return a globally unique, monotonically increasing proposal number

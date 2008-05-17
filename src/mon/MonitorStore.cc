@@ -140,6 +140,18 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
   return r == 0;
 }
 
+int MonitorStore::erase_ss(const char *a, const char *b)
+{
+  char fn[200];
+  if (b) {
+    dout(15) << "erase_ss " << a << "/" << b << dendl;
+    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+  } else {
+    dout(15) << "erase_ss " << a << dendl;
+    sprintf(fn, "%s/%s", dir.c_str(), a);
+  }
+  return ::unlink(fn);
+}
 
 int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
 {
