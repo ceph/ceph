@@ -876,6 +876,8 @@ void PG::peer(ObjectStore::Transaction& t,
     // -- ok, activate!
     activate(t, activator_map);
   }
+  else if (is_all_uptodate()) 
+    finish_recovery();
 }
 
 
