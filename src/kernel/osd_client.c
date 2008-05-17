@@ -853,7 +853,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 
 	reqhead = reqm->front.iov_base;
-	reqhead->flags = CEPH_OSD_OP_ACK;    /* just ACK for now */
+	reqhead->flags = CEPH_OSD_OP_SAFE;
 
 	len = calc_layout(osdc, ino, layout, off, len, req);
 	nr_pages = calc_pages_for(off, len);
