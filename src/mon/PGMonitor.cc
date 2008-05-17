@@ -20,6 +20,7 @@
 #include "MonitorStore.h"
 
 #include "messages/MPGStats.h"
+#include "messages/MPGStatsAck.h"
 
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
@@ -210,6 +211,10 @@ bool PGMonitor::prepare_update(Message *m)
   case MSG_PGSTATS:
     return prepare_pg_stats((MPGStats*)m);
 
+  case MSG_MON_COMMAND:
+    delete m;
+    return false;
+
   default:
     assert(0);
     delete m;
@@ -258,10 +263,13 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   pg_map.stat_osd_add(stats->osd_stat);
 
   // pg stats
+  MPGStatsAck *ack = new MPGStatsAck;
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++) {
     pg_t pgid = p->first;
+    ack->pg_stat[pgid] = p->second.reported;
+
     if ((pg_map.pg_stat.count(pgid) && 
 	 pg_map.pg_stat[pgid].reported > p->second.reported)) {
       dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported << dendl;
@@ -295,10 +303,15 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     pg_map.stat_pg_add(pgid, pg_map.pg_stat[pgid]);
   }
   
-  delete stats;
+  paxos->wait_for_commit(new C_Stats(this, ack, stats->get_source_inst()));
   return true;
 }
 
+void PGMonitor::_updated_stats(MPGStatsAck *ack, entity_inst_t who)
+{
+  dout(7) << "_updated_stats for " << who << dendl;
+  mon->messenger->send_message(ack, who);
+}
 
 
 
@@ -474,7 +487,7 @@ void PGMonitor::send_pg_creates()
     int nrep = mon->osdmon->osdmap.pg_to_acting_osds(on, acting);
     if (!nrep) {
       dout(20) << "send_pg_creates  " << pgid << " -> no osds in epoch "
-	       << pg_map.pg_stat[pgid].created << ", skipping" << dendl;
+	       << mon->osdmon->osdmap.get_epoch() << ", skipping" << dendl;
       continue;  // blarney!
     }
     int osd = acting[0];
@@ -517,6 +530,11 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     else if (m->cmd[1] == "getmap") {
       pg_map.encode(rdata);
       ss << "got pgmap version " << pg_map.version;
+      r = 0;
+    }
+    else if (m->cmd[1] == "send_pg_creates") {
+      send_pg_creates();
+      ss << "sent pg creates ";
       r = 0;
     }
   }

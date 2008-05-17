@@ -856,7 +856,7 @@ void PG::peer(ObjectStore::Transaction& t,
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	       << " < same_since " << info.history.same_since
 	       << ", must notify monitor" << dendl;
-      osd->send_alive(info.history.same_since);
+      osd->queue_want_up_thru(info.history.same_since);
       return;
     } else {
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
@@ -1101,7 +1101,7 @@ void PG::update_stats()
   // put in osd stat_queue
   osd->pg_stat_queue_lock.Lock();
   if (is_primary())
-    osd->pg_stat_queue.insert(info.pgid);    
+    osd->pg_stat_queue[info.pgid] = info.last_update;    
   osd->osd_stat_updated = true;
   osd->pg_stat_queue_lock.Unlock();
 }

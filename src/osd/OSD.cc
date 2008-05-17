@@ -62,6 +62,7 @@
 #include "messages/MOSDAlive.h"
 
 #include "messages/MPGStats.h"
+#include "messages/MPGStatsAck.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -227,7 +228,9 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
 
   memset(&my_stat, 0, sizeof(my_stat));
 
-  last_sent_alive = 0;
+  booting = boot_pending = false;
+  up_thru_wanted = up_thru_pending = 0;
+  osd_stat_updated = osd_stat_pending = false;
 
   stat_ops = 0;
   stat_qlen = 0;
@@ -392,14 +395,11 @@ int OSD::init()
   messenger->set_dispatcher(this);
   
   // announce to monitor i exist and have booted.
-  int mon = monmap->pick_mon();
-  messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), monmap->get_inst(mon));
+  booting = true;
+  do_mon_report();     // start mon report timer
   
-  // start the heart
+  // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
-
-  // and stat beacon
-  timer.add_event_after(g_conf.osd_pg_stats_interval, new C_Stats(this));
 
   return 0;
 }
@@ -760,16 +760,6 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 }
 
 
-void OSD::send_alive(epoch_t need)
-{
-  if (need > last_sent_alive) {
-    last_sent_alive = osdmap->get_epoch();
-    /* AAHHH FIXME, may need to retry */
-    int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDAlive(osdmap->get_epoch()),
-			    monmap->get_inst(mon));
-  }
-}
 
 // -------------------------------------
 
@@ -919,7 +909,6 @@ void OSD::heartbeat()
     } else
       heartbeat_from_stamp[*p] = now;  // fake initial
   }
-  maybe_report_failures();
 
   if (logger) logger->set("hbto", heartbeat_to.size());
   if (logger) logger->set("hbfrom", heartbeat_from.size());
@@ -950,49 +939,129 @@ void OSD::heartbeat()
   timer.add_event_after(wait, new C_Heartbeat(this));
 }
 
-void OSD::maybe_report_failures()
+
+
+// =========================================
+
+void OSD::do_mon_report()
 {
-  if (pending_failures.empty())
-    return;  // nothing to report
+  dout(7) << "do_mon_report" << dendl;
 
-  utime_t now = g_clock.now();
-  if (last_failure_report + g_conf.osd_failure_report_interval > now)
-    return;  // not yet
+  last_mon_report = g_clock.now();
 
-  last_failure_report = now;
+  // are prior reports still pending?
+  bool retry = false;
+  if (boot_pending) {
+    dout(10) << "boot still pending" << dendl;
+    retry = true;
+  }
+  if (osdmap->exists(whoami) && 
+      up_thru_pending < osdmap->get_up_thru(whoami)) {
+    dout(10) << "up_thru_pending " << up_thru_pending << " < " << osdmap->get_up_thru(whoami) 
+	     << " -- still pending" << dendl;
+    retry = true;
+  }
+  pg_stat_queue_lock.Lock();
+  if (!pg_stat_pending.empty() || osd_stat_pending) {
+    dout(10) << "requeueing pg_stat_pending" << dendl;
+    retry = true;
+    osd_stat_updated = osd_stat_updated || osd_stat_pending;
+    osd_stat_pending = false;
+    for (map<pg_t,eversion_t>::iterator p = pg_stat_pending.begin(); 
+	 p != pg_stat_pending.end(); 
+	 p++)
+      if (pg_stat_queue.count(p->first) == 0)   // _queue value will always be >= _pending
+	pg_stat_queue[p->first] = p->second;
+    pg_stat_pending.clear();
+  }
+  pg_stat_queue_lock.Unlock();
 
+  if (retry) {
+    int oldmon = monmap->pick_mon();
+    messenger->mark_down(monmap->get_inst(oldmon).addr);
+    int mon = monmap->pick_mon(true);
+    dout(10) << "marked down old mon" << oldmon << ", chose new mon" << mon << dendl;
+  }
+
+  // do any pending reports
+  if (booting)
+    send_boot();
+  send_alive();
+  send_failures();
+  send_pg_stats();
+
+  // reschedule
+  timer.add_event_after(g_conf.osd_mon_report_interval, new C_MonReport(this));
+}
+
+void OSD::send_boot()
+{
   int mon = monmap->pick_mon();
-  for (set<int>::iterator p = pending_failures.begin();
-       p != pending_failures.end();
-       p++)
-    messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), 
-					    osdmap->get_inst(*p), osdmap->get_epoch()),
+  dout(10) << "send_boot to mon" << mon << dendl;
+  messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), 
+			  monmap->get_inst(mon));
+}
+
+void OSD::queue_want_up_thru(epoch_t want)
+{
+  if (want > up_thru_wanted) {
+    up_thru_wanted = want;
+
+    // expedite, a bit.  WARNING this will somewhat delay other mon queries.
+    last_mon_report = g_clock.now();
+    send_alive();
+  }
+}
+
+void OSD::send_alive()
+{
+  if (!osdmap->exists(whoami))
+    return;
+  epoch_t up_thru = osdmap->get_up_thru(whoami);
+  if (up_thru_wanted < up_thru) {
+    up_thru_pending = up_thru_wanted;
+    int mon = monmap->pick_mon();
+    dout(10) << "send_alive to mon" << mon << " (want " << up_thru_wanted << ")" << dendl;
+    messenger->send_message(new MOSDAlive(osdmap->get_epoch()),
 			    monmap->get_inst(mon));
-  pending_failures.clear();
+  }
+}
+
+void OSD::send_failures()
+{
+  int mon = monmap->pick_mon();
+  while (!failure_queue.empty()) {
+    int osd = *failure_queue.begin();
+    messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), 
+					    osdmap->get_inst(osd), osdmap->get_epoch()),
+			    monmap->get_inst(mon));
+    failure_queue.erase(osd);
+  }
 }
 
 void OSD::send_pg_stats()
 {
-  //dout(-10) << "send_pg_stats" << dendl;
-  bool updated;
+  dout(10) << "send_pg_stats" << dendl;
 
   // grab queue
-  set<pg_t> q;
+  assert(pg_stat_pending.empty());
   pg_stat_queue_lock.Lock();
-  q.swap(pg_stat_queue);
-  updated = osd_stat_updated;
+  pg_stat_pending.swap(pg_stat_queue);
+  osd_stat_pending = osd_stat_updated;
   osd_stat_updated = false;
   pg_stat_queue_lock.Unlock();
-  
-  if (!q.empty() || osd_stat_updated) {
-    dout(1) << "send_pg_stats - " << q.size() << " pgs updated" << dendl;
+
+  if (!pg_stat_pending.empty() || osd_stat_pending) {
+    dout(1) << "send_pg_stats - " << pg_stat_pending.size() << " pgs updated" << dendl;
     
     MPGStats *m = new MPGStats;
-    while (!q.empty()) {
-      pg_t pgid = *q.begin();
-      q.erase(q.begin());
+    for (map<pg_t,eversion_t>::iterator p = pg_stat_pending.begin();
+	 p != pg_stat_pending.end();
+	 p++) {
+      pg_t pgid = p->first;
       
-      if (!pg_map.count(pgid)) continue;
+      if (!pg_map.count(pgid)) 
+	continue;
       PG *pg = pg_map[pgid];
       pg->pg_stats_lock.Lock();
       m->pg_stat[pgid] = pg->pg_stats;
@@ -1010,9 +1079,32 @@ void OSD::send_pg_stats()
     int mon = monmap->pick_mon();
     messenger->send_message(m, monmap->get_inst(mon));  
   }
+}
 
-  // reschedule
-  timer.add_event_after(g_conf.osd_pg_stats_interval, new C_Stats(this));
+void OSD::handle_pgstats_ack(MPGStatsAck *ack)
+{
+  dout(10) << "handle_pgstats_ack " << dendl;
+
+  for (map<pg_t,eversion_t>::iterator p = ack->pg_stat.begin();
+       p != ack->pg_stat.end();
+       p++) {
+    if (pg_stat_pending.count(p->first) == 0) {
+      dout(10) << "ignoring " << p->first << " " << p->second << dendl;
+    } else if (pg_stat_pending[p->first] <= p->second) {
+      dout(10) << "ack on " << p->first << " " << p->second << dendl;
+      pg_stat_pending.erase(p->first);
+    } else {
+      dout(10) << "still pending " << p->first << " " << pg_stat_pending[p->first]
+	       << " > acked " << p->second << dendl;
+    }
+  }
+  
+  if (pg_stat_pending.empty()) {
+    dout(10) << "clearing osd_stat_pending" << dendl;
+    osd_stat_pending = false;
+  }
+
+  delete ack;
 }
 
 
@@ -1102,6 +1194,10 @@ void OSD::dispatch(Message *m)
   case CEPH_MSG_SHUTDOWN:
     shutdown();
     delete m;
+    break;
+
+  case MSG_PGSTATSACK:
+    handle_pgstats_ack((MPGStatsAck*)m);
     break;
     
     
@@ -1201,19 +1297,6 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
     return;
   }
 
-  if (dest.is_mon()) {
-    if (m->get_type() == MSG_PGSTATS) {
-      MPGStats *pgstats = (MPGStats*)m;
-      dout(10) << "ms_handle_failure on " << *m << ", requeuing pg stats" << dendl;
-      pg_stat_queue_lock.Lock();
-      for (map<pg_t,pg_stat_t>::iterator p = pgstats->pg_stat.begin(); 
-	   p != pgstats->pg_stat.end(); 
-	   p++)
-	pg_stat_queue.insert(p->first);
-      pg_stat_queue_lock.Unlock();
-    }
-  }
-
   dout(1) << "ms_handle_failure " << inst 
 	  << ", dropping " << *m << dendl;
   delete m;
@@ -1262,7 +1345,8 @@ void OSD::note_down_osd(int osd)
 {
   messenger->mark_down(osdmap->get_addr(osd));
   peer_map_epoch.erase(entity_name_t::OSD(osd));
-  pending_failures.erase(osd);
+  failure_queue.erase(osd);
+  failure_pending.erase(osd);
   heartbeat_from_stamp.erase(osd);
 }
 void OSD::note_up_osd(int osd)
@@ -1277,6 +1361,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     delete m;
     return;
   }
+
+  booting = boot_pending = false;
 
   wait_for_no_ops();
   

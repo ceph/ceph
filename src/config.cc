@@ -371,6 +371,7 @@ md_config_t g_conf = {
   osd_pg_bits: 6,  // bits per osd
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
+  osd_min_rep: 2,
   osd_max_rep: 4,
   osd_min_raid_width: 4,
   osd_max_raid_width: 3, //6, 
@@ -382,8 +383,7 @@ md_config_t g_conf = {
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
   osd_heartbeat_grace: 30,
-  osd_failure_report_interval: 10,
-  osd_pg_stats_interval:  5,
+  osd_mon_report_interval:  5,  // pg stats, failures, up_thru, boot.
   osd_replay_window: 5,
   osd_max_pull: 2,
   osd_pad_pg_log: false,

@@ -258,6 +258,7 @@ struct md_config_t {
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;
+  int   osd_min_rep;
   int   osd_max_rep;
   int   osd_min_raid_width;
   int   osd_max_raid_width;
@@ -268,8 +269,7 @@ struct md_config_t {
   int   osd_age_time;
   int   osd_heartbeat_interval;  
   int   osd_heartbeat_grace;
-  double osd_failure_report_interval;
-  int   osd_pg_stats_interval;
+  int   osd_mon_report_interval;
   int   osd_replay_window;
   int   osd_max_pull;
   bool  osd_pad_pg_log;

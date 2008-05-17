@@ -12,6 +12,7 @@ using namespace std;
 #include "messages/MGenericMessage.h"
 
 #include "messages/MPGStats.h"
+#include "messages/MPGStatsAck.h"
 
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
@@ -125,6 +126,9 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
 
   case MSG_PGSTATS:
     m = new MPGStats;
+    break;
+  case MSG_PGSTATSACK:
+    m = new MPGStatsAck;
     break;
 
   case CEPH_MSG_STATFS:

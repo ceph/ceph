@@ -60,8 +60,10 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
   crush.set_type_name(1, "domain");
   crush.set_type_name(2, "pool");
 
+  int minrep = g_conf.osd_min_rep;
   int ndom = MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
-  if (num_osd >= ndom*2) {
+  if (num_osd >= ndom*3 &&
+      num_osd > 8) {
     int ritems[ndom];
     int rweights[ndom];
 
@@ -100,8 +102,8 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
     // rules
     // replication
     for (int pool=0; pool<1; pool++) {
-      // size 1..ndom
-      crush_rule *rule = crush_make_rule(4, pool, CEPH_PG_TYPE_REP, 1, ndom);
+      // size minrep..ndom
+      crush_rule *rule = crush_make_rule(4, pool, CEPH_PG_TYPE_REP, minrep, ndom);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
       crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);  // and 1 device in each
@@ -132,7 +134,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
 
     // replication
     for (int pool=0; pool<1; pool++) {
-      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, 1, g_conf.osd_max_rep);
+      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, g_conf.osd_min_rep, g_conf.osd_max_rep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);

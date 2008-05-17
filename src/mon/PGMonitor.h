@@ -31,6 +31,7 @@ using namespace std;
 #include "PGMap.h"
 
 class MPGStats;
+class MPGStatsAck;
 class MStatfs;
 class MMonCommand;
 
@@ -52,6 +53,17 @@ private:
   bool prepare_update(Message *m);
 
   bool prepare_pg_stats(MPGStats *stats);
+  void _updated_stats(MPGStatsAck *ack, entity_inst_t who);
+
+  struct C_Stats : public Context {
+    PGMonitor *pgmon;
+    MPGStatsAck *ack;
+    entity_inst_t who;
+    C_Stats(PGMonitor *p, MPGStatsAck *a, entity_inst_t w) : pgmon(p), ack(a), who(w) {}
+    void finish(int r) {
+      pgmon->_updated_stats(ack, who);
+    }    
+  };
 
   void handle_statfs(MStatfs *statfs);
 
