@@ -63,7 +63,7 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
        ++p) {
     if (p != pm.pg_map.num_pg_by_state.begin())
       ss << ", ";
-    ss << p->second << " " << pg_state_string(p->first);// << "(" << p->first << ")";
+    ss << p->second << " " << pg_state_string(p->first);
   }
   string states = ss.str();
   return out << "v" << pm.pg_map.version << ": "
@@ -472,8 +472,11 @@ void PGMonitor::send_pg_creates()
       on = pg_map.pg_stat[pgid].parent;
     vector<int> acting;
     int nrep = mon->osdmon->osdmap.pg_to_acting_osds(on, acting);
-    if (!nrep) 
+    if (!nrep) {
+      dout(20) << "send_pg_creates  " << pgid << " -> no osds in epoch "
+	       << pg_map.pg_stat[pgid].created << ", skipping" << dendl;
       continue;  // blarney!
+    }
     int osd = acting[0];
 
     // throttle?
