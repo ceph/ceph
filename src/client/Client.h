@@ -161,6 +161,7 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
   fragtree_t dirfragtree;
+  map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
   list<Cond*>       waitfor_caps;
@@ -810,6 +811,10 @@ private:
   int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1);
   int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
   int _chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid=-1, int cgid=-1);
+  int _getxattr(const filepath &path, const char *name, void *value, size_t len, bool followsym, int uid=-1, int gid=-1);
+  int _listxattr(const filepath &path, char *names, size_t len, bool followsym, int uid=-1, int gid=-1);
+  int _setxattr(const filepath &path, const char *name, const void *value, size_t len, int flags, bool followsym, int uid=-1, int gid=-1);
+  int _removexattr(const filepath &path, const char *nm, bool followsym, int uid=-1, int gid=-1);
   int _utimes(const filepath &path, utime_t mtime, utime_t atime, bool followsym, int uid=-1, int gid=-1);
   int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
   int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
@@ -901,6 +906,10 @@ public:
   Inode *_ll_get_inode(inodeno_t ino);
   int ll_getattr(inodeno_t ino, struct stat *st, int uid = -1, int gid = -1);
   int ll_setattr(inodeno_t ino, struct stat *st, int mask, int uid = -1, int gid = -1);
+  int ll_getxattr(inodeno_t ino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
+  int ll_setxattr(inodeno_t ino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(inodeno_t ino, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(inodeno_t ino, char *list, size_t size, int uid=-1, int gid=-1);
   int ll_opendir(inodeno_t ino, void **dirpp, int uid = -1, int gid = -1);
   void ll_releasedir(void *dirp);
   int ll_readlink(inodeno_t ino, const char **value, int uid = -1, int gid = -1);
@@ -919,7 +928,6 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(inodeno_t, struct statvfs *stbuf);
-
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

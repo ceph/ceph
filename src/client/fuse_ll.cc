@@ -78,6 +78,52 @@ static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     fuse_reply_err(req, -r);
 }
 
+// XATTRS
+
+static void ceph_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     const char *value, size_t size, int flags)
+{
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  int r = client->ll_setxattr(ino, name, value, size, flags, ctx->uid, ctx->gid);
+  fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
+{
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  char buf[size];
+  int r = client->ll_listxattr(ino, buf, size, ctx->uid, ctx->gid);
+  if (size == 0 && r >= 0)
+    fuse_reply_xattr(req, r);
+  else if (r >= 0)
+    fuse_reply_buf(req, buf, r);
+  else
+    fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     size_t size)
+{
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  char buf[size];
+  int r = client->ll_getxattr(ino, name, buf, size, ctx->uid, ctx->gid);
+  if (size == 0 && r >= 0)
+    fuse_reply_xattr(req, r);
+  else if (r >= 0)
+    fuse_reply_buf(req, buf, r);
+  else
+    fuse_reply_err(req, -r);
+}
+
+static void ceph_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
+{
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  int r = client->ll_removexattr(ino, name, ctx->uid, ctx->gid);
+  fuse_reply_err(req, -r);
+}
+
+
+
 static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -353,10 +399,10 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  releasedir: ceph_ll_releasedir,
  fsyncdir: 0,
  statfs: ceph_ll_statfs,
- setxattr: 0,
- getxattr: 0,
- listxattr: 0,
- removexattr: 0,
+ setxattr: ceph_ll_setxattr,
+ getxattr: ceph_ll_getxattr,
+ listxattr: ceph_ll_listxattr,
+ removexattr: ceph_ll_removexattr,
  access: 0,
  create: ceph_ll_create,
  getlk: 0,

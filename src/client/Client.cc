@@ -381,6 +381,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     in->inode.anchored = false;  /* lie */
 
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+    in->xattrs = st->xattrs;
 
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
@@ -3743,6 +3744,158 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask, int uid, int 
   dout(3) << "ll_setattr " << ino << " = " << r << dendl;
   return 0;
 }
+
+// ----------
+// xattrs
+
+int Client::ll_getxattr(inodeno_t ino, const char *name, void *value, size_t size, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_getxattr " << ino << " " << name << " size " << size << dendl;
+  tout << "ll_getxattr" << std::endl;
+  tout << ino.val << std::endl;
+  tout << name << std::endl;
+
+  Inode *in = _ll_get_inode(ino);
+  filepath path;
+  in->make_path(path);
+  return _getxattr(path, name, value, size, false, uid, gid);
+}
+
+int Client::_getxattr(const filepath &path, const char *name, void *value, size_t size,
+		      bool followsym, int uid, int gid)
+{
+  Inode *in = 0;
+  int r = _do_lstat(path, CEPH_STAT_MASK_XATTR, &in, uid, gid);
+  if (r == 0) {
+    string n(name);
+    r = -ENOENT;
+    if (in->xattrs.count(n)) {
+      r = in->xattrs[n].length();
+      if (size != 0) {
+	if (size >= (unsigned)r)
+	  memcpy(value, in->xattrs[n].c_str(), r);
+	else
+	  r = -ERANGE;
+      }
+    }
+  }
+  dout(3) << "_setxattr(\"" << path << "\", \"" << name << "\", " << size << ") = " << r << dendl;
+  return r;
+}
+
+int Client::ll_listxattr(inodeno_t ino, char *names, size_t size, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_listxattr " << ino << " size " << size << dendl;
+  tout << "ll_listxattr" << std::endl;
+  tout << ino.val << std::endl;
+  tout << size << std::endl;
+
+  Inode *in = _ll_get_inode(ino);
+  filepath path;
+  in->make_path(path);
+  return _listxattr(path, names, size, false, uid, gid);
+}
+
+int Client::_listxattr(const filepath &path, char *name, size_t size,
+		       bool followsym, int uid, int gid)
+{
+  Inode *in = 0;
+  int r = _do_lstat(path, CEPH_STAT_MASK_XATTR, &in, uid, gid);
+  if (r == 0) {
+    for (map<string,bufferptr>::iterator p = in->xattrs.begin();
+	 p != in->xattrs.end();
+	 p++)
+      r += p->second.length() + 1;
+    
+    if (size != 0) {
+      if (size >= (unsigned)r) {
+	for (map<string,bufferptr>::iterator p = in->xattrs.begin();
+	     p != in->xattrs.end();
+	     p++) {
+	  memcpy(name, p->second.c_str(), p->second.length());
+	  name += p->second.length();
+	  *name = '\0';
+	  name++;
+	}
+      } else
+	r = -ERANGE;
+    }
+  }
+  dout(3) << "_listxattr(\"" << path << "\", " << size << ") = " << r << dendl;
+  return r;
+}
+
+int Client::ll_setxattr(inodeno_t ino, const char *name, const void *value, size_t size, int flags, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_setxattr " << ino << " " << name << " size " << size << dendl;
+  tout << "ll_setxattr" << std::endl;
+  tout << ino.val << std::endl;
+  tout << name << std::endl;
+
+  Inode *in = _ll_get_inode(ino);
+  if (in->dn) touch_dn(in->dn);
+
+  filepath path;
+  in->make_path(path);
+  return _setxattr(path, name, value, size, flags, false, uid, gid);
+}
+
+int Client::_setxattr(const filepath &path, const char *name, const void *value, size_t size, int flags,
+		      bool followsym, int uid, int gid)
+{
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LSETXATTR, messenger->get_myinst());
+  req->set_filepath(path);
+  req->set_path2(name);
+  req->head.args.setxattr.flags = flags;
+
+  bufferlist bl;
+  bl.append((const char*)value, size);
+  req->set_data(bl);
+  
+  MClientReply *reply = make_request(req, uid, gid);
+  int res = reply->get_result();
+  delete reply;
+
+  trim_cache();
+  dout(3) << "_setxattr(\"" << path << "\", \"" << name << "\") = " << res << dendl;
+  return res;
+}
+
+int Client::ll_removexattr(inodeno_t ino, const char *name, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+  dout(3) << "ll_removexattr " << ino << " " << name << dendl;
+  tout << "ll_removexattr" << std::endl;
+  tout << ino.val << std::endl;
+  tout << name << std::endl;
+
+  Inode *in = _ll_get_inode(ino);
+  if (in->dn) touch_dn(in->dn);
+
+  filepath path;
+  in->make_path(path);
+  return _removexattr(path, name, false, uid, gid);
+}
+
+int Client::_removexattr(const filepath &path, const char *name, 
+			 bool followsym, int uid, int gid)
+{
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LRMXATTR, messenger->get_myinst());
+  req->set_filepath(path);
+ 
+  MClientReply *reply = make_request(req, uid, gid);
+  int res = reply->get_result();
+  delete reply;
+
+  trim_cache();
+  dout(3) << "_removexattr(\"" << path << "\", \"" << name << "\") = " << res << dendl;
+  return res;
+}
+
+
 
 int Client::ll_readlink(inodeno_t ino, const char **value, int uid, int gid)
 {

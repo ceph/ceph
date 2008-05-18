@@ -471,11 +471,15 @@ enum {
 	CEPH_MDS_OP_LUTIME    = 0x01101,
 	CEPH_MDS_OP_LCHMOD    = 0x01102,
 	CEPH_MDS_OP_LCHOWN    = 0x01103,
-
+	CEPH_MDS_OP_LSETXATTR = 0x01104,
+	CEPH_MDS_OP_LRMXATTR  = 0x01105,
+	
 	CEPH_MDS_OP_STAT      = 0x10100,
 	CEPH_MDS_OP_UTIME     = 0x11101,
 	CEPH_MDS_OP_CHMOD     = 0x11102,
 	CEPH_MDS_OP_CHOWN     = 0x11103,
+	CEPH_MDS_OP_SETXATTR  = 0x11104,
+	CEPH_MDS_OP_RMXATTR   = 0x11105,
 
 	CEPH_MDS_OP_MKNOD     = 0x01201,
 	CEPH_MDS_OP_LINK      = 0x01202,
@@ -491,6 +495,38 @@ enum {
 	CEPH_MDS_OP_FSYNC     = 0x00304,
 	CEPH_MDS_OP_READDIR   = 0x00305,
 };
+
+static inline const char *ceph_mds_op_name(int op)
+{
+	switch (op) {
+	case CEPH_MDS_OP_FINDINODE: return "findinode";
+	case CEPH_MDS_OP_STAT:  return "stat";
+	case CEPH_MDS_OP_LSTAT:  return "lstat";
+	case CEPH_MDS_OP_UTIME: return "utime";
+	case CEPH_MDS_OP_LUTIME: return "lutime";
+	case CEPH_MDS_OP_CHMOD: return "chmod";
+	case CEPH_MDS_OP_LCHMOD: return "lchmod";
+	case CEPH_MDS_OP_CHOWN: return "chown";
+	case CEPH_MDS_OP_LCHOWN: return "lchown";
+	case CEPH_MDS_OP_SETXATTR: return "setxattr";
+	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
+	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
+	case CEPH_MDS_OP_LRMXATTR: return "lrmxattr";
+	case CEPH_MDS_OP_READDIR: return "readdir";
+	case CEPH_MDS_OP_MKNOD: return "mknod";
+	case CEPH_MDS_OP_LINK: return "link";
+	case CEPH_MDS_OP_UNLINK: return "unlink";
+	case CEPH_MDS_OP_RENAME: return "rename";
+	case CEPH_MDS_OP_MKDIR: return "mkdir";
+	case CEPH_MDS_OP_RMDIR: return "rmdir";
+	case CEPH_MDS_OP_SYMLINK: return "symlink";
+	case CEPH_MDS_OP_OPEN: return "open";
+	case CEPH_MDS_OP_TRUNCATE: return "truncate";
+	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
+	case CEPH_MDS_OP_FSYNC: return "fsync";
+	default: return "unknown";
+	}
+}
 
 struct ceph_mds_request_head {
 	struct ceph_entity_inst client_inst;
@@ -539,6 +575,9 @@ struct ceph_mds_request_head {
 		struct {
 			__le64 length;
 		} __attribute__ ((packed)) truncate;
+		struct {
+			__le32 flags;
+		} __attribute__ ((packed)) setxattr;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
