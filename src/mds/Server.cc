@@ -1800,10 +1800,9 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   pi->ctime = g_clock.real_now();
 
   cur->xattrs.erase(name);
-  if (len) {
-    cur->xattrs[name] = buffer::create(len);
+  cur->xattrs[name] = buffer::create(len);
+  if (len)
     req->get_data().copy(0, len, cur->xattrs[name].c_str());
-  }
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();

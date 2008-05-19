@@ -53,11 +53,19 @@ struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
 const struct inode_operations ceph_file_iops = {
 	.setattr = ceph_setattr,
 	.getattr = ceph_getattr,
+	.setxattr = ceph_setxattr,
+	.getxattr = ceph_getxattr,
+	.listxattr = ceph_listxattr,
+	.removexattr = ceph_removexattr
 };
 
 const struct inode_operations ceph_special_iops = {
 	.setattr = ceph_setattr,
 	.getattr = ceph_getattr,
+	.setxattr = ceph_setxattr,
+	.getxattr = ceph_getxattr,
+	.listxattr = ceph_listxattr,
+	.removexattr = ceph_removexattr
 };
 
 
@@ -280,6 +288,8 @@ int ceph_fill_inode(struct inode *inode,
 	if (le64_to_cpu(info->version) > 0 &&
 	    ci->i_version == le64_to_cpu(info->version))
 		goto no_change;
+
+	/* update inode */
 	ci->i_version = le64_to_cpu(info->version);
 	inode->i_mode = le32_to_cpu(info->mode);
 	inode->i_uid = le32_to_cpu(info->uid);
@@ -303,6 +313,23 @@ int ceph_fill_inode(struct inode *inode,
 	ci->i_layout = info->layout;
 	kfree(ci->i_symlink);
 	ci->i_symlink = 0;
+
+	/* xattrs */
+	if (iinfo->xattr_len) {
+		if (ci->i_xattr_len != iinfo->xattr_len) {
+			kfree(ci->i_xattr_data);
+			ci->i_xattr_len = iinfo->xattr_len;
+			ci->i_xattr_data = kmalloc(ci->i_xattr_len, GFP_NOFS);
+			if (!ci->i_xattr_data) {
+				derr(10, "ENOMEM on xattr blob %d bytes\n",
+				     ci->i_xattr_len);
+				ci->i_xattr_len = 0;  /* hrmpf */
+			}
+		}
+		if (ci->i_xattr_len)
+			memcpy(ci->i_xattr_data, iinfo->xattr_data,
+			       ci->i_xattr_len);
+	}
 
 	ci->i_old_atime = inode->i_atime;
 
@@ -1770,44 +1797,254 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
-int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
-		 struct kstat *stat)
+static int do_getattr(struct dentry *dentry, int mask)
 {
-	int err = 0;
-	int mask = CEPH_STAT_MASK_INODE_ALL;
+	int want_inode = 0;
+	struct dentry *ret;
 
 	dout(30, "getattr dentry %p inode %p\n", dentry,
 	     dentry->d_inode);
 
-	if (!ceph_inode_lease_valid(dentry->d_inode, mask)) {
-		/*
-		 * if the dentry is unhashed AND we have a cap, stat
-		 * the ino directly.  (if its unhashed and we don't have a 
-		 * cap, we may be screwed anyway.)
-		 */
-		int want_inode = 0;
-		struct dentry *ret;
-		if (d_unhashed(dentry)) {
-			if (ceph_get_cap_mds(dentry->d_inode) >= 0)
-				want_inode = 1;
-			else
-				derr(10, "WARNING: getattr on unhashed cap-less"
-				     " dentry %p %.*s\n", dentry,
-				     dentry->d_name.len, dentry->d_name.name);
-		}
-		ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
-				     want_inode);
-		if (IS_ERR(ret))
-			return PTR_ERR(ret);
-		if (ret)
-			dentry = ret;
-		if (!dentry->d_inode)
-			return -ENOENT;
-	}
+	if (ceph_inode_lease_valid(dentry->d_inode, mask))
+		return 0;
 
+	/*
+	 * if the dentry is unhashed AND we have a cap, stat
+	 * the ino directly.  (if its unhashed and we don't have a 
+	 * cap, we may be screwed anyway.)
+	 */
+	if (d_unhashed(dentry)) {
+		if (ceph_get_cap_mds(dentry->d_inode) >= 0)
+			want_inode = 1;
+		else
+			derr(10, "WARNING: getattr on unhashed cap-less"
+			     " dentry %p %.*s\n", dentry,
+			     dentry->d_name.len, dentry->d_name.name);
+	}
+	ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
+			     want_inode);
+	if (IS_ERR(ret))
+		return PTR_ERR(ret);
+	if (ret)
+		dentry = ret;
+	if (!dentry->d_inode)
+		return -ENOENT;
+	return 0;
+}
+
+int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
+		 struct kstat *stat)
+{
+	int err;
+
+	err = do_getattr(dentry, CEPH_STAT_MASK_INODE_ALL);
 	dout(30, "getattr returned %d\n", err);
 	if (!err)
 		generic_fillattr(dentry->d_inode, stat);
+	return err;
+}
+
+ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
+		      size_t size)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int namelen = strlen(name);
+	u32 numattr;
+	int err;
+	void *p, *end;
+
+	err = do_getattr(dentry, CEPH_STAT_MASK_XATTR);
+	if (err)
+		return err;
+
+	spin_lock(&inode->i_lock);
+
+	/* find attr */
+	p = ci->i_xattr_data;
+	end = p + ci->i_xattr_len;
+	ceph_decode_32_safe(&p, end, numattr, bad);
+	err = -ENODATA;  /* == ENOATTR */
+	while (numattr--) {
+		u32 len;
+		int match;
+		ceph_decode_32_safe(&p, end, len, bad);
+		match = (len == namelen && strncmp(name, p, len) == 0);
+		p += len;
+		ceph_decode_32_safe(&p, end, len, bad);
+		if (match) {
+			err = -ERANGE;
+			if (size && size < len)
+				goto out;
+			err = len;
+			if (size == 0)
+				goto out;
+			memcpy(value, p, len);
+			goto out;
+		}
+		p += len;
+	}
+
+out:
+	spin_unlock(&inode->i_lock);
+	return err;
+
+bad:
+	derr(10, "currupt xattr info on %p %llx\n", dentry->d_inode,
+	     ceph_ino(dentry->d_inode));
+	err = -EIO;
+	goto out;
+}
+
+ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int namelen = 0;
+	u32 numattr;
+	void *p, *end;
+	int err;
+
+	err = do_getattr(dentry, CEPH_STAT_MASK_XATTR);
+	if (err)
+		return err;
+
+	spin_lock(&inode->i_lock);
+
+	/* measure len */
+	p = ci->i_xattr_data;
+	end = p + ci->i_xattr_len;
+	ceph_decode_32_safe(&p, end, numattr, bad);
+	while (numattr--) {
+		u32 len;
+		ceph_decode_32_safe(&p, end, len, bad);
+		namelen += len + 1;
+		p += len;
+		ceph_decode_32_safe(&p, end, len, bad);
+		p += len;
+	}
+
+	err = -ERANGE;
+	if (size && namelen > size)
+		goto out;
+	err = namelen;
+	if (size == 0)
+		goto out;
+
+	/* copy names */
+	p = ci->i_xattr_data;
+	ceph_decode_32(&p, numattr);
+	while (numattr--) {
+		u32 len;
+		ceph_decode_32(&p, len);
+		memcpy(names, p, len);
+		names[len] = '\0';
+		names += len + 1;
+		p += len;
+		ceph_decode_32(&p, len);
+		p += len;	
+	}
+
+out:
+	spin_unlock(&inode->i_lock);
+	return err;
+
+bad:
+	derr(10, "currupt xattr info on %p %llx\n", dentry->d_inode,
+	     ceph_ino(dentry->d_inode));
+	err = -EIO;
+	goto out;
+}
+
+int ceph_setxattr(struct dentry *dentry, const char *name,
+		  const void *value, size_t size, int flags)
+{
+	struct ceph_client *client = ceph_client(dentry->d_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_mds_request *req;
+	struct ceph_mds_request_head *rhead;
+	char *path;
+	int pathlen;
+	int err;
+	int i, nr_pages;
+	struct page **pages = 0;
+	void *kaddr;
+
+	/* copy value into some pages */
+	nr_pages = calc_pages_for(0, size);
+	if (nr_pages) {
+		pages = kmalloc(sizeof(pages)*nr_pages, GFP_NOFS);
+		if (!pages)
+			return -ENOMEM;
+		err = -ENOMEM;
+		for (i = 0; i < nr_pages; i++) {
+			pages[i] = alloc_page(GFP_NOFS);
+			if (!pages[i]) {
+				nr_pages = i;
+				goto out;
+			}
+			kaddr = kmap(pages[i]);
+			memcpy(kaddr, value + i*PAGE_CACHE_SIZE, 
+			       min(PAGE_CACHE_SIZE, size-i*PAGE_CACHE_SIZE));
+		}
+	}
+
+	/* do request */
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
+				       ceph_ino(dentry->d_sb->s_root->d_inode),
+				       path, 0, name,
+				       dentry, USE_AUTH_MDS);
+	kfree(path);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	rhead = req->r_request->front.iov_base;
+	rhead->args.setxattr.flags = cpu_to_le32(flags);
+
+	req->r_request->pages = pages;
+	req->r_request->nr_pages = nr_pages;
+	req->r_request->hdr.data_len = cpu_to_le32(size);
+	req->r_request->hdr.data_off = cpu_to_le32(0);
+
+	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_IXATTR);
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
+
+out:
+	if (pages) {
+		for (i = 0; i < nr_pages; i++)
+			__free_page(pages[i]);
+		kfree(pages);
+	}
+	return err;
+}
+
+int ceph_removexattr(struct dentry *dentry, const char *name)
+{
+	struct ceph_client *client = ceph_client(dentry->d_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_mds_request *req;
+	char *path;
+	int pathlen;
+	int err;
+
+	path = ceph_build_dentry_path(dentry, &pathlen);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
+				       ceph_ino(dentry->d_sb->s_root->d_inode),
+				       path, 0, name,
+				       dentry, USE_AUTH_MDS);
+	kfree(path);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_IXATTR);
+	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_mdsc_put_request(req);
 	return err;
 }
 

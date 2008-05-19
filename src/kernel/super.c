@@ -155,6 +155,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_fragtree = RB_ROOT;
 
+	ci->i_xattr_len = 0;
+	ci->i_xattr_data = 0;
+
 	INIT_LIST_HEAD(&ci->i_caps);
 	for (i = 0; i < STATIC_CAPS; i++)
 		ci->i_static_caps[i].mds = -1;
@@ -194,6 +197,7 @@ static void ceph_destroy_inode(struct inode *inode)
 		rb_erase(n, &ci->i_fragtree);
 		kfree(frag);
 	}
+	kfree(ci->i_xattr_data);
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 

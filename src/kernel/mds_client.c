@@ -30,14 +30,21 @@ static int parse_reply_info_in(void **p, void *end,
 			       struct ceph_mds_reply_info_in *info)
 {
 	int err = -EINVAL;
+
 	info->in = *p;
 	*p += sizeof(struct ceph_mds_reply_inode) +
 		sizeof(*info->in->fragtree.splits) * 
 		le32_to_cpu(info->in->fragtree.nsplits);
+
 	ceph_decode_32_safe(p, end, info->symlink_len, bad);
 	ceph_decode_need(p, end, info->symlink_len, bad);
 	info->symlink = *p;
 	*p += info->symlink_len;
+	
+	ceph_decode_32_safe(p, end, info->xattr_len, bad);
+	ceph_decode_need(p, end, info->xattr_len, bad);
+	info->xattr_data = *p;
+	*p += info->xattr_len;
 	return 0;
 bad:
 	return err;

@@ -16,8 +16,10 @@ struct ceph_client;
  */
 struct ceph_mds_reply_info_in {
 	struct ceph_mds_reply_inode *in;
-	__u32                       symlink_len;
-	char                        *symlink;
+	__u32 symlink_len;
+	char *symlink;
+	__u32 xattr_len;
+	char *xattr_data;
 };
 
 struct ceph_mds_reply_info {

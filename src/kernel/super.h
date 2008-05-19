@@ -192,6 +192,9 @@ struct ceph_inode_info {
 
 	struct rb_root i_fragtree;
 
+	int i_xattr_len;
+	char *i_xattr_data;
+
 	struct list_head i_caps;
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;
@@ -443,7 +446,11 @@ extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
-			      struct kstat *stat);
+			struct kstat *stat);
+extern int ceph_setxattr(struct dentry *, const char *,const void *,size_t,int);
+extern ssize_t ceph_getxattr(struct dentry *, const char *, void *, size_t);
+extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
+extern int ceph_removexattr(struct dentry *, const char *);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

@@ -621,7 +621,7 @@ struct ceph_mds_reply_inode {
 	__le32 rdev;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));
-/* followed by frag array, then symlink string */
+/* followed by frag array, then symlink string, then xattr map */
 
 /* reply_lease follows dname, and reply_inode */
 struct ceph_mds_reply_lease {
