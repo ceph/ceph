@@ -1136,6 +1136,7 @@ int Locker::issue_client_lease(CInode *in, int client,
   } else {
     if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
   }
+  if (in->xattrlock.can_lease()) mask |= CEPH_LOCK_IXATTR;
 
   _issue_client_lease(in, mask, pool, client, bl, now, session);
   return mask;

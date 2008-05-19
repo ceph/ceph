@@ -381,7 +381,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     in->inode.anchored = false;  /* lie */
 
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
-    in->xattrs = st->xattrs;
+    in->xattrs.swap(st->xattrs);
 
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
@@ -3780,7 +3780,7 @@ int Client::_getxattr(const filepath &path, const char *name, void *value, size_
       }
     }
   }
-  dout(3) << "_setxattr(\"" << path << "\", \"" << name << "\", " << size << ") = " << r << dendl;
+  dout(3) << "_getxattr(\"" << path << "\", \"" << name << "\", " << size << ") = " << r << dendl;
   return r;
 }
 
@@ -3807,15 +3807,15 @@ int Client::_listxattr(const filepath &path, char *name, size_t size,
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
 	 p++)
-      r += p->second.length() + 1;
+      r += p->first.length() + 1;
     
     if (size != 0) {
       if (size >= (unsigned)r) {
 	for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	     p != in->xattrs.end();
 	     p++) {
-	  memcpy(name, p->second.c_str(), p->second.length());
-	  name += p->second.length();
+	  memcpy(name, p->first.c_str(), p->first.length());
+	  name += p->first.length();
 	  *name = '\0';
 	  name++;
 	}

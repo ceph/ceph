@@ -49,6 +49,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <attr/xattr.h>
 
 #include <list>
 #include <iostream>
@@ -753,6 +754,14 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_TRUNCATE:
   case CEPH_MDS_OP_LTRUNCATE:
     handle_client_truncate(mdr);
+    break;
+  case CEPH_MDS_OP_SETXATTR:
+  case CEPH_MDS_OP_LSETXATTR:
+    handle_client_setxattr(mdr);
+    break;
+  case CEPH_MDS_OP_RMXATTR:
+  case CEPH_MDS_OP_LRMXATTR:
+    handle_client_removexattr(mdr);
     break;
   case CEPH_MDS_OP_READDIR:
     handle_client_readdir(mdr);
@@ -1559,6 +1568,7 @@ void Server::handle_client_stat(MDRequest *mdr)
       mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->filelock);
   if (ref->is_dir() &&
       mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->dirlock);
+  if (mask & CEPH_LOCK_IXATTR) rdlocks.insert(&ref->xattrlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -1568,8 +1578,7 @@ void Server::handle_client_stat(MDRequest *mdr)
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
-  MClientReply *reply = new MClientReply(req);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 }
 
 
@@ -1745,6 +1754,111 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdlog->submit_entry(le);
   mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
 }
+
+
+// XATTRS
+
+void Server::handle_client_setxattr(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  if (!cur) return;
+
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  // write
+  set<SimpleLock*> rdlocks = mdr->rdlocks;
+  set<SimpleLock*> wrlocks = mdr->wrlocks;
+  set<SimpleLock*> xlocks = mdr->xlocks;
+  xlocks.insert(&cur->xattrlock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  string name(req->get_path2());
+  int flags = req->head.args.setxattr.flags;
+
+  if ((flags & XATTR_CREATE) && cur->xattrs.count(name)) {
+    dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
+    reply_request(mdr, -EEXIST);
+    return;
+  }
+  if ((flags & XATTR_REPLACE) && !cur->xattrs.count(name)) {
+    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENOATTR on " << *cur << dendl;
+    reply_request(mdr, -ENOATTR);
+    return;
+  }
+
+  dout(10) << "setxattr '" << name << "' on " << *cur << dendl;
+
+  // project update
+  inode_t *pi = cur->project_inode();
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+
+  cur->xattrs.erase(name);
+  int len = req->get_data().length();
+  cur->xattrs[name] = buffer::create(len);
+  req->get_data().copy(0, len, cur->xattrs[name].c_str());
+  
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "chown");
+  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
+void Server::handle_client_removexattr(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  if (!cur) return;
+
+  if (cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  // write
+  set<SimpleLock*> rdlocks = mdr->rdlocks;
+  set<SimpleLock*> wrlocks = mdr->wrlocks;
+  set<SimpleLock*> xlocks = mdr->xlocks;
+  xlocks.insert(&cur->xattrlock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  string name(req->get_path2());
+  if (cur->xattrs.count(name) == 0) {
+    dout(10) << "removexattr '" << name << "' and ENOATTR on " << *cur << dendl;
+    reply_request(mdr, -ENOATTR);
+    return;
+  }
+
+  dout(10) << "removexattr '" << name << "' on " << *cur << dendl;
+
+  // project update
+  inode_t *pi = cur->project_inode();
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+  cur->xattrs.erase(name);
+  
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "chown");
+  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_dir_context(cur->get_parent_dir());
+  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  
+  mdlog->submit_entry(le);
+  mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
 
 
 

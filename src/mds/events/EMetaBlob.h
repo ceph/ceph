@@ -54,13 +54,12 @@ public:
     version_t dnv;
     inode_t inode;      // if it's not
     fragtree_t dirfragtree;
-    string  symlink;
+    map<string,bufferptr> xattrs;
+    string symlink;
     bool dirty;
 
-    fullbit(const string& d, version_t v, inode_t& i, fragtree_t dft, bool dr) : 
-      dn(d), dnv(v), inode(i), dirfragtree(dft), dirty(dr) { }
-    fullbit(const string& d, version_t v, inode_t& i, fragtree_t dft, string& sym, bool dr) :
-      dn(d), dnv(v), inode(i), dirfragtree(dft), symlink(sym), dirty(dr) { }
+    fullbit(const string& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, string& sym, bool dr) :
+      dn(d), dnv(v), inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), dirty(dr) { }
     fullbit(bufferlist::iterator &p) { decode(p); }
     fullbit() {}
 
@@ -69,6 +68,7 @@ public:
       ::encode(dnv, bl);
       ::encode(inode, bl);
       ::encode(dirfragtree, bl);
+      ::encode(xattrs, bl);
       if (inode.is_symlink())
 	::encode(symlink, bl);
       ::encode(dirty, bl);
@@ -78,6 +78,7 @@ public:
       ::decode(dnv, bl);
       ::decode(inode, bl);
       ::decode(dirfragtree, bl);
+      ::decode(xattrs, bl);
       if (inode.is_symlink())
 	::decode(symlink, bl);
       ::decode(dirty, bl);
@@ -380,14 +381,14 @@ private:
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
 					  dn->get_projected_version(), 
-					  in->inode, in->dirfragtree, in->symlink, 
+					  in->inode, in->dirfragtree, in->xattrs, in->symlink, 
 					  dirty));
       if (pi) lump.get_dfull().front().inode = *pi;
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
 					 dn->get_projected_version(),
-					 in->inode, in->dirfragtree, in->symlink, 
+					 in->inode, in->dirfragtree, in->xattrs, in->symlink, 
 					 dirty));
       if (pi) lump.get_dfull().back().inode = *pi;
       return &lump.get_dfull().back().inode;

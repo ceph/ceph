@@ -95,7 +95,7 @@ static void ceph_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
   int r = client->ll_listxattr(ino, buf, size, ctx->uid, ctx->gid);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
-  else if (r >= 0)
+  else if (r >= 0) 
     fuse_reply_buf(req, buf, r);
   else
     fuse_reply_err(req, -r);
