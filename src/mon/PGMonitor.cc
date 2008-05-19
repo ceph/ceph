@@ -537,6 +537,33 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       ss << "sent pg creates ";
       r = 0;
     }
+    else if (m->cmd[1] == "dump") {
+      ss << "version " << pg_map.version << std::endl;
+      ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
+      ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
+      ss << "pg_stat" << std::endl;
+      for (hash_map<pg_t,pg_stat_t>::iterator p = pg_map.pg_stat.begin();
+	   p != pg_map.pg_stat.end();
+	   p++)
+	ss << p->first << "\t" << pg_state_string(p->second.state)
+	   << "\t" << p->second.reported << std::endl;
+      ss << "osd_stat" << std::endl;
+      for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
+	   p != pg_map.osd_stat.end();
+	   p++)
+	ss << p->first << "\t" << p->second.num_blocks
+	   << "\t" << p->second.num_blocks_avail 
+	   << "\t" << p->second.num_objects
+	   << std::endl;
+      while (!ss.eof()) {
+	string s;
+	getline(ss, s);
+	rdata.append(s.c_str(), s.length());
+	rdata.append("\n", 1);
+      }
+      ss << "ok";
+      r = 0;
+    }
   }
 
   if (r != -1) {
