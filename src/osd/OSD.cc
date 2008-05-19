@@ -668,12 +668,12 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
            << ", start " << h
            << dendl;
 
-  for (epoch_t e = osdmap->get_epoch()-1;
-       e >= from;
+  for (epoch_t e = osdmap->get_epoch();
+       e > from;
        e--) {
-    // verify during intermediate epoch
+    // verify during intermediate epoch (e-1)
     OSDMap oldmap;
-    get_map(e, oldmap);
+    get_map(e-1, oldmap);
 
     vector<int> acting;
     oldmap.pg_to_acting_osds(pgid, acting);
@@ -681,16 +681,16 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     // acting set change?
     if (acting != last && 
         e > h.same_since) {
-      dout(15) << "project_pg_history " << pgid << " changed in " << e+1 
+      dout(15) << "project_pg_history " << pgid << " changed in " << e 
                 << " from " << acting << " -> " << last << dendl;
-      h.same_since = e+1;
+      h.same_since = e;
     }
 
     // primary change?
     if (!(!acting.empty() && !last.empty() && acting[0] == last[0]) &&
         e > h.same_primary_since) {
-      dout(15) << "project_pg_history " << pgid << " primary changed in " << e+1 << dendl;
-      h.same_primary_since = e+1;
+      dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
+      h.same_primary_since = e;
     
       if (g_conf.osd_rep == OSD_REP_PRIMARY)
         h.same_acker_since = h.same_primary_since;
@@ -700,14 +700,14 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     if (g_conf.osd_rep != OSD_REP_PRIMARY) {
       if (!(!acting.empty() && !last.empty() && acting[acting.size()-1] == last[last.size()-1]) &&
           e > h.same_acker_since) {
-        dout(15) << "project_pg_history " << pgid << " acker changed in " << e+1 << dendl;
-        h.same_acker_since = e+1;
+        dout(15) << "project_pg_history " << pgid << " acker changed in " << e << dendl;
+        h.same_acker_since = e;
       }
     }
 
-    if (h.same_since > e &&
-        h.same_primary_since > e &&
-        h.same_acker_since > e) break;
+    if (h.same_since >= e &&
+        h.same_primary_since >= e &&
+        h.same_acker_since >= e) break;
   }
 
   dout(15) << "project_pg_history end " << h << dendl;
