@@ -74,9 +74,10 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_FSID     1
 #define CEPH_MOUNT_NOSHARE  2  /* don't share client with other mounts */
 #define CEPH_MOUNT_MYIP     4  /* specified my ip */
+#define CEPH_MOUNT_UNSAFE_WRITES 8
 
 struct ceph_mount_args {
-	int mntflags;
+	int sb_flags;
 	int flags;
 	struct ceph_fsid fsid;
 	struct ceph_entity_addr my_addr;

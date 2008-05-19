@@ -339,6 +339,7 @@ enum {
 	Opt_osdtimeout,
 	/* int args above */
 	Opt_ip,
+	Opt_unsafewrites,
 };
 
 static match_table_t arg_tokens = {
@@ -358,6 +359,7 @@ static match_table_t arg_tokens = {
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
+	{Opt_unsafewrites, "unsafewrites"},
 	{-1, NULL}
 };
 
@@ -410,7 +412,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	memset(args, 0, sizeof(*args));
 
 	/* defaults */
-	args->mntflags = flags;
+	args->sb_flags = flags;
 	args->flags = 0;
 	args->osd_timeout = 5;  /* seconds */
 
@@ -516,6 +518,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_osdtimeout:
 			args->osd_timeout = intval;
+			break;
+		case Opt_unsafewrites:
+			args->flags |= CEPH_MOUNT_UNSAFE_WRITES;
 			break;
 
 		default:
@@ -803,7 +808,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 
 	dout(10, "set_super %p data %p\n", s, data);
 
-	s->s_flags = args->mntflags;
+	s->s_flags = args->sb_flags;
 	s->s_maxbytes = min((u64)MAX_LFS_FILESIZE, CEPH_FILE_MAX_SIZE);
 
 	/* create client */
@@ -860,7 +865,7 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 		}
 		dout(10, "mon ip matches existing sb %p\n", sb);
 	}
-	if (args->mntflags != other->mount_args.mntflags) {
+	if (args->sb_flags != other->mount_args.sb_flags) {
 		dout(30, "flags differ\n");
 		return 0;
 	}

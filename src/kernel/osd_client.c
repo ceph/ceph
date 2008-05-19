@@ -853,7 +853,10 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 
 	reqhead = reqm->front.iov_base;
-	reqhead->flags = CEPH_OSD_OP_SAFE;
+	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITES)
+		reqhead->flags = CEPH_OSD_OP_ACK;
+	else
+		reqhead->flags = CEPH_OSD_OP_SAFE;
 
 	len = calc_layout(osdc, ino, layout, off, len, req);
 	nr_pages = calc_pages_for(off, len);
