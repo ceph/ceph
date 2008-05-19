@@ -1668,7 +1668,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       } else {
 	// i am now replica|stray.  we need to send a notify.
 	pg->state_set(PG_STATE_STRAY);
-	
+	pg->have_master_log = false;
+
 	if (nrep == 0) {
 	  // did they all shut down cleanly?
 	  bool clean = true;
