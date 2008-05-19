@@ -26,9 +26,12 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/file.h>
 
 int MonitorStore::mount()
 {
+  char t[200];
+
   dout(1) << "mount" << dendl;
   // verify dir exists
   DIR *d = ::opendir(dir.c_str());
@@ -37,6 +40,17 @@ int MonitorStore::mount()
     return -ENOENT;
   }
   ::closedir(d);
+
+  // open lockfile
+  sprintf(t, "%s/lock", dir.c_str());
+  lock_fd = ::open(t, O_CREAT|O_RDWR, 0600);
+  if (lock_fd < 0)
+    return -errno;
+  int r = ::flock(lock_fd, LOCK_EX|LOCK_NB);
+  if (r < 0) {
+    derr(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
+    return -errno;
+  }
 
   if (g_conf.use_abspaths) {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
@@ -50,6 +64,11 @@ int MonitorStore::mount()
   return 0;
 }
 
+int MonitorStore::umount()
+{
+  ::close(lock_fd);
+  return 0;
+}
 
 int MonitorStore::mkfs()
 {

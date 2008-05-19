@@ -119,10 +119,6 @@ void Monitor::shutdown()
   timer.cancel_all();
   timer.join();
   
-  // unmount my local storage
-  if (store) 
-    delete store;
-  
   // clean up
   if (osdmon) delete osdmon;
   if (mdsmon) delete mdsmon;

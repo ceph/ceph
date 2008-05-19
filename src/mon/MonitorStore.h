@@ -22,6 +22,7 @@
 
 class MonitorStore {
   string dir;
+  int lock_fd;
 
 public:
   MonitorStore(const char *d) : dir(d) { }
@@ -29,7 +30,7 @@ public:
 
   int mkfs();  // wipe
   int mount();
-  int umount() { return 0; }
+  int umount();
 
   // ints (stored as ascii)
   version_t get_int(const char *a, const char *b=0);
