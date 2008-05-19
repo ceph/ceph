@@ -1791,7 +1791,8 @@ void Server::handle_client_setxattr(MDRequest *mdr)
     return;
   }
 
-  dout(10) << "setxattr '" << name << "' on " << *cur << dendl;
+  int len = req->get_data().length();
+  dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;
 
   // project update
   inode_t *pi = cur->project_inode();
@@ -1799,13 +1800,14 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   pi->ctime = g_clock.real_now();
 
   cur->xattrs.erase(name);
-  int len = req->get_data().length();
-  cur->xattrs[name] = buffer::create(len);
-  req->get_data().copy(0, len, cur->xattrs[name].c_str());
+  if (len) {
+    cur->xattrs[name] = buffer::create(len);
+    req->get_data().copy(0, len, cur->xattrs[name].c_str());
+  }
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "chown");
+  EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
@@ -1850,7 +1852,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "chown");
+  EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
