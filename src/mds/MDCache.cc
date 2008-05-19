@@ -2787,7 +2787,6 @@ void MDCache::queue_file_recover(CInode *in)
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   in->state_set(CInode::STATE_RECOVERING);
   in->auth_pin();
-  //in->filelock.get_xlock(0);
   file_recover_queue.insert(in);
 }
 
@@ -2853,9 +2852,8 @@ void MDCache::_recovered(CInode *in, int r)
   in->state_clear(CInode::STATE_RECOVERING);
 
   in->auth_unpin();
-  //in->filelock.put_xlock();
 
-  mds->locker->check_inode_max_size(in);
+  mds->locker->check_inode_max_size(in, true);
 
   do_file_recover();
 }

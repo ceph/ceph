@@ -173,7 +173,7 @@ protected:
   bool file_rdlock_try(FileLock *lock, Context *con);
   bool file_rdlock_start(FileLock *lock, MDRequest *mdr);
   void file_rdlock_finish(FileLock *lock, MDRequest *mdr);
-  bool file_wrlock_start(FileLock *lock);
+  bool file_wrlock_start(FileLock *lock, bool force=false);
   void file_wrlock_finish(FileLock *lock);
   bool file_xlock_start(FileLock *lock, MDRequest *mdr);
   void file_xlock_finish(FileLock *lock, MDRequest *mdr);
@@ -197,7 +197,7 @@ protected:
 
   void file_update_finish(CInode *in, LogSegment *ls, bool share);
 public:
-  bool check_inode_max_size(CInode *in);
+  bool check_inode_max_size(CInode *in, bool forcewrlock=false);
 private:
   void share_inode_max_size(CInode *in);
 
