@@ -2106,10 +2106,11 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     // poll priors
     set<int>& pset = creating_pgs[pgid].prior;
     dout(10) << "mkpg " << pgid << " e" << created
+	     << " h " << history
 	     << " : querying priors " << pset << dendl;
     for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
       if (osdmap->is_up(*p))
-	query_map[*p][pgid].type = PG::Query::INFO;
+	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
     
     PG *pg = try_create_pg(pgid, t);
     if (pg) {
