@@ -353,6 +353,11 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	return 0;
 }
 
+static int ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	return -EINVAL;
+}
+
 const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
@@ -365,4 +370,5 @@ const struct file_operations ceph_file_fops = {
 	.fsync = ceph_fsync,
 	.splice_read = generic_file_splice_read,
 	.splice_write = generic_file_splice_write,
+	.unlocked_ioctl = ceph_ioctl,
 };

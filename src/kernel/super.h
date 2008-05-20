@@ -59,6 +59,7 @@ extern int ceph_debug_inode;
 		(unsigned int)(((n).sin_addr.s_addr)>>24) & 0xFF,	\
 		(unsigned int)(ntohs((n).sin_port))
 
+
 /*
  * subtract jiffies
  */
