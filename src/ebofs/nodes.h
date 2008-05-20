@@ -305,7 +305,7 @@ class NodePool {
         debofs(10) << "ebofs.nodepool.read node " << nid << " at " << (void*)n << dendl;
 
       } else {
-        //debofs(-10) << "ebofs.nodepool.read  node " << nid << " is free" << dendl;
+        //debofs(10) << "ebofs.nodepool.read  node " << nid << " is free" << dendl;
 	free.insert(nid);
 	num_free++;
       }
@@ -424,6 +424,17 @@ class NodePool {
       flushing++;
     }
 
+    // limbo -> free
+    for (map<nodeid_t,nodeid_t>::iterator i = limbo.m.begin();
+         i != limbo.m.end();
+         i++) {
+      num_free += i->second;
+      num_limbo -= i->second;
+      free.insert(i->first, i->second);
+      debofs(20) << "ebofs.nodepool.commit_finish " << i->first << "~" << i->second << " limbo->free" << dendl;
+    }
+    limbo.clear();
+
     debofs(20) << "ebofs.nodepool.commit_start finish" << dendl;
   }
 
@@ -434,20 +445,7 @@ class NodePool {
   }
 
   void commit_finish() {
-    // limbo -> free
-    for (map<nodeid_t,nodeid_t>::iterator i = limbo.m.begin();
-         i != limbo.m.end();
-         i++) {
-      num_free += i->second;
-      num_limbo -= i->second;
-      free.insert(i->first, i->second);
-    }
-    limbo.clear();
   }
-
-
-
-
 
 
    
@@ -497,20 +495,23 @@ class NodePool {
 
   void release(Node *n) {
     const nodeid_t nid = n->get_id();
-    debofs(15) << "ebofs.nodepool.release on " << nid << dendl;
     node_map.erase(nid);
 
     if (n->is_dirty()) {
+      debofs(15) << "ebofs.nodepool.release on " << nid << " to free" << dendl;
       dirty_ls.remove(&n->xlist);
       num_dirty--;
       free.insert(nid);
       num_free++;
       usemap_bits.clear(n->get_pos_in_bitmap());
     } else if (n->is_clean()) {
+      debofs(15) << "ebofs.nodepool.release on " << nid << " to limbo" << dendl;
       limbo.insert(nid);
       num_limbo++;
       num_clean--;
       usemap_bits.clear(n->get_pos_in_bitmap());
+    } else {
+      debofs(15) << "ebofs.nodepool.release on " << nid << " to nowhere?" << dendl;
     }
 
     delete n;
@@ -543,6 +544,7 @@ class NodePool {
 
     // release old block
     assert(n->is_clean());
+    debofs(15) << "ebofs.nodepool.dirty_node releasing old " << oldid << " to limbo" << dendl;
     num_clean--;
     limbo.insert(oldid);
     num_limbo++;

@@ -274,7 +274,10 @@ class Table {
     // ** modifications **
     void dirty() {
       for (int l=level; l>=0; l--) {
-        if (open[l].node->is_dirty()) break;  // already dirty!  (and thus parents are too)
+        if (open[l].node->is_dirty()) {
+	  dbtout << "dirty " << open[l].node->get_id() << " already dirty (thus parents are too)" << std::endl;
+	  break;  // already dirty!  (and thus parents are too)
+	}
         
         table->pool.dirty_node(open[l].node);
         if (l > 0)
@@ -814,6 +817,33 @@ class Table {
     K min = node.key(0);
     last = min;
     K max = min;
+
+    // print it
+    char s[1000];
+    strcpy(s,"           ");
+    s[level+1] = 0;
+    if (1) {
+      if (root.nodeid == node_loc) {
+        dbtout << s << "root " << node_loc << ": "
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+      } else if (level == depth-1) {
+        dbtout << s << "leaf " << node_loc << ": "
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+      } else {
+        dbtout << s << "indx " << node_loc << ": "
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+      }
+      if (1) {
+        for (int i=0; i<node.size(); i++) {
+          if (level < depth-1) {          // index
+            dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << std::endl;
+          } else {          // leaf
+            dbtout << s << "   " << hex << node.key(i) << " -> " << node.leaf_item(i).value << dec << std::endl;
+          }
+        }
+      }
+    }
+
     for (int i=0; i<node.size(); i++) {
       if (i && node.key(i) <= last) {
         dbtout << ":: key " << i << " " << hex << node.key(i) << dec << " in node " << node_loc 
@@ -857,6 +887,7 @@ class Table {
     if (err == 0) return err;
     
     // print it
+    /*
     char s[1000];
     strcpy(s,"           ");
     s[level+1] = 0;
@@ -881,7 +912,7 @@ class Table {
           }
         }
       }
-    }
+      }*/
     
     return err;
   }
@@ -899,7 +930,7 @@ class Table {
     K last;
     
     int before = g_conf.debug_ebofs;
-    g_conf.debug_ebofs = 0;
+    //g_conf.debug_ebofs = 0;
 
     int err = verify_sub(cursor, root.nodeid, 0, count, last, on);
     if (count != nkeys) {
