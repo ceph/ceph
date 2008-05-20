@@ -82,6 +82,7 @@ public:
   // i implement and you ignore
   void dispatch(Message *m);
   void election_finished();
+  void shutdown();
 
 private:
   void _active();
@@ -103,7 +104,7 @@ public:
   virtual bool should_propose(double &delay);
 
   virtual void committed() = 0;            // [leader] called after a proposed value commits
-
+  
 };
 
 #endif

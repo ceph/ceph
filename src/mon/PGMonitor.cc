@@ -304,6 +304,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   }
   
   paxos->wait_for_commit(new C_Stats(this, ack, stats->get_source_inst()));
+  delete stats;
   return true;
 }
 

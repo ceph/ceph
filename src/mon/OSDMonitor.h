@@ -135,6 +135,7 @@ private:
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();
   void fake_reorg();
+
 };
 
 #endif

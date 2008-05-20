@@ -83,8 +83,6 @@ private:
 
   void check_osd_map(epoch_t epoch);
 
-
-
 };
 
 #endif

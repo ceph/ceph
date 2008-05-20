@@ -169,3 +169,12 @@ void PaxosService::_active()
 }
 
 
+void PaxosService::shutdown()
+{
+  paxos->cancel_events();
+
+  if (proposal_timer) {
+    mon->timer.cancel_event(proposal_timer);
+    proposal_timer = 0;
+  }
+}

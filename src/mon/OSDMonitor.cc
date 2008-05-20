@@ -453,6 +453,7 @@ void OSDMonitor::_reported_failure(MOSDFailure *m)
 {
   dout(7) << "_reported_failure on " << m->get_failed() << ", telling " << m->get_from() << dendl;
   send_latest(m->get_from(), m->get_epoch());
+  delete m;
 }
 
 
@@ -923,3 +924,5 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   mon->reply_command(m, err, rs);
   return false;
 }
+
+
