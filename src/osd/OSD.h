@@ -23,7 +23,7 @@
 
 #include "mon/MonMap.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "PG.h"
 
 #include "common/DecayCounter.h"

@@ -30,17 +30,21 @@ $CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 ARGS="-d"
 
 # start monitor
-$CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 20 --debug_ms 1
+#valgrind --tool=massif 
+#valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cmon mondata/mon0 --debug_mon 20 --debug_ms 1 > out/mon0 &
+#valgrind --tool=massif $CEPH_BIN/cmon mondata/mon0 --debug_mon 20 --debug_ms 1 > out/mon0 &
+#sleep 1
+$CEPH_BIN/cmon -d mondata/mon0 --debug_mon 20 --debug_ms 1
 
 # build and inject an initial osd map
-$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 8 --print .ceph_osdmap --pgbits 2
+$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap # --pgbits 2
 $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 
-for osd in 0 1 2 3 #4 5 6 7
+for osd in 0 1 2 3 #4 5 6 7 8 9 10 11 12 13 14 15
 do
  $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
- #valgrind --tool=massif $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_fakestore 10 1>out/o$osd & #--debug_osd 40
- $CEPH_BIN/cosd dev/osd$osd -d --debug_ms 1 --debug_osd 20 --debug_fakestore 10
+ #valgrind --tool=massif $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd & #--debug_osd 40
+ $CEPH_BIN/cosd dev/osd$osd -d --debug_ms 1 --debug_osd 20 --debug_filestore 10
 done
 
 # mds

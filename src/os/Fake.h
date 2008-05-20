@@ -24,14 +24,14 @@
 using namespace std;
 using namespace __gnu_cxx;
 
-class FakeStoreCollections {
+class FakeCollections {
  private:
   Mutex faker_lock;
   ObjectStore *store;
   hash_map<coll_t, set<pobject_t> > fakecollections;
 
  public:
-  FakeStoreCollections(ObjectStore *s) : store(s) {}
+  FakeCollections(ObjectStore *s) : store(s) {}
 
   // faked collections
   int list_collections(list<coll_t>& ls) {
@@ -114,7 +114,7 @@ class FakeStoreCollections {
 
 };
 
-class FakeStoreAttrs {
+class FakeAttrs {
  private:
   
   class FakeAttrSet {
@@ -168,7 +168,7 @@ class FakeStoreAttrs {
   hash_map<coll_t, FakeAttrSet> fakecattrs;
 
  public:
-  FakeStoreAttrs(ObjectStore *s) : store(s) {}
+  FakeAttrs(ObjectStore *s) : store(s) {}
 
   int setattr(pobject_t oid, const char *name,
               const void *value, size_t size,

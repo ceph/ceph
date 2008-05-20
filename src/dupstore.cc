@@ -14,7 +14,7 @@
 
 #include <iostream>
 #include "ebofs/Ebofs.h"
-#include "osd/FakeStore.h"
+#include "os/FileStore.h"
 
 
 int dupstore(ObjectStore* src, ObjectStore* dst)
@@ -88,14 +88,14 @@ int main(int argc, const char **argv)
 
   if (strcmp(args[0], "ebofs") == 0) 
     src = new Ebofs(args[1]);
-  else if (strcmp(args[0], "fakestore") == 0) 
-    src = new FakeStore(args[1]);
+  else if (strcmp(args[0], "filestore") == 0) 
+    src = new FileStore(args[1]);
   else usage();
 
   if (strcmp(args[2], "ebofs") == 0) 
     dst = new Ebofs(args[3]);
-  else if (strcmp(args[2], "fakestore") == 0) 
-    dst = new FakeStore(args[3]);
+  else if (strcmp(args[2], "filestore") == 0) 
+    dst = new FileStore(args[3]);
   else usage();
 
   return dupstore(src, dst);

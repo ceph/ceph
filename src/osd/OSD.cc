@@ -19,8 +19,7 @@
 #include "OSD.h"
 #include "OSDMap.h"
 
-#include "FakeStore.h"
-
+#include "os/FileStore.h"
 #include "ebofs/Ebofs.h"
 
 #ifdef USE_OSBDB
@@ -129,11 +128,11 @@ ObjectStore *OSD::create_object_store(const char *dev)
 
   if (g_conf.ebofs) 
     return new Ebofs(dev);
-  if (g_conf.fakestore)
-    return new FakeStore(dev);
+  if (g_conf.filestore)
+    return new FileStore(dev);
 
   if (S_ISDIR(st.st_mode))
-    return new FakeStore(dev);
+    return new FileStore(dev);
   else
     return new Ebofs(dev);
 }
@@ -179,7 +178,7 @@ int OSD::peek_whoami(const char *dev)
 
 
 
-// <hack> force remount hack for performance testing FakeStore
+// <hack> force remount hack for performance testing FileStore
 class C_Remount : public Context {
   OSD *osd;
 public:

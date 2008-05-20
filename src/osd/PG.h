@@ -21,7 +21,7 @@
 #include "include/buffer.h"
 
 #include "OSDMap.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "msg/Messenger.h"
 
 #include "common/DecayCounter.h"

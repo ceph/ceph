@@ -213,9 +213,9 @@ libebofs_a_SOURCES = \
 	ebofs/Ebofs.cc \
 	ebofs/Allocator.cc
 libos_a_SOURCES = \
-	osd/FileJournal.cc \
-	osd/FakeStore.cc \
-	osd/JournalingObjectStore.cc
+	os/FileJournal.cc \
+	os/FileStore.cc \
+	os/JournalingObjectStore.cc
 
 libosd_a_SOURCES = \
 	osd/PG.cc \
@@ -269,12 +269,12 @@ noinst_HEADERS = \
 	ebofs/csum.h\
 	ebofs/BlockDevice.h\
 	ebofs/Ebofs.h\
-	osd/FileJournal.h\
-	osd/JournalingObjectStore.h\
+	os/FileJournal.h\
+	os/JournalingObjectStore.h\
 	ebofs/types.h\
 	ebofs/Allocator.h\
 	ebofs/BufferCache.h\
-	osd/Journal.h\
+	os/Journal.h\
 	ebofs/nodes.h\
 	ebofs/Cnode.h\
 	ebofs/Onode.h\
@@ -468,16 +468,16 @@ noinst_HEADERS = \
 	msg/SimpleMessenger.h\
 	osbdb/OSBDB.h\
 	osd/Ager.h\
-	osd/BDBMap.h\
-	osd/Fake.h\
-	osd/FakeStoreBDBCollections.h\
-	osd/ObjectStore.h\
+	os/BDBMap.h\
+	os/Fake.h\
+	os/FakeStoreBDBCollections.h\
+	os/ObjectStore.h\
 	osd/ObjectVersioner.h\
 	osd/RAID4PG.h\
 	osd/ReplicatedPG.h\
 	osd/PG.h\
 	osd/OSDMap.h\
-	osd/FakeStore.h\
+	os/FileStore.h\
 	osd/OSD.h\
 	osd/osd_types.h\
 	osdc/Blinker.h\

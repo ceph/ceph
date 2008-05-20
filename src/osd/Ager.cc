@@ -4,7 +4,7 @@
 #include "include/types.h"
 
 #include "Ager.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 
 #include "config.h"
 #include "common/Clock.h"

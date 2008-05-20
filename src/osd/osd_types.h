@@ -73,8 +73,6 @@ namespace __gnu_cxx {
 
 
 
-// osd types
-typedef uint64_t coll_t;        // collection id
 
 // pg stuff
 

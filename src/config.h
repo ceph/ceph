@@ -89,7 +89,7 @@ struct md_config_t {
   int debug_client;
   int debug_osd;
   int debug_ebofs;
-  int debug_fakestore;
+  int debug_filestore;
   int debug_journal;
   int debug_bdev;
   int debug_ns;
@@ -276,12 +276,12 @@ struct md_config_t {
 
   bool osd_auto_weight;
 
-  // fakestore
-  bool fakestore;
-  double   fakestore_sync_interval;
-  bool  fakestore_fake_attrs;
-  bool  fakestore_fake_collections;
-  const char  *fakestore_dev;
+  // filestore
+  bool filestore;
+  double   filestore_sync_interval;
+  bool  filestore_fake_attrs;
+  bool  filestore_fake_collections;
+  const char  *filestore_dev;
   
   // ebofs
   bool  ebofs;

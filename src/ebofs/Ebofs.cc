@@ -16,7 +16,7 @@
 
 #include "Ebofs.h"
 
-#include "osd/FileJournal.h"
+#include "os/FileJournal.h"
 
 #include <errno.h>
 

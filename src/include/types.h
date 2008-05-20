@@ -136,7 +136,7 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 #define O_LAZY 01000000
 
-
+typedef __u64 coll_t;
 
 
 // --------------------------------------

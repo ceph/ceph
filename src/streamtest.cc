@@ -16,7 +16,7 @@
 
 #include <iostream>
 #include "ebofs/Ebofs.h"
-#include "osd/FakeStore.h"
+#include "os/FileStore.h"
 
 struct io {
   utime_t start, ack, commit;
@@ -97,7 +97,7 @@ int main(int argc, const char **argv)
        << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
   //ObjectStore *fs = new Ebofs(filename, journal);
-  ObjectStore *fs = new FakeStore(filename);
+  ObjectStore *fs = new FileStore(filename);
 
   if (g_conf.mkfs && 
       fs->mkfs() < 0) {
