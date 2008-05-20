@@ -282,7 +282,7 @@ int FakeStore::mount()
   if (r == 0) {
     dout(0) << "mount detected btrfs" << dendl;
   } else {
-    dout(0) << "mount did NOT detect btrfs: " << strerror(r) << dendl;
+    dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
     ::close(btrfs_fd);
     btrfs_fd = -1;
   }
@@ -359,10 +359,10 @@ int FakeStore::transaction_start()
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) 
-    derr(0) << "transaction_start got " << strerror(fd)
+    derr(0) << "transaction_start got " << strerror(errno)
 	    << " from btrfs open" << dendl;
-  if (int err = ::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
-    derr(0) << "transaction_start got " << strerror(err)
+  if (::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
+    derr(0) << "transaction_start got " << strerror(errno)
 	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
     return -errno;
