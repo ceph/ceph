@@ -97,7 +97,7 @@ AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_MSG_ERROR([Sorry, you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
 AC_LANG([C])
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdint.h stdlib.h string.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h unistd.h utime.h])
+AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h fcntl.h netdb.h netinet/in.h stdint.h stdlib.h string.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h unistd.h utime.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL

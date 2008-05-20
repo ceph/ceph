@@ -49,7 +49,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <attr/xattr.h>
+#include <sys/xattr.h>
 
 #include <list>
 #include <iostream>
@@ -1786,8 +1786,8 @@ void Server::handle_client_setxattr(MDRequest *mdr)
     return;
   }
   if ((flags & XATTR_REPLACE) && !cur->xattrs.count(name)) {
-    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENOATTR on " << *cur << dendl;
-    reply_request(mdr, -ENOATTR);
+    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
+    reply_request(mdr, -ENODATA);
     return;
   }
 
@@ -1836,8 +1836,8 @@ void Server::handle_client_removexattr(MDRequest *mdr)
 
   string name(req->get_path2());
   if (cur->xattrs.count(name) == 0) {
-    dout(10) << "removexattr '" << name << "' and ENOATTR on " << *cur << dendl;
-    reply_request(mdr, -ENOATTR);
+    dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
+    reply_request(mdr, -ENODATA);
     return;
   }
 
