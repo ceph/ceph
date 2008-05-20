@@ -713,22 +713,22 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
   dout(15) << "project_pg_history end " << h << dendl;
 }
 
+/*
+ * NOTE: this is called from SafeTimer, so caller holds osd_lock
+ */
 void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 {
-  osd_lock.Lock();
-  {
-    if (pg_map.count(pgid)) {
-      PG *pg = _lookup_lock_pg(pgid);
-      if (pg->is_crashed() &&
-          pg->is_replay() &&
-          pg->get_role() == 0 &&
-          pg->info.history.same_primary_since <= epoch) {
-        ObjectStore::Transaction t;
-        pg->activate(t);
-        store->apply_transaction(t);
-      }
-      pg->unlock();
+  if (pg_map.count(pgid)) {
+    PG *pg = _lookup_lock_pg(pgid);
+    if (pg->is_crashed() &&
+	pg->is_replay() &&
+	pg->get_role() == 0 &&
+	pg->info.history.same_primary_since <= epoch) {
+      ObjectStore::Transaction t;
+      pg->activate(t);
+      store->apply_transaction(t);
     }
+    pg->unlock();
   }
 
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
@@ -743,7 +743,6 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
   finished_lock.Lock();
   if (finished.empty()) {
     finished_lock.Unlock();
-    osd_lock.Unlock();
   } else {
     list<Message*> waiting;
     waiting.splice(waiting.begin(), finished);
@@ -756,6 +755,8 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
          it++) {
       dispatch(*it);
     }
+
+    osd_lock.Lock();
   }
 }
 
