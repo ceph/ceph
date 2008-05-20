@@ -918,11 +918,14 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     num_unacked--;
     dout(15) << "handle_osd_modify_reply ack" << dendl;
     
+    /*
+      osd uses v to reorder during replay, but doesn't preserve it
     if (wr->tid_version.count(tid) &&
 	wr->tid_version[tid].version != m->get_version().version) {
       dout(-10) << "handle_osd_modify_reply WARNING: replay of tid " << tid 
 		<< " did not achieve previous ordering" << dendl;
     }
+    */
     wr->tid_version[tid] = m->get_version();
     
     if (wr->waitfor_ack.empty()) {
@@ -942,8 +945,11 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   }
   if (m->is_safe()) {
     // safe
+    /*
+      osd uses v to reorder during replay, but doesn't preserve it
     assert(wr->tid_version.count(tid) == 0 ||
            m->get_version() == wr->tid_version[tid]);
+    */
 
     wr->waitfor_commit.erase(tid);
     num_uncommitted--;

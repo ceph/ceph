@@ -614,9 +614,12 @@ void PG::build_prior()
     int num_still_up_or_clean = 0;
     for (unsigned i=0; i<acting.size(); i++) {
       if (osd->osdmap->is_up(acting[i])) {  // is up now
-	num_still_up_or_clean++;
 	if (acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(acting[i]);
+
+	// has it been up this whole time?
+	if (osd->osdmap->get_up_from(acting[i]) <= first_epoch)
+	  num_still_up_or_clean++;
       } else {
 	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
 	must_notify_mon = true;

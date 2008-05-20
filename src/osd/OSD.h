@@ -79,7 +79,8 @@ public:
 private:
   /** superblock **/
   OSDSuperblock superblock;
-  epoch_t  boot_epoch;      
+  epoch_t boot_epoch;      
+  epoch_t last_active_epoch;
 
   void write_superblock();
   void write_superblock(ObjectStore::Transaction& t);

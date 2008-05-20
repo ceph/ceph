@@ -384,7 +384,7 @@ md_config_t g_conf = {
   osd_heartbeat_interval: 1,
   osd_heartbeat_grace: 30,
   osd_mon_report_interval:  5,  // pg stats, failures, up_thru, boot.
-  osd_replay_window: 5,
+  osd_replay_window: 45,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
 

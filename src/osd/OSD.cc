@@ -1004,12 +1004,20 @@ void OSD::send_boot()
 
 void OSD::queue_want_up_thru(epoch_t want)
 {
+  epoch_t cur = osdmap->get_up_thru(whoami);
   if (want > up_thru_wanted) {
+    dout(10) << "queue_want_up_thru now " << want << " (was " << up_thru_wanted << ")" 
+	     << ", currently " << cur
+	     << dendl;
     up_thru_wanted = want;
 
     // expedite, a bit.  WARNING this will somewhat delay other mon queries.
     last_mon_report = g_clock.now();
     send_alive();
+  } else {
+    dout(10) << "queue_want_up_thru want " << want << " <= queued " << up_thru_wanted 
+	     << ", currently " << cur
+	     << dendl;
   }
 }
 
@@ -1018,7 +1026,8 @@ void OSD::send_alive()
   if (!osdmap->exists(whoami))
     return;
   epoch_t up_thru = osdmap->get_up_thru(whoami);
-  if (up_thru_wanted < up_thru) {
+  dout(10) << "send_alive up_thru currently " << up_thru << " want " << up_thru_wanted << dendl;
+  if (up_thru_wanted > up_thru) {
     up_thru_pending = up_thru_wanted;
     int mon = monmap->pick_mon();
     dout(10) << "send_alive to mon" << mon << " (want " << up_thru_wanted << ")" << dendl;
@@ -1520,7 +1529,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	osdmap->get_addr(whoami) == messenger->get_myaddr()) {
       // yay!
       activate_map(t);
-    
+
       // process waiters
       take_waiters(waiting_for_osdmap);
     }
@@ -1726,20 +1735,19 @@ void OSD::activate_map(ObjectStore::Transaction& t)
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
        it++) {
-    //pg_t pgid = it->first;
     PG *pg = it->second;
     pg->lock();
     if (pg->is_active()) {
       // update started counter
       pg->info.history.last_epoch_started = osdmap->get_epoch();
-    } 
+    }
     else if (pg->get_role() == 0 && !pg->is_active()) {
       // i am (inactive) primary
       pg->build_prior();
       pg->peer(t, query_map, &info_map);
     }
     else if (pg->is_stray() &&
-             pg->get_primary() >= 0) {
+	     pg->get_primary() >= 0) {
       // i am residual|replica
       notify_list[pg->get_primary()].push_back(pg->info);
     }
@@ -1747,6 +1755,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
       pg->update_stats();
     pg->unlock();
   }  
+
+  last_active_epoch = osdmap->get_epoch();
 
   do_notifies(notify_list);  // notify? (residual|replica)
   do_queries(query_map);

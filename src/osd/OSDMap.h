@@ -273,6 +273,10 @@ private:
     return n;
   }
 
+  int get_state(int o) {
+    assert(o < max_osd);
+    return osd_state[o];
+  }
   void set_state(int o, unsigned s) {
     assert(o < max_osd);
     osd_state[o] = s;
@@ -326,19 +330,6 @@ private:
       if (is_up(i))
 	return i;
     return -1;
-  }
-
-  void mark_down(int o, bool clean) { 
-    osd_state[o] &= ~CEPH_OSD_UP;
-  }
-  void mark_up(int o) { 
-    osd_state[o] |= CEPH_OSD_UP;
-  }
-  void mark_out(int o) { 
-    set_offload(o, CEPH_OSD_OUT);
-  }
-  void mark_in(int o) { 
-    set_offload(o, CEPH_OSD_IN);
   }
 
   void apply_incremental(Incremental &inc) {
