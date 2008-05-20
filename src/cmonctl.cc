@@ -48,10 +48,14 @@ void handle_ack(MMonCommandAck *ack)
   int len = ack->get_data().length();
   if (len) {
     if (outfile) {
-      int fd = ::open(outfile, O_WRONLY|O_TRUNC|O_CREAT);
-      ::write(fd, ack->get_data().c_str(), len);
-      ::fchmod(fd, 0777);
-      ::close(fd);
+      if (strcmp(outfile, "-") == 0) {
+	::write(0, ack->get_data().c_str(), len);
+      } else {
+	int fd = ::open(outfile, O_WRONLY|O_TRUNC|O_CREAT);
+	::write(fd, ack->get_data().c_str(), len);
+	::fchmod(fd, 0777);
+	::close(fd);
+      }
       generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
     } else {
       generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
