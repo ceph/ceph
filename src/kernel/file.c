@@ -110,6 +110,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	dentry = d_find_alias(inode);
 	if (!dentry)
 		return -ESTALE;  /* blech */
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
