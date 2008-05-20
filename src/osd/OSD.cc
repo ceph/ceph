@@ -1741,7 +1741,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
       // update started counter
       pg->info.history.last_epoch_started = osdmap->get_epoch();
     }
-    else if (pg->get_role() == 0 && !pg->is_active()) {
+    else if (pg->is_primary() && !pg->is_active()) {
       // i am (inactive) primary
       pg->build_prior();
       pg->peer(t, query_map, &info_map);
@@ -1996,7 +1996,7 @@ void OSD::kick_pg_split_queue()
         waiting_for_pg.erase(pg->info.pgid);
       }
       pg->peer(t, query_map, &info_map);
-
+      pg->update_stats();
       pg->unlock();
       created++;
     }
@@ -2131,6 +2131,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
         waiting_for_pg.erase(pgid);
       }
       pg->peer(t, query_map, &info_map);
+      pg->update_stats();
       pg->unlock();
     }
   }
@@ -2291,7 +2292,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     }
 
     // ok!
-    dout(10) << *pg << " osd" << from << " " << *it << dendl;
+    dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
     pg->info.history.merge(it->history);
 
     // save info.
@@ -2323,7 +2324,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       pg->build_prior();
       pg->peer(t, query_map, &info_map);
     }
-
+    pg->update_stats();
     pg->unlock();
   }
   
@@ -2407,6 +2408,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // peer
     map< int, map<pg_t,PG::Query> > query_map;
     pg->peer(t, query_map, info_map);
+    pg->update_stats();
     do_queries(query_map);
 
   } else {

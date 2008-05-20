@@ -881,6 +881,8 @@ void PG::peer(ObjectStore::Transaction& t,
   }
   else if (is_all_uptodate()) 
     finish_recovery();
+
+  update_stats(); // update stats
 }
 
 
