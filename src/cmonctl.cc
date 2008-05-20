@@ -49,7 +49,7 @@ void handle_ack(MMonCommandAck *ack)
   if (len) {
     if (outfile) {
       if (strcmp(outfile, "-") == 0) {
-	::write(0, ack->get_data().c_str(), len);
+	::write(1, ack->get_data().c_str(), len);
       } else {
 	int fd = ::open(outfile, O_WRONLY|O_TRUNC|O_CREAT);
 	::write(fd, ack->get_data().c_str(), len);
