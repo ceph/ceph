@@ -8,6 +8,9 @@ big items
 - client, user authentication
 - cas
 
+bugs
+- -1 on mds file size recovery
+
 - mon needs to trim history
 - meta vs data crush rules
 - use libuuid

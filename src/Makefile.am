@@ -152,7 +152,7 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = start.sh stop.sh crushtool.pl
+EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh
 
 # cleaning
 clean-local:
@@ -446,6 +446,8 @@ noinst_HEADERS = \
 	messages/MDiscoverReply.h\
 	messages/MOSDFailure.h\
 	messages/MExportDir.h\
+	messages/MOSDAlive.h\
+	messages/MPGStatsAck.h\
 	mon/Elector.h\
 	mon/MonitorStore.h\
 	mon/Paxos.h\
@@ -487,6 +489,5 @@ noinst_HEADERS = \
 	osdc/Objecter.h\
 	config.h\
 	include/intarith.h\
+	include/encoding.h\
 	include/err.h
-
-
