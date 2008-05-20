@@ -872,8 +872,9 @@ int Rank::Pipe::accept()
   dout(10) << "accept replacing " << existing << dendl;
   existing->state = STATE_CLOSED;
   existing->cond.Signal();
+  existing->reader_thread.kill(SIGUSR1);
   existing->unregister_pipe();
-  
+    
   // steal queue and out_seq
   out_seq = existing->out_seq;
   if (!existing->sent.empty()) {
@@ -1197,7 +1198,7 @@ void Rank::Pipe::fail()
 
 void Rank::Pipe::was_session_reset()
 {
-  dout(10) << "was_reset_session" << dendl;
+  dout(10) << "was_session_reset" << dendl;
   report_failures();
   for (unsigned i=0; i<rank.local.size(); i++) 
     if (rank.local[i] && rank.local[i]->get_dispatcher())

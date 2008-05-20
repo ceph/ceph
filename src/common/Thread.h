@@ -48,7 +48,10 @@ class Thread {
   static int get_num_threads() { return _num_threads; }
 
   int kill(int signal) {
-    return pthread_kill(thread_id, signal);
+    if (thread_id)
+      return pthread_kill(thread_id, signal);
+    else
+      return -EINVAL;
   }
   int create() {
     _num_threads++;
