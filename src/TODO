@@ -27,6 +27,8 @@ userspace client
   - also needs cope with mds failures
 
 kernel client
+- close WR|WRBUFFER -> WR transition overwrite hole
+  - get_cap_refs needs to block if want WR+WRBUFFER, issued WR, but still implemented WRBUFFER.
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
