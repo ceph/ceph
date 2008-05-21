@@ -125,12 +125,6 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
   //parse_object(t+1);
 }
 
-void FileStore::get_oname(pobject_t oid, char *s) 
-{
-  sprintf(s, "%s/objects", basedir.c_str());
-  append_oname(oid, s);
-}
-
 pobject_t FileStore::parse_object(char *s)
 {
   pobject_t o;
@@ -377,57 +371,57 @@ void FileStore::transaction_end(int fd)
 // --------------------
 // objects
 
-bool FileStore::exists(pobject_t oid)
+bool FileStore::exists(coll_t cid, pobject_t oid)
 {
   struct stat st;
-  if (stat(oid, &st) == 0)
+  if (stat(cid, oid, &st) == 0)
     return true;
   else 
     return false;
 }
   
-int FileStore::stat(pobject_t oid, struct stat *st)
+int FileStore::stat(coll_t cid, pobject_t oid, struct stat *st)
 {
-  dout(20) << "stat " << oid << dendl;
+  dout(20) << "stat " << cid << " " << oid << dendl;
   char fn[200];
-  get_oname(oid,fn);
+  get_coname(cid, oid, fn);
   int r = ::stat(fn, st);
-  dout(20) << "stat " << oid << " at " << fn << " = " << r << dendl;
+  dout(20) << "stat " << cid << " " << oid << " at " << fn << " = " << r << dendl;
   return r < 0 ? -errno:r;
 }
 
  
-int FileStore::remove(pobject_t oid, Context *onsafe) 
+int FileStore::remove(coll_t cid, pobject_t oid, Context *onsafe) 
 {
-  dout(20) << "remove " << oid << dendl;
+  dout(20) << "remove " << cid << " " << oid << dendl;
   char fn[200];
-  get_oname(oid,fn);
+  get_coname(cid, oid, fn);
   int r = ::unlink(fn);
   if (r == 0) 
-    journal_remove(oid, onsafe);
+    journal_remove(cid, oid, onsafe);
   else
     delete onsafe;
   return r < 0 ? -errno:r;
 }
 
-int FileStore::truncate(pobject_t oid, off_t size, Context *onsafe)
+int FileStore::truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe)
 {
-  dout(20) << "truncate " << oid << " size " << size << dendl;
+  dout(20) << "truncate " << cid << " " << oid << " size " << size << dendl;
 
   char fn[200];
-  get_oname(oid,fn);
+  get_coname(cid, oid, fn);
   int r = ::truncate(fn, size);
-  if (r >= 0) journal_truncate(oid, size, onsafe);
+  if (r >= 0) journal_truncate(cid, oid, size, onsafe);
   return r < 0 ? -errno:r;
 }
 
-int FileStore::read(pobject_t oid, 
+int FileStore::read(coll_t cid, pobject_t oid, 
                     off_t offset, size_t len,
                     bufferlist& bl) {
-  dout(20) << "read " << oid << " len " << len << " off " << offset << dendl;
+  dout(20) << "read " << cid << " " << oid << " len " << len << " off " << offset << dendl;
 
   char fn[200];
-  get_oname(oid,fn);
+  get_coname(cid, oid, fn);
   
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
@@ -457,13 +451,13 @@ int FileStore::read(pobject_t oid,
 }
 
 
-int FileStore::write(pobject_t oid, 
+int FileStore::write(coll_t cid, pobject_t oid, 
                      off_t offset, size_t len,
                      const bufferlist& bl, 
                      Context *onsafe)
 {
   char fn[200];
-  get_oname(oid,fn);
+  get_coname(cid, oid, fn);
 
   dout(20) << "write " << fn << " len " << len << " off " << offset << dendl;
 
@@ -500,7 +494,7 @@ int FileStore::write(pobject_t oid,
 
   // schedule sync
   if (did >= 0)
-    journal_write(oid, offset, len, bl, onsafe);
+    journal_write(cid, oid, offset, len, bl, onsafe);
   else
     delete onsafe;
 
@@ -509,11 +503,11 @@ int FileStore::write(pobject_t oid,
   return did;
 }
 
-int FileStore::clone(pobject_t oldoid, pobject_t newoid)
+int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
 {
   char ofn[200], nfn[200];
-  get_oname(oldoid, ofn);
-  get_oname(newoid, nfn);
+  get_coname(cid, oldoid, ofn);
+  get_coname(cid, newoid, nfn);
 
   dout(20) << "clone " << ofn << " -> " << nfn << dendl;
 
@@ -612,33 +606,33 @@ void FileStore::sync(Context *onsafe)
 
 // objects
 
-int FileStore::setattr(pobject_t oid, const char *name,
+int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
 		       const void *value, size_t size,
 		       Context *onsafe) 
 {
   int r;
   if (fake_attrs) 
-    r = attrs.setattr(oid, name, value, size, onsafe);
+    r = attrs.setattr(cid, oid, name, value, size, onsafe);
   else {
     char fn[100];
-    get_oname(oid, fn);
+    get_coname(cid, oid, fn);
     r = do_setxattr(fn, name, value, size);
   }
   if (r >= 0)
-    journal_setattr(oid, name, value, size, onsafe);
+    journal_setattr(cid, oid, name, value, size, onsafe);
   else
     delete onsafe;
   return r < 0 ? -errno:r;
 }
 
-int FileStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
 {
   int r;
   if (fake_attrs) 
-    r = attrs.setattrs(oid, aset);
+    r = attrs.setattrs(cid, oid, aset);
   else {
     char fn[100];
-    get_oname(oid, fn);
+    get_coname(cid, oid, fn);
     r = 0;
     for (map<string,bufferptr>::iterator p = aset.begin();
 	 p != aset.end();
@@ -651,32 +645,32 @@ int FileStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
     }
   }
   if (r >= 0)
-    journal_setattrs(oid, aset, 0);
+    journal_setattrs(cid, oid, aset, 0);
   return r < 0 ? -errno:r;
 }
 
-int FileStore::getattr(pobject_t oid, const char *name,
+int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
 		       void *value, size_t size) 
 {
   int r;
   if (fake_attrs) 
-    r = attrs.getattr(oid, name, value, size);
+    r = attrs.getattr(cid, oid, name, value, size);
   else {
     char fn[100];
-    get_oname(oid, fn);
+    get_coname(cid, oid, fn);
     r = do_getxattr(fn, name, value, size);
   }
   return r < 0 ? -errno:r;
 }
 
-int FileStore::getattrs(pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
 {
   int r;
   if (fake_attrs) 
-    r = attrs.getattrs(oid, aset);
+    r = attrs.getattrs(cid, oid, aset);
   else {
     char fn[100];
-    get_oname(oid, fn);
+    get_coname(cid, oid, fn);
     
     char val[1000];
     char names[1000];
@@ -694,18 +688,18 @@ int FileStore::getattrs(pobject_t oid, map<string,bufferptr>& aset)
   return r < 0 ? -errno:r;
 }
 
-int FileStore::rmattr(pobject_t oid, const char *name, Context *onsafe) 
+int FileStore::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe) 
 {
   int r;
   if (fake_attrs) 
-    r = attrs.rmattr(oid, name, onsafe);
+    r = attrs.rmattr(cid, oid, name, onsafe);
   else {
     char fn[100];
-    get_oname(oid, fn);
+    get_coname(cid, oid, fn);
     r = do_removexattr(fn, name);
   }
   if (r >= 0)
-    journal_rmattr(oid, name, onsafe);
+    journal_rmattr(cid, oid, name, onsafe);
   else
     delete onsafe;
   return r < 0 ? -errno:r;
@@ -714,9 +708,8 @@ int FileStore::rmattr(pobject_t oid, const char *name, Context *onsafe)
 
 
 // collections
-
 int FileStore::collection_setattr(coll_t c, const char *name,
-				  void *value, size_t size,
+				  const void *value, size_t size,
 				  Context *onsafe) 
 {
   int r;
@@ -849,7 +842,7 @@ int FileStore::list_collections(list<coll_t>& ls)
   if (fake_collections) return collections.list_collections(ls);
 
   char fn[200];
-  sprintf(fn, "%s/collections", basedir.c_str());
+  sprintf(fn, "%s", basedir.c_str());
 
   DIR *dir = ::opendir(fn);
   assert(dir);
@@ -857,6 +850,8 @@ int FileStore::list_collections(list<coll_t>& ls)
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
     // parse
+    if (strlen(de->d_name) != 16)
+      continue;
     errno = 0;
     coll_t c = parse_coll(de->d_name);
     if (c) ls.push_back(c);
@@ -921,7 +916,7 @@ bool FileStore::collection_exists(coll_t c)
 }
 
 
-int FileStore::collection_add(coll_t c, pobject_t o,
+int FileStore::collection_add(coll_t c, coll_t cid, pobject_t o,
 			      Context *onsafe) 
 {
   int r;
@@ -931,11 +926,11 @@ int FileStore::collection_add(coll_t c, pobject_t o,
     char cof[200];
     get_coname(c, o, cof);
     char of[200];
-    get_oname(o, of);
+    get_coname(cid, o, of);
     r = ::link(of, cof);
   }
   if (r >= 0)
-    journal_collection_add(c, o, onsafe);
+    journal_collection_add(c, cid, o, onsafe);
   else 
     delete onsafe;
   return r < 0 ? -errno:r;

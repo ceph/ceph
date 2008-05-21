@@ -16,6 +16,8 @@
 #include "ebofs/Ebofs.h"
 #include "os/FileStore.h"
 
+#include <ext/hash_map>
+using __gnu_cxx::hash_map;
 
 int dupstore(ObjectStore* src, ObjectStore* dst)
 {
@@ -24,44 +26,42 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
   if (dst->mount() < 0) return 1;
 
   // objects
-  list<pobject_t> objects;
-  src->list_objects(objects);
-  int num = objects.size();
-  cout << num << " objects" << std::endl;
-  int i = 1;
-  for (list<pobject_t>::iterator p = objects.begin(); p != objects.end(); ++p) {
-    bufferlist bl;
-    src->read(*p, 0, 0, bl);
-    cout << "object " << i++ << "/" << num << " " << *p << " = " << bl.length() << " bytes" << std::endl;
-    dst->write(*p, 0, bl.length(), bl, 0);
-    map<string,bufferptr> attrs;
-    src->getattrs(*p, attrs);
-    dst->setattrs(*p, attrs);
-  }
+  hash_map<pobject_t, coll_t> did_object;
 
   // collections
   list<coll_t> collections;
   src->list_collections(collections);
-  num = collections.size();
+  int num = collections.size();
   cout << num << " collections" << std::endl;
-  i = 1;
+  int i = 1;
   for (list<coll_t>::iterator p = collections.begin();
        p != collections.end();
        ++p) {
+    cout << "collection " << i++ << "/" << num << " " << hex << *p << dec << std::endl;
     dst->create_collection(*p, 0);
     map<string,bufferptr> attrs;
     src->collection_getattrs(*p, attrs);
     dst->collection_setattrs(*p, attrs);
+
     list<pobject_t> o;
     src->collection_list(*p, o);
-    int numo = 0;
+    int numo = o.size();
+    int j = 1;
     for (list<pobject_t>::iterator q = o.begin(); q != o.end(); q++) {
-      dst->collection_add(*p, *q, 0);
-      numo++;
+      if (did_object.count(*q))
+	dst->collection_add(*p, did_object[*q], *q, 0);
+      else {
+	bufferlist bl;
+	src->read(*p, *q, 0, 0, bl);
+	cout << "object " << j++ << "/" << numo << " " << *q << " = " << bl.length() << " bytes" << std::endl;
+	dst->write(*p, *q, 0, bl.length(), bl, 0);
+	map<string,bufferptr> attrs;
+	src->getattrs(*p, *q, attrs);
+	dst->setattrs(*p, *q, attrs);
+	did_object[*q] = *p;
+      }
     }
-    cout << "collection " << i++ << "/" << num << " " << hex << *p << dec << " = " << numo << " objects" << std::endl;
   }
-
   
   src->umount();
   dst->umount();  

@@ -116,7 +116,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
       ssize_t t = MIN(s, max);
       bufferlist sbl;
       sbl.substr_of(bl, 0, t);
-      store->write(poid, off, t, sbl, false);
+      store->write(0, poid, off, t, sbl, false);
       off += t;
       s -= t;
     }
@@ -157,7 +157,7 @@ void Ager::age_empty(float pc) {
     
     generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << poid << dec << dendl;
     
-    store->remove(poid);
+    store->remove(0, poid);
     age_free_oids.push_back(poid);
   }
 

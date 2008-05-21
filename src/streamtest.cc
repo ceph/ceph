@@ -120,7 +120,7 @@ int main(int argc, const char **argv)
     utime_t start = now;
     set_start(pos, now);
     ObjectStore::Transaction t;
-    t.write(poid, pos, bytes, bl);
+    t.write(0, poid, pos, bytes, bl);
     fs->apply_transaction(t, new C_Commit(pos));
     now = g_clock.now();
     set_ack(pos, now);

@@ -2275,7 +2275,7 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
  * return value of -1 if onode isn't loaded.  otherwise, the number
  * of extents that need to be read (i.e. # of seeks)  
  */
-int Ebofs::is_cached(pobject_t oid, off_t off, size_t len)
+int Ebofs::is_cached(coll_t cid, pobject_t oid, off_t off, size_t len)
 {
   ebofs_lock.Lock();
   int r = _is_cached(oid, off, len);
@@ -2326,7 +2326,7 @@ int Ebofs::_is_cached(pobject_t oid, off_t off, size_t len)
   */
 }
 
-void Ebofs::trim_from_cache(pobject_t oid, off_t off, size_t len)
+void Ebofs::trim_from_cache(coll_t cid, pobject_t oid, off_t off, size_t len)
 {
   ebofs_lock.Lock();
   _trim_from_cache(oid, off, len);
@@ -2358,7 +2358,7 @@ void Ebofs::_trim_from_cache(pobject_t oid, off_t off, size_t len)
 }
 
 
-int Ebofs::read(pobject_t oid, 
+int Ebofs::read(coll_t cid, pobject_t oid, 
                 off_t off, size_t len,
                 bufferlist& bl)
 {
@@ -2847,7 +2847,7 @@ int Ebofs::_zero(pobject_t oid, off_t offset, size_t length)
 }
 
 
-int Ebofs::write(pobject_t oid, 
+int Ebofs::write(coll_t cid, pobject_t oid, 
                  off_t off, size_t len,
                  const bufferlist& bl, Context *onsafe)
 {
@@ -2861,7 +2861,7 @@ int Ebofs::write(pobject_t oid,
     assert((size_t)r == len);
     if (journal) {
       Transaction t;
-      t.write(oid, off, len, bl);
+      t.write(cid, oid, off, len, bl);
       bufferlist tbl;
       t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
@@ -2875,7 +2875,7 @@ int Ebofs::write(pobject_t oid,
   return r;
 }
 
-int Ebofs::zero(pobject_t oid, off_t off, size_t len, Context *onsafe)
+int Ebofs::zero(coll_t cid, pobject_t oid, off_t off, size_t len, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -2887,7 +2887,7 @@ int Ebofs::zero(pobject_t oid, off_t off, size_t len, Context *onsafe)
     assert((size_t)r == len);
     if (journal) {
       Transaction t;
-      t.zero(oid, off, len);
+      t.zero(cid, oid, off, len);
       bufferlist tbl;
       t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
@@ -2917,7 +2917,7 @@ int Ebofs::_remove(pobject_t oid)
 }
 
 
-int Ebofs::remove(pobject_t oid, Context *onsafe)
+int Ebofs::remove(coll_t cid, pobject_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
 
@@ -2928,7 +2928,7 @@ int Ebofs::remove(pobject_t oid, Context *onsafe)
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.remove(oid);
+      t.remove(cid, oid);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -3001,7 +3001,7 @@ int Ebofs::_truncate(pobject_t oid, off_t size)
 }
 
 
-int Ebofs::truncate(pobject_t oid, off_t size, Context *onsafe)
+int Ebofs::truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -3011,7 +3011,7 @@ int Ebofs::truncate(pobject_t oid, off_t size, Context *onsafe)
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.truncate(oid, size);
+      t.truncate(cid, oid, size);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -3027,7 +3027,7 @@ int Ebofs::truncate(pobject_t oid, off_t size, Context *onsafe)
 
 
 
-int Ebofs::clone(pobject_t from, pobject_t to, Context *onsafe)
+int Ebofs::clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -3037,7 +3037,7 @@ int Ebofs::clone(pobject_t from, pobject_t to, Context *onsafe)
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.clone(from, to);
+      t.clone(cid, from, to);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -3111,7 +3111,7 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
  *  (oid.rev is a noninclusive upper bound.)
  *
  */
-int Ebofs::pick_object_revision_lt(pobject_t& oid)
+int Ebofs::pick_object_revision_lt(coll_t cid, pobject_t& oid)
 {
   assert(oid.oid.rev > 0);   // this is only useful for non-zero oid.rev
 
@@ -3159,7 +3159,7 @@ int Ebofs::pick_object_revision_lt(pobject_t& oid)
 
 
 
-bool Ebofs::exists(pobject_t oid)
+bool Ebofs::exists(coll_t cid, pobject_t oid)
 {
   ebofs_lock.Lock();
   dout(8) << "exists " << oid << dendl;
@@ -3168,7 +3168,7 @@ bool Ebofs::exists(pobject_t oid)
   return e;
 }
 
-int Ebofs::stat(pobject_t oid, struct stat *st)
+int Ebofs::stat(coll_t cid, pobject_t oid, struct stat *st)
 {
   ebofs_lock.Lock();
   int r = _stat(oid,st);
@@ -3212,7 +3212,7 @@ int Ebofs::_setattr(pobject_t oid, const char *name, const void *value, size_t s
   return 0;
 }
 
-int Ebofs::setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe)
+int Ebofs::setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe)
 {
   ebofs_lock.Lock();
   int r = _setattr(oid, name, value, size);
@@ -3221,7 +3221,7 @@ int Ebofs::setattr(pobject_t oid, const char *name, const void *value, size_t si
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.setattr(oid, name, value, size);
+      t.setattr(cid, oid, name, value, size);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -3252,7 +3252,7 @@ int Ebofs::_setattrs(pobject_t oid, map<string,bufferptr>& attrset)
   return 0;
 }
 
-int Ebofs::setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe)
+int Ebofs::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe)
 {
   ebofs_lock.Lock();
   int r = _setattrs(oid, attrset);
@@ -3261,7 +3261,7 @@ int Ebofs::setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsa
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.setattrs(oid, attrset);
+      t.setattrs(cid, oid, attrset);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -3276,7 +3276,7 @@ int Ebofs::setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsa
 }
 
 
-int Ebofs::get_object_collections(pobject_t oid, set<coll_t>& ls)
+int Ebofs::get_object_collections(coll_t cid, pobject_t oid, set<coll_t>& ls)
 {
   ebofs_lock.Lock();
   int r = _get_object_collections(oid, ls);
@@ -3295,7 +3295,7 @@ int Ebofs::_get_object_collections(pobject_t oid, set<coll_t>& ls)
   return 0;
 }
 
-int Ebofs::getattr(pobject_t oid, const char *name, void *value, size_t size)
+int Ebofs::getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size)
 {
   ebofs_lock.Lock();
   int r = _getattr(oid, name, value, size);
@@ -3324,7 +3324,7 @@ int Ebofs::_getattr(pobject_t oid, const char *name, void *value, size_t size)
   return r;
 }
 
-int Ebofs::getattrs(pobject_t oid, map<string,bufferptr> &aset)
+int Ebofs::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();
   int r = _getattrs(oid, aset);
@@ -3363,7 +3363,7 @@ int Ebofs::_rmattr(pobject_t oid, const char *name)
   return 0;
 }
 
-int Ebofs::rmattr(pobject_t oid, const char *name, Context *onsafe) 
+int Ebofs::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe) 
 {
   ebofs_lock.Lock();
 
@@ -3373,7 +3373,7 @@ int Ebofs::rmattr(pobject_t oid, const char *name, Context *onsafe)
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.rmattr(oid, name);
+      t.rmattr(cid, oid, name);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -3387,7 +3387,7 @@ int Ebofs::rmattr(pobject_t oid, const char *name, Context *onsafe)
   return r;
 }
 
-int Ebofs::listattr(pobject_t oid, vector<string>& attrs)
+int Ebofs::listattr(coll_t cid, pobject_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
   dout(8) << "listattr " << oid << dendl;
@@ -3581,7 +3581,7 @@ int Ebofs::_collection_add(coll_t cid, pobject_t oid)
   return r;
 }
 
-int Ebofs::collection_add(coll_t cid, pobject_t oid, Context *onsafe)
+int Ebofs::collection_add(coll_t cid, coll_t ocid, pobject_t oid, Context *onsafe)
 {
   ebofs_lock.Lock();
 
@@ -3591,7 +3591,7 @@ int Ebofs::collection_add(coll_t cid, pobject_t oid, Context *onsafe)
   if (r >= 0) {
     if (journal) {
       Transaction t;
-      t.collection_add(cid, oid);
+      t.collection_add(cid, ocid, oid);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);

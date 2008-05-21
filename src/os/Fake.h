@@ -170,7 +170,7 @@ class FakeAttrs {
  public:
   FakeAttrs(ObjectStore *s) : store(s) {}
 
-  int setattr(pobject_t oid, const char *name,
+  int setattr(coll_t cid, pobject_t oid, const char *name,
               const void *value, size_t size,
               Context *onsafe=0) {
     faker_lock.Lock();
@@ -179,26 +179,26 @@ class FakeAttrs {
     faker_lock.Unlock();
     return r;
   }
-  int setattrs(pobject_t oid, map<string,bufferptr>& aset) {
+  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].setattrs(aset);
     faker_lock.Unlock();
     return r;
   }
-  int getattr(pobject_t oid, const char *name,
+  int getattr(coll_t cid, pobject_t oid, const char *name,
               void *value, size_t size) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].getattr(name, value, size);
     faker_lock.Unlock();
     return r;
   }
-  int getattrs(pobject_t oid, map<string,bufferptr>& aset) {
+  int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].getattrs(aset);
     faker_lock.Unlock();
     return r;
   }
-  int rmattr(pobject_t oid, const char *name,
+  int rmattr(coll_t cid, pobject_t oid, const char *name,
              Context *onsafe=0) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].rmattr(name);
@@ -207,7 +207,7 @@ class FakeAttrs {
     return r;
   }
 
-  int listattr(pobject_t oid, char *attrs, size_t size) {
+  int listattr(coll_t cid, pobject_t oid, char *attrs, size_t size) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].listattr(attrs,size);
     faker_lock.Unlock();
@@ -215,7 +215,7 @@ class FakeAttrs {
   }
 
   int collection_setattr(coll_t c, const char *name,
-                         void *value, size_t size,
+                         const void *value, size_t size,
                          Context *onsafe=0) {
     faker_lock.Lock();
     int r = fakecattrs[c].setattr(name, value, size);

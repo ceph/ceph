@@ -150,7 +150,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       bool b;
       // *** FIXME *** this may block, and we're in the fast path! ***
       if (g_conf.osd_balance_reads &&
-	  osd->store->getattr(poid, "balance-reads", &b, 1) >= 0)
+	  osd->store->getattr(info.pgid, poid, "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
       if (!is_balanced && should_balance &&
@@ -327,13 +327,13 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   // -- fastpath read?
   // if this is a read and the data is in the cache, do an immediate read.. 
   if ( g_conf.osd_immediate_read_from_cache ) {
-    if (osd->store->is_cached( poid,
+    if (osd->store->is_cached( info.pgid, poid,
 			       op->get_offset(), 
 			       op->get_length() ) == 0) {
       if (!is_primary() && !op->get_source().is_osd()) {
 	// am i allowed?
 	bool v;
-	if (osd->store->getattr(poid, "balance-reads", &v, 1) < 0) {
+	if (osd->store->getattr(info.pgid, poid, "balance-reads", &v, 1) < 0) {
 	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
 	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
@@ -493,8 +493,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
     } else {
       // make sure i exist and am balanced, otherwise fw back to acker.
       bool b;
-      if (!osd->store->exists(poid) || 
-	  osd->store->getattr(poid, "balance-reads", &b, 1) < 0) {
+      if (!osd->store->exists(info.pgid, poid) || 
+	  osd->store->getattr(info.pgid, poid, "balance-reads", &b, 1) < 0) {
 	dout(-10) << "read on replica, object " << poid 
 		  << " dne or no balance-reads, fw back to primary" << dendl;
 	osd->messenger->send_message(op, osd->osdmap->get_inst(get_acker()));
@@ -518,7 +518,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   // check inc_lock?
   if (op->get_inc_lock() > 0) {
     __u32 cur = 0;
-    osd->store->getattr(poid, "inc_lock", &cur, sizeof(cur));
+    osd->store->getattr(info.pgid, poid, "inc_lock", &cur, sizeof(cur));
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
@@ -532,7 +532,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     {
       // read into a buffer
       bufferlist bl;
-      r = osd->store->read(poid, 
+      r = osd->store->read(info.pgid, poid, 
 			   op->get_offset(), op->get_length(),
 			   bl);
       reply->set_data(bl);
@@ -550,7 +550,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     {
       struct stat st;
       memset(&st, sizeof(st), 0);
-      r = osd->store->stat(poid, &st);
+      r = osd->store->stat(info.pgid, poid, &st);
       if (r >= 0)
 	reply->set_length(st.st_size);
     }
@@ -670,7 +670,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
     pobject_t noid = poid;  // FIXME ****
     noid.oid.rev = rev;
     dout(10) << "prepare_op_transaction cloning " << poid << " crev " << crev << " to " << noid << dendl;
-    t.clone(poid, noid);
+    t.clone(info.pgid, poid, noid);
     did_clone = true;
   }  
 
@@ -681,24 +681,24 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
 
   case CEPH_OSD_OP_WRLOCK:
     { // lock object
-      t.setattr(poid, "wrlock", &reqid.name, sizeof(entity_name_t));
+      t.setattr(info.pgid, poid, "wrlock", &reqid.name, sizeof(entity_name_t));
     }
     break;  
   case CEPH_OSD_OP_WRUNLOCK:
     { // unlock objects
-      t.rmattr(poid, "wrlock");
+      t.rmattr(info.pgid, poid, "wrlock");
     }
     break;
 
   case CEPH_OSD_OP_BALANCEREADS:
     {
       bool bal = true;
-      t.setattr(poid, "balance-reads", &bal, sizeof(bal));
+      t.setattr(info.pgid, poid, "balance-reads", &bal, sizeof(bal));
     }
     break;
   case CEPH_OSD_OP_UNBALANCEREADS:
     {
-      t.rmattr(poid, "balance-reads");
+      t.rmattr(info.pgid, poid, "balance-reads");
     }
     break;
 
@@ -710,8 +710,8 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       assert(bl.length() == length);
       bufferlist nbl;
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
-      t.write(poid, offset, length, nbl);
-      if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      t.write(info.pgid, poid, offset, length, nbl);
+      if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
     
@@ -719,13 +719,13 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
     {
       // zero, remove, or truncate?
       struct stat st;
-      int r = osd->store->stat(poid, &st);
+      int r = osd->store->stat(info.pgid, poid, &st);
       if (r >= 0) {
 	if (offset == 0 && offset + length >= (off_t)st.st_size) 
-	  t.remove(poid);
+	  t.remove(info.pgid, poid);
 	else {
-	  t.zero(poid, offset, length);
-	  if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+	  t.zero(info.pgid, poid, offset, length);
+	  if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
 	}
       } else {
 	// noop?
@@ -736,14 +736,14 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
 
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
-      t.truncate(poid, length);
-      if (inc_lock) t.setattr(poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      t.truncate(info.pgid, poid, length);
+      if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
     
   case CEPH_OSD_OP_DELETE:
     { // delete
-      t.remove(poid);
+      t.remove(info.pgid, poid);
     }
     break;
     
@@ -754,18 +754,18 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
   // object collection, version
   if (op == CEPH_OSD_OP_DELETE) {
     // remove object from c
-    t.collection_remove(pgid, poid);
+    //t.collection_remove(pgid, poid);
   } else {
     // add object to c
-    t.collection_add(pgid, poid);
+    //t.collection_add(pgid, poid);
     
     // object version
-    t.setattr(poid, "version", &version, sizeof(version));
+    t.setattr(info.pgid, poid, "version", &version, sizeof(version));
 
     // set object crev
     if (crev == 0 ||   // new object
 	did_clone)     // we cloned
-      t.setattr(poid, "crev", &rev, sizeof(rev));
+      t.setattr(info.pgid, poid, "crev", &rev, sizeof(rev));
   }
 }
 
@@ -1043,7 +1043,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
 
   // check crev
   objectrev_t crev = 0;
-  osd->store->getattr(poid, "crev", (char*)&crev, sizeof(crev));
+  osd->store->getattr(info.pgid, poid, "crev", (char*)&crev, sizeof(crev));
 
   // assign version
   eversion_t clone_version;
@@ -1156,7 +1156,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // check inc_lock?
   if (op->get_inc_lock() > 0) {
     __u32 cur = 0;
-    osd->store->getattr(poid, "inc_lock", &cur, sizeof(cur));
+    osd->store->getattr(info.pgid, poid, "inc_lock", &cur, sizeof(cur));
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
@@ -1170,7 +1170,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // balance-reads set?
   char v;
   if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&
-      (osd->store->getattr(poid, "balance-reads", &v, 1) >= 0 ||
+      (osd->store->getattr(info.pgid, poid, "balance-reads", &v, 1) >= 0 ||
        balancing_reads.count(poid.oid))) {
     
     if (!unbalancing_reads.count(poid.oid)) {
@@ -1275,7 +1275,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 
   // check crev
   objectrev_t crev = 0;
-  osd->store->getattr(poid, "crev", (char*)&crev, sizeof(crev));
+  osd->store->getattr(info.pgid, poid, "crev", (char*)&crev, sizeof(crev));
 
   dout(10) << "sub_op_modify " << opname 
            << " " << poid 
@@ -1412,9 +1412,9 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   map<string,bufferptr> attrset;
   
   ObjectStore::Transaction t;
-  t.read(poid, 0, 0, &bl);
-  t.getattr(poid, "version", &v, &vlen);
-  t.getattrs(poid, attrset);
+  t.read(info.pgid, poid, 0, 0, &bl);
+  t.getattr(info.pgid, poid, "version", &v, &vlen);
+  t.getattrs(info.pgid, poid, attrset);
   unsigned tr = osd->store->apply_transaction(t);
   
   assert(tr == 0);  // !!!
@@ -1538,10 +1538,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   
   // write object and add it to the PG
   ObjectStore::Transaction t;
-  t.remove(poid);  // in case old version exists
-  t.write(poid, 0, op->get_length(), op->get_data());
-  t.setattrs(poid, op->get_attrset());
-  t.collection_add(info.pgid, poid);
+  t.remove(info.pgid, poid);  // in case old version exists
+  t.write(info.pgid, poid, 0, op->get_length(), op->get_data());
+  t.setattrs(info.pgid, poid, op->get_attrset());
+  //t.collection_add(info.pgid, poid);
 
   // close out pull op?
   num_pulling--;
@@ -1822,7 +1822,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 	  pobject_t poid(info.pgid.pool(), 0, p->oid);
           dout(10) << " deleting " << poid
                    << " when " << p->version << dendl;
-          t.remove(poid);
+          t.remove(info.pgid, poid);
         }
         s.erase(p->oid);
       } else {
@@ -1836,7 +1836,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
          i++) {
       pobject_t poid(info.pgid.pool(), 0, *i);
       dout(10) << " deleting stray " << poid << dendl;
-      t.remove(poid);
+      t.remove(info.pgid, poid);
     }
 
   } else {
@@ -1852,7 +1852,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 	pobject_t poid(info.pgid.pool(), 0, p->oid);
         dout(10) << " deleting " << poid
                  << " when " << p->version << dendl;
-        t.remove(poid);
+        t.remove(info.pgid, poid);
       } else {
         // keep old(+missing) objects, just for kicks.
       }

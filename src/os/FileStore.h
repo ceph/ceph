@@ -50,7 +50,7 @@ class FileStore : public JournalingObjectStore {
   
   // helper fns
   void append_oname(const pobject_t &oid, char *s);
-  void get_oname(pobject_t oid, char *s);
+  //void get_oname(pobject_t oid, char *s);
   void get_cdir(coll_t cid, char *s);
   void get_coname(coll_t cid, pobject_t oid, char *s);
   pobject_t parse_object(char *s);
@@ -94,13 +94,13 @@ class FileStore : public JournalingObjectStore {
   int pick_object_revision_lt(pobject_t& oid) {
     return 0;
   }
-  bool exists(pobject_t oid);
-  int stat(pobject_t oid, struct stat *st);
-  int remove(pobject_t oid, Context *onsafe);
-  int truncate(pobject_t oid, off_t size, Context *onsafe);
-  int read(pobject_t oid, off_t offset, size_t len, bufferlist& bl);
-  int write(pobject_t oid, off_t offset, size_t len, const bufferlist& bl, Context *onsafe);
-  int clone(pobject_t oldoid, pobject_t newoid);
+  bool exists(coll_t cid, pobject_t oid);
+  int stat(coll_t cid, pobject_t oid, struct stat *st);
+  int remove(coll_t cid, pobject_t oid, Context *onsafe);
+  int truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe);
+  int read(coll_t cid, pobject_t oid, off_t offset, size_t len, bufferlist& bl);
+  int write(coll_t cid, pobject_t oid, off_t offset, size_t len, const bufferlist& bl, Context *onsafe);
+  int clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
 
   void sync();
   void sync(Context *onsafe);
@@ -108,13 +108,13 @@ class FileStore : public JournalingObjectStore {
   int list_objects(list<pobject_t>& ls);
 
   // attrs
-  int setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int setattrs(pobject_t oid, map<string,bufferptr>& aset);
-  int getattr(pobject_t oid, const char *name, void *value, size_t size);
-  int getattrs(pobject_t oid, map<string,bufferptr>& aset);
-  int rmattr(pobject_t oid, const char *name, Context *onsafe=0);
-  //int listattr(pobject_t oid, char *attrs, size_t size);
-  int collection_setattr(coll_t c, const char *name, void *value, size_t size, Context *onsafe=0);
+  int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
+  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
+  int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
+  int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
+  int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
+
+  int collection_setattr(coll_t c, const char *name, const void *value, size_t size, Context *onsafe=0);
   int collection_rmattr(coll_t c, const char *name, Context *onsafe=0);
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   //int collection_listattr(coll_t c, char *attrs, size_t size);
@@ -127,10 +127,13 @@ class FileStore : public JournalingObjectStore {
   int destroy_collection(coll_t c, Context *onsafe=0);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
-  int collection_add(coll_t c, pobject_t o, Context *onsafe=0);
+  int collection_add(coll_t c, coll_t ocid, pobject_t o, Context *onsafe=0);
   int collection_remove(coll_t c, pobject_t o, Context *onsafe=0);
   int collection_list(coll_t c, list<pobject_t>& o);
 
+  int pick_object_revision_lt(coll_t cid, pobject_t& oid) { return -1; }
+  void trim_from_cache(coll_t cid, pobject_t oid, off_t offset, size_t len) {}
+  int is_cached(coll_t cid, pobject_t oid, off_t offset, size_t len) { return -1; }
 
 
 };

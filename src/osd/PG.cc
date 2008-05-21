@@ -447,7 +447,7 @@ void PG::generate_backlog()
     Log::Entry e;
     e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
     e.oid = oid;
-    osd->store->getattr(pobject_t(0,0,oid), 
+    osd->store->getattr(info.pgid, pobject_t(0,0,oid), 
                         "version",
                         &e.version, sizeof(e.version));
     add[e.version] = e;
@@ -1138,8 +1138,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove( info.pgid.to_pobject() );
-  t.write( info.pgid.to_pobject() , 0, bl.length(), bl);
+  t.remove(info.pgid, info.pgid.to_pobject() );
+  t.write(info.pgid, info.pgid.to_pobject() , 0, bl.length(), bl);
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
@@ -1179,7 +1179,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(info.pgid.to_pobject(), 0, ondisklog.bottom);
+  t.zero(info.pgid, info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1197,7 +1197,7 @@ void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry,
     bl.push_back(bp);
   }
   */
-  t.write( info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
+  t.write(info.pgid,  info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
@@ -1235,7 +1235,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(info.pgid, info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log data doesn't match attrs" << dendl;
       assert(0);
@@ -1281,7 +1281,7 @@ void PG::read_log(ObjectStore *store)
 
     eversion_t v;
     pobject_t poid(info.pgid.pool(), 0, i->oid);
-    int r = osd->store->getattr(poid, "version", &v, sizeof(v));
+    int r = osd->store->getattr(info.pgid, poid, "version", &v, sizeof(v));
     if (r < 0 || v < i->version) 
       missing.add(i->oid, i->version);
   }
@@ -1302,7 +1302,7 @@ bool PG::block_if_wrlocked(MOSDOp* op)
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
   entity_name_t source;
-  int len = osd->store->getattr(poid, "wrlock", &source, sizeof(entity_name_t));
+  int len = osd->store->getattr(info.pgid, poid, "wrlock", &source, sizeof(entity_name_t));
   //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&
@@ -1357,11 +1357,11 @@ bool PG::pick_object_rev(object_t& oid)
 {
   pobject_t t(info.pgid.pool(), 0, oid);
 
-  if (!osd->store->pick_object_revision_lt(t))
+  if (!osd->store->pick_object_revision_lt(info.pgid, t))
     return false; // we have no revisions of this object!
   
   objectrev_t crev;
-  int r = osd->store->getattr(t, "crev", &crev, sizeof(crev));
+  int r = osd->store->getattr(info.pgid, t, "crev", &crev, sizeof(crev));
   assert(r >= 0);
   if (crev <= oid.rev) {
     dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << dendl;

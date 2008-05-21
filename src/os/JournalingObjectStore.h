@@ -49,10 +49,10 @@ protected:
       commit_waiters[super_epoch].push_back(oncommit);
   }
 
-  void journal_write(pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe) {
+  void journal_write(coll_t cid, pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.write(oid, off, len, bl);
+      t.write(cid, oid, off, len, bl);
       bufferlist tbl;
       t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
@@ -60,10 +60,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
   
-  void journal_zero(pobject_t oid, off_t off, size_t len, Context *onsafe) {
+  void journal_zero(coll_t cid, pobject_t oid, off_t off, size_t len, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.zero(oid, off, len);
+      t.zero(cid, oid, off, len);
       bufferlist tbl;
       t.encode(tbl);
       journal->submit_entry(super_epoch, tbl, onsafe);
@@ -71,10 +71,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
   
-  void journal_remove(pobject_t oid, Context *onsafe) {
+  void journal_remove(coll_t cid, pobject_t oid, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.remove(oid);
+      t.remove(cid, oid);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -82,10 +82,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_truncate(pobject_t oid, off_t size, Context *onsafe) {
+  void journal_truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.truncate(oid, size);
+      t.truncate(cid, oid, size);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -93,10 +93,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_clone(pobject_t from, pobject_t to, Context *onsafe) {
+  void journal_clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.clone(from, to);
+      t.clone(cid, from, to);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -104,10 +104,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe) {
+  void journal_setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.setattr(oid, name, value, size);
+      t.setattr(cid, oid, name, value, size);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -115,10 +115,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe) {
+  void journal_setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.setattrs(oid, attrset);
+      t.setattrs(cid, oid, attrset);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -126,10 +126,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_rmattr(pobject_t oid, const char *name, Context *onsafe) {
+  void journal_rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.rmattr(oid, name);
+      t.rmattr(cid, oid, name);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);
@@ -159,10 +159,10 @@ protected:
       queue_commit_waiter(onsafe);
   }
   
-  void journal_collection_add(coll_t cid, pobject_t oid, Context *onsafe) {
+  void journal_collection_add(coll_t cid, coll_t ocid, pobject_t oid, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
-      t.collection_add(cid, oid);
+      t.collection_add(cid, ocid, oid);
       bufferlist bl;
       t.encode(bl);
       journal->submit_entry(super_epoch, bl, onsafe);

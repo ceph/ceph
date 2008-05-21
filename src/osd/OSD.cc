@@ -151,7 +151,8 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   sb.whoami = whoami;
   bufferlist bl;
   ::encode(sb, bl);
-  store->write(OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
+  store->create_collection(0, 0);
+  store->write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
   store->umount();
   delete store;
   return 0;
@@ -166,7 +167,7 @@ int OSD::peek_whoami(const char *dev)
 
   OSDSuperblock sb;
   bufferlist bl;
-  err = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
+  err = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
   if (err < 0) 
     return -ENOENT;
   bl.copy(0, sizeof(sb), (char*)&sb);
@@ -307,13 +308,13 @@ int OSD::init()
       bl.push_back(bp);
       utime_t start = g_clock.now();
       for (int i=0; i<1000; i++) 
-	store->write(pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
+	store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
       store->sync();
       utime_t end = g_clock.now();
       end -= start;
       dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
       for (int i=0; i<1000; i++) 
-	store->remove(pobject_t(0, 0, object_t(999,i)), 0);
+	store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
       
       // set osd weight
       superblock.weight = (1000.0 / (double)end);
@@ -446,13 +447,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
+  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
+  int r = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
   if (bl.length() != sizeof(superblock)) {
     derr(0) << "read_superblock failed, r = " << r 
 	    << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << dendl;
@@ -573,9 +574,9 @@ void OSD::_remove_unlock_pg(PG *pg)
     for (list<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
-      t.remove(*p);
+      t.remove(pgid, *p);
+    t.remove(pgid, pgid.to_pobject());  // log too
     t.remove_collection(pgid);
-    t.remove(pgid.to_pobject());  // log too
   }
   store->apply_transaction(t);
 
@@ -600,6 +601,8 @@ void OSD::load_pgs()
   for (list<coll_t>::iterator it = ls.begin();
        it != ls.end();
        it++) {
+    if (*it == 0)
+      continue;
     pg_t pgid = *it;
     PG *pg = _open_lock_pg(pgid);
 
@@ -1400,7 +1403,7 @@ void OSD::handle_osd_map(MOSDMap *m)
        p != m->maps.end();
        p++) {
     pobject_t poid = get_osdmap_pobject_name(p->first);
-    if (store->exists(poid)) {
+    if (store->exists(0, poid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << dendl;
       logger->inc("mapfdup");
       bufferlist bl;
@@ -1410,7 +1413,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    store->write(poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    store->write(0, poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1424,7 +1427,7 @@ void OSD::handle_osd_map(MOSDMap *m)
        p != m->incremental_maps.end();
        p++) {
     pobject_t poid = get_inc_osdmap_pobject_name(p->first);
-    if (store->exists(poid)) {
+    if (store->exists(0, poid)) {
       dout(10) << "handle_osd_map already had incremental map epoch " << p->first << dendl;
       logger->inc("mapidup");
       bufferlist bl;
@@ -1434,7 +1437,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    store->write(poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    store->write(0, poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1453,7 +1456,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "cur " << cur << " < newest " << superblock.newest_map << dendl;
 
     if (m->incremental_maps.count(cur+1) ||
-        store->exists(get_inc_osdmap_pobject_name(cur+1))) {
+        store->exists(0, get_inc_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
       
       bufferlist bl;
@@ -1471,7 +1474,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       // archive the full map
       bl.clear();
       osdmap->encode(bl);
-      t.write( get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
+      t.write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
@@ -1489,7 +1492,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
     else if (m->maps.count(cur+1) ||
-             store->exists(get_osdmap_pobject_name(cur+1))) {
+             store->exists(0, get_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding full map epoch " << cur+1 << dendl;
       bufferlist bl;
       if (m->maps.count(cur+1))
@@ -1795,12 +1798,12 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  return store->read(0, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  return store->read(0, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 void OSD::get_map(epoch_t epoch, OSDMap &m)
@@ -2033,14 +2036,14 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       PG *child = children[pgid];
       assert(child);
       eversion_t v;
-      store->getattr(poid, "version", &v, sizeof(v));
+      store->getattr(parentid, poid, "version", &v, sizeof(v));
       if (v > child->info.last_update) {
 	child->info.last_update = v;
 	dout(25) << "        tagging pg with v " << v << "  > " << child->info.last_update << dendl;
       } else {
 	dout(25) << "    not tagging pg with v " << v << " <= " << child->info.last_update << dendl;
       }
-      t.collection_add(pgid, poid);
+      t.collection_add(pgid, parentid, poid);
       t.collection_remove(parentid, poid);
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
@@ -2369,7 +2372,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 
     project_pg_history(info.pgid, info.history, epoch, acting);
     if (epoch < info.history.same_since) {
-      dout(10) << *pg << " got old info " << info << " on non-existent pg, ignoring" << dendl;
+      dout(10) << "got old info " << info << " on non-existent pg, ignoring" << dendl;
       return;
     }
 

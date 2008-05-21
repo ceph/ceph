@@ -60,7 +60,7 @@ int main(int argc, const char **argv)
 	  cout << i << " / " << n << " in " << end << std::endl;
 	}
 	pobject_t poid(0, 0, object_t(i,0));
-	fs.write(poid, 0, sz, bl, (Context*)0);
+	fs.write(0, poid, 0, sz, bl, (Context*)0);
       }
     }
 
@@ -83,7 +83,7 @@ int main(int argc, const char **argv)
 
       while (1) {
 	cout << g_clock.now() << " writing " << pos << "~" << sz << std::endl;
-	fs.write(oid, pos, sz, bl, (Context*)0);
+	fs.write(0, oid, pos, sz, bl, (Context*)0);
 	pos += sz;
 	nanosleep(&ts, 0);
       }

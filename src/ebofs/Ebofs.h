@@ -257,35 +257,35 @@ protected:
   // atomic transaction
   unsigned apply_transaction(Transaction& t, Context *onsafe=0);
 
-  int pick_object_revision_lt(pobject_t& oid);
+  int pick_object_revision_lt(coll_t cid, pobject_t& oid);
 
   // object interface
-  bool exists(pobject_t);
-  int stat(pobject_t, struct stat*);
-  int read(pobject_t, off_t off, size_t len, bufferlist& bl);
-  int is_cached(pobject_t oid, off_t off, size_t len);
+  bool exists(coll_t cid, pobject_t);
+  int stat(coll_t cid, pobject_t, struct stat*);
+  int read(coll_t cid, pobject_t, off_t off, size_t len, bufferlist& bl);
+  int is_cached(coll_t cid, pobject_t oid, off_t off, size_t len);
 
-  int write(pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe);
-  int zero(pobject_t oid, off_t off, size_t len, Context *onsafe);
-  int truncate(pobject_t oid, off_t size, Context *onsafe=0);
-  int remove(pobject_t oid, Context *onsafe=0);
+  int write(coll_t cid, pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe);
+  int zero(coll_t cid, pobject_t oid, off_t off, size_t len, Context *onsafe);
+  int truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe=0);
+  int remove(coll_t cid, pobject_t oid, Context *onsafe=0);
   bool write_will_block();
-  void trim_from_cache(pobject_t oid, off_t off, size_t len);
+  void trim_from_cache(coll_t cid, pobject_t oid, off_t off, size_t len);
 
   int rename(pobject_t from, pobject_t to);
-  int clone(pobject_t from, pobject_t to, Context *onsafe);
+  int clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe);
 
   int list_objects(list<pobject_t>& ls);
 
   // object attr
-  int setattr(pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int setattrs(pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
-  int getattr(pobject_t oid, const char *name, void *value, size_t size);
-  int getattrs(pobject_t oid, map<string,bufferptr> &aset);
-  int rmattr(pobject_t oid, const char *name, Context *onsafe=0);
-  int listattr(pobject_t oid, vector<string>& attrs);
+  int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
+  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
+  int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
+  int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr> &aset);
+  int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
+  int listattr(coll_t cid, pobject_t oid, vector<string>& attrs);
 
-  int get_object_collections(pobject_t oid, set<coll_t>& ls);
+  int get_object_collections(coll_t cid, pobject_t oid, set<coll_t>& ls);
 
   // collections
   int list_collections(list<coll_t>& ls);
@@ -293,7 +293,7 @@ protected:
 
   int create_collection(coll_t c, Context *onsafe);
   int destroy_collection(coll_t c, Context *onsafe);
-  int collection_add(coll_t c, pobject_t o, Context *onsafe);
+  int collection_add(coll_t c, coll_t cid, pobject_t o, Context *onsafe);
   int collection_remove(coll_t c, pobject_t o, Context *onsafe);
 
   int collection_list(coll_t c, list<pobject_t>& o);

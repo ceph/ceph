@@ -54,7 +54,7 @@ public:
 	  oid.oid.rev = rand() % 10;
           cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << std::endl;
           bufferlist bl;
-          fs.read(oid, off, len, bl);
+          fs.read(0, oid, off, len, bl);
           int l = MIN(len,bl.length());
           if (l) {
             cout << t << " got " << l << std::endl;
@@ -80,32 +80,32 @@ public:
             b[j] = fingerprint_byte_at(off+j, oid.oid.ino);
           bufferlist w;
 	  w.append(b, len);
-          fs.write(oid, off, len, w, 0);
+          fs.write(0, oid, off, len, w, 0);
         }
         break;
 
       case 2:
         {
           cout << t << " zero " << hex << oid << dec << " at " << off << " len " << len << std::endl;
-          fs.zero(oid, off, len, 0);
+          fs.zero(0, oid, off, len, 0);
         }
         break;
 
       case 3:
         {
           cout << t << " truncate " << hex << oid << dec <<  " " << off << std::endl;
-          fs.truncate(oid, 0);
+          fs.truncate(0, oid, 0);
         }
         break;
 
       case 4:
         cout << t << " remove " << hex << oid << dec <<  std::endl;
-        fs.remove(oid);
+        fs.remove(0, oid);
         break;
 
       case 5:
         cout << t << " collection_add " << hex << oid << dec <<  " to " << cid << std::endl;
-        fs.collection_add(cid, oid, 0);
+        fs.collection_add(cid, 0, oid, 0);
         break;
 
       case 6:
@@ -115,19 +115,19 @@ public:
 
       case 7:
         cout << t << " setattr " << hex << oid << dec <<  " " << a << " len " << l << std::endl;
-        fs.setattr(oid, a, (void*)a, l, 0);
+        fs.setattr(0, oid, a, (void*)a, l, 0);
         break;
         
       case 8:
         cout << t << " rmattr " << hex << oid << dec <<  " " << a << std::endl;
-        fs.rmattr(oid,a);
+        fs.rmattr(0, oid, a);
         break;
 
       case 9:
         {
           char v[4];
           cout << t << " getattr " << hex << oid << dec <<  " " << a << std::endl;
-          if (fs.getattr(oid,a,(void*)v,3) == 0) {
+          if (fs.getattr(0, oid,a,(void*)v,3) == 0) {
             v[3] = 0;
             assert(strcmp(v,a) == 0);
           }
@@ -139,7 +139,7 @@ public:
 	  pobject_t newoid = oid;
 	  newoid.oid.rev = rand() % 10;
 	  cout << t << " clone " << oid << " to " << newoid << std::endl;
-	  fs.clone(oid, newoid, 0);
+	  fs.clone(0, oid, newoid, 0);
 	}
       }
 
@@ -177,7 +177,7 @@ int main(int argc, const char **argv)
     bp.zero();
     bufferlist bl;
     bl.push_back(bp);
-    fs.write(oid, 0, 10000, bl, 0);
+    fs.write(0, oid, 0, 10000, bl, 0);
 
     fs.sync();
     fs.trim_buffer_cache();
@@ -185,26 +185,26 @@ int main(int argc, const char **argv)
     // induce a partial write
     bufferlist bl2;
     bl2.substr_of(bl, 0, 100);
-    fs.write(oid, 100, 100, bl2, 0);
+    fs.write(0, oid, 100, 100, bl2, 0);
 
     // clone it
     pobject_t oid2;
     oid2 = oid;
     oid2.oid.rev = 1;
-    fs.clone(oid, oid2, 0);
+    fs.clone(0, oid, oid2, 0);
 
     // ... 
     if (0) {
       // make sure partial still behaves after orig is removed...
-      fs.remove(oid, 0);
+      fs.remove(0, oid, 0);
 
       // or i read for oid2...
       bufferlist rbl;
-      fs.read(oid2, 0, 200, rbl);
+      fs.read(0, oid2, 0, 200, rbl);
     }
     if (1) {
       // make sure things behave if we remove the clone
-      fs.remove(oid2,0);
+      fs.remove(0, oid2,0);
     }
   }
   // /explicit tests
