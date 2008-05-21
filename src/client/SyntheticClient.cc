@@ -17,9 +17,10 @@
 using namespace std;
 
 
-
 #include "SyntheticClient.h"
 #include "osdc/Objecter.h"
+#include "osdc/Filer.h"
+
 
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
@@ -605,6 +606,16 @@ int SyntheticClient::run()
 	did_run_me();
       }
       break;
+
+    case SYNCLIENT_MODE_CHUNK:
+      if (run_me()) {
+        string sarg1 = get_sarg(0);
+	chunk_file(sarg1);
+      }
+      did_run_me();
+      break;
+
+
     case SYNCLIENT_MODE_OVERLOAD_OSD_0:
       {
 	dout(1) << "OVERLOADING OSD 0" << dendl;
@@ -3050,17 +3061,53 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 int SyntheticClient::chunk_file(string &filename)
 {
   int fd = client->open(filename.c_str(), O_RDONLY);
-  if (fd < 0) return fd;
 
   struct stat st;
   client->fstat(fd, &st);
   __u64 size = st.st_size;
-
   dout(0) << "file " << filename << " size is " << size << dendl;
 
+  Filer *filer = client->filer;
 
+  inode_t inode;
+  memset(&inode, 0, sizeof(inode));
+  inode.ino = st.st_ino;
+  client->describe_layout(fd, &inode.layout);
 
+  __u64 pos = 0;
+  bufferlist from_before;
+  while (pos < size) {
+    int get = MIN(size-pos, 1048576);
 
+    Mutex lock;
+    Cond cond;
+    bool done;
+    bufferlist bl;
+    
+    lock.Lock();
+    Context *onfinish = new C_SafeCond(&lock, &cond, &done);
+    filer->read(inode, pos, get, &bl, 0, onfinish);
+    while (!done)
+      cond.Wait(lock);
+    lock.Unlock();
+
+    dout(0) << "got " << bl.length() << " bytes at " << pos << dendl;
+    
+    if (from_before.length()) {
+      dout(0) << " including bit from previous block" << dendl;
+      pos -= from_before.length();
+      from_before.claim_append(bl);
+      bl.swap(from_before);
+    }      
+
+    // ....
+
+    // keep last 32 bytes around
+    from_before.clear();
+    from_before.substr_of(bl, bl.length()-32, 32);
+
+    pos += bl.length();
+  }
 
   client->close(fd);
   return 0;
