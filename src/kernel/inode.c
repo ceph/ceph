@@ -291,6 +291,7 @@ int ceph_fill_inode(struct inode *inode,
 
 	/* update inode */
 	ci->i_version = le64_to_cpu(info->version);
+	inode->i_version++;
 	inode->i_mode = le32_to_cpu(info->mode);
 	inode->i_uid = le32_to_cpu(info->uid);
 	inode->i_gid = le32_to_cpu(info->gid);
