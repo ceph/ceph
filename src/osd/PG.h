@@ -361,10 +361,10 @@ public:
       Log::clear();
     }
 
-    bool logged_object(object_t oid) {
+    bool logged_object(object_t oid) const {
       return objects.count(oid);
     }
-    bool logged_req(const osd_reqid_t &r) {
+    bool logged_req(const osd_reqid_t &r) const {
       return caller_ops.count(r);
     }
 
@@ -423,6 +423,8 @@ public:
 
     void trim(ObjectStore::Transaction &t, eversion_t s);
     void trim_write_ahead(eversion_t last_update);
+
+    ostream& print(ostream& out) const;
   };
   
 
@@ -535,10 +537,6 @@ protected:
 
   bool block_if_wrlocked(MOSDOp* op);
 
-
-  // recovery
-  map<object_t, eversion_t> objects_pulling;  // which objects are currently being pulled
-  
 
   // stats
   off_t stat_num_bytes;
@@ -665,10 +663,6 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
-  int num_active_ops() const {
-    return objects_pulling.size();
-  }
-
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction &t, 
@@ -787,8 +781,10 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     }
   }
 
-  if (pg.get_role() == 0) out << " pct " << pg.peers_complete_thru;
-  if (!pg.have_master_log) out << " !hml";
+  if (pg.get_role() == 0) {
+    out << " pct " << pg.peers_complete_thru;
+    if (!pg.have_master_log) out << " !hml";
+  }
   if (pg.is_active()) out << " active";
   if (pg.is_crashed()) out << " crashed";
   if (pg.is_replay()) out << " replay";

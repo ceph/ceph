@@ -77,7 +77,7 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, Message *m)
 
   // we don't have it (yet).
   eversion_t v = missing.missing[oid];
-  if (objects_pulling.count(oid)) {
+  if (pulling.count(oid)) {
     dout(7) << "missing "
 	    << poid 
 	    << " v " << v
@@ -1395,9 +1395,8 @@ void ReplicatedPG::pull(pobject_t poid)
   osd->messenger->send_message(subop, osd->osdmap->get_inst(fromosd));
   
   // take note
-  assert(objects_pulling.count(poid.oid) == 0);
-  num_pulling++;
-  objects_pulling[poid.oid] = v;
+  assert(pulling.count(poid.oid) == 0);
+  pulling[poid.oid] = v;
 }
 
 
@@ -1416,7 +1415,6 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   t.getattr(info.pgid, poid, "version", &v, &vlen);
   t.getattrs(info.pgid, poid, attrset);
   unsigned tr = osd->store->apply_transaction(t);
-  
   assert(tr == 0);  // !!!
 
   // ok
@@ -1424,6 +1422,7 @@ void ReplicatedPG::push(pobject_t poid, int peer)
           << " size " << bl.length()
           << " to osd" << peer
           << dendl;
+  assert(vlen == sizeof(v));
 
   osd->logger->inc("r_push");
   osd->logger->inc("r_pushb", bl.length());
@@ -1525,6 +1524,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   if (!is_missing_object(poid.oid)) {
     dout(7) << "sub_op_push not missing " << poid << dendl;
+    dout(15) << " but i AM missing " << missing.missing << dendl;
     return;
   }
   
@@ -1544,9 +1544,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   //t.collection_add(info.pgid, poid);
 
   // close out pull op?
-  num_pulling--;
-  if (objects_pulling.count(poid.oid))
-    objects_pulling.erase(poid.oid);
+  if (pulling.count(poid.oid))
+    pulling.erase(poid.oid);
+
   missing.got(poid.oid, v);
 
 
@@ -1663,9 +1663,8 @@ void ReplicatedPG::cancel_recovery()
 {
   // forget about where missing items are, or anything we're pulling
   missing.loc.clear();
-  osd->num_pulling -= objects_pulling.size();
-  objects_pulling.clear();
-  num_pulling = 0;
+  osd->num_pulling -= pulling.size();
+  pulling.clear();
   pushing.clear();
 }
 
@@ -1677,13 +1676,13 @@ bool ReplicatedPG::do_recovery()
 {
   assert(is_primary());
 
-  dout(-10) << "do_recovery pulling " << objects_pulling.size() << " in pg, "
+  dout(-10) << "do_recovery pulling " << pulling.size() << " in pg, "
            << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
            << dendl;
   dout(10) << "do_recovery " << missing << dendl;
 
   // can we slow down on this PG?
-  if (osd->num_pulling >= g_conf.osd_max_pull && !objects_pulling.empty()) {
+  if (osd->num_pulling >= g_conf.osd_max_pull && !pulling.empty()) {
     dout(-10) << "do_recovery already pulling max, waiting" << dendl;
     return true;
   }
@@ -1698,11 +1697,11 @@ bool ReplicatedPG::do_recovery()
 
     dout(10) << "do_recovery "
              << *log.requested_to
-             << (objects_pulling.count(latest->oid) ? " (pulling)":"")
+             << (pulling.count(latest->oid) ? " (pulling)":"")
              << dendl;
 
     if (latest->is_update() &&
-        !objects_pulling.count(latest->oid) &&
+        !pulling.count(latest->oid) &&
         missing.is_missing(latest->oid)) {
       pobject_t poid(info.pgid.pool(), 0, latest->oid);
       pull(poid);
@@ -1712,7 +1711,7 @@ bool ReplicatedPG::do_recovery()
     log.requested_to++;
   }
 
-  if (!objects_pulling.empty()) {
+  if (!pulling.empty()) {
     dout(7) << "do_recovery requested everything, still waiting" << dendl;
     return false;
   }

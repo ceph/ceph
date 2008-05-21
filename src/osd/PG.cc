@@ -176,8 +176,12 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
     list<Log::Entry>::reverse_iterator pp = olog.log.rbegin();
     eversion_t lu = peer_info[from].last_update;
     while (pp != olog.log.rend()) {
-      if (!log.objects.count(pp->oid)) {
+      if (!log.logged_object(pp->oid)) {
         dout(10) << " divergent " << *pp << " not in our log, generating backlog" << dendl;
+	//dout(0) << "log" << dendl;
+	//log.print(*_dout);
+	//dout(0) << "olog" << dendl;
+	//olog.print(*_dout);
         generate_backlog();
       }
       
@@ -228,9 +232,9 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
            << " into " << log << dendl;
 
   //dout(0) << "log" << dendl;
-  //log.print(cout);
+  //log.print(*_dout);
   //dout(0) << "olog" << dendl;
-  //olog.print(cout);
+  //olog.print(*_dout);
   
   if (log.empty() ||
       (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
@@ -492,11 +496,24 @@ void PG::drop_backlog()
 
 ostream& PG::Log::print(ostream& out) const 
 {
-  out << *this << dendl;
+  out << *this << std::endl;
   for (list<Entry>::const_iterator p = log.begin();
        p != log.end();
        p++) 
-    out << *p << dendl;
+    out << *p << std::endl;
+  return out;
+}
+
+ostream& PG::IndexedLog::print(ostream& out) const 
+{
+  out << *this << std::endl;
+  for (list<Entry>::const_iterator p = log.begin();
+       p != log.end();
+       p++) {
+    out << *p << " " << (logged_object(p->oid) ? "indexed":"NOT INDEXED") << std::endl;
+    assert(logged_object(p->oid));
+    assert(logged_req(p->reqid));
+  }
   return out;
 }
 

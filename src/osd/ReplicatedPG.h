@@ -86,8 +86,9 @@ protected:
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
   
   // push/pull
-  int num_pulling;
+  map<object_t, eversion_t> pulling;  // which objects are currently being pulled
   map<object_t, set<int> > pushing;
+
 
   void push(pobject_t oid, int dest);
   void pull(pobject_t oid);
@@ -130,8 +131,7 @@ protected:
 
 public:
   ReplicatedPG(OSD *o, pg_t p) : 
-    PG(o,p),
-    num_pulling(0) 
+    PG(o,p)
   { }
   ~ReplicatedPG() {}
 
