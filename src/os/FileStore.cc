@@ -252,11 +252,13 @@ int FileStore::mount()
     dout(0) << "faking attrs (in memory)" << dendl;
     fake_attrs = true;
   } else {
-    char names[1000];
-    r = do_listxattr(basedir.c_str(), names, 1000);
-    if (r < 0) {
+    int x = rand();
+    int y = x+1;
+    do_setxattr(basedir.c_str(), "test", &x, sizeof(x));
+    do_getxattr(basedir.c_str(), "test", &y, sizeof(y));
+    if (x != y) {
       derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --filestore_fake_attrs to fake them (in memory)." << dendl;
-      assert(0);
+      return -errno;
     }
   }
 
@@ -617,7 +619,8 @@ int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
     char fn[100];
     get_coname(cid, oid, fn);
     r = do_setxattr(fn, name, value, size);
-  }
+    dout(10) << "setattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
+ }
   if (r >= 0)
     journal_setattr(cid, oid, name, value, size, onsafe);
   else
@@ -659,6 +662,7 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
     char fn[100];
     get_coname(cid, oid, fn);
     r = do_getxattr(fn, name, value, size);
+    dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
   }
   return r < 0 ? -errno:r;
 }
