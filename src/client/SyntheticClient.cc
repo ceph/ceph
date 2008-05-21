@@ -216,6 +216,10 @@ void parse_syn_options(vector<const char*>& args)
 	syn_sargs.push_back(args[++i]);
 	syn_sargs.push_back(args[++i]);
 	syn_iargs.push_back(atoi(args[++i]));
+
+      } else if (strcmp(args[i], "chunkfile") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_CHUNK);
+	syn_sargs.push_back(args[++i]);
       } else {
         cerr << "unknown syn arg " << args[i] << std::endl;
         assert(0);
@@ -3042,3 +3046,22 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 
 }
 
+
+int SyntheticClient::chunk_file(string &filename)
+{
+  int fd = client->open(filename.c_str(), O_RDONLY);
+  if (fd < 0) return fd;
+
+  struct stat st;
+  client->fstat(fd, &st);
+  __u64 size = st.st_size;
+
+  dout(0) << "file " << filename << " size is " << size << dendl;
+
+
+
+
+
+  client->close(fd);
+  return 0;
+}

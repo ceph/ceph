@@ -75,6 +75,8 @@
 
 #define SYNCLIENT_MODE_IMPORTFIND 300
 
+#define SYNCLIENT_MODE_CHUNK    400
+
 
 
 void parse_syn_options(vector<const char*>& args);
@@ -244,6 +246,7 @@ class SyntheticClient {
 
   void import_find(const char *basedir, const char *find, bool writedata);
 
+  int chunk_file(string &filename);
 };
 
 #endif
