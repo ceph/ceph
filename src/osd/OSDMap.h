@@ -303,7 +303,7 @@ private:
     return osd_addr[osd];
   }
   entity_inst_t get_inst(int osd) {
-    assert(exists(osd));
+    assert(exists(osd) && is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd),
 			 osd_addr[osd]);
   }

@@ -696,9 +696,13 @@ void PG::peer(ObjectStore::Transaction& t,
       continue;
     }
     
-    dout(10) << " querying info from osd" << *it << dendl;
-    query_map[*it][info.pgid] = Query(Query::INFO, info.history);
-    peer_info_requested.insert(*it);
+    if (osd->osdmap->is_up(*it)) {
+      dout(10) << " querying info from osd" << *it << dendl;
+      query_map[*it][info.pgid] = Query(Query::INFO, info.history);
+      peer_info_requested.insert(*it);
+    } else {
+      dout(10) << " not querying down osd" << *it << dendl;
+    }
   }
   if (missing_info) return;
 
@@ -1074,12 +1078,15 @@ void PG::purge_strays()
   for (set<int>::iterator p = stray_set.begin();
        p != stray_set.end();
        p++) {
-    dout(10) << "sending PGRemove to osd" << *p << dendl;
-    set<pg_t> ls;
-    ls.insert(info.pgid);
-    MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
-    osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
-
+    if (osd->osdmap->is_up(*p)) {
+      dout(10) << "sending PGRemove to osd" << *p << dendl;
+      set<pg_t> ls;
+      ls.insert(info.pgid);
+      MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
+      osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
+    } else {
+      dout(10) << "not sending PGRemote to down osd" << *p << dendl;
+    }
     peer_info.erase(*p);
   }
 
