@@ -99,6 +99,19 @@ int do_listxattr(const char *fn, char *names, size_t len) {
 
 
 
+void get_attrname(const char *name, char *buf)
+{
+  sprintf(buf, "user.ceph.%s", name);
+}
+bool parse_attrname(char **name)
+{
+  if (strncmp(*name, "user.ceph.", 10) == 0) {
+    *name += 10;
+    return true;
+  }
+  return false;
+}
+
 
 int FileStore::statfs(struct statfs *buf)
 {
@@ -254,8 +267,12 @@ int FileStore::mount()
   } else {
     int x = rand();
     int y = x+1;
-    do_setxattr(basedir.c_str(), "test", &x, sizeof(x));
-    do_getxattr(basedir.c_str(), "test", &y, sizeof(y));
+    int r1 = do_setxattr(basedir.c_str(), "user.test", &x, sizeof(x));
+    int r2 = do_getxattr(basedir.c_str(), "user.test", &y, sizeof(y));
+    dout(10) << "x = " << x << "   y = " << y 
+	     << "  r1 = " << r1 << "  r2 = " << r2
+	     << " " << strerror(errno)
+	     << dendl;
     if (x != y) {
       derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --filestore_fake_attrs to fake them (in memory)." << dendl;
       return -errno;
@@ -618,7 +635,9 @@ int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
   else {
     char fn[100];
     get_coname(cid, oid, fn);
-    r = do_setxattr(fn, name, value, size);
+    char n[40];
+    get_attrname(name, n);
+    r = do_setxattr(fn, n, value, size);
     dout(10) << "setattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
  }
   if (r >= 0)
@@ -640,7 +659,9 @@ int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset)
     for (map<string,bufferptr>::iterator p = aset.begin();
 	 p != aset.end();
 	 ++p) {
-      r = do_setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length());
+      char n[40];
+      get_attrname(p->first.c_str(), n);
+      r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
       if (r < 0) {
 	cerr << "error setxattr " << strerror(errno) << std::endl;
 	break;
@@ -661,7 +682,9 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
   else {
     char fn[100];
     get_coname(cid, oid, fn);
-    r = do_getxattr(fn, name, value, size);
+    char n[40];
+    get_attrname(name, n);
+    r = do_getxattr(fn, n, value, size);
     dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
   }
   return r < 0 ? -errno:r;
@@ -685,7 +708,10 @@ int FileStore::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset)
       dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
       int l = do_getxattr(fn, name, val, 1000);
       dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
-      aset[names].append(val, l);
+      if (parse_attrname(&name)) {
+	aset[name] = buffer::create(l);
+	memcpy(aset[name].c_str(), val, l);
+      }
       name += strlen(name) + 1;
     }
   }
@@ -700,7 +726,9 @@ int FileStore::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsa
   else {
     char fn[100];
     get_coname(cid, oid, fn);
-    r = do_removexattr(fn, name);
+    char n[40];
+    get_attrname(name, n);
+    r = do_removexattr(fn, n);
   }
   if (r >= 0)
     journal_rmattr(cid, oid, name, onsafe);
@@ -798,7 +826,10 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
       dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
       int l = do_getxattr(fn, name, val, 1000);
       dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
-      aset[names].append(val, l);
+      if (parse_attrname(&name)) {
+	aset[name] = buffer::create(l);
+	memcpy(aset[name].c_str(), val, l);
+      }
       name += strlen(name) + 1;
     }
     r = 0;
@@ -806,14 +837,6 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
   return r < 0 ? -errno:r;
 }
 
-
-/*
-int FileStore::collection_listattr(coll_t c, char *attrs, size_t size) 
-{
-  if (fake_attrs) return collection_listattr(c, attrs, size);
-  return 0;
-}
-*/
 
 
 // --------------------------
