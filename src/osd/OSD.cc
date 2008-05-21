@@ -1141,7 +1141,9 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
   }
 
   // does peer have old map?
-  if (inst.name.is_osd()) {
+  if (inst.name.is_osd() &&
+      osdmap->have_inst(inst.name.num()) &&
+      osdmap->get_inst(inst.name.num()) == inst) {
     // remember
     if (peer_map_epoch[inst.name] < epoch) {
       dout(20) << "peer " << inst.name << " has " << epoch << dendl;
@@ -1321,11 +1323,15 @@ void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "osdping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
 
-  _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
-  
   int from = m->get_source().num();
-  take_peer_stat(from, m->peer_stat);
-  heartbeat_from_stamp[from] = m->get_recv_stamp();
+  if (osdmap->have_inst(from) &&
+      osdmap->get_inst(from) == m->get_source_inst()) {
+
+    _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
+  
+    take_peer_stat(from, m->peer_stat);
+    heartbeat_from_stamp[from] = m->get_recv_stamp();
+  }
 
   delete m;
 }
@@ -1507,7 +1513,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       set<int> old;
       osdmap->get_all_osds(old);
       for (set<int>::iterator p = old.begin(); p != old.end(); p++)
-	if (osdmap->is_up(*p) && (!newmap->exists(*p) || !newmap->is_up(*p))) 
+	if (osdmap->have_inst(*p) && (!newmap->exists(*p) || !newmap->is_up(*p))) 
 	  note_down_osd(*p);
       // NOTE: note_up_osd isn't called at all for full maps... FIXME?
       delete osdmap;
@@ -1771,7 +1777,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 }
 
 
-void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full)
+void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full, bool lazy)
 {
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
@@ -1793,7 +1799,10 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
     }
   }
 
-  messenger->send_message(m, inst);
+  if (lazy)
+    messenger->lazy_send_message(m, inst);  // only if we already have an open connection
+  else
+    messenger->send_message(m, inst);
 }
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
@@ -1896,11 +1905,8 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_addr(from) != m->get_source_inst().addr) {
-      dout(-7) << "from dead osd" << from << ", dropping, sharing our map" << dendl;
-      if (osdmap->have_inst(from))
-	dout(-7) << "have addr " << osdmap->get_addr(from) << " != " << m->get_source_inst() << dendl;
-
-      send_incremental_map(epoch, m->get_source_inst(), true);
+      dout(-7) << "from dead osd" << from << ", dropping, sharing map" << dendl;
+      send_incremental_map(epoch, m->get_source_inst(), true, true);
       delete m;
       return false;
     }

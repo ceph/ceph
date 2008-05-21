@@ -286,7 +286,7 @@ private:
   }
 
   bool exists(int osd) { return osd < max_osd && osd_state[osd] & CEPH_OSD_EXISTS; }
-  bool is_up(int osd) { assert(exists(osd)); return osd_state[osd] & CEPH_OSD_UP; }
+  bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
   bool is_down(int osd) { assert(exists(osd)); return !is_up(osd); }
   bool is_down_clean(int osd) { 
     assert(exists(osd)); 
