@@ -113,7 +113,7 @@ int FileStore::statfs(struct statfs *buf)
  */ 
 void FileStore::append_oname(const pobject_t &oid, char *s)
 {
-  assert(sizeof(oid) == 28);
+  //assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
 #ifdef __LP64__
   sprintf(t, "/%04x.%04x.%016lx.%08x.%lx", 
@@ -128,7 +128,7 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
 pobject_t FileStore::parse_object(char *s)
 {
   pobject_t o;
-  assert(sizeof(o) == 28);
+  //assert(sizeof(o) == 28);
   dout(0) << "  got object " << s << dendl;
   o.volume = strtoll(s, 0, 16);
   assert(s[4] == '.');
@@ -152,9 +152,9 @@ void FileStore::get_cdir(coll_t cid, char *s)
 {
   assert(sizeof(cid) == 8);
 #ifdef __LP64__
-  sprintf(s, "%s/collections/%016lx", basedir.c_str(), cid);
+  sprintf(s, "%s/%016lx", basedir.c_str(), cid);
 #else
-  sprintf(s, "%s/collections/%016llx", basedir.c_str(), cid);
+  sprintf(s, "%s/%016llx", basedir.c_str(), cid);
 #endif
 }
 
@@ -179,8 +179,8 @@ int FileStore::mkfs()
   dout(1) << "mkfs in " << basedir << dendl;
 
   // wipe
-  sprintf(cmd, "test -d %s && rm -r %s ; mkdir -p %s/collections && mkdir -p %s/objects",
-	  basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str());
+  sprintf(cmd, "test -d %s && rm -r %s ; mkdir -p %s",
+	  basedir.c_str(), basedir.c_str(), basedir.c_str());
   
   dout(5) << "wipe: " << cmd << dendl;
   system(cmd);
@@ -810,28 +810,6 @@ int FileStore::collection_listattr(coll_t c, char *attrs, size_t size)
   return 0;
 }
 */
-
-
-int FileStore::list_objects(list<pobject_t>& ls) 
-{
-  char fn[200];
-  sprintf(fn, "%s/objects", basedir.c_str());
-
-  DIR *dir = ::opendir(fn);
-  assert(dir);
-
-  struct dirent *de;
-  while ((de = ::readdir(dir)) != 0) {
-    if (de->d_name[0] == '.') continue;
-    // parse
-    pobject_t o = parse_object(de->d_name);
-    if (errno) continue;
-    ls.push_back(o);
-  }
-  
-  ::closedir(dir);
-  return 0;
-}
 
 
 // --------------------------

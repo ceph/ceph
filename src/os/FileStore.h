@@ -105,8 +105,6 @@ class FileStore : public JournalingObjectStore {
   void sync();
   void sync(Context *onsafe);
 
-  int list_objects(list<pobject_t>& ls);
-
   // attrs
   int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);

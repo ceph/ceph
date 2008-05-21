@@ -633,8 +633,6 @@ public:
     return -1;
   }
   
-  virtual int list_objects(list<pobject_t>& ls) = 0;//{ return -1; }
-
   virtual int get_object_collections(coll_t cid, pobject_t oid, set<coll_t>& ls) { return -1; }
 
   //virtual int listattr(pobject_t oid, char *attrs, size_t size) {return 0;} //= 0;

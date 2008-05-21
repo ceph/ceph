@@ -275,8 +275,6 @@ protected:
   int rename(pobject_t from, pobject_t to);
   int clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe);
 
-  int list_objects(list<pobject_t>& ls);
-
   // object attr
   int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);

@@ -120,7 +120,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (err == 0)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
-	dout(5, "ceph_open result=%d on %llx\n", err, ceph_ino(inode));
+	dout(5, "open result=%d on %llx\n", err, ceph_ino(inode));
 out:
 	dput(dentry);
 	return err;

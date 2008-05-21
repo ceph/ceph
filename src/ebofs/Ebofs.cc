@@ -3410,26 +3410,6 @@ int Ebofs::listattr(coll_t cid, pobject_t oid, vector<string>& attrs)
   return 0;
 }
 
-int Ebofs::list_objects(list<pobject_t>& ls)
-{
-  ebofs_lock.Lock();
-  dout(9) << "list_objects " << dendl;
-
-  Table<pobject_t, ebofs_inode_ptr>::Cursor cursor(object_tab);
-
-  int num = 0;
-  if (object_tab->find(pobject_t(), cursor) >= 0) {
-    while (1) {
-      ls.push_back(cursor.current().key);
-      num++;
-      if (cursor.move_right() <= 0) break;
-    }
-  }
-
-  ebofs_lock.Unlock();
-  return num;
-}
-
 
 /***************** collections ******************/
 
