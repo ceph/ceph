@@ -80,6 +80,9 @@ protected:
   // send message
   virtual void prepare_dest(const entity_inst_t& inst) {}
   virtual int send_message(Message *m, entity_inst_t dest) = 0;
+  virtual int lazy_send_message(Message *m, entity_inst_t dest) {
+    return send_message(m, dest);
+  }
 
   virtual void mark_down(entity_addr_t a) {}
 

@@ -310,6 +310,7 @@ private:
     void suicide();
     void prepare_dest(const entity_inst_t& inst);
     int send_message(Message *m, entity_inst_t dest);
+    int lazy_send_message(Message *m, entity_inst_t dest);
     
     void mark_down(entity_addr_t a);
     void mark_up(entity_name_t a, entity_addr_t& i);
@@ -362,7 +363,7 @@ public:
   void rename_entity(EntityMessenger *ms, entity_name_t newaddr);
   void unregister_entity(EntityMessenger *ms);
 
-  void submit_message(Message *m, const entity_addr_t& addr);  
+  void submit_message(Message *m, const entity_addr_t& addr, bool lazy=false);  
   void prepare_dest(const entity_inst_t& inst);
 
   // create a new messenger

@@ -403,7 +403,7 @@ void Rank::unregister_entity(EntityMessenger *msgr)
 }
 
 
-void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
+void Rank::submit_message(Message *m, const entity_addr_t& dest_addr, bool lazy)
 {
   const entity_name_t dest = m->get_dest();
 
@@ -444,10 +444,15 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr)
 	}
       }
       if (!pipe) {
-        dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", new pipe." << dendl;
-        // not connected.
-        pipe = connect_rank(dest_proc_addr, policy_map[m->get_dest().type()]);
-	pipe->send(m);
+	if (lazy) {
+	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", lazy, dropping." << dendl;
+	  delete m;
+	} else {
+	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", new pipe." << dendl;
+	  // not connected.
+	  pipe = connect_rank(dest_proc_addr, policy_map[m->get_dest().type()]);
+	  pipe->send(m);
+	}
       }
     }
   }
@@ -656,6 +661,23 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
           << dendl;
 
   rank.submit_message(m, dest.addr);
+
+  return 0;
+}
+
+int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
+{
+  // set envelope
+  m->set_source_inst(_myinst);
+  m->set_dest_inst(dest);
+ 
+  dout(1) << "lazy " << m->get_source()
+          << " --> " << dest.name << " " << dest.addr
+          << " -- " << *m
+	  << " -- " << m
+          << dendl;
+
+  rank.submit_message(m, dest.addr, true);
 
   return 0;
 }
