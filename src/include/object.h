@@ -39,7 +39,7 @@ struct object_t {
       uint64_t ino;    // "file" identifier
       uint32_t bno;    // "block" in that "file"
       objectrev_t rev; // revision.  normally ctime (as epoch).
-    };
+    } __attribute__ ((packed));
   };
 
   object_t() : ino(0), bno(0), rev(0) {}
@@ -111,7 +111,7 @@ namespace __gnu_cxx {
     size_t operator()(const object_t &r) const { 
       static rjhash<uint64_t> H;
       static rjhash<uint32_t> I;
-      return H(r.ino) ^ I(r.bno) ^ I(r.rev);
+      return H(r.ino) ^ I(r.bno) ^ H(r.rev);
     }
   };
 
