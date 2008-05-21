@@ -478,6 +478,16 @@ public:
   friend class MDBalancer;
 
 
+  // file size recovery
+  set<CInode*> file_recover_queue;
+  set<CInode*> file_recovering;
+
+  void queue_file_recover(CInode *in);
+  void identify_files_to_recover();
+  void do_file_recover();
+  void _recovered(CInode *in, int r);
+
+
  public:
 
   // subsystems

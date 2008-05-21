@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __FAKESTORE_H
-#define __FAKESTORE_H
+#ifndef __FILESTORE_H
+#define __FILESTORE_H
 
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
@@ -34,18 +34,18 @@ using namespace __gnu_cxx;
 
 // fake attributes in memory, if we need to.
 
-class FakeStore : public JournalingObjectStore {
+class FileStore : public JournalingObjectStore {
   string basedir;
   __u64 fsid;
   
   int btrfs_fd;  // >= if btrfs
 
   // fake attrs?
-  FakeStoreAttrs attrs;
+  FakeAttrs attrs;
   bool fake_attrs;
 
   // fake collections?
-  FakeStoreCollections collections;
+  FakeCollections collections;
   bool fake_collections;
   
   // helper fns
@@ -62,8 +62,8 @@ class FakeStore : public JournalingObjectStore {
   bool stop;
   void sync_entry();
   struct SyncThread : public Thread {
-    FakeStore *fs;
-    SyncThread(FakeStore *f) : fs(f) {}
+    FileStore *fs;
+    SyncThread(FileStore *f) : fs(f) {}
     void *entry() {
       fs->sync_entry();
       return 0;
@@ -73,7 +73,7 @@ class FakeStore : public JournalingObjectStore {
   void sync_fs(); // actuall sync underlying fs
 
  public:
-  FakeStore(const char *base) : 
+  FileStore(const char *base) : 
     basedir(base),
     btrfs_fd(-1),
     attrs(this), fake_attrs(false), 

@@ -88,7 +88,10 @@ private:
   class raw_char : public raw {
   public:
     raw_char(unsigned l) : raw(l) {
-      data = new char[len];
+      if (len)
+	data = new char[len];
+      else
+	data = 0;
       inc_total_alloc(len);
     }
     ~raw_char() {
@@ -754,7 +757,8 @@ public:
       }
     }
     void append(const ptr& bp) {
-      push_back(bp);
+      if (bp.length())
+	push_back(bp);
     }
     void append(const ptr& bp, unsigned off, unsigned len) {
       assert(len+off <= bp.length());

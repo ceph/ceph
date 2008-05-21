@@ -90,6 +90,7 @@ public:
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_offload;
+    map<int32_t,epoch_t> new_up_thru;
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
     
@@ -107,6 +108,7 @@ public:
       ::encode(new_up, bl);
       ::encode(new_down, bl);
       ::encode(new_offload, bl);
+      ::encode(new_up_thru, bl);
       ::encode(new_pg_swap_primary, bl);
       ::encode(old_pg_swap_primary, bl);
     }
@@ -124,6 +126,7 @@ public:
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_offload, p);
+      ::decode(new_up_thru, p);
       ::decode(new_pg_swap_primary, p);
       ::decode(old_pg_swap_primary, p);
     }
@@ -174,6 +177,8 @@ private:
   int32_t max_osd;
   vector<uint8_t>  osd_state;
   vector<entity_addr_t> osd_addr;
+  vector<epoch_t> osd_up_from;  // when it went up
+  vector<epoch_t> osd_up_thru;      // lower bound on _actual_ osd death.  bumped by osd before activating pgs with no replicas.
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   
  public:
@@ -232,8 +237,13 @@ private:
     int o = max_osd;
     max_osd = m;
     osd_state.resize(m);
-    for (; o<max_osd; o++) 
+    osd_up_from.resize(m);
+    osd_up_thru.resize(m);
+    for (; o<max_osd; o++) {
       osd_state[o] = 0;
+      osd_up_from[o] = 0;
+      osd_up_thru[o] = 0;
+    }
     osd_addr.resize(m);
   }
 
@@ -263,6 +273,10 @@ private:
     return n;
   }
 
+  int get_state(int o) {
+    assert(o < max_osd);
+    return osd_state[o];
+  }
   void set_state(int o, unsigned s) {
     assert(o < max_osd);
     osd_state[o] = s;
@@ -289,7 +303,7 @@ private:
     return osd_addr[osd];
   }
   entity_inst_t get_inst(int osd) {
-    assert(have_inst(osd));
+    assert(exists(osd));
     return entity_inst_t(entity_name_t::OSD(osd),
 			 osd_addr[osd]);
   }
@@ -301,25 +315,21 @@ private:
     } 
     return false;
   }
+
+  epoch_t get_up_from(int osd) {
+    assert(exists(osd));
+    return osd_up_from[osd];
+  }
+  epoch_t get_up_thru(int osd) {
+    assert(exists(osd));
+    return osd_up_thru[osd];
+  }
   
   int get_any_up_osd() {
     for (int i=0; i<max_osd; i++)
       if (is_up(i))
 	return i;
     return -1;
-  }
-
-  void mark_down(int o, bool clean) { 
-    osd_state[o] &= ~CEPH_OSD_UP;
-  }
-  void mark_up(int o) { 
-    osd_state[o] |= CEPH_OSD_UP;
-  }
-  void mark_out(int o) { 
-    set_offload(o, CEPH_OSD_OUT);
-  }
-  void mark_in(int o) { 
-    set_offload(o, CEPH_OSD_IN);
   }
 
   void apply_incremental(Incremental &inc) {
@@ -376,15 +386,20 @@ private:
     }
     for (map<int32_t,uint32_t>::iterator i = inc.new_offload.begin();
          i != inc.new_offload.end();
-         i++) {
+         i++)
       crush.set_offload(i->first, i->second);
-    }
+
+    for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
+         i != inc.new_up_thru.end();
+         i++)
+      osd_up_thru[i->first] = i->second;
 
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
          i != inc.new_up.end(); 
          i++) {
       osd_state[i->first] |= CEPH_OSD_UP;
       osd_addr[i->first] = i->second;
+      osd_up_from[i->first] = epoch;
       //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << endl;
     }
 
@@ -413,6 +428,8 @@ private:
     ::encode(max_osd, blist);
     ::encode(osd_state, blist);
     ::encode(osd_addr, blist);
+    ::encode(osd_up_from, blist);
+    ::encode(osd_up_thru, blist);
     ::encode(pg_swap_primary, blist);
     
     bufferlist cbl;
@@ -436,6 +453,8 @@ private:
     ::decode(max_osd, p);
     ::decode(osd_state, p);
     ::decode(osd_addr, p);
+    ::decode(osd_up_from, p);
+    ::decode(osd_up_thru, p);
     ::decode(pg_swap_primary, p);
     
     bufferlist cbl;
@@ -458,26 +477,23 @@ private:
   }
 
   ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
-    int num = preferred >= 0 ? lpg_num:pg_num;
-    int num_mask = preferred >= 0 ? lpg_num_mask:pg_num_mask;
-
     // calculate ps (placement seed)
-    ps_t ps;
+    ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {
     case CEPH_OBJECT_LAYOUT_LINEAR:
-      ps = ceph_stable_mod(oid.bno + oid.ino, num, num_mask);
+      ps = oid.bno + oid.ino;
       break;
       
     case CEPH_OBJECT_LAYOUT_HASHINO:
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
       break;
 
     case CEPH_OBJECT_LAYOUT_HASH:
       //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
       //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
       //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = ceph_stable_mod(oid.bno + crush_hash32_2(oid.ino, oid.ino>>32), num, num_mask);
+      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
       break;
 
     default:
@@ -495,15 +511,32 @@ private:
   }
 
 
+  /*
+   * map a raw pg (with full precision ps) into an actual pg, for storage
+   */
+  pg_t raw_pg_to_pg(pg_t pg) {
+    if (pg.preferred() >= 0)
+      pg.u.pg.ps = ceph_stable_mod(pg.ps(), lpg_num, lpg_num_mask);
+    else
+      pg.u.pg.ps = ceph_stable_mod(pg.ps(), pg_num, pg_num_mask);
+    return pg;
+  }
+  
+  /*
+   * map raw pg (full precision ps) into a placement ps
+   */
+  ps_t raw_pg_to_pps(pg_t pg) {
+    if (pg.preferred() >= 0)
+      return ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
+    else
+      return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+  }
+
   // pg -> (osd list)
   int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
 
-    ps_t pps;  // placement ps
-    if (pg.preferred() >= 0)
-      pps = ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
-    else
-      pps = ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+    ps_t pps = raw_pg_to_pps(pg);  // placement ps
 
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:

@@ -30,6 +30,7 @@ public:
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
   hash_map<pg_t,pg_stat_t> pg_stat;
+  set<pg_t>                pg_set;
   hash_map<int,osd_stat_t> osd_stat;
 
   class Incremental {
@@ -69,6 +70,8 @@ public:
 	 ++p) {
       if (pg_stat.count(p->first))
 	stat_pg_sub(p->first, pg_stat[p->first]);
+      if (pg_stat.count(p->first) == 0)
+	pg_set.insert(p->first);
       pg_stat[p->first] = p->second;
       stat_pg_add(p->first, p->second);
     }
@@ -180,8 +183,10 @@ public:
     stat_zero();
     for (hash_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
 	 p != pg_stat.end();
-	 ++p)
+	 ++p) {
       stat_pg_add(p->first, p->second);
+      pg_set.insert(p->first);
+    }
     for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
 	 p != osd_stat.end();
 	 ++p)

@@ -1784,23 +1784,6 @@ void ReplicatedPG::do_peer_recovery()
   }
 }
 
-void ReplicatedPG::purge_strays()
-{
-  dout(10) << "purge_strays " << stray_set << dendl;
-  
-  for (set<int>::iterator p = stray_set.begin();
-       p != stray_set.end();
-       p++) {
-    dout(10) << "sending PGRemove to osd" << *p << dendl;
-    set<pg_t> ls;
-    ls.insert(info.pgid);
-    MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
-    osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
-  }
-
-  stray_set.clear();
-}
-
 
 
 /** clean_up_local

@@ -90,6 +90,9 @@ public:
   epoch_t get_epoch() { return mon_epoch; }
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
+  bool is_full_quorum() {
+    return quorum.size() == monmap->size();
+  }
 
   void call_election();  // initiate election
   void win_election(epoch_t epoch, set<int>& q);  // end election (called by Elector)
@@ -138,38 +141,15 @@ public:
   };
 
  public:
-  Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) : 
-    whoami(w), 
-    messenger(m),
-    monmap(map),
-    timer(lock), tick_timer(0),
-    store(s),
+  Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);
+  ~Monitor();
 
-    state(STATE_STARTING), stopping(false),
-
-    elector(this, w),
-    mon_epoch(0), 
-    leader(0),
-    
-    paxos_mdsmap(this, w, PAXOS_MDSMAP),
-    paxos_osdmap(this, w, PAXOS_OSDMAP),
-    paxos_clientmap(this, w, PAXOS_CLIENTMAP),
-    paxos_pgmap(this, w, PAXOS_PGMAP),
-
-    osdmon(0), mdsmon(0), clientmon(0)
-  {
-  }
-  ~Monitor() {
-    delete messenger;
-  }
-
-  void preinit();
   void init();
   void shutdown();
   void dispatch(Message *m);
   void tick();
 
-  void do_stop();
+  void stop_cluster();
 
   int mkfs();
 

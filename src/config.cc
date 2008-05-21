@@ -53,7 +53,21 @@ int buffer::list::write_file(const char *fn)
     cerr << "can't write " << fn << ": " << strerror(errno) << std::endl;
     return -errno;
   }
-  ::write(fd, (void*)c_str(), length());
+  for (std::list<ptr>::const_iterator it = _buffers.begin(); 
+       it != _buffers.end(); 
+       it++) {
+    const char *c = it->c_str();
+    int left = it->length();
+    while (left > 0) {
+      int r = ::write(fd, c, left);
+      if (r < 0) {
+	::close(fd);
+	return -errno;
+      }
+      c += r;
+      left -= r;
+    }
+  }
   ::close(fd);
   return 0;
 }
@@ -195,7 +209,7 @@ md_config_t g_conf = {
   debug_client: 0,
   debug_osd: 0,
   debug_ebofs: 1,
-  debug_fakestore: 1,
+  debug_filestore: 1,
   debug_journal: 1,
   debug_bdev: 1,         // block device
   debug_ns: 0,
@@ -307,7 +321,7 @@ md_config_t g_conf = {
   mds_bal_merge_rd: 1000,
   mds_bal_merge_wr: 1000,
   mds_bal_interval: 10,           // seconds
-  mds_bal_fragment_interval: 2,      // seconds
+  mds_bal_fragment_interval: -1,      // seconds
   mds_bal_idle_threshold: 0, //.1,
   mds_bal_max: -1,
   mds_bal_max_until: -1,
@@ -352,9 +366,12 @@ md_config_t g_conf = {
 
   osd_stat_refresh_interval: .5,
 
+  osd_min_pg_size_without_alive: 2,  // smallest pg we allow to activate without telling the monitor
+
   osd_pg_bits: 6,  // bits per osd
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
+  osd_min_rep: 2,
   osd_max_rep: 4,
   osd_min_raid_width: 4,
   osd_max_raid_width: 3, //6, 
@@ -366,21 +383,20 @@ md_config_t g_conf = {
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
   osd_heartbeat_grace: 30,
-  osd_failure_report_interval: 10,
-  osd_pg_stats_interval:  5,
-  osd_replay_window: 5,
+  osd_mon_report_interval:  5,  // pg stats, failures, up_thru, boot.
+  osd_replay_window: 45,
   osd_max_pull: 2,
   osd_pad_pg_log: false,
 
   osd_auto_weight: false,
 
   
-  // --- fakestore ---
-  fakestore: false,
-  fakestore_sync_interval: .2,    // seconds
-  fakestore_fake_attrs: false,
-  fakestore_fake_collections: false,   
-  fakestore_dev: 0,
+  // --- filestore ---
+  filestore: false,
+  filestore_sync_interval: .2,    // seconds
+  filestore_fake_attrs: false,
+  filestore_fake_collections: false,   
+  filestore_dev: 0,
 
   // --- ebofs ---
   ebofs: false,
@@ -603,7 +619,7 @@ void parse_config_options(std::vector<const char*>& args)
 
     
     
-    else if (strcmp(args[i], "-o") == 0 ||
+    else if (//strcmp(args[i], "-o") == 0 ||
 	     strcmp(args[i], "--doutdir") == 0) 
       g_conf.dout_dir = args[++i];
 
@@ -682,11 +698,11 @@ void parse_config_options(std::vector<const char*>& args)
         g_conf.debug_ebofs = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_ebofs = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_fakestore") == 0) 
+    else if (strcmp(args[i], "--debug_filestore") == 0) 
       if (!g_conf.debug_after) 
-        g_conf.debug_fakestore = atoi(args[++i]);
+        g_conf.debug_filestore = atoi(args[++i]);
       else 
-        g_debug_after_conf.debug_fakestore = atoi(args[++i]);
+        g_debug_after_conf.debug_filestore = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_journal") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_journal = atoi(args[++i]);
@@ -791,6 +807,9 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--mds_bal_merge_wr") == 0) 
       g_conf.mds_bal_merge_wr = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--mds_bal_fragment_interval") == 0) 
+      g_conf.mds_bal_fragment_interval = atoi(args[++i]);
+
     else if (strcmp(args[i], "--mds_bal_mode") == 0) 
       g_conf.mds_bal_mode = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_bal_min_start") == 0) 
@@ -879,16 +898,16 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--journal_max_write_bytes") == 0)
       g_conf.journal_max_write_bytes = atoi(args[++i]);      
 
-    else if (strcmp(args[i], "--fakestore") == 0)
-      g_conf.fakestore = true;
-    else if (strcmp(args[i], "--fakestore_sync_interval") == 0)
-      g_conf.fakestore_sync_interval = atoi(args[++i]);
-    else if (strcmp(args[i], "--fakestore_dev") == 0) 
-      g_conf.fakestore_dev = args[++i];
-    else if (strcmp(args[i], "--fakestore_fake_attrs") == 0) 
-      g_conf.fakestore_fake_attrs = true;//atoi(args[++i]);
-    else if (strcmp(args[i], "--fakestore_fake_collections") == 0) 
-      g_conf.fakestore_fake_collections = true;//atoi(args[++i]);
+    else if (strcmp(args[i], "--filestore") == 0)
+      g_conf.filestore = true;
+    else if (strcmp(args[i], "--filestore_sync_interval") == 0)
+      g_conf.filestore_sync_interval = atoi(args[++i]);
+    else if (strcmp(args[i], "--filestore_dev") == 0) 
+      g_conf.filestore_dev = args[++i];
+    else if (strcmp(args[i], "--filestore_fake_attrs") == 0) 
+      g_conf.filestore_fake_attrs = true;//atoi(args[++i]);
+    else if (strcmp(args[i], "--filestore_fake_collections") == 0) 
+      g_conf.filestore_fake_collections = true;//atoi(args[++i]);
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);

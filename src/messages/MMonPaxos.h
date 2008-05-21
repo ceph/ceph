@@ -46,6 +46,7 @@ class MMonPaxos : public Message {
   __s32 op;          // paxos op
   __s32 machine_id;  // which state machine?
 
+  version_t first_committed;  // i've committed to
   version_t last_committed;  // i've committed to
   version_t pn_from;         // i promise to accept after
   version_t pn;              // with with proposal
@@ -59,13 +60,15 @@ class MMonPaxos : public Message {
     Message(MSG_MON_PAXOS),
     epoch(e),
     op(o), machine_id(mid),
-    last_committed(0), pn_from(0), pn(0), uncommitted_pn(0) { }
+    first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0) { }
   
   const char *get_type_name() { return "paxos"; }
   
   void print(ostream& out) {
     out << "paxos(" << get_paxos_name(machine_id)
-	<< " " << get_opname(op) << " lc " << last_committed
+	<< " " << get_opname(op) 
+	<< " lc " << last_committed
+	<< " fc " << first_committed
 	<< " pn " << pn << " opn " << uncommitted_pn
 	<< ")";
   }
@@ -74,6 +77,7 @@ class MMonPaxos : public Message {
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(machine_id, payload);
+    ::encode(first_committed, payload);
     ::encode(last_committed, payload);
     ::encode(pn_from, payload);
     ::encode(pn, payload);
@@ -86,6 +90,7 @@ class MMonPaxos : public Message {
     ::decode(epoch, p);
     ::decode(op, p);
     ::decode(machine_id, p);
+    ::decode(first_committed, p);
     ::decode(last_committed, p);
     ::decode(pn_from, p);   
     ::decode(pn, p);   

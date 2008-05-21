@@ -346,6 +346,9 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_addr, map->max_osd*sizeof(*map->osd_addr));
 
+	*p += sizeof(u32) + map->max_osd * sizeof(u32); /* osd_up_from */
+	*p += sizeof(u32) + map->max_osd * sizeof(u32); /* osd_up_thru */
+
 	/* pg primary swapping */
 	ceph_decode_32_safe(p, end, len, bad);
 	if (len) {
@@ -490,6 +493,10 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 			map->crush->device_offload[osd] = off;
 	}
 
+	/* skip new_alive_thru */
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * sizeof(u32);
+
 	/* skip old/new pg_swap stuff */
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * (sizeof(__u64) + sizeof(__u32));
@@ -584,8 +591,7 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	}
 
 	pgid.pg64 = 0;   /* start with it zeroed out */
-	pgid.pg.ps = ceph_stable_mod(bno + crush_hash32_2(ino, ino>>32),
-				     num, num_mask);
+	pgid.pg.ps = bno + crush_hash32_2(ino, ino>>32);
 	pgid.pg.preferred = preferred;
 	pgid.pg.type = fl->fl_pg_type;
 	pgid.pg.size = fl->fl_pg_size;

@@ -934,6 +934,7 @@ void MDS::recovery_done()
   anchorclient->finish_recovery();
   
   mdcache->start_recovered_purges();
+  mdcache->do_file_recover();
   
   // tell connected clients
   bcast_mds_map();  

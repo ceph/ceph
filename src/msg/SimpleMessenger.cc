@@ -761,6 +761,12 @@ int Rank::Pipe::accept()
       existing = rank.rank_pipe[peer_addr];
       existing->lock.Lock();
       
+      if (existing->policy.is_lossy()) {
+	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
+	existing->was_session_reset();
+	goto replace;
+      }
+
       if (peer_cseq < existing->connect_seq) {
 	if (false &&
 	    /*
@@ -866,8 +872,9 @@ int Rank::Pipe::accept()
   dout(10) << "accept replacing " << existing << dendl;
   existing->state = STATE_CLOSED;
   existing->cond.Signal();
+  existing->reader_thread.kill(SIGUSR1);
   existing->unregister_pipe();
-  
+    
   // steal queue and out_seq
   out_seq = existing->out_seq;
   if (!existing->sent.empty()) {
@@ -969,9 +976,15 @@ int Rank::Pipe::connect()
   }
   dout(20) << "connect read peer addr " << paddr << " on socket " << newsd << dendl;
   if (!peer_addr.is_local_to(paddr)) {
-    dout(0) << "connect peer identifies itself as " 
-	    << paddr << "... wrong node!" << dendl;
-    goto fail;
+    if (paddr.ipaddr.sin_addr.s_addr == 0 &&
+	peer_addr.ipaddr.sin_port == paddr.ipaddr.sin_port) {
+      dout(0) << "connect claims to be " 
+	      << paddr << " not " << peer_addr << " - presumably this is the same node!" << dendl;
+    } else {
+      dout(0) << "connect claims to be " 
+	      << paddr << " not " << peer_addr << " - wrong node!" << dendl;
+      goto fail;
+    }
   }
 
   // identify myself, and send initial cseq
@@ -1123,13 +1136,14 @@ void Rank::Pipe::fault(bool onconnect)
   sd = -1;
 
   // lossy channel?
-  if (policy.retry_interval < 0) {
+  if (policy.is_lossy()) {
+    dout(10) << "fault on lossy channel, failing" << dendl;
     fail();
     return;
   }
 
   if (q.empty()) {
-    if (state == STATE_CLOSING || onconnect) {
+    if (state == STATE_CLOSING || onconnect || policy.is_lossy()) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
     } else {
@@ -1184,7 +1198,7 @@ void Rank::Pipe::fail()
 
 void Rank::Pipe::was_session_reset()
 {
-  dout(10) << "was_reset_session" << dendl;
+  dout(10) << "was_session_reset" << dendl;
   report_failures();
   for (unsigned i=0; i<rank.local.size(); i++) 
     if (rank.local[i] && rank.local[i]->get_dispatcher())

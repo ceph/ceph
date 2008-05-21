@@ -44,7 +44,6 @@ protected:
   void clean_up_local(ObjectStore::Transaction& t);
   void cancel_recovery();
   bool do_recovery();
-  void purge_strays();
 
   
 public:

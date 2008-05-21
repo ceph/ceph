@@ -13,38 +13,6 @@ int ceph_debug_mdsc = -1;
 #include "messenger.h"
 #include "decode.h"
 
-/*
- * note: this also appears in messages/MClientRequest.h,
- * but i don't want it inline in the kernel.
- */
-const char *ceph_mds_op_name(int op)
-{
-  switch (op) {
-  case CEPH_MDS_OP_FINDINODE: return "findinode";
-  case CEPH_MDS_OP_STAT:  return "stat";
-  case CEPH_MDS_OP_LSTAT: return "lstat";
-  case CEPH_MDS_OP_UTIME: return "utime";
-  case CEPH_MDS_OP_LUTIME: return "lutime";
-  case CEPH_MDS_OP_CHMOD: return "chmod";
-  case CEPH_MDS_OP_LCHMOD: return "lchmod";
-  case CEPH_MDS_OP_CHOWN: return "chown";
-  case CEPH_MDS_OP_LCHOWN: return "lchown";
-  case CEPH_MDS_OP_READDIR: return "readdir";
-  case CEPH_MDS_OP_MKNOD: return "mknod";
-  case CEPH_MDS_OP_LINK: return "link";
-  case CEPH_MDS_OP_UNLINK: return "unlink";
-  case CEPH_MDS_OP_RENAME: return "rename";
-  case CEPH_MDS_OP_MKDIR: return "mkdir";
-  case CEPH_MDS_OP_RMDIR: return "rmdir";
-  case CEPH_MDS_OP_SYMLINK: return "symlink";
-  case CEPH_MDS_OP_OPEN: return "open";
-  case CEPH_MDS_OP_TRUNCATE: return "truncate";
-  case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
-  case CEPH_MDS_OP_FSYNC: return "fsync";
-  default: return "unknown";
-  }
-}
-
 static void send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 			 int mds)
 {
@@ -62,14 +30,21 @@ static int parse_reply_info_in(void **p, void *end,
 			       struct ceph_mds_reply_info_in *info)
 {
 	int err = -EINVAL;
+
 	info->in = *p;
 	*p += sizeof(struct ceph_mds_reply_inode) +
 		sizeof(*info->in->fragtree.splits) * 
 		le32_to_cpu(info->in->fragtree.nsplits);
+
 	ceph_decode_32_safe(p, end, info->symlink_len, bad);
 	ceph_decode_need(p, end, info->symlink_len, bad);
 	info->symlink = *p;
 	*p += info->symlink_len;
+	
+	ceph_decode_32_safe(p, end, info->xattr_len, bad);
+	ceph_decode_need(p, end, info->xattr_len, bad);
+	info->xattr_data = *p;
+	*p += info->xattr_len;
 	return 0;
 bad:
 	return err;
@@ -996,11 +971,9 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 
 	/* encode paths */
 	if (op == CEPH_MDS_OP_FINDINODE) {
-		derr(10,"p %p\n", p);
 		ceph_encode_32(&p, ino1);
 		memcpy(p, path1, ino1 * sizeof(struct ceph_inopath_item));
 		p += ino1 * sizeof(struct ceph_inopath_item);
-		derr(10, " p %p end %p len %d\n", p, end, (int)ino1);
 	} else {
 		ceph_encode_filepath(&p, end, ino1, path1);
 		ceph_encode_filepath(&p, end, ino2, path2);

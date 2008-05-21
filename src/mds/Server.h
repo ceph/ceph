@@ -34,11 +34,14 @@ class Server {
   Logger *logger;
 
 public:
+  int failed_reconnects;
+
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
     messenger(mds->messenger),
-    logger(0) {
+    logger(0),
+    failed_reconnects(0) {
   }
   ~Server() {
     delete logger;
@@ -109,6 +112,8 @@ public:
   void handle_client_chown(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
   void handle_client_truncate(MDRequest *mdr);
+  void handle_client_setxattr(MDRequest *mdr);
+  void handle_client_removexattr(MDRequest *mdr);
   void handle_client_fsync(MDRequest *mdr);
 
   // open

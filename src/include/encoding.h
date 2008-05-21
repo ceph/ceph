@@ -375,7 +375,8 @@ inline void encode(const buffer::ptr& bp, bufferlist& bl)
 {
   __u32 len = bp.length();
   encode(len, bl);
-  bl.append(bp);
+  if (len)
+    bl.append(bp);
 }
 inline void decode(buffer::ptr& bp, bufferlist::iterator& p)
 {
@@ -385,10 +386,12 @@ inline void decode(buffer::ptr& bp, bufferlist::iterator& p)
   bufferlist s;
   p.copy(len, s);
 
-  if (s.buffers().size() == 1)
-    bp = s.buffers().front();
-  else
-    bp = buffer::copy(s.c_str(), s.length());
+  if (len) {
+    if (s.buffers().size() == 1)
+      bp = s.buffers().front();
+    else
+      bp = buffer::copy(s.c_str(), s.length());
+  }
 }
 
 // bufferlist (encapsulated)

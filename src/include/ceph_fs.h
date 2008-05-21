@@ -192,7 +192,7 @@ static inline int ceph_stable_mod(int x, int b, int bmask) {
  * object layout - how a given object should be stored.
  */
 struct ceph_object_layout {
-	__le64 ol_pgid;
+	__le64 ol_pgid;           /* raw pg, with _full_ ps precision. */
 	__le32 ol_stripe_unit;
 } __attribute__ ((packed));
 
@@ -416,7 +416,8 @@ struct ceph_mds_getmap {
 #define CEPH_LOCK_ILINK       16
 #define CEPH_LOCK_IDFT        32    /* dir frag tree */
 #define CEPH_LOCK_IDIR        64    /* mds internal */
-#define CEPH_LOCK_INO         128   /* immutable inode bits; not actually a lock */
+#define CEPH_LOCK_IXATTR      128
+#define CEPH_LOCK_INO         256   /* immutable inode bits; not actually a lock */
 
 #define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)  /* alias for either filelock or dirlock */
 
@@ -434,6 +435,7 @@ struct ceph_mds_getmap {
 #define CEPH_STAT_MASK_MTIME    CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
+#define CEPH_STAT_MASK_XATTR    CEPH_LOCK_IXATTR
 #define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
 
 #define CEPH_UTIME_ATIME		1
@@ -474,11 +476,15 @@ enum {
 	CEPH_MDS_OP_LUTIME    = 0x01101,
 	CEPH_MDS_OP_LCHMOD    = 0x01102,
 	CEPH_MDS_OP_LCHOWN    = 0x01103,
-
+	CEPH_MDS_OP_LSETXATTR = 0x01104,
+	CEPH_MDS_OP_LRMXATTR  = 0x01105,
+	
 	CEPH_MDS_OP_STAT      = 0x10100,
 	CEPH_MDS_OP_UTIME     = 0x11101,
 	CEPH_MDS_OP_CHMOD     = 0x11102,
 	CEPH_MDS_OP_CHOWN     = 0x11103,
+	CEPH_MDS_OP_SETXATTR  = 0x11104,
+	CEPH_MDS_OP_RMXATTR   = 0x11105,
 
 	CEPH_MDS_OP_MKNOD     = 0x01201,
 	CEPH_MDS_OP_LINK      = 0x01202,
@@ -494,6 +500,38 @@ enum {
 	CEPH_MDS_OP_FSYNC     = 0x00304,
 	CEPH_MDS_OP_READDIR   = 0x00305,
 };
+
+static inline const char *ceph_mds_op_name(int op)
+{
+	switch (op) {
+	case CEPH_MDS_OP_FINDINODE: return "findinode";
+	case CEPH_MDS_OP_STAT:  return "stat";
+	case CEPH_MDS_OP_LSTAT:  return "lstat";
+	case CEPH_MDS_OP_UTIME: return "utime";
+	case CEPH_MDS_OP_LUTIME: return "lutime";
+	case CEPH_MDS_OP_CHMOD: return "chmod";
+	case CEPH_MDS_OP_LCHMOD: return "lchmod";
+	case CEPH_MDS_OP_CHOWN: return "chown";
+	case CEPH_MDS_OP_LCHOWN: return "lchown";
+	case CEPH_MDS_OP_SETXATTR: return "setxattr";
+	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
+	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
+	case CEPH_MDS_OP_LRMXATTR: return "lrmxattr";
+	case CEPH_MDS_OP_READDIR: return "readdir";
+	case CEPH_MDS_OP_MKNOD: return "mknod";
+	case CEPH_MDS_OP_LINK: return "link";
+	case CEPH_MDS_OP_UNLINK: return "unlink";
+	case CEPH_MDS_OP_RENAME: return "rename";
+	case CEPH_MDS_OP_MKDIR: return "mkdir";
+	case CEPH_MDS_OP_RMDIR: return "rmdir";
+	case CEPH_MDS_OP_SYMLINK: return "symlink";
+	case CEPH_MDS_OP_OPEN: return "open";
+	case CEPH_MDS_OP_TRUNCATE: return "truncate";
+	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
+	case CEPH_MDS_OP_FSYNC: return "fsync";
+	default: return "unknown";
+	}
+}
 
 struct ceph_mds_request_head {
 	struct ceph_entity_inst client_inst;
@@ -542,6 +580,9 @@ struct ceph_mds_request_head {
 		struct {
 			__le64 length;
 		} __attribute__ ((packed)) truncate;
+		struct {
+			__le32 flags;
+		} __attribute__ ((packed)) setxattr;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
@@ -585,7 +626,7 @@ struct ceph_mds_reply_inode {
 	__le32 rdev;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));
-/* followed by frag array, then symlink string */
+/* followed by frag array, then symlink string, then xattr map */
 
 /* reply_lease follows dname, and reply_inode */
 struct ceph_mds_reply_lease {

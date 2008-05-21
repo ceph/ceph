@@ -59,6 +59,9 @@ public:
       fail_callback(fc),
       remote_reset_callback(rrc) {}
 
+    bool is_lossy() {
+      return retry_interval < 0;
+    }
     static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
     static Policy fail_after(float f) { return Policy(MIN(g_conf.ms_retry_interval, f), f, true, true, true); }
     static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, -1, false, true, true); }

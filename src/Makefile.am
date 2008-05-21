@@ -32,6 +32,9 @@ mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
 
+dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
+
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
 cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
@@ -90,7 +93,6 @@ libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
 
 ## libcephclient.so
 libcephclient_so_a_SOURCES = \
-	client/FileCache.cc \
 	client/Client.cc \
 	client/SyntheticClient.cc \
 	client/Trace.cc \
@@ -139,7 +141,7 @@ bin_PROGRAMS = \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	fakesyn \
-	streamtest dupstore psim \
+	streamtest dupstore psim dumpjournal \
 	test.ebofs mkfs.ebofs \
 	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
@@ -150,7 +152,7 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = start.sh stop.sh crushtool.pl
+EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh
 
 # cleaning
 clean-local:
@@ -211,9 +213,9 @@ libebofs_a_SOURCES = \
 	ebofs/Ebofs.cc \
 	ebofs/Allocator.cc
 libos_a_SOURCES = \
-	osd/FileJournal.cc \
-	osd/FakeStore.cc \
-	osd/JournalingObjectStore.cc
+	os/FileJournal.cc \
+	os/FileStore.cc \
+	os/JournalingObjectStore.cc
 
 libosd_a_SOURCES = \
 	osd/PG.cc \
@@ -229,7 +231,6 @@ libosdc_a_SOURCES = \
 	osdc/Journaler.cc
 
 libclient_a_SOURCES = \
-	client/FileCache.cc \
 	client/Client.cc \
 	client/SyntheticClient.cc \
 	client/Trace.cc
@@ -242,7 +243,6 @@ noinst_HEADERS = \
 	client/SyntheticClient.h\
 	client/fuse.h\
 	client/fuse_ll.h\
-	client/FileCache.h\
 	client/Client.h\
 	common/Clock.h\
 	common/Cond.h\
@@ -269,12 +269,12 @@ noinst_HEADERS = \
 	ebofs/csum.h\
 	ebofs/BlockDevice.h\
 	ebofs/Ebofs.h\
-	osd/FileJournal.h\
-	osd/JournalingObjectStore.h\
+	os/FileJournal.h\
+	os/JournalingObjectStore.h\
 	ebofs/types.h\
 	ebofs/Allocator.h\
 	ebofs/BufferCache.h\
-	osd/Journal.h\
+	os/Journal.h\
 	ebofs/nodes.h\
 	ebofs/Cnode.h\
 	ebofs/Onode.h\
@@ -446,6 +446,8 @@ noinst_HEADERS = \
 	messages/MDiscoverReply.h\
 	messages/MOSDFailure.h\
 	messages/MExportDir.h\
+	messages/MOSDAlive.h\
+	messages/MPGStatsAck.h\
 	mon/Elector.h\
 	mon/MonitorStore.h\
 	mon/Paxos.h\
@@ -468,16 +470,16 @@ noinst_HEADERS = \
 	msg/SimpleMessenger.h\
 	osbdb/OSBDB.h\
 	osd/Ager.h\
-	osd/BDBMap.h\
-	osd/Fake.h\
-	osd/FakeStoreBDBCollections.h\
-	osd/ObjectStore.h\
+	os/BDBMap.h\
+	os/Fake.h\
+	os/FakeStoreBDBCollections.h\
+	os/ObjectStore.h\
 	osd/ObjectVersioner.h\
 	osd/RAID4PG.h\
 	osd/ReplicatedPG.h\
 	osd/PG.h\
 	osd/OSDMap.h\
-	osd/FakeStore.h\
+	os/FileStore.h\
 	osd/OSD.h\
 	osd/osd_types.h\
 	osdc/Blinker.h\
@@ -487,6 +489,5 @@ noinst_HEADERS = \
 	osdc/Objecter.h\
 	config.h\
 	include/intarith.h\
+	include/encoding.h\
 	include/err.h
-
-

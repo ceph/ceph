@@ -243,7 +243,7 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
       g_conf.mon_stop_on_last_unmount &&
       !mon->is_stopping()) {
     dout(1) << "last client unmounted" << dendl;
-    mon->do_stop();
+    mon->stop_cluster();
   }
 }
 

@@ -323,6 +323,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	in = new CInode(mds->mdcache);
 	in->inode = p->inode;
 	in->dirfragtree = p->dirfragtree;
+	in->xattrs = p->xattrs;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
 	if (!dn->is_null()) {
@@ -344,6 +345,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	in->inode = p->inode;
 	in->dirfragtree = p->dirfragtree;
+	in->xattrs = p->xattrs;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_inode() != in) {

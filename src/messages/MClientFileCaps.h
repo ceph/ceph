@@ -56,6 +56,8 @@ class MClientFileCaps : public Message {
   void set_caps(int c) { h.caps = c; }
   void set_wanted(int w) { h.wanted = w; }
 
+  void set_max_size(__u64 ms) { h.max_size = ms; }
+
   void set_migrate_mds(int m) { h.migrate_mds = m; }
   void set_migrate_seq(int m) { h.migrate_seq = m; }
   void set_op(int o) { h.op = o; }
@@ -97,6 +99,7 @@ class MClientFileCaps : public Message {
 	<< " wanted" << cap_string(h.wanted)
 	<< " size " << h.size << "/" << h.max_size
 	<< " mtime " << utime_t(h.mtime)
+	<< " tws " << h.time_warp_seq
 	<< ")";
   }
   

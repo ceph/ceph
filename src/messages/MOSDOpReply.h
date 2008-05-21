@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 #include "MOSDOp.h"
-#include "osd/ObjectStore.h"
+#include "os/ObjectStore.h"
 
 /*
  * OSD op reply

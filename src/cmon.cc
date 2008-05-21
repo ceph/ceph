@@ -65,7 +65,7 @@ int main(int argc, const char **argv)
   MonitorStore store(fsdir);
   err = store.mount();
   if (err < 0) {
-    cerr << "problem opening monitor store in " << fsdir << ": " << strerror(err) << std::endl;
+    cerr << "problem opening monitor store in " << fsdir << ": " << strerror(-err) << std::endl;
     exit(1);
   }
 

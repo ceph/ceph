@@ -79,10 +79,13 @@ private:
   bool prepare_boot(class MOSDBoot *m);
   void _booted(MOSDBoot *m);
 
-  class C_Booted : public Context {
+  bool preprocess_alive(class MOSDAlive *m);
+  bool prepare_alive(class MOSDAlive *m);
+  void _alive(MOSDAlive *m);
+
+  struct C_Booted : public Context {
     OSDMonitor *cmon;
     MOSDBoot *m;
-  public:
     C_Booted(OSDMonitor *cm, MOSDBoot *m_) : 
       cmon(cm), m(m_) {}
     void finish(int r) {
@@ -92,10 +95,17 @@ private:
 	cmon->dispatch((Message*)m);
     }
   };
-  class C_Reported : public Context {
+  struct C_Alive : public Context {
+    OSDMonitor *osdmon;
+    MOSDAlive *m;
+    C_Alive(OSDMonitor *o, MOSDAlive *mm) : osdmon(o), m(mm) {}
+    void finish(int r) {
+      osdmon->_alive(m);
+    }    
+  };
+  struct C_Reported : public Context {
     OSDMonitor *cmon;
     MOSDFailure *m;
-  public:
     C_Reported(OSDMonitor *cm, MOSDFailure *m_) : 
       cmon(cm), m(m_) {}
     void finish(int r) {
@@ -105,9 +115,6 @@ private:
 	cmon->dispatch((Message*)m);
     }
   };
-
-  bool preprocess_in(class MOSDIn *m);
-  bool prepare_in(class MOSDIn *m);
 
   bool preprocess_out(class MOSDOut *m);
   bool prepare_out(class MOSDOut *m);
@@ -128,6 +135,7 @@ private:
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();
   void fake_reorg();
+
 };
 
 #endif

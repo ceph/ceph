@@ -35,7 +35,7 @@
 #include "common/Mutex.h"
 #include "common/Timer.h"
 
-#include "FileCache.h"
+//#include "FileCache.h"
 
 
 // stl
@@ -127,9 +127,10 @@ class Dir {
 
 class InodeCap {
  public:
-  int  caps;
+  unsigned issued;
+  unsigned implemented;
   unsigned seq;
-  InodeCap() : caps(0), seq(0) {}
+  InodeCap() : issued(0), implemented(0), seq(0) {}
 };
 
 
@@ -148,7 +149,11 @@ class Inode {
   map<int,InodeCap> caps;            // mds -> InodeCap
   map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
-  int       num_open_rd, num_open_wr, num_open_lazy;  // num readers, writers
+  //int open_by_mode[CEPH_FILE_MODE_NUM];
+  map<int,int> open_by_mode;
+  map<int,int> cap_refs;
+
+  __u64     reported_size, wanted_max_size, requested_max_size;
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
@@ -156,19 +161,11 @@ class Inode {
   Dentry    *dn;      // if i'm linked to a dentry.
   string    *symlink; // symlink content, if it's a symlink
   fragtree_t dirfragtree;
+  map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
-  // for caching i/o mode
-  FileCache fc;
-
-  // for sync i/o mode
-  int       sync_reads;   // sync reads in progress
-  int       sync_writes;  // sync writes in progress
-
-  list<Cond*>       waitfor_write;
-  list<Cond*>       waitfor_read;
-  list<Cond*>       waitfor_lazy;
-  list<Context*>    waitfor_no_read, waitfor_no_write;
+  list<Cond*>       waitfor_caps;
+  list<Cond*>       waitfor_commit;
 
   // <hack>
   bool hack_balance_reads;
@@ -200,17 +197,17 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(inodeno_t ino, ceph_file_layout *layout, ObjectCacher *_oc) : 
+  Inode(inodeno_t ino, ceph_file_layout *layout) : 
     //inode(_inode),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    num_open_rd(0), num_open_wr(0), num_open_lazy(0),
+    reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
-    fc(_oc, ino, layout),
-    sync_reads(0), sync_writes(0),
     hack_balance_reads(false)
   {
+    memset(&inode, 0, sizeof(inode));
+    //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
     inode.ino = ino;
   }
   ~Inode() {
@@ -221,34 +218,64 @@ class Inode {
 
   bool is_dir() { return inode.is_dir(); }
 
-  int file_caps() {
+
+  // CAPS --------
+  void get_open_ref(int mode) {
+    open_by_mode[mode]++;
+  }
+  bool put_open_ref(int mode) {
+    //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
+    if (--open_by_mode[mode] == 0)
+      return true;
+    return false;
+  }
+
+  void get_cap_ref(int cap);
+  bool put_cap_ref(int cap);
+
+  int caps_issued() {
     int c = 0;
     for (map<int,InodeCap>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second.caps;
+      c |= it->second.issued;
     for (map<int,InodeCap>::iterator it = stale_caps.begin();
          it != stale_caps.end();
          it++)
-      c |= it->second.caps;
+      c |= it->second.issued;
     return c;
   }
 
-  int file_caps_wanted() {
+  int caps_used() {
     int w = 0;
-    if (num_open_rd) w |= CEPH_CAP_RD|CEPH_CAP_RDCACHE;
-    if (num_open_wr) w |= CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
-    if (num_open_lazy) w |= CEPH_CAP_LAZYIO;
-    if (fc.is_dirty()) w |= CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL;
-    if (fc.is_cached()) w |= CEPH_CAP_RDCACHE;
+    for (map<int,int>::iterator p = cap_refs.begin();
+	 p != cap_refs.end();
+	 p++)
+      if (p->second)
+	w |= p->first;
     return w;
+  }
+  int caps_file_wanted() {
+    int want = 0;
+    for (map<int,int>::iterator p = open_by_mode.begin();
+	 p != open_by_mode.end();
+	 p++)
+      if (p->second)
+	want |= ceph_caps_for_mode(p->first);
+    return want;
+  }
+  int caps_wanted() {
+    int want = caps_file_wanted() | caps_used();
+    if (want & CEPH_CAP_WRBUFFER)
+      want |= CEPH_CAP_EXCL;
+    return want;
   }
 
   int get_effective_lease_mask(utime_t now) {
     int havemask = 0;
     if (now < lease_ttl && lease_mds >= 0)
       havemask |= lease_mask;
-    if (file_caps() & CEPH_CAP_EXCL) 
+    if (caps_issued() & CEPH_CAP_EXCL) 
       havemask |= CEPH_LOCK_ICONTENT;
     if (havemask & CEPH_LOCK_ICONTENT)
       havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
@@ -257,9 +284,9 @@ class Inode {
 
   bool have_valid_size() {
     // RD+RDCACHE or WR+WRBUFFER => valid size
-    if ((file_caps() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
+    if ((caps_issued() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
       return true;
-    if ((file_caps() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
+    if ((caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
       return true;
     // otherwise, look for lease or EXCL...
     if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_ICONTENT)
@@ -267,17 +294,7 @@ class Inode {
     return false;
   }
 
-  void add_open(int cmode) {
-    if (cmode & CEPH_FILE_MODE_RD) num_open_rd++;
-    if (cmode & CEPH_FILE_MODE_WR) num_open_wr++;
-    if (cmode & CEPH_FILE_MODE_LAZY) num_open_lazy++;
-  }
-  void sub_open(int cmode) {
-    if (cmode & CEPH_FILE_MODE_RD) num_open_rd--;
-    if (cmode & CEPH_FILE_MODE_WR) num_open_wr--;
-    if (cmode & CEPH_FILE_MODE_LAZY) num_open_lazy--;
-  }
-  
+ 
   int authority(const string& dname) {
     if (!dirfragtree.empty()) {
       __gnu_cxx::hash<string> H;
@@ -531,7 +548,7 @@ public:
   int    unsafe_sync_write;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
-  void hack_sync_write_safe();
+  void sync_write_commit(Inode *in);
 
 protected:
   Filer                 *filer;     
@@ -576,6 +593,9 @@ protected:
   //  - protects Client and buffer cache both!
   Mutex                  client_lock;
 
+  // helpers
+  void wait_on_list(list<Cond*>& ls);
+  void signal_cond_list(list<Cond*>& ls);
 
   // -- metadata cache stuff
 
@@ -724,9 +744,12 @@ protected:
 
   // file caps
   void handle_file_caps(class MClientFileCaps *m);
-  void implemented_caps(class MClientFileCaps *m, Inode *in);
-  void release_caps(Inode *in, int retain=0);
-  void update_caps_wanted(Inode *in);
+  void check_caps(Inode *in);
+  void put_cap_ref(Inode *in, int cap);
+
+  void _release(Inode *in, bool checkafter=true);
+  void _flush(Inode *in, bool checkafter=true);
+  void _flushed(Inode *in, bool checkafter);
 
   void close_release(Inode *in);
   void close_safe(Inode *in);
@@ -738,6 +761,8 @@ protected:
   void update_dir_dist(Inode *in, DirStat *st);
 
   Inode* insert_trace(MClientReply *reply, utime_t ttl);
+  void update_inode_file_bits(Inode *in, __u64 size, utime_t ctime, utime_t mtime, utime_t atime,
+			      int issued, __u64 time_warp_seq);
   void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
   Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			     InodeStat *ist, LeaseStat *ilease, 
@@ -786,6 +811,10 @@ private:
   int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1);
   int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
   int _chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid=-1, int cgid=-1);
+  int _getxattr(const filepath &path, const char *name, void *value, size_t len, bool followsym, int uid=-1, int gid=-1);
+  int _listxattr(const filepath &path, char *names, size_t len, bool followsym, int uid=-1, int gid=-1);
+  int _setxattr(const filepath &path, const char *name, const void *value, size_t len, int flags, bool followsym, int uid=-1, int gid=-1);
+  int _removexattr(const filepath &path, const char *nm, bool followsym, int uid=-1, int gid=-1);
   int _utimes(const filepath &path, utime_t mtime, utime_t atime, bool followsym, int uid=-1, int gid=-1);
   int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
   int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
@@ -877,6 +906,10 @@ public:
   Inode *_ll_get_inode(inodeno_t ino);
   int ll_getattr(inodeno_t ino, struct stat *st, int uid = -1, int gid = -1);
   int ll_setattr(inodeno_t ino, struct stat *st, int mask, int uid = -1, int gid = -1);
+  int ll_getxattr(inodeno_t ino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
+  int ll_setxattr(inodeno_t ino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(inodeno_t ino, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(inodeno_t ino, char *list, size_t size, int uid=-1, int gid=-1);
   int ll_opendir(inodeno_t ino, void **dirpp, int uid = -1, int gid = -1);
   void ll_releasedir(void *dirp);
   int ll_readlink(inodeno_t ino, const char **value, int uid = -1, int gid = -1);
@@ -895,7 +928,6 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(inodeno_t, struct statvfs *stbuf);
-
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

@@ -100,6 +100,8 @@ class CInode : public MDSCacheObject {
   static const int STATE_FROZEN =      (1<<8);
   static const int STATE_AMBIGUOUSAUTH = (1<<9);
   static const int STATE_EXPORTINGCAPS = (1<<10);
+  static const int STATE_NEEDSRECOVER = (1<<11);
+  static const int STATE_RECOVERING = (1<<11);
 
   // -- waiters --
   //static const int WAIT_SLAVEAGREE  = (1<<0);
@@ -115,6 +117,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_FILELOCK_OFFSET = 5 + 3*SimpleLock::WAIT_BITS;
   static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_VERSIONLOCK_OFFSET = 5 + 5*SimpleLock::WAIT_BITS;
+  static const int WAIT_XATTRLOCK_OFFSET = 5 + 6*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY_MASK	= (0xffffffff);
 
@@ -129,6 +132,7 @@ class CInode : public MDSCacheObject {
   // inode contents proper
   inode_t          inode;        // the inode itself
   string           symlink;      // symlink dest, if symlink
+  map<string, bufferptr> xattrs;
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
@@ -248,8 +252,10 @@ public:
     linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
-    dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET)
+    dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET)
   {
+    memset(&inode, 0, sizeof(inode));
     state = 0;  
     if (auth) state_set(STATE_AUTH);
   };
@@ -333,6 +339,7 @@ public:
   ScatterLock dirfragtreelock;
   FileLock   filelock;
   ScatterLock dirlock;
+  SimpleLock xattrlock;
 
 
   SimpleLock* get_lock(int type) {
@@ -342,6 +349,7 @@ public:
     case CEPH_LOCK_ILINK: return &linklock;
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
     case CEPH_LOCK_IDIR: return &dirlock;
+    case CEPH_LOCK_IXATTR: return &xattrlock;
     }
     return 0;
   }
@@ -466,6 +474,7 @@ public:
       filelock.replicate_relax();
 
     dirlock.replicate_relax();
+    xattrlock.replicate_relax();
   }
 
 
@@ -560,7 +569,7 @@ class CInodeDiscover {
   inode_t    inode;
   string     symlink;
   fragtree_t dirfragtree;
-
+  map<string, bufferptr> xattrs;
   __s32        replica_nonce;
   
   __u32      authlock_state;
@@ -568,6 +577,7 @@ class CInodeDiscover {
   __u32      dirfragtreelock_state;
   __u32      filelock_state;
   __u32      dirlock_state;
+  __u32      xattrlock_state;
 
  public:
   CInodeDiscover() {}
@@ -575,6 +585,7 @@ class CInodeDiscover {
     inode = in->inode;
     symlink = in->symlink;
     dirfragtree = in->dirfragtree;
+    xattrs = in->xattrs;
 
     replica_nonce = nonce;
 
@@ -583,6 +594,7 @@ class CInodeDiscover {
     dirfragtreelock_state = in->dirfragtreelock.get_replica_state();
     filelock_state = in->filelock.get_replica_state();
     dirlock_state = in->dirlock.get_replica_state();
+    xattrlock_state = in->xattrlock.get_replica_state();
   }
   CInodeDiscover(bufferlist::iterator &p) {
     decode(p);
@@ -595,6 +607,7 @@ class CInodeDiscover {
     in->inode = inode;
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;
+    in->xattrs = xattrs;
     in->replica_nonce = replica_nonce;
   }
   void init_inode_locks(CInode *in) {
@@ -603,30 +616,35 @@ class CInodeDiscover {
     in->dirfragtreelock.set_state(dirfragtreelock_state);
     in->filelock.set_state(filelock_state);
     in->dirlock.set_state(dirlock_state);
+    in->xattrlock.set_state(xattrlock_state);
   }
   
   void encode(bufferlist &bl) const {
     ::encode(inode, bl);
     ::encode(symlink, bl);
     ::encode(dirfragtree, bl);
+    ::encode(xattrs, bl);
     ::encode(replica_nonce, bl);
     ::encode(authlock_state, bl);
     ::encode(linklock_state, bl);
     ::encode(dirfragtreelock_state, bl);
     ::encode(filelock_state, bl);
     ::encode(dirlock_state, bl);
+    ::encode(xattrlock_state, bl);
   }
 
   void decode(bufferlist::iterator &p) {
     ::decode(inode, p);
     ::decode(symlink, p);
     ::decode(dirfragtree, p);
+    ::decode(xattrs, p);
     ::decode(replica_nonce, p);
     ::decode(authlock_state, p);
     ::decode(linklock_state, p);
     ::decode(dirfragtreelock_state, p);
     ::decode(filelock_state, p);
     ::decode(dirlock_state, p);
+    ::decode(xattrlock_state, p);
   }  
 
 };

@@ -1082,7 +1082,12 @@ static void process_accept(struct ceph_connection *con)
 	spin_lock(&msgr->con_lock);
 	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
-		if (peer_cseq < existing->connect_seq) {
+		if (existing->delay == 0) {
+			dout(20, "process_accept replacing existing lossy %p\n",
+			     existing);
+			reset_connection(existing);
+			__replace_connection(msgr, existing, con);
+		} else if (peer_cseq < existing->connect_seq) {
 			if (peer_cseq == 0) {
 				/* reset existing connection */
 				reset_connection(existing);
@@ -1114,7 +1119,7 @@ static void process_accept(struct ceph_connection *con)
 				prepare_write_accept_reply(con, &tag_wait);
 			}
 		} else if (existing->connect_seq == 0 &&
-			  (peer_cseq > existing->connect_seq)) {
+			   peer_cseq > existing->connect_seq) {
 			/* we reset and already reconnecting */
 			prepare_write_accept_reply(con, &tag_reset);
 		} else {

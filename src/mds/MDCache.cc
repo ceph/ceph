@@ -148,9 +148,6 @@ CInode *MDCache::create_inode()
 {
   CInode *in = new CInode(this);
 
-  // zero
-  memset(&in->inode, 0, sizeof(inode_t));
-  
   // assign ino
   in->inode.ino = mds->idalloc->alloc_id();
   in->inode.version = 1;
@@ -209,7 +206,6 @@ void MDCache::remove_inode(CInode *o)
 CInode *MDCache::create_root_inode()
 {
   CInode *root = new CInode(this);
-  memset(&root->inode, 0, sizeof(inode_t));
   root->inode.ino = MDS_INO_ROOT;
   root->inode.version = 1;
   
@@ -261,7 +257,6 @@ CInode *MDCache::create_stray_inode(int whose)
   if (whose < 0) whose = mds->get_nodeid();
 
   CInode *in = new CInode(this, whose == mds->get_nodeid());
-  memset(&in->inode, 0, sizeof(inode_t));
   in->inode.ino = MDS_INO_STRAY(whose);
   
   // make it up (FIXME)
@@ -1784,7 +1779,7 @@ void MDCache::rejoin_send_rejoins()
   // nothing?
   if (mds->is_rejoin() && rejoins.empty()) {
     dout(10) << "nothing to rejoin" << dendl;
-    mds->rejoin_done();
+    rejoin_gather_finish();
   }
 }
 
@@ -2199,7 +2194,6 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 CInode *MDCache::rejoin_invent_inode(inodeno_t ino)
 {
   CInode *in = new CInode(this);
-  memset(&in->inode, 0, sizeof(inode_t));
   in->inode.ino = ino;
   in->state_set(CInode::STATE_REJOINUNDEF);
   add_inode(in);
@@ -2643,7 +2637,8 @@ void MDCache::rejoin_gather_finish()
   }
   
   mds->server->process_reconnected_caps();
-  
+  identify_files_to_recover();
+
   rejoin_send_acks();
 
   // did we already get our acks too?
@@ -2779,6 +2774,92 @@ void MDCache::rejoin_send_acks()
     mds->send_message_mds(p->second, p->first);
   
 }
+
+
+
+// ===============================================================================
+
+
+
+void MDCache::queue_file_recover(CInode *in)
+{
+  dout(10) << "queue_file_recover " << *in << dendl;
+  in->state_clear(CInode::STATE_NEEDSRECOVER);
+  in->state_set(CInode::STATE_RECOVERING);
+  in->auth_pin();
+  file_recover_queue.insert(in);
+}
+
+/*
+ * called after recovery to recover file sizes for previously opened (for write)
+ * files.  that is, those where max_size > size.
+ */
+void MDCache::identify_files_to_recover()
+{
+  if (!mds->server->failed_reconnects) {
+    dout(10) << "identify_files_to_recover -- all clients reconnected, nothing to do" << dendl;
+    return;
+  }
+
+  dout(10) << "identify_files_to_recover" << dendl;
+  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (!in->is_auth())
+      continue;
+    if (in->inode.max_size > in->inode.size) {
+      in->filelock.set_state(LOCK_LOCK);
+      queue_file_recover(in);
+    }
+  }
+}
+
+struct C_MDC_Recover : public Context {
+  MDCache *mdc;
+  CInode *in;
+  C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i) {}
+  void finish(int r) {
+    mdc->_recovered(in, r);
+  }
+};
+
+void MDCache::do_file_recover()
+{
+  dout(10) << "do_file_recover " << file_recover_queue.size() << " queued, "
+	   << file_recovering.size() << " recovering" << dendl;
+
+  while (file_recovering.size() < 5 &&
+	 !file_recover_queue.empty()) {
+    CInode *in = *file_recover_queue.begin();
+    file_recover_queue.erase(in);
+    file_recovering.insert(in);
+
+    dout(10) << "do_file_recover " << *in << dendl;
+    mds->filer->probe(in->inode, in->inode.max_size, &in->inode.size, false,
+		      0, new C_MDC_Recover(this, in));    
+  }
+}
+
+void MDCache::_recovered(CInode *in, int r)
+{
+  dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " for " << *in << dendl;
+
+  // make sure this is in "newest" inode struct, and doesn't get thrown out..
+  in->get_projected_inode()->size = in->inode.size;
+
+  file_recovering.erase(in);
+  in->state_clear(CInode::STATE_RECOVERING);
+
+  in->auth_unpin();
+
+  mds->locker->check_inode_max_size(in, true);
+
+  do_file_recover();
+}
+
+
+
 
 
 

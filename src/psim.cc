@@ -20,8 +20,8 @@ int main()
   int n = osdmap.get_max_osd();
   int count[n];
   for (int i=0; i<n; i++) {
-    osdmap.mark_up(i);
-    osdmap.mark_in(i);
+    osdmap.set_state(i, osdmap.get_state(i) | CEPH_OSD_UP);
+    osdmap.set_offload(i, CEPH_OSD_IN);
     count[i] = 0;
   }
 

@@ -14,7 +14,7 @@
 
 
 
-#include "FakeStore.h"
+#include "FileStore.h"
 #include "include/types.h"
 
 #include "FileJournal.h"
@@ -56,8 +56,8 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_fakestore) *_dout << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
-#define  derr(l)    if (l<=g_conf.debug_fakestore) *_derr << dbeginl << g_clock.now() << " fakestore(" << basedir << ") "
+#define  dout(l)    if (l<=g_conf.debug_filestore) *_dout << dbeginl << g_clock.now() << " filestore(" << basedir << ") "
+#define  derr(l)    if (l<=g_conf.debug_filestore) *_derr << dbeginl << g_clock.now() << " filestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
@@ -100,7 +100,7 @@ int do_listxattr(const char *fn, char *names, size_t len) {
 
 
 
-int FakeStore::statfs(struct statfs *buf)
+int FileStore::statfs(struct statfs *buf)
 {
   if (::statfs(basedir.c_str(), buf) < 0)
     return -errno;
@@ -111,7 +111,7 @@ int FakeStore::statfs(struct statfs *buf)
 /* 
  * sorry, these are sentitive to the pobject_t and coll_t typing.
  */ 
-void FakeStore::append_oname(const pobject_t &oid, char *s)
+void FileStore::append_oname(const pobject_t &oid, char *s)
 {
   assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
@@ -125,13 +125,13 @@ void FakeStore::append_oname(const pobject_t &oid, char *s)
   //parse_object(t+1);
 }
 
-void FakeStore::get_oname(pobject_t oid, char *s) 
+void FileStore::get_oname(pobject_t oid, char *s) 
 {
   sprintf(s, "%s/objects", basedir.c_str());
   append_oname(oid, s);
 }
 
-pobject_t FakeStore::parse_object(char *s)
+pobject_t FileStore::parse_object(char *s)
 {
   pobject_t o;
   assert(sizeof(o) == 28);
@@ -149,12 +149,12 @@ pobject_t FakeStore::parse_object(char *s)
   return o;
 }
 
-coll_t FakeStore::parse_coll(char *s)
+coll_t FileStore::parse_coll(char *s)
 {
   return strtoll(s, 0, 16);
 }
 
-void FakeStore::get_cdir(coll_t cid, char *s) 
+void FileStore::get_cdir(coll_t cid, char *s) 
 {
   assert(sizeof(cid) == 8);
 #ifdef __LP64__
@@ -164,7 +164,7 @@ void FakeStore::get_cdir(coll_t cid, char *s)
 #endif
 }
 
-void FakeStore::get_coname(coll_t cid, pobject_t oid, char *s) 
+void FileStore::get_coname(coll_t cid, pobject_t oid, char *s) 
 {
   get_cdir(cid, s);
   append_oname(oid, s);
@@ -173,12 +173,12 @@ void FakeStore::get_coname(coll_t cid, pobject_t oid, char *s)
 
 
 
-int FakeStore::mkfs()
+int FileStore::mkfs()
 {
   char cmd[200];
-  if (g_conf.fakestore_dev) {
+  if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
-    sprintf(cmd,"mount %s", g_conf.fakestore_dev);
+    sprintf(cmd,"mount %s", g_conf.filestore_dev);
     system(cmd);
   }
 
@@ -216,10 +216,10 @@ int FakeStore::mkfs()
     dout(10) << "mkfs no journal at " << fn << dendl;
   }
 
-  if (g_conf.fakestore_dev) {
+  if (g_conf.filestore_dev) {
     char cmd[100];
     dout(0) << "umounting" << dendl;
-    sprintf(cmd,"umount %s", g_conf.fakestore_dev);
+    sprintf(cmd,"umount %s", g_conf.filestore_dev);
     //system(cmd);
   }
 
@@ -228,12 +228,12 @@ int FakeStore::mkfs()
   return 0;
 }
 
-int FakeStore::mount() 
+int FileStore::mount() 
 {
-  if (g_conf.fakestore_dev) {
+  if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
     char cmd[100];
-    sprintf(cmd,"mount %s", g_conf.fakestore_dev);
+    sprintf(cmd,"mount %s", g_conf.filestore_dev);
     //system(cmd);
   }
 
@@ -247,21 +247,21 @@ int FakeStore::mount()
     return -errno;
   }
   
-  if (g_conf.fakestore_fake_collections) {
+  if (g_conf.filestore_fake_collections) {
     dout(0) << "faking collections (in memory)" << dendl;
     fake_collections = true;
   }
 
   // fake attrs? 
   // let's test to see if they work.
-  if (g_conf.fakestore_fake_attrs) {
+  if (g_conf.filestore_fake_attrs) {
     dout(0) << "faking attrs (in memory)" << dendl;
     fake_attrs = true;
   } else {
     char names[1000];
     r = do_listxattr(basedir.c_str(), names, 1000);
     if (r < 0) {
-      derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --fakestore_fake_attrs to fake them (in memory)." << dendl;
+      derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --filestore_fake_attrs to fake them (in memory)." << dendl;
       assert(0);
     }
   }
@@ -276,7 +276,7 @@ int FakeStore::mount()
   if (r == 0) {
     dout(0) << "mount detected btrfs" << dendl;
   } else {
-    dout(0) << "mount did NOT detect btrfs: " << strerror(r) << dendl;
+    dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
     ::close(btrfs_fd);
     btrfs_fd = -1;
   }
@@ -316,7 +316,7 @@ int FakeStore::mount()
   return 0;
 }
 
-int FakeStore::umount() 
+int FileStore::umount() 
 {
   dout(5) << "umount " << basedir << dendl;
   
@@ -334,10 +334,10 @@ int FakeStore::umount()
     btrfs_fd = -1;
   } 
 
-  if (g_conf.fakestore_dev) {
+  if (g_conf.filestore_dev) {
     char cmd[100];
     dout(0) << "umounting" << dendl;
-    sprintf(cmd,"umount %s", g_conf.fakestore_dev);
+    sprintf(cmd,"umount %s", g_conf.filestore_dev);
     //system(cmd);
   }
 
@@ -346,17 +346,17 @@ int FakeStore::umount()
 }
 
 
-int FakeStore::transaction_start()
+int FileStore::transaction_start()
 {
   if (btrfs_fd < 0)
     return 0;
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) 
-    derr(0) << "transaction_start got " << strerror(fd)
+    derr(0) << "transaction_start got " << strerror(errno)
 	    << " from btrfs open" << dendl;
-  if (int err = ::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
-    derr(0) << "transaction_start got " << strerror(err)
+  if (::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
+    derr(0) << "transaction_start got " << strerror(errno)
 	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
     return -errno;
@@ -365,7 +365,7 @@ int FakeStore::transaction_start()
   return fd;
 }
 
-void FakeStore::transaction_end(int fd)
+void FileStore::transaction_end(int fd)
 {
   if (btrfs_fd < 0)
     return;
@@ -377,7 +377,7 @@ void FakeStore::transaction_end(int fd)
 // --------------------
 // objects
 
-bool FakeStore::exists(pobject_t oid)
+bool FileStore::exists(pobject_t oid)
 {
   struct stat st;
   if (stat(oid, &st) == 0)
@@ -386,7 +386,7 @@ bool FakeStore::exists(pobject_t oid)
     return false;
 }
   
-int FakeStore::stat(pobject_t oid, struct stat *st)
+int FileStore::stat(pobject_t oid, struct stat *st)
 {
   dout(20) << "stat " << oid << dendl;
   char fn[200];
@@ -397,7 +397,7 @@ int FakeStore::stat(pobject_t oid, struct stat *st)
 }
 
  
-int FakeStore::remove(pobject_t oid, Context *onsafe) 
+int FileStore::remove(pobject_t oid, Context *onsafe) 
 {
   dout(20) << "remove " << oid << dendl;
   char fn[200];
@@ -410,7 +410,7 @@ int FakeStore::remove(pobject_t oid, Context *onsafe)
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::truncate(pobject_t oid, off_t size, Context *onsafe)
+int FileStore::truncate(pobject_t oid, off_t size, Context *onsafe)
 {
   dout(20) << "truncate " << oid << " size " << size << dendl;
 
@@ -421,7 +421,7 @@ int FakeStore::truncate(pobject_t oid, off_t size, Context *onsafe)
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::read(pobject_t oid, 
+int FileStore::read(pobject_t oid, 
                     off_t offset, size_t len,
                     bufferlist& bl) {
   dout(20) << "read " << oid << " len " << len << " off " << offset << dendl;
@@ -457,7 +457,7 @@ int FakeStore::read(pobject_t oid,
 }
 
 
-int FakeStore::write(pobject_t oid, 
+int FileStore::write(pobject_t oid, 
                      off_t offset, size_t len,
                      const bufferlist& bl, 
                      Context *onsafe)
@@ -509,7 +509,7 @@ int FakeStore::write(pobject_t oid,
   return did;
 }
 
-int FakeStore::clone(pobject_t oldoid, pobject_t newoid)
+int FileStore::clone(pobject_t oldoid, pobject_t newoid)
 {
   char ofn[200], nfn[200];
   get_oname(oldoid, ofn);
@@ -564,11 +564,11 @@ int FakeStore::clone(pobject_t oldoid, pobject_t newoid)
 }
 
 
-void FakeStore::sync_entry()
+void FileStore::sync_entry()
 {
   lock.Lock();
   utime_t interval;
-  interval.set_from_double(g_conf.fakestore_sync_interval);
+  interval.set_from_double(g_conf.filestore_sync_interval);
   while (!stop) {
     dout(20) << "sync_entry waiting for " << interval << dendl;
     sync_cond.WaitInterval(lock, interval);
@@ -594,13 +594,13 @@ void FakeStore::sync_entry()
   lock.Unlock();
 }
 
-void FakeStore::sync()
+void FileStore::sync()
 {
   Mutex::Locker l(lock);
   sync_cond.Signal();
 }
 
-void FakeStore::sync(Context *onsafe)
+void FileStore::sync(Context *onsafe)
 {
   journal_sync(onsafe);
   sync();
@@ -612,7 +612,7 @@ void FakeStore::sync(Context *onsafe)
 
 // objects
 
-int FakeStore::setattr(pobject_t oid, const char *name,
+int FileStore::setattr(pobject_t oid, const char *name,
 		       const void *value, size_t size,
 		       Context *onsafe) 
 {
@@ -631,7 +631,7 @@ int FakeStore::setattr(pobject_t oid, const char *name,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::setattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
   int r;
   if (fake_attrs) 
@@ -655,7 +655,7 @@ int FakeStore::setattrs(pobject_t oid, map<string,bufferptr>& aset)
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::getattr(pobject_t oid, const char *name,
+int FileStore::getattr(pobject_t oid, const char *name,
 		       void *value, size_t size) 
 {
   int r;
@@ -669,7 +669,7 @@ int FakeStore::getattr(pobject_t oid, const char *name,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::getattrs(pobject_t oid, map<string,bufferptr>& aset) 
 {
   int r;
   if (fake_attrs) 
@@ -694,7 +694,7 @@ int FakeStore::getattrs(pobject_t oid, map<string,bufferptr>& aset)
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe) 
+int FileStore::rmattr(pobject_t oid, const char *name, Context *onsafe) 
 {
   int r;
   if (fake_attrs) 
@@ -715,7 +715,7 @@ int FakeStore::rmattr(pobject_t oid, const char *name, Context *onsafe)
 
 // collections
 
-int FakeStore::collection_setattr(coll_t c, const char *name,
+int FileStore::collection_setattr(coll_t c, const char *name,
 				  void *value, size_t size,
 				  Context *onsafe) 
 {
@@ -734,7 +734,7 @@ int FakeStore::collection_setattr(coll_t c, const char *name,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::collection_rmattr(coll_t c, const char *name,
+int FileStore::collection_rmattr(coll_t c, const char *name,
 				 Context *onsafe) 
 {
   int r;
@@ -748,7 +748,7 @@ int FakeStore::collection_rmattr(coll_t c, const char *name,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::collection_getattr(coll_t c, const char *name,
+int FileStore::collection_getattr(coll_t c, const char *name,
 				  void *value, size_t size) 
 {
   int r;
@@ -762,7 +762,7 @@ int FakeStore::collection_getattr(coll_t c, const char *name,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
+int FileStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
   int r;
   if (fake_attrs) 
@@ -783,7 +783,7 @@ int FakeStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
+int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
   int r;
   if (fake_attrs) 
@@ -811,7 +811,7 @@ int FakeStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
 
 
 /*
-int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size) 
+int FileStore::collection_listattr(coll_t c, char *attrs, size_t size) 
 {
   if (fake_attrs) return collection_listattr(c, attrs, size);
   return 0;
@@ -819,7 +819,7 @@ int FakeStore::collection_listattr(coll_t c, char *attrs, size_t size)
 */
 
 
-int FakeStore::list_objects(list<pobject_t>& ls) 
+int FileStore::list_objects(list<pobject_t>& ls) 
 {
   char fn[200];
   sprintf(fn, "%s/objects", basedir.c_str());
@@ -844,7 +844,7 @@ int FakeStore::list_objects(list<pobject_t>& ls)
 // --------------------------
 // collections
 
-int FakeStore::list_collections(list<coll_t>& ls) 
+int FileStore::list_collections(list<coll_t>& ls) 
 {
   if (fake_collections) return collections.list_collections(ls);
 
@@ -866,7 +866,7 @@ int FakeStore::list_collections(list<coll_t>& ls)
   return 0;
 }
 
-int FakeStore::create_collection(coll_t c,
+int FileStore::create_collection(coll_t c,
 				 Context *onsafe) 
 {
   if (fake_collections) return collections.create_collection(c, onsafe);
@@ -883,7 +883,7 @@ int FakeStore::create_collection(coll_t c,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::destroy_collection(coll_t c,
+int FileStore::destroy_collection(coll_t c,
 				  Context *onsafe) 
 {
   if (fake_collections) return collections.destroy_collection(c, onsafe);
@@ -902,7 +902,7 @@ int FakeStore::destroy_collection(coll_t c,
   return 0;
 }
 
-int FakeStore::collection_stat(coll_t c, struct stat *st) 
+int FileStore::collection_stat(coll_t c, struct stat *st) 
 {
   if (fake_collections) return collections.collection_stat(c, st);
 
@@ -912,7 +912,7 @@ int FakeStore::collection_stat(coll_t c, struct stat *st)
   return r < 0 ? -errno:r;
 }
 
-bool FakeStore::collection_exists(coll_t c) 
+bool FileStore::collection_exists(coll_t c) 
 {
   if (fake_collections) return collections.collection_exists(c);
 
@@ -921,7 +921,7 @@ bool FakeStore::collection_exists(coll_t c)
 }
 
 
-int FakeStore::collection_add(coll_t c, pobject_t o,
+int FileStore::collection_add(coll_t c, pobject_t o,
 			      Context *onsafe) 
 {
   int r;
@@ -941,7 +941,7 @@ int FakeStore::collection_add(coll_t c, pobject_t o,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::collection_remove(coll_t c, pobject_t o,
+int FileStore::collection_remove(coll_t c, pobject_t o,
 				 Context *onsafe) 
 {
   int r;
@@ -959,7 +959,7 @@ int FakeStore::collection_remove(coll_t c, pobject_t o,
   return r < 0 ? -errno:r;
 }
 
-int FakeStore::collection_list(coll_t c, list<pobject_t>& ls) 
+int FileStore::collection_list(coll_t c, list<pobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 

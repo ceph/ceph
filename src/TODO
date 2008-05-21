@@ -8,23 +8,27 @@ big items
 - client, user authentication
 - cas
 
+bugs
+- -1 on mds file size recovery
+
 - mon needs to trim history
 - meta vs data crush rules
 - use libuuid
 
 userspace client
 - rm -rf on fragmented directory
-- move the size check(s) on read from _read() into FileCache
 - time out caps, wake up waiters on renewal
+  - link caps with mds session
 - validate dn leases
 - clean up ll_ interface, now that we have leases!
-- obey file_max
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
   - caps need a seq number; reap logic needs to be a bit smarter
   - also needs cope with mds failures
 
 kernel client
+- close WR|WRBUFFER -> WR transition overwrite hole
+  - get_cap_refs needs to block if want WR+WRBUFFER, issued WR, but still implemented WRBUFFER.
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
@@ -77,9 +81,6 @@ mds
   - mds lock last_change stamp?
 
 - fix file_data_version
-- on recovery, validate file sizes when max_size > size
-
-- coalesce lease revocations on dir inode + dentry, where possible
 
 - fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
@@ -87,7 +88,7 @@ mds
   - dentry versions vs dirfrags...
 - failure during reconnect vs clientmap.  
 
-- inode.rmtime (recursive mtime)?
+- inode.rctime (recursive mtime)?
 - make inode.size reflect directory size (number of entries)?
 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
@@ -147,29 +148,11 @@ rados snapshots
 
 objecter
 - maybe_request_map should set a timer event to periodically re-request.
-- transaction prepare/commit
+- transaction prepare/commit?
 - read+floor_lockout
 
 osd/rados
-- fix build_prior_set behavior.  needs to not always exclude currently down nodes.  e.g.,
-
-  1: A B
-  2:   B
-  3: A    -> prior_set should be <A,B>, bc B may have independently applied updates.
-
-  1: A B C
-  2:   B C
-  3: A   C -> prior_set can be <A,C>, bc C would carry any epoch 2 updates
-
- -> so: we need at least 1 osd from each epoch, IFF we make store sync on osdmap boundaries.
- 
- -> so, use calc_priors_during in build_prior, then make recovery code check for is_up
-
-- paxos replication (i.e. majority voting)?
-
-- transaction prepare/commit
-  - rollback
-  - rollback logging (to fix slow prepare vs rollback race)
+- how does an admin intervene when a pg needs a dead osd to repeer?
 
 - a more general fencing mechanism?  per-object granularity isn't usually a good match.
 
@@ -188,10 +171,7 @@ messenger
 - fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
 
 simplemessenger
-- fix/audit accept() logic to detect reset, do callback
 - close idle connections
-- take a look at RDS?  http://oss.oracle.com/projects/rds/
-
 
 objectcacher
 - merge clean bh's

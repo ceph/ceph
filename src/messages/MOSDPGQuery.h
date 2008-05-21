@@ -32,7 +32,8 @@ class MOSDPGQuery : public Message {
   MOSDPGQuery() {}
   MOSDPGQuery(epoch_t e, map<pg_t,PG::Query>& ls) :
     Message(MSG_OSD_PG_QUERY),
-    epoch(e), pg_list(ls) {
+    epoch(e) {
+    pg_list.swap(ls);
   }
   
   const char *get_type_name() { return "PGq"; }

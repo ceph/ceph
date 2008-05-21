@@ -459,6 +459,8 @@ void MDLog::_replay_thread()
     off_t pos = journaler->get_read_pos();
     bufferlist bl;
     bool r = journaler->try_read_entry(bl);
+    if (!r && journaler->get_error())
+      continue;
     assert(r);
     
     // unpack event

@@ -89,7 +89,7 @@ struct md_config_t {
   int debug_client;
   int debug_osd;
   int debug_ebofs;
-  int debug_fakestore;
+  int debug_filestore;
   int debug_journal;
   int debug_bdev;
   int debug_ns;
@@ -253,9 +253,12 @@ struct md_config_t {
   bool  osd_exclusive_caching;
   double osd_stat_refresh_interval;
 
+  int osd_min_pg_size_without_alive;
+
   int   osd_pg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;
+  int   osd_min_rep;
   int   osd_max_rep;
   int   osd_min_raid_width;
   int   osd_max_raid_width;
@@ -266,20 +269,19 @@ struct md_config_t {
   int   osd_age_time;
   int   osd_heartbeat_interval;  
   int   osd_heartbeat_grace;
-  double osd_failure_report_interval;
-  int   osd_pg_stats_interval;
+  int   osd_mon_report_interval;
   int   osd_replay_window;
   int   osd_max_pull;
   bool  osd_pad_pg_log;
 
   bool osd_auto_weight;
 
-  // fakestore
-  bool fakestore;
-  double   fakestore_sync_interval;
-  bool  fakestore_fake_attrs;
-  bool  fakestore_fake_collections;
-  const char  *fakestore_dev;
+  // filestore
+  bool filestore;
+  double   filestore_sync_interval;
+  bool  filestore_fake_attrs;
+  bool  filestore_fake_collections;
+  const char  *filestore_dev;
   
   // ebofs
   bool  ebofs;

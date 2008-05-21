@@ -22,6 +22,7 @@ extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
+extern int ceph_debug_inode;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
@@ -58,6 +59,7 @@ extern int ceph_debug_addr;
 		(unsigned int)(((n).sin_addr.s_addr)>>24) & 0xFF,	\
 		(unsigned int)(ntohs((n).sin_port))
 
+
 /*
  * subtract jiffies
  */
@@ -73,9 +75,10 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_FSID     1
 #define CEPH_MOUNT_NOSHARE  2  /* don't share client with other mounts */
 #define CEPH_MOUNT_MYIP     4  /* specified my ip */
+#define CEPH_MOUNT_UNSAFE_WRITES 8
 
 struct ceph_mount_args {
-	int mntflags;
+	int sb_flags;
 	int flags;
 	struct ceph_fsid fsid;
 	struct ceph_entity_addr my_addr;
@@ -190,6 +193,9 @@ struct ceph_inode_info {
 	struct list_head i_lease_item; /* mds session list */
 
 	struct rb_root i_fragtree;
+
+	int i_xattr_len;
+	char *i_xattr_data;
 
 	struct list_head i_caps;
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
@@ -442,7 +448,11 @@ extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
-			      struct kstat *stat);
+			struct kstat *stat);
+extern int ceph_setxattr(struct dentry *, const char *,const void *,size_t,int);
+extern ssize_t ceph_getxattr(struct dentry *, const char *, void *, size_t);
+extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
+extern int ceph_removexattr(struct dentry *, const char *);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

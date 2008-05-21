@@ -23,7 +23,7 @@
 
 #include "mon/MonMap.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "PG.h"
 
 #include "common/DecayCounter.h"
@@ -79,7 +79,8 @@ public:
 private:
   /** superblock **/
   OSDSuperblock superblock;
-  epoch_t  boot_epoch;      
+  epoch_t boot_epoch;      
+  epoch_t last_active_epoch;
 
   void write_superblock();
   void write_superblock(ObjectStore::Transaction& t);
@@ -317,29 +318,51 @@ private:
   void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
 
 
-  // -- pg stats --
-  Mutex pg_stat_queue_lock;
-  set<pg_t> pg_stat_queue;
-  bool osd_stat_updated;
+  // == monitor interaction ==
+  utime_t last_mon_report;
 
-  class C_Stats : public Context {
+  void do_mon_report();
+
+  struct C_MonReport : public Context {
     OSD *osd;
-  public:
-    C_Stats(OSD *o) : osd(o) {}
-    void finish(int r) { 
-      osd->send_pg_stats(); 
+    C_MonReport(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->do_mon_report();
     }
   };
+
+  // -- boot --
+  bool booting, boot_pending;
+
+  void send_boot();
+
+  // -- alive --
+  epoch_t up_thru_wanted;
+  epoch_t up_thru_pending;
+
+  void queue_want_up_thru(epoch_t want);
+  void send_alive();
+
+  // -- failures --
+  set<int> failure_queue;
+  set<int> failure_pending;
+
+  void queue_failure(int n) {
+    failure_queue.insert(n);
+  }
+  void send_failures();
+  void handle_pgstats_ack(class MPGStatsAck *ack);
+
+  // -- pg stats --
+  Mutex pg_stat_queue_lock;
+  map<pg_t,eversion_t> pg_stat_queue;
+  map<pg_t,eversion_t> pg_stat_pending;
+  bool osd_stat_updated;
+  bool osd_stat_pending;
+
   void send_pg_stats(); 
 
 
-  // -- failures --
-  set<int> pending_failures;
-  utime_t last_failure_report;
-  void queue_failure(int n) {
-    pending_failures.insert(n);
-  }
-  void maybe_report_failures();
 
   // -- tids --
   // for ops i issue

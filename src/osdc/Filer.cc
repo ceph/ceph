@@ -40,38 +40,51 @@ public:
   Filer *filer;
   Probe *probe;
   object_t oid;
-  off_t size;
+  __u64 size;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o), size(0) {}
   void finish(int r) {
     filer->_probed(probe, oid, size);    
   }  
 };
 
-int Filer::probe_fwd(inode_t& inode,
-		     off_t start_from,
-		     off_t *end,
-		     int flags,
-		     Context *onfinish) 
+int Filer::probe(inode_t& inode,
+		 __u64 start_from,
+		 __u64 *end,
+		 bool fwd,
+		 int flags,
+		 Context *onfinish) 
 {
-  dout(10) << "probe_fwd " << hex << inode.ino << dec << " starting from " << start_from << dendl;
+  dout(10) << "probe " << (fwd ? "fwd ":"bwd ")
+	   << hex << inode.ino << dec
+	   << " starting from " << start_from
+	   << dendl;
 
-  Probe *probe = new Probe(inode, start_from, end, flags, onfinish);
-
+  Probe *probe = new Probe(inode, start_from, end, flags, fwd, onfinish);
+  
   // period (bytes before we jump unto a new set of object(s))
-  off_t period = ceph_file_layout_period(inode.layout);
-
+  __u64 period = ceph_file_layout_period(inode.layout);
+  
   // start with 1+ periods.
   probe->probing_len = period;
-  if (start_from % period) 
-    probe->probing_len += period - (start_from % period);
+  if (probe->fwd) {
+    if (probe->fwd)
+      probe->probing_len += period - (start_from % period);
+  } else {
+    if (probe->fwd)
+      probe->probing_len = start_from % period;
+    probe->from -= probe->probing_len;
+  }
   
   _probe(probe);
   return 0;
 }
 
+
 void Filer::_probe(Probe *probe)
 {
-  dout(10) << "_probe " << hex << probe->inode.ino << dec << " " << probe->from << "~" << probe->probing_len << dendl;
+  dout(10) << "_probe " << hex << probe->inode.ino << dec 
+	   << " " << probe->from << "~" << probe->probing_len 
+	   << dendl;
   
   // map range onto objects
   file_to_extents(probe->inode.ino, &probe->inode.layout, probe->from, probe->probing_len, probe->probing);
@@ -85,7 +98,7 @@ void Filer::_probe(Probe *probe)
   }
 }
 
-void Filer::_probed(Probe *probe, object_t oid, off_t size)
+void Filer::_probed(Probe *probe, object_t oid, __u64 size)
 {
   dout(10) << "_probed " << probe->inode.ino << " object " << hex << oid << dec << " has size " << size << dendl;
 
@@ -97,11 +110,15 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
     return;  // waiting for more!
 
   // analyze!
-  off_t end = 0;
+  __u64 end = 0;
+
+  if (!probe->fwd)
+    probe->probing.reverse();
+
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
-    off_t shouldbe = p->length+p->start;
+    __u64 shouldbe = p->length+p->start;
     dout(10) << "_probed  " << probe->inode.ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known[p->oid]
@@ -110,15 +127,16 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
     if (probe->known[p->oid] < 0) { end = -1; break; } // error!
 
     assert(probe->known[p->oid] <= shouldbe);
-    if (shouldbe == probe->known[p->oid]) continue;  // keep going
+    if (shouldbe == probe->known[p->oid] && probe->fwd)
+      continue;  // keep going
    
     // aha, we found the end!
     // calc offset into buffer_extent to get distance from probe->from.
-    off_t oleft = probe->known[p->oid] - p->start;
+    __u64 oleft = probe->known[p->oid] - p->start;
     for (map<size_t,size_t>::iterator i = p->buffer_extents.begin();
 	 i != p->buffer_extents.end();
 	 i++) {
-      if (oleft <= (off_t)i->second) {
+      if (oleft <= (__u64)i->second) {
 	end = probe->from + i->first + oleft;
 	dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
 		 << ", from was " << probe->from << ", end is " << end 
@@ -133,9 +151,17 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
   if (end == 0) {
     // keep probing!
     dout(10) << "_probed didn't find end, probing further" << dendl;
-    off_t period = ceph_file_layout_period(probe->inode.layout);
-    probe->from += probe->probing_len;
-    probe->probing_len = period;
+    __u64 period = ceph_file_layout_period(probe->inode.layout);
+    if (probe->fwd) {
+      probe->from += probe->probing_len;
+      assert(probe->from % period == 0);
+      probe->probing_len = period;
+    } else {
+      // previous period.
+      assert(probe->from % period == 0);
+      probe->probing_len -= period;
+      probe->from -= period;
+    }
     _probe(probe);
     return;
   }
@@ -150,14 +176,14 @@ void Filer::_probed(Probe *probe, object_t oid, off_t size)
   }
 
   // done!  finish and clean up.
-  probe->onfinish->finish(end > 0 ? 0:-1);
+  probe->onfinish->finish(end >= 0 ? 0:-1);
   delete probe->onfinish;
   delete probe;
 }
 
 
 void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-                            off_t offset, size_t len,
+                            __u64 offset, size_t len,
                             list<ObjectExtent>& extents,
 			    objectrev_t rev) 
 {
@@ -175,18 +201,18 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
   __u32 su = ceph_file_layout_su(*layout);
   __u32 stripe_count = ceph_file_layout_stripe_count(*layout);
   assert(object_size >= su);
-  off_t stripes_per_object = object_size / su;
+  __u64 stripes_per_object = object_size / su;
   dout(20) << " stripes_per_object " << stripes_per_object << dendl;
 
-  off_t cur = offset;
-  off_t left = len;
+  __u64 cur = offset;
+  __u64 left = len;
   while (left > 0) {
     // layout into objects
-    off_t blockno = cur / su;          // which block
-    off_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
-    off_t stripepos = blockno % stripe_count;   // which object in the object set (X)
-    off_t objectsetno = stripeno / stripes_per_object;       // which object set
-    off_t objectno = objectsetno * stripe_count + stripepos;  // object id
+    __u64 blockno = cur / su;          // which block
+    __u64 stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
+    __u64 stripepos = blockno % stripe_count;   // which object in the object set (X)
+    __u64 objectsetno = stripeno / stripes_per_object;       // which object set
+    __u64 objectno = objectsetno * stripe_count + stripepos;  // object id
     
     // find oid, extent
     ObjectExtent *ex = 0;
@@ -200,18 +226,18 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     }
     
     // map range into object
-    off_t block_start = (stripeno % stripes_per_object)*su;
-    off_t block_off = cur % su;
-    off_t max = su - block_off;
+    __u64 block_start = (stripeno % stripes_per_object)*su;
+    __u64 block_off = cur % su;
+    __u64 max = su - block_off;
     
-    off_t x_offset = block_start + block_off;
-    off_t x_len;
+    __u64 x_offset = block_start + block_off;
+    __u64 x_len;
     if (left > max)
       x_len = max;
     else
       x_len = left;
     
-    if (ex->start + (off_t)ex->length == x_offset) {
+    if (ex->start + (__u64)ex->length == x_offset) {
       // add to extent
       ex->length += x_len;
     } else {

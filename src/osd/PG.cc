@@ -400,17 +400,17 @@ void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
     if (omissing.is_missing(p->first)) {
       assert(omissing.is_missing(p->first, p->second));
       if (omissing.loc.count(p->first)) {
-        dout(10) << "proc_missing missing " << p->first << " " << p->second
-                 << " on osd" << omissing.loc[p->first] << dendl;
+        dout(10) << "proc_missing " << p->first << " " << p->second
+                 << " is on osd" << omissing.loc[p->first] << dendl;
         missing.loc[p->first] = omissing.loc[p->first];
       } else {
-        dout(10) << "proc_missing missing " << p->first << " " << p->second
+        dout(10) << "proc_missing " << p->first << " " << p->second
                  << " also LOST on source, osd" << fromosd << dendl;
       }
     } 
     else if (p->second <= olog.top) {
-      dout(10) << "proc_missing missing " << p->first << " " << p->second
-               << " on source, osd" << fromosd << dendl;
+      dout(10) << "proc_missing " << p->first << " " << p->second
+               << " is on source, osd" << fromosd << dendl;
       missing.loc[p->first] = fromosd;
     } else {
       dout(10) << "proc_missing " << p->first << " " << p->second
@@ -507,56 +507,148 @@ ostream& PG::Log::print(ostream& out) const
 /******* PG ***********/
 void PG::build_prior()
 {
+  if (1) {
+    // sanity check
+    for (map<int,Info>::iterator it = peer_info.begin();
+	 it != peer_info.end();
+	 it++)
+      assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
+  }
+
+  /*
+   * We have to be careful to gracefully deal with situations like
+   * so. Say we have a power outage or something that takes out both
+   * OSDs, but the monitor doesn't mark them down in the same epoch.
+   * The history may look like
+   *
+   *  1: A B
+   *  2:   B
+   *  3:       let's say B dies for good, too (say, from the power spike) 
+   *  4: A
+   *
+   * which makes it look like B may have applied updates to the PG
+   * that we need in order to proceed.  This sucks...
+   *
+   * To minimize the risk of this happening, we CANNOT go active if
+   * any OSDs in the prior set are down until we send an MOSDAlive to
+   * the monitor such that the OSDMap sets osd_up_thru to an epoch.
+   * Then, we have something like
+   *
+   *  1: A B
+   *  2:   B   alive_thru[B]=0
+   *  3:
+   *  4: A
+   *
+   * -> we can ignore B, bc it couldn't have gone active (alive_thru
+   *    still 0).
+   *
+   * or,
+   *
+   *  1: A B
+   *  2:   B   alive_thru[B]=0
+   *  3:   B   alive_thru[B]=2
+   *  4:
+   *  5: A    
+   *
+   * -> we must wait for B, bc it was alive through 2, and could have
+        written to the pg.
+   *
+   * If B is really dead, then an administrator will need to manually
+   * intervene in some as-yet-undetermined way.  :)
+   */
+
   // build prior set.
   prior_set.clear();
   
-  // current
+  // current nodes, of course.
   for (unsigned i=1; i<acting.size(); i++)
     prior_set.insert(acting[i]);
 
-  // and prior map(s), if OSDs are still up
-  for (epoch_t epoch = MAX(1, last_epoch_started_any);
-       epoch < osd->osdmap->get_epoch();
-       epoch++) {
-    OSDMap omap;
-    osd->get_map(epoch, omap);
+  // and prior PG mappings.  move backwards in time.
+  state_clear(PG_STATE_CRASHED);
+  bool some_down = false;
+
+  must_notify_mon = false;
+
+  // for each acting set, we need to know same_since and last_epoch
+  epoch_t first_epoch = info.history.same_since;
+  epoch_t last_epoch = first_epoch - 1;
+  epoch_t stop = MAX(1, info.history.last_epoch_started);
+
+  dout(10) << "build_prior considering interval " << first_epoch << " down to " << stop << dendl;
+  OSDMap *nextmap = new OSDMap;
+  osd->get_map(last_epoch, *nextmap);
+
+  for (; last_epoch >= stop; last_epoch = first_epoch-1) {
+    OSDMap *lastmap = nextmap;
+    assert(last_epoch == lastmap->get_epoch());
     
     vector<int> acting;
-    omap.pg_to_acting_osds(get_pgid(), acting);
+    lastmap->pg_to_acting_osds(get_pgid(), acting);
     
+    // calc first_epoch, first_map
+    nextmap = new OSDMap;
+    for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
+      osd->get_map(first_epoch-1, *nextmap);
+      vector<int> t;
+      nextmap->pg_to_acting_osds(get_pgid(), t);
+      if (t != acting)
+	break;
+    }
+
+    if (acting.empty()) {
+      dout(20) << "build_prior epochs " << first_epoch << "-" << last_epoch << " empty" << dendl;
+      continue;
+    }
+
+    bool maybe_went_rw = 
+      lastmap->get_up_thru(acting[0]) >= first_epoch &&
+      lastmap->get_up_from(acting[0]) < first_epoch;
+
+    dout(10) << "build_prior epochs " << first_epoch << "-" << last_epoch << " " << acting
+	     << " - primary osd" << acting[0]
+	     << " up [" << lastmap->get_up_from(acting[0]) << ", " << lastmap->get_up_thru(acting[0]) << "]"
+	     << (maybe_went_rw ? " -> maybe went rw":"")
+	     << dendl;
+    
+    int num_still_up_or_clean = 0;
     for (unsigned i=0; i<acting.size(); i++) {
-      dout(10) << "build prior considering epoch " << epoch << " osd" << acting[i] << dendl;
-      if (osd->osdmap->is_up(acting[i]) &&  // is up now
-          acting[i] != osd->whoami)         // and is not me
-        prior_set.insert(acting[i]);
+      if (osd->osdmap->is_up(acting[i])) {  // is up now
+	if (acting[i] != osd->whoami)       // and is not me
+	  prior_set.insert(acting[i]);
+
+	// has it been up this whole time?
+	if (osd->osdmap->get_up_from(acting[i]) <= first_epoch)
+	  num_still_up_or_clean++;
+      } else {
+	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
+	must_notify_mon = true;
+
+	// fixme: how do we identify a "clean" shutdown anyway?
+
+	if (i == 0) {
+	  if (maybe_went_rw) {
+	    dout(10) << "build_prior  pg possibly went active+rw in epoch " 
+		     << (lastmap->get_up_thru(acting[i]) + 1) << dendl;
+	    some_down = true;
+	    prior_set.insert(acting[i]);
+	  }
+	}
+      }
+    }
+
+    if (num_still_up_or_clean == 0) {
+      dout(10) << "build_prior  none of " << acting << " still up or cleanly shutdown, pg crashed" << dendl;
+      state_set(PG_STATE_CRASHED);
     }
   }
 
-  dout(10) << "build_prior built " << prior_set << dendl;
+  dout(10) << "build_prior = " << prior_set
+	   << (is_crashed() ? " crashed":"")
+	   << (some_down ? " some_down":"")
+	   << (must_notify_mon ? " must_notify_mon":"")
+	   << dendl;
 }
-
-void PG::adjust_prior()
-{
-  assert(!prior_set.empty());
-
-  // raise last_epoch_started_any
-  epoch_t max = 0;
-  for (map<int,Info>::iterator it = peer_info.begin();
-       it != peer_info.end();
-       it++) {
-    if (it->second.last_epoch_started > max)
-      max = it->second.last_epoch_started;
-  }
-
-  dout(10) << "adjust_prior last_epoch_started_any " 
-           << last_epoch_started_any << " -> " << max << dendl;
-  assert(max > last_epoch_started_any);
-  last_epoch_started_any = max;
-
-  // rebuild prior set
-  build_prior();
-}
-
 
 void PG::clear_primary_state()
 {
@@ -569,12 +661,11 @@ void PG::clear_primary_state()
   uptodate_set.clear();
   peer_info_requested.clear();
   peer_log_requested.clear();
+  peer_summary_requested.clear();
   peer_info.clear();
   peer_missing.clear();
   
   stat_object_temp_rd.clear();
-
-  last_epoch_started_any = info.last_epoch_started;
 }
 
 void PG::peer(ObjectStore::Transaction& t, 
@@ -614,61 +705,7 @@ void PG::peer(ObjectStore::Transaction& t,
   
   // -- ok, we have all (prior_set) info.  (and maybe others.)
 
-  // did we crash?
-  dout(10) << " last_epoch_started_any " << last_epoch_started_any << dendl;
-  if (last_epoch_started_any) {
-    OSDMap omap;
-    osd->get_map(last_epoch_started_any, omap);
-    
-    // start with the last active set of replicas
-    set<int> last_started;
-    vector<int> acting;
-    bool cleanly_down = true;
-    omap.pg_to_acting_osds(get_pgid(), acting);
-    for (unsigned i=0; i<acting.size(); i++)
-      last_started.insert(acting[i]);
-
-    // make sure at least one of them is still up
-    for (epoch_t e = last_epoch_started_any+1;
-         e <= osd->osdmap->get_epoch();
-         e++) {
-      OSDMap omap;
-      osd->get_map(e, omap);
-      
-      set<int> still_up;
-
-      for (set<int>::iterator i = last_started.begin();
-           i != last_started.end();
-           i++) {
-        //dout(10) << " down in epoch " << e << " is " << omap.get_down_osds() << dendl;
-        if (omap.is_up(*i))
-          still_up.insert(*i);
-	else if (!omap.is_down_clean(*i))
-	  cleanly_down = false;	   
-      }
-
-      last_started.swap(still_up);
-      //dout(10) << " still active as of epoch " << e << ": " << last_started << dendl;
-    }
-    
-    if (last_started.empty()) {
-      if (cleanly_down) {
-	dout(10) << " cleanly stopped since epoch " << last_epoch_started_any << dendl;
-      } else {
-	dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-	state_set(PG_STATE_CRASHED);
-      }
-    } else {
-      dout(10) << " still active from last started: " << last_started << dendl;
-    }
-  } else if (osd->osdmap->get_epoch() > info.epoch_created) {  // FIXME hrm is htis right?
-    dout(10) << " crashed since epoch " << last_epoch_started_any << dendl;
-    state_set(PG_STATE_CRASHED);
-  }    
-
-  dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
-
-
+  dout(10) << " have prior_set info.  peers_complete_thru " << peers_complete_thru << dendl;
 
 
   /** CREATE THE MASTER PG::Log *********/
@@ -816,6 +853,20 @@ void PG::peer(ObjectStore::Transaction& t,
   assert(missing.num_lost() == 0);
   assert(info.last_complete >= log.bottom || log.backlog);
 
+  // -- do need to notify the monitor?
+  if (must_notify_mon) {
+    if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_since) {
+      dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
+	       << " < same_since " << info.history.same_since
+	       << ", must notify monitor" << dendl;
+      osd->queue_want_up_thru(info.history.same_since);
+      return;
+    } else {
+      dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
+	       << " >= same_since " << info.history.same_since
+	       << ", all is well" << dendl;
+    }
+  }
 
   // -- crash recovery?
   if (is_crashed()) {
@@ -828,6 +879,10 @@ void PG::peer(ObjectStore::Transaction& t,
     // -- ok, activate!
     activate(t, activator_map);
   }
+  else if (is_all_uptodate()) 
+    finish_recovery();
+
+  update_stats(); // update stats
 }
 
 
@@ -844,7 +899,7 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(PG_STATE_CRASHED);
     state_clear(PG_STATE_REPLAY);
   }
-  last_epoch_started_any = info.last_epoch_started = osd->osdmap->get_epoch();
+  info.history.last_epoch_started = osd->osdmap->get_epoch();
   
   if (role == 0) {    // primary state
     peers_complete_thru = eversion_t(0,0);  // we don't know (yet)!
@@ -1012,6 +1067,27 @@ void PG::finish_recovery()
 }
 
 
+void PG::purge_strays()
+{
+  dout(10) << "purge_strays " << stray_set << dendl;
+  
+  for (set<int>::iterator p = stray_set.begin();
+       p != stray_set.end();
+       p++) {
+    dout(10) << "sending PGRemove to osd" << *p << dendl;
+    set<pg_t> ls;
+    ls.insert(info.pgid);
+    MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
+    osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
+
+    peer_info.erase(*p);
+  }
+
+  stray_set.clear();
+}
+
+
+
 
 void PG::update_stats()
 {
@@ -1030,7 +1106,7 @@ void PG::update_stats()
   // put in osd stat_queue
   osd->pg_stat_queue_lock.Lock();
   if (is_primary())
-    osd->pg_stat_queue.insert(info.pgid);    
+    osd->pg_stat_queue[info.pgid] = info.last_update;    
   osd->osd_stat_updated = true;
   osd->pg_stat_queue_lock.Unlock();
 }
@@ -1052,10 +1128,12 @@ void PG::write_log(ObjectStore::Transaction& t)
     if (bl.length() % 4096 == 0)
       ondisklog.block_map[bl.length()] = p->version;
     ::encode(*p, bl);
+    /*
     if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
       bufferptr bp(4096 - sizeof(*p));
       bl.push_back(bp);
     }
+    */
   }
   ondisklog.top = bl.length();
   
@@ -1066,6 +1144,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   t.collection_setattr(info.pgid, "info", &info, sizeof(info)); 
+
+  dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }
 
 void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v) 
@@ -1103,18 +1183,20 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 }
 
 
-void PG::append_log(ObjectStore::Transaction& t, PG::Log::Entry& logentry, 
+void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry, 
                     eversion_t trim_to)
 {
   dout(10) << "append_log " << ondisklog.top << " " << logentry << dendl;
 
   // write entry on disk
   bufferlist bl;
-  bl.append( (char*)&logentry, sizeof(logentry) );
+  ::encode(logentry, bl);
+  /*
   if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
     bufferptr bp(4096 - sizeof(logentry));
     bl.push_back(bp);
   }
+  */
   t.write( info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
@@ -1160,10 +1242,11 @@ void PG::read_log(ObjectStore *store)
     }
     
     PG::Log::Entry e;
-    off_t pos = ondisklog.bottom;
+    bufferlist::iterator p = bl.begin();
     assert(log.log.empty());
-    while (pos < ondisklog.top) {
-      bl.copy(pos-ondisklog.bottom, sizeof(e), (char*)&e);
+    while (!p.end()) {
+      ::decode(e, p);
+      off_t pos = ondisklog.bottom + p.get_off();
       dout(10) << "read_log " << pos << " " << e << dendl;
 
       if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
@@ -1173,11 +1256,13 @@ void PG::read_log(ObjectStore *store)
       } else {
 	dout(10) << "read_log ignoring entry at " << pos << dendl;
       }
-      
+
+      /*
       if (g_conf.osd_pad_pg_log)   // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
 	pos += 4096;
       else
 	pos += sizeof(e);
+      */
     }
   }
   log.top = info.last_update;

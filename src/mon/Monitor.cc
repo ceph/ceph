@@ -46,8 +46,25 @@
 #define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << whoami << (is_starting() ? (const char*)"(starting)":(is_leader() ? (const char*)"(leader)":(is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << " "
 
-
-void Monitor::preinit()
+Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
+  whoami(w), 
+  messenger(m),
+  monmap(map),
+  timer(lock), tick_timer(0),
+  store(s),
+  
+  state(STATE_STARTING), stopping(false),
+  
+  elector(this, w),
+  mon_epoch(0), 
+  leader(0),
+  
+  paxos_mdsmap(this, w, PAXOS_MDSMAP),
+  paxos_osdmap(this, w, PAXOS_OSDMAP),
+  paxos_clientmap(this, w, PAXOS_CLIENTMAP),
+  paxos_pgmap(this, w, PAXOS_PGMAP),
+  
+  osdmon(0), mdsmon(0), clientmon(0)
 {
   osdmon = new OSDMonitor(this, &paxos_osdmap);
   mdsmon = new MDSMonitor(this, &paxos_mdsmap);
@@ -55,13 +72,20 @@ void Monitor::preinit()
   pgmon = new PGMonitor(this, &paxos_pgmap);
 }
 
+Monitor::~Monitor()
+{
+  delete osdmon;
+  delete mdsmon;
+  delete clientmon;
+  delete pgmon;
+  delete messenger;
+}
+
 void Monitor::init()
 {
   lock.Lock();
   
   dout(1) << "init fsid " << monmap->fsid << dendl;
-  
-  preinit();
   
   // init paxos
   paxos_osdmap.init();
@@ -95,39 +119,16 @@ void Monitor::shutdown()
   
   elector.shutdown();
   
-  if (is_leader()) {
-    // stop osds.
-    set<int32_t> ls;
-    osdmon->osdmap.get_all_osds(ls);
-    for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
-      if (osdmon->osdmap.is_down(*it)) continue;
-      dout(10) << "sending shutdown to osd" << *it << dendl;
-      messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
-			      osdmon->osdmap.get_inst(*it));
-    }
-    osdmon->mark_all_down();
-    
-    // monitors too.
-    for (unsigned i=0; i<monmap->size(); i++)
-      if ((int)i != whoami)
-	messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
-				monmap->get_inst(i));
-  }
-  
+  // clean up
+  osdmon->shutdown();
+  mdsmon->shutdown();
+  clientmon->shutdown();
+  pgmon->shutdown();
+
   // cancel all events
   cancel_tick();
   timer.cancel_all();
-  timer.join();
-  
-  // unmount my local storage
-  if (store) 
-    delete store;
-  
-  // clean up
-  if (osdmon) delete osdmon;
-  if (mdsmon) delete mdsmon;
-  if (clientmon) delete clientmon;
-  if (pgmon) delete pgmon;
+  timer.join();  
   
   // die.
   messenger->shutdown();
@@ -221,7 +222,13 @@ void Monitor::handle_command(MMonCommand *m)
       return;
     }
     if (m->cmd[0] == "stop") {
-      do_stop();
+      shutdown();
+      reply_command(m, 0, "stopping");
+      return;
+    }
+    if (m->cmd[0] == "stop_cluster") {
+      stop_cluster();
+      reply_command(m, 0, "initiating cluster shutdown");
       return;
     }
     rs = "unrecognized subsystem";
@@ -245,9 +252,9 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   delete m;
 }
 
-void Monitor::do_stop()
+void Monitor::stop_cluster()
 {
-  dout(0) << "do_stop -- initiating shutdown" << dendl;
+  dout(0) << "stop_cluster -- initiating shutdown" << dendl;
   stopping = true;
   mdsmon->do_stop();
 }
@@ -286,6 +293,7 @@ void Monitor::dispatch(Message *m)
     case MSG_OSD_BOOT:
     case MSG_OSD_IN:
     case MSG_OSD_OUT:
+    case MSG_OSD_ALIVE:
       osdmon->dispatch(m);
       break;
 
@@ -368,6 +376,26 @@ void Monitor::handle_shutdown(Message *m)
   assert(m->get_source().is_mon());
   if (m->get_source().num() == get_leader()) {
     dout(1) << "shutdown from leader " << m->get_source() << dendl;
+
+    if (is_leader()) {
+      // stop osds.
+      set<int32_t> ls;
+      osdmon->osdmap.get_all_osds(ls);
+      for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
+	if (osdmon->osdmap.is_down(*it)) continue;
+	dout(10) << "sending shutdown to osd" << *it << dendl;
+	messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
+				osdmon->osdmap.get_inst(*it));
+      }
+      osdmon->mark_all_down();
+      
+      // monitors too.
+      for (unsigned i=0; i<monmap->size(); i++)
+	if ((int)i != whoami)
+	  messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
+				  monmap->get_inst(i));
+    }
+
     shutdown();
   } else {
     dout(1) << "ignoring shutdown from non-leader " << m->get_source() << dendl;
@@ -434,8 +462,6 @@ void Monitor::tick()
  */
 int Monitor::mkfs()
 {
-  preinit();
-
   // create it
   int err = store->mkfs();
   if (err < 0) {

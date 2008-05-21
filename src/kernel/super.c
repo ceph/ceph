@@ -155,6 +155,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_fragtree = RB_ROOT;
 
+	ci->i_xattr_len = 0;
+	ci->i_xattr_data = 0;
+
 	INIT_LIST_HEAD(&ci->i_caps);
 	for (i = 0; i < STATIC_CAPS; i++)
 		ci->i_static_caps[i].mds = -1;
@@ -194,6 +197,7 @@ static void ceph_destroy_inode(struct inode *inode)
 		rb_erase(n, &ci->i_fragtree);
 		kfree(frag);
 	}
+	kfree(ci->i_xattr_data);
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
@@ -328,12 +332,14 @@ enum {
 	Opt_debug_mdsc,
 	Opt_debug_osdc,
 	Opt_debug_addr,
+	Opt_debug_inode,
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
 	Opt_osdtimeout,
 	/* int args above */
 	Opt_ip,
+	Opt_unsafewrites,
 };
 
 static match_table_t arg_tokens = {
@@ -345,6 +351,7 @@ static match_table_t arg_tokens = {
 	{Opt_debug_mdsc, "debug_mdsc=%d"},
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_debug_addr, "debug_addr=%d"},
+	{Opt_debug_inode, "debug_inode=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
@@ -352,6 +359,7 @@ static match_table_t arg_tokens = {
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
+	{Opt_unsafewrites, "unsafewrites"},
 	{-1, NULL}
 };
 
@@ -404,7 +412,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	memset(args, 0, sizeof(*args));
 
 	/* defaults */
-	args->mntflags = flags;
+	args->sb_flags = flags;
 	args->flags = 0;
 	args->osd_timeout = 5;  /* seconds */
 
@@ -497,6 +505,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_debug_addr:
 			ceph_debug_addr = intval;
 			break;
+		case Opt_debug_inode:
+			ceph_debug_inode = intval;
+			break;
 		case Opt_debug_console:
 			ceph_debug_console = 1;
 			break;
@@ -507,6 +518,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_osdtimeout:
 			args->osd_timeout = intval;
+			break;
+		case Opt_unsafewrites:
+			args->flags |= CEPH_MOUNT_UNSAFE_WRITES;
 			break;
 
 		default:
@@ -794,7 +808,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 
 	dout(10, "set_super %p data %p\n", s, data);
 
-	s->s_flags = args->mntflags;
+	s->s_flags = args->sb_flags;
 	s->s_maxbytes = min((u64)MAX_LFS_FILESIZE, CEPH_FILE_MAX_SIZE);
 
 	/* create client */
@@ -851,7 +865,7 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 		}
 		dout(10, "mon ip matches existing sb %p\n", sb);
 	}
-	if (args->mntflags != other->mount_args.mntflags) {
+	if (args->sb_flags != other->mount_args.sb_flags) {
 		dout(30, "flags differ\n");
 		return 0;
 	}

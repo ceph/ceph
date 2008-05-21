@@ -30,13 +30,13 @@ using namespace __gnu_cxx;
 #include "nodes.h"
 #include "Allocator.h"
 #include "Table.h"
-#include "osd/Journal.h"
+
+#include "os/Journal.h"
+#include "os/ObjectStore.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Finisher.h"
-
-#include "osd/ObjectStore.h"
 
 //typedef pair<object_t,coll_t> object_coll_t;
 typedef pair<coll_t,pobject_t> coll_pobject_t;

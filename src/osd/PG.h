@@ -21,7 +21,7 @@
 #include "include/buffer.h"
 
 #include "OSDMap.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "msg/Messenger.h"
 
 #include "common/DecayCounter.h"
@@ -66,20 +66,35 @@ public:
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
-    epoch_t epoch_created;       // epoch in which it was created
-    epoch_t last_epoch_started;  // last epoch started.
-
     struct History {
+      epoch_t epoch_created;       // epoch in which PG was created
+      epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
+
       epoch_t same_since;          // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
       epoch_t same_acker_since;    // same acker at least back through this epoch.
-      History() : same_since(0), same_primary_since(0), same_acker_since(0) {}
+      History() : 	      
+	epoch_created(0),
+	last_epoch_started(0),
+	same_since(0), same_primary_since(0), same_acker_since(0) {}
+
+      void merge(const History &other) {
+	if (epoch_created < other.epoch_created)
+	  epoch_created = other.epoch_created;
+	if (last_epoch_started < other.last_epoch_started)
+	  last_epoch_started = other.last_epoch_started;
+      }
+
       void encode(bufferlist &bl) const {
+	::encode(epoch_created, bl);
+	::encode(last_epoch_started, bl);
 	::encode(same_since, bl);
 	::encode(same_primary_since, bl);
 	::encode(same_acker_since, bl);
       }
       void decode(bufferlist::iterator &bl) {
+	::decode(epoch_created, bl);
+	::decode(last_epoch_started, bl);
 	::decode(same_since, bl);
 	::decode(same_primary_since, bl);
 	::decode(same_acker_since, bl);
@@ -87,13 +102,11 @@ public:
     } history;
     
     Info(pg_t p=0) : pgid(p), 
-                     log_backlog(false),
-		     epoch_created(0),
-                     last_epoch_started(0)
+                     log_backlog(false)
     { }
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
-    bool dne() const { return epoch_created == 0; }
+    bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
       ::encode(pgid, bl);
@@ -101,8 +114,6 @@ public:
       ::encode(last_complete, bl);
       ::encode(log_bottom, bl);
       ::encode(log_backlog, bl);
-      ::encode(epoch_created, bl);
-      ::encode(last_epoch_started, bl);
       history.encode(bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -111,8 +122,6 @@ public:
       ::decode(last_complete, bl);
       ::decode(log_bottom, bl);
       ::decode(log_backlog, bl);
-      ::decode(epoch_created, bl);
-      ::decode(last_epoch_started, bl);
       history.decode(bl);
     }
   };
@@ -497,14 +506,14 @@ protected:
   // primary state
  public:
   vector<int> acting;
-  epoch_t     last_epoch_started_any;
   eversion_t  last_complete_commit;
 
   // [primary only] content recovery state
   eversion_t  peers_complete_thru;
   bool        have_master_log;
  protected:
-  set<int>    prior_set;   // current+prior OSDs, as defined by last_epoch_started_any.
+  set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
+  bool        must_notify_mon;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
   eversion_t  oldest_update; // lowest (valid) last_update in active set
@@ -557,7 +566,6 @@ public:
   bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
   void build_prior();
-  void adjust_prior();  // based on new peer_info.last_epoch_started_any
 
   bool adjust_peers_complete_thru() {
     eversion_t t = info.last_complete;
@@ -590,7 +598,8 @@ public:
 
   virtual void cancel_recovery() = 0;
   virtual bool do_recovery() = 0;
-  virtual void purge_strays() = 0;
+
+  void purge_strays();
 
   void finish_recovery();
 
@@ -607,8 +616,8 @@ public:
     info(p),
     role(0),
     state(0),
-    last_epoch_started_any(0),
     have_master_log(true),
+    must_notify_mon(false),
     stat_num_bytes(0), stat_num_blocks(0)
   { }
   virtual ~PG() { }
@@ -662,8 +671,8 @@ public:
 
   // pg on-disk state
   void write_log(ObjectStore::Transaction& t);
-  void append_log(ObjectStore::Transaction& t, 
-                  PG::Log::Entry& logentry, 
+  void append_log(ObjectStore::Transaction &t, 
+                  const PG::Log::Entry &logentry, 
                   eversion_t trim_to);
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
@@ -708,7 +717,9 @@ WRITE_CLASS_ENCODER(PG::Log)
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {
-  return out << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
+  return out << " ec=" << h.epoch_created
+	     << " les=" << h.last_epoch_started
+	     << " " << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 
@@ -723,8 +734,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
         << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
   //out << " c " << pgi.epoch_created;
-  out << " e " << pgi.last_epoch_started
-      << " " << pgi.history
+  out << " " << pgi.history
       << ")";
   return out;
 }

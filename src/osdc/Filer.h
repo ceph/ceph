@@ -51,26 +51,29 @@ class Filer {
   // probes
   struct Probe {
     inode_t inode;
-    off_t from;
-    off_t *end;
+    __u64 from;        // for !fwd, this is start of extent we are probing, thus possibly < our endpoint.
+    __u64 *end;
     int flags;
+
+    bool fwd;
+
     Context *onfinish;
     
     list<ObjectExtent> probing;
-    off_t probing_len;
+    __u64 probing_len;
     
-    map<object_t, off_t> known;
+    map<object_t, __u64> known;
     map<object_t, tid_t> ops;
 
-    Probe(inode_t &i, off_t f, off_t *e, int fl, Context *c) : 
-      inode(i), from(f), end(e), flags(fl), onfinish(c), probing_len(0) {}
+    Probe(inode_t &i, __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
+      inode(i), from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
   };
   
   class C_Probe;
   //friend class C_Probe;  
 
   void _probe(Probe *p);
-  void _probed(Probe *p, object_t oid, off_t size);
+  void _probed(Probe *p, object_t oid, __u64 size);
 
  public:
   Filer(Objecter *o) : objecter(o) {}
@@ -82,7 +85,7 @@ class Filer {
 
   /*** async file interface ***/
   Objecter::OSDRead *prepare_read(inode_t& inode,
-				  off_t offset, 
+				  __u64 offset, 
 				  size_t len, 
 				  bufferlist *bl, 
 				  int flags) {
@@ -91,7 +94,7 @@ class Filer {
     return rd;
   }
   int read(inode_t& inode,
-           off_t offset, 
+           __u64 offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
@@ -101,7 +104,7 @@ class Filer {
   }
 
   int write(inode_t& inode,
-            off_t offset, 
+            __u64 offset, 
             size_t len, 
             bufferlist& bl,
             int flags, 
@@ -114,7 +117,7 @@ class Filer {
   }
 
   int zero(inode_t& inode,
-           off_t offset,
+           __u64 offset,
            size_t len,
 	   int flags,
            Context *onack,
@@ -125,7 +128,7 @@ class Filer {
   }
 
   int remove(inode_t& inode,
-	     off_t offset,
+	     __u64 offset,
 	     size_t len,
 	     int flags,
 	     Context *onack,
@@ -135,31 +138,27 @@ class Filer {
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
-  int probe_fwd(inode_t& inode,
-		off_t start_from,
-		off_t *end,
-		int flags,
-		Context *onfinish);
+  /*
+   * probe 
+   *  specify direction,
+   *  and whether we stop when we find data, or hole.
+   */
+  int probe(inode_t& inode,
+	    __u64 start_from,
+	    __u64 *end,
+	    bool fwd,
+	    int flags,
+	    Context *onfinish);
 
 
   /***** mapping *****/
 
-  /* map (ino, ono) to an object name
-     (to be used on any osd in the proper replica group) */
-  /*object_t file_to_object(inodeno_t ino,
-                          size_t    _ono) {  
-    uint64_t ono = _ono;
-    assert(ino < (1ULL<<OID_INO_BITS));       // legal ino can't be too big
-    assert(ono < (1ULL<<OID_ONO_BITS));
-    return ono + (ino << OID_ONO_BITS);
-  }
-  */
-
-
-  /* map (ino, offset, len) to a (list of) OSDExtents 
-     (byte ranges in objects on (primary) osds) */
+  /*
+   * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
+   * ranges in objects on (primary) osds)
+   */
   void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-		       off_t offset,
+		       __u64 offset,
 		       size_t len,
 		       list<ObjectExtent>& extents,
 		       objectrev_t rev=0);

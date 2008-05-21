@@ -5,7 +5,7 @@
 
 #include "include/types.h"
 #include "include/Distribution.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "common/Clock.h"
 
 #include <list>

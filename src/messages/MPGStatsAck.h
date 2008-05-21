@@ -1,0 +1,40 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+#ifndef __MPGSTATSACK_H
+#define __MPGSTATSACK_H
+
+#include "osd/osd_types.h"
+
+class MPGStatsAck : public Message {
+public:
+  map<pg_t,eversion_t> pg_stat;
+  
+  MPGStatsAck() : Message(MSG_PGSTATSACK) {}
+
+  const char *get_type_name() { return "pg_stats_ack"; }
+  void print(ostream& out) {
+    out << "pg_stats_ack";
+  }
+
+  void encode_payload() {
+    ::encode(pg_stat, payload);
+  }
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    ::decode(pg_stat, p);
+  }
+};
+
+#endif
