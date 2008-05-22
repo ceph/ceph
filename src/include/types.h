@@ -297,7 +297,37 @@ static inline void decode(inode_t &i, bufferlist::iterator &p) {
   ::decode(i.file_data_version, p);
 }
 
+/*
+ * like an inode, but for a dir frag 
+ */
+struct fnode_t {
+  version_t version;
+  __u64 size;            // files + dirs
+  __u64 nprimary, nremote;
+  __u64 nfiles;          // files
+  __u64 nsubdirs;        // subdirs
+  nested_info_t nested;  // nested summation
 
+  void encode(bufferlist &bl) const {
+    ::encode(version, bl);
+    ::encode(size, bl);
+    ::encode(nprimary, bl);
+    ::encode(nremote, bl);
+    ::encode(nfiles, bl);
+    ::encode(nsubdirs, bl);
+    ::encode(nested, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
+    ::decode(size, bl);
+    ::decode(nprimary, bl);
+    ::decode(nremote, bl);
+    ::decode(nfiles, bl);
+    ::decode(nsubdirs, bl);
+    ::decode(nested, bl);
+  }
+};
+WRITE_CLASS_ENCODER(fnode_t)
 
 
 

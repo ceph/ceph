@@ -657,14 +657,40 @@ void CInode::clear_dirty_scattered(int type)
   case CEPH_LOCK_IDIR:
     xlist_dirty_inode_mtime.remove_myself();
     break;
+
   case CEPH_LOCK_INESTED:
     assert(0); // hmm!
     break;
+
   default:
     assert(0);
   }
 }
 
+
+void CInode::finish_scatter_gather_update(int type)
+{
+  dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
+  switch (type) {
+  case CEPH_LOCK_IDIR:
+    {
+      inode_t *pi = get_projected_inode();
+      pi->size = 0;
+      for (map<frag_t,int>::iterator p = dirfrag_size.begin(); p != dirfrag_size.end(); ++p)
+	pi->size += p->second;
+    }
+    break;
+
+  case CEPH_LOCK_INESTED:
+    assert(0); // hmm!
+    break;
+
+  default:
+    assert(0);
+  }
+
+
+}
 
 
 // waiting

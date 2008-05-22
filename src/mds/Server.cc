@@ -1483,7 +1483,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
  * predirty the directory inode for a new dentry, if it is auth (and not root)
  * BUG: root inode doesn't get dirtied properly, currently.  blech.
  */
-version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
+version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob, int deltasize)
 {
   version_t dirpv = 0;
   CInode *diri = dn->dir->inode;
@@ -1496,10 +1496,13 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob)
     dirpv = diri->pre_dirty();
     dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << dendl;
     
+    diri->dirfrag_size[dn->dir->dirfrag().frag] += deltasize;
+
     // predirty+journal
     inode_t *pi = diri->project_inode();
     if (dirpv) pi->version = dirpv;
     pi->ctime = pi->mtime = mdr->now;
+    pi->size += deltasize;
     blob->add_dir_context(diri->get_parent_dn()->get_dir());
     blob->add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
   } else {

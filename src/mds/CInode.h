@@ -361,6 +361,7 @@ public:
   void decode_lock_state(int type, bufferlist& bl);
 
   void clear_dirty_scattered(int type);
+  void finish_scatter_gather_update(int type);
 
   // -- caps -- (new)
   // client caps

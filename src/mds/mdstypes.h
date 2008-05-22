@@ -768,6 +768,7 @@ protected:
   virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
 
   virtual void clear_dirty_scattered(int type) { assert(0); }
+  virtual void finish_scatter_gather_update(int type) { }
 
   // ---------------------------------------------
   // ordering

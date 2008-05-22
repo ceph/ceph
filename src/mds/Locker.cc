@@ -2129,6 +2129,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   inode_t *pi = in->project_inode();
   pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
   pi->version = in->pre_dirty();
+
+  lock->get_parent()->finish_scatter_gather_update(lock->get_type());
   
   EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
   le->metablob.add_dir_context(in->get_parent_dn()->get_dir());

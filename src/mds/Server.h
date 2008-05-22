@@ -100,7 +100,7 @@ public:
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);
 
-  version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob);
+  version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob, int deltasize=0);
   void dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv);
   void predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in);
 

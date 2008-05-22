@@ -155,10 +155,36 @@ class CDir : public MDSCacheObject {
 
   //int hack_num_accessed;
 
+protected:
+  fnode_t fnode;
+  list<fnode_t*> projected_fnode;
+
+public:
+  version_t get_version() { return fnode.version; }
+  void set_version(version_t v) { 
+    assert(projected_fnode.empty());
+    fnode.version = v; 
+  }
+  fnode_t *get_projected_fnode() {
+    if (projected_fnode.empty())
+      return &fnode;
+    else
+      return projected_fnode.back();
+  }
+  version_t get_projected_version() { return get_projected_fnode()->version; }
+  fnode_t *project_fnode();
+  void pop_and_dirty_projected_fnode(LogSegment *ls);
+  bool is_projected() { return !projected_fnode.empty(); }
+  version_t pre_dirty(version_t min=0);
+  void _mark_dirty(LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
+  void mark_clean();
+
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
   typedef map<string, CDentry*> map_t;
 protected:
+
   // contents
   map_t items;       // non-null AND null
   unsigned nitems;             // # non-null
@@ -167,13 +193,10 @@ protected:
   int num_dirty;
 
 
-
   // state
-  version_t version;
   version_t committing_version;
   version_t committed_version;
   version_t committed_version_equivalent;  // in case of, e.g., temporary file
-  version_t projected_version; 
 
   xlist<CDir*>::item xlist_dirty;
 
@@ -348,18 +371,11 @@ private:
   void wait_for_commit(Context *c, version_t v=0);
 
   // -- dirtyness --
-  version_t get_version() { return version; }
-  void set_version(version_t v) { projected_version = version = v; }
-  version_t get_projected_version() { return projected_version; }
   version_t get_committing_version() { return committing_version; }
   version_t get_committed_version() { return committed_version; }
   version_t get_committed_version_equivalent() { return committed_version_equivalent; }
   void set_committed_version(version_t v) { committed_version = v; }
 
-  version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t pv, LogSegment *ls);
-  void mark_clean();
   void mark_complete() { state_set(STATE_COMPLETE); }
 
 

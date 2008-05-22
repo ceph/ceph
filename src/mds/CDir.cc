@@ -132,7 +132,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
 
   state = STATE_INITIAL;
 
-  projected_version = version = 0;
+  memset(&fnode, 0, sizeof(fnode));
+
   committing_version = 0;
   committed_version_equivalent = committed_version = 0;
 
@@ -157,6 +158,12 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
 
 
 
+
+
+
+
+
+
 /***
  * linking fun
  */
@@ -173,7 +180,7 @@ CDentry* CDir::add_null_dentry(const string& dname)
   cache->lru.lru_insert_mid(dn);
 
   dn->dir = this;
-  dn->version = projected_version;
+  dn->version = get_projected_version();
   
   // add to dir
   assert(items.count(dn->name) == 0);
@@ -205,7 +212,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in)
   cache->lru.lru_insert_mid(dn);
 
   dn->dir = this;
-  dn->version = projected_version;
+  dn->version = get_projected_version();
   
   // add to dir
   assert(items.count(dn->name) == 0);
@@ -236,7 +243,7 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
   cache->lru.lru_insert_mid(dn);
 
   dn->dir = this;
-  dn->version = projected_version;
+  dn->version = get_projected_version();
   
   // add to dir
   assert(items.count(dn->name) == 0);
@@ -392,10 +399,10 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
     dn->mark_clean();
     remove_dentry(dn);
 
-    if (version == projected_version &&
+    if (!is_projected() &&
 	committing_version == committed_version &&
 	num_dirty == 0) {
-      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << version 
+      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << get_version() 
 	       << " vs committed " << committed_version
 	       << dendl;
       committed_version_equivalent = committed_version;    
@@ -477,8 +484,17 @@ void CDir::steal_dentry(CDentry *dn)
     get(PIN_CHILD);
   if (dn->is_null()) 
     nnull++;
-  else
+  else {
     nitems++;
+    fnode.size++;
+    if (dn->is_primary()) {
+      fnode.nprimary++;
+      fnode.nested.rbytes += dn->get_inode()->inode.accounted_nested.rbytes;
+      fnode.nested.rfiles += dn->get_inode()->inode.accounted_nested.rfiles;
+    } else {
+      fnode.nremote++;
+    }
+  }
 
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
   if (dn->is_dirty()) 
@@ -541,8 +557,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->replica_map = replica_map;
     f->dir_auth = dir_auth;
     f->init_fragment_pins();
-    f->version = version;
-    f->projected_version = projected_version;
+    f->fnode.version = get_version();
 
     f->pop_me = pop_me;
     f->pop_me *= fac;
@@ -752,39 +767,59 @@ void CDir::finish_waiting(int mask, int result)
 
 // dirty/clean
 
+fnode_t *CDir::project_fnode()
+{
+  fnode_t *p = new fnode_t;
+  *p = *get_projected_fnode();
+  projected_fnode.push_back(p);
+  dout(10) << "project_fnode " << p << dendl;
+  return p;
+}
+
 version_t CDir::pre_dirty(version_t min)
 {
-  if (min > projected_version) 
-    projected_version = min;
-  ++projected_version;
-  dout(10) << "pre_dirty " << projected_version << dendl;
-  return projected_version;
+  fnode_t *pf = project_fnode();
+  if (min > pf->version)
+    pf->version = min;
+  ++pf->version;
+  dout(10) << "pre_dirty " << pf->version << dendl;
+  return pf->version;
+}
+
+void CDir::mark_dirty(version_t pv, LogSegment *ls)
+{
+  assert(get_version() < pv);
+  pop_and_dirty_projected_fnode(ls);
+}
+
+void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
+{
+  assert(!projected_fnode.empty());
+  dout(15) << "pop_and_dirty_projected_fnode " << projected_fnode.front()
+	   << " v" << projected_fnode.front()->version << dendl;
+  _mark_dirty(ls);
+  fnode = *projected_fnode.front();
+  delete projected_fnode.front();
+  projected_fnode.pop_front();
 }
 
 void CDir::_mark_dirty(LogSegment *ls)
 {
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dout(10) << "mark_dirty (was clean) " << *this << " version " << version << dendl;
+    dout(10) << "mark_dirty (was clean) " << *this << " version " << get_version() << dendl;
     get(PIN_DIRTY);
     assert(ls);
   } else {
-    dout(10) << "mark_dirty (already dirty) " << *this << " version " << version << dendl;
+    dout(10) << "mark_dirty (already dirty) " << *this << " version " << get_version() << dendl;
   }
   if (ls) 
     ls->dirty_dirfrags.push_back(&xlist_dirty);
 }
 
-void CDir::mark_dirty(version_t pv, LogSegment *ls)
-{
-  assert(version < pv);
-  version = pv;
-  _mark_dirty(ls);
-}
-
 void CDir::mark_clean()
 {
-  dout(10) << "mark_clean " << *this << " version " << version << dendl;
+  dout(10) << "mark_clean " << *this << " version " << get_version() << dendl;
   if (state_test(STATE_DIRTY)) {
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
@@ -875,11 +910,11 @@ void CDir::_fetched(bufferlist &bl)
   // decode.
   int len = bl.length();
   bufferlist::iterator p = bl.begin();
-  version_t got_version;
-  
-  ::decode(got_version, p);
 
-  dout(10) << "_fetched version " << got_version
+  fnode_t got_fnode;
+  ::decode(got_fnode, p);
+
+  dout(10) << "_fetched version " << got_fnode.version
 	   << ", " << len << " bytes"
 	   << dendl;
   
@@ -1008,13 +1043,13 @@ void CDir::_fetched(bufferlist &bl)
      */
     if (committed_version == 0 &&     
 	dn &&
-	dn->get_version() <= got_version &&
+	dn->get_version() <= got_fnode.version &&
 	dn->is_dirty()) {
       dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
       dn->mark_clean();
 
       if (dn->get_inode()) {
-	assert(dn->get_inode()->get_version() <= got_version);
+	assert(dn->get_inode()->get_version() <= got_fnode.version);
 	dout(10) << "_fetched  had underwater inode " << *dn->get_inode() << ", marking clean" << dendl;
 	dn->get_inode()->mark_clean();
       }
@@ -1022,12 +1057,13 @@ void CDir::_fetched(bufferlist &bl)
   }
   //assert(off == len);  FIXME  no, directories may shrink.  add this back in when we properly truncate objects on write.
 
-  // take the loaded version?
+  // take the loaded fnode?
   // only if we are a fresh CDir* with no prior state.
-  if (version == 0) {
-    assert(projected_version == 0);
+  if (get_version() == 0) {
+    assert(!is_projected());
     assert(!state_test(STATE_COMMITTING));
-    projected_version = version = committing_version = committed_version = got_version;
+    fnode = got_fnode;
+    committing_version = committed_version = got_fnode.version;
   }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
@@ -1056,10 +1092,10 @@ void CDir::_fetched(bufferlist &bl)
 void CDir::commit(version_t want, Context *c)
 {
   dout(10) << "commit want " << want << " on " << *this << dendl;
-  if (want == 0) want = version;
+  if (want == 0) want = get_version();
 
   // preconditions
-  assert(want <= version || version == 0);    // can't commit the future
+  assert(want <= get_version() || get_version() == 0);    // can't commit the future
   assert(want > committed_version); // the caller is stupid
   assert(is_auth());
   assert(can_auth_pin());
@@ -1106,7 +1142,7 @@ void CDir::_commit(version_t want)
 
   // we can't commit things in the future.
   // (even the projected future.)
-  assert(want <= version || version == 0);
+  assert(want <= get_version() || get_version() == 0);
 
   // check pre+postconditions.
   assert(is_auth());
@@ -1132,7 +1168,7 @@ void CDir::_commit(version_t want)
   }
   
   // commit.
-  committing_version = version;
+  committing_version = get_version();
 
   // mark committing (if not already)
   if (!state_test(STATE_COMMITTING)) {
@@ -1145,7 +1181,7 @@ void CDir::_commit(version_t want)
   // encode
   bufferlist bl;
 
-  ::encode(version, bl);
+  ::encode(fnode, bl);
   int32_t n = nitems;
   ::encode(n, bl);
 
@@ -1200,7 +1236,7 @@ void CDir::_commit(version_t want)
 			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										    g_default_mds_dir_layout ),
 			       bl, 0,
-			       NULL, new C_Dir_Committed(this, version) );
+			       NULL, new C_Dir_Committed(this, get_version()) );
 }
 
 
@@ -1224,7 +1260,7 @@ void CDir::_committed(version_t v)
     state_clear(CDir::STATE_COMMITTING);
   
   // dir clean?
-  if (committed_version == version) 
+  if (committed_version == get_version()) 
     mark_clean();
 
   // dentries clean?
@@ -1288,7 +1324,8 @@ void CDir::_committed(version_t v)
 
 void CDir::encode_export(bufferlist& bl)
 {
-  ::encode(version, bl);
+  assert(!is_projected());
+  ::encode(fnode, bl);
   ::encode(committed_version, bl);
   ::encode(committed_version_equivalent, bl);
 
@@ -1314,11 +1351,10 @@ void CDir::finish_export(utime_t now)
 
 void CDir::decode_import(bufferlist::iterator& blp)
 {
-  ::decode(version, blp);
+  ::decode(fnode, blp);
   ::decode(committed_version, blp);
   ::decode(committed_version_equivalent, blp);
   committing_version = committed_version;
-  projected_version = version;
 
   unsigned s;
   ::decode(s, blp);
