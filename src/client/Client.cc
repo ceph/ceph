@@ -3835,6 +3835,10 @@ int Client::ll_setxattr(inodeno_t ino, const char *name, const void *value, size
   tout << ino.val << std::endl;
   tout << name << std::endl;
 
+  // only user xattrs, for now
+  if (strncmp(name, "user.", 5))
+    return -EOPNOTSUPP;
+
   Inode *in = _ll_get_inode(ino);
   if (in->dn) touch_dn(in->dn);
 
@@ -3871,6 +3875,10 @@ int Client::ll_removexattr(inodeno_t ino, const char *name, int uid, int gid)
   tout << "ll_removexattr" << std::endl;
   tout << ino.val << std::endl;
   tout << name << std::endl;
+
+  // only user xattrs, for now
+  if (strncmp(name, "user.", 5))
+    return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(ino);
   if (in->dn) touch_dn(in->dn);
