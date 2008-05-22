@@ -1971,6 +1971,10 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct page **pages = 0;
 	void *kaddr;
 
+	/* only support user.* xattrs, for now */
+	if (strncmp(name, "user.", 5) != 0)
+		return -EOPNOTSUPP;
+
 	/* copy value into some pages */
 	nr_pages = calc_pages_for(0, size);
 	if (nr_pages) {
@@ -2031,6 +2035,10 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	char *path;
 	int pathlen;
 	int err;
+
+	/* only support user.* xattrs, for now */
+	if (strncmp(name, "user.", 5) != 0)
+		return -EOPNOTSUPP;
 
 	path = ceph_build_dentry_path(dentry, &pathlen);
 	if (IS_ERR(path))
