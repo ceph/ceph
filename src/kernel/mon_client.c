@@ -114,29 +114,35 @@ static void do_request_mdsmap(struct work_struct *work)
 
 void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 want)
 {
+	mutex_lock(&monc->req_mutex);
 	if (want > monc->want_mdsmap) {
 		monc->mds_delay = BASE_DELAY_INTERVAL;
 		monc->want_mdsmap = want;
 		do_request_mdsmap(&monc->mds_delayed_work.work);
 	}
+	mutex_unlock(&monc->req_mutex);
 }
 
 int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 got)
 {
+	int ret = 0;
+
+	mutex_lock(&monc->req_mutex);
 	if (got < monc->want_mdsmap) {
 		dout(5, "got_mdsmap got %u <= wanted %u\n",
 		     got, monc->want_mdsmap);
-		return -EAGAIN;
+		ret = -EAGAIN;
+	} else {
+		dout(5, "got_mdsmap got %u > wanted %u\n",
+		     got, monc->want_mdsmap);
+		monc->want_mdsmap = 0;
+		
+		/* we got map so take map request out of queue */
+		cancel_delayed_work_sync(&monc->mds_delayed_work);
+		monc->mds_delay = BASE_DELAY_INTERVAL;
 	}
-	
-	dout(5, "got_mdsmap have %u > wanted %u\n",
-	     got, monc->want_mdsmap);
-	monc->want_mdsmap = 0;
-	
-	/* we got map so take map request out of queue */
-	cancel_delayed_work_sync(&monc->mds_delayed_work);
-	monc->mds_delay = BASE_DELAY_INTERVAL;
-	return 0;
+	mutex_unlock(&monc->req_mutex);
+	return ret;
 }
 
 
@@ -169,26 +175,32 @@ static void do_request_osdmap(struct work_struct *work)
 
 void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u32 have)
 {
+	mutex_lock(&monc->req_mutex);
 	dout(5, "request_osdmap have %u\n", have);
 	monc->osd_delay = BASE_DELAY_INTERVAL;
 	monc->have_osdmap = have;
 	do_request_osdmap(&monc->osd_delayed_work.work);
+	mutex_unlock(&monc->req_mutex);
 }
 
 int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 got)
 {
+	int ret = 0;
+
+	mutex_lock(&monc->req_mutex);
 	if (got <= monc->have_osdmap) {
 		dout(5, "got_osdmap got %u <= had %u, will retry\n",
 		     got, monc->have_osdmap);
-		return -EAGAIN;
+		ret = -EAGAIN;
+	} else {
+		/* we got map so take map request out of queue */
+		dout(5, "got_osdmap got %u > had %u\n", got, monc->have_osdmap);
+		monc->have_osdmap = 0;
+		cancel_delayed_work_sync(&monc->osd_delayed_work);
+		monc->osd_delay = BASE_DELAY_INTERVAL;
 	}
-
-	/* we got map so take map request out of queue */
-	dout(5, "got_osdmap got %u > had %u\n", got, monc->have_osdmap);
-	monc->have_osdmap = 0;
-	cancel_delayed_work_sync(&monc->osd_delayed_work);
-	monc->osd_delay = BASE_DELAY_INTERVAL;
-	return 0;
+	mutex_unlock(&monc->req_mutex);
+	return ret;
 }
 
 
@@ -215,16 +227,20 @@ static void do_request_umount(struct work_struct *work)
 
 void ceph_monc_request_umount(struct ceph_mon_client *monc)
 {
+	mutex_lock(&monc->req_mutex);
 	monc->umount_delay = BASE_DELAY_INTERVAL;
 	do_request_umount(&monc->umount_delayed_work.work);
+	mutex_unlock(&monc->req_mutex);
 }
 
 void ceph_monc_handle_umount(struct ceph_mon_client *monc,
 			     struct ceph_msg *msg)
 {
 	dout(5, "handle_umount\n");
+	mutex_lock(&monc->req_mutex);
 	cancel_delayed_work_sync(&monc->umount_delayed_work);
 	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
+	mutex_unlock(&monc->req_mutex);
 	wake_up(&monc->client->mount_wq);
 }
 
@@ -320,6 +336,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	if (monc->monmap == NULL)
 		return -ENOMEM;
 	spin_lock_init(&monc->lock);
+	mutex_init(&monc->req_mutex);
 	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&monc->mds_delayed_work, do_request_mdsmap);
 	INIT_DELAYED_WORK(&monc->osd_delayed_work, do_request_osdmap);

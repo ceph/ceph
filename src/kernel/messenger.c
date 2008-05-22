@@ -1456,6 +1456,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	msg->hdr.src = msgr->inst;
 
 	/* do we have the connection? */
+	radix_tree_preload(GFP_NOFS);
 	spin_lock(&msgr->con_lock);
 	con = __get_connection(msgr, &msg->hdr.dst.addr);
 	if (!con) {

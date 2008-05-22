@@ -39,8 +39,9 @@ struct ceph_mon_client {
 	unsigned long osd_delay;
 	unsigned long umount_delay;
 
-	u32 want_mdsmap;  /* protected by caller's lock */
-	u32 have_osdmap;  /* protected by caller's lock */
+	struct mutex req_mutex;
+	u32 want_mdsmap;
+	u32 have_osdmap;
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);

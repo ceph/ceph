@@ -2076,8 +2076,8 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(2, "handle_map epoch %u len %d\n", epoch, (int)maplen);
 
 	/* do we need it? */
-	spin_lock(&mdsc->lock);
 	ceph_monc_got_mdsmap(&mdsc->client->monc, epoch);
+	spin_lock(&mdsc->lock);
 	if (mdsc->mdsmap && epoch <= mdsc->mdsmap->m_epoch) {
 		dout(2, "ceph_mdsc_handle_map epoch %u < our %u\n",
 		     epoch, mdsc->mdsmap->m_epoch);
