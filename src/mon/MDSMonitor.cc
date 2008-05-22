@@ -691,6 +691,7 @@ void MDSMonitor::tick()
       int newstate = curstate;
       switch (curstate) {
       case MDSMap::STATE_CREATING:
+      case MDSMap::STATE_DNE:
 	newstate = MDSMap::STATE_DNE;	// didn't finish creating
 	last_beacon.erase(addr);
 	break;
