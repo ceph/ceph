@@ -308,11 +308,18 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	init_completion(&req.completion);
 
 	/* register request */
+	err = radix_tree_preload(GFP_NOFS);
+	if (err < 0) {
+		derr(10, "ENOMEM in do_statfs\n");
+		return err;
+	}
+
 	spin_lock(&monc->lock);
 	req.tid = ++monc->last_tid;
 	req.last_attempt = jiffies;
 	radix_tree_insert(&monc->statfs_request_tree, req.tid, &req);
 	spin_unlock(&monc->lock);
+	radix_tree_preload_end();
 
 	/* send request */
 	err = send_statfs(monc, req.tid);
@@ -337,7 +344,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 		return -ENOMEM;
 	spin_lock_init(&monc->lock);
 	mutex_init(&monc->req_mutex);
-	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
+	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_ATOMIC);
 	INIT_DELAYED_WORK(&monc->mds_delayed_work, do_request_mdsmap);
 	INIT_DELAYED_WORK(&monc->osd_delayed_work, do_request_osdmap);
 	INIT_DELAYED_WORK(&monc->umount_delayed_work, do_request_umount);

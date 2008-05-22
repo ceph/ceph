@@ -94,7 +94,11 @@ static int register_request(struct ceph_osd_client *osdc,
 	struct ceph_osd_request_head *head = req->r_request->front.iov_base;
 	int rc;
 
-	radix_tree_preload(GFP_NOFS);
+	rc = radix_tree_preload(GFP_NOFS);
+	if (rc < 0) {
+		derr(10, "ENOMEM in register_request\n");
+		return rc;
+	}
 
 	spin_lock(&osdc->request_lock);
 	req->r_tid = head->tid = ++osdc->last_tid;
@@ -113,6 +117,8 @@ static int register_request(struct ceph_osd_client *osdc,
 	osdc->nr_requests++;
 
 	spin_unlock(&osdc->request_lock);
+	radix_tree_preload_end();
+	
 	return rc;
 }
 
@@ -521,7 +527,7 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	spin_lock_init(&osdc->request_lock);
 	osdc->last_tid = 0;
 	osdc->nr_requests = 0;
-	INIT_RADIX_TREE(&osdc->request_tree, GFP_NOFS);
+	INIT_RADIX_TREE(&osdc->request_tree, GFP_ATOMIC);
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
 }
 

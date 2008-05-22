@@ -1078,7 +1078,10 @@ static void process_accept(struct ceph_connection *con)
 	__u32 peer_cseq = le32_to_cpu(con->in_connect_seq);
 
 	/* do we have an existing connection for this peer? */
-	radix_tree_preload(GFP_NOFS);
+	if (radix_tree_preload(GFP_NOFS) < 0) {
+		derr(10, "ENOMEM in process_accept\n");
+		return;
+	}
 	spin_lock(&msgr->con_lock);
 	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
@@ -1138,6 +1141,7 @@ static void process_accept(struct ceph_connection *con)
 		prepare_write_accept_reply(con, &tag_ready);
 	}
 	spin_unlock(&msgr->con_lock);
+	radix_tree_preload_end();
 
 	ceph_queue_write(con);
 	put_connection(con);
@@ -1310,7 +1314,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	spin_lock_init(&msgr->con_lock);
 	INIT_LIST_HEAD(&msgr->con_all);
 	INIT_LIST_HEAD(&msgr->con_accepting);
-	INIT_RADIX_TREE(&msgr->con_tree, GFP_KERNEL);
+	INIT_RADIX_TREE(&msgr->con_tree, GFP_ATOMIC);
 
 	msgr->zero_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (!msgr->zero_page) {
@@ -1456,7 +1460,6 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	msg->hdr.src = msgr->inst;
 
 	/* do we have the connection? */
-	radix_tree_preload(GFP_NOFS);
 	spin_lock(&msgr->con_lock);
 	con = __get_connection(msgr, &msg->hdr.dst.addr);
 	if (!con) {
@@ -1465,6 +1468,13 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		newcon = new_connection(msgr);
 		if (IS_ERR(newcon))
 			return PTR_ERR(con);
+
+		ret = radix_tree_preload(GFP_NOFS);
+		if (ret < 0) {
+			derr(10, "ENOMEM in ceph_msg_send\n");
+			return ret;
+		}
+			
 		spin_lock(&msgr->con_lock);
 		con = __get_connection(msgr, &msg->hdr.dst.addr);
 		if (con) {
@@ -1481,12 +1491,15 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 			     "%u.%u.%u.%u:%u\n", con,
 			     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
 		}
+		spin_unlock(&msgr->con_lock);
+		radix_tree_preload_end();
 	} else {
 		dout(10, "ceph_msg_send had connection %p to peer "
 		     "%u.%u.%u.%u:%u\n", con,
 		     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
+		spin_unlock(&msgr->con_lock);
 	}
-	spin_unlock(&msgr->con_lock);
+
 	con->delay = timeout;
 	dout(10, "ceph_msg_send delay = %lu\n", con->delay);
 

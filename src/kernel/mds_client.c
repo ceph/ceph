@@ -1015,10 +1015,17 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	BUG_ON(le32_to_cpu(req->r_request->hdr.type) !=
 	       CEPH_MSG_CLIENT_REQUEST);
 
-	radix_tree_preload(GFP_NOFS);
+	err = radix_tree_preload(GFP_NOFS);
+	if (err < 0) {
+		derr(10, "ENOMEM in ceph_mdsc_do_request\n");
+		return err;
+	}
 	spin_lock(&mdsc->lock);
 	__register_request(mdsc, req);
+	spin_unlock(&mdsc->lock);
+	radix_tree_preload_end();
 
+	spin_lock(&mdsc->lock);
 retry:
 	mds = choose_mds(mdsc, req);
 	if (mds < 0) {
@@ -1063,6 +1070,7 @@ retry:
 
 	/* send and wait */
 	spin_unlock(&mdsc->lock);
+
 	dout(10, "do_request %p r_expects_cap=%d\n", req, req->r_expects_cap);
 	req->r_request = ceph_msg_maybe_dup(req->r_request);  
 	ceph_msg_get(req->r_request);
