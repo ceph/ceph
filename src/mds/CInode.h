@@ -287,6 +287,7 @@ public:
   inodeno_t ino() const { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
+  CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   

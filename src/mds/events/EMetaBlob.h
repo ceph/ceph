@@ -465,7 +465,7 @@ private:
     // journaled?
 
     // add parent dn
-    CDentry *parent = diri->get_parent_dn();
+    CDentry *parent = diri->get_projected_parent_dn();
     add_dir_context(parent->get_dir(), mode);
     add_dentry(parent, false);
   }

@@ -70,6 +70,9 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  out << " s=" << in.inode.size;
+  out << " rb=" << in.inode.nested.rbytes << "/" << in.inode.accounted_nested.rbytes;
+
   // locks
   out << " " << in.authlock;
   out << " " << in.linklock;
@@ -409,7 +412,7 @@ void CInode::name_stray_dentry(string& dname)
 
 version_t CInode::pre_dirty()
 {    
-  assert(parent);
+  assert(parent || projected_parent);
   version_t pv;
   if (projected_parent)
     pv = projected_parent->pre_dirty(get_projected_version());

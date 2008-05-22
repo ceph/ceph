@@ -2244,7 +2244,10 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_ctime = MAX(in->inode.ctime, in->inode.mtime);
   st->st_atime = in->inode.atime;
   st->st_mtime = in->inode.mtime;
-  st->st_size = in->inode.size;
+  if (in->inode.is_dir())
+    st->st_size = in->inode.nested.rbytes;
+  else
+    st->st_size = in->inode.size;
   st->st_blksize = MAX(ceph_file_layout_su(in->inode.layout), 4096);
   st->st_blocks = in->inode.size ? DIV_ROUND_UP(in->inode.size, st->st_blksize):0;
   return in->lease_mask;

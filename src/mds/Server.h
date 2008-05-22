@@ -102,7 +102,7 @@ public:
 
   version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob);
   void dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv);
-  void predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in, CDir *parent);
+  void predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in);
 
 
   // requests on existing inodes.

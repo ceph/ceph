@@ -135,9 +135,8 @@ protected:
   void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
-public:
-  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);  // public for Server's predirty_nested
-protected:
+  bool scatter_wrlock_try(ScatterLock *lock);
+  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
 
   void scatter_writebehind(ScatterLock *lock);
@@ -152,6 +151,9 @@ protected:
     }
   };
   void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
+
+public:
+  void predirty_nested(class EMetaBlob *blob, CInode *in, list<CInode*> &ls);
 
   // local
 protected:
@@ -197,7 +199,7 @@ protected:
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, LogSegment *ls, bool share);
+  void file_update_finish(CInode *in, LogSegment *ls, list<CInode*> &nest_updates, bool share);
 public:
   bool check_inode_max_size(CInode *in, bool forcewrlock=false);
 private:

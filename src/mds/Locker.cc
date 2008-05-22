@@ -471,22 +471,32 @@ version_t Locker::issue_file_data_version(CInode *in)
 struct C_Locker_FileUpdate_finish : public Context {
   Locker *locker;
   CInode *in;
+  list<CInode*> nest_updates;
   LogSegment *ls;
   bool share;
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, LogSegment *s, bool e=false) : 
+  C_Locker_FileUpdate_finish(Locker *l, CInode *i, LogSegment *s, list<CInode*> &ls, bool e=false) : 
     locker(l), in(i), ls(s), share(e) {
+    nest_updates.swap(ls);
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
-    locker->file_update_finish(in, ls, share);
+    locker->file_update_finish(in, ls, nest_updates, share);
   }
 };
 
-void Locker::file_update_finish(CInode *in, LogSegment *ls, bool share)
+void Locker::file_update_finish(CInode *in, LogSegment *ls, list<CInode*> &nest_updates, bool share)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(ls);
   in->put(CInode::PIN_PTRWAITER);
+
+  for (list<CInode*>::iterator p = nest_updates.begin();
+       p != nest_updates.end();
+       p++) {
+    (*p)->pop_and_dirty_projected_inode(ls);
+    scatter_wrlock_finish(&(*p)->dirlock, 0);
+  }
+
   file_wrlock_finish(&in->filelock);
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
@@ -842,11 +852,13 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   pi->max_size = new_max;
   EOpen *le = new EOpen(mds->mdlog);
   le->metablob.add_dir_context(in->get_parent_dir());
+  list<CInode*> nest_updates;
+  predirty_nested(&le->metablob, in, nest_updates);
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   LogSegment *ls = mds->mdlog->get_current_segment();
   le->add_ino(in->ino());
   ls->open_files.push_back(&in->xlist_open_file);
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, nest_updates, true));
   file_wrlock_start(&in->filelock, forcewrlock);  // wrlock for duration of journal
   return true;
 }
@@ -1036,9 +1048,11 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       pi->time_warp_seq = m->get_time_warp_seq();
     }
     le->metablob.add_dir_context(in->get_parent_dir());
+    list<CInode*> nest_updates;
+    predirty_nested(&le->metablob, in, nest_updates);
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     LogSegment *ls = mds->mdlog->get_current_segment();
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, change_max));
+    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, nest_updates, change_max));
     file_wrlock_start(&in->filelock);  // wrlock for duration of journal
   }
 
@@ -1208,6 +1222,92 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 
 // nested ---------------------------------------------------------------
+
+void Locker::predirty_nested(EMetaBlob *blob, CInode *in, list<CInode*> &ls)
+{
+  assert(ls.empty());
+
+  CDir *parent = in->get_projected_parent_dn()->get_dir();
+  blob->add_dir_context(parent);
+
+  // initial diff from *in
+  inode_t *curi = in->get_projected_inode();
+  __u64 drbytes;
+  __u64 drfiles;
+  utime_t rctime;
+  if (in->is_dir()) {
+    drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
+    drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
+    rctime = MAX(curi->ctime, curi->nested.rctime);
+  } else {
+    drbytes = curi->size - curi->accounted_nested.rbytes;
+    drfiles = 1 - curi->accounted_nested.rfiles;
+    rctime = curi->ctime;
+  }
+  
+  dout(10) << "predirty_nested delta " << drbytes << " bytes / " << drfiles << " files from " << *in << dendl;
+  
+  // build list of inodes to wrlock, dirty, and update
+  CInode *cur = in;
+  while (parent) {
+    assert(cur->is_auth());
+    assert(parent->is_auth());
+    
+    // opportunistically adjust parent dirfrag
+    CInode *pin = parent->get_inode();
+
+    dout(10) << "predirty_nested delta " << drbytes << " bytes / " << drfiles << " files for " << *pin << dendl;
+    if (pin->is_base())
+      break;
+
+    if (!scatter_wrlock_try(&pin->dirlock)) {
+      dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
+      break;
+    }
+
+    ls.push_back(pin);
+
+    // FIXME
+    if (!pin->is_auth()) {
+      assert(0);
+      break;
+    }
+
+    // project update
+    version_t ppv = pin->pre_dirty();
+    inode_t *pi = pin->project_inode();
+    pi->version = ppv;
+    pi->nested.rbytes += drbytes;
+    pi->nested.rfiles += drfiles;
+    pi->nested.rctime = rctime;
+
+    frag_t fg = parent->dirfrag().frag;
+    pin->dirfrag_nested[fg].rbytes += drbytes;
+    pin->dirfrag_nested[fg].rfiles += drfiles;
+    pin->dirfrag_nested[fg].rctime = rctime;
+    
+    curi->accounted_nested.rbytes += drbytes;
+    curi->accounted_nested.rfiles += drfiles;
+    curi->accounted_nested.rctime = rctime;
+
+    cur = pin;
+    curi = pi;
+    parent = cur->get_projected_parent_dn()->get_dir();
+
+    drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
+    drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
+    rctime = MAX(curi->ctime, curi->nested.rctime);
+  }
+
+  // now, stick it in the blob
+  for (list<CInode*>::iterator p = ls.begin();
+       p != ls.end();
+       p++) {
+    CInode *cur = *p;
+    inode_t *pi = cur->get_projected_inode();
+    blob->add_primary_dentry(cur->get_parent_dn(), true, 0, pi);
+  }
+}
 
 
 
@@ -1791,11 +1891,8 @@ void Locker::scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr)
 }
 
 
-bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
+bool Locker::scatter_wrlock_try(ScatterLock *lock)
 {
-  dout(7) << "scatter_wrlock_start  on " << *lock
-	  << " on " << *lock->get_parent() << dendl;  
-  
   // pre-twiddle?
   if (lock->get_parent()->is_auth() &&
       !lock->get_parent()->is_replicated() &&
@@ -1809,6 +1906,18 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
   // can wrlock?
   if (lock->can_wrlock()) {
     lock->get_wrlock();
+    return true;
+  }
+
+  return false;
+}
+
+bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
+{
+  dout(7) << "scatter_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+  
+  if (scatter_wrlock_try(lock)) {
     mdr->wrlocks.insert(lock);
     mdr->locks.insert(lock);
     return true;
