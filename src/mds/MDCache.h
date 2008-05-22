@@ -118,6 +118,9 @@ struct MDRequest {
   bool committing;
   bool aborted;
 
+  // for applying projected inode changes
+  list<CInode*> projected_inodes;
+
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
@@ -221,6 +224,17 @@ struct MDRequest {
       (*it)->auth_unpin();
     }
     auth_pins.clear();
+  }
+
+  void add_projected_inode(CInode *in) {
+    projected_inodes.push_back(in);
+  }
+  void pop_and_dirty_projected_inodes() {
+    while (!projected_inodes.empty()) {
+      CInode *in = projected_inodes.front();
+      projected_inodes.pop_front();
+      in->pop_and_dirty_projected_inode(ls);
+    }
   }
 };
 

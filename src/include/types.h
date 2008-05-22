@@ -200,16 +200,19 @@ struct FileLayout {
 };
 
 struct nested_info_t {
-  uint64_t nested_size;       // \sum_{children}(size + nested_size)
-  utime_t  nested_ctime;      // \max_{children}(ctime, nested_ctime)
+  utime_t rctime;      // \max_{children}(ctime, nested_ctime)
+  __u64 rbytes;
+  __u64 rfiles;
   
   void encode(bufferlist &bl) const {
-    ::encode(nested_size, bl);
-    ::encode(nested_ctime, bl);
+    ::encode(rbytes, bl);
+    ::encode(rfiles, bl);
+    ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(nested_size, bl);
-    ::decode(nested_ctime, bl);
+    ::decode(rbytes, bl);
+    ::decode(rfiles, bl);
+    ::decode(rctime, bl);
   }
 };
 WRITE_CLASS_ENCODER(nested_info_t)
@@ -240,7 +243,12 @@ struct inode_t {
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
   // dirfrag, recursive accounting
-  nested_info_t nested;   // inline summation
+  nested_info_t accounted_nested;  // what dirfrag has seen
+  nested_info_t nested;            // inline summation for child dirfrags.
+  /*
+   * if accounted_nested does not match nested, the parent dirfrag needs to be 
+   * adjusted by the difference.
+   */
  
   // special stuff
   version_t version;           // auth only

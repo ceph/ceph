@@ -135,7 +135,9 @@ protected:
   void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
   void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
-  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
+public:
+  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);  // public for Server's predirty_nested
+protected:
   void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
 
   void scatter_writebehind(ScatterLock *lock);

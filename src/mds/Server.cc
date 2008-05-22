@@ -1539,6 +1539,81 @@ void Server::dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv)
   }
 }
 
+void Server::predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in, CDir *parent)
+{
+  if (!parent)
+    parent = in->get_parent_dir();
+
+  // initial diff from *in
+  inode_t *curi = in->get_projected_inode();
+  __u64 drbytes;
+  __u64 drfiles;
+  utime_t rctime;
+  if (in->is_dir()) {
+    drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
+    drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
+    rctime = MAX(curi->ctime, curi->nested.rctime);
+  } else {
+    drbytes = curi->size - curi->accounted_nested.rbytes;
+    drfiles = 1 - curi->accounted_nested.rfiles;
+    rctime = curi->ctime;
+  }
+  
+  blob->add_dir_context(in->get_parent_dir());
+
+  // build list of inodes to wrlock, dirty, and update
+  list<CInode*> ls;
+  CInode *cur = in;
+  while (parent) {
+    assert(cur->is_auth());
+    assert(parent->is_auth());
+    
+    // opportunistically adjust parent dirfrag
+    CInode *pin = parent->get_inode();
+    if (!pin->dirlock.can_wrlock()) {
+      dout(10) << " can't wrlock " << pin->dirlock << " on " << *pin << dendl;
+      break;
+    }
+    bool r = mds->locker->scatter_wrlock_start(&pin->dirlock, mdr);
+    assert(r);
+
+    if (!pin->is_auth()) {
+      break;
+    }
+
+    // project update
+    version_t ppv = pin->pre_dirty();
+    inode_t *pi = pin->project_inode();
+    pi->version = ppv;
+    pi->nested.rbytes += drbytes;
+    pi->nested.rfiles += drfiles;
+    pi->nested.rctime = rctime;
+    mdr->add_projected_inode(pin);
+    ls.push_back(pin);
+
+    frag_t fg = parent->dirfrag().frag;
+    pin->dirfrag_nested[fg].rbytes += drbytes;
+    pin->dirfrag_nested[fg].rfiles += drfiles;
+    pin->dirfrag_nested[fg].rctime = rctime;
+    
+    curi->accounted_nested.rbytes += drbytes;
+    curi->accounted_nested.rfiles += drfiles;
+    curi->accounted_nested.rctime = rctime;
+
+    cur = pin;
+    curi = pi;
+    parent = cur->get_parent_dir();
+  }
+
+  // now, stick it in the blob
+  for (list<CInode*>::iterator p = ls.begin();
+       p != ls.end();
+       p++) {
+    CInode *cur = *p;
+    inode_t *pi = cur->get_projected_inode();
+    blob->add_primary_dentry(cur->get_parent_dn(), true, 0, pi);
+  }
+}
 
 
 
@@ -2142,7 +2217,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
-
+  
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
@@ -2150,8 +2225,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
+  predirty_nested(mdr, &le->metablob, newi, dn->dir);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
-  
+
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
 }

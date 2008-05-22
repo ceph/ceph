@@ -88,6 +88,8 @@ mds
   - dentry versions vs dirfrags...
 - failure during reconnect vs clientmap.  
 
+- make truncate faster with a trunc_seq, attached to objects as attributes?
+
 - inode.rctime (recursive mtime)?
 - make inode.size reflect directory size (number of entries)?
 

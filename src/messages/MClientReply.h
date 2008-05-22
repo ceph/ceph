@@ -104,7 +104,7 @@ struct InodeStat {
   inodeno_t ino;
   version_t version;
   ceph_file_layout layout;
-  utime_t ctime, mtime, atime, nested_ctime;
+  utime_t ctime, mtime, atime, rctime;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size, nested_size;
   version_t time_warp_seq;
@@ -129,7 +129,6 @@ struct InodeStat {
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
-    nested.nested_ctime.decode_timeval(&e.nested_ctime);
     time_warp_seq = e.time_warp_seq;
     mode = e.mode;
     uid = e.uid;
@@ -138,10 +137,10 @@ struct InodeStat {
     size = e.size;
     max_size = e.max_size;
     rdev = e.rdev;
-    nested.nested_size = e.nested_size;
 
-    nested_ctime.decode_timeval(&e.nested_ctime);
-    nested_size = e.nested_size;
+    nested.rctime.decode_timeval(&e.rctime);
+    nested.rbytes = e.rbytes;
+    nested.rfiles = e.rfiles;
 
     int n = e.fragtree.nsplits;
     while (n) {
@@ -170,7 +169,6 @@ struct InodeStat {
     in->inode.ctime.encode_timeval(&e.ctime);
     in->inode.mtime.encode_timeval(&e.mtime);
     in->inode.atime.encode_timeval(&e.atime);
-    in->inode.nested.nested_ctime.encode_timeval(&e.nested_ctime);
     e.time_warp_seq = in->inode.time_warp_seq;
     e.mode = in->inode.mode;
     e.uid = in->inode.uid;
@@ -178,7 +176,11 @@ struct InodeStat {
     e.nlink = in->inode.nlink;
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
-    e.nested_size = in->inode.nested.nested_size;
+
+    in->inode.nested.rctime.encode_timeval(&e.rctime);
+    e.rbytes = in->inode.nested.rbytes;
+    e.rfiles = in->inode.nested.rfiles;
+
     e.rdev = in->inode.rdev;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
     ::encode(e, bl);

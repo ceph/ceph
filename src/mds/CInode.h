@@ -144,7 +144,6 @@ class CInode : public MDSCacheObject {
 
   // projected values (only defined while dirty)
   list<inode_t*>   projected_inode;
-  list<fragtree_t> projected_dirfragtree;
 
   version_t get_projected_version() {
     if (projected_inode.empty())
