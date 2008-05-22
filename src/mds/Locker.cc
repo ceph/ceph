@@ -840,7 +840,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   le->add_ino(in->ino());
   ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, true));
-  file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+  file_wrlock_start(&in->filelock, forcewrlock);  // wrlock for duration of journal
   return true;
 }
 
