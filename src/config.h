@@ -290,8 +290,8 @@ struct md_config_t {
   int   ebofs_commit_ms;
   int   ebofs_oc_size;
   int   ebofs_cc_size;
-  off_t ebofs_bc_size;
-  off_t ebofs_bc_max_dirty;
+  __u64 ebofs_bc_size;
+  __u64 ebofs_bc_max_dirty;
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;

@@ -39,9 +39,9 @@ using namespace __gnu_cxx;
 // disk
 typedef uint64_t block_t;        // disk location/sector/block
 
-static const int EBOFS_BLOCK_SIZE = 4096;
-static const int EBOFS_BLOCK_MASK = 4095;
-static const int EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
+static const unsigned EBOFS_BLOCK_SIZE = 4096;
+static const unsigned EBOFS_BLOCK_MASK = 4095;
+static const unsigned EBOFS_BLOCK_BITS = 12;    // 1<<12 == 4096
 
 struct extent_t {
   block_t start, length;

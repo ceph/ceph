@@ -97,9 +97,9 @@ class FileStore : public JournalingObjectStore {
   bool exists(coll_t cid, pobject_t oid);
   int stat(coll_t cid, pobject_t oid, struct stat *st);
   int remove(coll_t cid, pobject_t oid, Context *onsafe);
-  int truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe);
-  int read(coll_t cid, pobject_t oid, off_t offset, size_t len, bufferlist& bl);
-  int write(coll_t cid, pobject_t oid, off_t offset, size_t len, const bufferlist& bl, Context *onsafe);
+  int truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe);
+  int read(coll_t cid, pobject_t oid, __u64 offset, size_t len, bufferlist& bl);
+  int write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl, Context *onsafe);
   int clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
 
   void sync();
@@ -130,8 +130,8 @@ class FileStore : public JournalingObjectStore {
   int collection_list(coll_t c, list<pobject_t>& o);
 
   int pick_object_revision_lt(coll_t cid, pobject_t& oid) { return -1; }
-  void trim_from_cache(coll_t cid, pobject_t oid, off_t offset, size_t len) {}
-  int is_cached(coll_t cid, pobject_t oid, off_t offset, size_t len) { return -1; }
+  void trim_from_cache(coll_t cid, pobject_t oid, __u64 offset, size_t len) {}
+  int is_cached(coll_t cid, pobject_t oid, __u64 offset, size_t len) { return -1; }
 
 
 };
