@@ -320,15 +320,15 @@ bool Locker::acquire_locks(MDRequest *mdr,
 }
 
 
-void Locker::drop_locks(MDRequest *mdr)
+void Locker::drop_locks(Mutation *mut)
 {
   // leftover locks
-  while (!mdr->xlocks.empty()) 
-    xlock_finish(*mdr->xlocks.begin(), mdr);
-  while (!mdr->rdlocks.empty()) 
-    rdlock_finish(*mdr->rdlocks.begin(), mdr);
-  while (!mdr->wrlocks.empty()) 
-    wrlock_finish(*mdr->wrlocks.begin(), mdr);
+  while (!mut->xlocks.empty()) 
+    xlock_finish(*mut->xlocks.begin(), mut);
+  while (!mut->rdlocks.empty()) 
+    rdlock_finish(*mut->rdlocks.begin(), mut);
+  while (!mut->wrlocks.empty()) 
+    wrlock_finish(*mut->wrlocks.begin(), mut);
 }
 
 
@@ -348,94 +348,94 @@ void Locker::eval_gather(SimpleLock *lock)
   }
 }
 
-bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mdr)
+bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IFILE:
-    return file_rdlock_start((FileLock*)lock, mdr);
+    return file_rdlock_start((FileLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
-    return scatter_rdlock_start((ScatterLock*)lock, mdr);
+    return scatter_rdlock_start((ScatterLock*)lock, mut);
   default:
-    return simple_rdlock_start(lock, mdr);
+    return simple_rdlock_start(lock, mut);
   }
 }
 
-void Locker::rdlock_finish(SimpleLock *lock, MDRequest *mdr)
+void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IFILE:
-    return file_rdlock_finish((FileLock*)lock, mdr);
+    return file_rdlock_finish((FileLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
-    return scatter_rdlock_finish((ScatterLock*)lock, mdr);
+    return scatter_rdlock_finish((ScatterLock*)lock, mut);
   default:
-    return simple_rdlock_finish(lock, mdr);
+    return simple_rdlock_finish(lock, mut);
   }
 }
 
-bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mdr)
+bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
-    return scatter_wrlock_start((ScatterLock*)lock, mdr);
+    return scatter_wrlock_start((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
-    return local_wrlock_start((LocalLock*)lock, mdr);
+    return local_wrlock_start((LocalLock*)lock, mut);
     //case CEPH_LOCK_IFILE:
-    //return file_wrlock_start((ScatterLock*)lock, mdr);
+    //return file_wrlock_start((ScatterLock*)lock, mut);
   default:
     assert(0); 
     return false;
   }
 }
 
-void Locker::wrlock_finish(SimpleLock *lock, MDRequest *mdr)
+void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
-    return scatter_wrlock_finish((ScatterLock*)lock, mdr);
+    return scatter_wrlock_finish((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
-    return local_wrlock_finish((LocalLock*)lock, mdr);
+    return local_wrlock_finish((LocalLock*)lock, mut);
   default:
     assert(0);
   }
 }
 
-bool Locker::xlock_start(SimpleLock *lock, MDRequest *mdr)
+bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IFILE:
-    return file_xlock_start((FileLock*)lock, mdr);
+    return file_xlock_start((FileLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
-    return local_xlock_start((LocalLock*)lock, mdr);
+    return local_xlock_start((LocalLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
     assert(0);
   default:
-    return simple_xlock_start(lock, mdr);
+    return simple_xlock_start(lock, mut);
   }
 }
 
-void Locker::xlock_finish(SimpleLock *lock, MDRequest *mdr)
+void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IFILE:
-    return file_xlock_finish((FileLock*)lock, mdr);
+    return file_xlock_finish((FileLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
-    return local_xlock_finish((LocalLock*)lock, mdr);
+    return local_xlock_finish((LocalLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
     assert(0);
   default:
-    return simple_xlock_finish(lock, mdr);
+    return simple_xlock_finish(lock, mut);
   }
 }
 
@@ -471,33 +471,27 @@ version_t Locker::issue_file_data_version(CInode *in)
 struct C_Locker_FileUpdate_finish : public Context {
   Locker *locker;
   CInode *in;
-  list<CInode*> nest_updates;
-  LogSegment *ls;
+  Mutation *mut;
   bool share;
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, LogSegment *s, list<CInode*> &ls, bool e=false) : 
-    locker(l), in(i), ls(s), share(e) {
-    nest_updates.swap(ls);
+  C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false) : 
+    locker(l), in(i), mut(m), share(e) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
-    locker->file_update_finish(in, ls, nest_updates, share);
+    locker->file_update_finish(in, mut, share);
   }
 };
 
-void Locker::file_update_finish(CInode *in, LogSegment *ls, list<CInode*> &nest_updates, bool share)
+void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
-  in->pop_and_dirty_projected_inode(ls);
+  in->pop_and_dirty_projected_inode(mut->ls);
   in->put(CInode::PIN_PTRWAITER);
 
-  for (list<CInode*>::iterator p = nest_updates.begin();
-       p != nest_updates.end();
-       p++) {
-    (*p)->pop_and_dirty_projected_inode(ls);
-    scatter_wrlock_finish(&(*p)->dirlock, 0);
-  }
-
-  file_wrlock_finish(&in->filelock);
+  mut->pop_and_dirty_projected_inodes();
+  mut->pop_and_dirty_projected_fnodes();
+  drop_locks(mut);
+  
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
 }
@@ -846,20 +840,21 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
 
   dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
 	   << " on " << *in << dendl;
+
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
     
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->max_size = new_max;
   EOpen *le = new EOpen(mds->mdlog);
+  predirty_nested(mut, &le->metablob, in);
   le->metablob.add_dir_context(in->get_parent_dir());
-  list<CInode*> nest_updates;
-  predirty_nested(&le->metablob, in, nest_updates);
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-  LogSegment *ls = mds->mdlog->get_current_segment();
   le->add_ino(in->ino());
-  ls->open_files.push_back(&in->xlist_open_file);
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, nest_updates, true));
-  file_wrlock_start(&in->filelock, forcewrlock);  // wrlock for duration of journal
+  mut->ls->open_files.push_back(&in->xlist_open_file);
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
+  file_wrlock_start(&in->filelock, mut, forcewrlock);  // wrlock for duration of journal
   return true;
 }
 
@@ -1047,13 +1042,13 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
+    Mutation *mut = new Mutation;
+    mut->ls = mds->mdlog->get_current_segment();
+    file_wrlock_start(&in->filelock, mut);  // wrlock for duration of journal
+    predirty_nested(mut, &le->metablob, in);    
     le->metablob.add_dir_context(in->get_parent_dir());
-    list<CInode*> nest_updates;
-    predirty_nested(&le->metablob, in, nest_updates);
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, ls, nest_updates, change_max));
-    file_wrlock_start(&in->filelock);  // wrlock for duration of journal
+    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
   }
 
   // reevaluate, waiters
@@ -1223,12 +1218,9 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 // nested ---------------------------------------------------------------
 
-void Locker::predirty_nested(EMetaBlob *blob, CInode *in, list<CInode*> &ls)
+void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in)
 {
-  assert(ls.empty());
-
   CDir *parent = in->get_projected_parent_dn()->get_dir();
-  blob->add_dir_context(parent);
 
   // initial diff from *in
   inode_t *curi = in->get_projected_inode();
@@ -1248,6 +1240,7 @@ void Locker::predirty_nested(EMetaBlob *blob, CInode *in, list<CInode*> &ls)
   dout(10) << "predirty_nested delta " << drbytes << " bytes / " << drfiles << " files from " << *in << dendl;
   
   // build list of inodes to wrlock, dirty, and update
+  list<CInode*> lsi;
   CInode *cur = in;
   while (parent) {
     assert(cur->is_auth());
@@ -1260,12 +1253,24 @@ void Locker::predirty_nested(EMetaBlob *blob, CInode *in, list<CInode*> &ls)
     if (pin->is_base())
       break;
 
-    if (!scatter_wrlock_try(&pin->dirlock)) {
+    if (mut->wrlocks.count(&pin->dirlock) == 0 &&
+	!scatter_wrlock_try(&pin->dirlock, mut)) {
       dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
       break;
     }
 
-    ls.push_back(pin);
+    // inode -> dirfrag
+    mut->add_projected_fnode(parent);
+
+    fnode_t *pf = parent->project_fnode();
+    pf->version = parent->pre_dirty();
+    pf->nested.rbytes += drbytes;
+    pf->nested.rfiles += drfiles;
+    pf->nested.rctime = rctime;
+
+    curi->accounted_nested.rbytes += drbytes;
+    curi->accounted_nested.rfiles += drfiles;
+    curi->accounted_nested.rctime = rctime;
 
     // FIXME
     if (!pin->is_auth()) {
@@ -1273,22 +1278,16 @@ void Locker::predirty_nested(EMetaBlob *blob, CInode *in, list<CInode*> &ls)
       break;
     }
 
-    // project update
+    // dirfrag -> diri
+    mut->add_projected_inode(pin);
+    lsi.push_back(pin);
+
     version_t ppv = pin->pre_dirty();
     inode_t *pi = pin->project_inode();
     pi->version = ppv;
     pi->nested.rbytes += drbytes;
     pi->nested.rfiles += drfiles;
     pi->nested.rctime = rctime;
-
-    frag_t fg = parent->dirfrag().frag;
-    pin->dirfrag_nested[fg].rbytes += drbytes;
-    pin->dirfrag_nested[fg].rfiles += drfiles;
-    pin->dirfrag_nested[fg].rctime = rctime;
-    
-    curi->accounted_nested.rbytes += drbytes;
-    curi->accounted_nested.rfiles += drfiles;
-    curi->accounted_nested.rctime = rctime;
 
     cur = pin;
     curi = pi;
@@ -1300,8 +1299,9 @@ void Locker::predirty_nested(EMetaBlob *blob, CInode *in, list<CInode*> &ls)
   }
 
   // now, stick it in the blob
-  for (list<CInode*>::iterator p = ls.begin();
-       p != ls.end();
+  blob->add_dir_context(parent);
+  for (list<CInode*>::iterator p = lsi.begin();
+       p != lsi.end();
        p++) {
     CInode *cur = *p;
     inode_t *pi = cur->get_projected_inode();
@@ -1653,31 +1653,31 @@ bool Locker::simple_rdlock_try(SimpleLock *lock, Context *con)
   return false;
 }
 
-bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mdr)
+bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
 {
   dout(7) << "simple_rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // can read?  grab ref.
-  if (lock->can_rdlock(mdr)) {
+  if (lock->can_rdlock(mut)) {
     lock->get_rdlock();
-    mdr->rdlocks.insert(lock);
-    mdr->locks.insert(lock);
+    mut->rdlocks.insert(lock);
+    mut->locks.insert(lock);
     return true;
   }
   
   // wait!
   dout(7) << "simple_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
+  lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
   return false;
 }
 
-void Locker::simple_rdlock_finish(SimpleLock *lock, MDRequest *mdr)
+void Locker::simple_rdlock_finish(SimpleLock *lock, Mutation *mut)
 {
   // drop ref
   lock->put_rdlock();
-  if (mdr) {
-    mdr->rdlocks.erase(lock);
-    mdr->locks.erase(lock);
+  if (mut) {
+    mut->rdlocks.erase(lock);
+    mut->locks.erase(lock);
   }
 
   dout(7) << "simple_rdlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -1687,13 +1687,13 @@ void Locker::simple_rdlock_finish(SimpleLock *lock, MDRequest *mdr)
     simple_eval_gather(lock);
 }
 
-bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
+bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mut)
 {
   dout(7) << "simple_xlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // xlock by me?
   if (lock->is_xlocked() &&
-      lock->get_xlocked_by() == mdr) 
+      lock->get_xlocked_by() == mut) 
     return true;
 
   // auth?
@@ -1708,57 +1708,57 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mdr)
     if (lock->get_state() == LOCK_LOCK) {
       if (lock->is_xlocked()) {
 	// by someone else.
-	lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mdr));
+	lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
 	return false;
       }
 
       // xlock.
-      lock->get_xlock(mdr);
-      mdr->xlocks.insert(lock);
-      mdr->locks.insert(lock);
+      lock->get_xlock(mut);
+      mut->xlocks.insert(lock);
+      mut->locks.insert(lock);
       return true;
     } else {
       // wait for lock
-      lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
       return false;
     }
   } else {
     // replica
     // this had better not be a remote xlock attempt!
-    assert(!mdr->slave_request);
+    assert(!mut->slave_request);
 
     // wait for single auth
     if (lock->get_parent()->is_ambiguous_auth()) {
       lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
-				     new C_MDS_RetryRequest(mdcache, mdr));
+				     new C_MDS_RetryRequest(mdcache, mut));
       return false;
     }
 
     // send lock request
     int auth = lock->get_parent()->authority().first;
-    mdr->more()->slaves.insert(auth);
-    MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCK);
+    mut->more()->slaves.insert(auth);
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_XLOCK);
     r->set_lock_type(lock->get_type());
     lock->get_parent()->set_object_info(r->get_object_info());
     mds->send_message_mds(r, auth);
     
     // wait
-    lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mdr));
+    lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 }
 
 
-void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
+void Locker::simple_xlock_finish(SimpleLock *lock, Mutation *mut)
 {
   dout(7) << "simple_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // drop ref
-  assert(lock->can_xlock(mdr));
+  assert(lock->can_xlock(mut));
   lock->put_xlock();
-  assert(mdr);
-  mdr->xlocks.erase(lock);
-  mdr->locks.erase(lock);
+  assert(mut);
+  mut->xlocks.erase(lock);
+  mut->locks.erase(lock);
 
   // remote xlock?
   if (!lock->get_parent()->is_auth()) {
@@ -1766,7 +1766,7 @@ void Locker::simple_xlock_finish(SimpleLock *lock, MDRequest *mdr)
     dout(7) << "simple_xlock_finish releasing remote xlock on " << *lock->get_parent()  << dendl;
     int auth = lock->get_parent()->authority().first;
     if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
-      MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNXLOCK);
+      MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, MMDSSlaveRequest::OP_UNXLOCK);
       slavereq->set_lock_type(lock->get_type());
       lock->get_parent()->set_object_info(slavereq->get_object_info());
       mds->send_message_mds(slavereq, auth);
@@ -1834,7 +1834,7 @@ void Locker::dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace)
 // ==========================================================================
 // scatter lock
 
-bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr)
+bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mut)
 {
   dout(7) << "scatter_rdlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -1843,7 +1843,7 @@ bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr)
   if (lock->get_state() == LOCK_SCATTER &&
       !lock->get_parent()->is_auth()) {
     dout(7) << "scatter_rdlock_start  scatterlock read on a stable scattered replica, fw to auth" << dendl;
-    mdcache->request_forward(mdr, lock->get_parent()->authority().first);
+    mdcache->request_forward(mut, lock->get_parent()->authority().first);
     return false;
   }
 
@@ -1855,15 +1855,15 @@ bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr)
     scatter_sync(lock);
 
   // can rdlock?
-  if (lock->can_rdlock(mdr)) {
+  if (lock->can_rdlock(mut)) {
     lock->get_rdlock();
-    mdr->rdlocks.insert(lock);
-    mdr->locks.insert(lock);
+    mut->rdlocks.insert(lock);
+    mut->locks.insert(lock);
     return true;
   }
 
   // wait for read.
-  lock->add_waiter(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+  lock->add_waiter(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
 
   // initiate sync or tempsync?
   if (lock->is_stable() &&
@@ -1877,21 +1877,21 @@ bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr)
   return false;
 }
 
-void Locker::scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr)
+void Locker::scatter_rdlock_finish(ScatterLock *lock, MDRequest *mut)
 {
   dout(7) << "scatter_rdlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->put_rdlock();
-  if (mdr) {
-    mdr->rdlocks.erase(lock);
-    mdr->locks.erase(lock);
+  if (mut) {
+    mut->rdlocks.erase(lock);
+    mut->locks.erase(lock);
   }
   
   scatter_eval_gather(lock);
 }
 
 
-bool Locker::scatter_wrlock_try(ScatterLock *lock)
+bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut)
 {
   // pre-twiddle?
   if (lock->get_parent()->is_auth() &&
@@ -1906,26 +1906,25 @@ bool Locker::scatter_wrlock_try(ScatterLock *lock)
   // can wrlock?
   if (lock->can_wrlock()) {
     lock->get_wrlock();
+    mut->wrlocks.insert(lock);
+    mut->locks.insert(lock);
     return true;
   }
 
   return false;
 }
 
-bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
+bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mut)
 {
   dout(7) << "scatter_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
-  if (scatter_wrlock_try(lock)) {
-    mdr->wrlocks.insert(lock);
-    mdr->locks.insert(lock);
+  if (scatter_wrlock_try(lock, mut))
     return true;
-  }
 
   // wait for write.
   lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, 
-		   new C_MDS_RetryRequest(mdcache, mdr));
+		   new C_MDS_RetryRequest(mdcache, mut));
   
   // initiate scatter or lock?
   if (lock->is_stable()) {
@@ -1948,14 +1947,14 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr)
   return false;
 }
 
-void Locker::scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr)
+void Locker::scatter_wrlock_finish(ScatterLock *lock, Mutation *mut)
 {
   dout(7) << "scatter_wrlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->put_wrlock();
-  if (mdr) {
-    mdr->wrlocks.erase(lock);
-    mdr->locks.erase(lock);
+  if (mut) {
+    mut->wrlocks.erase(lock);
+    mut->locks.erase(lock);
   }
   
   scatter_eval_gather(lock);
@@ -2577,54 +2576,54 @@ void Locker::scatter_unscatter_autoscattered()
 // local lock
 
 
-bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mdr)
+bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
 {
   dout(7) << "local_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
   if (lock->can_wrlock()) {
     lock->get_wrlock();
-    mdr->wrlocks.insert(lock);
-    mdr->locks.insert(lock);
+    mut->wrlocks.insert(lock);
+    mut->locks.insert(lock);
     return true;
   } else {
-    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 }
 
-void Locker::local_wrlock_finish(LocalLock *lock, MDRequest *mdr)
+void Locker::local_wrlock_finish(LocalLock *lock, MDRequest *mut)
 {
   dout(7) << "local_wrlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->put_wrlock();
-  mdr->wrlocks.erase(lock);
-  mdr->locks.erase(lock);
+  mut->wrlocks.erase(lock);
+  mut->locks.erase(lock);
 }
 
-bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mdr)
+bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
 {
   dout(7) << "local_xlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
-  if (lock->is_xlocked_by_other(mdr)) {
-    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+  if (lock->is_xlocked_by_other(mut)) {
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 
-  lock->get_xlock(mdr);
-  mdr->xlocks.insert(lock);
-  mdr->locks.insert(lock);
+  lock->get_xlock(mut);
+  mut->xlocks.insert(lock);
+  mut->locks.insert(lock);
   return true;
 }
 
-void Locker::local_xlock_finish(LocalLock *lock, MDRequest *mdr)
+void Locker::local_xlock_finish(LocalLock *lock, MDRequest *mut)
 {
   dout(7) << "local_xlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->put_xlock();
-  mdr->xlocks.erase(lock);
-  mdr->locks.erase(lock);
+  mut->xlocks.erase(lock);
+  mut->locks.erase(lock);
 
   lock->finish_waiters(SimpleLock::WAIT_STABLE | 
 		       SimpleLock::WAIT_WR | 
@@ -2637,15 +2636,15 @@ void Locker::local_xlock_finish(LocalLock *lock, MDRequest *mdr)
 // file lock
 
 
-bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mdr)
+bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mut)
 {
   dout(7) << "file_rdlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
   // can read?  grab ref.
-  if (lock->can_rdlock(mdr)) {
+  if (lock->can_rdlock(mut)) {
     lock->get_rdlock();
-    mdr->rdlocks.insert(lock);
-    mdr->locks.insert(lock);
+    mut->rdlocks.insert(lock);
+    mut->locks.insert(lock);
     return true;
   }
   
@@ -2662,17 +2661,17 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mdr)
       if (lock->is_stable()) {
         file_lock(lock);     // lock, bc easiest to back off ... FIXME
 	
-        if (lock->can_rdlock(mdr)) {
+        if (lock->can_rdlock(mut)) {
           lock->get_rdlock();
-	  mdr->rdlocks.insert(lock);
-	  mdr->locks.insert(lock);
+	  mut->rdlocks.insert(lock);
+	  mut->locks.insert(lock);
           
           lock->finish_waiters(SimpleLock::WAIT_STABLE);
           return true;
         }
       } else {
         dout(7) << "file_rdlock_start waiting until stable on " << *lock << " on " << *lock->get_parent() << dendl;
-        lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+        lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
         return false;
       }
     } else {
@@ -2684,13 +2683,13 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mdr)
         int auth = in->authority().first;
         dout(7) << "file_rdlock_start " << *lock << " on " << *lock->get_parent() << " on replica and async, fw to auth " << auth << dendl;
         assert(auth != mds->get_nodeid());
-        mdcache->request_forward(mdr, auth);
+        mdcache->request_forward(mut, auth);
         return false;
         
       } else {
         // wait until stable
         dout(7) << "inode_file_rdlock_start waiting until stable on " << *lock << " on " << *lock->get_parent() << dendl;
-        lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+        lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
         return false;
       }
     }
@@ -2698,21 +2697,21 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mdr)
   
   // wait
   dout(7) << "file_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
+  lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
         
   return false;
 }
 
 
 
-void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
+void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mut)
 {
   dout(7) << "rdlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // drop ref
   lock->put_rdlock();
-  mdr->rdlocks.erase(lock);
-  mdr->locks.erase(lock);
+  mut->rdlocks.erase(lock);
+  mut->locks.erase(lock);
 
   if (!lock->is_rdlocked()) {
     if (!lock->is_stable())
@@ -2722,54 +2721,60 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mdr)
   }
 }
 
-bool Locker::file_wrlock_start(FileLock *lock, bool force)
+bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut, bool force)
 {
   dout(7) << "file_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   assert(force || lock->can_wrlock());
   lock->get_wrlock();
+  mut->wrlocks.insert(lock);
+  mut->locks.insert(lock);
   return true;
 
   /*
   if (lock->can_wrlock()) {
     lock->get_wrlock();
-    mdr->wrlocks.insert(lock);
-    mdr->locks.insert(lock);
+    mut->wrlocks.insert(lock);
+    mut->locks.insert(lock);
     return true;
   } else {
-    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
     return false;
     }*/
 }
 
-void Locker::file_wrlock_finish(FileLock *lock)
+void Locker::file_wrlock_finish(FileLock *lock, Mutation *mut)
 {
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->put_wrlock();
-  
+  if (mut) {
+    mut->wrlocks.erase(lock);
+    mut->locks.erase(lock);
+  }
+
   if (!lock->is_wrlocked())
     file_eval_gather(lock);
 }
 
 
-bool Locker::file_xlock_start(FileLock *lock, MDRequest *mdr)
+bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
 {
   dout(7) << "file_xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
 
   assert(lock->get_parent()->is_auth());  // remote file xlock not implemented
 
   // already xlocked by me?
-  if (lock->get_xlocked_by() == mdr)
+  if (lock->get_xlocked_by() == mut)
     return true;
 
   // can't write?
-  if (!lock->can_xlock(mdr)) {
+  if (!lock->can_xlock(mut)) {
     
     // auth
     if (!lock->can_xlock_soon()) {
       if (!lock->is_stable()) {
 	dout(7) << "file_xlock_start on auth, waiting for stable on " << *lock << " on " << *lock->get_parent() << dendl;
-	lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+	lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
 	return false;
       }
       
@@ -2781,29 +2786,29 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mdr)
   } 
   
   // check again
-  if (lock->can_xlock(mdr)) {
+  if (lock->can_xlock(mut)) {
     assert(lock->get_parent()->is_auth());
-    lock->get_xlock(mdr);
-    mdr->locks.insert(lock);
-    mdr->xlocks.insert(lock);
+    lock->get_xlock(mut);
+    mut->locks.insert(lock);
+    mut->xlocks.insert(lock);
     return true;
   } else {
     dout(7) << "file_xlock_start on auth, waiting for write on " << *lock << " on " << *lock->get_parent() << dendl;
-    lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mdr));
+    lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 }
 
 
-void Locker::file_xlock_finish(FileLock *lock, MDRequest *mdr)
+void Locker::file_xlock_finish(FileLock *lock, MDRequest *mut)
 {
   dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // drop ref
-  assert(lock->can_xlock(mdr));
+  assert(lock->can_xlock(mut));
   lock->put_xlock();
-  mdr->locks.erase(lock);
-  mdr->xlocks.erase(lock);
+  mut->locks.erase(lock);
+  mut->xlocks.erase(lock);
 
   assert(lock->get_parent()->is_auth());  // or implement remote xlocks
 

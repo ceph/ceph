@@ -21,6 +21,7 @@ class Logger;
 class LogEvent;
 class C_MDS_rename_finish;
 class MDRequest;
+class Mutation;
 class EMetaBlob;
 class EUpdate;
 class PVList;
@@ -102,7 +103,6 @@ public:
 
   version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob, int deltasize=0);
   void dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv);
-  void predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in);
 
 
   // requests on existing inodes.

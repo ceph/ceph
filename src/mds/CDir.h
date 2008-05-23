@@ -153,29 +153,33 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
-  //int hack_num_accessed;
+  fnode_t fnode;
 
 protected:
-  fnode_t fnode;
+  version_t projected_version;
   list<fnode_t*> projected_fnode;
+
   xlist<CDir*>::item xlist_dirty;
+
 
 public:
   version_t get_version() { return fnode.version; }
   void set_version(version_t v) { 
     assert(projected_fnode.empty());
-    fnode.version = v; 
+    projected_version = fnode.version = v; 
   }
+  version_t get_projected_version() { return projected_version; }
+
   fnode_t *get_projected_fnode() {
     if (projected_fnode.empty())
       return &fnode;
     else
       return projected_fnode.back();
   }
-  version_t get_projected_version() { return get_projected_fnode()->version; }
   fnode_t *project_fnode();
+
   void pop_and_dirty_projected_fnode(LogSegment *ls);
-  bool is_projected() { return !projected_fnode.empty(); }
+  bool is_projected() { return get_projected_version() > get_version(); }
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
   void mark_dirty(version_t pv, LogSegment *ls);

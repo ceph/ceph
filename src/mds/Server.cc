@@ -1542,26 +1542,6 @@ void Server::dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv)
   }
 }
 
-void Server::predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in)
-{
-  list<CInode*> ls;
-  mds->locker->predirty_nested(blob, in, ls);
-
-  for (list<CInode*>::iterator p = ls.begin();
-       p != ls.end();
-       p++) {
-    ScatterLock *lock = &(*p)->dirlock;
-    if (mdr->wrlocks.count(lock))
-      lock->put_wrlock();
-    else {
-      mdr->wrlocks.insert(lock);
-      mdr->locks.insert(lock);
-    }
-    mdr->add_projected_inode(*p);
-  }
-}
-
-
 
 // ===============================================================================
 // STAT
@@ -2037,6 +2017,7 @@ public:
     // dir inode's mtime
     mds->server->dirty_dn_diri(mdr, dn, dirpv);
     mdr->pop_and_dirty_projected_inodes();
+    mdr->pop_and_dirty_projected_fnodes();
 
     // hit pop
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
@@ -2075,9 +2056,9 @@ void Server::handle_client_mknod(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mknod");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
+  mds->locker->predirty_nested(mdr, &le->metablob, newi);
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
-  predirty_nested(mdr, &le->metablob, newi);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
   // log + wait
@@ -2122,7 +2103,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
-  predirty_nested(mdr, &le->metablob, newi);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
@@ -2175,7 +2156,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
   le->metablob.add_dir_context(dn->dir);
-  predirty_nested(mdr, &le->metablob, newi);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
 
   // log + wait

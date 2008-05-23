@@ -164,7 +164,8 @@ public:
     static const int STATE_COMPLETE = (1<<1);
     static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
 
-    version_t  dirv;
+    //version_t  dirv;
+    fnode_t fnode;
     __u32 state;
     __u32 nfull, nremote, nnull;
 
@@ -176,7 +177,7 @@ public:
     list<nullbit>   dnull;
 
   public:
-    dirlump() : dirv(0), state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
+    dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
     bool is_complete() { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
@@ -188,7 +189,7 @@ public:
     list<nullbit>   &get_dnull()   { return dnull; }
 
     void print(dirfrag_t dirfrag, ostream& out) {
-      out << "dirlump " << dirfrag << " dirv " << dirv 
+      out << "dirlump " << dirfrag << " v " << fnode.version
 	  << " state " << state
 	  << " num " << nfull << "/" << nremote << "/" << nnull
 	  << std::endl;
@@ -216,7 +217,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      ::encode(dirv, bl);
+      ::encode(fnode, bl);
       ::encode(state, bl);
       ::encode(nfull, bl);
       ::encode(nremote, bl);
@@ -225,7 +226,7 @@ public:
       ::encode(dnbl, bl);
     }
     void decode(bufferlist::iterator &bl) {
-      ::decode(dirv, bl);
+      ::decode(fnode, bl);
       ::decode(state, bl);
       ::decode(nfull, bl);
       ::decode(nremote, bl);
@@ -415,12 +416,14 @@ private:
 
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
-    return add_dir(dir->dirfrag(), dir->get_projected_version(), dirty, complete);
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+		   dirty, complete);
   }
-  dirlump& add_dir(dirfrag_t df, version_t pv, bool dirty, bool complete=false) {
+  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty, bool complete=false) {
     if (lump_map.count(df) == 0) {
       lump_order.push_back(df);
-      lump_map[df].dirv = pv;
+      lump_map[df].fnode = *pf;
+      lump_map[df].fnode.version = pv;
     }
     dirlump& l = lump_map[df];
     if (complete) l.mark_complete();

@@ -72,6 +72,7 @@ ostream& operator<<(ostream& out, CInode& in)
 
   out << " s=" << in.inode.size;
   out << " rb=" << in.inode.nested.rbytes << "/" << in.inode.accounted_nested.rbytes;
+  out << " rf=" << in.inode.nested.rfiles << "/" << in.inode.accounted_nested.rfiles;
 
   // locks
   out << " " << in.authlock;

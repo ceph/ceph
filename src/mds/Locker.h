@@ -29,6 +29,9 @@ class Session;
 class CDir;
 class CInode;
 class CDentry;
+class Mutation;
+class MDRequest;
+class EMetaBlob;
 
 class Message;
 
@@ -76,18 +79,18 @@ public:
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks);
 
-  void drop_locks(MDRequest *mdr);
+  void drop_locks(Mutation *mut);
 
   void eval_gather(SimpleLock *lock);
 protected:
-  bool rdlock_start(SimpleLock *lock, MDRequest *mdr);
-  void rdlock_finish(SimpleLock *lock, MDRequest *mdr);
-  bool xlock_start(SimpleLock *lock, MDRequest *mdr);
+  bool rdlock_start(SimpleLock *lock, MDRequest *mut);
+  void rdlock_finish(SimpleLock *lock, Mutation *mut);
+  bool xlock_start(SimpleLock *lock, MDRequest *mut);
 public:
-  void xlock_finish(SimpleLock *lock, MDRequest *mdr);  // public for Server's slave UNXLOCK
+  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
 protected:
-  bool wrlock_start(SimpleLock *lock, MDRequest *mdr);
-  void wrlock_finish(SimpleLock *lock, MDRequest *mdr);
+  bool wrlock_start(SimpleLock *lock, MDRequest *mut);
+  void wrlock_finish(SimpleLock *lock, Mutation *mut);
 
 public:
   void rejoin_set_state(SimpleLock *lock, int s, list<Context*>& waiters);
@@ -102,10 +105,10 @@ protected:
   void handle_simple_lock(SimpleLock *lock, MLock *m);
   void simple_sync(SimpleLock *lock);
   void simple_lock(SimpleLock *lock);
-  bool simple_rdlock_start(SimpleLock *lock, MDRequest *mdr);
-  void simple_rdlock_finish(SimpleLock *lock, MDRequest *mdr);
-  bool simple_xlock_start(SimpleLock *lock, MDRequest *mdr);
-  void simple_xlock_finish(SimpleLock *lock, MDRequest *mdr);
+  bool simple_rdlock_start(SimpleLock *lock, MDRequest *mut);
+  void simple_rdlock_finish(SimpleLock *lock, Mutation *mut);
+  bool simple_xlock_start(SimpleLock *lock, MDRequest *mut);
+  void simple_xlock_finish(SimpleLock *lock, Mutation *mut);
 
 public:
   bool dentry_can_rdlock_trace(vector<CDentry*>& trace);
@@ -133,11 +136,11 @@ protected:
   void scatter_sync(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock);
   void scatter_tempsync(ScatterLock *lock);
-  bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mdr);
-  void scatter_rdlock_finish(ScatterLock *lock, MDRequest *mdr);
-  bool scatter_wrlock_try(ScatterLock *lock);
-  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mdr);
-  void scatter_wrlock_finish(ScatterLock *lock, MDRequest *mdr);
+  bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mut);
+  void scatter_rdlock_finish(ScatterLock *lock, Mutation *mut);
+  bool scatter_wrlock_try(ScatterLock *lock, Mutation *mut);
+  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mut);
+  void scatter_wrlock_finish(ScatterLock *lock, Mutation *mut);
 
   void scatter_writebehind(ScatterLock *lock);
   class C_Locker_ScatterWB : public Context {
@@ -153,14 +156,14 @@ protected:
   void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
 
 public:
-  void predirty_nested(class EMetaBlob *blob, CInode *in, list<CInode*> &ls);
+  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in);
 
   // local
 protected:
-  bool local_wrlock_start(LocalLock *lock, MDRequest *mdr);
-  void local_wrlock_finish(LocalLock *lock, MDRequest *mdr);
-  bool local_xlock_start(LocalLock *lock, MDRequest *mdr);
-  void local_xlock_finish(LocalLock *lock, MDRequest *mdr);
+  bool local_wrlock_start(LocalLock *lock, MDRequest *mut);
+  void local_wrlock_finish(LocalLock *lock, Mutation *mut);
+  bool local_xlock_start(LocalLock *lock, MDRequest *mut);
+  void local_xlock_finish(LocalLock *lock, Mutation *mut);
 
 
   // file
@@ -175,12 +178,12 @@ protected:
   void file_mixed(FileLock *lock);
   void file_loner(FileLock *lock);
   bool file_rdlock_try(FileLock *lock, Context *con);
-  bool file_rdlock_start(FileLock *lock, MDRequest *mdr);
-  void file_rdlock_finish(FileLock *lock, MDRequest *mdr);
-  bool file_wrlock_start(FileLock *lock, bool force=false);
+  bool file_rdlock_start(FileLock *lock, MDRequest *mut);
+  void file_rdlock_finish(FileLock *lock, Mutation *mut);
+  bool file_wrlock_start(FileLock *lock, MDRequest *mut, bool force=false);
   void file_wrlock_finish(FileLock *lock);
-  bool file_xlock_start(FileLock *lock, MDRequest *mdr);
-  void file_xlock_finish(FileLock *lock, MDRequest *mdr);
+  bool file_xlock_start(FileLock *lock, MDRequest *mut);
+  void file_xlock_finish(FileLock *lock, Mutation *mut);
 
 
 
@@ -199,7 +202,7 @@ protected:
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, LogSegment *ls, list<CInode*> &nest_updates, bool share);
+  void file_update_finish(CInode *in, Mutation *mut, bool share);
 public:
   bool check_inode_max_size(CInode *in, bool forcewrlock=false);
 private:

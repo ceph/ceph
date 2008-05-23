@@ -92,7 +92,7 @@ any + statlite(mtime)
 
 // -- lock... hard or file
 
-class MDRequest;
+class Mutation;
 
 class FileLock : public SimpleLock {
   int num_wrlock;
@@ -136,7 +136,7 @@ class FileLock : public SimpleLock {
   }
 
   // read/write access
-  bool can_rdlock(MDRequest *mdr) {
+  bool can_rdlock(Mutation *mdr) {
     if (!parent->is_auth()) return (state == LOCK_SYNC);
     //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true;
     if (state == LOCK_LOCK && !xlock_by) return true;

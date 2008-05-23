@@ -86,6 +86,10 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
+  out << " s=" << dir.fnode.size;
+  out << " rb=" << dir.fnode.nested.rbytes;
+  out << " rf=" << dir.fnode.nested.rfiles;
+
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
   if (dir.get_num_dirty())
     out << " dirty=" << dir.get_num_dirty();
@@ -557,7 +561,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     f->replica_map = replica_map;
     f->dir_auth = dir_auth;
     f->init_fragment_pins();
-    f->fnode.version = get_version();
+    f->set_version(get_version());
 
     f->pop_me = pop_me;
     f->pop_me *= fac;
@@ -776,22 +780,6 @@ fnode_t *CDir::project_fnode()
   return p;
 }
 
-version_t CDir::pre_dirty(version_t min)
-{
-  fnode_t *pf = project_fnode();
-  if (min > pf->version)
-    pf->version = min;
-  ++pf->version;
-  dout(10) << "pre_dirty " << pf->version << dendl;
-  return pf->version;
-}
-
-void CDir::mark_dirty(version_t pv, LogSegment *ls)
-{
-  assert(get_version() < pv);
-  pop_and_dirty_projected_fnode(ls);
-}
-
 void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
 {
   assert(!projected_fnode.empty());
@@ -801,6 +789,24 @@ void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
   delete projected_fnode.front();
   _mark_dirty(ls);
   projected_fnode.pop_front();
+}
+
+
+version_t CDir::pre_dirty(version_t min)
+{
+  if (min > projected_version)
+    projected_version = min;
+  ++projected_version;
+  dout(10) << "pre_dirty " << projected_version << dendl;
+  return projected_version;
+}
+
+void CDir::mark_dirty(version_t pv, LogSegment *ls)
+{
+  assert(get_version() < pv);
+  assert(pv <= projected_version);
+  fnode.version = pv;
+  _mark_dirty(ls);
 }
 
 void CDir::_mark_dirty(LogSegment *ls)
@@ -1063,7 +1069,7 @@ void CDir::_fetched(bufferlist &bl)
     assert(!is_projected());
     assert(!state_test(STATE_COMMITTING));
     fnode = got_fnode;
-    committing_version = committed_version = got_fnode.version;
+    projected_version = committing_version = committed_version = got_fnode.version;
   }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
