@@ -156,7 +156,7 @@ protected:
   void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
 
 public:
-  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in);
+  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, bool parent_mtime);
 
   // local
 protected:
@@ -180,8 +180,8 @@ protected:
   bool file_rdlock_try(FileLock *lock, Context *con);
   bool file_rdlock_start(FileLock *lock, MDRequest *mut);
   void file_rdlock_finish(FileLock *lock, Mutation *mut);
-  bool file_wrlock_start(FileLock *lock, MDRequest *mut, bool force=false);
-  void file_wrlock_finish(FileLock *lock);
+  bool file_wrlock_force(FileLock *lock, Mutation *mut);
+  void file_wrlock_finish(FileLock *lock, Mutation *mut);
   bool file_xlock_start(FileLock *lock, MDRequest *mut);
   void file_xlock_finish(FileLock *lock, Mutation *mut);
 

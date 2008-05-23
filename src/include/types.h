@@ -302,11 +302,13 @@ static inline void decode(inode_t &i, bufferlist::iterator &p) {
  */
 struct fnode_t {
   version_t version;
+  utime_t mtime;
   __u64 size;            // files + dirs
   __u64 nprimary, nremote;
   __u64 nfiles;          // files
   __u64 nsubdirs;        // subdirs
   nested_info_t nested;  // nested summation
+  nested_info_t accounted_nested;  // nested summation
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
@@ -316,6 +318,7 @@ struct fnode_t {
     ::encode(nfiles, bl);
     ::encode(nsubdirs, bl);
     ::encode(nested, bl);
+    ::encode(accounted_nested, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
@@ -325,6 +328,7 @@ struct fnode_t {
     ::decode(nfiles, bl);
     ::decode(nsubdirs, bl);
     ::decode(nested, bl);
+    ::decode(accounted_nested, bl);
   }
 };
 WRITE_CLASS_ENCODER(fnode_t)

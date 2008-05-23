@@ -848,13 +848,13 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   pi->version = in->pre_dirty();
   pi->max_size = new_max;
   EOpen *le = new EOpen(mds->mdlog);
-  predirty_nested(mut, &le->metablob, in);
+  predirty_nested(mut, &le->metablob, in, false);
   le->metablob.add_dir_context(in->get_parent_dir());
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   le->add_ino(in->ino());
   mut->ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
-  file_wrlock_start(&in->filelock, mut, forcewrlock);  // wrlock for duration of journal
+  file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   return true;
 }
 
@@ -1044,8 +1044,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     }
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
-    file_wrlock_start(&in->filelock, mut);  // wrlock for duration of journal
-    predirty_nested(mut, &le->metablob, in);    
+    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+    predirty_nested(mut, &le->metablob, in, false);
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
@@ -1218,7 +1218,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 // nested ---------------------------------------------------------------
 
-void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in)
+void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, bool parent_mtime)
 {
   CDir *parent = in->get_projected_parent_dn()->get_dir();
 
@@ -1264,6 +1264,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in)
 
     fnode_t *pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
+    if (parent_mtime) {
+      dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
+      pf->mtime = rctime = mut->now;
+    }
     pf->nested.rbytes += drbytes;
     pf->nested.rfiles += drfiles;
     pf->nested.rctime = rctime;
@@ -1272,11 +1276,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in)
     curi->accounted_nested.rfiles += drfiles;
     curi->accounted_nested.rctime = rctime;
 
-    // FIXME
-    if (!pin->is_auth()) {
-      assert(0);
+    if (!pin->is_auth())
       break;
-    }
 
     // dirfrag -> diri
     mut->add_projected_inode(pin);
@@ -1285,10 +1286,17 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in)
     version_t ppv = pin->pre_dirty();
     inode_t *pi = pin->project_inode();
     pi->version = ppv;
+    if (pf->mtime > pi->mtime)
+      pi->mtime = pf->mtime;
     pi->nested.rbytes += drbytes;
     pi->nested.rfiles += drfiles;
     pi->nested.rctime = rctime;
 
+    pf->accounted_nested.rbytes += drbytes;
+    pf->accounted_nested.rfiles += drfiles;
+    pf->accounted_nested.rctime = rctime;
+    
+    // next parent!
     cur = pin;
     curi = pi;
     parent = cur->get_projected_parent_dn()->get_dir();
@@ -1299,13 +1307,16 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in)
   }
 
   // now, stick it in the blob
+  assert(parent->is_auth());
   blob->add_dir_context(parent);
+  blob->add_dir(parent, true);
+
   for (list<CInode*>::iterator p = lsi.begin();
        p != lsi.end();
        p++) {
     CInode *cur = *p;
     inode_t *pi = cur->get_projected_inode();
-    blob->add_primary_dentry(cur->get_parent_dn(), true, 0, pi);
+    blob->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, pi);
   }
 }
 
@@ -1877,7 +1888,7 @@ bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mut)
   return false;
 }
 
-void Locker::scatter_rdlock_finish(ScatterLock *lock, MDRequest *mut)
+void Locker::scatter_rdlock_finish(ScatterLock *lock, Mutation *mut)
 {
   dout(7) << "scatter_rdlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -2592,7 +2603,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
   }
 }
 
-void Locker::local_wrlock_finish(LocalLock *lock, MDRequest *mut)
+void Locker::local_wrlock_finish(LocalLock *lock, Mutation *mut)
 {
   dout(7) << "local_wrlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -2617,7 +2628,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
   return true;
 }
 
-void Locker::local_xlock_finish(LocalLock *lock, MDRequest *mut)
+void Locker::local_xlock_finish(LocalLock *lock, Mutation *mut)
 {
   dout(7) << "local_xlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -2704,7 +2715,7 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mut)
 
 
 
-void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mut)
+void Locker::file_rdlock_finish(FileLock *lock, Mutation *mut)
 {
   dout(7) << "rdlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
@@ -2721,12 +2732,11 @@ void Locker::file_rdlock_finish(FileLock *lock, MDRequest *mut)
   }
 }
 
-bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut, bool force)
+bool Locker::file_wrlock_force(FileLock *lock, Mutation *mut)
 {
-  dout(7) << "file_wrlock_start  on " << *lock
+  dout(7) << "file_wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
-  assert(force || lock->can_wrlock());
-  lock->get_wrlock();
+  lock->get_wrlock(true);
   mut->wrlocks.insert(lock);
   mut->locks.insert(lock);
   return true;
@@ -2800,7 +2810,7 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
 }
 
 
-void Locker::file_xlock_finish(FileLock *lock, MDRequest *mut)
+void Locker::file_xlock_finish(FileLock *lock, Mutation *mut)
 {
   dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 

@@ -75,6 +75,7 @@ struct PVList {
 };
 
 struct Mutation {
+  metareqid_t reqid;
   LogSegment *ls;  // the log segment i'm committing to
   utime_t now;
 
@@ -104,8 +105,11 @@ struct Mutation {
   list<CDir*> projected_fnodes;
 
   Mutation() : ls(0),
-	       done_locking(false), committing(false), aborted(false)
-  {}
+	       done_locking(false), committing(false), aborted(false) {}
+  Mutation(metareqid_t ri) : reqid(ri),
+			     ls(0),
+			     done_locking(false), committing(false), aborted(false) {}
+  virtual ~Mutation() {}
 
   // pin items in cache
   void pin(MDSCacheObject *o) {
@@ -168,6 +172,11 @@ struct Mutation {
     }
   }
 
+  void apply() {
+    pop_and_dirty_projected_inodes();
+    pop_and_dirty_projected_fnodes();
+  }
+
   virtual void print(ostream &out) {
     out << "mutation(" << this << ")";
   }
@@ -186,7 +195,6 @@ inline ostream& operator<<(ostream& out, Mutation &mut)
  * the request is finished or forwarded.  see request_*().
  */
 struct MDRequest : public Mutation {
-  metareqid_t reqid;
   Session *session;
 
   // -- i am a client (master) request
@@ -238,11 +246,13 @@ struct MDRequest : public Mutation {
     slave_request(0), slave_to_mds(-1), 
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
-    reqid(ri), session(0), client_request(req), ref(0), 
+    Mutation(ri),
+    session(0), client_request(req), ref(0), 
     slave_request(0), slave_to_mds(-1), 
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
-    reqid(ri), session(0), client_request(0), ref(0),
+    Mutation(ri),
+    session(0), client_request(0), ref(0),
     slave_request(0), slave_to_mds(by), 
     _more(0) {}
   ~MDRequest() {

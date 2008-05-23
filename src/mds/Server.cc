@@ -1992,12 +1992,9 @@ class C_MDS_mknod_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
-  version_t dirpv;
-  version_t newdirpv;
 public:
-  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dirpv_, version_t newdirpv_=0) :
-    mds(m), mdr(r), dn(d), newi(ni),
-    dirpv(dirpv_), newdirpv(newdirpv_) {}
+  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
+    mds(m), mdr(r), dn(d), newi(ni) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -2008,16 +2005,13 @@ public:
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
 
     // mkdir?
-    if (newdirpv) { 
+    if (newi->inode.is_dir()) { 
       CDir *dir = newi->get_dirfrag(frag_t());
       assert(dir);
-      dir->mark_dirty(newdirpv, mdr->ls);
+      dir->mark_dirty(1, mdr->ls);
     }
 
-    // dir inode's mtime
-    mds->server->dirty_dn_diri(mdr, dn, dirpv);
-    mdr->pop_and_dirty_projected_inodes();
-    mdr->pop_and_dirty_projected_fnodes();
+    mdr->apply();
 
     // hit pop
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
@@ -2056,13 +2050,14 @@ void Server::handle_client_mknod(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mknod");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi);
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
+
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true);
+  //version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
+
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
 }
 
 
@@ -2092,7 +2087,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
   newdir->mark_complete();
-  version_t newdirpv = newdir->pre_dirty();
+  newdir->pre_dirty();
 
   //if (mds->logger) mds->logger->inc("mkdir");
 
@@ -2101,14 +2096,12 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
-  mds->locker->predirty_nested(mdr, &le->metablob, newi);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv, newdirpv));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
 
   /* old export heuristic.  pbly need to reimplement this at some point.    
   if (
@@ -2154,13 +2147,11 @@ void Server::handle_client_symlink(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
-  mds->locker->predirty_nested(mdr, &le->metablob, newi);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
 
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, dirpv));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
 }
 
 
