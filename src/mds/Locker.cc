@@ -2606,7 +2606,7 @@ bool Locker::file_wrlock_start(FileLock *lock, bool force)
   dout(7) << "file_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   assert(force || lock->can_wrlock());
-  lock->get_wrlock();
+  lock->get_wrlock(force);
   return true;
 
   /*

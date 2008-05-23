@@ -169,8 +169,8 @@ class FileLock : public SimpleLock {
       state == LOCK_LONER || state == LOCK_GLONERM ||
       state == LOCK_GSYNCM || state == LOCK_GSYNCL;
   }
-  void get_wrlock() {
-    assert(can_wrlock());
+  void get_wrlock(bool force=false) {
+    assert(force || can_wrlock());
     if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
   }
