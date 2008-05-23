@@ -2054,7 +2054,6 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
 
   mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 1, 0);
-  //version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
 
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
@@ -4265,11 +4264,9 @@ class C_MDS_openc_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
-  version_t pv, dirpv;
 public:
-  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, version_t dpv) :
-    mds(m), mdr(r), dn(d), newi(ni),
-    pv(d->get_projected_version()), dirpv(dpv) {}
+  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
+    mds(m), mdr(r), dn(d), newi(ni) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -4277,10 +4274,9 @@ public:
     dn->get_dir()->link_primary_inode(dn, newi);
 
     // dirty inode, dn, dir
-    newi->mark_dirty(pv, mdr->ls);
+    newi->mark_dirty(newi->inode.version + 1, mdr->ls);
 
-    // dir inode's mtime
-    mds->server->dirty_dn_diri(mdr, dn, dirpv);
+    mdr->apply();
 
     // downgrade xlock to rdlock
     //mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
@@ -4329,22 +4325,24 @@ void Server::handle_client_openc(MDRequest *mdr)
   assert(in);
   
   // it's a file.
+  in->projected_parent = dn;
   in->inode.mode = req->head.args.open.mode;
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
   in->inode.max_size = in->get_layout_size_increment();
+  in->inode.nested.rfiles = 1;
   
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
-  le->metablob.add_dir_context(dn->dir);
+
+  mds->locker->predirty_nested(mdr, &le->metablob, in, true, 1, 0);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   
   // log + wait
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, dirpv);
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
   mdlog->submit_entry(le, fin);
   
   /*
