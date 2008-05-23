@@ -382,6 +382,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
 
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
     in->xattrs.swap(st->xattrs);
+    in->inode.nested = st->nested;
 
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
@@ -3699,6 +3700,7 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr, int uid, int gid)
   int res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in, uid, gid);
   if (res == 0)
     fill_stat(in, attr);
+  dout(3) << "ll_getattr " << ino << " = " << res << dendl;
   return res;
 }
 
@@ -3760,6 +3762,7 @@ int Client::ll_getxattr(inodeno_t ino, const char *name, void *value, size_t siz
   tout << name << std::endl;
 
   Inode *in = _ll_get_inode(ino);
+
   filepath path;
   in->make_path(path);
   return _getxattr(path, name, value, size, false, uid, gid);
