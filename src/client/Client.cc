@@ -3769,7 +3769,7 @@ int Client::_getxattr(const filepath &path, const char *name, void *value, size_
   int r = _do_lstat(path, CEPH_STAT_MASK_XATTR, &in, uid, gid);
   if (r == 0) {
     string n(name);
-    r = -ENOENT;
+    r = -ENODATA;
     if (in->xattrs.count(n)) {
       r = in->xattrs[n].length();
       if (size != 0) {
