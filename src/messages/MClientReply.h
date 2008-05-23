@@ -141,6 +141,7 @@ struct InodeStat {
     nested.rctime.decode_timeval(&e.rctime);
     nested.rbytes = e.rbytes;
     nested.rfiles = e.rfiles;
+    nested.rsubdirs = e.rsubdirs;
 
     int n = e.fragtree.nsplits;
     while (n) {
@@ -180,6 +181,7 @@ struct InodeStat {
     in->inode.nested.rctime.encode_timeval(&e.rctime);
     e.rbytes = in->inode.nested.rbytes;
     e.rfiles = in->inode.nested.rfiles;
+    e.rsubdirs = in->inode.nested.rsubdirs;
 
     e.rdev = in->inode.rdev;
     e.fragtree.nsplits = in->dirfragtree._splits.size();
