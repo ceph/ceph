@@ -797,9 +797,9 @@ void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
   assert(!projected_fnode.empty());
   dout(15) << "pop_and_dirty_projected_fnode " << projected_fnode.front()
 	   << " v" << projected_fnode.front()->version << dendl;
-  _mark_dirty(ls);
   fnode = *projected_fnode.front();
   delete projected_fnode.front();
+  _mark_dirty(ls);
   projected_fnode.pop_front();
 }
 

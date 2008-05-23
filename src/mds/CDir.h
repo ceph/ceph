@@ -158,6 +158,7 @@ class CDir : public MDSCacheObject {
 protected:
   fnode_t fnode;
   list<fnode_t*> projected_fnode;
+  xlist<CDir*>::item xlist_dirty;
 
 public:
   version_t get_version() { return fnode.version; }
@@ -192,13 +193,11 @@ protected:
 
   int num_dirty;
 
-
   // state
   version_t committing_version;
   version_t committed_version;
   version_t committed_version_equivalent;  // in case of, e.g., temporary file
 
-  xlist<CDir*>::item xlist_dirty;
 
   // lock nesting, freeze
   int auth_pins;

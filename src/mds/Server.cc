@@ -1550,9 +1550,13 @@ void Server::predirty_nested(MDRequest *mdr, EMetaBlob *blob, CInode *in)
   for (list<CInode*>::iterator p = ls.begin();
        p != ls.end();
        p++) {
-    SimpleLock *lock = &(*p)->dirlock;
-    mdr->wrlocks.insert(lock);
-    mdr->locks.insert(lock);
+    ScatterLock *lock = &(*p)->dirlock;
+    if (mdr->wrlocks.count(lock))
+      lock->put_wrlock();
+    else {
+      mdr->wrlocks.insert(lock);
+      mdr->locks.insert(lock);
+    }
     mdr->add_projected_inode(*p);
   }
 }
