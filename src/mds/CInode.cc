@@ -73,6 +73,7 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " s=" << in.inode.size;
   out << " rb=" << in.inode.nested.rbytes << "/" << in.inode.accounted_nested.rbytes;
   out << " rf=" << in.inode.nested.rfiles << "/" << in.inode.accounted_nested.rfiles;
+  out << " rd=" << in.inode.nested.rsubdirs << "/" << in.inode.accounted_nested.rsubdirs;
 
   // locks
   out << " " << in.authlock;
@@ -656,11 +657,11 @@ void CInode::clear_dirty_scattered(int type)
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
   switch (type) {
   case CEPH_LOCK_IDIR:
-    xlist_dirty_inode_mtime.remove_myself();
+    xlist_dirty_dirfrag_dir.remove_myself();
     break;
 
   case CEPH_LOCK_INESTED:
-    assert(0); // hmm!
+    xlist_dirty_dirfrag_nested.remove_myself();
     break;
 
   default:

@@ -106,9 +106,9 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // dirty non-auth mtimes
-  for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
     CInode *in = *p;
-    dout(10) << "try_to_expire waiting for dirlock mtime flush on " << *in << dendl;
+    dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
 
     if (in->is_ambiguous_auth()) {
@@ -124,6 +124,25 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
       mds->locker->scatter_try_unscatter(&in->dirlock, gather->new_sub());
     }
     //(*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
+  }
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_nested.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    dout(10) << "try_to_expire waiting for nestedlock flush on " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+
+    if (in->is_ambiguous_auth()) {
+      dout(10) << " waiting for single auth on " << *in << dendl;
+      in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather->new_sub());
+    } else if (in->is_auth()) {
+      dout(10) << " i'm auth, unscattering nestedlock on " << *in << dendl;
+      assert(in->is_replicated()); // hrm!
+      mds->locker->scatter_lock(&in->nestedlock);
+      in->nestedlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
+    } else {
+      dout(10) << " i'm a replica, requesting nestedlock unscatter of " << *in << dendl;
+      mds->locker->scatter_try_unscatter(&in->nestedlock, gather->new_sub());
+    }
+    //(*p)->nestedlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
   
   // open files
@@ -294,8 +313,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
     dir->set_version( lump.fnode.version );
-    if (lump.is_dirty())
+    if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
+      dir->get_inode()->dirlock.set_updated();
+      dir->get_inode()->nestedlock.set_updated();
+    }
+
     if (lump.is_complete())
       dir->mark_complete();
     
@@ -409,7 +432,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     mds->anchorclient->got_journaled_agree(*p, logseg);
   }
 
-  // dirtied inode mtimes
+  /*// dirtied inode mtimes
   if (!dirty_inode_mtimes.empty())
     for (map<inodeno_t,utime_t>::iterator p = dirty_inode_mtimes.begin();
 	 p != dirty_inode_mtimes.end();
@@ -419,6 +442,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       in->dirlock.set_updated();
       logseg->dirty_inode_mtimes.push_back(&in->xlist_dirty_inode_mtime);
     }
+  */
 
   // allocated_inos
   if (!allocated_inos.empty()) {

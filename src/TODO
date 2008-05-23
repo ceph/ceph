@@ -66,6 +66,9 @@ mon
 - some sort of tester for PaxosService...
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
+mds nested
+- fix rejoin vs updated dirfrag nested/dirlocks
+
 mds mustfix
 - replay of dir fragmentation  (dont want dir frozen, pins, etc.?)
 - fix rm -r vs mds exports

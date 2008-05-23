@@ -203,15 +203,18 @@ struct nested_info_t {
   utime_t rctime;      // \max_{children}(ctime, nested_ctime)
   __u64 rbytes;
   __u64 rfiles;
+  __u64 rsubdirs;
   
   void encode(bufferlist &bl) const {
     ::encode(rbytes, bl);
     ::encode(rfiles, bl);
+    ::encode(rsubdirs, bl);
     ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(rbytes, bl);
     ::decode(rfiles, bl);
+    ::decode(rsubdirs, bl);
     ::decode(rctime, bl);
   }
 };
@@ -300,33 +303,44 @@ static inline void decode(inode_t &i, bufferlist::iterator &p) {
 /*
  * like an inode, but for a dir frag 
  */
-struct fnode_t {
-  version_t version;
+struct frag_info_t {
   utime_t mtime;
-  __u64 size;            // files + dirs
-  __u64 nprimary, nremote;
   __u64 nfiles;          // files
   __u64 nsubdirs;        // subdirs
-  nested_info_t nested;  // nested summation
-  nested_info_t accounted_nested;  // nested summation
+
+  __u64 size() { return nfiles + nsubdirs; }
+  
+  void encode(bufferlist &bl) const {
+    ::encode(mtime, bl);
+    //::encode(size, bl);
+    ::encode(nfiles, bl);
+    ::encode(nsubdirs, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(mtime, bl);
+    //::decode(size, bl);
+    ::decode(nfiles, bl);
+    ::decode(nsubdirs, bl);
+ }
+};
+WRITE_CLASS_ENCODER(frag_info_t)
+
+struct fnode_t {
+  version_t version;
+  frag_info_t fraginfo, accounted_fraginfo; // this dir
+  nested_info_t nested, accounted_nested;   // this dir + sum over children.
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
-    ::encode(size, bl);
-    ::encode(nprimary, bl);
-    ::encode(nremote, bl);
-    ::encode(nfiles, bl);
-    ::encode(nsubdirs, bl);
+    ::encode(fraginfo, bl);
+    ::encode(accounted_fraginfo, bl);
     ::encode(nested, bl);
     ::encode(accounted_nested, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
-    ::decode(size, bl);
-    ::decode(nprimary, bl);
-    ::decode(nremote, bl);
-    ::decode(nfiles, bl);
-    ::decode(nsubdirs, bl);
+    ::decode(fraginfo, bl);
+    ::decode(accounted_fraginfo, bl);
     ::decode(nested, bl);
     ::decode(accounted_nested, bl);
   }

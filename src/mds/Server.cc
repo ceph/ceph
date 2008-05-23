@@ -1420,6 +1420,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
+  wrlocks.insert(&dn->dir->inode->nestedlock); // also, wrlock on dir mtime
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
@@ -1512,9 +1513,9 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob,
 
     dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << dendl;
     
-    blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
+    //blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
     assert(mdr->ls);
-    mdr->ls->dirty_inode_mtimes.push_back(&diri->xlist_dirty_inode_mtime);
+    mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
   }
   
   return dirpv;
@@ -2042,6 +2043,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   if ((newi->inode.mode & S_IFMT) == 0)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
+  newi->inode.nested.rfiles = 1;
   
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
 
@@ -2051,7 +2053,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
 
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, true);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 1, 0);
   //version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);  // dir mtime too
 
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
@@ -2083,6 +2085,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode |= S_IFDIR;
   newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty() - 1;
+  newi->inode.nested.rsubdirs = 1;
 
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
@@ -2096,7 +2099,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, true);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 0, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
@@ -2141,13 +2144,14 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
-  
+  newi->inode.nested.rfiles = 1;
+
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, true);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 1, 0);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
 
   // log + wait

@@ -211,7 +211,8 @@ protected:
   xlist<CInode*>::item xlist_dirty;
 public:
   xlist<CInode*>::item xlist_open_file;
-  xlist<CInode*>::item xlist_dirty_inode_mtime;
+  xlist<CInode*>::item xlist_dirty_dirfrag_dir;
+  xlist<CInode*>::item xlist_dirty_dirfrag_nested;
   xlist<CInode*>::item xlist_purging_inode;
 
 private:
@@ -244,7 +245,9 @@ public:
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
-    xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
+    xlist_dirty_dirfrag_dir(this), 
+    xlist_dirty_dirfrag_nested(this), 
+    xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),

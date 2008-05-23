@@ -161,8 +161,8 @@ public:
    */
 public:
   struct dirlump {
-    static const int STATE_COMPLETE = (1<<1);
-    static const int STATE_DIRTY =    (1<<2);  // dirty due to THIS journal item, that is!
+    static const int STATE_COMPLETE =    (1<<1);
+    static const int STATE_DIRTY =       (1<<2);  // dirty due to THIS journal item, that is!
 
     //version_t  dirv;
     fnode_t fnode;
@@ -246,7 +246,7 @@ private:
   list<version_t>         atids;
 
   // inode dirlocks (scatterlocks) i've touched.
-  map<inodeno_t, utime_t> dirty_inode_mtimes;
+  //map<inodeno_t, utime_t> dirty_inode_mtimes;
 
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
@@ -263,7 +263,7 @@ private:
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
     ::encode(atids, bl);
-    ::encode(dirty_inode_mtimes, bl);
+    //::encode(dirty_inode_mtimes, bl);
     ::encode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::encode(alloc_tablev, bl);
@@ -274,7 +274,7 @@ private:
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
     ::decode(atids, bl);
-    ::decode(dirty_inode_mtimes, bl);
+    //::decode(dirty_inode_mtimes, bl);
     ::decode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::decode(alloc_tablev, bl);
@@ -309,9 +309,11 @@ private:
     atids.push_back(atid);
   }  
 
+  /*
   void add_dirtied_inode_mtime(inodeno_t ino, utime_t ctime) {
     dirty_inode_mtimes[ino] = ctime;
   }
+  */
 
   void add_allocated_ino(inodeno_t ino, version_t tablev) {
     allocated_inos.push_back(ino);

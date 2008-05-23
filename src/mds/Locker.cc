@@ -402,6 +402,8 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
     return scatter_wrlock_finish((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_finish((LocalLock*)lock, mut);
+  case CEPH_LOCK_IFILE:
+    return file_wrlock_finish((FileLock*)lock, mut);
   default:
     assert(0);
   }
@@ -1153,6 +1155,7 @@ int Locker::issue_client_lease(CInode *in, int client,
     if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
   }
   if (in->xattrlock.can_lease()) mask |= CEPH_LOCK_IXATTR;
+  //if (in->nestedlock.can_lease()) mask |= CEPH_LOCK_INESTED;
 
   _issue_client_lease(in, mask, pool, client, bl, now, session);
   return mask;
@@ -1218,27 +1221,20 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 // nested ---------------------------------------------------------------
 
-void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, bool parent_mtime)
+void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, 
+			     bool do_parent, int dfiles, int dsubdirs)
 {
+  dout(10) << "predirty_nested "
+	   << do_parent << "/" << dfiles << "/" << dsubdirs
+	   << " " << *in << dendl;
+
   CDir *parent = in->get_projected_parent_dn()->get_dir();
 
-  // initial diff from *in
   inode_t *curi = in->get_projected_inode();
-  __u64 drbytes;
-  __u64 drfiles;
-  utime_t rctime;
-  if (in->is_dir()) {
-    drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
-    drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
-    rctime = MAX(curi->ctime, curi->nested.rctime);
-  } else {
-    drbytes = curi->size - curi->accounted_nested.rbytes;
-    drfiles = 1 - curi->accounted_nested.rfiles;
-    rctime = curi->ctime;
+  if (curi->is_file()) {
+    curi->nested.rbytes = curi->size;
   }
-  
-  dout(10) << "predirty_nested delta " << drbytes << " bytes / " << drfiles << " files from " << *in << dendl;
-  
+
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
   CInode *cur = in;
@@ -1249,35 +1245,56 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, bool pa
     // opportunistically adjust parent dirfrag
     CInode *pin = parent->get_inode();
 
-    dout(10) << "predirty_nested delta " << drbytes << " bytes / " << drfiles << " files for " << *pin << dendl;
-    if (pin->is_base())
-      break;
+    if (do_parent) {
+      assert(mut->wrlocks.count(&pin->dirlock));
+      assert(mut->wrlocks.count(&pin->nestedlock));
+    }
 
-    if (mut->wrlocks.count(&pin->dirlock) == 0 &&
-	!scatter_wrlock_try(&pin->dirlock, mut)) {
-      dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
+    if (mut->wrlocks.count(&pin->nestedlock) == 0 &&
+	!scatter_wrlock_try(&pin->nestedlock, mut)) {
+      dout(10) << "predirty_nested can't wrlock " << pin->nestedlock << " on " << *pin << dendl;
       break;
     }
 
     // inode -> dirfrag
+    __u64 drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
+    __u64 drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
+    __u64 drsubdirs = curi->nested.rsubdirs - curi->accounted_nested.rsubdirs;
+    utime_t rctime = MAX(curi->ctime, curi->nested.rctime);
+
     mut->add_projected_fnode(parent);
 
     fnode_t *pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
-    if (parent_mtime) {
-      dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
-      pf->mtime = rctime = mut->now;
+    if (do_parent) {
+      dout(10) << "predirty_nested updating mtime/size on " << *parent << dendl;
+      pf->fraginfo.mtime = mut->now;
+      pf->fraginfo.nfiles += dfiles;
+      pf->fraginfo.nsubdirs += dsubdirs;
+      //pf->nested.rfiles += dfiles;
+      //pf->nested.rsubdirs += dsubdirs;
     }
+    dout(10) << "predirty_nested delta "
+	     << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
+	     << *parent << dendl;
     pf->nested.rbytes += drbytes;
     pf->nested.rfiles += drfiles;
+    pf->nested.rsubdirs += drsubdirs;
     pf->nested.rctime = rctime;
-
+    
     curi->accounted_nested.rbytes += drbytes;
     curi->accounted_nested.rfiles += drfiles;
+    curi->accounted_nested.rsubdirs += drsubdirs;
     curi->accounted_nested.rctime = rctime;
 
-    if (!pin->is_auth())
+    if (pin->is_base())
       break;
+    if (!pin->is_auth()) {
+      if (do_parent)
+	mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
+      mut->ls->dirty_dirfrag_nested.push_back(&pin->xlist_dirty_dirfrag_nested);
+      break;
+    }
 
     // dirfrag -> diri
     mut->add_projected_inode(pin);
@@ -1286,24 +1303,30 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, bool pa
     version_t ppv = pin->pre_dirty();
     inode_t *pi = pin->project_inode();
     pi->version = ppv;
-    if (pf->mtime > pi->mtime)
-      pi->mtime = pf->mtime;
+    if (do_parent) {
+      dout(10) << "predirty_nested updating size/mtime on " << *pin << dendl;
+      if (pf->fraginfo.mtime > pi->mtime)
+	pi->mtime = pf->fraginfo.mtime;
+      pi->size += pf->fraginfo.size() - pf->accounted_fraginfo.size();
+      pf->accounted_fraginfo = pf->fraginfo;
+    }
+    drbytes = pf->nested.rbytes - pf->accounted_nested.rbytes;
+    drfiles = pf->nested.rfiles - pf->accounted_nested.rfiles;
+    drsubdirs = pf->nested.rsubdirs - pf->accounted_nested.rsubdirs;
+    dout(10) << "predirty_nested delta " 
+	     << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
+	     << *pin << dendl;
     pi->nested.rbytes += drbytes;
     pi->nested.rfiles += drfiles;
-    pi->nested.rctime = rctime;
+    pi->nested.rsubdirs += drsubdirs;
+    pi->nested.rctime = MAX(pf->fraginfo.mtime, pf->nested.rctime);
+    pf->accounted_nested = pf->nested;
 
-    pf->accounted_nested.rbytes += drbytes;
-    pf->accounted_nested.rfiles += drfiles;
-    pf->accounted_nested.rctime = rctime;
-    
     // next parent!
     cur = pin;
     curi = pi;
     parent = cur->get_projected_parent_dn()->get_dir();
-
-    drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
-    drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
-    rctime = MAX(curi->ctime, curi->nested.rctime);
+    do_parent = false;
   }
 
   // now, stick it in the blob

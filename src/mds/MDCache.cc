@@ -1820,7 +1820,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
       dn->get_inode()->get_nested_dirfrags(nested);
 
-      if (dn->get_inode()->dirlock.is_updated()) {
+      if (dn->get_inode()->dirlock.is_updated()) {   // ******* FIXME *********
 	// include full inode to shed any dirtyscattered state
 	rejoin->add_full_inode(dn->get_inode()->inode, 
 			       dn->get_inode()->symlink,
