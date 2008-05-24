@@ -850,7 +850,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   pi->version = in->pre_dirty();
   pi->max_size = new_max;
   EOpen *le = new EOpen(mds->mdlog);
-  predirty_nested(mut, &le->metablob, in, false);
+  predirty_nested(mut, &le->metablob, in, true, 0, false);
   le->metablob.add_dir_context(in->get_parent_dir());
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   le->add_ino(in->ino());
@@ -1033,6 +1033,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << "  size " << pi->size << " -> " << size
 	      << " for " << *in << dendl;
       pi->size = size;
+      pi->nested.rbytes = size;
     }
     if (dirty_atime) {
       dout(7) << "  atime " << pi->atime << " -> " << atime
@@ -1047,7 +1048,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
-    predirty_nested(mut, &le->metablob, in, false);
+    predirty_nested(mut, &le->metablob, in, true, 0, false);
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
@@ -1221,19 +1222,23 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 // nested ---------------------------------------------------------------
 
-void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, 
-			     bool do_parent, int dfiles, int dsubdirs)
+void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
+			     CInode *in, bool primary_dn, CDir *parent,
+			     bool do_parent, int linkunlink)
 {
   dout(10) << "predirty_nested "
-	   << do_parent << "/" << dfiles << "/" << dsubdirs
+	   << (primary_dn ? "primary_dn ":"remote_dn ")
+	   << (do_parent ? "do_parent_mtime ":"")
+	   << "linkunlink=" <<  linkunlink
 	   << " " << *in << dendl;
 
-  CDir *parent = in->get_projected_parent_dn()->get_dir();
+  if (!parent)
+    parent = in->get_projected_parent_dn()->get_dir();
 
   inode_t *curi = in->get_projected_inode();
-  if (curi->is_file()) {
-    curi->nested.rbytes = curi->size;
-  }
+
+  __s64 drbytes, drfiles, drsubdirs;
+  utime_t rctime;
 
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
@@ -1257,35 +1262,44 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in,
     }
 
     // inode -> dirfrag
-    __u64 drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
-    __u64 drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
-    __u64 drsubdirs = curi->nested.rsubdirs - curi->accounted_nested.rsubdirs;
-    utime_t rctime = MAX(curi->ctime, curi->nested.rctime);
-
     mut->add_projected_fnode(parent);
 
     fnode_t *pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
+
     if (do_parent) {
       dout(10) << "predirty_nested updating mtime/size on " << *parent << dendl;
       pf->fraginfo.mtime = mut->now;
-      pf->fraginfo.nfiles += dfiles;
-      pf->fraginfo.nsubdirs += dsubdirs;
-      //pf->nested.rfiles += dfiles;
-      //pf->nested.rsubdirs += dsubdirs;
+      if (linkunlink) {
+	if (in->is_dir())
+	  pf->fraginfo.nsubdirs += linkunlink;
+	else
+	  pf->fraginfo.nfiles += linkunlink;
+      }
     }
-    dout(10) << "predirty_nested delta "
-	     << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
-	     << *parent << dendl;
-    pf->nested.rbytes += drbytes;
-    pf->nested.rfiles += drfiles;
-    pf->nested.rsubdirs += drsubdirs;
-    pf->nested.rctime = rctime;
+    if (primary_dn) {
+      drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
+      drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
+      drsubdirs = curi->nested.rsubdirs - curi->accounted_nested.rsubdirs;
+      rctime = MAX(curi->ctime, curi->nested.rctime);
+
+      dout(10) << "predirty_nested delta "
+	       << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
+	       << *parent << dendl;
+      pf->nested.rbytes += drbytes;
+      pf->nested.rfiles += drfiles;
+      pf->nested.rsubdirs += drsubdirs;
+      pf->nested.rctime = rctime;
     
-    curi->accounted_nested.rbytes += drbytes;
-    curi->accounted_nested.rfiles += drfiles;
-    curi->accounted_nested.rsubdirs += drsubdirs;
-    curi->accounted_nested.rctime = rctime;
+      curi->accounted_nested.rbytes += drbytes;
+      curi->accounted_nested.rfiles += drfiles;
+      curi->accounted_nested.rsubdirs += drsubdirs;
+      curi->accounted_nested.rctime = rctime;
+    } else {
+      dout(10) << "predirty_nested no delta (remote dentry) in " << *parent << dendl;
+      assert(!in->is_dir());
+      pf->nested.rfiles += linkunlink;
+    }
 
     if (pin->is_base())
       break;
@@ -1300,9 +1314,9 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in,
     mut->add_projected_inode(pin);
     lsi.push_back(pin);
 
-    version_t ppv = pin->pre_dirty();
     inode_t *pi = pin->project_inode();
-    pi->version = ppv;
+    pi->version = pin->pre_dirty();
+
     if (do_parent) {
       dout(10) << "predirty_nested updating size/mtime on " << *pin << dendl;
       if (pf->fraginfo.mtime > pi->mtime)
@@ -1326,6 +1340,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in,
     cur = pin;
     curi = pi;
     parent = cur->get_projected_parent_dn()->get_dir();
+    primary_dn = true;
     do_parent = false;
   }
 

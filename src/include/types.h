@@ -205,6 +205,10 @@ struct nested_info_t {
   __u64 rfiles;
   __u64 rsubdirs;
   
+  void zero() {
+    rbytes = rfiles = rsubdirs = 0;
+  }
+
   void encode(bufferlist &bl) const {
     ::encode(rbytes, bl);
     ::encode(rfiles, bl);

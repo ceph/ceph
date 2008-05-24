@@ -133,7 +133,7 @@ public:
   void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_local_finish(MDRequest *mdr,
 			  CDentry *dn, CInode *targeti,
-			  version_t, version_t, version_t);
+			  version_t, version_t);
 
   void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
@@ -151,7 +151,7 @@ public:
   void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t, version_t);    
+			    version_t);    
 
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
   void _unlink_remote_finish(MDRequest *mdr, 

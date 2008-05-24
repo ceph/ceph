@@ -1849,6 +1849,10 @@ int Client::unmount()
          p != inode_map.end();
          p++) {
       Inode *in = p->second;
+      if (!in) {
+	dout(0) << "null inode_map entry ino " << p->first << dendl;
+	assert(in);
+      }      
       if (!in->caps.empty()) {
 	_release(in);
 	_flush(in);

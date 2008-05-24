@@ -2053,7 +2053,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
 
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 1, 0);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, dn->dir, true, 1);
 
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   
@@ -2098,7 +2098,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 0, 1);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, dn->dir, true, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
@@ -2150,7 +2150,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, 1, 0);
+  mds->locker->predirty_nested(mdr, &le->metablob, newi, true, dn->dir, true, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
 
   // log + wait
@@ -2216,6 +2216,7 @@ void Server::handle_client_link(MDRequest *mdr)
     rdlocks.insert(&linktrace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
+  wrlocks.insert(&dn->dir->inode->nestedlock);
   for (int i=0; i<(int)targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
@@ -2265,15 +2266,14 @@ class C_MDS_link_local_finish : public Context {
   CInode *targeti;
   version_t dnpv;
   version_t tipv;
-  version_t dirpv;
 public:
   C_MDS_link_local_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, 
-			  version_t dnpv_, version_t tipv_, version_t dirpv_) :
+			  version_t dnpv_, version_t tipv_) :
     mds(m), mdr(r), dn(d), targeti(ti),
-    dnpv(dnpv_), tipv(tipv_), dirpv(dirpv_) { }
+    dnpv(dnpv_), tipv(tipv_) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_link_local_finish(mdr, dn, targeti, dnpv, tipv, dirpv);
+    mds->server->_link_local_finish(mdr, dn, targeti, dnpv, tipv);
   }
 };
 
@@ -2297,18 +2297,18 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   le->metablob.add_client_req(mdr->reqid);
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
-  le->metablob.add_dir_context(dn->get_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, targeti, false, dn->dir,
+			       true, 1);
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
 				 MODE_TO_DT(targeti->inode.mode));  // new remote
   le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
 
-  mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv, dirpv));
+  mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
 }
 
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-				version_t dnpv, version_t tipv, version_t dirpv)
+				version_t dnpv, version_t tipv)
 {
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
@@ -2319,8 +2319,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   // target inode
   targeti->pop_and_dirty_projected_inode(mdr->ls);
 
-  // new dentry dir mtime
-  dirty_dn_diri(mdr, dn, dirpv);
+  mdr->apply();
   
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
@@ -2671,6 +2670,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
+  wrlocks.insert(&dn->dir->inode->nestedlock);
   xlocks.insert(&in->linklock);
   
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -2715,15 +2715,13 @@ class C_MDS_unlink_local_finish : public Context {
   CDentry *dn;
   CDentry *straydn;
   version_t dnpv;  // deleted dentry
-  version_t dirpv;
 public:
-  C_MDS_unlink_local_finish(MDS *m, MDRequest *r, CDentry *d, CDentry *sd,
-			    version_t dirpv_) :
+  C_MDS_unlink_local_finish(MDS *m, MDRequest *r, CDentry *d, CDentry *sd) :
     mds(m), mdr(r), dn(d), straydn(sd),
-    dnpv(d->get_projected_version()), dirpv(dirpv_) { }
+    dnpv(d->get_projected_version()) {}
   void finish(int r) {
     assert(r == 0);
-    mds->server->_unlink_local_finish(mdr, dn, straydn, dnpv, dirpv);
+    mds->server->_unlink_local_finish(mdr, dn, straydn, dnpv);
   }
 };
 
@@ -2760,25 +2758,25 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->nlink--;
   pi->ctime = mdr->now;
   pi->version = ipv;
+  pi->nested.zero();
   *ji = *pi;  // copy into journal
 
   // the unlinked dentry
   dn->pre_dirty();
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);
-  le->metablob.add_dir_context(dn->get_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->is_primary(), dn->dir,
+			       true, -1);
   le->metablob.add_null_dentry(dn, true);
 
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn, 
-							dirpv));
+  mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
 }
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
 				  CDentry *dn, CDentry *straydn,
-				  version_t dnpv, version_t dirpv) 
+				  version_t dnpv) 
 {
   dout(10) << "_unlink_local_finish " << *dn << dendl;
 
@@ -2796,8 +2794,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   in->pop_and_dirty_projected_inode(mdr->ls);
   dn->mark_dirty(dnpv, mdr->ls);  
 
-  // dir inode's mtime
-  dirty_dn_diri(mdr, dn, dirpv);
+  mdr->apply();
   
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
@@ -3127,6 +3124,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
+  wrlocks.insert(&srcdn->dir->inode->nestedlock);
   /*
    * no, this causes problems if the dftlock is scattered...
    *  and what was i thinking anyway? 
@@ -3138,6 +3136,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
   wrlocks.insert(&destdn->dir->inode->dirlock);
+  wrlocks.insert(&destdn->dir->inode->nestedlock);
 
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
@@ -4338,7 +4337,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
 
-  mds->locker->predirty_nested(mdr, &le->metablob, in, true, 1, 0);
+  mds->locker->predirty_nested(mdr, &le->metablob, in, true, dn->dir, true, 1);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   
   // log + wait
