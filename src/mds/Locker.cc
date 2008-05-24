@@ -1278,9 +1278,19 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       }
     }
     if (primary_dn) {
-      drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
-      drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
-      drsubdirs = curi->nested.rsubdirs - curi->accounted_nested.rsubdirs;
+      if (linkunlink == 0) {
+	drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
+	drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
+	drsubdirs = curi->nested.rsubdirs - curi->accounted_nested.rsubdirs;
+      } else if (linkunlink < 0) {
+	drbytes = 0 - curi->accounted_nested.rbytes;
+	drfiles = 0 - curi->accounted_nested.rfiles;
+	drsubdirs = 0 - curi->accounted_nested.rsubdirs;
+      } else {
+	drbytes = curi->nested.rbytes;
+	drfiles = curi->nested.rfiles;
+	drsubdirs = curi->nested.rsubdirs;
+      }
       rctime = MAX(curi->ctime, curi->nested.rctime);
 
       dout(10) << "predirty_nested delta "
@@ -1291,10 +1301,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       pf->nested.rsubdirs += drsubdirs;
       pf->nested.rctime = rctime;
     
-      curi->accounted_nested.rbytes += drbytes;
-      curi->accounted_nested.rfiles += drfiles;
-      curi->accounted_nested.rsubdirs += drsubdirs;
-      curi->accounted_nested.rctime = rctime;
+      curi->accounted_nested = curi->nested;
     } else {
       dout(10) << "predirty_nested no delta (remote dentry) in " << *parent << dendl;
       assert(!in->is_dir());
@@ -1340,6 +1347,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     cur = pin;
     curi = pi;
     parent = cur->get_projected_parent_dn()->get_dir();
+    linkunlink = 0;
     primary_dn = true;
     do_parent = false;
   }

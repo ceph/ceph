@@ -2758,7 +2758,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->nlink--;
   pi->ctime = mdr->now;
   pi->version = ipv;
-  pi->nested.zero();
   *ji = *pi;  // copy into journal
 
   // the unlinked dentry
