@@ -419,7 +419,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
-    assert(0);
+    return scatter_xlock_start((ScatterLock*)lock, mut);
   default:
     return simple_xlock_start(lock, mut);
   }
@@ -435,7 +435,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INESTED:
-    assert(0);
+    return scatter_xlock_finish((ScatterLock*)lock, mut);
   default:
     return simple_xlock_finish(lock, mut);
   }
@@ -2018,6 +2018,70 @@ void Locker::scatter_wrlock_finish(ScatterLock *lock, Mutation *mut)
   }
   
   scatter_eval_gather(lock);
+}
+
+
+bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
+{
+  dout(7) << "file_xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
+
+  assert(lock->get_parent()->is_auth());  // remote scatter xlock not implemented
+
+  // already xlocked by me?
+  if (lock->get_xlocked_by() == mut)
+    return true;
+
+  // can't write?
+  if (!lock->can_xlock(mut)) {
+    
+    // auth
+    if (!lock->can_xlock_soon()) {
+      if (!lock->is_stable()) {
+	dout(7) << "scatter_xlock_start on auth, waiting for stable on " << *lock << " on " << *lock->get_parent() << dendl;
+	lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+	return false;
+      }
+      
+      // initiate lock 
+      scatter_lock(lock);
+      
+      // fall-thru to below.
+    }
+  } 
+  
+  // check again
+  if (lock->can_xlock(mut)) {
+    assert(lock->get_parent()->is_auth());
+    lock->get_xlock(mut);
+    mut->locks.insert(lock);
+    mut->xlocks.insert(lock);
+    return true;
+  } else {
+    dout(7) << "scatter_xlock_start on auth, waiting for write on " << *lock << " on " << *lock->get_parent() << dendl;
+    lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
+    return false;
+  }
+}
+
+void Locker::scatter_xlock_finish(ScatterLock *lock, Mutation *mut)
+{
+  dout(7) << "scatter_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
+
+  // drop ref
+  assert(lock->can_xlock(mut));
+  lock->put_xlock();
+  mut->locks.erase(lock);
+  mut->xlocks.erase(lock);
+
+  assert(lock->get_parent()->is_auth());  // or implement remote xlocks
+
+  // others waiting?
+  lock->finish_waiters(SimpleLock::WAIT_STABLE | 
+		       SimpleLock::WAIT_WR | 
+		       SimpleLock::WAIT_RD, 0); 
+
+  if (lock->get_parent()->is_auth())
+    scatter_eval(lock);
 }
 
 

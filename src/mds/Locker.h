@@ -141,6 +141,8 @@ protected:
   bool scatter_wrlock_try(ScatterLock *lock, Mutation *mut);
   bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mut);
   void scatter_wrlock_finish(ScatterLock *lock, Mutation *mut);
+  bool scatter_xlock_start(ScatterLock *lock, MDRequest *mut);
+  void scatter_xlock_finish(ScatterLock *lock, Mutation *mut);
 
   void scatter_writebehind(ScatterLock *lock);
   class C_Locker_ScatterWB : public Context {

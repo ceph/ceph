@@ -2338,15 +2338,13 @@ class C_MDS_link_remote_finish : public Context {
   CDentry *dn;
   CInode *targeti;
   version_t dpv;
-  version_t dirpv;
 public:
-  C_MDS_link_remote_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti, version_t dirpv_) :
+  C_MDS_link_remote_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti) :
     mds(m), mdr(r), dn(d), targeti(ti),
-    dpv(d->get_projected_version()),
-    dirpv(dirpv_) { }
+    dpv(d->get_projected_version()) {}
   void finish(int r) {
     assert(r == 0);
-    mds->server->_link_remote_finish(mdr, dn, targeti, dpv, dirpv);
+    mds->server->_link_remote_finish(mdr, dn, targeti, dpv);
   }
 };
 
@@ -2378,8 +2376,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "link_remote");
   le->metablob.add_client_req(mdr->reqid);
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);   // dir inode's mtime
-  le->metablob.add_dir_context(dn->get_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, false, true, 1);
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
 				 MODE_TO_DT(targeti->inode.mode));  // new remote
 
@@ -2387,11 +2384,11 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   mdr->committing = true;
 
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, dn, targeti, dirpv));
+  mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, dn, targeti));
 }
 
 void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-				 version_t dpv, version_t dirpv)
+				 version_t dpv)
 {
   dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << dendl;
 
@@ -2399,8 +2396,7 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dn->dir->link_remote_inode(dn, targeti);
   dn->mark_dirty(dpv, mdr->ls);
 
-  // dir inode's mtime
-  dirty_dn_diri(mdr, dn, dirpv);
+  mdr->apply();
   
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
@@ -2736,33 +2732,31 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   le->metablob.add_client_req(mdr->reqid);
 
-  version_t ipv = 0;  // dirty inode version
-  inode_t *ji = 0;     // journaled projected inode
+  if (dn->is_primary())
+    dn->inode->projected_parent = straydn;
+
+  inode_t *pi = dn->inode->project_inode();
+  mdr->add_projected_inode(dn->inode);
+  pi->version = dn->inode->pre_dirty();
+  pi->nlink--;
+  pi->ctime = mdr->now;
+
+  mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir,
+			       dn->is_primary(), true, -1);
+  
   if (dn->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
-    dn->inode->projected_parent = straydn;    
-    ipv = dn->inode->pre_dirty();
     le->metablob.add_dir_context(straydn->dir);
-    ji = le->metablob.add_primary_dentry(straydn, true, dn->inode);
+    le->metablob.add_primary_dentry(straydn, true, dn->inode, pi);
   } else {
     // remote link.  update remote inode.
-    ipv = dn->inode->pre_dirty();
     le->metablob.add_dir_context(dn->inode->get_parent_dir());
-    ji = le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode);
+    le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode);
   }
-  
-  // update journaled target inode
-  inode_t *pi = dn->inode->project_inode();
-  pi->nlink--;
-  pi->ctime = mdr->now;
-  pi->version = ipv;
-  *ji = *pi;  // copy into journal
 
   // the unlinked dentry
   dn->pre_dirty();
-  mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir,
-			       dn->is_primary(), true, -1);
   le->metablob.add_null_dentry(dn, true);
 
   if (mdr->more()->dst_reanchor_atid)
@@ -2788,11 +2782,8 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     straydn->dir->link_primary_inode(straydn, in);
   }
 
-  // nlink--, dirty old dentry
-  in->pop_and_dirty_projected_inode(mdr->ls);
-  dn->mark_dirty(dnpv, mdr->ls);  
-
   mdr->apply();
+  dn->mark_dirty(dnpv, mdr->ls);  
   
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();

@@ -137,7 +137,7 @@ public:
 
   void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-			   version_t, version_t);
+			   version_t);
 
   void handle_slave_link_prep(MDRequest *mdr);
   void _logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc);
