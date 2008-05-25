@@ -642,10 +642,6 @@ void CInode::clear_dirty_scattered(int type)
     xlist_dirty_dirfrag_dir.remove_myself();
     break;
 
-  case CEPH_LOCK_INESTED:
-    xlist_dirty_dirfrag_nested.remove_myself();
-    break;
-
   default:
     assert(0);
   }
@@ -658,9 +654,8 @@ void CInode::finish_scatter_gather_update(int type)
   switch (type) {
   case CEPH_LOCK_IDIR:
     {
-      assert(is_auth());
-      
       // adjust summation
+      assert(is_auth());
       inode.dirstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();

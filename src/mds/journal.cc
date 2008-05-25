@@ -125,27 +125,6 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     }
     //(*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
-  /*
-  for (xlist<CInode*>::iterator p = dirty_dirfrag_nested.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for nestedlock flush on " << *in << dendl;
-    if (!gather) gather = new C_Gather;
-
-    if (in->is_ambiguous_auth()) {
-      dout(10) << " waiting for single auth on " << *in << dendl;
-      in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather->new_sub());
-    } else if (in->is_auth()) {
-      dout(10) << " i'm auth, unscattering nestedlock on " << *in << dendl;
-      assert(in->is_replicated()); // hrm!
-      mds->locker->scatter_lock(&in->nestedlock);
-      in->nestedlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
-    } else {
-      dout(10) << " i'm a replica, requesting nestedlock unscatter of " << *in << dendl;
-      mds->locker->scatter_try_unscatter(&in->nestedlock, gather->new_sub());
-    }
-    //(*p)->nestedlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
-  }
-  */
 
   // open files
   if (!open_files.empty()) {
@@ -318,7 +297,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
       dir->get_inode()->dirlock.set_updated();
-      //dir->get_inode()->nestedlock.set_updated();
     }
 
     if (lump.is_complete())

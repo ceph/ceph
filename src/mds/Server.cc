@@ -1420,7 +1420,6 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
-  //wrlocks.insert(&dn->dir->inode->nestedlock); // also, wrlock on dir mtime
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
@@ -2214,7 +2213,6 @@ void Server::handle_client_link(MDRequest *mdr)
     rdlocks.insert(&linktrace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
-  //wrlocks.insert(&dn->dir->inode->nestedlock);
   for (int i=0; i<(int)targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
@@ -2663,7 +2661,6 @@ void Server::handle_client_unlink(MDRequest *mdr)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
-  //wrlocks.insert(&dn->dir->inode->nestedlock);
   xlocks.insert(&in->linklock);
   
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -3107,7 +3104,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
-  //wrlocks.insert(&srcdn->dir->inode->nestedlock);
   if (srcdn->is_primary() && srcdn->inode->is_dir())
     xlocks.insert(&srcdn->inode->dirlock);
 
@@ -3122,7 +3118,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
   wrlocks.insert(&destdn->dir->inode->dirlock);
-  //wrlocks.insert(&destdn->dir->inode->nestedlock);
   if (destdn->is_primary() && destdn->inode->is_dir())
     xlocks.insert(&destdn->inode->dirlock);
 

@@ -210,7 +210,6 @@ protected:
 public:
   xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
-  xlist<CInode*>::item xlist_dirty_dirfrag_nested;
   xlist<CInode*>::item xlist_purging_inode;
 
 private:
@@ -244,7 +243,6 @@ public:
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_dirfrag_dir(this), 
-    xlist_dirty_dirfrag_nested(this), 
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
@@ -253,8 +251,7 @@ public:
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
-    nestedlock(this, CEPH_LOCK_INESTED, WAIT_NESTEDLOCK_OFFSET)
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET)
   {
     memset(&inode, 0, sizeof(inode));
     state = 0;  
@@ -342,7 +339,6 @@ public:
   FileLock   filelock;
   ScatterLock dirlock;
   SimpleLock xattrlock;
-  ScatterLock nestedlock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -352,7 +348,6 @@ public:
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
     case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
-    case CEPH_LOCK_INESTED: return &nestedlock;
     }
     return 0;
   }

@@ -40,7 +40,6 @@ class LogSegment {
 
   xlist<CInode*>  open_files;
   xlist<CInode*>  dirty_dirfrag_dir;
-  xlist<CInode*>  dirty_dirfrag_nested;
 
   xlist<MDSlaveUpdate*> slave_updates;
 
