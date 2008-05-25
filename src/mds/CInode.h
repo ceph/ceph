@@ -159,6 +159,16 @@ class CInode : public MDSCacheObject {
   inode_t *project_inode();
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
+  inode_t *get_previous_projected_inode() {
+    assert(!projected_inode.empty());
+    list<inode_t*>::reverse_iterator p = projected_inode.rbegin();
+    p++;
+    if (p != projected_inode.rend())
+      return *p;
+    else
+      return &inode;
+  }
+
   // -- cache infrastructure --
 private:
   map<frag_t,CDir*> dirfrags; // cached dir fragments

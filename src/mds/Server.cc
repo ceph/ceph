@@ -1612,6 +1612,7 @@ public:
 
     // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
+    mdr->apply();
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
@@ -1663,7 +1664,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "utime");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1704,7 +1705,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chmod");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1745,11 +1746,10 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-  mdlog->submit_entry(le);
-  mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
+  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 
@@ -1805,11 +1805,10 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-  mdlog->submit_entry(le);
-  mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
+  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 void Server::handle_client_removexattr(MDRequest *mdr)
@@ -1850,11 +1849,10 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_dir_context(cur->get_parent_dir());
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
-  mdlog->submit_entry(le);
-  mdlog->wait_for_sync(new C_MDS_inode_update_finish(mds, mdr, cur));
+  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 
@@ -2293,10 +2291,10 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   le->metablob.add_client_req(mdr->reqid);
-  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, false, true, 1);
+  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, false, true, 1); // new dn
+  mds->locker->predirty_nested(mdr, &le->metablob, targeti, 0, true, true);           // targeti
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
 				 MODE_TO_DT(targeti->inode.mode));  // new remote
-  le->metablob.add_dir_context(targeti->get_parent_dir());
   le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
 
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
@@ -2452,11 +2450,8 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
 
+  inode_t *oldi = dn->inode->get_projected_inode();
   inode_t *pi = dn->inode->project_inode();
-
-  // rollback case
-  le->rollback.add_dir_context(targeti->get_parent_dir());
-  le->rollback.add_primary_dentry(dn, true, targeti, pi);  // update old primary
 
   // update journaled target inode
   bool inc;
@@ -2474,8 +2469,9 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
 
   // commit case
-  le->commit.add_dir_context(targeti->get_parent_dir());
+  mds->locker->predirty_nested(mdr, &le->commit, dn->inode, 0, true, false, 0, &le->rollback);
   le->commit.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+  le->rollback.add_primary_dentry(dn, true, targeti, oldi);
 
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti, old_ctime, inc));
 }
@@ -2548,6 +2544,8 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti,
       targeti->inode.nlink++;
     else
       targeti->inode.nlink--;
+
+    // FIXME rctime etc.?
   }
 
   mdlog->submit_entry(le);
@@ -2742,11 +2740,11 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (dn->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
-    le->metablob.add_dir_context(straydn->dir);
+    mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, straydn->dir, true, true, 1);
     le->metablob.add_primary_dentry(straydn, true, dn->inode, pi);
   } else {
     // remote link.  update remote inode.
-    le->metablob.add_dir_context(dn->inode->get_parent_dir());
+    mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, 0, true, true);
     le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode);
   }
 
@@ -4061,13 +4059,13 @@ void Server::handle_client_truncate(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
   inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = le64_to_cpu(req->head.args.truncate.length);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
@@ -4250,13 +4248,13 @@ void Server::handle_client_opent(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_dir_context(cur->get_parent_dir());
   le->metablob.add_inode_truncate(cur->ino(), 0, cur->inode.size);
   inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
@@ -4342,7 +4340,6 @@ void Server::handle_client_openc(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
-
   mds->locker->predirty_nested(mdr, &le->metablob, in, dn->dir, true, true, 1);
   le->metablob.add_primary_dentry(dn, true, in, &in->inode);
   

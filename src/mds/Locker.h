@@ -159,7 +159,8 @@ protected:
 
 public:
   void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, CDir *dir,
-		       bool do_nested, bool do_parent, int linkunlink=0);
+		       bool do_nested, bool do_parent, int linkunlink=0,
+		       EMetaBlob *rollback=0);
 
   // local
 protected:
