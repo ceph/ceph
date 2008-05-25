@@ -103,6 +103,7 @@ struct Mutation {
   // for applying projected inode changes
   list<CInode*> projected_inodes;
   list<CDir*> projected_fnodes;
+  list<ScatterLock*> updated_scatterlocks;
 
   Mutation() : ls(0),
 	       done_locking(false), committing(false), aborted(false) {}
@@ -171,10 +172,18 @@ struct Mutation {
       dir->pop_and_dirty_projected_fnode(ls);
     }
   }
+  
+  void add_updated_scatterlock(ScatterLock *lock) {
+    updated_scatterlocks.push_back(lock);
+  }
 
   void apply() {
     pop_and_dirty_projected_inodes();
     pop_and_dirty_projected_fnodes();
+    for (list<ScatterLock*>::iterator p = updated_scatterlocks.begin();
+	 p != updated_scatterlocks.end();
+	 p++)
+      (*p)->set_updated();
   }
 
   virtual void print(ostream &out) {

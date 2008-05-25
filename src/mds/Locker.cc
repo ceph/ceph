@@ -1223,12 +1223,12 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     CInode *in, CDir *parent,
-			     bool do_nested, bool do_parent, int linkunlink)
+			     bool primary_dn, bool do_parent, int linkunlink)
 {
   dout(10) << "predirty_nested "
 	   << (do_parent ? "do_parent_mtime ":"")
 	   << "linkunlink=" <<  linkunlink
-	   << (do_nested ? "do_nested ":"")
+	   << (primary_dn ? "primary_dn ":"remote_dn ")
 	   << " " << *in << dendl;
 
   if (!parent)
@@ -1254,17 +1254,6 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       //assert(mut->wrlocks.count(&pin->nestedlock));
     }
 
-    if (do_nested &&
-	mut->wrlocks.count(&pin->dirlock) == 0 &&
-	!scatter_wrlock_try(&pin->dirlock, mut)) {
-      dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
-      do_nested = false;
-      break;
-    }
-
-    if (!do_parent && !do_nested)
-      break;
-
     // inode -> dirfrag
     mut->add_projected_fnode(parent);
 
@@ -1281,7 +1270,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 	  pf->fraginfo.nfiles += linkunlink;
       }
     }
-    if (do_nested) {
+    if (primary_dn) {
       if (linkunlink == 0) {
 	drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
 	drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
@@ -1312,12 +1301,25 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       pf->nested.rfiles += linkunlink;
     }
 
+
+    // stop?
     if (pin->is_base())
       break;
-    if (!pin->is_auth()) {
-      if (do_parent)
-	mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
-      mut->ls->dirty_dirfrag_nested.push_back(&pin->xlist_dirty_dirfrag_nested);
+
+    bool stop = false;
+    if (mut->wrlocks.count(&pin->dirlock) == 0 &&
+	!scatter_wrlock_try(&pin->dirlock, mut)) {
+      dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
+      stop = true;
+    }
+    if (!pin->is_auth() || pin->is_ambiguous_auth()) {
+      dout(10) << "predirty_nested !auth or ambig on " << *pin << dendl;
+      stop = true;
+    }
+    if (stop) {
+      dout(10) << "predirty_nested stop.  marking dirty dirfrag/scatterlock on " << *pin << dendl;
+      mut->add_updated_scatterlock(&pin->dirlock);
+      mut->ls->dirty_dirfrag_nested.push_back(&pin->xlist_dirty_dirfrag_dir);
       break;
     }
 
@@ -1355,6 +1357,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     parent = cur->get_projected_parent_dn()->get_dir();
     linkunlink = 0;
     do_parent = false;
+    primary_dn = true;
   }
 
   // now, stick it in the blob
