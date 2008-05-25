@@ -621,8 +621,57 @@ static void ceph_dentry_release(struct dentry *dentry)
 	BUG_ON(dentry->d_fsdata);
 }
 
+/*
+ * reading from a dir
+ */
+static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
+			     loff_t *ppos)
+{
+	struct ceph_file_info *cf = file->private_data;
+	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int left;
+
+	if (!(ceph_client(inode->i_sb)->mount_args.flags & CEPH_MOUNT_DIRSTAT))
+		return -EISDIR;
+
+	if (!cf->dir_info) {
+		cf->dir_info = kmalloc(1024, GFP_NOFS);
+		if (!cf->dir_info)
+			return -ENOMEM;
+		cf->dir_info_len = 
+			sprintf(cf->dir_info, 
+				"entries:  %20lld\n"
+				"files:    %20lld\n"
+				"subdirs:  %20lld\n"
+				"rentries: %20lld\n"
+				"rfiles:   %20lld\n"
+				"rsubdirs: %20lld\n"
+				"rbytes:   %20lld\n"
+				"rctime:   %10ld.%09ld\n",
+				ci->i_files + ci->i_subdirs,
+				ci->i_files,
+				ci->i_subdirs,
+				ci->i_rfiles + ci->i_rsubdirs,
+				ci->i_rfiles,
+				ci->i_rsubdirs,
+				ci->i_rbytes,
+				(long)ci->i_rctime.tv_sec,
+				(long)ci->i_rctime.tv_nsec);
+	}
+
+	if (*ppos >= cf->dir_info_len)
+		return 0;
+	size = min_t(unsigned, size, cf->dir_info_len-*ppos);
+	left = copy_to_user(buf, cf->dir_info + *ppos, size);
+	if (left == size)
+		return -EFAULT;
+	*ppos += (size - left);
+	return (size - left);
+}
+
 const struct file_operations ceph_dir_fops = {
-	.read = generic_read_dir,
+	.read = ceph_read_dir,
 	.readdir = ceph_readdir,
 	.llseek = ceph_dir_llseek,
 	.open = ceph_open,

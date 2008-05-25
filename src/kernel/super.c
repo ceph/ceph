@@ -124,6 +124,13 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 			   args->fsid.major, args->fsid.minor);
 	if (args->flags & CEPH_MOUNT_NOSHARE)
 		seq_puts(m, ",noshare");
+
+	if (args->flags & CEPH_MOUNT_DIRSTAT)
+		seq_puts(m, ",dirstat");
+	else
+		seq_puts(m, ",nodirstat");
+	if (args->flags & CEPH_MOUNT_RBYTES)
+		seq_puts(m, ",rbytes");
 	return 0;
 }
 
@@ -340,6 +347,9 @@ enum {
 	/* int args above */
 	Opt_ip,
 	Opt_unsafewrites,
+	Opt_dirstat,
+	Opt_nodirstat,
+	Opt_rbytes,
 };
 
 static match_table_t arg_tokens = {
@@ -360,6 +370,9 @@ static match_table_t arg_tokens = {
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
 	{Opt_unsafewrites, "unsafewrites"},
+	{Opt_dirstat, "dirstat"},
+	{Opt_nodirstat, "nodirstat"},
+	{Opt_rbytes, "rbytes"},
 	{-1, NULL}
 };
 
@@ -413,7 +426,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	/* defaults */
 	args->sb_flags = flags;
-	args->flags = 0;
+	args->flags = CEPH_MOUNT_DEFAULT;
 	args->osd_timeout = 5;  /* seconds */
 
 	/* ip1[,ip2...]:/server/path */
@@ -521,6 +534,16 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_unsafewrites:
 			args->flags |= CEPH_MOUNT_UNSAFE_WRITES;
+			break;
+
+		case Opt_dirstat:
+			args->flags |= CEPH_MOUNT_DIRSTAT;
+			break;
+		case Opt_nodirstat:
+			args->flags &= ~CEPH_MOUNT_DIRSTAT;
+			break;
+		case Opt_rbytes:
+			args->flags |= CEPH_MOUNT_RBYTES;
 			break;
 
 		default:

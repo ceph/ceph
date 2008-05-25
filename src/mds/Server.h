@@ -156,7 +156,7 @@ public:
   void _unlink_remote(MDRequest *mdr, CDentry *dn);
   void _unlink_remote_finish(MDRequest *mdr, 
 			     CDentry *dn, 
-			     version_t, version_t);    
+			     version_t);    
 
   // rename
   void handle_client_rename(MDRequest *mdr);

@@ -72,10 +72,14 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 /*
  * mount options
  */
-#define CEPH_MOUNT_FSID     1
-#define CEPH_MOUNT_NOSHARE  2  /* don't share client with other mounts */
-#define CEPH_MOUNT_MYIP     4  /* specified my ip */
-#define CEPH_MOUNT_UNSAFE_WRITES 8
+#define CEPH_MOUNT_FSID          (1<<0)
+#define CEPH_MOUNT_NOSHARE       (1<<1) /* don't share client with other sbs */
+#define CEPH_MOUNT_MYIP          (1<<2) /* specified my ip */
+#define CEPH_MOUNT_UNSAFE_WRITES (1<<3)
+#define CEPH_MOUNT_DIRSTAT       (1<<4)
+#define CEPH_MOUNT_RBYTES        (1<<5)
+
+#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_DIRSTAT)
 
 struct ceph_mount_args {
 	int sb_flags;
@@ -178,6 +182,11 @@ struct ceph_inode_frag {
 
 #define STATIC_CAPS 2
 
+struct ceph_dir_info {
+	u64 nfiles, nsubdirs;
+	u64 bytes;
+};
+
 struct ceph_inode_info {
 	u64 i_ceph_ino;   /* make this ifdef away on 64 bit */
 
@@ -186,6 +195,11 @@ struct ceph_inode_info {
 
 	struct ceph_file_layout i_layout;
 	char *i_symlink;
+
+	/* for dirs */
+	struct timespec i_rctime;
+	u64 i_rbytes, i_rfiles, i_rsubdirs;
+	u64 i_files, i_subdirs;
 
 	int i_lease_mask;
 	struct ceph_mds_session *i_lease_session;
@@ -382,6 +396,8 @@ struct ceph_file_info {
 	int mode;      /* initialized on open */
 	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	struct ceph_mds_request *last_readdir;
+	char *dir_info;
+	int dir_info_len;
 };
 
 

@@ -626,7 +626,7 @@ struct ceph_mds_reply_inode {
 	__le32 mode, uid, gid;
 	__le32 nlink;
 	__le64 size, max_size;
-	__le64 rbytes, rfiles, rsubdirs;
+	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
 	struct ceph_timespec rctime;
 	__le32 rdev;
 	struct ceph_frag_tree_head fragtree;
