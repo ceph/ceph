@@ -104,12 +104,14 @@ struct InodeStat {
   inodeno_t ino;
   version_t version;
   ceph_file_layout layout;
-  utime_t ctime, mtime, atime, rctime;
+  utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size, nested_size;
   version_t time_warp_seq;
-  nested_info_t nested;
 
+  uint64_t nfiles, nsubdirs;
+  nested_info_t nested;
+  
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
   map<string, bufferptr> xattrs;
@@ -138,6 +140,8 @@ struct InodeStat {
     max_size = e.max_size;
     rdev = e.rdev;
 
+    nfiles = e.files;
+    nsubdirs = e.subdirs;
     nested.rctime.decode_timeval(&e.rctime);
     nested.rbytes = e.rbytes;
     nested.rfiles = e.rfiles;
@@ -178,6 +182,8 @@ struct InodeStat {
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
 
+    e.files = in->inode.nfiles;
+    e.subdirs = in->inode.nsubdirs;
     in->inode.nested.rctime.encode_timeval(&e.rctime);
     e.rbytes = in->inode.nested.rbytes;
     e.rfiles = in->inode.nested.rfiles;

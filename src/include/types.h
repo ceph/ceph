@@ -246,6 +246,7 @@ struct inode_t {
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
   // dirfrag, recursive accounting
+  uint64_t nfiles, nsubdirs;
   nested_info_t accounted_nested;  // what dirfrag has seen
   nested_info_t nested;            // inline summation for child dirfrags.
   /*
@@ -277,7 +278,10 @@ static inline void encode(const inode_t &i, bufferlist &bl) {
   ::encode(i.max_size, bl);
   ::encode(i.mtime, bl);
   ::encode(i.atime, bl);
+  ::encode(i.nfiles, bl);
+  ::encode(i.nsubdirs, bl);
   ::encode(i.nested, bl);
+  ::encode(i.accounted_nested, bl);
   ::encode(i.version, bl);
   ::encode(i.file_data_version, bl);
 }
@@ -295,7 +299,10 @@ static inline void decode(inode_t &i, bufferlist::iterator &p) {
   ::decode(i.max_size, p);
   ::decode(i.mtime, p);
   ::decode(i.atime, p);
+  ::decode(i.nfiles, p);
+  ::decode(i.nsubdirs, p);
   ::decode(i.nested, p);
+  ::decode(i.accounted_nested, p);
   ::decode(i.version, p);
   ::decode(i.file_data_version, p);
 }

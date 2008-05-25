@@ -641,14 +641,14 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 			return -ENOMEM;
 		cf->dir_info_len = 
 			sprintf(cf->dir_info, 
-				"entries:  %20lld\n"
-				"files:    %20lld\n"
-				"subdirs:  %20lld\n"
-				"rentries: %20lld\n"
-				"rfiles:   %20lld\n"
-				"rsubdirs: %20lld\n"
-				"rbytes:   %20lld\n"
-				"rctime:   %10ld.%09ld\n",
+				"entries:   %20lld\n"
+				" files:    %20lld\n"
+				" subdirs:  %20lld\n"
+				"rentries:  %20lld\n"
+				" rfiles:   %20lld\n"
+				" rsubdirs: %20lld\n"
+				"rbytes:    %20lld\n"
+				"rctime:    %10ld.%09ld\n",
 				ci->i_files + ci->i_subdirs,
 				ci->i_files,
 				ci->i_subdirs,

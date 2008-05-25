@@ -1332,6 +1332,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       dout(10) << "predirty_nested updating size/mtime on " << *pin << dendl;
       if (pf->fraginfo.mtime > pi->mtime)
 	pi->mtime = pf->fraginfo.mtime;
+      pi->nfiles += pf->fraginfo.nfiles - pf->accounted_fraginfo.nfiles;
+      pi->nsubdirs += pf->fraginfo.nsubdirs - pf->accounted_fraginfo.nsubdirs;
       pi->size += pf->fraginfo.size() - pf->accounted_fraginfo.size();
       pf->accounted_fraginfo = pf->fraginfo;
     }
