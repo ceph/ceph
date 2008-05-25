@@ -2824,15 +2824,13 @@ class C_MDS_unlink_remote_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   version_t dnpv;  // deleted dentry
-  version_t dirpv;
 public:
-  C_MDS_unlink_remote_finish(MDS *m, MDRequest *r, CDentry *d, 
-			     version_t dirpv_) :
+  C_MDS_unlink_remote_finish(MDS *m, MDRequest *r, CDentry *d) :
     mds(m), mdr(r), dn(d), 
-    dnpv(d->get_projected_version()), dirpv(dirpv_) { }
+    dnpv(d->get_projected_version()) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_unlink_remote_finish(mdr, dn, dnpv, dirpv);
+    mds->server->_unlink_remote_finish(mdr, dn, dnpv);
   }
 };
 
@@ -2863,16 +2861,15 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
   le->metablob.add_client_req(mdr->reqid);
 
   // the unlinked dentry
+  mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, false, true, -1);
   dn->pre_dirty();
-  version_t dirpv = predirty_dn_diri(mdr, dn, &le->metablob);
-  le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_null_dentry(dn, true);
 
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 
   // finisher
-  C_MDS_unlink_remote_finish *fin = new C_MDS_unlink_remote_finish(mds, mdr, dn, dirpv);
+  C_MDS_unlink_remote_finish *fin = new C_MDS_unlink_remote_finish(mds, mdr, dn);
   
   // mark committing (needed for proper recovery)
   mdr->committing = true;
@@ -2883,17 +2880,16 @@ void Server::_unlink_remote(MDRequest *mdr, CDentry *dn)
 
 void Server::_unlink_remote_finish(MDRequest *mdr, 
 				   CDentry *dn, 
-				   version_t dnpv, version_t dirpv) 
+				   version_t dnpv) 
 {
   dout(10) << "_unlink_remote_finish " << *dn << dendl;
 
   // unlink main dentry
   dn->dir->unlink_inode(dn);
+
+  mdr->apply();
   dn->mark_dirty(dnpv, mdr->ls);  // dirty old dentry
 
-  // dir inode's mtime
-  dirty_dn_diri(mdr, dn, dirpv);
-    
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
