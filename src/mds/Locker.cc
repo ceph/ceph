@@ -1032,7 +1032,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       dout(7) << "  size " << pi->size << " -> " << size
 	      << " for " << *in << dendl;
       pi->size = size;
-      pi->nested.rbytes = size;
+      pi->dirstat.rbytes = size;
     }
     if (dirty_atime) {
       dout(7) << "  atime " << pi->atime << " -> " << atime
@@ -1262,43 +1262,43 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
     if (do_parent) {
       dout(10) << "predirty_nested updating mtime/size on " << *parent << dendl;
-      pf->fraginfo.mtime = mut->now;
+      pf->fragstat.mtime = mut->now;
       if (linkunlink) {
 	if (in->is_dir())
-	  pf->fraginfo.nsubdirs += linkunlink;
+	  pf->fragstat.nsubdirs += linkunlink;
 	else
-	  pf->fraginfo.nfiles += linkunlink;
+	  pf->fragstat.nfiles += linkunlink;
       }
     }
     if (primary_dn) {
       if (linkunlink == 0) {
-	drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
-	drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
-	drsubdirs = curi->nested.rsubdirs - curi->accounted_nested.rsubdirs;
+	drbytes = curi->dirstat.rbytes - curi->accounted_dirstat.rbytes;
+	drfiles = curi->dirstat.rfiles - curi->accounted_dirstat.rfiles;
+	drsubdirs = curi->dirstat.rsubdirs - curi->accounted_dirstat.rsubdirs;
       } else if (linkunlink < 0) {
-	drbytes = 0 - curi->accounted_nested.rbytes;
-	drfiles = 0 - curi->accounted_nested.rfiles;
-	drsubdirs = 0 - curi->accounted_nested.rsubdirs;
+	drbytes = 0 - curi->accounted_dirstat.rbytes;
+	drfiles = 0 - curi->accounted_dirstat.rfiles;
+	drsubdirs = 0 - curi->accounted_dirstat.rsubdirs;
       } else {
-	drbytes = curi->nested.rbytes;
-	drfiles = curi->nested.rfiles;
-	drsubdirs = curi->nested.rsubdirs;
+	drbytes = curi->dirstat.rbytes;
+	drfiles = curi->dirstat.rfiles;
+	drsubdirs = curi->dirstat.rsubdirs;
       }
-      rctime = MAX(curi->ctime, curi->nested.rctime);
+      rctime = MAX(curi->ctime, curi->dirstat.rctime);
 
       dout(10) << "predirty_nested delta "
 	       << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
 	       << *parent << dendl;
-      pf->nested.rbytes += drbytes;
-      pf->nested.rfiles += drfiles;
-      pf->nested.rsubdirs += drsubdirs;
-      pf->nested.rctime = rctime;
+      pf->fragstat.rbytes += drbytes;
+      pf->fragstat.rfiles += drfiles;
+      pf->fragstat.rsubdirs += drsubdirs;
+      pf->fragstat.rctime = rctime;
     
-      curi->accounted_nested = curi->nested;
+      curi->accounted_dirstat = curi->dirstat;
     } else {
       dout(10) << "predirty_nested no delta (remote dentry) in " << *parent << dendl;
       assert(!in->is_dir());
-      pf->nested.rfiles += linkunlink;
+      pf->fragstat.rfiles += linkunlink;
     }
 
 
@@ -1332,24 +1332,23 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
     if (do_parent) {
       dout(10) << "predirty_nested updating size/mtime on " << *pin << dendl;
-      if (pf->fraginfo.mtime > pi->mtime)
-	pi->mtime = pf->fraginfo.mtime;
-      pi->nfiles += pf->fraginfo.nfiles - pf->accounted_fraginfo.nfiles;
-      pi->nsubdirs += pf->fraginfo.nsubdirs - pf->accounted_fraginfo.nsubdirs;
-      pi->size += pf->fraginfo.size() - pf->accounted_fraginfo.size();
-      pf->accounted_fraginfo = pf->fraginfo;
+      if (pf->fragstat.mtime > pi->mtime)
+	pi->mtime = pf->fragstat.mtime;
+      pi->dirstat.nfiles += pf->fragstat.nfiles - pf->accounted_fragstat.nfiles;
+      pi->dirstat.nsubdirs += pf->fragstat.nsubdirs - pf->accounted_fragstat.nsubdirs;
+      pf->accounted_fragstat = pf->fragstat;
     }
-    drbytes = pf->nested.rbytes - pf->accounted_nested.rbytes;
-    drfiles = pf->nested.rfiles - pf->accounted_nested.rfiles;
-    drsubdirs = pf->nested.rsubdirs - pf->accounted_nested.rsubdirs;
+    drbytes = pf->fragstat.rbytes - pf->accounted_fragstat.rbytes;
+    drfiles = pf->fragstat.rfiles - pf->accounted_fragstat.rfiles;
+    drsubdirs = pf->fragstat.rsubdirs - pf->accounted_fragstat.rsubdirs;
     dout(10) << "predirty_nested delta " 
 	     << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
 	     << *pin << dendl;
-    pi->nested.rbytes += drbytes;
-    pi->nested.rfiles += drfiles;
-    pi->nested.rsubdirs += drsubdirs;
-    pi->nested.rctime = MAX(pf->fraginfo.mtime, pf->nested.rctime);
-    pf->accounted_nested = pf->nested;
+    pi->dirstat.rbytes += drbytes;
+    pi->dirstat.rfiles += drfiles;
+    pi->dirstat.rsubdirs += drsubdirs;
+    pi->dirstat.rctime = MAX(pf->fragstat.mtime, pf->fragstat.rctime);
+    pf->accounted_fragstat = pf->fragstat;
 
     // next parent!
     cur = pin;

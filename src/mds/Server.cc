@@ -1497,8 +1497,6 @@ version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob,
     dirpv = diri->pre_dirty();
     dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << dendl;
     
-    diri->dirfrag_size[dn->dir->dirfrag().frag] += deltasize;
-
     // predirty+journal
     inode_t *pi = diri->project_inode();
     if (dirpv) pi->version = dirpv;
@@ -2043,7 +2041,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   if ((newi->inode.mode & S_IFMT) == 0)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
-  newi->inode.nested.rfiles = 1;
+  newi->inode.dirstat.rfiles = 1;
   
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
 
@@ -2084,7 +2082,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode |= S_IFDIR;
   newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty() - 1;
-  newi->inode.nested.rsubdirs = 1;
+  newi->inode.dirstat.rsubdirs = 1;
 
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
@@ -2143,7 +2141,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
-  newi->inode.nested.rfiles = 1;
+  newi->inode.dirstat.rfiles = 1;
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -4342,7 +4340,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
   in->inode.max_size = in->get_layout_size_increment();
-  in->inode.nested.rfiles = 1;
+  in->inode.dirstat.rfiles = 1;
   
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();

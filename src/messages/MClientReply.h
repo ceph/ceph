@@ -106,11 +106,10 @@ struct InodeStat {
   ceph_file_layout layout;
   utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;
-  loff_t size, max_size, nested_size;
+  loff_t size, max_size;
   version_t time_warp_seq;
 
-  uint64_t nfiles, nsubdirs;
-  nested_info_t nested;
+  frag_info_t dirstat;
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
@@ -140,12 +139,12 @@ struct InodeStat {
     max_size = e.max_size;
     rdev = e.rdev;
 
-    nfiles = e.files;
-    nsubdirs = e.subdirs;
-    nested.rctime.decode_timeval(&e.rctime);
-    nested.rbytes = e.rbytes;
-    nested.rfiles = e.rfiles;
-    nested.rsubdirs = e.rsubdirs;
+    dirstat.nfiles = e.files;
+    dirstat.nsubdirs = e.subdirs;
+    dirstat.rctime.decode_timeval(&e.rctime);
+    dirstat.rbytes = e.rbytes;
+    dirstat.rfiles = e.rfiles;
+    dirstat.rsubdirs = e.rsubdirs;
 
     int n = e.fragtree.nsplits;
     while (n) {
@@ -182,12 +181,12 @@ struct InodeStat {
     e.size = in->inode.size;
     e.max_size = in->inode.max_size;
 
-    e.files = in->inode.nfiles;
-    e.subdirs = in->inode.nsubdirs;
-    in->inode.nested.rctime.encode_timeval(&e.rctime);
-    e.rbytes = in->inode.nested.rbytes;
-    e.rfiles = in->inode.nested.rfiles;
-    e.rsubdirs = in->inode.nested.rsubdirs;
+    e.files = in->inode.dirstat.nfiles;
+    e.subdirs = in->inode.dirstat.nsubdirs;
+    in->inode.dirstat.rctime.encode_timeval(&e.rctime);
+    e.rbytes = in->inode.dirstat.rbytes;
+    e.rfiles = in->inode.dirstat.rfiles;
+    e.rsubdirs = in->inode.dirstat.rsubdirs;
 
     e.rdev = in->inode.rdev;
     e.fragtree.nsplits = in->dirfragtree._splits.size();

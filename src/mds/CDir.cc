@@ -86,12 +86,12 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
-  out << " s=" << dir.fnode.fraginfo.size() 
-      << "=" << dir.fnode.fraginfo.nfiles
-      << "+" << dir.fnode.fraginfo.nsubdirs;
-  out << " rb=" << dir.fnode.nested.rbytes << "/" << dir.fnode.accounted_nested.rbytes;
-  out << " rf=" << dir.fnode.nested.rfiles << "/" << dir.fnode.accounted_nested.rfiles;
-  out << " rd=" << dir.fnode.nested.rsubdirs << "/" << dir.fnode.accounted_nested.rsubdirs;
+  out << " s=" << dir.fnode.fragstat.size() 
+      << "=" << dir.fnode.fragstat.nfiles
+      << "+" << dir.fnode.fragstat.nsubdirs;
+  out << " rb=" << dir.fnode.fragstat.rbytes << "/" << dir.fnode.accounted_fragstat.rbytes;
+  out << " rf=" << dir.fnode.fragstat.rfiles << "/" << dir.fnode.accounted_fragstat.rfiles;
+  out << " rd=" << dir.fnode.fragstat.rsubdirs << "/" << dir.fnode.accounted_fragstat.rsubdirs;
 
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
   if (dir.get_num_dirty())
@@ -493,19 +493,21 @@ void CDir::steal_dentry(CDentry *dn)
     nnull++;
   else {
     nitems++;
+    assert(0); // fixme fix accounting here
+    /* FIXME
     if (dn->is_primary()) {
-      fnode.nested.rbytes += dn->get_inode()->inode.accounted_nested.rbytes;
-      fnode.nested.rfiles += dn->get_inode()->inode.accounted_nested.rfiles;
+      fnode.fragstat.rbytes += dn->get_inode()->inode.accounted_fragstat.rbytes;
+      fnode.fragstat.rfiles += dn->get_inode()->inode.accounted_fragstat.rfiles;
       if (dn->get_inode()->is_dir())
-	fnode.fraginfo.nsubdirs++;
+	fnode.fragstat.nsubdirs++;
       else
-	fnode.fraginfo.nfiles++;
+	fnode.fragstat.nfiles++;
     } else if (dn->is_remote()) {
       if (dn->get_remote_d_type() == (S_IFDIR >> 12))
-	fnode.fraginfo.nsubdirs++;
+	fnode.fragstat.nsubdirs++;
       else
-	fnode.fraginfo.nfiles++;
-    }
+	fnode.fragstat.nfiles++;
+	}*/
   }
 
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;

@@ -382,7 +382,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
 
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
     in->xattrs.swap(st->xattrs);
-    in->inode.nested = st->nested;
+    in->inode.dirstat = st->dirstat;
 
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
@@ -2250,7 +2250,8 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_atime = in->inode.atime;
   st->st_mtime = in->inode.mtime;
   if (in->inode.is_dir()) {
-    st->st_size = in->inode.nested.rbytes;
+    //st->st_size = in->inode.dirstat.size();
+    st->st_size = in->inode.dirstat.rbytes;
     st->st_blocks = 1;
   } else {
     st->st_size = in->inode.size;

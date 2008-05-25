@@ -199,26 +199,40 @@ struct FileLayout {
   __u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
 };
 
-struct nested_info_t {
+
+struct frag_info_t {
+  version_t version;
+
+  utime_t mtime;
+  __u64 nfiles;        // files
+  __u64 nsubdirs;      // subdirs
+  __u64 size() { return nfiles + nsubdirs; }
+
   utime_t rctime;      // \max_{children}(ctime, nested_ctime)
   __u64 rbytes;
   __u64 rfiles;
   __u64 rsubdirs;
-  
+
   void encode(bufferlist &bl) const {
+    ::encode(mtime, bl);
+    ::encode(nfiles, bl);
+    ::encode(nsubdirs, bl);
     ::encode(rbytes, bl);
     ::encode(rfiles, bl);
     ::encode(rsubdirs, bl);
     ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    ::decode(mtime, bl);
+    ::decode(nfiles, bl);
+    ::decode(nsubdirs, bl);
     ::decode(rbytes, bl);
     ::decode(rfiles, bl);
     ::decode(rsubdirs, bl);
     ::decode(rctime, bl);
-  }
+ }
 };
-WRITE_CLASS_ENCODER(nested_info_t)
+WRITE_CLASS_ENCODER(frag_info_t)
 
 struct inode_t {
   // base (immutable)
@@ -246,13 +260,8 @@ struct inode_t {
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
   // dirfrag, recursive accounting
-  uint64_t nfiles, nsubdirs;
-  nested_info_t accounted_nested;  // what dirfrag has seen
-  nested_info_t nested;            // inline summation for child dirfrags.
-  /*
-   * if accounted_nested does not match nested, the parent dirfrag needs to be 
-   * adjusted by the difference.
-   */
+  frag_info_t dirstat;             
+  frag_info_t accounted_dirstat;   // what dirfrag has seen
  
   // special stuff
   version_t version;           // auth only
@@ -262,94 +271,64 @@ struct inode_t {
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
-};
 
-static inline void encode(const inode_t &i, bufferlist &bl) {
-  ::encode(i.ino, bl);
-  ::encode(i.layout, bl);
-  ::encode(i.rdev, bl);
-  ::encode(i.ctime, bl);
-  ::encode(i.mode, bl);
-  ::encode(i.uid, bl);
-  ::encode(i.gid, bl);
-  ::encode(i.nlink, bl);
-  ::encode(i.anchored, bl);
-  ::encode(i.size, bl);
-  ::encode(i.max_size, bl);
-  ::encode(i.mtime, bl);
-  ::encode(i.atime, bl);
-  ::encode(i.nfiles, bl);
-  ::encode(i.nsubdirs, bl);
-  ::encode(i.nested, bl);
-  ::encode(i.accounted_nested, bl);
-  ::encode(i.version, bl);
-  ::encode(i.file_data_version, bl);
-}
-static inline void decode(inode_t &i, bufferlist::iterator &p) {
-  ::decode(i.ino, p);
-  ::decode(i.layout, p);
-  ::decode(i.rdev, p);
-  ::decode(i.ctime, p);
-  ::decode(i.mode, p);
-  ::decode(i.uid, p);
-  ::decode(i.gid, p);
-  ::decode(i.nlink, p);
-  ::decode(i.anchored, p);
-  ::decode(i.size, p);
-  ::decode(i.max_size, p);
-  ::decode(i.mtime, p);
-  ::decode(i.atime, p);
-  ::decode(i.nfiles, p);
-  ::decode(i.nsubdirs, p);
-  ::decode(i.nested, p);
-  ::decode(i.accounted_nested, p);
-  ::decode(i.version, p);
-  ::decode(i.file_data_version, p);
-}
+  void encode(bufferlist &bl) const {
+    ::encode(ino, bl);
+    ::encode(layout, bl);
+    ::encode(rdev, bl);
+    ::encode(ctime, bl);
+    ::encode(mode, bl);
+    ::encode(uid, bl);
+    ::encode(gid, bl);
+    ::encode(nlink, bl);
+    ::encode(anchored, bl);
+    ::encode(size, bl);
+    ::encode(max_size, bl);
+    ::encode(mtime, bl);
+    ::encode(atime, bl);
+    ::encode(dirstat, bl);
+    ::encode(accounted_dirstat, bl);
+    ::encode(version, bl);
+    ::encode(file_data_version, bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    ::decode(ino, p);
+    ::decode(layout, p);
+    ::decode(rdev, p);
+    ::decode(ctime, p);
+    ::decode(mode, p);
+    ::decode(uid, p);
+    ::decode(gid, p);
+    ::decode(nlink, p);
+    ::decode(anchored, p);
+    ::decode(size, p);
+    ::decode(max_size, p);
+    ::decode(mtime, p);
+    ::decode(atime, p);
+    ::decode(dirstat, p);
+    ::decode(accounted_dirstat, p);
+    ::decode(version, p);
+    ::decode(file_data_version, p);
+  }
+};
+WRITE_CLASS_ENCODER(inode_t)
 
 /*
  * like an inode, but for a dir frag 
  */
-struct frag_info_t {
-  utime_t mtime;
-  __u64 nfiles;          // files
-  __u64 nsubdirs;        // subdirs
-
-  __u64 size() { return nfiles + nsubdirs; }
-  
-  void encode(bufferlist &bl) const {
-    ::encode(mtime, bl);
-    //::encode(size, bl);
-    ::encode(nfiles, bl);
-    ::encode(nsubdirs, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    ::decode(mtime, bl);
-    //::decode(size, bl);
-    ::decode(nfiles, bl);
-    ::decode(nsubdirs, bl);
- }
-};
-WRITE_CLASS_ENCODER(frag_info_t)
-
 struct fnode_t {
   version_t version;
-  frag_info_t fraginfo, accounted_fraginfo; // this dir
-  nested_info_t nested, accounted_nested;   // this dir + sum over children.
+  frag_info_t fragstat, accounted_fragstat;
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
-    ::encode(fraginfo, bl);
-    ::encode(accounted_fraginfo, bl);
-    ::encode(nested, bl);
-    ::encode(accounted_nested, bl);
+    ::encode(fragstat, bl);
+    ::encode(accounted_fragstat, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
-    ::decode(fraginfo, bl);
-    ::decode(accounted_fraginfo, bl);
-    ::decode(nested, bl);
-    ::decode(accounted_nested, bl);
+    ::decode(fragstat, bl);
+    ::decode(accounted_fragstat, bl);
   }
 };
 WRITE_CLASS_ENCODER(fnode_t)

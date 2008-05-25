@@ -71,9 +71,9 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_frozen_inode()) out << " FROZEN";
 
   out << " s=" << in.inode.size;
-  out << " rb=" << in.inode.nested.rbytes << "/" << in.inode.accounted_nested.rbytes;
-  out << " rf=" << in.inode.nested.rfiles << "/" << in.inode.accounted_nested.rfiles;
-  out << " rd=" << in.inode.nested.rsubdirs << "/" << in.inode.accounted_nested.rsubdirs;
+  out << " rb=" << in.inode.dirstat.rbytes << "/" << in.inode.accounted_dirstat.rbytes;
+  out << " rf=" << in.inode.dirstat.rfiles << "/" << in.inode.accounted_dirstat.rfiles;
+  out << " rd=" << in.inode.dirstat.rsubdirs << "/" << in.inode.accounted_dirstat.rsubdirs;
 
   // locks
   out << " " << in.authlock;
@@ -527,15 +527,17 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IDIR:
     {
-      ::encode(inode.size, bl);
       ::encode(inode.mtime, bl);
+      /*
+      ::encode(inode.size, bl);
       map<frag_t,int> frag_sizes;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   ++p) 
 	if (p->second->is_auth())
 	  frag_sizes[p->first] = dirfrag_size[p->first];
-      ::encode(frag_sizes, bl);
+	  ::encode(frag_sizes, bl);
+      */
     }
     break;
 
@@ -545,6 +547,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   
   case CEPH_LOCK_INESTED:
     {
+      /*
       map<frag_t,nested_info_t> dfn;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
@@ -552,6 +555,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	if (p->second->is_auth())
 	  dfn[p->first] = dirfrag_nested[p->first];
       ::encode(dfn, bl);
+      */
     }
     break;
 
@@ -606,10 +610,11 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IDIR:
     {
+      ::decode(tm, p);
+      /*
       uint64_t sz;
       map<frag_t,int> dfsz;
       ::decode(sz, p);
-      ::decode(tm, p);
       ::decode(dfsz, p);
       
       if (is_auth()) {
@@ -629,6 +634,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	inode.size = sz;
 	dirfrag_size.swap(dfsz);
       }
+      */
     }
     break;
 
@@ -638,12 +644,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_INESTED:
     {
+      /*
       map<frag_t,nested_info_t> dfn;
       ::decode(dfn, p);
       for (map<frag_t,nested_info_t>::iterator p = dfn.begin(); p != dfn.end(); ++p) {
 	dirfragtree.force_to_leaf(p->first);
 	dirfrag_nested[p->first] = p->second;
       }
+      */
     }
     break;
 
@@ -676,10 +684,12 @@ void CInode::finish_scatter_gather_update(int type)
   switch (type) {
   case CEPH_LOCK_IDIR:
     {
+      /*
       inode_t *pi = get_projected_inode();
       pi->size = 0;
       for (map<frag_t,int>::iterator p = dirfrag_size.begin(); p != dirfrag_size.end(); ++p)
 	pi->size += p->second;
+      */
     }
     break;
 
