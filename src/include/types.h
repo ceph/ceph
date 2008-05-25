@@ -206,12 +206,28 @@ struct frag_info_t {
   utime_t mtime;
   __u64 nfiles;        // files
   __u64 nsubdirs;      // subdirs
-  __u64 size() { return nfiles + nsubdirs; }
+  __u64 size() const { return nfiles + nsubdirs; }
 
   utime_t rctime;      // \max_{children}(ctime, nested_ctime)
   __u64 rbytes;
   __u64 rfiles;
   __u64 rsubdirs;
+  __u64 rsize() const { return rfiles + rsubdirs; }
+
+  void take_diff(const frag_info_t &cur, frag_info_t &acc) {
+    if (cur.mtime > mtime)
+      rctime = mtime = cur.mtime;
+    nfiles += cur.nfiles - acc.nfiles;
+    nsubdirs += cur.nsubdirs - acc.nsubdirs;
+
+    if (cur.rctime > rctime)
+      rctime = cur.rctime;
+    rbytes += cur.rbytes - acc.rbytes;
+    rfiles += cur.rfiles - acc.rfiles;
+    rsubdirs += cur.rsubdirs - acc.rsubdirs;
+    acc = cur;
+    acc.version = version;
+  }
 
   void encode(bufferlist &bl) const {
     ::encode(mtime, bl);
@@ -233,6 +249,16 @@ struct frag_info_t {
  }
 };
 WRITE_CLASS_ENCODER(frag_info_t)
+
+inline ostream& operator<<(ostream &out, const frag_info_t &f) {
+  return out << "f(v" << f.version
+	     << " m" << f.mtime
+	     << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs
+	     << " rc" << f.rctime
+	     << " b" << f.rbytes
+	     << " " << f.rsize() << "=" << f.rfiles << "+" << f.rsubdirs
+	     << ")";    
+}
 
 struct inode_t {
   // base (immutable)

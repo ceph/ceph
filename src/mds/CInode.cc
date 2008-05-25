@@ -527,17 +527,21 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IDIR:
     {
-      ::encode(inode.mtime, bl);
-      /*
-      ::encode(inode.size, bl);
-      map<frag_t,int> frag_sizes;
+      ::encode(inode.dirstat, bl);  // only meaningful if i am auth.
+      bufferlist tmp;
+      __u32 n = 0;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
-	   ++p) 
-	if (p->second->is_auth())
-	  frag_sizes[p->first] = dirfrag_size[p->first];
-	  ::encode(frag_sizes, bl);
-      */
+	   ++p)
+	if (is_auth() || p->second->is_auth()) {
+	  dout(15) << "encode_lock_state fragstat for " << *p->second << dendl;
+	  frag_t fg = p->second->dirfrag().frag;
+	  ::encode(fg, tmp);
+	  ::encode(p->second->fnode.fragstat, tmp);
+	  n++;
+	}
+      ::encode(n, bl);
+      bl.claim_append(tmp);
     }
     break;
 
@@ -545,20 +549,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     ::encode(xattrs, bl);
     break;
   
-  case CEPH_LOCK_INESTED:
-    {
-      /*
-      map<frag_t,nested_info_t> dfn;
-      for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
-	   p != dirfrags.end();
-	   ++p) 
-	if (p->second->is_auth())
-	  dfn[p->first] = dirfrag_nested[p->first];
-      ::encode(dfn, bl);
-      */
-    }
-    break;
-
   default:
     assert(0);
   }
@@ -610,49 +600,33 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IDIR:
     {
-      ::decode(tm, p);
-      /*
-      uint64_t sz;
-      map<frag_t,int> dfsz;
-      ::decode(sz, p);
-      ::decode(dfsz, p);
-      
-      if (is_auth()) {
-	if (tm > inode.mtime) {
-	  dout(10) << "decode_lock_state auth got mtime " << tm << " > my " << inode.mtime
-		   << ", setting dirlock updated flag on " << *this
-		   << dendl;
-	  inode.mtime = tm;
-	  dirlock.set_updated();
+      frag_info_t dirstat;
+      ::decode(dirstat, p);
+      if (!is_auth())
+	inode.dirstat = dirstat;    // ignore inode summaction unless i'm a replica
+      __u32 n;
+      ::decode(n, p);
+      while (n--) {
+	frag_t fg;
+	frag_info_t fragstat;
+	::decode(fg, p);
+	::decode(fragstat, p);
+	CDir *dir = get_dirfrag(fg);
+	if (is_auth()) {
+	  assert(dir);                // i am auth; i had better have this dir open
+	  dir->fnode.fragstat = fragstat;
+	} else {
+	  if (dir) {
+	    dir->fnode.accounted_fragstat = fragstat;
+	    // mark dirty?  FIXME
+	  }
 	}
-	for (map<frag_t,int>::iterator p = dfsz.begin(); p != dfsz.end(); ++p) {
-	  dirfragtree.force_to_leaf(p->first);
-	  dirfrag_size[p->first] = p->second;
-	}
-      } else {
-	inode.mtime = tm;
-	inode.size = sz;
-	dirfrag_size.swap(dfsz);
       }
-      */
     }
     break;
 
   case CEPH_LOCK_IXATTR:
     ::decode(xattrs, p);
-    break;
-
-  case CEPH_LOCK_INESTED:
-    {
-      /*
-      map<frag_t,nested_info_t> dfn;
-      ::decode(dfn, p);
-      for (map<frag_t,nested_info_t>::iterator p = dfn.begin(); p != dfn.end(); ++p) {
-	dirfragtree.force_to_leaf(p->first);
-	dirfrag_nested[p->first] = p->second;
-      }
-      */
-    }
     break;
 
   default:
@@ -684,17 +658,17 @@ void CInode::finish_scatter_gather_update(int type)
   switch (type) {
   case CEPH_LOCK_IDIR:
     {
-      /*
-      inode_t *pi = get_projected_inode();
-      pi->size = 0;
-      for (map<frag_t,int>::iterator p = dirfrag_size.begin(); p != dirfrag_size.end(); ++p)
-	pi->size += p->second;
-      */
+      assert(is_auth());
+      
+      // adjust summation
+      inode.dirstat.version++;
+      for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	   p != dirfrags.end();
+	   p++) {
+	inode.dirstat.take_diff(p->second->fnode.fragstat, 
+				p->second->fnode.accounted_fragstat);
+      }
     }
-    break;
-
-  case CEPH_LOCK_INESTED:
-    assert(0); // hmm!
     break;
 
   default:

@@ -1329,26 +1329,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
-
-    if (do_parent) {
-      dout(10) << "predirty_nested updating size/mtime on " << *pin << dendl;
-      if (pf->fragstat.mtime > pi->mtime)
-	pi->mtime = pf->fragstat.mtime;
-      pi->dirstat.nfiles += pf->fragstat.nfiles - pf->accounted_fragstat.nfiles;
-      pi->dirstat.nsubdirs += pf->fragstat.nsubdirs - pf->accounted_fragstat.nsubdirs;
-      pf->accounted_fragstat = pf->fragstat;
-    }
-    drbytes = pf->fragstat.rbytes - pf->accounted_fragstat.rbytes;
-    drfiles = pf->fragstat.rfiles - pf->accounted_fragstat.rfiles;
-    drsubdirs = pf->fragstat.rsubdirs - pf->accounted_fragstat.rsubdirs;
-    dout(10) << "predirty_nested delta " 
-	     << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
-	     << *pin << dendl;
-    pi->dirstat.rbytes += drbytes;
-    pi->dirstat.rfiles += drfiles;
-    pi->dirstat.rsubdirs += drsubdirs;
-    pi->dirstat.rctime = MAX(pf->fragstat.mtime, pf->fragstat.rctime);
-    pf->accounted_fragstat = pf->fragstat;
+    pi->dirstat.version++;
+    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat);
 
     // next parent!
     cur = pin;
