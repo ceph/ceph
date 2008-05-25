@@ -1252,7 +1252,6 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     if (do_parent) {
       assert(mut->wrlocks.count(&pin->dirlock));
       assert(mut->wrlocks.count(&pin->nestedlock));
-      assert(do_nested || linkunlink == 0);
     }
 
     if (do_nested &&
