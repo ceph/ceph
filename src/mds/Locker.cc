@@ -1251,13 +1251,13 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
     if (do_parent) {
       assert(mut->wrlocks.count(&pin->dirlock));
-      assert(mut->wrlocks.count(&pin->nestedlock));
+      //assert(mut->wrlocks.count(&pin->nestedlock));
     }
 
     if (do_nested &&
-	mut->wrlocks.count(&pin->nestedlock) == 0 &&
-	!scatter_wrlock_try(&pin->nestedlock, mut)) {
-      dout(10) << "predirty_nested can't wrlock " << pin->nestedlock << " on " << *pin << dendl;
+	mut->wrlocks.count(&pin->dirlock) == 0 &&
+	!scatter_wrlock_try(&pin->dirlock, mut)) {
+      dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
       do_nested = false;
       break;
     }

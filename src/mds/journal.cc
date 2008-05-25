@@ -125,6 +125,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     }
     //(*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
+  /*
   for (xlist<CInode*>::iterator p = dirty_dirfrag_nested.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for nestedlock flush on " << *in << dendl;
@@ -144,7 +145,8 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     }
     //(*p)->nestedlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
   }
-  
+  */
+
   // open files
   if (!open_files.empty()) {
     assert(!mds->mdlog->is_capped()); // hmm FIXME
@@ -316,7 +318,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
       dir->get_inode()->dirlock.set_updated();
-      dir->get_inode()->nestedlock.set_updated();
+      //dir->get_inode()->nestedlock.set_updated();
     }
 
     if (lump.is_complete())
