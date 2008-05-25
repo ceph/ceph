@@ -850,7 +850,6 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   pi->version = in->pre_dirty();
   pi->max_size = new_max;
   EOpen *le = new EOpen(mds->mdlog);
-  predirty_nested(mut, &le->metablob, in, true, 0, false);
   le->metablob.add_dir_context(in->get_parent_dir());
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   le->add_ino(in->ino());
@@ -1048,7 +1047,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
-    predirty_nested(mut, &le->metablob, in, true, 0, false);
+    predirty_nested(mut, &le->metablob, in, 0, true, false);
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
@@ -1223,13 +1222,13 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 // nested ---------------------------------------------------------------
 
 void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
-			     CInode *in, bool primary_dn, CDir *parent,
-			     bool do_parent, int linkunlink)
+			     CInode *in, CDir *parent,
+			     bool do_nested, bool do_parent, int linkunlink)
 {
   dout(10) << "predirty_nested "
-	   << (primary_dn ? "primary_dn ":"remote_dn ")
 	   << (do_parent ? "do_parent_mtime ":"")
 	   << "linkunlink=" <<  linkunlink
+	   << (do_nested ? "do_nested ":"")
 	   << " " << *in << dendl;
 
   if (!parent)
@@ -1237,7 +1236,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
   inode_t *curi = in->get_projected_inode();
 
-  __s64 drbytes, drfiles, drsubdirs;
+  __s64 drbytes = 1, drfiles = 0, drsubdirs = 0;
   utime_t rctime;
 
   // build list of inodes to wrlock, dirty, and update
@@ -1253,13 +1252,19 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     if (do_parent) {
       assert(mut->wrlocks.count(&pin->dirlock));
       assert(mut->wrlocks.count(&pin->nestedlock));
+      assert(do_nested || linkunlink == 0);
     }
 
-    if (mut->wrlocks.count(&pin->nestedlock) == 0 &&
+    if (do_nested &&
+	mut->wrlocks.count(&pin->nestedlock) == 0 &&
 	!scatter_wrlock_try(&pin->nestedlock, mut)) {
       dout(10) << "predirty_nested can't wrlock " << pin->nestedlock << " on " << *pin << dendl;
+      do_nested = false;
       break;
     }
+
+    if (!do_parent && !do_nested)
+      break;
 
     // inode -> dirfrag
     mut->add_projected_fnode(parent);
@@ -1277,7 +1282,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 	  pf->fraginfo.nfiles += linkunlink;
       }
     }
-    if (primary_dn) {
+    if (do_nested) {
       if (linkunlink == 0) {
 	drbytes = curi->nested.rbytes - curi->accounted_nested.rbytes;
 	drfiles = curi->nested.rfiles - curi->accounted_nested.rfiles;
@@ -1348,7 +1353,6 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     curi = pi;
     parent = cur->get_projected_parent_dn()->get_dir();
     linkunlink = 0;
-    primary_dn = true;
     do_parent = false;
   }
 

@@ -156,8 +156,8 @@ protected:
   void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
 
 public:
-  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, bool primary_dn, CDir *dir,
-		       bool do_parent, int linkunlink=0);
+  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, CDir *dir,
+		       bool do_nested, bool do_parent, int linkunlink=0);
 
   // local
 protected:
