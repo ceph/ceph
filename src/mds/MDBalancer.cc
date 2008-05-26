@@ -814,6 +814,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 
   // hit modify counter, if this was a modify
   if (//g_conf.num_mds > 2 &&             // FIXME >2 thing
+      g_conf.mds_bal_frag &&
       !dir->inode->is_root() &&        // not root (for now at least)
       dir->is_auth() &&
       
