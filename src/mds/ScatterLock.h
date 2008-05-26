@@ -150,8 +150,8 @@ public:
   bool can_wrlock() {
     return state == LOCK_SCATTER || state == LOCK_LOCK;
   }
-  void get_wrlock() {
-    assert(can_wrlock());
+  void get_wrlock(bool force=false) {
+    assert(can_wrlock() || force);
     if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
   }

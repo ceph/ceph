@@ -656,13 +656,20 @@ void CInode::finish_scatter_gather_update(int type)
     {
       // adjust summation
       assert(is_auth());
-      inode.dirstat.version++;
+      inode_t *pi = get_projected_inode();
+      dout(20) << " orig dirstat " << pi->dirstat << dendl;
+      pi->dirstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   p++) {
-	inode.dirstat.take_diff(p->second->fnode.fragstat, 
-				p->second->fnode.accounted_fragstat);
+	fnode_t *pf = p->second->get_projected_fnode();
+	dout(20) << "  frag " << p->first
+		 << " " << pf->fragstat
+		 << " " << pf->accounted_fragstat << dendl;
+	pi->dirstat.take_diff(pf->fragstat, 
+			      pf->accounted_fragstat);
       }
+      dout(20) << " final dirstat " << pi->dirstat << dendl;
     }
     break;
 

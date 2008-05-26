@@ -148,14 +148,14 @@ protected:
   class C_Locker_ScatterWB : public Context {
     Locker *locker;
     ScatterLock *lock;
-    LogSegment *ls;
+    Mutation *mut;
   public:
-    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, LogSegment *s) : locker(l), lock(sl), ls(s) {}
+    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, Mutation *m) : locker(l), lock(sl), mut(m) {}
     void finish(int r) { 
-      locker->scatter_writebehind_finish(lock, ls); 
+      locker->scatter_writebehind_finish(lock, mut); 
     }
   };
-  void scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls);
+  void scatter_writebehind_finish(ScatterLock *lock, Mutation *mut);
 
 public:
   void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, CDir *dir,

@@ -1218,10 +1218,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     bool primary_dn, bool do_parent, int linkunlink,
 			     EMetaBlob *rollback)
 {
-  dout(10) << "predirty_nested "
-	   << (do_parent ? "do_parent_mtime ":"")
-	   << "linkunlink=" <<  linkunlink
-	   << (primary_dn ? "primary_dn ":"remote_dn ")
+  dout(10) << "predirty_nested"
+	   << (do_parent ? " do_parent_mtime":"")
+	   << " linkunlink=" <<  linkunlink
+	   << (primary_dn ? " primary_dn":" remote_dn")
 	   << " " << *in << dendl;
 
   if (!parent) {
@@ -1312,6 +1312,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     }
     if (stop) {
       dout(10) << "predirty_nested stop.  marking dirlock on " << *pin << dendl;
+      pin->dirlock.set_updated();
       mut->add_updated_scatterlock(&pin->dirlock);
       mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
       break;
@@ -1936,6 +1937,9 @@ void Locker::scatter_rdlock_finish(ScatterLock *lock, Mutation *mut)
 
 bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut)
 {
+  dout(7) << "scatter_wrlock_try  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+
   // pre-twiddle?
   if (lock->get_parent()->is_auth() &&
       !lock->get_parent()->is_replicated() &&
@@ -1954,21 +1958,6 @@ bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut)
     return true;
   }
 
-  return false;
-}
-
-bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mut)
-{
-  dout(7) << "scatter_wrlock_start  on " << *lock
-	  << " on " << *lock->get_parent() << dendl;  
-  
-  if (scatter_wrlock_try(lock, mut))
-    return true;
-
-  // wait for write.
-  lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, 
-		   new C_MDS_RetryRequest(mdcache, mut));
-  
   // initiate scatter or lock?
   if (lock->is_stable()) {
     if (lock->get_parent()->is_auth()) {
@@ -1987,6 +1976,20 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mut)
     }
   }
 
+  return false;
+}
+
+bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mut)
+{
+  dout(7) << "scatter_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+  
+  if (scatter_wrlock_try(lock, mut))
+    return true;
+
+  // wait for write.
+  lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, 
+		   new C_MDS_RetryRequest(mdcache, mut));
   return false;
 }
 
@@ -2138,11 +2141,15 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	!lock->is_gathering() &&
 	lock->get_num_client_lease() == 0 &&
 	!lock->is_rdlocked()) {
-      dout(7) << "scatter_eval finished lock gather/un-rdlock on " << *lock
-	      << " on " << *lock->get_parent() << dendl;
-      lock->set_state(LOCK_LOCK);
-      lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+      if (lock->is_updated()) {
+	scatter_writebehind(lock);
+      } else {
+	dout(7) << "scatter_eval finished lock gather/un-rdlock on " << *lock
+		<< " on " << *lock->get_parent() << dendl;
+	lock->set_state(LOCK_LOCK);
+	lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
+	lock->get_parent()->auth_unpin();
+      }
     }
     
     // glockc -> lock?
@@ -2213,8 +2220,9 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 
 
     // re-eval?
-    if (lock->is_stable()) // && lock->get_parent()->can_auth_pin())
+    if (lock->is_stable()) { // && lock->get_parent()->can_auth_pin())
       scatter_eval(lock);
+    }
   }
 }
 
@@ -2231,28 +2239,38 @@ void Locker::scatter_writebehind(ScatterLock *lock)
     return;
   }
 
-  // journal write-behind.
-  inode_t *pi = in->project_inode();
-  pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
-  pi->version = in->pre_dirty();
+  // journal
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
 
+  // forcefully take a wrlock
+  lock->get_wrlock(true);
+  mut->wrlocks.insert(lock);
+  mut->locks.insert(lock);
+
+  inode_t *pi = in->project_inode();
+
+  //????pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
+  pi->version = in->pre_dirty();
   lock->get_parent()->finish_scatter_gather_update(lock->get_type());
   
   EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
-  le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
+  predirty_nested(mut, &le->metablob, in, 0, true, false);
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mds->mdlog->get_current_segment()));
+  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
 }
 
-void Locker::scatter_writebehind_finish(ScatterLock *lock, LogSegment *ls)
+void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
 {
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
-  in->pop_and_dirty_projected_inode(ls);
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
   lock->clear_updated();
-  scatter_eval_gather(lock);
+  drop_locks(mut);
+  //scatter_eval_gather(lock);
 }
 
 void Locker::scatter_eval(ScatterLock *lock)
