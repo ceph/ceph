@@ -4,19 +4,28 @@
 extern struct workqueue_struct *recv_wq;       /* receive work queue */
 extern struct workqueue_struct *send_wq;       /* send work queue */
 
+/* wrap socket, since we use/drop it from multiple threads */
+extern struct kobject *ceoh_sockets_kobj;
+
+struct ceph_socket {
+	struct kobject kobj;
+	struct socket *sock;
+};
+
 /* prototype definitions */
-int ceph_tcp_connect(struct ceph_connection *);
+struct ceph_socket *ceph_tcp_connect(struct ceph_connection *);
 int ceph_tcp_listen(struct ceph_messenger *);
-int ceph_tcp_accept(struct socket *, struct ceph_connection *);
-int ceph_tcp_recvmsg(struct socket *, void *, size_t );
-int ceph_tcp_sendmsg(struct socket *, struct kvec *, size_t, size_t, int more);
-void ceph_cancel_sock_callbacks(struct socket *);
-void ceph_sock_release(struct socket *);
+int ceph_tcp_accept(struct ceph_socket *, struct ceph_connection *);
+int ceph_tcp_recvmsg(struct ceph_socket *, void *, size_t );
+int ceph_tcp_sendmsg(struct ceph_socket *, struct kvec *, size_t, size_t, int more);
+void ceph_cancel_sock_callbacks(struct ceph_socket *);
 int ceph_workqueue_init(void);
 void ceph_workqueue_shutdown(void);
 
-/* Well known port for ceph client listener.. */
-#define CEPH_PORT 2002
+extern struct ceph_socket *ceph_socket_create(void);
+extern void ceph_socket_get(struct ceph_socket *s);
+extern void ceph_socket_put(struct ceph_socket *s, int die);
+
 /* Max number of outstanding connections in listener queueu */
 #define NUM_BACKUP 10
 #endif

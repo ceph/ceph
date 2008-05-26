@@ -1,6 +1,7 @@
 #ifndef __FS_CEPH_MESSENGER_H
 #define __FS_CEPH_MESSENGER_H
 
+#include <linux/kobject.h>
 #include <linux/mutex.h>
 #include <linux/net.h>
 #include <linux/radix-tree.h>
@@ -39,7 +40,7 @@ struct ceph_messenger {
 	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
-	struct socket *listen_sock; 	 /* listening socket */
+	struct ceph_socket *listen_s; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
@@ -68,6 +69,7 @@ struct ceph_msg_pos {
 #define BASE_DELAY_INTERVAL	(HZ/2)
 #define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
 
+
 /* ceph_connection state bit flags */
 #define NEW		0
 #define CONNECTING	1
@@ -84,7 +86,7 @@ struct ceph_msg_pos {
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
-	struct socket *sock;	/* connection socket */
+	struct ceph_socket *s;	/* connection socket */
 	unsigned long state;	/* connection state */
 	const char *error_msg;
 
