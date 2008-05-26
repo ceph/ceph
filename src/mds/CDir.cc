@@ -493,21 +493,23 @@ void CDir::steal_dentry(CDentry *dn)
     nnull++;
   else {
     nitems++;
-    assert(0); // fixme fix accounting here
-    /* FIXME
     if (dn->is_primary()) {
-      fnode.fragstat.rbytes += dn->get_inode()->inode.accounted_fragstat.rbytes;
-      fnode.fragstat.rfiles += dn->get_inode()->inode.accounted_fragstat.rfiles;
+      inode_t *pi = dn->get_inode()->get_projected_inode();
       if (dn->get_inode()->is_dir())
 	fnode.fragstat.nsubdirs++;
       else
 	fnode.fragstat.nfiles++;
+      fnode.fragstat.rbytes += pi->accounted_dirstat.rbytes;
+      fnode.fragstat.rfiles += pi->accounted_dirstat.rfiles;
+      fnode.fragstat.rsubdirs += pi->accounted_dirstat.rsubdirs;
+      if (pi->accounted_dirstat.rctime > fnode.fragstat.rctime)
+	fnode.fragstat.rctime = pi->accounted_dirstat.rctime;
     } else if (dn->is_remote()) {
       if (dn->get_remote_d_type() == (S_IFDIR >> 12))
 	fnode.fragstat.nsubdirs++;
       else
 	fnode.fragstat.nfiles++;
-	}*/
+    }
   }
 
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
