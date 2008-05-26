@@ -438,7 +438,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
       dout(12) << " had dentry " << dname
                << " with WRONG ino " << dn->inode->inode.ino
                << dendl;
-      unlink(dn);
+      unlink(dn, true);
       dn = NULL;
     }
   }
@@ -453,7 +453,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
         dout(12) << " had ino " << in->inode.ino
                  << " not linked or linked at the right position, relinking"
                  << dendl;
-        dn = relink(dir, dname, in);
+        dn = relink_inode(dir, dname, in);
       } else {
         // link
         dout(12) << " had ino " << in->inode.ino
