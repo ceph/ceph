@@ -1293,8 +1293,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     
       curi->accounted_dirstat = curi->dirstat;
     } else {
-      dout(10) << "predirty_nested no delta (remote dentry) in " << *parent << dendl;
-      assert(!in->is_dir());
+      dout(10) << "predirty_nested no delta (remote dentry, or rename within same dir) in " << *parent << dendl;
       pf->fragstat.rfiles += linkunlink;
     }
 
@@ -2052,7 +2051,7 @@ bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
     return true;
   } else {
     dout(7) << "scatter_xlock_start on auth, waiting for write on " << *lock << " on " << *lock->get_parent() << dendl;
-    lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
+    lock->add_waiter(SimpleLock::WAIT_XLOCK, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 }
