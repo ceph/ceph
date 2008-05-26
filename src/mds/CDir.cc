@@ -822,9 +822,8 @@ void CDir::mark_dirty(version_t pv, LogSegment *ls)
 void CDir::_mark_dirty(LogSegment *ls)
 {
   if (!state_test(STATE_DIRTY)) {
-    state_set(STATE_DIRTY);
     dout(10) << "mark_dirty (was clean) " << *this << " version " << get_version() << dendl;
-    get(PIN_DIRTY);
+    _set_dirty_flag();
     assert(ls);
   } else {
     dout(10) << "mark_dirty (already dirty) " << *this << " version " << get_version() << dendl;

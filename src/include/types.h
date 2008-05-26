@@ -250,6 +250,10 @@ struct frag_info_t {
 };
 WRITE_CLASS_ENCODER(frag_info_t)
 
+inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
 inline ostream& operator<<(ostream &out, const frag_info_t &f) {
   return out << "f(v" << f.version
 	     << " m" << f.mtime

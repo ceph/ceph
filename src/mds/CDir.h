@@ -182,6 +182,10 @@ public:
   bool is_projected() { return get_projected_version() > get_version(); }
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
+  void _set_dirty_flag() {
+    state_set(STATE_DIRTY);
+    get(PIN_DIRTY);
+  }
   void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
 

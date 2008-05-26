@@ -603,7 +603,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       frag_info_t dirstat;
       ::decode(dirstat, p);
       if (!is_auth())
-	inode.dirstat = dirstat;    // ignore inode summaction unless i'm a replica
+	inode.dirstat = dirstat;    // take inode summation if replica
       __u32 n;
       ::decode(n, p);
       while (n--) {
@@ -616,9 +616,13 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  assert(dir);                // i am auth; i had better have this dir open
 	  dir->fnode.fragstat = fragstat;
 	} else {
-	  if (dir) {
-	    dir->fnode.accounted_fragstat = fragstat;
-	    // mark dirty?  FIXME
+	  if (dir &&
+	      !(dir->fnode.accounted_fragstat == fragstat)) {
+	    dout(10) << " setting accounted_fragstat " << fragstat << " and setting dirty bit on "
+		     << *dir << dendl;
+	    fnode_t *pf = dir->get_projected_fnode();
+	    pf->accounted_fragstat = fragstat;
+	    dir->_set_dirty_flag();	    // bit of a hack
 	  }
 	}
       }
