@@ -70,6 +70,8 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  out << " nl=" << in.inode.nlink;
+
   out << " s=" << in.inode.size;
   out << " rb=" << in.inode.dirstat.rbytes << "/" << in.inode.accounted_dirstat.rbytes;
   out << " rf=" << in.inode.dirstat.rfiles << "/" << in.inode.accounted_dirstat.rfiles;

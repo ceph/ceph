@@ -3357,6 +3357,10 @@ void Server::_rename_prepare(MDRequest *mdr,
   // primary+remote link merge?
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
+  bool silent = srcdn->dir->inode->is_stray();
+
+  if (silent)
+    dout(10) << "reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
 
   // prepare
   inode_t *pi = 0, *ji = 0;    // renamed inode
@@ -3446,19 +3450,22 @@ void Server::_rename_prepare(MDRequest *mdr,
       mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
   }
 
-  if (pi) {
-    pi->ctime = mdr->now;
-  }
-  if (tpi) {
-    tpi->nlink--;
-    tpi->ctime = mdr->now;
+  if (!silent) {
+    if (pi) {
+      pi->ctime = mdr->now;
+    }
+    if (tpi) {
+      tpi->nlink--;
+      tpi->ctime = mdr->now;
+    }
   }
 
   // prepare nesting, mtime updates
   if (mdr->is_master()) {
     // sub off target
+    int predirty_dir = silent ? 0:PREDIRTY_DIR;
     if (!linkmerge && destdn->is_primary())
-      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir, PREDIRTY_PRIMARY|predirty_dir, -1);
     if (destdn->dir == srcdn->dir) {
       // same dir.  don't update nested info or adjust counts.
       mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir,
@@ -3466,7 +3473,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     } else {
       // different dir.  update nested accounting.
       int flags = srcdn->is_primary() ? PREDIRTY_PRIMARY:0;
-      flags |= PREDIRTY_DIR;
+      flags |= predirty_dir;
       if (srcdn->is_auth())
 	mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1);
       mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1);
@@ -3511,12 +3518,14 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
-  if (ji && !pi) {
-    ji->ctime = mdr->now;
-  }
-  if (tji && !tpi) {
-    tji->nlink--;
-    tji->ctime = mdr->now;
+  if (!silent) {
+    if (ji && !pi) {
+      ji->ctime = mdr->now;
+    }
+    if (tji && !tpi) {
+      tji->nlink--;
+      tji->ctime = mdr->now;
+    }
   }
 
   // anchor updates?

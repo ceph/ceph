@@ -2836,7 +2836,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 
   if (time_to_stop()) return 0;
 
-  if (0) {
+  if (1) {
     for (int k=0; k<n; k++) {
       
       if (rand() % 10 == 0) {
