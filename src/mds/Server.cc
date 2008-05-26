@@ -2652,6 +2652,14 @@ void Server::handle_client_unlink(MDRequest *mdr)
     }
   }
 
+  CDentry *straydn = 0;
+  if (dn->is_primary()) {
+    straydn = mdcache->get_or_create_stray_dentry(dn->inode);
+    mdr->pin(straydn);  // pin it.
+    dout(10) << " straydn is " << *straydn << dendl;
+    assert(straydn->is_null());
+  }
+
   // lock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
@@ -2660,6 +2668,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
   xlocks.insert(&in->linklock);
+  if (straydn)
+    wrlocks.insert(&straydn->dir->inode->dirlock);
   
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2670,13 +2680,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
     mdr->now = g_clock.real_now();
 
   // get stray dn ready?
-  CDentry *straydn = 0;
   if (dn->is_primary()) {
-    straydn = mdcache->get_or_create_stray_dentry(dn->inode);
-    mdr->pin(straydn);  // pin it.
-    dout(10) << " straydn is " << *straydn << dendl;
-    assert(straydn->is_null());
-
     if (!mdr->more()->dst_reanchor_atid &&
 	dn->inode->is_anchored()) {
       dout(10) << "reanchoring to stray " << *dn->inode << dendl;
@@ -2741,6 +2745,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     // primary link.  add stray dentry.
     assert(straydn);
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, straydn->dir, true, true, 1);
+    //le->metablob.add_dir_context(straydn->dir);
     le->metablob.add_primary_dentry(straydn, true, dn->inode, pi);
   } else {
     // remote link.  update remote inode.
