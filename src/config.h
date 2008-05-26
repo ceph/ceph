@@ -202,6 +202,7 @@ struct md_config_t {
   float mds_bal_sample_interval;  
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
+  bool mds_bal_frag;
   int mds_bal_split_size;
   float mds_bal_split_rd;
   float mds_bal_split_wr;

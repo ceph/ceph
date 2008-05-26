@@ -314,6 +314,7 @@ md_config_t g_conf = {
   mds_bal_sample_interval: 3.0,  // every 5 seconds
   mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 0,//500,
+  mds_bal_frag: false,
   mds_bal_split_size: 10000,
   mds_bal_split_rd: 25000,
   mds_bal_split_wr: 10000,
@@ -794,6 +795,8 @@ void parse_config_options(std::vector<const char*>& args)
     else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
       g_conf.mds_bal_max_until = atoi(args[++i]);
 
+    else if (strcmp(args[i], "--mds_bal_frag") == 0) 
+      g_conf.mds_bal_frag = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_bal_split_size") == 0) 
       g_conf.mds_bal_split_size = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_bal_split_rd") == 0) 
