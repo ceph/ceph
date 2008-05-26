@@ -3169,9 +3169,12 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = g_clock.real_now();
 
+  bool linkmerge = (srcdn->inode == destdn->inode &&
+		    (srcdn->is_primary() || destdn->is_primary()));
+
   // -- create stray dentry? --
   CDentry *straydn = 0;
-  if (destdn->is_primary()) {
+  if (destdn->is_primary() && !linkmerge) {
     straydn = mdcache->get_or_create_stray_dentry(destdn->inode);
     mdr->pin(straydn);
     dout(10) << "straydn is " << *straydn << dendl;
@@ -3224,9 +3227,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
   
   // -- prepare anchor updates -- 
-  bool linkmerge = (srcdn->inode == destdn->inode &&
-		    (srcdn->is_primary() || destdn->is_primary()));
-
   if (!linkmerge) {
     C_Gather *anchorgather = 0;
 
