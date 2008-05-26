@@ -548,10 +548,10 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
  * request accordingly.  shorten extent as necessary if it hits an
  * object boundary.
  */
-__u64 calc_layout(struct ceph_osd_client *osdc,
-		  ceph_ino_t ino, struct ceph_file_layout *layout,
-		  __u64 off, __u64 len,
-		  struct ceph_osd_request *req)
+static __u64 calc_layout(struct ceph_osd_client *osdc,
+			 ceph_ino_t ino, struct ceph_file_layout *layout,
+			 __u64 off, __u64 len,
+			 struct ceph_osd_request *req)
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
 	__u64 toff = off, tlen = len;
