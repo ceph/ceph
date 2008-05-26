@@ -646,7 +646,7 @@ protected:
     return dn;
   }
 
-  void unlink(Dentry *dn) {
+  void unlink(Dentry *dn, bool keepdir = false) {
     Inode *in = dn->inode;
     assert(in->dn == dn);
 
@@ -658,7 +658,7 @@ protected:
         
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
-    if (dn->dir->is_empty()) 
+    if (dn->dir->is_empty() && !keepdir) 
       close_dir(dn->dir);
     dn->dir = 0;
 
@@ -667,7 +667,7 @@ protected:
     delete dn;
   }
 
-  Dentry *relink(Dir *dir, const string& name, Inode *in) {
+  Dentry *relink_inode(Dir *dir, const string& name, Inode *in) {
     Dentry *olddn = in->dn;
     Dir *olddir = olddn->dir;  // note: might == dir!
 
@@ -688,6 +688,7 @@ protected:
     olddn->inode = 0;
     olddn->dir = 0;
     lru.lru_remove(olddn);
+    delete olddn;
     
     // link new dn to dir
     dir->dentries[name] = newdn;
