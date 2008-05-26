@@ -1367,6 +1367,7 @@ void CDir::finish_export(utime_t now)
 void CDir::decode_import(bufferlist::iterator& blp)
 {
   ::decode(fnode, blp);
+  projected_version = fnode.version;
   ::decode(committed_version, blp);
   ::decode(committed_version_equivalent, blp);
   committing_version = committed_version;

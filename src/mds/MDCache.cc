@@ -4500,8 +4500,14 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     return;
   }
 
-  if (!dir && in->is_auth())
+  if (!dir && in->is_auth()) {
+    if (dir->is_frozen_dir()) {
+      dout(7) << "traverse: " << *dir << " is frozen_dir, waiting" << dendl;
+      dir->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, 0));
+      return;
+    }
     dir = in->get_or_open_dirfrag(this, frag);
+  }
   
   assert(dir);
   if (dir->is_auth()) {
@@ -4551,7 +4557,6 @@ MDRequest *MDCache::request_start(MClientRequest *req)
     if (mdr->is_slave()) {
       dout(10) << "request_start already had " << *mdr << ", cleaning up" << dendl;
       request_cleanup(mdr);
-      delete mdr;
     } else {
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
       delete req;
@@ -5215,6 +5220,12 @@ void MDCache::discover_ino(CDir *base,
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
   
+  if (base->is_ambiguous_auth()) {
+    dout(10) << " waiting for single auth on " << *base << dendl;
+    base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
+    return;
+  } 
+
   if (!base->is_waiting_for_ino(want_ino)) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->dirfrag(),

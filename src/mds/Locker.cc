@@ -1215,9 +1215,12 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     CInode *in, CDir *parent,
-			     bool primary_dn, bool do_parent, int linkunlink,
+			     int flags, int linkunlink,
 			     EMetaBlob *rollback)
 {
+  bool primary_dn = flags & PREDIRTY_PRIMARY;
+  bool do_parent = flags & PREDIRTY_DIR;
+
   dout(10) << "predirty_nested"
 	   << (do_parent ? " do_parent_mtime":"")
 	   << " linkunlink=" <<  linkunlink
@@ -1238,7 +1241,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   list<CInode*> lsi;
   CInode *cur = in;
   while (parent) {
-    assert(cur->is_auth());
+    assert(cur->is_auth() || !primary_dn);
     assert(parent->is_auth());
     
     // opportunistically adjust parent dirfrag
@@ -1461,6 +1464,9 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 {
   int from = m->get_asker();
   
+  dout(10) << "handle_simple_lock " << *m
+	   << " on " << *lock << " " << *lock->get_parent() << dendl;
+
   if (mds->is_rejoin()) {
     if (lock->get_parent()->is_rejoining()) {
       dout(7) << "handle_simple_lock still rejoining " << *lock->get_parent()
@@ -1497,9 +1503,11 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     //||           lock->get_state() == LOCK_GLOCKR);
     
     // wait for readers to finish?
-    if (lock->is_rdlocked()) {
-      dout(7) << "handle_simple_lock has reader, waiting before ack on " << *lock
+    if (lock->is_rdlocked() ||
+	lock->get_num_client_lease()) {
+      dout(7) << "handle_simple_lock has reader|leases, waiting before ack on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
+      revoke_client_leases(lock);
       lock->set_state(LOCK_GLOCKR);
     } else {
       // update lock and reply

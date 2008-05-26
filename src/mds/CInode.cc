@@ -622,7 +622,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 		     << *dir << dendl;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_fragstat = fragstat;
-	    dir->_set_dirty_flag();	    // bit of a hack
+	    if (dir->is_auth())
+	      dir->_set_dirty_flag();	    // bit of a hack
 	  }
 	}
       }

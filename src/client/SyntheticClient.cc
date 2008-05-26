@@ -2642,6 +2642,28 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 void SyntheticClient::foo()
 {
   if (1) {
+    // make 2 parallel dirs, link/unlink between them.
+    char a[100], b[100];
+    client->mkdir("/a", 0755);
+    client->mkdir("/b", 0755);
+    for (int i=0; i<10; i++) {
+      sprintf(a, "/a/%d", i);
+      client->mknod(a, 0644);
+    }
+    while (1) {
+      for (int i=0; i<10; i++) {
+	sprintf(a, "/a/%d", i);
+	sprintf(b, "/b/%d", i);
+	client->link(a, b);
+      }
+      for (int i=0; i<10; i++) {
+	sprintf(b, "/b/%d", i);
+	client->unlink(b);
+      }
+    }
+    return;
+  }
+  if (1) {
     // bug1.cpp
     const char *fn = "blah";
     char buffer[8192]; 
