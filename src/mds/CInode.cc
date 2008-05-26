@@ -521,8 +521,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IFILE:
     ::encode(inode.size, bl);
+    ::encode(inode.max_size, bl);
     ::encode(inode.mtime, bl);
     ::encode(inode.atime, bl);
+    ::encode(inode.time_warp_seq, bl);
     break;
 
   case CEPH_LOCK_IDIR:
@@ -594,8 +596,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IFILE:
     ::decode(inode.size, p);
+    ::decode(inode.max_size, p);
     ::decode(inode.mtime, p);
     ::decode(inode.atime, p);
+    ::decode(inode.time_warp_seq, p);
     break;
 
   case CEPH_LOCK_IDIR:

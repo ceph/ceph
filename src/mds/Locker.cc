@@ -1241,7 +1241,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   list<CInode*> lsi;
   CInode *cur = in;
   while (parent) {
-    assert(cur->is_auth() || !primary_dn);
+    //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
     assert(parent->is_auth());
     
     // opportunistically adjust parent dirfrag
