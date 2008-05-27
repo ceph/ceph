@@ -1478,69 +1478,6 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 }
 
 
-
-/** predirty_dn_diri
- * predirty the directory inode for a new dentry, if it is auth (and not root)
- * BUG: root inode doesn't get dirtied properly, currently.  blech.
- */
-version_t Server::predirty_dn_diri(MDRequest *mdr, CDentry *dn, EMetaBlob *blob, int deltasize)
-{
-  version_t dirpv = 0;
-  CInode *diri = dn->dir->inode;
-  
-  if (diri->is_base()) return 0;
-
-  if (diri->is_auth()) {
-    assert(mdr->wrlocks.count(&diri->dirlock));
-    
-    dirpv = diri->pre_dirty();
-    dout(10) << "predirty_dn_diri ctime/mtime " << mdr->now << " pv " << dirpv << " on " << *diri << dendl;
-    
-    // predirty+journal
-    inode_t *pi = diri->project_inode();
-    if (dirpv) pi->version = dirpv;
-    pi->ctime = pi->mtime = mdr->now;
-    pi->size += deltasize;
-    blob->add_dir_context(diri->get_parent_dn()->get_dir());
-    blob->add_primary_dentry(diri->get_parent_dn(), true, 0, pi);
-  } else {
-    // journal the mtime change anyway.
-    inode_t *ji = blob->add_primary_dentry(diri->get_parent_dn(), true);    
-    ji->ctime = ji->mtime = mdr->now;
-
-    dout(10) << "predirty_dn_diri (non-auth) ctime/mtime " << mdr->now << " on " << *diri << dendl;
-    
-    //blob->add_dirtied_inode_mtime(diri->ino(), mdr->now);
-    assert(mdr->ls);
-    mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
-  }
-  
-  return dirpv;
-}
-
-/** dirty_dn_diri
- * follow-up with actual dirty of inode after journal entry commits.
- */
-void Server::dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv)
-{
-  CInode *diri = dn->dir->inode;
-  
-  if (diri->is_root()) return;
-
-  if (dirpv) {
-    // we journaled and predirtied.
-    assert(diri->is_auth() && !diri->is_root());
-    diri->pop_and_dirty_projected_inode(mdr->ls);
-    dout(10) << "dirty_dn_diri ctime/mtime " << mdr->now << " v " << diri->inode.version << " on " << *diri << dendl;
-  } else {
-    // dirlock scatterlock will propagate the update.
-    diri->inode.ctime = diri->inode.mtime = mdr->now;
-    diri->dirlock.set_updated();
-    dout(10) << "dirty_dn_diri (non-dirty) ctime/mtime " << mdr->now << " on " << *diri << dendl;
-  }
-}
-
-
 // ===============================================================================
 // STAT
 
