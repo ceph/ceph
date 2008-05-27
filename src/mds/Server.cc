@@ -3109,8 +3109,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
-  if (srcdn->is_primary() && srcdn->inode->is_dir())
-    xlocks.insert(&srcdn->inode->dirlock);
 
   /*
    * no, this causes problems if the dftlock is scattered...
@@ -3123,8 +3121,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
   wrlocks.insert(&destdn->dir->inode->dirlock);
-  if (destdn->is_primary() && destdn->inode->is_dir())
-    xlocks.insert(&destdn->inode->dirlock);
 
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
