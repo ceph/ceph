@@ -75,6 +75,8 @@ ostream& operator<<(ostream& out, CDir& dir)
   
   if (dir.get_cum_auth_pins())
     out << " ap=" << dir.get_auth_pins() << "+" << dir.get_nested_auth_pins();
+  if (dir.get_nested_anchors())
+    out << " na=" << dir.get_nested_anchors();
 
   out << " state=" << dir.get_state();
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
@@ -156,6 +158,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   auth_pins = 0;
   nested_auth_pins = 0;
   request_pins = 0;
+
+  nested_anchors = 0;
 
   //hack_num_accessed = -1;
   
@@ -359,6 +363,9 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
     dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins);
+
+  if (in->inode.anchored + in->nested_anchors)
+    dn->adjust_nested_anchors(in->nested_anchors + in->inode.anchored);
 }
 
 void CDir::unlink_inode( CDentry *dn )
@@ -442,6 +449,9 @@ void CDir::unlink_inode_work( CDentry *dn )
     if (in->auth_pins + in->nested_auth_pins)
       dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins));
     
+    if (in->inode.anchored + in->nested_anchors)
+      dn->adjust_nested_anchors(0 - (in->nested_anchors + in->inode.anchored));
+
     // detach inode
     in->remove_primary_parent(dn);
     dn->inode = 0;
@@ -514,6 +524,7 @@ void CDir::steal_dentry(CDentry *dn)
   }
 
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
+  nested_anchors += dn->nested_anchors;
   if (dn->is_dirty()) 
     num_dirty++;
 
@@ -1564,6 +1575,13 @@ void CDir::adjust_nested_auth_pins(int inc)
   inode->adjust_nested_auth_pins(inc);
 }
 
+void CDir::adjust_nested_anchors(int by)
+{
+  nested_anchors += by;
+  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
+  assert(nested_anchors >= 0);
+  inode->adjust_nested_anchors(by);
+}
 
 
 /*****************************************************************************

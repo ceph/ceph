@@ -576,7 +576,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
     ::decode(inode.nlink, p);
-    ::decode(inode.anchored, p);
+    {
+      bool was_anchored = inode.anchored;
+      ::decode(inode.anchored, p);
+      if (was_anchored != inode.anchored)
+	parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
+    }
     break;
 
   case CEPH_LOCK_IDFT:
@@ -826,7 +831,14 @@ void CInode::adjust_nested_auth_pins(int a)
   parent->adjust_nested_auth_pins(a);
 }
 
-
+void CInode::adjust_nested_anchors(int by)
+{
+  nested_anchors += by;
+  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
+  assert(nested_anchors >= 0);
+  if (parent)
+    parent->adjust_nested_anchors(by);
+}
 
 // authority
 
@@ -898,7 +910,10 @@ void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
   utime_t old_mtime = inode.mtime;
+  bool was_anchored = inode.anchored;
   ::decode(inode, p);
+  if (was_anchored != inode.anchored)
+    parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
   if (old_mtime > inode.mtime) {
     assert(dirlock.is_updated());
     inode.mtime = old_mtime;     // preserve our mtime, if it is larger

@@ -116,7 +116,6 @@ class CInode : public MDSCacheObject {
   static const int WAIT_DIRLOCK_OFFSET         = 4 + 3*SimpleLock::WAIT_BITS; // same
   static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
-  static const int WAIT_NESTEDLOCK_OFFSET      = 4 + 6*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY_MASK	= (0xffffffff);
 
@@ -229,6 +228,9 @@ private:
 public:
   int auth_pin_freeze_allowance;
 
+private:
+  int nested_anchors;   // _NOT_ including me!
+
  public:
   inode_load_vec_t pop;
 
@@ -255,6 +257,7 @@ public:
     xlist_dirty_dirfrag_dir(this), 
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
+    nested_anchors(0),
     versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),
     linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
@@ -501,6 +504,7 @@ public:
   void auth_pin();
   void auth_unpin();
 
+  void adjust_nested_anchors(int by);
 
   // -- freeze --
   bool is_freezing_inode() { return state_test(STATE_FREEZING); }
@@ -614,6 +618,8 @@ class CInodeDiscover {
   int get_replica_nonce() { return replica_nonce; }
 
   void update_inode(CInode *in) {
+    if (in->parent && inode.anchored != in->inode.anchored)
+      in->parent->adjust_nested_anchors((int)inode.anchored - (int)in->inode.anchored);
     in->inode = inode;
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;

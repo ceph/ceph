@@ -326,6 +326,14 @@ bool CDentry::is_frozen()
 }
 
 
+void CDentry::adjust_nested_anchors(int by)
+{
+  nested_anchors += by;
+  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
+  assert(nested_anchors >= 0);
+  dir->adjust_nested_anchors(by);
+}
+
 // ----------------------------
 // locking
 

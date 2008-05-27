@@ -4777,6 +4777,21 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
     return;
   }
 
+  // rdlock path
+  set<SimpleLock*> rdlocks = mdr->rdlocks;
+  set<SimpleLock*> wrlocks = mdr->wrlocks;
+  set<SimpleLock*> xlocks = mdr->xlocks;
+
+  CDentry *dn = in->get_parent_dn();
+  while (dn) {
+    rdlocks.insert(&dn->lock);
+    dn = dn->get_dir()->get_inode()->get_parent_dn();
+  }
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
+   dout(7) << "anchor_create waiting for locks  " << *in << dendl;
+   return;
+  }
+
   // wait
   in->add_waiter(CInode::WAIT_ANCHORED, onfinish);
 
@@ -4851,17 +4866,20 @@ public:
 
 void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
 {
-  dout(10) << "_anchor_create_prepared " << *in << " atid " << atid << dendl;
-  assert(in->inode.anchored == false);
+  dout(10) << "_anchor_prepared " << *in << " atid " << atid 
+	   << " " << (add ? "create":"destroy") << dendl;
+  assert(in->inode.anchored == !add);
 
   // update the logged inode copy
   inode_t *pi = in->project_inode();
   if (add) {
     pi->anchored = true;
     pi->dirstat.ranchors++;
+    in->parent->adjust_nested_anchors(1);
   } else {
     pi->anchored = false;
     pi->dirstat.ranchors--;
+    in->parent->adjust_nested_anchors(-1);
   }
   pi->version = in->pre_dirty();
 
