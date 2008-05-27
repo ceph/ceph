@@ -48,9 +48,15 @@ struct ceph_socket *ceph_socket_create()
 		return ERR_PTR(err);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_init_and_add(&s->kobj, &ceph_socket_type,
 			     ceph_sockets_kobj,
 			     "socket %p", s);
+#else
+	kobject_init(&s->kobj);
+	kobject_set_name(&s->kobj, "socket %p", s);
+	s->kobj.ktype = &ceph_socket_type;
+#endif
 	return s;
 }
 
