@@ -2016,7 +2016,7 @@ void Locker::scatter_wrlock_finish(ScatterLock *lock, Mutation *mut)
 
 bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
 {
-  dout(7) << "file_xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
+  dout(7) << "scatter_xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
 
   assert(lock->get_parent()->is_auth());  // remote scatter xlock not implemented
 

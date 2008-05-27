@@ -4467,7 +4467,19 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     i--;
     if (!i) {
       in = get_inode(anchortrace[i].dirfrag.ino);
-      assert(in);  // actually, we may need to open the root or a foreign stray inode, here.
+      if (!in) {
+	dout(0) << "open_remote_ino_2 don't have inode " << anchortrace[i].dirfrag.ino << dendl;
+	if (anchortrace[i].dirfrag.ino == MDS_INO_ROOT) {
+	  open_root(onfinish);
+	  return;
+	}
+	if (MDS_INO_IS_STRAY(anchortrace[i].dirfrag.ino)) {
+	  int mds = anchortrace[i].dirfrag.ino % MAX_MDS;
+	  open_foreign_stray(mds, onfinish);
+	  return;
+	}
+	assert(in);  // hrm!
+      }
       break;
     }
   }
