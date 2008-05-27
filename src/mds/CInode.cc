@@ -443,7 +443,7 @@ void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   
   dout(10) << "mark_dirty " << *this << dendl;
 
-  assert(parent);
+  assert(parent || projected_parent);
 
   /*
     NOTE: I may already be dirty, but this fn _still_ needs to be called so that

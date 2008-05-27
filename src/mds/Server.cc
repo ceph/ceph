@@ -3343,112 +3343,109 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
   mdr->more()->waiting_on_slave.insert(who);
 }
 
+version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl)
+{
+  version_t oldpv = mdr->more()->inode_import_v;
+
+  /* import node */
+  bufferlist::iterator blp = mdr->more()->inode_import.begin();
+	  
+  // imported caps
+  ::decode(mdr->more()->imported_client_map, blp);
+  ::encode(mdr->more()->imported_client_map, *client_map_bl);
+  prepare_force_open_sessions(mdr->more()->imported_client_map);
+
+  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
+  mdcache->migrator->decode_import_inode(srcdn, blp, 
+					 srcdn->authority().first,
+					 mdr->ls,
+					 mdr->more()->cap_imports, updated_scatterlocks);
+  srcdn->inode->dirlock.clear_updated();  
+
+  // hack: force back to !auth and clean, temporarily
+  srcdn->inode->state_clear(CInode::STATE_AUTH);
+  srcdn->inode->mark_clean();
+
+  return oldpv;
+}
 
 void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, bufferlist *client_map_bl,
 			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
+  if (straydn) dout(10) << " straydn " << *straydn << dendl;
 
   // primary+remote link merge?
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
   bool silent = srcdn->dir->inode->is_stray();
-
+  if (linkmerge)
+    dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
-    dout(10) << "reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
+    dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
 
   // prepare
   inode_t *pi = 0, *ji = 0;    // renamed inode
   inode_t *tpi = 0, *tji = 0;  // target/overwritten inode
   
-  if (linkmerge) {
-    dout(10) << "will merge remote+primary links" << dendl;
-    
-    // destdn -> primary
-    tpi = destdn->inode->project_inode();
-    //mdr->add_projected_inode(destdn->inode);
-    if (destdn->is_auth())
-      tpi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
-    destdn->inode->projected_parent = destdn;
-    
-    // do src dentry
-    if (srcdn->is_auth())
-      mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
-  } else {
-    // target?
+  // target inode
+  if (!linkmerge) {
     if (destdn->is_primary()) {
       assert(straydn);  // moving to straydn.
       // link--, and move.
       if (destdn->is_auth()) {
 	tpi = destdn->inode->project_inode();
-	//mdr->add_projected_inode(destdn->inode);
-	tpi->version = mdr->more()->pvmap[straydn] = straydn->pre_dirty(tpi->version);
+	tpi->version = straydn->pre_dirty(tpi->version);
       }
       destdn->inode->projected_parent = straydn;
     } else if (destdn->is_remote()) {
       // nlink-- targeti
       if (destdn->inode->is_auth()) {
 	tpi = destdn->inode->project_inode();
-	//mdr->add_projected_inode(destdn->inode);
-	tpi->version = mdr->more()->pvmap[destdn->inode] = destdn->inode->pre_dirty();
+	tpi->version = destdn->inode->pre_dirty();
       }
-    } else
-      assert(destdn->is_null());
+    }
+  }
 
-    // dest
-    if (srcdn->is_remote()) {
+  // dest
+  if (srcdn->is_remote()) {
+    if (!linkmerge) {
       if (destdn->is_auth())
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
       if (srcdn->inode->is_auth()) {
 	pi = srcdn->inode->project_inode();
-	//mdr->add_projected_inode(srcdn->inode);
 	pi->version = srcdn->inode->pre_dirty();
       }
-    } else if (srcdn->is_primary()) {
+    } else {
+      dout(10) << " will merge remote onto primary link" << dendl;
       if (destdn->is_auth()) {
-	version_t oldpv;
-	if (srcdn->is_auth())
-	  oldpv = srcdn->inode->get_projected_version();
-	else {
-	  oldpv = mdr->more()->inode_import_v;
-
-	  /* import node */
-	  bufferlist::iterator blp = mdr->more()->inode_import.begin();
-	  
-	  // imported caps
-	  ::decode(mdr->more()->imported_client_map, blp);
-	  ::encode(mdr->more()->imported_client_map, *client_map_bl);
-	  prepare_force_open_sessions(mdr->more()->imported_client_map);
-
-	  list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
-	  
-	  mdcache->migrator->decode_import_inode(srcdn, blp, 
-						 srcdn->authority().first,
-						 mdr->ls,
-						 mdr->more()->cap_imports, updated_scatterlocks);
-	  srcdn->inode->dirlock.clear_updated();  
-
-
-	  // hack: force back to !auth and clean, temporarily
-	  srcdn->inode->state_clear(CInode::STATE_AUTH);
-	  srcdn->inode->mark_clean();
-	}
-	pi = srcdn->inode->project_inode();
-	//mdr->add_projected_inode(srcdn->inode);
-	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
+	pi = destdn->inode->project_inode();
+	pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(destdn->inode->inode.version);
       }
-      srcdn->inode->projected_parent = destdn;
     }
-
-    // remove src
-    if (srcdn->is_auth())
-      mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
+  } else {
+    if (destdn->is_auth()) {
+      version_t oldpv;
+      if (srcdn->is_auth())
+	oldpv = srcdn->inode->get_projected_version();
+      else
+	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
+      pi = srcdn->inode->project_inode();
+      pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
+    }
+    srcdn->inode->projected_parent = destdn;
   }
+
+  // src
+  if (srcdn->is_auth())
+    mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
 
   if (!silent) {
     if (pi) {
       pi->ctime = mdr->now;
+      if (linkmerge)
+	pi->nlink--;
     }
     if (tpi) {
       tpi->nlink--;
@@ -3477,46 +3474,47 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // add it all to the metablob
-  if (linkmerge) {
-    metablob->add_primary_dentry(destdn, true, destdn->inode, tpi); 
-    metablob->add_null_dentry(srcdn, true);
-  } else {
-    // target inode
+  // target inode
+  if (!linkmerge) {
     if (destdn->is_primary())
       tji = metablob->add_primary_dentry(straydn, true, destdn->inode, tpi);
     else if (destdn->is_remote()) {
       metablob->add_dir_context(destdn->inode->get_parent_dir());
       tji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode, tpi);
     }
+  }
 
-    // dest
-    if (srcdn->is_remote()) {
-      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), 
-				  srcdn->get_remote_d_type());
-      if (pi)
-	metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true, srcdn->inode, pi);  // ???
-    } else if (srcdn->is_primary()) {
-      ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi); 
+  // dest
+  if (srcdn->is_remote()) {
+    if (!linkmerge) {
+      metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), srcdn->get_remote_d_type());
+      ji = metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true, srcdn->inode, pi);
+    } else {
+      metablob->add_primary_dentry(destdn, true, destdn->inode, pi); 
     }
+  } else if (srcdn->is_primary()) {
+    ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi); 
+  }
     
-    // src
-    metablob->add_null_dentry(srcdn, true);
+  // src
+  metablob->add_null_dentry(srcdn, true);
 
-    // new subtree?
-    if (srcdn->is_primary() &&
-	srcdn->inode->is_dir()) {
-      list<CDir*> ls;
-      srcdn->inode->get_nested_dirfrags(ls);
-      int auth = srcdn->authority().first;
-      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
-	mdcache->adjust_subtree_auth(*p, auth, auth);
-    }       
+  // new subtree?
+  if (srcdn->is_primary() &&
+      srcdn->inode->is_dir()) {
+    list<CDir*> ls;
+    srcdn->inode->get_nested_dirfrags(ls);
+    int auth = srcdn->authority().first;
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
+      mdcache->adjust_subtree_auth(*p, auth, auth);
   }
 
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
   if (!silent) {
     if (ji && !pi) {
       ji->ctime = mdr->now;
+      if (linkmerge)
+	ji->nlink--;
     }
     if (tji && !tpi) {
       tji->nlink--;
@@ -3543,94 +3541,68 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   bool linkmerge = (srcdn->inode == destdn->inode &&
 		    (srcdn->is_primary() || destdn->is_primary()));
 
-  if (linkmerge) {
+  // target inode
+  if (!linkmerge && oldin) {
     if (destdn->is_primary()) {
-      dout(10) << "merging remote onto primary link" << dendl;
-
-      // nlink-- in place
-      if (destdn->inode->is_auth())
-	destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
-      
-      // unlink srcdn
-      srcdn->dir->unlink_inode(srcdn);
-      if (srcdn->is_auth())
-	srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
-    } else {
-      dout(10) << "merging primary onto remote link" << dendl;
-
-      // move inode to dest
-      srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->unlink_inode(destdn);
-      destdn->dir->link_primary_inode(destdn, oldin);
-      
-      // nlink--
-      if (destdn->inode->is_auth())
-	destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
-      
-      // mark src dirty
-      if (srcdn->is_auth())
-	srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
-    }
-  } else {
-    // unlink destdn?
-    if (!destdn->is_null())
-      destdn->dir->unlink_inode(destdn);
-
-    if (straydn) {
+      assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
-      
-      // relink oldin to stray dir.  destdn was primary.
-      assert(oldin);
+      destdn->dir->unlink_inode(destdn);
       straydn->dir->link_primary_inode(straydn, oldin);
-      //assert(straypv == ipv);
-      
-      // nlink-- in stray dir.
-      if (oldin->is_auth())
-	oldin->pop_and_dirty_projected_inode(mdr->ls);
+    } else {
+      destdn->dir->unlink_inode(destdn);
     }
-    else if (oldin) {
-      // nlink-- remote.  destdn was remote.
-      if (oldin->is_auth())
-	oldin->pop_and_dirty_projected_inode(mdr->ls);
-    }
-    
-    CInode *in = srcdn->inode;
-    assert(in);
-    if (srcdn->is_remote()) {
-      // srcdn was remote.
+    // nlink-- targeti
+    if (oldin->is_auth())
+      oldin->pop_and_dirty_projected_inode(mdr->ls);
+  }
+
+  // dest
+  CInode *in = srcdn->inode;
+  assert(in);
+  if (srcdn->is_remote()) {
+    if (!linkmerge) {
       srcdn->dir->unlink_inode(srcdn);
       destdn->dir->link_remote_inode(destdn, in);
       destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     } else {
-      // srcdn was primary.
+      dout(10) << "merging remote onto primary link" << dendl;
       srcdn->dir->unlink_inode(srcdn);
-      destdn->dir->link_primary_inode(destdn, in);
-      
-      // srcdn inode import?
-      if (!srcdn->is_auth() && destdn->is_auth()) {
-	assert(mdr->more()->inode_import.length() > 0);
+    }
+    if (destdn->inode->is_auth())
+      destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
+  } else {
+    if (linkmerge) {
+      dout(10) << "merging primary onto remote link" << dendl;
+      destdn->dir->unlink_inode(destdn);
+    }
+    srcdn->dir->unlink_inode(srcdn);
+    destdn->dir->link_primary_inode(destdn, in);
 
-	// finish cap imports
-	finish_force_open_sessions(mdr->more()->imported_client_map);
-	if (mdr->more()->cap_imports.count(destdn->inode))
-	  mds->mdcache->migrator->finish_import_inode_caps(destdn->inode, srcdn->authority().first, 
-							   mdr->more()->cap_imports[destdn->inode]);
-	
-	// hack: fix auth bit
-	destdn->inode->state_set(CInode::STATE_AUTH);
-      }
+    // srcdn inode import?
+    if (!srcdn->is_auth() && destdn->is_auth()) {
+      assert(mdr->more()->inode_import.length() > 0);
+      
+      // finish cap imports
+      finish_force_open_sessions(mdr->more()->imported_client_map);
+      if (mdr->more()->cap_imports.count(destdn->inode))
+	mds->mdcache->migrator->finish_import_inode_caps(destdn->inode, srcdn->authority().first, 
+							 mdr->more()->cap_imports[destdn->inode]);
+      
+      // hack: fix auth bit
+      destdn->inode->state_set(CInode::STATE_AUTH);
     }
 
     if (destdn->inode->is_auth())
       destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
-
-    if (srcdn->is_auth())
-      srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
   }
 
-  // apply remaining projected inodes
+  // src
+  if (srcdn->is_auth())
+    srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
+  
+  // apply remaining projected inodes (nested)
   mdr->apply();
 
   // update subtree map?
