@@ -169,7 +169,8 @@ public:
   version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
   void _rename_prepare(MDRequest *mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
-		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+		       CDentry *srcdn, CDentry *destdn, CDentry *straydn,
+		       EMetaBlob *rollback=0);
   void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
 
   // slaving

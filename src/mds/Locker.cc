@@ -1232,6 +1232,14 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     parent = in->get_projected_parent_dn()->get_dir();
   }
 
+  if (flags == 0) {
+    dout(10) << " no flags, just adding dir context to blob(s)" << dendl;
+    blob->add_dir_context(parent);
+    if (rollback)
+      rollback->add_dir_context(parent);
+    return;
+  }
+
   inode_t *curi = in->get_projected_inode();
 
   __s64 drbytes = 1, drfiles = 0, drsubdirs = 0;
@@ -1343,7 +1351,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
   if (rollback)
-    blob->add_dir_context(parent);
+    rollback->add_dir_context(parent);
   for (list<CInode*>::iterator p = lsi.begin();
        p != lsi.end();
        p++) {

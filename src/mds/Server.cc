@@ -3223,7 +3223,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
   
   // -- prepare anchor updates -- 
-  if (!linkmerge) {
+  if (!linkmerge || srcdn->is_primary()) {
     C_Gather *anchorgather = 0;
 
     if (srcdn->is_primary() && srcdn->inode->is_anchored() &&
@@ -3371,7 +3371,8 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
 
 void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, bufferlist *client_map_bl,
-			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+			     CDentry *srcdn, CDentry *destdn, CDentry *straydn,
+			     EMetaBlob *rollback)
 {
   dout(10) << "_rename_prepare " << *mdr << " " << *srcdn << " " << *destdn << dendl;
   if (straydn) dout(10) << " straydn " << *straydn << dendl;
@@ -3458,18 +3459,18 @@ void Server::_rename_prepare(MDRequest *mdr,
     // sub off target
     int predirty_dir = silent ? 0:PREDIRTY_DIR;
     if (!linkmerge && destdn->is_primary())
-      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir, PREDIRTY_PRIMARY|predirty_dir, -1);
+      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir, PREDIRTY_PRIMARY|predirty_dir, -1,
+				   rollback);
     if (destdn->dir == srcdn->dir) {
       // same dir.  don't update nested info or adjust counts.
-      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir,
-				   false, true);
+      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, predirty_dir, 0, rollback);
     } else {
       // different dir.  update nested accounting.
       int flags = srcdn->is_primary() ? PREDIRTY_PRIMARY:0;
       flags |= predirty_dir;
       if (srcdn->is_auth())
-	mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1);
-      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1);
+	mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1, rollback);
+      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1, rollback);
     }
   }
 
@@ -3682,8 +3683,10 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   mdr->pin(srcdn->inode);
 
   // stray?
+  bool linkmerge = (srcdn->inode == destdn->inode &&
+		    (srcdn->is_primary() || destdn->is_primary()));
   CDentry *straydn = 0;
-  if (destdn->is_primary()) {
+  if (destdn->is_primary() && !linkmerge) {
     assert(mdr->slave_request->stray.length() > 0);
     straydn = mdcache->add_replica_stray(mdr->slave_request->stray, 
 					 destdn->inode, mdr->slave_to_mds);
@@ -3746,21 +3749,19 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     mdr->ls = mdlog->get_current_segment();
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_PREPARE);
 
+    // commit case
+    bufferlist blah;
+    _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn, &le->rollback);
+
     // rollback case
     if (destdn->inode && destdn->inode->is_auth()) {
       assert(destdn->is_remote());
-      le->rollback.add_dir_context(destdn->dir);
       le->rollback.add_dentry(destdn, true);
     }
     if (srcdn->is_auth() ||
 	(srcdn->inode && srcdn->inode->is_auth())) {
-      le->rollback.add_dir_context(srcdn->dir);
       le->rollback.add_dentry(srcdn, true);
     }
-
-    // commit case
-    bufferlist blah;
-    _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
 
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
