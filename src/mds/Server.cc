@@ -3762,7 +3762,8 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
   // unfreeze+singleauth inode
   //  hmm, do i really need to delay this?
-  if (srcdn->is_auth() && destdn->is_primary()) {
+  if (srcdn->is_auth() && destdn->is_primary() &&
+      destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
     dout(10) << " unfreezing exported inode " << *destdn->inode << dendl;
     list<Context*> finished;
     
