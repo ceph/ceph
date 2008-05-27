@@ -697,15 +697,10 @@ public:
   void anchor_create(MDRequest *mdr, CInode *in, Context *onfinish);
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
-  void _anchor_create_prepared(CInode *in, version_t atid);
-  void _anchor_create_logged(CInode *in, version_t atid, LogSegment *ls);
-  void _anchor_destroy_prepared(CInode *in, version_t atid);
-  void _anchor_destroy_logged(CInode *in, version_t atid, LogSegment *ls);
-
-  friend class C_MDC_AnchorCreatePrepared;
-  friend class C_MDC_AnchorCreateLogged;
-  friend class C_MDC_AnchorDestroyPrepared;
-  friend class C_MDC_AnchorDestroyLogged;
+  void _anchor_prepared(CInode *in, version_t atid, bool add);
+  void _anchor_logged(CInode *in, version_t atid, Mutation *mut);
+  friend class C_MDC_AnchorPrepared;
+  friend class C_MDC_AnchorLogged;
 
   // -- stray --
 public:

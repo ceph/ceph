@@ -203,16 +203,19 @@ struct FileLayout {
 struct frag_info_t {
   version_t version;
 
+  // this frag
   utime_t mtime;
   __u64 nfiles;        // files
   __u64 nsubdirs;      // subdirs
   __u64 size() const { return nfiles + nsubdirs; }
 
-  utime_t rctime;      // \max_{children}(ctime, nested_ctime)
+  // this frag + children
+  utime_t rctime;
   __u64 rbytes;
   __u64 rfiles;
   __u64 rsubdirs;
   __u64 rsize() const { return rfiles + rsubdirs; }
+  __u64 ranchors;  // for dirstat, includes inode's anchored flag.
 
   void take_diff(const frag_info_t &cur, frag_info_t &acc) {
     if (cur.mtime > mtime)
@@ -225,6 +228,7 @@ struct frag_info_t {
     rbytes += cur.rbytes - acc.rbytes;
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
+    ranchors += cur.ranchors - acc.ranchors;
     acc = cur;
     acc.version = version;
   }
@@ -236,6 +240,7 @@ struct frag_info_t {
     ::encode(rbytes, bl);
     ::encode(rfiles, bl);
     ::encode(rsubdirs, bl);
+    ::encode(ranchors, bl);
     ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -245,6 +250,7 @@ struct frag_info_t {
     ::decode(rbytes, bl);
     ::decode(rfiles, bl);
     ::decode(rsubdirs, bl);
+    ::decode(ranchors, bl);
     ::decode(rctime, bl);
  }
 };
@@ -260,6 +266,7 @@ inline ostream& operator<<(ostream &out, const frag_info_t &f) {
 	     << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs
 	     << " rc" << f.rctime
 	     << " b" << f.rbytes
+	     << " a" << f.ranchors
 	     << " " << f.rsize() << "=" << f.rfiles << "+" << f.rsubdirs
 	     << ")";    
 }

@@ -4753,16 +4753,15 @@ for (int i=0; i<CInode::NUM_PINS; i++) {
 // --------------------------------------------------------------------
 // ANCHORS
 
-// CREATE
-
-class C_MDC_AnchorCreatePrepared : public Context {
+class C_MDC_AnchorPrepared : public Context {
   MDCache *cache;
   CInode *in;
+  bool add;
 public:
   version_t atid;
-  C_MDC_AnchorCreatePrepared(MDCache *c, CInode *i) : cache(c), in(i) {}
+  C_MDC_AnchorPrepared(MDCache *c, CInode *i, bool a) : cache(c), in(i), add(a) {}
   void finish(int r) {
-    cache->_anchor_create_prepared(in, atid);
+    cache->_anchor_prepared(in, atid, add);
   }
 };
 
@@ -4799,76 +4798,9 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   in->make_anchor_trace(trace);
   
   // do it
-  C_MDC_AnchorCreatePrepared *fin = new C_MDC_AnchorCreatePrepared(this, in);
+  C_MDC_AnchorPrepared *fin = new C_MDC_AnchorPrepared(this, in, true);
   mds->anchorclient->prepare_create(in->ino(), trace, &fin->atid, fin);
 }
-
-class C_MDC_AnchorCreateLogged : public Context {
-  MDCache *cache;
-  CInode *in;
-  version_t atid;
-  LogSegment *ls;
-public:
-  C_MDC_AnchorCreateLogged(MDCache *c, CInode *i, version_t t, LogSegment *s) : 
-    cache(c), in(i), atid(t), ls(s) {}
-  void finish(int r) {
-    cache->_anchor_create_logged(in, atid, ls);
-  }
-};
-
-void MDCache::_anchor_create_prepared(CInode *in, version_t atid)
-{
-  dout(10) << "_anchor_create_prepared " << *in << " atid " << atid << dendl;
-  assert(in->inode.anchored == false);
-
-  // update the logged inode copy
-  inode_t *pi = in->project_inode();
-  pi->anchored = true;
-  pi->version = in->pre_dirty();
-
-  // note anchor transaction
-  EUpdate *le = new EUpdate(mds->mdlog, "anchor_create");
-  le->metablob.add_dir_context(in->get_parent_dir());
-  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-  le->metablob.add_anchor_transaction(atid);
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorCreateLogged(this, in, atid,
-							    mds->mdlog->get_current_segment()));
-}
-
-
-void MDCache::_anchor_create_logged(CInode *in, version_t atid, LogSegment *ls)
-{
-  dout(10) << "_anchor_create_logged on " << *in << dendl;
-
-  // unpin
-  assert(in->state_test(CInode::STATE_ANCHORING));
-  in->state_clear(CInode::STATE_ANCHORING);
-  in->put(CInode::PIN_ANCHORING);
-  in->auth_unpin();
-  
-  // apply update to cache
-  in->pop_and_dirty_projected_inode(ls);
-  
-  // tell the anchortable we've committed
-  mds->anchorclient->commit(atid, ls);
-
-  // trigger waiters
-  in->finish_waiting(CInode::WAIT_ANCHORED, 0);
-}
-
-
-// DESTROY
-
-class C_MDC_AnchorDestroyPrepared : public Context {
-  MDCache *cache;
-  CInode *in;
-public:
-  version_t atid;
-  C_MDC_AnchorDestroyPrepared(MDCache *c, CInode *i) : cache(c), in(i) {}
-  void finish(int r) {
-    cache->_anchor_destroy_prepared(in, atid);
-  }
-};
 
 void MDCache::anchor_destroy(CInode *in, Context *onfinish)
 {
@@ -4900,61 +4832,68 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
   in->auth_pin();
   
   // do it
-  C_MDC_AnchorDestroyPrepared *fin = new C_MDC_AnchorDestroyPrepared(this, in);
+  C_MDC_AnchorPrepared *fin = new C_MDC_AnchorPrepared(this, in, false);
   mds->anchorclient->prepare_destroy(in->ino(), &fin->atid, fin);
 }
 
-class C_MDC_AnchorDestroyLogged : public Context {
+class C_MDC_AnchorLogged : public Context {
   MDCache *cache;
   CInode *in;
   version_t atid;
-  LogSegment *ls;
+  Mutation *mut;
 public:
-  C_MDC_AnchorDestroyLogged(MDCache *c, CInode *i, version_t t, LogSegment *l) :
-    cache(c), in(i), atid(t), ls(l) {}
+  C_MDC_AnchorLogged(MDCache *c, CInode *i, version_t t, Mutation *m) : 
+    cache(c), in(i), atid(t), mut(m) {}
   void finish(int r) {
-    cache->_anchor_destroy_logged(in, atid, ls);
+    cache->_anchor_logged(in, atid, mut);
   }
 };
 
-void MDCache::_anchor_destroy_prepared(CInode *in, version_t atid)
+void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
 {
-  dout(10) << "_anchor_destroy_prepared " << *in << " atid " << atid << dendl;
-
-  assert(in->inode.anchored == true);
+  dout(10) << "_anchor_create_prepared " << *in << " atid " << atid << dendl;
+  assert(in->inode.anchored == false);
 
   // update the logged inode copy
   inode_t *pi = in->project_inode();
-  pi->anchored = true;
+  if (add) {
+    pi->anchored = true;
+    pi->dirstat.ranchors++;
+  } else {
+    pi->anchored = false;
+    pi->dirstat.ranchors--;
+  }
   pi->version = in->pre_dirty();
 
-  // log + wait
-  EUpdate *le = new EUpdate(mds->mdlog, "anchor_destroy");
-  le->metablob.add_dir_context(in->get_parent_dir());
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
+  mds->locker->predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   le->metablob.add_anchor_transaction(atid);
-  mds->mdlog->submit_entry(le, new C_MDC_AnchorDestroyLogged(this, in, atid, mds->mdlog->get_current_segment()));
+  mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
 }
 
 
-void MDCache::_anchor_destroy_logged(CInode *in, version_t atid, LogSegment *ls)
+void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 {
-  dout(10) << "_anchor_destroy_logged on " << *in << dendl;
-  
+  dout(10) << "_anchor_logged on " << *in << dendl;
+
   // unpin
-  assert(in->state_test(CInode::STATE_UNANCHORING));
-  in->state_clear(CInode::STATE_UNANCHORING);
-  in->put(CInode::PIN_UNANCHORING);
+  assert(in->state_test(CInode::STATE_ANCHORING));
+  in->state_clear(CInode::STATE_ANCHORING);
+  in->put(CInode::PIN_ANCHORING);
   in->auth_unpin();
   
   // apply update to cache
-  in->pop_and_dirty_projected_inode(ls);
-
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
+  
   // tell the anchortable we've committed
-  mds->anchorclient->commit(atid, ls);
+  mds->anchorclient->commit(atid, mut->ls);
 
   // trigger waiters
-  in->finish_waiting(CInode::WAIT_UNANCHORED, 0);
+  in->finish_waiting(CInode::WAIT_ANCHORED, 0);
 }
 
 

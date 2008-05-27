@@ -1242,7 +1242,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
   inode_t *curi = in->get_projected_inode();
 
-  __s64 drbytes = 1, drfiles = 0, drsubdirs = 0;
+  __s64 drbytes = 1, drfiles = 0, drsubdirs = 0, dranchors = 0;
   utime_t rctime;
 
   // build list of inodes to wrlock, dirty, and update
@@ -1268,6 +1268,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     if (do_parent) {
       dout(10) << "predirty_nested updating mtime/size on " << *parent << dendl;
       pf->fragstat.mtime = mut->now;
+      if (mut->now > pf->fragstat.rctime)
+	pf->fragstat.rctime = mut->now;
       if (linkunlink) {
 	if (in->is_dir())
 	  pf->fragstat.nsubdirs += linkunlink;
@@ -1280,14 +1282,17 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 	drbytes = curi->dirstat.rbytes - curi->accounted_dirstat.rbytes;
 	drfiles = curi->dirstat.rfiles - curi->accounted_dirstat.rfiles;
 	drsubdirs = curi->dirstat.rsubdirs - curi->accounted_dirstat.rsubdirs;
+	dranchors = curi->dirstat.ranchors - curi->accounted_dirstat.ranchors;
       } else if (linkunlink < 0) {
 	drbytes = 0 - curi->accounted_dirstat.rbytes;
 	drfiles = 0 - curi->accounted_dirstat.rfiles;
 	drsubdirs = 0 - curi->accounted_dirstat.rsubdirs;
+	dranchors = 0 - curi->accounted_dirstat.ranchors;
       } else {
 	drbytes = curi->dirstat.rbytes;
 	drfiles = curi->dirstat.rfiles;
 	drsubdirs = curi->dirstat.rsubdirs;
+	dranchors = curi->dirstat.ranchors;
       }
       rctime = MAX(curi->ctime, curi->dirstat.rctime);
 
@@ -1297,6 +1302,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       pf->fragstat.rbytes += drbytes;
       pf->fragstat.rfiles += drfiles;
       pf->fragstat.rsubdirs += drsubdirs;
+      pf->fragstat.ranchors += dranchors;
       pf->fragstat.rctime = rctime;
     
       curi->accounted_dirstat = curi->dirstat;
@@ -1335,7 +1341,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
     pi->dirstat.version++;
+    dout(15) << "predirty_nested take_diff " << pf->fragstat << dendl;
+    dout(15) << "predirty_nested         - " << pf->accounted_fragstat << dendl;
     pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat);
+    dout(15) << "predirty_nested     gives " << pi->dirstat << " on " << *pin << dendl;
 
     // next parent!
     cur = pin;
