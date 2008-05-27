@@ -393,6 +393,10 @@ public:
   void subtree_merge_writebehind_finish(CInode *in, LogSegment *ls);
   void eval_subtree_root(CDir *dir);
   CDir *get_subtree_root(CDir *dir);
+  bool is_leaf_subtree(CDir *dir) {
+    assert(subtrees.count(dir));
+    return subtrees[dir].empty();
+  }
   void remove_subtree(CDir *dir);
   void get_subtree_bounds(CDir *root, set<CDir*>& bounds);
   void get_wouldbe_subtree_bounds(CDir *root, set<CDir*>& bounds);

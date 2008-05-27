@@ -192,15 +192,19 @@ void AnchorTable::commit(version_t atid)
     inodeno_t ino = pending_update[atid].first;
     vector<Anchor> &trace = pending_update[atid].second;
     
-    dout(7) << "commit " << atid << " update " << ino << dendl;
+    if (anchor_map.count(ino)) {
+      dout(7) << "commit " << atid << " update " << ino << dendl;
 
-    // remove old
-    dec(ino);
-    
-    // add new
-    for (unsigned i=0; i<trace.size(); i++) 
-      add(trace[i].ino, trace[i].dirfrag);
-    inc(ino);
+      // remove old
+      dec(ino);
+      
+      // add new
+      for (unsigned i=0; i<trace.size(); i++) 
+	add(trace[i].ino, trace[i].dirfrag);
+      inc(ino);
+    } else {
+      dout(7) << "commit " << atid << " update " << ino << " -- DNE" << dendl;
+    }
     
     pending_update.erase(atid);
   }

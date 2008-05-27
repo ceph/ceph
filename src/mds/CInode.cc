@@ -912,7 +912,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   utime_t old_mtime = inode.mtime;
   bool was_anchored = inode.anchored;
   ::decode(inode, p);
-  if (was_anchored != inode.anchored)
+  if (parent && was_anchored != inode.anchored)
     parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
   if (old_mtime > inode.mtime) {
     assert(dirlock.is_updated());

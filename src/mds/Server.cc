@@ -2163,12 +2163,7 @@ void Server::handle_client_link(MDRequest *mdr)
 
   // does the target need an anchor?
   if (targeti->is_auth()) {
-    /*if (targeti->get_parent_dir() == dn->dir) {
-      dout(7) << "target is in the same dirfrag, sweet" << dendl;
-    } 
-    else 
-      */
-    if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+    if (targeti->is_anchored()) {
       dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
     } 
     else {
@@ -2374,7 +2369,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   // anchor?
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
-    if (targeti->is_anchored() && !targeti->is_unanchoring()) {
+    if (targeti->is_anchored()) {
       dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
     } 
     else {
@@ -3163,8 +3158,11 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (!linkmerge || srcdn->is_primary()) {
     C_Gather *anchorgather = 0;
 
-    if (srcdn->is_primary() && srcdn->inode->is_anchored() &&
-	srcdn->dir != destdn->dir &&
+    if (srcdn->is_primary() &&
+	(srcdn->inode->is_anchored() || 
+	 (srcdn->inode->is_dir() && (srcdn->inode->inode.dirstat.ranchors ||
+				     srcdn->inode->nested_anchors ||
+				     !mdcache->is_leaf_subtree(mdcache->get_subtree_root(srcdn->dir))))) &&
 	!mdr->more()->src_reanchor_atid) {
       dout(10) << "reanchoring src->dst " << *srcdn->inode << dendl;
       vector<Anchor> trace;

@@ -77,6 +77,7 @@ mds mustfix
 - when renaming a dir, how do we know if we need to update the anchor table?
 - anchor records need to include the dentry hash
   - adjust conditional guard on anchor table updates accordingly (i.e., update table even if in same dir)
+- anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
 
 - fix rm -r vs mds exports
   - use new dir size values in dirstat

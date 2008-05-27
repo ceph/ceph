@@ -4787,6 +4787,7 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
+  xlocks.insert(&in->linklock);
 
   CDentry *dn = in->get_parent_dn();
   while (dn) {
@@ -4826,6 +4827,10 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
 void MDCache::anchor_destroy(CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
+
+  // FIXME: i need to xlock in->linklock, somehow, before i get used, to avoid
+  //        races with anchor_destroy
+  assert(0);
 
   // auth pin
   if (!in->can_auth_pin()/* &&
@@ -4915,6 +4920,8 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   
   // tell the anchortable we've committed
   mds->anchorclient->commit(atid, mut->ls);
+
+  mds->locker->drop_locks(mut);
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED, 0);
