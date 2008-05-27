@@ -140,6 +140,7 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   state = STATE_INITIAL;
 
   memset(&fnode, 0, sizeof(fnode));
+  projected_version = 0;
 
   committing_version = 0;
   committed_version_equivalent = committed_version = 0;
