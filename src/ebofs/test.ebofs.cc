@@ -42,8 +42,8 @@ public:
       pobject_t oid;
       oid.oid.ino = (rand() % 1000) + 0x10000000;
       coll_t cid = rand() % 50;
-      off_t off = rand() % 10000;//0;//rand() % 1000000;
-      off_t len = 1+rand() % 100000;
+      __u64 off = rand() % 10000;//0;//rand() % 1000000;
+      __u64 len = 1+rand() % 100000;
       const char *a = "one";
       if (rand() % 2) a = "two";
       int l = 3;//rand() % 10;
@@ -76,7 +76,7 @@ public:
         {
           cout << t << " write " << hex << oid << dec << " at " << off << " len " << len << std::endl;
 	  char b[len];
-          for (int j=0;j<len;j++)
+          for (unsigned j=0;j<len;j++)
             b[j] = fingerprint_byte_at(off+j, oid.oid.ino);
           bufferlist w;
 	  w.append(b, len);

@@ -639,8 +639,8 @@ int BlockDevice::_read(int fd, block_t bno, unsigned num, bufferlist& bl)
 
   assert(fd > 0);
   
-  off_t offset = bno * EBOFS_BLOCK_SIZE;
-  off_t actual = lseek(fd, offset, SEEK_SET);
+  __u64 offset = bno * EBOFS_BLOCK_SIZE;
+  __u64 actual = lseek(fd, offset, SEEK_SET);
   assert(actual == offset);
   
   size_t len = num*EBOFS_BLOCK_SIZE;
@@ -675,9 +675,9 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
   assert(fd > 0);
   
   while (1) {
-    off_t offset = (off_t)bno << EBOFS_BLOCK_BITS;
-    assert((off_t)bno * (off_t)EBOFS_BLOCK_SIZE == offset);
-    off_t actual = lseek(fd, offset, SEEK_SET);
+    __u64 offset = bno << EBOFS_BLOCK_BITS;
+    assert(bno * EBOFS_BLOCK_SIZE == offset);
+    __u64 actual = lseek(fd, offset, SEEK_SET);
     assert(actual == offset);
     
     // write buffers

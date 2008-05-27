@@ -28,6 +28,8 @@ static void try_accept(struct work_struct *);
 
 
 
+
+
 /*
  * connections
  */
@@ -118,7 +120,7 @@ static void put_connection(struct ceph_connection *con)
 		dout(20, "put_connection destroying %p\n", con);
 		ceph_msg_put_list(&con->out_queue);
 		ceph_msg_put_list(&con->out_sent);
-		ceph_sock_release(con->sock);
+		ceph_socket_put(con->s, 1);
 		kfree(con);
 	}
 }
@@ -275,8 +277,8 @@ static void ceph_fault(struct ceph_connection *con)
 
 	if (con->delay) {
 		dout(30, "fault tcp_close delay != 0\n");
-		ceph_sock_release(con->sock);
-		con->sock = NULL;
+		ceph_socket_put(con->s, 1);
+		con->s = NULL;
 		set_bit(NEW, &con->state);
 
 		/*
@@ -328,13 +330,14 @@ static void ceph_fault(struct ceph_connection *con)
  *  0 -> socket full, but more to do
  * <0 -> error
  */
-static int write_partial_kvec(struct ceph_connection *con)
+static int write_partial_kvec(struct ceph_connection *con,
+			      struct ceph_socket *s)
 {
 	int ret;
 
 	dout(10, "write_partial_kvec have %d left\n", con->out_kvec_bytes);
 	while (con->out_kvec_bytes > 0) {
-		ret = ceph_tcp_sendmsg(con->sock, con->out_kvec_cur,
+		ret = ceph_tcp_sendmsg(s, con->out_kvec_cur,
 				       con->out_kvec_left, con->out_kvec_bytes,
 				       con->out_more);
 		if (ret <= 0)
@@ -364,6 +367,7 @@ out:
 }
 
 static int write_partial_msg_pages(struct ceph_connection *con,
+				   struct ceph_socket *s,
 				   struct ceph_msg *msg)
 {
 	struct kvec kv;
@@ -389,7 +393,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
-		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
+		ret = ceph_tcp_sendmsg(s, &kv, 1, kv.iov_len, 1);
 		if (msg->pages)
 			kunmap(page);
 		mutex_unlock(&msg->page_mutex);
@@ -574,9 +578,12 @@ static void try_write(struct work_struct *work)
 		container_of(work, struct ceph_connection, swork.work);
 	struct ceph_messenger *msgr = con->msgr;
 	int ret = 1;
+	struct ceph_socket *s = con->s;
 
 	dout(30, "try_write start %p state %lu nref %d\n", con, con->state,
 	     atomic_read(&con->nref));
+	if (s)
+		ceph_socket_get(s);
 
 	if (test_bit(CLOSED, &con->state)) {
 		dout(5, "try_write closed\n");
@@ -600,8 +607,10 @@ more:
 		con->in_tag = CEPH_MSGR_TAG_READY;
 		dout(5, "try_write initiating connect on %p new state %lu\n",
 		     con, con->state);
-		ret = ceph_tcp_connect(con);
-		if (ret < 0) {
+		BUG_ON(s);
+		s = ceph_tcp_connect(con);
+		dout(10, "tcp_connect returned %p\n", s);
+		if (IS_ERR(s)) {
 			con->error_msg = "connect error";
 			ceph_fault(con);
 			goto done;
@@ -611,7 +620,7 @@ more:
 	/* kvec data queued? */
 more_kvec:
 	if (con->out_kvec_left) {
-		ret = write_partial_kvec(con);
+		ret = write_partial_kvec(con, s);
 		if (ret == 0)
 			goto done;
 		if (ret < 0) {
@@ -622,7 +631,7 @@ more_kvec:
 
 	/* msg pages? */
 	if (con->out_msg && con->out_msg->nr_pages) {
-		ret = write_partial_msg_pages(con, con->out_msg);
+		ret = write_partial_msg_pages(con, s, con->out_msg);
 		if (ret == 1)
 			goto more_kvec;
 		if (ret == 0)
@@ -655,6 +664,7 @@ more_kvec:
 
 done:
 	dout(30, "try_write done on %p\n", con);
+	ceph_socket_put(s, 0);
 	put_connection(con);
 	return;
 }
@@ -681,7 +691,8 @@ static int prepare_read_message(struct ceph_connection *con)
 /*
  * read (part of) a message
  */
-static int read_message_partial(struct ceph_connection *con)
+static int read_message_partial(struct ceph_connection *con,
+				struct ceph_socket *s)
 {
 	struct ceph_msg *m = con->in_msg;
 	void *p;
@@ -694,7 +705,7 @@ static int read_message_partial(struct ceph_connection *con)
 	/* header */
 	while (con->in_base_pos < sizeof(m->hdr)) {
 		left = sizeof(m->hdr) - con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock, &m->hdr + con->in_base_pos,
+		ret = ceph_tcp_recvmsg(s, &m->hdr + con->in_base_pos,
 				       left);
 		if (ret <= 0)
 			return ret;
@@ -710,7 +721,7 @@ static int read_message_partial(struct ceph_connection *con)
 				return -ENOMEM;
 		}
 		left = front_len - m->front.iov_len;
-		ret = ceph_tcp_recvmsg(con->sock, (char *)m->front.iov_base +
+		ret = ceph_tcp_recvmsg(s, (char *)m->front.iov_base +
 				       m->front.iov_len, left);
 		if (ret <= 0)
 			return ret;
@@ -757,7 +768,7 @@ static int read_message_partial(struct ceph_connection *con)
 			return 0;
 		}
 		p = kmap(m->pages[con->in_msg_pos.page]);
-		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
+		ret = ceph_tcp_recvmsg(s, p + con->in_msg_pos.page_pos,
 				       left);
 		kunmap(m->pages[con->in_msg_pos.page]);
 		mutex_unlock(&m->page_mutex);
@@ -774,7 +785,7 @@ static int read_message_partial(struct ceph_connection *con)
 	/* footer */
 	while (con->in_base_pos < sizeof(m->hdr) + sizeof(m->footer)) {
 		left = sizeof(m->hdr) + sizeof(m->footer) - con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock, &m->footer +
+		ret = ceph_tcp_recvmsg(s, &m->footer +
 				       (con->in_base_pos - sizeof(m->hdr)),
 				       left);
 		if (ret <= 0)
@@ -835,11 +846,12 @@ static void prepare_read_ack(struct ceph_connection *con)
 /*
  * read (part of) an ack
  */
-static int read_ack_partial(struct ceph_connection *con)
+static int read_ack_partial(struct ceph_connection *con,
+			    struct ceph_socket *s)
 {
 	while (con->in_base_pos < sizeof(con->in_partial_ack)) {
 		int left = sizeof(con->in_partial_ack) - con->in_base_pos;
-		int ret = ceph_tcp_recvmsg(con->sock,
+		int ret = ceph_tcp_recvmsg(s,
 					   (char *)&con->in_partial_ack +
 					   con->in_base_pos, left);
 		if (ret <= 0)
@@ -874,7 +886,8 @@ static void process_ack(struct ceph_connection *con)
 /*
  * read portion of connect-side handshake on a new connection
  */
-static int read_connect_partial(struct ceph_connection *con)
+static int read_connect_partial(struct ceph_connection *con,
+				struct ceph_socket *s)
 {
 	int ret, to;
 	dout(20, "read_connect_partial %p at %d\n", con, con->in_base_pos);
@@ -884,8 +897,7 @@ static int read_connect_partial(struct ceph_connection *con)
 	while (con->in_base_pos < to) {
 		int left = to - con->in_base_pos;
 		int have = con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&con->actual_peer_addr + have,
+		ret = ceph_tcp_recvmsg(s, (char *)&con->actual_peer_addr + have,
 				       left);
 		if (ret <= 0)
 			goto out;
@@ -895,7 +907,7 @@ static int read_connect_partial(struct ceph_connection *con)
 	/* in_tag */
 	to += 1;
 	if (con->in_base_pos < to) {
-		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
+		ret = ceph_tcp_recvmsg(s, &con->in_tag, 1);
 		if (ret <= 0)
 			goto out;
 		con->in_base_pos += ret;
@@ -907,7 +919,7 @@ static int read_connect_partial(struct ceph_connection *con)
 		if (con->in_base_pos < to) {
 			int left = to - con->in_base_pos;
 			int have = sizeof(con->in_connect_seq) - left;
-			ret = ceph_tcp_recvmsg(con->sock,
+			ret = ceph_tcp_recvmsg(s,
 					       (char *)&con->in_connect_seq +
 					       have, left);
 			if (ret <= 0)
@@ -982,8 +994,8 @@ static void process_connect(struct ceph_connection *con)
 	case CEPH_MSGR_TAG_WAIT:
 		dout(10, "process_connect peer connecting WAIT\n");
 		set_bit(WAIT, &con->state);
-		ceph_sock_release(con->sock);
-		con->sock = NULL;
+		ceph_socket_put(con->s, 1);
+		con->s = NULL;
 		break;
 	case CEPH_MSGR_TAG_READY:
 		dout(10, "process_connect got READY, now open\n");
@@ -1004,7 +1016,8 @@ static void process_connect(struct ceph_connection *con)
 /*
  * read portion of accept-side handshake on a newly accepted connection
  */
-static int read_accept_partial(struct ceph_connection *con)
+static int read_accept_partial(struct ceph_connection *con,
+			       struct ceph_socket *s)
 {
 	int ret;
 	int to;
@@ -1014,7 +1027,7 @@ static int read_accept_partial(struct ceph_connection *con)
 	while (con->in_base_pos < to) {
 		int left = to - con->in_base_pos;
 		int have = con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock,
+		ret = ceph_tcp_recvmsg(s,
 				       (char *)&con->peer_addr + have, left);
 		if (ret <= 0)
 			return ret;
@@ -1026,7 +1039,7 @@ static int read_accept_partial(struct ceph_connection *con)
 	while (con->in_base_pos < to) {
 		int left = to - con->in_base_pos;
 		int have = sizeof(con->peer_addr) - left;
-		ret = ceph_tcp_recvmsg(con->sock,
+		ret = ceph_tcp_recvmsg(s,
 				       (char *)&con->in_connect_seq + have,
 				       left);
 		if (ret <= 0)
@@ -1152,12 +1165,17 @@ static void process_accept(struct ceph_connection *con)
  */
 static void try_read(struct work_struct *work)
 {
-	int ret = -1;
-	struct ceph_connection *con;
+	struct ceph_connection *con = container_of(work, struct ceph_connection,
+						   rwork);
 	struct ceph_messenger *msgr;
+	struct ceph_socket *s;
+	int ret = -1;
 
-	con = container_of(work, struct ceph_connection, rwork);
 	dout(20, "try_read start on %p\n", con);
+	s = con->s;
+	if (!s)
+		goto out;
+	ceph_socket_get(s);
 	msgr = con->msgr;
 
 retry:
@@ -1174,7 +1192,7 @@ more:
 	}
 	if (test_bit(ACCEPTING, &con->state)) {
 		dout(20, "try_read accepting\n");
-		ret = read_accept_partial(con);
+		ret = read_accept_partial(con, s);
 		if (ret <= 0)
 			goto done;
 		process_accept(con);		/* accepted */
@@ -1182,7 +1200,7 @@ more:
 	}
 	if (test_bit(CONNECTING, &con->state)) {
 		dout(20, "try_read connecting\n");
-		ret = read_connect_partial(con);
+		ret = read_connect_partial(con, s);
 		if (ret <= 0)
 			goto done;
 		process_connect(con);
@@ -1194,7 +1212,7 @@ more:
 		static char buf[1024];
 		int skip = min(1024, -con->in_base_pos);
 		dout(20, "skipping %d / %d bytes\n", skip, -con->in_base_pos);
-		ret = ceph_tcp_recvmsg(con->sock, buf, skip);
+		ret = ceph_tcp_recvmsg(s, buf, skip);
 		if (ret <= 0)
 			goto done;
 		con->in_base_pos += ret;
@@ -1202,7 +1220,7 @@ more:
 			goto more;
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_READY) {
-		ret = ceph_tcp_recvmsg(con->sock, &con->in_tag, 1);
+		ret = ceph_tcp_recvmsg(s, &con->in_tag, 1);
 		if (ret <= 0)
 			goto done;
 		dout(30, "try_read got tag %d\n", (int)con->in_tag);
@@ -1221,7 +1239,7 @@ more:
 		}
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
-		ret = read_message_partial(con);
+		ret = read_message_partial(con, s);
 		if (ret <= 0)
 			goto done;
 		if (con->in_tag == CEPH_MSGR_TAG_READY)
@@ -1230,7 +1248,7 @@ more:
 		goto more;
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_ACK) {
-		ret = read_ack_partial(con);
+		ret = read_ack_partial(con, s);
 		if (ret <= 0)
 			goto done;
 		process_ack(con);
@@ -1251,6 +1269,7 @@ done:
 
 out:
 	dout(20, "try_read done on %p\n", con);
+	ceph_socket_put(s, 0);
 	put_connection(con);
 	return;
 }
@@ -1280,7 +1299,7 @@ static void try_accept(struct work_struct *work)
 	clear_bit(NEW, &new_con->state);
 	new_con->in_tag = CEPH_MSGR_TAG_READY;  /* eventually, hopefully */
 
-	if (ceph_tcp_accept(msgr->listen_sock, new_con) < 0) {
+	if (ceph_tcp_accept(msgr->listen_s, new_con) < 0) {
 		derr(1, "error accepting connection\n");
 		put_connection(new_con);
 		goto done;
@@ -1344,6 +1363,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 
 	dout(1, "messenger %p listening on %u.%u.%u.%u:%u\n", msgr,
 	     IPQUADPORT(msgr->inst.addr.ipaddr));
+
 	return msgr;
 }
 
@@ -1354,9 +1374,8 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	dout(2, "destroy %p\n", msgr);
 	
 	/* stop listener */
-	ceph_cancel_sock_callbacks(msgr->listen_sock);
+	ceph_socket_put(msgr->listen_s, 1);
 	cancel_work_sync(&msgr->awork);
-	ceph_sock_release(msgr->listen_sock);
 
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
@@ -1370,7 +1389,7 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 		
 		/* in case there's queued work... */
 		spin_unlock(&msgr->con_lock);
-		ceph_cancel_sock_callbacks(con->sock);
+		ceph_cancel_sock_callbacks(con->s);
 		cancel_work_sync(&con->rwork);
 		cancel_delayed_work_sync(&con->swork);
 		put_connection(con);

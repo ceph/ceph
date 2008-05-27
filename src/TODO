@@ -38,6 +38,8 @@ kernel client
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
+- clean up messenger vs ktcp
+ - hook into sysfs?
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client

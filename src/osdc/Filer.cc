@@ -49,7 +49,7 @@ public:
 
 int Filer::probe(inode_t& inode,
 		 __u64 start_from,
-		 __u64 *end,
+		 __u64 *end,           // LB, when !fwd
 		 bool fwd,
 		 int flags,
 		 Context *onfinish) 
@@ -70,6 +70,7 @@ int Filer::probe(inode_t& inode,
     if (probe->fwd)
       probe->probing_len += period - (start_from % period);
   } else {
+    assert(start_from > *end);
     if (probe->fwd)
       probe->probing_len = start_from % period;
     probe->from -= probe->probing_len;

@@ -851,7 +851,7 @@ csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   }
 
   // bad byte extents
-  for (map<off_t,off_t>::iterator p = on->bad_byte_extents.m.begin();
+  for (map<__u64,__u64>::iterator p = on->bad_byte_extents.m.begin();
        p != on->bad_byte_extents.m.end();
        p++) {
     extent_t o = {p->first, p->second};
@@ -1348,7 +1348,7 @@ void Ebofs::trim_buffer_cache()
   ebofs_lock.Unlock();
 }
 
-void Ebofs::trim_bc(off_t max)
+void Ebofs::trim_bc(__u64 max)
 {
   if (max < 0)
     max = g_conf.ebofs_bc_size;
@@ -1628,11 +1628,11 @@ void Ebofs::alloc_write(Onode *on,
 }
 
 
-int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len, 
+int Ebofs::check_partial_edges(Onode *on, __u64 off, __u64 len, 
 			       bool &partial_head, bool &partial_tail)
 {
   // partial block overwrite at head or tail?
-  off_t last_block_byte = on->last_block * EBOFS_BLOCK_SIZE;
+  __u64 last_block_byte = on->last_block * EBOFS_BLOCK_SIZE;
   partial_head = (off < last_block_byte) && (off & EBOFS_BLOCK_MASK);
   partial_tail = ((off+len) < on->object_size) && ((off+len) & EBOFS_BLOCK_MASK);
   dout(10) << "check_partial_edges on " << *on << " " << off << "~" << len 
@@ -1654,8 +1654,8 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
 	return -1;
       }
       if (bh->is_partial()) {
-	int off_in_bh = off & EBOFS_BLOCK_MASK;
-	int end_in_bh = MAX(EBOFS_BLOCK_SIZE, off_in_bh+len);
+	unsigned off_in_bh = off & EBOFS_BLOCK_MASK;
+	unsigned end_in_bh = MAX(EBOFS_BLOCK_SIZE, off_in_bh+len);
 	if (!(off_in_bh == 0 || bh->have_partial_range(0, off_in_bh)) ||
 	    !(end_in_bh == EBOFS_BLOCK_SIZE || bh->have_partial_range(end_in_bh, EBOFS_BLOCK_SIZE-end_in_bh))) {
 	  dout(10) << "check_partial_edges can't complete partial head " << *bh << ", deferring" << dendl;
@@ -1675,10 +1675,10 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
 	return -1;
       }
       if (bh->is_partial()) {
-	off_t off_in_bh = off & EBOFS_BLOCK_MASK;
-	off_t end_in_bh = MAX(EBOFS_BLOCK_SIZE, off_in_bh+len);
-	off_t end = EBOFS_BLOCK_SIZE;
-	if ((off_t)bh->end()*EBOFS_BLOCK_SIZE > last_block_byte)
+	__u64 off_in_bh = off & EBOFS_BLOCK_MASK;
+	__u64 end_in_bh = MAX(EBOFS_BLOCK_SIZE, off_in_bh+len);
+	__u64 end = EBOFS_BLOCK_SIZE;
+	if (bh->end()*EBOFS_BLOCK_SIZE > last_block_byte)
 	  end = last_block_byte & EBOFS_BLOCK_MASK;
 	if (!(off_in_bh == 0 || bh->have_partial_range(0, off_in_bh)) ||
 	    !(end_in_bh >= end || bh->have_partial_range(end_in_bh, end-end_in_bh))) {
@@ -1693,7 +1693,7 @@ int Ebofs::check_partial_edges(Onode *on, off_t off, off_t len,
   return 0;
 }
 
-int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
+int Ebofs::apply_write(Onode *on, __u64 off, __u64 len, const bufferlist& bl)
 {
   ObjectCache *oc = on->get_oc(&bc);
   //oc->scrub_csums();
@@ -1701,8 +1701,8 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
   assert(bl.length() == len);
 
   // map into blocks
-  off_t opos = off;        // byte pos in object
-  off_t left = len;        // bytes left
+  __u64 opos = off;        // byte pos in object
+  __u64 left = len;        // bytes left
   block_t bstart = off / EBOFS_BLOCK_SIZE;
   block_t blast = (len+off-1) / EBOFS_BLOCK_SIZE;
   block_t blen = blast-bstart+1;
@@ -1715,7 +1715,7 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
   // -- starting changing stuff --
 
   // extending object?
-  off_t old_object_size = on->object_size;
+  __u64 old_object_size = on->object_size;
   if (off+len > on->object_size) {
     dout(10) << "apply_write extending size on " << *on << ": " << on->object_size 
              << " -> " << off+len << dendl;
@@ -1803,15 +1803,15 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
     if ((bh->start() == bstart && partial_head) ||
         (bh->last() == blast && partial_tail)) {
       unsigned len_in_bh = MIN( left, 
-				((off_t)bh->end()*EBOFS_BLOCK_SIZE)-opos );
+				(bh->end()*EBOFS_BLOCK_SIZE)-opos );
       
       if (bh->is_partial() || bh->is_rx() || bh->is_missing() || bh->is_corrupt()) {
         assert(bh->length() == 1);
 
 	if (bh->is_corrupt()) {
 	  dout(10) << "apply_write  marking non-overwritten bytes bad on corrupt " << *bh << dendl;
-	  interval_set<off_t> bad;
-	  off_t bs = bh->start() * EBOFS_BLOCK_SIZE;
+	  interval_set<__u64> bad;
+	  __u64 bs = bh->start() * EBOFS_BLOCK_SIZE;
 	  if (off_in_bh) bad.insert(bs, bs+off_in_bh);
 	  if (off_in_bh+len_in_bh < (unsigned)EBOFS_BLOCK_SIZE)
 	    bad.insert(bs+off_in_bh+len_in_bh, bs+EBOFS_BLOCK_SIZE-off_in_bh-len_in_bh);
@@ -1946,10 +1946,10 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
 
     // ok
     //  we're now writing up to a block boundary, or EOF.
-    assert(off_in_bh+left >= (off_t)(EBOFS_BLOCK_SIZE*bh->length()) ||
+    assert(off_in_bh+left >= (__u64)(EBOFS_BLOCK_SIZE*bh->length()) ||
            (opos+left) >= on->object_size);
 
-    unsigned len_in_bh = MIN((off_t)bh->length()*EBOFS_BLOCK_SIZE - off_in_bh, 
+    unsigned len_in_bh = MIN((__u64)bh->length()*EBOFS_BLOCK_SIZE - off_in_bh, 
 			     left);
     assert(len_in_bh <= left);
 
@@ -1977,8 +1977,8 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
       // zero leader?
       if (off_in_bh &&
 	  opos > old_object_size) {
-	off_t zstart = MAX(0, old_object_size-(off_t)bh->start()*EBOFS_BLOCK_SIZE);
-	off_t zlen = off_in_bh - zstart;
+	__u64 zstart = MAX(0, old_object_size-(__u64)bh->start()*EBOFS_BLOCK_SIZE);
+	__u64 zlen = off_in_bh - zstart;
 	dout(15) << "apply_write zeroing bh lead over " << zstart << "~" << zlen << dendl;
 	bh->data.zero(zstart, zlen);
       }
@@ -1990,8 +1990,8 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
 
       // zero the past-eof tail, too, to be tidy.
       if (len_in_bh < bh->data.length()) {
-	off_t zstart = off_in_bh+len_in_bh;
-	off_t zlen = bh->data.length()-(off_in_bh+len_in_bh);
+	__u64 zstart = off_in_bh+len_in_bh;
+	__u64 zlen = bh->data.length()-(off_in_bh+len_in_bh);
 	bh->data.zero(zstart, zlen);
 	dout(15) << "apply_write zeroing bh tail over " << zstart << "~" << zlen << dendl;
       }
@@ -2034,7 +2034,7 @@ int Ebofs::apply_write(Onode *on, off_t off, off_t len, const bufferlist& bl)
 }
 
 
-int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
+int Ebofs::apply_zero(Onode *on, __u64 off, size_t len)
 {
   dout(10) << "apply_zero " << off << "~" << len << " on " << *on << dendl;
 
@@ -2121,7 +2121,7 @@ int Ebofs::apply_zero(Onode *on, off_t off, size_t len)
 
 // *** file i/o ***
 
-int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl, 
+int Ebofs::attempt_read(Onode *on, __u64 off, size_t len, bufferlist& bl, 
 			Cond *will_wait_on, bool *will_wait_on_bool)
 {
   dout(10) << "attempt_read " << *on << " " << off << "~" << len << dendl;
@@ -2134,8 +2134,8 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
       return -EIO;
     }
     if (on->bad_byte_extents.end() > off) {
-      off_t bad = on->bad_byte_extents.start_after(off);
-      if (bad < off+(off_t)len) {
+      __u64 bad = on->bad_byte_extents.start_after(off);
+      if (bad < off+(__u64)len) {
 	len = bad-off;
 	dout(10) << "attempt_read corrupt (bad byte extent) at " << bad << ", shortening read to " << len << dendl;
       }
@@ -2182,10 +2182,10 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
        i != partials.end();
        i++) {
     BufferHead *bh = i->second;
-    off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
-    off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
-    off_t start = MAX( off, bhstart );
-    off_t end = MIN( off+(off_t)len, bhend );
+    __u64 bhstart = (__u64)(bh->start()*EBOFS_BLOCK_SIZE);
+    __u64 bhend = (__u64)(bh->end()*EBOFS_BLOCK_SIZE);
+    __u64 start = MAX( off, bhstart );
+    __u64 end = MIN( off+(__u64)len, bhend );
     
     if (!i->second->have_partial_range(start-bhstart, end-bhstart)) {
       // wait on this one
@@ -2203,7 +2203,7 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
   map<block_t,BufferHead*>::iterator p = partials.begin();
 
   bl.clear();
-  off_t pos = off;
+  __u64 pos = off;
   block_t curblock = bstart;
   while (curblock <= blast) {
     BufferHead *bh = 0;
@@ -2215,10 +2215,10 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
       p++;
     } else assert(0);
     
-    off_t bhstart = (off_t)(bh->start()*EBOFS_BLOCK_SIZE);
-    off_t bhend = (off_t)(bh->end()*EBOFS_BLOCK_SIZE);
-    off_t start = MAX( pos, bhstart );
-    off_t end = MIN( off+(off_t)len, bhend );
+    __u64 bhstart = (__u64)(bh->start()*EBOFS_BLOCK_SIZE);
+    __u64 bhend = (__u64)(bh->end()*EBOFS_BLOCK_SIZE);
+    __u64 start = MAX( pos, bhstart );
+    __u64 end = MIN( off+(__u64)len, bhend );
 
     if (bh->is_corrupt()) {
       if (bl.length()) {
@@ -2275,7 +2275,7 @@ int Ebofs::attempt_read(Onode *on, off_t off, size_t len, bufferlist& bl,
  * return value of -1 if onode isn't loaded.  otherwise, the number
  * of extents that need to be read (i.e. # of seeks)  
  */
-int Ebofs::is_cached(coll_t cid, pobject_t oid, off_t off, size_t len)
+int Ebofs::is_cached(coll_t cid, pobject_t oid, __u64 off, size_t len)
 {
   ebofs_lock.Lock();
   int r = _is_cached(oid, off, len);
@@ -2283,7 +2283,7 @@ int Ebofs::is_cached(coll_t cid, pobject_t oid, off_t off, size_t len)
   return r;
 }
 
-int Ebofs::_is_cached(pobject_t oid, off_t off, size_t len)
+int Ebofs::_is_cached(pobject_t oid, __u64 off, size_t len)
 {
   if (!have_onode(oid)) {
     dout(7) << "_is_cached " << oid << " " << off << "~" << len << " ... onode  " << dendl;
@@ -2326,14 +2326,14 @@ int Ebofs::_is_cached(pobject_t oid, off_t off, size_t len)
   */
 }
 
-void Ebofs::trim_from_cache(coll_t cid, pobject_t oid, off_t off, size_t len)
+void Ebofs::trim_from_cache(coll_t cid, pobject_t oid, __u64 off, size_t len)
 {
   ebofs_lock.Lock();
   _trim_from_cache(oid, off, len);
   ebofs_lock.Unlock();
 }
 
-void Ebofs::_trim_from_cache(pobject_t oid, off_t off, size_t len)
+void Ebofs::_trim_from_cache(pobject_t oid, __u64 off, size_t len)
 {
   // be careful not to load it if we don't have it
   if (!have_onode(oid)) {
@@ -2359,7 +2359,7 @@ void Ebofs::_trim_from_cache(pobject_t oid, off_t off, size_t len)
 
 
 int Ebofs::read(coll_t cid, pobject_t oid, 
-                off_t off, size_t len,
+                __u64 off, size_t len,
                 bufferlist& bl)
 {
   ebofs_lock.Lock();
@@ -2368,7 +2368,7 @@ int Ebofs::read(coll_t cid, pobject_t oid,
   return r;
 }
 
-int Ebofs::_read(pobject_t oid, off_t off, size_t len, bufferlist& bl)
+int Ebofs::_read(pobject_t oid, __u64 off, size_t len, bufferlist& bl)
 {
   dout(7) << "_read " << oid << " " << off << "~" << len << dendl;
 
@@ -2391,7 +2391,7 @@ int Ebofs::_read(pobject_t oid, off_t off, size_t len, bufferlist& bl)
     }
 
     size_t try_len = len ? len:on->object_size;
-    size_t will_read = MIN(off+(off_t)try_len, on->object_size) - off;
+    size_t will_read = MIN(off+(__u64)try_len, on->object_size) - off;
     
     bool done;
     r = attempt_read(on, off, will_read, bl, &cond, &done);
@@ -2468,7 +2468,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         pobject_t oid;
 	t.get_oid(oid);
-        off_t offset, len;
+        __u64 offset, len;
 	t.get_length(offset);
 	t.get_length(len);
         bufferlist *pbl;
@@ -2526,7 +2526,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         pobject_t oid;
 	t.get_oid(oid);
-        off_t offset, len;
+        __u64 offset, len;
 	t.get_length(offset);
 	t.get_length(len);
         bufferlist bl;
@@ -2542,7 +2542,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         pobject_t oid;
 	t.get_oid(oid);
-        off_t offset, len;
+        __u64 offset, len;
 	t.get_length(offset);
 	t.get_length(len);
         if (_zero(oid, offset, len) < 0) {
@@ -2556,7 +2556,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         pobject_t oid;
 	t.get_oid(oid);
-        off_t offset, len;
+        __u64 offset, len;
 	t.get_length(offset);
 	t.get_length(len);
         _trim_from_cache(oid, offset, len);
@@ -2567,7 +2567,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
         pobject_t oid;
 	t.get_oid(oid);
-        off_t len;
+        __u64 len;
 	t.get_length(len);
         if (_truncate(oid, len) < 0) {
           dout(7) << "apply_transaction fail on _truncate" << dendl;
@@ -2732,7 +2732,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
 
 
-int Ebofs::_write(pobject_t oid, off_t offset, size_t length, const bufferlist& bl)
+int Ebofs::_write(pobject_t oid, __u64 offset, size_t length, const bufferlist& bl)
 {
   dout(7) << "_write " << oid << " " << offset << "~" << length << dendl;
   assert(bl.length() == length);
@@ -2808,7 +2808,7 @@ int Ebofs::_write(pobject_t oid, off_t offset, size_t length, const bufferlist& 
   return length;
 }
 
-int Ebofs::_zero(pobject_t oid, off_t offset, size_t length)
+int Ebofs::_zero(pobject_t oid, __u64 offset, size_t length)
 {
   dout(7) << "_zero " << oid << " " << offset << "~" << length << dendl;
 
@@ -2822,7 +2822,7 @@ int Ebofs::_zero(pobject_t oid, off_t offset, size_t length)
 
   if (length > 0 &&
       offset < on->object_size) {
-    if (offset + (off_t)length >= on->object_size) {
+    if (offset + (__u64)length >= on->object_size) {
       _truncate(oid, offset);
     } else {
       while (1) {
@@ -2848,7 +2848,7 @@ int Ebofs::_zero(pobject_t oid, off_t offset, size_t length)
 
 
 int Ebofs::write(coll_t cid, pobject_t oid, 
-                 off_t off, size_t len,
+                 __u64 off, size_t len,
                  const bufferlist& bl, Context *onsafe)
 {
   ebofs_lock.Lock();
@@ -2875,7 +2875,7 @@ int Ebofs::write(coll_t cid, pobject_t oid,
   return r;
 }
 
-int Ebofs::zero(coll_t cid, pobject_t oid, off_t off, size_t len, Context *onsafe)
+int Ebofs::zero(coll_t cid, pobject_t oid, __u64 off, size_t len, Context *onsafe)
 {
   ebofs_lock.Lock();
   
@@ -2942,7 +2942,7 @@ int Ebofs::remove(coll_t cid, pobject_t oid, Context *onsafe)
   return r;
 }
 
-int Ebofs::_truncate(pobject_t oid, off_t size)
+int Ebofs::_truncate(pobject_t oid, __u64 size)
 {
   dout(7) << "_truncate " << oid << " size " << size << dendl;
 
@@ -3001,7 +3001,7 @@ int Ebofs::_truncate(pobject_t oid, off_t size)
 }
 
 
-int Ebofs::truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe)
+int Ebofs::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
 {
   ebofs_lock.Lock();
   

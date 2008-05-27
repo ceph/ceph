@@ -220,8 +220,8 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 		wbc->pages_skipped++;
 		ceph_set_page_dirty(page);
 	}
-	unlock_page(page);
 	end_page_writeback(page);
+	unlock_page(page);
 	page_cache_release(page);
 	return err;
 }
@@ -450,8 +450,8 @@ get_more_pages:
 					ceph_set_page_dirty(page);
 				}
 				dout(50, "unlocking %d %p\n", i, page);
-				unlock_page(page);
 				end_page_writeback(page);
+				unlock_page(page);
 			}
 			dout(20, "%p cleaned %d pages\n", inode, cleaned);
 			ceph_put_wrbuffer_cap_refs(ci, cleaned);

@@ -966,8 +966,8 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	/* head->retry_attempt = 0; set by do_request */
 	head->mds_wants_replica_in_dirino = 0;
 	head->op = cpu_to_le32(op);
-	head->caller_uid = cpu_to_le32(current->euid);
-	head->caller_gid = cpu_to_le32(current->egid);
+	head->caller_uid = cpu_to_le32(current->fsuid);
+	head->caller_gid = cpu_to_le32(current->fsgid);
 
 	/* encode paths */
 	if (op == CEPH_MDS_OP_FINDINODE) {

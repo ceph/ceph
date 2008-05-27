@@ -134,7 +134,7 @@ public:
       cid = cids.front();
       cids.pop_front();
     }
-    void get_length(off_t& len) {
+    void get_length(__u64& len) {
       len = lengths.front();
       lengths.pop_front();
     }
@@ -160,7 +160,7 @@ public:
     }
       
 
-    void read(coll_t cid, pobject_t oid, off_t off, size_t len, bufferlist *pbl) {
+    void read(coll_t cid, pobject_t oid, __u64 off, size_t len, bufferlist *pbl) {
       int op = OP_READ;
       ops.push_back(op);
       cids.push_back(cid);
@@ -192,7 +192,7 @@ public:
       pattrsets.push_back(&aset);
     }
 
-    void write(coll_t cid, pobject_t oid, off_t off, size_t len, const bufferlist& bl) {
+    void write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl) {
       int op = OP_WRITE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -201,7 +201,7 @@ public:
       lengths.push_back(len);
       bls.push_back(bl);
     }
-    void zero(coll_t cid, pobject_t oid, off_t off, size_t len) {
+    void zero(coll_t cid, pobject_t oid, __u64 off, size_t len) {
       int op = OP_ZERO;
       ops.push_back(op);
       cids.push_back(cid);
@@ -209,7 +209,7 @@ public:
       lengths.push_back(off);
       lengths.push_back(len);
     }
-    void trim_from_cache(coll_t cid, pobject_t oid, off_t off, size_t len) {
+    void trim_from_cache(coll_t cid, pobject_t oid, __u64 off, size_t len) {
       int op = OP_TRIMCACHE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -217,7 +217,7 @@ public:
       lengths.push_back(off);
       lengths.push_back(len);
     }
-    void truncate(coll_t cid, pobject_t oid, off_t off) {
+    void truncate(coll_t cid, pobject_t oid, __u64 off) {
       int op = OP_TRUNCATE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -353,7 +353,7 @@ public:
         {
 	  coll_t cid;
           pobject_t oid;
-          off_t offset, len;
+          __u64 offset, len;
 	  t.get_cid(cid);
 	  t.get_oid(oid);
 	  t.get_length(offset);
@@ -405,7 +405,7 @@ public:
 	  t.get_cid(cid);
 	  pobject_t oid;
 	  t.get_oid(oid);
-          off_t offset, len;
+          __u64 offset, len;
 	  t.get_length(offset);
 	  t.get_length(len);
           bufferlist bl;
@@ -420,7 +420,7 @@ public:
 	  t.get_cid(cid);
 	  pobject_t oid;
 	  t.get_oid(oid);
-          off_t offset, len;
+          __u64 offset, len;
 	  t.get_length(offset);
 	  t.get_length(len);
           zero(cid, oid, offset, len, 0);
@@ -433,7 +433,7 @@ public:
 	  t.get_cid(cid);
 	  pobject_t oid;
 	  t.get_oid(oid);
-          off_t offset, len;
+          __u64 offset, len;
 	  t.get_length(offset);
 	  t.get_length(len);
           trim_from_cache(cid, oid, offset, len);
@@ -446,7 +446,7 @@ public:
 	  t.get_cid(cid);
 	  pobject_t oid;
 	  t.get_oid(oid);
-          off_t len;
+          __u64 len;
 	  t.get_length(len);
           truncate(cid, oid, len, 0);
         }
@@ -603,19 +603,19 @@ public:
   virtual bool exists(coll_t cid, pobject_t oid) = 0;                   // useful?
   virtual int stat(coll_t cid, pobject_t oid, struct stat *st) = 0;     // struct stat?
   virtual int remove(coll_t cid, pobject_t oid, Context *onsafe=0) = 0;
-  virtual int truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe=0) = 0;
+  virtual int truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe=0) = 0;
   
-  virtual int read(coll_t cid, pobject_t oid, off_t offset, size_t len, bufferlist& bl) = 0;
-  virtual int write(coll_t cid, pobject_t oid, off_t offset, size_t len, const bufferlist& bl, Context *onsafe) = 0;
-  virtual int zero(coll_t cid, pobject_t oid, off_t offset, size_t len, Context *onsafe) {
+  virtual int read(coll_t cid, pobject_t oid, __u64 offset, size_t len, bufferlist& bl) = 0;
+  virtual int write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl, Context *onsafe) = 0;
+  virtual int zero(coll_t cid, pobject_t oid, __u64 offset, size_t len, Context *onsafe) {
     // write zeros.. yuck!
     bufferptr bp(len);
     bufferlist bl;
     bl.push_back(bp);
     return write(cid, oid, offset, len, bl, onsafe);
   }
-  virtual void trim_from_cache(coll_t cid, pobject_t oid, off_t offset, size_t len) = 0; //{ }
-  virtual int is_cached(coll_t cid, pobject_t oid, off_t offset, size_t len) = 0;  //{ return -1; }
+  virtual void trim_from_cache(coll_t cid, pobject_t oid, __u64 offset, size_t len) = 0; //{ }
+  virtual int is_cached(coll_t cid, pobject_t oid, __u64 offset, size_t len) = 0;  //{ return -1; }
 
   virtual int setattr(coll_t cid, pobject_t oid, const char *name,
                       const void *value, size_t size,

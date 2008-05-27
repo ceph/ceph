@@ -60,7 +60,7 @@ struct ceph_object {
 			__le64 ino;  /* inode "file" identifier */
 			__le32 bno;  /* "block" (object) in that "file" */
 			__le64 rev;  /* revision.  normally ctime (as epoch). */
-		};
+		} __attribute__ ((packed));
 	};
 } __attribute__ ((packed));
 

@@ -423,7 +423,7 @@ int FileStore::remove(coll_t cid, pobject_t oid, Context *onsafe)
   return r < 0 ? -errno:r;
 }
 
-int FileStore::truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe)
+int FileStore::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
 {
   dout(20) << "truncate " << cid << " " << oid << " size " << size << dendl;
 
@@ -435,7 +435,7 @@ int FileStore::truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe)
 }
 
 int FileStore::read(coll_t cid, pobject_t oid, 
-                    off_t offset, size_t len,
+                    __u64 offset, size_t len,
                     bufferlist& bl) {
   dout(20) << "read " << cid << " " << oid << " len " << len << " off " << offset << dendl;
 
@@ -449,7 +449,7 @@ int FileStore::read(coll_t cid, pobject_t oid,
   }
   ::flock(fd, LOCK_EX);    // lock for safety
   
-  off_t actual = lseek(fd, offset, SEEK_SET);
+  __u64 actual = lseek(fd, offset, SEEK_SET);
   size_t got = 0;
 
   if (len == 0) {
@@ -471,7 +471,7 @@ int FileStore::read(coll_t cid, pobject_t oid,
 
 
 int FileStore::write(coll_t cid, pobject_t oid, 
-                     off_t offset, size_t len,
+                     __u64 offset, size_t len,
                      const bufferlist& bl, 
                      Context *onsafe)
 {
@@ -489,7 +489,7 @@ int FileStore::write(coll_t cid, pobject_t oid,
   ::flock(fd, LOCK_EX);    // lock for safety
   
   // seek
-  off_t actual = ::lseek(fd, offset, SEEK_SET);
+  __u64 actual = ::lseek(fd, offset, SEEK_SET);
   int did = 0;
   assert(actual == offset);
 

@@ -2833,11 +2833,17 @@ void MDCache::do_file_recover()
 	 !file_recover_queue.empty()) {
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
-    file_recovering.insert(in);
 
-    dout(10) << "do_file_recover " << *in << dendl;
-    mds->filer->probe(in->inode, in->inode.max_size, &in->inode.size, false,
-		      0, new C_MDC_Recover(this, in));    
+    if (in->inode.max_size > in->inode.size) {
+      dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
+	       << " " << *in << dendl;
+      file_recovering.insert(in);
+      mds->filer->probe(in->inode, in->inode.max_size, &in->inode.size, false,
+			0, new C_MDC_Recover(this, in));    
+    } else {
+      dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
+	       << " " << *in << dendl;
+    }
   }
 }
 
