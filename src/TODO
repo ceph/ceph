@@ -70,10 +70,9 @@ mds nested
 mds mustfix
 - rollback vs accounting is just broken!  can we avoid it.
   - even with _just_ parent dir mtime, the rollback metablob isn't sufficient during replay.. we need special handling regardless.
-- when renaming a dir, how do we know if we need to update the anchor table?
-- anchor records need to include the dentry hash
-  - adjust conditional guard on anchor table updates accordingly (i.e., update table even if in same dir)
+
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
+  - ... when it gets a caller.. someday..
 
 - fix rm -r vs mds exports
   - use new dir size values in dirstat

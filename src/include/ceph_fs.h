@@ -248,7 +248,7 @@ static inline unsigned long ceph_end_name_hash(unsigned long hash)
 
 /* Compute the hash for a name string. */
 static inline unsigned int
-ceph_full_name_hash(const unsigned char *name, unsigned int len)
+ceph_full_name_hash(const char *name, unsigned int len)
 {
 	unsigned long hash = ceph_init_name_hash();
 	while (len--)

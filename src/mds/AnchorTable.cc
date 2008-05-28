@@ -45,17 +45,17 @@ void AnchorTable::dump()
  * basic updates
  */
 
-bool AnchorTable::add(inodeno_t ino, dirfrag_t dirfrag) 
+bool AnchorTable::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash) 
 {
   //dout(17) << "add " << ino << " dirfrag " << dirfrag << dendl;
   
   // parent should be there
-  assert(dirfrag.ino < MDS_INO_BASE ||     // system dirino
-         anchor_map.count(dirfrag.ino));   // have
+  assert(dirino < MDS_INO_BASE ||     // base case,
+         anchor_map.count(dirino));   // or have it
   
   if (anchor_map.count(ino) == 0) {
     // new item
-    anchor_map[ino] = Anchor(ino, dirfrag);
+    anchor_map[ino] = Anchor(ino, dirino, dn_hash);
     dout(7) << "add added " << anchor_map[ino] << dendl;
     return true;
   } else {
@@ -75,7 +75,7 @@ void AnchorTable::inc(inodeno_t ino)
     anchor.nref++;
       
     dout(10) << "inc now " << anchor << dendl;
-    ino = anchor.dirfrag.ino;
+    ino = anchor.dirino;
     
     if (ino == 0) break;
     if (anchor_map.count(ino) == 0) break;
@@ -93,12 +93,12 @@ void AnchorTable::dec(inodeno_t ino)
       
     if (anchor.nref == 0) {
       dout(10) << "dec removing " << anchor << dendl;
-      dirfrag_t dirfrag = anchor.dirfrag;
+      inodeno_t dirino = anchor.dirino;
       anchor_map.erase(ino);
-      ino = dirfrag.ino;
+      ino = dirino;
     } else {
       dout(10) << "dec now " << anchor << dendl;
-      ino = anchor.dirfrag.ino;
+      ino = anchor.dirino;
     }
     
     if (ino == 0) break;
@@ -127,8 +127,8 @@ void AnchorTable::handle_lookup(MAnchor *req)
     dout(10) << "handle_lookup  adding " << anchor << dendl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
 
-    if (anchor.dirfrag.ino < MDS_INO_BASE) break;
-    curino = anchor.dirfrag.ino;
+    if (anchor.dirino < MDS_INO_BASE) break;
+    curino = anchor.dirino;
   }
 
   // reply
@@ -146,7 +146,7 @@ void AnchorTable::create_prepare(inodeno_t ino, vector<Anchor>& trace, int reqmd
 {
   // make sure trace is in table
   for (unsigned i=0; i<trace.size(); i++) 
-    add(trace[i].ino, trace[i].dirfrag);
+    add(trace[i].ino, trace[i].dirino, trace[i].dn_hash);
   inc(ino);
 
   version++;
@@ -200,7 +200,7 @@ void AnchorTable::commit(version_t atid)
       
       // add new
       for (unsigned i=0; i<trace.size(); i++) 
-	add(trace[i].ino, trace[i].dirfrag);
+	add(trace[i].ino, trace[i].dirino, trace[i].dn_hash);
       inc(ino);
     } else {
       dout(7) << "commit " << atid << " update " << ino << " -- DNE" << dendl;

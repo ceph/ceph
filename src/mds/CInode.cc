@@ -149,7 +149,7 @@ frag_t CInode::pick_dirfrag(const string& dn)
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
 
-  __u32 h = ceph_full_name_hash((const unsigned char *)dn.data(), dn.length());
+  __u32 h = ceph_full_name_hash(dn.data(), dn.length());
   return dirfragtree[h*h];
 }
 
@@ -393,11 +393,8 @@ void CInode::make_path(filepath& fp)
 
 void CInode::make_anchor_trace(vector<Anchor>& trace)
 {
-  if (parent) {
-    parent->dir->inode->make_anchor_trace(trace);
-    trace.push_back(Anchor(ino(), parent->dir->dirfrag()));
-    dout(10) << "make_anchor_trace added " << trace.back() << dendl;
-  }
+  if (parent)
+    parent->make_anchor_trace(trace, this);
   else 
     assert(is_root() || is_stray());
 }

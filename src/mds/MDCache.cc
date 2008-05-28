@@ -4472,15 +4472,15 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     if (in) break;
     i--;
     if (!i) {
-      in = get_inode(anchortrace[i].dirfrag.ino);
+      in = get_inode(anchortrace[i].dirino);
       if (!in) {
-	dout(0) << "open_remote_ino_2 don't have inode " << anchortrace[i].dirfrag.ino << dendl;
-	if (anchortrace[i].dirfrag.ino == MDS_INO_ROOT) {
+	dout(0) << "open_remote_ino_2 don't have dir inode " << anchortrace[i].dirino << dendl;
+	if (anchortrace[i].dirino == MDS_INO_ROOT) {
 	  open_root(onfinish);
 	  return;
 	}
-	if (MDS_INO_IS_STRAY(anchortrace[i].dirfrag.ino)) {
-	  int mds = anchortrace[i].dirfrag.ino % MAX_MDS;
+	if (MDS_INO_IS_STRAY(anchortrace[i].dirino)) {
+	  int mds = anchortrace[i].dirino % MAX_MDS;
 	  open_foreign_stray(mds, onfinish);
 	  return;
 	}
@@ -4500,7 +4500,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   } 
 
   // open dirfrag beneath *in
-  frag_t frag = anchortrace[i].dirfrag.frag;
+  frag_t frag = in->dirfragtree[anchortrace[i].dn_hash];
 
   if (!in->dirfragtree.contains(frag)) {
     dout(10) << "frag " << frag << " not valid, requerying anchortable" << dendl;
@@ -4512,7 +4512,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
   if (!dir && !in->is_auth()) {
     dout(10) << "opening remote dirfrag " << frag << " under " << *in << dendl;
-    /* FIXME: we re-query the anchortable just to avoid a fragtree update race */
+    /* we re-query the anchortable just to avoid a fragtree update race */
     open_remote_dirfrag(in, frag,
 			new C_MDC_RetryOpenRemoteIno(this, ino, mdr, onfinish));
     return;
