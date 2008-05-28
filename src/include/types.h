@@ -314,17 +314,23 @@ struct inode_t {
     ::encode(layout, bl);
     ::encode(rdev, bl);
     ::encode(ctime, bl);
+
     ::encode(mode, bl);
     ::encode(uid, bl);
     ::encode(gid, bl);
+
     ::encode(nlink, bl);
     ::encode(anchored, bl);
+
     ::encode(size, bl);
     ::encode(max_size, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
+    ::encode(time_warp_seq, bl);
+
     ::encode(dirstat, bl);
     ::encode(accounted_dirstat, bl);
+
     ::encode(version, bl);
     ::encode(file_data_version, bl);
   }
@@ -333,17 +339,23 @@ struct inode_t {
     ::decode(layout, p);
     ::decode(rdev, p);
     ::decode(ctime, p);
+
     ::decode(mode, p);
     ::decode(uid, p);
     ::decode(gid, p);
+
     ::decode(nlink, p);
     ::decode(anchored, p);
+
     ::decode(size, p);
     ::decode(max_size, p);
     ::decode(mtime, p);
     ::decode(atime, p);
+    ::decode(time_warp_seq, p);
+    
     ::decode(dirstat, p);
     ::decode(accounted_dirstat, p);
+
     ::decode(version, p);
     ::decode(file_data_version, p);
   }
