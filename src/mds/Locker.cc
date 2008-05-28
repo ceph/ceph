@@ -2714,11 +2714,15 @@ void Locker::scatter_unscatter_autoscattered()
     ScatterLock *lock = autoscattered.front();
     
     // stop?
-    if (lock->get_state() == LOCK_SCATTER &&
+    if (lock->get_parent()->is_auth() &&
+	lock->get_state() == LOCK_SCATTER &&
 	now - lock->get_last_scatter() < 10.0) 
       break;
     
     autoscattered.pop_front();
+
+    if (lock->get_parent()->is_auth())
+      continue;
 
     if (lock->get_state() == LOCK_SCATTER &&
 	lock->get_parent()->is_replicated()) {
