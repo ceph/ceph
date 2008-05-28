@@ -3405,22 +3405,20 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   // prepare nesting, mtime updates
   if (mdr->is_master()) {
-    // sub off target
     int predirty_dir = silent ? 0:PREDIRTY_DIR;
-    if (!linkmerge && destdn->is_primary())
-      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir, PREDIRTY_PRIMARY|predirty_dir, -1,
+
+    // sub off target
+    if (!destdn->is_null())
+      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir,
+				   (destdn->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1,
 				   rollback);
-    if (destdn->dir == srcdn->dir) {
-      // same dir.  don't update nested info or adjust counts.
-      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, predirty_dir, 0, rollback);
-    } else {
-      // different dir.  update nested accounting.
-      int flags = srcdn->is_primary() ? PREDIRTY_PRIMARY:0;
-      flags |= predirty_dir;
-      if (srcdn->is_auth())
-	mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1, rollback);
-      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1, rollback);
-    }
+    
+    // move srcdn
+    int predirty_primary = (srcdn->is_primary() && srcdn->dir != destdn->dir) ? PREDIRTY_PRIMARY:0;
+    int flags = predirty_dir | predirty_primary;
+    if (srcdn->is_auth())
+      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1, rollback);
+    mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1, rollback);
   }
 
   // add it all to the metablob
