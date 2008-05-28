@@ -24,7 +24,7 @@ void ceph_workqueue_shutdown(void);
 
 extern struct ceph_socket *ceph_socket_create(void);
 extern void ceph_socket_get(struct ceph_socket *s);
-extern void ceph_socket_put(struct ceph_socket *s, int die);
+extern void ceph_socket_put(struct ceph_socket *s);
 
 /* Max number of outstanding connections in listener queueu */
 #define NUM_BACKUP 10

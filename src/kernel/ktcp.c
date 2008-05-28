@@ -34,30 +34,35 @@ struct kobj_type ceph_socket_type = {
 struct ceph_socket *ceph_socket_create()
 {
 	struct ceph_socket *s;
-	int err;
-	
+	int err = -ENOMEM;
+
 	s = kzalloc(sizeof(*s), GFP_NOFS);
-	if (!s) {
-		derr(10, "ENOMEM creating ceph_socket\n");
-		return ERR_PTR(-ENOMEM);
-	}
+	if (!s)
+		goto out;
 
 	err = sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP, &s->sock);
-	if (err) {
-		derr(10, "sock_create_kern error %d\n", err);
-		return ERR_PTR(err);
-	}
+	if (err)
+		goto out_free;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
-	kobject_init_and_add(&s->kobj, &ceph_socket_type,
-			     ceph_sockets_kobj,
-			     "socket %p", s);
+	err = kobject_init_and_add(&s->kobj, &ceph_socket_type,
+				   ceph_sockets_kobj,
+				   "socket %p", s);
+	if (err)
+		goto out_release;
 #else
 	kobject_init(&s->kobj);
 	kobject_set_name(&s->kobj, "socket %p", s);
 	s->kobj.ktype = &ceph_socket_type;
 #endif
 	return s;
+
+out_release:
+	sock_release(s->sock);
+out_free:
+	kfree(s);
+out:
+	return ERR_PTR(err);
 }
 
 void ceph_socket_get(struct ceph_socket *s)
@@ -69,13 +74,11 @@ void ceph_socket_get(struct ceph_socket *s)
 	BUG_ON(!r);
 }
 
-void ceph_socket_put(struct ceph_socket *s, int die)
+void ceph_socket_put(struct ceph_socket *s)
 {
 	dout(10, "socket_put %p\n", s);
 	if (!s)
 		return;
-	if (die)
-		ceph_cancel_sock_callbacks(s);
 	kobject_put(&s->kobj);
 }
 
@@ -216,7 +219,8 @@ struct ceph_socket *ceph_tcp_connect(struct ceph_connection *con)
 		/* TBD check for fatal errors, retry if not fatal.. */
 		derr(1, "connect %u.%u.%u.%u:%u error: %d\n",
 		     IPQUADPORT(*(struct sockaddr_in *)paddr), ret);
-		ceph_socket_put(s, 1);
+		ceph_cancel_sock_callbacks(s);
+		ceph_socket_put(s);
 		con->s = 0;
 	}
 
@@ -287,7 +291,7 @@ int ceph_tcp_listen(struct ceph_messenger *msgr)
 	return ret;
 
 err:
-	ceph_socket_put(s, 0);
+	ceph_socket_put(s);
 	return ret;
 }
 
@@ -327,7 +331,7 @@ int ceph_tcp_accept(struct ceph_socket *ls, struct ceph_connection *con)
 	return ret;
 
 err:
-	ceph_socket_put(s, 0);
+	ceph_socket_put(s);
 	con->s = 0;
 	return ret;
 }
