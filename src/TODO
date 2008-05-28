@@ -8,10 +8,6 @@ big items
 - client, user authentication
 - cas
 
-bugs
-- -1 on mds file size recovery
-
-- mon needs to trim history
 - meta vs data crush rules
 - use libuuid
 
@@ -92,6 +88,8 @@ mds mustfix
 - rerun destro trace against latest, with various journal lengths
 
 mds
+- bind lease, cap timeouts to session renew, so that they can be _longer_ than the session renew interval
+
 - lease length heuristics
   - mds lock last_change stamp?
 

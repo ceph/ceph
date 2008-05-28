@@ -131,12 +131,14 @@ public:
   void scatter_try_unscatter(ScatterLock *lock, Context *c);
   void note_autoscattered(ScatterLock *lock);
 
+  bool scatter_lock_fastpath(ScatterLock *lock);  // called by LogSegment::try_to_expire
   void scatter_lock(ScatterLock *lock);  // called by LogSegment::try_to_expire
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void _scatter_replica_lock(ScatterLock *lock, int auth);
   void scatter_sync(ScatterLock *lock);
+  bool scatter_scatter_fastpath(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock);
   void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mut);
