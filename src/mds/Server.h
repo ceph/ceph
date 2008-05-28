@@ -144,7 +144,7 @@ public:
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);
-  bool _verify_rmdir(MDRequest *mdr, CInode *rmdiri);
+  bool _dir_is_nonempty(MDRequest *mdr, CInode *rmdiri);
   void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,

@@ -625,6 +625,11 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	CDir *dir = get_dirfrag(fg);
 	if (is_auth()) {
 	  assert(dir);                // i am auth; i had better have this dir open
+	  if (!(dir->fnode.fragstat == fragstat)) {
+	    dout(10) << " got changed fragstat " << fragstat << " != old " << dir->fnode.fragstat
+		     << ", setting updated flag" << dendl;
+	    dirlock.set_updated();
+	  }
 	  dir->fnode.fragstat = fragstat;
 	} else {
 	  if (dir &&

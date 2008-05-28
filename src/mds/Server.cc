@@ -2571,7 +2571,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (in->is_dir()) {
     if (rmdir) {
       // do empty directory checks
-      if (!_verify_rmdir(mdr, in))
+      if (_dir_is_nonempty(mdr, in))
 	return;
     } else {
       dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << dendl;
@@ -2605,9 +2605,19 @@ void Server::handle_client_unlink(MDRequest *mdr)
   xlocks.insert(&in->linklock);
   if (straydn)
     wrlocks.insert(&straydn->dir->inode->dirlock);
-  
+  if (in->is_dir())
+    rdlocks.insert(&in->dirlock);   // to verify it's empty
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
+
+  if (in->is_dir() &&
+      in->inode.dirstat.size() != 0) {
+    dout(10) << " not empty, dirstat.size() = " << in->inode.dirstat.size()
+	     << " on " << *in << dendl;
+    reply_request(mdr, -ENOTEMPTY);
+    return;
+  }
 
   // yay!
   mdr->done_locking = true;  // avoid wrlock racing
@@ -2848,17 +2858,21 @@ void Server::_unlink_remote_finish(MDRequest *mdr,
 
 
 
-/** _verify_rmdir
+/** _dir_is_not_empty
  *
- * verify that a directory is empty (i.e. we can rmdir it),
- * and make sure it is part of the same subtree (i.e. local)
- * so that rmdir will occur locally.
+ * check if a directory is non-empty (i.e. we can rmdir it), and make
+ * sure it is part of the same subtree (i.e. local) so that rmdir will
+ * occur locally.
  *
- * @param in is the inode being rmdir'd.
+ * this is a fastpath check.  we can't really be sure until we rdlock
+ * the dirlock.
+ *
+ * @param in is the inode being rmdir'd.  return true if it is
+ * definitely not empty.
  */
-bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
+bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 {
-  dout(10) << "_verify_rmdir " << *in << dendl;
+  dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
 
   list<frag_t> frags;
@@ -2870,44 +2884,30 @@ bool Server::_verify_rmdir(MDRequest *mdr, CInode *in)
     CDir *dir = in->get_or_open_dirfrag(mdcache, *p);
     assert(dir);
 
-    // dir looks empty but incomplete?
-    if (dir->is_auth() &&
-	dir->get_size() == 0 && 
-	!dir->is_complete()) {
-      dout(7) << "_verify_rmdir fetching incomplete dir " << *dir << dendl;
-      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
-      return false;
-    }
-    
     // does the frag _look_ empty?
     if (dir->get_size()) {
-      dout(10) << "_verify_rmdir still " << dir->get_size() << " items in frag " << *dir << dendl;
+      dout(10) << "dir_is_nonempty still " << dir->get_size() << " items in frag " << *dir << dendl;
       reply_request(mdr, -ENOTEMPTY);
-      return false;
+      return true;
     }
+
+    // dir looks empty but incomplete?
+    /* actually, screw this, it's cheaper to just rely on dirstat!
+    if (dir->is_auth() && !dir->is_complete()) {
+      dout(7) << "dir_is_nonempty fetching incomplete dir " << *dir << dendl;
+      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
+      return true;
+    }
+    */
     
     // not dir auth?
     if (!dir->is_auth()) {
-      dout(10) << "_verify_rmdir not auth for " << *dir << ", FIXME BUG" << dendl;
-      reply_request(mdr, -ENOTEMPTY);
-      return false;
+      dout(10) << "dir_is_nonempty non-auth dirfrag for " << *dir << dendl;
     }
   }
 
-  return true;
+  return false;
 }
-/*
-      // export sanity check
-      if (!in->is_auth()) {
-        // i should be exporting this now/soon, since the dir is empty.
-        dout(7) << "handle_client_rmdir dir is auth, but not inode." << dendl;
-	mdcache->migrator->export_empty_import(in->dir);          
-        in->dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mds, req, diri));
-        return;
-      }
-*/
-
-
 
 
 // ======================================================
@@ -3022,7 +3022,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     }
 
     // non-empty dir?
-    if (oldin->is_dir() && !_verify_rmdir(mdr, oldin))      
+    if (oldin->is_dir() && _dir_is_nonempty(mdr, oldin))      
       return;
   }
   if (!destdn) {
@@ -3062,11 +3062,25 @@ void Server::handle_client_rename(MDRequest *mdr)
     xlocks.insert(&srcdn->inode->versionlock);
 
   // xlock oldin (for nlink--)
-  if (oldin) xlocks.insert(&oldin->linklock);
+  if (oldin) {
+    xlocks.insert(&oldin->linklock);
+    if (oldin->is_dir())
+      rdlocks.insert(&oldin->dirlock);
+  }
   
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
   
+  if (oldin &&
+      oldin->is_dir() &&
+      oldin->inode.dirstat.size() != 0) {
+    dout(10) << " target inode dir not empty, dirstat.size() = " << oldin->inode.dirstat.size() 
+	     << " on " << *oldin << dendl;
+    reply_request(mdr, -ENOTEMPTY);
+    return;
+  }
+
+
   // set done_locking flag, to avoid problems with wrlock moving auth target
   mdr->done_locking = true;
 

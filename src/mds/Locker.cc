@@ -2438,7 +2438,7 @@ bool Locker::scatter_scatter_fastpath(ScatterLock *lock)
       (!lock->get_parent()->is_replicated() ||  // if sync
        lock->get_state() == LOCK_LOCK ||
        lock->get_state() == LOCK_TEMPSYNC)) {
-    dout(10) << "scatter_scatter_fathpath YES " << *lock
+    dout(10) << "scatter_scatter_fastpath YES " << *lock
 	     << " on " << *lock->get_parent() << dendl;
     // do scatter
     lock->set_last_scatter(g_clock.now());
@@ -2453,7 +2453,7 @@ bool Locker::scatter_scatter_fastpath(ScatterLock *lock)
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
     return true;
   }
-  dout(20) << "scatter_scatter_fathpath NO " << *lock
+  dout(20) << "scatter_scatter_fastpath NO " << *lock
 	   << " on " << *lock->get_parent() << dendl;
   return false;
 }
