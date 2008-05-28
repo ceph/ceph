@@ -2235,7 +2235,7 @@ int Client::_do_lstat(const filepath &path, int mask, Inode **in, int uid, int g
 }
 
 
-int Client::fill_stat(Inode *in, struct stat *st) 
+int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat) 
 {
   dout(10) << "fill_stat on " << in->inode.ino << " mode 0" << oct << in->inode.mode << dec
 	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << dendl;
@@ -2258,26 +2258,30 @@ int Client::fill_stat(Inode *in, struct stat *st)
     st->st_blocks = (in->inode.size + 511) >> 9;
   }
   st->st_blksize = MAX(ceph_file_layout_su(in->inode.layout), 4096);
+
+  if (dirstat)
+    *dirstat = in->inode.dirstat;
+
   return in->lease_mask;
 }
 
 
-int Client::lstat(const char *relpath, struct stat *stbuf)
+int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat)
 {
   Mutex::Locker lock(client_lock);
   tout << "lstat" << std::endl;
   tout << relpath << std::endl;
   filepath path = mkpath(relpath);
-  return _lstat(path, stbuf);
+  return _lstat(path, stbuf, -1, -1, dirstat);
 }
 
-int Client::_lstat(const filepath &path, struct stat *stbuf, int uid, int gid)
+int Client::_lstat(const filepath &path, struct stat *stbuf, int uid, int gid, frag_info_t *dirstat)
 {
   Inode *in = 0;
   int res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in);
   if (res == 0) {
     assert(in);
-    fill_stat(in, stbuf);
+    fill_stat(in, stbuf, dirstat);
     dout(10) << "stat sez size = " << in->inode.size
 	     << " mode = 0" << oct << stbuf->st_mode << dec
 	     << " ino = " << stbuf->st_ino << dendl;

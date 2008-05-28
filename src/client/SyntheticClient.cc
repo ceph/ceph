@@ -1418,11 +1418,19 @@ int SyntheticClient::full_walk(string& basedir)
   if (time_to_stop()) return -1;
 
   list<string> dirq;
+  list<frag_info_t> statq;
   dirq.push_back(basedir);
+  frag_info_t empty;
+  memset(&empty, 0, sizeof(empty));
+  statq.push_back(empty);
 
   while (!dirq.empty()) {
     string dir = dirq.front();
+    frag_info_t expect = statq.front();
     dirq.pop_front();
+    statq.pop_front();
+
+    frag_info_t actual = empty;
 
     // read dir
     list<string> contents;
@@ -1441,11 +1449,17 @@ int SyntheticClient::full_walk(string& basedir)
       string file = dir + "/" + *it;
       
       struct stat st;
-      int r = client->lstat(file.c_str(), &st);
+      frag_info_t dirstat;
+      int r = client->lstat(file.c_str(), &st, &dirstat);
       if (r < 0) {
 	dout(1) << "stat error on " << file << " r=" << r << dendl;
 	continue;
       }
+
+      if (S_ISDIR(st.st_mode))
+	actual.nsubdirs++;
+      else
+	actual.nfiles++;
       
       // print
       char *tm = ctime(&st.st_mtime);
@@ -1471,7 +1485,14 @@ int SyntheticClient::full_walk(string& basedir)
       
       if ((st.st_mode & S_IFMT) == S_IFDIR) {
 	dirq.push_back(file);
+	statq.push_back(dirstat);
       }
+    }
+
+    if (actual.nsubdirs != expect.nsubdirs ||
+	actual.nfiles != expect.nfiles) {
+      dout(0) << dir << ": expected " << expect << dendl;
+      dout(0) << dir << ":      got " << actual << dendl;
     }
   }
 

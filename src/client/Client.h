@@ -712,7 +712,7 @@ protected:
   // find dentry based on filepath
   Dentry *lookup(const filepath& path);
 
-  int fill_stat(Inode *in, struct stat *st);
+  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0);
 
   
   // trace generation
@@ -809,7 +809,7 @@ private:
   int _rmdir(const filepath &path, int uid=-1, int gid=-1);
   int _readlink(const filepath &path, char *buf, off_t size, int uid=-1, int gid=-1);
   int _symlink(const filepath &path, const char *target, int uid=-1, int gid=-1);
-  int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1);
+  int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1, frag_info_t *dirstat=0);
   int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
   int _chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid=-1, int cgid=-1);
   int _getxattr(const filepath &path, const char *name, void *value, size_t len, bool followsym, int uid=-1, int gid=-1);
@@ -869,7 +869,7 @@ public:
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
-  int lstat(const char *path, struct stat *stbuf);
+  int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0);
   int lstatlite(const char *path, struct statlite *buf);
 
   int chmod(const char *path, mode_t mode);
