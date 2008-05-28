@@ -958,6 +958,9 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
   
   assert(dir->get_projected_version() == dir->get_version());
 
+  if (dir->is_complete())
+    dir->verify_fragstat();
+
   // dir 
   dirfrag_t df = dir->dirfrag();
   ::encode(df, exportbl);
@@ -2165,6 +2168,9 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     if (le)
       le->metablob.add_dentry(dn, dn->is_dirty());
   }
+  
+  if (dir->is_complete())
+    dir->verify_fragstat();
   
   dout(7) << "decode_import_dir done " << *dir << dendl;
   return num_imported;

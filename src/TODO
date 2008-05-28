@@ -74,9 +74,6 @@ mds mustfix
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 
-- fix rm -r vs mds exports
-  - use new dir size values in dirstat
-
 - replay of dir fragmentation  (dont want dir frozen, pins, etc.?)
 - rename slave in-memory rollback on failure
 

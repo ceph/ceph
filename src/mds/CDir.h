@@ -446,7 +446,9 @@ public:
   int get_nested_auth_pins() { return nested_auth_pins; }
   void auth_pin();
   void auth_unpin();
+
   void adjust_nested_auth_pins(int inc);
+  void verify_fragstat();
 
   int get_nested_anchors() { return nested_anchors; }
   void adjust_nested_anchors(int by);

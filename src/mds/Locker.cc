@@ -1220,10 +1220,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     EMetaBlob *rollback)
 {
   bool primary_dn = flags & PREDIRTY_PRIMARY;
-  bool do_parent = flags & PREDIRTY_DIR;
+  bool do_parent_mtime = flags & PREDIRTY_DIR;
 
   dout(10) << "predirty_nested"
-	   << (do_parent ? " do_parent_mtime":"")
+	   << (do_parent_mtime ? " do_parent_mtime":"")
 	   << " linkunlink=" <<  linkunlink
 	   << (primary_dn ? " primary_dn":" remote_dn")
 	   << " " << *in << dendl;
@@ -1233,8 +1233,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     parent = in->get_projected_parent_dn()->get_dir();
   }
 
-  if (flags == 0) {
-    dout(10) << " no flags, just adding dir context to blob(s)" << dendl;
+  if (flags == 0 && linkunlink == 0) {
+    dout(10) << " no flags/linkunlink, just adding dir context to blob(s)" << dendl;
     blob->add_dir_context(parent);
     if (rollback)
       rollback->add_dir_context(parent);
@@ -1256,8 +1256,9 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     // opportunistically adjust parent dirfrag
     CInode *pin = parent->get_inode();
 
-    if (do_parent) {
-      assert(mut->wrlocks.count(&pin->dirlock));
+    if (do_parent_mtime || linkunlink) {
+      assert(mut->wrlocks.count(&pin->dirlock) ||
+	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
     }
 
     // inode -> dirfrag
@@ -1266,17 +1267,18 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     fnode_t *pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
 
-    if (do_parent) {
-      dout(10) << "predirty_nested updating mtime/size on " << *parent << dendl;
+    if (do_parent_mtime) {
+      dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
       pf->fragstat.mtime = mut->now;
       if (mut->now > pf->fragstat.rctime)
 	pf->fragstat.rctime = mut->now;
-      if (linkunlink) {
-	if (in->is_dir())
-	  pf->fragstat.nsubdirs += linkunlink;
-	else
-	  pf->fragstat.nfiles += linkunlink;
-      }
+    }
+    if (linkunlink) {
+      dout(10) << "predirty_nested updating size on " << *parent << dendl;
+      if (in->is_dir())
+	pf->fragstat.nsubdirs += linkunlink;
+      else
+	pf->fragstat.nfiles += linkunlink;
     }
     if (primary_dn) {
       if (linkunlink == 0) {
@@ -1352,7 +1354,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     curi = pi;
     parent = cur->get_projected_parent_dn()->get_dir();
     linkunlink = 0;
-    do_parent = false;
+    do_parent_mtime = false;
     primary_dn = true;
   }
 
@@ -2028,8 +2030,9 @@ void Locker::scatter_wrlock_finish(ScatterLock *lock, Mutation *mut)
     mut->wrlocks.erase(lock);
     mut->locks.erase(lock);
   }
-  
-  scatter_eval_gather(lock);
+
+  if (!lock->is_wrlocked())
+    scatter_eval_gather(lock);
 }
 
 
@@ -2395,17 +2398,17 @@ void Locker::scatter_sync(ScatterLock *lock)
     break; // do it.
 
   case LOCK_SCATTER:
-    // lock first.  this is the slow way, incidentally.
-    if (lock->get_parent()->is_replicated()) {
-      send_lock_message(lock, LOCK_AC_LOCK);
-      lock->init_gather();
-    } else {
-      if (!lock->is_wrlocked()) {
-	break; // do it now, we're fine
-      }
-    }
+    if (!lock->get_parent()->is_replicated() &&
+	!lock->is_wrlocked())
+      break; // do it now
+
     lock->set_state(LOCK_GLOCKC);
     lock->get_parent()->auth_pin();
+
+    if (lock->get_parent()->is_replicated()) {
+      lock->init_gather();
+      send_lock_message(lock, LOCK_AC_LOCK);
+    }    
     return;
 
   default:
@@ -2561,12 +2564,14 @@ void Locker::scatter_tempsync(ScatterLock *lock)
       break; // do it.
     }
     
-    if (lock->get_parent()->is_replicated()) {
-      send_lock_message(lock, LOCK_AC_LOCK);
-      lock->init_gather();
-    }
     lock->set_state(LOCK_GTEMPSYNCC);
     lock->get_parent()->auth_pin();
+
+    if (lock->get_parent()->is_replicated()) {
+      lock->init_gather();
+      send_lock_message(lock, LOCK_AC_LOCK);
+    }
+
     return;
 
   case LOCK_TEMPSYNC:

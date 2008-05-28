@@ -79,6 +79,9 @@ struct Mutation {
   LogSegment *ls;  // the log segment i'm committing to
   utime_t now;
 
+  // flag mutation as slave
+  int slave_to_mds;                // this is a slave request if >= 0.
+
   // -- my pins and locks --
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
@@ -107,10 +110,15 @@ struct Mutation {
 
   Mutation() : ls(0),
 	       done_locking(false), committing(false), aborted(false) {}
-  Mutation(metareqid_t ri) : reqid(ri),
-			     ls(0),
-			     done_locking(false), committing(false), aborted(false) {}
+  Mutation(metareqid_t ri, int slave_to=-1) : 
+    reqid(ri),
+    ls(0),
+    slave_to_mds(slave_to), 
+    done_locking(false), committing(false), aborted(false) {}
   virtual ~Mutation() {}
+
+  bool is_master() { return slave_to_mds < 0; }
+  bool is_slave() { return slave_to_mds >= 0; }
 
   // pin items in cache
   void pin(MDSCacheObject *o) {
@@ -214,7 +222,6 @@ struct MDRequest : public Mutation {
 
   // -- i am a slave request
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
-  int slave_to_mds;                // this is a slave request if >= 0.
 
 
   // break rarely-used fields into a separately allocated structure 
@@ -252,25 +259,22 @@ struct MDRequest : public Mutation {
   // ---------------------------------------------------
   MDRequest() : 
     session(0), client_request(0), ref(0), 
-    slave_request(0), slave_to_mds(-1), 
+    slave_request(0),
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
     session(0), client_request(req), ref(0), 
-    slave_request(0), slave_to_mds(-1), 
+    slave_request(0),
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
-    Mutation(ri),
+    Mutation(ri, by),
     session(0), client_request(0), ref(0),
-    slave_request(0), slave_to_mds(by), 
+    slave_request(0),
     _more(0) {}
   ~MDRequest() {
     delete _more;
   }
   
-  bool is_master() { return slave_to_mds < 0; }
-  bool is_slave() { return slave_to_mds >= 0; }
-
   More* more() { 
     if (!_more) _more = new More();
     return _more;

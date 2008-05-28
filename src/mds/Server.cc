@@ -629,6 +629,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   dout(20) << " trace added " << lmask << " " << *dn << dendl;
   
   // dir
+  if (dn->get_dir()->is_complete())
+    dn->get_dir()->verify_fragstat();
   DirStat::encode(bl, dn->get_dir(), whoami);
   dout(20) << " trace added " << *dn->get_dir() << dendl;
 
@@ -1846,6 +1848,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
     return;
   }
 
+  dir->verify_fragstat();
+
   mdr->now = g_clock.real_now();
 
   // build dir contents
@@ -3033,20 +3037,31 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   dout(10) << " destdn " << *destdn << dendl;
 
+  bool linkmerge = (srcdn->inode == destdn->inode &&
+		    (srcdn->is_primary() || destdn->is_primary()));
+  if (linkmerge)
+    dout(10) << " this is a link merge" << dendl;
+
+  // -- create stray dentry? --
+  CDentry *straydn = 0;
+  if (destdn->is_primary() && !linkmerge) {
+    straydn = mdcache->get_or_create_stray_dentry(destdn->inode);
+    mdr->pin(straydn);
+    dout(10) << "straydn is " << *straydn << dendl;
+  }
+
   // -- locks --
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  // straydn?
+  if (straydn)
+    wrlocks.insert(&straydn->dir->inode->dirlock);
 
   // rdlock sourcedir path, xlock src dentry
   for (int i=0; i<(int)srctrace.size()-1; i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
-
-  /*
-   * no, this causes problems if the dftlock is scattered...
-   *  and what was i thinking anyway? 
-   * rdlocks.insert(&srcdn->dir->inode->dirfragtreelock);  // rd lock on srci dirfragtree.
-   */
 
   // rdlock destdir path, xlock dest dentry
   for (int i=0; i<(int)desttrace.size(); i++)
@@ -3110,17 +3125,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   // -- declare now --
   if (mdr->now == utime_t())
     mdr->now = g_clock.real_now();
-
-  bool linkmerge = (srcdn->inode == destdn->inode &&
-		    (srcdn->is_primary() || destdn->is_primary()));
-
-  // -- create stray dentry? --
-  CDentry *straydn = 0;
-  if (destdn->is_primary() && !linkmerge) {
-    straydn = mdcache->get_or_create_stray_dentry(destdn->inode);
-    mdr->pin(straydn);
-    dout(10) << "straydn is " << *straydn << dendl;
-  }
 
   // -- prepare witnesses --
   /*
@@ -3404,22 +3408,21 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   // prepare nesting, mtime updates
-  if (mdr->is_master()) {
-    int predirty_dir = silent ? 0:PREDIRTY_DIR;
-
-    // sub off target
-    if (!destdn->is_null())
-      mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir,
-				   (destdn->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1,
-				   rollback);
-    
-    // move srcdn
-    int predirty_primary = (srcdn->is_primary() && srcdn->dir != destdn->dir) ? PREDIRTY_PRIMARY:0;
-    int flags = predirty_dir | predirty_primary;
-    if (srcdn->is_auth())
-      mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1, rollback);
+  int predirty_dir = silent ? 0:PREDIRTY_DIR;
+  
+  // sub off target
+  if (destdn->is_auth() && !destdn->is_null())
+    mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir,
+				 (destdn->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1,
+				 rollback);
+  
+  // move srcdn
+  int predirty_primary = (srcdn->is_primary() && srcdn->dir != destdn->dir) ? PREDIRTY_PRIMARY:0;
+  int flags = predirty_dir | predirty_primary;
+  if (srcdn->is_auth())
+    mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1, rollback);
+  if (destdn->is_auth())
     mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1, rollback);
-  }
 
   // add it all to the metablob
   // target inode

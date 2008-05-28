@@ -4017,6 +4017,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     }
     assert(curdir);
 
+    // HACK
+    if (curdir->is_complete())
+      curdir->verify_fragstat();
+
     // frozen?
     /*
     if (curdir->is_frozen()) {

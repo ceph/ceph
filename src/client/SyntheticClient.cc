@@ -1489,8 +1489,9 @@ int SyntheticClient::full_walk(string& basedir)
       }
     }
 
-    if (actual.nsubdirs != expect.nsubdirs ||
-	actual.nfiles != expect.nfiles) {
+    if (dir != "" &&
+	(actual.nsubdirs != expect.nsubdirs ||
+	 actual.nfiles != expect.nfiles)) {
       dout(0) << dir << ": expected " << expect << dendl;
       dout(0) << dir << ":      got " << actual << dendl;
     }
@@ -2857,6 +2858,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 
   if (time_to_stop()) return 0;
 
+  srand(0);
   if (1) {
     for (int k=0; k<n; k++) {
       

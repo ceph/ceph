@@ -1583,6 +1583,49 @@ void CDir::adjust_nested_anchors(int by)
   inode->adjust_nested_anchors(by);
 }
 
+void CDir::verify_fragstat()
+{
+  assert(is_complete());
+  if (inode->is_stray())
+    return;
+
+  frag_info_t c;
+  memset(&c, 0, sizeof(c));
+
+  for (map_t::iterator it = items.begin();
+       it != items.end();
+       it++) {
+    CDentry *dn = it->second;
+    if (dn->is_null())
+      continue;
+    
+    dout(10) << " " << *dn << dendl;
+    if (dn->is_primary())
+      dout(10) << "     " << *dn->inode << dendl;
+
+    if (dn->is_primary()) {
+      if (dn->inode->is_dir())
+	c.nsubdirs++;
+      else
+	c.nfiles++;
+    }
+    if (dn->is_remote()) {
+      if (dn->get_remote_d_type() == (S_IFDIR >> 12))
+	c.nsubdirs++;
+      else
+	c.nfiles++;
+    }
+  }
+
+  if (c.nsubdirs != fnode.fragstat.nsubdirs ||
+      c.nfiles != fnode.fragstat.nfiles) {
+    dout(0) << "verify_fragstat failed " << fnode.fragstat << " on " << *this << dendl;
+    dout(0) << "               i count " << c << dendl;
+    assert(0);
+  } else {
+    dout(0) << "verify_fragstat ok " << fnode.fragstat << " on " << *this << dendl;
+  }
+}
 
 /*****************************************************************************
  * FREEZING
