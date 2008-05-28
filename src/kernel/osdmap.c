@@ -526,29 +526,34 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 			      struct ceph_object *oid,
 			      __u64 *oxoff, __u64 *oxlen)
 {
-	unsigned su, stripeno, stripepos, objsetno;
-	unsigned su_per_object;
-	unsigned stripe_len = layout->fl_stripe_count * layout->fl_stripe_unit;
-	unsigned first_oxlen;
-	loff_t t;
+	u32 osize = le32_to_cpu(layout->fl_object_size);
+	u32 su = le32_to_cpu(layout->fl_stripe_unit);
+	u32 sc = le32_to_cpu(layout->fl_stripe_count);
+	u32 stripe_len = layout->fl_stripe_count * layout->fl_stripe_unit;
+	u32 bl, stripeno, stripepos, objsetno;
+	u32 su_per_object;
+	u32 first_oxlen;
+	u64 t;
 
-	/*su_per_object = layout->fl_object_size / layout->fl_stripe_unit; */
-	su_per_object = le32_to_cpu(layout->fl_object_size);
-	do_div(su_per_object, le32_to_cpu(layout->fl_stripe_unit));
+	dout(80, "mapping %llu~%llu  osize %u fl_su %u\n", *off, *len,
+	     osize, su);
+	su_per_object = osize / layout->fl_stripe_unit;
+	dout(80, "osize %u / su %u = su_per_object %u\n", osize, su,
+	     su_per_object);
 
-	BUG_ON((le32_to_cpu(layout->fl_stripe_unit) & ~PAGE_MASK) != 0);
-	/* su = *off / layout->fl_stripe_unit; */
-	su = *off;
-	do_div(su, le32_to_cpu(layout->fl_stripe_unit));
-	/* stripeno = su / layout->fl_stripe_count;
-	   stripepos = su % layout->fl_stripe_count; */
-	stripeno = su;
-	stripepos = do_div(stripeno, le32_to_cpu(layout->fl_stripe_count));
-	/* objsetno = stripeno / su_per_object; */
-	objsetno = stripeno;
-	do_div(objsetno, su_per_object);
+	BUG_ON((su & ~PAGE_MASK) != 0);
+	/* bl = *off / su; */
+	t = *off;
+	do_div(t, su);
+	bl = t;
+	dout(80, "off %llu / su %u = bl %u\n", *off, su, bl);
+	
+	stripeno = bl / sc;
+	stripepos = bl % sc;
+	objsetno = stripeno / su_per_object;
 
-	oid->bno = objsetno * le32_to_cpu(layout->fl_stripe_count) + stripepos;
+	oid->bno = objsetno * sc + stripepos;
+	dout(80, "objset %u * sc %u = bno %u\n", objsetno, sc, oid->bno);
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = *off;
 	*oxoff = do_div(t, le32_to_cpu(layout->fl_stripe_unit));
@@ -557,14 +562,14 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 
 	/* multiple stripe units across this object? */
 	t = *len;
-	while (t > stripe_len && *oxoff + *oxlen < 
-	       le32_to_cpu(layout->fl_object_size)) {
-		*oxlen += min_t(loff_t, le32_to_cpu(layout->fl_stripe_unit), t);
+	while (t > stripe_len && *oxoff + *oxlen < osize) {
+		*oxlen += min_t(loff_t, su, t);
 		t -= stripe_len;
 	}
 
 	*off += first_oxlen;
 	*len -= *oxlen;
+	dout(80, " obj extent %llu~%llu\n", *off, *len);
 }
 
 /*
