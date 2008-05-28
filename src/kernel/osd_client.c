@@ -288,7 +288,7 @@ more_locked:
 		get_request(req);
 		spin_unlock(&osdc->request_lock);
 		req->r_request = ceph_msg_maybe_dup(req->r_request);
-		if (req->r_aborted) {
+		if (!req->r_aborted) {
 			req->r_flags |= CEPH_OSD_OP_RETRY;
 			send_request(osdc, req, osd);
 		}
