@@ -2303,7 +2303,7 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   }
   dout(10) << " targeti auth has prepared nlink++" << dendl;
 
-  assert(0);  // test hack: verify that remote slave can do a live rollback.
+  //assert(0);  // test hack: verify that remote slave can do a live rollback.
 
   // go.
   // predirty dentry
@@ -2375,6 +2375,8 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   mdr->now = mdr->slave_request->now;
 
   mdr->auth_pin(targeti);
+
+  //assert(0);  // test hack: make sure master can handle a slave that fails to prepare...
 
   // anchor?
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {

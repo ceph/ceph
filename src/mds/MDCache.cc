@@ -1734,13 +1734,13 @@ void MDCache::rejoin_send_rejoins()
 
   if (!mds->is_rejoin()) {
     // i am survivor.  send strong rejoin.
-    // note request authpins, xlocks
+    // note request remote_auth_pins, xlocks
     for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
       // auth pins
-      for (set<MDSCacheObject*>::iterator q = p->second->auth_pins.begin();
-	   q != p->second->auth_pins.end();
+      for (set<MDSCacheObject*>::iterator q = p->second->remote_auth_pins.begin();
+	   q != p->second->remote_auth_pins.end();
 	   ++q) {
 	if (!(*q)->is_auth()) {
 	  int who = (*q)->authority().first;
