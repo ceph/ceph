@@ -139,6 +139,7 @@ struct InodeStat {
     max_size = e.max_size;
     rdev = e.rdev;
 
+    memset(&dirstat, 0, sizeof(dirstat));
     dirstat.nfiles = e.files;
     dirstat.nsubdirs = e.subdirs;
     dirstat.rctime.decode_timeval(&e.rctime);

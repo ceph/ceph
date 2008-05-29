@@ -148,6 +148,9 @@ class CInode : public MDSCacheObject {
     else
       return projected_inode.back()->version;
   }
+  bool is_projected() {
+    return !projected_inode.empty();
+  }
 
   inode_t *get_projected_inode() { 
     if (projected_inode.empty())

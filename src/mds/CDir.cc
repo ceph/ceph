@@ -53,13 +53,17 @@ ostream& operator<<(ostream& out, CDir& dir)
     if (dir.is_replicated())
       out << dir.get_replicas();
 
-    out << " pv=" << dir.get_projected_version();
+    if (dir.is_projected())
+      out << " pv=" << dir.get_projected_version();
     out << " v=" << dir.get_version();
     out << " cv=" << dir.get_committing_version();
     out << "/" << dir.get_committed_version();
     out << "/" << dir.get_committed_version_equivalent();
   } else {
-    out << " rep@" << dir.authority();
+    pair<int,int> a = dir.authority();
+    out << " rep@" << a.first;
+    if (a.second != CDIR_AUTH_UNKNOWN)
+      out << "," << a.second;
     if (dir.get_replica_nonce() > 1)
       out << "." << dir.get_replica_nonce();
   }
@@ -88,12 +92,16 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
+  //out << " " << dir.fnode.fragstat;
   out << " s=" << dir.fnode.fragstat.size() 
       << "=" << dir.fnode.fragstat.nfiles
       << "+" << dir.fnode.fragstat.nsubdirs;
-  out << " rb=" << dir.fnode.fragstat.rbytes << "/" << dir.fnode.accounted_fragstat.rbytes;
-  out << " rf=" << dir.fnode.fragstat.rfiles << "/" << dir.fnode.accounted_fragstat.rfiles;
-  out << " rd=" << dir.fnode.fragstat.rsubdirs << "/" << dir.fnode.accounted_fragstat.rsubdirs;
+  out << " rb=" << dir.fnode.fragstat.rbytes;
+  if (dir.is_projected()) out << "/" << dir.fnode.accounted_fragstat.rbytes;
+  out << " rf=" << dir.fnode.fragstat.rfiles;
+  if (dir.is_projected()) out << "/" << dir.fnode.accounted_fragstat.rfiles;
+  out << " rd=" << dir.fnode.fragstat.rsubdirs;
+  if (dir.is_projected()) out << "/" << dir.fnode.accounted_fragstat.rsubdirs;
 
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
   if (dir.get_num_dirty())
@@ -1583,6 +1591,7 @@ void CDir::adjust_nested_anchors(int by)
   inode->adjust_nested_anchors(by);
 }
 
+#ifdef MDS_VERIFY_FRAGSTAT
 void CDir::verify_fragstat()
 {
   assert(is_complete());
@@ -1626,6 +1635,7 @@ void CDir::verify_fragstat()
     dout(0) << "verify_fragstat ok " << fnode.fragstat << " on " << *this << dendl;
   }
 }
+#endif
 
 /*****************************************************************************
  * FREEZING

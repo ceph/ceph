@@ -234,6 +234,7 @@ struct frag_info_t {
   }
 
   void encode(bufferlist &bl) const {
+    ::encode(version, bl);
     ::encode(mtime, bl);
     ::encode(nfiles, bl);
     ::encode(nsubdirs, bl);
@@ -244,6 +245,7 @@ struct frag_info_t {
     ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
     ::decode(mtime, bl);
     ::decode(nfiles, bl);
     ::decode(nsubdirs, bl);

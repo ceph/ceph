@@ -86,6 +86,8 @@ mds mustfix
 mds
 - bind lease, cap timeouts to session renew, so that they can be _longer_ than the session renew interval
 
+- can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
+
 - lease length heuristics
   - mds lock last_change stamp?
 

@@ -629,8 +629,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   dout(20) << " trace added " << lmask << " " << *dn << dendl;
   
   // dir
+#ifdef MDS_VERIFY_FRAGSTAT
   if (dn->get_dir()->is_complete())
     dn->get_dir()->verify_fragstat();
+#endif
+
   DirStat::encode(bl, dn->get_dir(), whoami);
   dout(20) << " trace added " << *dn->get_dir() << dendl;
 
@@ -1848,7 +1851,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
     return;
   }
 
+#ifdef MDS_VERIFY_FRAGSTAT
   dir->verify_fragstat();
+#endif
 
   mdr->now = g_clock.real_now();
 

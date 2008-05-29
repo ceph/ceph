@@ -20,7 +20,7 @@ using namespace std;
 #include "include/xlist.h"
 
 #define MDS_REF_SET    // define me for improved debug output, sanity checking
-
+//#define MDS_VERIFY_FRAGSTAT    // do do (slow) sanity checking on frags
 
 #define MDS_PORT_CACHE   0x200
 #define MDS_PORT_LOCKER  0x300
