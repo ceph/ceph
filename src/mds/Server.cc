@@ -2760,7 +2760,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     // remote link.  update remote inode.
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, 0, PREDIRTY_PRIMARY);
-    le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode);
+    le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode, pi);
   }
 
   // the unlinked dentry
