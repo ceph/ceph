@@ -1223,6 +1223,8 @@ void MDCache::handle_mds_recovery(int who)
     }
   }
 
+  kick_discovers(who);
+
   // queue them up.
   mds->queue_waiters(waiters);
 }
