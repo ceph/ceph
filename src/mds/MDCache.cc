@@ -1411,9 +1411,9 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       // perform rollback (and journal a rollback entry)
       // note: this will hold up the resolve a bit, until the rollback entries journal.
       if (uncommitted_slave_updates[from][*p]->origop == ESlaveUpdate::LINK)
-	mds->server->do_link_rollback(uncommitted_slave_updates[from][*p]->rollback, 0);
+	mds->server->do_link_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
       else if (uncommitted_slave_updates[from][*p]->origop == ESlaveUpdate::RENAME)  
-	mds->server->do_rename_rollback(uncommitted_slave_updates[from][*p]->rollback, 0);    
+	mds->server->do_rename_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);    
       else
 	assert(0);
 
@@ -2446,6 +2446,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        ++p) {
     CInode *in = get_inode(p->inode.ino);
     if (!in) continue;
+    if (in->parent && in->inode.anchored != p->inode.anchored)
+      in->parent->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
     in->inode = p->inode;
     in->symlink = p->symlink;
     in->dirfragtree = p->dirfragtree;
@@ -2522,6 +2524,8 @@ void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
     set<CInode*>::iterator q = rejoin_undef_inodes.find(in);
     if (q != rejoin_undef_inodes.end()) {
       CInode *in = *q;
+      if (in->parent && in->inode.anchored != p->inode.anchored)
+	in->parent->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
       in->inode = p->inode;
       in->symlink = p->symlink;
       in->dirfragtree = p->dirfragtree;

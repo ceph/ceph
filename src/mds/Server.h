@@ -143,7 +143,7 @@ public:
   void _logged_slave_link(MDRequest *mdr, CInode *targeti);
   void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti);
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
-  void do_link_rollback(bufferlist &rbl, MDRequest *mdr);
+  void do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr);
   void _do_link_rollback_finish(Mutation *mut, MDRequest *mdr);
 
   // unlink
@@ -178,7 +178,7 @@ public:
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void do_rename_rollback(bufferlist &rbl, MDRequest *mdr);
+  void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr);
 
 };
 

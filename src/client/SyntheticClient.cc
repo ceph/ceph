@@ -2860,9 +2860,10 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 
   srand(0);
   if (1) {
+    bool renames = false; // thrash renames too?
     for (int k=0; k<n; k++) {
       
-      if (rand() % 10 == 0) {
+      if (renames && rand() % 10 == 0) {
 	// rename some directories.  whee!
 	int dep = (rand() % depth) + 1;
 	string src = basedir;
@@ -2921,7 +2922,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       switch (o) {
       case 0: 
 	client->mknod(src.c_str(), 0755); 
-	client->rename(src.c_str(), dst.c_str()); 
+	if (renames) client->rename(src.c_str(), dst.c_str()); 
 	break;
       case 1: 
 	client->mknod(src.c_str(), 0755); 

@@ -2303,6 +2303,8 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   }
   dout(10) << " targeti auth has prepared nlink++" << dendl;
 
+  assert(0);  // test hack: verify that remote slave can do a live rollback.
+
   // go.
   // predirty dentry
   dn->pre_dirty();
@@ -2475,7 +2477,7 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
     mdlog->submit_entry(le);
     mds->mdcache->request_finish(mdr);
   } else {
-    do_link_rollback(mdr->more()->rollback_bl, mdr);
+    do_link_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
   }
 }
 
@@ -2489,7 +2491,7 @@ struct C_MDS_LoggedLinkRollback : public Context {
   }
 };
 
-void Server::do_link_rollback(bufferlist &rbl, MDRequest *mdr)
+void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 {
   link_rollback rollback;
   bufferlist::iterator p = rbl.begin();
@@ -2528,7 +2530,7 @@ void Server::do_link_rollback(bufferlist &rbl, MDRequest *mdr)
   else
     pi->nlink++;
 
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, -1,
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::LINK);
   le->commit.add_dir_context(parent);
   le->commit.add_dir(parent, true);
@@ -3229,6 +3231,9 @@ void Server::handle_client_rename(MDRequest *mdr)
     _rename_prepare_witness(mdr, last, srcdn, destdn, straydn);
     return;
   }
+
+  // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
+  //if (!mdr->more()->slaves.empty()) assert(0); 
   
   // -- prepare anchor updates -- 
   if (!linkmerge || srcdn->is_primary()) {
@@ -3879,7 +3884,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
   } else {
     // abort
-    do_rename_rollback(mdr->more()->rollback_bl, mdr);
+    do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
 
     // rollback export.  readjust subtree map, if it was a dir.
     assert(0); // write me
@@ -3890,13 +3895,13 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
   mds->mdcache->request_finish(mdr);
 }
 
-void Server::do_rename_rollback(bufferlist &rbl, MDRequest *mdr)
+void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 {
   rename_rollback rollback;
   bufferlist::iterator p = rbl.begin();
   ::decode(rollback, p);
 
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_abort", rollback.reqid, -1,
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_abort", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RENAME);
 
 

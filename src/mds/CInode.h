@@ -508,6 +508,7 @@ public:
   void auth_unpin();
 
   void adjust_nested_anchors(int by);
+  int get_nested_anchors() { return nested_anchors; }
 
   // -- freeze --
   bool is_freezing_inode() { return state_test(STATE_FREEZING); }

@@ -346,12 +346,16 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
+	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
+	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
 	in->inode = p->inode;
 	in->dirfragtree = p->dirfragtree;
 	in->xattrs = p->xattrs;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_inode() != in) {
+	  if (!dn->is_null())  // note: might be remote.  as with stray reintegration.
+	    dir->unlink_inode(dn);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
@@ -460,7 +464,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p)
-    mds->sessionmap.add_completed_request(*p);
+    if (p->name.is_client())
+      mds->sessionmap.add_completed_request(*p);
 
 
   // update segment
@@ -487,7 +492,7 @@ void ESession::replay(MDS *mds)
 
   } else {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version
-	     << " < " << cmapv << dendl;
+	     << " < " << cmapv << " " << (open ? "open":"close") << dendl;
     mds->sessionmap.projected = ++mds->sessionmap.version;
     assert(mds->sessionmap.version == cmapv);
     if (open) {

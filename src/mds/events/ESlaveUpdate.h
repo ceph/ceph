@@ -132,7 +132,7 @@ public:
   void print(ostream& out) {
     if (type.length())
       out << type << " ";
-    out << " " << op;
+    out << " " << (int)op;
     if (origop == LINK) out << " link";
     if (origop == RENAME) out << " rename";
     out << " " << reqid;

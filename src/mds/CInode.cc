@@ -73,6 +73,9 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  if (in.get_nested_anchors())
+    out << " na=" << in.get_nested_anchors();
+
   if (in.inode.is_dir()) {
     out << " ds=" << in.inode.dirstat.size() << "=" 
 	<< in.inode.dirstat.nfiles << "+" << in.inode.dirstat.nsubdirs;
@@ -596,7 +599,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     {
       bool was_anchored = inode.anchored;
       ::decode(inode.anchored, p);
-      if (was_anchored != inode.anchored)
+      if (parent && was_anchored != inode.anchored)
 	parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
     }
     break;
