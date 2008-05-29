@@ -1079,13 +1079,15 @@ void MDCache::send_resolve_now(int who)
     }
   }
   // [resolving]
-  if (uncommitted_slave_updates.count(who)) {
+  if (uncommitted_slave_updates.count(who) &&
+      !uncommitted_slave_updates[who].empty()) {
     for (map<metareqid_t, MDSlaveUpdate*>::iterator p = uncommitted_slave_updates[who].begin();
 	 p != uncommitted_slave_updates[who].end();
 	 ++p) {
       dout(10) << " including uncommitted " << p->first << dendl;
       m->add_slave_request(p->first);
     }
+    dout(10) << " will need resolve ack from mds" << who << dendl;
     need_resolve_ack.insert(who);
   }
 
@@ -1246,7 +1248,6 @@ void MDCache::handle_resolve(MMDSResolve *m)
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
     MMDSResolveAck *ack = new MMDSResolveAck;
-
     for (list<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
@@ -1260,7 +1261,6 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	ack->add_abort(*p);      
       }
     }
-
     mds->send_message_mds(ack, from);
   }
 

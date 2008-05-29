@@ -1424,6 +1424,9 @@ int SyntheticClient::full_walk(string& basedir)
   memset(&empty, 0, sizeof(empty));
   statq.push_back(empty);
 
+  hash_map<inodeno_t, int> nlink;
+  hash_map<inodeno_t, int> nlink_seen;
+
   while (!dirq.empty()) {
     string dir = dirq.front();
     frag_info_t expect = statq.front();
@@ -1455,6 +1458,9 @@ int SyntheticClient::full_walk(string& basedir)
 	dout(1) << "stat error on " << file << " r=" << r << dendl;
 	continue;
       }
+
+      nlink_seen[st.st_ino]++;
+      nlink[st.st_ino] = st.st_nlink;
 
       if (S_ISDIR(st.st_mode))
 	actual.nsubdirs++;
@@ -1495,6 +1501,11 @@ int SyntheticClient::full_walk(string& basedir)
       dout(0) << dir << ": expected " << expect << dendl;
       dout(0) << dir << ":      got " << actual << dendl;
     }
+  }
+
+  for (hash_map<inodeno_t,int>::iterator p = nlink.begin(); p != nlink.end(); p++) {
+    if (nlink_seen[p->first] != p->second)
+      dout(0) << p->first << " nlink " << p->second << " != " << nlink_seen[p->first] << "seen" << dendl;
   }
 
   return 0;
