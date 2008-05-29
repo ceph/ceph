@@ -248,6 +248,7 @@ struct MDRequest : public Mutation {
     
     // called when slave commits or aborts
     Context *slave_commit;
+    bufferlist rollback_bl;
 
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
@@ -295,15 +296,15 @@ struct MDRequest : public Mutation {
 
 
 struct MDSlaveUpdate {
-  EMetaBlob commit;
-  EMetaBlob rollback;
+  int origop;
+  bufferlist rollback;
   xlist<MDSlaveUpdate*>::item xlistitem;
   Context *waiter;
-  MDSlaveUpdate() : xlistitem(this), waiter(0) {}
-  MDSlaveUpdate(EMetaBlob c, EMetaBlob r, xlist<MDSlaveUpdate*> &list) :
-    commit(c), rollback(r),
+  MDSlaveUpdate(int oo, bufferlist &rbl, xlist<MDSlaveUpdate*> &list) :
+    origop(oo),
     xlistitem(this),
     waiter(0) {
+    rollback.claim(rbl);
     list.push_back(&xlistitem);
   }
   ~MDSlaveUpdate() {
@@ -471,6 +472,7 @@ protected:
   set<int> wants_resolve;   // nodes i need to send my resolve to
   set<int> got_resolve;     // nodes i got resolves from
   set<int> need_resolve_ack;   // nodes i need a resolve_ack from
+  set<metareqid_t> need_resolve_rollback;  // rollbacks i'm writing to the journal
   
   void handle_resolve(MMDSResolve *m);
   void handle_resolve_ack(MMDSResolveAck *m);
@@ -478,6 +480,15 @@ protected:
   void disambiguate_imports();
   void recalc_auth_bits();
 public:
+  void add_rollback(metareqid_t reqid) {
+    need_resolve_rollback.insert(reqid);
+  }
+  void finish_rollback(metareqid_t reqid) {
+    need_resolve_rollback.erase(reqid);
+    if (need_resolve_rollback.empty())
+      maybe_resolve_finish();
+  }
+
   // ambiguous imports
   void add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds);
   void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);

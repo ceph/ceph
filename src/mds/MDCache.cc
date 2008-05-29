@@ -1361,8 +1361,10 @@ void MDCache::maybe_resolve_finish()
   } 
   else if (!need_resolve_ack.empty()) {
     dout(10) << "maybe_resolve_finish still waiting for resolve_ack from (" << need_resolve_ack << ")" << dendl;
-  } 
-  else {
+  }
+  else if (!need_resolve_rollback.empty()) {
+    dout(10) << "maybe_resolve_finish still waiting for rollback to commit on (" << need_resolve_rollback << ")" << dendl;
+  } else {
     dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
     disambiguate_imports();
     if (mds->is_resolve()) {
@@ -1386,11 +1388,11 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     if (mds->is_resolve()) {
       // replay
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p]->commit.replay(mds);
+      // log commit
+      mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from,
+						ESlaveUpdate::OP_COMMIT, uncommitted_slave_updates[from][*p]->origop));
       delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
-      // log commit
-      mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_COMMIT));
     } else {
       MDRequest *mdr = request_get(*p);
       assert(mdr->slave_request == 0);  // shouldn't be doing anything!
@@ -1405,21 +1407,31 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
     if (mds->is_resolve()) {
       assert(uncommitted_slave_updates[from].count(*p));
-      uncommitted_slave_updates[from][*p]->rollback.replay(mds);
+
+      // perform rollback (and journal a rollback entry)
+      // note: this will hold up the resolve a bit, until the rollback entries journal.
+      if (uncommitted_slave_updates[from][*p]->origop == ESlaveUpdate::LINK)
+	mds->server->do_link_rollback(uncommitted_slave_updates[from][*p]->rollback, 0);
+      else if (uncommitted_slave_updates[from][*p]->origop == ESlaveUpdate::RENAME)  
+	mds->server->do_rename_rollback(uncommitted_slave_updates[from][*p]->rollback, 0);    
+      else
+	assert(0);
+
       delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
-      mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from, ESlaveUpdate::OP_ROLLBACK));
     } else {
       MDRequest *mdr = request_get(*p);
       if (mdr->more()->slave_commit) {
-	mdr->more()->slave_commit->finish(-1);
-	delete mdr->more()->slave_commit;
+	Context *fin = mdr->more()->slave_commit;
 	mdr->more()->slave_commit = 0;
+	fin->finish(-1);
+	delete fin;
+      } else {
+	if (mdr->slave_request) 
+	  mdr->aborted = true;
+	else
+	  request_finish(mdr);
       }
-      if (mdr->slave_request) 
-	mdr->aborted = true;
-      else
-	request_finish(mdr);
     }
   }
 
@@ -4617,9 +4629,11 @@ void MDCache::request_finish(MDRequest *mdr)
 
   // slave finisher?
   if (mdr->more()->slave_commit) {
-    mdr->more()->slave_commit->finish(0);
-    delete mdr->more()->slave_commit;
+    Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
+    fin->finish(0);   // this must re-call request_finish.
+    delete fin;
+    return; 
   }
 
   if (mdr->client_request && mds->logger) {

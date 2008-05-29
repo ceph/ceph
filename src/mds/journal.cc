@@ -629,40 +629,36 @@ void ESlaveUpdate::replay(MDS *mds)
 {
   switch (op) {
   case ESlaveUpdate::OP_PREPARE:
-    // FIXME: horribly inefficient copy; EMetaBlob needs a swap() or something
     dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds" << master 
-	     << ": saving blobs for later commit" << dendl;
+	     << ": applying commit, saving rollback info" << dendl;
     assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid) == 0);
-    commit._segment = _segment;  // may need this later
-    rollback._segment = _segment;  // may need this later
+    commit.replay(mds, _segment);
     mds->mdcache->uncommitted_slave_updates[master][reqid] = 
-      new MDSlaveUpdate(commit, rollback, _segment->slave_updates);
+      new MDSlaveUpdate(origop, rollback, _segment->slave_updates);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
-      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master
-	       << ": applying commit blob" << dendl;
-      mds->mdcache->uncommitted_slave_updates[master][reqid]->commit.replay(mds, _segment);
+      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master << dendl;
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
-	       << ": ignoring, no previously saved blobs" << dendl;
+	       << ": ignoring, no previously saved prepare" << dendl;
     }
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master
-	       << ": applying rollback blob" << dendl;
+	       << ": applying rollback commit blob" << dendl;
       assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid));
-      mds->mdcache->uncommitted_slave_updates[master][reqid]->rollback.replay(mds, _segment);
+      commit.replay(mds, _segment);
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
     } else {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master 
-	       << ": ignoring, no previously saved blobs" << dendl;
+	       << ": ignoring, no previously saved prepare" << dendl;
     }
     break;
 

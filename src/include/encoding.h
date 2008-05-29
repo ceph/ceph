@@ -78,6 +78,10 @@ WRITE_INTTYPE_ENCODER(s16, le16)
   inline void encode(const cl &c, bufferlist &bl) { c.encode(bl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
+#define WRITE_CLASS_ENCODER_MEMBER(cl) \
+  inline void encode(const cl &c, bufferlist &bl) const { c.encode(bl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
+
 
 
 // -----------------------------

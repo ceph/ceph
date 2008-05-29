@@ -1216,16 +1216,17 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     CInode *in, CDir *parent,
-			     int flags, int linkunlink,
-			     EMetaBlob *rollback)
+			     int flags, int linkunlink)
 {
   bool primary_dn = flags & PREDIRTY_PRIMARY;
   bool do_parent_mtime = flags & PREDIRTY_DIR;
+  bool shallow = flags & PREDIRTY_SHALLOW;
 
   dout(10) << "predirty_nested"
 	   << (do_parent_mtime ? " do_parent_mtime":"")
 	   << " linkunlink=" <<  linkunlink
 	   << (primary_dn ? " primary_dn":" remote_dn")
+	   << (shallow ? " SHALLOW":"")
 	   << " " << *in << dendl;
 
   if (!parent) {
@@ -1236,8 +1237,6 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   if (flags == 0 && linkunlink == 0) {
     dout(10) << " no flags/linkunlink, just adding dir context to blob(s)" << dendl;
     blob->add_dir_context(parent);
-    if (rollback)
-      rollback->add_dir_context(parent);
     return;
   }
 
@@ -1362,18 +1361,12 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   assert(parent->is_auth());
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
-  if (rollback)
-    rollback->add_dir_context(parent);
   for (list<CInode*>::iterator p = lsi.begin();
        p != lsi.end();
        p++) {
     CInode *cur = *p;
     inode_t *pi = cur->get_projected_inode();
     blob->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, pi);
-    if (rollback) {
-      inode_t *oldi = cur->get_previous_projected_inode();
-      rollback->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, oldi);
-    }
   }
  
 }

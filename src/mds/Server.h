@@ -27,6 +27,9 @@ class EUpdate;
 class PVList;
 class MMDSSlaveRequest;
 
+
+
+
 class Server {
   MDS *mds;
   MDCache *mdcache;
@@ -137,10 +140,11 @@ public:
 			   version_t);
 
   void handle_slave_link_prep(MDRequest *mdr);
-  void _logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc);
-  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, 
-			  utime_t old_ctime, version_t old_version, bool inc);
+  void _logged_slave_link(MDRequest *mdr, CInode *targeti);
+  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti);
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void do_link_rollback(bufferlist &rbl, MDRequest *mdr);
+  void _do_link_rollback_finish(Mutation *mut, MDRequest *mdr);
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);
@@ -166,8 +170,7 @@ public:
   version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
   void _rename_prepare(MDRequest *mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
-		       CDentry *srcdn, CDentry *destdn, CDentry *straydn,
-		       EMetaBlob *rollback=0);
+		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
 
   // slaving
@@ -175,6 +178,7 @@ public:
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void do_rename_rollback(bufferlist &rbl, MDRequest *mdr);
 
 };
 
