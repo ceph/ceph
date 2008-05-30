@@ -120,6 +120,8 @@ private:
   version_t  uncommitted_pn;
   bufferlist uncommitted_value;
 
+  Context    *collect_timeout_event;
+
   // active
   set<int>   acked_lease;
   Context    *lease_renew_event;
@@ -134,6 +136,15 @@ private:
 
   list<Context*> waiting_for_writeable;
   list<Context*> waiting_for_commit;
+
+  class C_CollectTimeout : public Context {
+    Paxos *paxos;
+  public:
+    C_CollectTimeout(Paxos *p) : paxos(p) {}
+    void finish(int r) {
+      paxos->collect_timeout();
+    }
+  };
 
   class C_AcceptTimeout : public Context {
     Paxos *paxos;
@@ -176,10 +187,13 @@ private:
   void collect(version_t oldpn);
   void handle_collect(MMonPaxos*);
   void handle_last(MMonPaxos*);
+  void collect_timeout();
+
   void begin(bufferlist& value);
   void handle_begin(MMonPaxos*);
   void handle_accept(MMonPaxos*);
   void accept_timeout();
+
   void commit();
   void handle_commit(MMonPaxos*);
   void extend_lease();
@@ -200,6 +214,7 @@ public:
 		   machine_id(mid), 
 		   machine_name(get_paxos_name(mid)),
 		   state(STATE_RECOVERING),
+		   collect_timeout_event(0),
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
 		   lease_timeout_event(0),

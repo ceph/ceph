@@ -79,6 +79,9 @@ void Paxos::collect(version_t oldpn)
     mon->messenger->send_message(collect, mon->monmap->get_inst(*p));
   }
 
+  // set timeout event
+  collect_timeout_event = new C_CollectTimeout(this);
+  mon->timer.add_event_after(g_conf.mon_accept_timeout, collect_timeout_event);
 }
 
 
@@ -186,6 +189,11 @@ void Paxos::handle_last(MMonPaxos *last)
   if (last->pn > accepted_pn) {
     // no, try again.
     dout(10) << " they had a higher pn than us, picking a new one." << dendl;
+
+    // cancel timeout event
+    mon->timer.cancel_event(collect_timeout_event);
+    collect_timeout_event = 0;
+
     collect(last->pn);
   } else {
     // yes, they accepted our pn.  great.
@@ -207,6 +215,10 @@ void Paxos::handle_last(MMonPaxos *last)
     
     // is that everyone?
     if (num_last == mon->get_quorum().size()) {
+      // cancel timeout event
+      mon->timer.cancel_event(collect_timeout_event);
+      collect_timeout_event = 0;
+
       // almost...
       state = STATE_ACTIVE;
 
@@ -229,6 +241,15 @@ void Paxos::handle_last(MMonPaxos *last)
   }
 
   delete last;
+}
+
+void Paxos::collect_timeout()
+{
+  dout(5) << "collect timeout, calling fresh election" << dendl;
+  collect_timeout_event = 0;
+  assert(mon->is_leader());
+  cancel_events();
+  mon->call_election();
 }
 
 
@@ -626,6 +647,10 @@ version_t Paxos::get_new_proposal_number(version_t gt)
 
 void Paxos::cancel_events()
 {
+  if (collect_timeout_event) {
+    mon->timer.cancel_event(collect_timeout_event);
+    collect_timeout_event = 0;
+  }
   if (accept_timeout_event) {
     mon->timer.cancel_event(accept_timeout_event);
     accept_timeout_event = 0;
