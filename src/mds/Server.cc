@@ -2412,7 +2412,9 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   rollback.reqid = mdr->reqid;
   rollback.ino = targeti->ino();
   rollback.old_ctime = targeti->inode.ctime;   // we hold versionlock; no concorrent projections
-  rollback.old_dir_rctime = targeti->get_parent_dn()->get_dir()->get_projected_fnode()->fragstat.rctime;
+  fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
+  rollback.old_dir_mtime = pf->fragstat.mtime;
+  rollback.old_dir_rctime = pf->fragstat.rctime;
   rollback.was_inc = inc;
   ::encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
@@ -2489,7 +2491,7 @@ struct C_MDS_LoggedLinkRollback : public Context {
   MDRequest *mdr;
   C_MDS_LoggedLinkRollback(Server *s, Mutation *m, MDRequest *r) : server(s), mut(m), mdr(r) {}
   void finish(int r) {
-    server->_do_link_rollback_finish(mut, mdr);
+    server->_link_rollback_finish(mut, mdr);
   }
 };
 
@@ -2499,11 +2501,11 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   bufferlist::iterator p = rbl.begin();
   ::decode(rollback, p);
 
-  CInode *in = mds->mdcache->get_inode(rollback.ino);
-  assert(in);
-  dout(10) << "do_link_rollback of " << (rollback.was_inc ? "inc":"dec") << " on " << *in << dendl;
-  assert(!in->is_projected());  // live slave request hold versionlock.
-  
+  dout(10) << "do_link_rollback on " << rollback.reqid 
+	   << (rollback.was_inc ? "inc":"dec") 
+	   << " ino " << rollback.ino
+	   << dendl;
+
   Mutation *mut = mdr;
   if (!mut) {
     assert(mds->is_resolve());
@@ -2511,6 +2513,12 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     mut = new Mutation(rollback.reqid);
   }
 
+
+  CInode *in = mds->mdcache->get_inode(rollback.ino);
+  assert(in);
+  dout(10) << " target is " << *in << dendl;
+  assert(!in->is_projected());  // live slave request hold versionlock.
+  
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   mut->add_projected_inode(in);
@@ -2520,8 +2528,10 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   fnode_t *pf = parent->project_fnode();
   mut->add_projected_fnode(parent);
   pf->version = parent->pre_dirty();
-  if (pf->fragstat.rctime == pi->ctime) {
-    pf->fragstat.rctime = rollback.old_dir_rctime;
+  if (pf->fragstat.mtime == pi->ctime) {
+    pf->fragstat.mtime = rollback.old_dir_mtime;
+    if (pf->fragstat.rctime == pi->ctime)
+      pf->fragstat.rctime = rollback.old_dir_rctime;
     mut->add_updated_scatterlock(&parent->get_inode()->dirlock);
   }
 
@@ -2532,6 +2542,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   else
     pi->nlink++;
 
+  // journal it
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::LINK);
   le->commit.add_dir_context(parent);
@@ -2541,9 +2552,9 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   mdlog->submit_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr));
 }
 
-void Server::_do_link_rollback_finish(Mutation *mut, MDRequest *mdr)
+void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
 {
-  dout(10) << "_do_link_rollback_finish" << dendl;
+  dout(10) << "_link_rollback_finish" << dendl;
   mut->apply();
   if (mdr)
     mds->mdcache->request_finish(mdr);
@@ -3235,7 +3246,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
-  //if (!mdr->more()->slaves.empty()) assert(0); 
+  if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
+  //if (!mdr->more()->slaves.empty() && srci->is_dir()) assert(0); 
   
   // -- prepare anchor updates -- 
   if (!linkmerge || srcdn->is_primary()) {
@@ -3318,6 +3330,9 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   if (destdn->is_remote() &&
       destdn->inode->is_auth())
     mds->balancer->hit_inode(mdr->now, destdn->get_inode(), META_POP_IWR);
+
+  // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
+  
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -3767,30 +3782,38 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     rename_rollback rollback;
     
     rollback.orig_src.dirfrag = srcdn->dir->dirfrag();
+    rollback.orig_src.dirfrag_old_mtime = srcdn->dir->get_projected_fnode()->fragstat.mtime;
+    rollback.orig_src.dirfrag_old_rctime = srcdn->dir->get_projected_fnode()->fragstat.rctime;
     rollback.orig_src.dname = srcdn->name;
     if (srcdn->is_primary())
       rollback.orig_src.ino = srcdn->inode->ino();
     else {
-      rollback.orig_src.ino = 0;
+      assert(srcdn->is_remote());
       rollback.orig_src.remote_ino = srcdn->get_remote_ino();
       rollback.orig_src.remote_ino = srcdn->get_remote_d_type();
     }
     
     rollback.orig_dest.dirfrag = destdn->dir->dirfrag();
+    rollback.orig_dest.dirfrag_old_mtime = destdn->dir->get_projected_fnode()->fragstat.mtime;
+    rollback.orig_dest.dirfrag_old_rctime = destdn->dir->get_projected_fnode()->fragstat.rctime;
     rollback.orig_dest.dname = destdn->name;
     if (destdn->is_primary())
       rollback.orig_dest.ino = destdn->inode->ino();
-    else {
-      rollback.orig_dest.ino = 0;
+    else if (destdn->is_remote()) {
       rollback.orig_dest.remote_ino = destdn->get_remote_ino();
       rollback.orig_dest.remote_ino = destdn->get_remote_d_type();
     }
 
     if (straydn) {
-      rollback.stray_dirfrag = straydn->dir->dirfrag();
-      rollback.stray_dname = straydn->name;
+      rollback.stray.dirfrag = straydn->dir->dirfrag();
+      rollback.stray.dirfrag_old_mtime = straydn->dir->get_projected_fnode()->fragstat.mtime;
+      rollback.stray.dirfrag_old_rctime = straydn->dir->get_projected_fnode()->fragstat.rctime;
+      rollback.stray.dname = straydn->name;
     }
     ::encode(rollback, le->rollback);
+    dout(10) << " rollback is " << le->rollback.length() << " bytes" << dendl;
+    mdr->more()->rollback_bl = le->rollback;
+    dout(10) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
     bufferlist blah;  // inode import data... obviously not used if we're the slave
     _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
@@ -3885,17 +3908,59 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     mdlog->submit_entry(le);
 
   } else {
+    if (srcdn->is_auth() && destdn->is_primary() &&
+	destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+      dout(10) << " reversing inode export of " << *destdn->inode << dendl;
+      assert(0);  // this bites
+    }
+
     // abort
     do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
-
-    // rollback export.  readjust subtree map, if it was a dir.
-    assert(0); // write me
-
-
   }
 
   mds->mdcache->request_finish(mdr);
 }
+
+void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, utime_t ctime, 
+			  bool isdir, int linkunlink, bool primary, frag_info_t &dirstat)
+{
+  fnode_t *pf = dir->project_fnode();
+  mut->add_projected_fnode(dir);
+  pf->version = dir->pre_dirty();
+
+  if (isdir) {
+    pf->fragstat.nsubdirs += linkunlink;
+    pf->fragstat.rsubdirs += linkunlink;
+  } else {
+    pf->fragstat.nfiles += linkunlink;
+    pf->fragstat.rfiles += linkunlink;
+  }    
+  if (primary) {
+    pf->fragstat.rbytes += linkunlink * dirstat.rbytes;
+    pf->fragstat.rfiles += linkunlink * dirstat.rfiles;
+    pf->fragstat.rsubdirs += linkunlink * dirstat.rsubdirs;
+    pf->fragstat.ranchors += linkunlink * dirstat.ranchors;
+  }
+  if (pf->fragstat.mtime == ctime) {
+    pf->fragstat.mtime = r.dirfrag_old_mtime;
+    if (pf->fragstat.rctime == ctime)
+      pf->fragstat.rctime = r.dirfrag_old_rctime;
+    mut->add_updated_scatterlock(&dir->get_inode()->dirlock);
+  }
+}
+
+struct C_MDS_LoggedRenameRollback : public Context {
+  Server *server;
+  Mutation *mut;
+  MDRequest *mdr;
+  CInode *in;
+  CDir *olddir;
+  C_MDS_LoggedRenameRollback(Server *s, Mutation *m, MDRequest *r,
+			     CInode *i, CDir *d) : server(s), mut(m), mdr(r), in(i), olddir(d) {}
+  void finish(int r) {
+    server->_rename_rollback_finish(mut, mdr, in, olddir);
+  }
+};
 
 void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 {
@@ -3903,65 +3968,158 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   bufferlist::iterator p = rbl.begin();
   ::decode(rollback, p);
 
-  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_abort", rollback.reqid, master,
+  dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
+
+  Mutation *mut = mdr;
+  if (!mut) {
+    assert(mds->is_resolve());
+    mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
+    mut = new Mutation(rollback.reqid);
+  }
+
+  CDir *srcdir = mds->mdcache->get_dirfrag(rollback.orig_src.dirfrag);
+  assert(srcdir);
+  dout(10) << "  srcdir " << *srcdir << dendl;
+  CDentry *srcdn = srcdir->lookup(rollback.orig_src.dname);
+  assert(srcdn);
+  assert(srcdn->is_null());
+  dout(10) << "   srcdn " << *srcdn << dendl;
+
+  CInode *in;
+  if (rollback.orig_src.ino)
+    in = mds->mdcache->get_inode(rollback.orig_src.ino);
+  else
+    in = mds->mdcache->get_inode(rollback.orig_src.remote_ino);    
+  assert(in);
+  
+  CDir *destdir = mds->mdcache->get_dirfrag(rollback.orig_dest.dirfrag);
+  assert(destdir);
+  dout(10) << " destdir " << *destdir << dendl;
+  CDentry *destdn = destdir->lookup(rollback.orig_dest.dname);
+  assert(destdn);
+  dout(10) << "  destdn " << *destdn << dendl;
+
+  CDir *straydir = 0;
+  CDentry *straydn = 0;
+  if (rollback.stray.dirfrag.ino) {
+    straydir = mds->mdcache->get_dirfrag(rollback.stray.dirfrag);
+    assert(straydir);
+    dout(10) << "straydir " << *straydir << dendl;
+    straydn = straydir->lookup(rollback.stray.dname);
+    assert(straydn);
+    assert(straydn->is_primary());
+    dout(10) << " straydn " << *straydn << dendl;
+  }
+  
+  // unlink
+  destdir->unlink_inode(destdn);
+  if (straydn)
+    straydir->unlink_inode(straydn);
+
+  bool linkmerge = ((rollback.orig_src.ino && 
+		     rollback.orig_src.ino == rollback.orig_dest.remote_ino) ||
+		    (rollback.orig_dest.ino && 
+		     rollback.orig_dest.ino == rollback.orig_src.remote_ino));
+  
+  // repair src
+  if (rollback.orig_src.ino)
+    srcdir->link_primary_inode(srcdn, in);
+  else
+    srcdir->link_remote_inode(srcdn, rollback.orig_src.remote_ino, 
+			      rollback.orig_src.remote_d_type);
+  inode_t *pi = in->project_inode();
+  mut->add_projected_inode(in);
+  pi->version = in->pre_dirty();
+  if (pi->ctime == rollback.ctime)
+    pi->ctime = rollback.orig_src.old_ctime;
+
+  _rollback_repair_dir(mut, srcdir, rollback.orig_src, rollback.ctime,
+		       in->is_dir(), 1, srcdn->is_primary(), pi->dirstat);
+
+  // repair dest
+  CInode *target = 0;
+  if (rollback.orig_dest.ino) {
+    target = mds->mdcache->get_inode(rollback.orig_dest.ino);
+    destdir->link_primary_inode(destdn, target);
+    assert(linkmerge || straydn);
+  } else if (rollback.orig_dest.remote_ino) {
+    target = mds->mdcache->get_inode(rollback.orig_dest.remote_ino);
+    destdir->link_remote_inode(destdn, rollback.orig_dest.remote_ino, 
+			       rollback.orig_dest.remote_d_type);
+  }
+  inode_t *ti = 0;
+  if (target) {
+    ti = target->project_inode();
+    mut->add_projected_inode(target);
+    ti->version = target->pre_dirty();
+    if (ti->ctime == rollback.ctime)
+      ti->ctime = rollback.orig_dest.old_ctime;
+    ti->nlink++;
+  }
+  if (target)
+    _rollback_repair_dir(mut, destdir, rollback.orig_dest, rollback.ctime,
+			 target->is_dir(), 0, destdn->is_primary(), ti->dirstat);
+  else {
+    frag_info_t blah;
+    _rollback_repair_dir(mut, destdir, rollback.orig_dest, rollback.ctime, 0, -1, 0, blah);
+  }
+
+  // repair stray
+  if (straydir)
+    _rollback_repair_dir(mut, straydir, rollback.stray, rollback.ctime,
+			 target->is_dir(), -1, true, ti->dirstat);
+
+  dout(-10) << "  srcdn back to " << *srcdn << dendl;
+  dout(-10) << "   srci back to " << *srcdn->inode << dendl;
+  dout(-10) << " destdn back to " << *destdn << dendl;
+  if (destdn->inode) dout(-10) << "  desti back to " << *destdn->inode << dendl;
+  
+  // new subtree?
+  if (srcdn->is_primary() && srcdn->inode->is_dir()) {
+    list<CDir*> ls;
+    srcdn->inode->get_nested_dirfrags(ls);
+    int auth = srcdn->authority().first;
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
+      mdcache->adjust_subtree_auth(*p, auth, auth);
+  }
+
+  // journal it
+  ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RENAME);
-
-
-    /*
-    // -- rollback in memory --
-
-    if (mdr->more()->was_link_merge) { 
-      // link merge
-      CInode *in = destdn->inode;
-      in->inode.nlink++;
-      if (mdr->more()->destdn_was_remote_inode) {
-	destdn->dir->unlink_inode(destdn);
-	srcdn->dir->link_primary_inode(srcdn, in);
-	destdn->dir->link_remote_inode(destdn, in);
-      } else {
-	srcdn->dir->link_remote_inode(srcdn, in);
-      }
-    } else {
-      // normal
-
-      // revert srcdn
-      if (destdn->is_remote()) {
-	srcdn->dir->link_remote_inode(srcdn, destdn->inode);
-	destdn->dir->unlink_inode(destdn);
-      } else {
-	// renamed a primary
-	CInode *in = destdn->inode;
-	destdn->dir->unlink_inode(destdn);
-	srcdn->dir->link_primary_inode(srcdn, in);
-      }
-      
-      // revert destdn
-      if (mdr->more()->destdn_was_remote_inode) {
-	destdn->dir->link_remote_inode(destdn, mdr->more()->destdn_was_remote_inode);
-	mdr->more()->destdn_was_remote_inode->inode.nlink++;
-      } else if (straydn && straydn->inode) {
-	CInode *in = straydn->inode;
-	strayd    mdlog->submit_entry(le);
-n->dir->unlink_inode(straydn);
-	destdn->dir->link_primary_inode(destdn, in);
-	straydn->dir->remove_dentry(straydn);
-      }
-    }
-
-    // FIXME: reverse srci export?
-
-    dout(-10) << "  srcdn back to " << *srcdn << dendl;
-    dout(-10) << "   srci back to " << *srcdn->inode << dendl;
-    dout(-10) << " destdn back to " << *destdn << dendl;
-    if (destdn->inode) dout(-10) << "  desti back to " << *destdn->inode << dendl;
-    
-    // *** WRITE ME ***
-    assert(0);
-    */
-  assert(0); 
-
-  //mdlog->submit_entry(le, new ...);
+  le->commit.add_dir_context(srcdir);
+  le->commit.add_primary_dentry(srcdn, true, 0, pi);
+  le->commit.add_dir_context(destdir);
+  if (destdn->is_null())
+    le->commit.add_null_dentry(destdn, true);
+  else if (destdn->is_primary())
+    le->commit.add_primary_dentry(destdn, true, 0, ti);
+  else if (destdn->is_remote())
+    le->commit.add_remote_dentry(destdn, true);
+  if (straydn) {
+    le->commit.add_dir_context(straydir);
+    le->commit.add_null_dentry(straydn, true);
+  }
+  
+  mdlog->submit_entry(le, new C_MDS_LoggedRenameRollback(this, mut, mdr,
+							 srcdn->inode, destdn->dir));
 }
+
+void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, CDir *olddir)
+{
+  dout(10) << "_rename_rollback_finish" << dendl;
+  mut->apply();
+
+  // update subtree map?
+  if (in->is_dir())
+    mdcache->adjust_subtree_after_rename(in, olddir);
+
+  if (mdr)
+    mds->mdcache->request_finish(mdr);
+  else {
+    mds->mdcache->finish_rollback(mut->reqid);
+  }
+}
+
 
 void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {

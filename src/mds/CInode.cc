@@ -85,7 +85,7 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " s=" << in.inode.size;
     if (in.inode.max_size)
       out << "/" << in.inode.max_size;
-    //out << " nl=" << in.inode.nlink;
+    out << " nl=" << in.inode.nlink;
   }
 
   out << " rb=" << in.inode.dirstat.rbytes;

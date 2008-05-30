@@ -28,6 +28,7 @@ struct link_rollback {
   inodeno_t ino;
   bool was_inc;
   utime_t old_ctime;
+  utime_t old_dir_mtime;
   utime_t old_dir_rctime;
 
   void encode(bufferlist &bl) const {
@@ -35,6 +36,7 @@ struct link_rollback {
     ::encode(ino, bl);
     ::encode(was_inc, bl);
     ::encode(old_ctime, bl);
+    ::encode(old_dir_mtime, bl);
     ::encode(old_dir_rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -42,6 +44,7 @@ struct link_rollback {
     ::decode(ino, bl);
     ::decode(was_inc, bl);
     ::decode(old_ctime, bl);
+    ::decode(old_dir_mtime, bl);
     ::decode(old_dir_rctime, bl);
   }
 };
@@ -50,49 +53,54 @@ WRITE_CLASS_ENCODER(link_rollback)
 struct rename_rollback {
   struct drec {
     dirfrag_t dirfrag;
-    dirfrag_t dirfrag_mtime;
+    utime_t dirfrag_old_mtime;
+    utime_t dirfrag_old_rctime;
     inodeno_t ino, remote_ino;
     string dname;
     char remote_d_type;
-    utime_t ctime;
+    utime_t old_ctime;
     
     void encode(bufferlist &bl) const {
       ::encode(dirfrag, bl);
-      ::encode(dirfrag_mtime, bl);
+      ::encode(dirfrag_old_mtime, bl);
+      ::encode(dirfrag_old_rctime, bl);
       ::encode(ino, bl);
       ::encode(remote_ino, bl);
       ::encode(dname, bl);
       ::encode(remote_d_type, bl);
-    } 
+      ::encode(old_ctime, bl);
+   } 
     void decode(bufferlist::iterator &bl) {
       ::decode(dirfrag, bl);
-      ::decode(dirfrag_mtime, bl);
+      ::decode(dirfrag_old_mtime, bl);
+      ::decode(dirfrag_old_rctime, bl);
       ::decode(ino, bl);
       ::decode(remote_ino, bl);
       ::decode(dname, bl);
       ::decode(remote_d_type, bl);
-    } 
+      ::decode(old_ctime, bl);
+    }
   };
   WRITE_CLASS_ENCODER_MEMBER(drec)
 
   metareqid_t reqid;
   drec orig_src, orig_dest;
-  dirfrag_t stray_dirfrag;
-  string stray_dname;
-  
+  drec stray; // we know this is null, but we want dname, old mtime/rctime
+  utime_t ctime;
+
   void encode(bufferlist &bl) const {
     ::encode(reqid, bl);
     encode(orig_src, bl);
     encode(orig_dest, bl);
-    ::encode(stray_dirfrag, bl);
-    ::encode(stray_dname, bl);
-  }
+    encode(stray, bl);
+    ::encode(ctime, bl);
+ }
   void decode(bufferlist::iterator &bl) {
     ::decode(reqid, bl);
     decode(orig_src, bl);
     decode(orig_dest, bl);
-    ::decode(stray_dirfrag, bl);
-    ::decode(stray_dname, bl);
+    decode(stray, bl);
+    ::decode(ctime, bl);
   }
 };
 WRITE_CLASS_ENCODER(rename_rollback)
