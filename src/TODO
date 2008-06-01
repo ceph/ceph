@@ -71,6 +71,7 @@ mds mustfix
 
 - make sure locker avoids frozen inodes
 - make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
+- make sure stray inode is always opened on startup
 
 - look at the client_map session opening code.. versus rollback (of import, or slave request)
 

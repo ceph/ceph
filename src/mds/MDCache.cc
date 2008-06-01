@@ -256,7 +256,7 @@ CInode *MDCache::create_stray_inode(int whose)
 {
   if (whose < 0) whose = mds->get_nodeid();
 
-  CInode *in = new CInode(this, whose == mds->get_nodeid());
+  CInode *in = new CInode(this);  //, whose == mds->get_nodeid());
   in->inode.ino = MDS_INO_STRAY(whose);
   
   // make it up (FIXME)
@@ -295,7 +295,7 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   string straydname;
   in->name_stray_dentry(straydname);
   
-  if (!stray) create_stray_inode(mds->get_nodeid());
+  assert(stray);
 
   frag_t fg = stray->pick_dirfrag(straydname);
 

@@ -2511,6 +2511,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     assert(mds->is_resolve());
     mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
     mut = new Mutation(rollback.reqid);
+    mut->ls = mds->mdlog->get_current_segment();
   }
 
 
@@ -3246,7 +3247,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
-  //if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
+  if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
   //if (!mdr->more()->slaves.empty() && srci->is_dir()) assert(0); 
   
   // -- prepare anchor updates -- 
@@ -3501,6 +3502,11 @@ void Server::_rename_prepare(MDRequest *mdr,
     mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1);
   if (destdn->is_auth())
     mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1);
+
+  metablob->add_dir_context(srcdn->dir);
+  metablob->add_dir_context(destdn->dir);
+  if (straydn)
+    metablob->add_dir_context(straydn->dir);
 
   // add it all to the metablob
   // target inode
@@ -3781,6 +3787,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     // encode everything we'd need to roll this back... basically, just the original state.
     rename_rollback rollback;
     
+    rollback.reqid = mdr->reqid;
+
     rollback.orig_src.dirfrag = srcdn->dir->dirfrag();
     rollback.orig_src.dirfrag_old_mtime = srcdn->dir->get_projected_fnode()->fragstat.mtime;
     rollback.orig_src.dirfrag_old_rctime = srcdn->dir->get_projected_fnode()->fragstat.rctime;
@@ -3907,7 +3915,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     }
 
     mdlog->submit_entry(le);
-
+    mds->mdcache->request_finish(mdr);
   } else {
     if (srcdn->is_auth() && destdn->is_primary() &&
 	destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
@@ -3932,16 +3940,18 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     // abort
     do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
   }
-
-  mds->mdcache->request_finish(mdr);
 }
 
 void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, utime_t ctime, 
 			  bool isdir, int linkunlink, bool primary, frag_info_t &dirstat)
 {
-  fnode_t *pf = dir->project_fnode();
-  mut->add_projected_fnode(dir);
-  pf->version = dir->pre_dirty();
+  fnode_t *pf;
+  if (dir->is_auth()) {
+    pf = dir->project_fnode();
+    mut->add_projected_fnode(dir);
+    pf->version = dir->pre_dirty();
+  } else
+    pf = dir->get_projected_fnode();
 
   if (isdir) {
     pf->fragstat.nsubdirs += linkunlink;
@@ -3985,12 +3995,13 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
 
-  Mutation *mut = mdr;
-  if (!mut) {
+  //Mutation *mut = mdr;
+  if (!mdr) {
     assert(mds->is_resolve());
     mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
-    mut = new Mutation(rollback.reqid);
   }
+  Mutation *mut = new Mutation(rollback.reqid);
+  mut->ls = mds->mdlog->get_current_segment();
 
   CDir *srcdir = mds->mdcache->get_dirfrag(rollback.orig_src.dirfrag);
   assert(srcdir);
@@ -4042,9 +4053,13 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   else
     srcdir->link_remote_inode(srcdn, rollback.orig_src.remote_ino, 
 			      rollback.orig_src.remote_d_type);
-  inode_t *pi = in->project_inode();
-  mut->add_projected_inode(in);
-  pi->version = in->pre_dirty();
+  inode_t *pi;
+  if (in->is_auth()) {
+    pi = in->project_inode();
+    mut->add_projected_inode(in);
+    pi->version = in->pre_dirty();
+  } else
+    pi = in->get_projected_inode();
   if (pi->ctime == rollback.ctime)
     pi->ctime = rollback.orig_src.old_ctime;
 
@@ -4064,9 +4079,12 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   }
   inode_t *ti = 0;
   if (target) {
-    ti = target->project_inode();
-    mut->add_projected_inode(target);
-    ti->version = target->pre_dirty();
+    if (target->is_auth()) {
+      ti = target->project_inode();
+      mut->add_projected_inode(target);
+      ti->version = target->pre_dirty();
+    } else 
+      ti = target->get_projected_inode();
     if (ti->ctime == rollback.ctime)
       ti->ctime = rollback.orig_dest.old_ctime;
     ti->nlink++;
