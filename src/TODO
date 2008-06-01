@@ -68,6 +68,12 @@ mds nested
 - fix rejoin vs updated dirfrag nested/dirlocks
 
 mds mustfix
+
+- make sure locker avoids frozen inodes
+- make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
+
+- look at the client_map session opening code.. versus rollback (of import, or slave request)
+
 - rollback vs accounting is just broken!  can we avoid it.
   - even with _just_ parent dir mtime, the rollback metablob isn't sufficient during replay.. we need special handling regardless.
 

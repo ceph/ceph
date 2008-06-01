@@ -3246,7 +3246,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
-  if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
+  //if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
   //if (!mdr->more()->slaves.empty() && srci->is_dir()) assert(0); 
   
   // -- prepare anchor updates -- 
@@ -3623,7 +3623,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->inode->state_set(CInode::STATE_AUTH);
     }
 
-    if (destdn->inode->is_auth())
+    if (destdn->is_auth())
       destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
   }
 
@@ -3846,8 +3846,6 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     bufferlist inodebl;
     mdcache->migrator->encode_export_inode(srcdn->inode, inodebl, 
 					   exported_client_map);
-    mdcache->migrator->finish_export_inode(srcdn->inode, mdr->now, finished); 
-    mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
     ::encode(exported_client_map, reply->inode_export);
     reply->inode_export.claim_append(inodebl);
     reply->inode_export_v = srcdn->inode->inode.version;
@@ -3889,9 +3887,12 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     //  hmm, do i really need to delay this?
     if (srcdn->is_auth() && destdn->is_primary() &&
 	destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-      dout(10) << " unfreezing exported inode " << *destdn->inode << dendl;
       list<Context*> finished;
-      
+
+      dout(10) << " finishing inode export on " << *destdn->inode << dendl;
+      mdcache->migrator->finish_export_inode(destdn->inode, mdr->now, finished); 
+      mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
+
       // singleauth
       assert(destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH));
       destdn->inode->state_clear(CInode::STATE_AMBIGUOUSAUTH);
@@ -3910,8 +3911,22 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
   } else {
     if (srcdn->is_auth() && destdn->is_primary() &&
 	destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+         list<Context*> finished;
+
       dout(10) << " reversing inode export of " << *destdn->inode << dendl;
-      assert(0);  // this bites
+      destdn->inode->abort_export();
+    
+      // singleauth
+      assert(destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH));
+      destdn->inode->state_clear(CInode::STATE_AMBIGUOUSAUTH);
+      destdn->inode->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
+      
+      // unfreeze
+      assert(destdn->inode->is_frozen_inode() ||
+	     destdn->inode->is_freezing_inode());
+      destdn->inode->unfreeze_inode(finished);
+      
+      mds->queue_waiters(finished);
     }
 
     // abort

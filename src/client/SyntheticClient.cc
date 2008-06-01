@@ -2871,7 +2871,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 
   srand(0);
   if (1) {
-    bool renames = false; // thrash renames too?
+    bool renames = true; // thrash renames too?
     for (int k=0; k<n; k++) {
       
       if (renames && rand() % 10 == 0) {

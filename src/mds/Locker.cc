@@ -2719,7 +2719,7 @@ void Locker::scatter_unscatter_autoscattered()
     
     autoscattered.pop_front();
 
-    if (lock->get_parent()->is_auth())
+    if (!lock->get_parent()->is_auth())
       continue;
 
     if (lock->get_state() == LOCK_SCATTER &&
