@@ -170,6 +170,7 @@ public:
 
   // local
 protected:
+  void local_wrlock_grab(LocalLock *lock, Mutation *mut);
   bool local_wrlock_start(LocalLock *lock, MDRequest *mut);
   void local_wrlock_finish(LocalLock *lock, Mutation *mut);
   bool local_xlock_start(LocalLock *lock, MDRequest *mut);

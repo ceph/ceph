@@ -1237,7 +1237,6 @@ void Locker::revoke_client_leases(SimpleLock *lock)
  * the scatterlock on a list if it isn't already wrlockable.  this is
  * probably the best plan anyway, since we avoid too many
  * scatters/locks under normal usage.
- *
  */
 void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     CInode *in, CDir *parent,
@@ -1344,13 +1343,16 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       break;
 
     bool stop = false;
-    if (mut->wrlocks.count(&pin->dirlock) == 0 &&
-	!scatter_wrlock_try(&pin->dirlock, mut, false)) {  // ** do not initiate.. see above comment **
-      dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
-      stop = true;
-    }
     if (!pin->is_auth() || pin->is_ambiguous_auth()) {
       dout(10) << "predirty_nested !auth or ambig on " << *pin << dendl;
+      stop = true;
+    }
+    if (!stop &&
+	mut->wrlocks.count(&pin->dirlock) == 0 &&
+	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
+	 !scatter_wrlock_try(&pin->dirlock, mut, false))) {  // ** do not initiate.. see above comment **
+      dout(10) << "predirty_nested can't wrlock one of " << pin->versionlock << " or " << pin->dirlock
+	       << " on " << *pin << dendl;
       stop = true;
     }
     if (stop) {
@@ -1360,6 +1362,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
       break;
     }
+    local_wrlock_grab(&pin->versionlock, mut);
 
     // dirfrag -> diri
     mut->add_projected_inode(pin);
@@ -2770,6 +2773,16 @@ void Locker::scatter_unscatter_autoscattered()
 // ==========================================================================
 // local lock
 
+void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
+{
+  dout(7) << "local_wrlock_try  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+  
+  assert(lock->can_wrlock());
+  lock->get_wrlock();
+  mut->wrlocks.insert(lock);
+  mut->locks.insert(lock);
+}
 
 bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
 {

@@ -68,9 +68,13 @@ mds mustfix
 - fix rejoin vs updated dirfrag nested/dirlocks
   - not inode_full, now.. send the fnode.  but for auth dirfrags, _to_ inode auth... which is sorta outside the subtree..?
 
+- fix completed_request list on master, for disambiguating slaves.  (sessionmap's complete list is trimmed based on client, not slave ops.)
+  - keep mdrequest open?  is this useful for the srci export trimming?
+  - special list?  needs master journal entry to finish commit, and extra message from slave->master after the commit.
+
 /- locks (esp scatter) vs rejoin, scatter_writebehind
 - make sure locker avoids frozen inodes
-- make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
+/- make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
 - make sure stray inode is always opened on startup
 - make sure inode cache expire for frozen inode behaves
 
