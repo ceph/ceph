@@ -77,9 +77,9 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " na=" << in.get_nested_anchors();
 
   if (in.inode.is_dir()) {
+    out << " " << in.inode.dirstat;
     out << " ds=" << in.inode.dirstat.size() << "=" 
 	<< in.inode.dirstat.nfiles << "+" << in.inode.dirstat.nsubdirs;
-    //out << " " << in.inode.dirstat;
     //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
   } else {
     out << " s=" << in.inode.size;

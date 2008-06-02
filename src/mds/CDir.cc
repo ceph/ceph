@@ -92,7 +92,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
-  //out << " " << dir.fnode.fragstat;
+  out << " " << dir.fnode.fragstat;
   out << " s=" << dir.fnode.fragstat.size() 
       << "=" << dir.fnode.fragstat.nfiles
       << "+" << dir.fnode.fragstat.nsubdirs;
