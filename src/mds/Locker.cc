@@ -86,6 +86,13 @@ void Locker::dispatch(Message *m)
 }
 
 
+/*
+ * locks vs rejoin
+ *
+ * 
+ *
+ */
+
 void Locker::send_lock_message(SimpleLock *lock, int msg)
 {
   for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
@@ -1214,6 +1221,24 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
 // nested ---------------------------------------------------------------
 
+
+/*
+ * NOTE: we _have_ to delay the scatter if we are called during a
+ * rejoin, because we can't twiddle locks between when the
+ * rejoin_(weak|strong) is received and when we send the rejoin_ack.
+ * normally, this isn't a problem: a recover mds doesn't twiddle locks
+ * (no requests), and a survivor acks immediately.  _except_ that
+ * during rejoin_(weak|strong) processing, we may complete a lock
+ * gather, and do a scatter_writebehind.. and we _can't_ twiddle the
+ * scatterlock state in that case or the lock states will get out of
+ * sync between the auth and replica.
+ *
+ * the simple solution is to never do the scatter here.  instead, put
+ * the scatterlock on a list if it isn't already wrlockable.  this is
+ * probably the best plan anyway, since we avoid too many
+ * scatters/locks under normal usage.
+ *
+ */
 void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 			     CInode *in, CDir *parent,
 			     int flags, int linkunlink)
@@ -1320,7 +1345,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
 
     bool stop = false;
     if (mut->wrlocks.count(&pin->dirlock) == 0 &&
-	!scatter_wrlock_try(&pin->dirlock, mut)) {
+	!scatter_wrlock_try(&pin->dirlock, mut, false)) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_nested can't wrlock " << pin->dirlock << " on " << *pin << dendl;
       stop = true;
     }
@@ -1955,7 +1980,7 @@ void Locker::scatter_rdlock_finish(ScatterLock *lock, Mutation *mut)
 }
 
 
-bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut)
+bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut, bool initiate)
 {
   dout(7) << "scatter_wrlock_try  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -1981,7 +2006,7 @@ bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut)
   }
 
   // initiate scatter or lock?
-  if (lock->is_stable()) {
+  if (initiate && lock->is_stable()) {
     if (lock->get_parent()->is_auth()) {
       if (want_scatter) 
 	scatter_scatter(lock);
@@ -2005,7 +2030,7 @@ bool Locker::scatter_wrlock_start(ScatterLock *lock, MDRequest *mut)
   dout(7) << "scatter_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
-  if (scatter_wrlock_try(lock, mut))
+  if (scatter_wrlock_try(lock, mut, true)) // initiate
     return true;
 
   // wait for write.

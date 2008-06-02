@@ -2502,7 +2502,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   ::decode(rollback, p);
 
   dout(10) << "do_link_rollback on " << rollback.reqid 
-	   << (rollback.was_inc ? "inc":"dec") 
+	   << (rollback.was_inc ? " inc":" dec") 
 	   << " ino " << rollback.ino
 	   << dendl;
 
@@ -3011,6 +3011,15 @@ public:
 
 /** handle_client_rename
  *
+ * rename master is the destdn auth.  this is because cached inodes
+ * must remain connected.  thus, any replica of srci, must also
+ * replicate destdn, and possibly straydn, so that srci (and
+ * destdn->inode) remain connected during the rename.
+ *
+ * to do this, we freeze srci, then master (destdn auth) verifies that
+ * all other nodes have also replciated destdn and straydn.  note that
+ * destdn replicas need not also replicate srci.  this only works when 
+ * destdn is master.
  */
 void Server::handle_client_rename(MDRequest *mdr)
 {
@@ -3775,6 +3784,43 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
   }
 
+  // encode everything we'd need to roll this back... basically, just the original state.
+  rename_rollback rollback;
+  
+  rollback.reqid = mdr->reqid;
+  
+  rollback.orig_src.dirfrag = srcdn->dir->dirfrag();
+  rollback.orig_src.dirfrag_old_mtime = srcdn->dir->get_projected_fnode()->fragstat.mtime;
+  rollback.orig_src.dirfrag_old_rctime = srcdn->dir->get_projected_fnode()->fragstat.rctime;
+  rollback.orig_src.dname = srcdn->name;
+  if (srcdn->is_primary())
+    rollback.orig_src.ino = srcdn->inode->ino();
+  else {
+    assert(srcdn->is_remote());
+    rollback.orig_src.remote_ino = srcdn->get_remote_ino();
+    rollback.orig_src.remote_ino = srcdn->get_remote_d_type();
+  }
+  
+  rollback.orig_dest.dirfrag = destdn->dir->dirfrag();
+  rollback.orig_dest.dirfrag_old_mtime = destdn->dir->get_projected_fnode()->fragstat.mtime;
+  rollback.orig_dest.dirfrag_old_rctime = destdn->dir->get_projected_fnode()->fragstat.rctime;
+  rollback.orig_dest.dname = destdn->name;
+  if (destdn->is_primary())
+    rollback.orig_dest.ino = destdn->inode->ino();
+  else if (destdn->is_remote()) {
+    rollback.orig_dest.remote_ino = destdn->get_remote_ino();
+    rollback.orig_dest.remote_ino = destdn->get_remote_d_type();
+  }
+  
+  if (straydn) {
+    rollback.stray.dirfrag = straydn->dir->dirfrag();
+    rollback.stray.dirfrag_old_mtime = straydn->dir->get_projected_fnode()->fragstat.mtime;
+    rollback.stray.dirfrag_old_rctime = straydn->dir->get_projected_fnode()->fragstat.rctime;
+    rollback.stray.dname = straydn->name;
+  }
+  ::encode(rollback, mdr->more()->rollback_bl);
+  dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
+
   // journal it?
   if (srcdn->is_auth() ||
       (destdn->inode && destdn->inode->is_auth()) ||
@@ -3783,45 +3829,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     mdr->ls = mdlog->get_current_segment();
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RENAME);
-
-    // encode everything we'd need to roll this back... basically, just the original state.
-    rename_rollback rollback;
-    
-    rollback.reqid = mdr->reqid;
-
-    rollback.orig_src.dirfrag = srcdn->dir->dirfrag();
-    rollback.orig_src.dirfrag_old_mtime = srcdn->dir->get_projected_fnode()->fragstat.mtime;
-    rollback.orig_src.dirfrag_old_rctime = srcdn->dir->get_projected_fnode()->fragstat.rctime;
-    rollback.orig_src.dname = srcdn->name;
-    if (srcdn->is_primary())
-      rollback.orig_src.ino = srcdn->inode->ino();
-    else {
-      assert(srcdn->is_remote());
-      rollback.orig_src.remote_ino = srcdn->get_remote_ino();
-      rollback.orig_src.remote_ino = srcdn->get_remote_d_type();
-    }
-    
-    rollback.orig_dest.dirfrag = destdn->dir->dirfrag();
-    rollback.orig_dest.dirfrag_old_mtime = destdn->dir->get_projected_fnode()->fragstat.mtime;
-    rollback.orig_dest.dirfrag_old_rctime = destdn->dir->get_projected_fnode()->fragstat.rctime;
-    rollback.orig_dest.dname = destdn->name;
-    if (destdn->is_primary())
-      rollback.orig_dest.ino = destdn->inode->ino();
-    else if (destdn->is_remote()) {
-      rollback.orig_dest.remote_ino = destdn->get_remote_ino();
-      rollback.orig_dest.remote_ino = destdn->get_remote_d_type();
-    }
-
-    if (straydn) {
-      rollback.stray.dirfrag = straydn->dir->dirfrag();
-      rollback.stray.dirfrag_old_mtime = straydn->dir->get_projected_fnode()->fragstat.mtime;
-      rollback.stray.dirfrag_old_rctime = straydn->dir->get_projected_fnode()->fragstat.rctime;
-      rollback.stray.dname = straydn->name;
-    }
-    ::encode(rollback, le->rollback);
-    dout(10) << " rollback is " << le->rollback.length() << " bytes" << dendl;
-    mdr->more()->rollback_bl = le->rollback;
-    dout(10) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
+    le->rollback = mdr->more()->rollback_bl;
 
     bufferlist blah;  // inode import data... obviously not used if we're the slave
     _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);

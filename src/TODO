@@ -64,14 +64,15 @@ mon
 - some sort of tester for PaxosService...
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
-mds nested
-- fix rejoin vs updated dirfrag nested/dirlocks
-
 mds mustfix
+- fix rejoin vs updated dirfrag nested/dirlocks
+  - not inode_full, now.. send the fnode.  but for auth dirfrags, _to_ inode auth... which is sorta outside the subtree..?
 
+/- locks (esp scatter) vs rejoin, scatter_writebehind
 - make sure locker avoids frozen inodes
 - make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
 - make sure stray inode is always opened on startup
+- make sure inode cache expire for frozen inode behaves
 
 - look at the client_map session opening code.. versus rollback (of import, or slave request)
 
