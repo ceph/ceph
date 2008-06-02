@@ -934,58 +934,62 @@ int MDCache::num_subtrees_fullnonauth()
 
 /*
  * some handlers for master requests with slaves.  we need to make 
- * sure slaves journal commits before we forget we mastered them.
+ * sure slaves journal commits before we forget we mastered them and
+ * remove them from the uncommitted_masters map (used during recovery
+ * to commit|abort slaves).
  */
-struct C_MDC_CommittedSlaves : public Context {
+struct C_MDC_CommittedMaster : public Context {
   MDCache *cache;
   metareqid_t reqid;
   LogSegment *ls;
   list<Context*> waiters;
-  C_MDC_CommittedSlaves(MDCache *s, metareqid_t r, LogSegment *l, list<Context*> &w) :
+  C_MDC_CommittedMaster(MDCache *s, metareqid_t r, LogSegment *l, list<Context*> &w) :
     cache(s), reqid(r), ls(l) {
     waiters.swap(w);
   }
   void finish(int r) {
-    cache->_logged_committed_slaves(reqid, ls, waiters);
+    cache->_logged_master_commit(reqid, ls, waiters);
   }
 };
 
-void MDCache::log_all_uncommitted_slaves()
+void MDCache::log_master_commit(metareqid_t reqid)
 {
-  while (!uncommitted_slaves.empty())
-    log_committed_slaves(uncommitted_slaves.begin()->first);
-}
-
-void MDCache::log_committed_slaves(metareqid_t reqid)
-{
-  dout(10) << "log_committed_slaves " << reqid << dendl;
+  dout(10) << "log_master_commit " << reqid << dendl;
   mds->mdlog->submit_entry(new ECommitted(reqid), 
-			   new C_MDC_CommittedSlaves(this, reqid, 
-						     uncommitted_slaves[reqid].ls,
-						     uncommitted_slaves[reqid].waiters));
-  mds->mdcache->uncommitted_slaves.erase(reqid);
+			   new C_MDC_CommittedMaster(this, reqid, 
+						     uncommitted_masters[reqid].ls,
+						     uncommitted_masters[reqid].waiters));
+  mds->mdcache->uncommitted_masters.erase(reqid);
 }
 
-void MDCache::_logged_committed_slaves(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters)
+void MDCache::_logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters)
 {
-  dout(10) << "_logged_committed_slaves " << reqid << dendl;
-  ls->uncommitted_slaves.erase(reqid);
+  dout(10) << "_logged_master_commit " << reqid << dendl;
+  ls->uncommitted_masters.erase(reqid);
   mds->queue_waiters(waiters);
 }
 
 // while active...
 
-void MDCache::committed_slave(metareqid_t r, int from)
+void MDCache::committed_master_slave(metareqid_t r, int from)
 {
-  dout(10) << "committed_slave mds" << from << " on " << r << dendl;
-  assert(uncommitted_slaves.count(r));
-  uncommitted_slaves[r].slaves.erase(from);
-  if (uncommitted_slaves[r].slaves.empty())
-    log_committed_slaves(r);
+  dout(10) << "committed_master_slave mds" << from << " on " << r << dendl;
+  assert(uncommitted_masters.count(r));
+  uncommitted_masters[r].slaves.erase(from);
+  if (uncommitted_masters[r].slaves.empty())
+    log_master_commit(r);
 }
 
-// at end of resolve...
 
+
+/*
+ * at end of resolve... we must journal a commit|abort for all slave
+ * updates, before moving on.
+ * 
+ * this is so that the master can safely journal ECommitted on ops it
+ * masters when it reaches up:active (all other recovering nodes must
+ * complete resolve before that happens).
+ */
 struct C_MDC_SlaveCommit : public Context {
   MDCache *cache;
   int from;
@@ -999,13 +1003,10 @@ struct C_MDC_SlaveCommit : public Context {
 void MDCache::_logged_slave_commit(int from, metareqid_t reqid)
 {
   dout(10) << "_logged_slave_commit from mds" << from << " " << reqid << dendl;
-  delete uncommitted_slave_updates[from][reqid];
-  uncommitted_slave_updates[from].erase(reqid);
-  if (uncommitted_slave_updates[from].empty())
-    uncommitted_slave_updates.erase(from);
   
-  if (uncommitted_slave_updates.empty() && mds->is_resolve())
-    maybe_resolve_finish();    
+  // send a message
+  MMDSSlaveRequest *req = new MMDSSlaveRequest(reqid, MMDSSlaveRequest::OP_COMMITTED);
+  mds->send_message_mds(req, from);
 }
 
 
@@ -1336,10 +1337,11 @@ void MDCache::handle_resolve(MMDSResolve *m)
     for (list<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
-      if (uncommitted_slaves.count(*p)) {  //mds->sessionmap.have_completed_request(*p)) {
+      if (uncommitted_masters.count(*p)) {  //mds->sessionmap.have_completed_request(*p)) {
 	// COMMIT
 	dout(10) << " ambiguous slave request " << *p << " will COMMIT" << dendl;
 	ack->add_commit(*p);
+	uncommitted_masters[*p].slaves.insert(from);   // wait for slave OP_COMMITTED before we log ECommitted
       } else {
 	// ABORT
 	dout(10) << " ambiguous slave request " << *p << " will ABORT" << dendl;
@@ -1452,9 +1454,6 @@ void MDCache::maybe_resolve_finish()
     dout(10) << "maybe_resolve_finish still waiting for rollback to commit on (" 
 	     << need_resolve_rollback << ")" << dendl;
   } 
-  else if (!uncommitted_slave_updates.empty()) {
-    dout(10) << "maybe_resolve_finish still waiting for slave commits to commit" << dendl;
-  } 
   else {
     dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
     disambiguate_imports();
@@ -1483,8 +1482,13 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       // log commit
       mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from,
 						ESlaveUpdate::OP_COMMIT, uncommitted_slave_updates[from][*p]->origop));
+
       delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
+      if (uncommitted_slave_updates[from].empty())
+	uncommitted_slave_updates.erase(from);
+
+      mds->mdlog->wait_for_sync(new C_MDC_SlaveCommit(this, from, *p));
     } else {
       MDRequest *mdr = request_get(*p);
       assert(mdr->slave_request == 0);  // shouldn't be doing anything!
@@ -1509,7 +1513,10 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       else
 	assert(0);
 
-      mds->mdlog->wait_for_sync(new C_MDC_SlaveCommit(this, from, *p));
+      delete uncommitted_slave_updates[from][*p];
+      uncommitted_slave_updates[from].erase(*p);
+      if (uncommitted_slave_updates[from].empty())
+	uncommitted_slave_updates.erase(from);
     } else {
       MDRequest *mdr = request_get(*p);
       if (mdr->more()->slave_commit) {

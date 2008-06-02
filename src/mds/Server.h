@@ -135,8 +135,8 @@ public:
 			  CDentry *dn, CInode *targeti,
 			  version_t, version_t);
 
-  void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
-  void _link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
+  void _link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti);
+  void _link_remote_finish(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
   void handle_slave_link_prep(MDRequest *mdr);
@@ -154,11 +154,6 @@ public:
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
 			    version_t);    
-
-  void _unlink_remote(MDRequest *mdr, CDentry *dn);
-  void _unlink_remote_finish(MDRequest *mdr, 
-			     CDentry *dn, 
-			     version_t);    
 
   // rename
   void handle_client_rename(MDRequest *mdr);

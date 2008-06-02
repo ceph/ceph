@@ -107,12 +107,12 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // master ops with possibly uncommitted slaves
-  for (set<metareqid_t>::iterator p = uncommitted_slaves.begin();
-       p != uncommitted_slaves.end();
+  for (set<metareqid_t>::iterator p = uncommitted_masters.begin();
+       p != uncommitted_masters.end();
        p++) {
     dout(10) << "try_to_expire waiting for slaves to ack commit on " << *p << dendl;
     if (!gather) gather = new C_Gather;
-    mds->mdcache->wait_for_uncommitted_slaves(*p, gather->new_sub());
+    mds->mdcache->wait_for_uncommitted_master(*p, gather->new_sub());
   }
 
   // dirty non-auth mtimes
@@ -606,7 +606,7 @@ void EUpdate::update_segment()
   metablob.update_segment(_segment);
 
   if (had_slaves)
-    _segment->uncommitted_slaves.insert(reqid);
+    _segment->uncommitted_masters.insert(reqid);
 }
 
 void EUpdate::replay(MDS *mds)
@@ -615,7 +615,9 @@ void EUpdate::replay(MDS *mds)
 
   if (had_slaves) {
     dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
-    _segment->uncommitted_slaves.insert(reqid);
+    _segment->uncommitted_masters.insert(reqid);
+    set<int> slaves;
+    mds->mdcache->add_uncommitted_master(reqid, _segment, slaves);
   }
 }
 
@@ -649,10 +651,10 @@ void EOpen::replay(MDS *mds)
 
 void ECommitted::replay(MDS *mds)
 {
-  if (mds->mdcache->uncommitted_slaves.count(reqid)) {
+  if (mds->mdcache->uncommitted_masters.count(reqid)) {
     dout(10) << "ECommitted.replay " << reqid << dendl;
-    mds->mdcache->uncommitted_slaves[reqid].ls->uncommitted_slaves.erase(reqid);
-    mds->mdcache->uncommitted_slaves.erase(reqid);
+    mds->mdcache->uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
+    mds->mdcache->uncommitted_masters.erase(reqid);
   } else {
     dout(10) << "ECommitted.replay " << reqid << " -- didn't see original op" << dendl;
   }
@@ -680,6 +682,8 @@ void ESlaveUpdate::replay(MDS *mds)
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master << dendl;
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
+      if (mds->mdcache->uncommitted_slave_updates[master].empty())
+	mds->mdcache->uncommitted_slave_updates.erase(master);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
 	       << ": ignoring, no previously saved prepare" << dendl;
@@ -694,6 +698,8 @@ void ESlaveUpdate::replay(MDS *mds)
       commit.replay(mds, _segment);
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
+      if (mds->mdcache->uncommitted_slave_updates[master].empty())
+	mds->mdcache->uncommitted_slave_updates.erase(master);
     } else {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master 
 	       << ": ignoring, no previously saved prepare" << dendl;

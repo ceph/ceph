@@ -49,7 +49,7 @@ class LogSegment {
 
   // committed anchor transactions
   hash_set<version_t> pending_commit_atids;
-  set<metareqid_t> uncommitted_slaves;
+  set<metareqid_t> uncommitted_masters;
 
   // client request ids
   map<int, tid_t> last_client_tids;

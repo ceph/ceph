@@ -869,7 +869,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     case MMDSSlaveRequest::OP_COMMITTED:
       {
 	metareqid_t r = m->get_reqid();
-	mds->mdcache->committed_slave(r, from);
+	mds->mdcache->committed_master_slave(r, from);
       }
       break;
 
@@ -2198,7 +2198,7 @@ void Server::handle_client_link(MDRequest *mdr)
   if (targeti->is_auth()) 
     _link_local(mdr, dn, targeti);
   else 
-    _link_remote(mdr, dn, targeti);
+    _link_remote(mdr, true, dn, targeti);
 }
 
 
@@ -2273,34 +2273,42 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 }
 
 
-// remote
+// link / unlink remote
 
 class C_MDS_link_remote_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
+  bool inc;
   CDentry *dn;
   CInode *targeti;
   version_t dpv;
 public:
-  C_MDS_link_remote_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ti) :
-    mds(m), mdr(r), dn(d), targeti(ti),
+  C_MDS_link_remote_finish(MDS *m, MDRequest *r, bool i, CDentry *d, CInode *ti) :
+    mds(m), mdr(r), inc(i), dn(d), targeti(ti),
     dpv(d->get_projected_version()) {}
   void finish(int r) {
     assert(r == 0);
-    mds->server->_link_remote_finish(mdr, dn, targeti, dpv);
+    mds->server->_link_remote_finish(mdr, inc, dn, targeti, dpv);
   }
 };
 
-void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
+void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti)
 {
-  dout(10) << "_link_remote " << *dn << " to " << *targeti << dendl;
+  dout(10) << "_link_remote " 
+	   << (inc ? "link ":"unlink ")
+	   << *dn << " to " << *targeti << dendl;
 
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   int linkauth = targeti->authority().first;
   if (mdr->more()->witnessed.count(linkauth) == 0) {
-    dout(10) << " targeti auth must prepare nlink++" << dendl;
+    dout(10) << " targeti auth must prepare nlink++/--" << dendl;
 
-    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_LINKPREP);
+    int op;
+    if (inc)
+      op = MMDSSlaveRequest::OP_LINKPREP;
+    else 
+      op = MMDSSlaveRequest::OP_UNLINKPREP;
+    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, op);
     targeti->set_object_info(req->get_object_info());
     req->now = mdr->now;
     mds->send_message_mds(req, linkauth);
@@ -2309,49 +2317,75 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
     mdr->more()->waiting_on_slave.insert(linkauth);
     return;
   }
-  dout(10) << " targeti auth has prepared nlink++" << dendl;
+  dout(10) << " targeti auth has prepared nlink++/--" << dendl;
 
   //assert(0);  // test hack: verify that remote slave can do a live rollback.
 
-  // go.
-  // predirty dentry
-  dn->pre_dirty();
-  
   // add to event
   mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "link_remote");
+  EUpdate *le = new EUpdate(mdlog, inc ? "link_remote":"unlink_remote");
   le->metablob.add_client_req(mdr->reqid);
   if (!mdr->more()->slaves.empty()) {
     dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
-    
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    
-    mds->mdcache->add_uncommitted_slaves(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
   }
 
-  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
-  le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
-				 MODE_TO_DT(targeti->inode.mode));  // new remote
+  if (inc) {
+    dn->pre_dirty();
+    mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
+    le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
+				   MODE_TO_DT(targeti->inode.mode));  // new remote
+  } else {
+    dn->pre_dirty();
+    mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, -1);
+    le->metablob.add_null_dentry(dn, true);
+  }
+
+  if (mdr->more()->dst_reanchor_atid)
+    le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
 
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, dn, targeti));
+  mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, inc, dn, targeti));
 }
 
-void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
+void Server::_link_remote_finish(MDRequest *mdr, bool inc,
+				 CDentry *dn, CInode *targeti,
 				 version_t dpv)
 {
-  dout(10) << "_link_remote_finish " << *dn << " to " << *targeti << dendl;
+  dout(10) << "_link_remote_finish "
+	   << (inc ? "link ":"unlink ")
+	   << *dn << " to " << *targeti << dendl;
 
-  // link the new dentry
-  dn->dir->link_remote_inode(dn, targeti);
-  dn->mark_dirty(dpv, mdr->ls);
+  if (inc) {
+    // link the new dentry
+    dn->dir->link_remote_inode(dn, targeti);
+    dn->mark_dirty(dpv, mdr->ls);
+  } else {
+    // unlink main dentry
+    dn->dir->unlink_inode(dn);
+    dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
+
+    // share unlink news with replicas
+    for (map<int,int>::iterator it = dn->replicas_begin();
+	 it != dn->replicas_end();
+	 it++) {
+      dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
+      MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
+      mds->send_message_mds(unlink, it->first);
+    }
+  }
 
   mdr->apply();
   
+  // commit anchor update?
+  if (mdr->more()->dst_reanchor_atid) 
+    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
+
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
   //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
@@ -2359,6 +2393,10 @@ void Server::_link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply, targeti, dn);  // FIXME: imprecise ref
+
+  if (!inc)
+    // removing a new dn?
+    dn->dir->try_remove_unlinked_dn(dn);
 }
 
 
@@ -2750,7 +2788,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // ok!
   if (dn->is_remote() && !dn->inode->is_auth()) 
-    _unlink_remote(mdr, dn);
+    _link_remote(mdr, false, dn, dn->inode);
   else
     _unlink_local(mdr, dn, straydn);
 }
@@ -2870,102 +2908,6 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   // removing a new dn?
   dn->dir->try_remove_unlinked_dn(dn);
 }
-
-
-class C_MDS_unlink_remote_finish : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CDentry *dn;
-  version_t dnpv;  // deleted dentry
-public:
-  C_MDS_unlink_remote_finish(MDS *m, MDRequest *r, CDentry *d) :
-    mds(m), mdr(r), dn(d), 
-    dnpv(d->get_projected_version()) { }
-  void finish(int r) {
-    assert(r == 0);
-    mds->server->_unlink_remote_finish(mdr, dn, dnpv);
-  }
-};
-
-void Server::_unlink_remote(MDRequest *mdr, CDentry *dn) 
-{
-  dout(10) << "_unlink_remote " << *dn << " " << *dn->inode << dendl;
-
-  // 1. send LinkPrepare to dest (journal nlink-- prepare)
-  int inauth = dn->inode->authority().first;
-  if (mdr->more()->witnessed.count(inauth) == 0) {
-    dout(10) << " inode auth must prepare nlink--" << dendl;
-
-    MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_UNLINKPREP);
-    dn->inode->set_object_info(req->get_object_info());
-    req->now = mdr->now;
-    mds->send_message_mds(req, inauth);
-
-    assert(mdr->more()->waiting_on_slave.count(inauth) == 0);
-    mdr->more()->waiting_on_slave.insert(inauth);
-    return;
-  }
-  dout(10) << " inode auth has prepared nlink--" << dendl;
-
-  // ok, let's do it.
-  // prepare log entry
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "unlink_remote");
-  le->metablob.add_client_req(mdr->reqid);
-
-  // the unlinked dentry
-  mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
-  dn->pre_dirty();
-  le->metablob.add_null_dentry(dn, true);
-
-  if (mdr->more()->dst_reanchor_atid)
-    le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
-
-  // finisher
-  C_MDS_unlink_remote_finish *fin = new C_MDS_unlink_remote_finish(mds, mdr, dn);
-  
-  // mark committing (needed for proper recovery)
-  mdr->committing = true;
-
-  // log + wait
-  mdlog->submit_entry(le, fin);
-}
-
-void Server::_unlink_remote_finish(MDRequest *mdr, 
-				   CDentry *dn, 
-				   version_t dnpv) 
-{
-  dout(10) << "_unlink_remote_finish " << *dn << dendl;
-
-  // unlink main dentry
-  dn->dir->unlink_inode(dn);
-
-  mdr->apply();
-  dn->mark_dirty(dnpv, mdr->ls);  // dirty old dentry
-
-  // share unlink news with replicas
-  for (map<int,int>::iterator it = dn->replicas_begin();
-       it != dn->replicas_end();
-       it++) {
-    dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
-    MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
-    mds->send_message_mds(unlink, it->first);
-  }
-
-  // commit anchor update?
-  if (mdr->more()->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
-
-  //mds->balancer->hit_dir(mdr->now, dn->dir, META_POP_DWR);
-
-  // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, 0, dn);  // FIXME: imprecise ref
-
-  // removing a new dn?
-  dn->dir->try_remove_unlinked_dn(dn);
-}
-
 
 
 
@@ -3289,7 +3231,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
-  if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
+  //if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
   //if (!mdr->more()->slaves.empty() && srci->is_dir()) assert(0); 
   
   // -- prepare anchor updates -- 
@@ -3339,7 +3281,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     le->reqid = mdr->reqid;
     le->had_slaves = true;
     
-    mds->mdcache->add_uncommitted_slaves(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
   }
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
@@ -3365,6 +3307,10 @@ void Server::handle_client_rename(MDRequest *mdr)
 void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_finish " << *mdr << dendl;
+
+  // test hack: test slave commit
+  if (!mdr->more()->slaves.empty() && !destdn->inode->is_dir()) assert(0); 
+  //if (!mdr->more()->slaves.empty() && destdn->inode->is_dir()) assert(0); 
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);

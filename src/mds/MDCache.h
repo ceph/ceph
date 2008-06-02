@@ -443,17 +443,17 @@ public:
   void request_cleanup(MDRequest *r);
 
   // slaves
-  void add_uncommitted_slaves(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {
-    uncommitted_slaves[reqid].ls = ls;
-    uncommitted_slaves[reqid].slaves = slaves;
+  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {
+    uncommitted_masters[reqid].ls = ls;
+    uncommitted_masters[reqid].slaves = slaves;
   }
-  void wait_for_uncommitted_slaves(metareqid_t reqid, Context *c) {
-    uncommitted_slaves[reqid].waiters.push_back(c);
+  void wait_for_uncommitted_master(metareqid_t reqid, Context *c) {
+    uncommitted_masters[reqid].waiters.push_back(c);
   }
-  void log_all_uncommitted_slaves();
-  void log_committed_slaves(metareqid_t reqid);
-  void _logged_committed_slaves(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters);
-  void committed_slave(metareqid_t r, int from);
+  void log_master_commit(metareqid_t reqid);
+  void _logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters);
+  void committed_master_slave(metareqid_t r, int from);
+
   void _logged_slave_commit(int from, metareqid_t reqid);
 
 
@@ -481,12 +481,12 @@ protected:
   map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
 
   // track master requests whose slaves haven't acknowledged commit
-  struct uslave {
+  struct umaster {
     set<int> slaves;
     LogSegment *ls;
     list<Context*> waiters;
   };
-  map<metareqid_t, uslave>                 uncommitted_slaves;         // master: req -> slave set
+  map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
 
   //map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
   //map<metareqid_t, Context*> waiting_for_slave_update_commit;
