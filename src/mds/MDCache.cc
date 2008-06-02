@@ -44,6 +44,7 @@
 #include "events/EPurgeFinish.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
+#include "events/ECommitted.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -927,6 +928,88 @@ int MDCache::num_subtrees_fullnonauth()
 
 
 
+// ===================================
+// slave requests
+
+
+/*
+ * some handlers for master requests with slaves.  we need to make 
+ * sure slaves journal commits before we forget we mastered them.
+ */
+struct C_MDC_CommittedSlaves : public Context {
+  MDCache *cache;
+  metareqid_t reqid;
+  LogSegment *ls;
+  list<Context*> waiters;
+  C_MDC_CommittedSlaves(MDCache *s, metareqid_t r, LogSegment *l, list<Context*> &w) :
+    cache(s), reqid(r), ls(l) {
+    waiters.swap(w);
+  }
+  void finish(int r) {
+    cache->_logged_committed_slaves(reqid, ls, waiters);
+  }
+};
+
+void MDCache::log_all_uncommitted_slaves()
+{
+  while (!uncommitted_slaves.empty())
+    log_committed_slaves(uncommitted_slaves.begin()->first);
+}
+
+void MDCache::log_committed_slaves(metareqid_t reqid)
+{
+  dout(10) << "log_committed_slaves " << reqid << dendl;
+  mds->mdlog->submit_entry(new ECommitted(reqid), 
+			   new C_MDC_CommittedSlaves(this, reqid, 
+						     uncommitted_slaves[reqid].ls,
+						     uncommitted_slaves[reqid].waiters));
+  mds->mdcache->uncommitted_slaves.erase(reqid);
+}
+
+void MDCache::_logged_committed_slaves(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters)
+{
+  dout(10) << "_logged_committed_slaves " << reqid << dendl;
+  ls->uncommitted_slaves.erase(reqid);
+  mds->queue_waiters(waiters);
+}
+
+// while active...
+
+void MDCache::committed_slave(metareqid_t r, int from)
+{
+  dout(10) << "committed_slave mds" << from << " on " << r << dendl;
+  assert(uncommitted_slaves.count(r));
+  uncommitted_slaves[r].slaves.erase(from);
+  if (uncommitted_slaves[r].slaves.empty())
+    log_committed_slaves(r);
+}
+
+// at end of resolve...
+
+struct C_MDC_SlaveCommit : public Context {
+  MDCache *cache;
+  int from;
+  metareqid_t reqid;
+  C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : cache(c), from(f), reqid(r) {}
+  void finish(int r) {
+    cache->_logged_slave_commit(from, reqid);
+  }
+};
+
+void MDCache::_logged_slave_commit(int from, metareqid_t reqid)
+{
+  dout(10) << "_logged_slave_commit from mds" << from << " " << reqid << dendl;
+  delete uncommitted_slave_updates[from][reqid];
+  uncommitted_slave_updates[from].erase(reqid);
+  if (uncommitted_slave_updates[from].empty())
+    uncommitted_slave_updates.erase(from);
+  
+  if (uncommitted_slave_updates.empty() && mds->is_resolve())
+    maybe_resolve_finish();    
+}
+
+
+
 
 
 
@@ -1253,7 +1336,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
     for (list<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
-      if (mds->sessionmap.have_completed_request(*p)) {
+      if (uncommitted_slaves.count(*p)) {  //mds->sessionmap.have_completed_request(*p)) {
 	// COMMIT
 	dout(10) << " ambiguous slave request " << *p << " will COMMIT" << dendl;
 	ack->add_commit(*p);
@@ -1358,15 +1441,21 @@ void MDCache::handle_resolve(MMDSResolve *m)
 void MDCache::maybe_resolve_finish()
 {
   if (got_resolve != recovery_set) {
-    dout(10) << "maybe_resolve_finish still waiting for more resolves, got (" << got_resolve 
-	     << "), need (" << recovery_set << ")" << dendl;
+    dout(10) << "maybe_resolve_finish still waiting for more resolves, got (" 
+	     << got_resolve << "), need (" << recovery_set << ")" << dendl;
   } 
   else if (!need_resolve_ack.empty()) {
-    dout(10) << "maybe_resolve_finish still waiting for resolve_ack from (" << need_resolve_ack << ")" << dendl;
+    dout(10) << "maybe_resolve_finish still waiting for resolve_ack from (" 
+	     << need_resolve_ack << ")" << dendl;
   }
   else if (!need_resolve_rollback.empty()) {
-    dout(10) << "maybe_resolve_finish still waiting for rollback to commit on (" << need_resolve_rollback << ")" << dendl;
-  } else {
+    dout(10) << "maybe_resolve_finish still waiting for rollback to commit on (" 
+	     << need_resolve_rollback << ")" << dendl;
+  } 
+  else if (!uncommitted_slave_updates.empty()) {
+    dout(10) << "maybe_resolve_finish still waiting for slave commits to commit" << dendl;
+  } 
+  else {
     dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
     disambiguate_imports();
     if (mds->is_resolve()) {
@@ -1376,6 +1465,7 @@ void MDCache::maybe_resolve_finish()
     }
   } 
 }
+
 
 void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 {
@@ -1419,8 +1509,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       else
 	assert(0);
 
-      delete uncommitted_slave_updates[from][*p];
-      uncommitted_slave_updates[from].erase(*p);
+      mds->mdlog->wait_for_sync(new C_MDC_SlaveCommit(this, from, *p));
     } else {
       MDRequest *mdr = request_get(*p);
       if (mdr->more()->slave_commit) {
@@ -4779,6 +4868,8 @@ for (int i=0; i<CInode::NUM_PINS; i++) {
   }
 
 }
+
+
 
 
 // --------------------------------------------------------------------

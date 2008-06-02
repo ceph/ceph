@@ -41,6 +41,7 @@
 #include "events/ESlaveUpdate.h"
 #include "events/ESession.h"
 #include "events/EOpen.h"
+#include "events/ECommitted.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -862,6 +863,13 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       {
 	MDRequest *mdr = mdcache->request_get(m->get_reqid());
 	handle_slave_rename_prep_ack(mdr, m);
+      }
+      break;
+
+    case MMDSSlaveRequest::OP_COMMITTED:
+      {
+	metareqid_t r = m->get_reqid();
+	mds->mdcache->committed_slave(r, from);
       }
       break;
 
@@ -2286,7 +2294,7 @@ public:
 void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
 {
   dout(10) << "_link_remote " << *dn << " to " << *targeti << dendl;
-    
+
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   int linkauth = targeti->authority().first;
   if (mdr->more()->witnessed.count(linkauth) == 0) {
@@ -2313,6 +2321,15 @@ void Server::_link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "link_remote");
   le->metablob.add_client_req(mdr->reqid);
+  if (!mdr->more()->slaves.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+    
+    le->reqid = mdr->reqid;
+    le->had_slaves = true;
+    
+    mds->mdcache->add_uncommitted_slaves(mdr->reqid, mdr->ls, mdr->more()->slaves);
+  }
+
   mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
 				 MODE_TO_DT(targeti->inode.mode));  // new remote
@@ -2468,6 +2485,15 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
 }
 
 
+struct C_MDS_CommittedSlave : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_CommittedSlave(Server *s, MDRequest *m) : server(s), mdr(m) {}
+  void finish(int r) {
+    server->_committed_slave(mdr);
+  }
+};
+
 void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
 {  
   dout(10) << "_commit_slave_link " << *mdr
@@ -2478,11 +2504,18 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
     // write a commit to the journal
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_commit", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_COMMIT, ESlaveUpdate::LINK);
-    mdlog->submit_entry(le);
-    mds->mdcache->request_finish(mdr);
+    mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
   } else {
     do_link_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
   }
+}
+
+void Server::_committed_slave(MDRequest *mdr)
+{
+  dout(10) << "_committed_slave " << *mdr << dendl;
+  MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_COMMITTED);
+  mds->send_message_mds(req, mdr->slave_to_mds);
+  mds->mdcache->request_finish(mdr);
 }
 
 struct C_MDS_LoggedLinkRollback : public Context {
@@ -3300,8 +3333,17 @@ void Server::handle_client_rename(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rename");
   le->metablob.add_client_req(mdr->reqid);
+  if (!mdr->more()->slaves.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+    
+    le->reqid = mdr->reqid;
+    le->had_slaves = true;
+    
+    mds->mdcache->add_uncommitted_slaves(mdr->reqid, mdr->ls, mdr->more()->slaves);
+  }
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
+
 
   if (!srcdn->is_auth() && srcdn->is_primary()) {
     // importing inode; also journal imported client map
@@ -3748,8 +3790,12 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     if (srcdn->is_primary() && 
 	!srcdn->inode->is_freezing_inode() &&
 	!srcdn->inode->is_frozen_inode()) {
-      // srci auth.  
-      // set ambiguous auth.
+      // set ambiguous auth for srci
+      /*
+       * NOTE: we don't worry about ambiguous cache expire as we do
+       * with subtree migrations because all slaves will pin
+       * srcdn->inode for duration of this rename.
+       */
       srcdn->inode->state_set(CInode::STATE_AMBIGUOUSAUTH);
 
       // freeze?
@@ -3798,7 +3844,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   else {
     assert(srcdn->is_remote());
     rollback.orig_src.remote_ino = srcdn->get_remote_ino();
-    rollback.orig_src.remote_ino = srcdn->get_remote_d_type();
+    rollback.orig_src.remote_d_type = srcdn->get_remote_d_type();
   }
   
   rollback.orig_dest.dirfrag = destdn->dir->dirfrag();
@@ -3809,7 +3855,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     rollback.orig_dest.ino = destdn->inode->ino();
   else if (destdn->is_remote()) {
     rollback.orig_dest.remote_ino = destdn->get_remote_ino();
-    rollback.orig_dest.remote_ino = destdn->get_remote_d_type();
+    rollback.orig_dest.remote_d_type = destdn->get_remote_d_type();
   }
   
   if (straydn) {
@@ -3837,7 +3883,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
   } else {
     // don't journal.
-    dout(10) << "not journaling, i'm not auth for anything, and srci isn't open" << dendl;
+    dout(10) << "not journaling: i'm not auth for anything, and srci has no caps" << dendl;
 
     // prepare anyway; this may twiddle dir_auth
     EMetaBlob blob;
@@ -3922,8 +3968,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       mds->queue_waiters(finished);
     }
 
-    mdlog->submit_entry(le);
-    mds->mdcache->request_finish(mdr);
+    mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
   } else {
     if (srcdn->is_auth() && destdn->is_primary() &&
 	destdn->inode->state_test(CInode::STATE_AMBIGUOUSAUTH)) {

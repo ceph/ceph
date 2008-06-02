@@ -23,11 +23,13 @@ public:
   EMetaBlob metablob;
   string type;
   bufferlist client_map;
+  metareqid_t reqid;
+  bool had_slaves;
 
   EUpdate() : LogEvent(EVENT_UPDATE) { }
   EUpdate(MDLog *mdlog, const char *s) : 
     LogEvent(EVENT_UPDATE), metablob(mdlog),
-    type(s) { }
+    type(s), had_slaves(false) { }
   
   void print(ostream& out) {
     if (type.length())
@@ -39,11 +41,15 @@ public:
     ::encode(type, bl);
     ::encode(metablob, bl);
     ::encode(client_map, bl);
+    ::encode(reqid, bl);
+    ::encode(had_slaves, bl);
   } 
   void decode(bufferlist::iterator &bl) {
     ::decode(type, bl);
     ::decode(metablob, bl);
     ::decode(client_map, bl);
+    ::decode(reqid, bl);
+    ::decode(had_slaves, bl);
   }
 
   void update_segment();

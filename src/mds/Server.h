@@ -142,6 +142,7 @@ public:
   void handle_slave_link_prep(MDRequest *mdr);
   void _logged_slave_link(MDRequest *mdr, CInode *targeti);
   void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti);
+  void _committed_slave(MDRequest *mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr);
   void _link_rollback_finish(Mutation *mut, MDRequest *mdr);

@@ -22,6 +22,7 @@
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
+#include "events/ECommitted.h"
 
 #include "events/EPurgeFinish.h"
 
@@ -103,6 +104,15 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	dir->add_waiter(CDir::WAIT_UNFREEZE, gather->new_sub());
       }
     }
+  }
+
+  // master ops with possibly uncommitted slaves
+  for (set<metareqid_t>::iterator p = uncommitted_slaves.begin();
+       p != uncommitted_slaves.end();
+       p++) {
+    dout(10) << "try_to_expire waiting for slaves to ack commit on " << *p << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->mdcache->wait_for_uncommitted_slaves(*p, gather->new_sub());
   }
 
   // dirty non-auth mtimes
@@ -594,11 +604,19 @@ void EAnchorClient::replay(MDS *mds)
 void EUpdate::update_segment()
 {
   metablob.update_segment(_segment);
+
+  if (had_slaves)
+    _segment->uncommitted_slaves.insert(reqid);
 }
 
 void EUpdate::replay(MDS *mds)
 {
   metablob.replay(mds, _segment);
+
+  if (had_slaves) {
+    dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
+    _segment->uncommitted_slaves.insert(reqid);
+  }
 }
 
 
@@ -622,6 +640,21 @@ void EOpen::replay(MDS *mds)
     CInode *in = mds->mdcache->get_inode(*p);
     assert(in); 
     _segment->open_files.push_back(&in->xlist_open_file);
+  }
+}
+
+
+// -----------------------
+// ECommitted
+
+void ECommitted::replay(MDS *mds)
+{
+  if (mds->mdcache->uncommitted_slaves.count(reqid)) {
+    dout(10) << "ECommitted.replay " << reqid << dendl;
+    mds->mdcache->uncommitted_slaves[reqid].ls->uncommitted_slaves.erase(reqid);
+    mds->mdcache->uncommitted_slaves.erase(reqid);
+  } else {
+    dout(10) << "ECommitted.replay " << reqid << " -- didn't see original op" << dendl;
   }
 }
 
