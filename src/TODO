@@ -66,13 +66,6 @@ mon
 
 mds mustfix
 
-/- locks (esp scatter) vs rejoin, scatter_writebehind
-- make sure locker avoids frozen inodes
-/- make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
-- make sure stray inode is always opened on startup
-/- make sure inode cache expire for frozen inode behaves
-/- REQUNSCATTER ... can we avoid the auth pin requirement?
-
 - look at the client_map session opening code.. versus rollback (of import, or slave request)
 
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
