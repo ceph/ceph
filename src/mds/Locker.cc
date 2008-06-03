@@ -2324,6 +2324,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   pi->version = in->pre_dirty();
   lock->get_parent()->finish_scatter_gather_update(lock->get_type());
   
+  lock->clear_updated();
+
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   predirty_nested(mut, &le->metablob, in, 0, true, false);
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
@@ -2338,7 +2340,6 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
-  lock->clear_updated();
   drop_locks(mut);
   //scatter_eval_gather(lock);
 }
