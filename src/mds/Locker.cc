@@ -2431,16 +2431,15 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
 	     << *lock << " on " << *p << dendl;
     // request unscatter?
     int auth = lock->get_parent()->authority().first;
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE) {
-      if (lock->get_state() == LOCK_SCATTER)
-	mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()), auth);
-      else
-	mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
-    }
+    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE)
+      mds->send_message_mds(new MLock(lock, LOCK_AC_NUDGE, mds->get_nodeid()), auth);
 
     // wait...
     if (c)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+
+    // also, requeue, in case we had wrong auth or something
+    updated_scatterlocks.push_back(&lock->xlistitem_updated);
   }
 }
 
@@ -2786,6 +2785,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     }
     break;
 
+    /*
   case LOCK_AC_REQUNSCATTER:
     if (!lock->is_stable()) {
       dout(7) << "handle_scatter_lock ignoring now-unnecessary unscatter request on " << *lock
@@ -2797,8 +2797,24 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     } else {
       dout(7) << "handle_scatter_lock DROPPING unscatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      /* FIXME: if we can't auth_pin here, this request is effectively lost... */
+      // FIXME: if we can't auth_pin here, this request is effectively lost... 
     }
+    break;
+    */
+
+  case LOCK_AC_NUDGE:
+    if (lock->get_parent()->is_auth()) {
+      dout(7) << "handle_scatter_lock trying nudge on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      scatter_nudge(lock, 0);
+    } else {
+      dout(7) << "handle_scatter_lock IGNORING nudge on non-auth " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    }    
+    break;
+
+ default: 
+   assert(0);
   }
 
   delete m;

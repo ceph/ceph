@@ -33,6 +33,7 @@
 
 #define LOCK_AC_REQSCATTER   7
 #define LOCK_AC_REQUNSCATTER 8
+#define LOCK_AC_NUDGE        9
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
@@ -49,6 +50,7 @@ static const char *get_lock_action_name(int a) {
   case LOCK_AC_LOCKACK: return "lockack";
   case LOCK_AC_REQSCATTER: return "reqscatter";
   case LOCK_AC_REQUNSCATTER: return "requnscatter";
+  case LOCK_AC_NUDGE: return "nudge";
   default: assert(0); return 0;
   }
 }
