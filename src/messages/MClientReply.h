@@ -149,8 +149,10 @@ struct InodeStat {
 
     bufferlist xbl;
     ::decode(xbl, p);
-    bufferlist::iterator q = xbl.begin();
-    ::decode(xattrs, q);
+    if (xbl.length()) {
+      bufferlist::iterator q = xbl.begin();
+      ::decode(xattrs, q);
+    }
   }
 
   static void encode(bufferlist &bl, CInode *in) {
@@ -184,7 +186,8 @@ struct InodeStat {
     ::encode(in->symlink, bl);
 
     bufferlist xbl;
-    ::encode(in->xattrs, xbl);
+    if (!in->xattrs.empty())
+      ::encode(in->xattrs, xbl);
     ::encode(xbl, bl);
   }
   
