@@ -674,7 +674,7 @@ public:
       lru.lru_midtouch(dn);
   }
 
-  void inode_remove_replica(CInode *in, int rep);
+  void inode_remove_replica(CInode *in, int rep, bool will_readd=false);
   void dentry_remove_replica(CDentry *dn, int rep);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);

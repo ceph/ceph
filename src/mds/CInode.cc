@@ -725,8 +725,6 @@ void CInode::finish_scatter_gather_update(int type)
   default:
     assert(0);
   }
-
-
 }
 
 

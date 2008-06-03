@@ -1789,7 +1789,17 @@ void MDCache::rejoin_send_rejoins()
     int auth = dir->get_dir_auth().first;
     assert(auth >= 0);
     
-    if (auth == mds->get_nodeid()) continue;  // skip my own regions!
+    if (mds->is_rejoin() && auth == mds->get_nodeid()) {
+      // include dirfrag stat?
+      int inauth = dir->inode->authority().first;
+      if (rejoins.count(inauth)) {
+	dout(10) << " sending dirfrag stat to mds" << inauth << " for " << *dir << dendl;
+	rejoins[inauth]->add_dirfrag_stat(dir->dirfrag(),
+					  dir->fnode.fragstat,
+					  dir->fnode.accounted_fragstat);
+      }
+      continue;  // skip my own regions!
+    }
     if (rejoins.count(auth) == 0) continue;   // don't care about this node's regions
 
     rejoin_walk(dir, rejoins[auth]);
@@ -1929,14 +1939,6 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       assert(dn->inode->is_dir());
       rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
       dn->get_inode()->get_nested_dirfrags(nested);
-
-      if (dn->get_inode()->dirlock.is_updated()) {   // ******* FIXME *********
-	// include full inode to shed any dirtyscattered state
-	rejoin->add_full_inode(dn->get_inode()->inode, 
-			       dn->get_inode()->symlink,
-			       dn->get_inode()->dirfragtree);
-	dn->get_inode()->dirlock.clear_updated();
-      }
     }
   } else {
     // STRONG
@@ -2022,7 +2024,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
  * the sender 
  *  - is recovering from their journal.
  *  - may have incorrect (out of date) inode contents
- *  - will include full inodes IFF they contain dirty scatterlock content
+ *  - will include weak dirfrag if sender is dirfrag auth and parent inode auth is recipient
  *
  * if the sender didn't trim_non_auth(), they
  *  - may have incorrect (out of date) dentry/inode linkage
@@ -2081,18 +2083,29 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
 
-  // full inodes?
-  //   dirty scatterlock content!
-  for (list<MMDSCacheRejoin::inode_full>::iterator p = weak->full_inodes.begin();
-       p != weak->full_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->inode.ino);
-    if (!in) continue;
-    if (p->inode.mtime > in->inode.mtime) in->inode.mtime = p->inode.mtime;
-    dout(10) << " got dirty inode scatterlock content " << *in << dendl;
-    in->dirlock.set_updated();
+  if (!mds->is_rejoin()) {
+    // dirfrag stat?  we only care if we are a survivor, and possibly
+    // doing a gather on the scatterlock in which we _need_ the
+    // replica's data.
+    for (map<dirfrag_t,pair<frag_info_t, frag_info_t> >::iterator p = weak->dirfrag_stat.begin();
+	 p != weak->dirfrag_stat.end();
+	 p++) {
+      CDir *dir = get_dirfrag(p->first);
+      assert(dir);
+      dout(10) << " got fragstat " << p->second.first << " " << p->second.second
+	       << " for " << p->first << " on " << *dir << dendl;
+      dir->fnode.fragstat = p->second.first;
+      dir->fnode.accounted_fragstat = p->second.second;
+      dir->inode->dirlock.set_updated();
+      if (dir->inode->dirlock.must_gather()) {
+	dout(10) << " completing must_gather gather on " << dir->inode->dirlock
+		 << " on " << *dir->inode << dendl;
+	dir->inode->dirlock.remove_gather(from);
+      	mds->locker->scatter_eval_gather(&dir->inode->dirlock);
+      }
+    }
   }
-
+  
   // walk weak map
   for (map<dirfrag_t, map<string, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
        p != weak->weak.end();
@@ -2128,12 +2141,12 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       assert(in);
 
       if (survivor && in->is_replica(from)) 
-	inode_remove_replica(in, from);    // this induces a lock gather completion
+	inode_remove_replica(in, from, true);  // this induces a lock gather completion... usually!
       int inonce = in->add_replica(from);
       dout(10) << " have " << *in << dendl;
 
       // scatter the dirlock, just in case?
-      if (!survivor && in->is_dir())
+      if (!survivor && in->is_dir() && in->has_subtree_root_dirfrag())
 	in->dirlock.set_state(LOCK_SCATTER);
 
       if (ack) {
@@ -3661,7 +3674,7 @@ void MDCache::discard_delayed_expire(CDir *dir)
   delayed_expire.erase(dir);  
 }
 
-void MDCache::inode_remove_replica(CInode *in, int from)
+void MDCache::inode_remove_replica(CInode *in, int from, bool will_readd)
 {
   in->remove_replica(from);
   in->mds_caps_wanted.erase(from);
@@ -3672,7 +3685,11 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   if (in->linklock.remove_replica(from)) mds->locker->simple_eval_gather(&in->linklock);
   if (in->dirfragtreelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirfragtreelock);
   if (in->filelock.remove_replica(from)) mds->locker->file_eval_gather(&in->filelock);
-  if (in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
+
+  // don't complete gather if we will re-add (i.e. we are rejoining)
+  // and dirlock must_gather actual data...
+  if ((!will_readd || !in->dirlock.must_gather()) &&
+      in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
   
   // alone now?
   /*
