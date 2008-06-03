@@ -69,12 +69,15 @@ class ScatterLock : public SimpleLock {
 
 public:
   xlist<ScatterLock*>::item xlistitem_autoscattered;
+  xlist<ScatterLock*>::item xlistitem_updated;
+  utime_t update_stamp;
 
   ScatterLock(MDSCacheObject *o, int t, int wo) : 
     SimpleLock(o, t, wo),
     num_wrlock(0),
     updated(false),
-    xlistitem_autoscattered(this) {}
+    xlistitem_autoscattered(this),
+    xlistitem_updated(this) {}
 
   int get_replica_state() {
     switch (state) {

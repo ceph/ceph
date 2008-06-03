@@ -1222,6 +1222,20 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 // nested ---------------------------------------------------------------
 
 
+void Locker::mark_updated_scatterlock(ScatterLock *lock)
+{
+  lock->set_updated();
+  if (lock->xlistitem_updated.get_xlist()) {
+    dout(10) << "mark_updated_scatterlock " << *lock
+	     << " -- already on list since " << lock->update_stamp << dendl;
+  } else {
+    updated_scatterlocks.push_back(&lock->xlistitem_updated);
+    lock->update_stamp = g_clock.now();
+    dout(10) << "mark_updated_scatterlock " << *lock
+	     << " -- added at " << lock->update_stamp << dendl;
+  }
+}
+
 /*
  * NOTE: we _have_ to delay the scatter if we are called during a
  * rejoin, because we can't twiddle locks between when the
@@ -1357,7 +1371,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     }
     if (stop) {
       dout(10) << "predirty_nested stop.  marking dirlock on " << *pin << dendl;
-      pin->dirlock.set_updated();
+      mark_updated_scatterlock(&pin->dirlock);
       mut->add_updated_scatterlock(&pin->dirlock);
       mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
       break;
@@ -2765,6 +2779,28 @@ void Locker::scatter_unscatter_autoscattered()
       }
     }
     if (--n == 0) break;
+  }
+
+
+  // updated
+  while (!updated_scatterlocks.empty()) {
+    ScatterLock *lock = updated_scatterlocks.front();
+    
+    if (!lock->is_updated() ||
+	!lock->get_parent()->is_auth() ||
+	!lock->is_stable()) {
+      updated_scatterlocks.pop_front();
+      dout(10) << " removed from updated_scatterlocks " << *lock << " " << *lock->get_parent() << dendl;
+      continue;
+    }
+    
+    if (now - lock->update_stamp < 10.0)
+      break;
+
+    updated_scatterlocks.pop_front();
+
+    dout(10) << " scattering updated_scatterlocks item " << *lock << " " << *lock->get_parent() << dendl;
+    scatter_scatter(lock);
   }
 }
 

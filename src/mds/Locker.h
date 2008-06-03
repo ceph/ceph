@@ -164,7 +164,9 @@ protected:
   };
   void scatter_writebehind_finish(ScatterLock *lock, Mutation *mut);
 
+  xlist<ScatterLock*> updated_scatterlocks;
 public:
+  void mark_updated_scatterlock(ScatterLock *lock);
   void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, CDir *dir,
 		       int flags, int linkunlink=0);
 

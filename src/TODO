@@ -65,8 +65,6 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds mustfix
-- fix rejoin vs updated dirfrag nested/dirlocks
-  - not inode_full, now.. send the fnode.  but for auth dirfrags, _to_ inode auth... which is sorta outside the subtree..?
 
 /- locks (esp scatter) vs rejoin, scatter_writebehind
 - make sure locker avoids frozen inodes
