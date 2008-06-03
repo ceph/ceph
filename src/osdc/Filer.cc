@@ -67,12 +67,12 @@ int Filer::probe(inode_t& inode,
   // start with 1+ periods.
   probe->probing_len = period;
   if (probe->fwd) {
-    if (probe->fwd)
+    if (start_from % period)
       probe->probing_len += period - (start_from % period);
   } else {
     assert(start_from > *end);
-    if (probe->fwd)
-      probe->probing_len = start_from % period;
+    if (start_from % period)
+      probe->probing_len -= period - (start_from % period);
     probe->from -= probe->probing_len;
   }
   
@@ -111,6 +111,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
     return;  // waiting for more!
 
   // analyze!
+  bool found = false;
   __u64 end = 0;
 
   if (!probe->fwd)
@@ -139,6 +140,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
 	 i++) {
       if (oleft <= (__u64)i->second) {
 	end = probe->from + i->first + oleft;
+	found = true;
 	dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
 		 << ", from was " << probe->from << ", end is " << end 
 		 << dendl;
@@ -149,7 +151,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
     break;
   }
 
-  if (end == 0) {
+  if (!found) {
     // keep probing!
     dout(10) << "_probed didn't find end, probing further" << dendl;
     __u64 period = ceph_file_layout_period(probe->inode.layout);
