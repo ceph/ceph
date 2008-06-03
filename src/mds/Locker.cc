@@ -857,6 +857,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   mut->ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
   file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+  mut->auth_pin(in);
   return true;
 }
 
@@ -1048,6 +1049,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+    mut->auth_pin(in);
     predirty_nested(mut, &le->metablob, in, 0, true, false);
     le->metablob.add_dir_context(in->get_parent_dir());
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
@@ -1349,7 +1351,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     }
     if (!stop &&
 	mut->wrlocks.count(&pin->dirlock) == 0 &&
-	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
+	(!pin->can_auth_pin() ||
+	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 !scatter_wrlock_try(&pin->dirlock, mut, false))) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_nested can't wrlock one of " << pin->versionlock << " or " << pin->dirlock
 	       << " on " << *pin << dendl;
@@ -1363,6 +1366,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       break;
     }
     local_wrlock_grab(&pin->versionlock, mut);
+    mut->auth_pin(pin);
 
     // dirfrag -> diri
     mut->add_projected_inode(pin);
@@ -1931,10 +1935,11 @@ bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mut)
   dout(7) << "scatter_rdlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
 
-  // read on stable scattered replica?  
-  if (lock->get_state() == LOCK_SCATTER &&
+  // read on stable lock|scatter replica?  
+  if ((lock->get_state() == LOCK_SCATTER ||
+       lock->get_state() == LOCK_LOCK) &&
       !lock->get_parent()->is_auth()) {
-    dout(7) << "scatter_rdlock_start  scatterlock read on a stable scattered replica, fw to auth" << dendl;
+    dout(7) << "scatter_rdlock_start  scatterlock read on a stable locked|scattered replica, fw to auth" << dendl;
     mdcache->request_forward(mut, lock->get_parent()->authority().first);
     return false;
   }
@@ -2581,6 +2586,12 @@ bool Locker::scatter_lock_fastpath(ScatterLock *lock)
       !lock->get_num_client_lease() &&
       (!lock->get_parent()->is_replicated() ||  // sync | scatter
        lock->get_state() == LOCK_TEMPSYNC)) {
+
+    if (lock->is_updated()) {
+      scatter_writebehind(lock);
+      return false;
+    } 
+
     // lock
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
@@ -3388,7 +3399,8 @@ void Locker::file_lock(FileLock *lock)
   }
 
   int gather = 0;
-  if (in->is_replicated()) {
+  if (in->is_replicated() && 
+      lock->get_state() != LOCK_GLOCKL) {  // (replicas are LOCK when auth is LONER)
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;

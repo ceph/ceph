@@ -93,15 +93,13 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
   out << " " << dir.fnode.fragstat;
+  //out << "/" << dir.fnode.accounted_fragstat;
   out << " s=" << dir.fnode.fragstat.size() 
       << "=" << dir.fnode.fragstat.nfiles
       << "+" << dir.fnode.fragstat.nsubdirs;
-  out << " rb=" << dir.fnode.fragstat.rbytes;
-  if (dir.is_projected()) out << "/" << dir.fnode.accounted_fragstat.rbytes;
-  out << " rf=" << dir.fnode.fragstat.rfiles;
-  if (dir.is_projected()) out << "/" << dir.fnode.accounted_fragstat.rfiles;
-  out << " rd=" << dir.fnode.fragstat.rsubdirs;
-  if (dir.is_projected()) out << "/" << dir.fnode.accounted_fragstat.rsubdirs;
+  out << " rb=" << dir.fnode.fragstat.rbytes << "/" << dir.fnode.accounted_fragstat.rbytes;
+  out << " rf=" << dir.fnode.fragstat.rfiles << "/" << dir.fnode.accounted_fragstat.rfiles;
+  out << " rd=" << dir.fnode.fragstat.rsubdirs << "/" << dir.fnode.accounted_fragstat.rsubdirs;
 
   out << " sz=" << dir.get_nitems() << "+" << dir.get_nnull();
   if (dir.get_num_dirty())

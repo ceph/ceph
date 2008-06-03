@@ -1920,10 +1920,12 @@ void Migrator::import_finish(CDir *dir)
   mds->mdlog->submit_entry(new EImportFinish(dir, true));
 
   // clear updated scatterlocks
+  /*
   for (list<ScatterLock*>::iterator p = import_updated_scatterlocks[dir].begin();
        p != import_updated_scatterlocks[dir].end();
        ++p) 
     (*p)->clear_updated();
+  */
 
   // remove pins
   set<CDir*> bounds;

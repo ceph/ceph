@@ -639,6 +639,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       }
       __u32 n;
       ::decode(n, p);
+      dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
       while (n--) {
 	frag_t fg;
 	frag_info_t fragstat;
@@ -646,6 +647,9 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	::decode(fg, p);
 	::decode(fragstat, p);
 	::decode(accounted_fragstat, p);
+	dout(10) << fg << " got changed fragstat " << fragstat << dendl;
+	dout(20) << fg << "   accounted_fragstat " << accounted_fragstat << dendl;
+
 	CDir *dir = get_dirfrag(fg);
 	if (is_auth()) {
 	  assert(dir);                // i am auth; i had better have this dir open
@@ -656,6 +660,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dir->fnode.accounted_fragstat = accounted_fragstat;
 	    dirlock.set_updated();
 	  } else {
+	    dout(10) << " fully accounted fragstat " << fragstat << " on " << *dir << dendl;
 	    assert(dir->fnode.fragstat == fragstat);
 	  }
 	} else {
@@ -932,7 +937,7 @@ void CInode::finish_export(utime_t now)
   pop.zero(now);
 
   // just in case!
-  dirlock.clear_updated();
+  //dirlock.clear_updated();
 
   put(PIN_TEMPEXPORTING);
 }
