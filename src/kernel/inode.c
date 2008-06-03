@@ -1872,6 +1872,10 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 
 	spin_lock(&inode->i_lock);
 
+	err = -ENODATA;
+	if (!ci->i_xattr_len)
+		goto out;
+
 	/* find attr */
 	p = ci->i_xattr_data;
 	end = p + ci->i_xattr_len;
@@ -1902,7 +1906,7 @@ out:
 	return err;
 
 bad:
-	derr(10, "currupt xattr info on %p %llx\n", dentry->d_inode,
+	derr(10, "corrupt xattr info on %p %llx\n", dentry->d_inode,
 	     ceph_ino(dentry->d_inode));
 	err = -EIO;
 	goto out;
@@ -1913,7 +1917,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int namelen = 0;
-	u32 numattr;
+	u32 numattr = 0;
 	void *p, *end;
 	int err;
 
@@ -1924,17 +1928,20 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	spin_lock(&inode->i_lock);
 
 	/* measure len */
-	p = ci->i_xattr_data;
-	end = p + ci->i_xattr_len;
-	ceph_decode_32_safe(&p, end, numattr, bad);
-	while (numattr--) {
-		u32 len;
-		ceph_decode_32_safe(&p, end, len, bad);
-		namelen += len + 1;
-		p += len;
-		ceph_decode_32_safe(&p, end, len, bad);
-		p += len;
-	}
+	if (ci->i_xattr_len) {
+		p = ci->i_xattr_data;
+		end = p + ci->i_xattr_len;
+		ceph_decode_32_safe(&p, end, numattr, bad);
+		while (numattr--) {
+			u32 len;
+			ceph_decode_32_safe(&p, end, len, bad);
+			namelen += len + 1;
+			p += len;
+			ceph_decode_32_safe(&p, end, len, bad);
+			p += len;
+		}
+	} else
+		namelen = 1; /* for \0 */
 
 	err = -ERANGE;
 	if (size && namelen > size)
@@ -1944,25 +1951,28 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 		goto out;
 
 	/* copy names */
-	p = ci->i_xattr_data;
-	ceph_decode_32(&p, numattr);
-	while (numattr--) {
-		u32 len;
-		ceph_decode_32(&p, len);
-		memcpy(names, p, len);
-		names[len] = '\0';
-		names += len + 1;
-		p += len;
-		ceph_decode_32(&p, len);
-		p += len;	
-	}
+	if (ci->i_xattr_len) {
+		p = ci->i_xattr_data;
+		ceph_decode_32(&p, numattr);
+		while (numattr--) {
+			u32 len;
+			ceph_decode_32(&p, len);
+			memcpy(names, p, len);
+			names[len] = '\0';
+			names += len + 1;
+			p += len;
+			ceph_decode_32(&p, len);
+			p += len;	
+		}
+	} else
+		names[0] = 0;
 
 out:
 	spin_unlock(&inode->i_lock);
 	return err;
 
 bad:
-	derr(10, "currupt xattr info on %p %llx\n", dentry->d_inode,
+	derr(10, "corrupt xattr info on %p %llx\n", dentry->d_inode,
 	     ceph_ino(dentry->d_inode));
 	err = -EIO;
 	goto out;
