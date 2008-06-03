@@ -490,9 +490,11 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
   in->pop_and_dirty_projected_inode(mut->ls);
   in->put(CInode::PIN_PTRWAITER);
 
-  mut->pop_and_dirty_projected_inodes();
-  mut->pop_and_dirty_projected_fnodes();
+  mut->apply();
   drop_locks(mut);
+  mut->drop_local_auth_pins();
+
+  delete mut;
   
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
@@ -2396,12 +2398,19 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
     dout(10) << "scatter_nudge waiting for unfreeze on " << *p << dendl;
     if (c) 
       p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, c);
+    else
+      // just requeue.  not ideal.. starvation prone..
+      updated_scatterlocks.push_back(&lock->xlistitem_updated);
     return;
   }
 
   if (p->is_ambiguous_auth()) {
     dout(10) << "scatter_nudge waiting for single auth on " << *p << dendl;
-    p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
+    if (c) 
+      p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
+    else
+      // just requeue.  not ideal.. starvation prone..
+      updated_scatterlocks.push_back(&lock->xlistitem_updated);
     return;
   }
 
@@ -2441,8 +2450,11 @@ void Locker::scatter_tick()
   
   // updated
   utime_t now = g_clock.now();
+  int n = updated_scatterlocks.size();
   while (!updated_scatterlocks.empty()) {
     ScatterLock *lock = updated_scatterlocks.front();
+
+    if (n-- == 0) break;  // scatter_nudge() may requeue; avoid looping
     
     if (!lock->is_updated()) {
       updated_scatterlocks.pop_front();

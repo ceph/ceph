@@ -71,17 +71,14 @@ mds mustfix
 /- make sure predirty_nested stops if it can't wrlock versionlock (acquire_locks normally hides that detail for us)
 - make sure stray inode is always opened on startup
 /- make sure inode cache expire for frozen inode behaves
+- REQSCATTER/REQUNSCATTER ... can we avoid the auth pin requirement?
 
 - look at the client_map session opening code.. versus rollback (of import, or slave request)
-
-- rollback vs accounting is just broken!  can we avoid it.
-  - even with _just_ parent dir mtime, the rollback metablob isn't sufficient during replay.. we need special handling regardless.
 
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 
 - replay of dir fragmentation  (dont want dir frozen, pins, etc.?)
-- rename slave in-memory rollback on failure
 
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
