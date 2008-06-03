@@ -918,6 +918,10 @@ void Client::handle_client_session(MClientSession *m)
       mds_sessions[from].last_cap_renew_request + mdsmap->get_cap_timeout();
     break;
 
+  case CEPH_SESSION_STALE:
+    // FIXME
+    break;
+
   default:
     assert(0);
   }
