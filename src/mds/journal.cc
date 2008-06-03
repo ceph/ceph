@@ -120,20 +120,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
-
-    if (in->is_ambiguous_auth()) {
-      dout(10) << " waiting for single auth on " << *in << dendl;
-      in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather->new_sub());
-    } else if (in->is_auth()) {
-      dout(10) << " i'm auth, unscattering dirlock on " << *in << dendl;
-      assert(in->is_replicated()); // hrm!
-      mds->locker->scatter_lock(&in->dirlock);
-      in->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
-    } else {
-      dout(10) << " i'm a replica, requesting dirlock unscatter of " << *in << dendl;
-      mds->locker->scatter_try_unscatter(&in->dirlock, gather->new_sub());
-    }
-    //(*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
+    mds->locker->scatter_nudge(&in->dirlock, gather->new_sub());
   }
 
   // open files

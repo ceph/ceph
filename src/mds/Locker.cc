@@ -1222,20 +1222,6 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 // nested ---------------------------------------------------------------
 
 
-void Locker::mark_updated_scatterlock(ScatterLock *lock)
-{
-  lock->set_updated();
-  if (lock->xlistitem_updated.get_xlist()) {
-    dout(10) << "mark_updated_scatterlock " << *lock
-	     << " -- already on list since " << lock->update_stamp << dendl;
-  } else {
-    updated_scatterlocks.push_back(&lock->xlistitem_updated);
-    lock->update_stamp = g_clock.now();
-    dout(10) << "mark_updated_scatterlock " << *lock
-	     << " -- added at " << lock->update_stamp << dendl;
-  }
-}
-
 /*
  * NOTE: we _have_ to delay the scatter if we are called during a
  * rejoin, because we can't twiddle locks between when the
@@ -1372,8 +1358,8 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     if (stop) {
       dout(10) << "predirty_nested stop.  marking dirlock on " << *pin << dendl;
       mark_updated_scatterlock(&pin->dirlock);
-      mut->add_updated_scatterlock(&pin->dirlock);
       mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
+      mut->add_updated_scatterlock(&pin->dirlock);
       break;
     }
     local_wrlock_grab(&pin->versionlock, mut);
@@ -2331,7 +2317,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   pi->version = in->pre_dirty();
   lock->get_parent()->finish_scatter_gather_update(lock->get_type());
   
-  EUpdate *le = new EUpdate(mds->mdlog, "scatter writebehind");
+  EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   predirty_nested(mut, &le->metablob, in, 0, true, false);
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
@@ -2362,6 +2348,7 @@ void Locker::scatter_eval(ScatterLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   if (in->has_subtree_root_dirfrag() && !in->is_base()) {
     // i _should_ be scattered.
+    /*
     if (!lock->is_rdlocked() &&
 	!lock->is_xlocked() &&
 	lock->get_state() != LOCK_SCATTER) {
@@ -2369,6 +2356,7 @@ void Locker::scatter_eval(ScatterLock *lock)
       scatter_scatter(lock);
       autoscattered.push_back(&lock->xlistitem_autoscattered);
     }
+    */
   } else {
     // i _should_ be sync.
     lock->xlistitem_autoscattered.remove_myself(); 
@@ -2389,24 +2377,121 @@ void Locker::note_autoscattered(ScatterLock *lock)
 
 
 /*
- * this is called by LogSegment::try_to_trim() when trying to 
- * flush dirty scattered data (e.g. inode->dirlock mtime) back
- * to the auth node.
+ * mark a scatterlock to indicate that the dir fnode has some dirty data
  */
-void Locker::scatter_try_unscatter(ScatterLock *lock, Context *c)
+void Locker::mark_updated_scatterlock(ScatterLock *lock)
 {
-  dout(10) << "scatter_try_unscatter " << *lock << " on " << *lock->get_parent() << dendl;
-  assert(!lock->get_parent()->is_auth());
-  assert(!lock->get_parent()->is_ambiguous_auth());
+  lock->set_updated();
+  if (lock->xlistitem_updated.get_xlist()) {
+    dout(10) << "mark_updated_scatterlock " << *lock
+	     << " -- already on list since " << lock->update_stamp << dendl;
+  } else {
+    updated_scatterlocks.push_back(&lock->xlistitem_updated);
+    lock->update_stamp = g_clock.now();
+    dout(10) << "mark_updated_scatterlock " << *lock
+	     << " -- added at " << lock->update_stamp << dendl;
+  }
+}
 
-  // request unscatter?
-  int auth = lock->get_parent()->authority().first;
-  if (lock->get_state() == LOCK_SCATTER &&
-      mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE) 
-    mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()), auth);
+/*
+ * this is called by scatter_tick and LogSegment::try_to_trim() when
+ * trying to flush dirty scattered data (i.e. updated fnode) back to
+ * the inode.
+ *
+ * we need to lock|scatter in order to push fnode changes into the
+ * inode.dirstat.
+ */
+void Locker::scatter_nudge(ScatterLock *lock, Context *c)
+{
+  MDSCacheObject *p = lock->get_parent();
+  if (p->is_ambiguous_auth()) {
+    dout(10) << "scatter_nudge waiting for single auth on " << *p << dendl;
+    p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
+  } else if (p->is_auth()) {
+    dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
+    if (c)
+      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+    if (lock->is_stable()) {
+      if (p->is_replicated() && lock->get_state() != LOCK_SCATTER)
+	scatter_scatter(lock);
+      else // if (lock->get_state() != LOCK_LOCK)
+	scatter_lock(lock);
+      //else
+      //scatter_sync(lock);
+    }
+  } else {
+    dout(10) << "scatter_nudge replica, requesting scatter/unscatter of " 
+	     << *lock << " on " << *p << dendl;
+    // request unscatter?
+    int auth = lock->get_parent()->authority().first;
+    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE) {
+      if (lock->get_state() == LOCK_SCATTER)
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()), auth);
+      else
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+    }
+
+    // wait...
+    if (c)
+      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+  }
+}
+
+void Locker::scatter_tick()
+{
+  dout(10) << "scatter_tick" << dendl;
   
-  // wait...
-  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+  /* 
+   * periodically unscatter autoscattered locks
+   */
+  utime_t now = g_clock.now();
+  int n = autoscattered.size();
+  while (!autoscattered.empty()) {
+    ScatterLock *lock = autoscattered.front();
+    
+    // stop?
+    if (lock->get_parent()->is_auth() &&
+	lock->get_state() == LOCK_SCATTER &&
+	now - lock->get_last_scatter() < 10.0) 
+      break;
+    
+    autoscattered.pop_front();
+
+    if (!lock->get_parent()->is_auth())
+      continue;
+
+    if (lock->get_state() == LOCK_SCATTER &&
+	lock->get_parent()->is_replicated()) {
+      if (((CInode*)lock->get_parent())->is_frozen() ||
+	  ((CInode*)lock->get_parent())->is_freezing()) {
+	// hrm.. requeue.
+	dout(10) << "last_scatter " << lock->get_last_scatter() 
+		 << ", now " << now << ", but frozen|freezing, requeueing" << dendl;
+	autoscattered.push_back(&lock->xlistitem_autoscattered);	
+      } else {
+	dout(10) << "last_scatter " << lock->get_last_scatter() 
+		 << ", now " << now << ", locking" << dendl;
+	scatter_lock(lock);
+      }
+    }
+    if (--n == 0) break;
+  }
+
+  // updated
+  while (!updated_scatterlocks.empty()) {
+    ScatterLock *lock = updated_scatterlocks.front();
+    
+    if (!lock->is_updated()) {
+      updated_scatterlocks.pop_front();
+      dout(10) << " removing from updated_scatterlocks " 
+	       << *lock << " " << *lock->get_parent() << dendl;
+      continue;
+    }
+    if (now - lock->update_stamp < g_conf.mds_scatter_nudge_interval)
+      break;
+    updated_scatterlocks.pop_front();
+    scatter_nudge(lock, 0);
+  }
 }
 
 
@@ -2740,69 +2825,6 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
 
 
-void Locker::scatter_unscatter_autoscattered()
-{
-  /* 
-   * periodically unscatter autoscattered locks
-   */
-
-  dout(10) << "scatter_unscatter_autoscattered" << dendl;
-  
-  utime_t now = g_clock.now();
-  int n = autoscattered.size();
-  while (!autoscattered.empty()) {
-    ScatterLock *lock = autoscattered.front();
-    
-    // stop?
-    if (lock->get_parent()->is_auth() &&
-	lock->get_state() == LOCK_SCATTER &&
-	now - lock->get_last_scatter() < 10.0) 
-      break;
-    
-    autoscattered.pop_front();
-
-    if (!lock->get_parent()->is_auth())
-      continue;
-
-    if (lock->get_state() == LOCK_SCATTER &&
-	lock->get_parent()->is_replicated()) {
-      if (((CInode*)lock->get_parent())->is_frozen() ||
-	  ((CInode*)lock->get_parent())->is_freezing()) {
-	// hrm.. requeue.
-	dout(10) << "last_scatter " << lock->get_last_scatter() 
-		 << ", now " << now << ", but frozen|freezing, requeueing" << dendl;
-	autoscattered.push_back(&lock->xlistitem_autoscattered);	
-      } else {
-	dout(10) << "last_scatter " << lock->get_last_scatter() 
-		 << ", now " << now << ", locking" << dendl;
-	scatter_lock(lock);
-      }
-    }
-    if (--n == 0) break;
-  }
-
-
-  // updated
-  while (!updated_scatterlocks.empty()) {
-    ScatterLock *lock = updated_scatterlocks.front();
-    
-    if (!lock->is_updated() ||
-	!lock->get_parent()->is_auth() ||
-	!lock->is_stable()) {
-      updated_scatterlocks.pop_front();
-      dout(10) << " removed from updated_scatterlocks " << *lock << " " << *lock->get_parent() << dendl;
-      continue;
-    }
-    
-    if (now - lock->update_stamp < 10.0)
-      break;
-
-    updated_scatterlocks.pop_front();
-
-    dout(10) << " scattering updated_scatterlocks item " << *lock << " " << *lock->get_parent() << dendl;
-    scatter_scatter(lock);
-  }
-}
 
 
 

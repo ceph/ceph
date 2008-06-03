@@ -191,6 +191,7 @@ struct md_config_t {
   float mds_reconnect_timeout;
 
   float mds_tick_interval;
+  float mds_scatter_nudge_interval;
 
   bool mds_log;
   int mds_log_max_events;

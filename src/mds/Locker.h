@@ -129,14 +129,15 @@ public:
   void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
   void scatter_eval_gather(ScatterLock *lock);
 
-  void scatter_unscatter_autoscattered();
-  void scatter_try_unscatter(ScatterLock *lock, Context *c);
+  void scatter_tick();
   void note_autoscattered(ScatterLock *lock);
 
+  void scatter_nudge(ScatterLock *lock, Context *c);
+
+protected:
   bool scatter_lock_fastpath(ScatterLock *lock);  // called by LogSegment::try_to_expire
   void scatter_lock(ScatterLock *lock);  // called by LogSegment::try_to_expire
 
-protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void _scatter_replica_lock(ScatterLock *lock, int auth);
   void scatter_sync(ScatterLock *lock);
