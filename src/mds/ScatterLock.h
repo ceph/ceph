@@ -68,7 +68,6 @@ class ScatterLock : public SimpleLock {
   utime_t last_scatter;
 
 public:
-  xlist<ScatterLock*>::item xlistitem_autoscattered;
   xlist<ScatterLock*>::item xlistitem_updated;
   utime_t update_stamp;
 
@@ -76,7 +75,6 @@ public:
     SimpleLock(o, t, wo),
     num_wrlock(0),
     updated(false),
-    xlistitem_autoscattered(this),
     xlistitem_updated(this) {}
 
   int get_replica_state() {

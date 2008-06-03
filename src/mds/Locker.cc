@@ -2346,20 +2346,8 @@ void Locker::scatter_eval(ScatterLock *lock)
   if (lock->get_parent()->is_frozen()) return;
 
   CInode *in = (CInode*)lock->get_parent();
-  if (in->has_subtree_root_dirfrag() && !in->is_base()) {
-    // i _should_ be scattered.
-    /*
-    if (!lock->is_rdlocked() &&
-	!lock->is_xlocked() &&
-	lock->get_state() != LOCK_SCATTER) {
-      dout(10) << "scatter_eval no rdlocks|xlocks, am subtree root inode, scattering" << dendl;
-      scatter_scatter(lock);
-      autoscattered.push_back(&lock->xlistitem_autoscattered);
-    }
-    */
-  } else {
+  if (!in->has_subtree_root_dirfrag() || in->is_base()) {
     // i _should_ be sync.
-    lock->xlistitem_autoscattered.remove_myself(); 
     if (!lock->is_wrlocked() &&
 	!lock->is_xlocked() &&
 	lock->get_state() != LOCK_SYNC) {
@@ -2367,12 +2355,6 @@ void Locker::scatter_eval(ScatterLock *lock)
       scatter_sync(lock);
     }
   }
-}
-
-void Locker::note_autoscattered(ScatterLock *lock)
-{
-  dout(10) << "note_autoscattered " << *lock << " on " << *lock->get_parent() << dendl;
-  autoscattered.push_back(&lock->xlistitem_autoscattered);
 }
 
 
@@ -2403,11 +2385,22 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
  */
 void Locker::scatter_nudge(ScatterLock *lock, Context *c)
 {
-  MDSCacheObject *p = lock->get_parent();
+  CInode *p = (CInode *)lock->get_parent();
+
+  if (p->is_frozen() || p->is_freezing()) {
+    dout(10) << "scatter_nudge waiting for unfreeze on " << *p << dendl;
+    if (c) 
+      p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, c);
+    return;
+  }
+
   if (p->is_ambiguous_auth()) {
     dout(10) << "scatter_nudge waiting for single auth on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
-  } else if (p->is_auth()) {
+    return;
+  }
+
+  if (p->is_auth()) {
     dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
     if (c)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
@@ -2441,43 +2434,8 @@ void Locker::scatter_tick()
 {
   dout(10) << "scatter_tick" << dendl;
   
-  /* 
-   * periodically unscatter autoscattered locks
-   */
-  utime_t now = g_clock.now();
-  int n = autoscattered.size();
-  while (!autoscattered.empty()) {
-    ScatterLock *lock = autoscattered.front();
-    
-    // stop?
-    if (lock->get_parent()->is_auth() &&
-	lock->get_state() == LOCK_SCATTER &&
-	now - lock->get_last_scatter() < 10.0) 
-      break;
-    
-    autoscattered.pop_front();
-
-    if (!lock->get_parent()->is_auth())
-      continue;
-
-    if (lock->get_state() == LOCK_SCATTER &&
-	lock->get_parent()->is_replicated()) {
-      if (((CInode*)lock->get_parent())->is_frozen() ||
-	  ((CInode*)lock->get_parent())->is_freezing()) {
-	// hrm.. requeue.
-	dout(10) << "last_scatter " << lock->get_last_scatter() 
-		 << ", now " << now << ", but frozen|freezing, requeueing" << dendl;
-	autoscattered.push_back(&lock->xlistitem_autoscattered);	
-      } else {
-	dout(10) << "last_scatter " << lock->get_last_scatter() 
-		 << ", now " << now << ", locking" << dendl;
-	scatter_lock(lock);
-      }
-    }
-    if (--n == 0) break;
-  }
-
   // updated
+  utime_t now = g_clock.now();
   while (!updated_scatterlocks.empty()) {
     ScatterLock *lock = updated_scatterlocks.front();
     

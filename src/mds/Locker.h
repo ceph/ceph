@@ -121,17 +121,12 @@ public:
   void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 
   // scatter
-protected:
-  xlist<ScatterLock*> autoscattered;
-
 public:
   void try_scatter_eval(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
   void scatter_eval_gather(ScatterLock *lock);
 
   void scatter_tick();
-  void note_autoscattered(ScatterLock *lock);
-
   void scatter_nudge(ScatterLock *lock, Context *c);
 
 protected:
