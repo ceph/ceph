@@ -46,7 +46,13 @@ int MonitorStore::mount()
   lock_fd = ::open(t, O_CREAT|O_RDWR, 0600);
   if (lock_fd < 0)
     return -errno;
-  int r = ::flock(lock_fd, LOCK_EX|LOCK_NB);
+  struct flock l;
+  memset(&l, 0, sizeof(l));
+  l.l_type = F_WRLCK;
+  l.l_whence = SEEK_SET;
+  l.l_start = 0;
+  l.l_len = 0;
+  int r = ::fcntl(lock_fd, F_SETLK, &l);
   if (r < 0) {
     derr(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
     return -errno;
