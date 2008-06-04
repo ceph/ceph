@@ -2978,15 +2978,14 @@ void MDCache::_recovered(CInode *in, int r)
 {
   dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " for " << *in << dendl;
 
-  // make sure this is in "newest" inode struct, and doesn't get thrown out..
-  in->get_projected_inode()->size = in->inode.size;
-
   file_recovering.erase(in);
   in->state_clear(CInode::STATE_RECOVERING);
 
-  in->auth_unpin();
+  // make sure this is in "newest" inode struct, and gets journaled
+  in->get_projected_inode()->size = in->inode.size;
+  mds->locker->check_inode_max_size(in, true, in->inode.size);
 
-  mds->locker->check_inode_max_size(in, true);
+  in->auth_unpin();
 
   do_file_recover();
 }

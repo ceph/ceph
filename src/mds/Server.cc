@@ -1614,7 +1614,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "utime");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1655,7 +1655,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chmod");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1696,7 +1696,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1755,7 +1755,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1799,7 +1799,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -4292,7 +4292,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = le64_to_cpu(req->head.args.truncate.length);
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);
@@ -4481,7 +4481,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, true, false);
+  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
   
   mdlog->submit_entry(le, fin);

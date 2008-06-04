@@ -822,10 +822,10 @@ public:
 };
 
 
-bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
+bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
 {
   assert(in->is_auth());
-  if (!forcewrlock && !in->filelock.can_wrlock()) {
+  if (!forceupdate && !in->filelock.can_wrlock()) {
     // try again later
     in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
     dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
@@ -839,8 +839,8 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
     new_max = 0;
   else if ((latest->size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-  
-  if (new_max == latest->max_size)// && !force_journal)
+
+  if (new_max == latest->max_size && !forceupdate)
     return false;  // no change.
 
   dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
@@ -852,8 +852,18 @@ bool Locker::check_inode_max_size(CInode *in, bool forcewrlock)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->max_size = new_max;
+  if (forceupdate) {
+    dout(10) << "check_inode_max_size also forcing size " 
+	     << pi->size << " -> " << new_size << dendl;
+    pi->size = new_size;
+    pi->dirstat.rbytes = new_size;
+  }
+
   EOpen *le = new EOpen(mds->mdlog);
-  le->metablob.add_dir_context(in->get_parent_dir());
+  if (forceupdate)  // FIXME if/when we do max_size nested accounting
+    predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  else
+    le->metablob.add_dir_context(in->get_parent_dir());
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
   le->add_ino(in->ino());
   mut->ls->open_files.push_back(&in->xlist_open_file);
@@ -1052,8 +1062,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     mut->ls = mds->mdlog->get_current_segment();
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
     mut->auth_pin(in);
-    predirty_nested(mut, &le->metablob, in, 0, true, false);
-    le->metablob.add_dir_context(in->get_parent_dir());
+    predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
     le->metablob.add_primary_dentry(in->parent, true, 0, pi);
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
   }
@@ -2327,7 +2336,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   lock->clear_updated();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
-  predirty_nested(mut, &le->metablob, in, 0, true, false);
+  predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
   mds->mdlog->submit_entry(le);
@@ -3357,18 +3366,7 @@ bool Locker::file_sync(FileLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_state() == LOCK_LOCK) {
-    if (in->is_replicated()) {
-      bufferlist softdata;
-      lock->encode_locked_state(softdata);
-      send_lock_message(lock, LOCK_AC_SYNC, softdata);
-    }
-    
-    // change lock
-    lock->set_state(LOCK_SYNC);
-    issue_caps(in);    // reissue caps
-    return true;
-  } else {
+  if (lock->get_state() != LOCK_LOCK) {
     // gather?
     switch (lock->get_state()) {
     case LOCK_MIXED: lock->set_state(LOCK_GSYNCM); break;
@@ -3377,15 +3375,6 @@ bool Locker::file_sync(FileLock *lock)
     }
 
     int gather = 0;
-    if (in->is_replicated()) {
-      bufferlist softdata;
-      lock->encode_locked_state(softdata);
-      send_lock_message(lock, LOCK_AC_SYNC, softdata);
-      if (lock->get_state() != LOCK_GSYNCL) {    // loner replica is already LOCK
-	lock->init_gather();
-	gather++;
-      }
-    }
     int issued = in->get_caps_issued();
     if (issued & ~lock->caps_allowed()) {
       issue_caps(in);
@@ -3399,16 +3388,24 @@ bool Locker::file_sync(FileLock *lock)
       gather++;
     }
 
-    if (gather)
+    if (gather) {
       lock->get_parent()->auth_pin();
-    else {
-      lock->set_state(LOCK_SYNC);
-      issue_caps(in);
-      return true;
+      return false;
     }
   }
 
-  return false;
+  assert(!lock->is_wrlocked());  // FIXME if we hit this we need a new gsynck state or somethin'
+
+  // ok
+  if (in->is_replicated()) {
+    bufferlist softdata;
+    lock->encode_locked_state(softdata);
+    send_lock_message(lock, LOCK_AC_SYNC, softdata);
+  }
+  
+  lock->set_state(LOCK_SYNC);
+  issue_caps(in);
+  return true;
 }
 
 
@@ -3530,11 +3527,7 @@ void Locker::file_loner(FileLock *lock)
 
   assert(in->count_nonstale_caps() == 1 && in->mds_caps_wanted.empty());
   
-  if (lock->get_state() == LOCK_LOCK) {
-    // change lock.  ignore replicas; they don't know about LONER.
-    lock->set_state(LOCK_LONER);
-    issue_caps(in);
-  } else {
+  if (lock->get_state() != LOCK_LOCK) {  // LONER replicas are LOCK
     switch (lock->get_state()) {
     case LOCK_SYNC: lock->set_state(LOCK_GLONERR); break;
     case LOCK_MIXED: lock->set_state(LOCK_GLONERM); break;
@@ -3557,13 +3550,14 @@ void Locker::file_loner(FileLock *lock)
       gather++;
     }
  
-    if (gather)
+    if (gather) {
       lock->get_parent()->auth_pin();
-    else {
-      lock->set_state(LOCK_LONER);
-      issue_caps(in);
+      return;
     }
   }
+
+  lock->set_state(LOCK_LONER);
+  issue_caps(in);
 }
 
 
