@@ -21,10 +21,14 @@ class Logger;
 class LogEvent;
 class C_MDS_rename_finish;
 class MDRequest;
+class Mutation;
 class EMetaBlob;
 class EUpdate;
 class PVList;
 class MMDSSlaveRequest;
+
+
+
 
 class Server {
   MDS *mds;
@@ -100,9 +104,6 @@ public:
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);
 
-  version_t predirty_dn_diri(MDRequest *mdr, CDentry *dn, class EMetaBlob *blob);
-  void dirty_dn_diri(MDRequest *mdr, CDentry *dn, version_t dirpv);
-
 
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
@@ -132,30 +133,27 @@ public:
   void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
   void _link_local_finish(MDRequest *mdr,
 			  CDentry *dn, CInode *targeti,
-			  version_t, version_t, version_t);
+			  version_t, version_t);
 
-  void _link_remote(MDRequest *mdr, CDentry *dn, CInode *targeti);
-  void _link_remote_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
-			   version_t, version_t);
+  void _link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti);
+  void _link_remote_finish(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti,
+			   version_t);
 
   void handle_slave_link_prep(MDRequest *mdr);
-  void _logged_slave_link(MDRequest *mdr, CInode *targeti, utime_t old_ctime, bool inc);
-  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti, 
-			  utime_t old_ctime, version_t old_version, bool inc);
+  void _logged_slave_link(MDRequest *mdr, CInode *targeti);
+  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti);
+  void _committed_slave(MDRequest *mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr);
+  void _link_rollback_finish(Mutation *mut, MDRequest *mdr);
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);
-  bool _verify_rmdir(MDRequest *mdr, CInode *rmdiri);
+  bool _dir_is_nonempty(MDRequest *mdr, CInode *rmdiri);
   void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
-			    version_t, version_t);    
-
-  void _unlink_remote(MDRequest *mdr, CDentry *dn);
-  void _unlink_remote_finish(MDRequest *mdr, 
-			     CDentry *dn, 
-			     version_t, version_t);    
+			    version_t);    
 
   // rename
   void handle_client_rename(MDRequest *mdr);
@@ -165,6 +163,7 @@ public:
   // helpers
   void _rename_prepare_witness(MDRequest *mdr, int who,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
   void _rename_prepare(MDRequest *mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
 		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
@@ -175,6 +174,8 @@ public:
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr);
+  void _rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, CDir *olddir);
 
 };
 

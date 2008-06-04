@@ -159,6 +159,7 @@ class MMDSCacheRejoin : public Message {
   int32_t op;
 
   // weak
+  map<dirfrag_t, pair<frag_info_t, frag_info_t> > dirfrag_stat;
   map<dirfrag_t, map<string, dn_weak> > weak;
   set<inodeno_t> weak_inodes;
 
@@ -214,6 +215,10 @@ class MMDSCacheRejoin : public Message {
   }
   
   // dirfrags
+  void add_dirfrag_stat(dirfrag_t df, const frag_info_t &fs, const frag_info_t &afs) {
+    dirfrag_stat[df].first = fs;
+    dirfrag_stat[df].second = afs;
+  }
   void add_weak_dirfrag(dirfrag_t df) {
     weak[df];
   }
@@ -250,6 +255,7 @@ class MMDSCacheRejoin : public Message {
     ::encode(xlocked_inodes, payload);
     ::encode(cap_export_bl, payload);
     ::encode(strong_dirfrags, payload);
+    ::encode(dirfrag_stat, payload);
     ::encode(weak, payload);
     ::encode(weak_inodes, payload);
     ::encode(strong_dentries, payload);
@@ -270,6 +276,7 @@ class MMDSCacheRejoin : public Message {
       ::decode(cap_export_paths, q);
     }
     ::decode(strong_dirfrags, p);
+    ::decode(dirfrag_stat, p);
     ::decode(weak, p);
     ::decode(weak_inodes, p);
     ::decode(strong_dentries, p);

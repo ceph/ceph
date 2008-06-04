@@ -22,7 +22,6 @@ void ceph_cancel_sock_callbacks(struct ceph_socket *);
 int ceph_workqueue_init(void);
 void ceph_workqueue_shutdown(void);
 
-extern struct ceph_socket *ceph_socket_create(void);
 extern void ceph_socket_get(struct ceph_socket *s);
 extern void ceph_socket_put(struct ceph_socket *s);
 

@@ -248,7 +248,7 @@ static inline unsigned long ceph_end_name_hash(unsigned long hash)
 
 /* Compute the hash for a name string. */
 static inline unsigned int
-ceph_full_name_hash(const unsigned char *name, unsigned int len)
+ceph_full_name_hash(const char *name, unsigned int len)
 {
 	unsigned long hash = ceph_init_name_hash();
 	while (len--)
@@ -417,7 +417,7 @@ struct ceph_mds_getmap {
 #define CEPH_LOCK_IDFT        32    /* dir frag tree */
 #define CEPH_LOCK_IDIR        64    /* mds internal */
 #define CEPH_LOCK_IXATTR      128
-#define CEPH_LOCK_INO         256   /* immutable inode bits; not actually a lock */
+#define CEPH_LOCK_INO         2048   /* immutable inode bits; not actually a lock */
 
 #define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)  /* alias for either filelock or dirlock */
 
@@ -623,6 +623,8 @@ struct ceph_mds_reply_inode {
 	__le32 mode, uid, gid;
 	__le32 nlink;
 	__le64 size, max_size;
+	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
+	struct ceph_timespec rctime;
 	__le32 rdev;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));

@@ -54,7 +54,10 @@ ostream& operator<<(ostream& out, CInode& in)
     if (in.is_replicated()) 
       out << in.get_replicas();
   } else {
-    out << "rep@" << in.authority();
+    pair<int,int> a = in.authority();
+    out << "rep@" << a.first;
+    if (a.second != CDIR_AUTH_UNKNOWN)
+      out << "," << a.second;
     out << "." << in.get_replica_nonce();
     assert(in.get_replica_nonce() >= 0);
   }
@@ -70,18 +73,40 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  if (in.get_nested_anchors())
+    out << " na=" << in.get_nested_anchors();
+
+  if (in.inode.is_dir()) {
+    out << " " << in.inode.dirstat;
+    out << " ds=" << in.inode.dirstat.size() << "=" 
+	<< in.inode.dirstat.nfiles << "+" << in.inode.dirstat.nsubdirs;
+    //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
+  } else {
+    out << " s=" << in.inode.size;
+    if (in.inode.max_size)
+      out << "/" << in.inode.max_size;
+    out << " nl=" << in.inode.nlink;
+  }
+
+  out << " rb=" << in.inode.dirstat.rbytes;
+  if (in.is_projected()) out << "/" << in.inode.accounted_dirstat.rbytes;
+  out << " rf=" << in.inode.dirstat.rfiles;
+  if (in.is_projected()) out << "/" << in.inode.accounted_dirstat.rfiles;
+  out << " rd=" << in.inode.dirstat.rsubdirs;
+  if (in.is_projected()) out << "/" << in.inode.accounted_dirstat.rsubdirs;
+  
   // locks
   out << " " << in.authlock;
   out << " " << in.linklock;
   out << " " << in.dirfragtreelock;
-  out << " " << in.filelock;
-  out << " " << in.dirlock;
+  if (in.inode.is_dir())
+    out << " " << in.dirlock;
+  else
+    out << " " << in.filelock;
   out << " " << in.xattrlock;
   
-  if (in.inode.max_size)
-    out << " size=" << in.inode.size << "/" << in.inode.max_size;
-
   // hack: spit out crap on which clients have caps
+  /*
   if (!in.get_client_caps().empty()) {
     out << " caps={";
     for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
@@ -92,6 +117,7 @@ ostream& operator<<(ostream& out, CInode& in)
     }
     out << "}";
   }
+  */
 
   if (in.get_num_ref()) {
     out << " |";
@@ -142,7 +168,7 @@ frag_t CInode::pick_dirfrag(const string& dn)
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
 
-  __u32 h = ceph_full_name_hash((const unsigned char *)dn.data(), dn.length());
+  __u32 h = ceph_full_name_hash(dn.data(), dn.length());
   return dirfragtree[h*h];
 }
 
@@ -386,11 +412,8 @@ void CInode::make_path(filepath& fp)
 
 void CInode::make_anchor_trace(vector<Anchor>& trace)
 {
-  if (parent) {
-    parent->dir->inode->make_anchor_trace(trace);
-    trace.push_back(Anchor(ino(), parent->dir->dirfrag()));
-    dout(10) << "make_anchor_trace added " << trace.back() << dendl;
-  }
+  if (parent)
+    parent->make_anchor_trace(trace, this);
   else 
     assert(is_root() || is_stray());
 }
@@ -409,7 +432,7 @@ void CInode::name_stray_dentry(string& dname)
 
 version_t CInode::pre_dirty()
 {    
-  assert(parent);
+  assert(parent || projected_parent);
   version_t pv;
   if (projected_parent)
     pv = projected_parent->pre_dirty(get_projected_version());
@@ -436,7 +459,7 @@ void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   
   dout(10) << "mark_dirty " << *this << dendl;
 
-  assert(parent);
+  assert(parent || projected_parent);
 
   /*
     NOTE: I may already be dirty, but this fn _still_ needs to be called so that
@@ -516,22 +539,33 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IFILE:
     ::encode(inode.size, bl);
+    ::encode(inode.max_size, bl);
     ::encode(inode.mtime, bl);
     ::encode(inode.atime, bl);
+    ::encode(inode.time_warp_seq, bl);
     break;
 
   case CEPH_LOCK_IDIR:
-    ::encode(inode.mtime, bl);
-    if (0) {
-      map<frag_t,int> frag_sizes;
+    {
+      dout(15) << "encode_lock_state inode.dirstat is " << inode.dirstat << dendl;
+      ::encode(inode.dirstat, bl);  // only meaningful if i am auth.
+      bufferlist tmp;
+      __u32 n = 0;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
-	   ++p) 
-	if (p->second->is_auth()) {
-	  //frag_t fg = (*p)->get_frag();
-	  //frag_sizes[f] = dirfrag_size[fg];
+	   ++p)
+	if (is_auth() || p->second->is_auth()) {
+	  dout(15) << "encode_lock_state fragstat for " << *p->second << dendl;
+	  dout(20) << "             fragstat " << p->second->fnode.fragstat << dendl;
+	  dout(20) << "   accounted_fragstat " << p->second->fnode.accounted_fragstat << dendl;
+	  frag_t fg = p->second->dirfrag().frag;
+	  ::encode(fg, tmp);
+	  ::encode(p->second->fnode.fragstat, tmp);
+	  ::encode(p->second->fnode.accounted_fragstat, tmp);
+	  n++;
 	}
-      ::encode(frag_sizes, bl);
+      ::encode(n, bl);
+      bl.claim_append(tmp);
     }
     break;
 
@@ -562,7 +596,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
     ::decode(inode.nlink, p);
-    ::decode(inode.anchored, p);
+    {
+      bool was_anchored = inode.anchored;
+      ::decode(inode.anchored, p);
+      if (parent && was_anchored != inode.anchored)
+	parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
+    }
     break;
 
   case CEPH_LOCK_IDFT:
@@ -584,26 +623,59 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IFILE:
     ::decode(inode.size, p);
+    ::decode(inode.max_size, p);
     ::decode(inode.mtime, p);
     ::decode(inode.atime, p);
+    ::decode(inode.time_warp_seq, p);
     break;
 
   case CEPH_LOCK_IDIR:
-    //::_decode(inode.size, p);
-    ::decode(tm, p);
-    if (inode.mtime < tm) {
-      inode.mtime = tm;
-      if (is_auth()) {
-	dout(10) << "decode_lock_state auth got mtime " << tm << " > my " << inode.mtime
-		 << ", setting dirlock updated flag on " << *this
-		 << dendl;
-	dirlock.set_updated();
+    {
+      frag_info_t dirstat;
+      ::decode(dirstat, p);
+      if (!is_auth()) {
+	dout(10) << " taking inode dirstat " << dirstat << " for " << *this << dendl;
+	inode.dirstat = dirstat;    // take inode summation if replica
       }
-    }
-    if (0) {
-      map<frag_t,int> dfsz;
-      ::decode(dfsz, p);
-      // hmm which to keep?
+      __u32 n;
+      ::decode(n, p);
+      dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
+      while (n--) {
+	frag_t fg;
+	frag_info_t fragstat;
+	frag_info_t accounted_fragstat;
+	::decode(fg, p);
+	::decode(fragstat, p);
+	::decode(accounted_fragstat, p);
+	dout(10) << fg << " got changed fragstat " << fragstat << dendl;
+	dout(20) << fg << "   accounted_fragstat " << accounted_fragstat << dendl;
+
+	CDir *dir = get_dirfrag(fg);
+	if (is_auth()) {
+	  assert(dir);                // i am auth; i had better have this dir open
+	  if (!(fragstat == accounted_fragstat)) {
+	    dout(10) << " got changed fragstat " << fragstat << " on " << *dir << dendl;
+	    dout(20) << "   accounted_fragstat " << accounted_fragstat << dendl;
+	    dir->fnode.fragstat = fragstat;
+	    dir->fnode.accounted_fragstat = accounted_fragstat;
+	    dirlock.set_updated();
+	  } else {
+	    dout(10) << " fully accounted fragstat " << fragstat << " on " << *dir << dendl;
+	    assert(dir->fnode.fragstat == fragstat);
+	  }
+	} else {
+	  if (dir &&
+	      dir->is_auth() &&
+	      !(dir->fnode.accounted_fragstat == fragstat)) {
+	    dout(10) << " setting accounted_fragstat " << fragstat << " and setting dirty bit on "
+		     << *dir << dendl;
+	    fnode_t *pf = dir->get_projected_fnode();
+	    pf->accounted_fragstat = fragstat;
+	    if (dir->is_auth())
+	      dir->_set_dirty_flag();	    // bit of a hack
+	  }
+	}
+      }
     }
     break;
 
@@ -621,13 +693,44 @@ void CInode::clear_dirty_scattered(int type)
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
   switch (type) {
   case CEPH_LOCK_IDIR:
-    xlist_dirty_inode_mtime.remove_myself();
+    xlist_dirty_dirfrag_dir.remove_myself();
     break;
+
   default:
     assert(0);
   }
 }
 
+
+void CInode::finish_scatter_gather_update(int type)
+{
+  dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
+  switch (type) {
+  case CEPH_LOCK_IDIR:
+    {
+      // adjust summation
+      assert(is_auth());
+      inode_t *pi = get_projected_inode();
+      dout(20) << "         orig dirstat " << pi->dirstat << dendl;
+      pi->dirstat.version++;
+      for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	   p != dirfrags.end();
+	   p++) {
+	fnode_t *pf = p->second->get_projected_fnode();
+	dout(20) << "  frag " << p->first << " " << *p->second << dendl;
+	dout(20) << "             fragstat " << pf->fragstat << dendl;
+	dout(20) << "   accounted_fragstat " << pf->fragstat << dendl;
+	pi->dirstat.take_diff(pf->fragstat, 
+			      pf->accounted_fragstat);
+      }
+      dout(20) << "        final dirstat " << pi->dirstat << dendl;
+    }
+    break;
+
+  default:
+    assert(0);
+  }
+}
 
 
 // waiting
@@ -764,7 +867,14 @@ void CInode::adjust_nested_auth_pins(int a)
   parent->adjust_nested_auth_pins(a);
 }
 
-
+void CInode::adjust_nested_anchors(int by)
+{
+  nested_anchors += by;
+  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
+  assert(nested_anchors >= 0);
+  if (parent)
+    parent->adjust_nested_anchors(by);
+}
 
 // authority
 
@@ -827,7 +937,7 @@ void CInode::finish_export(utime_t now)
   pop.zero(now);
 
   // just in case!
-  dirlock.clear_updated();
+  //dirlock.clear_updated();
 
   put(PIN_TEMPEXPORTING);
 }
@@ -836,7 +946,10 @@ void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
   utime_t old_mtime = inode.mtime;
+  bool was_anchored = inode.anchored;
   ::decode(inode, p);
+  if (parent && was_anchored != inode.anchored)
+    parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
   if (old_mtime > inode.mtime) {
     assert(dirlock.is_updated());
     inode.mtime = old_mtime;     // preserve our mtime, if it is larger

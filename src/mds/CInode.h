@@ -104,20 +104,18 @@ class CInode : public MDSCacheObject {
   static const int STATE_RECOVERING = (1<<11);
 
   // -- waiters --
-  //static const int WAIT_SLAVEAGREE  = (1<<0);
-  static const int WAIT_DIR         = (1<<1);
-  static const int WAIT_ANCHORED    = (1<<2);
-  static const int WAIT_UNANCHORED  = (1<<3);
-  static const int WAIT_CAPS        = (1<<4);
-  static const int WAIT_FROZEN      = (1<<5);
+  static const int WAIT_DIR         = (1<<0);
+  static const int WAIT_ANCHORED    = (1<<1);
+  static const int WAIT_UNANCHORED  = (1<<2);
+  static const int WAIT_FROZEN      = (1<<3);
   
-  static const int WAIT_AUTHLOCK_OFFSET = 5;
-  static const int WAIT_LINKLOCK_OFFSET = 5 + SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 5 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET = 5 + 3*SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRLOCK_OFFSET = 5 + 4*SimpleLock::WAIT_BITS;
-  static const int WAIT_VERSIONLOCK_OFFSET = 5 + 5*SimpleLock::WAIT_BITS;
-  static const int WAIT_XATTRLOCK_OFFSET = 5 + 6*SimpleLock::WAIT_BITS;
+  static const int WAIT_AUTHLOCK_OFFSET        = 4;
+  static const int WAIT_LINKLOCK_OFFSET        = 4 +   SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 4 + 2*SimpleLock::WAIT_BITS;
+  static const int WAIT_FILELOCK_OFFSET        = 4 + 3*SimpleLock::WAIT_BITS; // same
+  static const int WAIT_DIRLOCK_OFFSET         = 4 + 3*SimpleLock::WAIT_BITS; // same
+  static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
+  static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY_MASK	= (0xffffffff);
 
@@ -134,7 +132,6 @@ class CInode : public MDSCacheObject {
   string           symlink;      // symlink dest, if symlink
   map<string, bufferptr> xattrs;
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  map<frag_t,int>  dirfrag_size; // size of each dirfrag
 
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
@@ -144,13 +141,15 @@ class CInode : public MDSCacheObject {
 
   // projected values (only defined while dirty)
   list<inode_t*>   projected_inode;
-  list<fragtree_t> projected_dirfragtree;
 
   version_t get_projected_version() {
     if (projected_inode.empty())
       return inode.version;
     else
       return projected_inode.back()->version;
+  }
+  bool is_projected() {
+    return !projected_inode.empty();
   }
 
   inode_t *get_projected_inode() { 
@@ -161,6 +160,16 @@ class CInode : public MDSCacheObject {
   }
   inode_t *project_inode();
   void pop_and_dirty_projected_inode(LogSegment *ls);
+
+  inode_t *get_previous_projected_inode() {
+    assert(!projected_inode.empty());
+    list<inode_t*>::reverse_iterator p = projected_inode.rbegin();
+    p++;
+    if (p != projected_inode.rend())
+      return *p;
+    else
+      return &inode;
+  }
 
   // -- cache infrastructure --
 private:
@@ -212,7 +221,7 @@ protected:
   xlist<CInode*>::item xlist_dirty;
 public:
   xlist<CInode*>::item xlist_open_file;
-  xlist<CInode*>::item xlist_dirty_inode_mtime;
+  xlist<CInode*>::item xlist_dirty_dirfrag_dir;
   xlist<CInode*>::item xlist_purging_inode;
 
 private:
@@ -221,6 +230,9 @@ private:
   int nested_auth_pins;
 public:
   int auth_pin_freeze_allowance;
+
+private:
+  int nested_anchors;   // _NOT_ including me!
 
  public:
   inode_load_vec_t pop;
@@ -245,8 +257,10 @@ public:
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
-    xlist_dirty_inode_mtime(this), xlist_purging_inode(this),
+    xlist_dirty_dirfrag_dir(this), 
+    xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
+    nested_anchors(0),
     versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
     authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),
     linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
@@ -287,6 +301,7 @@ public:
   inodeno_t ino() const { return inode.ino; }
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
+  CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   
@@ -341,7 +356,6 @@ public:
   ScatterLock dirlock;
   SimpleLock xattrlock;
 
-
   SimpleLock* get_lock(int type) {
     switch (type) {
     case CEPH_LOCK_IFILE: return &filelock;
@@ -353,11 +367,13 @@ public:
     }
     return 0;
   }
+
   void set_object_info(MDSCacheObjectInfo &info);
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
   void clear_dirty_scattered(int type);
+  void finish_scatter_gather_update(int type);
 
   // -- caps -- (new)
   // client caps
@@ -491,6 +507,8 @@ public:
   void auth_pin();
   void auth_unpin();
 
+  void adjust_nested_anchors(int by);
+  int get_nested_anchors() { return nested_anchors; }
 
   // -- freeze --
   bool is_freezing_inode() { return state_test(STATE_FREEZING); }
@@ -604,6 +622,8 @@ class CInodeDiscover {
   int get_replica_nonce() { return replica_nonce; }
 
   void update_inode(CInode *in) {
+    if (in->parent && inode.anchored != in->inode.anchored)
+      in->parent->adjust_nested_anchors((int)inode.anchored - (int)in->inode.anchored);
     in->inode = inode;
     in->symlink = symlink;
     in->dirfragtree = dirfragtree;

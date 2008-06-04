@@ -8,14 +8,11 @@ big items
 - client, user authentication
 - cas
 
-bugs
-- -1 on mds file size recovery
-
-- mon needs to trim history
 - meta vs data crush rules
 - use libuuid
 
 userspace client
+- handle session STALE
 - rm -rf on fragmented directory
 - time out caps, wake up waiters on renewal
   - link caps with mds session
@@ -68,43 +65,38 @@ mon
 - some sort of tester for PaxosService...
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
-mds mustfix
-- replay of dir fragmentation  (dont want dir frozen, pins, etc.?)
-- fix rm -r vs mds exports
-- rename slave in-memory rollback on failure
+mds
+- fix cap exports.. merges seem to munge up the seq #.
+
+- dir frags
+ - fix replay  (dont want dir frozen, pins, etc.?)
+ - fix accounting
+
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
 
 - rerun destro trace against latest, with various journal lengths
 
-mds
+- bind lease, cap timeouts to session renew, so that they can be _longer_ than the session renew interval
 - lease length heuristics
   - mds lock last_change stamp?
 
-- fix file_data_version
+- can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
 
 - fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
-- consistency points/snapshots
-  - dentry versions vs dirfrags...
+
 - failure during reconnect vs clientmap.  
 
-- inode.rctime (recursive mtime)?
-- make inode.size reflect directory size (number of entries)?
+- anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
+  - ... when it gets a caller.. someday..
+
+- make truncate faster with a trunc_seq, attached to objects as attributes?
 
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 
 - could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...
-
-- fix rmdir empty exported dirfrag race
-  - export all frags <= 1 item?  then we ensure freezing before empty, avoiding any last unlink + export vs rmdir race.
-  - how to know full dir size (when trimming)?
-    - put frag size/mtime in fragmap in inode?  we will need that anyway for stat on dirs
-      - will need to make inode discover/import_decode smart about dirfrag auth
-    - or, only put frag size/mtime in inode when frag is closed.  otherwise, soft (journaled) state, possibly on another mds.
-  - need to move state from replicas to auth.  simplelock doesn't currently support that.
-    - ScatterLock or something?  hrm.
 
 - FIXME how to journal/store root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?

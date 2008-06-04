@@ -31,7 +31,7 @@ struct kobj_type ceph_socket_type = {
 	.release = ceph_socket_destroy,
 };
 
-struct ceph_socket *ceph_socket_create()
+static struct ceph_socket *ceph_socket_create(void)
 {
 	struct ceph_socket *s;
 	int err = -ENOMEM;

@@ -18,6 +18,7 @@
 #include "include/xlist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
+#include "mdstypes.h"
 
 #include <ext/hash_set>
 using __gnu_cxx::hash_set;
@@ -39,7 +40,7 @@ class LogSegment {
   xlist<CDentry*> dirty_dentries;
 
   xlist<CInode*>  open_files;
-  xlist<CInode*>  dirty_inode_mtimes;
+  xlist<CInode*>  dirty_dirfrag_dir;
 
   xlist<MDSlaveUpdate*> slave_updates;
 
@@ -48,6 +49,7 @@ class LogSegment {
 
   // committed anchor transactions
   hash_set<version_t> pending_commit_atids;
+  set<metareqid_t> uncommitted_masters;
 
   // client request ids
   map<int, tid_t> last_client_tids;

@@ -22,6 +22,7 @@
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/EOpen.h"
+#include "events/ECommitted.h"
 
 #include "events/EPurgeFinish.h"
 
@@ -105,27 +106,23 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     }
   }
 
-  // dirty non-auth mtimes
-  for (xlist<CInode*>::iterator p = dirty_inode_mtimes.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for dirlock mtime flush on " << *in << dendl;
+  // master ops with possibly uncommitted slaves
+  for (set<metareqid_t>::iterator p = uncommitted_masters.begin();
+       p != uncommitted_masters.end();
+       p++) {
+    dout(10) << "try_to_expire waiting for slaves to ack commit on " << *p << dendl;
     if (!gather) gather = new C_Gather;
-
-    if (in->is_ambiguous_auth()) {
-      dout(10) << " waiting for single auth on " << *in << dendl;
-      in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather->new_sub());
-    } else if (in->is_auth()) {
-      dout(10) << " i'm auth, unscattering dirlock on " << *in << dendl;
-      assert(in->is_replicated()); // hrm!
-      mds->locker->scatter_lock(&in->dirlock);
-      in->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
-    } else {
-      dout(10) << " i'm a replica, requesting dirlock unscatter of " << *in << dendl;
-      mds->locker->scatter_try_unscatter(&in->dirlock, gather->new_sub());
-    }
-    //(*p)->dirlock.add_waiter(SimpleLock::WAIT_STABLE, gather->new_sub());
+    mds->mdcache->wait_for_uncommitted_master(*p, gather->new_sub());
   }
-  
+
+  // dirty non-auth mtimes
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->locker->scatter_nudge(&in->dirlock, gather->new_sub());
+  }
+
   // open files
   if (!open_files.empty()) {
     assert(!mds->mdlog->is_capped()); // hmm FIXME
@@ -293,9 +290,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
-    dir->set_version( lump.dirv );
-    if (lump.is_dirty())
+    dir->set_version( lump.fnode.version );
+    if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
+      dir->get_inode()->dirlock.set_updated();
+    }
+
     if (lump.is_complete())
       dir->mark_complete();
     
@@ -343,12 +343,16 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
+	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
+	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
 	in->inode = p->inode;
 	in->dirfragtree = p->dirfragtree;
 	in->xattrs = p->xattrs;
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_inode() != in) {
+	  if (!dn->is_null())  // note: might be remote.  as with stray reintegration.
+	    dir->unlink_inode(dn);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
@@ -409,7 +413,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     mds->anchorclient->got_journaled_agree(*p, logseg);
   }
 
-  // dirtied inode mtimes
+  /*// dirtied inode mtimes
   if (!dirty_inode_mtimes.empty())
     for (map<inodeno_t,utime_t>::iterator p = dirty_inode_mtimes.begin();
 	 p != dirty_inode_mtimes.end();
@@ -419,6 +423,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       in->dirlock.set_updated();
       logseg->dirty_inode_mtimes.push_back(&in->xlist_dirty_inode_mtime);
     }
+  */
 
   // allocated_inos
   if (!allocated_inos.empty()) {
@@ -456,7 +461,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p)
-    mds->sessionmap.add_completed_request(*p);
+    if (p->name.is_client())
+      mds->sessionmap.add_completed_request(*p);
 
 
   // update segment
@@ -483,7 +489,7 @@ void ESession::replay(MDS *mds)
 
   } else {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version
-	     << " < " << cmapv << dendl;
+	     << " < " << cmapv << " " << (open ? "open":"close") << dendl;
     mds->sessionmap.projected = ++mds->sessionmap.version;
     assert(mds->sessionmap.version == cmapv);
     if (open) {
@@ -585,11 +591,21 @@ void EAnchorClient::replay(MDS *mds)
 void EUpdate::update_segment()
 {
   metablob.update_segment(_segment);
+
+  if (had_slaves)
+    _segment->uncommitted_masters.insert(reqid);
 }
 
 void EUpdate::replay(MDS *mds)
 {
   metablob.replay(mds, _segment);
+
+  if (had_slaves) {
+    dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
+    _segment->uncommitted_masters.insert(reqid);
+    set<int> slaves;
+    mds->mdcache->add_uncommitted_master(reqid, _segment, slaves);
+  }
 }
 
 
@@ -617,6 +633,21 @@ void EOpen::replay(MDS *mds)
 }
 
 
+// -----------------------
+// ECommitted
+
+void ECommitted::replay(MDS *mds)
+{
+  if (mds->mdcache->uncommitted_masters.count(reqid)) {
+    dout(10) << "ECommitted.replay " << reqid << dendl;
+    mds->mdcache->uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
+    mds->mdcache->uncommitted_masters.erase(reqid);
+  } else {
+    dout(10) << "ECommitted.replay " << reqid << " -- didn't see original op" << dendl;
+  }
+}
+
+
 
 // -----------------------
 // ESlaveUpdate
@@ -625,40 +656,40 @@ void ESlaveUpdate::replay(MDS *mds)
 {
   switch (op) {
   case ESlaveUpdate::OP_PREPARE:
-    // FIXME: horribly inefficient copy; EMetaBlob needs a swap() or something
     dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds" << master 
-	     << ": saving blobs for later commit" << dendl;
+	     << ": applying commit, saving rollback info" << dendl;
     assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid) == 0);
-    commit._segment = _segment;  // may need this later
-    rollback._segment = _segment;  // may need this later
+    commit.replay(mds, _segment);
     mds->mdcache->uncommitted_slave_updates[master][reqid] = 
-      new MDSlaveUpdate(commit, rollback, _segment->slave_updates);
+      new MDSlaveUpdate(origop, rollback, _segment->slave_updates);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
-      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master
-	       << ": applying commit blob" << dendl;
-      mds->mdcache->uncommitted_slave_updates[master][reqid]->commit.replay(mds, _segment);
+      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master << dendl;
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
+      if (mds->mdcache->uncommitted_slave_updates[master].empty())
+	mds->mdcache->uncommitted_slave_updates.erase(master);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds" << master 
-	       << ": ignoring, no previously saved blobs" << dendl;
+	       << ": ignoring, no previously saved prepare" << dendl;
     }
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
     if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master
-	       << ": applying rollback blob" << dendl;
+	       << ": applying rollback commit blob" << dendl;
       assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid));
-      mds->mdcache->uncommitted_slave_updates[master][reqid]->rollback.replay(mds, _segment);
+      commit.replay(mds, _segment);
       delete mds->mdcache->uncommitted_slave_updates[master][reqid];
       mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
+      if (mds->mdcache->uncommitted_slave_updates[master].empty())
+	mds->mdcache->uncommitted_slave_updates.erase(master);
     } else {
       dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds" << master 
-	       << ": ignoring, no previously saved blobs" << dendl;
+	       << ": ignoring, no previously saved prepare" << dendl;
     }
     break;
 

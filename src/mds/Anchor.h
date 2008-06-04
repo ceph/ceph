@@ -70,34 +70,36 @@ inline const char* get_anchor_opname(int o) {
 class Anchor {
 public:
   inodeno_t ino;      // anchored ino
-  dirfrag_t dirfrag;  // containing dirfrag
-  //string    ref_dn;   // referring dentry
+  inodeno_t dirino;
+  __u32     dn_hash;
   int       nref;     // reference count
 
-  Anchor() : nref(0) {}
-  Anchor(inodeno_t i, dirfrag_t df, 
-	 //string& rd, 
-	 int nr=0) :
-    ino(i), dirfrag(df),
-    //ref_dn(rd), 
+  Anchor() : dn_hash(0), nref(0) {}
+  Anchor(inodeno_t i, inodeno_t di, __u32 hash, int nr=0) :
+    ino(i), dirino(di), dn_hash(hash), nref(nr) { }
+  Anchor(inodeno_t i, inodeno_t di, const string &dname, int nr=0) :
+    ino(i), dirino(di),
+    dn_hash(ceph_full_name_hash(dname.data(), dname.length())),
     nref(nr) { }
   
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
-    ::encode(dirfrag, bl);
+    ::encode(dirino, bl);
+    ::encode(dn_hash, bl);
     ::encode(nref, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(ino, bl);
-    ::decode(dirfrag, bl);
+    ::decode(dirino, bl);
+    ::decode(dn_hash, bl);
     ::decode(nref, bl);
   }
 };
 WRITE_CLASS_ENCODER(Anchor)
 
-inline ostream& operator<<(ostream& out, Anchor& a)
+inline ostream& operator<<(ostream& out, const Anchor &a)
 {
-  return out << "a(" << a.ino << " " << a.dirfrag << " " << a.nref << ")";
+  return out << "a(" << a.ino << " " << a.dirino << "/" << a.dn_hash << " " << a.nref << ")";
 }
 
 #endif

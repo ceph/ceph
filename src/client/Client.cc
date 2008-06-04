@@ -382,6 +382,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
 
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
     in->xattrs.swap(st->xattrs);
+    in->inode.dirstat = st->dirstat;
 
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
@@ -1852,6 +1853,10 @@ int Client::unmount()
          p != inode_map.end();
          p++) {
       Inode *in = p->second;
+      if (!in) {
+	dout(0) << "null inode_map entry ino " << p->first << dendl;
+	assert(in);
+      }      
       if (!in->caps.empty()) {
 	_release(in);
 	_flush(in);
@@ -2234,7 +2239,7 @@ int Client::_do_lstat(const filepath &path, int mask, Inode **in, int uid, int g
 }
 
 
-int Client::fill_stat(Inode *in, struct stat *st) 
+int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat) 
 {
   dout(10) << "fill_stat on " << in->inode.ino << " mode 0" << oct << in->inode.mode << dec
 	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << dendl;
@@ -2248,29 +2253,39 @@ int Client::fill_stat(Inode *in, struct stat *st)
   st->st_ctime = MAX(in->inode.ctime, in->inode.mtime);
   st->st_atime = in->inode.atime;
   st->st_mtime = in->inode.mtime;
-  st->st_size = in->inode.size;
+  if (in->inode.is_dir()) {
+    //st->st_size = in->inode.dirstat.size();
+    st->st_size = in->inode.dirstat.rbytes;
+    st->st_blocks = 1;
+  } else {
+    st->st_size = in->inode.size;
+    st->st_blocks = (in->inode.size + 511) >> 9;
+  }
   st->st_blksize = MAX(ceph_file_layout_su(in->inode.layout), 4096);
-  st->st_blocks = in->inode.size ? DIV_ROUND_UP(in->inode.size, st->st_blksize):0;
+
+  if (dirstat)
+    *dirstat = in->inode.dirstat;
+
   return in->lease_mask;
 }
 
 
-int Client::lstat(const char *relpath, struct stat *stbuf)
+int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat)
 {
   Mutex::Locker lock(client_lock);
   tout << "lstat" << std::endl;
   tout << relpath << std::endl;
   filepath path = mkpath(relpath);
-  return _lstat(path, stbuf);
+  return _lstat(path, stbuf, -1, -1, dirstat);
 }
 
-int Client::_lstat(const filepath &path, struct stat *stbuf, int uid, int gid)
+int Client::_lstat(const filepath &path, struct stat *stbuf, int uid, int gid, frag_info_t *dirstat)
 {
   Inode *in = 0;
   int res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in);
   if (res == 0) {
     assert(in);
-    fill_stat(in, stbuf);
+    fill_stat(in, stbuf, dirstat);
     dout(10) << "stat sez size = " << in->inode.size
 	     << " mode = 0" << oct << stbuf->st_mode << dec
 	     << " ino = " << stbuf->st_ino << dendl;
@@ -3700,6 +3715,7 @@ int Client::ll_getattr(inodeno_t ino, struct stat *attr, int uid, int gid)
   int res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in, uid, gid);
   if (res == 0)
     fill_stat(in, attr);
+  dout(3) << "ll_getattr " << ino << " = " << res << dendl;
   return res;
 }
 
@@ -3761,6 +3777,7 @@ int Client::ll_getxattr(inodeno_t ino, const char *name, void *value, size_t siz
   tout << name << std::endl;
 
   Inode *in = _ll_get_inode(ino);
+
   filepath path;
   in->make_path(path);
   return _getxattr(path, name, value, size, false, uid, gid);

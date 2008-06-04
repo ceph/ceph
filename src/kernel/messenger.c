@@ -1612,9 +1612,9 @@ out:
 
 void ceph_msg_put(struct ceph_msg *m)
 {
-	BUG_ON(atomic_read(&m->nref) <= 0);
 	dout(20, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
 	     atomic_read(&m->nref)-1);
+	BUG_ON(atomic_read(&m->nref) <= 0);
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(20, "ceph_msg_put last one on %p\n", m);
 		WARN_ON(!list_empty(&m->list_head));

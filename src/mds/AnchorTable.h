@@ -51,7 +51,7 @@ class AnchorTable {
 protected:
 
   // basic updates
-  bool add(inodeno_t ino, dirfrag_t dirfrag);
+  bool add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash);
   void inc(inodeno_t ino);
   void dec(inodeno_t ino);
 

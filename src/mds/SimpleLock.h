@@ -71,7 +71,7 @@ inline const char *get_simplelock_state_name(int n) {
 
  */
 
-class MDRequest;
+class Mutation;
 
 
 class SimpleLock {
@@ -97,7 +97,7 @@ protected:
 
   // local state
   int num_rdlock;
-  MDRequest *xlock_by;
+  Mutation *xlock_by;
 
 
 public:
@@ -193,7 +193,7 @@ public:
   }
   int get_num_rdlocks() { return num_rdlock; }
 
-  void get_xlock(MDRequest *who) { 
+  void get_xlock(Mutation *who) { 
     assert(xlock_by == 0);
     parent->get(MDSCacheObject::PIN_LOCK);
     xlock_by = who; 
@@ -204,10 +204,10 @@ public:
     xlock_by = 0;
   }
   bool is_xlocked() { return xlock_by ? true:false; }
-  bool is_xlocked_by_other(MDRequest *mdr) {
+  bool is_xlocked_by_other(Mutation *mdr) {
     return is_xlocked() && xlock_by != mdr;
   }
-  MDRequest *get_xlocked_by() { return xlock_by; }
+  Mutation *get_xlocked_by() { return xlock_by; }
   
   bool is_used() {
     return is_xlocked() || is_rdlocked() || num_client_lease;
@@ -285,12 +285,12 @@ public:
   bool can_lease() {
     return state == LOCK_SYNC;
   }
-  bool can_rdlock(MDRequest *mdr) {
+  bool can_rdlock(Mutation *mdr) {
     //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
     //if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
     return (state == LOCK_SYNC);
   }
-  bool can_xlock(MDRequest *mdr) {
+  bool can_xlock(Mutation *mdr) {
     if (mdr && xlock_by == mdr) {
       assert(state == LOCK_LOCK);
       return true; // auth or replica!  xlocked by me.

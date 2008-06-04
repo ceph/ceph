@@ -390,6 +390,17 @@ no_change:
 	case S_IFDIR:
 		inode->i_op = &ceph_dir_iops;
 		inode->i_fop = &ceph_dir_fops;
+		
+		ci->i_files = le64_to_cpu(info->files);
+		ci->i_subdirs = le64_to_cpu(info->subdirs);
+		ci->i_rbytes = le64_to_cpu(info->rbytes);
+		ci->i_rfiles = le64_to_cpu(info->rfiles);
+		ci->i_rsubdirs = le64_to_cpu(info->rsubdirs);
+		ceph_decode_timespec(&ci->i_rctime, &info->rctime);
+
+		if (ceph_client(inode->i_sb)->mount_args.flags &
+		    CEPH_MOUNT_RBYTES)
+			inode->i_size = ci->i_rbytes;
 		break;
 	default:
 		derr(0, "BAD mode 0x%x S_IFMT 0x%x\n",

@@ -240,7 +240,7 @@ void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
     dir->inode->make_anchor_trace(trace);
 
   // add this inode (in my dirfrag) to the end
-  trace.push_back(Anchor(in->ino(), dir->dirfrag()));
+  trace.push_back(Anchor(in->ino(), dir->ino(), name));
   dout(10) << "make_anchor_trace added " << trace.back() << dendl;
 }
 
@@ -325,6 +325,14 @@ bool CDentry::is_frozen()
   return dir->is_frozen();
 }
 
+
+void CDentry::adjust_nested_anchors(int by)
+{
+  nested_anchors += by;
+  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
+  assert(nested_anchors >= 0);
+  dir->adjust_nested_anchors(by);
+}
 
 // ----------------------------
 // locking

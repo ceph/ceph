@@ -20,7 +20,7 @@ using namespace std;
 #include "include/xlist.h"
 
 #define MDS_REF_SET    // define me for improved debug output, sanity checking
-
+//#define MDS_VERIFY_FRAGSTAT    // do do (slow) sanity checking on frags
 
 #define MDS_PORT_CACHE   0x200
 #define MDS_PORT_LOCKER  0x300
@@ -768,6 +768,7 @@ protected:
   virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
 
   virtual void clear_dirty_scattered(int type) { assert(0); }
+  virtual void finish_scatter_gather_update(int type) { }
 
   // ---------------------------------------------
   // ordering

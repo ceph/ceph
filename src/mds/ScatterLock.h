@@ -68,13 +68,14 @@ class ScatterLock : public SimpleLock {
   utime_t last_scatter;
 
 public:
-  xlist<ScatterLock*>::item xlistitem_autoscattered;
+  xlist<ScatterLock*>::item xlistitem_updated;
+  utime_t update_stamp;
 
   ScatterLock(MDSCacheObject *o, int t, int wo) : 
     SimpleLock(o, t, wo),
     num_wrlock(0),
     updated(false),
-    xlistitem_autoscattered(this) {}
+    xlistitem_updated(this) {}
 
   int get_replica_state() {
     switch (state) {
@@ -101,6 +102,12 @@ public:
       assert(0);
       return 0;
     }
+  }
+
+  // true if we are gathering and need the replica's data to be consistent
+  bool must_gather() {
+    return (state == LOCK_GTEMPSYNCC ||
+	    state == LOCK_GLOCKC);
   }
 
   void set_updated() { 
@@ -150,8 +157,8 @@ public:
   bool can_wrlock() {
     return state == LOCK_SCATTER || state == LOCK_LOCK;
   }
-  void get_wrlock() {
-    assert(can_wrlock());
+  void get_wrlock(bool force=false) {
+    assert(can_wrlock() || force);
     if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
   }

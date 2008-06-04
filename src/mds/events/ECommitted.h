@@ -12,47 +12,32 @@
  * 
  */
 
-#ifndef __MDS_EUPDATE_H
-#define __MDS_EUPDATE_H
+#ifndef __MDS_ECOMMITTED_H
+#define __MDS_ECOMMITTED_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
-class EUpdate : public LogEvent {
+class ECommitted : public LogEvent {
 public:
-  EMetaBlob metablob;
-  string type;
-  bufferlist client_map;
   metareqid_t reqid;
-  bool had_slaves;
 
-  EUpdate() : LogEvent(EVENT_UPDATE) { }
-  EUpdate(MDLog *mdlog, const char *s) : 
-    LogEvent(EVENT_UPDATE), metablob(mdlog),
-    type(s), had_slaves(false) { }
-  
+  ECommitted() : LogEvent(EVENT_COMMITTED) { }
+  ECommitted(metareqid_t r) : 
+    LogEvent(EVENT_COMMITTED), reqid(r) { }
+
   void print(ostream& out) {
-    if (type.length())
-      out << type << " ";
-    out << metablob;
+    out << "ECommitted " << reqid;
   }
 
   void encode(bufferlist &bl) const {
-    ::encode(type, bl);
-    ::encode(metablob, bl);
-    ::encode(client_map, bl);
     ::encode(reqid, bl);
-    ::encode(had_slaves, bl);
   } 
   void decode(bufferlist::iterator &bl) {
-    ::decode(type, bl);
-    ::decode(metablob, bl);
-    ::decode(client_map, bl);
     ::decode(reqid, bl);
-    ::decode(had_slaves, bl);
   }
 
-  void update_segment();
+  void update_segment() {}
   void replay(MDS *mds);
 };
 

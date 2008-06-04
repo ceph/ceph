@@ -92,6 +92,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   off_t dir_offset;   
 
   int auth_pins, nested_auth_pins;
+  int nested_anchors;
 
   friend class Migrator;
   friend class Locker;
@@ -117,7 +118,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     dir_offset(0),
-    auth_pins(0), nested_auth_pins(0),
+    auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, CInode *in) :
     name(n),
@@ -126,7 +127,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     dir_offset(0),
-    auth_pins(0), nested_auth_pins(0),
+    auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const string& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
     name(n),
@@ -135,7 +136,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     dir_offset(0),
-    auth_pins(0), nested_auth_pins(0),
+    auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
 
   CInode *get_inode() const { return inode; }
@@ -169,6 +170,7 @@ public:
   void adjust_nested_auth_pins(int by);
   bool is_frozen();
   
+  void adjust_nested_anchors(int by);
 
   // dentry type is primary || remote || null
   // inode ptr is required for primary, optional for remote, undefined for null

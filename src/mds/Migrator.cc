@@ -958,6 +958,11 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
   
   assert(dir->get_projected_version() == dir->get_version());
 
+#ifdef MDS_VERIFY_FRAGSTAT
+  if (dir->is_complete())
+    dir->verify_fragstat();
+#endif
+
   // dir 
   dirfrag_t df = dir->dirfrag();
   ::encode(df, exportbl);
@@ -1915,10 +1920,12 @@ void Migrator::import_finish(CDir *dir)
   mds->mdlog->submit_entry(new EImportFinish(dir, true));
 
   // clear updated scatterlocks
+  /*
   for (list<ScatterLock*>::iterator p = import_updated_scatterlocks[dir].begin();
        p != import_updated_scatterlocks[dir].end();
        ++p) 
     (*p)->clear_updated();
+  */
 
   // remove pins
   set<CDir*> bounds;
@@ -1999,14 +2006,11 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...
-  if (in->dirlock.is_updated())
+  if (in->dirlock.is_updated()) {
     updated_scatterlocks.push_back(&in->dirlock);
+    mds->locker->mark_updated_scatterlock(&in->dirlock);
+  }
 
-  // put in autoscatter list?
-  //  this is conservative, but safe.
-  if (in->dirlock.get_state() == LOCK_SCATTER)
-    mds->locker->note_autoscattered(&in->dirlock);
-  
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
   in->add_replica(oldauth, CInode::EXPORT_NONCE);
@@ -2166,6 +2170,11 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
       le->metablob.add_dentry(dn, dn->is_dirty());
   }
   
+#ifdef MDS_VERIFY_FRAGSTAT
+  if (dir->is_complete())
+    dir->verify_fragstat();
+#endif
+
   dout(7) << "decode_import_dir done " << *dir << dendl;
   return num_imported;
 }

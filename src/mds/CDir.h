@@ -153,12 +153,49 @@ class CDir : public MDSCacheObject {
     return dirfrag() < ((const CDir*)r)->dirfrag();
   }
 
-  //int hack_num_accessed;
+  fnode_t fnode;
+
+protected:
+  version_t projected_version;
+  list<fnode_t*> projected_fnode;
+
+  xlist<CDir*>::item xlist_dirty;
+
+
+public:
+  version_t get_version() { return fnode.version; }
+  void set_version(version_t v) { 
+    assert(projected_fnode.empty());
+    projected_version = fnode.version = v; 
+  }
+  version_t get_projected_version() { return projected_version; }
+
+  fnode_t *get_projected_fnode() {
+    if (projected_fnode.empty())
+      return &fnode;
+    else
+      return projected_fnode.back();
+  }
+  fnode_t *project_fnode();
+
+  void pop_and_dirty_projected_fnode(LogSegment *ls);
+  bool is_projected() { return get_projected_version() > get_version(); }
+  version_t pre_dirty(version_t min=0);
+  void _mark_dirty(LogSegment *ls);
+  void _set_dirty_flag() {
+    if (!state_test(STATE_DIRTY)) {
+      state_set(STATE_DIRTY);
+      get(PIN_DIRTY);
+    }
+  }
+  void mark_dirty(version_t pv, LogSegment *ls);
+  void mark_clean();
 
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
   typedef map<string, CDentry*> map_t;
 protected:
+
   // contents
   map_t items;       // non-null AND null
   unsigned nitems;             // # non-null
@@ -166,21 +203,18 @@ protected:
 
   int num_dirty;
 
-
-
   // state
-  version_t version;
   version_t committing_version;
   version_t committed_version;
   version_t committed_version_equivalent;  // in case of, e.g., temporary file
-  version_t projected_version; 
 
-  xlist<CDir*>::item xlist_dirty;
 
   // lock nesting, freeze
   int auth_pins;
   int nested_auth_pins;
   int request_pins;
+
+  int nested_anchors;
 
   // cache control  (defined for authority; hints for replicas)
   int      dir_rep;
@@ -348,18 +382,11 @@ private:
   void wait_for_commit(Context *c, version_t v=0);
 
   // -- dirtyness --
-  version_t get_version() { return version; }
-  void set_version(version_t v) { projected_version = version = v; }
-  version_t get_projected_version() { return projected_version; }
   version_t get_committing_version() { return committing_version; }
   version_t get_committed_version() { return committed_version; }
   version_t get_committed_version_equivalent() { return committed_version_equivalent; }
   void set_committed_version(version_t v) { committed_version = v; }
 
-  version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t pv, LogSegment *ls);
-  void mark_clean();
   void mark_complete() { state_set(STATE_COMPLETE); }
 
 
@@ -419,7 +446,12 @@ public:
   int get_nested_auth_pins() { return nested_auth_pins; }
   void auth_pin();
   void auth_unpin();
+
   void adjust_nested_auth_pins(int inc);
+  void verify_fragstat();
+
+  int get_nested_anchors() { return nested_anchors; }
+  void adjust_nested_anchors(int by);
 
   // -- freezing --
   bool freeze_tree();
