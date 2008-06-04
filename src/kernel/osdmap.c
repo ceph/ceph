@@ -227,19 +227,21 @@ static struct crush_map *crush_decode(void **p, void *end)
 		__u32 yes;
 		struct crush_rule *r;
 
-		dout(30, "crush_decode rule %d off %x %p to %p\n",
-		     i, (int)(*p-start), *p, end);
-
 		ceph_decode_32_safe(p, end, yes, bad);
 		if (!yes) {
+			dout(30, "crush_decode NO rule %d off %x %p to %p\n",
+			     i, (int)(*p-start), *p, end);
 			c->rules[i] = 0;
 			continue;
 		}
 
+		dout(30, "crush_decode rule %d off %x %p to %p\n",
+		     i, (int)(*p-start), *p, end);
+
 		/* len */
 		ceph_decode_32_safe(p, end, yes, bad);
 
-		r = c->rules[i] = kmalloc(sizeof(**c->rules) +
+		r = c->rules[i] = kmalloc(sizeof(*r) +
 					  yes*sizeof(struct crush_rule_step),
 					  GFP_NOFS);
 		if (r == NULL)
@@ -269,8 +271,10 @@ bad:
 
 void osdmap_destroy(struct ceph_osdmap *map)
 {
+	dout(10, "osdmap_destroy %p\n", map);
+	if (map->crush)
+		crush_destroy(map->crush);
 	kfree(map->osd_state);
-	kfree(map->crush);
 	kfree(map);
 }
 
