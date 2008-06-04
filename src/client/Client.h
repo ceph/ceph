@@ -130,7 +130,18 @@ class InodeCap {
   unsigned issued;
   unsigned implemented;
   unsigned seq;
-  InodeCap() : issued(0), implemented(0), seq(0) {}
+
+  int issued_exporting;        // if export comes first
+  set<int> importing_from;    // if import comes first
+
+  InodeCap() : issued(0), implemented(0), seq(0),
+	       issued_exporting(0) {}
+  
+  bool can_drop() {
+    return issued == 0 &&
+      issued_exporting == 0 &&
+      importing_from.empty();
+  }
 };
 
 
@@ -147,7 +158,6 @@ class Inode {
 
   // per-mds caps
   map<int,InodeCap> caps;            // mds -> InodeCap
-  map<int,InodeCap> stale_caps;      // mds -> cap .. stale
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -238,11 +248,7 @@ class Inode {
     for (map<int,InodeCap>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second.issued;
-    for (map<int,InodeCap>::iterator it = stale_caps.begin();
-         it != stale_caps.end();
-         it++)
-      c |= it->second.issued;
+      c |= it->second.issued | it->second.issued_exporting;
     return c;
   }
 
@@ -560,10 +566,6 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
-  // cap weirdness
-  map<inodeno_t, map<int, class MClientFileCaps*> > cap_reap_queue;  // ino -> mds -> msg .. set of (would-be) stale caps to reap
-
-
   // file handles, etc.
   filepath cwd;
   interval_set<int> free_fd_set;  // unused fds
@@ -604,7 +606,7 @@ protected:
     //cout << "put_inode on " << in << " " << in->inode.ino << endl;
     in->put(n);
     if (in->ref == 0) {
-      //cout << "put_inode deleting " << in->inode.ino << endl;
+      //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
       inode_map.erase(in->inode.ino);
       if (in == root) root = 0;
       delete in;

@@ -1198,10 +1198,12 @@ void Client::send_reconnect(int mds)
 	dout(10) << " path on " << p->first << " is " << path << dendl;
 	m->add_inode_path(p->first, path.get_path());
       }
+      /*
       if (p->second->stale_caps.count(mds)) {
 	dout(10) << " clearing stale caps on " << p->first << dendl;
 	p->second->stale_caps.erase(mds);         // hrm, is this right?
       }
+      */
     }
 
     // reset my cap seq number
@@ -1359,9 +1361,16 @@ void Client::check_caps(Inode *in)
 	   << " used " << cap_string(used)
 	   << dendl;
   
+  if (in->caps.empty())
+    return;   // guard if at end of func
+  
+  map<int,InodeCap>::iterator next;
   for (map<int,InodeCap>::iterator it = in->caps.begin();
        it != in->caps.end();
-       it++) {
+       it = next) {
+    next = it;
+    next++;
+
     InodeCap &cap = it->second;
     int revoking = cap.implemented & ~cap.issued;
     
@@ -1404,12 +1413,16 @@ void Client::check_caps(Inode *in)
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
     messenger->send_message(m, mdsmap->get_inst(it->first));
-    if (wanted == 0)
-      mds_sessions[it->first].num_caps--;
+    if (wanted == 0) {
+      it->second.seq = 0;
+      if (it->second.can_drop()) {
+	mds_sessions[it->first].num_caps--;
+	in->caps.erase(it);
+      }
+    }
   }
 
-  if (wanted == 0 && !in->caps.empty()) {
-    in->caps.clear();
+  if (in->caps.empty()) {
     dout(10) << "last caps on " << *in << dendl;
     put_inode(in);
   }
@@ -1522,67 +1535,68 @@ void Client::handle_file_caps(MClientFileCaps *m)
     int other = m->get_migrate_mds();
 
     /*
-     * FIXME: there is a race here.. if the caps are exported twice in succession,
-     *  you may get the second import before the first, in which case the middle MDS's
-     *  import and then export won't be handled properly.
-     *  there should be a sequence number attached to the cap, incremented each time
-     *  it is exported... 
-     */
-    /*
      * FIXME: handle mds failures
      */
 
-    if (in && in->stale_caps.count(other)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " imported from mds" << other << dendl;
-
-      // fresh from new mds?
-      if (!in->caps.count(mds)) {
-	mds_sessions[mds].num_caps++;
-        if (in->caps.empty()) in->get();
-        in->caps[mds].seq = m->get_seq();
-        in->caps[mds].issued = m->get_caps();
-      }
-      
-      assert(in->stale_caps.count(other));
-      in->stale_caps.erase(other);
-      if (in->stale_caps.empty()) put_inode(in); // note: this will never delete *in
-      
-      // fall-thru!
-    } else {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds << " premature (!!) import from mds" << other << dendl;
-      // delay!
-      cap_reap_queue[in->ino()][other] = m;
-      return;
+    // fresh from new mds?
+    if (!in->caps.count(mds)) {
+      mds_sessions[mds].num_caps++;
+      if (in->caps.empty()) in->get();
+      in->caps[mds].seq = m->get_seq();
+      in->caps[mds].issued = m->get_caps();
     }
+
+    if (in->caps.count(other) &&
+	in->caps[other].issued_exporting) {
+      dout(5) << "handle_file_caps ino " << m->get_ino() << " seq " << m->get_seq() << " IMPORT to mds" << mds << " from mds" << other
+	      << " - already saw EXPORT, done" << dendl;
+      in->caps[other].issued_exporting = 0;
+      if (in->caps[other].can_drop()) {
+	mds_sessions[other].num_caps--;
+	in->caps.erase(other);
+      }
+    } else {
+      dout(5) << "handle_file_caps ino " << m->get_ino() << " seq " << m->get_seq() << " IMPORT to mds" << mds << " from mds" << other
+	      << " - no EXPORT yet, marking" << dendl;
+      in->caps[mds].importing_from.insert(other);
+    }
+      
+    // fall-thru!
+    // (wake ppl up, etc.)
   }
 
   // stale?
   if (m->get_op() == CEPH_CAP_OP_EXPORT) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() << " seq " << m->get_seq() << " from mds" << mds << " now exported/stale" << dendl;
-    
     // move to stale list
-    assert(in->caps.count(mds));
-    if (in->stale_caps.empty()) in->get();
-    in->stale_caps[mds] = in->caps[mds];
-    in->stale_caps[mds].seq = m->get_seq();
+    bool found_importing = false;
+    for (map<int,InodeCap>::iterator p = in->caps.begin();
+	 p != in->caps.end();
+	 p++) {
+      if (p->first == mds) continue;
+      if (p->second.importing_from.count(mds) == 0) continue;
 
-    assert(in->caps.count(mds));
-    in->caps.erase(mds);
-    mds_sessions[mds].num_caps--;
-    if (in->caps.empty()) in->put();
-
-    // delayed reap?
-    if (cap_reap_queue.count(in->ino()) &&
-        cap_reap_queue[in->ino()].count(mds)) {
-      dout(5) << "handle_file_caps on ino " << m->get_ino() << " from mds" << mds
-	      << " delayed reap on mds?FIXME?" << dendl;  /* FIXME */
-      
-      // process delayed reap
-      handle_file_caps( cap_reap_queue[in->ino()][mds] );
-
-      cap_reap_queue[in->ino()].erase(mds);
-      if (cap_reap_queue[in->ino()].empty())
-        cap_reap_queue.erase(in->ino());
+      dout(5) << "handle_file_caps ino " << m->get_ino() << " seq " << m->get_seq() << " EXPORT from mds" << mds
+	      << " - already saw IMPORT, done" << dendl;
+      p->second.importing_from.erase(mds);
+      mds_sessions[mds].num_caps--;
+      in->caps.erase(mds);
+      found_importing = true;
+      if (p->second.can_drop()) {
+	mds_sessions[p->first].num_caps--;
+	in->caps.erase(p);
+	if (in->caps.empty())
+	  put_inode(in);
+      }
+      break;
+    } 
+    if (!found_importing) {
+      dout(5) << "handle_file_caps ino " << m->get_ino() << " seq " << m->get_seq() << " EXPORT from mds" << mds
+	      << " - no IMPORT yet, marking" << dendl;
+      if (in->caps.empty()) in->get();
+      InodeCap &cap = in->caps[mds];
+      cap.issued_exporting = in->caps[mds].issued;
+      cap.issued = 0;
+      cap.seq = 0;
     }
     delete m;
     return;
@@ -1623,10 +1637,12 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
   
+
+  // ok!
   InodeCap &cap = in->caps[mds];
+  cap.seq = m->get_seq();
 
-
-  // don't want?
+  // don't want it?
   int wanted = in->caps_wanted();
   if (wanted == 0) {
     dout(5) << "handle_file_caps on ino " << m->get_ino() 
@@ -1637,6 +1653,13 @@ void Client::handle_file_caps(MClientFileCaps *m)
     m->set_caps(0);
     m->set_wanted(0);
     messenger->send_message(m, m->get_source_inst());
+    cap.seq = 0;
+    if (cap.can_drop()) {
+      mds_sessions[mds].num_caps--;
+      in->caps.erase(mds);
+      if (in->caps.empty())
+	put_inode(in);
+    }      
     return;
   }
 
@@ -1666,7 +1689,6 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
 
   // update caps
-  cap.seq = m->get_seq();
 
   bool ack = false;
   

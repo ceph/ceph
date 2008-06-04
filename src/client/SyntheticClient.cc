@@ -1700,8 +1700,9 @@ int SyntheticClient::create_shared(int num)
 {
   // files
   char d[255];
+  client->mkdir("test", 0755);
   for (int n=0; n<num; n++) {
-    sprintf(d,"file.%d", n);
+    sprintf(d,"test/file.%d", n);
     client->mknod(d, 0644);
   }
   
@@ -1716,14 +1717,14 @@ int SyntheticClient::open_shared(int num, int count)
     // open
     list<int> fds;
     for (int n=0; n<num; n++) {
-      sprintf(d,"file.%d", n);
+      sprintf(d,"test/file.%d", n);
       int fd = client->open(d,O_RDONLY);
       if (fd > 0) fds.push_back(fd);
     }
 
     if (false && client->get_nodeid() == 0)
       for (int n=0; n<num; n++) {
-	sprintf(d,"file.%d", n);
+	sprintf(d,"test/file.%d", n);
 	client->unlink(d);
       }
 

@@ -54,17 +54,20 @@ public:
     int32_t wanted;
     int32_t issued;
     int32_t pending;
+    capseq_t seq;
     Export() {}
-    Export(int w, int i, int p) : wanted(w), issued(i), pending(p) {}
+    Export(int w, int i, int p, capseq_t s) : wanted(w), issued(i), pending(p), seq(s) {}
     void encode(bufferlist &bl) const {
       ::encode(wanted, bl);
       ::encode(issued, bl);
       ::encode(pending, bl);
+      ::encode(seq, bl);
     }
     void decode(bufferlist::iterator &p) {
       ::decode(wanted, p);
       ::decode(issued, p);
       ::decode(pending, p);
+      ::decode(seq, p);
     }
   };
 
@@ -174,7 +177,7 @@ public:
   capseq_t get_last_seq() { return last_sent; }
 
   Export make_export() {
-    return Export(wanted_caps, issued(), pending());
+    return Export(wanted_caps, issued(), pending(), last_sent);
   }
   void merge(Export& other) {
     // issued + pending
@@ -185,6 +188,7 @@ public:
 
     // wanted
     wanted_caps = wanted_caps | other.wanted;
+    last_sent = MAX(last_sent, other.seq);
   }
   void merge(int otherwanted, int otherissued) {
     // issued + pending
