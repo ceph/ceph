@@ -79,7 +79,7 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_DIRSTAT       (1<<4)
 #define CEPH_MOUNT_RBYTES        (1<<5)
 
-#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_DIRSTAT)
+#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_DIRSTAT|CEPH_MOUNT_UNSAFE_WRITES)
 
 struct ceph_mount_args {
 	int sb_flags;
