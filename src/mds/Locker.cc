@@ -3381,8 +3381,10 @@ bool Locker::file_sync(FileLock *lock)
       bufferlist softdata;
       lock->encode_locked_state(softdata);
       send_lock_message(lock, LOCK_AC_SYNC, softdata);
-      lock->init_gather();
-      gather++;
+      if (lock->get_state() != LOCK_GSYNCL) {    // loner replica is already LOCK
+	lock->init_gather();
+	gather++;
+      }
     }
     int issued = in->get_caps_issued();
     if (issued & ~lock->caps_allowed()) {
@@ -3488,8 +3490,10 @@ void Locker::file_mixed(FileLock *lock)
     int gather = 0;
     if (in->is_replicated()) {
       send_lock_message(lock, LOCK_AC_MIXED);
-      lock->init_gather();
-      gather++;
+      if (lock->get_state() != LOCK_GMIXEDL) {  // LONER replica is LOCK
+	lock->init_gather();
+	gather++;
+      }
     }
     if (lock->get_num_client_lease()) {
       revoke_client_leases(lock);
