@@ -741,6 +741,8 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
+  void add_update_inode_cap(Inode *in, int mds, unsigned issued, unsigned seq, unsigned mseq);
+  void remove_cap(Inode *in, int mds);
   void handle_file_caps(class MClientFileCaps *m);
   void check_caps(Inode *in);
   void put_cap_ref(Inode *in, int cap);
