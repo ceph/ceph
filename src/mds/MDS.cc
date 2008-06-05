@@ -1237,9 +1237,6 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
   mds_lock.Lock();
   dout(0) << "ms_handle_failure to " << inst << " on " << *m << dendl;
   
-  if (m->get_type() == CEPH_MSG_MDS_MAP && m->get_dest().is_client()) 
-    server->client_reconnect_failure(m->get_dest().num());
-
   delete m;
   mds_lock.Unlock();
 }

@@ -461,18 +461,6 @@ void Server::process_reconnected_caps()
 }
 
 
-void Server::client_reconnect_failure(int from) 
-{
-  dout(5) << "client_reconnect_failure on client" << from << dendl;
-  if (mds->is_reconnect() &&
-      client_reconnect_gather.count(from)) {
-    failed_reconnects++;
-    client_reconnect_gather.erase(from);
-    if (client_reconnect_gather.empty()) 
-      reconnect_gather_finish();
-  }
-}
-
 void Server::reconnect_gather_finish()
 {
   dout(7) << "reconnect_gather_finish.  failed on " << failed_reconnects << " clients" << dendl;
@@ -489,10 +477,18 @@ void Server::reconnect_tick()
     for (set<int>::iterator p = client_reconnect_gather.begin();
 	 p != client_reconnect_gather.end();
 	 p++) {
+      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(*p));
+      dout(1) << "reconnect gave up on " << session->inst << dendl;
+
+      /* no, we need to respect g_conf.mds_session_autoclose
+      // since we are reconnecting, cheat a bit and don't project anything.
+      mds->sessionmap.projected++;
+      mds->sessionmap.version++;
+      mdlog->submit_entry(new ESession(session->inst, false, mds->sessionmap.version));
+      mds->messenger->mark_down(session->inst.addr);
+      */
+
       failed_reconnects++;
-      dout(1) << "reconnect gave up on "
-	      << mds->sessionmap.get_inst(entity_name_t::CLIENT(*p))
-	      << dendl;
     }
     client_reconnect_gather.clear();
     reconnect_gather_finish();
@@ -506,7 +502,7 @@ void Server::reconnect_tick()
 
 
 /*
- * send generic response (just and error code)
+ * send generic response (just an error code)
  */
 void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *tracedn)
 {

@@ -82,13 +82,12 @@ mds
 - lease length heuristics
   - mds lock last_change stamp?
 
-- can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
+- handle slow client reconnect (i.e. after mds has gone active)
 
 - fix reconnect/rejoin open file weirdness
 - get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 
-- failure during reconnect vs clientmap.  
-
+- can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 

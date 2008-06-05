@@ -2923,10 +2923,12 @@ void MDCache::queue_file_recover(CInode *in)
  */
 void MDCache::identify_files_to_recover()
 {
+  /*  no.  we may have failed a reconnect, then crashed before recovering all sizes..
   if (!mds->server->failed_reconnects) {
     dout(10) << "identify_files_to_recover -- all clients reconnected, nothing to do" << dendl;
     return;
   }
+  */
 
   dout(10) << "identify_files_to_recover" << dendl;
   for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
