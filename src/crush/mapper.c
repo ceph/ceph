@@ -222,6 +222,7 @@ static int crush_choose(struct crush_map *map,
 					BUG_ON(1);
 					item = in->items[0];
 				}
+				BUG_ON(item >= map->max_devices);
 				
 				/* desired type? */
 				if (item < 0) 
@@ -294,6 +295,7 @@ int crush_do_rule(struct crush_map *map,
 	int i,j;
 	int numrep;
 	
+	BUG_ON(ruleno >= map->max_rules);
 	rule = map->rules[ruleno];
 	result_len = 0;
 	w = a;
