@@ -223,6 +223,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 	}
 
 	/* rules */
+	dout(30, "rule vec is %p\n", c->rules);
 	for (i = 0; i < c->max_rules; i++) {
 		__u32 yes;
 		struct crush_rule *r;
@@ -246,6 +247,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 					  GFP_NOFS);
 		if (r == NULL)
 			goto badmem;
+		dout(30, " rule %d is at %p\n", i, r);
 		r->len = yes;
 		ceph_decode_copy_safe(p, end, &r->mask, 4, bad); /* 4 u8's */
 		ceph_decode_need(p, end, r->len*3*sizeof(__u32), bad);

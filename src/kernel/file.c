@@ -250,11 +250,16 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 }
 
 /*
- * wrap do_sync_read and friends with checks for cap bits on the inode.
- * atomically grab references, so that those bits are not released mid-read.
+ * wrap generic_file_aio_read with checks for cap bits on the inode.
+ * atomically grab references, so that those bits are not released
+ * mid-read.
  */
-ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
+ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
+		      unsigned long nr_segs, loff_t pos)
 {
+	struct file *filp = iocb->ki_filp;
+	loff_t *ppos = &iocb->ki_pos;
+	size_t len = iov->iov_len;
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	ssize_t ret;
@@ -262,25 +267,27 @@ ssize_t ceph_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 
 	__ceph_do_pending_vmtruncate(inode);
 
-	dout(10, "read %llx %llu~%u trying to get caps on %p\n",
-	     ceph_ino(inode), *ppos, (unsigned)len, inode);
+	dout(10, "aio_read %llx %llu~%u trying to get caps on %p\n",
+	     ceph_ino(inode), pos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
 							 CEPH_CAP_RDCACHE,
 							 &got, -1));
 	if (ret < 0)
 		goto out;
-	dout(10, "read %llx %llu~%u got cap refs %d\n",
-	     ceph_ino(inode), *ppos, (unsigned)len, got);
+	dout(10, "aio_read %llx %llu~%u got cap refs %d\n",
+	     ceph_ino(inode), pos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_RDCACHE) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
-		ret = ceph_sync_read(filp, buf, len, ppos);
+		/* fixme.. this isn't async */
+		ret = ceph_sync_read(filp, iov->iov_base, len, ppos);
 	else
-		ret = do_sync_read(filp, buf, len, ppos);
+		ret = generic_file_aio_read(iocb, iov, nr_segs, pos);
 
 out:
-	dout(10, "read %llx dropping cap refs on %d\n", ceph_ino(inode), got);
+	dout(10, "aio_read %llx dropping cap refs on %d\n", ceph_ino(inode),
+	     got);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
@@ -308,44 +315,7 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 		ceph_check_caps(ci, 0);
 }
 
-ssize_t ceph_write(struct file *filp, const char __user *buf,
-		   size_t len, loff_t *ppos)
-{
-	struct inode *inode = filp->f_dentry->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	ssize_t ret;
-	int got = 0;
-	loff_t endoff = *ppos + len;
-
-	__ceph_do_pending_vmtruncate(inode);
-	check_max_size(inode, endoff);
-
-	dout(10, "write %p %llu~%u getting caps. i_size %llu\n",
-	     inode, *ppos, (unsigned)len, inode->i_size);
-	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_WR,
-							 CEPH_CAP_WRBUFFER,
-							 &got, endoff));
-	if (ret < 0)
-		goto out;
-	dout(10, "write %p %llu~%u  got cap refs on %d\n",
-	     inode, *ppos, (unsigned)len, got);
-
-	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
-	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
-		ret = ceph_sync_write(filp, buf, len, ppos);
-	else
-		ret = do_sync_write(filp, buf, len, ppos);
-
-out:
-	dout(10, "write %p %llu~%u  dropping cap refs on %d\n",
-	     inode, *ppos, (unsigned)len, got);
-	ceph_put_cap_refs(ci, got);
-	return ret;
-}
-
 /*
- * verify caps in aio_write as well!
  */
 ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		       unsigned long nr_segs, loff_t pos)
@@ -357,6 +327,7 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	int got = 0;
 	int ret;
 
+	__ceph_do_pending_vmtruncate(inode);
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
@@ -372,7 +343,7 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
-		/* fixme, this isn't async */
+		/* fixme, this isn't actually async! */
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len, &pos);
 	else
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
@@ -412,9 +383,9 @@ const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
 	.llseek = generic_file_llseek,
-	.read = ceph_read,
-	.write = ceph_write,
-	.aio_read = generic_file_aio_read,
+	.read = do_sync_read,
+	.write = do_sync_write,
+	.aio_read = ceph_aio_read,
 	.aio_write = ceph_aio_write,
 	.mmap = generic_file_mmap,
 	.fsync = ceph_fsync,
