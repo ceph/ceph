@@ -566,7 +566,7 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
 	struct ceph_dentry_info *di;
 	struct ceph_mds_session *session;
 	int valid = 0;
-	u64 gen;
+	u32 gen;
 	unsigned long ttl;
 
 	spin_lock(&dentry->d_lock);
@@ -942,12 +942,14 @@ int ceph_get_cap_mds(struct inode *inode)
 }
 
 /*
- * caller shoudl hold session s_mutex.
+ * caller should hold session s_mutex.
+ *
+ * @fmode can be negative, in which case it is ignored.
  */
-struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
-				    struct ceph_mds_session *session,
-				    int fmode,
-				    u32 issued, u32 seq)
+int ceph_add_cap(struct inode *inode,
+		 struct ceph_mds_session *session,
+		 int fmode, unsigned issued,
+		 unsigned seq, unsigned mseq)
 {
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -972,7 +974,7 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 				spin_unlock(&inode->i_lock);
 				new_cap = kmalloc(sizeof(*cap), GFP_NOFS);
 				if (new_cap == 0)
-					return ERR_PTR(-ENOMEM);
+					return -ENOMEM;
 				spin_lock(&inode->i_lock);
 			}
 		}
@@ -980,7 +982,6 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 		is_new = 1;    /* grab inode later */
 		cap->issued = cap->implemented = 0;
 		cap->mds = mds;
-		cap->seq = 0;
 		cap->flags = 0;
 
 		cap->ci = ci;
@@ -990,6 +991,13 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 		cap->session = session;
 		list_add(&cap->session_caps, &session->s_caps);
 		session->s_nr_caps++;
+
+		/* clear out old exporting info? */
+		if (ci->i_cap_exporting_mds == mds) {
+			ci->i_cap_exporting_issued = 0;
+			ci->i_cap_exporting_mseq = 0;
+			ci->i_cap_exporting_mds = -1;
+		}
 	}
 
 	dout(10, "add_cap inode %p (%llx) got cap %xh now %xh seq %d from %d\n",
@@ -997,12 +1005,14 @@ struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
 	cap->issued |= issued;
 	cap->implemented |= issued;
 	cap->seq = seq;
+	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
-	__ceph_get_fmode(ci, fmode);
+	if (fmode >= 0)
+		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
 	if (is_new)
 		igrab(inode);
-	return cap;
+	return 0;
 }
 
 int __ceph_caps_issued(struct ceph_inode_info *ci)
@@ -1010,7 +1020,7 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 	int have = 0;
 	struct ceph_inode_cap *cap;
 	struct list_head *p;
-	u64 gen;
+	u32 gen;
 	unsigned long ttl;
 
 	list_for_each(p, &ci->i_caps) {
@@ -1023,7 +1033,7 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 
 		if (cap->gen < gen || time_after_eq(jiffies, ttl)) {
 			dout(30, "__ceph_caps_issued %p cap %p issued %d "
-			     "but STALE (gen %llu vs %llu)\n", &ci->vfs_inode,
+			     "but STALE (gen %u vs %u)\n", &ci->vfs_inode,
 			     cap, cap->issued, cap->gen, gen);
 			continue;
 		}
@@ -1406,8 +1416,9 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }
 
-int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
-			  struct ceph_mds_session *session)
+void ceph_handle_cap_trunc(struct inode *inode,
+			   struct ceph_mds_file_caps *trunc,
+			   struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
@@ -1447,8 +1458,72 @@ int ceph_handle_cap_trunc(struct inode *inode, struct ceph_mds_file_caps *trunc,
 	if (queue_trunc)
 		queue_work(ceph_client(inode->i_sb)->trunc_wq,
 			   &ci->i_vmtruncate_work);
-	return 0;
 }
+
+void ceph_handle_cap_export(struct inode *inode, struct ceph_mds_file_caps *ex,
+			    struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int mds = session->s_mds;
+	unsigned mseq = le32_to_cpu(ex->migrate_seq);
+	struct ceph_inode_cap *cap = 0, *t;
+	struct list_head *p;
+
+	dout(10, "handle_cap_export inode %p ci %p mds%d mseq %d\n",
+	     inode, ci, mds, mseq);
+
+	spin_lock(&inode->i_lock);
+
+	/* make sure we haven't seen a higher mseq */
+	list_for_each(p, &ci->i_caps) {
+		t = list_entry(p, struct ceph_inode_cap, ci_caps);
+		if (t->mseq > mseq) {
+			dout(10, " higher mseq on cap from mds%d\n",
+			     t->session->s_mds);
+			goto out;
+		}
+		if (t->session->s_mds == mds)
+			cap = t;
+	}
+
+	if (cap) {
+		/* make note, and remove */
+		ci->i_cap_exporting_mds = mds;
+		ci->i_cap_exporting_mseq = mseq;
+		ci->i_cap_exporting_issued = cap->issued;
+		__ceph_remove_cap(cap);
+	}
+
+out:
+	spin_unlock(&inode->i_lock);
+}
+
+void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_file_caps *im,
+			    struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int mds = session->s_mds;
+	unsigned issued = le32_to_cpu(im->caps);
+	unsigned seq = le32_to_cpu(im->seq);
+	unsigned mseq = le32_to_cpu(im->migrate_seq);
+
+	if (ci->i_cap_exporting_mds >= 0 &&
+	    ci->i_cap_exporting_mseq < mseq) {
+		dout(10, "handle_cap_import inode %p ci %p mds%d mseq %d"
+		     " - cleared exporting from mds%d\n",
+		     inode, ci, mds, mseq,
+		     ci->i_cap_exporting_mds);
+		ci->i_cap_exporting_issued = 0;
+		ci->i_cap_exporting_mseq = 0;
+		ci->i_cap_exporting_mds = -1;
+	} else {
+		dout(10, "handle_cap_import inode %p ci %p mds%d mseq %d\n",
+		     inode, ci, mds, mseq);
+	}
+
+	ceph_add_cap(inode, session, -1, issued, seq, mseq);
+}
+
 
 static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 {

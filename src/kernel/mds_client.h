@@ -10,6 +10,7 @@
 #include "mdsmap.h"
 
 struct ceph_client;
+struct ceph_inode_cap;
 
 /*
  * for mds reply parsing
@@ -60,7 +61,7 @@ struct ceph_mds_session {
 	u64               s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;
 	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
-	u64               s_cap_gen;  /* inc each time we get mds stale msg */
+	u32               s_cap_gen;  /* inc each time we get mds stale msg */
 	unsigned long     s_cap_ttl, s_renew_requested;
 	struct list_head  s_caps;
 	struct list_head  s_inode_leases, s_dentry_leases;
@@ -97,7 +98,6 @@ struct ceph_mds_request {
 	int			r_expects_cap;
 	int                     r_fmode;  /* if expecting cap */
 	unsigned long           r_from_time;
-	struct ceph_inode_cap  *r_cap;
 	struct ceph_mds_session *r_session;
 	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
 

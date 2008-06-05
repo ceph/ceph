@@ -153,7 +153,7 @@ struct ceph_inode_cap {
 	int mds;    /* -1 if not used */
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemneted (for tracking revocation) */
-	u64 seq, gen;
+	u32 seq, mseq, gen;
 	int flags;  /* stale, etc.? */
 	struct ceph_inode_info *ci;
 	struct list_head ci_caps;       /* per-ci caplist */
@@ -204,7 +204,7 @@ struct ceph_inode_info {
 	int i_lease_mask;
 	struct ceph_mds_session *i_lease_session;
 	long unsigned i_lease_ttl;  /* jiffies */
-	u64 i_lease_gen;
+	u32 i_lease_gen;
 	struct list_head i_lease_item; /* mds session list */
 
 	struct rb_root i_fragtree;
@@ -217,6 +217,9 @@ struct ceph_inode_info {
 	wait_queue_head_t i_cap_wq;
 	unsigned long i_hold_caps_until; /* jiffies */
 	struct list_head i_cap_delay_list;
+	int i_cap_exporting_mds;
+	unsigned i_cap_exporting_mseq;
+	unsigned i_cap_exporting_issued;
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
 	loff_t i_max_size;      /* size authorized by mds */
@@ -269,7 +272,7 @@ extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 struct ceph_dentry_info {
 	struct dentry *dentry;
 	struct ceph_mds_session *lease_session;
-	u64 lease_gen;
+	u32 lease_gen;
 	struct list_head lease_item; /* mds session list */
 };
 
@@ -440,10 +443,10 @@ extern void ceph_update_dentry_lease(struct dentry *dentry,
 extern int ceph_inode_lease_valid(struct inode *inode, int mask);
 extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
-extern struct ceph_inode_cap *ceph_add_cap(struct inode *inode,
-					   struct ceph_mds_session *session,
-					   int fmode,
-					   u32 cap, u32 seq);
+extern int ceph_add_cap(struct inode *inode,
+			struct ceph_mds_session *session,
+			int fmode, unsigned issued,
+			unsigned cap, unsigned seq);
 extern void __ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
@@ -451,9 +454,15 @@ extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_handle_cap_grant(struct inode *inode,
 				 struct ceph_mds_file_caps *grant,
 				 struct ceph_mds_session *session);
-extern int ceph_handle_cap_trunc(struct inode *inode,
-				 struct ceph_mds_file_caps *grant,
-				 struct ceph_mds_session *session);
+extern void ceph_handle_cap_trunc(struct inode *inode,
+				  struct ceph_mds_file_caps *trunc,
+				  struct ceph_mds_session *session);
+extern void ceph_handle_cap_export(struct inode *inode,
+				   struct ceph_mds_file_caps *ex,
+				   struct ceph_mds_session *session);
+extern void ceph_handle_cap_import(struct inode *inode,
+				   struct ceph_mds_file_caps *im,
+				   struct ceph_mds_session *session);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);

@@ -400,7 +400,6 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_old_dentry = 0;
 	req->r_expects_cap = 0;
 	req->r_fmode = 0;
-	req->r_cap = 0;
 	req->r_session = 0;
 	req->r_fwd_session = 0;
 	req->r_attempts = 0;
@@ -1105,10 +1104,10 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mds_request *req;
 	struct ceph_mds_reply_head *head = msg->front.iov_base;
 	struct ceph_mds_reply_info *rinfo;
-	__u64 tid;
+	u64 tid;
 	int err, result;
 	int mds;
-	__u32 cap, capseq;
+	u32 cap, capseq, mseq;
 
 	/* extract tid */
 	if (msg->front.iov_len < sizeof(*head)) {
@@ -1160,15 +1159,13 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		if (req->r_expects_cap && req->r_last_inode) {
 			cap = le32_to_cpu(rinfo->head->file_caps);
 			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
-			req->r_cap = ceph_add_cap(req->r_last_inode,
-						  req->r_session,
-						  req->r_fmode,
-						  cap, capseq);
-			if (IS_ERR(req->r_cap)) {
-				err = PTR_ERR(req->r_cap);
-				req->r_cap = 0;
+			mseq = le32_to_cpu(rinfo->head->file_caps_mseq);
+			err = ceph_add_cap(req->r_last_inode,
+					   req->r_session,
+					   req->r_fmode,
+					   cap, capseq, mseq);
+			if (err)
 				goto done;
-			}
 		}
 
 		/* readdir result? */
@@ -1556,8 +1553,11 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_CAP_OP_EXPORT:
+		ceph_handle_cap_export(inode, h, session);
+		break;
+
 	case CEPH_CAP_OP_IMPORT:
-		dout(10, "cap export/import -- IMPLEMENT ME\n");
+		ceph_handle_cap_import(inode, h, session);
 		break;
 	}
 
