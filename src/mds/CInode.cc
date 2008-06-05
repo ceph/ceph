@@ -945,15 +945,10 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  utime_t old_mtime = inode.mtime;
   bool was_anchored = inode.anchored;
   ::decode(inode, p);
   if (parent && was_anchored != inode.anchored)
     parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
-  if (old_mtime > inode.mtime) {
-    assert(dirlock.is_updated());
-    inode.mtime = old_mtime;     // preserve our mtime, if it is larger
-  }
 
   ::decode(symlink, p);
   ::decode(dirfragtree, p);

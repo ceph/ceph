@@ -413,18 +413,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     mds->anchorclient->got_journaled_agree(*p, logseg);
   }
 
-  /*// dirtied inode mtimes
-  if (!dirty_inode_mtimes.empty())
-    for (map<inodeno_t,utime_t>::iterator p = dirty_inode_mtimes.begin();
-	 p != dirty_inode_mtimes.end();
-	 ++p) {
-      CInode *in = mds->mdcache->get_inode(p->first);
-      dout(10) << "EMetaBlob.replay setting dirlock updated flag on " << *in << dendl;
-      in->dirlock.set_updated();
-      logseg->dirty_inode_mtimes.push_back(&in->xlist_dirty_inode_mtime);
-    }
-  */
-
   // allocated_inos
   if (!allocated_inos.empty()) {
     if (mds->idalloc->get_version() >= alloc_tablev) {
