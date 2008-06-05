@@ -20,9 +20,6 @@ userspace client
 - fix lease validation to check session ttl
 - clean up ll_ interface, now that we have leases!
 - clean up client mds session vs mdsmap behavior?
-- client caps migration races
-  - caps need a seq number; reap logic needs to be a bit smarter
-  - also needs cope with mds failures
 
 kernel client
 - close WR|WRBUFFER -> WR transition overwrite hole
@@ -45,9 +42,6 @@ kernel client
 
 client
 - clean up client mds session vs mdsmap behavior?
-- client caps migration races
-  - caps need a seq number; reap logic needs to be a bit smarter
-  - also needs cope with mds failures
 
 osdmon
 - monitor needs to monitor some osds...
@@ -67,8 +61,6 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds
-- fix cap exports.. merges seem to munge up the seq #.
-
 - dir frags
  - fix replay  (dont want dir frozen, pins, etc.?)
  - fix accounting
