@@ -164,10 +164,11 @@ class FileLock : public SimpleLock {
   // wrlock
   bool can_wrlock() {
     return 
-      state == LOCK_LOCK || state == LOCK_GLOCKM || state == LOCK_GLOCKL ||
-      state == LOCK_MIXED || state == LOCK_GMIXEDL ||
-      state == LOCK_LONER || state == LOCK_GLONERM ||
-      state == LOCK_GSYNCM || state == LOCK_GSYNCL;
+      parent->is_auth() && 
+      (state == LOCK_LOCK || state == LOCK_GLOCKM || state == LOCK_GLOCKL ||
+       state == LOCK_MIXED || state == LOCK_GMIXEDL ||
+       state == LOCK_LONER || state == LOCK_GLONERM ||
+       state == LOCK_GSYNCM || state == LOCK_GSYNCL);
   }
   void get_wrlock(bool force) {
     assert(force || can_wrlock());
