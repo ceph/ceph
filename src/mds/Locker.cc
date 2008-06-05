@@ -702,6 +702,18 @@ void Locker::resume_stale_caps(Session *session)
   }
 }
 
+void Locker::remove_stale_leases(Session *session)
+{
+  dout(10) << "remove_stale_leases for " << session->inst.name << dendl;
+  for (xlist<ClientLease*>::iterator p = session->leases.begin(); !p.end(); ++p) {
+    ClientLease *l = *p;
+    MDSCacheObject *parent = l->parent;
+    dout(15) << " removing lease for " << l->mask << " on " << *parent << dendl;
+    parent->remove_client_lease(l, l->mask, this);
+  }
+}
+
+
 class C_MDL_RequestInodeFileCaps : public Context {
   Locker *locker;
   CInode *in;

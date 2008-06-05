@@ -295,10 +295,11 @@ void Server::find_idle_sessions()
 {
   dout(10) << "find_idle_sessions" << dendl;
   
-  // stale
+  // timeout/stale
+  //  (caps go stale, lease die)
   utime_t now = g_clock.now();
   utime_t cutoff = now;
-  cutoff -= g_conf.mds_cap_timeout;  
+  cutoff -= g_conf.mds_session_timeout;  
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
@@ -312,11 +313,12 @@ void Server::find_idle_sessions()
     dout(10) << "new stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
+    mds->locker->remove_stale_leases(session);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()),
 				 session->inst);
   }
 
-  // dead
+  // autoclose
   cutoff = now;
   cutoff -= g_conf.mds_session_autoclose;
   while (1) {

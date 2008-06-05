@@ -71,7 +71,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_32(p, m->m_created.tv_nsec);
 	ceph_decode_32(p, m->m_anchortable);
 	ceph_decode_32(p, m->m_root);
-	ceph_decode_32(p, m->m_cap_bit_timeout);
+	ceph_decode_32(p, m->m_session_timeout);
 	ceph_decode_32(p, m->m_session_autoclose);
 	ceph_decode_32(p, m->m_max_mds);
 

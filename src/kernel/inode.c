@@ -214,7 +214,7 @@ static void fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	u64 blocks = (size + (1<<9) - 1) >> 9;
 	int warn = 0;
-	
+
 	if (issued & CEPH_CAP_EXCL) {
 		if (timespec_compare(ctime, &inode->i_ctime) > 0)
 			inode->i_ctime = *ctime;
@@ -390,7 +390,7 @@ no_change:
 	case S_IFDIR:
 		inode->i_op = &ceph_dir_iops;
 		inode->i_fop = &ceph_dir_fops;
-		
+
 		ci->i_files = le64_to_cpu(info->files);
 		ci->i_subdirs = le64_to_cpu(info->subdirs);
 		ci->i_rbytes = le64_to_cpu(info->rbytes);
@@ -436,9 +436,11 @@ void ceph_update_inode_lease(struct inode *inode,
 	 * be careful: we can't remove lease from a different session
 	 * without holding that other session's s_mutex.  so don't.
 	 */
-	if ((ci->i_lease_ttl == 0 || !time_before(ttl, ci->i_lease_ttl)) &&
+	if ((ci->i_lease_ttl == 0 || !time_before(ttl, ci->i_lease_ttl) ||
+	     ci->i_lease_gen != session->s_cap_gen) &&
 	    (!ci->i_lease_session || ci->i_lease_session == session)) {
 		ci->i_lease_ttl = ttl;
+		ci->i_lease_gen = session->s_cap_gen;
 		ci->i_lease_mask = mask;
 		if (!ci->i_lease_session) {
 			ci->i_lease_session = session;
@@ -460,13 +462,15 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int havemask;
-	int valid;
+	int valid = 0;
 	int ret = 0;
 
 	spin_lock(&inode->i_lock);
 	havemask = ci->i_lease_mask;
-	/* EXCL cap counts for an ICONTENT lease */
-	if (__ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+
+	/* EXCL cap counts for an ICONTENT lease... check caps? */
+	if ((mask & CEPH_LOCK_ICONTENT) &&
+	    __ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
 		dout(20, "lease_valid inode %p EXCL cap -> ICONTENT\n", inode);
 		havemask |= CEPH_LOCK_ICONTENT;
 	}
@@ -474,7 +478,15 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 	if (havemask & CEPH_LOCK_ICONTENT)
 		havemask |= CEPH_LOCK_ICONTENT;
 
-	valid = time_before(jiffies, ci->i_lease_ttl);
+	if (ci->i_lease_session) {
+		struct ceph_mds_session *s = ci->i_lease_session;
+		spin_lock(&s->s_cap_lock);
+		if (s->s_cap_gen == ci->i_lease_gen &&
+		    time_before(jiffies, s->s_cap_ttl) &&
+		    time_before(jiffies, ci->i_lease_ttl))
+			valid = 1;
+		spin_unlock(&s->s_cap_lock);
+	}
 	spin_unlock(&inode->i_lock);
 
 	if (valid && (havemask & mask) == mask)
@@ -505,10 +517,12 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 		return;
 
 	spin_lock(&dentry->d_lock);
-	if (dentry->d_time != 0 && time_before(ttl, dentry->d_time))
+	di = ceph_dentry(dentry);
+	if (dentry->d_time != 0 &&
+	    di && di->lease_gen == session->s_cap_gen &&
+	    time_before(ttl, dentry->d_time))
 		goto fail_unlock;  /* we already have a newer lease. */
 
-	di = ceph_dentry(dentry);
 	if (!di) {
 		spin_unlock(&dentry->d_lock);
 		di = kmalloc(sizeof(struct ceph_dentry_info),
@@ -523,6 +537,7 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 		di->dentry = dentry;
 		dentry->d_fsdata = di;
 		di->lease_session = session;
+		di->lease_gen = session->s_cap_gen;
 		list_add(&di->lease_item, &session->s_dentry_leases);
 		is_new = 1;
 	} else {
@@ -549,11 +564,25 @@ fail_unlock:
 int ceph_dentry_lease_valid(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
+	struct ceph_mds_session *session;
 	int valid = 0;
+	u64 gen;
+	unsigned long ttl;
+
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (di && time_before(jiffies, dentry->d_time))
-		valid = 1;
+	if (di) {
+		session = di->lease_session;
+		spin_lock(&session->s_cap_lock);
+		gen = session->s_cap_gen;
+		ttl = session->s_cap_ttl;
+		spin_unlock(&session->s_cap_lock);
+
+		if (di->lease_gen == gen &&
+		    time_before(jiffies, dentry->d_time) &&
+		    time_before(jiffies, ttl))
+			valid = 1;
+	}
 	spin_unlock(&dentry->d_lock);
 	dout(20, "dentry_lease_valid - dentry %p = %d\n", dentry, valid);
 	return valid;
@@ -584,7 +613,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dout(10, "fill_trace reply has empty trace!\n");
 		return 0;
 	}
-	
+
 #if 0
 	/*
 	 * if we resend completed ops to a recovering mds, we get no
@@ -1822,7 +1851,7 @@ static int do_getattr(struct dentry *dentry, int mask)
 
 	/*
 	 * if the dentry is unhashed AND we have a cap, stat
-	 * the ino directly.  (if its unhashed and we don't have a 
+	 * the ino directly.  (if its unhashed and we don't have a
 	 * cap, we may be screwed anyway.)
 	 */
 	if (d_unhashed(dentry)) {
@@ -1962,7 +1991,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 			names += len + 1;
 			p += len;
 			ceph_decode_32(&p, len);
-			p += len;	
+			p += len;
 		}
 	} else
 		names[0] = 0;
@@ -2010,7 +2039,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 				goto out;
 			}
 			kaddr = kmap(pages[i]);
-			memcpy(kaddr, value + i*PAGE_CACHE_SIZE, 
+			memcpy(kaddr, value + i*PAGE_CACHE_SIZE,
 			       min(PAGE_CACHE_SIZE, size-i*PAGE_CACHE_SIZE));
 		}
 	}

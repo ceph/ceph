@@ -916,7 +916,7 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_RENEWCAPS:
     mds_sessions[from].cap_ttl = 
-      mds_sessions[from].last_cap_renew_request + mdsmap->get_cap_timeout();
+      mds_sessions[from].last_cap_renew_request + mdsmap->get_session_timeout();
     break;
 
   case CEPH_SESSION_STALE:
@@ -1951,7 +1951,7 @@ void Client::tick()
   
   utime_t now = g_clock.now();
   utime_t el = now - last_cap_renew;
-  if (mdsmap && el > mdsmap->get_cap_timeout() / 3.0)
+  if (mdsmap && el > mdsmap->get_session_timeout() / 3.0)
     renew_caps();
   
 }

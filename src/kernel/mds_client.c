@@ -853,7 +853,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		session->s_state = CEPH_MDS_SESSION_OPEN;
 		spin_lock(&session->s_cap_lock);
 		session->s_cap_ttl = session->s_renew_requested +
-			mdsc->mdsmap->m_cap_bit_timeout*HZ;
+			mdsc->mdsmap->m_session_timeout*HZ;
 		spin_unlock(&session->s_cap_lock);
 		complete(&session->s_completion);
 		break;
@@ -871,7 +871,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	case CEPH_SESSION_RENEWCAPS:
 		spin_lock(&session->s_cap_lock);
 		session->s_cap_ttl = session->s_renew_requested +
-			mdsc->mdsmap->m_cap_bit_timeout*HZ;
+			mdsc->mdsmap->m_session_timeout*HZ;
 		spin_unlock(&session->s_cap_lock);
 		dout(10, "session renewed caps from mds%d, ttl now %lu\n", mds,
 			session->s_cap_ttl);
@@ -1838,32 +1838,45 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
 	struct ceph_inode_info *ci;
+	struct ceph_dentry_info *di;
 	int origmask = mask;
 	int mds = -1;
 	int len = sizeof(*lease) + sizeof(__u32);
 	int dnamelen = 0;
-	__u64 ino;
 
 	BUG_ON(inode == 0);
-	if ((mask & CEPH_LOCK_DN) &&
-	    dentry && dentry->d_fsdata &&
-	    ceph_dentry(dentry)->lease_session->s_mds >= 0 &&
-	    time_before(jiffies, dentry->d_time)) {
-		dnamelen = dentry->d_name.len;
-		len += dentry->d_name.len;
-		mds = ceph_dentry(dentry)->lease_session->s_mds;
+
+	/* is dentry lease valid? */
+	if ((mask & CEPH_LOCK_DN) && dentry) {
+		spin_lock(&dentry->d_lock);
+		di = ceph_dentry(dentry);
+		if (di &&
+		    di->lease_session->s_mds >= 0 &&
+		    di->lease_gen == di->lease_session->s_cap_gen &&
+		    time_before(jiffies, dentry->d_time)) {
+			dnamelen = dentry->d_name.len;
+			len += dentry->d_name.len;
+			mds = di->lease_session->s_mds;
+		} else
+			mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
+		spin_unlock(&dentry->d_lock);
 	} else
-		mask &= ~CEPH_LOCK_DN;  /* nothing to release */
+		mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
+
+	/* inode lease? */
 	ci = ceph_inode(inode);
-	ino = ci->i_ceph_ino;
+	spin_lock(&inode->i_lock);
 	if (ci->i_lease_session && 
-	    time_before(jiffies, ci->i_lease_ttl) &&
-	    ci->i_lease_session->s_mds >= 0) {
+	    ci->i_lease_session->s_mds >= 0 &&
+	    ci->i_lease_gen == ci->i_lease_session->s_cap_gen &&
+	    time_before(jiffies, ci->i_lease_ttl)) {
 		mds = ci->i_lease_session->s_mds;
 		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
 		ci->i_lease_mask &= ~mask;
 	} else
 		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
+	spin_unlock(&inode->i_lock);
+
 	if (mask == 0) {
 		dout(10, "lease_release inode %p (%d) dentry %p -- "
 		     "no lease on %d\n",
@@ -1872,8 +1885,8 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	}
 	BUG_ON(mds < 0);
 
-	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n", inode,
-	     dentry, mask, mds);
+	dout(10, "lease_release inode %p dentry %p %d mask %d to mds%d\n",
+	     inode, dentry, dnamelen, mask, mds);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, 0);
 	if (IS_ERR(msg))
@@ -1881,7 +1894,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	lease = msg->front.iov_base;
 	lease->action = CEPH_MDS_LEASE_RELEASE;
 	lease->mask = mask;
-	lease->ino = cpu_to_le64(ino); /* ?? */
+	lease->ino = cpu_to_le64(ceph_ino(inode));
 	*(__le32 *)(lease+1) = cpu_to_le32(dnamelen);
 	if (dentry)
 		memcpy((void *)(lease + 1) + 4, dentry->d_name.name, dnamelen);
@@ -1909,7 +1922,7 @@ static void delayed_work(struct work_struct *work)
 	int i;
 	struct ceph_mds_client *mdsc =
 		container_of(work, struct ceph_mds_client, delayed_work.work);
-	int renew_interval = mdsc->mdsmap->m_cap_bit_timeout >> 2;
+	int renew_interval = mdsc->mdsmap->m_session_timeout >> 2;
 	int renew_caps = time_after_eq(jiffies, HZ*renew_interval + 
 				       mdsc->last_renew_caps);
 	u32 want_map = 0;

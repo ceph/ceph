@@ -204,6 +204,7 @@ protected:
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
   void resume_stale_caps(Session *session);
+  void remove_stale_leases(Session *session);
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);

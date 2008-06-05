@@ -17,6 +17,7 @@ userspace client
 - time out caps, wake up waiters on renewal
   - link caps with mds session
 - validate dn leases
+- fix lease validation to check session ttl
 - clean up ll_ interface, now that we have leases!
 - clean up client mds session vs mdsmap behavior?
 - client caps migration races
@@ -78,7 +79,6 @@ mds
 
 - rerun destro trace against latest, with various journal lengths
 
-- bind lease, cap timeouts to session renew, so that they can be _longer_ than the session renew interval
 - lease length heuristics
   - mds lock last_change stamp?
 

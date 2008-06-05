@@ -108,7 +108,7 @@ class MDSMap {
   int32_t anchortable;   // which MDS has anchortable (fixme someday)
   int32_t root;          // which MDS has root directory
 
-  __u32 cap_bit_timeout;
+  __u32 session_timeout;
   __u32 session_autoclose;
 
   map<int32_t,int32_t>       mds_state;     // MDS state
@@ -125,12 +125,12 @@ class MDSMap {
  public:
   MDSMap() : epoch(0), client_epoch(0), last_failure(0), anchortable(0), root(0) {
     // hack.. this doesn't really belong here
-    cap_bit_timeout = (int)g_conf.mds_cap_timeout;
+    session_timeout = (int)g_conf.mds_session_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
   }
 
-  utime_t get_cap_timeout() {
-    return utime_t(cap_bit_timeout,0);
+  utime_t get_session_timeout() {
+    return utime_t(session_timeout,0);
   }
   
   epoch_t get_epoch() const { return epoch; }
@@ -354,7 +354,7 @@ class MDSMap {
     ::encode(created, bl);
     ::encode(anchortable, bl);
     ::encode(root, bl);
-    ::encode(cap_bit_timeout, bl);
+    ::encode(session_timeout, bl);
     ::encode(session_autoclose, bl);
     ::encode(max_mds, bl);
     ::encode(mds_state, bl);
@@ -374,7 +374,7 @@ class MDSMap {
     ::decode(created, p);
     ::decode(anchortable, p);
     ::decode(root, p);
-    ::decode(cap_bit_timeout, p);
+    ::decode(session_timeout, p);
     ::decode(session_autoclose, p);
     ::decode(max_mds, p);
     ::decode(mds_state, p);

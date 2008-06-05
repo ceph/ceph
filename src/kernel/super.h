@@ -204,6 +204,7 @@ struct ceph_inode_info {
 	int i_lease_mask;
 	struct ceph_mds_session *i_lease_session;
 	long unsigned i_lease_ttl;  /* jiffies */
+	u64 i_lease_gen;
 	struct list_head i_lease_item; /* mds session list */
 
 	struct rb_root i_fragtree;
@@ -268,6 +269,7 @@ extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 struct ceph_dentry_info {
 	struct dentry *dentry;
 	struct ceph_mds_session *lease_session;
+	u64 lease_gen;
 	struct list_head lease_item; /* mds session list */
 };
 

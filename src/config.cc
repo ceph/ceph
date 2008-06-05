@@ -297,9 +297,9 @@ md_config_t g_conf = {
   mds_beacon_interval: 4, //30.0,
   mds_beacon_grace: 15, //60*60.0,
 
-  mds_cap_timeout: 100,       // cap bits time out if client idle
+  mds_session_timeout: 60,    // cap bits and leases time out if client idle
   mds_session_autoclose: 300, // autoclose idle session 
-  mds_client_lease: 100,
+  mds_client_lease: 120,      // (assuming session stays alive)
   mds_reconnect_timeout: 30,  // seconds to wait for clients during mds restart
 
   mds_tick_interval: 5,
