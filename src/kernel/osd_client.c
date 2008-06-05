@@ -254,7 +254,8 @@ done:
 	return;
 
 bad:
-	derr(0, "got corrupt osd_op_reply\n");
+	derr(0, "got corrupt osd_op_reply got %d expected %d\n",
+	     msg->front.iov_len, sizeof(*rhead));
 }
 
 

@@ -264,7 +264,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 
 	spin_unlock(&mdsc->lock);
 
-	s = kmalloc(sizeof(struct ceph_mds_session), GFP_NOFS);
+	s = kmalloc(sizeof(*s), GFP_NOFS);
 	s->s_mds = mds;
 	s->s_ttl = 0;
 	s->s_state = CEPH_MDS_SESSION_NEW;
