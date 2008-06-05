@@ -113,6 +113,8 @@ public:
     list< map<string,bufferptr>* > pattrsets;
 
   public:
+    int get_len() { return ops.size(); } // FIXME maintain a counter?
+
     bool have_op() {
       return !ops.empty();
     }
@@ -341,11 +343,11 @@ public:
    * these stubs should be implemented if we want to use the
    * apply_transaction() below and we want atomic transactions.
    */
-  virtual int transaction_start() { return 0; }
+  virtual int transaction_start(int len) { return 0; }
   virtual void transaction_end(int id) { }
   virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) {
     // non-atomic implementation
-    int id = transaction_start();
+    int id = transaction_start(t.get_len());
     while (t.have_op()) {
       int op = t.get_op();
       switch (op) {
