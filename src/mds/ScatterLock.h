@@ -155,7 +155,9 @@ public:
 
   // wrlock
   bool can_wrlock() {
-    return state == LOCK_SCATTER || state == LOCK_LOCK;
+    return 
+      state == LOCK_SCATTER ||
+      (parent->is_auth() && state == LOCK_LOCK);
   }
   void get_wrlock(bool force=false) {
     assert(can_wrlock() || force);
