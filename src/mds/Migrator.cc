@@ -900,7 +900,8 @@ void Migrator::finish_export_inode_caps(CInode *in)
 					     in->inode, 
                                              cap->get_last_seq(), 
                                              cap->pending(),
-                                             cap->wanted());
+                                             cap->wanted(),
+					     cap->get_mseq());
     mds->send_message_client(m, it->first);
   }
   in->clear_client_caps();
@@ -2055,7 +2056,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 						cap->get_last_seq(),
 						cap->pending(),
 						cap->wanted(),
-						from);
+						cap->get_mseq());
     mds->send_message_client(caps, session->inst);
   }
 

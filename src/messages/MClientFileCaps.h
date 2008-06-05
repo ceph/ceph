@@ -39,6 +39,7 @@ class MClientFileCaps : public Message {
   int       get_caps() { return h.caps; }
   int       get_wanted() { return h.wanted; }
   capseq_t  get_seq() { return h.seq; }
+  capseq_t  get_mseq() { return h.migrate_seq; }
 
   inodeno_t get_ino() { return inodeno_t(h.ino); }
   __u64 get_size() { return h.size;  }
@@ -48,8 +49,6 @@ class MClientFileCaps : public Message {
   utime_t get_atime() { return utime_t(h.atime); }
   __u64 get_time_warp_seq() { return h.time_warp_seq; }
 
-  // for cap migration
-  int       get_migrate_mds() { return h.migrate_mds; }
   int       get_migrate_seq() { return h.migrate_seq; }
   int       get_op() { return h.op; }
 
@@ -58,7 +57,6 @@ class MClientFileCaps : public Message {
 
   void set_max_size(__u64 ms) { h.max_size = ms; }
 
-  void set_migrate_mds(int m) { h.migrate_mds = m; }
   void set_migrate_seq(int m) { h.migrate_seq = m; }
   void set_op(int o) { h.op = o; }
 
@@ -72,8 +70,7 @@ class MClientFileCaps : public Message {
                   long seq,
                   int caps,
                   int wanted,
-                  int mmds=0,
-		  int mseq=0) :
+		  int mseq) :
     Message(CEPH_MSG_CLIENT_FILECAPS) {
     h.op = op;
     h.seq = seq;
@@ -82,7 +79,6 @@ class MClientFileCaps : public Message {
     h.ino = inode.ino;
     h.size = inode.size;
     h.max_size = inode.max_size;
-    h.migrate_mds = mmds;
     h.migrate_seq = mseq;
     inode.mtime.encode_timeval(&h.mtime);
     inode.atime.encode_timeval(&h.atime);
@@ -99,8 +95,10 @@ class MClientFileCaps : public Message {
 	<< " wanted" << cap_string(h.wanted)
 	<< " size " << h.size << "/" << h.max_size
 	<< " mtime " << utime_t(h.mtime)
-	<< " tws " << h.time_warp_seq
-	<< ")";
+	<< " tws " << h.time_warp_seq;
+    if (h.migrate_seq)
+      out << " mseq " << h.migrate_seq;
+    out << ")";
   }
   
   void decode_payload() {

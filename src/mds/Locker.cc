@@ -626,7 +626,8 @@ bool Locker::issue_caps(CInode *in)
 						     in->inode,
 						     cap->get_last_seq(),
 						     cap->pending(),
-						     cap->wanted()),
+						     cap->wanted(),
+						     cap->get_mseq()),
 				 it->first);
       }
     }
@@ -647,7 +648,8 @@ void Locker::issue_truncate(CInode *in)
 						 in->inode,
 						 cap->get_last_seq(),
 						 cap->pending(),
-						 cap->wanted()),
+						 cap->wanted(),
+						 cap->get_mseq()),
 			     it->first);
   }
 
@@ -905,7 +907,8 @@ void Locker::share_inode_max_size(CInode *in)
 						   in->inode,
 						   cap->get_last_seq(),
 						   cap->pending(),
-						   cap->wanted()),
+						   cap->wanted(),
+						   cap->get_mseq()),
 			       client);
     }
   }

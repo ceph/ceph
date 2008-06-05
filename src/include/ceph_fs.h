@@ -598,6 +598,7 @@ struct ceph_mds_reply_head {
 	__le32 result;
 	__le32 file_caps;
 	__le32 file_caps_seq;
+	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
 } __attribute__ ((packed));
 
@@ -716,7 +717,7 @@ struct ceph_mds_file_caps {
 	__le32 caps, wanted;
 	__le64 ino;
 	__le64 size, max_size;
-	__le32 migrate_mds, migrate_seq;
+	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
 	__le64 time_warp_seq;
 } __attribute__ ((packed));

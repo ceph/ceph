@@ -54,20 +54,20 @@ public:
     int32_t wanted;
     int32_t issued;
     int32_t pending;
-    capseq_t seq;
+    capseq_t mseq;
     Export() {}
-    Export(int w, int i, int p, capseq_t s) : wanted(w), issued(i), pending(p), seq(s) {}
+    Export(int w, int i, int p, capseq_t s) : wanted(w), issued(i), pending(p), mseq(s) {}
     void encode(bufferlist &bl) const {
       ::encode(wanted, bl);
       ::encode(issued, bl);
       ::encode(pending, bl);
-      ::encode(seq, bl);
+      ::encode(mseq, bl);
     }
     void decode(bufferlist::iterator &p) {
       ::decode(wanted, p);
       ::decode(issued, p);
       ::decode(pending, p);
-      ::decode(seq, p);
+      ::decode(mseq, p);
     }
   };
 
@@ -78,6 +78,7 @@ private:
   map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
   capseq_t last_open;
+  capseq_t mseq;
   
   bool suppress;
   bool stale;
@@ -90,10 +91,13 @@ public:
     last_sent(s),
     last_recv(s),
     last_open(0),
+    mseq(0),
     suppress(false), stale(false),
     session_caps_item(this) { 
   }
   
+  capseq_t get_mseq() { return mseq; }
+
   capseq_t get_last_open() { return last_open; }
   void set_last_open() { last_open = last_sent; }
 
@@ -177,7 +181,7 @@ public:
   capseq_t get_last_seq() { return last_sent; }
 
   Export make_export() {
-    return Export(wanted_caps, issued(), pending(), last_sent);
+    return Export(wanted_caps, issued(), pending(), mseq+1);
   }
   void merge(Export& other) {
     // issued + pending
@@ -188,7 +192,7 @@ public:
 
     // wanted
     wanted_caps = wanted_caps | other.wanted;
-    last_sent = MAX(last_sent, other.seq);
+    mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
     // issued + pending

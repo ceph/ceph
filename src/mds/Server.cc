@@ -401,7 +401,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 						     fake_inode, 
 						     0,
 						     0,                // doesn't matter.
-						     p->second.wanted); // doesn't matter.
+						     p->second.wanted, // doesn't matter.
+						     0);  // FIXME get proper mseq here?  hmm.
 	mds->send_message_client(stale, m->get_source_inst());
 
 	// add to cap export list.
@@ -4391,6 +4392,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
+  reply->set_file_caps_mseq(cap->get_mseq());
   //reply->set_file_data_version(fdv);
   reply_request(mdr, reply);
 

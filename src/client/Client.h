@@ -129,19 +129,10 @@ class InodeCap {
  public:
   unsigned issued;
   unsigned implemented;
-  unsigned seq;
+  __u64 seq;
+  __u32 mseq;  // migration seq
 
-  int issued_exporting;        // if export comes first
-  set<int> importing_from;    // if import comes first
-
-  InodeCap() : issued(0), implemented(0), seq(0),
-	       issued_exporting(0) {}
-  
-  bool can_drop() {
-    return issued == 0 &&
-      issued_exporting == 0 &&
-      importing_from.empty();
-  }
+  InodeCap() : issued(0), implemented(0), seq(0), mseq(0) {}
 };
 
 
@@ -158,6 +149,9 @@ class Inode {
 
   // per-mds caps
   map<int,InodeCap> caps;            // mds -> InodeCap
+  unsigned exporting_issued;
+  int exporting_mds;
+  capseq_t exporting_mseq;
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -211,6 +205,7 @@ class Inode {
     //inode(_inode),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -244,11 +239,11 @@ class Inode {
   bool put_cap_ref(int cap);
 
   int caps_issued() {
-    int c = 0;
+    int c = exporting_issued;
     for (map<int,InodeCap>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second.issued | it->second.issued_exporting;
+      c |= it->second.issued;
     return c;
   }
 
