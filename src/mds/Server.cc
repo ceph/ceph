@@ -3309,7 +3309,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   dout(10) << "_rename_finish " << *mdr << dendl;
 
   // test hack: test slave commit
-  if (!mdr->more()->slaves.empty() && !destdn->inode->is_dir()) assert(0); 
+  //if (!mdr->more()->slaves.empty() && !destdn->inode->is_dir()) assert(0); 
   //if (!mdr->more()->slaves.empty() && destdn->inode->is_dir()) assert(0); 
 
   // apply
