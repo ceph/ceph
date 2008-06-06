@@ -805,6 +805,12 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
 		dout(1, "mds%d session caps stale\n", session->s_mds);
 
+	if (ceph_mdsmap_get_state(mdsc->mdsmap, session->s_mds) <
+	    CEPH_MDS_STATE_RECONNECT) {
+		dout(10, "send_renew_caps ignoring mds%d\n", session->s_mds);
+		return 0;
+	}
+
 	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
 	session->s_renew_requested = jiffies;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
