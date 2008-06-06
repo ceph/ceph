@@ -217,3 +217,44 @@ ebofs
 remaining hard problems
 - how to cope with file size changes and read/write sharing
 
+
+snapshot notes --
+
+mds
+- break mds hierarchy into snaprealms
+  - keep per-realm inode xlists, so that breaking a realm is O(size(realm))
+struct snap {
+  u64 rev;
+  string name;
+  utime_t ctime;
+};
+struct snaprealm {
+  list<rev> revs;
+  snaprealm parent;
+  list<realm> children;
+  xlist<CInode*> inodes_with_caps;   // used for efficient realm splits
+};
+
+
+- link client caps to realm, so that snapshot creation is O(num_child_realms*num_clients)
+  - keep per-realm, per-client record with cap refcount, to avoid traversinng realm inode lists looking for caps
+
+struct CapabilityGroup {
+   int client;
+   xlist<Capability*> caps;
+   snaprealm *realm;
+};
+in snaprealm, 
+   map<int, CapabilityGroup*> client_cap_groups;  // used to identify clients who need snap notifications
+
+
+- for each realm, 
+  - list<rev> revs;
+
+client
+- also keep caps linked into snaprealm list
+- current rev for each snaprealm
+- attach rev to each dirty page
+  - can we cow page if its dirty but a different realm?
+    ... hmm probably not, but we can flush it first, just like we do a read to make it clean
+
