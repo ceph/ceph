@@ -622,6 +622,7 @@ more:
 		s = ceph_tcp_connect(con);
 		dout(10, "tcp_connect returned %p\n", s);
 		if (IS_ERR(s)) {
+			s = 0;
 			con->error_msg = "connect error";
 			ceph_fault(con);
 			goto done;
