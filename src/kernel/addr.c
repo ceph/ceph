@@ -68,10 +68,14 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	BUG_ON(!PageLocked(page));
 	if (offset == 0)
 		ClearPageChecked(page);
-	if (!PageDirty(page))
+	if (!PageDirty(page)) {
+		ClearPagePrivate(page);
 		return;
-	if (!page->mapping)
+	}
+	if (!page->mapping) {
+		ClearPagePrivate(page);
 		return;
+	}
 	ci = ceph_inode(page->mapping->host);
 	if (offset == 0) {
 		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
