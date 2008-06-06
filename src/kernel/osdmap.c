@@ -277,6 +277,7 @@ void osdmap_destroy(struct ceph_osdmap *map)
 	if (map->crush)
 		crush_destroy(map->crush);
 	kfree(map->osd_state);
+	kfree(map->osd_addr);
 	kfree(map);
 }
 
@@ -285,18 +286,20 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 	__u8 *state;
 	struct ceph_entity_addr *addr;
 
-	state = kzalloc(max * (sizeof(__u32) +
-			       sizeof(struct ceph_entity_addr)),
-			GFP_NOFS);
-	if (state == NULL)
+	state = kzalloc(max * sizeof(__u32), GFP_NOFS);
+	addr = kzalloc(max * sizeof(struct ceph_entity_addr), GFP_NOFS);
+	if (state == NULL || addr == NULL) {
+		kfree(state);
+		kfree(addr);
 		return -ENOMEM;
-	addr = (void *)((__u32 *)state + max);
+	}
 
 	/* copy old? */
 	if (map->osd_state) {
-		memcpy(state, map->osd_state, map->max_osd);
-		memcpy(addr, map->osd_addr, map->max_osd);
+		memcpy(state, map->osd_state, map->max_osd*sizeof(*state));
+		memcpy(addr, map->osd_addr, map->max_osd*sizeof(*addr));
 		kfree(map->osd_state);
+		kfree(map->osd_addr);
 	}
 
 	map->osd_state = state;
