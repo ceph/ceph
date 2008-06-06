@@ -692,7 +692,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
 	struct ceph_msg *mount_msg;
 	struct dentry *root;
 	int err;
-	int attempts = 10;
+	int attempts = 2;//10;
 	int which;
 	char r;
 
@@ -939,8 +939,10 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 out_splat:
 	up_write(&sb->s_umount);
 	deactivate_super(sb);
+	goto out_final;
 out:
 	ceph_destroy_client(client);
+out_final:
 	dout(25, "ceph_get_sb fail %d\n", err);
 	return err;
 }
