@@ -344,6 +344,7 @@ enum {
 	Opt_port,
 	Opt_wsize,
 	Opt_osdtimeout,
+	Opt_mount_attempts,
 	/* int args above */
 	Opt_ip,
 	Opt_unsafewrites,
@@ -366,6 +367,7 @@ static match_table_t arg_tokens = {
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
+	{Opt_mount_attempts, "mount_attempts=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
@@ -428,6 +430,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->sb_flags = flags;
 	args->flags = CEPH_MOUNT_DEFAULT;
 	args->osd_timeout = 5;  /* seconds */
+	args->mount_attempts = 2;  /* 2 attempts */
 
 	/* ip1[,ip2...]:/server/path */
 	c = strchr(dev_name, ':');
@@ -531,6 +534,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_osdtimeout:
 			args->osd_timeout = intval;
+			break;
+		case Opt_mount_attempts:
+			args->mount_attempts = intval;
 			break;
 		case Opt_unsafewrites:
 			args->flags |= CEPH_MOUNT_UNSAFE_WRITES;
@@ -692,7 +698,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
 	struct ceph_msg *mount_msg;
 	struct dentry *root;
 	int err;
-	int attempts = 2;//10;
+	int attempts = client->mount_args.mount_attempts;
 	int which;
 	char r;
 
