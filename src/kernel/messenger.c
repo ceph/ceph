@@ -974,7 +974,8 @@ static void reset_connection(struct ceph_connection *con)
 static void process_connect(struct ceph_connection *con)
 {
 	dout(20, "process_connect on %p tag %d\n", con, (int)con->in_tag);
-	if (!ceph_entity_addr_is_local(con->peer_addr, con->actual_peer_addr)) {
+	if (!ceph_entity_addr_is_local(con->peer_addr, con->actual_peer_addr) &&
+	    con->actual_peer_addr.ipaddr.sin_addr.s_addr != 0) {
 		derr(1, "process_connect wrong peer, want %u.%u.%u.%u:%u/%d, "
 		     "got %u.%u.%u.%u:%u/%d, wtf\n",
 		     IPQUADPORT(con->peer_addr.ipaddr),
