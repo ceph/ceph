@@ -137,13 +137,15 @@ public:
   __s64 write_pos;       // logical write position, where next entry will go
   __s64 flush_pos;       // where we will flush. if write_pos>flush_pos, we're buffering writes.
   __s64 ack_pos;         // what has been acked.
+  __s64 safe_pos;        // what has been committed safely to disk.
   bufferlist write_buf;  // write buffer.  flush_pos + write_buf.length() == write_pos.
 
   std::map<__s64, utime_t> pending_flush;  // start offsets and times for pending flushes
-  std::map<__s64, std::list<Context*> > waitfor_flush; // when flushed through given offset
+  std::map<__s64, std::list<Context*> > waitfor_ack;  // when flushed through given offset
+  std::map<__s64, std::list<Context*> > waitfor_safe; // when safe through given offset
 
   void _do_flush();
-  void _finish_flush(int r, __s64 start);
+  void _finish_flush(int r, __s64 start, bool safe);
   class C_Flush;
   friend class C_Flush;
 
@@ -189,7 +191,7 @@ public:
     inode(inode_), objecter(obj), filer(objecter), logger(l), 
     lock(lk), timer(*lk), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
-    write_pos(0), flush_pos(0), ack_pos(0),
+    write_pos(0), flush_pos(0), ack_pos(0), safe_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(fl), prefetch_from(pff),
     read_bl(0), on_read_finish(0), on_readable(0),
@@ -227,7 +229,7 @@ public:
 
   // write
   __s64 append_entry(bufferlist& bl, Context *onsync = 0);
-  void flush(Context *onsync = 0);
+  void flush(Context *onsync = 0, Context *onsafe = 0);
 
   // read
   void set_read_pos(__s64 p) { 

@@ -781,7 +781,8 @@ enum {
 	CEPH_OSD_OP_SAFE = 2,         /* want (or is) "safe" ack */
 	CEPH_OSD_OP_RETRY = 4,        /* resend attempt */
 	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
-	CEPH_OSD_OP_BALANCE_READS = 16
+	CEPH_OSD_OP_BALANCE_READS = 16,
+	CEPH_OSD_OP_ACKNVRAM = 32,    /* ACK when stable in NVRAM, not RAM */
 };
 
 struct ceph_osd_peer_stat {
