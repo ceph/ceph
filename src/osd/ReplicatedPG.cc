@@ -1407,15 +1407,12 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   // read data+attrs
   bufferlist bl;
   eversion_t v;
-  int vlen = sizeof(v);
+  size_t vlen = sizeof(v);
   map<string,bufferptr> attrset;
   
-  ObjectStore::Transaction t;
-  t.read(info.pgid, poid, 0, 0, &bl);
-  t.getattr(info.pgid, poid, "version", &v, &vlen);
-  t.getattrs(info.pgid, poid, attrset);
-  unsigned tr = osd->store->apply_transaction(t);
-  assert(tr == 0);  // !!!
+  osd->store->read(info.pgid, poid, 0, 0, bl);
+  osd->store->getattr(info.pgid, poid, "version", &v, vlen);
+  osd->store->getattrs(info.pgid, poid, attrset);
 
   // ok
   dout(7) << "push " << poid << " v " << v 

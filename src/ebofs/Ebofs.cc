@@ -2464,64 +2464,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
   while (t.have_op()) {
     int op = t.get_op();
     switch (op) {
-    case Transaction::OP_READ:
-      {
-        pobject_t oid;
-	t.get_oid(oid);
-        __u64 offset, len;
-	t.get_length(offset);
-	t.get_length(len);
-        bufferlist *pbl;
-	t.get_pbl(pbl);
-        if (_read(oid, offset, len, *pbl) < 0) {
-          dout(7) << "apply_transaction fail on _read" << dendl;
-          r &= bit;
-        }
-      }
-      break;
-
-    case Transaction::OP_STAT:
-      {
-        pobject_t oid;
-	t.get_oid(oid);
-        struct stat *st;
-	t.get_pstat(st);
-        if (_stat(oid, st) < 0) {
-          dout(7) << "apply_transaction fail on _stat" << dendl;
-          r &= bit;
-        }
-      }
-      break;
-
-    case Transaction::OP_GETATTR:
-      {
-        pobject_t oid;
-	t.get_oid(oid);
-	const char *attrname;
-	t.get_attrname(attrname);
-        pair<void*,int*> pattrval;
-	t.get_pattrval(pattrval);
-        if ((*(pattrval.second) = _getattr(oid, attrname, pattrval.first, *(pattrval.second))) < 0) {
-          dout(7) << "apply_transaction fail on _getattr" << dendl;
-          r &= bit;
-        }        
-      }
-      break;
-
-    case Transaction::OP_GETATTRS:
-      {
-        pobject_t oid;
-	t.get_oid(oid);
-        map<string,bufferptr> *pset;
-	t.get_pattrset(pset);
-        if (_getattrs(oid, *pset) < 0) {
-          dout(7) << "apply_transaction fail on _getattrs" << dendl;
-          r &= bit;
-        }        
-      }
-      break;
-
-
+ 
     case Transaction::OP_WRITE:
       {
         pobject_t oid;

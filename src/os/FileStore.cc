@@ -426,7 +426,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
     return ObjectStore::apply_transaction(t, onsafe);
 
   // create transaction
-  int len = t.get_len() * 30;  // very conservative!  FIXME FIXME FIXME
+  int len = t.get_btrfs_len();
   dout(20) << "apply_transaction allocation btrfs usertrans len " << len << dendl;
   btrfs_ioctl_usertrans *trans =
     (btrfs_ioctl_usertrans *)new char[sizeof(*trans) + len * sizeof(trans->ops[0])];
@@ -439,56 +439,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
     int op = t.get_op();
 
     switch (op) {
-    case Transaction::OP_READ:
-      {
-	coll_t cid;
-	pobject_t oid;
-	__u64 offset, len;
-	t.get_cid(cid);
-	t.get_oid(oid);
-	t.get_length(offset);
-	t.get_length(len);
-	bufferlist *pbl;
-	t.get_pbl(pbl);
-	read(cid, oid, offset, len, *pbl);
-      }
-      break;
-    case Transaction::OP_STAT:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	struct stat *st;
-	t.get_pstat(st);
-	stat(cid, oid, st);
-      }
-      break;
-    case Transaction::OP_GETATTR:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	const char *attrname;
-	t.get_attrname(attrname);
-	pair<void*,int*> pattrval;
-	t.get_pattrval(pattrval);
-	*pattrval.second = getattr(cid, oid, attrname, pattrval.first, *pattrval.second);
-      }
-      break;
-    case Transaction::OP_GETATTRS:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	map<string,bufferptr> *pset;
-	t.get_pattrset(pset);
-	getattrs(cid, oid, *pset);
-      }
-      break;
-      
+
     case Transaction::OP_WRITE:
     case Transaction::OP_ZERO:   // write actual zeros.
       {
@@ -616,24 +567,32 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	trans->len++;
       }
       break;
+
+
     case Transaction::OP_SETATTRS:
+    case Transaction::OP_COLL_SETATTRS:
       {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	map<string,bufferptr> *pattrset;
-	t.get_pattrset(pattrset);
-	//setattrs(cid, oid, *pattrset, 0);
-	
 	// make note of old attrs
 	map<string,bufferptr> oldattrs;
-	getattrs(cid, oid, oldattrs);
-	
-	dout(10) << "setattrs " << cid << " " << oid << dendl;
 	char *fn = new char[80];
 	str.push_back(fn);
-	get_coname(cid, oid, fn);
+
+	if (op == Transaction::OP_SETATTRS) {
+	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+	  getattrs(cid, oid, oldattrs);
+	  get_coname(cid, oid, fn);
+	} else {
+	  coll_t cid;
+	  t.get_cid(cid);
+	  collection_getattrs(cid, oldattrs);
+	  get_cdir(cid, fn);
+	}
+	map<string,bufferptr> *pattrset;
+	t.get_pattrset(pattrset);
+	
 	for (map<string,bufferptr>::iterator p = pattrset->begin();
 	     p != pattrset->end();
 	     p++) {
@@ -713,10 +672,10 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	trans->ops[trans->len].args[0] = -2;
 	trans->ops[trans->len].args[1] = -1;
 	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLONE;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
 	trans->ops[trans->len].args[0] = -1;
 	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLONE;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
 	trans->ops[trans->len].args[0] = -2;
 	trans->len++;
       }
@@ -817,9 +776,9 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	trans->ops[trans->len].args[0] = (__u64)fn;
 	trans->ops[trans->len].args[1] = (__u64)attrname;
  	trans->len++;
-     }
+      }
       break;
-      
+
       
     default:
       cerr << "bad op " << op << std::endl;
@@ -828,6 +787,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
   }  
 
   dout(20) << "apply_transaction final btrfs usertrans len is " << trans->len << dendl;
+  assert((int)trans->len <= (int)len);
 
   // apply
   int r = 0;
