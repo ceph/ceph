@@ -1339,7 +1339,7 @@ retry:
 		spin_lock(&ci->vfs_inode.i_lock);
 		cap->seq = 0;  /* reset cap seq */
 		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
-		rec->issued = cpu_to_le32(__ceph_caps_issued(ci));
+		rec->issued = cpu_to_le32(__ceph_caps_issued(ci, 0));
 		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
 		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
 		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
@@ -1610,13 +1610,16 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	__u64 size, max_size;
 	struct timespec mtime, atime;
 	int removed_last = 0;
+	int wake = 0;
 
 	dout(10, "__send_cap cap %p session %p %d -> %d\n", cap, cap->session,
 	     cap->issued, cap->issued & wanted);
 	cap->issued &= wanted;  /* drop bits we don't want */
 	
-	if (revoking && (revoking && used) == 0)
+	if (revoking && (revoking && used) == 0) {
 		cap->implemented = cap->issued;
+		wake = 1;  /* for waiters on wanted -> needed transition */
+	}
 	
 	keep = cap->issued;
 	seq = cap->seq;
@@ -1649,6 +1652,8 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     session->s_mds);
 
+	if (wake)
+		wake_up(&ci->i_cap_wq);
 	if (wanted == 0)
 		iput(inode);  /* removed cap */
 

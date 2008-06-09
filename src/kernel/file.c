@@ -97,7 +97,7 @@ int ceph_open(struct inode *inode, struct file *file)
 
 	/* can we re-use existing caps? */
 	spin_lock(&inode->i_lock);
-	if ((__ceph_caps_issued(ci) & wantcaps) == wantcaps) {
+	if ((__ceph_caps_issued(ci, 0) & wantcaps) == wantcaps) {
 		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, wantcaps, inode);
 		__ceph_get_fmode(ci, fmode);

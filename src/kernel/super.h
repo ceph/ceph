@@ -337,13 +337,13 @@ static inline struct inode *ceph_find_inode(struct super_block *sb, __u64 ino)
 /*
  * caps helpers
  */
-extern int __ceph_caps_issued(struct ceph_inode_info *ci);
+extern int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented);
 
 static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 {
 	int issued;
 	spin_lock(&ci->vfs_inode.i_lock);
-	issued = __ceph_caps_issued(ci);
+	issued = __ceph_caps_issued(ci, 0);
 	spin_unlock(&ci->vfs_inode.i_lock);
 	return issued;
 }

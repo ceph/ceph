@@ -302,7 +302,7 @@ int ceph_fill_inode(struct inode *inode,
 	ceph_decode_timespec(&atime, &info->atime);
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
-	issued = __ceph_caps_issued(ci);
+	issued = __ceph_caps_issued(ci, 0);
 
 	fill_file_bits(inode, issued, le64_to_cpu(info->time_warp_seq), size,
 		       &ctime, &mtime, &atime);
@@ -470,7 +470,7 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 
 	/* EXCL cap counts for an ICONTENT lease... check caps? */
 	if ((mask & CEPH_LOCK_ICONTENT) &&
-	    __ceph_caps_issued(ci) & CEPH_CAP_EXCL) {
+	    __ceph_caps_issued(ci, 0) & CEPH_CAP_EXCL) {
 		dout(20, "lease_valid inode %p EXCL cap -> ICONTENT\n", inode);
 		havemask |= CEPH_LOCK_ICONTENT;
 	}
@@ -1015,7 +1015,7 @@ int ceph_add_cap(struct inode *inode,
 	return 0;
 }
 
-int __ceph_caps_issued(struct ceph_inode_info *ci)
+int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 {
 	int have = 0;
 	struct ceph_inode_cap *cap;
@@ -1040,6 +1040,8 @@ int __ceph_caps_issued(struct ceph_inode_info *ci)
 		dout(30, "__ceph_caps_issued %p cap %p issued %d\n",
 		     &ci->vfs_inode, cap, cap->issued);
 		have |= cap->issued;
+		if (implemented)
+			*implemented |= cap->implemented;
 	}
 	return have;
 }
@@ -1121,7 +1123,7 @@ retry:
 	wanted = __ceph_caps_wanted(ci);
 	used = __ceph_caps_used(ci);
 	dout(10, "check_caps %p wanted %d used %d issued %d\n", inode,
-	     wanted, used, __ceph_caps_issued(ci));
+	     wanted, used, __ceph_caps_issued(ci, 0));
 
 	if (!is_delayed)
 		__ceph_cap_delay_requeue(mdsc, ci);
@@ -1276,7 +1278,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 	cap->gen = session->s_cap_gen;
 
 	/* size/ctime/mtime/atime? */
-	issued = __ceph_caps_issued(ci);
+	issued = __ceph_caps_issued(ci, 0);
 	ceph_decode_timespec(&mtime, &grant->mtime);
 	ceph_decode_timespec(&atime, &grant->atime);
 	ceph_decode_timespec(&ctime, &grant->ctime);
@@ -1322,6 +1324,7 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
 			grant->time_warp_seq = cpu_to_le64(ci->i_time_warp_seq);
 			reply = 1;
+			wake = 1;
 		}
 		cap->issued = newcaps;
 		goto out;
@@ -1553,7 +1556,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff)
 {
 	int ret = 0;
-	int have;
+	int have, implemented;
 
 	dout(30, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
 	     need, want);
@@ -1563,13 +1566,25 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		     endoff, ci->i_max_size);
 		goto sorry;
 	}
-	have = __ceph_caps_issued(ci);
-	dout(30, "get_cap_refs have %d\n", have);
+	have = __ceph_caps_issued(ci, &implemented);
 	if ((have & need) == need) {
-		*got = need | (have & want);
-		__take_cap_refs(ci, *got);
-		ret = 1;
-	}
+		/*
+		 * look at (implemented & ~have & not) so that we keep waiting
+		 * on transition from wanted -> needed caps.  this is needed
+		 * for WRBUFFER|WR -> WR to avoid a new WR sync write from
+		 * going before a prior buffered writeback happens.
+		 */
+		int not = want & ~(have & need);
+		int revoking = implemented & ~have;
+		dout(30, "get_cap_refs have %d but not %d (revoking %d)\n", 
+		     have, not, revoking);
+		if ((revoking & not) == 0) {
+			*got = need | (have & want);
+			__take_cap_refs(ci, *got);
+			ret = 1;
+		}
+	} else
+		dout(30, "get_cap_refs have %d needed %d\n", have, need);
 sorry:
 	spin_unlock(&ci->vfs_inode.i_lock);
 	dout(30, "get_cap_refs on %p ret %d got %d\n", &ci->vfs_inode,
