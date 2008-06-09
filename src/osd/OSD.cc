@@ -1480,7 +1480,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       // archive the full map
       bl.clear();
       osdmap->encode(bl);
-      t.write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
+      store->write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl, 0);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
