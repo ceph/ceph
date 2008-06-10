@@ -94,14 +94,19 @@ void MDLog::write_head(Context *c)
   journaler->write_head(c);
 }
 
-off_t MDLog::get_read_pos() 
+loff_t MDLog::get_read_pos() 
 {
   return journaler->get_read_pos(); 
 }
 
-off_t MDLog::get_write_pos() 
+loff_t MDLog::get_write_pos() 
 {
   return journaler->get_write_pos(); 
+}
+
+loff_t MDLog::get_safe_pos() 
+{
+  return journaler->get_write_safe_pos(); 
 }
 
 
@@ -206,6 +211,17 @@ void MDLog::wait_for_sync( Context *c )
   if (g_conf.mds_log) {
     // wait
     journaler->flush(c);
+  } else {
+    // hack: bypass.
+    c->finish(0);
+    delete c;
+  }
+}
+void MDLog::wait_for_safe( Context *c )
+{
+  if (g_conf.mds_log) {
+    // wait
+    journaler->flush(0, c);
   } else {
     // hack: bypass.
     c->finish(0);

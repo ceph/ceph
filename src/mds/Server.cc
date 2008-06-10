@@ -4573,11 +4573,6 @@ void Server::handle_client_openc(MDRequest *mdr)
   // log + wait
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
   mdlog->submit_entry(le, fin);
-  
-  /*
-    FIXME. this needs to be rewritten when the write capability stuff starts
-    getting journaled.  
-  */
 }
 
 

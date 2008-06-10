@@ -31,8 +31,9 @@ class MDSlaveUpdate;
 
 class LogSegment {
  public:
-  off_t offset, end;
+  loff_t offset, end;
   int num_events;
+  loff_t trimmable_at;
 
   // dirty items
   xlist<CDir*>    dirty_dirfrags;
@@ -63,7 +64,7 @@ class LogSegment {
   C_Gather *try_to_expire(MDS *mds);
 
   // cons
-  LogSegment(off_t off) : offset(off), end(off), num_events(0),
+  LogSegment(loff_t off) : offset(off), end(off), num_events(0), trimmable_at(0),
 			  allocv(0), sessionmapv(0), anchortablev(0) 
   { }
 };

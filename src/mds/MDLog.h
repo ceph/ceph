@@ -153,8 +153,9 @@ public:
   size_t get_num_segments() { return segments.size(); }  
   void set_max_segments(int m) { max_segments = m; }
 
-  off_t get_read_pos();
-  off_t get_write_pos();
+  loff_t get_read_pos();
+  loff_t get_write_pos();
+  loff_t get_safe_pos();
   bool empty() { return segments.empty(); }
 
   bool is_capped() { return capped; }
@@ -162,6 +163,7 @@ public:
 
   void submit_entry( LogEvent *e, Context *c = 0 );
   void wait_for_sync( Context *c );
+  void wait_for_safe( Context *c );
   void flush();
   bool is_flushed() {
     return unflushed == 0;

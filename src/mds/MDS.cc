@@ -1118,6 +1118,7 @@ void MDS::_dispatch(Message *m)
   if (is_active() || is_stopping()) {
     // flush log to disk after every op.  for now.
     //mdlog->flush();
+    mdlog->trim();
 
     // trim cache
     mdcache->trim();

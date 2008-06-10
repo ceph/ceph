@@ -1128,8 +1128,8 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   }
 
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
-  mds->mdlog->submit_entry(le,
-			   new C_MDS_ExportFinishLogged(this, dir));
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_safe(new C_MDS_ExportFinishLogged(this, dir));
   
   delete m;
 }
@@ -1693,7 +1693,8 @@ void Migrator::handle_export_dir(MExportDir *m)
   dout(7) << "handle_export_dir did " << *dir << dendl;
 
   // log it
-  mds->mdlog->submit_entry(le, onlogged);
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_safe(onlogged);
 
   // note state
   import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
@@ -2302,7 +2303,8 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   mds->server->prepare_force_open_sessions(ex->client_map);
   le->client_map.swap(ex->client_map);
   
-  mds->mdlog->submit_entry(le, finish);
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_safe(finish);
 
   delete ex;
 }

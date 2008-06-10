@@ -505,7 +505,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
       
       mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, 
+      mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, 
 							 mds->mdlog->get_current_segment()));
     }
   } 
