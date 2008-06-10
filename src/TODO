@@ -63,8 +63,6 @@ mds
  - fix replay  (dont want dir frozen, pins, etc.?)
  - fix accounting
 
-- make sure fragstat rejoin works - it should compare fragstat.version?
-
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing

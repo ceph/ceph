@@ -653,16 +653,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	CDir *dir = get_dirfrag(fg);
 	if (is_auth()) {
 	  assert(dir);                // i am auth; i had better have this dir open
-	  if (!(fragstat == accounted_fragstat)) {
-	    dout(10) << " got changed fragstat " << fragstat << " on " << *dir << dendl;
-	    dout(20) << "   accounted_fragstat " << accounted_fragstat << dendl;
-	    dir->fnode.fragstat = fragstat;
-	    dir->fnode.accounted_fragstat = accounted_fragstat;
+	  dout(10) << " " << fg << "           fragstat " << fragstat << " on " << *dir << dendl;
+	  dout(20) << " " << fg << " accounted_fragstat " << accounted_fragstat << dendl;
+	  dir->fnode.fragstat = fragstat;
+	  dir->fnode.accounted_fragstat = accounted_fragstat;
+	  if (!(fragstat == accounted_fragstat))
 	    dirlock.set_updated();
-	  } else {
-	    dout(10) << " fully accounted fragstat " << fragstat << " on " << *dir << dendl;
-	    assert(dir->fnode.fragstat == fragstat);
-	  }
 	} else {
 	  if (dir &&
 	      dir->is_auth() &&
@@ -712,17 +708,22 @@ void CInode::finish_scatter_gather_update(int type)
       assert(is_auth());
       inode_t *pi = get_projected_inode();
       dout(20) << "         orig dirstat " << pi->dirstat << dendl;
-      pi->dirstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   p++) {
 	fnode_t *pf = p->second->get_projected_fnode();
-	dout(20) << "  frag " << p->first << " " << *p->second << dendl;
-	dout(20) << "             fragstat " << pf->fragstat << dendl;
-	dout(20) << "   accounted_fragstat " << pf->fragstat << dendl;
-	pi->dirstat.take_diff(pf->fragstat, 
-			      pf->accounted_fragstat);
+	if (pf->accounted_fragstat.version == pi->dirstat.version) {
+	  dout(20) << "  frag " << p->first << " " << *p->second << dendl;
+	  dout(20) << "             fragstat " << pf->fragstat << dendl;
+	  dout(20) << "   accounted_fragstat " << pf->fragstat << dendl;
+	  pi->dirstat.take_diff(pf->fragstat, 
+				pf->accounted_fragstat);
+	} else {
+	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
+	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->fragstat << dendl;
+	}
       }
+      pi->dirstat.version++;
       dout(20) << "        final dirstat " << pi->dirstat << dendl;
     }
     break;
