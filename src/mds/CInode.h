@@ -222,6 +222,7 @@ protected:
 public:
   xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
+  xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
   xlist<CInode*>::item xlist_purging_inode;
 
 private:
@@ -258,6 +259,7 @@ private:
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_dirfrag_dir(this), 
+    xlist_dirty_dirfrag_dirfragtree(this), 
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),

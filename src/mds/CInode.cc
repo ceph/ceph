@@ -692,6 +692,10 @@ void CInode::clear_dirty_scattered(int type)
     xlist_dirty_dirfrag_dir.remove_myself();
     break;
 
+  case CEPH_LOCK_IDFT:
+    xlist_dirty_dirfrag_dirfragtree.remove_myself();
+    break;
+
   default:
     assert(0);
   }

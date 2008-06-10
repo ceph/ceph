@@ -800,7 +800,7 @@ private:
   void fragment_mark_and_complete(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
   void fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
   void fragment_stored(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags);
-  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs, LogSegment *ls);
+  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, Mutation *mut);
   friend class C_MDC_FragmentGo;
   friend class C_MDC_FragmentMarking;
   friend class C_MDC_FragmentStored;

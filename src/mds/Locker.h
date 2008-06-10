@@ -141,9 +141,13 @@ protected:
   void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mut);
   void scatter_rdlock_finish(ScatterLock *lock, Mutation *mut);
+public:
   bool scatter_wrlock_try(ScatterLock *lock, Mutation *mut, bool initiate);
+protected:
   bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mut);
+public:
   void scatter_wrlock_finish(ScatterLock *lock, Mutation *mut);
+protected:
   bool scatter_xlock_start(ScatterLock *lock, MDRequest *mut);
   void scatter_xlock_finish(ScatterLock *lock, Mutation *mut);
 

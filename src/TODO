@@ -62,6 +62,8 @@ mds
 - dir frags
  - fix replay  (dont want dir frozen, pins, etc.?)
  - fix accounting
+ - block while acquiring the dft dirlock, since we may need to request a scatter?
+ - make sure non-dirty dirs journal/replay properly
 
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing

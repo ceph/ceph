@@ -2034,8 +2034,10 @@ bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut, bool initiate)
   // can wrlock?
   if (lock->can_wrlock()) {
     lock->get_wrlock();
-    mut->wrlocks.insert(lock);
-    mut->locks.insert(lock);
+    if (mut) {
+      mut->wrlocks.insert(lock);
+      mut->locks.insert(lock);
+    }
     return true;
   }
 

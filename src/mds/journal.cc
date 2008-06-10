@@ -115,12 +115,18 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     mds->mdcache->wait_for_uncommitted_master(*p, gather->new_sub());
   }
 
-  // dirty non-auth mtimes
+  // nudge scatterlocks
   for (xlist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
     mds->locker->scatter_nudge(&in->dirlock, gather->new_sub());
+  }
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    dout(10) << "try_to_expire waiting for dirfragtreelock flush on " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->locker->scatter_nudge(&in->dirfragtreelock, gather->new_sub());
   }
 
   // open files

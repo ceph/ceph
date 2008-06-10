@@ -6203,15 +6203,14 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
   dout(10) << "adjust_dir_fragments " << basefrag << " " << bits 
 	   << " on " << *diri << dendl;
 
+  // adjust fragtree
   // yuck.  we may have discovered the inode while it was being fragmented.
   if (!diri->dirfragtree.is_leaf(basefrag))
     diri->dirfragtree.force_to_leaf(basefrag);
-
-  CDir *base = diri->get_or_open_dirfrag(this, basefrag);
-
-  // adjust fragtree
   diri->dirfragtree.split(basefrag, bits);
   dout(10) << " new fragtree is " << diri->dirfragtree << dendl;
+
+  CDir *base = diri->get_or_open_dirfrag(this, basefrag);
 
   if (bits > 0) {
     if (base) {
@@ -6221,17 +6220,21 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 
       // did i change the subtree map?
       if (base->is_subtree_root()) {
-	// am i a bound?
+	// new frags are now separate subtrees
+	for (list<CDir*>::iterator p = resultfrags.begin();
+	     p != resultfrags.end();
+	     ++p)
+	  subtrees[*p].clear();   // new frag is now its own subtree
+
+	// was i a bound?
 	if (baseparent) {
 	  CDir *parent = get_subtree_root(baseparent);
 	  assert(subtrees[parent].count(base));
 	  subtrees[parent].erase(base);
 	  for (list<CDir*>::iterator p = resultfrags.begin();
 	       p != resultfrags.end();
-	       ++p) { 
+	       ++p)
 	    subtrees[parent].insert(*p);
-	    subtrees[*p].clear();   // new frag is now its own subtree
-	  }
 	}
 
 	// adjust my bounds.
@@ -6298,6 +6301,12 @@ void MDCache::split_dir(CDir *dir, int bits)
     return;
   }
 
+  // wrlock
+  if (!mds->locker->scatter_wrlock_try(&dir->inode->dirfragtreelock, 0, false)) {
+    dout(7) << "can't wrlock dirfragtree on " << *dir->inode << dendl;
+    return;
+  }
+
   list<CDir*> startfrags;
   startfrags.push_back(dir);
   
@@ -6324,7 +6333,7 @@ void MDCache::fragment_freeze(CInode *diri, list<CDir*>& frags, frag_t basefrag,
        p != frags.end();
        ++p) {
     CDir *dir = *p;
-    dir->auth_pin(); // this will block the freeze
+    dir->auth_pin(); // this will block the freeze, until mark_and_complete
     dir->freeze_dir();
     assert(dir->is_freezing_dir());
     dir->add_waiter(CDir::WAIT_FROZEN, gather->new_sub());
@@ -6429,20 +6438,16 @@ class C_MDC_FragmentLogged : public Context {
   frag_t basefrag;
   int bits;
   list<CDir*> resultfrags;
-  vector<version_t> pvs;
-  LogSegment *ls;
+  Mutation *mut;
 public:
   C_MDC_FragmentLogged(MDCache *m, CInode *di, frag_t bf, int b, 
-		       list<CDir*>& rf, vector<version_t>& p,
-		       LogSegment *s) : 
-    mdcache(m), diri(di), basefrag(bf), bits(b), ls(s) {
+		       list<CDir*>& rf, Mutation *mu) :
+    mdcache(m), diri(di), basefrag(bf), bits(b), mut(mu) {
     resultfrags.swap(rf);
-    pvs.swap(p);
   }
   virtual void finish(int r) {
     mdcache->fragment_logged(diri, basefrag, bits, 
-			     resultfrags, pvs,
-			     ls);
+			     resultfrags, mut);
   }
 };
 
@@ -6452,64 +6457,57 @@ void MDCache::fragment_stored(CInode *diri, frag_t basefrag, int bits,
   dout(10) << "fragment_stored " << basefrag << " by " << bits 
 	   << " on " << *diri << dendl;
 
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
   EFragment *le = new EFragment(mds->mdlog, diri->ino(), basefrag, bits);
+  le->metablob.add_dir_context(*resultfrags.begin());
 
-  set<int> peers;
-  vector<version_t> pvs;
+  mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
+  mut->ls->dirty_dirfrag_dirfragtree.push_back(&diri->xlist_dirty_dirfrag_dirfragtree);
+  mut->add_updated_scatterlock(&diri->dirfragtreelock);
+
+  // journal new dirfrag fragstats for each new fragment.
+  // mark complete.  but not dirty.
   for (list<CDir*>::iterator p = resultfrags.begin();
        p != resultfrags.end();
        p++) {
     CDir *dir = *p;
     dout(10) << " result frag " << *dir << dendl;
-
-    if (p == resultfrags.begin()) {
-      le->metablob.add_dir_context(dir);
-      // note peers
-      // only do this once: all frags have identical replica_maps.
-      if (peers.empty()) 
-	for (map<int,int>::iterator p = dir->replica_map.begin();
-	     p != dir->replica_map.end();
-	     ++p) 
-	  peers.insert(p->first);
-    }
-    
-    pvs.push_back(dir->pre_dirty());
-    le->metablob.add_dir(dir, true);
+    le->metablob.add_dir(dir, true).mark_complete();  // mark complete
   }
   
   mds->mdlog->submit_entry(le,
 			   new C_MDC_FragmentLogged(this, diri, basefrag, bits, 
-						    resultfrags, pvs, mds->mdlog->get_current_segment()));
-  
-  // announcelist<CDir*>& resultfrags, 
-  for (set<int>::iterator p = peers.begin();
-       p != peers.end();
-       ++p) {
-    MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), basefrag, bits);
-    if (bits < 0) {
-      // freshly replicate basedir to peer on merge
-      CDir *base = resultfrags.front();
-      CDirDiscover *basedis = base->replicate_to(*p);
-      basedis->encode(notify->basebl);
-      delete basedis;
-    }
-    mds->send_message_mds(notify, *p);
-  }
-
+						    resultfrags, mut));
 }
 
 void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
 			      list<CDir*>& resultfrags, 
-			      vector<version_t>& pvs,
-			      LogSegment *ls)
+			      Mutation *mut)
 {
   dout(10) << "fragment_logged " << basefrag << " bits " << bits 
 	   << " on " << *diri << dendl;
   
- 
-  // dirty resulting frags
+  // tell peers
+  CDir *first = *resultfrags.begin();
+  for (map<int,int>::iterator p = first->replica_map.begin();
+       p != first->replica_map.end();
+       p++) {
+    MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), basefrag, bits);
+    if (bits < 0) {
+      // freshly replicate new basedir to peer on merge
+      CDir *base = resultfrags.front();
+      CDirDiscover *basedis = base->replicate_to(p->first);
+      basedis->encode(notify->basebl);
+      delete basedis;
+    }
+    mds->send_message_mds(notify, p->first);
+  } 
+
+  mut->apply();  // mark scatterlocks, mainly.
+
+  // unfreeze resulting frags
   set<int> peers;
-  vector<version_t>::iterator pv = pvs.begin();
   for (list<CDir*>::iterator p = resultfrags.begin();
        p != resultfrags.end();
        p++) {
@@ -6518,8 +6516,6 @@ void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
     
     // dirty, unpin, unfreeze
     dir->state_clear(CDir::STATE_FRAGMENTING);  
-    dir->mark_dirty(*pv, ls);
-    pv++;
 
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
@@ -6531,6 +6527,8 @@ void MDCache::fragment_logged(CInode *diri, frag_t basefrag, int bits,
 
     dir->unfreeze_dir();
   }
+
+  mds->locker->scatter_wrlock_finish(&diri->dirfragtreelock, 0);
 }
 
 
