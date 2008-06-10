@@ -140,12 +140,13 @@ public:
   __s64 safe_pos;        // what has been committed safely to disk.
   bufferlist write_buf;  // write buffer.  flush_pos + write_buf.length() == write_pos.
 
-  std::map<__s64, utime_t> pending_flush;  // start offsets and times for pending flushes
+  std::set<__s64> pending_ack, pending_safe;
   std::map<__s64, std::list<Context*> > waitfor_ack;  // when flushed through given offset
   std::map<__s64, std::list<Context*> > waitfor_safe; // when safe through given offset
+  std::set<__s64> ack_barrier;
 
   void _do_flush();
-  void _finish_flush(int r, __s64 start, bool safe);
+  void _finish_flush(int r, __s64 start, utime_t stamp, bool safe);
   class C_Flush;
   friend class C_Flush;
 
@@ -223,13 +224,14 @@ public:
 
   __s64 get_write_pos() const { return write_pos; }
   __s64 get_write_ack_pos() const { return ack_pos; }
+  __s64 get_write_safe_pos() const { return safe_pos; }
   __s64 get_read_pos() const { return read_pos; }
   __s64 get_expire_pos() const { return expire_pos; }
   __s64 get_trimmed_pos() const { return trimmed_pos; }
 
   // write
   __s64 append_entry(bufferlist& bl, Context *onsync = 0);
-  void flush(Context *onsync = 0, Context *onsafe = 0);
+  void flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
 
   // read
   void set_read_pos(__s64 p) { 
