@@ -263,6 +263,33 @@ int FileStore::mkfs()
   return 0;
 }
 
+Mutex sig_lock;
+Cond sig_cond;
+bool sig_installed = false;
+int sig_pending = 0;
+int trans_running = 0;
+struct sigaction safe_sigint;
+struct sigaction old_sigint, old_sigterm;
+
+void _handle_signal(int signal)
+{
+  cerr << "got signal " << signal << ", stopping" << std::endl;
+  _exit(0);
+}
+
+void handle_signal(int signal, siginfo_t *info, void *p)
+{
+  //cout << "sigint signal " << signal << std::endl;
+  int running;
+  sig_lock.Lock();
+  running = trans_running;
+  sig_pending = signal;
+  sig_lock.Unlock();
+  if (!running)
+    _handle_signal(signal);
+}
+
+
 int FileStore::mount() 
 {
   if (g_conf.filestore_dev) {
@@ -295,12 +322,12 @@ int FileStore::mount()
   } else {
     int x = rand();
     int y = x+1;
-    int r1 = do_setxattr(basedir.c_str(), "user.test", &x, sizeof(x));
-    int r2 = do_getxattr(basedir.c_str(), "user.test", &y, sizeof(y));
-    dout(10) << "x = " << x << "   y = " << y 
+    do_setxattr(basedir.c_str(), "user.test", &x, sizeof(x));
+    do_getxattr(basedir.c_str(), "user.test", &y, sizeof(y));
+    /*dout(10) << "x = " << x << "   y = " << y 
 	     << "  r1 = " << r1 << "  r2 = " << r2
 	     << " " << strerror(errno)
-	     << dendl;
+	     << dendl;*/
     if (x != y) {
       derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --filestore_fake_attrs to fake them (in memory)." << dendl;
       return -errno;
@@ -316,11 +343,21 @@ int FileStore::mount()
   ::read(lock_fd, &fsid, sizeof(fsid));
 
   // and lock it..
-  // FIXME
+  /*
+  struct flock l;
+  memset(&l, 0, sizeof(l));
+  l.l_type = F_WRLCK;
+  l.l_whence = SEEK_SET;
+  l.l_start = 0;
+  l.l_len = 0;
+  r = ::fcntl(lock_fd, F_SETLK, &l);
+  if (r < 0) {
+    derr(0) << "mount failed to lock " << fn << ", is another cosd still running? " << strerror(errno) << dendl;
+    return -errno;
+    }*/
 
   dout(10) << "mount fsid is " << fsid << dendl;
 
-#ifdef BTRFS_IOC_USERTRANS
   // is this btrfs?
   Transaction empty;
   btrfs = true;
@@ -332,8 +369,25 @@ int FileStore::mount()
     dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
     btrfs = false;
   }
-#endif
- 
+
+  // install signal handler for SIGINT, SIGTERM
+  sig_lock.Lock();
+  if (!sig_installed) {
+    dout(10) << "mount installing signal handler to (somewhat) protect transactions" << dendl;
+    sigset_t trans_sigmask;
+    sigemptyset(&trans_sigmask);
+    sigaddset(&trans_sigmask, SIGINT);
+    sigaddset(&trans_sigmask, SIGTERM);
+
+    memset(&safe_sigint, 0, sizeof(safe_sigint));
+    safe_sigint.sa_sigaction = handle_signal;
+    safe_sigint.sa_mask = trans_sigmask;
+    sigaction(SIGTERM, &safe_sigint, &old_sigterm);
+    sigaction(SIGINT, &safe_sigint, &old_sigint);
+    sig_installed = true;
+  }
+  sig_lock.Unlock();
+
   // get epoch
   sprintf(fn, "%s/commit_epoch", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
@@ -407,6 +461,21 @@ int FileStore::transaction_start(int len)
     return -errno;
   }
   dout(10) << "transaction_start " << fd << dendl;
+
+  sig_lock.Lock();
+ retry:
+  if (trans_running && sig_pending) {
+    dout(-10) << "transaction_start signal " << sig_pending << " pending" << dendl;
+    sig_cond.Wait(sig_lock);
+    goto retry;
+  }
+  trans_running++;
+  sig_lock.Unlock();
+
+  char fn[80];
+  sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
+  ::mknod(fn, 0644, 0);
+
   return fd;
 }
 
@@ -414,8 +483,21 @@ void FileStore::transaction_end(int fd)
 {
   if (!btrfs || !btrfs_trans_start_end)
     return;
+
+  char fn[80];
+  sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
+  ::unlink(fn);
+  
   dout(10) << "transaction_end " << fd << dendl;
   ::close(fd);
+
+  sig_lock.Lock();
+  trans_running--;
+  if (trans_running == 0 && sig_pending) {
+    dout(-10) << "transaction_end signal " << sig_pending << " pending" << dendl;
+    _handle_signal(sig_pending);
+  }
+  sig_lock.Unlock();
 }
 
 unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)

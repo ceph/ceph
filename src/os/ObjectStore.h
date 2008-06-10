@@ -340,6 +340,8 @@ public:
   virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) {
     // non-atomic implementation
     int id = transaction_start(t.get_len());
+    if (id < 0) return id;
+
     while (t.have_op()) {
       int op = t.get_op();
       switch (op) {

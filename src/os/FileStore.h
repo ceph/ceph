@@ -24,6 +24,7 @@
 #include "Fake.h"
 //#include "FakeStoreBDBCollections.h"
 
+#include <signal.h>
 
 #include <map>
 using namespace std;
