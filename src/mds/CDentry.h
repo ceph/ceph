@@ -167,7 +167,7 @@ public:
   bool can_auth_pin();
   void auth_pin();
   void auth_unpin();
-  void adjust_nested_auth_pins(int by);
+  void adjust_nested_auth_pins(int by, int dirby);
   bool is_frozen();
   
   void adjust_nested_anchors(int by);

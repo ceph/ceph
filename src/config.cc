@@ -338,7 +338,7 @@ md_config_t g_conf = {
   mds_bal_sample_interval: 3.0,  // every 5 seconds
   mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 0,//500,
-  mds_bal_frag: false,
+  mds_bal_frag: true,
   mds_bal_split_size: 10000,
   mds_bal_split_rd: 25000,
   mds_bal_split_wr: 10000,

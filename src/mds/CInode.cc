@@ -67,6 +67,9 @@ ostream& operator<<(ostream& out, CInode& in)
   
   out << " v" << in.get_version();
 
+  if (in.is_auth_pinned())
+    out << " ap=" << in.get_num_auth_pins();
+
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
@@ -612,11 +615,25 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(authfrags, p);
       if (is_auth()) {
 	// auth.  believe replica's auth frags only.
-	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p) 
-	  dirfragtree.force_to_leaf(*p);
+	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p)
+	  if (!dirfragtree.is_leaf(*p)) {
+	    dout(10) << " forcing frag " << *p << " to leaf (split|merge)" << dendl;
+	    dirfragtree.force_to_leaf(*p);
+	    dirfragtreelock.set_updated();
+	  }
       } else {
-	// replica.  just take the tree.
+	// replica.  take the new tree, BUT make sure any open
+	//  dirfrags remain leaves (they may have split _after_ this
+	//  dft was scattered, or we may still be be waiting on the
+	//  notify from the auth)
 	dirfragtree.swap(temp);
+	for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	     p != dirfrags.end();
+	     p++)
+	  if (!dirfragtree.is_leaf(p->first)) {
+	    dout(10) << " forcing open dirfrag " << p->first << " to leaf (racing with split|merge)" << dendl;
+	    dirfragtree.force_to_leaf(p->first);
+	  }
       }
     }
     break;
@@ -732,6 +749,12 @@ void CInode::finish_scatter_gather_update(int type)
     }
     break;
 
+  case CEPH_LOCK_IDFT:
+    {
+      assert(is_auth());
+    }
+    break;
+
   default:
     assert(0);
   }
@@ -830,7 +853,7 @@ void CInode::auth_pin()
 	   << dendl;
   
   if (parent)
-    parent->adjust_nested_auth_pins( 1 );
+    parent->adjust_nested_auth_pins(1, 1);
 }
 
 void CInode::auth_unpin() 
@@ -846,7 +869,7 @@ void CInode::auth_unpin()
   assert(auth_pins >= 0);
 
   if (parent)
-    parent->adjust_nested_auth_pins( -1 );
+    parent->adjust_nested_auth_pins(-1, -1);
 
   if (is_freezing_inode() &&
       auth_pins == auth_pin_freeze_allowance) {
@@ -864,12 +887,12 @@ void CInode::adjust_nested_auth_pins(int a)
   if (!parent) return;
   nested_auth_pins += a;
 
-  dout(15) << "adjust_nested_auth_pins by " << a
+  dout(35) << "adjust_nested_auth_pins by " << a
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(nested_auth_pins >= 0);
 
-  parent->adjust_nested_auth_pins(a);
+  parent->adjust_nested_auth_pins(a, 0);
 }
 
 void CInode::adjust_nested_anchors(int by)

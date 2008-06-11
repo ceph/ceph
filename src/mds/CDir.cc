@@ -78,7 +78,9 @@ ostream& operator<<(ostream& out, CDir& dir)
   }
   
   if (dir.get_cum_auth_pins())
-    out << " ap=" << dir.get_auth_pins() << "+" << dir.get_nested_auth_pins();
+    out << " ap=" << dir.get_auth_pins() 
+	<< "+" << dir.get_dir_auth_pins()
+	<< "+" << dir.get_nested_auth_pins();
   if (dir.get_nested_anchors())
     out << " na=" << dir.get_nested_anchors();
 
@@ -163,6 +165,7 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
  
   auth_pins = 0;
   nested_auth_pins = 0;
+  dir_auth_pins = 0;
   request_pins = 0;
 
   nested_anchors = 0;
@@ -368,7 +371,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
-    dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins);
+    dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins, in->auth_pins);
 
   if (in->inode.anchored + in->nested_anchors)
     dn->adjust_nested_anchors(in->nested_anchors + in->inode.anchored);
@@ -453,7 +456,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)
-      dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins));
+      dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins), 0 - in->auth_pins);
     
     if (in->inode.anchored + in->nested_anchors)
       dn->adjust_nested_anchors(0 - (in->nested_anchors + in->inode.anchored));
@@ -1563,13 +1566,15 @@ void CDir::auth_unpin()
   inode->adjust_nested_auth_pins(-1);
 }
 
-void CDir::adjust_nested_auth_pins(int inc) 
+void CDir::adjust_nested_auth_pins(int inc, int dirinc) 
 {
   nested_auth_pins += inc;
+  dir_auth_pins += dirinc;
   
-  dout(15) << "adjust_nested_auth_pins " << inc << " on " << *this
+  dout(15) << "adjust_nested_auth_pins " << inc << "/" << dirinc << " on " << *this
 	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
+  assert(dir_auth_pins >= 0);
 
   maybe_finish_freeze();  // pending freeze?
   

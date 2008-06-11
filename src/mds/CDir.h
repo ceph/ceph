@@ -211,7 +211,7 @@ protected:
 
   // lock nesting, freeze
   int auth_pins;
-  int nested_auth_pins;
+  int nested_auth_pins, dir_auth_pins;
   int request_pins;
 
   int nested_anchors;
@@ -444,10 +444,11 @@ public:
   int get_cum_auth_pins() { return auth_pins + nested_auth_pins; }
   int get_auth_pins() { return auth_pins; }
   int get_nested_auth_pins() { return nested_auth_pins; }
+  int get_dir_auth_pins() { return dir_auth_pins; }
   void auth_pin();
   void auth_unpin();
 
-  void adjust_nested_auth_pins(int inc);
+  void adjust_nested_auth_pins(int inc, int dirinc);
   void verify_fragstat();
 
   int get_nested_anchors() { return nested_anchors; }
@@ -463,15 +464,19 @@ public:
   void unfreeze_dir();
 
   void maybe_finish_freeze() {
-    if (auth_pins != 1 || nested_auth_pins != 0) 
+    if (auth_pins != 1 ||
+	dir_auth_pins != 0)
       return;
-    if (state_test(STATE_FREEZINGTREE)) {
-      _freeze_tree();
+    // we can freeze the _dir_ even with nested pins...
+    if (state_test(STATE_FREEZINGDIR)) {
+      _freeze_dir();
       auth_unpin();
       finish_waiting(WAIT_FROZEN);
     }
-    if (state_test(STATE_FREEZINGDIR)) {
-      _freeze_dir();
+    if (nested_auth_pins != 0) 
+      return;
+    if (state_test(STATE_FREEZINGTREE)) {
+      _freeze_tree();
       auth_unpin();
       finish_waiting(WAIT_FROZEN);
     }
@@ -499,7 +504,7 @@ public:
     return true;
   }
   bool is_freezeable_dir(bool freezing=false) {
-    if ((auth_pins-freezing) > 0) 
+    if ((auth_pins-freezing) > 0 || dir_auth_pins > 0) 
       return false;
 
     // if not subtree root, inode must not be frozen (tree--frozen_dir is okay).

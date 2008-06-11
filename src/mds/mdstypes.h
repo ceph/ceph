@@ -667,7 +667,7 @@ class MDSCacheObject {
   const static int PIN_LOCK       = -1002;
   const static int PIN_REQUEST    = -1003;
   const static int PIN_WAITER     =  1004;
-  const static int PIN_DIRTYSCATTERED = 1005;   // make this neg if we start using multiple scatterlocks?  
+  const static int PIN_DIRTYSCATTERED = -1005;
   static const int PIN_AUTHPIN    =  1006;
   static const int PIN_PTRWAITER  = -1007;
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
