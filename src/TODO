@@ -109,26 +109,6 @@ fsck
 - online mds fsck?
 - object backpointer attrs to hint catastrophic reconstruction?
 
-
-
-rados snapshots
-- integrate revisions into ObjectCacher?
-- clean up oid.rev vs op.rev in osd+osdc
-
-- attr.crev is rev we were created in.
-- oid.rev=0 is "live".  defined for attr.crev <= rev.
-- otherwise, defined for attr.crev <= rev < oid.rev  (i.e. oid.rev is upper bound, non-inclusive.)
-
-- write|delete is tagged with op.rev
-  - if attr.crev < op.rev
-    - we clone to oid.rev=rev (clone keeps old crev)
-    - change live attr.crev=rev.
-  - apply update
-- read is tagged with op.rev
-  - if 0, we read from 0 (if it exists).
-  - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
-
-
 objecter
 - maybe_request_map should set a timer event to periodically re-request.
 - transaction prepare/commit?
@@ -251,10 +231,69 @@ in snaprealm,
 - for each realm, 
   - list<rev> revs;
 
+- rev can be an ino?  or whatever.  _not_ ordered.
+
 client
 - also keep caps linked into snaprealm list
 - current rev for each snaprealm
 - attach rev to each dirty page
   - can we cow page if its dirty but a different realm?
     ... hmm probably not, but we can flush it first, just like we do a read to make it clean
+
+
+
+osd
+- pass realm lineage with osd op/capability
+- tag each non-live object with the set of realms it is defined over
+  - osdmap has sparse map of extant revs.  incrementals are simple rmrev, and max_rev increase
+
+- is it possible to efficiently clean up whiteout objects when old snaprealms go away?
+
+
+rados snapshots
+- integrate revisions into ObjectCacher?
+- clean up oid.rev vs op.rev in osd+osdc
+
+- attr.crev is rev we were created in.
+- oid.rev=0 is "live".  defined for attr.crev <= rev.
+- otherwise, defined for attr.crev <= rev < oid.rev  (i.e. oid.rev is deletion time.  upper bound, non-inclusive.)
+
+- write|delete is tagged with op.rev
+  - if attr.crev != op.rev
+    - we clone to oid.rev=rev (clone keeps old crev)
+    - tag clone with list of revs it is defined over
+    - change live attr.crev=rev.
+  - apply update
+- read is tagged with op.rev
+  - if 0, we read from 0 (if it exists).
+  - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
+    - walk backwards through snap lineage?  i.e. if lineage = 1, 5, 30, 77, 100(now), and op.rev = 30, try 100, 77.
+
+- or, tag live (0) object with attr listing which revs exist (and keep it around at size 0 if it doesn't logically exist)
+  - no, the dir lookup on old revs will be in a cached btrfs btree dir node (no inode needed until we have a hit)
+
+btrfs rev de-duping
+- i.e. when sub_op_push gets an object
+- query checksums
+  - userland will read+verify ranges are actually a match?
+- punch hole (?)
+- clone file range (not entire file)
+
+
+ro snaps
+-
+
+rw snaps
+- a tree: interior nodes ro, leaves rw
+  - snapping a rw leaf forms two new leaves, one for orig, one for new snap
+- cow?
+  - caps include direct lineage
+  - less efficient when looking up old objects, since we have to query some list possible poids explicitly
+- gc?
+- 
+
+
+interface
+$ ls -al .snapshot      # list snaps.  show both symbolic names, and timestamp names?  (symbolic -> timestamp symlinks, maybe)
+$ mkdir .snapshot/blah  # create snap
 
