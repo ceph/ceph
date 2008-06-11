@@ -231,7 +231,25 @@ in snaprealm,
 - for each realm, 
   - list<rev> revs;
 
-- rev can be an ino?  or whatever.  _not_ ordered.
+- rev can be an ino?  or whatever. can we get away with it _not_ being ordered?
+  - for osds.. yes.
+  - for mds.. may make the cdentry range info tricky!
+
+
+metadata
+- fix up inode_map to key off vinodeno.. or better yet have a second map for non-zero revs.
+struct vinodeno_t {
+  inodeno_t ino;
+  __u64 rev;
+};
+- dentry: replace dname -> ino, rino+rtype with
+     (dname, crev, drev) -> vino, vino+rtype (where valid range is [crev, drev)
+  - live dentries have drev = 0.  kept in separate map:
+     - map<string, CDentry*> items;
+     - map<pair<string,drev>, CDentry> vitems;
+  - track vitem count in fragstat.
+     - when vitem count gets large, add pointer in fnode indicating vitem range stored in separate dir object.
+
 
 client
 - also keep caps linked into snaprealm list
@@ -280,20 +298,9 @@ btrfs rev de-duping
 - clone file range (not entire file)
 
 
-ro snaps
--
-
-rw snaps
-- a tree: interior nodes ro, leaves rw
-  - snapping a rw leaf forms two new leaves, one for orig, one for new snap
-- cow?
-  - caps include direct lineage
-  - less efficient when looking up old objects, since we have to query some list possible poids explicitly
-- gc?
-- 
 
 
 interface
 $ ls -al .snapshot      # list snaps.  show both symbolic names, and timestamp names?  (symbolic -> timestamp symlinks, maybe)
 $ mkdir .snapshot/blah  # create snap
-
+$ rmdir .snapshot/blah  # remove it
