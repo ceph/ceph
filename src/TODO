@@ -8,7 +8,6 @@ big items
 - client, user authentication
 - cas
 
-- meta vs data crush rules
 - use libuuid
 
 userspace client
@@ -20,6 +19,7 @@ userspace client
 - fix lease validation to check session ttl
 - clean up ll_ interface, now that we have leases!
 - clean up client mds session vs mdsmap behavior?
+- stop using mds's inode_t?
 
 kernel client
 - flush caps on sync, fsync, etc.

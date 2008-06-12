@@ -16,9 +16,12 @@
 #define __CEPH_CONFIG_H
 
 extern struct ceph_file_layout g_default_file_layout;
+extern struct ceph_file_layout g_default_casdata_layout;
 extern struct ceph_file_layout g_default_mds_dir_layout;
 extern struct ceph_file_layout g_default_mds_log_layout;
 extern struct ceph_file_layout g_default_mds_anchortable_layout;
+
+extern const char *get_pool_name(int pool);
 
 #include <vector>
 #include <map>
