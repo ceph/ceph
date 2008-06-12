@@ -73,18 +73,73 @@ struct ceph_timespec {
 
 /*
  * dir fragments
+ *  8 upper bits = "bits"
+ * 23 lower bits = "value"
+ *
+ * This isn't quite ideal in that it doesn't sort well, and because we
+ * are masking out the least significant bits instead of hte most
+ * significant bits.  But, mapping onto low bits has some advantage
+ * for weak hashes.  Bah.  FIXME.
  */
 static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
 static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
 static inline __u32 frag_mask(__u32 f) { return 0xffffffu >> (24-frag_bits(f)); }
-static inline __u32 frag_next(__u32 f) { return frag_make(frag_bits(f), frag_value(f)+1); }
+
+static inline bool frag_contains_value(__u32 f, __u32 v) {
+	return (v & frag_mask(f)) == frag_value(f);
+}
+static inline bool frag_contains_frag(__u32 f, __u32 sub) {
+	/* as specific as us, and contained by us */
+	return frag_bits(sub) >= frag_bits(f) &&
+		(frag_value(sub) & frag_mask(f)) == frag_value(f);
+}
+
+static inline __u32 frag_parent(__u32 f) {
+	return frag_make(frag_bits(f) - 1,
+			 frag_value(f) & (frag_mask(f) >> 1));
+}
+static inline bool frag_is_left_child(__u32 f) {
+	return frag_bits(f) > 0 &&
+		(frag_value(f) & (1 << (frag_bits(f)-1)) == 0);
+}
+static inline bool frag_is_right_child(__u32 f) {
+	return frag_bits(f) > 0 &&
+		(frag_value(f) & (1 << (frag_bits(f)-1)) == 1);
+}
+static inline __u32 frag_sibling(__u32 f) {
+	return frag_make(frag_bits(f),
+			 frag_value(f) ^ (1 << (frag_bits(f)-1)));
+}
+static inline __u32 frag_left_child(__u32 f) {
+	return frag_make(frag_bits(f)+1, frag_value(f));
+}
+static inline __u32 frag_right_child(__u32 f) {
+	return frag_make(frag_bits(f)+1,
+			 frag_value(f) | (1<<frag_bits(f)));
+}
+
 static inline bool frag_is_leftmost(__u32 f) {
 	return frag_value(f) == 0;
 }
 static inline bool frag_is_rightmost(__u32 f) {
 	return frag_value(f) == frag_mask(f);
 }
+static inline __u32 frag_next(__u32 f) {
+	unsigned b = frag_bits(f) - 1;
+	unsigned v = frag_value(f);
+	while (b >= 0) {
+		if (v & (1<<b) == 0)
+			return frag_make(b+1, v | (1<<b));
+		v &= ~(1<<b);
+		b--;
+	}
+	return frag_make(0, 0);  /* rightmost */
+}
+
+/*
+ * note: this is not in a "nice" sorted order, by any means.
+ */
 static inline int frag_compare(__u32 a, __u32 b) {
 	unsigned va = frag_value(a);
 	unsigned vb = frag_value(b);
@@ -99,10 +154,6 @@ static inline int frag_compare(__u32 a, __u32 b) {
 	if (va > vb)
 		return 1;
 	return 0;
-}
-static inline bool frag_contains_value(__u32 f, __u32 v)
-{
-	return (v & frag_mask(f)) == frag_value(f);
 }
 
 

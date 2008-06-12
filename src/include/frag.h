@@ -91,19 +91,12 @@ class frag_t {
   operator _frag_t() const { return _enc; }
 
   // tests
-  bool contains(unsigned v) const {
-    return (v & mask()) == value();
-  }
-  bool contains(frag_t sub) const {
-    return (sub.bits() >= bits() &&             // they at least as specific as us,
-	    (sub.value() & mask()) == value()); // and they are contained by us.
-  }
-  bool is_root() const { 
-    return bits() == 0; 
-  }
+  bool contains(unsigned v) const { return frag_contains_value(_enc, v); }
+  bool contains(frag_t sub) const { return frag_contains_frag(_enc, sub._enc); }
+  bool is_root() const { return bits() == 0; }
   frag_t parent() const {
     assert(bits() > 0);
-    return frag_t(value() & (mask() >> 1), bits()-1);
+    return frag_t(frag_parent(_enc));
   }
 
   // splitting
@@ -118,32 +111,16 @@ class frag_t {
   // binary splitting
   frag_t get_sibling() const {
     assert(!is_root());
-    return frag_t(value() ^ (1 << (bits()-1)), bits());
+    return frag_t(frag_sibling(_enc));
   }
-  bool is_left() const {
-    return 
-      bits() > 0 &&
-      (value() & (1 << (bits()-1)) == 0);
-  }
-  bool is_right() const {
-    return 
-      bits() > 0 &&
-      (value() & (1 << (bits()-1)) == 1);
-  }
-  frag_t left_child() const {
-    return frag_t(value(), bits()+1);
-  }
-  frag_t right_child() const {
-    return frag_t(value() | (1<<bits()), bits()+1);
-  }
+  bool is_left() const { return frag_is_left_child(_enc); }
+  bool is_right() const { return frag_is_right_child(_enc); }
+  frag_t left_child() const { return frag_t(frag_left_child(_enc)); }
+  frag_t right_child() const { return frag_t(frag_right_child(_enc)); }
 
   // sequencing
-  bool is_leftmost() const {
-    return frag_is_leftmost(_enc);
-  }
-  bool is_rightmost() const {
-    return frag_is_rightmost(_enc);
-  }
+  bool is_leftmost() const { return frag_is_leftmost(_enc); }
+  bool is_rightmost() const { return frag_is_rightmost(_enc); }
   frag_t next() const {
     assert(!is_rightmost());
     return frag_t(frag_next(_enc));
