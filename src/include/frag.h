@@ -69,9 +69,9 @@
 typedef uint32_t _frag_t;
 
 class frag_t {
-  /* encoded value.
-   *  8 upper bits = "bits"
-   * 24 lower bits = "value"
+  /*
+   * encoding is dictated by frag_* functions in ceph_fs.h.  use those
+   * helpers _exclusively_.
    */
  public:
   _frag_t _enc;  
@@ -87,6 +87,7 @@ class frag_t {
   unsigned value() const { return frag_value(_enc); }
   unsigned bits() const { return frag_bits(_enc); }
   unsigned mask() const { return frag_mask(_enc); }
+  unsigned mask_shift() const { return frag_mask_shift(_enc); }
 
   operator _frag_t() const { return _enc; }
 
@@ -100,23 +101,27 @@ class frag_t {
   }
 
   // splitting
+  frag_t make_child(int i, int nb) const {
+    assert(i < (1<<nb));
+    return frag_t(frag_make_child(_enc, nb, i));
+  }
   void split(int nb, std::list<frag_t>& fragments) const {
     assert(nb > 0);
     unsigned nway = 1 << nb;
     for (unsigned i=0; i<nway; i++) 
-      fragments.push_back( frag_t(value() | (i << bits()), 
-				  bits()+nb) );
+      fragments.push_back(make_child(i, nb));
   }
 
   // binary splitting
+  frag_t left_child() const { return frag_t(frag_left_child(_enc)); }
+  frag_t right_child() const { return frag_t(frag_right_child(_enc)); }
+
+  bool is_left() const { return frag_is_left_child(_enc); }
+  bool is_right() const { return frag_is_right_child(_enc); }
   frag_t get_sibling() const {
     assert(!is_root());
     return frag_t(frag_sibling(_enc));
   }
-  bool is_left() const { return frag_is_left_child(_enc); }
-  bool is_right() const { return frag_is_right_child(_enc); }
-  frag_t left_child() const { return frag_t(frag_left_child(_enc)); }
-  frag_t right_child() const { return frag_t(frag_right_child(_enc)); }
 
   // sequencing
   bool is_leftmost() const { return frag_is_leftmost(_enc); }
@@ -308,8 +313,7 @@ public:
       unsigned nway = 1 << nb;
       unsigned i;
       for (i=0; i<nway; i++) {
-	frag_t n(t.value() | (i << t.bits()), 
-		 t.bits()+nb);
+	frag_t n = t.make_child(i, nb);
 	if (n.contains(v)) {
 	  t = n;
 	  break;

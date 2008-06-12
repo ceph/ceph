@@ -619,7 +619,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     
     CDentry *dn = p->second;
     frag_t subfrag = inode->pick_dirfrag(p->first);
-    int n = subfrag.value() >> frag.bits();
+    int n = (subfrag.value() & (subfrag.mask() ^ frag.mask())) >> subfrag.mask_shift();
     dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << dendl;
     CDir *f = subfrags[n];
     f->steal_dentry(dn);
