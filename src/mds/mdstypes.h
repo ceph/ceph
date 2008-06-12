@@ -19,7 +19,8 @@ using namespace std;
 #include "include/frag.h"
 #include "include/xlist.h"
 
-#define MDS_REF_SET    // define me for improved debug output, sanity checking
+#define MDS_REF_SET      // define me for improved debug output, sanity checking
+#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
 //#define MDS_VERIFY_FRAGSTAT    // do do (slow) sanity checking on frags
 
 #define MDS_PORT_CACHE   0x200
@@ -821,8 +822,8 @@ protected:
   // --------------------------------------------
   // auth pins
   virtual bool can_auth_pin() = 0;
-  virtual void auth_pin() = 0;
-  virtual void auth_unpin() = 0;
+  virtual void auth_pin(void *who) = 0;
+  virtual void auth_unpin(void *who) = 0;
   virtual bool is_frozen() = 0;
 
 

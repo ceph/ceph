@@ -67,8 +67,12 @@ ostream& operator<<(ostream& out, CInode& in)
   
   out << " v" << in.get_version();
 
-  if (in.is_auth_pinned())
+  if (in.is_auth_pinned()) {
     out << " ap=" << in.get_num_auth_pins();
+#ifdef MDS_AUTHPIN_SET
+    out << "(" << in.auth_pin_set << ")";
+#endif
+  }
 
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
@@ -842,13 +846,17 @@ bool CInode::can_auth_pin() {
   return true;
 }
 
-void CInode::auth_pin() 
+void CInode::auth_pin(void *by) 
 {
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(10) << "auth_pin on " << *this
+#ifdef MDS_AUTHPIN_SET
+  auth_pin_set.insert(by);
+#endif
+
+  dout(10) << "auth_pin by " << by << " on " << *this
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   
@@ -856,13 +864,19 @@ void CInode::auth_pin()
     parent->adjust_nested_auth_pins(1, 1);
 }
 
-void CInode::auth_unpin() 
+void CInode::auth_unpin(void *by) 
 {
   auth_pins--;
+
+#ifdef MDS_AUTHPIN_SET
+  assert(auth_pin_set.count(by));
+  auth_pin_set.erase(auth_pin_set.find(by));
+#endif
+
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(10) << "auth_unpin on " << *this
+  dout(10) << "auth_unpin by " << by << " on " << *this
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   

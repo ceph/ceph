@@ -92,6 +92,9 @@ class CDentry : public MDSCacheObject, public LRUObject {
   off_t dir_offset;   
 
   int auth_pins, nested_auth_pins;
+#ifdef MDS_AUTHPIN_SET
+  multiset<void*> auth_pin_set;
+#endif
   int nested_anchors;
 
   friend class Migrator;
@@ -165,8 +168,8 @@ public:
 
   // auth pins
   bool can_auth_pin();
-  void auth_pin();
-  void auth_unpin();
+  void auth_pin(void *by);
+  void auth_unpin(void *by);
   void adjust_nested_auth_pins(int by, int dirby);
   bool is_frozen();
   

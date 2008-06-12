@@ -211,6 +211,9 @@ protected:
 
   // lock nesting, freeze
   int auth_pins;
+#ifdef MDS_AUTHPIN_SET
+  multiset<void*> auth_pin_set;
+#endif
   int nested_auth_pins, dir_auth_pins;
   int request_pins;
 
@@ -445,8 +448,8 @@ public:
   int get_auth_pins() { return auth_pins; }
   int get_nested_auth_pins() { return nested_auth_pins; }
   int get_dir_auth_pins() { return dir_auth_pins; }
-  void auth_pin();
-  void auth_unpin();
+  void auth_pin(void *who);
+  void auth_unpin(void *who);
 
   void adjust_nested_auth_pins(int inc, int dirinc);
   void verify_fragstat();
@@ -470,14 +473,14 @@ public:
     // we can freeze the _dir_ even with nested pins...
     if (state_test(STATE_FREEZINGDIR)) {
       _freeze_dir();
-      auth_unpin();
+      auth_unpin(this);
       finish_waiting(WAIT_FROZEN);
     }
     if (nested_auth_pins != 0) 
       return;
     if (state_test(STATE_FREEZINGTREE)) {
       _freeze_tree();
-      auth_unpin();
+      auth_unpin(this);
       finish_waiting(WAIT_FROZEN);
     }
   }

@@ -230,6 +230,9 @@ private:
   int auth_pins;
   int nested_auth_pins;
 public:
+#ifdef MDS_AUTHPIN_SET
+  multiset<void*> auth_pin_set;
+#endif
   int auth_pin_freeze_allowance;
 
 private:
@@ -505,8 +508,8 @@ public:
   int get_num_auth_pins() { return auth_pins; }
   void adjust_nested_auth_pins(int a);
   bool can_auth_pin();
-  void auth_pin();
-  void auth_unpin();
+  void auth_pin(void *by);
+  void auth_unpin(void *by);
 
   void adjust_nested_anchors(int by);
   int get_nested_anchors() { return nested_anchors; }
@@ -524,14 +527,22 @@ public:
 
   // -- reference counting --
   void bad_put(int by) {
-    generic_dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
+    generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		    << " (" << ref_set << ")"
+#endif
+		    << dendl;
 #ifdef MDS_REF_SET
     assert(ref_set.count(by) == 1);
 #endif
     assert(ref > 0);
   }
   void bad_get(int by) {
-    generic_dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
+    generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		    << " (" << ref_set << ")"
+#endif
+		    << dendl;
 #ifdef MDS_REF_SET
     assert(ref_set.count(by) == 0);
 #endif

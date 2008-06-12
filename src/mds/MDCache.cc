@@ -494,7 +494,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       CInode *in = dir->inode;
       dout(10) << "try_subtree_merge_at journaling merged bound " << *in << dendl;
       
-      in->auth_pin();
+      in->auth_pin(this);
 
       // journal write-behind.
       inode_t *pi = in->project_inode();
@@ -517,7 +517,7 @@ void MDCache::subtree_merge_writebehind_finish(CInode *in, LogSegment *ls)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
   in->pop_and_dirty_projected_inode(ls);
-  in->auth_unpin();
+  in->auth_unpin(this);
 }
 
 void MDCache::eval_subtree_root(CDir *dir)
@@ -2913,7 +2913,7 @@ void MDCache::queue_file_recover(CInode *in)
   dout(10) << "queue_file_recover " << *in << dendl;
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   in->state_set(CInode::STATE_RECOVERING);
-  in->auth_pin();
+  in->auth_pin(this);
   file_recover_queue.insert(in);
 }
 
@@ -2987,7 +2987,7 @@ void MDCache::_recovered(CInode *in, int r)
   in->get_projected_inode()->size = in->inode.size;
   mds->locker->check_inode_max_size(in, true, in->inode.size);
 
-  in->auth_unpin();
+  in->auth_unpin(this);
 
   do_file_recover();
 }
@@ -4974,7 +4974,7 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   // auth: do it
   in->state_set(CInode::STATE_ANCHORING);
   in->get(CInode::PIN_ANCHORING);
-  in->auth_pin();
+  in->auth_pin(this);
   
   // make trace
   vector<Anchor> trace;
@@ -5016,7 +5016,7 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
   // auth: do it
   in->state_set(CInode::STATE_UNANCHORING);
   in->get(CInode::PIN_UNANCHORING);
-  in->auth_pin();
+  in->auth_pin(this);
   
   // do it
   C_MDC_AnchorPrepared *fin = new C_MDC_AnchorPrepared(this, in, false);
@@ -5073,7 +5073,7 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   assert(in->state_test(CInode::STATE_ANCHORING));
   in->state_clear(CInode::STATE_ANCHORING);
   in->put(CInode::PIN_ANCHORING);
-  in->auth_unpin();
+  in->auth_unpin(this);
   
   // apply update to cache
   in->pop_and_dirty_projected_inode(mut->ls);

@@ -142,13 +142,13 @@ struct Mutation {
   }
   void auth_pin(MDSCacheObject *object) {
     if (!is_auth_pinned(object)) {
-      object->auth_pin();
+      object->auth_pin(this);
       auth_pins.insert(object);
     }
   }
   void auth_unpin(MDSCacheObject *object) {
     assert(auth_pins.count(object));
-    object->auth_unpin();
+    object->auth_unpin(this);
     auth_pins.erase(object);
   }
   void drop_local_auth_pins() {
@@ -156,7 +156,7 @@ struct Mutation {
 	 it != auth_pins.end();
 	 it++) {
       assert((*it)->is_auth());
-      (*it)->auth_unpin();
+      (*it)->auth_unpin(this);
     }
     auth_pins.clear();
   }
