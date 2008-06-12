@@ -176,7 +176,7 @@ frag_t CInode::pick_dirfrag(const string& dn)
     return frag_t();          // avoid the string hash if we can.
 
   __u32 h = ceph_full_name_hash(dn.data(), dn.length());
-  return dirfragtree[h*h];
+  return dirfragtree[h];
 }
 
 void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
