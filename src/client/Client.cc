@@ -3138,7 +3138,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
@@ -3296,7 +3296,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    filer->write(in->inode, offset, size, bl, 0, onfinish, onsafe);
+    filer->write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);

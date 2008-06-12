@@ -31,7 +31,7 @@ void Journaler::reset()
   state = STATE_ACTIVE;
   write_pos = flush_pos = ack_pos = safe_pos =
     read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos = ceph_file_layout_period(inode.layout);
+    expire_pos = trimming_pos = trimmed_pos = ceph_file_layout_period(layout);
 }
 
 
@@ -81,7 +81,7 @@ void Journaler::recover(Context *onread)
   dout(1) << "read_head" << dendl;
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
-  filer.read(inode, 0, sizeof(Header), &fin->bl, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+  filer.read(ino, &layout, 0, sizeof(Header), &fin->bl, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -112,7 +112,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   // probe the log
   state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
-  filer.probe(inode, h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+  filer.probe(ino, &layout, h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_probe_end(int r, __s64 end)
@@ -168,7 +168,7 @@ void Journaler::write_head(Context *oncommit)
 
   bufferlist bl;
   ::encode(last_written, bl);
-  filer.write(inode, 0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
+  filer.write(ino, &layout, 0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
 	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
 }
@@ -276,7 +276,7 @@ __s64 Journaler::append_entry(bufferlist& bl, Context *onsync)
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
-    int p = ceph_file_layout_su(inode.layout);
+    int p = ceph_file_layout_su(layout);
     if (write_pos / p != (write_pos + (__s64)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
@@ -338,7 +338,7 @@ void Journaler::_do_flush()
   // submit write for anything pending
   // flush _start_ pos to _finish_flush
   utime_t now = g_clock.now();
-  filer.write(inode, flush_pos, len, write_buf, 
+  filer.write(ino, &layout, flush_pos, len, write_buf, 
 	      CEPH_OSD_OP_INCLOCK_FAIL,
 	      new C_Flush(this, flush_pos, now, false),  // on ACK
 	      new C_Flush(this, flush_pos, now, true));  // on COMMIT
@@ -526,7 +526,7 @@ void Journaler::_issue_read(__s64 len)
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << (requested_pos+len)
 	   << dendl;
   
-  filer.read(inode, requested_pos, len, &reading_buf, CEPH_OSD_OP_INCLOCK_FAIL,
+  filer.read(ino, &layout, requested_pos, len, &reading_buf, CEPH_OSD_OP_INCLOCK_FAIL,
 	     new C_Read(this));
   requested_pos += len;
 }
@@ -686,7 +686,7 @@ public:
 void Journaler::trim()
 {
   __s64 trim_to = last_committed.expire_pos;
-  trim_to -= trim_to % ceph_file_layout_period(inode.layout);
+  trim_to -= trim_to % ceph_file_layout_period(layout);
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
 	   << dendl;
@@ -710,7 +710,7 @@ void Journaler::trim()
 	   << trimmed_pos << "/" << trimming_pos << "/" << expire_pos
 	   << dendl;
   
-  filer.remove(inode, trimming_pos, trim_to-trimming_pos, CEPH_OSD_OP_INCLOCK_FAIL, 
+  filer.remove(ino, &layout, trimming_pos, trim_to-trimming_pos, CEPH_OSD_OP_INCLOCK_FAIL, 
 	       NULL, new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }

@@ -106,7 +106,7 @@ void IdAllocator::save(Context *onfinish, version_t v)
     waitfor_save[version].push_back(onfinish);
 
   // write (async)
-  mds->filer->write(inode,
+  mds->filer->write(inode.ino, &inode.layout,
                     0, bl.length(), bl,
                     0,
 		    0, new C_ID_Save(this, version));
@@ -172,7 +172,7 @@ void IdAllocator::load(Context *onfinish)
   state = STATE_OPENING;
 
   C_ID_Load *c = new C_ID_Load(this, onfinish);
-  mds->filer->read(inode,
+  mds->filer->read(inode.ino, &inode.layout,
                    0, ceph_file_layout_su(inode.layout),
                    &c->bl, 0,
                    c);

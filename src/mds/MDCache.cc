@@ -2967,7 +2967,7 @@ void MDCache::do_file_recover()
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
 	       << " " << *in << dendl;
       file_recovering.insert(in);
-      mds->filer->probe(in->inode, in->inode.max_size, &in->inode.size, false,
+      mds->filer->probe(in->inode.ino, &in->inode.layout, in->inode.max_size, &in->inode.size, false,
 			0, new C_MDC_Recover(this, in));    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
@@ -3063,7 +3063,7 @@ void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
 
   // remove
   if (newsize < oldsize) {
-    mds->filer->remove(in->inode, newsize, oldsize-newsize, 0,
+    mds->filer->remove(in->inode.ino, &in->inode.layout, newsize, oldsize-newsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
     // no need, empty file, just log it
