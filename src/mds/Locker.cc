@@ -1312,6 +1312,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     }
 
     // inode -> dirfrag
+    mut->auth_pin(parent);
     mut->add_projected_fnode(parent);
 
     fnode_t *pf = parent->project_fnode();
@@ -1391,9 +1392,9 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       break;
     }
     local_wrlock_grab(&pin->versionlock, mut);
-    mut->auth_pin(pin);
 
     // dirfrag -> diri
+    mut->auth_pin(pin);
     mut->add_projected_inode(pin);
     lsi.push_back(pin);
 

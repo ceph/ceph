@@ -20,6 +20,7 @@ userspace client
 - clean up ll_ interface, now that we have leases!
 - clean up client mds session vs mdsmap behavior?
 - stop using mds's inode_t?
+- fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
 - flush caps on sync, fsync, etc.
@@ -37,6 +38,7 @@ kernel client
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
   - osd ack vs commit handling.  hmm!
+- fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 client
 - clean up client mds session vs mdsmap behavior?
@@ -62,8 +64,8 @@ mds
 - dir frags
  - fix replay  (dont want dir frozen, pins, etc.?)
  - fix accounting
- - block while acquiring the dft dirlock, since we may need to request a scatter?
  - make sure non-dirty dirs journal/replay properly
+ - client: fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
