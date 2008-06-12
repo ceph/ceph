@@ -200,18 +200,24 @@ remaining hard problems
 
 snapshot notes --
 
+typedef __u64 snapid_t;
+#define MAXSNAP (spanid_t)(-2)
+#define NOSNAP (spanid_t)(-1)
+
+
 mds
 - break mds hierarchy into snaprealms
   - keep per-realm inode xlists, so that breaking a realm is O(size(realm))
 struct snap {
-  u64 rev;
+  snapid_t snapid;
   string name;
   utime_t ctime;
 };
+
 struct snaprealm {
-  list<rev> revs;
-  snaprealm parent;
-  list<realm> children;
+  map<snapid_t, snap> snaps;
+  snaprealm *parent;
+  list<snaprealm> children;
   xlist<CInode*> inodes_with_caps;   // used for efficient realm splits
 };
 
@@ -228,42 +234,50 @@ in snaprealm,
    map<int, CapabilityGroup*> client_cap_groups;  // used to identify clients who need snap notifications
 
 
-- for each realm, 
-  - list<rev> revs;
-
-- rev can be an ino?  or whatever. can we get away with it _not_ being ordered?
-  - for osds.. yes.
-  - for mds.. may make the cdentry range info tricky!
+- what is snapid?
+  - can we get away with it _not_ being ordered?
+    - for osds.. yes.
+    - for mds.. may make the cdentry range info tricky!
+  - so.. let's assign it via using a the monitor state machine, for now.  simple and safe, though a bit slow.
+    - for now, state is simply last_snapid
 
 
 metadata
-- fix up inode_map to key off vinodeno.. or better yet have a second map for non-zero revs.
+- fix up inode_map to key off vinodeno.. or have a second map for non-zero snapids.. 
+  - no, just key of vinodeno_t, and make it 
+
+CInode *get_inode(inodeno_t ino, snapid_t sn=0);
+
 struct vinodeno_t {
   inodeno_t ino;
-  __u64 rev;
+  snapid_t snapid;
 };
+
 - dentry: replace dname -> ino, rino+rtype with
-     (dname, crev, drev) -> vino, vino+rtype (where valid range is [crev, drev)
-  - live dentries have drev = 0.  kept in separate map:
+     (dname, csnap, dsnap) -> vino, vino+rtype (where valid range is [csnap, dsnap)
+  - live dentries have dsnap = NOSNAP.  kept in separate map:
      - map<string, CDentry*> items;
-     - map<pair<string,drev>, CDentry> vitems;
+     - map<pair<string,dsnap>, CDentry> vitems;
+  - or?
+
+CDentry *lookup(string dname, snapid_t sn=0);
+
   - track vitem count in fragstat.
      - when vitem count gets large, add pointer in fnode indicating vitem range stored in separate dir object.
 
 
 client
 - also keep caps linked into snaprealm list
-- current rev for each snaprealm
-- attach rev to each dirty page
+- current snapid (lineage) for each snaprealm
+- attach snapid (lineage) to each dirty page
   - can we cow page if its dirty but a different realm?
-    ... hmm probably not, but we can flush it first, just like we do a read to make it clean
-
+    ...hmm probably not, but we can flush it in write_begin, just like when we do a read to make it clean
 
 
 osd
 - pass realm lineage with osd op/capability
 - tag each non-live object with the set of realms it is defined over
-  - osdmap has sparse map of extant revs.  incrementals are simple rmrev, and max_rev increase
+  - osdmap has sparse map of extant snapids.  incrementals are simple rmsnapid, and max_snapid increase
 
 - is it possible to efficiently clean up whiteout objects when old snaprealms go away?
 
