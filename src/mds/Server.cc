@@ -1261,7 +1261,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 
 
-CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
+CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_dft)
 {
   dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
 
@@ -1344,6 +1344,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 
   for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
+  if (rdlock_dft)
+    rdlocks.insert(&ref->dirfragtreelock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, empty, empty))
     return 0;
@@ -1817,7 +1819,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   int client = req->get_client().num();
-  CInode *diri = rdlock_path_pin_ref(mdr, false);
+  CInode *diri = rdlock_path_pin_ref(mdr, false, true);  // rdlock dirfragtreelock!
   if (!diri) return;
 
   // it's a directory, right?
@@ -1842,6 +1844,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!dir) return;
 
   // ok!
+  dout(10) << "handle_client_readdir on " << *dir << dendl;
   assert(dir->is_auth());
 
   // check perm
