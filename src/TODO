@@ -246,7 +246,7 @@ metadata
 - fix up inode_map to key off vinodeno.. or have a second map for non-zero snapids.. 
   - no, just key of vinodeno_t, and make it 
 
-CInode *get_inode(inodeno_t ino, snapid_t sn=0);
+CInode *get_inode(inodeno_t ino, snapid_t sn=NOSNAP);
 
 struct vinodeno_t {
   inodeno_t ino;
@@ -260,7 +260,7 @@ struct vinodeno_t {
      - map<pair<string,dsnap>, CDentry> vitems;
   - or?
 
-CDentry *lookup(string dname, snapid_t sn=0);
+CDentry *lookup(string dname, snapid_t sn=NOSNAP);
 
   - track vitem count in fragstat.
      - when vitem count gets large, add pointer in fnode indicating vitem range stored in separate dir object.
@@ -278,8 +278,6 @@ osd
 - pass realm lineage with osd op/capability
 - tag each non-live object with the set of realms it is defined over
   - osdmap has sparse map of extant snapids.  incrementals are simple rmsnapid, and max_snapid increase
-
-- is it possible to efficiently clean up whiteout objects when old snaprealms go away?
 
 
 rados snapshots
