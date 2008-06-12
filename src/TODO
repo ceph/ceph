@@ -258,9 +258,10 @@ struct vinodeno_t {
   - live dentries have dsnap = NOSNAP.  kept in separate map:
      - map<string, CDentry*> items;
      - map<pair<string,dsnap>, CDentry> vitems;
-  - or?
+  - or?  clean up dir item map/hash at the same time (keep name storage in CDentry)
+     - map<pair<const char *, snapid_t>, CDentry*> items;  // all items
 
-CDentry *lookup(string dname, snapid_t sn=NOSNAP);
+CDentry *lookup(string &dname, snapid_t sn=NOSNAP);
 
   - track vitem count in fragstat.
      - when vitem count gets large, add pointer in fnode indicating vitem range stored in separate dir object.
@@ -275,9 +276,14 @@ client
 
 
 osd
-- pass realm lineage with osd op/capability
-- tag each non-live object with the set of realms it is defined over
+- pass snap lineage with osd op/capability
+- tag each non-live object with the set of snaps it is defined over
   - osdmap has sparse map of extant snapids.  incrementals are simple rmsnapid, and max_snapid increase
+  - put each object in first_snap, last_snap collections.
+  - use background thread to trim old snaps.  for each object, 
+    - get snap list,
+    - filter against extant snaps
+    - adjust collections, or delete
 
 
 rados snapshots
@@ -306,6 +312,7 @@ btrfs rev de-duping
 - i.e. when sub_op_push gets an object
 - query checksums
   - userland will read+verify ranges are actually a match?
+  - or, in pull, do FIEMAP against prior, and next object?  how do we know what those are?
 - punch hole (?)
 - clone file range (not entire file)
 
