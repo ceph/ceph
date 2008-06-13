@@ -23,6 +23,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// for tstring stringtable
+#include "include/tstring.h"
+stringtable g_stab;
+
 // hack hack hack ugly FIXME
 #include "include/atomic.h"
 atomic_t buffer_total_alloc;
