@@ -248,8 +248,8 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
 
-static inline struct ceph_inode_frag *ceph_find_frag(struct ceph_inode_info *ci,
-						     u32 f)
+static inline struct ceph_inode_frag *
+__ceph_find_frag(struct ceph_inode_info *ci, u32 f)
 {
 	struct rb_node *n = ci->i_fragtree.rb_node;
 

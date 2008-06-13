@@ -72,13 +72,15 @@ const struct inode_operations ceph_special_iops = {
 /*
  * find (or create) a frag in the tree
  */
-struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
+struct ceph_inode_frag *__ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 {
-	struct rb_node **p = &ci->i_fragtree.rb_node;
+	struct rb_node **p;
 	struct rb_node *parent = NULL;
-	struct ceph_inode_frag *frag;
+	struct ceph_inode_frag *frag, *newfrag = 0;
 	int c;
 
+retry:
+	p = &ci->i_fragtree.rb_node;
 	while (*p) {
 		parent = *p;
 		frag = rb_entry(parent, struct ceph_inode_frag, node);
@@ -88,13 +90,20 @@ struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 		else if (c > 0)
 			p = &(*p)->rb_right;
 		else
-			return frag;
+			goto out;
 	}
 
-	frag = kmalloc(sizeof(*frag), GFP_NOFS);
-	if (!frag)
-		return 0;
+	if (!newfrag) {
+		spin_unlock(&ci->vfs_inode.i_lock);
+		newfrag = kmalloc(sizeof(*frag), GFP_NOFS);
+		spin_lock(&ci->vfs_inode.i_lock);
+		if (!newfrag)
+			return ERR_PTR(-ENOMEM);
+		goto retry;
+	}
 
+	frag = newfrag;
+	newfrag = 0;
 	frag->frag = f;
 	frag->split_by = 0;
 	frag->mds = -1;
@@ -104,6 +113,9 @@ struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 	rb_insert_color(&frag->node, &ci->i_fragtree);
 
 	dout(20, "get_frag added %llx frag %x\n", ceph_ino(&ci->vfs_inode), f);
+
+out:
+	kfree(newfrag);
 	return frag;
 }
 
@@ -118,7 +130,7 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 	spin_lock(&ci->vfs_inode.i_lock);
 	while (1) {
 		WARN_ON(!frag_contains_value(t, v));
-		frag = ceph_find_frag(ci, t);
+		frag = __ceph_find_frag(ci, t);
 		if (!frag)
 			break; /* t is a leaf */
 		if (frag->split_by == 0) {
@@ -161,12 +173,14 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	int mds = le32_to_cpu(dirinfo->auth);
 	int ndist = le32_to_cpu(dirinfo->ndist);
 	int i;
+	int err = 0;
 
+	spin_lock(&inode->i_lock);
 	if (mds < 0 && ndist == 0) {
 		/* no delegation info needed. */
-		frag = ceph_find_frag(ci, id);
+		frag = __ceph_find_frag(ci, id);
 		if (!frag)
-			return 0;
+			goto out;
 		if (frag->split_by == 0) {
 			/* tree leaf, remove */
 			dout(20, "fill_dirfrag removed %llx frag %x (no ref)\n",
@@ -180,25 +194,29 @@ static int ceph_fill_dirfrag(struct inode *inode,
 			frag->mds = -1;
 			frag->ndist = 0;
 		}
-		return 0;
+		goto out;
 	}
 
 
 	/* find/add this frag to store mds delegation info */
-	frag = ceph_get_frag(ci, id);
-	if (!frag) {
+	frag = __ceph_get_frag(ci, id);
+	if (IS_ERR(frag)) {
 		derr(0, "fill_dirfrag ENOMEM on mds ref ino %llx frag %x\n",
 		     ceph_ino(inode), le32_to_cpu(dirinfo->frag));
-		return -ENOMEM;
-	} else {
-		frag->mds = mds;
-		frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
-		for (i = 0; i < frag->ndist; i++)
-			frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
-		dout(20, "fill_dirfrag %llx frag %x referral mds %d ndist=%d\n",
-		     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
+		err = -ENOMEM;
+		goto out;
 	}
-	return 0;
+
+	frag->mds = mds;
+	frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
+	for (i = 0; i < frag->ndist; i++)
+		frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
+	dout(20, "fill_dirfrag %llx frag %x referral mds %d ndist=%d\n",
+	     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
+	
+out:
+	spin_unlock(&inode->i_lock);
+	return err;
 }
 
 /*
@@ -342,8 +360,8 @@ no_change:
 	nsplits = le32_to_cpu(info->fragtree.nsplits);
 	for (i = 0; i < nsplits; i++) {
 		u32 id = le32_to_cpu(info->fragtree.splits[i].frag);
-		struct ceph_inode_frag *frag = ceph_get_frag(ci, id);
-		if (!frag) {
+		struct ceph_inode_frag *frag = __ceph_get_frag(ci, id);
+		if (IS_ERR(frag)) {
 			derr(0,"ENOMEM on ino %llx frag %x\n",
 			     ceph_ino(inode), id);
 			continue;
@@ -354,11 +372,11 @@ no_change:
 		     frag->split_by);
 	}
 
+	spin_unlock(&inode->i_lock);
+
 	/* set dirinfo? */
 	if (dirinfo)
 		ceph_fill_dirfrag(inode, dirinfo);
-
-	spin_unlock(&inode->i_lock);
 
 	if (ci->i_hashval != inode->i_ino) {
 		insert_inode_hash(inode);
