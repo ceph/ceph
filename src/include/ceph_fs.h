@@ -113,11 +113,11 @@ static inline __u32 frag_parent(__u32 f) {
 }
 static inline bool frag_is_left_child(__u32 f) {
 	return frag_bits(f) > 0 &&
-		(frag_value(f) & (0x1000000 >> frag_bits(f)) == 0);
+		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 0;
 }
 static inline bool frag_is_right_child(__u32 f) {
 	return frag_bits(f) > 0 &&
-		(frag_value(f) & (0x1000000 >> frag_bits(f)) == 1);
+		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 1;
 }
 static inline __u32 frag_sibling(__u32 f) {
 	return frag_make(frag_bits(f),
