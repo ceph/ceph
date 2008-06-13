@@ -180,7 +180,7 @@ public:
   bool is_leaf(frag_t x) const {
     std::list<frag_t> ls;
     get_leaves_under(x, ls);
-    //cout << "is_leaf(" << x << ") -> " << ls << std::endl;
+    //generic_dout(10) << "is_leaf(" << x << ") -> " << ls << dendl;
     if (!ls.empty() &&
 	ls.front() == x &&
 	ls.size() == 1)
@@ -326,20 +326,20 @@ public:
 
   // ---------------
   // modifiers
-  void split(frag_t x, int b) {
+  void split(frag_t x, int b, bool simplify=true) {
     assert(is_leaf(x));
     _splits[x] = b;
     
-    // simplify?
-    try_assimilate_children(get_branch_above(x));
+    if (simplify)
+      try_assimilate_children(get_branch_above(x));
   }
-  void merge(frag_t x, int b) {
+  void merge(frag_t x, int b, bool simplify=true) {
     assert(!is_leaf(x));
     assert(_splits[x] == b);
     _splits.erase(x);
 
-    // simplify?
-    try_assimilate_children(get_branch_above(x));
+    if (simplify)
+      try_assimilate_children(get_branch_above(x));
   }
 
   /*
@@ -372,20 +372,20 @@ public:
     if (is_leaf(x))
       return false;
 
-    cout << "force_to_leaf " << x << " on " << _splits << std::endl;
+    generic_dout(10) << "force_to_leaf " << x << " on " << _splits << dendl;
 
     frag_t parent = get_branch_or_leaf(x);
     assert(parent.bits() <= x.bits());
-    cout << "parent is " << parent << std::endl;
+    generic_dout(10) << "parent is " << parent << dendl;
 
     // do we need to split from parent to x?
     if (parent.bits() < x.bits()) {
       int spread = x.bits() - parent.bits();
       int nb = get_split(parent);
-      cout << "spread " << spread << ", parent splits by " << nb << std::endl;
+      generic_dout(10) << "spread " << spread << ", parent splits by " << nb << dendl;
       if (nb == 0) {
 	// easy: split parent (a leaf) by the difference
-	cout << "splitting parent " << parent << " by spread " << spread << std::endl;
+	generic_dout(10) << "splitting parent " << parent << " by spread " << spread << dendl;
 	split(parent, spread);
 	assert(is_leaf(x));
 	return true;
@@ -393,16 +393,16 @@ public:
       assert(nb > spread);
       
       // add an intermediary split
-      merge(parent, nb);
-      split(parent, spread);
+      merge(parent, nb, false);
+      split(parent, spread, false);
 
       std::list<frag_t> subs;
       parent.split(spread, subs);
       for (std::list<frag_t>::iterator p = subs.begin();
 	   p != subs.end();
 	   ++p) {
-	cout << "splitting intermediate " << *p << " by " << (nb-spread) << std::endl;
-	split(*p, nb - spread);
+	generic_dout(10) << "splitting intermediate " << *p << " by " << (nb-spread) << dendl;
+	split(*p, nb - spread, false);
       }
     }
 
@@ -415,13 +415,13 @@ public:
       q.pop_front();
       int nb = get_split(t);
       if (nb) {
-	cout << "merging child " << t << " by " << nb << std::endl;
-	merge(t, nb);         // merge this point, and
-	t.split(nb, q);   // queue up children
+	generic_dout(10) << "merging child " << t << " by " << nb << dendl;
+	merge(t, nb, false);    // merge this point, and
+	t.split(nb, q);         // queue up children
       }
     }
 
-    cout << "force_to_leaf done" << std::endl;
+    generic_dout(10) << "force_to_leaf done" << dendl;
     assert(is_leaf(x));
     return true;
   }
@@ -461,7 +461,7 @@ public:
       q.pop_front();
       // newline + indent?
       if (t.bits()) {
-	out << std::endl;
+	out << dendl;
 	for (unsigned i=0; i<t.bits(); i++) out << ' ';
       }
       int nb = get_split(t);
