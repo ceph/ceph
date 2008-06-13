@@ -27,6 +27,7 @@ using namespace std;
 #include "include/lru.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
+#include "include/nstring.h"
 #include "mdstypes.h"
 
 #include "SimpleLock.h"
@@ -76,7 +77,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   }
 
  protected:
-  string name;
+  nstring name;
 
   inodeno_t remote_ino;      // if remote dentry
   unsigned char remote_d_type;
@@ -120,7 +121,7 @@ public:
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const string& n, CInode *in) :
+  CDentry(const nstring& n, CInode *in) :
     name(n),
     remote_ino(0), remote_d_type(0),
     inode(in), dir(0),
@@ -129,7 +130,7 @@ public:
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const string& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
+  CDentry(const nstring& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
     name(n),
     remote_ino(ino), remote_d_type(dt),
     inode(in), dir(0),
@@ -141,7 +142,7 @@ public:
 
   CInode *get_inode() const { return inode; }
   CDir *get_dir() const { return dir; }
-  const string& get_name() const { return name; }
+  const nstring& get_name() const { return name; }
   inodeno_t get_ino();
 
   off_t get_dir_offset() { return dir_offset; }
@@ -273,7 +274,7 @@ ostream& operator<<(ostream& out, CDentry& dn);
 
 
 class CDentryDiscover {
-  string dname;
+  nstring dname;
   __s32  replica_nonce;
   __s32  lockstate;
   __s64  dir_offset;
@@ -289,7 +290,7 @@ public:
     remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
   CDentryDiscover(bufferlist::iterator &p) { decode(p); }
 
-  string& get_dname() { return dname; }
+  nstring& get_dname() { return dname; }
   int get_nonce() { return replica_nonce; }
   bool is_remote() { return remote_ino ? true:false; }
   inodeno_t get_remote_ino() { return remote_ino; }

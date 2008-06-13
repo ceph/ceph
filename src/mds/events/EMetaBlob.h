@@ -16,8 +16,8 @@
 #define __MDS_EMETABLOB_H
 
 #include <stdlib.h>
-#include <string>
-using std::string;
+
+#include "include/nstring.h"
 
 #include "../CInode.h"
 #include "../CDir.h"
@@ -50,7 +50,7 @@ public:
   /* fullbit - a regular dentry + inode
    */
   struct fullbit {
-    string  dn;         // dentry
+    nstring  dn;         // dentry
     version_t dnv;
     inode_t inode;      // if it's not
     fragtree_t dirfragtree;
@@ -58,7 +58,7 @@ public:
     string symlink;
     bool dirty;
 
-    fullbit(const string& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, string& sym, bool dr) :
+    fullbit(const nstring& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, const string& sym, bool dr) :
       dn(d), dnv(v), inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), dirty(dr) { }
     fullbit(bufferlist::iterator &p) { decode(p); }
     fullbit() {}
@@ -94,13 +94,13 @@ public:
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
   struct remotebit {
-    string dn;
+    nstring dn;
     version_t dnv;
     inodeno_t ino;
     unsigned char d_type;
     bool dirty;
 
-    remotebit(const string& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+    remotebit(const nstring& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit() {}
@@ -131,11 +131,11 @@ public:
    * nullbit - a null dentry
    */
   struct nullbit {
-    string dn;
+    nstring dn;
     version_t dnv;
     bool dirty;
 
-    nullbit(const string& d, version_t v, bool dr) : dn(d), dnv(v), dirty(dr) { }
+    nullbit(const nstring& d, version_t v, bool dr) : dn(d), dnv(v), dirty(dr) { }
     nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit() {}
 

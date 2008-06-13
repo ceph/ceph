@@ -2107,7 +2107,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   }
   
   // walk weak map
-  for (map<dirfrag_t, map<string, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
+  for (map<dirfrag_t, map<nstring, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
        p != weak->weak.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
@@ -2120,7 +2120,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       ack->add_strong_dirfrag(p->first, nonce, dir->dir_rep);
     
     // weak dentries
-    for (map<string,MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
+    for (map<nstring,MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
@@ -2355,7 +2355,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     dir->add_replica(from);
     dir->dir_rep = p->second.dir_rep;
 
-    for (map<string,MMDSCacheRejoin::dn_strong>::iterator q = strong->strong_dentries[p->first].begin();
+    for (map<nstring,MMDSCacheRejoin::dn_strong>::iterator q = strong->strong_dentries[p->first].begin();
 	 q != strong->strong_dentries[p->first].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
@@ -2511,7 +2511,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     dout(10) << " got " << *dir << dendl;
 
     // dentries
-    for (map<string,MMDSCacheRejoin::dn_strong>::iterator q = ack->strong_dentries[p->first].begin();
+    for (map<nstring,MMDSCacheRejoin::dn_strong>::iterator q = ack->strong_dentries[p->first].begin();
 	 q != ack->strong_dentries[p->first].end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first);
@@ -3602,7 +3602,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
     
     // DENTRIES
-    for (map<dirfrag_t, map<string,int> >::iterator pd = p->second.dentries.begin();
+    for (map<dirfrag_t, map<nstring,int> >::iterator pd = p->second.dentries.begin();
 	 pd != p->second.dentries.end();
 	 ++pd) {
       dout(10) << " dn expires in dir " << pd->first << dendl;
@@ -3617,7 +3617,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	assert(dir->is_auth());
       }
       
-      for (map<string,int>::iterator p = pd->second.begin();
+      for (map<nstring,int>::iterator p = pd->second.begin();
 	   p != pd->second.end();
 	   ++p) {
 	int nonce = p->second;

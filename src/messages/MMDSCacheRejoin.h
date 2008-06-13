@@ -160,12 +160,12 @@ class MMDSCacheRejoin : public Message {
 
   // weak
   map<dirfrag_t, pair<frag_info_t, frag_info_t> > dirfrag_stat;
-  map<dirfrag_t, map<string, dn_weak> > weak;
+  map<dirfrag_t, map<nstring, dn_weak> > weak;
   set<inodeno_t> weak_inodes;
 
   // strong
   map<dirfrag_t, dirfrag_strong> strong_dirfrags;
-  map<dirfrag_t, map<string, dn_strong> > strong_dentries;
+  map<dirfrag_t, map<nstring, dn_strong> > strong_dentries;
   map<inodeno_t, inode_strong> strong_inodes;
 
   // open
@@ -179,8 +179,8 @@ class MMDSCacheRejoin : public Message {
   // authpins, xlocks
   map<inodeno_t, metareqid_t> authpinned_inodes;
   map<inodeno_t, map<__s32, metareqid_t> > xlocked_inodes;
-  map<dirfrag_t, map<string, metareqid_t> > authpinned_dentries;
-  map<dirfrag_t, map<string, metareqid_t> > xlocked_dentries;
+  map<dirfrag_t, map<nstring, metareqid_t> > authpinned_dentries;
+  map<dirfrag_t, map<nstring, metareqid_t> > xlocked_dentries;
 
   MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
   MMDSCacheRejoin(int o) : 
@@ -222,7 +222,7 @@ class MMDSCacheRejoin : public Message {
   void add_weak_dirfrag(dirfrag_t df) {
     weak[df];
   }
-  void add_weak_dirfrag(dirfrag_t df, map<string,dn_weak>& dnmap) {
+  void add_weak_dirfrag(dirfrag_t df, map<nstring,dn_weak>& dnmap) {
     weak[df] = dnmap;
   }
   void add_strong_dirfrag(dirfrag_t df, int n, int dr) {
@@ -236,13 +236,13 @@ class MMDSCacheRejoin : public Message {
   void add_weak_primary_dentry(dirfrag_t df, const string& dname, inodeno_t ino) {
     weak[df][dname] = dn_weak(ino);
   }
-  void add_strong_dentry(dirfrag_t df, const string& dname, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+  void add_strong_dentry(dirfrag_t df, const nstring& dname, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][dname] = dn_strong(pi, ri, rdt, n, ls);
   }
-  void add_dentry_authpin(dirfrag_t df, const string& dname, const metareqid_t& ri) {
+  void add_dentry_authpin(dirfrag_t df, const nstring& dname, const metareqid_t& ri) {
     authpinned_dentries[df][dname] = ri;
   }
-  void add_dentry_xlock(dirfrag_t df, const string& dname, const metareqid_t& ri) {
+  void add_dentry_xlock(dirfrag_t df, const nstring& dname, const metareqid_t& ri) {
     xlocked_dentries[df][dname] = ri;
   }
 

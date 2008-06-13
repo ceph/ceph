@@ -117,7 +117,7 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   //hash_map<const char*, Dentry*, hash<const char*>, eqstr> dentries;
-  hash_map<string, Dentry*> dentries;
+  hash_map<nstring, Dentry*> dentries;
 
   Dir(Inode* in) { parent_inode = in; }
 

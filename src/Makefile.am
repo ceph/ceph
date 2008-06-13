@@ -149,7 +149,7 @@ noinst_LIBRARIES = \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a libebofs.a 
 
-noinst_LIBRARIES += libcrush_so.a libcephclient_so.a
+noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh

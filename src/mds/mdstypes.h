@@ -18,6 +18,7 @@ using namespace std;
 
 #include "include/frag.h"
 #include "include/xlist.h"
+#include "include/nstring.h"
 
 #define MDS_REF_SET    // define me for improved debug output, sanity checking
 //#define MDS_VERIFY_FRAGSTAT    // do do (slow) sanity checking on frags
@@ -640,7 +641,7 @@ class MDSCacheObjectInfo {
 public:
   inodeno_t ino;
   dirfrag_t dirfrag;
-  string dname;
+  nstring dname;
 
   MDSCacheObjectInfo() : ino(0) {}
 
