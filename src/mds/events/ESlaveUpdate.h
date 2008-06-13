@@ -56,7 +56,7 @@ struct rename_rollback {
     utime_t dirfrag_old_mtime;
     utime_t dirfrag_old_rctime;
     inodeno_t ino, remote_ino;
-    string dname;
+    nstring dname;
     char remote_d_type;
     utime_t old_ctime;
     

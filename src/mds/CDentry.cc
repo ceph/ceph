@@ -198,7 +198,7 @@ void CDentry::make_path_string(string& s)
     s = "???";
   }
   s += "/";
-  s += name;
+  s.append(name.data(), name.length());
 }
 
 void CDentry::make_path(filepath& fp)

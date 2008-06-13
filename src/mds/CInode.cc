@@ -170,7 +170,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
 // dirfrags
 
-frag_t CInode::pick_dirfrag(const string& dn)
+frag_t CInode::pick_dirfrag(const nstring& dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.

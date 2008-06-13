@@ -193,7 +193,7 @@ public:
 
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  typedef map<string, CDentry*> map_t;
+  typedef map<const char *, CDentry*, ltstr> map_t;
 protected:
 
   // contents
@@ -282,17 +282,21 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup(const string& n) {
-    map_t::iterator iter = items.find(n);
+  CDentry* lookup(const string& s) {
+    nstring ns(s);
+    return lookup(ns);
+  }
+  CDentry* lookup(const nstring& ns) {
+    map_t::iterator iter = items.find(ns.c_str());
     if (iter == items.end()) 
       return 0;
     else
       return iter->second;
   }
 
-  CDentry* add_null_dentry(const string& dname);
-  CDentry* add_primary_dentry(const string& dname, CInode *in);
-  CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type);
+  CDentry* add_null_dentry(const nstring& dname);
+  CDentry* add_primary_dentry(const nstring& dname, CInode *in);
+  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
@@ -409,15 +413,15 @@ private:
     
   // -- waiters --
 protected:
-  hash_map< string, list<Context*> > waiting_on_dentry;
+  hash_map< nstring, list<Context*> > waiting_on_dentry;
   hash_map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
   bool is_waiting_for_dentry(const string& dn) {
     return waiting_on_dentry.count(dn);
   }
-  void add_dentry_waiter(const string& dentry, Context *c);
-  void take_dentry_waiting(const string& dentry, list<Context*>& ls);
+  void add_dentry_waiter(const nstring& dentry, Context *c);
+  void take_dentry_waiting(const nstring& dentry, list<Context*>& ls);
 
   bool is_waiting_for_ino(inodeno_t ino) {
     return waiting_on_ino.count(ino);

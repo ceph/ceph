@@ -77,7 +77,7 @@ public:
   Anchor() : dn_hash(0), nref(0) {}
   Anchor(inodeno_t i, inodeno_t di, __u32 hash, int nr=0) :
     ino(i), dirino(di), dn_hash(hash), nref(nr) { }
-  Anchor(inodeno_t i, inodeno_t di, const string &dname, int nr=0) :
+  Anchor(inodeno_t i, inodeno_t di, const nstring &dname, int nr=0) :
     ino(i), dirino(di),
     dn_hash(ceph_full_name_hash(dname.data(), dname.length())),
     nref(nr) { }

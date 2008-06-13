@@ -1,0 +1,112 @@
+#ifndef _CEPH_CSTRING
+#define _CEPH_CSTRING
+
+/*
+ * cstring - a simple string class
+ *
+ * the key difference between this and std::string is that the string
+ * is stored with a null terminator, providing an efficient c_str()
+ * method.
+ */
+class cstring {
+ private:
+  int _len;
+  char *_data;
+  
+ public:
+  cstring() : _len(0), _data(0) {}
+  cstring(int l, const char *d=0) : _len(l) {
+    _data = new char[_len + 1];
+    if (d) {
+      memcpy(_data, d, l);
+      _data[l] = 0;
+    }
+  }
+  cstring(const char *s) { 
+    _len = strlen(s);
+    _data = new char[_len + 1];
+    memcpy(_data, s, _len);
+    _data[_len] = 0;
+  }
+  cstring(const string &s) {
+    _len = s.length();
+    _data = new char[_len + 1];
+    memcpy(_data, s.data(), _len);
+    _data[_len] = 0;
+  }
+  cstring(const cstring &s) {
+    _len = s.length();
+    _data = new char[_len + 1];
+    memcpy(_data, s.data(), _len);
+    _data[_len] = 0;
+  }
+  ~cstring() {
+    if (_data) delete[] _data;
+  }
+
+  // accessors
+  int length() const { return _len; }
+  bool empty() const { return _len == 0; }
+  const char *c_str() const { return _data; }
+  const char *data() const { return _data; }
+
+  //const char *operator() const { return _data; }
+
+  // modifiers
+  const cstring& operator=(const char *s) {
+    if (_data) delete[] _data;
+    _len = strlen(s);
+    _data = new char[_len + 1];
+    memcpy(_data, s, _len);
+    _data[_len] = 0;
+    return *this;
+  }
+  const cstring& operator=(const string &s) {
+    if (_data) delete[] _data;
+    _len = s.length();
+    _data = new char[_len + 1];
+    memcpy(_data, s.data(), _len);
+    _data[_len] = 0;
+    return *this;
+  }
+  const cstring& operator=(const cstring &ns) {
+    if (_data) delete[] _data;
+    _len = ns.length();
+    _data = new char[_len + 1];
+    memcpy(_data, ns.data(), _len);
+    _data[_len] = 0;
+    return *this;
+  }
+  void swap(cstring &other) {
+    int tlen = _len;
+    char *tdata = _data;
+    _len = other._len;
+    _data = other._data;
+    other._len = tlen;
+    other._data = tdata;
+  }
+  void clear() {
+    _len = 0;
+    delete _data;
+    _data = 0;
+  }
+
+  // encoding
+  void encode(bufferlist &bl) const {
+    __u32 l = _len;
+    ::encode(l, bl);
+    bl.append(_data, _len);
+  }
+  void decode(bufferlist::iterator &bl) {
+    if (_data) delete[] _data;
+    __u32 l;
+    ::decode(l, bl);
+    _len = l;
+    _data = new char[_len + 1];
+    bl.copy(_len, _data);
+    _data[_len] = 0;
+  }
+};
+WRITE_CLASS_ENCODER(cstring)
+
+#endif

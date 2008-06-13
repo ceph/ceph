@@ -31,7 +31,7 @@ static const char *get_lease_action_name(int a) {
 
 struct MClientLease : public Message {
   struct ceph_mds_lease h;
-  string dname;
+  nstring dname;
   
   int get_action() { return h.action; }
   int get_mask() { return h.mask; }
@@ -44,7 +44,7 @@ struct MClientLease : public Message {
     h.mask = m;
     h.ino = i;
   }
-  MClientLease(int ac, int m, __u64 i, const string& d) :
+  MClientLease(int ac, int m, __u64 i, const nstring& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;

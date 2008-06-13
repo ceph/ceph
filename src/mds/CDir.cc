@@ -189,7 +189,7 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
  * linking fun
  */
 
-CDentry* CDir::add_null_dentry(const string& dname)
+CDentry* CDir::add_null_dentry(const nstring& dname)
 {
   // foreign
   assert(lookup(dname) == 0);
@@ -204,10 +204,10 @@ CDentry* CDir::add_null_dentry(const string& dname)
   dn->version = get_projected_version();
   
   // add to dir
-  assert(items.count(dn->name) == 0);
+  assert(items.count(dn->name.c_str()) == 0);
   //assert(null_items.count(dn->name) == 0);
 
-  items[dn->name] = dn;
+  items[dn->name.c_str()] = dn;
   nnull++;
 
   dout(12) << "add_null_dentry " << *dn << dendl;
@@ -221,7 +221,7 @@ CDentry* CDir::add_null_dentry(const string& dname)
 }
 
 
-CDentry* CDir::add_primary_dentry(const string& dname, CInode *in) 
+CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in) 
 {
   // primary
   assert(lookup(dname) == 0);
@@ -236,10 +236,10 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in)
   dn->version = get_projected_version();
   
   // add to dir
-  assert(items.count(dn->name) == 0);
+  assert(items.count(dn->name.c_str()) == 0);
   //assert(null_items.count(dn->name) == 0);
 
-  items[dn->name] = dn;
+  items[dn->name.c_str()] = dn;
   link_inode_work( dn, in );
 
   dout(12) << "add_primary_dentry " << *dn << dendl;
@@ -252,7 +252,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in)
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type) 
+CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type) 
 {
   // foreign
   assert(lookup(dname) == 0);
@@ -267,10 +267,10 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
   dn->version = get_projected_version();
   
   // add to dir
-  assert(items.count(dn->name) == 0);
+  assert(items.count(dn->name.c_str()) == 0);
   //assert(null_items.count(dn->name) == 0);
 
-  items[dn->name] = dn;
+  items[dn->name.c_str()] = dn;
   nitems++;
 
   dout(12) << "add_remote_dentry " << *dn << dendl;
@@ -300,8 +300,8 @@ void CDir::remove_dentry(CDentry *dn)
   }
   
   // remove from list
-  assert(items.count(dn->name) == 1);
-  items.erase(dn->name);
+  assert(items.count(dn->name.c_str()) == 1);
+  items.erase(dn->name.c_str());
 
   // adjust dirty counter?
   if (dn->state_test(CDentry::STATE_DIRTY))
@@ -501,9 +501,9 @@ void CDir::steal_dentry(CDentry *dn)
 {
   dout(15) << "steal_dentry " << *dn << dendl;
 
-  items[dn->name] = dn;
+  items[dn->name.c_str()] = dn;
 
-  dn->dir->items.erase(dn->name);
+  dn->dir->items.erase(dn->name.c_str());
   if (dn->dir->items.empty())
     dn->dir->put(PIN_CHILD);
 
@@ -704,7 +704,7 @@ CDirDiscover *CDir::replicate_to(int mds)
  * WAITING
  */
 
-void CDir::add_dentry_waiter(const string& dname, Context *c) 
+void CDir::add_dentry_waiter(const nstring& dname, Context *c) 
 {
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
@@ -712,7 +712,7 @@ void CDir::add_dentry_waiter(const string& dname, Context *c)
   dout(10) << "add_dentry_waiter dentry " << dname << " " << c << " on " << *this << dendl;
 }
 
-void CDir::take_dentry_waiting(const string& dname, list<Context*>& ls)
+void CDir::take_dentry_waiting(const nstring& dname, list<Context*>& ls)
 {
   if (waiting_on_dentry.empty()) return;
   if (waiting_on_dentry.count(dname) == 0) return;
@@ -749,7 +749,7 @@ void CDir::take_ino_waiting(inodeno_t ino, list<Context*>& ls)
 void CDir::take_sub_waiting(list<Context*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
-  for (hash_map<string, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
+  for (hash_map<nstring, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
        p != waiting_on_dentry.end();
        ++p) 
     ls.splice(ls.end(), p->second);
@@ -798,7 +798,7 @@ void CDir::take_waiting(int mask, list<Context*>& ls)
 {
   if (mask & WAIT_DENTRY) {
     // take each each dentry waiter
-    hash_map<string, list<Context*> >::iterator it = 
+    hash_map<nstring, list<Context*> >::iterator it = 
       waiting_on_dentry.begin(); 
     while (it != waiting_on_dentry.end()) {
       take_dentry_waiting((it++)->first, ls);   // not post-inc
