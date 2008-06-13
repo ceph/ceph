@@ -750,6 +750,9 @@ void CInode::finish_scatter_gather_update(int type)
       }
       pi->dirstat.version++;
       dout(20) << "        final dirstat " << pi->dirstat << dendl;
+      assert(pi->dirstat.size() >= 0);
+      assert(pi->dirstat.nfiles >= 0);
+      assert(pi->dirstat.nsubdirs >= 0);
     }
     break;
 

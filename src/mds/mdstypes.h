@@ -58,18 +58,21 @@ struct frag_info_t {
 
   // this frag
   utime_t mtime;
-  __u64 nfiles;        // files
-  __u64 nsubdirs;      // subdirs
-  __u64 size() const { return nfiles + nsubdirs; }
+  __s64 nfiles;        // files
+  __s64 nsubdirs;      // subdirs
+  __s64 size() const { return nfiles + nsubdirs; }
 
   // this frag + children
   utime_t rctime;
-  __u64 rbytes;
-  __u64 rfiles;
-  __u64 rsubdirs;
-  __u64 rsize() const { return rfiles + rsubdirs; }
-  __u64 ranchors;  // for dirstat, includes inode's anchored flag.
+  __s64 rbytes;
+  __s64 rfiles;
+  __s64 rsubdirs;
+  __s64 rsize() const { return rfiles + rsubdirs; }
+  __s64 ranchors;  // for dirstat, includes inode's anchored flag.
 
+  void zero() {
+    memset(this, 0, sizeof(*this));
+  }
   void take_diff(const frag_info_t &cur, frag_info_t &acc) {
     if (cur.mtime > mtime)
       rctime = mtime = cur.mtime;

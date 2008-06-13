@@ -586,6 +586,13 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
   
   double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
 
+  frag_info_t olddiff;  // old += f - af;
+  dout(10) << "           fragstat " << fnode.fragstat << dendl;
+  dout(10) << " accounted_fragstat " << fnode.accounted_fragstat << dendl;
+  olddiff.zero();
+  olddiff.take_diff(fnode.fragstat, fnode.accounted_fragstat);
+  dout(10) << "            olddiff " << olddiff << dendl;
+
   // create subfrag dirs
   int n = 0;
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
@@ -624,6 +631,21 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
     CDir *f = subfrags[n];
     f->steal_dentry(dn);
   }
+
+  // fix up new frag fragstats
+  for (int i=0; i<n; i++) {
+    subfrags[i]->fnode.fragstat.version = fnode.fragstat.version;
+    subfrags[i]->fnode.accounted_fragstat = subfrags[i]->fnode.fragstat;
+    dout(10) << "      fragstat " << subfrags[i]->fnode.fragstat << " on " << *subfrags[i] << dendl;
+  }
+
+  // give any outstanding frag stat differential to first frag
+  //   af[0] -= olddiff
+  dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
+  frag_info_t zero;
+  zero.zero();
+  subfrags[0]->fnode.accounted_fragstat.take_diff(zero, olddiff);
+  dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters);
   inode->close_dirfrag(frag); // selft deletion, watch out.
