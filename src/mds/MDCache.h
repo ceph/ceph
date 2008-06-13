@@ -811,7 +811,7 @@ protected:
   // -- fragmenting --
 private:
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
-			    list<CDir*>& frags, list<Context*>& waiters);
+			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
   friend class EFragment;
 
 public:

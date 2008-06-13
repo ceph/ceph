@@ -6222,7 +6222,8 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
  */
 void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 				   list<CDir*>& resultfrags, 
-				   list<Context*>& waiters)
+				   list<Context*>& waiters,
+				   bool replay)
 {
   dout(10) << "adjust_dir_fragments " << basefrag << " " << bits 
 	   << " on " << *diri << dendl;
@@ -6241,7 +6242,7 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
     if (base) {
       CDir *baseparent = base->get_parent_dir();
 
-      base->split(bits, resultfrags, waiters);
+      base->split(bits, resultfrags, waiters, replay);
 
       // did i change the subtree map?
       if (base->is_subtree_root()) {
@@ -6278,7 +6279,7 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
     }
   } else {
     assert(base);
-    base->merge(bits, waiters);
+    base->merge(bits, waiters, replay);
     resultfrags.push_back(base);
     assert(0); // FIXME adjust subtree map!  and clean up this code, probably.
   }
@@ -6468,7 +6469,7 @@ void MDCache::fragment_go(MDRequest *mdr)
   // refragment
   list<CDir*> &resultfrags = mdr->more()->fragment_result;
   list<Context*> waiters;
-  adjust_dir_fragments(diri, basefrag, bits, resultfrags, waiters);
+  adjust_dir_fragments(diri, basefrag, bits, resultfrags, waiters, false);
   mds->queue_waiters(waiters);
 
   C_Gather *gather = new C_Gather(new C_MDC_FragmentStored(this, mdr));
@@ -6608,7 +6609,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     // refragment
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, notify->get_basefrag(), notify->get_bits(), 
-			 resultfrags, waiters);
+			 resultfrags, waiters, false);
     mds->queue_waiters(waiters);
   }
 

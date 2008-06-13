@@ -62,8 +62,6 @@ mon
 
 mds
 - dir frags
- - fix replay  (dont want dir frozen, pins, etc.?)
- - fix accounting
  - make sure non-dirty dirs journal/replay properly
  - client: fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 

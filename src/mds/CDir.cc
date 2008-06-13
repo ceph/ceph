@@ -540,14 +540,15 @@ void CDir::steal_dentry(CDentry *dn)
   dn->dir = this;
 }
 
-void CDir::purge_stolen(list<Context*>& waiters)
+void CDir::purge_stolen(list<Context*>& waiters, bool replay)
 {
   // take waiters _before_ unfreeze...
-  take_waiting(WAIT_ANY_MASK, waiters);
-  
-  if (is_auth()) {
-    assert(is_frozen_dir());
-    unfreeze_dir();
+  if (!replay) {
+    take_waiting(WAIT_ANY_MASK, waiters);
+    if (is_auth()) {
+      assert(is_frozen_dir());
+      unfreeze_dir();
+    }
   }
 
   nnull = nitems = 0;
@@ -571,7 +572,7 @@ void CDir::init_fragment_pins()
   if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
 }
 
-void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
+void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
@@ -647,11 +648,11 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters)
   subfrags[0]->fnode.accounted_fragstat.take_diff(zero, olddiff);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
-  purge_stolen(waiters);
+  purge_stolen(waiters, replay);
   inode->close_dirfrag(frag); // selft deletion, watch out.
 }
 
-void CDir::merge(int bits, list<Context*>& waiters)
+void CDir::merge(int bits, list<Context*>& waiters, bool replay)
 {
   dout(10) << "merge by " << bits << " bits" << dendl;
 
@@ -677,7 +678,7 @@ void CDir::merge(int bits, list<Context*>& waiters)
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
     dir_auth = dir->dir_auth;
 
-    dir->purge_stolen(waiters);
+    dir->purge_stolen(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
   }
 

@@ -309,11 +309,11 @@ private:
   void remove_null_dentries();
 
 public:
-  void split(int bits, list<CDir*>& subs, list<Context*>& waiters);
-  void merge(int bits, list<Context*>& waiters);
+  void split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay);
+  void merge(int bits, list<Context*>& waiters, bool replay);
 private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void purge_stolen(list<Context*>& waiters);
+  void purge_stolen(list<Context*>& waiters, bool replay);
   void init_fragment_pins();
 
 

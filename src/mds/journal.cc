@@ -756,7 +756,7 @@ void EFragment::replay(MDS *mds)
 
   list<CDir*> resultfrags;
   list<Context*> waiters;
-  mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters);
+  mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
 
   metablob.replay(mds, _segment);
 }
