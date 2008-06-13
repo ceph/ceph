@@ -517,6 +517,7 @@ void ESession::replay(MDS *mds)
 	mds->sessionmap.remove_session(session);
     }
   }
+  _segment->sessionmapv = cmapv;
 }
 
 void ESessions::update_segment()
@@ -536,6 +537,7 @@ void ESessions::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;
   }
+  _segment->sessionmapv = cmapv;
 }
 
 
