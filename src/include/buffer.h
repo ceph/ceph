@@ -20,6 +20,7 @@
 #include <list>
 #include <stdint.h>
 #include <assert.h>
+#include <string.h>
 
 #include "atomic.h"
 
