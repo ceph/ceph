@@ -1348,13 +1348,13 @@ void Ebofs::trim_buffer_cache()
   ebofs_lock.Unlock();
 }
 
-void Ebofs::trim_bc(__u64 max)
+void Ebofs::trim_bc(__s64 max)
 {
   if (max < 0)
     max = g_conf.ebofs_bc_size;
   dout(10) << "trim_bc start: size " << bc.get_size() << ", trimmable " << bc.get_trimmable() << ", max " << max << dendl;
 
-  while (bc.get_size() > max &&
+  while (bc.get_size() > (__u64)max &&
          bc.get_trimmable()) {
     BufferHead *bh = (BufferHead*) bc.lru_rest.lru_expire();
     if (!bh) break;

@@ -179,7 +179,7 @@ protected:
 
   version_t trigger_commit();
   void commit_bc_wait(version_t epoch);
-  void trim_bc(__u64 max = -1);
+  void trim_bc(__s64 max = -1);
 
  public:
   void kick_idle();
