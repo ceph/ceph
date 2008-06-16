@@ -12,9 +12,9 @@
 # include <asm/fcntl.h>
 #else
 # define _LINUX_TYPES_H   /* we don't want linux/types.h's __u32, __le32, etc. */
+# include <netinet/in.h>
 # include "inttypes.h"
 # include "byteorder.h"
-# include <netinet/in.h>
 # include <fcntl.h>
 #endif
 
