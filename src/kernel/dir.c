@@ -280,6 +280,7 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 			     dentry, dentry->d_inode);
 			ceph_init_dentry(dentry);
 			if (dentry->d_inode) {
+				dout(40, "d_drop %p\n", dentry);
 				d_drop(dentry);
 				req->r_last_dentry = d_alloc(dentry->d_parent,
 							     &dentry->d_name);
@@ -339,6 +340,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req)) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
@@ -360,8 +362,10 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 		}
 	}
 	ceph_mdsc_put_request(req);
-	if (err)
+	if (err) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
+	}
 	return err;
 }
 
@@ -402,14 +406,17 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req)) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
 	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-	if (err)
+	if (err) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
+	}
 	return err;
 }
 
@@ -433,6 +440,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req)) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
@@ -441,8 +449,10 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	rhead->args.mkdir.mode = cpu_to_le32(mode);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-	if (err < 0)
+	if (err < 0) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
+	}
 	return err;
 }
 
@@ -475,6 +485,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	kfree(oldpath);
 	kfree(path);
 	if (IS_ERR(req)) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
@@ -485,9 +496,10 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-	if (err)
+	if (err) {
+		dout(40, "d_drop %p\n", dentry);
 		d_drop(dentry);
-	else if (req->r_reply_info.trace_numd == 0) {
+	} else if (req->r_reply_info.trace_numd == 0) {
 		/* no trace */
 		struct inode *inode = old_dentry->d_inode;
 		inc_nlink(inode);
@@ -612,6 +624,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	}
 
 	dout(20, "dentry_revalidate %p no lease\n", dentry);
+	dout(40, "d_drop %p\n", dentry);
 	d_drop(dentry);
 	return 0;
 }

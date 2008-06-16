@@ -901,8 +901,10 @@ retry_lookup:
 				d_delete(dn);
 				return -1;
 			}
-			if (!d_unhashed(dn))
+			if (!d_unhashed(dn)) {
+				dout(40, "d_drop %p\n", dn);
 				d_drop(dn);
+			}
 			new = d_splice_alias(in, dn);
 			if (new)
 				dn = new;
