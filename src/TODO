@@ -1,4 +1,12 @@
+v0.3
+- client rsync bug
+- document nested accounting
+
+v0.4
+- ENOSPC
+
 big items
+- ENOSPC
 - quotas
   - accounting
   - enforcement
@@ -23,6 +31,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
+- set mapping bits for ENOSPC, EIO?
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount

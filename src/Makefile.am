@@ -41,7 +41,7 @@ cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
 dupstore_SOURCES = dupstore.cc config.cc
 dupstore_LDADD = libos.a libebofs.a libcommon.a
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libebofs.a libcommon.a
+streamtest_LDADD = libebofs.a libcommon.a libos.a
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc

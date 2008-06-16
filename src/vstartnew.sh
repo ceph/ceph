@@ -43,8 +43,8 @@ $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 for osd in 0 #1 #2 3 4 5 6 7 8 9 10 11 12 13 14 15
 do
  $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
- #valgrind --tool=massif $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd & #--debug_osd 40
- $CEPH_BIN/cosd dev/osd$osd -d --debug_ms 1 --debug_osd 20 --debug_filestore 10
+ #valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd & #--debug_osd 40
+ $CEPH_BIN/cosd dev/osd$osd -d --debug_ms 1 --debug_osd 20 # --debug_filestore 10
 done
 
 # mds
