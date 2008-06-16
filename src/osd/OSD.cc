@@ -254,6 +254,13 @@ OSD::~OSD()
   if (store) { delete store; store = 0; }
 }
 
+bool got_sighup = false;
+
+void handle_sighup(int signal, siginfo_t *info, void *p)
+{
+  got_sighup = true;
+}
+
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
@@ -400,6 +407,12 @@ int OSD::init()
   
   // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
+
+  // SIGHUP
+  struct sigaction hup;
+  memset(&hup, 0, sizeof(hup));
+  hup.sa_sigaction = handle_sighup;
+  sigaction(SIGHUP, &hup, 0);
 
   return 0;
 }
@@ -868,6 +881,13 @@ void OSD::update_heartbeat_peers()
 void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
+
+  if (got_sighup) {
+    dout(0) << "got SIGHUP, shutting down" << dendl;
+    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), messenger->get_myinst());
+    return;
+  }
+    
 
   // get CPU load avg
   ifstream in("/proc/loadavg");
