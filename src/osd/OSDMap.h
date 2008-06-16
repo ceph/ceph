@@ -72,6 +72,7 @@ public:
     ceph_fsid fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     utime_t ctime;
+    int32_t new_flags;
 
     bool is_pg_change() {
       return (fullmap.length() ||
@@ -98,6 +99,7 @@ public:
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
       ::encode(ctime, bl);
+      ::encode(new_flags, bl);
       ::encode(fullmap, bl);
       ::encode(crush, bl);
       ::encode(new_max_osd, bl);
@@ -116,6 +118,7 @@ public:
       ::decode(fsid, p);
       ::decode(epoch, p);
       ::decode(ctime, p);
+      ::decode(new_flags, p);
       ::decode(fullmap, p);
       ::decode(crush, p);
       ::decode(new_max_osd, p);
@@ -131,7 +134,7 @@ public:
       ::decode(old_pg_swap_primary, p);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), new_max_osd(-1), 
+    Incremental(epoch_t e=0) : epoch(e), new_flags(-1), new_max_osd(-1), 
 			       new_pg_num(0), new_pgp_num(0), new_lpg_num(0), new_lpgp_num(0) {
       fsid.major = fsid.minor = 0;
     }
@@ -143,7 +146,7 @@ public:
       decode(p);
     }
   };
-
+  
 private:
   ceph_fsid fsid;
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
@@ -174,6 +177,8 @@ private:
   // new pgs
   epoch_t last_pg_change;  // most recent epoch initiating possible pg creation
 
+  uint32_t flags;
+
   int32_t max_osd;
   vector<uint8_t>  osd_state;
   vector<entity_addr_t> osd_addr;
@@ -191,6 +196,7 @@ private:
   OSDMap() : epoch(0), 
 	     pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
 	     last_pg_change(0),
+	     flags(0),
 	     max_osd(0) { 
     fsid.major = fsid.minor = 0;
     calc_pg_masks();
@@ -357,6 +363,9 @@ private:
     }
 
     // nope, incremental.
+    if (inc.new_flags >= 0)
+      flags = inc.new_flags;
+
     if (inc.new_pg_num) {
       assert(inc.new_pg_num >= pg_num);
       pg_num = inc.new_pg_num;
@@ -424,6 +433,7 @@ private:
     ::encode(lpg_num, blist);
     ::encode(lpgp_num, blist);
     ::encode(last_pg_change, blist);
+    ::encode(flags, blist);
     
     ::encode(max_osd, blist);
     ::encode(osd_state, blist);
@@ -449,6 +459,7 @@ private:
     ::decode(lpgp_num, p);
     calc_pg_masks();
     ::decode(last_pg_change, p);
+    ::decode(flags, p);
 
     ::decode(max_osd, p);
     ::decode(osd_state, p);

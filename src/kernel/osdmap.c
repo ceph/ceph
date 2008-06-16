@@ -322,7 +322,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 2*sizeof(__u64)+9*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 2*sizeof(__u64)+11*sizeof(__u32), bad);
 	ceph_decode_64(p, map->fsid.major);
 	ceph_decode_64(p, map->fsid.minor);
 	ceph_decode_32(p, map->epoch);
@@ -335,6 +335,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_32(p, map->lpg_num);
 	ceph_decode_32(p, map->lpgp_num);
 	ceph_decode_32(p, map->last_pg_change);
+	ceph_decode_32(p, map->flags);
 
 	calc_pg_masks(map);
 
@@ -409,7 +410,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	__u32 epoch;
 	struct ceph_timespec ctime;
 	__u32 len;
-	__s32 max;
+	__s32 new_flags, max;
 	int err = -EINVAL;
 
 	ceph_decode_need(p, end, 2*sizeof(__u64)+4*sizeof(__u32), bad);
@@ -419,6 +420,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	BUG_ON(epoch != map->epoch+1);
 	ceph_decode_32(p, ctime.tv_sec);
 	ceph_decode_32(p, ctime.tv_nsec);
+	ceph_decode_32(p, new_flags);
 
 	/* full map? */
 	ceph_decode_32(p, len);
@@ -438,6 +440,10 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		if (IS_ERR(newcrush))
 			return ERR_PTR(PTR_ERR(newcrush));
 	}
+
+	/* new flags? */
+	if (new_flags >= 0)
+		map->flags = new_flags;
 
 	/*
 	 * FIXME: from this point on i'm optimisticaly assuming the message

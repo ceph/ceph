@@ -801,6 +801,11 @@ struct ceph_mds_cap_reconnect {
 /* followed by encoded string */
 
 
+/*
+ * osd map
+ */
+
+#define CEPH_OSDMAP_DATAFULL 1  /* no data writes (ENOSPC) */
 
 /*
  * osd ops
