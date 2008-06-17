@@ -499,7 +499,7 @@ extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
 extern struct dentry_operations ceph_dentry_ops;
 
-extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
+extern char *ceph_build_dentry_path(struct dentry *dn, int *len, __u64 *base);
 extern struct dentry *ceph_do_lookup(struct super_block *sb, 
 				     struct dentry *dentry, 
 				     int mask, int on_inode);

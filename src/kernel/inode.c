@@ -613,6 +613,9 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
  * changes needed to properly reflect the completed operation (e.g.,
  * call d_move).  make note of the distribution of metadata across the
  * mds cluster.
+ *
+ * FIXME: we should check inode.version to avoid races between traces
+ * from multiple MDSs after, say, a ancestor directory is renamed.
  */
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		    struct ceph_mds_session *session)
@@ -1696,7 +1699,7 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 	char *path;
 	int pathlen;
 	struct ceph_mds_request *req;
-	__u64 baseino = ceph_ino(dentry->d_inode->i_sb->s_root->d_inode);
+	u64 pathbase;
 
 	if (ia_valid & ATTR_FILE) {
 		dout(5, "prepare_setattr dentry %p (inode %llx)\n", dentry,
@@ -1707,10 +1710,10 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 					       dentry, USE_CAP_MDS);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
-		path = ceph_build_dentry_path(dentry, &pathlen);
+		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
-		req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0,
+		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0, 0,
 					       dentry, USE_ANY_MDS);
 		kfree(path);
 	}
@@ -2135,6 +2138,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct ceph_mds_request_head *rhead;
 	char *path;
 	int pathlen;
+	u64 pathbase;
 	int err;
 	int i, nr_pages;
 	struct page **pages = 0;
@@ -2164,12 +2168,11 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 
 	/* do request */
-	path = ceph_build_dentry_path(dentry, &pathlen);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
-				       ceph_ino(dentry->d_sb->s_root->d_inode),
-				       path, 0, name,
+				       pathbase, path, 0, name,
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req))
@@ -2203,18 +2206,18 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	struct ceph_mds_request *req;
 	char *path;
 	int pathlen;
+	u64 pathbase;
 	int err;
 
 	/* only support user.* xattrs, for now */
 	if (strncmp(name, "user.", 5) != 0)
 		return -EOPNOTSUPP;
 
-	path = ceph_build_dentry_path(dentry, &pathlen);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
-				       ceph_ino(dentry->d_sb->s_root->d_inode),
-				       path, 0, name,
+				       pathbase, path, 0, name,
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req))

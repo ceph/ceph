@@ -1,6 +1,5 @@
 v0.3
 - client rsync bug
-- document nested accounting
 
 v0.4
 - ENOSPC
@@ -8,7 +7,7 @@ v0.4
 big items
 - ENOSPC
 - quotas
-  - accounting
+/  - accounting
   - enforcement
 - rados cow/snapshot infrastructure
 - mds snapshots

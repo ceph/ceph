@@ -1274,6 +1274,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_inode_cap *cap;
 	char *path;
 	int pathlen, err;
+	u64 pathbase;
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
 	struct ceph_mds_cap_reconnect *rec;
@@ -1347,7 +1348,8 @@ retry:
 
 		dentry = d_find_alias(&ci->vfs_inode);
 		if (dentry) {
-			path = ceph_build_dentry_path(dentry, &pathlen);
+			path = ceph_build_dentry_path(dentry, &pathlen,
+						      &pathbase);
 			if (IS_ERR(path)) {
 				err = PTR_ERR(path);
 				BUG_ON(err);

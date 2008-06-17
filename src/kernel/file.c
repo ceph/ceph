@@ -33,8 +33,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 
 	dout(5, "prepare_open_request dentry %p name '%s' flags %d\n", dentry,
 	     dentry->d_name.name, flags);
-	pathbase = ceph_ino(sb->s_root->d_inode);
-	path = ceph_build_dentry_path(dentry, &pathlen);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
