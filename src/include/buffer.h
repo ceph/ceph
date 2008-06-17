@@ -15,19 +15,22 @@
 #ifndef __BUFFER_H
 #define __BUFFER_H
 
-#include <iostream>
-#include <iomanip>
-#include <list>
+#define _XOPEN_SOURCE 600
+#include <stdlib.h>
+#include <malloc.h>
 #include <stdint.h>
 #include <assert.h>
 #include <string.h>
-
-#include "atomic.h"
 
 #ifndef __CYGWIN__
 # include <sys/mman.h>
 #endif
 
+#include <iostream>
+#include <iomanip>
+#include <list>
+
+#include "atomic.h"
 #include "page.h"
 
 // <hack>
