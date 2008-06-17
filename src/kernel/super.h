@@ -60,6 +60,15 @@ extern int ceph_debug_inode;
 		(unsigned int)(ntohs((n).sin_port))
 
 
+#define dput(dentry)				       \
+	do {					       \
+		dout(20, "dput %p %d -> %d\n", dentry, \
+		     atomic_read(&dentry->d_count),    \
+		     atomic_read(&dentry->d_count)-1); \
+		dput(dentry);			       \
+	} while (0)
+
+
 /*
  * subtract jiffies
  */
