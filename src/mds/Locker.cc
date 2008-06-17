@@ -2402,7 +2402,7 @@ void Locker::scatter_eval(ScatterLock *lock)
 void Locker::mark_updated_scatterlock(ScatterLock *lock)
 {
   lock->set_updated();
-  if (lock->xlistitem_updated.get_xlist()) {
+  if (lock->xlistitem_updated.is_on_xlist()) {
     dout(10) << "mark_updated_scatterlock " << *lock
 	     << " -- already on list since " << lock->update_stamp << dendl;
   } else {

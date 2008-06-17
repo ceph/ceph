@@ -137,7 +137,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
-  xlist_dirty(this)
+  xlist_dirty(this), xlist_new(this)
 {
   inode = in;
   frag = fg;
@@ -874,8 +874,13 @@ void CDir::_mark_dirty(LogSegment *ls)
   } else {
     dout(10) << "mark_dirty (already dirty) " << *this << " version " << get_version() << dendl;
   }
-  if (ls) 
+  if (ls) {
     ls->dirty_dirfrags.push_back(&xlist_dirty);
+
+    // if i've never committed, i need to be before _any_ mention of me is trimmed from the journal.
+    if (committed_version == 0 && !xlist_new.is_on_xlist())
+      ls->new_dirfrags.push_back(&xlist_dirty);
+  }
 }
 
 void CDir::mark_clean()
@@ -886,6 +891,7 @@ void CDir::mark_clean()
     put(PIN_DIRTY);
 
     xlist_dirty.remove_myself();
+    xlist_new.remove_myself();
   }
 }
 

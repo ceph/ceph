@@ -2055,20 +2055,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
-
-  /* old export heuristic.  pbly need to reimplement this at some point.    
-  if (
-      diri->dir->is_auth() &&
-      diri->dir->is_rep() &&
-      newdir->is_auth() &&
-      !newdir->is_hashing()) {
-    int dest = rand() % mds->mdsmap->get_num_mds();
-    if (dest != whoami) {
-      dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << dendl;
-      mdcache->migrator->export_dir(newdir, dest);
-    }
-  }
-  */
 }
 
 
@@ -4400,7 +4386,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply_request(mdr, reply);
 
   // make sure this inode gets into the journal
-  if (cur->xlist_open_file.get_xlist() == 0) {
+  if (!cur->xlist_open_file.is_on_xlist()) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
     le->add_clean_inode(cur);

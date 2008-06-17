@@ -33,6 +33,7 @@ public:
 
     
     xlist* get_xlist() { return _list; }
+    bool is_on_xlist() { return _list ? true:false; }
     void remove_myself() {
       if (_list) 
 	_list->remove(this);

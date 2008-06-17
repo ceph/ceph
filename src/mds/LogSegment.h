@@ -36,7 +36,7 @@ class LogSegment {
   loff_t trimmable_at;
 
   // dirty items
-  xlist<CDir*>    dirty_dirfrags;
+  xlist<CDir*>    dirty_dirfrags, new_dirfrags;
   xlist<CInode*>  dirty_inodes;
   xlist<CDentry*> dirty_dentries;
 

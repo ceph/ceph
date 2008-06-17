@@ -75,6 +75,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
   // commit dirs
+  for (xlist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
+    assert((*p)->is_auth());
+    commit.insert(*p);
+  }
   for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
     assert((*p)->is_auth());
     commit.insert(*p);
