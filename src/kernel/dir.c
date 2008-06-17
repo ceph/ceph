@@ -308,9 +308,10 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	}
 	if (err)
 		dentry = ERR_PTR(err);
-	else if (dentry != req->r_last_dentry)
-		dentry = req->r_last_dentry;   /* we got d_splice_alias'd */
-	else
+	else if (dentry != req->r_last_dentry) {
+		dentry = req->r_last_dentry;   /* we got spliced */
+		dget(dentry);
+	} else
 		dentry = 0;
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	dout(20, "do_lookup result=%p\n", dentry);

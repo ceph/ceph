@@ -769,9 +769,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			dn = req->r_old_dentry;  /* use old_dentry */
 			req->r_old_dentry = 0;
 		}
-		if (dn->d_parent != parent)
-			dout(10, "warning: d_parent %p != %p\n",
-			     dn->d_parent, parent);
 
 		/* attach proper inode */
 		ininfo = rinfo->trace_in[d+1].in;
@@ -801,21 +798,22 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dout(20, "d_drop %p\n", dn);
 				d_drop(dn);
 			}
-			realdn = d_splice_alias(in, dn);
+			realdn = d_materialise_unique(dn, in);
 			if (realdn) {
-				derr(10, "dn %p spliced with %p inode %p "
-				     "ino %llx\n", dn, realdn, realdn->d_inode,
+				derr(10, "dn %p (%d) spliced with %p (%d) "
+				     "inode %p ino %llx\n",
+				     dn, atomic_read(&dn->d_count),
+				     realdn, atomic_read(&realdn->d_count), 
+				     realdn->d_inode,
 				     ceph_ino(realdn->d_inode));
-				if (dn == req->r_last_dentry) {
-					dput(dn);
-					req->r_last_dentry = realdn;
-				}
+				dput(dn);
 				dn = realdn;
 				ceph_init_dentry(dn);
 			} else
 				dout(10, "dn %p attached to %p ino %llx\n",
 				     dn, dn->d_inode, ceph_ino(dn->d_inode));
 		}
+		BUG_ON(d_unhashed(dn));
 		BUG_ON(dn->d_parent != parent);
 
 		ceph_update_dentry_lease(dn, rinfo->trace_dlease[d],
@@ -884,7 +882,7 @@ retry_lookup:
 
 		if (!dn) {
 			dn = d_alloc(parent, &dname);
-			dout(40, "d_alloc %p/%.*s\n", parent,
+			dout(40, "d_alloc %p '%.*s'\n", parent,
 			     dname.len, dname.name);
 			if (dn == NULL) {
 				dout(30, "d_alloc badness\n");
@@ -911,15 +909,22 @@ retry_lookup:
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
-				return -1;
+				dput(dn);
+				return -ENOMEM;
 			}
 			if (!d_unhashed(dn)) {
 				dout(40, "d_drop %p\n", dn);
 				d_drop(dn);
 			}
-			new = d_splice_alias(in, dn);
-			if (new)
+			new = d_materialise_unique(dn, in);
+			if (new) {
+				derr(10, "dn %p spliced with %p inode %p "
+				     "ino %llx\n", dn, new, new->d_inode,
+				     ceph_ino(new->d_inode));
+				dput(dn);
 				dn = new;
+				ceph_init_dentry(dn);
+			}
 		}
 		BUG_ON(d_unhashed(dn));
 
