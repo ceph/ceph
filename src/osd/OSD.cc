@@ -149,9 +149,45 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   OSDSuperblock sb;
   sb.fsid = fsid;
   sb.whoami = whoami;
+
+  store->create_collection(0, 0);
+
+  // age?
+  if (g_conf.osd_age_time != 0) {
+    cout << "aging..." << std::endl;
+    Ager ager(store);
+    if (g_conf.osd_age_time < 0) 
+      ager.load_freelist();
+    else 
+      ager.age(g_conf.osd_age_time, 
+	       g_conf.osd_age, 
+	       g_conf.osd_age - .05, 
+	       50000, 
+	       g_conf.osd_age - .05);
+  }
+
+  // benchmark?
+  if (g_conf.osd_auto_weight) {
+    bufferlist bl;
+    bufferptr bp(1048576);
+    bp.zero();
+    bl.push_back(bp);
+    utime_t start = g_clock.now();
+    for (int i=0; i<1000; i++) 
+      store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
+    store->sync();
+    utime_t end = g_clock.now();
+    end -= start;
+    cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
+    for (int i=0; i<1000; i++) 
+      store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
+    
+    // set osd weight
+    sb.weight = (1000.0 / (double)end);
+  }
+
   bufferlist bl;
   ::encode(sb, bl);
-  store->create_collection(0, 0);
   store->write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
   store->umount();
   delete store;
@@ -292,61 +328,21 @@ int OSD::init()
   int r = store->mount();
   if (r < 0) return -1;
   
-  if (g_conf.osd_mkfs) {
-    // age?
-    if (g_conf.osd_age_time != 0) {
-      dout(2) << "age" << dendl;
-      Ager ager(store);
-      if (g_conf.osd_age_time < 0) 
-	ager.load_freelist();
-      else 
-	ager.age(g_conf.osd_age_time, 
-		 g_conf.osd_age, 
-		 g_conf.osd_age - .05, 
-		 50000, 
-		 g_conf.osd_age - .05);
-    }
-
-    if (g_conf.osd_auto_weight) {
-      // benchmark
-      bufferlist bl;
-      bufferptr bp(1048576);
-      bp.zero();
-      bl.push_back(bp);
-      utime_t start = g_clock.now();
-      for (int i=0; i<1000; i++) 
-	store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
-      store->sync();
-      utime_t end = g_clock.now();
-      end -= start;
-      dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
-      for (int i=0; i<1000; i++) 
-	store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
-      
-      // set osd weight
-      superblock.weight = (1000.0 / (double)end);
-    }
-  }
-  else {
-    dout(2) << "boot" << dendl;
-    
-    // read superblock
-    if (read_superblock() < 0) {
-      store->umount();
-      delete store;
-      return -1;
-    }
-    
-    // load up pgs (as they previously existed)
-    load_pgs();
-    
-    dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
-    assert(whoami == superblock.whoami);
+  dout(2) << "boot" << dendl;
+  
+  // read superblock
+  if (read_superblock() < 0) {
+    store->umount();
+    delete store;
+    return -1;
   }
   
-
-
+  // load up pgs (as they previously existed)
+  load_pgs();
   
+  dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
+  assert(whoami == superblock.whoami);
+    
   // log
   char name[80];
   sprintf(name, "osd%d", whoami);
