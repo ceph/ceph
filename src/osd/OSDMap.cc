@@ -32,8 +32,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
   pg_num = pgp_num = num_osd << pg_bits;
 
   // crush map
-  map<int,double> weights;
-  build_simple_crush_map(crush, num_osd, weights);
+  build_simple_crush_map(crush, num_osd);
 
   for (int i=0; i<num_osd; i++) {
     set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
@@ -52,7 +51,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
   }
 }
 
-void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,double>& weights)
+void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd)
 {
   // new
   crush.create();
@@ -165,3 +164,4 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,do
 
   dout(20) << "crush max_devices " << crush.crush->max_devices << dendl;
 }
+

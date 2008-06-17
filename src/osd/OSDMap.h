@@ -357,11 +357,6 @@ private:
     if (inc.fullmap.length())
       return;
 
-    if (inc.crush.length()) {
-      bufferlist::iterator blp = inc.crush.begin();
-      crush.decode(blp);
-    }
-
     // nope, incremental.
     if (inc.new_flags >= 0)
       flags = inc.new_flags;
@@ -420,6 +415,12 @@ private:
 	 i != inc.old_pg_swap_primary.end();
 	 i++)
       pg_swap_primary.erase(*i);
+
+    // do new crush map last (after up/down stuff)
+    if (inc.crush.length()) {
+      bufferlist::iterator blp = inc.crush.begin();
+      crush.decode(blp);
+    }
   }
 
   // serialize, unserialize
@@ -715,7 +716,7 @@ private:
    */
   void build_simple(epoch_t e, ceph_fsid &fsid,
 		    int num_osd, int pg_bits, int mds_local_osd);
-  static void build_simple_crush_map(CrushWrapper& crush, int num_osd, map<int,double>& weights);
+  static void build_simple_crush_map(CrushWrapper& crush, int num_osd);
 
 };
 

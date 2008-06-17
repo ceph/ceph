@@ -339,6 +339,21 @@ public:
       out[i] = rawout[i];
   }
 
+
+  void adjust_osd_weights(map<int,double> &weights) {
+    float max = 0;
+    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
+      if (p->second > max)
+	max = p->second;
+    
+    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++) {
+      unsigned w = 0x10000 - (p->second / max * 0x10000);
+      set_offload(p->first, w);
+    }
+  }
+  
+
+
   int read_from_file(const char *fn) {
     bufferlist bl;
     int r = bl.read_file(fn);

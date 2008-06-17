@@ -318,18 +318,22 @@ bool OSDMonitor::prepare_update(Message *m)
 bool OSDMonitor::should_propose(double& delay)
 {
   dout(10) << "should_propose" << dendl;
-  if (osdmap.epoch == 1) {
-    if (pending_inc.new_up.size() == (unsigned)osdmap.get_max_osd()) {
-      delay = 0.0;
-      if (g_conf.osd_auto_weight) {
-	CrushWrapper crush;
-	OSDMap::build_simple_crush_map(crush, osdmap.get_max_osd(), osd_weight);
-	crush.encode(pending_inc.crush);
-      }
-      return true;
-    } else 
-      return false;
+
+  // adjust osd weights?
+  if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
+    dout(0) << " adjusting crush osd weights based on " << osd_weight << dendl;
+    bufferlist bl;
+    osdmap.crush.encode(bl);
+    CrushWrapper crush;
+    bufferlist::iterator p = bl.begin();
+    crush.decode(p);
+    crush.adjust_osd_weights(osd_weight);
+    crush.encode(pending_inc.crush);
+    delay = 0.0;
+    osd_weight.clear();
+    return true;
   }
+
   return PaxosService::should_propose(delay);
 }
 
@@ -518,8 +522,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     
     // mark in?
     pending_inc.new_offload[from] = CEPH_OSD_IN;
-    
-    osd_weight[from] = m->sb.weight;
+
+    if (m->sb.weight)
+      osd_weight[from] = m->sb.weight;
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));

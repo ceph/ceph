@@ -141,6 +141,8 @@ ObjectStore *OSD::create_object_store(const char *dev)
 int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
 {
   ObjectStore *store = create_object_store(dev);
+  if (!store)
+    return -ENOENT;
   int err = store->mkfs();    
   if (err < 0) return err;
   err = store->mount();
@@ -172,6 +174,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
     bufferptr bp(1048576);
     bp.zero();
     bl.push_back(bp);
+    cout << "testing disk bandwidth..." << std::endl;
     utime_t start = g_clock.now();
     for (int i=0; i<1000; i++) 
       store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
