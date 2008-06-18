@@ -76,18 +76,22 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // commit dirs
   for (xlist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
+    dout(20) << " new_dirfrag " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert(*p);
   }
   for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
+    dout(20) << " dirty_dirfrag " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert(*p);
   }
   for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
+    dout(20) << " dirty_dentry " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert((*p)->get_dir());
   }
   for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
+    dout(20) << " dirty_inode " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert((*p)->get_parent_dn()->get_dir());
   }
