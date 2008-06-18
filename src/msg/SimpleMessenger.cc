@@ -131,6 +131,8 @@ int Rank::Accepter::bind(int64_t force_nonce)
   rank.rank_addr = g_my_addr;
   if (rank.rank_addr != entity_addr_t())
     rank.need_addr = false;
+  else 
+    rank.need_addr = true;
   if (rank.rank_addr.get_port() == 0) {
     entity_addr_t tmp;
     tmp.ipaddr = listen_addr;
@@ -142,7 +144,9 @@ int Rank::Accepter::bind(int64_t force_nonce)
   }
   rank.rank_addr.erank = 0;
 
-  dout(1) << "accepter.bind rank_addr is " << rank.rank_addr << dendl;
+  dout(1) << "accepter.bind rank_addr is " << rank.rank_addr 
+	  << " need_addr=" << rank.need_addr
+	  << dendl;
   return 0;
 }
 
