@@ -1961,6 +1961,7 @@ PG *OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
 
   dout(10) << "try_create_pg " << pgid << " - creating now" << dendl;
   PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, t);
+  creating_pgs.erase(pgid);
   return pg;
 }
 
