@@ -1,6 +1,7 @@
 #ifndef _CEPH_TSTRING
 #define _CEPH_TSTRING
 
+#include "common/Mutex.h"
 
 class stringtable {
 private:
