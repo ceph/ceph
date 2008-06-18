@@ -224,6 +224,7 @@ private:
     bool stop;
     int qlen, pqlen;
     int my_rank;
+    bool need_addr;
 
     class DispatchThread : public Thread {
       EntityMessenger *m;
@@ -288,6 +289,7 @@ private:
       stop(false),
       qlen(0), pqlen(0),
       my_rank(r),
+      need_addr(false),
       dispatch_thread(this) { }
     ~EntityMessenger() {
       // join dispatch thread

@@ -380,9 +380,13 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   local[erank] = msgr;
   stopped[erank] = false;
   msgr->_myinst.addr = rank_addr;
+  if (msgr->_myinst.addr.ipaddr == entity_addr_t().ipaddr)
+    msgr->need_addr = true;
   msgr->_myinst.addr.erank = erank;
 
-  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr << dendl;
+  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr 
+	   << " need_addr=" << need_addr
+	   << dendl;
 
   num_local++;
   
@@ -1398,11 +1402,16 @@ void Rank::Pipe::reader()
 	  entity = rank.local[erank];
 
 	  // first message?
-	  if (rank.need_addr) {
+	  if (entity->need_addr) {
 	    entity->_set_myaddr(m->get_dest_inst().addr);
+	    dout(2) << "reader entity addr is " << entity->get_myaddr() << dendl;
+	    entity->need_addr = false;
+	  }
+
+	  if (rank.need_addr) {
 	    rank.rank_addr = m->get_dest_inst().addr;
 	    rank.rank_addr.erank = 0;
-	    dout(2) << "reader my rank addr is " << rank.rank_addr << dendl;
+	    dout(2) << "reader rank_addr is " << rank.rank_addr << dendl;
 	    rank.need_addr = false;
 	  }
 
