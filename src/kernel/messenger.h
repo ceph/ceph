@@ -40,7 +40,7 @@ struct ceph_messenger {
 	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
-	struct ceph_socket *listen_s; 	 /* listening socket */
+	struct socket *listen_sock; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
@@ -76,6 +76,7 @@ struct ceph_msg_pos {
 #define ACCEPTING	2
 #define OPEN		3
 #define WRITE_PENDING	4  /* we have data to send */
+#define NOSOCK          5  /* mask socket callbacks */
 #define WAIT		7  /* wait for peer to connect */
 #define CLOSED		8  /* we've closed the connection */
 #define SOCK_CLOSE	9  /* socket state changed to close */
@@ -84,7 +85,7 @@ struct ceph_msg_pos {
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
-	struct ceph_socket *s;	/* connection socket */
+	struct socket *sock;	/* connection socket */
 	unsigned long state;	/* connection state */
 	const char *error_msg;
 

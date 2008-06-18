@@ -2996,7 +2996,8 @@ void Server::handle_client_rename(MDRequest *mdr)
       !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
     // error out for now; eventually, we should find the deepest common root
     derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
-    assert(0);
+    reply_request(mdr, -ESTALE);
+    return;
   }
 
   // traverse to dest dir (not dest)
