@@ -1792,13 +1792,11 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
   if (fd < 0) return fd;
+  
+  utime_t from = g_clock.now();
+  utime_t start = from;
+  __u64 bytes = 0, total = 0;
 
-#define CHEAP_HACK 0
-#if CHEAP_HACK
-  // START temporary hack piece 1 --Esteban
-  for (int foo = 0; foo < 10; ++foo) {
-  // END temporary hack piece 1 --Esteban
-#endif
 
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) {
@@ -1820,14 +1818,25 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     }
 
     client->write(fd, buf, wrsize, i*wrsize);
+    bytes += wrsize;
+    total += wrsize;
+
+    utime_t now = g_clock.now();
+    if (now - from >= 1.0) {
+      double el = now - from;
+      dout(0) << (bytes / el / 1048576.0) << " MB/sec" << dendl;
+      from = now;
+      bytes = 0;
+    }
   }
-#if CHEAP_HACK
-  // START temporary hack piece 2--Esteban
-  }
-  sleep(5);
-  // END temporary hack piece 2 --Esteban
-#endif
+
   client->fsync(fd, true);
+  
+  utime_t stop = g_clock.now();
+  double el = stop - start;
+  dout(0) << "total " << (total / el / 1048576.0) << " MB/sec ("
+	  << total << " bytes in " << el << " seconds)" << dendl;
+
   client->close(fd);
   delete[] buf;
 
