@@ -107,7 +107,7 @@ namespace __gnu_cxx {
   {
     size_t operator()( const entity_name_t m ) const
     {
-      return rjhash32(m.type()) ^ rjhash32(m.num());
+      return rjhash32(m.type() ^ m.num());
     }
   };
 }
@@ -191,7 +191,8 @@ namespace __gnu_cxx {
     size_t operator()( const entity_addr_t& x ) const
     {
       static blobhash H;
-      return H((const char*)&x, sizeof(x));
+      return H((const char*)&x.ipaddr, sizeof(x.ipaddr)) ^
+	rjhash32(x.erank ^ x.nonce);
     }
   };
 }
@@ -234,8 +235,9 @@ namespace __gnu_cxx {
   {
     size_t operator()( const entity_inst_t& x ) const
     {
-      static blobhash H;
-      return H((const char*)&x, sizeof(x));
+      static hash< entity_name_t > H;
+      static hash< entity_addr_t > I;
+      return H(x.name) ^ I(x.addr);
     }
   };
 }
