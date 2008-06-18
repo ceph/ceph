@@ -347,7 +347,7 @@ public:
 	max = p->second;
     
     for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++) {
-      unsigned w = 0x10000 - (p->second / max * 0x10000);
+      unsigned w = 0x10000 - (unsigned)(p->second / max * 0x10000);
       set_offload(p->first, w);
     }
   }
