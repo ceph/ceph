@@ -52,6 +52,14 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   if (g_conf.clock_tare) g_clock.tare();
 
+  // check for 32-bit arch
+  if (sizeof(long) == 4) {
+    cerr << std::endl;
+    cerr << "WARNING: Ceph inode numbers are 64 bits wide, and FUSE on 32-bit kernels does" << std::endl;
+    cerr << "         not cope well with that situation.  Expect to crash shortly." << std::endl;
+    cerr << std::endl;
+  }
+
   // get monmap
   MonMap monmap;
   MonClient mc;
