@@ -1,7 +1,7 @@
 #ifndef _CEPH_NSTRING
 #define _CEPH_NSTRING
 
-#if 1
+#if 0
 # include "tstring.h"
 typedef tstring nstring;
 #else
