@@ -629,7 +629,8 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 
-	if (ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
+	if (ceph_inode(dir)->i_version == dentry->d_time &&
+	    ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
 		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
 		     dentry, dir);
 		return 1;

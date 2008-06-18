@@ -531,8 +531,17 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 
 	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
 	     dentry, le16_to_cpu(lease->mask), duration, ttl);
-	if (lease->mask == 0)
+	if (lease->mask == 0) {
+		/*
+		 * no per-dentry lease.  so, set d_time to match
+		 * parent directory version.  if/when we get an
+		 * ICONTENT cap (implicit directory-wide lease), we'll
+		 * know whether it covers this dentry.
+		 */
+		struct inode *dir = dentry->d_parent->d_inode;
+		dentry->d_time = ceph_inode(dir)->i_version;
 		return;
+	}
 
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
