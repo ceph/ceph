@@ -918,6 +918,8 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 bool ObjectCacher::wait_for_write(size_t len, Mutex& lock)
 {
   int blocked = 0;
+
+  // wait for writeback?
   while (get_stat_dirty() + get_stat_tx() >= g_conf.client_oc_max_dirty) {
     dout(10) << "wait_for_write waiting on " << len << ", dirty|tx " 
 	     << (get_stat_dirty() + get_stat_tx()) 
@@ -929,6 +931,13 @@ bool ObjectCacher::wait_for_write(size_t len, Mutex& lock)
     stat_waiter--;
     blocked++;
     dout(10) << "wait_for_write woke up" << dendl;
+  }
+
+  // start writeback anyway?
+  if (get_stat_dirty() > g_conf.client_oc_target_dirty) {
+    dout(10) << "wait_for_write " << get_stat_dirty() << " > target "
+	     << g_conf.client_oc_target_dirty << ", nudging flusher" << dendl;
+    flusher_cond.Signal();
   }
   return blocked;
 }
@@ -945,14 +954,17 @@ void ObjectCacher::flusher_entry()
                << get_stat_tx() << " tx, "
                << get_stat_rx() << " rx, "
                << get_stat_clean() << " clean, "
-               << get_stat_dirty() << " / " << g_conf.client_oc_max_dirty << " dirty"
+               << get_stat_dirty() << " dirty ("
+	       << g_conf.client_oc_target_dirty << " target, "
+	       << g_conf.client_oc_max_dirty << " max)"
                << dendl;
-      if (get_stat_dirty() > g_conf.client_oc_max_dirty) {
+      if (get_stat_dirty() > g_conf.client_oc_target_dirty) {
         // flush some dirty pages
         dout(10) << "flusher " 
-                 << get_stat_dirty() << " / " << g_conf.client_oc_max_dirty << " dirty,"
-                 << " flushing some dirty bhs" << dendl;
-        flush(get_stat_dirty() - g_conf.client_oc_max_dirty);
+                 << get_stat_dirty() << " dirty > target "
+		 << g_conf.client_oc_target_dirty
+                 << ", flushing some dirty bhs" << dendl;
+        flush(get_stat_dirty() - g_conf.client_oc_target_dirty);
       }
       else {
         // check tail of lru for old dirty items

@@ -162,6 +162,7 @@ struct md_config_t {
   bool     client_oc;
   int      client_oc_size;
   int      client_oc_max_dirty;
+  int      client_oc_target_dirty;
   size_t   client_oc_max_sync_write;
 
   // objecter

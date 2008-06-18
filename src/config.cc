@@ -295,7 +295,9 @@ md_config_t g_conf = {
   // --- objectcacher ---
   client_oc: true,
   client_oc_size:      1024*1024* 64,    // MB * n
-  client_oc_max_dirty: 1024*1024* 32,    // MB * n  (dirty OR tx)
+  client_oc_max_dirty: 1024*1024* 48,    // MB * n  (dirty OR tx.. bigish)
+  client_oc_target_dirty:  1024*1024* 8, // target dirty (keep this smallish)
+  // note: the max amount of "in flight" dirty data is roughly (max - target)
   client_oc_max_sync_write: 128*1024,   // sync writes >= this use wrlock
 
   // --- objecter ---
