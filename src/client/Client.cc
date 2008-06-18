@@ -227,6 +227,9 @@ void Client::init()
 {
   Mutex::Locker lock(client_lock);
 
+  tick();
+
+  // do logger crap only once per process.
   static bool did_init = false;
   if (did_init) return;
   did_init = true;
@@ -263,7 +266,6 @@ void Client::init()
   }
   client_logger_lock.Unlock();
 
-  tick();
 }
 
 void Client::shutdown() 
@@ -1864,7 +1866,8 @@ int Client::unmount()
   dout(2) << "unmounting" << dendl;
   unmounting = true;
 
-  timer.cancel_event(tick_event);
+  if (tick_event)
+    timer.cancel_event(tick_event);
   tick_event = 0;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
