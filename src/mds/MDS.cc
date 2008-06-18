@@ -490,7 +490,8 @@ void MDS::handle_mds_map(MMDSMap *m)
       }
       goto out;
     }
-    dout(1) << "handle_mds_map i'm not in the mdsmap, killing myself" << dendl;
+    dout(1) << "handle_mds_map i (" << messenger->get_myaddr() 
+	    << ") am not in the mdsmap, killing myself" << dendl;
     suicide();
     goto out;
   }
