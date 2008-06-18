@@ -19,7 +19,6 @@ big items
 
 userspace client
 - handle session STALE
-- rm -rf on fragmented directory
 - time out caps, wake up waiters on renewal
   - link caps with mds session
 - validate dn leases

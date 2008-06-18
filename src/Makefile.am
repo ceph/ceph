@@ -490,4 +490,8 @@ noinst_HEADERS = \
 	config.h\
 	include/intarith.h\
 	include/encoding.h\
-	include/err.h
+	include/err.h\
+	include/nstring.h\
+	include/tstring.h\
+	include/cstring.h\
+	mds/events/ECommitted.h
