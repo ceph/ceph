@@ -1397,6 +1397,9 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
 
   dout(10) << "commit_set " << ino << dendl;
 
+  // make sure it's flushing.
+  flush_set(ino);
+
   C_Gather *gather = 0; // we'll need to wait for all objects to commit
 
   set<Object*>& s = objects_by_ino[ino];
@@ -1406,9 +1409,6 @@ bool ObjectCacher::commit_set(inodeno_t ino, Context *onfinish)
        i++) {
     Object *ob = *i;
     
-    // make sure it's flushing.
-    flush_set(ino);
-
     if (ob->last_write_tid > ob->last_commit_tid) {
       dout(10) << "commit_set " << ino << " " << *ob 
                << " will finish on commit tid " << ob->last_write_tid
