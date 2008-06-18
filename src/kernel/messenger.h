@@ -76,8 +76,6 @@ struct ceph_msg_pos {
 #define ACCEPTING	2
 #define OPEN		3
 #define WRITE_PENDING	4  /* we have data to send */
-#define READABLE	5  /* set when socket gets new data */
-#define READING		6  /* provides mutual exclusion, protecting in_* */
 #define WAIT		7  /* wait for peer to connect */
 #define CLOSED		8  /* we've closed the connection */
 #define SOCK_CLOSE	9  /* socket state changed to close */
@@ -127,9 +125,8 @@ struct ceph_connection {
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
-	struct work_struct rwork;		/* receive work */
-	struct delayed_work swork;		/* send work */
-	unsigned long           delay;          /* delay interval */
+	struct delayed_work work;	    /* send|recv work */
+	unsigned long       delay;          /* delay interval */
 };
 
 
@@ -139,8 +136,7 @@ extern void ceph_messenger_destroy(struct ceph_messenger *);
 extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 				     struct ceph_entity_addr *addr);
 
-extern void ceph_queue_write(struct ceph_connection *con);
-extern void ceph_queue_read(struct ceph_connection *con);
+extern void ceph_queue_con(struct ceph_connection *con);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,

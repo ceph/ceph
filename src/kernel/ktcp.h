@@ -1,8 +1,7 @@
 #ifndef _FS_CEPH_TCP_H
 #define _FS_CEPH_TCP_H
 
-extern struct workqueue_struct *recv_wq;       /* receive work queue */
-extern struct workqueue_struct *send_wq;       /* send work queue */
+extern struct workqueue_struct *con_wq;       /* receive work queue */
 
 /* wrap socket, since we use/drop it from multiple threads */
 extern struct kobject *ceoh_sockets_kobj;

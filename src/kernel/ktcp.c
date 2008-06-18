@@ -10,8 +10,7 @@ int ceph_debug_tcp;
 #define DOUT_PREFIX "tcp: "
 #include "super.h"
 
-struct workqueue_struct *recv_wq;	/* receive work queue */
-struct workqueue_struct *send_wq;	/* send work queue */
+struct workqueue_struct *con_wq;
 struct workqueue_struct *accept_wq;	/* accept work queue */
 
 struct kobject *ceph_sockets_kobj;
@@ -107,7 +106,7 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
 	if (con && (sk->sk_state != TCP_CLOSE_WAIT)) {
 		dout(30, "ceph_data_ready on %p state = %lu, queuing rwork\n",
 		     con, con->state);
-		ceph_queue_read(con);
+		ceph_queue_con(con);
 	}
 }
 
@@ -122,7 +121,7 @@ static void ceph_write_space(struct sock *sk)
 	/* only queue to workqueue if a WRITE is pending */
 	if (con && test_bit(WRITE_PENDING, &con->state)) {
 		dout(30, "ceph_write_space %p queuing write work\n", con);
-		ceph_queue_write(con);
+		ceph_queue_con(con);
 	}
 	/* Since we have our own write_space, Clear the SOCK_NOSPACE flag */
 	clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
@@ -149,7 +148,7 @@ static void ceph_state_change(struct sock *sk)
 			con->error_msg = "connection refused";
 		else
 			con->error_msg = "socket closed";
-		ceph_queue_write(con);
+		ceph_queue_con(con);
 		break;
 	case TCP_ESTABLISHED:
 		dout(30, "ceph_state_change TCP_ESTABLISHED\n");
@@ -381,42 +380,25 @@ int ceph_workqueue_init(void)
 	int ret = 0;
 
 	dout(20, "entered work_init\n");
-	/*
-	 * Create a num CPU threads to handle receive requests
-	 * note: we can create more threads if needed to even out
-	 * the scheduling of multiple requests..
-	 */
-	recv_wq = create_workqueue("ceph-recv");
-	ret = IS_ERR(recv_wq);
-	if (ret) {
-		derr(0, "receive worker failed to start: %d\n", ret);
-		destroy_workqueue(recv_wq);
+
+	con_wq = create_singlethread_workqueue("ceph-net");
+	if (IS_ERR(con_wq)) {
+		derr(0, "net worker failed to start: %d\n", ret);
+		destroy_workqueue(con_wq);
+		ret = PTR_ERR(con_wq);
+		con_wq = 0;
 		return ret;
 	}
 
-	/*
-	 * Create a single thread to handle send requests
-	 * note: may use same thread pool as receive workers later...
-	 */
-	send_wq = create_singlethread_workqueue("ceph-send");
-	ret = IS_ERR(send_wq);
-	if (ret) {
-		derr(0, "send worker failed to start: %d\n", ret);
-		destroy_workqueue(send_wq);
-		return ret;
-	}
-
-	/*
-	 * Create a single thread to handle send requests
-	 * note: may use same thread pool as receive workers later...
-	 */
-	accept_wq = create_singlethread_workqueue("ceph-accept");
-	ret = IS_ERR(accept_wq);
-	if (ret) {
-		derr(0, "accept worker failed to start: %d\n", ret);
+	accept_wq = create_workqueue("ceph-accept");
+	if (IS_ERR(accept_wq)) {
+		derr(0, "net worker failed to start: %d\n", ret);
 		destroy_workqueue(accept_wq);
+		ret = PTR_ERR(accept_wq);
+		accept_wq = 0;
 		return ret;
 	}
+
 	dout(20, "successfully created wrkqueues\n");
 
 	return(ret);
@@ -427,7 +409,6 @@ int ceph_workqueue_init(void)
  */
 void ceph_workqueue_shutdown(void)
 {
+	destroy_workqueue(con_wq);
 	destroy_workqueue(accept_wq);
-	destroy_workqueue(send_wq);
-	destroy_workqueue(recv_wq);
 }
