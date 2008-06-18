@@ -4226,6 +4226,8 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
 
+    mdr->apply();
+
     // notify any clients
     mds->locker->issue_truncate(in);
 
@@ -4435,6 +4437,8 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
     
+    mdr->apply();
+
     // notify any clients
     mds->locker->issue_truncate(in);
 
