@@ -141,11 +141,9 @@ inline ostream& operator<<(ostream& out, pg_t pg)
     out << pg.size() << 'r';
   else 
     out << pg.size() << '?';
-  
+  out << pg.pool() << '.';
   out << hex << pg.ps() << dec;
 
-  if (pg.pool() > 0)
-    out << 'v' << pg.pool();
   if (pg.preferred() >= 0)
     out << 'p' << pg.preferred();
 
