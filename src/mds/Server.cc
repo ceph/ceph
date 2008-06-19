@@ -3020,27 +3020,41 @@ void Server::handle_client_rename(MDRequest *mdr)
   mdr->pin(srci);
 
   // -- some sanity checks --
-  // src+dest _must_ share a common root for locking to prevent orphans
-  if (destpath.get_ino() != srcpath.get_ino()) {
+
+  // src+dest traces _must_ share a common ancestor for locking to prevent orphans
+  if (destpath.get_ino() != srcpath.get_ino() &&
+      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok!
     // do traces share a dentry?
-    bool match = false;
+    CDentry *common = 0;
     for (unsigned i=0; i < srctrace.size(); i++) {
-      for (unsigned j=0; j< desttrace.size(); j++) {
+      for (unsigned j=0; j < desttrace.size(); j++) {
 	if (srctrace[i] == desttrace[j]) {
-	  match = true;
+	  common = srctrace[i];
 	  break;
 	}
       }
-      if (match)
+      if (common)
 	break;
     }
 
-    if (!match && 
-	!MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
-      // error out for now; eventually, we should find the deepest common root
-      dout(0) << "rename src + dst must share a common root; fix client or fix me" << dendl;
-      reply_request(mdr, -ESTALE);
-      return;
+    if (common) {
+      dout(10) << "rename src and dest traces share common dentry " << *common << dendl;
+    } else {
+      // ok, extend srctrace toward root until it is an ancestor of desttrace.
+      while (srctrace[0] != desttrace[0] &&
+	     !srctrace[0]->is_parent_of(desttrace[0])) {
+	srctrace.insert(srctrace.begin(),
+			srctrace[0]->get_dir()->get_inode()->get_parent_dn());
+	dout(10) << "rename prepending srctrace with " << *srctrace[0] << dendl;
+      }
+
+      // then, extend destpath until it shares the same parent as srcpath.
+      while (desttrace[0] != srctrace[0]) {
+	desttrace.insert(desttrace.begin(),
+			 desttrace[0]->get_dir()->get_inode()->get_parent_dn());
+	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
+      }
+      dout(10) << "rename src and dest traces now share common dentry " << *desttrace[0] << dendl;
     }
   }
 
