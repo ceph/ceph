@@ -18,7 +18,6 @@ extern int ceph_debug_console;
 extern int ceph_debug;
 extern int ceph_debug_msgr;
 extern int ceph_debug_super;
-extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
@@ -522,7 +521,7 @@ static inline void ceph_init_dentry(struct dentry *dentry) {
 extern const struct export_operations ceph_export_ops;
 
 /* proc.c */
-extern void ceph_proc_init(void);
+extern int ceph_proc_init(void);
 extern void ceph_proc_cleanup(void);
 
 #endif /* _FS_CEPH_SUPER_H */

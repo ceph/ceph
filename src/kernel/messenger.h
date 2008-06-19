@@ -13,6 +13,8 @@
 
 struct ceph_msg;
 
+extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
+
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
 typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_name *pn);
 typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
@@ -28,6 +30,8 @@ static __inline__ const char *ceph_name_type_str(int t) {
 	default: return "???";
 	}
 }
+
+#define CEPH_MSGR_BACKUP 10  /* backlogged incoming connections */
 
 /* use format string %s%d */
 #define ENTITY_NAME(n)				   \
@@ -131,6 +135,8 @@ struct ceph_connection {
 	unsigned long       delay;          /* delay interval */
 };
 
+extern int ceph_msgr_init(void);
+extern void ceph_msgr_exit(void);
 
 extern struct ceph_messenger *
 ceph_messenger_create(struct ceph_entity_addr *myaddr);

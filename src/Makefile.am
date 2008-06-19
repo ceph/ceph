@@ -315,8 +315,6 @@ noinst_HEADERS = \
 	kernel/export.c\
 	kernel/file.c\
 	kernel/inode.c\
-	kernel/ktcp.c\
-	kernel/ktcp.h\
 	kernel/mds_client.c\
 	kernel/mds_client.h\
 	kernel/mdsmap.c\

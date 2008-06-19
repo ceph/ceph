@@ -29,7 +29,6 @@ int ceph_debug_super = -1;
 #define DOUT_VAR ceph_debug_super
 #define DOUT_PREFIX "super: "
 #include "super.h"
-#include "ktcp.h"
 
 #include <linux/statfs.h>
 #include "mon_client.h"
@@ -335,7 +334,6 @@ enum {
 	Opt_debug,
 	Opt_debug_console,
 	Opt_debug_msgr,
-	Opt_debug_tcp,
 	Opt_debug_mdsc,
 	Opt_debug_osdc,
 	Opt_debug_addr,
@@ -358,7 +356,6 @@ static match_table_t arg_tokens = {
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_debug, "debug=%d"},
 	{Opt_debug_msgr, "debug_msgr=%d"},
-	{Opt_debug_tcp, "debug_tcp=%d"},
 	{Opt_debug_mdsc, "debug_mdsc=%d"},
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_debug_addr, "debug_addr=%d"},
@@ -509,9 +506,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_debug_msgr:
 			ceph_debug_msgr = intval;
 			break;
-		case Opt_debug_tcp:
-			ceph_debug_tcp = intval;
-			break;
 		case Opt_debug_mdsc:
 			ceph_debug_mdsc = intval;
 			break;
@@ -561,27 +555,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 }
 
 /*
- * share work queue between clients.
- */
-atomic_t ceph_num_clients = ATOMIC_INIT(0);
-
-static void get_client_counter(void)
-{
-	if (atomic_add_return(1, &ceph_num_clients) == 1) {
-		dout(10, "first client, setting up workqueues\n");
-		ceph_workqueue_init();
-	}
-}
-
-static void put_client_counter(void)
-{
-	if (atomic_dec_and_test(&ceph_num_clients)) {
-		dout(10, "last client, shutting down workqueues\n");
-		ceph_workqueue_shutdown();
-	}
-}
-
-/*
  * create a fresh client instance
  */
 struct ceph_client *ceph_create_client(void)
@@ -602,9 +575,6 @@ struct ceph_client *ceph_create_client(void)
 
 	cl->msgr = 0;
 
-	/* start work queues? */
-	get_client_counter();
-
 	cl->wb_wq = create_workqueue("ceph-writeback");
 	if (cl->wb_wq == 0)
 		goto fail;
@@ -623,7 +593,6 @@ struct ceph_client *ceph_create_client(void)
 
 fail:
 	/* fixme: use type->init() eventually */
-	put_client_counter();
 	return ERR_PTR(-ENOMEM);
 }
 
@@ -647,7 +616,6 @@ void ceph_destroy_client(struct ceph_client *cl)
 		destroy_workqueue(cl->trunc_wq);
 	if (cl->msgr)
 		ceph_messenger_destroy(cl->msgr);
-	put_client_counter();
 	kfree(cl);
 	dout(10, "destroy_client %p done\n", cl);
 }
@@ -985,18 +953,40 @@ static int __init init_ceph(void)
 	dout(1, "init_ceph\n");
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+	ret = -ENOMEM;
 	ceph_kobj = kobject_create_and_add("ceph", fs_kobj);
 	if (!ceph_kobj)
-		return -ENOMEM;
+		goto out;
 #endif
-	ceph_proc_init();
+
+	ret = ceph_proc_init();
+	if (ret < 0)
+		goto out_kobj;
+
+	ret = ceph_msgr_init();
+	if (ret < 0)
+		goto out_proc;
 
 	ret = init_inodecache();
 	if (ret)
-		goto out;
+		goto out_msgr;
+
 	ret = register_filesystem(&ceph_fs_type);
 	if (ret)
-		destroy_inodecache();
+		goto out_icache;
+	return 0;
+
+out_icache:
+	destroy_inodecache();	
+out_msgr:
+	ceph_msgr_exit();
+out_proc:
+	ceph_proc_cleanup();
+out_kobj:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+	kobject_put(ceph_kobj);
+	ceph_kobj = 0;
+#endif
 out:
 	return ret;
 }
@@ -1004,15 +994,14 @@ out:
 static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
-
+	unregister_filesystem(&ceph_fs_type);
+	destroy_inodecache();
+	ceph_msgr_exit();
+	ceph_proc_cleanup();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_put(ceph_kobj);
 	ceph_kobj = 0;
 #endif
-	ceph_proc_cleanup();
-
-	unregister_filesystem(&ceph_fs_type);
-	destroy_inodecache();
 }
 
 module_init(init_ceph);
