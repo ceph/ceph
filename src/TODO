@@ -1,8 +1,14 @@
 v0.3
 - client rsync bug
+- build_path vs ESTALE.
+- fix rename common root requirement
+  - enforce in the client, too?
 
 v0.4
 - ENOSPC
+- finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
+- make kclient sendpage (and rip out io interruption?)
+
 
 big items
 - ENOSPC
