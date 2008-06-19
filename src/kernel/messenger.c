@@ -1560,9 +1560,9 @@ more:
 	dout(10, "con_work %p start, clearing QUEUED\n", con);
 	clear_bit(QUEUED, &con->state);
 	
-	if (test_bit(CLOSED, &con->state) ||
-	    test_bit(STANDBY, &con->state)) {
-		dout(5, "con_work CLOSED|STANDBY\n");
+	if (con->sock == 0 &&
+	    !test_bit(NEW, &con->state)) {
+		dout(5, "con_work no sock\n");
 		goto done;
 	}
 	
