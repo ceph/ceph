@@ -1,7 +1,9 @@
 v0.3
 - client rsync bug?
+- osd: primary needs to check requests if replica set changes
 
 v0.4
+- fix msgr protocol wrt resets, and varying connection close policies
 - ENOSPC
 - finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
 - make kclient sendpage (and rip out io interruption?)

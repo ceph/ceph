@@ -1904,7 +1904,7 @@ void ceph_msg_put(struct ceph_msg *m)
 		     ceph_msg_type_name(le32_to_cpu(m->hdr.type)),
 		     le32_to_cpu(m->hdr.front_len),
 		     le32_to_cpu(m->hdr.data_len));
-		WARN();
+		WARN_ON(1);
 	}
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(20, "ceph_msg_put last one on %p\n", m);
