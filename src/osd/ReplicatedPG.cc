@@ -1636,6 +1636,29 @@ void ReplicatedPG::on_change()
        p++) 
     if (!p->second->applied)
       apply_repop(p->second);
+
+  // artificially ack+commit any replicas who dropped out of the pg
+  hash_map<tid_t,RepGather*>::iterator next;
+  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin(); 
+       p != rep_gather.end();
+       p = next) {
+    next = p;
+    next++;
+
+    dout(-1) << "checking repop tid " << p->first << dendl;
+    set<int> all;
+    set_union(p->second->waitfor_commit.begin(), p->second->waitfor_commit.end(),
+	      p->second->waitfor_ack.begin(), p->second->waitfor_ack.end(),
+	      inserter(all, all.begin()));
+    for (set<int>::iterator q = all.begin(); q != all.end(); q++) {
+      bool have = false;
+      for (unsigned i=1; i<acting.size(); i++)
+	if (acting[i] == *q) 
+	  have = true;
+      if (!have)
+	repop_ack(p->second, -1, true, *q);
+    }
+  }
 }
 
 void ReplicatedPG::on_role_change()
