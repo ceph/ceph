@@ -499,8 +499,8 @@ extern const struct address_space_operations ceph_aops;
 extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
-extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-			    struct nameidata *nd, int mode);
+extern struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
+				       struct nameidata *nd, int mode);
 extern int ceph_release(struct inode *inode, struct file *filp);
 
 
@@ -513,6 +513,8 @@ extern char *ceph_build_dentry_path(struct dentry *dn, int *len, __u64 *base);
 extern struct dentry *ceph_do_lookup(struct super_block *sb, 
 				     struct dentry *dentry, 
 				     int mask, int on_inode);
+extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
+					 struct dentry *dentry, int err);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
 	dentry->d_op = &ceph_dentry_ops;

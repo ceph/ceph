@@ -245,6 +245,36 @@ loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 	return retval;
 }
 
+struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
+				  struct dentry *dentry, int err)
+{
+	if (err == -ENOENT) {
+		/* no trace? */
+		if (req->r_reply_info.trace_numd == 0) {
+			dout(20, "ENOENT and no trace, dentry %p inode %p\n",
+			     dentry, dentry->d_inode);
+			ceph_init_dentry(dentry);
+			if (dentry->d_inode) {
+				dout(40, "d_drop %p\n", dentry);
+				d_drop(dentry);
+				req->r_last_dentry = d_alloc(dentry->d_parent,
+							     &dentry->d_name);
+				d_rehash(req->r_last_dentry);
+			} else
+				d_add(dentry, NULL);
+		}
+		err = 0;
+	}
+	if (err)
+		dentry = ERR_PTR(err);
+	else if (dentry != req->r_last_dentry) {
+		dentry = req->r_last_dentry;   /* we got spliced */
+		dget(dentry);
+	} else
+		dentry = 0;
+	return dentry;
+}
+
 /*
  * do a lookup / lstat (same thing).
  * @on_inode indicates that we should stat the ino, and not a path
@@ -289,30 +319,7 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	err = ceph_mdsc_do_request(mdsc, req);
-	if (err == -ENOENT) {
-		/* no trace? */
-		if (req->r_reply_info.trace_numd == 0) {
-			dout(20, "ENOENT and no trace, dentry %p inode %p\n",
-			     dentry, dentry->d_inode);
-			ceph_init_dentry(dentry);
-			if (dentry->d_inode) {
-				dout(40, "d_drop %p\n", dentry);
-				d_drop(dentry);
-				req->r_last_dentry = d_alloc(dentry->d_parent,
-							     &dentry->d_name);
-				d_rehash(req->r_last_dentry);
-			} else
-				d_add(dentry, NULL);
-		}
-		err = 0;
-	}
-	if (err)
-		dentry = ERR_PTR(err);
-	else if (dentry != req->r_last_dentry) {
-		dentry = req->r_last_dentry;   /* we got spliced */
-		dget(dentry);
-	} else
-		dentry = 0;
+	dentry = ceph_finish_lookup(req, dentry, err);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	dout(20, "do_lookup result=%p\n", dentry);
 	return dentry;
@@ -325,13 +332,12 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
 	/* open (but not create!) intent? */
-	if (false && nd &&
+	if (nd &&
 	    (nd->flags & LOOKUP_OPEN) &&
 	    (nd->flags & LOOKUP_CONTINUE) == 0 && /* only open last component */
 	    !(nd->intent.open.flags & O_CREAT)) {
 		int mode = nd->intent.open.create_mode & ~current->fs->umask;
-		int err = ceph_lookup_open(dir, dentry, nd, mode);
-		return ERR_PTR(err);
+		return ceph_lookup_open(dir, dentry, nd, mode);
 	}
 
 	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0);
@@ -391,14 +397,15 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 			   struct nameidata *nd)
 {
-	int err;
-
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 	if (nd) {
 		BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-		err = ceph_lookup_open(dir, dentry, nd, mode);
-		return err;
+		dentry = ceph_lookup_open(dir, dentry, nd, mode);
+		/* hrm, what should i do here if we get aliased? */
+		if (IS_ERR(dentry))
+			return PTR_ERR(dentry);
+		return 0;
 	}
 
 	/* fall back to mknod */
