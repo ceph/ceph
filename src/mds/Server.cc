@@ -2989,16 +2989,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << dendl;
 
-  // src+dest _must_ share commont root for locking to prevent orphans
   filepath destpath = req->get_filepath2();
   filepath srcpath = req->get_filepath();
-  if (destpath.get_ino() != srcpath.get_ino() &&
-      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
-    // error out for now; eventually, we should find the deepest common root
-    derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
-    reply_request(mdr, -ESTALE);
-    return;
-  }
 
   // traverse to dest dir (not dest)
   //  we do this FIRST, because the rename should occur on the 
@@ -3028,6 +3020,30 @@ void Server::handle_client_rename(MDRequest *mdr)
   mdr->pin(srci);
 
   // -- some sanity checks --
+  // src+dest _must_ share a common root for locking to prevent orphans
+  if (destpath.get_ino() != srcpath.get_ino()) {
+    // do traces share a dentry?
+    bool match = false;
+    for (unsigned i=0; i < srctrace.size(); i++) {
+      for (unsigned j=0; j< desttrace.size(); j++) {
+	if (srctrace[i] == desttrace[j]) {
+	  match = true;
+	  break;
+	}
+      }
+      if (match)
+	break;
+    }
+
+    if (!match && 
+	!MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
+      // error out for now; eventually, we should find the deepest common root
+      dout(0) << "rename src + dst must share a common root; fix client or fix me" << dendl;
+      reply_request(mdr, -ESTALE);
+      return;
+    }
+  }
+
   // src == dest?
   if (srcdn->get_dir() == destdir && srcdn->name == destname) {
     dout(7) << "rename src=dest, noop" << dendl;
