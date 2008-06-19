@@ -932,7 +932,7 @@ retry_lookup:
 				     dn, atomic_read(&dn->d_count),
 				     new, atomic_read(&new->d_count), 
 				     new->d_inode,
-				     ceph_ino(realdn->d_inode));
+				     ceph_ino(new->d_inode));
 				dput(dn);
 				dn = new;
 				ceph_init_dentry(dn);

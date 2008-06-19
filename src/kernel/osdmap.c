@@ -525,7 +525,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	return map;
 
 bad:
-	derr(10, "corrupt incremantal osdmap at %p / %p\n", *p, end);
+	derr(10, "corrupt incremental osdmap at %p / %p\n", *p, end);
 	return ERR_PTR(err);
 }
 
