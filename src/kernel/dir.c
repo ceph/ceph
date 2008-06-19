@@ -26,8 +26,12 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
  * revalidated during path traversal, and revalidated _again_ when we
  * reconstruct the reverse path.  lame.  unfortunately the VFS doesn't
  * tell us the path it traversed, so i'm not sure we can do any better.
+ *
+ * always include at least @min dentry(ies), or else paths for
+ * namespace operations (link, rename, etc.) are meaningless.
  */
-char *ceph_build_dentry_path(struct dentry *dentry, int *plen, __u64 *base)
+char *ceph_build_dentry_path(struct dentry *dentry, int *plen, __u64 *base,
+			     int min)
 {
 	struct dentry *temp;
 	char *path;
@@ -39,7 +43,8 @@ char *ceph_build_dentry_path(struct dentry *dentry, int *plen, __u64 *base)
 retry:
 	len = 0;
 	for (temp = dentry; !IS_ROOT(temp);) {
-		if (temp->d_inode &&
+		if (len >= min &&
+		    temp->d_inode &&
 		    !ceph_dentry_revalidate(temp, 0))
 			break;
 		len += 1 + temp->d_name.len;
@@ -304,7 +309,7 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	} else {
 		/* build path */
 		u64 pathbase;
-		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
@@ -357,7 +362,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 
 	dout(5, "dir_mknod in dir %p dentry %p mode 0%o rdev %d\n",
 	     dir, dentry, mode, rdev);
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD,
@@ -424,7 +429,7 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 	int err;
 
 	dout(5, "dir_symlink in dir %p dentry %p to '%s'\n", dir, dentry, dest);
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SYMLINK,
@@ -458,7 +463,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	int err;
 
 	dout(5, "dir_mkdir in dir %p dentry %p mode 0%o\n", dir, dentry, mode);
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKDIR,
@@ -495,10 +500,11 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 
 	dout(5, "dir_link in dir %p old_dentry %p dentry %p\n", dir,
 	     old_dentry, dentry);
-	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen, &oldpathbase);
+	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen, &oldpathbase,
+					 1);
 	if (IS_ERR(oldpath))
 		return PTR_ERR(oldpath);
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
 	if (IS_ERR(path)) {
 		kfree(oldpath);
 		return PTR_ERR(path);
@@ -550,7 +556,7 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 
 	dout(5, "dir_unlink/rmdir in dir %p dentry %p inode %p\n",
 	     dir, dentry, inode);
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, op,
@@ -589,10 +595,12 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	dout(5, "dir_rename in dir %p dentry %p to dir %p dentry %p\n",
 	     old_dir, old_dentry, new_dir, new_dentry);
-	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen, &oldpathbase);
+	oldpath = ceph_build_dentry_path(old_dentry, &oldpathlen, &oldpathbase,
+					 1);
 	if (IS_ERR(oldpath))
 		return PTR_ERR(oldpath);
-	newpath = ceph_build_dentry_path(new_dentry, &newpathlen, &newpathbase);
+	newpath = ceph_build_dentry_path(new_dentry, &newpathlen, &newpathbase,
+					 1);
 	if (IS_ERR(newpath)) {
 		kfree(oldpath);
 		return PTR_ERR(newpath);

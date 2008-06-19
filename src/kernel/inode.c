@@ -1727,7 +1727,7 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 					       dentry, USE_CAP_MDS);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
-		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
 		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0, 0,
@@ -2185,7 +2185,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 
 	/* do request */
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
@@ -2230,7 +2230,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (strncmp(name, "user.", 5) != 0)
 		return -EOPNOTSUPP;
 
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,

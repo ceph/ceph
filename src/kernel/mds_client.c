@@ -1349,7 +1349,7 @@ retry:
 		dentry = d_find_alias(&ci->vfs_inode);
 		if (dentry) {
 			path = ceph_build_dentry_path(dentry, &pathlen,
-						      &pathbase);
+						      &pathbase, 9999);
 			if (IS_ERR(path)) {
 				err = PTR_ERR(path);
 				BUG_ON(err);
