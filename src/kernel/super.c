@@ -130,6 +130,8 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 		seq_puts(m, ",nodirstat");
 	if (args->flags & CEPH_MOUNT_RBYTES)
 		seq_puts(m, ",rbytes");
+	else
+		seq_puts(m, ",norbytes");
 	return 0;
 }
 
@@ -349,6 +351,7 @@ enum {
 	Opt_dirstat,
 	Opt_nodirstat,
 	Opt_rbytes,
+	Opt_norbytes,
 };
 
 static match_table_t arg_tokens = {
@@ -372,6 +375,7 @@ static match_table_t arg_tokens = {
 	{Opt_dirstat, "dirstat"},
 	{Opt_nodirstat, "nodirstat"},
 	{Opt_rbytes, "rbytes"},
+	{Opt_norbytes, "norbytes"},
 	{-1, NULL}
 };
 
@@ -544,6 +548,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_rbytes:
 			args->flags |= CEPH_MOUNT_RBYTES;
+			break;
+		case Opt_norbytes:
+			args->flags &= ~CEPH_MOUNT_RBYTES;
 			break;
 
 		default:
