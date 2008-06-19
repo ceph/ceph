@@ -1396,7 +1396,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     // dirfrag -> diri
     mut->auth_pin(pin);
     mut->add_projected_inode(pin);
-    lsi.push_back(pin);
+    lsi.push_front(pin);
 
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
