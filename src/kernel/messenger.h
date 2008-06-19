@@ -76,7 +76,8 @@ struct ceph_msg_pos {
 #define ACCEPTING	2
 #define OPEN		3
 #define WRITE_PENDING	4  /* we have data to send */
-#define NOSOCK          5  /* mask socket callbacks */
+#define QUEUED          5  /* there is work to be done */
+#define BUSY            6  /* work is being done */
 #define WAIT		7  /* wait for peer to connect */
 #define CLOSED		8  /* we've closed the connection */
 #define SOCK_CLOSE	9  /* socket state changed to close */

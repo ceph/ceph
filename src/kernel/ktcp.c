@@ -11,7 +11,6 @@ int ceph_debug_tcp;
 #include "super.h"
 
 struct workqueue_struct *con_wq;
-struct workqueue_struct *accept_wq;	/* accept work queue */
 
 
 /*
@@ -25,8 +24,8 @@ static void ceph_accept_ready(struct sock *sk, int count_unused)
 
 	dout(30, "ceph_accept_ready messenger %p sk_state = %u\n",
 	     msgr, sk->sk_state);
-	if (msgr && (sk->sk_state == TCP_LISTEN))
-		queue_work(accept_wq, &msgr->awork);
+	if (sk->sk_state == TCP_LISTEN)
+		queue_work(con_wq, &msgr->awork);
 }
 
 /* Data available on socket or listen socket received a connect */
@@ -34,11 +33,7 @@ static void ceph_data_ready(struct sock *sk, int count_unused)
 {
 	struct ceph_connection *con =
 		(struct ceph_connection *)sk->sk_user_data;
-	if (con &&
-	    !test_bit(NEW, &con->state) &&
-	    !test_bit(WAIT, &con->state) &&
-	    !test_bit(CLOSED, &con->state) &&
-	    (sk->sk_state != TCP_CLOSE_WAIT)) {
+	if (sk->sk_state != TCP_CLOSE_WAIT) {
 		dout(30, "ceph_data_ready on %p state = %lu, queuing rwork\n",
 		     con, con->state);
 		ceph_queue_con(con);
@@ -54,11 +49,7 @@ static void ceph_write_space(struct sock *sk)
 	dout(30, "ceph_write_space %p state = %lu\n", con, con->state);
 
 	/* only queue to workqueue if a WRITE is pending */
-	if (con &&
-	    !test_bit(NEW, &con->state) &&
-	    !test_bit(WAIT, &con->state) &&
-	    !test_bit(CLOSED, &con->state) &&
-	    test_bit(WRITE_PENDING, &con->state)) {
+	if (test_bit(WRITE_PENDING, &con->state)) {
 		dout(30, "ceph_write_space %p queuing write work\n", con);
 		ceph_queue_con(con);
 	}
@@ -72,11 +63,6 @@ static void ceph_state_change(struct sock *sk)
 {
 	struct ceph_connection *con =
 		(struct ceph_connection *)sk->sk_user_data;
-	if (con == NULL ||
-	    test_bit(NEW, &con->state) ||
-	    test_bit(CLOSED, &con->state) ||
-	    test_bit(WAIT, &con->state))
-		return;
 
 	dout(30, "ceph_state_change %p state = %lu sk_state = %u\n",
 	     con, con->state, sk->sk_state);
@@ -309,14 +295,7 @@ int ceph_workqueue_init(void)
 {
 	int ret = 0;
 
-	dout(20, "entered work_init\n");
-
-	/*
-	 * this needs to be a single threaded queue until we
-	 * have add a way to ensure that each connection is only
-	 * being processed by a single thread at a time.
-	 */
-	con_wq = create_singlethread_workqueue("ceph-net");
+	con_wq = create_workqueue("ceph-net");
 	if (IS_ERR(con_wq)) {
 		derr(0, "net worker failed to start: %d\n", ret);
 		destroy_workqueue(con_wq);
@@ -324,17 +303,6 @@ int ceph_workqueue_init(void)
 		con_wq = 0;
 		return ret;
 	}
-
-	accept_wq = create_singlethread_workqueue("ceph-accept");
-	if (IS_ERR(accept_wq)) {
-		derr(0, "net worker failed to start: %d\n", ret);
-		destroy_workqueue(accept_wq);
-		ret = PTR_ERR(accept_wq);
-		accept_wq = 0;
-		return ret;
-	}
-
-	dout(20, "successfully created wrkqueues\n");
 
 	return(ret);
 }
@@ -345,5 +313,4 @@ int ceph_workqueue_init(void)
 void ceph_workqueue_shutdown(void)
 {
 	destroy_workqueue(con_wq);
-	destroy_workqueue(accept_wq);
 }

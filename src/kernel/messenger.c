@@ -235,11 +235,20 @@ static void remove_connection(struct ceph_messenger *msgr,
  */
 void ceph_queue_con(struct ceph_connection *con)
 {
+	if (test_bit(WAIT, &con->state) ||
+	    test_bit(CLOSED, &con->state)) {
+		dout(40, "ceph_queue_con %p ignoring: WAIT|CLOSED\n", con);
+		return;
+	}
+
 	atomic_inc(&con->nref);
 	dout(40, "ceph_queue_con %p %d -> %d\n", con,
 	     atomic_read(&con->nref) - 1, atomic_read(&con->nref));
-	if (!queue_work(con_wq, &con->work.work)) {
-		dout(40, "ceph_queue_write %p - already queued\n", con);
+	
+	set_bit(QUEUED, &con->state);
+	if (test_bit(BUSY, &con->state) ||
+	    !queue_work(con_wq, &con->work.work)) {
+		dout(40, "ceph_queue_write %p - already BUSY or queued\n", con);
 		put_connection(con);
 	}
 }
@@ -250,9 +259,12 @@ void ceph_queue_con_delayed(struct ceph_connection *con)
 	dout(40, "ceph_queue_con_delayed %p delay %lu %d -> %d\n", con,
 	     con->delay,
 	     atomic_read(&con->nref) - 1, atomic_read(&con->nref));
-	if (!queue_delayed_work(con_wq, &con->work,
+	set_bit(QUEUED, &con->state);
+	if (test_bit(BUSY, &con->state) ||
+	    !queue_delayed_work(con_wq, &con->work,
 				round_jiffies_relative(con->delay))) {
-		dout(40, "ceph_queue_con_delayed %p - already queued\n", con);
+		dout(40, "ceph_queue_con_delayed %p - already BUSY or queued\n",
+		     con);
 		put_connection(con);
 	}
 }
@@ -1237,7 +1249,15 @@ static void con_work(struct work_struct *work)
 {
 	struct ceph_connection *con = container_of(work, struct ceph_connection,
 						   work.work);
-
+	
+more:
+	if (test_and_set_bit(BUSY, &con->state) != 0) {
+		dout(10, "con_work %p BUSY already set\n", con);
+		goto out;
+	}
+	dout(10, "con_work %p start, clearing QUEUED\n", con);
+	clear_bit(QUEUED, &con->state);
+	
 	if (test_bit(CLOSED, &con->state) ||
 	    test_bit(STANDBY, &con->state)) {
 		dout(5, "con_work CLOSED|STANDBY\n");
@@ -1250,6 +1270,14 @@ static void con_work(struct work_struct *work)
 		ceph_fault(con);
 
 done:
+	clear_bit(BUSY, &con->state);
+	if (test_bit(QUEUED, &con->state)) {
+		dout(10, "con_work %p QUEUED reset, looping\n", con);
+		goto more;
+	}
+	dout(10, "con_work %p done\n", con);
+
+out:
 	put_connection(con);
 }
 
