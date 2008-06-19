@@ -1896,7 +1896,16 @@ void ceph_msg_put(struct ceph_msg *m)
 {
 	dout(20, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
 	     atomic_read(&m->nref)-1);
-	BUG_ON(atomic_read(&m->nref) <= 0);
+	if (atomic_read(&m->nref) <= 0) {
+		derr(0, "bad ceph_msg_put on %p %u from %s%d %d=%s len %d+%d\n",
+		     m, le32_to_cpu(m->hdr.seq),
+		     ENTITY_NAME(m->hdr.src.name),
+		     le32_to_cpu(m->hdr.type),
+		     ceph_msg_type_name(le32_to_cpu(m->hdr.type)),
+		     le32_to_cpu(m->hdr.front_len),
+		     le32_to_cpu(m->hdr.data_len));
+		WARN();
+	}
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(20, "ceph_msg_put last one on %p\n", m);
 		WARN_ON(!list_empty(&m->list_head));
