@@ -809,7 +809,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 			realdn = d_materialise_unique(dn, in);
 			if (realdn) {
-				derr(10, "dn %p (%d) spliced with %p (%d) "
+				dout(10, "dn %p (%d) spliced with %p (%d) "
 				     "inode %p ino %llx\n",
 				     dn, atomic_read(&dn->d_count),
 				     realdn, atomic_read(&realdn->d_count), 
@@ -927,9 +927,12 @@ retry_lookup:
 			}
 			new = d_materialise_unique(dn, in);
 			if (new) {
-				derr(10, "dn %p spliced with %p inode %p "
-				     "ino %llx\n", dn, new, new->d_inode,
-				     ceph_ino(new->d_inode));
+				dout(10, "dn %p (%d) spliced with %p (%d) "
+				     "inode %p ino %llx\n",
+				     dn, atomic_read(&dn->d_count),
+				     new, atomic_read(&new->d_count), 
+				     new->d_inode,
+				     ceph_ino(realdn->d_inode));
 				dput(dn);
 				dn = new;
 				ceph_init_dentry(dn);
