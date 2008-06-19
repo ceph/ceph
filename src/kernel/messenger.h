@@ -71,22 +71,22 @@ struct ceph_msg_pos {
 
 /* ceph connection fault delay defaults */
 #define BASE_DELAY_INTERVAL	(HZ/2)
-#define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
-
+#define MAX_DELAY_INTERVAL	(5 * 60 * HZ)
 
 /* ceph_connection state bit flags */
-#define NEW		0
+#define LOSSY           0 /* close channel on errors */
 #define CONNECTING	1
 #define ACCEPTING	2
-#define OPEN		3
-#define WRITE_PENDING	4  /* we have data to send */
-#define QUEUED          5  /* there is work to be done */
-#define BUSY            6  /* work is being done */
-#define WAIT		7  /* wait for peer to connect */
-#define CLOSED		8  /* we've closed the connection */
-#define SOCK_CLOSE	9  /* socket state changed to close */
-#define STANDBY		10 /* standby, when socket state close, no messages */
+#define WRITE_PENDING	3  /* we have data to send */
+#define QUEUED          4  /* there is work to be done */
+#define BUSY            5  /* work is being done */
+#define BACKOFF         6  /* backing off; will retry */
+#define STANDBY		7  /* standby, when socket state close, no messages */
+#define WAIT		8  /* wait for peer to connect */
+#define CLOSED		9  /* we've closed the connection */
+#define SOCK_CLOSED	10 /* socket state changed to closed */
 #define REGISTERED      11
+
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
