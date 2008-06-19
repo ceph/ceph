@@ -191,6 +191,8 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
+  bool is_parent_of(CDentry *other);
+
   void make_path_string(string& s);
   void make_path(filepath& fp);
   void make_anchor_trace(vector<class Anchor>& trace, CInode *in);
