@@ -2991,6 +2991,10 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   filepath destpath = req->get_filepath2();
   filepath srcpath = req->get_filepath();
+  if (destpath.depth() == 0 || srcpath.depth() == 0) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
 
   // traverse to dest dir (not dest)
   //  we do this FIRST, because the rename should occur on the 
@@ -3008,11 +3012,11 @@ void Server::handle_client_rename(MDRequest *mdr)
 				 srcpath, srctrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
-  if (srctrace.empty()) r = -EINVAL;  // can't rename root
   if (r < 0) {
     reply_request(mdr, r);
     return;
   }
+  assert(!srctrace.empty());
   CDentry *srcdn = srctrace[srctrace.size()-1];
   dout(10) << " srcdn " << *srcdn << dendl;
   CInode *srci = mdcache->get_dentry_inode(srcdn, mdr);
@@ -3041,20 +3045,21 @@ void Server::handle_client_rename(MDRequest *mdr)
       dout(10) << "rename src and dest traces share common dentry " << *common << dendl;
     } else {
       // ok, extend srctrace toward root until it is an ancestor of desttrace.
-      while (srctrace[0] != desttrace[0] &&
-	     !srctrace[0]->is_parent_of(desttrace[0])) {
+      while (srctrace[0]->get_dir()->get_inode() != desttrace[0]->get_dir()->get_inode() &&
+	     !srctrace[0]->get_dir()->get_inode()->is_ancestor_of(desttrace[0]->get_dir()->get_inode())) {
 	srctrace.insert(srctrace.begin(),
 			srctrace[0]->get_dir()->get_inode()->get_parent_dn());
 	dout(10) << "rename prepending srctrace with " << *srctrace[0] << dendl;
       }
 
-      // then, extend destpath until it shares the same parent as srcpath.
-      while (desttrace[0] != srctrace[0]) {
+      // then, extend destpath until it shares the same parent inode as srcpath.
+      while (desttrace[0]->get_dir()->get_inode() != srctrace[0]->get_dir()->get_inode()) {
 	desttrace.insert(desttrace.begin(),
 			 desttrace[0]->get_dir()->get_inode()->get_parent_dn());
 	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
       }
-      dout(10) << "rename src and dest traces now share common dentry " << *desttrace[0] << dendl;
+      dout(10) << "rename src and dest traces now share common ancestor "
+	       << *desttrace[0]->get_dir()->get_inode() << dendl;
     }
   }
 

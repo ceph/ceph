@@ -389,6 +389,17 @@ CInode *CInode::get_parent_inode()
 }
 
 
+bool CInode::is_ancestor_of(CInode *other)
+{
+  while (other) {
+    if (other == this)
+      return true;
+    if (!other->get_parent_dn())
+      break;
+    other = other->get_parent_dn()->get_dir()->get_inode();
+  }
+  return false;
+}
 
 void CInode::make_path_string(string& s)
 {

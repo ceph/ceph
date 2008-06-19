@@ -319,6 +319,7 @@ private:
   }
 
   // -- misc -- 
+  bool is_ancestor_of(CInode *other);
   void make_path_string(string& s);
   void make_path(filepath& s);
   void make_anchor_trace(vector<class Anchor>& trace);

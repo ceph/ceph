@@ -190,16 +190,6 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
-bool CDentry::is_parent_of(CDentry *other)
-{
-  while (other) {
-    if (other == this)
-      return true;
-    other = other->get_dir()->get_inode()->get_parent_dn();
-  }
-  return false;
-}
-
 void CDentry::make_path_string(string& s)
 {
   if (dir) {
