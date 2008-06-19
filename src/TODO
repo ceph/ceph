@@ -3,6 +3,7 @@ v0.3
 - build_path vs ESTALE.
 - fix rename common root requirement
   - enforce in the client, too?
+- clena up state bits in messenger a bit more
 
 v0.4
 - ENOSPC
