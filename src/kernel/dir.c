@@ -319,13 +319,15 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 }
 
 static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
-				      struct nameidata *nd)
+				  struct nameidata *nd)
 {
 	dout(5, "dir_lookup in dir %p dentry %p '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
 	/* open (but not create!) intent? */
-	if (nd && nd->flags & LOOKUP_OPEN &&
+	if (false && nd &&
+	    (nd->flags & LOOKUP_OPEN) &&
+	    (nd->flags & LOOKUP_CONTINUE) == 0 && /* only open last component */
 	    !(nd->intent.open.flags & O_CREAT)) {
 		int mode = nd->intent.open.create_mode & ~current->fs->umask;
 		int err = ceph_lookup_open(dir, dentry, nd, mode);
