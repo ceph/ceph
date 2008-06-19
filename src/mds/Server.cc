@@ -3040,21 +3040,26 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (common) {
       dout(10) << "rename src and dest traces share common dentry " << *common << dendl;
     } else {
+      CInode *srcbase = mdcache->get_inode(srcpath.get_ino());
+      CInode *destbase = mdcache->get_inode(destpath.get_ino());
+
       // ok, extend srctrace toward root until it is an ancestor of desttrace.
-      while (srctrace[0] != desttrace[0] &&
-	     !srctrace[0]->is_parent_of(desttrace[0])) {
+      while (srcbase != destbase &&
+	     !srcbase->is_ancestor_of(destbase)) {
 	srctrace.insert(srctrace.begin(),
-			srctrace[0]->get_dir()->get_inode()->get_parent_dn());
-	dout(10) << "rename prepending srctrace with " << *srctrace[0] << dendl;
+			srcbase->get_parent_dn());
+	srcbase = srctrace[0]->get_dir()->get_inode();
+	dout(10) << "rename prepended srctrace with " << *srctrace[0] << dendl;
       }
 
       // then, extend destpath until it shares the same parent as srcpath.
-      while (desttrace[0] != srctrace[0]) {
+      while (srcbase != destbase) {
 	desttrace.insert(desttrace.begin(),
-			 desttrace[0]->get_dir()->get_inode()->get_parent_dn());
-	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
+			 destbase->get_parent_dn());
+	destbase = desttrace[0]->get_dir()->get_inode();
+	dout(10) << "rename prepended desttrace with " << *desttrace[0] << dendl;
       }
-      dout(10) << "rename src and dest traces now share common dentry " << *desttrace[0] << dendl;
+      dout(10) << "rename src and dest traces now share common ancestor " << *srcbase << dendl;
     }
   }
 
