@@ -208,20 +208,16 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // once we are otherwise trimmable, make sure journal is fully safe on disk.
   if (!gather) {
-    if (trimmable_at &&
-	trimmable_at <= mds->mdlog->get_safe_pos()) {
+    if (!trimmable_at)
+      trimmable_at = mds->mdlog->get_write_pos();
+
+    if (trimmable_at <= mds->mdlog->get_safe_pos()) {
       dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
 	      << " <= " << mds->mdlog->get_safe_pos() << dendl;
     } else {
-      if (trimmable_at == 0) {
-	trimmable_at = mds->mdlog->get_write_pos();
-	dout(6) << "LogSegment(" << offset << ").try_to_expire now trimmable at " << trimmable_at
-		<< ", waiting for safe journal flush" << dendl;
-      } else {
-	dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
-		<< " > " << mds->mdlog->get_safe_pos()
-		<< ", waiting for safe journal flush" << dendl;
-      }
+      dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
+	      << " > " << mds->mdlog->get_safe_pos()
+	      << ", waiting for safe journal flush" << dendl;
       if (!gather) gather = new C_Gather;
       mds->mdlog->wait_for_safe(gather->new_sub());
     }
