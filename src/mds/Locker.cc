@@ -1198,7 +1198,8 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   //    if the client is holding EXCL|RDCACHE caps.
   int mask = 0;
   CInode *diri = dn->get_dir()->get_inode();
-  if (!diri->dirlock.can_lease() &&
+  if (!diri->is_base() &&   // base inode's don't get version updated, so ICONTENT is useless.
+      !diri->dirlock.can_lease() &&
       (diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0 &&
       dn->lock.can_lease())
     mask |= CEPH_LOCK_DN;
