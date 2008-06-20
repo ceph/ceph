@@ -646,10 +646,11 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 
-	if (ceph_inode(dir)->i_version == dentry->d_time &&
+	if (ceph_ino(dir) != 1 &&  /* ICONTENT useless on root inode */
+	    ceph_inode(dir)->i_version == dentry->d_time &&
 	    ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
-		dout(20, "dentry_revalidate %p have ICONTENT on dir inode %p\n",
-		     dentry, dir);
+		dout(20, "dentry_revalidate %p %lu ICONTENT on dir %p %llu\n",
+		     dentry, dentry->d_time, dir, ceph_inode(dir)->i_version);
 		return 1;
 	}
 	if (ceph_dentry_lease_valid(dentry)) {
