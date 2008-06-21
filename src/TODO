@@ -1,6 +1,14 @@
 v0.3
 
 v0.4
+- fill_trace locking
+  - revert 0772d6270c8a42b80323ecb2e43a844e28b7708a, then du during untar..
+  - we hit "Uhhuh" case in real_lookup().  the problem is the race
+    between lookup() adding a dentry and a subsequent revalidate always
+    failing.  
+  -> solution?  if htere is not dir ICONTENT or dentry lease, do not hash
+     the dentry in fill_trace... ?
+  - also, fill_trace should take dir->i_mutex... or not do the dentry update.
 - fix msgr protocol wrt resets, and varying connection close policies
 - ENOSPC
 - finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
