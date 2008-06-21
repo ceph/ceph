@@ -238,9 +238,7 @@ in snaprealm,
   - can we get away with it _not_ being ordered?
     - for osds.. yes.
     - for mds.. may make the cdentry range info tricky!
-  - so.. let's assign it via using a the monitor state machine, for now.  simple and safe, though a bit slow.
-    - for now, state is simply last_snapid
-
+  - assign it via mds0
 
 metadata
 - fix up inode_map to key off vinodeno.. or have a second map for non-zero snapids.. 
