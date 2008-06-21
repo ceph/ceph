@@ -993,8 +993,8 @@ out_kobj:
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_put(ceph_kobj);
 	ceph_kobj = 0;
-#endif
 out:
+#endif
 	return ret;
 }
 

@@ -822,6 +822,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			} else
 				dout(10, "dn %p attached to %p ino %llx\n",
 				     dn, dn->d_inode, ceph_ino(dn->d_inode));
+			if (d_unhashed(dn))
+				d_rehash(dn);
 		}
 		BUG_ON(d_unhashed(dn));
 		BUG_ON(dn->d_parent != parent);
