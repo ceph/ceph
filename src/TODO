@@ -40,6 +40,9 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
+- make writepages maybe skip pages with errors?
+  - EIO, or ENOSPC?
+  - ... writeback vs ENOSPC vs flush vs close()... hrm...
 - set mapping bits for ENOSPC, EIO?
 - flush caps on sync, fsync, etc.
   - do we need to block?
@@ -57,6 +60,13 @@ kernel client
 - io / osd client
   - osd ack vs commit handling.  hmm!
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
+
+vfs issues
+- real_lookup() race:
+  1- hash lookup find no dentry
+  2- real_lookup() takes dir i_mutex, but then finds a dentry
+  3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
+- vfs_rename_dir()
 
 client
 - clean up client mds session vs mdsmap behavior?
