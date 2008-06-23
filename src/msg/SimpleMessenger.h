@@ -224,8 +224,10 @@ private:
     bool stop;
     int qlen, pqlen;
     int my_rank;
+  public:
     bool need_addr;
 
+  private:
     class DispatchThread : public Thread {
       EntityMessenger *m;
     public:
