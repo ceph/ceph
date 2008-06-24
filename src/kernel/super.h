@@ -500,7 +500,8 @@ extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
 extern struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-				       struct nameidata *nd, int mode);
+				       struct nameidata *nd, int mode,
+				       int locked_dir);
 extern int ceph_release(struct inode *inode, struct file *filp);
 
 
@@ -513,7 +514,7 @@ extern char *ceph_build_dentry_path(struct dentry *dn, int *len, __u64 *base,
 				    int min);
 extern struct dentry *ceph_do_lookup(struct super_block *sb, 
 				     struct dentry *dentry, 
-				     int mask, int on_inode);
+				     int mask, int on_inode, int locked_dir);
 extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);
 

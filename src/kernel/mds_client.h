@@ -100,6 +100,7 @@ struct ceph_mds_request {
 	unsigned long           r_from_time;
 	struct ceph_mds_session *r_session;
 	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
+	struct inode     *r_locked_dir;
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */

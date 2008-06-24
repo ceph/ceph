@@ -2005,7 +2005,7 @@ static int do_getattr(struct dentry *dentry, int mask)
 			     dentry->d_name.len, dentry->d_name.name);
 	}
 	ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
-			     want_inode);
+			     want_inode, 0);
 	if (IS_ERR(ret))
 		return PTR_ERR(ret);
 	if (ret)

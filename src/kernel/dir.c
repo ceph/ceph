@@ -286,7 +286,7 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
  * built from @dentry.
  */
 struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry, 
-			      int mask, int on_inode)
+			      int mask, int on_inode, int locked_dir)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -323,6 +323,7 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	rhead->args.stat.mask = cpu_to_le32(mask);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
+	req->r_locked_dir = dentry->d_parent->d_inode;
 	err = ceph_mdsc_do_request(mdsc, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
@@ -342,10 +343,10 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	    (nd->flags & LOOKUP_CONTINUE) == 0 && /* only open last component */
 	    !(nd->intent.open.flags & O_CREAT)) {
 		int mode = nd->intent.open.create_mode & ~current->fs->umask;
-		return ceph_lookup_open(dir, dentry, nd, mode);
+		return ceph_lookup_open(dir, dentry, nd, mode, 1);
 	}
 
-	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0);
+	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0,1);
 }
 
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
@@ -383,7 +384,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 		/* no trace.  do lookup, in case we are called from create. */
 		struct dentry *d;
 		d = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL,
-				   0);
+				   0, 0);
 		if (d) {
 			/* ick.  this is untested... */
 			dput(d);
@@ -406,7 +407,7 @@ static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 	if (nd) {
 		BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
-		dentry = ceph_lookup_open(dir, dentry, nd, mode);
+		dentry = ceph_lookup_open(dir, dentry, nd, mode, 0);
 		/* hrm, what should i do here if we get aliased? */
 		if (IS_ERR(dentry))
 			return PTR_ERR(dentry);
