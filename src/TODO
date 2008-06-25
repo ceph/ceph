@@ -200,27 +200,55 @@ remaining hard problems
 
 snapshot notes --
 
+todo
+- basic types (snapid_t, etc.)
+- snap lineage in MOSDOp
+- rados bits to do clone+write
+  - figure out how to fix up rados logging
+  - snap collections
+  - garbage collection
+- mds types
+- client capgroups
+- mds snapid allocation
+- snap creation
+- mds metadata versioning
+- mds server ops
+
+- base types
+
 typedef __u64 snapid_t;
-#define MAXSNAP (spanid_t)(-2)
-#define NOSNAP (spanid_t)(-1)
+#define MAXSNAP (snapid_t)(0xffffffffffffffull)  /* 56 bits.. see ceph_pg */
+#define NOSNAP  (snapid_t)(-1)
+
+- let's go with [first, last] throughout, instead of non-inclusive drev...
+
 
 
 mds
 - break mds hierarchy into snaprealms
   - keep per-realm inode xlists, so that breaking a realm is O(size(realm))
-struct snap {
+
+struct Snap {
   snapid_t snapid;
   string name;
   utime_t ctime;
 };
 
-struct snaprealm {
-  map<snapid_t, snap> snaps;
-  snaprealm *parent;
-  list<snaprealm> children;
-  xlist<CInode*> inodes_with_caps;   // used for efficient realm splits
+struct snaplink_t {
+       snaprealm *realm;
+       snapid_t first;
 };
+struct SnapRealm {
+       inodeno_t dirino;
+       map<snapid_t, Snap> snaps;
 
+       int nlink;  
+       multimap<snapid_t, snaplink_t> parents;   // key is "last" (or NOSNAP)
+       multimap<snapid_t, snaplink_t> children;
+
+       xlist<CInode*> inodes_with_caps;   // used for efficient realm splits
+};
+- realm's parent can vary over time; we need to track the full history, so that we know which parents' snaps to include in the snap lineage.
 
 - link client caps to realm, so that snapshot creation is O(num_child_realms*num_clients)
   - keep per-realm, per-client record with cap refcount, to avoid traversinng realm inode lists looking for caps
@@ -228,17 +256,29 @@ struct snaprealm {
 struct CapabilityGroup {
    int client;
    xlist<Capability*> caps;
-   snaprealm *realm;
+   SnapRealm *realm;
 };
-in snaprealm, 
+in SnapRealm, 
    map<int, CapabilityGroup*> client_cap_groups;  // used to identify clients who need snap notifications
 
+- when we create a snapshot,
+  - xlock snaplock
+  - create realm, if necesarry
+  - add it to the realm snaps list.
+  - build list of current children
+    - send client a capgroup update for each affected realm
+      (as we unlock the snaplock?  or via a separate lock event that pushes the update out to replicas?)
+- when a client is opening a file
+  - if it is in an existing capgroup, all is well.
+  - if it is not, rdlock all ancestor snaprealms, and open a new capgroup with the client.
+    - or shoudl we even bother rdlocking?  the snap creation is going to be somewhat async, regardless...
 
 - what is snapid?
   - can we get away with it _not_ being ordered?
     - for osds.. yes.
     - for mds.. may make the cdentry range info tricky!
-  - assign it via mds0
+  - osds need to see snapid deletion events in osdmap incrementals.  or, snapmap?
+  - so... assign it via mds0
 
 metadata
 - fix up inode_map to key off vinodeno.. or have a second map for non-zero snapids.. 
@@ -252,12 +292,15 @@ struct vinodeno_t {
 };
 
 - dentry: replace dname -> ino, rino+rtype with
-     (dname, csnap, dsnap) -> vino, vino+rtype (where valid range is [csnap, dsnap)
-  - live dentries have dsnap = NOSNAP.  kept in separate map:
+     (dname, first, last) -> vino, vino+rtype
+  - live dentries have last = NOSNAP.  kept in separate map:
      - map<string, CDentry*> items;
      - map<pair<string,dsnap>, CDentry> vitems;
   - or?  clean up dir item map/hash at the same time (keep name storage in CDentry)
-     - map<pair<const char *, snapid_t>, CDentry*> items;  // all items
+     - map<pair<snapid_t, const char *>, CDentry*> items;  // all items
+  - or?
+       map<snapid_t, map<const char*>, CDentry*> items;  // lastsnap -> name ->
+      - no.. then all the CDir::map_t coded loops break
 
 CDentry *lookup(string &dname, snapid_t sn=NOSNAP);
 
@@ -267,7 +310,8 @@ CDentry *lookup(string &dname, snapid_t sn=NOSNAP);
 
 client
 - also keep caps linked into snaprealm list
-- current snapid (lineage) for each snaprealm
+- current snapid (lineage) for each snaprealm.
+  - just keep it simple; don't bother with snaprealm linkages!
 - attach snapid (lineage) to each dirty page
   - can we cow page if its dirty but a different realm?
     ...hmm probably not, but we can flush it in write_begin, just like when we do a read to make it clean
@@ -278,10 +322,14 @@ osd
 - tag each non-live object with the set of snaps it is defined over
   - osdmap has sparse map of extant snapids.  incrementals are simple rmsnapid, and max_snapid increase
   - put each object in first_snap, last_snap collections.
-  - use background thread to trim old snaps.  for each object, 
+  - use background thread to trim old snaps.
+  - for each object in first_snap|last_snap collections,
     - get snap list,
     - filter against extant snaps
     - adjust collections, or delete
+
+- adjust coll_t namespace to allow first_snap/last_snap collections..
+  - pg.u.type = CEPH_PG_TYPE_SNAP_LB/UB?
 
 
 rados snapshots
