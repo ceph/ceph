@@ -139,6 +139,12 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 typedef __u64 coll_t;
 
 
+// snaps
+typedef __u64 snapid_t;
+#define MAXSNAP CEPH_MAXSNAP
+#define NOSNAP  CEPH_NOSNAP
+
+
 // --------------------------------------
 // inode
 

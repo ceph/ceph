@@ -53,13 +53,17 @@ static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_f
  */
 typedef __le64 ceph_ino_t;
 
+typedef __le64 ceph_snapid_t;
+#define CEPH_MAXSNAP 0xffffffffffffffull  /* 56 bits; see ceph_pg */
+#define CEPH_NOSNAP  ((__u64)(-1))
+
 struct ceph_object {
 	union {
 		__u8 raw[20];        /* fits a sha1 hash */
 		struct {
 			__le64 ino;  /* inode "file" identifier */
 			__le32 bno;  /* "block" (object) in that "file" */
-			__le64 rev;  /* revision.  normally ctime (as epoch). */
+			__le64 snap; /* snapshot id.  usually NOSNAP. */
 		} __attribute__ ((packed));
 	};
 } __attribute__ ((packed));
@@ -159,17 +163,19 @@ struct ceph_file_layout {
  * placement group.
  * we encode this into one __le64.
  */
-#define CEPH_PG_TYPE_REP   1
-#define CEPH_PG_TYPE_RAID4 2
+#define CEPH_PG_TYPE_REP     1
+#define CEPH_PG_TYPE_RAID4   2
+#define CEPH_PG_TYPE_SNAP_LB 3
+#define CEPH_PG_TYPE_SNAP_UB 4
 union ceph_pg {
 	__u64 pg64;
 	struct {
 		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
+		__u8 __pad;
+		__u8 size;
 		__u8 pool;       /* implies crush ruleset */
 		__u8 type;
-		__u8 size;
-		__u8 __pad;
 	} pg;
 } __attribute__ ((packed));
 
