@@ -179,6 +179,10 @@ bool PGMonitor::preprocess_query(Message *m)
   case MSG_PGSTATS:
     {
       MPGStats *stats = (MPGStats*)m;
+
+      if (!stats->get_source().is_mon())
+	stats->orig_src = stats->get_source_inst();
+
       int from = m->get_source().num();
       if (pg_map.osd_stat.count(from) ||
 	  memcmp(&pg_map.osd_stat[from], &stats->osd_stat, sizeof(stats->osd_stat)) != 0)
@@ -190,7 +194,14 @@ bool PGMonitor::preprocess_query(Message *m)
 	    memcmp(&pg_map.pg_stat[p->first], &p->second, sizeof(p->second)) != 0)
 	  return false; // new pg stat(s)
       }
+
       dout(10) << " message contains no new osd|pg stats" << dendl;
+      MPGStatsAck *ack = new MPGStatsAck;
+      for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
+	   p != stats->pg_stat.end();
+	   p++)
+	ack->pg_stat[p->first] = p->second.reported;
+      mon->messenger->send_message(ack, stats->orig_src);
       return true;
     }
 
@@ -303,7 +314,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     pg_map.stat_pg_add(pgid, pg_map.pg_stat[pgid]);
   }
   
-  paxos->wait_for_commit(new C_Stats(this, ack, stats->get_source_inst()));
+  paxos->wait_for_commit(new C_Stats(this, ack, stats->orig_src));
   delete stats;
   return true;
 }

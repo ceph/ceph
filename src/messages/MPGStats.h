@@ -21,6 +21,7 @@ class MPGStats : public Message {
 public:
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
+  entity_inst_t orig_src;
   
   MPGStats() : Message(MSG_PGSTATS) {}
 
@@ -32,11 +33,13 @@ public:
   void encode_payload() {
     ::encode(osd_stat, payload);
     ::encode(pg_stat, payload);
+    ::encode(orig_src, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(osd_stat, p);
     ::decode(pg_stat, p);
+    ::decode(orig_src, p);
   }
 };
 
