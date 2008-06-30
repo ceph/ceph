@@ -1274,6 +1274,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   bool do_parent_mtime = flags & PREDIRTY_DIR;
   bool shallow = flags & PREDIRTY_SHALLOW;
 
+  // declare now?
+  if (mut->now == utime_t())
+    mut->now = g_clock.real_now();
+
   dout(10) << "predirty_nested"
 	   << (do_parent_mtime ? " do_parent_mtime":"")
 	   << " linkunlink=" <<  linkunlink
@@ -1320,10 +1324,13 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime) {
-      dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
       pf->fragstat.mtime = mut->now;
-      if (mut->now > pf->fragstat.rctime)
+      if (mut->now > pf->fragstat.rctime) {
+	dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
 	pf->fragstat.rctime = mut->now;
+      } else {
+	dout(10) << "predirty_nested updating mtime UNDERWATER on " << *parent << dendl;
+      }
     }
     if (linkunlink) {
       dout(10) << "predirty_nested updating size on " << *parent << dendl;
@@ -1405,6 +1412,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     dout(15) << "predirty_nested take_diff " << pf->fragstat << dendl;
     dout(15) << "predirty_nested         - " << pf->accounted_fragstat << dendl;
     pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat);
+    pi->mtime = pi->ctime = pi->dirstat.mtime;
     dout(15) << "predirty_nested     gives " << pi->dirstat << " on " << *pin << dendl;
 
     // next parent!

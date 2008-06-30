@@ -759,6 +759,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->fragstat << dendl;
 	}
       }
+      pi->mtime = pi->ctime = pi->dirstat.mtime;
       pi->dirstat.version++;
       dout(20) << "        final dirstat " << pi->dirstat << dendl;
       assert(pi->dirstat.size() >= 0);
