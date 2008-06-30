@@ -74,9 +74,11 @@ struct frag_info_t {
   void zero() {
     memset(this, 0, sizeof(*this));
   }
-  void take_diff(const frag_info_t &cur, frag_info_t &acc) {
-    if (cur.mtime > mtime)
+  void take_diff(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
+    if (cur.mtime > mtime) {
       rctime = mtime = cur.mtime;
+      touched_mtime = true;
+    }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
 

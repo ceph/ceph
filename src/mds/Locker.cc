@@ -1411,8 +1411,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     pi->dirstat.version++;
     dout(15) << "predirty_nested take_diff " << pf->fragstat << dendl;
     dout(15) << "predirty_nested         - " << pf->accounted_fragstat << dendl;
-    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat);
-    pi->mtime = pi->ctime = pi->dirstat.mtime;
+    bool touched_mtime = false;
+    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+    if (touched_mtime)
+      pi->mtime = pi->ctime = pi->dirstat.mtime;
     dout(15) << "predirty_nested     gives " << pi->dirstat << " on " << *pin << dendl;
 
     // next parent!

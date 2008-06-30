@@ -743,6 +743,7 @@ void CInode::finish_scatter_gather_update(int type)
       // adjust summation
       assert(is_auth());
       inode_t *pi = get_projected_inode();
+      bool touched_mtime = false;
       dout(20) << "         orig dirstat " << pi->dirstat << dendl;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
@@ -753,13 +754,14 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << "             fragstat " << pf->fragstat << dendl;
 	  dout(20) << "   accounted_fragstat " << pf->fragstat << dendl;
 	  pi->dirstat.take_diff(pf->fragstat, 
-				pf->accounted_fragstat);
+				pf->accounted_fragstat, touched_mtime);
 	} else {
 	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
 	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->fragstat << dendl;
 	}
       }
-      pi->mtime = pi->ctime = pi->dirstat.mtime;
+      if (touched_mtime)
+	pi->mtime = pi->ctime = pi->dirstat.mtime;
       pi->dirstat.version++;
       dout(20) << "        final dirstat " << pi->dirstat << dendl;
       assert(pi->dirstat.size() >= 0);
