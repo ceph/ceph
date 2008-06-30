@@ -146,6 +146,7 @@ void Monitor::call_election()
   paxos_mdsmap.election_starting();
   paxos_osdmap.election_starting();
   paxos_clientmap.election_starting();
+  paxos_pgmap.election_starting();
   
   // call a new election
   elector.call_election();

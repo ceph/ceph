@@ -671,11 +671,11 @@ void Paxos::cancel_events()
 
 void Paxos::leader_init()
 {
+  cancel_events();
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;			    
     return;
   } 
-  cancel_events();
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
