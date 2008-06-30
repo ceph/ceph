@@ -66,7 +66,11 @@ extern int ceph_debug_inode;
 		     atomic_read(&dentry->d_count)-1); \
 		dput(dentry);			       \
 	} while (0)
-
+#define d_drop(dentry)				       \
+	do {					       \
+		dout(20, "d_drop %p\n", dentry);       \
+		d_drop(dentry);			       \
+	} while (0)
 
 /*
  * subtract jiffies
@@ -443,14 +447,6 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_session *session);
 extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 
-extern void ceph_update_inode_lease(struct inode *inode,
-				    struct ceph_mds_reply_lease *lease,
-				    struct ceph_mds_session *seesion,
-				    unsigned long from_time);
-extern void ceph_update_dentry_lease(struct dentry *dentry,
-				     struct ceph_mds_reply_lease *lease,
-				     struct ceph_mds_session *session,
-				     unsigned long from_time);
 extern int ceph_inode_lease_valid(struct inode *inode, int mask);
 extern int ceph_dentry_lease_valid(struct dentry *dentry);
 

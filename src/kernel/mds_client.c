@@ -391,6 +391,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req = kmalloc(sizeof(*req), GFP_NOFS);
 	req->r_request = msg;
 	req->r_reply = 0;
+	req->r_err = 0;
 	req->r_direct_dentry = 0;
 	req->r_direct_mode = USE_ANY_MDS;
 	req->r_direct_hash = 0;
@@ -1182,7 +1183,7 @@ done:
 	mutex_unlock(&req->r_session->s_mutex);
 	spin_lock(&mdsc->lock);
 	if (err) {
-		req->r_reply = ERR_PTR(err);
+		req->r_err = err;
 	} else {
 		req->r_reply = msg;
 		ceph_msg_get(msg);
