@@ -137,7 +137,8 @@ out:
  *  path_lookup_create -> LOOKUP_OPEN|LOOKUP_CREATE
  */
 struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-				struct nameidata *nd, int mode)
+				struct nameidata *nd, int mode,
+				int locked_dir)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -157,6 +158,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 		ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
+	req->r_locked_dir = dir;     /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	if (err == 0)
