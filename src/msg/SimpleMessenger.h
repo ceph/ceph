@@ -113,6 +113,8 @@ private:
     Mutex lock;
     int state;
 
+    bool did_zero_retry;
+
   protected:
 
     utime_t first_fault;   // time of original failure
@@ -167,7 +169,7 @@ private:
   public:
     Pipe(int st) : 
       sd(-1),
-      state(st), 
+      state(st), did_zero_retry(false),
       reader_running(false), writer_running(false),
       connect_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
