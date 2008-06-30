@@ -145,8 +145,9 @@ void Elector::victory()
        p != quorum.end();
        ++p) {
     if (*p == whoami) continue;
-    mon->messenger->send_message(new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap),
-				 mon->monmap->get_inst(*p));
+    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
+    m->quorum = quorum;
+    mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
   // tell monitor
@@ -163,12 +164,19 @@ void Elector::handle_propose(MMonElection *m)
   if (m->epoch > epoch) {
     bump_epoch(m->epoch);
   }
-  else if (m->epoch < epoch &&  // got an "old" propose,
-	   epoch % 2 == 0 &&    // in a non-election cycle
-	   mon->quorum.count(from) == 0) {  // from someone outside the quorum
-    // a mon just started up, call a new election so they can rejoin!
-    dout(5) << " got propose from old epoch, " << m->get_source() << " must have just started" << dendl;
-    start();
+  else if (m->epoch < epoch) {
+    // got an "old" propose,
+    if (epoch % 2 == 0 &&    // in a non-election cycle
+	mon->quorum.count(from) == 0) {  // from someone outside the quorum
+      // a mon just started up, call a new election so they can rejoin!
+      dout(5) << " got propose from old epoch, quorum is " << mon->quorum 
+	      << ", " << m->get_source() << " must have just started" << dendl;
+      start();
+    } else {
+      dout(5) << " ignoring old propose" << dendl;
+      delete m;
+      return;
+    }
   }
 
   if (whoami < from) {
@@ -241,7 +249,7 @@ void Elector::handle_victory(MMonElection *m)
   bump_epoch(m->epoch);
   
   // they win
-  mon->lose_election(epoch, from);
+  mon->lose_election(epoch, m->quorum, from);
   
   // cancel my timer
   cancel_timer();	

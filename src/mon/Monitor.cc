@@ -172,12 +172,14 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   clientmon->election_finished();
 } 
 
-void Monitor::lose_election(epoch_t epoch, int l) 
+void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
 {
   state = STATE_PEON;
   mon_epoch = epoch;
   leader = l;
-  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << dendl;
+  quorum = q;
+  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader
+	   << " quorum is " << quorum << dendl;
   
   // init paxos
   paxos_mdsmap.peon_init();
@@ -340,6 +342,9 @@ void Monitor::dispatch(Message *m)
 	  break;
 	case PAXOS_CLIENTMAP:
 	  paxos_clientmap.dispatch(m);
+	  break;
+	case PAXOS_PGMAP:
+	  paxos_pgmap.dispatch(m);
 	  break;
 	default:
 	  assert(0);
