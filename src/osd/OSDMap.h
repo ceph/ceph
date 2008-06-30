@@ -640,7 +640,7 @@ private:
     
     osds.clear();
     for (unsigned i=0; i<raw.size(); i++) {
-      if (is_down(raw[i])) continue;
+      if (!exists(raw[i]) || is_down(raw[i])) continue;
       osds.push_back( raw[i] );
     }
     return osds.size();
