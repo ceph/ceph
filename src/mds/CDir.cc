@@ -588,10 +588,11 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
 
   frag_info_t olddiff;  // old += f - af;
+  bool changed_mtime;
   dout(10) << "           fragstat " << fnode.fragstat << dendl;
   dout(10) << " accounted_fragstat " << fnode.accounted_fragstat << dendl;
   olddiff.zero();
-  olddiff.take_diff(fnode.fragstat, fnode.accounted_fragstat);
+  olddiff.take_diff(fnode.fragstat, fnode.accounted_fragstat, changed_mtime);
   dout(10) << "            olddiff " << olddiff << dendl;
 
   // create subfrag dirs
@@ -645,7 +646,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
   frag_info_t zero;
   zero.zero();
-  subfrags[0]->fnode.accounted_fragstat.take_diff(zero, olddiff);
+  subfrags[0]->fnode.accounted_fragstat.take_diff(zero, olddiff, changed_mtime);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters, replay);
