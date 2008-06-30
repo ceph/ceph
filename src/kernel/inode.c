@@ -624,7 +624,8 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
  * splice a dentry to an inode.
  * caller must hold directory i_mutex for this to be safe.
  */
-static struct dentry *splice_dentry(struct dentry *dn, struct inode *in)
+static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
+				    bool rehash)
 {
 	struct dentry *realdn;
 
@@ -645,7 +646,7 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in)
 	} else
 		dout(10, "dn %p attached to %p ino %llx\n",
 		     dn, dn->d_inode, ceph_ino(dn->d_inode));
-	if (d_unhashed(dn))
+	if (rehash && d_unhashed(dn))
 		d_rehash(dn);
 	return dn;
 }
@@ -668,11 +669,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct qstr dname;
 	struct dentry *dn = sb->s_root;
 	struct dentry *parent = NULL;
+	struct dentry *existing;
 	struct inode *in;
 	struct ceph_mds_reply_inode *ininfo;
 	int d = 0;
 	u64 ino;
-	int have_icontent = 0;
+	int have_icontent = 0, have_lease = 0;
 
 	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
@@ -739,20 +741,19 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		     (int)dname.len, dname.name,
 		     have_icontent, rinfo->trace_dlease[d]->mask);
 
-		/* do we have a dn lease? */
-		if (!have_icontent &&
-		    rinfo->trace_dlease[d]->mask == 0) {
-			dout(0, "fill_trace  no icontent|dentry lease\n");
-			goto no_dentry_lease;
-		}
-
 		/* try to take dir i_mutex */
 		if (req->r_locked_dir != parent->d_inode &&
 		    mutex_trylock(&parent->d_inode->i_mutex) == 0) {
 			dout(0, "fill_trace  FAILED to take %p i_mutex\n",
 			     parent->d_inode);
-			goto no_dentry_lease;
+			goto no_dir_mutex;
 		}
+
+		/* do we have a dn lease? */
+		have_lease = have_icontent ||
+			(rinfo->trace_dlease[d]->mask & CEPH_LOCK_DN);
+		if (!have_lease)
+			dout(0, "fill_trace  no icontent|dentry lease\n");
 
 		dout(10, "fill_trace  took %p i_mutex\n", parent->d_inode);
 
@@ -806,7 +807,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 			dout(20, "d_instantiate %p NULL\n", dn);
 			d_instantiate(dn, NULL);
-			if (d_unhashed(dn))
+			if (have_lease && d_unhashed(dn))
 				d_rehash(dn);
 			in = 0;
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
@@ -857,12 +858,13 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				in = NULL;
 				goto out_dir;
 			}
-			dn = splice_dentry(dn, in);
+			dn = splice_dentry(dn, in, have_lease);
 		}
 		BUG_ON(dn->d_parent != parent);
 
-		update_dentry_lease(dn, rinfo->trace_dlease[d],
-				    session, req->r_from_time);
+		if (have_lease)
+			update_dentry_lease(dn, rinfo->trace_dlease[d],
+					    session, req->r_from_time);
 
 		/* done with dn update */
 		if (req->r_locked_dir != parent->d_inode)
@@ -897,10 +899,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		break;
 
 
-	no_dentry_lease:
+	no_dir_mutex:
 		/*
-		 * we have no lease or i_mutex for this dir, so do
-		 * not update or hash a dentry.
+		 * we couldn't take i_mutex for this dir, so do not
+		 * lookup or relink any existing dentry.
 		 */
 		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
 			dn = req->r_last_dentry;
@@ -925,7 +927,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			in = NULL;
 			break;
 		}
-		struct dentry *existing = d_find_alias(in);
+		existing = d_find_alias(in);
 		if (existing) {
 			if (dn)
 				dput(dn);
@@ -1024,7 +1026,7 @@ retry_lookup:
 				dput(dn);
 				return -ENOMEM;
 			}
-			dn = splice_dentry(dn, in);
+			dn = splice_dentry(dn, in, true);
 		}
 
 		if (ceph_fill_inode(in, &rinfo->dir_in[i], 0) < 0) {
