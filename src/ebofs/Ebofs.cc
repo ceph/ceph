@@ -3056,14 +3056,14 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
  */
 int Ebofs::pick_object_revision_lt(coll_t cid, pobject_t& oid)
 {
-  assert(oid.oid.rev > 0);   // this is only useful for non-zero oid.rev
+  assert(oid.oid.snap > 0);   // this is only useful for non-zero oid.rev
 
   int r = -EEXIST;             // return code
   ebofs_lock.Lock();
   {
     pobject_t orig = oid;
     pobject_t live = oid;
-    live.oid.rev = 0;
+    live.oid.snap = 0;
     
     if (object_tab->get_num_keys() > 0) {
       Table<pobject_t, ebofs_inode_ptr>::Cursor cursor(object_tab);
@@ -3076,12 +3076,12 @@ int Ebofs::pick_object_revision_lt(coll_t cid, pobject_t& oid)
 	  if (t.oid.ino != oid.oid.ino || 
 	      t.oid.bno != oid.oid.bno)                 // passed to previous object
 	    break;
-	  if (oid.oid.rev < t.oid.rev) {                // rev < desired.  possible match.
+	  if (oid.oid.snap < t.oid.snap) {                // rev < desired.  possible match.
 	    r = 0;
 	    oid = t;
 	    break;
 	  }
-	  if (firstpass && oid.oid.rev >= t.oid.rev) {  // there is no old rev < desired.  try live.
+	  if (firstpass && oid.oid.snap >= t.oid.snap) {  // there is no old rev < desired.  try live.
 	    r = 0;
 	    oid = live;
 	    break;

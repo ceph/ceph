@@ -509,7 +509,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   long r = 0;
 
   // do it.
-  if (oid.rev && !pick_object_rev(oid)) {
+  if (oid.snap && !pick_object_rev(oid)) {
     // we have no revision for this request.
     r = -EEXIST;
     goto done;
@@ -668,7 +668,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
   if (crev && rev && rev > crev) {
     assert(0);
     pobject_t noid = poid;  // FIXME ****
-    noid.oid.rev = rev;
+    noid.oid.snap = rev;
     dout(10) << "prepare_op_transaction cloning " << poid << " crev " << crev << " to " << noid << dendl;
     t.clone(info.pgid, poid, noid);
     did_clone = true;
@@ -1055,7 +1055,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
     assert(nv > log.top);
 
     // will clone?
-    if (crev && poid.oid.rev && poid.oid.rev > crev) {
+    if (crev && poid.oid.snap && poid.oid.snap > crev) {
       clone_version = nv;
       nv.version++;
     }
@@ -1066,7 +1066,7 @@ objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
         nv.version = op->get_version().version; 
 
 	// clone?
-	if (crev && op->get_oid().rev && op->get_oid().rev > crev) {
+	if (crev && op->get_oid().snap && op->get_oid().snap > crev) {
 	  // backstep clone
 	  clone_version = nv;
 	  clone_version.version--;
@@ -1223,7 +1223,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << " " << poid.oid 
            << " v " << nv 
     //<< " crev " << crev
-	   << " rev " << poid.oid.rev
+	   << " rev " << poid.oid.snap
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
 
@@ -1245,11 +1245,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
     // log and update later.
     prepare_log_transaction(repop->t, op->get_reqid(), poid, op->get_op(), nv,
-			    crev, poid.oid.rev, peers_complete_thru);
+			    crev, poid.oid.snap, peers_complete_thru);
     prepare_op_transaction(repop->t, op->get_reqid(),
 			   info.pgid, op->get_op(), poid, 
 			   op->get_offset(), op->get_length(), op->get_data(),
-			   nv, op->get_inc_lock(), crev, poid.oid.rev);
+			   nv, op->get_inc_lock(), crev, poid.oid.snap);
   }
   
   // (logical) local ack.

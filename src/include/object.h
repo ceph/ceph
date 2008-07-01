@@ -38,31 +38,31 @@ struct object_t {
     struct {
       uint64_t ino;    // "file" identifier
       uint32_t bno;    // "block" in that "file"
-      objectrev_t rev; // revision.  normally ctime (as epoch).
+      objectrev_t snap; // revision.  normally ctime (as epoch).
     } __attribute__ ((packed));
   };
 
-  object_t() : ino(0), bno(0), rev(0) {}
-  object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}
-  object_t(uint64_t i, uint32_t b, uint64_t r) : ino(i), bno(b), rev(r) {}
+  object_t() : ino(0), bno(0), snap(0) {}
+  object_t(uint64_t i, uint32_t b) : ino(i), bno(b), snap(0) {}
+  object_t(uint64_t i, uint32_t b, uint64_t r) : ino(i), bno(b), snap(r) {}
 
   // IMPORTANT: make this match struct ceph_object ****
   object_t(const ceph_object& co) {
     ino = co.ino;
     bno = co.bno;
-    rev = co.rev;
+    snap = co.snap;
   }  
   operator ceph_object() {
     ceph_object oid;
     oid.ino = ino;
     oid.bno = bno;
-    oid.rev = rev;
+    oid.snap = snap;
     return oid;
   }
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
     ::encode(bno, bl);
-    ::encode(rev, bl);
+    ::encode(snap, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u64 i, r;
@@ -72,7 +72,7 @@ struct object_t {
     ::decode(r, bl);
     ino = i;
     bno = b;
-    rev = r;
+    snap = r;
   }
 } __attribute__ ((packed));
 WRITE_CLASS_ENCODER(object_t)
@@ -101,8 +101,8 @@ inline ostream& operator<<(ostream& out, const object_t o) {
   out.fill('0');
   out << setw(8) << o.bno << dec;
   out.unsetf(ios::right);
-  if (o.rev) 
-    out << '.' << o.rev;
+  if (o.snap) 
+    out << '.' << o.snap;
   return out;
 }
 
@@ -111,7 +111,7 @@ namespace __gnu_cxx {
     size_t operator()(const object_t &r) const { 
       static rjhash<uint64_t> H;
       static rjhash<uint32_t> I;
-      return H(r.ino) ^ I(r.bno) ^ H(r.rev);
+      return H(r.ino) ^ I(r.bno) ^ H(r.snap);
     }
   };
 

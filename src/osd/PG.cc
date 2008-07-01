@@ -1387,7 +1387,7 @@ bool PG::pick_object_rev(object_t& oid)
   objectrev_t crev;
   int r = osd->store->getattr(info.pgid, t, "crev", &crev, sizeof(crev));
   assert(r >= 0);
-  if (crev <= oid.rev) {
+  if (crev <= oid.snap) {
     dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << dendl;
     oid = t.oid;
     return true;

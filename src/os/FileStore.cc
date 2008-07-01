@@ -158,10 +158,10 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
   char *t = s + strlen(s);
 #ifdef __LP64__
   sprintf(t, "/%04x.%04x.%016lx.%08x.%lx", 
-	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.rev);
+	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.snap);
 #else
   sprintf(t, "/%04x.%04x.%016llx.%08x.%llx", 
-	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.rev);
+	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.snap);
 #endif
   //parse_object(t+1);
 }
@@ -179,7 +179,7 @@ pobject_t FileStore::parse_object(char *s)
   assert(s[26] == '.');
   o.oid.bno = strtoll(s+27, 0, 16);
   assert(s[35] == '.');
-  o.oid.rev = strtoll(s+36, 0, 16);
+  o.oid.snap = strtoll(s+36, 0, 16);
   dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
   return o;
 }
