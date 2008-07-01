@@ -16,7 +16,8 @@ int ceph_debug_msgr;
 /* static tag bytes */
 static char tag_ready = CEPH_MSGR_TAG_READY;
 static char tag_reset = CEPH_MSGR_TAG_RESETSESSION;
-static char tag_retry = CEPH_MSGR_TAG_RETRY;
+static char tag_retry_session = CEPH_MSGR_TAG_RETRY_SESSION;
+static char tag_retry_global = CEPH_MSGR_TAG_RETRY_GLOBAL;
 static char tag_wait = CEPH_MSGR_TAG_WAIT;
 static char tag_msg = CEPH_MSGR_TAG_MSG;
 static char tag_ack = CEPH_MSGR_TAG_ACK;
@@ -614,6 +615,17 @@ static void ceph_fault(struct ceph_connection *con)
 }
 
 
+static u32 get_global_seq(struct ceph_messenger *msgr, u32 gt)
+{
+	u32 ret;
+	spin_lock(&msgr->global_seq_lock);
+	if (msgr->global_seq < gt)
+		msgr->global_seq = gt;
+	ret = ++msgr->global_seq;
+	spin_unlock(&msgr->global_seq_lock);
+	return ret;
+}
+
 
 /*
  * non-blocking versions
@@ -804,11 +816,15 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 {
 	con->out_kvec[0].iov_base = &msgr->inst.addr;
 	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
-	con->out_connect_seq = cpu_to_le32(con->connect_seq);
-	con->out_kvec[1].iov_base = &con->out_connect_seq;
+	con->global_seq = get_global_seq(msgr, 0);
+	con->out_global_seq = cpu_to_le32(con->global_seq);
+	con->out_kvec[1].iov_base = &con->out_global_seq;
 	con->out_kvec[1].iov_len = 4;
-	con->out_kvec_left = 2;
-	con->out_kvec_bytes = sizeof(msgr->inst.addr) + 4;
+	con->out_connect_seq = cpu_to_le32(con->connect_seq);
+	con->out_kvec[2].iov_base = &con->out_connect_seq;
+	con->out_kvec[2].iov_len = 4;
+	con->out_kvec_left = 3;
+	con->out_kvec_bytes = sizeof(msgr->inst.addr) + 8;
 	con->out_kvec_cur = con->out_kvec;
 	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
@@ -818,10 +834,12 @@ static void prepare_write_connect_retry(struct ceph_messenger *msgr,
 					struct ceph_connection *con)
 {
 	con->out_connect_seq = cpu_to_le32(con->connect_seq);
-	con->out_kvec[0].iov_base = &con->out_connect_seq;
+	con->out_kvec[0].iov_base = &con->out_global_seq;
 	con->out_kvec[0].iov_len = 4;
-	con->out_kvec_left = 1;
-	con->out_kvec_bytes = 4;
+	con->out_kvec[1].iov_base = &con->out_connect_seq;
+	con->out_kvec[1].iov_len = 4;
+	con->out_kvec_left = 2;
+	con->out_kvec_bytes = 8;
 	con->out_kvec_cur = con->out_kvec;
 	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
@@ -850,12 +868,12 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 	set_bit(WRITE_PENDING, &con->state);
 }
 
-static void prepare_write_accept_retry(struct ceph_connection *con, char *ptag)
+static void prepare_write_accept_retry(struct ceph_connection *con, char *ptag,
+				       u32 *pseq)
 {
 	con->out_kvec[0].iov_base = ptag;
 	con->out_kvec[0].iov_len = 1;
-	con->out_connect_seq = cpu_to_le32(con->connect_seq);
-	con->out_kvec[1].iov_base = &con->out_connect_seq;
+	con->out_kvec[1].iov_base = pseq;
 	con->out_kvec[1].iov_len = 4;
 	con->out_kvec_left = 2;
 	con->out_kvec_bytes = 1 + 4;
@@ -1190,7 +1208,7 @@ static int read_connect_partial(struct ceph_connection *con)
 		con->in_base_pos += ret;
 	}
 
-	if (con->in_tag == CEPH_MSGR_TAG_RETRY) {
+	if (con->in_tag == CEPH_MSGR_TAG_RETRY_SESSION) {
 		/* peers connect_seq */
 		to += sizeof(con->in_connect_seq);
 		if (con->in_base_pos < to) {
@@ -1198,6 +1216,20 @@ static int read_connect_partial(struct ceph_connection *con)
 			int have = sizeof(con->in_connect_seq) - left;
 			ret = ceph_tcp_recvmsg(con->sock,
 					       (char *)&con->in_connect_seq +
+					       have, left);
+			if (ret <= 0)
+				goto out;
+			con->in_base_pos += ret;
+		}
+	}
+	if (con->in_tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
+		/* peers global_seq */
+		to += sizeof(con->in_global_seq);
+		if (con->in_base_pos < to) {
+			int left = to - con->in_base_pos;
+			int have = sizeof(con->in_global_seq) - left;
+			ret = ceph_tcp_recvmsg(con->sock,
+					       (char *)&con->in_global_seq +
 					       have, left);
 			if (ret <= 0)
 				goto out;
@@ -1259,12 +1291,22 @@ static int process_connect(struct ceph_connection *con)
 		prepare_read_connect(con);
 		con->msgr->peer_reset(con->msgr->parent, &con->peer_name);
 		break;
-	case CEPH_MSGR_TAG_RETRY:
+	case CEPH_MSGR_TAG_RETRY_SESSION:
 		dout(10,
 		     "process_connect got RETRY my seq = %u, peer_seq = %u\n",
 		     le32_to_cpu(con->out_connect_seq),
 		     le32_to_cpu(con->in_connect_seq));
 		con->connect_seq = le32_to_cpu(con->in_connect_seq);
+		prepare_write_connect_retry(con->msgr, con);
+		prepare_read_connect(con);
+		break;
+	case CEPH_MSGR_TAG_RETRY_GLOBAL:
+		dout(10,
+		     "process_connect got RETRY_GLOBAL my %u, peer_gseq = %u\n",
+		     con->global_seq, le32_to_cpu(con->in_global_seq));
+		con->global_seq =
+			get_global_seq(con->msgr,
+				       le32_to_cpu(con->in_global_seq));
 		prepare_write_connect_retry(con->msgr, con);
 		prepare_read_connect(con);
 		break;
@@ -1307,11 +1349,24 @@ static int read_accept_partial(struct ceph_connection *con)
 		con->in_base_pos += ret;
 	}
 
+	/* global_seq */
+	to += sizeof(con->in_global_seq);
+	while (con->in_base_pos < to) {
+		int left = to - con->in_base_pos;
+		int have = sizeof(u32) - left;
+		ret = ceph_tcp_recvmsg(con->sock,
+				       (char *)&con->in_global_seq + have,
+				       left);
+		if (ret <= 0)
+			return ret;
+		con->in_base_pos += ret;
+	}
+
 	/* connect_seq */
 	to += sizeof(con->in_connect_seq);
 	while (con->in_base_pos < to) {
 		int left = to - con->in_base_pos;
-		int have = sizeof(con->peer_addr) - left;
+		int have = sizeof(u32) - left;
 		ret = ceph_tcp_recvmsg(con->sock,
 				       (char *)&con->in_connect_seq + have,
 				       left);
@@ -1358,7 +1413,8 @@ static void process_accept(struct ceph_connection *con)
 {
 	struct ceph_connection *existing;
 	struct ceph_messenger *msgr = con->msgr;
-	__u32 peer_cseq = le32_to_cpu(con->in_connect_seq);
+	u32 peer_gseq = le32_to_cpu(con->in_global_seq);
+	u32 peer_cseq = le32_to_cpu(con->in_connect_seq);
 
 	/* do we have an existing connection for this peer? */
 	if (radix_tree_preload(GFP_NOFS) < 0) {
@@ -1368,7 +1424,15 @@ static void process_accept(struct ceph_connection *con)
 	spin_lock(&msgr->con_lock);
 	existing = __get_connection(msgr, &con->peer_addr);
 	if (existing) {
-		if (test_bit(LOSSY, &existing->state)) {
+		if (peer_gseq < existing->global_seq) {
+			/* retry_global */
+			con->global_seq = existing->global_seq;
+			con->out_global_seq =
+				cpu_to_le32(con->global_seq);
+			prepare_write_accept_retry(con,
+						   &tag_retry_global,
+						   &con->out_global_seq);
+		} else if (test_bit(LOSSY, &existing->state)) {
 			dout(20, "process_accept replacing existing LOSSY %p\n",
 			     existing);
 			reset_connection(existing);
@@ -1385,7 +1449,11 @@ static void process_accept(struct ceph_connection *con)
 				/* old attempt or peer didn't get the READY */
 				/* send retry with peers connect seq */
 				con->connect_seq = existing->connect_seq;
-				prepare_write_accept_retry(con, &tag_retry);
+				con->out_connect_seq =
+					cpu_to_le32(con->connect_seq);
+				prepare_write_accept_retry(con,
+					&tag_retry_session,
+					&con->out_connect_seq);
 			}
 		} else if (peer_cseq == existing->connect_seq &&
 			   (test_bit(CONNECTING, &existing->state) ||
@@ -1419,6 +1487,7 @@ static void process_accept(struct ceph_connection *con)
 	} else {
 		dout(20, "process_accept no existing connection, opening\n");
 		__register_connection(msgr, con);
+		con->global_seq = peer_gseq;
 		con->connect_seq = peer_cseq + 1;
 		prepare_write_accept_reply(con, &tag_ready);
 	}
@@ -1629,6 +1698,7 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	INIT_LIST_HEAD(&msgr->con_all);
 	INIT_LIST_HEAD(&msgr->con_accepting);
 	INIT_RADIX_TREE(&msgr->con_tree, GFP_ATOMIC);
+	spin_lock_init(&msgr->global_seq_lock);
 
 	msgr->zero_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (!msgr->zero_page) {

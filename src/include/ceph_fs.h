@@ -336,8 +336,9 @@ struct ceph_entity_name {
 #define CEPH_MSGR_TAG_READY         1  /* server -> client: ready for messages */
 #define CEPH_MSGR_TAG_RESETSESSION  2  /* server -> client: reset, try again */
 #define CEPH_MSGR_TAG_WAIT          3  /* server -> client: wait for racing incoming connection */
-#define CEPH_MSGR_TAG_RETRY         4  /* server -> client + cseq: try again with higher cseq */
-#define CEPH_MSGR_TAG_CLOSE         5  /* closing pipe */
+#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server -> client + cseq: try again with higher cseq */
+#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server -> client + gseq: try again with higher gseq */
+#define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
 #define CEPH_MSGR_TAG_MSG          10  /* message */
 #define CEPH_MSGR_TAG_ACK          11  /* message ack */
 
