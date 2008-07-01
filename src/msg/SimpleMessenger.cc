@@ -660,6 +660,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
   m->set_source_inst(_myinst);
+  m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
  
   dout(1) << m->get_source()
@@ -673,10 +674,30 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   return 0;
 }
 
+int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
+{
+  // set envelope
+  m->set_source_inst(_myinst);
+  m->set_dest_inst(dest);
+ 
+  dout(1) << m->get_source()
+          << " **> " << dest.name << " " << dest.addr
+          << " -- " << *m
+	  << " -- " << m
+          << dendl;
+
+  rank.submit_message(m, dest.addr);
+
+  return 0;
+}
+
+
+
 int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
   m->set_source_inst(_myinst);
+  m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
  
   dout(1) << "lazy " << m->get_source()
@@ -1625,7 +1646,7 @@ Message *Rank::Pipe::read_message()
   
   if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
-    env.src.addr.ipaddr = peer_addr.ipaddr;
+    env.orig_src.addr.ipaddr = env.src.addr.ipaddr = peer_addr.ipaddr;
   }
 
   // read front

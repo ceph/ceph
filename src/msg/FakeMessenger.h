@@ -44,6 +44,8 @@ class FakeMessenger : public Messenger {
 
   // msg interface
   int send_message(Message *m, entity_inst_t dest);
+  int forward_message(Message *m, entity_inst_t dest);
+  int submit_message(Message *m, entity_inst_t dest);
   
   int get_dispatch_queue_len() { return qlen; }
 

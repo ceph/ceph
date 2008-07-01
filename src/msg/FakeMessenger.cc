@@ -364,12 +364,22 @@ void FakeMessenger::reset_myname(entity_name_t m)
 
 int FakeMessenger::send_message(Message *m, entity_inst_t inst)
 {
-  entity_name_t dest = inst.name;
-  
-  m->set_source(get_myname());
-  m->set_source_addr(get_myaddr());
-
+  m->set_source_inst(_myinst);
+  m->set_orig_source_inst(_myinst);
   m->set_dest_inst(inst);
+  return submit_message(m, inst);
+}
+
+int FakeMessenger::forward_message(Message *m, entity_inst_t inst)
+{
+  m->set_source_inst(_myinst);
+  m->set_dest_inst(inst);
+  return submit_message(m, inst);
+}
+
+int FakeMessenger::submit_message(Message *m, entity_inst_t inst)
+{
+  entity_name_t dest = inst.name;
 
   lock.Lock();
 

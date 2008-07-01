@@ -1844,6 +1844,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 	/* set source */
 	msg->hdr.src = msgr->inst;
+	msg->hdr.orig_src = msgr->inst;
 
 	/* do we have the connection? */
 	spin_lock(&msgr->con_lock);
