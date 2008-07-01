@@ -3245,6 +3245,13 @@ int Ebofs::getattr(coll_t cid, pobject_t oid, const char *name, void *value, siz
   ebofs_lock.Unlock();
   return r;
 }
+int Ebofs::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp)
+{
+  ebofs_lock.Lock();
+  int r = _getattr(oid, name, bp);
+  ebofs_lock.Unlock();
+  return r;
+}
 
 int Ebofs::_getattr(pobject_t oid, const char *name, void *value, size_t size)
 {
@@ -3257,11 +3264,31 @@ int Ebofs::_getattr(pobject_t oid, const char *name, void *value, size_t size)
   int r = 0;
   if (on->attr.count(n) == 0) {
     dout(10) << "_getattr " << oid << " '" << name << "' dne" << dendl;
-    r = -1;
+    r = -ENODATA;
   } else {
     r = MIN( on->attr[n].length(), size );
     dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << dendl;
     memcpy(value, on->attr[n].c_str(), r );
+  }
+  put_onode(on);
+  return r;
+}
+int Ebofs::_getattr(pobject_t oid, const char *name, bufferptr& bp)
+{
+  dout(8) << "_getattr " << oid << " '" << name << "'" << dendl;
+
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+
+  string n(name);
+  int r = 0;
+  if (on->attr.count(n) == 0) {
+    dout(10) << "_getattr " << oid << " '" << name << "' dne" << dendl;
+    r = -ENODATA;
+  } else {
+    bp = on->attr[n];
+    r = bp.length();
+    dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << dendl;
   }
   put_onode(on);
   return r;

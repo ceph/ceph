@@ -563,13 +563,13 @@ public:
   virtual void trim_from_cache(coll_t cid, pobject_t oid, __u64 offset, size_t len) = 0; //{ }
   virtual int is_cached(coll_t cid, pobject_t oid, __u64 offset, size_t len) = 0;  //{ return -1; }
 
-  virtual int setattr(coll_t cid, pobject_t oid, const char *name,
-                      const void *value, size_t size,
-                      Context *onsafe=0) {return 0;} //= 0;
-  virtual int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset,
-                      Context *onsafe=0) {return 0;} //= 0;
-  virtual int getattr(coll_t cid, pobject_t oid, const char *name,
-                      void *value, size_t size) {return 0;} //= 0;
+  virtual int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0) = 0;
+  virtual int setattr(coll_t cid, pobject_t oid, const char *name, const bufferptr &bp, Context *onsafe=0) {
+    return setattr(cid, oid, name, bp.c_str(), bp.length(), onsafe);
+  }
+  virtual int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset, Context *onsafe=0) = 0;
+  virtual int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size) = 0;
+  virtual int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& value) = 0;
   virtual int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {return 0;};
 
   virtual int rmattr(coll_t cid, pobject_t oid, const char *name,

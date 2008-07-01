@@ -279,6 +279,7 @@ protected:
   int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
   int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp);
   int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr> &aset);
   int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
   int listattr(coll_t cid, pobject_t oid, vector<string>& attrs);
@@ -329,6 +330,7 @@ private:
   int _is_cached(pobject_t oid, __u64 off, size_t len);
   int _stat(pobject_t oid, struct stat *st);
   int _getattr(pobject_t oid, const char *name, void *value, size_t size);
+  int _getattr(pobject_t oid, const char *name, bufferptr& bp);
   int _getattrs(pobject_t oid, map<string,bufferptr> &aset);
   int _get_object_collections(pobject_t oid, set<coll_t>& ls);
 

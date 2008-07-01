@@ -112,8 +112,9 @@ class FileStore : public JournalingObjectStore {
 
   // attrs
   int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
+  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset, Context *onsafe=0);
   int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp);
   int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
   int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
 

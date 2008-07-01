@@ -1158,7 +1158,7 @@ int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
   return r < 0 ? -errno:r;
 }
 
-int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset, Context *onsafe) 
 {
   int r;
   if (fake_attrs) 
@@ -1180,7 +1180,9 @@ int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset)
     }
   }
   if (r >= 0)
-    journal_setattrs(cid, oid, aset, 0);
+    journal_setattrs(cid, oid, aset, onsafe);
+  else
+    delete onsafe;
   return r < 0 ? -errno:r;
 }
 
@@ -1197,6 +1199,27 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
     get_attrname(name, n);
     r = do_getxattr(fn, n, value, size);
     dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
+  }
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp)
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.getattr(cid, oid, name, bp);
+  else {
+    char fn[100];
+    get_coname(cid, oid, fn);
+    char n[40];
+    get_attrname(name, n);
+    r = do_getxattr(fn, n, 0, 0);
+    if (r > 0) {
+      bp = buffer::create(r);
+      r = do_getxattr(fn, n, bp.c_str(), r);
+      if (r > 0) bp.set_length(r);
+    }
+    dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << bp.length() << " = " << r << dendl;
   }
   return r < 0 ? -errno:r;
 }

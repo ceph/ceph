@@ -130,7 +130,15 @@ class FakeAttrs {
         bl.copy(0, l, (char*)value);
         return l;
       }
-      return -1;
+      return -ENODATA;
+    }
+    int getattr(const char *name, bufferptr &bp) {
+      string n = name;
+      if (attrs.count(n)) {
+	bp = attrs[n];
+	return bp.length();
+      }
+      return -ENODATA;
     }
     int getattrs(map<string,bufferptr>& aset) {
       aset = attrs;
@@ -189,6 +197,12 @@ class FakeAttrs {
               void *value, size_t size) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].getattr(name, value, size);
+    faker_lock.Unlock();
+    return r;
+  }
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp) {
+    faker_lock.Lock();
+    int r = fakeoattrs[oid].getattr(name, bp);
     faker_lock.Unlock();
     return r;
   }
