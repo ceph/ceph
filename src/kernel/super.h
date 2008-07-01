@@ -18,7 +18,6 @@ extern int ceph_debug_console;
 extern int ceph_debug;
 extern int ceph_debug_msgr;
 extern int ceph_debug_super;
-extern int ceph_debug_tcp;
 extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
@@ -60,6 +59,19 @@ extern int ceph_debug_inode;
 		(unsigned int)(ntohs((n).sin_port))
 
 
+#define dput(dentry)				       \
+	do {					       \
+		dout(20, "dput %p %d -> %d\n", dentry, \
+		     atomic_read(&dentry->d_count),    \
+		     atomic_read(&dentry->d_count)-1); \
+		dput(dentry);			       \
+	} while (0)
+#define d_drop(dentry)				       \
+	do {					       \
+		dout(20, "d_drop %p\n", dentry);       \
+		d_drop(dentry);			       \
+	} while (0)
+
 /*
  * subtract jiffies
  */
@@ -79,7 +91,9 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_DIRSTAT       (1<<4)
 #define CEPH_MOUNT_RBYTES        (1<<5)
 
-#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_DIRSTAT|CEPH_MOUNT_UNSAFE_WRITES)
+#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_DIRSTAT |	\
+			    CEPH_MOUNT_RBYTES |		\
+			    CEPH_MOUNT_UNSAFE_WRITES)
 
 struct ceph_mount_args {
 	int sb_flags;
@@ -248,8 +262,8 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
 
-static inline struct ceph_inode_frag *ceph_find_frag(struct ceph_inode_info *ci,
-						     u32 f)
+static inline struct ceph_inode_frag *
+__ceph_find_frag(struct ceph_inode_info *ci, u32 f)
 {
 	struct rb_node *n = ci->i_fragtree.rb_node;
 
@@ -433,14 +447,6 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_session *session);
 extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 
-extern void ceph_update_inode_lease(struct inode *inode,
-				    struct ceph_mds_reply_lease *lease,
-				    struct ceph_mds_session *seesion,
-				    unsigned long from_time);
-extern void ceph_update_dentry_lease(struct dentry *dentry,
-				     struct ceph_mds_reply_lease *lease,
-				     struct ceph_mds_session *session,
-				     unsigned long from_time);
 extern int ceph_inode_lease_valid(struct inode *inode, int mask);
 extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
@@ -489,8 +495,9 @@ extern const struct address_space_operations ceph_aops;
 extern const struct file_operations ceph_file_fops;
 extern const struct address_space_operations ceph_aops;
 extern int ceph_open(struct inode *inode, struct file *file);
-extern int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-			    struct nameidata *nd, int mode);
+extern struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
+				       struct nameidata *nd, int mode,
+				       int locked_dir);
 extern int ceph_release(struct inode *inode, struct file *filp);
 
 
@@ -499,10 +506,13 @@ extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
 extern struct dentry_operations ceph_dentry_ops;
 
-extern char *ceph_build_dentry_path(struct dentry *dentry, int *len);
+extern char *ceph_build_dentry_path(struct dentry *dn, int *len, __u64 *base,
+				    int min);
 extern struct dentry *ceph_do_lookup(struct super_block *sb, 
 				     struct dentry *dentry, 
-				     int mask, int on_inode);
+				     int mask, int on_inode, int locked_dir);
+extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
+					 struct dentry *dentry, int err);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
 	dentry->d_op = &ceph_dentry_ops;
@@ -513,7 +523,7 @@ static inline void ceph_init_dentry(struct dentry *dentry) {
 extern const struct export_operations ceph_export_ops;
 
 /* proc.c */
-extern void ceph_proc_init(void);
+extern int ceph_proc_init(void);
 extern void ceph_proc_cleanup(void);
 
 #endif /* _FS_CEPH_SUPER_H */

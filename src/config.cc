@@ -23,6 +23,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// for tstring stringtable
+#include "include/tstring.h"
+stringtable g_stab;
+
 // hack hack hack ugly FIXME
 #include "include/atomic.h"
 atomic_t buffer_total_alloc;
@@ -107,7 +111,19 @@ struct ceph_file_layout g_default_file_layout = {
  fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
  fl_pg_size: 2,
- fl_pg_pool: 0
+ fl_pg_pool: 1
+};
+
+struct ceph_file_layout g_default_casdata_layout = {
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred: init_le32(-1),
+ fl_pg_type: CEPH_PG_TYPE_REP,
+ fl_pg_size: 2,
+ fl_pg_pool: 2
 };
 
 struct ceph_file_layout g_default_mds_dir_layout = {
@@ -145,6 +161,16 @@ struct ceph_file_layout g_default_mds_anchortable_layout = {
  fl_pg_size: 2,
  fl_pg_pool: 0
 };
+
+const char *get_pool_name(int pool) 
+{
+  switch (pool) {
+  case 0: return "metadata";
+  case 1: return "data";
+  case 2: return "casdata";
+  default: return "";
+  }
+}
 
 #include <msg/msg_types.h>
 
@@ -268,8 +294,10 @@ md_config_t g_conf = {
   
   // --- objectcacher ---
   client_oc: true,
-  client_oc_size:      1024*1024* 16,    // MB * n
-  client_oc_max_dirty: 1024*1024* 12,    // MB * n  (dirty OR tx)
+  client_oc_size:      1024*1024* 64,    // MB * n
+  client_oc_max_dirty: 1024*1024* 48,    // MB * n  (dirty OR tx.. bigish)
+  client_oc_target_dirty:  1024*1024* 8, // target dirty (keep this smallish)
+  // note: the max amount of "in flight" dirty data is roughly (max - target)
   client_oc_max_sync_write: 128*1024,   // sync writes >= this use wrlock
 
   // --- objecter ---
@@ -295,7 +323,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 5,
 
   mds_beacon_interval: 4, //30.0,
-  mds_beacon_grace: 15, //60*60.0,
+  mds_beacon_grace: 30, //60*60.0,
 
   mds_session_timeout: 60,    // cap bits and leases time out if client idle
   mds_session_autoclose: 300, // autoclose idle session 
@@ -316,7 +344,7 @@ md_config_t g_conf = {
   mds_bal_sample_interval: 3.0,  // every 5 seconds
   mds_bal_replicate_threshold: 8000,
   mds_bal_unreplicate_threshold: 0,//500,
-  mds_bal_frag: false,
+  mds_bal_frag: true,
   mds_bal_split_size: 10000,
   mds_bal_split_rd: 25000,
   mds_bal_split_wr: 10000,

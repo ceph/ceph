@@ -1261,7 +1261,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 
 
-CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
+CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_dft)
 {
   dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
 
@@ -1344,6 +1344,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth)
 
   for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
+  if (rdlock_dft)
+    rdlocks.insert(&ref->dirfragtreelock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, empty, empty))
     return 0;
@@ -1817,7 +1819,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   int client = req->get_client().num();
-  CInode *diri = rdlock_path_pin_ref(mdr, false);
+  CInode *diri = rdlock_path_pin_ref(mdr, false, true);  // rdlock dirfragtreelock!
   if (!diri) return;
 
   // it's a directory, right?
@@ -1842,6 +1844,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!dir) return;
 
   // ok!
+  dout(10) << "handle_client_readdir on " << *dir << dendl;
   assert(dir->is_auth());
 
   // check perm
@@ -2052,20 +2055,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
-
-  /* old export heuristic.  pbly need to reimplement this at some point.    
-  if (
-      diri->dir->is_auth() &&
-      diri->dir->is_rep() &&
-      newdir->is_auth() &&
-      !newdir->is_hashing()) {
-    int dest = rand() % mds->mdsmap->get_num_mds();
-    if (dest != whoami) {
-      dout(10) << "exporting new dir " << *newdir << " in replicated parent " << *diri->dir << dendl;
-      mdcache->migrator->export_dir(newdir, dest);
-    }
-  }
-  */
 }
 
 
@@ -2239,7 +2228,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   le->metablob.add_client_req(mdr->reqid);
-  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1); // new dn
+  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);      // new dn
   mds->locker->predirty_nested(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
 				 MODE_TO_DT(targeti->inode.mode));  // new remote
@@ -3000,14 +2989,11 @@ void Server::handle_client_rename(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << dendl;
 
-  // src+dest _must_ share commont root for locking to prevent orphans
   filepath destpath = req->get_filepath2();
   filepath srcpath = req->get_filepath();
-  if (destpath.get_ino() != srcpath.get_ino() &&
-      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok
-    // error out for now; eventually, we should find the deepest common root
-    derr(0) << "rename src + dst must share common root; fix client or fix me" << dendl;
-    assert(0);
+  if (destpath.depth() == 0 || srcpath.depth() == 0) {
+    reply_request(mdr, -EINVAL);
+    return;
   }
 
   // traverse to dest dir (not dest)
@@ -3026,11 +3012,11 @@ void Server::handle_client_rename(MDRequest *mdr)
 				 srcpath, srctrace, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
-  if (srctrace.empty()) r = -EINVAL;  // can't rename root
   if (r < 0) {
     reply_request(mdr, r);
     return;
   }
+  assert(!srctrace.empty());
   CDentry *srcdn = srctrace[srctrace.size()-1];
   dout(10) << " srcdn " << *srcdn << dendl;
   CInode *srci = mdcache->get_dentry_inode(srcdn, mdr);
@@ -3038,6 +3024,45 @@ void Server::handle_client_rename(MDRequest *mdr)
   mdr->pin(srci);
 
   // -- some sanity checks --
+
+  // src+dest traces _must_ share a common ancestor for locking to prevent orphans
+  if (destpath.get_ino() != srcpath.get_ino() &&
+      !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok!
+    // do traces share a dentry?
+    CDentry *common = 0;
+    for (unsigned i=0; i < srctrace.size(); i++) {
+      for (unsigned j=0; j < desttrace.size(); j++) {
+	if (srctrace[i] == desttrace[j]) {
+	  common = srctrace[i];
+	  break;
+	}
+      }
+      if (common)
+	break;
+    }
+
+    if (common) {
+      dout(10) << "rename src and dest traces share common dentry " << *common << dendl;
+    } else {
+      // ok, extend srctrace toward root until it is an ancestor of desttrace.
+      while (srctrace[0]->get_dir()->get_inode() != desttrace[0]->get_dir()->get_inode() &&
+	     !srctrace[0]->get_dir()->get_inode()->is_ancestor_of(desttrace[0]->get_dir()->get_inode())) {
+	srctrace.insert(srctrace.begin(),
+			srctrace[0]->get_dir()->get_inode()->get_parent_dn());
+	dout(10) << "rename prepending srctrace with " << *srctrace[0] << dendl;
+      }
+
+      // then, extend destpath until it shares the same parent inode as srcpath.
+      while (desttrace[0]->get_dir()->get_inode() != srctrace[0]->get_dir()->get_inode()) {
+	desttrace.insert(desttrace.begin(),
+			 desttrace[0]->get_dir()->get_inode()->get_parent_dn());
+	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
+      }
+      dout(10) << "rename src and dest traces now share common ancestor "
+	       << *desttrace[0]->get_dir()->get_inode() << dendl;
+    }
+  }
+
   // src == dest?
   if (srcdn->get_dir() == destdir && srcdn->name == destname) {
     dout(7) << "rename src=dest, noop" << dendl;
@@ -4237,6 +4262,8 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
 
+    mdr->apply();
+
     // notify any clients
     mds->locker->issue_truncate(in);
 
@@ -4397,7 +4424,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply_request(mdr, reply);
 
   // make sure this inode gets into the journal
-  if (cur->xlist_open_file.get_xlist() == 0) {
+  if (!cur->xlist_open_file.is_on_xlist()) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
     le->add_clean_inode(cur);
@@ -4446,6 +4473,8 @@ public:
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
     
+    mdr->apply();
+
     // notify any clients
     mds->locker->issue_truncate(in);
 

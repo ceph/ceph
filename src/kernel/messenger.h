@@ -13,6 +13,8 @@
 
 struct ceph_msg;
 
+extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
+
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
 typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_name *pn);
 typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
@@ -29,6 +31,8 @@ static __inline__ const char *ceph_name_type_str(int t) {
 	}
 }
 
+#define CEPH_MSGR_BACKUP 10  /* backlogged incoming connections */
+
 /* use format string %s%d */
 #define ENTITY_NAME(n)				   \
 	ceph_name_type_str(le32_to_cpu((n).type)), \
@@ -40,13 +44,15 @@ struct ceph_messenger {
 	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	struct ceph_entity_inst inst;    /* my name+address */
-	struct ceph_socket *listen_s; 	 /* listening socket */
+	struct socket *listen_sock; 	 /* listening socket */
 	struct work_struct awork;	 /* accept work */
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all connections */
 	struct list_head con_accepting;  /* accepting */
 	struct radix_tree_root con_tree; /*  established */
 	struct page *zero_page;
+	u32 global_seq;
+	spinlock_t global_seq_lock;
 };
 
 struct ceph_msg {
@@ -67,26 +73,26 @@ struct ceph_msg_pos {
 
 /* ceph connection fault delay defaults */
 #define BASE_DELAY_INTERVAL	(HZ/2)
-#define MAX_DELAY_INTERVAL	(5U * 60 * HZ)
-
+#define MAX_DELAY_INTERVAL	(5 * 60 * HZ)
 
 /* ceph_connection state bit flags */
-#define NEW		0
+#define LOSSY           0 /* close channel on errors */
 #define CONNECTING	1
 #define ACCEPTING	2
-#define OPEN		3
-#define WRITE_PENDING	4  /* we have data to send */
-#define READABLE	5  /* set when socket gets new data */
-#define READING		6  /* provides mutual exclusion, protecting in_* */
-#define WAIT		7  /* wait for peer to connect */
-#define CLOSED		8  /* we've closed the connection */
-#define SOCK_CLOSE	9  /* socket state changed to close */
-#define STANDBY		10 /* standby, when socket state close, no messages */
+#define WRITE_PENDING	3  /* we have data to send */
+#define QUEUED          4  /* there is work to be done */
+#define BUSY            5  /* work is being done */
+#define BACKOFF         6  /* backing off; will retry */
+#define STANDBY		7  /* standby, when socket state close, no messages */
+#define WAIT		8  /* wait for peer to connect */
+#define CLOSED		9  /* we've closed the connection */
+#define SOCK_CLOSED	10 /* socket state changed to closed */
 #define REGISTERED      11
+
 
 struct ceph_connection {
 	struct ceph_messenger *msgr;
-	struct ceph_socket *s;	/* connection socket */
+	struct socket *sock;	/* connection socket */
 	unsigned long state;	/* connection state */
 	const char *error_msg;
 
@@ -97,8 +103,9 @@ struct ceph_connection {
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
-	__u32 connect_seq;
+	__u32 connect_seq, global_seq;
 	__le32 in_connect_seq, out_connect_seq;
+	__le32 in_global_seq, out_global_seq;
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
 
@@ -127,11 +134,12 @@ struct ceph_connection {
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 
-	struct work_struct rwork;		/* receive work */
-	struct delayed_work swork;		/* send work */
-	unsigned long           delay;          /* delay interval */
+	struct delayed_work work;	    /* send|recv work */
+	unsigned long       delay;          /* delay interval */
 };
 
+extern int ceph_msgr_init(void);
+extern void ceph_msgr_exit(void);
 
 extern struct ceph_messenger *
 ceph_messenger_create(struct ceph_entity_addr *myaddr);
@@ -139,8 +147,7 @@ extern void ceph_messenger_destroy(struct ceph_messenger *);
 extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 				     struct ceph_entity_addr *addr);
 
-extern void ceph_queue_write(struct ceph_connection *con);
-extern void ceph_queue_read(struct ceph_connection *con);
+extern void ceph_queue_con(struct ceph_connection *con);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,

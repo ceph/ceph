@@ -18,11 +18,11 @@
 
 class MDentryUnlink : public Message {
   dirfrag_t dirfrag;
-  string dn;
+  nstring dn;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_dn() { return dn; }
+  nstring& get_dn() { return dn; }
 
   CInodeDiscover *strayin;
   CDirDiscover *straydir;
@@ -31,7 +31,7 @@ class MDentryUnlink : public Message {
   MDentryUnlink() :
     Message(MSG_MDS_DENTRYUNLINK),
     strayin(0), straydir(0), straydn(0) { }
-  MDentryUnlink(dirfrag_t df, string& n) :
+  MDentryUnlink(dirfrag_t df, nstring& n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n),

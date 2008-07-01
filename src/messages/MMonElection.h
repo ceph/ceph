@@ -29,7 +29,7 @@ public:
     switch (o) {
     case OP_PROPOSE: return "propose";
     case OP_ACK: return "ack";
-	case OP_NAK: return "nak";
+    case OP_NAK: return "nak";
     case OP_VICTORY: return "victory";
     default: assert(0); return 0;
     }
@@ -38,6 +38,7 @@ public:
   int32_t op;
   epoch_t epoch;
   bufferlist monmap_bl;
+  set<int> quorum;
   
   MMonElection() : Message(MSG_MON_ELECTION) {}
   MMonElection(int o, epoch_t e, MonMap *m) : 
@@ -55,12 +56,14 @@ public:
     ::encode(op, payload);
     ::encode(epoch, payload);
     ::encode(monmap_bl, payload);
+    ::encode(quorum, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(epoch, p);
     ::decode(monmap_bl, p);
+    ::decode(quorum, p);
   }
   
 };

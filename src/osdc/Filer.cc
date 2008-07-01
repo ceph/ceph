@@ -18,10 +18,6 @@
 #include "Filer.h"
 #include "osd/OSDMap.h"
 
-//#include "messages/MOSDRead.h"
-//#include "messages/MOSDReadReply.h"
-//#include "messages/MOSDWrite.h"
-//#include "messages/MOSDWriteReply.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
@@ -47,7 +43,8 @@ public:
   }  
 };
 
-int Filer::probe(inode_t& inode,
+int Filer::probe(inodeno_t ino,
+		 ceph_file_layout *layout,
 		 __u64 start_from,
 		 __u64 *end,           // LB, when !fwd
 		 bool fwd,
@@ -55,14 +52,14 @@ int Filer::probe(inode_t& inode,
 		 Context *onfinish) 
 {
   dout(10) << "probe " << (fwd ? "fwd ":"bwd ")
-	   << hex << inode.ino << dec
+	   << hex << ino << dec
 	   << " starting from " << start_from
 	   << dendl;
 
-  Probe *probe = new Probe(inode, start_from, end, flags, fwd, onfinish);
+  Probe *probe = new Probe(ino, *layout, start_from, end, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
-  __u64 period = ceph_file_layout_period(inode.layout);
+  __u64 period = ceph_file_layout_period(*layout);
   
   // start with 1+ periods.
   probe->probing_len = period;
@@ -83,12 +80,12 @@ int Filer::probe(inode_t& inode,
 
 void Filer::_probe(Probe *probe)
 {
-  dout(10) << "_probe " << hex << probe->inode.ino << dec 
+  dout(10) << "_probe " << hex << probe->ino << dec 
 	   << " " << probe->from << "~" << probe->probing_len 
 	   << dendl;
   
   // map range onto objects
-  file_to_extents(probe->inode.ino, &probe->inode.layout, probe->from, probe->probing_len, probe->probing);
+  file_to_extents(probe->ino, &probe->layout, probe->from, probe->probing_len, probe->probing);
   
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
@@ -101,7 +98,7 @@ void Filer::_probe(Probe *probe)
 
 void Filer::_probed(Probe *probe, object_t oid, __u64 size)
 {
-  dout(10) << "_probed " << probe->inode.ino << " object " << hex << oid << dec << " has size " << size << dendl;
+  dout(10) << "_probed " << probe->ino << " object " << hex << oid << dec << " has size " << size << dendl;
 
   probe->known[oid] = size;
   assert(probe->ops.count(oid));
@@ -121,7 +118,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
        p != probe->probing.end();
        p++) {
     __u64 shouldbe = p->length+p->start;
-    dout(10) << "_probed  " << probe->inode.ino << " object " << hex << p->oid << dec
+    dout(10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known[p->oid]
 	     << dendl;
@@ -154,7 +151,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
   if (!found) {
     // keep probing!
     dout(10) << "_probed didn't find end, probing further" << dendl;
-    __u64 period = ceph_file_layout_period(probe->inode.layout);
+    __u64 period = ceph_file_layout_period(probe->layout);
     if (probe->fwd) {
       probe->from += probe->probing_len;
       assert(probe->from % period == 0);

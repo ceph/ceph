@@ -62,7 +62,7 @@ void SessionMap::load(Context *onload)
 	waiting_for_load.push_back(onload);
   
   C_SM_Load *c = new C_SM_Load(this);
-  mds->filer->read(inode,
+  mds->filer->read(inode.ino, &inode.layout,
                    0, ceph_file_layout_su(inode.layout),
                    &c->bl, 0,
                    c);
@@ -112,7 +112,7 @@ void SessionMap::save(Context *onsave, version_t needv)
   init_inode();
   encode(bl);
   committing = version;
-  mds->filer->write(inode,
+  mds->filer->write(inode.ino, &inode.layout,
                     0, bl.length(), bl,
                     0,
 		    0, new C_SM_Save(this, version));

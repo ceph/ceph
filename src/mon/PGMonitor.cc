@@ -170,7 +170,7 @@ void PGMonitor::encode_pending(bufferlist &bl)
 
 bool PGMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case CEPH_MSG_STATFS:
     handle_statfs((MStatfs*)m);
@@ -179,7 +179,8 @@ bool PGMonitor::preprocess_query(Message *m)
   case MSG_PGSTATS:
     {
       MPGStats *stats = (MPGStats*)m;
-      int from = m->get_source().num();
+
+      int from = m->get_orig_source().num();
       if (pg_map.osd_stat.count(from) ||
 	  memcmp(&pg_map.osd_stat[from], &stats->osd_stat, sizeof(stats->osd_stat)) != 0)
 	return false;  // new osd stat
@@ -190,7 +191,14 @@ bool PGMonitor::preprocess_query(Message *m)
 	    memcmp(&pg_map.pg_stat[p->first], &p->second, sizeof(p->second)) != 0)
 	  return false; // new pg stat(s)
       }
+
       dout(10) << " message contains no new osd|pg stats" << dendl;
+      MPGStatsAck *ack = new MPGStatsAck;
+      for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
+	   p != stats->pg_stat.end();
+	   p++)
+	ack->pg_stat[p->first] = p->second.reported;
+      mon->messenger->send_message(ack, stats->get_orig_source_inst());
       return true;
     }
 
@@ -206,7 +214,7 @@ bool PGMonitor::preprocess_query(Message *m)
 
 bool PGMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
+  dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_PGSTATS:
     return prepare_pg_stats((MPGStats*)m);
@@ -229,7 +237,7 @@ void PGMonitor::committed()
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
-  dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_source() << dendl;
+  dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_orig_source() << dendl;
 
   // fill out stfs
   MStatfsReply *reply = new MStatfsReply(statfs->tid);
@@ -242,17 +250,17 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply->stfs.f_objects = pg_map.total_osd_num_objects;
 
   // reply
-  mon->messenger->send_message(reply, statfs->get_source_inst());
+  mon->messenger->send_message(reply, statfs->get_orig_source_inst());
   delete statfs;
 }
 
 bool PGMonitor::prepare_pg_stats(MPGStats *stats) 
 {
-  dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_source() << dendl;
-  int from = stats->get_source().num();
-  if (!stats->get_source().is_osd() ||
+  dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_orig_source() << dendl;
+  int from = stats->get_orig_source().num();
+  if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon->osdmap.is_up(from) ||
-      stats->get_source_inst() != mon->osdmon->osdmap.get_inst(from)) {
+      stats->get_orig_source_inst() != mon->osdmon->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd" << dendl;
   }
       
@@ -303,7 +311,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     pg_map.stat_pg_add(pgid, pg_map.pg_stat[pgid]);
   }
   
-  paxos->wait_for_commit(new C_Stats(this, ack, stats->get_source_inst()));
+  paxos->wait_for_commit(new C_Stats(this, ack, stats->get_orig_source_inst()));
   delete stats;
   return true;
 }

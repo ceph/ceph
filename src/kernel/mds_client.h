@@ -51,7 +51,7 @@ enum {
 	CEPH_MDS_SESSION_OPENING = 2,
 	CEPH_MDS_SESSION_OPEN = 3,
 	CEPH_MDS_SESSION_CLOSING = 4,
-	CEPH_MDS_SESSION_RESUMING = 5,
+//	CEPH_MDS_SESSION_RESUMING = 5,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
 struct ceph_mds_session {
@@ -85,6 +85,7 @@ struct ceph_mds_request {
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info r_reply_info;
+	int r_err;
 
 	/* to direct request */
 	struct dentry *r_direct_dentry;
@@ -100,6 +101,7 @@ struct ceph_mds_request {
 	unsigned long           r_from_time;
 	struct ceph_mds_session *r_session;
 	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
+	struct inode     *r_locked_dir;
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */

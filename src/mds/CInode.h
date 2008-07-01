@@ -177,7 +177,7 @@ private:
   int stickydir_ref;
 
 public:
-  frag_t pick_dirfrag(const string &dn);
+  frag_t pick_dirfrag(const nstring &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
@@ -222,6 +222,7 @@ protected:
 public:
   xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
+  xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
   xlist<CInode*>::item xlist_purging_inode;
 
 private:
@@ -229,6 +230,9 @@ private:
   int auth_pins;
   int nested_auth_pins;
 public:
+#ifdef MDS_AUTHPIN_SET
+  multiset<void*> auth_pin_set;
+#endif
   int auth_pin_freeze_allowance;
 
 private:
@@ -258,6 +262,7 @@ private:
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_open_file(this), 
     xlist_dirty_dirfrag_dir(this), 
+    xlist_dirty_dirfrag_dirfragtree(this), 
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
@@ -314,6 +319,7 @@ private:
   }
 
   // -- misc -- 
+  bool is_ancestor_of(CInode *other);
   void make_path_string(string& s);
   void make_path(filepath& s);
   void make_anchor_trace(vector<class Anchor>& trace);
@@ -499,13 +505,12 @@ public:
 
 
   // -- auth pins --
-  int is_auth_pinned() { 
-    return auth_pins;
-  }
+  int is_auth_pinned() { return auth_pins; }
+  int get_num_auth_pins() { return auth_pins; }
   void adjust_nested_auth_pins(int a);
   bool can_auth_pin();
-  void auth_pin();
-  void auth_unpin();
+  void auth_pin(void *by);
+  void auth_unpin(void *by);
 
   void adjust_nested_anchors(int by);
   int get_nested_anchors() { return nested_anchors; }
@@ -523,14 +528,22 @@ public:
 
   // -- reference counting --
   void bad_put(int by) {
-    generic_dout(7) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
+    generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		    << " (" << ref_set << ")"
+#endif
+		    << dendl;
 #ifdef MDS_REF_SET
     assert(ref_set.count(by) == 1);
 #endif
     assert(ref > 0);
   }
   void bad_get(int by) {
-    generic_dout(7) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref << " (" << ref_set << ")" << dendl;
+    generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
+#ifdef MDS_REF_SET
+		    << " (" << ref_set << ")"
+#endif
+		    << dendl;
 #ifdef MDS_REF_SET
     assert(ref_set.count(by) == 0);
 #endif

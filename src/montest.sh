@@ -30,11 +30,14 @@ do
  $CEPH_BIN/cmon -d mondata/mon$f --debug_mon 20 --debug_ms 1 --debug_paxos 10
 done
 
+# shared args
+ARGS="-d"
+
 # build and inject an initial osd map
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap # --pgbits 2
 $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 
-for osd in 0 1 2 3 #4 5 6 7 8 9 10 11 12 13 14 15
+for osd in 0 #1 2 3 #4 5 6 7 8 9 10 11 12 13 14 15
 do
  $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
  #valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd & #--debug_osd 40
@@ -42,8 +45,8 @@ do
 done
 
 # mds
-$CEPH_BIN/cmds -d --debug_ms 1 --debug_mds 20 --mds_log_max_segments 10 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_BIN/cmds -d --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+$CEPH_BIN/cmds $ARGS --debug_ms 1 --debug_mds 20 --mds_log_max_segments 10 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+#$CEPH_BIN/cmds $ARGS --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #./cmonctl mds set_max_mds 2
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."

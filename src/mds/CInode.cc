@@ -67,6 +67,13 @@ ostream& operator<<(ostream& out, CInode& in)
   
   out << " v" << in.get_version();
 
+  if (in.is_auth_pinned()) {
+    out << " ap=" << in.get_num_auth_pins();
+#ifdef MDS_AUTHPIN_SET
+    out << "(" << in.auth_pin_set << ")";
+#endif
+  }
+
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
@@ -163,13 +170,13 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
 // dirfrags
 
-frag_t CInode::pick_dirfrag(const string& dn)
+frag_t CInode::pick_dirfrag(const nstring& dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
 
   __u32 h = ceph_full_name_hash(dn.data(), dn.length());
-  return dirfragtree[h*h];
+  return dirfragtree[h];
 }
 
 void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
@@ -382,6 +389,17 @@ CInode *CInode::get_parent_inode()
 }
 
 
+bool CInode::is_ancestor_of(CInode *other)
+{
+  while (other) {
+    if (other == this)
+      return true;
+    if (!other->get_parent_dn())
+      break;
+    other = other->get_parent_dn()->get_dir()->get_inode();
+  }
+  return false;
+}
 
 void CInode::make_path_string(string& s)
 {
@@ -612,11 +630,25 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(authfrags, p);
       if (is_auth()) {
 	// auth.  believe replica's auth frags only.
-	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p) 
-	  dirfragtree.force_to_leaf(*p);
+	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p)
+	  if (!dirfragtree.is_leaf(*p)) {
+	    dout(10) << " forcing frag " << *p << " to leaf (split|merge)" << dendl;
+	    dirfragtree.force_to_leaf(*p);
+	    dirfragtreelock.set_updated();
+	  }
       } else {
-	// replica.  just take the tree.
+	// replica.  take the new tree, BUT make sure any open
+	//  dirfrags remain leaves (they may have split _after_ this
+	//  dft was scattered, or we may still be be waiting on the
+	//  notify from the auth)
 	dirfragtree.swap(temp);
+	for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	     p != dirfrags.end();
+	     p++)
+	  if (!dirfragtree.is_leaf(p->first)) {
+	    dout(10) << " forcing open dirfrag " << p->first << " to leaf (racing with split|merge)" << dendl;
+	    dirfragtree.force_to_leaf(p->first);
+	  }
       }
     }
     break;
@@ -692,6 +724,10 @@ void CInode::clear_dirty_scattered(int type)
     xlist_dirty_dirfrag_dir.remove_myself();
     break;
 
+  case CEPH_LOCK_IDFT:
+    xlist_dirty_dirfrag_dirfragtree.remove_myself();
+    break;
+
   default:
     assert(0);
   }
@@ -707,6 +743,7 @@ void CInode::finish_scatter_gather_update(int type)
       // adjust summation
       assert(is_auth());
       inode_t *pi = get_projected_inode();
+      bool touched_mtime = false;
       dout(20) << "         orig dirstat " << pi->dirstat << dendl;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
@@ -717,14 +754,25 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << "             fragstat " << pf->fragstat << dendl;
 	  dout(20) << "   accounted_fragstat " << pf->fragstat << dendl;
 	  pi->dirstat.take_diff(pf->fragstat, 
-				pf->accounted_fragstat);
+				pf->accounted_fragstat, touched_mtime);
 	} else {
 	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
 	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->fragstat << dendl;
 	}
       }
+      if (touched_mtime)
+	pi->mtime = pi->ctime = pi->dirstat.mtime;
       pi->dirstat.version++;
       dout(20) << "        final dirstat " << pi->dirstat << dendl;
+      assert(pi->dirstat.size() >= 0);
+      assert(pi->dirstat.nfiles >= 0);
+      assert(pi->dirstat.nsubdirs >= 0);
+    }
+    break;
+
+  case CEPH_LOCK_IDFT:
+    {
+      assert(is_auth());
     }
     break;
 
@@ -815,34 +863,44 @@ bool CInode::can_auth_pin() {
   return true;
 }
 
-void CInode::auth_pin() 
+void CInode::auth_pin(void *by) 
 {
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(10) << "auth_pin on " << *this
+#ifdef MDS_AUTHPIN_SET
+  auth_pin_set.insert(by);
+#endif
+
+  dout(10) << "auth_pin by " << by << " on " << *this
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   
   if (parent)
-    parent->adjust_nested_auth_pins( 1 );
+    parent->adjust_nested_auth_pins(1, 1);
 }
 
-void CInode::auth_unpin() 
+void CInode::auth_unpin(void *by) 
 {
   auth_pins--;
+
+#ifdef MDS_AUTHPIN_SET
+  assert(auth_pin_set.count(by));
+  auth_pin_set.erase(auth_pin_set.find(by));
+#endif
+
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(10) << "auth_unpin on " << *this
+  dout(10) << "auth_unpin by " << by << " on " << *this
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   
   assert(auth_pins >= 0);
 
   if (parent)
-    parent->adjust_nested_auth_pins( -1 );
+    parent->adjust_nested_auth_pins(-1, -1);
 
   if (is_freezing_inode() &&
       auth_pins == auth_pin_freeze_allowance) {
@@ -860,12 +918,12 @@ void CInode::adjust_nested_auth_pins(int a)
   if (!parent) return;
   nested_auth_pins += a;
 
-  dout(15) << "adjust_nested_auth_pins by " << a
+  dout(35) << "adjust_nested_auth_pins by " << a
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(nested_auth_pins >= 0);
 
-  parent->adjust_nested_auth_pins(a);
+  parent->adjust_nested_auth_pins(a, 0);
 }
 
 void CInode::adjust_nested_anchors(int by)

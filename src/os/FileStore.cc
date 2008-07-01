@@ -50,6 +50,34 @@
 # define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
 # define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
 # define BTRFS_IOC_CLONE        _IOW(BTRFS_IOCTL_MAGIC, 9, int)
+
+// alternate usertrans interface...
+#define BTRFS_IOC_USERTRANS_OPEN   1
+#define BTRFS_IOC_USERTRANS_CLOSE  2
+#define BTRFS_IOC_USERTRANS_SEEK   3
+#define BTRFS_IOC_USERTRANS_WRITE  5
+#define BTRFS_IOC_USERTRANS_UNLINK 6
+#define BTRFS_IOC_USERTRANS_MKDIR  7
+#define BTRFS_IOC_USERTRANS_RMDIR  8
+#define BTRFS_IOC_USERTRANS_TRUNCATE  9
+#define BTRFS_IOC_USERTRANS_SETXATTR 10
+#define BTRFS_IOC_USERTRANS_REMOVEXATTR  11
+#define BTRFS_IOC_USERTRANS_CLONE 12
+
+struct btrfs_ioctl_usertrans_op {
+	__u64 op;
+	__s64 args[5];
+	__s64 rval;
+};
+
+struct btrfs_ioctl_usertrans {
+	__u64 len;
+	struct btrfs_ioctl_usertrans_op ops[0];
+};
+
+#define BTRFS_IOC_USERTRANS  _IOW(BTRFS_IOCTL_MAGIC, 13,	\
+				  struct btrfs_ioctl_usertrans)
+
 #endif
 #endif
 
@@ -235,6 +263,33 @@ int FileStore::mkfs()
   return 0;
 }
 
+Mutex sig_lock;
+Cond sig_cond;
+bool sig_installed = false;
+int sig_pending = 0;
+int trans_running = 0;
+struct sigaction safe_sigint;
+struct sigaction old_sigint, old_sigterm;
+
+void _handle_signal(int signal)
+{
+  cerr << "got signal " << signal << ", stopping" << std::endl;
+  _exit(0);
+}
+
+void handle_signal(int signal, siginfo_t *info, void *p)
+{
+  //cout << "sigint signal " << signal << std::endl;
+  int running;
+  sig_lock.Lock();
+  running = trans_running;
+  sig_pending = signal;
+  sig_lock.Unlock();
+  if (!running)
+    _handle_signal(signal);
+}
+
+
 int FileStore::mount() 
 {
   if (g_conf.filestore_dev) {
@@ -267,12 +322,12 @@ int FileStore::mount()
   } else {
     int x = rand();
     int y = x+1;
-    int r1 = do_setxattr(basedir.c_str(), "user.test", &x, sizeof(x));
-    int r2 = do_getxattr(basedir.c_str(), "user.test", &y, sizeof(y));
-    dout(10) << "x = " << x << "   y = " << y 
+    do_setxattr(basedir.c_str(), "user.test", &x, sizeof(x));
+    do_getxattr(basedir.c_str(), "user.test", &y, sizeof(y));
+    /*dout(10) << "x = " << x << "   y = " << y 
 	     << "  r1 = " << r1 << "  r2 = " << r2
 	     << " " << strerror(errno)
-	     << dendl;
+	     << dendl;*/
     if (x != y) {
       derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --filestore_fake_attrs to fake them (in memory)." << dendl;
       return -errno;
@@ -282,26 +337,57 @@ int FileStore::mount()
   char fn[100];
   int fd;
 
-#ifdef BTRFS_IOC_SYNC
+  // get fsid
+  sprintf(fn, "%s/fsid", basedir.c_str());
+  lock_fd = ::open(fn, O_RDONLY);
+  ::read(lock_fd, &fsid, sizeof(fsid));
+
+  // and lock it..
+  /*
+  struct flock l;
+  memset(&l, 0, sizeof(l));
+  l.l_type = F_WRLCK;
+  l.l_whence = SEEK_SET;
+  l.l_start = 0;
+  l.l_len = 0;
+  r = ::fcntl(lock_fd, F_SETLK, &l);
+  if (r < 0) {
+    derr(0) << "mount failed to lock " << fn << ", is another cosd still running? " << strerror(errno) << dendl;
+    return -errno;
+    }*/
+
+  dout(10) << "mount fsid is " << fsid << dendl;
+
   // is this btrfs?
-  btrfs_fd = ::open(basedir.c_str(), O_DIRECTORY);
-  r = ::ioctl(btrfs_fd, BTRFS_IOC_SYNC);
+  Transaction empty;
+  btrfs = true;
+  btrfs_trans_start_end = true;  // trans start/end interface
+  r = apply_transaction(empty, 0);
   if (r == 0) {
     dout(0) << "mount detected btrfs" << dendl;
   } else {
     dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
-    ::close(btrfs_fd);
-    btrfs_fd = -1;
+    btrfs = false;
   }
-#endif
 
-  // get fsid
-  sprintf(fn, "%s/fsid", basedir.c_str());
-  fd = ::open(fn, O_RDONLY);
-  ::read(fd, &fsid, sizeof(fsid));
-  ::close(fd);
-  dout(10) << "mount fsid is " << fsid << dendl;
-  
+  // install signal handler for SIGINT, SIGTERM
+  sig_lock.Lock();
+  if (!sig_installed) {
+    dout(10) << "mount installing signal handler to (somewhat) protect transactions" << dendl;
+    sigset_t trans_sigmask;
+    sigemptyset(&trans_sigmask);
+    sigaddset(&trans_sigmask, SIGINT);
+    sigaddset(&trans_sigmask, SIGTERM);
+
+    memset(&safe_sigint, 0, sizeof(safe_sigint));
+    safe_sigint.sa_sigaction = handle_signal;
+    safe_sigint.sa_mask = trans_sigmask;
+    sigaction(SIGTERM, &safe_sigint, &old_sigterm);
+    sigaction(SIGINT, &safe_sigint, &old_sigint);
+    sig_installed = true;
+  }
+  sig_lock.Unlock();
+
   // get epoch
   sprintf(fn, "%s/commit_epoch", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
@@ -342,10 +428,7 @@ int FileStore::umount()
   lock.Unlock();
   sync_thread.join();
 
-  if (btrfs_fd >= 0) {
-    ::close(btrfs_fd);
-    btrfs_fd = -1;
-  } 
+  ::close(lock_fd);
 
   if (g_conf.filestore_dev) {
     char cmd[100];
@@ -358,33 +441,461 @@ int FileStore::umount()
   return 0;
 }
 
+// btrfs transaction start/end interface
 
-int FileStore::transaction_start()
+int FileStore::transaction_start(int len)
 {
-  if (btrfs_fd < 0)
+  if (!btrfs || !btrfs_trans_start_end)
     return 0;
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
-  if (fd < 0) 
+  if (fd < 0) {
     derr(0) << "transaction_start got " << strerror(errno)
-	    << " from btrfs open" << dendl;
+ 	    << " from btrfs open" << dendl;
+    assert(0);
+  }
   if (::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
     derr(0) << "transaction_start got " << strerror(errno)
-	    << " from btrfs ioctl" << dendl;    
+ 	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
     return -errno;
   }
   dout(10) << "transaction_start " << fd << dendl;
+
+  sig_lock.Lock();
+ retry:
+  if (trans_running && sig_pending) {
+    dout(-10) << "transaction_start signal " << sig_pending << " pending" << dendl;
+    sig_cond.Wait(sig_lock);
+    goto retry;
+  }
+  trans_running++;
+  sig_lock.Unlock();
+
+  char fn[80];
+  sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
+  ::mknod(fn, 0644, 0);
+
   return fd;
 }
 
 void FileStore::transaction_end(int fd)
 {
-  if (btrfs_fd < 0)
+  if (!btrfs || !btrfs_trans_start_end)
     return;
+
+  char fn[80];
+  sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
+  ::unlink(fn);
+  
   dout(10) << "transaction_end " << fd << dendl;
   ::close(fd);
+
+  sig_lock.Lock();
+  trans_running--;
+  if (trans_running == 0 && sig_pending) {
+    dout(-10) << "transaction_end signal " << sig_pending << " pending" << dendl;
+    _handle_signal(sig_pending);
+  }
+  sig_lock.Unlock();
 }
+
+unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
+{
+  // no btrfs transaction support?
+  // or, use trans start/end ioctls?
+  if (!btrfs || btrfs_trans_start_end)
+    return ObjectStore::apply_transaction(t, onsafe);
+
+  // create transaction
+  int len = t.get_btrfs_len();
+  dout(20) << "apply_transaction allocation btrfs usertrans len " << len << dendl;
+  btrfs_ioctl_usertrans *trans =
+    (btrfs_ioctl_usertrans *)new char[sizeof(*trans) + len * sizeof(trans->ops[0])];
+
+  trans->len = 0;
+
+  list<char *> str;
+
+  while (t.have_op()) {
+    int op = t.get_op();
+
+    switch (op) {
+
+    case Transaction::OP_WRITE:
+    case Transaction::OP_ZERO:   // write actual zeros.
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	__u64 offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+	bufferlist bl;
+	if (op == Transaction::OP_WRITE)
+	  t.get_bl(bl);
+	else {
+	  bufferptr bp(len);
+	  bp.zero();
+	  bl.push_back(bp);
+	}
+	
+	dout(10) << "write" << dendl;
+	//write(cid, oid, offset, len, bl, 0);
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_coname(cid, oid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_OPEN;
+	trans->ops[trans->len].args[0] = (__s64)fn;
+	trans->ops[trans->len].args[1] = O_WRONLY|O_CREAT;
+	trans->len++;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SEEK;
+	trans->ops[trans->len].args[0] = -1;
+	trans->ops[trans->len].args[1] = offset;
+	trans->ops[trans->len].args[2] = (__s64)&trans->ops[trans->len].args[4];  // whatever.
+	trans->ops[trans->len].args[3] = SEEK_SET;
+	trans->len++;
+	for (list<bufferptr>::const_iterator it = bl.buffers().begin();
+	     it != bl.buffers().end();
+	     it++) {
+	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_WRITE;
+	  trans->ops[trans->len].args[0] = -1;
+	  trans->ops[trans->len].args[1] = (__s64)(*it).c_str();
+	  trans->ops[trans->len].args[2] = (__s64)(*it).length();
+	  trans->len++;
+	}
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
+	trans->ops[trans->len].args[0] = -1;
+	trans->len++;
+      }
+      break;
+      
+    case Transaction::OP_TRIMCACHE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	__u64 offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+	trim_from_cache(cid, oid, offset, len);
+      }
+      break;
+      
+    case Transaction::OP_TRUNCATE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	__u64 len;
+	t.get_length(len);
+	//truncate(cid, oid, len, 0);
+	
+	dout(10) << "truncate" << dendl;
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_coname(cid, oid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_TRUNCATE;
+	trans->ops[trans->len].args[0] = (__s64)fn;
+	trans->ops[trans->len].args[1] = len;
+	trans->len++;
+      }
+      break;
+      
+    case Transaction::OP_REMOVE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	//remove(cid, oid, 0);
+	
+	dout(10) << "remove " << cid << " " << oid << dendl;
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_coname(cid, oid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_UNLINK;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	trans->len++;
+      }
+      break;
+      
+    case Transaction::OP_SETATTR:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	const char *attrname;
+	t.get_attrname(attrname);
+	bufferlist bl;
+	t.get_bl(bl);
+	//setattr(cid, oid, attrname, bl.c_str(), bl.length(), 0);
+	dout(10) << "setattr " << cid << " " << oid << dendl;
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_coname(cid, oid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	char aname[40];
+	sprintf(aname, "user.ceph.%s", attrname);
+	trans->ops[trans->len].args[1] = (__u64)aname;
+	trans->ops[trans->len].args[2] = (__u64)bl.c_str();
+	trans->ops[trans->len].args[3] = bl.length();
+	trans->ops[trans->len].args[4] = 0;	  
+	trans->len++;
+      }
+      break;
+
+
+    case Transaction::OP_SETATTRS:
+    case Transaction::OP_COLL_SETATTRS:
+      {
+	// make note of old attrs
+	map<string,bufferptr> oldattrs;
+	char *fn = new char[80];
+	str.push_back(fn);
+
+	if (op == Transaction::OP_SETATTRS) {
+	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+	  getattrs(cid, oid, oldattrs);
+	  get_coname(cid, oid, fn);
+	} else {
+	  coll_t cid;
+	  t.get_cid(cid);
+	  collection_getattrs(cid, oldattrs);
+	  get_cdir(cid, fn);
+	}
+	map<string,bufferptr> *pattrset;
+	t.get_pattrset(pattrset);
+	
+	for (map<string,bufferptr>::iterator p = pattrset->begin();
+	     p != pattrset->end();
+	     p++) {
+	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
+	  trans->ops[trans->len].args[0] = (__u64)fn;
+	  char *aname = new char[40];
+	  str.push_back(aname);
+	  sprintf(aname, "user.ceph.%s", p->first.c_str());
+	  trans->ops[trans->len].args[1] = (__u64)aname;
+	  trans->ops[trans->len].args[2] = (__u64)p->second.c_str();
+	  trans->ops[trans->len].args[3] = p->second.length();
+	  trans->ops[trans->len].args[4] = 0;	  
+	  trans->len++;
+	  oldattrs.erase(p->first);
+	}
+	
+	// and remove any leftovers
+	for (map<string,bufferptr>::iterator p = oldattrs.begin();
+	     p != oldattrs.end();
+	     p++) {
+	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
+	  trans->ops[trans->len].args[0] = (__u64)fn;
+	  trans->ops[trans->len].args[1] = (__u64)p->first.c_str();
+	  trans->len++;
+	}
+      }
+      break;
+      
+    case Transaction::OP_RMATTR:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	const char *attrname;
+	t.get_attrname(attrname);
+	//rmattr(cid, oid, attrname, 0);
+	
+	dout(10) << "rmattr " << cid << " " << oid << dendl;
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_coname(cid, oid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	trans->ops[trans->len].args[1] = (__u64)attrname;
+	trans->len++;
+      }
+      break;
+      
+    case Transaction::OP_CLONE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	pobject_t noid;
+	t.get_oid(noid);
+	//clone(cid, oid, noid);
+	
+	dout(10) << "clone " << cid << " " << oid << dendl;
+	char *ofn = new char[80];
+	str.push_back(ofn);
+	char *nfn = new char[80];
+	str.push_back(nfn);
+	get_coname(cid, oid, ofn);
+	get_coname(cid, noid, nfn);
+	
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_OPEN;
+	trans->ops[trans->len].args[0] = (__u64)nfn;
+	trans->ops[trans->len].args[1] = O_WRONLY;
+	trans->len++;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_OPEN;
+	trans->ops[trans->len].args[0] = (__u64)ofn;
+	trans->ops[trans->len].args[1] = O_RDONLY;
+	trans->len++;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLONE;
+	trans->ops[trans->len].args[0] = -2;
+	trans->ops[trans->len].args[1] = -1;
+	trans->len++;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
+	trans->ops[trans->len].args[0] = -1;
+	trans->len++;
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
+	trans->ops[trans->len].args[0] = -2;
+	trans->len++;
+      }
+      break;
+      
+    case Transaction::OP_MKCOLL:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	//create_collection(cid, 0);
+	dout(10) << "mkcoll " << cid << dendl;
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_cdir(cid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_MKDIR;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	trans->ops[trans->len].args[1] = 0644;
+ 	trans->len++;
+     }
+      break;
+      
+    case Transaction::OP_RMCOLL:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	//destroy_collection(cid, 0);
+	dout(10) << "rmcoll " << cid << dendl;
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_cdir(cid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_RMDIR;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	trans->ops[trans->len].args[1] = 0644;
+	trans->len++;
+      }
+      break;
+      
+    case Transaction::OP_COLL_ADD:
+      {
+	coll_t cid, ocid;
+	t.get_cid(cid);
+	t.get_cid(ocid);
+	pobject_t oid;
+	t.get_oid(oid);
+	collection_add(cid, ocid, oid, 0);
+	assert(0);
+      }
+      break;
+      
+    case Transaction::OP_COLL_REMOVE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	collection_remove(cid, oid, 0);
+	assert(0);
+      }
+      break;
+      
+    case Transaction::OP_COLL_SETATTR:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	const char *attrname;
+	t.get_attrname(attrname);
+	bufferlist bl;
+	t.get_bl(bl);
+	dout(10) << "coll_setattr " << cid << dendl;
+	//collection_setattr(cid, attrname, bl.c_str(), bl.length(), 0);
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_cdir(cid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	char aname[40];
+	sprintf(aname, "user.ceph.%s", attrname);
+	trans->ops[trans->len].args[1] = (__u64)aname;
+	trans->ops[trans->len].args[2] = (__u64)bl.c_str();
+	trans->ops[trans->len].args[3] = bl.length();
+	trans->ops[trans->len].args[4] = 0;	  
+ 	trans->len++;
+     }
+      break;
+      
+    case Transaction::OP_COLL_RMATTR:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	const char *attrname;
+	t.get_attrname(attrname);
+	dout(10) << "coll_rmattr " << cid << dendl;
+	//collection_rmattr(cid, attrname, 0);
+	char *fn = new char[80];
+	str.push_back(fn);
+	get_cdir(cid, fn);
+	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
+	trans->ops[trans->len].args[0] = (__u64)fn;
+	trans->ops[trans->len].args[1] = (__u64)attrname;
+ 	trans->len++;
+      }
+      break;
+
+      
+    default:
+      cerr << "bad op " << op << std::endl;
+      assert(0);
+    }
+  }  
+
+  dout(20) << "apply_transaction final btrfs usertrans len is " << trans->len << dendl;
+  assert((int)trans->len <= (int)len);
+
+  // apply
+  int r = 0;
+  if (trans->len) {
+    r = ::ioctl(lock_fd, BTRFS_IOC_USERTRANS, (unsigned long)trans);
+    if (r < 0) {
+      derr(0) << "apply_transaction_end got " << strerror(errno)
+	      << " from btrfs usertrans ioctl" << dendl;    
+      r = -errno;
+    } 
+  }
+  delete[] (char *)trans;
+
+  while (!str.empty()) {
+    delete[] str.front();
+    str.pop_front();
+  }
+
+  if (r >= 0)
+    journal_transaction(t, onsafe);
+  else
+    delete onsafe;
+
+  return r;
+}
+
 
 
 // --------------------
@@ -537,7 +1048,7 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   if (n < 0)
       return -errno;
   int r = 0;
-  if (btrfs_fd >= 0)
+  if (btrfs)
     r = ::ioctl(n, BTRFS_IOC_CLONE, o);
   else {
     struct stat st;

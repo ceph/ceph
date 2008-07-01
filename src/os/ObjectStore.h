@@ -43,6 +43,9 @@ using std::list;
  */
 
 
+static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
+  ::encode(*attrset, bl);
+}
 
 class ObjectStore {
 public:
@@ -73,16 +76,11 @@ public:
    */
   class Transaction {
   public:
-    static const int OP_READ =          1;  // oid, offset, len, pbl
-    static const int OP_STAT =          2;  // oid, pstat
-    static const int OP_GETATTR =       3;  // oid, attrname, pattrval
-    static const int OP_GETATTRS =      4;  // oid, pattrset
-
     static const int OP_WRITE =        10;  // oid, offset, len, bl
     static const int OP_ZERO =         11;  // oid, offset, len
     static const int OP_TRUNCATE =     12;  // oid, len
     static const int OP_REMOVE =       13;  // oid
-    static const int OP_SETATTR =      14;  // oid, attrname, attrval
+    static const int OP_SETATTR =      14;  // oid, attrname, bl
     static const int OP_SETATTRS =     15;  // oid, attrset
     static const int OP_RMATTR =       16;  // oid, attrname
     static const int OP_CLONE =        17;  // oid, newoid
@@ -93,26 +91,30 @@ public:
     static const int OP_RMCOLL =       21;  // cid
     static const int OP_COLL_ADD =     22;  // cid, oid
     static const int OP_COLL_REMOVE =  23;  // cid, oid
-    static const int OP_COLL_SETATTR = 24;  // cid, attrname, attrval
+    static const int OP_COLL_SETATTR = 24;  // cid, attrname, bl
     static const int OP_COLL_RMATTR =  25;  // cid, attrname
     static const int OP_COLL_SETATTRS = 26;  // cid, attrset
 
   private:
+    int len;
+    int blen;  // for btrfs transactions
     list<int8_t> ops;
     list<bufferlist> bls;
     list<pobject_t> oids;
     list<coll_t> cids;
     list<int64_t> lengths;
+
+    // for these guys, just use a pointer.
+    // but, decode to a full value, and create pointers to that.
     list<const char*> attrnames;
     list<string> attrnames2;
-
-    // for reads only (not encoded)
-    list<bufferlist*> pbls;
-    list<struct stat*> psts;
-    list< pair<void*,int*> > pattrvals;
-    list< map<string,bufferptr>* > pattrsets;
+    list<map<string,bufferptr> *> attrsets;
+    list<map<string,bufferptr> > attrsets2;
 
   public:
+    int get_len() { return len ? len : ops.size(); }
+    int get_btrfs_len() { return blen; }
+
     bool have_op() {
       return !ops.empty();
     }
@@ -142,54 +144,9 @@ public:
       p = attrnames.front();
       attrnames.pop_front();
     }
-    void get_pbl(bufferlist* &pbl) {
-      pbl = pbls.front();
-      pbls.pop_front();
-    }
-    void get_pstat(struct stat* &pst) {
-      pst = psts.front();
-      psts.pop_front();
-    }
-    void get_pattrval(pair<void*,int*>& p) {
-      p = pattrvals.front();
-      pattrvals.pop_front();
-    }
     void get_pattrset(map<string,bufferptr>* &ps) {
-      ps = pattrsets.front();
-      pattrsets.pop_front();
-    }
-      
-
-    void read(coll_t cid, pobject_t oid, __u64 off, size_t len, bufferlist *pbl) {
-      int op = OP_READ;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      lengths.push_back(off);
-      lengths.push_back(len);
-      pbls.push_back(pbl);
-    }
-    void stat(coll_t cid, pobject_t oid, struct stat *st) {
-      int op = OP_STAT;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      psts.push_back(st);
-    }
-    void getattr(coll_t cid, pobject_t oid, const char* name, void* val, int *plen) {
-      int op = OP_GETATTR;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      attrnames.push_back(name);
-      pattrvals.push_back(pair<void*,int*>(val,plen));
-    }
-    void getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {
-      int op = OP_GETATTRS;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      pattrsets.push_back(&aset);
+      ps = attrsets.front();
+      attrsets.pop_front();
     }
 
     void write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl) {
@@ -200,6 +157,8 @@ public:
       lengths.push_back(off);
       lengths.push_back(len);
       bls.push_back(bl);
+      len++;
+      blen += 3 + bl.buffers().size();
     }
     void zero(coll_t cid, pobject_t oid, __u64 off, size_t len) {
       int op = OP_ZERO;
@@ -208,6 +167,8 @@ public:
       oids.push_back(oid);
       lengths.push_back(off);
       lengths.push_back(len);
+      len++;
+      blen += 3 + 1;
     }
     void trim_from_cache(coll_t cid, pobject_t oid, __u64 off, size_t len) {
       int op = OP_TRIMCACHE;
@@ -216,6 +177,7 @@ public:
       oids.push_back(oid);
       lengths.push_back(off);
       lengths.push_back(len);
+      len++;
     }
     void truncate(coll_t cid, pobject_t oid, __u64 off) {
       int op = OP_TRUNCATE;
@@ -223,12 +185,16 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       lengths.push_back(off);
+      len++;
+      blen++;
     }
     void remove(coll_t cid, pobject_t oid) {
       int op = OP_REMOVE;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
+      len++;
+      blen++;
     }
     void setattr(coll_t cid, pobject_t oid, const char* name, const void* val, int len) {
       int op = OP_SETATTR;
@@ -236,17 +202,20 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       attrnames.push_back(name);
-      //attrvals.push_back(pair<const void*,int>(val,len));
       bufferlist bl;
       bl.append((char*)val,len);
       bls.push_back(bl);
+      len++;
+      blen++;
     }
     void setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset) {
       int op = OP_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      pattrsets.push_back(&attrset);
+      attrsets.push_back(&attrset);
+      len++;
+      blen += 5 + attrset.size();     // HACK allowance for removing old attrs
     }
     void rmattr(coll_t cid, pobject_t oid, const char* name) {
       int op = OP_RMATTR;
@@ -254,6 +223,8 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       attrnames.push_back(name);
+      len++;
+      blen++;
     }
     void clone(coll_t cid, pobject_t oid, pobject_t noid) {
       int op = OP_CLONE;
@@ -261,16 +232,22 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       oids.push_back(noid);
+      len++;
+      blen += 5;
     }
     void create_collection(coll_t cid) {
       int op = OP_MKCOLL;
       ops.push_back(op);
       cids.push_back(cid);
+      len++;
+      blen++;
     }
     void remove_collection(coll_t cid) {
       int op = OP_RMCOLL;
       ops.push_back(op);
       cids.push_back(cid);
+      len++;
+      blen++;
     }
     void collection_add(coll_t cid, coll_t ocid, pobject_t oid) {
       int op = OP_COLL_ADD;
@@ -278,13 +255,17 @@ public:
       cids.push_back(cid);
       cids.push_back(ocid);
       oids.push_back(oid);
+      len++;
+      blen++;
     }
     void collection_remove(coll_t cid, pobject_t oid) {
       int op = OP_COLL_REMOVE;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-    }
+      len++;
+       blen++;
+   }
     void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
       int op = OP_COLL_SETATTR;
       ops.push_back(op);
@@ -293,24 +274,31 @@ public:
       bufferlist bl;
       bl.append((char*)val, len);
       bls.push_back(bl);
+      len++;
+      blen++;
     }
     void collection_rmattr(coll_t cid, const char* name) {
       int op = OP_COLL_RMATTR;
       ops.push_back(op);
       cids.push_back(cid);
       attrnames.push_back(name);
+      len++;
+      blen++;
     }
     void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
       int op = OP_COLL_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
-      pattrsets.push_back(&aset);
+      attrsets.push_back(&aset);
+      len++;
+      blen += 5 + aset.size();
     }
 
+
     // etc.
-    Transaction() {}
-    Transaction(bufferlist::iterator &p) { decode(p); }
-    Transaction(bufferlist &bl) { 
+    Transaction() : len(0) {}
+    Transaction(bufferlist::iterator &p) : len(0) { decode(p); }
+    Transaction(bufferlist &bl) : len(0) { 
       bufferlist::iterator p = bl.begin();
       decode(p); 
     }
@@ -322,6 +310,7 @@ public:
       ::encode(cids, bl);
       ::encode(lengths, bl);
       ::encode(attrnames, bl);
+      ::encode(attrsets, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(ops, bl);
@@ -334,6 +323,11 @@ public:
 	   p != attrnames2.end();
 	   ++p)
 	attrnames.push_back((*p).c_str());
+      ::decode(attrsets2, bl);
+      for (list<map<string,bufferptr> >::iterator p = attrsets2.begin();
+	   p != attrsets2.end();
+	   ++p)
+	attrsets.push_back(&(*p));
     }
   };
 
@@ -341,64 +335,16 @@ public:
    * these stubs should be implemented if we want to use the
    * apply_transaction() below and we want atomic transactions.
    */
-  virtual int transaction_start() { return 0; }
+  virtual int transaction_start(int len) { return 0; }
   virtual void transaction_end(int id) { }
   virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) {
     // non-atomic implementation
-    int id = transaction_start();
+    int id = transaction_start(t.get_len());
+    if (id < 0) return id;
+
     while (t.have_op()) {
       int op = t.get_op();
       switch (op) {
-      case Transaction::OP_READ:
-        {
-	  coll_t cid;
-          pobject_t oid;
-          __u64 offset, len;
-	  t.get_cid(cid);
-	  t.get_oid(oid);
-	  t.get_length(offset);
-	  t.get_length(len);
-          bufferlist *pbl;
-	  t.get_pbl(pbl);
-          read(cid, oid, offset, len, *pbl);
-        }
-        break;
-      case Transaction::OP_STAT:
-        {
-	  coll_t cid;
-	  t.get_cid(cid);
-          pobject_t oid;
-	  t.get_oid(oid);
-          struct stat *st;
-	  t.get_pstat(st);
-          stat(cid, oid, st);
-        }
-        break;
-      case Transaction::OP_GETATTR:
-        {
-       	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          const char *attrname;
-	  t.get_attrname(attrname);
-          pair<void*,int*> pattrval;
-	  t.get_pattrval(pattrval);
-          *pattrval.second = getattr(cid, oid, attrname, pattrval.first, *pattrval.second);
-        }
-        break;
-      case Transaction::OP_GETATTRS:
-        {
-	  coll_t cid;
-	  t.get_cid(cid);
-          pobject_t oid;
-	  t.get_oid(oid);
-          map<string,bufferptr> *pset;
-	  t.get_pattrset(pset);
-          getattrs(cid, oid, *pset);
-        }
-        break;
-
       case Transaction::OP_WRITE:
         {
  	  coll_t cid;

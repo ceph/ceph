@@ -248,7 +248,6 @@ void Paxos::collect_timeout()
   dout(5) << "collect timeout, calling fresh election" << dendl;
   collect_timeout_event = 0;
   assert(mon->is_leader());
-  cancel_events();
   mon->call_election();
 }
 
@@ -399,7 +398,6 @@ void Paxos::accept_timeout()
   accept_timeout_event = 0;
   assert(mon->is_leader());
   assert(is_updating());
-  cancel_events();
   mon->call_election();
 }
 
@@ -582,7 +580,6 @@ void Paxos::lease_ack_timeout()
   assert(is_active());
 
   lease_ack_timeout_event = 0;
-  cancel_events();
   mon->call_election();
 }
 
@@ -592,7 +589,6 @@ void Paxos::lease_timeout()
   assert(mon->is_peon());
 
   lease_timeout_event = 0;
-  cancel_events();
   mon->call_election();
 }
 
@@ -671,11 +667,13 @@ void Paxos::cancel_events()
 
 void Paxos::leader_init()
 {
+  cancel_events();
+  new_value.clear();
+
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;			    
     return;
   } 
-  cancel_events();
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
@@ -685,6 +683,8 @@ void Paxos::leader_init()
 void Paxos::peon_init()
 {
   cancel_events();
+  new_value.clear();
+
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "peon_init -- i am a peon" << dendl;

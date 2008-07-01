@@ -50,7 +50,8 @@ class Filer {
   
   // probes
   struct Probe {
-    inode_t inode;
+    inodeno_t ino;
+    ceph_file_layout layout;
     __u64 from;        // for !fwd, this is start of extent we are probing, thus possibly < our endpoint.
     __u64 *end;
     int flags;
@@ -65,8 +66,8 @@ class Filer {
     map<object_t, __u64> known;
     map<object_t, tid_t> ops;
 
-    Probe(inode_t &i, __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
-      inode(i), from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
+    Probe(inodeno_t i, ceph_file_layout &l, __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
+      ino(i), layout(l), from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
   };
   
   class C_Probe;
@@ -84,27 +85,30 @@ class Filer {
   }
 
   /*** async file interface ***/
-  Objecter::OSDRead *prepare_read(inode_t& inode,
+  Objecter::OSDRead *prepare_read(inodeno_t ino,
+				  ceph_file_layout *layout,
 				  __u64 offset, 
 				  size_t len, 
 				  bufferlist *bl, 
 				  int flags) {
     Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
-    file_to_extents(inode.ino, &inode.layout, offset, len, rd->extents);
+    file_to_extents(ino, layout, offset, len, rd->extents);
     return rd;
   }
-  int read(inode_t& inode,
+  int read(inodeno_t ino,
+	   ceph_file_layout *layout,
            __u64 offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
            Context *onfinish) {
-    Objecter::OSDRead *rd = prepare_read(inode, offset, len, bl, flags);
+    Objecter::OSDRead *rd = prepare_read(ino, layout, offset, len, bl, flags);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 
-  int write(inode_t& inode,
-            __u64 offset, 
+  int write(inodeno_t ino,
+	    ceph_file_layout *layout,
+	    __u64 offset, 
             size_t len, 
             bufferlist& bl,
             int flags, 
@@ -112,29 +116,31 @@ class Filer {
             Context *oncommit,
 	    objectrev_t rev=0) {
     Objecter::OSDWrite *wr = objecter->prepare_write(bl, flags);
-    file_to_extents(inode.ino, &inode.layout, offset, len, wr->extents, rev);
+    file_to_extents(ino, layout, offset, len, wr->extents, rev);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
-  int zero(inode_t& inode,
-           __u64 offset,
+  int zero(inodeno_t ino,
+	   ceph_file_layout *layout,
+	   __u64 offset,
            size_t len,
 	   int flags,
            Context *onack,
            Context *oncommit) {
     Objecter::OSDModify *z = objecter->prepare_modify(CEPH_OSD_OP_ZERO, flags);
-    file_to_extents(inode.ino, &inode.layout, offset, len, z->extents);
+    file_to_extents(ino, layout, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
-  int remove(inode_t& inode,
+  int remove(inodeno_t ino,
+	     ceph_file_layout *layout,
 	     __u64 offset,
 	     size_t len,
 	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
     Objecter::OSDModify *z = objecter->prepare_modify(CEPH_OSD_OP_DELETE, flags);
-    file_to_extents(inode.ino, &inode.layout, offset, len, z->extents);
+    file_to_extents(ino, layout, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -143,7 +149,8 @@ class Filer {
    *  specify direction,
    *  and whether we stop when we find data, or hole.
    */
-  int probe(inode_t& inode,
+  int probe(inodeno_t ino,
+	    ceph_file_layout *layout,
 	    __u64 start_from,
 	    __u64 *end,
 	    bool fwd,

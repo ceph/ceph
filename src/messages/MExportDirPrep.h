@@ -33,7 +33,7 @@ class MExportDirPrep : public Message {
   list<CInodeDiscover*>          inodes;
   list<CDentryDiscover*>         dentries;
   map<inodeno_t,dirfrag_t>       inode_dirfrag;
-  map<inodeno_t,string>          inode_dentry;
+  map<inodeno_t,nstring>          inode_dentry;
 
   map<inodeno_t,list<frag_t> >   frags_by_ino;
   map<dirfrag_t,CDirDiscover*>   dirfrags;
@@ -53,7 +53,7 @@ class MExportDirPrep : public Message {
   dirfrag_t get_containing_dirfrag(inodeno_t ino) {
     return inode_dirfrag[ino];
   }
-  string& get_dentry(inodeno_t ino) {
+  nstring& get_dentry(inodeno_t ino) {
     return inode_dentry[ino];
   }
   bool have_dirfrag(dirfrag_t df) {
@@ -98,7 +98,7 @@ class MExportDirPrep : public Message {
   void add_export(dirfrag_t df) {
     bounds.push_back( df );
   }
-  void add_inode(dirfrag_t df, const string& name, CDentryDiscover *dn, CInodeDiscover *in) {
+  void add_inode(dirfrag_t df, const nstring& name, CDentryDiscover *dn, CInodeDiscover *in) {
     inodes.push_back(in);
     dentries.push_back(dn);
     inode_dirfrag[in->get_ino()] = df;

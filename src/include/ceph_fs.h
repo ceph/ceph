@@ -11,6 +11,7 @@
 # include <linux/types.h>
 # include <asm/fcntl.h>
 #else
+# define _LINUX_TYPES_H   /* we don't want linux/types.h's __u32, __le32, etc. */
 # include <netinet/in.h>
 # include "inttypes.h"
 # include "byteorder.h"
@@ -75,20 +76,81 @@ struct ceph_timespec {
 	__le32 tv_nsec;
 } __attribute__ ((packed));
 
+
 /*
- * dir fragments
+ * frag encoding:
+ *   8 upper bits = "bits"
+ *  24 lower bits = "value"
+ * (We could go to 5+27 bits, but who cares.)
+ *
+ * We use the _most_ significant bits of the 24 bit value.  This makes
+ * values logically sort.
+ *
+ * Unfortunately, because the bits are still in the high bits, we
+ * can't sort encoded frags numerically.  However, it does allow you
+ * to feed encoded frags as values into frag_contains_value.
  */
-static inline __u32 frag_make(__u32 b, __u32 v) { return (b << 24) | (v & (0xffffffu >> (24-b))); }
+static inline __u32 frag_make(__u32 b, __u32 v) {
+	return (b << 24) | 
+		(v & (0xffffffu << (24-b)) & 0xffffffu);
+}
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
 static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
-static inline __u32 frag_mask(__u32 f) { return 0xffffffu >> (24-frag_bits(f)); }
-static inline __u32 frag_next(__u32 f) { return frag_make(frag_bits(f), frag_value(f)+1); }
+static inline __u32 frag_mask(__u32 f) {
+	return (0xffffffu << (24-frag_bits(f))) & 0xffffffu;
+}
+static inline __u32 frag_mask_shift(__u32 f) {
+	return 24 - frag_bits(f);
+}
+
+static inline bool frag_contains_value(__u32 f, __u32 v) {
+	return (v & frag_mask(f)) == frag_value(f);
+}
+static inline bool frag_contains_frag(__u32 f, __u32 sub) {
+	/* as specific as us, and contained by us */
+	return frag_bits(sub) >= frag_bits(f) &&
+		(frag_value(sub) & frag_mask(f)) == frag_value(f);
+}
+
+static inline __u32 frag_parent(__u32 f) {
+	return frag_make(frag_bits(f) - 1,
+			 frag_value(f) & (frag_mask(f) << 1));
+}
+static inline bool frag_is_left_child(__u32 f) {
+	return frag_bits(f) > 0 &&
+		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 0;
+}
+static inline bool frag_is_right_child(__u32 f) {
+	return frag_bits(f) > 0 &&
+		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 1;
+}
+static inline __u32 frag_sibling(__u32 f) {
+	return frag_make(frag_bits(f),
+			 frag_value(f) ^ (0x1000000 >> frag_bits(f)));
+}
+static inline __u32 frag_left_child(__u32 f) {
+	return frag_make(frag_bits(f)+1, frag_value(f));
+}
+static inline __u32 frag_right_child(__u32 f) {
+	return frag_make(frag_bits(f)+1,
+			 frag_value(f) | (0x1000000 >> (1+frag_bits(f))));
+}
+static inline __u32 frag_make_child(__u32 f, int by, int i) {
+	int newbits = frag_bits(f) + by;
+	return frag_make(newbits,
+			 frag_value(f) | (i << (24 - newbits)));
+}
 static inline bool frag_is_leftmost(__u32 f) {
 	return frag_value(f) == 0;
 }
 static inline bool frag_is_rightmost(__u32 f) {
 	return frag_value(f) == frag_mask(f);
 }
+static inline __u32 frag_next(__u32 f) {
+	return frag_make(frag_bits(f),
+			 frag_value(f) + (0x1000000 >> frag_bits(f)));
+}
+
 static inline int frag_compare(__u32 a, __u32 b) {
 	unsigned va = frag_value(a);
 	unsigned vb = frag_value(b);
@@ -104,11 +166,6 @@ static inline int frag_compare(__u32 a, __u32 b) {
 		return 1;
 	return 0;
 }
-static inline bool frag_contains_value(__u32 f, __u32 v)
-{
-	return (v & frag_mask(f)) == frag_value(f);
-}
-
 
 /*
  * object layout - how objects are mapped into PGs
@@ -285,8 +342,9 @@ struct ceph_entity_name {
 #define CEPH_MSGR_TAG_READY         1  /* server -> client: ready for messages */
 #define CEPH_MSGR_TAG_RESETSESSION  2  /* server -> client: reset, try again */
 #define CEPH_MSGR_TAG_WAIT          3  /* server -> client: wait for racing incoming connection */
-#define CEPH_MSGR_TAG_RETRY         4  /* server -> client + cseq: try again with higher cseq */
-#define CEPH_MSGR_TAG_CLOSE         5  /* closing pipe */
+#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server -> client + cseq: try again with higher cseq */
+#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server -> client + gseq: try again with higher gseq */
+#define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
 #define CEPH_MSGR_TAG_MSG          10  /* message */
 #define CEPH_MSGR_TAG_ACK          11  /* message ack */
 
@@ -322,7 +380,7 @@ struct ceph_msg_header {
 	__le32 front_len;
 	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
-	struct ceph_entity_inst src, dst;
+	struct ceph_entity_inst src, orig_src, dst;
 } __attribute__ ((packed));
 
 struct ceph_msg_footer {
@@ -750,6 +808,11 @@ struct ceph_mds_cap_reconnect {
 /* followed by encoded string */
 
 
+/*
+ * osd map
+ */
+
+#define CEPH_OSDMAP_DATAFULL 1  /* no data writes (ENOSPC) */
 
 /*
  * osd ops

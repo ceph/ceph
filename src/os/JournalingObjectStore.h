@@ -49,6 +49,15 @@ protected:
       commit_waiters[super_epoch].push_back(oncommit);
   }
 
+  void journal_transaction(Transaction &t, Context *onsafe) {
+    if (journal && journal->is_writeable()) {
+      bufferlist tbl;
+      t.encode(tbl);
+      journal->submit_entry(super_epoch, tbl, onsafe);
+    } else
+      queue_commit_waiter(onsafe);
+  }
+
   void journal_write(coll_t cid, pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
@@ -191,7 +200,7 @@ protected:
     } else
       queue_commit_waiter(onsafe);
   }
-
+  
   void journal_collection_setattrs(coll_t cid, map<string,bufferptr>& aset, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
@@ -202,7 +211,7 @@ protected:
     } else
       queue_commit_waiter(onsafe);
   }
-
+  
   void journal_sync(Context *onsafe) {
     if (journal) {  
       // journal empty transaction

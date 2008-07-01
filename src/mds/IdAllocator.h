@@ -16,7 +16,7 @@
 #ifndef __IDALLOCATOR_H
 #define __IDALLOCATOR_H
 
-#include "include/types.h"
+#include "mdstypes.h"
 #include "include/interval_set.h"
 #include "include/buffer.h"
 #include "include/Context.h"

@@ -24,6 +24,7 @@
 #include "Fake.h"
 //#include "FakeStoreBDBCollections.h"
 
+#include <signal.h>
 
 #include <map>
 using namespace std;
@@ -38,7 +39,9 @@ class FileStore : public JournalingObjectStore {
   string basedir;
   __u64 fsid;
   
-  int btrfs_fd;  // >= if btrfs
+  bool btrfs;
+  bool btrfs_trans_start_end;
+  int lock_fd;
 
   // fake attrs?
   FakeAttrs attrs;
@@ -75,7 +78,8 @@ class FileStore : public JournalingObjectStore {
  public:
   FileStore(const char *base) : 
     basedir(base),
-    btrfs_fd(-1),
+    btrfs(false), btrfs_trans_start_end(false),
+    lock_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     stop(false), sync_thread(this) { }
@@ -84,10 +88,11 @@ class FileStore : public JournalingObjectStore {
   int umount();
   int mkfs();
 
-  int transaction_start();
-  void transaction_end(int id);
-
   int statfs(struct statfs *buf);
+
+  int transaction_start(int len);
+  void transaction_end(int id);
+  unsigned apply_transaction(Transaction& t, Context *onsafe=0);
 
   // ------------------
   // objects

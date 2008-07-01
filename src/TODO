@@ -1,6 +1,17 @@
+v0.3
+- fix mon osdmap send_full/latest ... never use get_source_inst()!
+
+v0.4
+- fix msgr protocol wrt resets, and varying connection close policies
+- ENOSPC
+- finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
+- make kclient sendpage (and rip out io interruption?)
+
+
 big items
+- ENOSPC
 - quotas
-  - accounting
+/  - accounting
   - enforcement
 - rados cow/snapshot infrastructure
 - mds snapshots
@@ -8,20 +19,24 @@ big items
 - client, user authentication
 - cas
 
-- meta vs data crush rules
 - use libuuid
 
 userspace client
 - handle session STALE
-- rm -rf on fragmented directory
 - time out caps, wake up waiters on renewal
   - link caps with mds session
 - validate dn leases
 - fix lease validation to check session ttl
 - clean up ll_ interface, now that we have leases!
 - clean up client mds session vs mdsmap behavior?
+- stop using mds's inode_t?
+- fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
+- make writepages maybe skip pages with errors?
+  - EIO, or ENOSPC?
+  - ... writeback vs ENOSPC vs flush vs close()... hrm...
+- set mapping bits for ENOSPC, EIO?
 - flush caps on sync, fsync, etc.
   - do we need to block?
 - timeout mds session close on umount
@@ -37,6 +52,14 @@ kernel client
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
   - osd ack vs commit handling.  hmm!
+- fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
+
+vfs issues
+- real_lookup() race:
+  1- hash lookup find no dentry
+  2- real_lookup() takes dir i_mutex, but then finds a dentry
+  3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
+- vfs_rename_dir()
 
 client
 - clean up client mds session vs mdsmap behavior?
@@ -59,10 +82,6 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds
-- dir frags
- - fix replay  (dont want dir frozen, pins, etc.?)
- - fix accounting
-
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
@@ -110,6 +129,8 @@ fsck
 - object backpointer attrs to hint catastrophic reconstruction?
 
 objecter
+- fix failure handler...
+  - generic mon client?
 - maybe_request_map should set a timer event to periodically re-request.
 - transaction prepare/commit?
 - read+floor_lockout

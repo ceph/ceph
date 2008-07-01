@@ -127,7 +127,7 @@ int main(int argc, const char **argv) {
     bufferlist bl;
     map.encode(bl);
     Messenger *messenger = new FakeMessenger(entity_name_t::ADMIN(-1));
-    MMonCommand *m = new MMonCommand(monmap->fsid, messenger->get_myinst());
+    MMonCommand *m = new MMonCommand(monmap->fsid);
     m->set_data(bl);
     m->cmd.push_back("osd");
     m->cmd.push_back("setmap");

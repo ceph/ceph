@@ -146,6 +146,7 @@ void Monitor::call_election()
   paxos_mdsmap.election_starting();
   paxos_osdmap.election_starting();
   paxos_clientmap.election_starting();
+  paxos_pgmap.election_starting();
   
   // call a new election
   elector.call_election();
@@ -172,12 +173,14 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   clientmon->election_finished();
 } 
 
-void Monitor::lose_election(epoch_t epoch, int l) 
+void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
 {
   state = STATE_PEON;
   mon_epoch = epoch;
   leader = l;
-  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader << dendl;
+  quorum = q;
+  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader
+	   << " quorum is " << quorum << dendl;
   
   // init paxos
   paxos_mdsmap.peon_init();
@@ -198,12 +201,6 @@ void Monitor::handle_command(MMonCommand *m)
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
     reply_command(m, -EPERM, "wrong fsid");
     return;
-  }
-
-  // first time we've seen it?
-  if (m->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-    m->inst = m->get_source_inst();
-    m->clear_payload();
   }
 
   dout(0) << "handle_command " << *m << dendl;
@@ -248,7 +245,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 {
   MMonCommandAck *reply = new MMonCommandAck(rc, rs);
   reply->set_data(rdata);
-  messenger->send_message(reply, m->inst);
+  messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
 }
 
@@ -340,6 +337,9 @@ void Monitor::dispatch(Message *m)
 	  break;
 	case PAXOS_CLIENTMAP:
 	  paxos_clientmap.dispatch(m);
+	  break;
+	case PAXOS_PGMAP:
+	  paxos_pgmap.dispatch(m);
 	  break;
 	default:
 	  assert(0);

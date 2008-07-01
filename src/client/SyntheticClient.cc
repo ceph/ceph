@@ -1792,13 +1792,11 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
   if (fd < 0) return fd;
+  
+  utime_t from = g_clock.now();
+  utime_t start = from;
+  __u64 bytes = 0, total = 0;
 
-#define CHEAP_HACK 0
-#if CHEAP_HACK
-  // START temporary hack piece 1 --Esteban
-  for (int foo = 0; foo < 10; ++foo) {
-  // END temporary hack piece 1 --Esteban
-#endif
 
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) {
@@ -1820,14 +1818,25 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     }
 
     client->write(fd, buf, wrsize, i*wrsize);
+    bytes += wrsize;
+    total += wrsize;
+
+    utime_t now = g_clock.now();
+    if (now - from >= 1.0) {
+      double el = now - from;
+      dout(0) << (bytes / el / 1048576.0) << " MB/sec" << dendl;
+      from = now;
+      bytes = 0;
+    }
   }
-#if CHEAP_HACK
-  // START temporary hack piece 2--Esteban
-  }
-  sleep(5);
-  // END temporary hack piece 2 --Esteban
-#endif
+
   client->fsync(fd, true);
+  
+  utime_t stop = g_clock.now();
+  double el = stop - start;
+  dout(0) << "total " << (total / el / 1048576.0) << " MB/sec ("
+	  << total << " bytes in " << el << " seconds)" << dendl;
+
   client->close(fd);
   delete[] buf;
 
@@ -3101,7 +3110,11 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
       } else {
 	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT, mode & 0777);
 	assert(fd > 0);	
-	client->write(fd, "", 0, size);
+	if (data) {
+	  client->write(fd, "", 0, size);
+	} else {
+	  client->truncate(f.c_str(), size);
+	}
 	client->close(fd);
 
 	//client->chmod(f.c_str(), mode & 0777);
@@ -3147,7 +3160,7 @@ int SyntheticClient::chunk_file(string &filename)
     
     lock.Lock();
     Context *onfinish = new C_SafeCond(&lock, &cond, &done);
-    filer->read(inode, pos, get, &bl, 0, onfinish);
+    filer->read(inode.ino, &inode.layout, pos, get, &bl, 0, onfinish);
     while (!done)
       cond.Wait(lock);
     lock.Unlock();

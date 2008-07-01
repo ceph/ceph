@@ -41,7 +41,7 @@ cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
 dupstore_SOURCES = dupstore.cc config.cc
 dupstore_LDADD = libos.a libebofs.a libcommon.a
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libebofs.a libcommon.a
+streamtest_LDADD = libebofs.a libcommon.a libos.a
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
@@ -149,7 +149,7 @@ noinst_LIBRARIES = \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a libebofs.a 
 
-noinst_LIBRARIES += libcrush_so.a libcephclient_so.a
+noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh
@@ -315,8 +315,6 @@ noinst_HEADERS = \
 	kernel/export.c\
 	kernel/file.c\
 	kernel/inode.c\
-	kernel/ktcp.c\
-	kernel/ktcp.h\
 	kernel/mds_client.c\
 	kernel/mds_client.h\
 	kernel/mdsmap.c\
@@ -490,4 +488,8 @@ noinst_HEADERS = \
 	config.h\
 	include/intarith.h\
 	include/encoding.h\
-	include/err.h
+	include/err.h\
+	include/nstring.h\
+	include/tstring.h\
+	include/cstring.h\
+	mds/events/ECommitted.h

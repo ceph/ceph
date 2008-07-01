@@ -16,6 +16,8 @@ struct ceph_osdmap {
 	__u32 lpgp_num, lpgp_num_mask;
 	ceph_epoch_t last_pg_change;
 
+	__u32 flags;
+
 	__u32 max_osd;
 	__u8 *osd_state;
 	__u32 *osd_offload;  /* 0 = normal, 0x10000 = 100% offload (failed) */

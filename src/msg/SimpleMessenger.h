@@ -125,7 +125,7 @@ private:
     list<Message*> sent;
     Cond cond;
     
-    __u32 connect_seq;
+    __u32 connect_seq, peer_global_seq;
     __u32 out_seq;
     __u32 in_seq, in_seq_acked;
     
@@ -169,7 +169,7 @@ private:
       sd(-1),
       state(st), 
       reader_running(false), writer_running(false),
-      connect_seq(0),
+      connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
     //~Pipe() { cout << "destructor on " << this << std::endl; }
@@ -224,7 +224,10 @@ private:
     bool stop;
     int qlen, pqlen;
     int my_rank;
+  public:
+    bool need_addr;
 
+  private:
     class DispatchThread : public Thread {
       EntityMessenger *m;
     public:
@@ -288,6 +291,7 @@ private:
       stop(false),
       qlen(0), pqlen(0),
       my_rank(r),
+      need_addr(false),
       dispatch_thread(this) { }
     ~EntityMessenger() {
       // join dispatch thread
@@ -310,6 +314,7 @@ private:
     void suicide();
     void prepare_dest(const entity_inst_t& inst);
     int send_message(Message *m, entity_inst_t dest);
+    int forward_message(Message *m, entity_inst_t dest);
     int lazy_send_message(Message *m, entity_inst_t dest);
     
     void mark_down(entity_addr_t a);
@@ -339,7 +344,10 @@ private:
 
   set<Pipe*>      pipes;
   list<Pipe*>     pipe_reap_queue;
-        
+  
+  Mutex global_seq_lock;
+  __u32 global_seq;
+      
   Pipe *connect_rank(const entity_addr_t& addr, const Policy& p);
 
   const entity_addr_t &get_rank_addr() { return rank_addr; }
@@ -358,6 +366,13 @@ public:
   int bind(int64_t force_nonce = -1);
   int start(bool nodaemon = false);
   void wait();
+
+  __u32 get_global_seq(__u32 old=0) {
+    Mutex::Locker l(global_seq_lock);
+    if (old > global_seq)
+      global_seq = old;
+    return ++global_seq;
+  }
 
   EntityMessenger *register_entity(entity_name_t addr);
   void rename_entity(EntityMessenger *ms, entity_name_t newaddr);

@@ -192,7 +192,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
       case EXPORT_DISCOVERING:
 	dout(10) << "export state=discovering : canceling freeze and removing auth_pin" << dendl;
 	dir->unfreeze_tree();  // cancel the freeze
-	dir->auth_unpin();
+	dir->auth_unpin(this);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
@@ -597,7 +597,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   mds->send_message_mds(new MExportDirDiscover(dir), dest);
 
   // start the freeze, but hold it up with an auth_pin.
-  dir->auth_pin();
+  dir->auth_pin(this);
   dir->freeze_tree();
   assert(dir->is_freezing_tree());
   dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir));
@@ -623,7 +623,7 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
   } else {
     // freeze the subtree
     export_state[dir] = EXPORT_FREEZING;
-    dir->auth_unpin();
+    dir->auth_unpin(this);
   }
   
   delete m;  // done

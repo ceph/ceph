@@ -1407,15 +1407,12 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   // read data+attrs
   bufferlist bl;
   eversion_t v;
-  int vlen = sizeof(v);
+  size_t vlen = sizeof(v);
   map<string,bufferptr> attrset;
   
-  ObjectStore::Transaction t;
-  t.read(info.pgid, poid, 0, 0, &bl);
-  t.getattr(info.pgid, poid, "version", &v, &vlen);
-  t.getattrs(info.pgid, poid, attrset);
-  unsigned tr = osd->store->apply_transaction(t);
-  assert(tr == 0);  // !!!
+  osd->store->read(info.pgid, poid, 0, 0, bl);
+  osd->store->getattr(info.pgid, poid, "version", &v, vlen);
+  osd->store->getattrs(info.pgid, poid, attrset);
 
   // ok
   dout(7) << "push " << poid << " v " << v 
@@ -1639,6 +1636,29 @@ void ReplicatedPG::on_change()
        p++) 
     if (!p->second->applied)
       apply_repop(p->second);
+
+  // artificially ack+commit any replicas who dropped out of the pg
+  hash_map<tid_t,RepGather*>::iterator next;
+  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin(); 
+       p != rep_gather.end();
+       p = next) {
+    next = p;
+    next++;
+
+    dout(-1) << "checking repop tid " << p->first << dendl;
+    set<int> all;
+    set_union(p->second->waitfor_commit.begin(), p->second->waitfor_commit.end(),
+	      p->second->waitfor_ack.begin(), p->second->waitfor_ack.end(),
+	      inserter(all, all.begin()));
+    for (set<int>::iterator q = all.begin(); q != all.end(); q++) {
+      bool have = false;
+      for (unsigned i=1; i<acting.size(); i++)
+	if (acting[i] == *q) 
+	  have = true;
+      if (!have)
+	repop_ack(p->second, -1, true, *q);
+    }
+  }
 }
 
 void ReplicatedPG::on_role_change()

@@ -160,19 +160,18 @@ public:
 
   // source/dest
   entity_inst_t get_dest_inst() { return entity_inst_t(env.dst); }
+  entity_name_t get_dest() { return entity_name_t(env.dst.name); }
   void set_dest_inst(entity_inst_t& inst) { env.dst = inst; }
 
   entity_inst_t get_source_inst() { return entity_inst_t(env.src); }
+  entity_name_t get_source() { return entity_name_t(env.src.name); }
+  entity_addr_t get_source_addr() { return entity_addr_t(env.src.addr); }
   void set_source_inst(entity_inst_t& inst) { env.src = inst; }
 
-  entity_name_t get_dest() { return entity_name_t(env.dst.name); }
-  void set_dest(entity_name_t a) { env.dst.name = a; }
-  
-  entity_name_t get_source() { return entity_name_t(env.src.name); }
-  void set_source(entity_name_t a) { env.src.name = a; }
-
-  entity_addr_t get_source_addr() { return entity_addr_t(env.src.addr); }
-  void set_source_addr(const entity_addr_t &i) { env.src.addr = i; }
+  entity_inst_t get_orig_source_inst() { return entity_inst_t(env.orig_src); }
+  entity_name_t get_orig_source() { return entity_name_t(env.orig_src.name); }
+  entity_addr_t get_orig_source_addr() { return entity_addr_t(env.orig_src.addr); }
+  void set_orig_source_inst(entity_inst_t &i) { env.orig_src = i; }
 
   // virtual bits
   virtual void decode_payload() = 0;

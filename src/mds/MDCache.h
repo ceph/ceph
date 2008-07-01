@@ -108,8 +108,10 @@ struct Mutation {
   list<CDir*> projected_fnodes;
   list<ScatterLock*> updated_scatterlocks;
 
-  Mutation() : ls(0),
-	       done_locking(false), committing(false), aborted(false) {}
+  Mutation() : 
+    ls(0),
+    slave_to_mds(-1),
+    done_locking(false), committing(false), aborted(false) {}
   Mutation(metareqid_t ri, int slave_to=-1) : 
     reqid(ri),
     ls(0),
@@ -140,13 +142,13 @@ struct Mutation {
   }
   void auth_pin(MDSCacheObject *object) {
     if (!is_auth_pinned(object)) {
-      object->auth_pin();
+      object->auth_pin(this);
       auth_pins.insert(object);
     }
   }
   void auth_unpin(MDSCacheObject *object) {
-    assert(is_auth_pinned(object));
-    object->auth_unpin();
+    assert(auth_pins.count(object));
+    object->auth_unpin(this);
     auth_pins.erase(object);
   }
   void drop_local_auth_pins() {
@@ -154,7 +156,7 @@ struct Mutation {
 	 it != auth_pins.end();
 	 it++) {
       assert((*it)->is_auth());
-      (*it)->auth_unpin();
+      (*it)->auth_unpin(this);
     }
     auth_pins.clear();
   }
@@ -206,6 +208,10 @@ inline ostream& operator<<(ostream& out, Mutation &mut)
 }
 
 
+enum {
+  MDS_INTERNAL_OP_FRAGMENT,
+};
+
 /** active_request_t
  * state we track for requests we are currently processing.
  * mostly information about locks held, so that we can drop them all
@@ -222,6 +228,9 @@ struct MDRequest : public Mutation {
 
   // -- i am a slave request
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
+
+  // -- i am an internal op
+  int internal_op;
 
 
   // break rarely-used fields into a separately allocated structure 
@@ -250,10 +259,18 @@ struct MDRequest : public Mutation {
     Context *slave_commit;
     bufferlist rollback_bl;
 
+    // internal ops
+    CInode *fragment_in;
+    frag_t fragment_base;
+    list<CDir*> fragment_start;
+    list<CDir*> fragment_result;
+    int fragment_bits;
+
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       destdn_was_remote_inode(0), was_link_merge(false),
-      slave_commit(0) { }
+      slave_commit(0),
+      fragment_in(0), fragment_bits(0) { }
   } *_more;
 
 
@@ -261,16 +278,19 @@ struct MDRequest : public Mutation {
   MDRequest() : 
     session(0), client_request(0), ref(0), 
     slave_request(0),
+    internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
     session(0), client_request(req), ref(0), 
     slave_request(0),
+    internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
     session(0), client_request(0), ref(0),
     slave_request(0),
+    internal_op(-1),
     _more(0) {}
   ~MDRequest() {
     delete _more;
@@ -290,6 +310,7 @@ struct MDRequest : public Mutation {
     if (is_slave()) out << " slave_to mds" << slave_to_mds;
     if (client_request) out << " cr=" << client_request;
     if (slave_request) out << " sr=" << slave_request;
+    if (internal_op == MDS_INTERNAL_OP_FRAGMENT) out << " fragment";
     out << ")";
   }
 };
@@ -430,6 +451,7 @@ protected:
 public:
   MDRequest* request_start(MClientRequest *req);
   MDRequest* request_start_slave(metareqid_t rid, int by);
+  MDRequest* request_start_internal(int op);
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);
   }
@@ -789,18 +811,18 @@ protected:
   // -- fragmenting --
 private:
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
-			    list<CDir*>& frags, list<Context*>& waiters);
+			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
   friend class EFragment;
 
 public:
   void split_dir(CDir *dir, int byn);
 
 private:
-  void fragment_freeze(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
-  void fragment_mark_and_complete(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
-  void fragment_go(CInode *diri, list<CDir*>& startfrags, frag_t basefrag, int bits);
-  void fragment_stored(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags);
-  void fragment_logged(CInode *diri, frag_t basefrag, int bits, list<CDir*>& resultfrags, vector<version_t>& pvs, LogSegment *ls);
+  void dispatch_fragment(MDRequest *mdr);
+  void fragment_mark_and_complete(MDRequest *mdr);
+  void fragment_go(MDRequest *mdr);
+  void fragment_stored(MDRequest *mdr);
+  void fragment_logged(MDRequest *mdr);
   friend class C_MDC_FragmentGo;
   friend class C_MDC_FragmentMarking;
   friend class C_MDC_FragmentStored;

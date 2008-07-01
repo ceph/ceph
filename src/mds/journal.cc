@@ -75,15 +75,23 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
   // commit dirs
+  for (xlist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
+    dout(20) << " new_dirfrag " << **p << dendl;
+    assert((*p)->is_auth());
+    commit.insert(*p);
+  }
   for (xlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
+    dout(20) << " dirty_dirfrag " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert(*p);
   }
   for (xlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
+    dout(20) << " dirty_dentry " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert((*p)->get_dir());
   }
   for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
+    dout(20) << " dirty_inode " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert((*p)->get_parent_dn()->get_dir());
   }
@@ -115,12 +123,18 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     mds->mdcache->wait_for_uncommitted_master(*p, gather->new_sub());
   }
 
-  // dirty non-auth mtimes
+  // nudge scatterlocks
   for (xlist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
     mds->locker->scatter_nudge(&in->dirlock, gather->new_sub());
+  }
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    dout(10) << "try_to_expire waiting for dirfragtreelock flush on " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->locker->scatter_nudge(&in->dirfragtreelock, gather->new_sub());
   }
 
   // open files
@@ -194,20 +208,16 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // once we are otherwise trimmable, make sure journal is fully safe on disk.
   if (!gather) {
-    if (trimmable_at &&
-	trimmable_at <= mds->mdlog->get_safe_pos()) {
+    if (!trimmable_at)
+      trimmable_at = mds->mdlog->get_write_pos();
+
+    if (trimmable_at <= mds->mdlog->get_safe_pos()) {
       dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
 	      << " <= " << mds->mdlog->get_safe_pos() << dendl;
     } else {
-      if (trimmable_at == 0) {
-	trimmable_at = mds->mdlog->get_write_pos();
-	dout(6) << "LogSegment(" << offset << ").try_to_expire now trimmable at " << trimmable_at
-		<< ", waiting for safe journal flush" << dendl;
-      } else {
-	dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
-		<< " > " << mds->mdlog->get_safe_pos()
-		<< ", waiting for safe journal flush" << dendl;
-      }
+      dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
+	      << " > " << mds->mdlog->get_safe_pos()
+	      << ", waiting for safe journal flush" << dendl;
       if (!gather) gather = new C_Gather;
       mds->mdlog->wait_for_safe(gather->new_sub());
     }
@@ -511,6 +521,7 @@ void ESession::replay(MDS *mds)
 	mds->sessionmap.remove_session(session);
     }
   }
+  _segment->sessionmapv = cmapv;
 }
 
 void ESessions::update_segment()
@@ -530,6 +541,7 @@ void ESessions::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;
   }
+  _segment->sessionmapv = cmapv;
 }
 
 
@@ -750,7 +762,7 @@ void EFragment::replay(MDS *mds)
 
   list<CDir*> resultfrags;
   list<Context*> waiters;
-  mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters);
+  mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
 
   metablob.replay(mds, _segment);
 }

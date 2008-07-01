@@ -141,6 +141,8 @@ ObjectStore *OSD::create_object_store(const char *dev)
 int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
 {
   ObjectStore *store = create_object_store(dev);
+  if (!store)
+    return -ENOENT;
   int err = store->mkfs();    
   if (err < 0) return err;
   err = store->mount();
@@ -149,9 +151,46 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   OSDSuperblock sb;
   sb.fsid = fsid;
   sb.whoami = whoami;
+
+  store->create_collection(0, 0);
+
+  // age?
+  if (g_conf.osd_age_time != 0) {
+    cout << "aging..." << std::endl;
+    Ager ager(store);
+    if (g_conf.osd_age_time < 0) 
+      ager.load_freelist();
+    else 
+      ager.age(g_conf.osd_age_time, 
+	       g_conf.osd_age, 
+	       g_conf.osd_age - .05, 
+	       50000, 
+	       g_conf.osd_age - .05);
+  }
+
+  // benchmark?
+  if (g_conf.osd_auto_weight) {
+    bufferlist bl;
+    bufferptr bp(1048576);
+    bp.zero();
+    bl.push_back(bp);
+    cout << "testing disk bandwidth..." << std::endl;
+    utime_t start = g_clock.now();
+    for (int i=0; i<1000; i++) 
+      store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
+    store->sync();
+    utime_t end = g_clock.now();
+    end -= start;
+    cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
+    for (int i=0; i<1000; i++) 
+      store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
+    
+    // set osd weight
+    sb.weight = (1000.0 / (double)end);
+  }
+
   bufferlist bl;
   ::encode(sb, bl);
-  store->create_collection(0, 0);
   store->write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
   store->umount();
   delete store;
@@ -254,6 +293,13 @@ OSD::~OSD()
   if (store) { delete store; store = 0; }
 }
 
+bool got_sighup = false;
+
+void handle_sighup(int signal, siginfo_t *info, void *p)
+{
+  got_sighup = true;
+}
+
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
@@ -285,61 +331,21 @@ int OSD::init()
   int r = store->mount();
   if (r < 0) return -1;
   
-  if (g_conf.osd_mkfs) {
-    // age?
-    if (g_conf.osd_age_time != 0) {
-      dout(2) << "age" << dendl;
-      Ager ager(store);
-      if (g_conf.osd_age_time < 0) 
-	ager.load_freelist();
-      else 
-	ager.age(g_conf.osd_age_time, 
-		 g_conf.osd_age, 
-		 g_conf.osd_age - .05, 
-		 50000, 
-		 g_conf.osd_age - .05);
-    }
-
-    if (g_conf.osd_auto_weight) {
-      // benchmark
-      bufferlist bl;
-      bufferptr bp(1048576);
-      bp.zero();
-      bl.push_back(bp);
-      utime_t start = g_clock.now();
-      for (int i=0; i<1000; i++) 
-	store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
-      store->sync();
-      utime_t end = g_clock.now();
-      end -= start;
-      dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
-      for (int i=0; i<1000; i++) 
-	store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
-      
-      // set osd weight
-      superblock.weight = (1000.0 / (double)end);
-    }
-  }
-  else {
-    dout(2) << "boot" << dendl;
-    
-    // read superblock
-    if (read_superblock() < 0) {
-      store->umount();
-      delete store;
-      return -1;
-    }
-    
-    // load up pgs (as they previously existed)
-    load_pgs();
-    
-    dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
-    assert(whoami == superblock.whoami);
+  dout(2) << "boot" << dendl;
+  
+  // read superblock
+  if (read_superblock() < 0) {
+    store->umount();
+    delete store;
+    return -1;
   }
   
-
-
+  // load up pgs (as they previously existed)
+  load_pgs();
   
+  dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
+  assert(whoami == superblock.whoami);
+    
   // log
   char name[80];
   sprintf(name, "osd%d", whoami);
@@ -400,6 +406,12 @@ int OSD::init()
   
   // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
+
+  // SIGHUP
+  struct sigaction hup;
+  memset(&hup, 0, sizeof(hup));
+  hup.sa_sigaction = handle_sighup;
+  sigaction(SIGHUP, &hup, 0);
 
   return 0;
 }
@@ -869,6 +881,13 @@ void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
 
+  if (got_sighup) {
+    dout(0) << "got SIGHUP, shutting down" << dendl;
+    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), messenger->get_myinst());
+    return;
+  }
+    
+
   // get CPU load avg
   ifstream in("/proc/loadavg");
   if (in.is_open()) {
@@ -1001,7 +1020,7 @@ void OSD::send_boot()
 {
   int mon = monmap->pick_mon();
   dout(10) << "send_boot to mon" << mon << dendl;
-  messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), 
+  messenger->send_message(new MOSDBoot(superblock), 
 			  monmap->get_inst(mon));
 }
 
@@ -1044,8 +1063,7 @@ void OSD::send_failures()
   int mon = monmap->pick_mon();
   while (!failure_queue.empty()) {
     int osd = *failure_queue.begin();
-    messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), 
-					    osdmap->get_inst(osd), osdmap->get_epoch()),
+    messenger->send_message(new MOSDFailure(monmap->fsid, osdmap->get_inst(osd), osdmap->get_epoch()),
 			    monmap->get_inst(mon));
     failure_queue.erase(osd);
   }
@@ -1942,6 +1960,7 @@ PG *OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
 
   dout(10) << "try_create_pg " << pgid << " - creating now" << dendl;
   PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, t);
+  creating_pgs.erase(pgid);
   return pg;
 }
 

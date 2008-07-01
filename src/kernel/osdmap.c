@@ -322,7 +322,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 2*sizeof(__u64)+9*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 2*sizeof(__u64)+11*sizeof(__u32), bad);
 	ceph_decode_64(p, map->fsid.major);
 	ceph_decode_64(p, map->fsid.minor);
 	ceph_decode_32(p, map->epoch);
@@ -335,6 +335,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_32(p, map->lpg_num);
 	ceph_decode_32(p, map->lpgp_num);
 	ceph_decode_32(p, map->last_pg_change);
+	ceph_decode_32(p, map->flags);
 
 	calc_pg_masks(map);
 
@@ -408,20 +409,23 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	struct ceph_fsid fsid;
 	__u32 epoch;
 	struct ceph_timespec ctime;
-	__u32 len;
-	__s32 max;
+	__u32 len, x;
+	__s32 new_flags, max;
+	void *start = *p;
 	int err = -EINVAL;
 
-	ceph_decode_need(p, end, 2*sizeof(__u64)+4*sizeof(__u32), bad);
+	ceph_decode_need(p, end, sizeof(fsid)+sizeof(ctime)+2*sizeof(__u32),
+			 bad);
 	ceph_decode_64(p, fsid.major);
 	ceph_decode_64(p, fsid.minor);
 	ceph_decode_32(p, epoch);
 	BUG_ON(epoch != map->epoch+1);
 	ceph_decode_32(p, ctime.tv_sec);
 	ceph_decode_32(p, ctime.tv_nsec);
+	ceph_decode_32(p, new_flags);
 
 	/* full map? */
-	ceph_decode_32(p, len);
+	ceph_decode_32_safe(p, end, len, bad);
 	if (len > 0) {
 		dout(20, "apply_incremental full map len %d, %p to %p\n",
 		     len, *p, end);
@@ -439,20 +443,31 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 			return ERR_PTR(PTR_ERR(newcrush));
 	}
 
-	/*
-	 * FIXME: from this point on i'm optimisticaly assuming the message
-	 * is complete
-	 */
+	/* new flags? */
+	if (new_flags >= 0)
+		map->flags = new_flags;
+
+	ceph_decode_need(p, end, 5*sizeof(__u32), bad);
 
 	/* new max? */
-	ceph_decode_need(p, end, 3*sizeof(__u32), bad);
 	ceph_decode_32(p, max);
-	*p += 4*sizeof(__u32);  /* skip new_pg_num et al for now.  FIXME. */
 	if (max >= 0) {
-		err = osdmap_set_max_osd(map, max);
+		int err = osdmap_set_max_osd(map, max);
 		if (err < 0)
 			goto bad;
 	}
+	ceph_decode_32(p, x);
+	if (x)
+		map->pg_num = x;
+	ceph_decode_32(p, x);
+	if (x)
+		map->pgp_num = x;
+	ceph_decode_32(p, x);
+	if (x)
+		map->lpg_num = x;
+	ceph_decode_32(p, x);
+	if (x)
+		map->lpgp_num = x;
 
 	map->epoch++;
 	map->ctime = map->ctime;
@@ -460,6 +475,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		if (map->crush)
 			crush_destroy(map->crush);
 		map->crush = newcrush;
+		newcrush = 0;
 	}
 
 	/* new_up */
@@ -485,8 +501,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		dout(1, "osd%d down\n", osd);
 		if (osd < map->max_osd) {
 			map->osd_state[osd] &= ~CEPH_OSD_UP;
-			ceph_messenger_mark_down(msgr,
-						 &map->osd_addr[osd]);
+			ceph_messenger_mark_down(msgr, &map->osd_addr[osd]);
 		}
 	}
 
@@ -519,7 +534,9 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	return map;
 
 bad:
-	derr(10, "corrupt incremantal osdmap at %p / %p\n", *p, end);
+	derr(10, "corrupt incremental osdmap at %p (%p-%p)\n", *p, start, end);
+	if (newcrush)
+		crush_destroy(newcrush);
 	return ERR_PTR(err);
 }
 

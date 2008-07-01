@@ -72,13 +72,15 @@ const struct inode_operations ceph_special_iops = {
 /*
  * find (or create) a frag in the tree
  */
-struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
+struct ceph_inode_frag *__ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 {
-	struct rb_node **p = &ci->i_fragtree.rb_node;
+	struct rb_node **p;
 	struct rb_node *parent = NULL;
-	struct ceph_inode_frag *frag;
+	struct ceph_inode_frag *frag, *newfrag = 0;
 	int c;
 
+retry:
+	p = &ci->i_fragtree.rb_node;
 	while (*p) {
 		parent = *p;
 		frag = rb_entry(parent, struct ceph_inode_frag, node);
@@ -88,13 +90,20 @@ struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 		else if (c > 0)
 			p = &(*p)->rb_right;
 		else
-			return frag;
+			goto out;
 	}
 
-	frag = kmalloc(sizeof(*frag), GFP_NOFS);
-	if (!frag)
-		return 0;
+	if (!newfrag) {
+		spin_unlock(&ci->vfs_inode.i_lock);
+		newfrag = kmalloc(sizeof(*frag), GFP_NOFS);
+		spin_lock(&ci->vfs_inode.i_lock);
+		if (!newfrag)
+			return ERR_PTR(-ENOMEM);
+		goto retry;
+	}
 
+	frag = newfrag;
+	newfrag = 0;
 	frag->frag = f;
 	frag->split_by = 0;
 	frag->mds = -1;
@@ -104,6 +113,9 @@ struct ceph_inode_frag *ceph_get_frag(struct ceph_inode_info *ci, u32 f)
 	rb_insert_color(&frag->node, &ci->i_fragtree);
 
 	dout(20, "get_frag added %llx frag %x\n", ceph_ino(&ci->vfs_inode), f);
+
+out:
+	kfree(newfrag);
 	return frag;
 }
 
@@ -118,7 +130,7 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 	spin_lock(&ci->vfs_inode.i_lock);
 	while (1) {
 		WARN_ON(!frag_contains_value(t, v));
-		frag = ceph_find_frag(ci, t);
+		frag = __ceph_find_frag(ci, t);
 		if (!frag)
 			break; /* t is a leaf */
 		if (frag->split_by == 0) {
@@ -161,12 +173,14 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	int mds = le32_to_cpu(dirinfo->auth);
 	int ndist = le32_to_cpu(dirinfo->ndist);
 	int i;
+	int err = 0;
 
+	spin_lock(&inode->i_lock);
 	if (mds < 0 && ndist == 0) {
 		/* no delegation info needed. */
-		frag = ceph_find_frag(ci, id);
+		frag = __ceph_find_frag(ci, id);
 		if (!frag)
-			return 0;
+			goto out;
 		if (frag->split_by == 0) {
 			/* tree leaf, remove */
 			dout(20, "fill_dirfrag removed %llx frag %x (no ref)\n",
@@ -180,25 +194,29 @@ static int ceph_fill_dirfrag(struct inode *inode,
 			frag->mds = -1;
 			frag->ndist = 0;
 		}
-		return 0;
+		goto out;
 	}
 
 
 	/* find/add this frag to store mds delegation info */
-	frag = ceph_get_frag(ci, id);
-	if (!frag) {
+	frag = __ceph_get_frag(ci, id);
+	if (IS_ERR(frag)) {
 		derr(0, "fill_dirfrag ENOMEM on mds ref ino %llx frag %x\n",
 		     ceph_ino(inode), le32_to_cpu(dirinfo->frag));
-		return -ENOMEM;
-	} else {
-		frag->mds = mds;
-		frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
-		for (i = 0; i < frag->ndist; i++)
-			frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
-		dout(20, "fill_dirfrag %llx frag %x referral mds %d ndist=%d\n",
-		     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
+		err = -ENOMEM;
+		goto out;
 	}
-	return 0;
+
+	frag->mds = mds;
+	frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
+	for (i = 0; i < frag->ndist; i++)
+		frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
+	dout(20, "fill_dirfrag %llx frag %x referral mds %d ndist=%d\n",
+	     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
+
+out:
+	spin_unlock(&inode->i_lock);
+	return err;
 }
 
 /*
@@ -342,8 +360,8 @@ no_change:
 	nsplits = le32_to_cpu(info->fragtree.nsplits);
 	for (i = 0; i < nsplits; i++) {
 		u32 id = le32_to_cpu(info->fragtree.splits[i].frag);
-		struct ceph_inode_frag *frag = ceph_get_frag(ci, id);
-		if (!frag) {
+		struct ceph_inode_frag *frag = __ceph_get_frag(ci, id);
+		if (IS_ERR(frag)) {
 			derr(0,"ENOMEM on ino %llx frag %x\n",
 			     ceph_ino(inode), id);
 			continue;
@@ -354,11 +372,11 @@ no_change:
 		     frag->split_by);
 	}
 
+	spin_unlock(&inode->i_lock);
+
 	/* set dirinfo? */
 	if (dirinfo)
 		ceph_fill_dirfrag(inode, dirinfo);
-
-	spin_unlock(&inode->i_lock);
 
 	if (ci->i_hashval != inode->i_ino) {
 		insert_inode_hash(inode);
@@ -414,10 +432,10 @@ no_change:
 /*
  * caller must hold session s_mutex.
  */
-void ceph_update_inode_lease(struct inode *inode,
-			     struct ceph_mds_reply_lease *lease,
-			     struct ceph_mds_session *session,
-			     unsigned long from_time)
+static int update_inode_lease(struct inode *inode,
+			      struct ceph_mds_reply_lease *lease,
+			      struct ceph_mds_session *session,
+			      unsigned long from_time)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int is_new = 0;
@@ -429,7 +447,7 @@ void ceph_update_inode_lease(struct inode *inode,
 	     inode, mask, duration, ttl);
 
 	if (mask == 0)
-		return;
+		return 0;
 
 	spin_lock(&inode->i_lock);
 	/*
@@ -447,12 +465,15 @@ void ceph_update_inode_lease(struct inode *inode,
 			is_new = 1;
 		}
 		list_move_tail(&ci->i_lease_item, &session->s_inode_leases);
-	}
+	} else
+		mask = 0;
 	spin_unlock(&inode->i_lock);
 	if (is_new) {
 		dout(10, "lease iget on %p\n", inode);
 		igrab(inode);
 	}
+
+	return mask;
 }
 
 /*
@@ -501,10 +522,10 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 /*
  * caller should hold session s_mutex.
  */
-void ceph_update_dentry_lease(struct dentry *dentry,
-			      struct ceph_mds_reply_lease *lease,
-			      struct ceph_mds_session *session,
-			      unsigned long from_time)
+static void update_dentry_lease(struct dentry *dentry,
+				struct ceph_mds_reply_lease *lease,
+				struct ceph_mds_session *session,
+				unsigned long from_time)
 {
 	struct ceph_dentry_info *di;
 	int is_new = 0;
@@ -513,8 +534,18 @@ void ceph_update_dentry_lease(struct dentry *dentry,
 
 	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
 	     dentry, le16_to_cpu(lease->mask), duration, ttl);
-	if (lease->mask == 0)
+	if (lease->mask == 0) {
+		/*
+		 * no per-dentry lease.  so, set d_time to match
+		 * parent directory version.  if/when we get an
+		 * ICONTENT cap (implicit directory-wide lease), we'll
+		 * know whether it covers this dentry.
+		 */
+		struct inode *dir = dentry->d_parent->d_inode;
+		dentry->d_time = ceph_inode(dir)->i_version;
+		dout(20, " no lease, setting d_time to %lu\n", dentry->d_time);
 		return;
+	}
 
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
@@ -590,24 +621,72 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
 
 
 /*
+ * splice a dentry to an inode.
+ * caller must hold directory i_mutex for this to be safe.
+ */
+static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
+				    bool *prehash)
+{
+	struct dentry *realdn;
+
+	/* dn must be unhashed */
+	if (!d_unhashed(dn))
+		d_drop(dn);
+	realdn = d_materialise_unique(dn, in);
+	if (IS_ERR(realdn)) {
+		derr(0, "error splicing %p (%d) with %p (%d) "
+		     "inode %p ino %llx\n",
+		     dn, atomic_read(&dn->d_count),
+		     realdn, atomic_read(&realdn->d_count),
+		     realdn->d_inode,
+		     ceph_ino(realdn->d_inode));
+		if (prehash)
+			*prehash = false; /* don't rehash on error */
+		goto out;
+	} else if (realdn) {
+		dout(10, "dn %p (%d) spliced with %p (%d) "
+		     "inode %p ino %llx\n",
+		     dn, atomic_read(&dn->d_count),
+		     realdn, atomic_read(&realdn->d_count),
+		     realdn->d_inode,
+		     ceph_ino(realdn->d_inode));
+		dput(dn);
+		dn = realdn;
+		ceph_init_dentry(dn);
+	} else
+		dout(10, "dn %p attached to %p ino %llx\n",
+		     dn, dn->d_inode, ceph_ino(dn->d_inode));
+	if ((!prehash || *prehash) && d_unhashed(dn))
+		d_rehash(dn);
+out:
+	return dn;
+}
+
+/*
  * assimilate a full trace of inodes and dentries, from the root to
  * the item relevant for this reply, into our cache.  make any dcache
  * changes needed to properly reflect the completed operation (e.g.,
  * call d_move).  make note of the distribution of metadata across the
  * mds cluster.
+ *
+ * FIXME: we should check inode.version to avoid races between traces
+ * from multiple MDSs after, say, a ancestor directory is renamed.
  */
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		    struct ceph_mds_session *session)
 {
 	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
-	int err = 0;
+	int err = 0, mask;
 	struct qstr dname;
-	struct dentry *dn = sb->s_root, *realdn;
+	struct dentry *dn = sb->s_root;
 	struct dentry *parent = NULL;
+	struct dentry *existing;
 	struct inode *in;
 	struct ceph_mds_reply_inode *ininfo;
 	int d = 0;
 	u64 ino;
+	int have_icontent = 0;
+	bool have_lease = 0;
 
 	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
@@ -631,7 +710,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 #endif
 
 	ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
-	if (dn) {
+	if (likely(dn)) {
 		in = dn->d_inode;
 		/* trace should start at root, or have only 1 dentry
 		 * (if it is in mds stray dir) */
@@ -654,8 +733,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				      rinfo->trace_dir[0]:0);
 		if (err < 0)
 			return err;
-		ceph_update_inode_lease(in, rinfo->trace_ilease[0], session,
-					req->r_from_time);
+		mask = update_inode_lease(in, rinfo->trace_ilease[0],
+					 session, req->r_from_time);
+		//have_icontent = mask & CEPH_LOCK_ICONTENT;
 		if (sb->s_root == NULL)
 			sb->s_root = dn;
 	}
@@ -665,59 +745,66 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dname.name = rinfo->trace_dname[d];
 		dname.len = rinfo->trace_dname_len[d];
 		parent = dn;
-
-		dout(10, "fill_trace %d/%d parent %p in %p d '%.*s'\n",
-		     (d+1), rinfo->trace_numd, parent, parent->d_inode,
-		     (int)dname.len, dname.name);
-
-		/* dentry */
 		dn = 0;
-		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
-			dn = req->r_last_dentry;
-			dout(10, "fill_trace provided dn %p '%.*s'\n", dn,
-			     dn->d_name.len, dn->d_name.name);
-			ceph_init_dentry(dn);  /* just in case */
-			req->r_last_dentry = NULL;
 
-			/* rename? */
-			if (req->r_old_dentry) {
-				dout(10, " src %p '%.*s' dst %p '%.*s'\n",
-				     req->r_old_dentry,
-				     req->r_old_dentry->d_name.len,
-				     req->r_old_dentry->d_name.name,
+		dout(10, "fill_trace %d/%d parent %p inode %p '%.*s'"
+		     " ic %d dmask %d\n",
+		     (d+1), rinfo->trace_numd, parent, parent->d_inode,
+		     (int)dname.len, dname.name,
+		     have_icontent, rinfo->trace_dlease[d]->mask);
+
+		/* try to take dir i_mutex */
+		if (req->r_locked_dir != parent->d_inode &&
+		    mutex_trylock(&parent->d_inode->i_mutex) == 0) {
+			dout(0, "fill_trace  FAILED to take %p i_mutex\n",
+			     parent->d_inode);
+			goto no_dir_mutex;
+		}
+
+		/* do we have a dn lease? */
+		have_lease = have_icontent ||
+			(rinfo->trace_dlease[d]->mask & CEPH_LOCK_DN);
+		if (!have_lease)
+			dout(0, "fill_trace  no icontent|dentry lease\n");
+
+		dout(10, "fill_trace  took %p i_mutex\n", parent->d_inode);
+
+		dname.hash = full_name_hash(dname.name, dname.len);
+	retry_lookup:
+		/* existing dentry? */
+		dn = d_lookup(parent, &dname);
+		dout(10, "fill_trace d_lookup of '%.*s' got %p\n",
+		     (int)dname.len, dname.name, dn);
+
+		/* use caller provided dentry?  for simplicity,
+		 *  - only if there is no existing dn, and
+		 *  - only if parent is correct
+		 */
+		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
+			if (!dn && req->r_last_dentry->d_parent == parent) {
+				dn = req->r_last_dentry;
+				dout(10, "fill_trace provided dn %p '%.*s'\n",
 				     dn, dn->d_name.len, dn->d_name.name);
-				dout(10, "fill_trace doing d_move %p -> %p\n",
-				     req->r_old_dentry, dn);
-				d_move(req->r_old_dentry, dn);
-				dout(10, " src %p '%.*s' dst %p '%.*s'\n",
-				     req->r_old_dentry,
-				     req->r_old_dentry->d_name.len,
-				     req->r_old_dentry->d_name.name,
-				     dn, dn->d_name.len, dn->d_name.name);
-				dput(dn);  /* dn is dropped */
-				dn = req->r_old_dentry;  /* use old_dentry */
-				req->r_old_dentry = 0;
+				ceph_init_dentry(dn);  /* just in case */
+			} else {
+				dout(10, "fill_trace NOT using provided dn %p "
+				     "(parent %p)\n", req->r_last_dentry,
+				     req->r_last_dentry->d_parent);
+				dput(req->r_last_dentry);
 			}
-			if (dn->d_parent != parent)
-				dout(10, "warning: d_parent %p != %p\n",
-				     dn->d_parent, parent);
+			req->r_last_dentry = NULL;
 		}
 
 		if (!dn) {
-			dname.hash = full_name_hash(dname.name, dname.len);
-		retry_lookup:
-			dn = d_lookup(parent, &dname);
-			dout(10, "fill_trace d_lookup of '%.*s' got %p\n",
-			     (int)dname.len, dname.name, dn);
+			dn = d_alloc(parent, &dname);
 			if (!dn) {
-				dn = d_alloc(parent, &dname);
-				if (!dn) {
-					derr(0, "d_alloc enomem\n");
-					err = -ENOMEM;
-					break;
-				}
-				ceph_init_dentry(dn);
+				derr(0, "d_alloc enomem\n");
+				err = -ENOMEM;
+				goto out_dir;
 			}
+			dout(10, "fill_trace d_alloc %p '%.*s'\n", dn,
+			     dn->d_name.len, dn->d_name.name);
+			ceph_init_dentry(dn);
 		}
 		BUG_ON(!dn);
 
@@ -732,19 +819,39 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			}
 			dout(20, "d_instantiate %p NULL\n", dn);
 			d_instantiate(dn, NULL);
-			if (d_unhashed(dn))
+			if (have_lease && d_unhashed(dn))
 				d_rehash(dn);
 			in = 0;
-			ceph_update_dentry_lease(dn, rinfo->trace_dlease[d],
-						 session, req->r_from_time);
-			break;
+			update_dentry_lease(dn, rinfo->trace_dlease[d],
+					    session, req->r_from_time);
+			goto out_dir;
+		}
+
+		/* rename? */
+		if (d == rinfo->trace_numd-1 && req->r_old_dentry) {
+			dout(10, " src %p '%.*s' dst %p '%.*s'\n",
+			     req->r_old_dentry,
+			     req->r_old_dentry->d_name.len,
+			     req->r_old_dentry->d_name.name,
+			     dn, dn->d_name.len, dn->d_name.name);
+			dout(10, "fill_trace doing d_move %p -> %p\n",
+			     req->r_old_dentry, dn);
+			d_move(req->r_old_dentry, dn);
+			dout(10, " src %p '%.*s' dst %p '%.*s'\n",
+			     req->r_old_dentry,
+			     req->r_old_dentry->d_name.len,
+			     req->r_old_dentry->d_name.name,
+			     dn, dn->d_name.len, dn->d_name.name);
+			dput(dn);  /* dn is dropped */
+			dn = req->r_old_dentry;  /* use old_dentry */
+			req->r_old_dentry = 0;
 		}
 
 		/* attach proper inode */
 		ininfo = rinfo->trace_in[d+1].in;
 		if (dn->d_inode) {
 			if (ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino)) {
-				dout(10, "dn %p wrong %p ino %llx\n",
+				dout(10, "dn %p wrong inode %p ino %llx\n",
 				     dn, dn->d_inode, ceph_ino(dn->d_inode));
 				d_delete(dn);
 				dput(dn);
@@ -761,35 +868,20 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				d_delete(dn);
 				dn = NULL;
 				in = NULL;
-				break;
+				goto out_dir;
 			}
-			/* d_splice_alias wants dn unhashed */
-			if (!d_unhashed(dn)) {
-				dout(20, "d_drop %p\n", dn);
-				d_drop(dn);
-			}
-			realdn = d_splice_alias(in, dn);
-			if (realdn) {
-				derr(10, "dn %p spliced with %p inode %p "
-				     "ino %llx\n", dn, realdn, realdn->d_inode,
-				     ceph_ino(realdn->d_inode));
-				if (dn == req->r_last_dentry) {
-					dput(dn);
-					req->r_last_dentry = realdn;
-				}
-				dn = realdn;
-				ceph_init_dentry(dn);
-			} else
-				dout(10, "dn %p attached to %p ino %llx\n",
-				     dn, dn->d_inode, ceph_ino(dn->d_inode));
+			dn = splice_dentry(dn, in, &have_lease);
 		}
-		if (dn->d_parent == parent)
-			ceph_update_dentry_lease(dn, rinfo->trace_dlease[d],
-						 session, req->r_from_time);
-		else
-			derr(10, "sloppy tailing dentry %p, not doing lease\n",
-			     dn);
 
+		if (have_lease)
+			update_dentry_lease(dn, rinfo->trace_dlease[d],
+					    session, req->r_from_time);
+
+		/* done with dn update */
+		if (req->r_locked_dir != parent->d_inode)
+			mutex_unlock(&parent->d_inode->i_mutex);
+
+	update_inode:
 		err = ceph_fill_inode(in,
 				      &rinfo->trace_in[d+1],
 				      rinfo->trace_numd <= d ?
@@ -801,15 +893,77 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			dn = NULL;
 			break;
 		}
-		ceph_update_inode_lease(dn->d_inode, rinfo->trace_ilease[d+1],
-					session, req->r_from_time);
+		mask = update_inode_lease(dn->d_inode,
+					 rinfo->trace_ilease[d+1],
+					 session, req->r_from_time);
+		have_icontent = mask & CEPH_LOCK_ICONTENT;
+
 		dput(parent);
 		parent = NULL;
+		continue;
+
+
+	out_dir:
+		/* drop i_mutex */
+		if (req->r_locked_dir != parent->d_inode)
+			mutex_unlock(&parent->d_inode->i_mutex);
+		break;
+
+
+	no_dir_mutex:
+		/*
+		 * we couldn't take i_mutex for this dir, so do not
+		 * lookup or relink any existing dentry.
+		 */
+		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
+			dn = req->r_last_dentry;
+			dout(10, "fill_trace using provided dn %p\n", dn);
+			ceph_init_dentry(dn);
+			req->r_last_dentry = NULL;
+		}
+
+		/* null dentry? */
+		if (d+1 == rinfo->trace_numi) {
+			if (dn && dn->d_inode)
+				d_delete(dn);
+			break;
+		}
+
+		/* find existing inode */
+		ininfo = rinfo->trace_in[d+1].in;
+		in = ceph_get_inode(parent->d_sb, le64_to_cpu(ininfo->ino));
+		if (IS_ERR(in)) {
+			derr(30, "ceph_get_inode badness\n");
+			err = PTR_ERR(in);
+			in = NULL;
+			break;
+		}
+		existing = d_find_alias(in);
+		if (existing) {
+			if (dn)
+				dput(dn);
+			dn = existing;
+			dout(10, " using existing %p\n", dn);
+		} else {
+			if (dn && dn->d_inode == NULL) {
+				dout(10, " instantiating provided %p\n", dn);
+				d_instantiate(dn, in);
+			} else {
+				if (dn) {
+					dout(10, " ignoring provided dn %p\n",
+					     dn);
+					dput(dn);
+				}
+				dn = d_alloc_anon(in);
+				dout(10, " d_alloc_anon new dn %p\n", dn);
+			}
+		}
+		goto update_inode;
 	}
 	if (parent)
 		dput(parent);
 
-	dout(10, "fill_trace done, last dn %p in %p\n", dn, in);
+	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
 	if (req->r_old_dentry)
 		dput(req->r_old_dentry);
 	if (req->r_last_dentry)
@@ -854,7 +1008,7 @@ retry_lookup:
 
 		if (!dn) {
 			dn = d_alloc(parent, &dname);
-			dout(40, "d_alloc %p/%.*s\n", parent,
+			dout(40, "d_alloc %p '%.*s'\n", parent,
 			     dname.len, dname.name);
 			if (dn == NULL) {
 				dout(30, "d_alloc badness\n");
@@ -875,31 +1029,26 @@ retry_lookup:
 		if (dn->d_inode)
 			in = dn->d_inode;
 		else {
-			struct dentry *new;
 			in = ceph_get_inode(parent->d_sb,
 					    rinfo->dir_in[i].in->ino);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
-				return -1;
+				dput(dn);
+				return -ENOMEM;
 			}
-			if (!d_unhashed(dn))
-				d_drop(dn);
-			new = d_splice_alias(in, dn);
-			if (new)
-				dn = new;
+			dn = splice_dentry(dn, in, NULL);
 		}
-		BUG_ON(d_unhashed(dn));
 
 		if (ceph_fill_inode(in, &rinfo->dir_in[i], 0) < 0) {
 			dout(0, "ceph_fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;
 		}
-		ceph_update_dentry_lease(dn, rinfo->dir_dlease[i],
-					 req->r_session, req->r_from_time);
-		ceph_update_inode_lease(in, rinfo->dir_ilease[i],
-					req->r_session, req->r_from_time);
+		update_dentry_lease(dn, rinfo->dir_dlease[i],
+				    req->r_session, req->r_from_time);
+		update_inode_lease(in, rinfo->dir_ilease[i],
+				   req->r_session, req->r_from_time);
 		dput(dn);
 	}
 	dout(10, "readdir_prepopulate done\n");
@@ -1576,7 +1725,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		 */
 		int not = want & ~(have & need);
 		int revoking = implemented & ~have;
-		dout(30, "get_cap_refs have %d but not %d (revoking %d)\n", 
+		dout(30, "get_cap_refs have %d but not %d (revoking %d)\n",
 		     have, not, revoking);
 		if ((revoking & not) == 0) {
 			*got = need | (have & want);
@@ -1667,7 +1816,7 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 	char *path;
 	int pathlen;
 	struct ceph_mds_request *req;
-	__u64 baseino = ceph_ino(dentry->d_inode->i_sb->s_root->d_inode);
+	u64 pathbase;
 
 	if (ia_valid & ATTR_FILE) {
 		dout(5, "prepare_setattr dentry %p (inode %llx)\n", dentry,
@@ -1678,10 +1827,10 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 					       dentry, USE_CAP_MDS);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
-		path = ceph_build_dentry_path(dentry, &pathlen);
+		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
-		req = ceph_mdsc_create_request(mdsc, op, baseino, path, 0, 0,
+		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0, 0,
 					       dentry, USE_ANY_MDS);
 		kfree(path);
 	}
@@ -1953,7 +2102,7 @@ static int do_getattr(struct dentry *dentry, int mask)
 			     dentry->d_name.len, dentry->d_name.name);
 	}
 	ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
-			     want_inode);
+			     want_inode, 0);
 	if (IS_ERR(ret))
 		return PTR_ERR(ret);
 	if (ret)
@@ -2106,6 +2255,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct ceph_mds_request_head *rhead;
 	char *path;
 	int pathlen;
+	u64 pathbase;
 	int err;
 	int i, nr_pages;
 	struct page **pages = 0;
@@ -2135,12 +2285,11 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 
 	/* do request */
-	path = ceph_build_dentry_path(dentry, &pathlen);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
-				       ceph_ino(dentry->d_sb->s_root->d_inode),
-				       path, 0, name,
+				       pathbase, path, 0, name,
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req))
@@ -2174,18 +2323,18 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	struct ceph_mds_request *req;
 	char *path;
 	int pathlen;
+	u64 pathbase;
 	int err;
 
 	/* only support user.* xattrs, for now */
 	if (strncmp(name, "user.", 5) != 0)
 		return -EOPNOTSUPP;
 
-	path = ceph_build_dentry_path(dentry, &pathlen);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
-				       ceph_ino(dentry->d_sb->s_root->d_inode),
-				       path, 0, name,
+				       pathbase, path, 0, name,
 				       dentry, USE_AUTH_MDS);
 	kfree(path);
 	if (IS_ERR(req))

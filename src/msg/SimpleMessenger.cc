@@ -131,6 +131,8 @@ int Rank::Accepter::bind(int64_t force_nonce)
   rank.rank_addr = g_my_addr;
   if (rank.rank_addr != entity_addr_t())
     rank.need_addr = false;
+  else 
+    rank.need_addr = true;
   if (rank.rank_addr.get_port() == 0) {
     entity_addr_t tmp;
     tmp.ipaddr = listen_addr;
@@ -142,7 +144,9 @@ int Rank::Accepter::bind(int64_t force_nonce)
   }
   rank.rank_addr.erank = 0;
 
-  dout(1) << "accepter.bind rank_addr is " << rank.rank_addr << dendl;
+  dout(1) << "accepter.bind rank_addr is " << rank.rank_addr 
+	  << " need_addr=" << rank.need_addr
+	  << dendl;
   return 0;
 }
 
@@ -376,9 +380,13 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   local[erank] = msgr;
   stopped[erank] = false;
   msgr->_myinst.addr = rank_addr;
+  if (msgr->_myinst.addr.ipaddr == entity_addr_t().ipaddr)
+    msgr->need_addr = true;
   msgr->_myinst.addr.erank = erank;
 
-  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr << dendl;
+  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr 
+	   << " need_addr=" << need_addr
+	   << dendl;
 
   num_local++;
   
@@ -652,6 +660,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
   m->set_source_inst(_myinst);
+  m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
  
   dout(1) << m->get_source()
@@ -665,10 +674,30 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   return 0;
 }
 
+int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
+{
+  // set envelope
+  m->set_source_inst(_myinst);
+  m->set_dest_inst(dest);
+ 
+  dout(1) << m->get_source()
+          << " **> " << dest.name << " " << dest.addr
+          << " -- " << *m
+	  << " -- " << m
+          << dendl;
+
+  rank.submit_message(m, dest.addr);
+
+  return 0;
+}
+
+
+
 int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
   m->set_source_inst(_myinst);
+  m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
  
   dout(1) << "lazy " << m->get_source()
@@ -762,13 +791,18 @@ int Rank::Pipe::accept()
     dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
   }
   
-  __u32 peer_cseq;
+  __u32 peer_gseq, peer_cseq;
   Pipe *existing = 0;
   
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
 
   while (1) {
+    rc = tcp_read(sd, (char*)&peer_gseq, sizeof(peer_gseq));
+    if (rc < 0) {
+      dout(10) << "accept couldn't read connect peer_gseq" << dendl;
+      goto fail;
+    }
     rc = tcp_read(sd, (char*)&peer_cseq, sizeof(peer_cseq));
     if (rc < 0) {
       dout(10) << "accept couldn't read connect peer_seq" << dendl;
@@ -782,6 +816,20 @@ int Rank::Pipe::accept()
     if (rank.rank_pipe.count(peer_addr)) {
       existing = rank.rank_pipe[peer_addr];
       existing->lock.Lock();
+
+      if (peer_gseq < existing->peer_global_seq) {
+	dout(10) << "accept existing " << existing << ".gseq " << existing->peer_global_seq
+		 << " > " << peer_gseq << ", RETRY_GLOBAL" << dendl;
+	__u32 gseq = existing->peer_global_seq;  // so we can send it below..
+	existing->lock.Unlock();
+	rank.lock.Unlock();
+	char tag = CEPH_MSGR_TAG_RETRY_GLOBAL;
+	if (tcp_write(sd, &tag, 1) < 0)
+	  goto fail;
+	if (tcp_write(sd, (char*)&gseq, sizeof(gseq)) < 0)
+	  goto fail;
+	continue;
+      }
       
       if (existing->policy.is_lossy()) {
 	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
@@ -790,41 +838,21 @@ int Rank::Pipe::accept()
       }
 
       if (peer_cseq < existing->connect_seq) {
-	if (false &&
-	    /*
-	     * FIXME: protocol spec is flawed here.  we can't
-	     * distinguish between a remote reset or a slow remote
-	     * connect race (where the remote connect arrives _after_
-	     * our outgoing connection gets a READY reply).
-	     *
-	     * BUT, this doesn't happen in practice, yet.  the "reset"
-	     * case comes up in two situations:
-	     *
-	     * - mds resets connection to client.  it should _never_
-	     * talk to that client after that, unless the client
-	     * initiates the connection.
-	     *
-	     * - mon restarts.  it'll talk to the client.  but, the client
-	     * doesn't need the peer_reset calback in that case.  faling into the 
-	     * RETRY case is harmless.
-	     *
-	     * blah!
-	     */
-	    peer_cseq == 0) {
+	if (peer_cseq == 0) {
 	  dout(10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
 	  // old attempt, or we sent READY but they didn't get it.
 	  dout(10) << "accept existing " << existing << ".cseq " << existing->connect_seq
-		   << " > " << peer_cseq << ", RETRY" << dendl;
-	  connect_seq = existing->connect_seq;  // so we can send it below..
+		   << " > " << peer_cseq << ", RETRY_SESSION" << dendl;
+	  __u32 cseq = existing->connect_seq;  // so we can send it below..
 	  existing->lock.Unlock();
 	  rank.lock.Unlock();
-	  char tag = CEPH_MSGR_TAG_RETRY;
+	  char tag = CEPH_MSGR_TAG_RETRY_SESSION;
 	  if (tcp_write(sd, &tag, 1) < 0)
 	    goto fail;
-	  if (tcp_write(sd, (char*)&connect_seq, sizeof(connect_seq)) < 0)
+	  if (tcp_write(sd, (char*)&cseq, sizeof(cseq)) < 0)
 	    goto fail;
 	  continue;
 	}
@@ -856,6 +884,7 @@ int Rank::Pipe::accept()
       }
 
       assert(peer_cseq > existing->connect_seq);
+      assert(peer_gseq > existing->peer_global_seq);
       if (existing->connect_seq == 0) {
 	dout(10) << "accept we reset (peer sent cseq " << peer_cseq 
 		 << ", " << existing << ".cseq = " << existing->connect_seq
@@ -913,6 +942,7 @@ int Rank::Pipe::accept()
   rank.lock.Unlock();
 
   connect_seq = peer_cseq + 1;
+  peer_global_seq = peer_gseq;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
   // send READY
@@ -946,6 +976,7 @@ int Rank::Pipe::connect()
     sd = -1;
   }
   __u32 cseq = connect_seq;
+  __u32 gseq = rank.get_global_seq();
 
   lock.Unlock();
   
@@ -1013,15 +1044,27 @@ int Rank::Pipe::connect()
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = (char*)&rank.rank_addr;
   msgvec[0].iov_len = sizeof(rank.rank_addr);
-  msgvec[1].iov_base = (char*)&cseq;
-  msgvec[1].iov_len = sizeof(cseq);
   msg.msg_iov = msgvec;
-  msg.msg_iovlen = 2;
-  msglen = msgvec[0].iov_len + msgvec[1].iov_len;
+  msg.msg_iovlen = 1;
+  msglen = msgvec[0].iov_len;
+  if (do_sendmsg(newsd, &msg, msglen)) {
+    dout(2) << "connect couldn't write self addr, " << strerror(errno) << dendl;
+    goto fail;
+  }
 
   while (1) {
+    memset(&msg, 0, sizeof(msg));
+    msgvec[0].iov_base = (char*)&gseq;
+    msgvec[0].iov_len = sizeof(gseq);
+    msgvec[1].iov_base = (char*)&cseq;
+    msgvec[1].iov_len = sizeof(cseq);
+    msg.msg_iov = msgvec;
+    msg.msg_iovlen = 2;
+    msglen = msgvec[0].iov_len + msgvec[1].iov_len;
+
+    dout(10) << "connect sending gseq " << gseq << " cseq " << cseq << dendl;
     if (do_sendmsg(newsd, &msg, msglen)) {
-      dout(2) << "connect couldn't write self, seq, " << strerror(errno) << dendl;
+      dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
       goto fail;
     }
     dout(20) << "connect wrote (self +) cseq, waiting for tag" << dendl;
@@ -1040,34 +1083,40 @@ int Rank::Pipe::connect()
 
       dout(0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
+      lock.Unlock();
       continue;
     }
-    if (tag == CEPH_MSGR_TAG_RETRY) {
-      int rc = tcp_read(newsd, (char*)&cseq, sizeof(cseq));
+    if (tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
+      int rc = tcp_read(newsd, (char*)&gseq, sizeof(gseq));
       if (rc < 0) {
-	dout(0) << "connect got RETRY tag but couldn't read cseq" << dendl;
+	dout(0) << "connect got RETRY_GLOBAL tag but couldn't read gseq" << dendl;
 	goto fail;
       }
       lock.Lock();
       if (state != STATE_CONNECTING) {
-	dout(0) << "connect got RETRY, but connection race or something, failing" << dendl;
+	dout(0) << "connect got RETRY_GLOBAL, but connection race or something, failing" << dendl;
+	goto stop_locked;
+      }
+      gseq = rank.get_global_seq(gseq);
+      dout(10) << "connect got RETRY_GLOBAL " << gseq << dendl;
+      lock.Unlock();
+      continue;
+    }
+    if (tag == CEPH_MSGR_TAG_RETRY_SESSION) {
+      int rc = tcp_read(newsd, (char*)&cseq, sizeof(cseq));
+      if (rc < 0) {
+	dout(0) << "connect got RETRY_SESSION tag but couldn't read cseq" << dendl;
+	goto fail;
+      }
+      lock.Lock();
+      if (state != STATE_CONNECTING) {
+	dout(0) << "connect got RETRY_SESSION, but connection race or something, failing" << dendl;
 	goto stop_locked;
       }
       assert(cseq > connect_seq);
-      dout(10) << "connect got RETRY " << connect_seq << " -> " << cseq << dendl;
+      dout(10) << "connect got RETRY_SESSION " << connect_seq << " -> " << cseq << dendl;
       connect_seq = cseq;
-    }
-
-    if (tag == CEPH_MSGR_TAG_RESETSESSION ||
-	tag == CEPH_MSGR_TAG_RETRY) {
-      // retry
       lock.Unlock();
-      memset(&msg, 0, sizeof(msg));
-      msgvec[0].iov_base = (char*)&cseq;
-      msgvec[0].iov_len = sizeof(cseq);
-      msg.msg_iov = msgvec;
-      msg.msg_iovlen = 1;
-      msglen = msgvec[0].iov_len;
       continue;
     }
 
@@ -1394,10 +1443,16 @@ void Rank::Pipe::reader()
 	  entity = rank.local[erank];
 
 	  // first message?
+	  if (entity->need_addr) {
+	    entity->_set_myaddr(m->get_dest_inst().addr);
+	    dout(2) << "reader entity addr is " << entity->get_myaddr() << dendl;
+	    entity->need_addr = false;
+	  }
+
 	  if (rank.need_addr) {
 	    rank.rank_addr = m->get_dest_inst().addr;
-	    entity->_set_myaddr(rank.rank_addr);
-	    dout(2) << "reader my rank addr is " << rank.rank_addr << dendl;
+	    rank.rank_addr.erank = 0;
+	    dout(2) << "reader rank_addr is " << rank.rank_addr << dendl;
 	    rank.need_addr = false;
 	  }
 
@@ -1591,7 +1646,7 @@ Message *Rank::Pipe::read_message()
   
   if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
-    env.src.addr.ipaddr = peer_addr.ipaddr;
+    env.orig_src.addr.ipaddr = env.src.addr.ipaddr = peer_addr.ipaddr;
   }
 
   // read front

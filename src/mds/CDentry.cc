@@ -198,7 +198,7 @@ void CDentry::make_path_string(string& s)
     s = "???";
   }
   s += "/";
-  s += name;
+  s.append(name.data(), name.length());
 }
 
 void CDentry::make_path(filepath& fp)
@@ -281,43 +281,53 @@ bool CDentry::can_auth_pin()
   return dir->can_auth_pin();
 }
 
-void CDentry::auth_pin()
+void CDentry::auth_pin(void *by)
 {
   if (auth_pins == 0)
     get(PIN_AUTHPIN);
   auth_pins++;
 
-  dout(10) << "auth_pin on " << *this 
+#ifdef MDS_AUTHPIN_SET
+  auth_pin_set.insert(by);
+#endif
+
+  dout(10) << "auth_pin by " << by << " on " << *this 
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
 
-  dir->adjust_nested_auth_pins(1);
+  dir->adjust_nested_auth_pins(1, 1);
 }
 
-void CDentry::auth_unpin()
+void CDentry::auth_unpin(void *by)
 {
   auth_pins--;
+
+#ifdef MDS_AUTHPIN_SET
+  assert(auth_pin_set.count(by));
+  auth_pin_set.erase(auth_pin_set.find(by));
+#endif
+
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
 
-  dout(10) << "auth_unpin on " << *this
+  dout(10) << "auth_unpin by " << by << " on " << *this
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(auth_pins >= 0);
 
-  dir->adjust_nested_auth_pins(-1);
+  dir->adjust_nested_auth_pins(-1, -1);
 }
 
-void CDentry::adjust_nested_auth_pins(int by)
+void CDentry::adjust_nested_auth_pins(int by, int dirby)
 {
   nested_auth_pins += by;
 
-  dout(15) << "adjust_nested_auth_pins by " << by 
+  dout(35) << "adjust_nested_auth_pins by " << by 
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(nested_auth_pins >= 0);
 
-  dir->adjust_nested_auth_pins(by);
+  dir->adjust_nested_auth_pins(by, dirby);
 }
 
 bool CDentry::is_frozen()

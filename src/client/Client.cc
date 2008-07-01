@@ -192,7 +192,7 @@ void Client::dump_inode(Inode *in, set<Inode*>& did)
   if (in->dir) {
     dout(1) << "  dir size " << in->dir->dentries.size() << dendl;
     //for (hash_map<const char*, Dentry*, hash<const char*>, eqstr>::iterator it = in->dir->dentries.begin();
-    for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
+    for (hash_map<nstring, Dentry*>::iterator it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          it++) {
       dout(1) << "    dn " << it->first << " ref " << it->second->ref << dendl;
@@ -227,6 +227,9 @@ void Client::init()
 {
   Mutex::Locker lock(client_lock);
 
+  tick();
+
+  // do logger crap only once per process.
   static bool did_init = false;
   if (did_init) return;
   did_init = true;
@@ -263,7 +266,6 @@ void Client::init()
   }
   client_logger_lock.Unlock();
 
-  tick();
 }
 
 void Client::shutdown() 
@@ -1864,7 +1866,8 @@ int Client::unmount()
   dout(2) << "unmounting" << dendl;
   unmounting = true;
 
-  timer.cancel_event(tick_event);
+  if (tick_event)
+    timer.cancel_event(tick_event);
   tick_event = 0;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
@@ -3138,7 +3141,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode, offset, size, bl, 0);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
@@ -3296,7 +3299,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    filer->write(in->inode, offset, size, bl, 0, onfinish, onsafe);
+    filer->write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);

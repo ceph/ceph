@@ -159,7 +159,7 @@ protected:
   version_t projected_version;
   list<fnode_t*> projected_fnode;
 
-  xlist<CDir*>::item xlist_dirty;
+  xlist<CDir*>::item xlist_dirty, xlist_new;
 
 
 public:
@@ -193,7 +193,7 @@ public:
 
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  typedef map<string, CDentry*> map_t;
+  typedef map<const char *, CDentry*, ltstr> map_t;
 protected:
 
   // contents
@@ -211,7 +211,10 @@ protected:
 
   // lock nesting, freeze
   int auth_pins;
-  int nested_auth_pins;
+#ifdef MDS_AUTHPIN_SET
+  multiset<void*> auth_pin_set;
+#endif
+  int nested_auth_pins, dir_auth_pins;
   int request_pins;
 
   int nested_anchors;
@@ -279,17 +282,21 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup(const string& n) {
-    map_t::iterator iter = items.find(n);
+  CDentry* lookup(const string& s) {
+    nstring ns(s);
+    return lookup(ns);
+  }
+  CDentry* lookup(const nstring& ns) {
+    map_t::iterator iter = items.find(ns.c_str());
     if (iter == items.end()) 
       return 0;
     else
       return iter->second;
   }
 
-  CDentry* add_null_dentry(const string& dname);
-  CDentry* add_primary_dentry(const string& dname, CInode *in);
-  CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type);
+  CDentry* add_null_dentry(const nstring& dname);
+  CDentry* add_primary_dentry(const nstring& dname, CInode *in);
+  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
@@ -302,11 +309,11 @@ private:
   void remove_null_dentries();
 
 public:
-  void split(int bits, list<CDir*>& subs, list<Context*>& waiters);
-  void merge(int bits, list<Context*>& waiters);
+  void split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay);
+  void merge(int bits, list<Context*>& waiters, bool replay);
 private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void purge_stolen(list<Context*>& waiters);
+  void purge_stolen(list<Context*>& waiters, bool replay);
   void init_fragment_pins();
 
 
@@ -406,15 +413,15 @@ private:
     
   // -- waiters --
 protected:
-  hash_map< string, list<Context*> > waiting_on_dentry;
+  hash_map< nstring, list<Context*> > waiting_on_dentry;
   hash_map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
   bool is_waiting_for_dentry(const string& dn) {
     return waiting_on_dentry.count(dn);
   }
-  void add_dentry_waiter(const string& dentry, Context *c);
-  void take_dentry_waiting(const string& dentry, list<Context*>& ls);
+  void add_dentry_waiter(const nstring& dentry, Context *c);
+  void take_dentry_waiting(const nstring& dentry, list<Context*>& ls);
 
   bool is_waiting_for_ino(inodeno_t ino) {
     return waiting_on_ino.count(ino);
@@ -444,10 +451,11 @@ public:
   int get_cum_auth_pins() { return auth_pins + nested_auth_pins; }
   int get_auth_pins() { return auth_pins; }
   int get_nested_auth_pins() { return nested_auth_pins; }
-  void auth_pin();
-  void auth_unpin();
+  int get_dir_auth_pins() { return dir_auth_pins; }
+  void auth_pin(void *who);
+  void auth_unpin(void *who);
 
-  void adjust_nested_auth_pins(int inc);
+  void adjust_nested_auth_pins(int inc, int dirinc);
   void verify_fragstat();
 
   int get_nested_anchors() { return nested_anchors; }
@@ -463,16 +471,20 @@ public:
   void unfreeze_dir();
 
   void maybe_finish_freeze() {
-    if (auth_pins != 1 || nested_auth_pins != 0) 
+    if (auth_pins != 1 ||
+	dir_auth_pins != 0)
+      return;
+    // we can freeze the _dir_ even with nested pins...
+    if (state_test(STATE_FREEZINGDIR)) {
+      _freeze_dir();
+      auth_unpin(this);
+      finish_waiting(WAIT_FROZEN);
+    }
+    if (nested_auth_pins != 0) 
       return;
     if (state_test(STATE_FREEZINGTREE)) {
       _freeze_tree();
-      auth_unpin();
-      finish_waiting(WAIT_FROZEN);
-    }
-    if (state_test(STATE_FREEZINGDIR)) {
-      _freeze_dir();
-      auth_unpin();
+      auth_unpin(this);
       finish_waiting(WAIT_FROZEN);
     }
   }
@@ -499,7 +511,7 @@ public:
     return true;
   }
   bool is_freezeable_dir(bool freezing=false) {
-    if ((auth_pins-freezing) > 0) 
+    if ((auth_pins-freezing) > 0 || dir_auth_pins > 0) 
       return false;
 
     // if not subtree root, inode must not be frozen (tree--frozen_dir is okay).

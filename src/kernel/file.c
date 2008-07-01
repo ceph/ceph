@@ -33,8 +33,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 
 	dout(5, "prepare_open_request dentry %p name '%s' flags %d\n", dentry,
 	     dentry->d_name.name, flags);
-	pathbase = ceph_ino(sb->s_root->d_inode);
-	path = ceph_build_dentry_path(dentry, &pathlen);
+	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
@@ -137,8 +136,9 @@ out:
  *  path_lookup_open   -> LOOKUP_OPEN
  *  path_lookup_create -> LOOKUP_OPEN|LOOKUP_CREATE
  */
-int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
-		     struct nameidata *nd, int mode)
+struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
+				struct nameidata *nd, int mode,
+				int locked_dir)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -153,21 +153,19 @@ int ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	/* do the open */
 	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
 	if (IS_ERR(req))
-		return PTR_ERR(req);
+		return ERR_PTR(PTR_ERR(req));
 	if (flags & O_CREAT)
 		ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
+	req->r_locked_dir = dir;     /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, req);
+	dentry = ceph_finish_lookup(req, dentry, err);
 	if (err == 0)
 		err = ceph_init_file(req->r_last_inode, file, req->r_fmode);
-	else if (err == -ENOENT) {
-		ceph_init_dentry(dentry);
-		d_add(dentry, NULL);
-	}
 	ceph_mdsc_put_request(req);
-	dout(5, "ceph_lookup_open result=%d\n", err);
-	return err;
+	dout(5, "ceph_lookup_open result=%p\n", dentry);
+	return dentry;
 }
 
 int ceph_release(struct inode *inode, struct file *file)

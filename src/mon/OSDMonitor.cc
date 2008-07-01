@@ -256,7 +256,7 @@ void OSDMonitor::committed()
 
 bool OSDMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
     // READs
@@ -288,7 +288,7 @@ bool OSDMonitor::preprocess_query(Message *m)
 
 bool OSDMonitor::prepare_update(Message *m)
 {
-  dout(7) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
+  dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   
   switch (m->get_type()) {
     // damp updates
@@ -318,18 +318,22 @@ bool OSDMonitor::prepare_update(Message *m)
 bool OSDMonitor::should_propose(double& delay)
 {
   dout(10) << "should_propose" << dendl;
-  if (osdmap.epoch == 1) {
-    if (pending_inc.new_up.size() == (unsigned)osdmap.get_max_osd()) {
-      delay = 0.0;
-      if (g_conf.osd_auto_weight) {
-	CrushWrapper crush;
-	OSDMap::build_simple_crush_map(crush, osdmap.get_max_osd(), osd_weight);
-	crush.encode(pending_inc.crush);
-      }
-      return true;
-    } else 
-      return false;
+
+  // adjust osd weights?
+  if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
+    dout(0) << " adjusting crush osd weights based on " << osd_weight << dendl;
+    bufferlist bl;
+    osdmap.crush.encode(bl);
+    CrushWrapper crush;
+    bufferlist::iterator p = bl.begin();
+    crush.decode(p);
+    crush.adjust_osd_weights(osd_weight);
+    crush.encode(pending_inc.crush);
+    delay = 0.0;
+    osd_weight.clear();
+    return true;
   }
+
   return PaxosService::should_propose(delay);
 }
 
@@ -340,7 +344,7 @@ bool OSDMonitor::should_propose(double& delay)
 
 void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 {
-  dout(7) << "handle_osd_getmap from " << m->get_source()
+  dout(7) << "handle_osd_getmap from " << m->get_orig_source()
 	  << " start " << m->get_start_epoch()
 	  << dendl;
   
@@ -351,11 +355,11 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 
   if (m->get_start_epoch()) {
     if (m->get_start_epoch() <= osdmap.get_epoch())
-	send_incremental(m->get_source_inst(), m->get_start_epoch());
+	send_incremental(m->get_orig_source_inst(), m->get_start_epoch());
     else
-      waiting_for_map[m->get_source_inst()] = m->get_start_epoch();
+      waiting_for_map[m->get_orig_source_inst()] = m->get_start_epoch();
   } else
-    send_full(m->get_source_inst());
+    send_full(m->get_orig_source_inst());
   
  out:
   delete m;
@@ -387,13 +391,13 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
    */
 
   // first, verify the reporting host is valid
-  if (m->get_source().is_osd()) {
-    int from = m->get_source().num();
+  if (m->get_orig_source().is_osd()) {
+    int from = m->get_orig_source().num();
     if (!osdmap.exists(from) ||
-	osdmap.get_addr(from) != m->get_source_inst().addr ||
+	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
 	osdmap.is_down(from)) {
       dout(5) << "preprocess_failure from dead osd" << from << ", ignoring" << dendl;
-      send_incremental(m->get_from(), m->get_epoch()+1);
+      send_incremental(m->get_orig_source_inst(), m->get_epoch()+1);
       goto didit;
     }
   }
@@ -401,27 +405,27 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
   // weird?
   if (!osdmap.have_inst(badboy)) {
-    dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_from() << dendl;
+    dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
-      send_incremental(m->get_from(), m->get_epoch()+1);
+      send_incremental(m->get_orig_source_inst(), m->get_epoch()+1);
     goto didit;
   }
   if (osdmap.get_inst(badboy) != m->get_failed()) {
     dout(5) << "preprocess_failure wrong osd: report " << m->get_failed() << " != map's " << osdmap.get_inst(badboy)
-	    << ", from " << m->get_from() << dendl;
+	    << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
-      send_incremental(m->get_from(), m->get_epoch()+1);
+      send_incremental(m->get_orig_source_inst(), m->get_epoch()+1);
     goto didit;
   }
   // already reported?
   if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_from() << dendl;
+    dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
-      send_incremental(m->get_from(), m->get_epoch()+1);
+      send_incremental(m->get_orig_source_inst(), m->get_epoch()+1);
     goto didit;
   }
 
-  dout(10) << "preprocess_failure new: " << m->get_failed() << ", from " << m->get_from() << dendl;
+  dout(10) << "preprocess_failure new: " << m->get_failed() << ", from " << m->get_orig_source_inst() << dendl;
   return false;
 
  didit:
@@ -431,7 +435,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
-  dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_from() << dendl;
+  dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_orig_source_inst() << dendl;
   
   // FIXME
   // take their word for it
@@ -451,8 +455,8 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 
 void OSDMonitor::_reported_failure(MOSDFailure *m)
 {
-  dout(7) << "_reported_failure on " << m->get_failed() << ", telling " << m->get_from() << dendl;
-  send_latest(m->get_from(), m->get_epoch());
+  dout(7) << "_reported_failure on " << m->get_failed() << ", telling " << m->get_orig_source_inst() << dendl;
+  send_latest(m->get_orig_source_inst(), m->get_epoch());
   delete m;
 }
 
@@ -467,33 +471,27 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     return true;
   }
 
-  // first time we've seen it?
-  if (m->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-    m->inst = m->get_source_inst();
-    m->clear_payload();
-  }
-
-  assert(m->inst.name.is_osd());
-  int from = m->inst.name.num();
+  assert(m->get_orig_source_inst().name.is_osd());
+  int from = m->get_orig_source_inst().name.num();
   
   // already booted?
   if (osdmap.is_up(from) &&
-      osdmap.get_inst(from) == m->inst) {
+      osdmap.get_inst(from) == m->get_orig_source_inst()) {
     // yup.
-    dout(7) << "preprocess_boot dup from " << m->inst << dendl;
+    dout(7) << "preprocess_boot dup from " << m->get_orig_source_inst() << dendl;
     _booted(m);
     return true;
   }
   
-  dout(10) << "preprocess_boot from " << m->inst << dendl;
+  dout(10) << "preprocess_boot from " << m->get_orig_source_inst() << dendl;
   return false;
 }
 
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
-  dout(7) << "prepare_boot from " << m->inst << dendl;
-  assert(m->inst.name.is_osd());
-  int from = m->inst.name.num();
+  dout(7) << "prepare_boot from " << m->get_orig_source_inst() << dendl;
+  assert(m->get_orig_source().is_osd());
+  int from = m->get_orig_source().num();
   
   // does this osd exist?
   if (!osdmap.exists(from)) {
@@ -505,7 +503,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
     dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
-    assert(osdmap.get_inst(from) != m->inst);  // preproces should have caught it
+    assert(osdmap.get_inst(from) != m->get_orig_source_inst());  // preproces should have caught it
     
     // mark previous guy down
     pending_inc.new_down[from] = false;
@@ -514,12 +512,13 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any
-    pending_inc.new_up[from] = m->inst.addr;
+    pending_inc.new_up[from] = m->get_orig_source_addr();
     
     // mark in?
     pending_inc.new_offload[from] = CEPH_OSD_IN;
-    
-    osd_weight[from] = m->sb.weight;
+
+    if (m->sb.weight)
+      osd_weight[from] = m->sb.weight;
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
@@ -529,8 +528,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
 void OSDMonitor::_booted(MOSDBoot *m)
 {
-  dout(7) << "_booted " << m->inst << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
-  send_latest(m->inst, m->sb.current_epoch+1);
+  dout(7) << "_booted " << m->get_orig_source_inst() 
+	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
+  send_latest(m->get_orig_source_inst(), m->sb.current_epoch+1);
   delete m;
 }
 
@@ -540,25 +540,26 @@ void OSDMonitor::_booted(MOSDBoot *m)
 
 bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 {
-  int from = m->get_source().num();
+  int from = m->get_orig_source().num();
   if (osdmap.is_up(from) &&
-      osdmap.get_inst(from) == m->get_source_inst() &&
+      osdmap.get_inst(from) == m->get_orig_source_inst() &&
       osdmap.get_up_thru(from) >= m->map_epoch) {
     // yup.
-    dout(7) << "preprocess_alive e" << m->map_epoch << " dup from " << m->get_source_inst() << dendl;
+    dout(7) << "preprocess_alive e" << m->map_epoch << " dup from " << m->get_orig_source_inst() << dendl;
     _alive(m);
     return true;
   }
   
-  dout(10) << "preprocess_alive e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
+  dout(10) << "preprocess_alive e" << m->map_epoch
+	   << " from " << m->get_orig_source_inst() << dendl;
   return false;
 }
 
 bool OSDMonitor::prepare_alive(MOSDAlive *m)
 {
-  int from = m->get_source().num();
+  int from = m->get_orig_source().num();
 
-  dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_source_inst() << dendl;
+  dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
   pending_inc.new_up_thru[from] = m->map_epoch;
   paxos->wait_for_commit(new C_Alive(this,m ));
   return true;
@@ -567,9 +568,9 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
 void OSDMonitor::_alive(MOSDAlive *m)
 {
   dout(7) << "_alive e" << m->map_epoch
-	  << " from " << m->get_source_inst()
+	  << " from " << m->get_orig_source_inst()
 	  << dendl;
-  send_latest(m->get_source_inst(), m->map_epoch);
+  send_latest(m->get_orig_source_inst(), m->map_epoch);
   delete m;
 }
 

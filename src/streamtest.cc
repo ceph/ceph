@@ -94,7 +94,7 @@ int main(int argc, const char **argv)
   float interval = 1.0 / 1000;
   
   cout << "#dev " << filename
-       << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
+       << ", " << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
   //ObjectStore *fs = new Ebofs(filename, journal);
   ObjectStore *fs = new FileStore(filename);
@@ -108,6 +108,8 @@ int main(int argc, const char **argv)
     cout << "mount failed" << std::endl;
     return -1;
   }
+
+  fs->create_collection(0);
 
   utime_t now = g_clock.now();
   utime_t end = now;

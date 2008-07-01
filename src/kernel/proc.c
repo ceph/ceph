@@ -58,14 +58,13 @@ static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 
 static struct proc_dir_entry *proc_fs_ceph;
 
-void ceph_proc_init(void)
+int ceph_proc_init(void)
 {
 	struct proc_dir_entry *pde;
 
 	proc_fs_ceph = proc_mkdir("ceph", proc_root_fs);
-
 	if (!proc_fs_ceph)
-		return;
+		return -ENOMEM;
 
 	proc_fs_ceph->owner = THIS_MODULE;
 	pde = create_proc_read_entry("debug", 0,
@@ -84,6 +83,7 @@ void ceph_proc_init(void)
 	if (pde)
 		pde->write_proc = ceph_debug_level_write;
 
+	return 0;
 }
 
 void ceph_proc_cleanup()

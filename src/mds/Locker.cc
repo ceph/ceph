@@ -452,7 +452,7 @@ void Locker::rejoin_set_state(SimpleLock *lock, int s, list<Context*>& waiters)
 {
   if (!lock->is_stable()) {
     lock->set_state(s);
-    lock->get_parent()->auth_unpin();
+    lock->get_parent()->auth_unpin(lock);
   } else {
     lock->set_state(s);
   }
@@ -493,7 +493,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
   mut->apply();
   drop_locks(mut);
   mut->drop_local_auth_pins();
-
   delete mut;
   
   if (share && in->is_auth() && in->filelock.is_stable())
@@ -1199,8 +1198,9 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   //    if the client is holding EXCL|RDCACHE caps.
   int mask = 0;
   CInode *diri = dn->get_dir()->get_inode();
-  if (!diri->dirlock.can_lease() &&
-      (diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0 &&
+  if ((diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
+       (!diri->dirlock.can_lease() &&
+	(diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0)) &&
       dn->lock.can_lease())
     mask |= CEPH_LOCK_DN;
 
@@ -1274,6 +1274,10 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   bool do_parent_mtime = flags & PREDIRTY_DIR;
   bool shallow = flags & PREDIRTY_SHALLOW;
 
+  // declare now?
+  if (mut->now == utime_t())
+    mut->now = g_clock.real_now();
+
   dout(10) << "predirty_nested"
 	   << (do_parent_mtime ? " do_parent_mtime":"")
 	   << " linkunlink=" <<  linkunlink
@@ -1313,16 +1317,20 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     }
 
     // inode -> dirfrag
+    mut->auth_pin(parent);
     mut->add_projected_fnode(parent);
 
     fnode_t *pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime) {
-      dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
       pf->fragstat.mtime = mut->now;
-      if (mut->now > pf->fragstat.rctime)
+      if (mut->now > pf->fragstat.rctime) {
+	dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
 	pf->fragstat.rctime = mut->now;
+      } else {
+	dout(10) << "predirty_nested updating mtime UNDERWATER on " << *parent << dendl;
+      }
     }
     if (linkunlink) {
       dout(10) << "predirty_nested updating size on " << *parent << dendl;
@@ -1392,18 +1400,21 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       break;
     }
     local_wrlock_grab(&pin->versionlock, mut);
-    mut->auth_pin(pin);
 
     // dirfrag -> diri
+    mut->auth_pin(pin);
     mut->add_projected_inode(pin);
-    lsi.push_back(pin);
+    lsi.push_front(pin);
 
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
     pi->dirstat.version++;
     dout(15) << "predirty_nested take_diff " << pf->fragstat << dendl;
     dout(15) << "predirty_nested         - " << pf->accounted_fragstat << dendl;
-    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat);
+    bool touched_mtime = false;
+    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+    if (touched_mtime)
+      pi->mtime = pi->ctime = pi->dirstat.mtime;
     dout(15) << "predirty_nested     gives " << pi->dirstat << " on " << *pin << dendl;
 
     // next parent!
@@ -1671,7 +1682,7 @@ void Locker::simple_eval_gather(SimpleLock *lock)
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
 
     if (lock->get_parent()->is_auth()) {
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
 
       // re-eval?
       simple_eval(lock);
@@ -1752,7 +1763,7 @@ void Locker::simple_lock(SimpleLock *lock)
     // change lock
     lock->set_state(LOCK_GLOCKR);
     lock->init_gather();
-    lock->get_parent()->auth_pin();
+    lock->get_parent()->auth_pin(lock);
   } else {
     lock->set_state(LOCK_LOCK);
   }
@@ -2034,8 +2045,10 @@ bool Locker::scatter_wrlock_try(ScatterLock *lock, Mutation *mut, bool initiate)
   // can wrlock?
   if (lock->can_wrlock()) {
     lock->get_wrlock();
-    mut->wrlocks.insert(lock);
-    mut->locks.insert(lock);
+    if (mut) {
+      mut->wrlocks.insert(lock);
+      mut->locks.insert(lock);
+    }
     return true;
   }
 
@@ -2242,7 +2255,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 		<< " on " << *lock->get_parent() << dendl;
 	lock->set_state(LOCK_LOCK);
 	lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
+	lock->get_parent()->auth_unpin(lock);
       }
     }
     
@@ -2257,7 +2270,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 	      << " on " << *lock->get_parent() << dendl;
 	lock->set_state(LOCK_LOCK);
 	lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
+	lock->get_parent()->auth_unpin(lock);
       }
     }
 
@@ -2274,7 +2287,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
       }
       lock->set_state(LOCK_SYNC);
       lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
     }
 
     // gscattert|gscatters -> scatter?
@@ -2293,7 +2306,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
       }
       lock->set_state(LOCK_SCATTER);
       lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);      
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
     }
 
     // gTempsyncC|gTempsyncL -> tempsync
@@ -2308,7 +2321,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
 		<< " on " << *lock->get_parent() << dendl;
 	lock->set_state(LOCK_TEMPSYNC);
 	lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
-	lock->get_parent()->auth_unpin();
+	lock->get_parent()->auth_unpin(lock);
       }
     }
 
@@ -2363,8 +2376,12 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
+
   mut->apply();
   drop_locks(mut);
+  mut->drop_local_auth_pins();
+  delete mut;
+
   //scatter_eval_gather(lock);
 }
 
@@ -2396,7 +2413,7 @@ void Locker::scatter_eval(ScatterLock *lock)
 void Locker::mark_updated_scatterlock(ScatterLock *lock)
 {
   lock->set_updated();
-  if (lock->xlistitem_updated.get_xlist()) {
+  if (lock->xlistitem_updated.is_on_xlist()) {
     dout(10) << "mark_updated_scatterlock " << *lock
 	     << " -- already on list since " << lock->update_stamp << dendl;
   } else {
@@ -2511,7 +2528,7 @@ void Locker::scatter_sync(ScatterLock *lock)
   case LOCK_LOCK:
     if (lock->is_wrlocked() || lock->is_xlocked()) {
       lock->set_state(LOCK_GSYNCL);
-      lock->get_parent()->auth_pin();
+      lock->get_parent()->auth_pin(lock);
       return;
     }
     break; // do it.
@@ -2522,7 +2539,7 @@ void Locker::scatter_sync(ScatterLock *lock)
       break; // do it now
 
     lock->set_state(LOCK_GLOCKC);
-    lock->get_parent()->auth_pin();
+    lock->get_parent()->auth_pin(lock);
 
     if (lock->get_parent()->is_replicated()) {
       lock->init_gather();
@@ -2599,7 +2616,7 @@ void Locker::scatter_scatter(ScatterLock *lock)
   default: assert(0);
   }
 
-  lock->get_parent()->auth_pin();
+  lock->get_parent()->auth_pin(lock);
 
   if (lock->get_parent()->is_replicated()) {
     send_lock_message(lock, LOCK_AC_LOCK);
@@ -2653,7 +2670,7 @@ void Locker::scatter_lock(ScatterLock *lock)
   default: assert(0);
   }
 
-  lock->get_parent()->auth_pin();
+  lock->get_parent()->auth_pin(lock);
 
   if (lock->get_parent()->is_replicated()) {
     send_lock_message(lock, LOCK_AC_LOCK);
@@ -2678,7 +2695,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
     if (lock->is_wrlocked() ||
 	lock->is_xlocked()) {
       lock->set_state(LOCK_GTEMPSYNCL);
-      lock->get_parent()->auth_pin();
+      lock->get_parent()->auth_pin(lock);
       return;
     }
     break; // do it.
@@ -2690,7 +2707,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
     }
     
     lock->set_state(LOCK_GTEMPSYNCC);
-    lock->get_parent()->auth_pin();
+    lock->get_parent()->auth_pin(lock);
 
     if (lock->get_parent()->is_replicated()) {
       lock->init_gather();
@@ -2855,7 +2872,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
 void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
 {
-  dout(7) << "local_wrlock_try  on " << *lock
+  dout(7) << "local_wrlock_grab  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
   assert(lock->can_wrlock());
@@ -3203,14 +3220,14 @@ void Locker::file_eval_gather(FileLock *lock)
       lock->get_rdlock();
       lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
       lock->put_rdlock();
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
       break;
       
       // to mixed
     case LOCK_GMIXEDR:
       lock->set_state(LOCK_MIXED);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
       break;
 
     case LOCK_GMIXEDL:
@@ -3226,20 +3243,20 @@ void Locker::file_eval_gather(FileLock *lock)
       }
       
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
       break;
 
       // to loner
     case LOCK_GLONERR:
       lock->set_state(LOCK_LONER);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
       break;
 
     case LOCK_GLONERM:
       lock->set_state(LOCK_LONER);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
       break;
       
       // to sync
@@ -3258,7 +3275,7 @@ void Locker::file_eval_gather(FileLock *lock)
       lock->get_rdlock();
       lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
       lock->put_rdlock();
-      lock->get_parent()->auth_unpin();
+      lock->get_parent()->auth_unpin(lock);
       break;
       
     default: 
@@ -3404,7 +3421,7 @@ bool Locker::file_sync(FileLock *lock)
     }
 
     if (gather) {
-      lock->get_parent()->auth_pin();
+      lock->get_parent()->auth_pin(lock);
       return false;
     }
   }
@@ -3464,7 +3481,7 @@ void Locker::file_lock(FileLock *lock)
   }
 
   if (gather)
-    lock->get_parent()->auth_pin();
+    lock->get_parent()->auth_pin(lock);
   else
     lock->set_state(LOCK_LOCK);
 }
@@ -3523,7 +3540,7 @@ void Locker::file_mixed(FileLock *lock)
     }
 
     if (gather)
-      lock->get_parent()->auth_pin();
+      lock->get_parent()->auth_pin(lock);
     else {
       lock->set_state(LOCK_MIXED);
       issue_caps(in);
@@ -3566,7 +3583,7 @@ void Locker::file_loner(FileLock *lock)
     }
  
     if (gather) {
-      lock->get_parent()->auth_pin();
+      lock->get_parent()->auth_pin(lock);
       return;
     }
   }

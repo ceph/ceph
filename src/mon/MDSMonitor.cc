@@ -176,7 +176,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 
 bool MDSMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
     
@@ -200,16 +200,16 @@ bool MDSMonitor::preprocess_query(Message *m)
 void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
 {
   if (m->want <= mdsmap.get_epoch())
-    send_full(m->get_source_inst());
+    send_full(m->get_orig_source_inst());
   else
-    waiting_for_map.push_back(m->get_source_inst());
+    waiting_for_map.push_back(m->get_orig_source_inst());
 }
 
 
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
-  int from = m->get_mds_inst().name.num();
-  entity_addr_t addr = m->get_mds_inst().addr;
+  int from = m->get_orig_source_inst().name.num();
+  entity_addr_t addr = m->get_orig_source_inst().addr;
   int state = m->get_state();
   version_t seq = m->get_seq();
 
@@ -218,22 +218,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
 
-  // first time we've seen it?
-  if (m->get_mds_inst().addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-    m->get_mds_inst() = m->get_source_inst();
-    m->clear_payload();
-  }
-
   dout(12) << "preprocess_beacon " << *m
-	   << " from " << m->get_mds_inst()
+	   << " from " << m->get_orig_source_inst()
 	   << dendl;
 
   // fw to leader?
-  if (!mon->is_leader()) {
-    dout(10) << "fw to leader" << dendl;
-    mon->messenger->send_message(m, mon->monmap->get_inst(mon->get_leader()));
-    return true;
-  }
+  if (!mon->is_leader())
+    return false;
 
   // can i handle this query without a map update?
   
@@ -278,9 +269,9 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // note time and reply
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr] = g_clock.now();  
-  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_mds_inst(), 
+  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid,
 					      mdsmap.get_epoch(), state, seq, 0), 
-			       m->get_mds_inst());
+			       m->get_orig_source_inst());
 
   // done
  out:
@@ -315,10 +306,10 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
 {
   // -- this is an update --
   dout(12) << "handle_beacon " << *m
-	   << " from " << m->get_mds_inst()
+	   << " from " << m->get_orig_source_inst()
 	   << dendl;
-  int from = m->get_mds_inst().name.num();
-  entity_addr_t addr = m->get_mds_inst().addr;
+  int from = m->get_orig_source_inst().name.num();
+  entity_addr_t addr = m->get_orig_source_inst().addr;
   int state = m->get_state();
   version_t seq = m->get_seq();
 
@@ -445,13 +436,13 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
 {
   if (from < 0) {
     dout(10) << "_updated (booted) mds" << from << " " << *m << dendl;
-    mon->osdmon->send_latest(m->get_source_inst());
+    mon->osdmon->send_latest(m->get_orig_source_inst());
   } else {
     dout(10) << "_updated mds" << from << " " << *m << dendl;
   }
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
-    send_latest(m->get_mds_inst());
+    send_latest(m->get_orig_source_inst());
   }
 
   delete m;
