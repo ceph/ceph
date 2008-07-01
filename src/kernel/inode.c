@@ -625,7 +625,7 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
  * caller must hold directory i_mutex for this to be safe.
  */
 static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
-				    bool rehash)
+				    bool *prehash)
 {
 	struct dentry *realdn;
 
@@ -633,7 +633,17 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 	if (!d_unhashed(dn))
 		d_drop(dn);
 	realdn = d_materialise_unique(dn, in);
-	if (realdn && !IS_ERR(realdn)) {
+	if (IS_ERR(realdn)) {
+		derr(0, "error splicing %p (%d) with %p (%d) "
+		     "inode %p ino %llx\n",
+		     dn, atomic_read(&dn->d_count),
+		     realdn, atomic_read(&realdn->d_count),
+		     realdn->d_inode,
+		     ceph_ino(realdn->d_inode));
+		if (prehash)
+			*prehash = false; /* don't rehash on error */
+		goto out;
+	} else if (realdn) {
 		dout(10, "dn %p (%d) spliced with %p (%d) "
 		     "inode %p ino %llx\n",
 		     dn, atomic_read(&dn->d_count),
@@ -646,8 +656,9 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 	} else
 		dout(10, "dn %p attached to %p ino %llx\n",
 		     dn, dn->d_inode, ceph_ino(dn->d_inode));
-	if (rehash && d_unhashed(dn))
+	if ((!prehash || *prehash) && d_unhashed(dn))
 		d_rehash(dn);
+out:
 	return dn;
 }
 
@@ -674,7 +685,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct ceph_mds_reply_inode *ininfo;
 	int d = 0;
 	u64 ino;
-	int have_icontent = 0, have_lease = 0;
+	int have_icontent = 0;
+	bool have_lease = 0;
 
 	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
@@ -858,9 +870,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				in = NULL;
 				goto out_dir;
 			}
-			dn = splice_dentry(dn, in, have_lease);
+			dn = splice_dentry(dn, in, &have_lease);
 		}
-		BUG_ON(dn->d_parent != parent);
 
 		if (have_lease)
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
@@ -1026,7 +1037,7 @@ retry_lookup:
 				dput(dn);
 				return -ENOMEM;
 			}
-			dn = splice_dentry(dn, in, true);
+			dn = splice_dentry(dn, in, NULL);
 		}
 
 		if (ceph_fill_inode(in, &rinfo->dir_in[i], 0) < 0) {
