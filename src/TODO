@@ -1,4 +1,5 @@
 v0.3
+- fix mon osdmap send_full/latest ... never use get_source_inst()!
 
 v0.4
 - fix msgr protocol wrt resets, and varying connection close policies

@@ -1020,7 +1020,7 @@ void OSD::send_boot()
 {
   int mon = monmap->pick_mon();
   dout(10) << "send_boot to mon" << mon << dendl;
-  messenger->send_message(new MOSDBoot(messenger->get_myinst(), superblock), 
+  messenger->send_message(new MOSDBoot(superblock), 
 			  monmap->get_inst(mon));
 }
 
@@ -1063,8 +1063,7 @@ void OSD::send_failures()
   int mon = monmap->pick_mon();
   while (!failure_queue.empty()) {
     int osd = *failure_queue.begin();
-    messenger->send_message(new MOSDFailure(monmap->fsid, messenger->get_myinst(), 
-					    osdmap->get_inst(osd), osdmap->get_epoch()),
+    messenger->send_message(new MOSDFailure(monmap->fsid, osdmap->get_inst(osd), osdmap->get_epoch()),
 			    monmap->get_inst(mon));
     failure_queue.erase(osd);
   }

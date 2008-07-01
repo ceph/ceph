@@ -203,12 +203,6 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  // first time we've seen it?
-  if (m->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-    m->inst = m->get_source_inst();
-    m->clear_payload();
-  }
-
   dout(0) << "handle_command " << *m << dendl;
   string rs;
   if (!m->cmd.empty()) {
@@ -251,7 +245,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 {
   MMonCommandAck *reply = new MMonCommandAck(rc, rs);
   reply->set_data(rdata);
-  messenger->send_message(reply, m->inst);
+  messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
 }
 

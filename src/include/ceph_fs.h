@@ -374,7 +374,7 @@ struct ceph_msg_header {
 	__le32 front_len;
 	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
-	struct ceph_entity_inst src, dst;
+	struct ceph_entity_inst src, orig_src, dst;
 } __attribute__ ((packed));
 
 struct ceph_msg_footer {
