@@ -27,7 +27,7 @@ $CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --add $IP:12346 --add $I
 for f in 0 1 2
 do
  $CEPH_BIN/mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap
- $CEPH_BIN/cmon -d mondata/mon$f --debug_mon 20 --debug_ms 20 --debug_paxos 10
+ $CEPH_BIN/cmon -d mondata/mon$f --debug_mon 20 --debug_ms 1 --debug_paxos 10
 done
 
 # build and inject an initial osd map

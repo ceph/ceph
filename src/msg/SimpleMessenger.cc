@@ -798,30 +798,35 @@ int Rank::Pipe::accept()
       }
 
       if (peer_cseq < existing->connect_seq) {
-	/*
-	 * in order to distinguish between a slow remote connect race
-	 * (where the remote connect arrives _after_ our outgoing
-	 * connection gets a READY reply) and a remote reset, we make
-	 * the remote node retry a second time with peer_cseq == 0.
-	 *
-	 * this is a hack.. it's possible to have a second race.  just
-	 * rare.  what we really need is a full seq # for remote
-	 * connection attempts.. or something along those lines.
-	 */
-	if (peer_cseq == 0 && did_zero_retry) {
-	  dout(10) << "accept peer reset, then tried to connect to us (2x), replacing" << dendl;
+	if (false &&
+	    /*
+	     * FIXME: protocol spec is flawed here.  we can't
+	     * distinguish between a remote reset or a slow remote
+	     * connect race (where the remote connect arrives _after_
+	     * our outgoing connection gets a READY reply).
+	     *
+	     * BUT, this doesn't happen in practice, yet.  the "reset"
+	     * case comes up in two situations:
+	     *
+	     * - mds resets connection to client.  it should _never_
+	     * talk to that client after that, unless the client
+	     * initiates the connection.
+	     *
+	     * - mon restarts.  it'll talk to the client.  but, the client
+	     * doesn't need the peer_reset calback in that case.  faling into the 
+	     * RETRY case is harmless.
+	     *
+	     * blah!
+	     */
+	    peer_cseq == 0) {
+	  dout(10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
 	  // old attempt, or we sent READY but they didn't get it.
-	  if (did_zero_retry) {
-	    connect_seq = existing->connect_seq;  // so we can send it below..
-	  } else {
-	    connect_seq = 0;
-	    did_zero_retry = true;
-	  }
 	  dout(10) << "accept existing " << existing << ".cseq " << existing->connect_seq
-		   << " > " << peer_cseq << ", RETRY " << connect_seq << dendl;
+		   << " > " << peer_cseq << ", RETRY" << dendl;
+	  connect_seq = existing->connect_seq;  // so we can send it below..
 	  existing->lock.Unlock();
 	  rank.lock.Unlock();
 	  char tag = CEPH_MSGR_TAG_RETRY;
@@ -1056,7 +1061,7 @@ int Rank::Pipe::connect()
 	dout(0) << "connect got RETRY, but connection race or something, failing" << dendl;
 	goto stop_locked;
       }
-      assert(cseq >= connect_seq);
+      assert(cseq > connect_seq);
       dout(10) << "connect got RETRY " << connect_seq << " -> " << cseq << dendl;
       connect_seq = cseq;
     }
