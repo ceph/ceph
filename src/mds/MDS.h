@@ -60,6 +60,7 @@ class MDCache;
 class MDLog;
 class MDBalancer;
 class IdAllocator;
+class SnapTable;
 
 class CInode;
 class CDir;
@@ -104,6 +105,8 @@ class MDS : public Dispatcher {
 
   AnchorTable  *anchortable;
   AnchorClient *anchorclient;
+
+  SnapTable    *snaptable;
 
   Logger       *logger, *logger2;
 

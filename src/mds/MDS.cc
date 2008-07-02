@@ -31,11 +31,13 @@
 #include "MDCache.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
-#include "IdAllocator.h"
 #include "Migrator.h"
 
 #include "AnchorTable.h"
 #include "AnchorClient.h"
+
+#include "IdAllocator.h"
+#include "SnapTable.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -92,6 +94,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   idalloc = new IdAllocator(this);
 
   anchortable = new AnchorTable(this);
+  snaptable = new SnapTable(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -125,6 +128,7 @@ MDS::~MDS() {
   if (balancer) { delete balancer; balancer = NULL; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
   if (anchortable) { delete anchortable; anchortable = NULL; }
+  if (snaptable) { delete snaptable; snaptable = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
@@ -735,6 +739,12 @@ void MDS::boot_create()
     anchortable->create_fresh();
     anchortable->save(fin->new_sub());
   }
+
+  if (whoami == 0) {
+    dout(10) << "boot_create creating fresh snaptable" << dendl;
+    snaptable->reset();
+    snaptable->save(fin->new_sub());
+  }
 }
 
 void MDS::creating_done()
@@ -776,6 +786,10 @@ void MDS::boot_start(int step, int r)
       if (mdsmap->get_anchortable() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
 	anchortable->load(gather->new_sub());
+      }
+      if (whoami == 0) {
+	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
+	snaptable->load(gather->new_sub());
       }
       
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;

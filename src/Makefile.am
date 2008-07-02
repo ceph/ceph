@@ -205,6 +205,7 @@ libmds_a_SOURCES = \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
 	mds/IdAllocator.cc \
+	mds/SnapTable.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc
 
