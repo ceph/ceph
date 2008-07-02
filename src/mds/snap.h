@@ -60,6 +60,13 @@ class CInode;
 class MDCache;
 class MDRequest;
 
+
+/*
+ * CapabilityGroup - group per-realm, per-client caps for efficient
+ * client snap notifications.
+ */
+#include "Capability.h"
+
 struct snaplink_t {
   inodeno_t dirino;
   snapid_t first;
@@ -98,29 +105,22 @@ struct SnapRealm {
   //set<snapid_t> cached_snaps;
   //set<SnapRealm*> cached_active_children;    // active children that are currently open
 
-  xlist<CInode*> inodes_with_caps;               // for efficient realm splits
-  map<int, CapabilityGroup*> client_cap_groups;  // to identify clients who need snap notifications
+  xlist<CInode*> inodes_with_caps;             // for efficient realm splits
+  map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : mdcache(c), inode(in) {}
 
   bool open_parents(MDRequest *mdr);
-  void get_snap_list(set<snapid_t>& s);
+  void get_snap_set(set<snapid_t>& s);
+  void get_snap_vector(vector<snapid_t>& s);
+  void add_cap(int client, Capability *cap) {
+    client_caps[client].push_back(&cap->snaprealm_caps_item);
+  }
 };
 WRITE_CLASS_ENCODER(SnapRealm)
 
 
 
-/*
- * CapabilityGroup - group per-realm, per-client caps for efficient
- * client snap notifications.
- */
-struct Capability;
-
-struct CapabilityGroup {
-  int client;
-  xlist<Capability*> caps;
-  SnapRealm *realm;
-};
 
 
 #endif

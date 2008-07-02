@@ -509,7 +509,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   long r = 0;
 
   // do it.
-  if (poid.oid.snap && !pick_object_rev(poid, op->get_snap())) {
+  if (poid.oid.snap && !pick_object_rev(poid, op->get_snaps())) {
     // we have no revision for this request.
     r = -EEXIST;
     goto done;
@@ -1172,7 +1172,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   dout(10) << "op_modify " << opname 
            << " " << poid.oid 
            << " av " << av 
-	   << " snaps=" << op->get_snap()
+	   << " snaps=" << op->get_snaps()
 	   << " follows_snap " << follows
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
@@ -1208,7 +1208,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     prepare_transaction(repop->t, op->get_reqid(),
 			poid, op->get_op(), av,
 			op->get_offset(), op->get_length(), op->get_data(),
-			follows, op->get_snap(),
+			follows, op->get_snaps(),
 			op->get_inc_lock(), peers_complete_thru);
   }
   

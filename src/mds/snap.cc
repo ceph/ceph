@@ -45,7 +45,7 @@ bool SnapRealm::open_parents(MDRequest *mdr)
  * get list of snaps for this realm.  we must include parents' snaps
  * for the intervals during which they were our parent.
  */
-void SnapRealm::get_snap_list(set<snapid_t> &s)
+void SnapRealm::get_snap_set(set<snapid_t> &s)
 {
   // start with my snaps
   for (map<snapid_t, SnapInfo>::iterator p = snaps.begin();
@@ -69,4 +69,17 @@ void SnapRealm::get_snap_list(set<snapid_t> &s)
 	s.insert(q->first);
   }
   dout(10) << "build_snap_list " << s << dendl;
+}
+
+/*
+ * build vector in reverse sorted order
+ */
+void SnapRealm::get_snap_vector(vector<snapid_t> &v)
+{
+  set<snapid_t> s;
+  get_snap_set(s);
+  v.resize(s.size());
+  int i = 0;
+  for (set<snapid_t>::reverse_iterator p = s.rbegin(); p != s.rend(); p++)
+    v[i++] = *p;
 }

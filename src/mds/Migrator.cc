@@ -898,6 +898,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
 	    << " exported caps on " << *in << dendl;
     MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 					     in->inode, 
+					     in->find_containing_snaprealm()->inode->ino(),
                                              cap->get_last_seq(), 
                                              cap->pending(),
                                              cap->wanted(),
@@ -2054,10 +2055,12 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 
     MClientFileCaps *caps = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 						in->inode,
+						in->find_containing_snaprealm()->inode->ino(),
 						cap->get_last_seq(),
 						cap->pending(),
 						cap->wanted(),
 						cap->get_mseq());
+    in->find_containing_snaprealm()->get_snap_vector(caps->get_snaps());
     mds->send_message_client(caps, session->inst);
   }
 

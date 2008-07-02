@@ -2791,10 +2791,12 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   // send IMPORT
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
+					      in->find_containing_snaprealm()->inode->ino(),
 					      cap->get_last_seq(),
 					      cap->pending(),
 					      cap->wanted(),
 					      cap->get_mseq());
+  in->find_containing_snaprealm()->get_snap_vector(reap->get_snaps());
   mds->messenger->send_message(reap, session->inst);
 }
 

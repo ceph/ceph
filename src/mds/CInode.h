@@ -29,7 +29,7 @@
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
-
+#include "snap.h"
 
 #include <cassert>
 #include <list>
@@ -390,6 +390,7 @@ public:
   // -- snap --
   void open_snaprealm();
   void close_snaprealm();
+  SnapRealm *find_containing_snaprealm();
   void encode_snap(bufferlist &bl);
   void decode_snap(bufferlist::iterator& p) {
     bufferlist snapbl;
@@ -438,6 +439,10 @@ public:
     assert(client_caps.count(client) == 0);
     Capability *cap = client_caps[client] = new Capability;
     cap->set_inode(in);
+    
+    SnapRealm *realm = find_containing_snaprealm();
+    realm->add_cap(client, cap);
+    
     return cap;
   }
   void remove_client_cap(int client) {

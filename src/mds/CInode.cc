@@ -980,6 +980,22 @@ void CInode::close_snaprealm()
   }
 }
 
+/*
+ * note: this is _not_ inclusive of *this->snaprealm, as that is for
+ * nested directory content.
+ */ 
+SnapRealm *CInode::find_containing_snaprealm()
+{
+  CInode *cur = this;
+  while (1) {
+    if (!cur->get_parent_dn())
+      return 0;
+    cur = cur->get_parent_dn()->get_dir()->get_inode();
+    if (cur->snaprealm)
+      return snaprealm;
+  }
+}
+
 void CInode::encode_snap(bufferlist &bl)
 {
   bufferlist snapbl;

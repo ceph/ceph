@@ -400,6 +400,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	MClientFileCaps *stale = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 						     fake_inode, 
 						     0,
+						     0,
 						     0,                // doesn't matter.
 						     p->second.wanted, // doesn't matter.
 						     0);  // FIXME get proper mseq here?  hmm.
@@ -4420,6 +4421,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps(cap->pending());
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_caps_mseq(cap->get_mseq());
+  cur->find_containing_snaprealm()->get_snap_vector(reply->get_snaps());
   //reply->set_file_data_version(fdv);
   reply_request(mdr, reply);
 

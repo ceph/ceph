@@ -661,9 +661,12 @@ struct ceph_mds_reply_head {
 	__le32 op;
 	__le32 result;
 	__le32 file_caps;
+	__le64 file_caps_realm;
 	__le32 file_caps_seq;
 	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
+	__le32 num_snaps;
+	__le64 snaps[];
 } __attribute__ ((packed));
 
 /*
@@ -676,7 +679,7 @@ struct ceph_frag_tree_split {
 
 struct ceph_frag_tree_head {
 	__le32 nsplits;
-	struct ceph_frag_tree_split splits[0];
+	struct ceph_frag_tree_split splits[];
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
@@ -785,6 +788,8 @@ struct ceph_mds_file_caps {
 	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
 	__le64 time_warp_seq;
+	__le32 num_snaps;
+	__le64 snaps[];
 } __attribute__ ((packed));
 
 
@@ -885,8 +890,8 @@ struct ceph_osd_request_head {
 	__le32                    shed_count;
 	struct ceph_osd_peer_stat peer_stat;
 
-	__le32 num_snap;
-	__le64 snap[];
+	__le32 num_snaps;
+	__le64 snaps[];
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

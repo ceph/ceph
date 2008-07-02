@@ -125,15 +125,33 @@ class Dir {
 };
 
 
-class InodeCap {
- public:
+struct InodeCap;
+
+struct CapRealm {
+  inodeno_t dirino;
+  vector<snapid_t> snaps;
+  xlist<InodeCap*> caps;
+
+  CapRealm(inodeno_t i, vector<snapid_t> &s) : dirino(i) {
+    snaps.swap(s);
+  }
+};
+
+struct InodeCap {
   unsigned issued;
   unsigned implemented;
   __u64 seq;
   __u32 mseq;  // migration seq
 
-  InodeCap() : issued(0), implemented(0), seq(0), mseq(0) {}
+  CapRealm *realm;
+  xlist<InodeCap*>::item realm_cap_item;
+
+  InodeCap(CapRealm *r) : issued(0), implemented(0), seq(0), mseq(0), 
+			  realm(r), realm_cap_item(this) {
+    realm->caps.push_back(&realm_cap_item);
+  }
 };
+
 
 
 class Inode {
@@ -148,7 +166,7 @@ class Inode {
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
-  map<int,InodeCap> caps;            // mds -> InodeCap
+  map<int,InodeCap*> caps;            // mds -> InodeCap
   unsigned exporting_issued;
   int exporting_mds;
   capseq_t exporting_mseq;
@@ -240,10 +258,10 @@ class Inode {
 
   int caps_issued() {
     int c = exporting_issued;
-    for (map<int,InodeCap>::iterator it = caps.begin();
+    for (map<int,InodeCap*>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second.issued;
+      c |= it->second->issued;
     return c;
   }
 
@@ -561,6 +579,20 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
+  map<inodeno_t,CapRealm*> cap_realms;
+
+  CapRealm *get_cap_realm(inodeno_t r, vector<snapid_t> &snaps) {
+    if (cap_realms.count(r))
+      return cap_realms[r];
+    CapRealm *realm = new CapRealm(r, snaps);
+    cap_realms[r] = realm;
+    return realm;
+  }
+  void remove_cap_realm(CapRealm *realm) {
+    assert(realm->caps.empty());
+    cap_realms.erase(realm->dirino);
+  }
+
   // file handles, etc.
   filepath cwd;
   interval_set<int> free_fd_set;  // unused fds
@@ -741,7 +773,9 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
-  void add_update_inode_cap(Inode *in, int mds, unsigned issued, unsigned seq, unsigned mseq);
+  void add_update_inode_cap(Inode *in, int mds,
+			    inodeno_t realm, vector<snapid_t> &snaps,
+			    unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
   void handle_file_caps(class MClientFileCaps *m);
   void check_caps(Inode *in);

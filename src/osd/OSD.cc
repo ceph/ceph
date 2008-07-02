@@ -2734,9 +2734,9 @@ void OSD::handle_op(MOSDOp *op)
 	// snap read.  hrm.
 	// are we missing a revision that we might need?
 	// let's get them all.
-	for (unsigned i=0; i<op->get_snap().size(); i++) {
+	for (unsigned i=0; i<op->get_snaps().size(); i++) {
 	  object_t oid = op->get_oid();
-	  oid.snap = op->get_snap()[i];
+	  oid.snap = op->get_snaps()[i];
 	  if (pg->is_missing_object(oid)) {
 	    dout(10) << "handle_op _may_ need missing rev " << oid << ", pulling" << dendl;
 	    pg->wait_for_missing_object(op->get_oid(), op);

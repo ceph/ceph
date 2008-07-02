@@ -60,12 +60,12 @@ public:
 
 private:
   ceph_osd_request_head head;
-  vector<snapid_t> snap;
+  vector<snapid_t> snaps;
 
   friend class MOSDOpReply;
 
 public:
-  vector<snapid_t> &get_snap() { return snap; }
+  vector<snapid_t> &get_snaps() { return snaps; }
 
   osd_reqid_t get_reqid() { return osd_reqid_t(head.client_inst.name, 
 					       head.client_inc,
@@ -141,19 +141,19 @@ public:
 
   // marshalling
   virtual void encode_payload() {
-    head.num_snap = snap.size();
+    head.num_snaps = snaps.size();
     ::encode(head, payload);
-    for (unsigned i=0; i<snap.size(); i++)
-      ::encode(snap[i], payload);
+    for (unsigned i=0; i<snaps.size(); i++)
+      ::encode(snaps[i], payload);
     env.data_off = get_offset();
   }
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    snap.resize(head.num_snap);
-    for (unsigned i=0; i<snap.size(); i++)
-      ::decode(snap[i], p);
+    snaps.resize(head.num_snaps);
+    for (unsigned i=0; i<snaps.size(); i++)
+      ::decode(snaps[i], p);
   }
 
 
@@ -165,8 +165,8 @@ public:
     if (get_length()) out << " " << get_offset() << "~" << get_length();
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
-    if (!snap.empty())
-      out << " snap=" << snap;
+    if (!snaps.empty())
+      out << " snaps=" << snaps;
     out << ")";
   }
 };

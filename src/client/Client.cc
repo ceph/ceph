@@ -1188,13 +1188,13 @@ void Client::send_reconnect(int mds)
       Inode *in = p->second;
       if (in->caps.count(mds)) {
 	dout(10) << " caps on " << p->first
-		 << " " << cap_string(in->caps[mds].issued)
+		 << " " << cap_string(in->caps[mds]->issued)
 		 << " wants " << cap_string(in->caps_wanted())
 		 << dendl;
-	in->caps[mds].seq = 0;  // reset seq.
+	in->caps[mds]->seq = 0;  // reset seq.
 	m->add_inode_caps(p->first,    // ino
 			  in->caps_wanted(), // wanted
-			  in->caps[mds].issued,     // issued
+			  in->caps[mds]->issued,     // issued
 			  in->inode.size, in->inode.mtime, in->inode.atime);
 	filepath path;
 	in->make_path(path);
@@ -1367,15 +1367,15 @@ void Client::check_caps(Inode *in)
   if (in->caps.empty())
     return;   // guard if at end of func
   
-  map<int,InodeCap>::iterator next;
-  for (map<int,InodeCap>::iterator it = in->caps.begin();
+  map<int,InodeCap*>::iterator next;
+  for (map<int,InodeCap*>::iterator it = in->caps.begin();
        it != in->caps.end();
        it = next) {
     next = it;
     next++;
 
-    InodeCap &cap = it->second;
-    int revoking = cap.implemented & ~cap.issued;
+    InodeCap *cap = it->second;
+    int revoking = cap->implemented & ~cap->issued;
     
     if (in->wanted_max_size > in->inode.max_size &&
 	in->wanted_max_size > in->requested_max_size)
@@ -1383,19 +1383,19 @@ void Client::check_caps(Inode *in)
 
     /* completed revocation? */
     if (revoking && (revoking && used) == 0) {
-      dout(10) << "completed revocation of " << (cap.implemented & ~cap.issued) << dendl;
+      dout(10) << "completed revocation of " << (cap->implemented & ~cap->issued) << dendl;
       goto ack;
     }
 
     /* approaching file_max? */
-    if ((cap.issued & CEPH_CAP_WR) &&
+    if ((cap->issued & CEPH_CAP_WR) &&
 	(in->inode.size << 1) >= in->inode.max_size &&
 	(in->reported_size << 1) < in->inode.max_size) {
       dout(10) << "size approaching max_size" << dendl;
       goto ack;
     }
 
-    if ((cap.issued & ~wanted) == 0)
+    if ((cap->issued & ~wanted) == 0)
       continue;     /* nothing extra, all good */
 
     /*
@@ -1409,8 +1409,9 @@ void Client::check_caps(Inode *in)
   ack:
     MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_ACK,
 					     in->inode, 
-                                             it->second.seq,
-                                             it->second.issued,
+					     0,
+                                             cap->seq,
+                                             cap->issued,
                                              wanted,
 					     0);
     in->reported_size = in->inode.size;
@@ -1506,9 +1507,14 @@ void Client::_flushed(Inode *in, bool checkafter)
  * handle caps update from mds.  including mds to mds caps transitions.
  * do not block.
  */
-void Client::add_update_inode_cap(Inode *in, int mds, unsigned issued, unsigned seq, unsigned mseq)
+void Client::add_update_inode_cap(Inode *in, int mds,
+				  inodeno_t realm, vector<snapid_t> &snaps,
+				  unsigned issued, unsigned seq, unsigned mseq)
 {
-  if (!in->caps.count(mds)) {
+  InodeCap *cap = 0;
+  if (in->caps.count(mds)) {
+    cap = in->caps[mds];
+  } else {
     mds_sessions[mds].num_caps++;
     if (in->caps.empty())
       in->get();
@@ -1518,14 +1524,14 @@ void Client::add_update_inode_cap(Inode *in, int mds, unsigned issued, unsigned 
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
     }
+    in->caps[mds] = cap = new InodeCap(get_cap_realm(realm, snaps));
   }
-  unsigned old_caps = in->caps[mds].issued;
-  InodeCap &cap = in->caps[mds];
 
-  cap.issued |= issued;
-  cap.implemented |= issued;
-  cap.seq = seq;
-  cap.mseq = mseq;
+  unsigned old_caps = cap->issued;
+  cap->issued |= issued;
+  cap->implemented |= issued;
+  cap->seq = seq;
+  cap->mseq = mseq;
 
   if (issued & ~old_caps)
     signal_cond_list(in->waitfor_caps);
@@ -1534,6 +1540,10 @@ void Client::add_update_inode_cap(Inode *in, int mds, unsigned issued, unsigned 
 void Client::remove_cap(Inode *in, int mds)
 {
   assert(in->caps.count(mds));
+  InodeCap *cap = in->caps[mds];
+  cap->realm_cap_item.remove_myself();
+  if (cap->realm->caps.empty())
+    remove_cap_realm(cap->realm);
   in->caps.erase(mds);
   if (in->caps.empty())
     put_inode(in);
@@ -1565,7 +1575,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   if (m->get_op() == CEPH_CAP_OP_IMPORT) {
     // add/update it
-    add_update_inode_cap(in, mds, m->get_caps(), m->get_seq(), m->get_mseq());
+    add_update_inode_cap(in, mds, m->get_realm(), m->get_snaps(), m->get_caps(), m->get_seq(), m->get_mseq());
 
     if (in->exporting_mseq < m->get_mseq()) {
       dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
@@ -1587,18 +1597,18 @@ void Client::handle_file_caps(MClientFileCaps *m)
     // note?
     bool found_higher_mseq = false;
     InodeCap *cap = 0;
-    for (map<int,InodeCap>::iterator p = in->caps.begin();
+    for (map<int,InodeCap*>::iterator p = in->caps.begin();
 	 p != in->caps.end();
 	 p++) {
       if (p->first == mds) {
-	cap = &p->second;
+	cap = p->second;
 	continue;
       }
-      if (p->second.mseq > m->get_mseq()) {
+      if (p->second->mseq > m->get_mseq()) {
 	found_higher_mseq = true;
 	dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
 		<< " EXPORT from mds" << mds
-		<< ", but mds" << p->first << " has higher mseq " << p->second.mseq << dendl;
+		<< ", but mds" << p->first << " has higher mseq " << p->second->mseq << dendl;
 	break;
       }
     }
@@ -1633,7 +1643,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   }
   
   // ok!
-  InodeCap &cap = in->caps[mds];
+  InodeCap *cap = in->caps[mds];
 
 
   // truncate?
@@ -1657,7 +1667,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     return;
   }
 
-  cap.seq = m->get_seq();
+  cap->seq = m->get_seq();
 
   // don't want it?
   int wanted = in->caps_wanted();
@@ -1679,7 +1689,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   int used = in->caps_used();
 
   // update per-mds caps
-  const int old_caps = cap.issued;
+  const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
   dout(5) << "handle_file_caps on in " << m->get_ino() 
           << " mds" << mds << " seq " << m->get_seq() 
@@ -1707,16 +1717,16 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   if (old_caps & ~new_caps) { 
     dout(10) << "  revocation of " << cap_string(~new_caps & old_caps) << dendl;
-    cap.issued = new_caps;
+    cap->issued = new_caps;
 
-    if ((cap.issued & ~new_caps) & CEPH_CAP_RDCACHE)
+    if ((cap->issued & ~new_caps) & CEPH_CAP_RDCACHE)
       _release(in, false);
 
     if ((used & ~new_caps) & CEPH_CAP_WRBUFFER)
       _flush(in, false);
     else {
       ack = true;
-      cap.implemented = new_caps;
+      cap->implemented = new_caps;
 
       // share our (possibly newer) file size, mtime, atime
       m->set_size(in->inode.size);
@@ -1729,7 +1739,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
     dout(10) << "  caps unchanged at " << cap_string(old_caps) << dendl;
   } else {
     dout(10) << "  grant, new caps are " << cap_string(new_caps & ~old_caps) << dendl;
-    cap.issued = cap.implemented = new_caps;
+    cap->issued = cap->implemented = new_caps;
   }
 
   // wake up waiters
@@ -2902,6 +2912,8 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     // add the cap
     int mds = reply->get_source().num();
     add_update_inode_cap(in, mds,
+			 reply->get_file_caps_realm(),
+			 reply->get_snaps(),
 			 reply->get_file_caps(),
 			 reply->get_file_caps_seq(),
 			 reply->get_file_caps_mseq());    

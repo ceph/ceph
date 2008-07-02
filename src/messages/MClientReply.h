@@ -214,6 +214,7 @@ struct InodeStat {
 class MClientReply : public Message {
   // reply data
   struct ceph_mds_reply_head st;
+  vector<snapid_t> snaps;
   bufferlist trace_bl;
   bufferlist dir_bl;
 
@@ -226,7 +227,10 @@ class MClientReply : public Message {
 
   int get_result() { return (__s32)(__u32)st.result; }
 
+  vector<snapid_t> &get_snaps() { return snaps; }
+
   unsigned get_file_caps() { return st.file_caps; }
+  inodeno_t get_file_caps_realm() { return inodeno_t((__u64)st.file_caps_realm); }
   unsigned get_file_caps_seq() { return st.file_caps_seq; }
   unsigned get_file_caps_mseq() { return st.file_caps_mseq; }
   //uint64_t get_file_data_version() { return st.file_data_version; }
@@ -258,12 +262,18 @@ class MClientReply : public Message {
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(st, p);
+    snaps.resize(st.num_snaps);
+    for (unsigned i=0; i<snaps.size(); i++)
+      ::decode(snaps[i], p);
     ::decode(trace_bl, p);
     ::decode(dir_bl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
+    st.num_snaps = snaps.size();
     ::encode(st, payload);
+    for (unsigned i=0; i<snaps.size(); i++)
+      ::encode(snaps[i], payload);
     ::encode(trace_bl, payload);
     ::encode(dir_bl, payload);
   }
