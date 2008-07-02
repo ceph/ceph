@@ -53,6 +53,23 @@ using namespace std;
 
 
 
+typedef __u32 capseq_t;
+
+inline string cap_string(int cap)
+{
+  string s;
+  s = "[";
+  if (cap & CEPH_CAP_PIN) s += " pin";
+  if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
+  if (cap & CEPH_CAP_RD) s += " rd";
+  if (cap & CEPH_CAP_WR) s += " wr";
+  if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
+  if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
+  if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
+  if (cap & CEPH_CAP_EXCL) s += " excl";
+  s += " ]";
+  return s;
+}
 
 
 struct frag_info_t {

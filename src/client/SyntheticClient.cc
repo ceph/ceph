@@ -1275,7 +1275,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       __u64 size;
-      client->objecter->stat(oid, &size, layout, 0, new C_SafeCond(&lock, &cond, &ack));
+      vector<snapid_t> snaps;
+      client->objecter->stat(oid, &size, layout, snaps, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1288,7 +1289,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       bufferlist bl;
-      client->objecter->read(oid, off, len, layout, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
+      vector<snapid_t> snaps;
+      client->objecter->read(oid, off, len, layout, snaps, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1303,7 +1305,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
-      client->objecter->write(oid, off, len, layout, bl, 0,
+      vector<snapid_t> snaps;
+      client->objecter->write(oid, off, len, layout, snaps, bl, 0,
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg->new_sub());
       while (!ack) cond.Wait(lock);
@@ -1317,7 +1320,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_t oid(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
-      client->objecter->zero(oid, off, len, layout, 0,
+      vector<snapid_t> snaps;
+      client->objecter->zero(oid, off, len, layout, snaps, 0,
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg->new_sub());
       while (!ack) cond.Wait(lock);
@@ -2003,6 +2007,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     object_t oid(0x1000, i);
     ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 
 								   g_default_file_layout.fl_pg_size, 0);
+    vector<snapid_t> snaps;
     
     if (i % inflight == 0) {
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
@@ -2011,7 +2016,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     
     starts.push_back(g_clock.now());
     client->client_lock.Lock();
-    client->objecter->write(oid, 0, osize, layout, bl, 0,
+    client->objecter->write(oid, 0, osize, layout, snaps, bl, 0,
 			    new C_Ref(lock, cond, &unack),
 			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();
@@ -2106,18 +2111,19 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
     ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 
 								   g_default_file_layout.fl_pg_size, 0);
+    vector<snapid_t> snaps;
     
     client->client_lock.Lock();
     utime_t start = g_clock.now();
     if (write) {
       dout(10) << "write to " << oid << dendl;
-      client->objecter->write(oid, 0, osize, layout, bl, 0,
+      client->objecter->write(oid, 0, osize, layout, snaps, bl, 0,
 			      new C_Ref(lock, cond, &unack),
 			      new C_Ref(lock, cond, &unsafe));
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
-      client->objecter->read(oid, 0, osize, layout, &inbl, 0,
+      client->objecter->read(oid, 0, osize, layout, snaps, &inbl, 0,
 			     new C_Ref(lock, cond, &unack));
     }
     client->client_lock.Unlock();
@@ -3157,10 +3163,11 @@ int SyntheticClient::chunk_file(string &filename)
     Cond cond;
     bool done;
     bufferlist bl;
+    vector<snapid_t> snaps;
     
     lock.Lock();
     Context *onfinish = new C_SafeCond(&lock, &cond, &done);
-    filer->read(inode.ino, &inode.layout, pos, get, &bl, 0, onfinish);
+    filer->read(inode.ino, &inode.layout, snaps, pos, get, &bl, 0, onfinish);
     while (!done)
       cond.Wait(lock);
     lock.Unlock();

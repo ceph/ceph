@@ -1516,15 +1516,18 @@ void Client::add_update_inode_cap(Inode *in, int mds,
     cap = in->caps[mds];
   } else {
     mds_sessions[mds].num_caps++;
-    if (in->caps.empty())
+    if (in->caps.empty()) {
+      assert(in->snaprealm == 0);
+      in->snaprealm = get_snap_realm(realm, snaps);
       in->get();
+    }
     if (in->exporting_mds == mds) {
       dout(10) << " clearing exporting_caps on " << mds << dendl;
       in->exporting_mds = -1;
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
     }
-    in->caps[mds] = cap = new InodeCap(get_cap_realm(realm, snaps));
+    in->caps[mds] = cap = new InodeCap;
   }
 
   unsigned old_caps = cap->issued;
@@ -1540,13 +1543,12 @@ void Client::add_update_inode_cap(Inode *in, int mds,
 void Client::remove_cap(Inode *in, int mds)
 {
   assert(in->caps.count(mds));
-  InodeCap *cap = in->caps[mds];
-  cap->realm_cap_item.remove_myself();
-  if (cap->realm->caps.empty())
-    remove_cap_realm(cap->realm);
   in->caps.erase(mds);
-  if (in->caps.empty())
+  if (in->caps.empty()) {
     put_inode(in);
+    put_snap_realm(in->snaprealm);
+    in->snaprealm = 0;
+  }
 }
 
 void Client::handle_file_caps(MClientFileCaps *m)
@@ -3135,7 +3137,8 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	in->get_cap_ref(CEPH_CAP_RDCACHE);
 
       // read (and possibly block)
-      r = objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish);
+  #warning bleh
+      //r = objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish);
       
       if (r == 0) {
 	while (!done) 
@@ -3146,14 +3149,15 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	delete onfinish;
       }
     } else {
-      r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
+  #warning bleh
+      //r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
     }
     
   } else {
     // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, in->snaprealm->snaps, offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
@@ -3296,10 +3300,12 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       objectcacher->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-      objectcacher->file_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
+  #warning bleh
+      //objectcacher->file_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
     } else {
       // atomic, synchronous, blocking.
-      objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
+  #warning bleh
+      //objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
     }   
   } else {
     // simple, non-atomic sync write
@@ -3311,7 +3317,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    filer->write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish, onsafe);
+    filer->write(in->inode.ino, &in->inode.layout, in->snaprealm->snaps, offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);

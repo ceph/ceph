@@ -359,6 +359,22 @@ private:
 	ls.insert(auth);
     }
   }
+  void encode_dirstat(bufferlist& bl, int whoami) {
+    /*
+     * note: encoding matches struct ceph_client_reply_dirfrag
+     */
+    frag_t frag = get_frag();
+    __s32 auth;
+    set<__s32> dist;
+    
+    auth = dir_auth.first;
+    if (is_auth()) 
+      get_dist_spec(dist, whoami);
+
+    ::encode(frag, bl);
+    ::encode(auth, bl);
+    ::encode(dist, bl);
+  }
 
   CDirDiscover *replicate_to(int mds);
 

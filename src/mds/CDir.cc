@@ -958,10 +958,12 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
 
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this);
-  cache->mds->objecter->read( get_ondisk_object(), 
+  vector<snapid_t> snaps;
+  cache->mds->objecter->read( get_ondisk_object(),
 			      0, 0,   // whole object
 			      cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										   g_default_mds_dir_layout ),
+			      snaps,
 			      &fin->bl, 0,
 			      fin );
 }
@@ -1304,10 +1306,12 @@ void CDir::_commit(version_t want)
   assert(n == 0);
 
   // write it.
+  vector<snapid_t> snaps;
   cache->mds->objecter->write( get_ondisk_object(),
 			       0, bl.length(),
 			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										    g_default_mds_dir_layout ),
+			       snaps,
 			       bl, 0,
 			       NULL, new C_Dir_Committed(this, get_version()) );
 }

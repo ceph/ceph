@@ -357,6 +357,54 @@ private:
   void decode_import(bufferlist::iterator& p, LogSegment *ls);
   
 
+  // for giving to clients
+  void encode_inodestat(bufferlist& bl) {
+    /*
+     * note: encoding matches struct ceph_client_reply_inode
+     */
+    struct ceph_mds_reply_inode e;
+    memset(&e, 0, sizeof(e));
+    e.ino = inode.ino;
+    e.version = inode.version;
+    e.layout = inode.layout;
+    inode.ctime.encode_timeval(&e.ctime);
+    inode.mtime.encode_timeval(&e.mtime);
+    inode.atime.encode_timeval(&e.atime);
+    e.time_warp_seq = inode.time_warp_seq;
+    e.mode = inode.mode;
+    e.uid = inode.uid;
+    e.gid = inode.gid;
+    e.nlink = inode.nlink;
+    e.size = inode.size;
+    e.max_size = inode.max_size;
+
+    e.files = inode.dirstat.nfiles;
+    e.subdirs = inode.dirstat.nsubdirs;
+    inode.dirstat.rctime.encode_timeval(&e.rctime);
+    e.rbytes = inode.dirstat.rbytes;
+    e.rfiles = inode.dirstat.rfiles;
+    e.rsubdirs = inode.dirstat.rsubdirs;
+
+    e.rdev = inode.rdev;
+    e.fragtree.nsplits = dirfragtree._splits.size();
+    ::encode(e, bl);
+    for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
+	 p != dirfragtree._splits.end();
+	 p++) {
+      ::encode(p->first, bl);
+      ::encode(p->second, bl);
+    }
+    ::encode(symlink, bl);
+
+    bufferlist xbl;
+    if (!xattrs.empty())
+      ::encode(xattrs, xbl);
+    ::encode(xbl, bl);
+
+
+  }
+
+
   // -- locks --
 public:
   LocalLock  versionlock;

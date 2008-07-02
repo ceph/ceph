@@ -557,9 +557,11 @@ void AnchorTable::save(Context *onfinish)
 
   // write!
   object_t oid = object_t(MDS_INO_ANCHORTABLE+mds->get_nodeid(), 0);
+  vector<snapid_t> snaps;
   mds->objecter->write(oid,
 		       0, bl.length(),
 		       mds->objecter->osdmap->file_to_object_layout(oid, g_default_mds_anchortable_layout),
+		       snaps,
 		       bl, 0,
 		       NULL, new C_AT_Saved(this, version));
 }
@@ -598,9 +600,11 @@ void AnchorTable::load(Context *onfinish)
 
   C_AT_Load *fin = new C_AT_Load(this);
   object_t oid = object_t(MDS_INO_ANCHORTABLE+mds->get_nodeid(), 0);
+  vector<snapid_t> snaps;
   mds->objecter->read(oid,
 		      0, 0,
 		      mds->objecter->osdmap->file_to_object_layout(oid, g_default_mds_anchortable_layout),
+		      snaps,
 		      &fin->bl, 0,
 		      fin);
 }

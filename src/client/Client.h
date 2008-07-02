@@ -127,12 +127,12 @@ class Dir {
 
 struct InodeCap;
 
-struct CapRealm {
+struct SnapRealm {
   inodeno_t dirino;
   vector<snapid_t> snaps;
-  xlist<InodeCap*> caps;
+  int nref;
 
-  CapRealm(inodeno_t i, vector<snapid_t> &s) : dirino(i) {
+  SnapRealm(inodeno_t i, vector<snapid_t> &s) : dirino(i), nref(0) {
     snaps.swap(s);
   }
 };
@@ -143,13 +143,7 @@ struct InodeCap {
   __u64 seq;
   __u32 mseq;  // migration seq
 
-  CapRealm *realm;
-  xlist<InodeCap*>::item realm_cap_item;
-
-  InodeCap(CapRealm *r) : issued(0), implemented(0), seq(0), mseq(0), 
-			  realm(r), realm_cap_item(this) {
-    realm->caps.push_back(&realm_cap_item);
-  }
+  InodeCap() : issued(0), implemented(0), seq(0), mseq(0) {}
 };
 
 
@@ -170,6 +164,8 @@ class Inode {
   unsigned exporting_issued;
   int exporting_mds;
   capseq_t exporting_mseq;
+
+  SnapRealm *snaprealm;
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -224,6 +220,7 @@ class Inode {
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
+    snaprealm(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -579,18 +576,22 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
-  map<inodeno_t,CapRealm*> cap_realms;
+  map<inodeno_t,SnapRealm*> snap_realms;
 
-  CapRealm *get_cap_realm(inodeno_t r, vector<snapid_t> &snaps) {
-    if (cap_realms.count(r))
-      return cap_realms[r];
-    CapRealm *realm = new CapRealm(r, snaps);
-    cap_realms[r] = realm;
+  SnapRealm *get_snap_realm(inodeno_t r, vector<snapid_t> &snaps) {
+    SnapRealm *realm = snap_realms[r];
+    if (!realm) {
+      new SnapRealm(r, snaps);
+      snap_realms[r] = realm;
+    }
+    realm->nref++;
     return realm;
   }
-  void remove_cap_realm(CapRealm *realm) {
-    assert(realm->caps.empty());
-    cap_realms.erase(realm->dirino);
+  void put_snap_realm(SnapRealm *realm) {
+    if (realm->nref-- == 0) {
+      snap_realms.erase(realm->dirino);
+      delete realm;
+    }
   }
 
   // file handles, etc.
