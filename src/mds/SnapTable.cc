@@ -39,6 +39,7 @@ snapid_t SnapTable::create(inodeno_t base, const string& name, utime_t stamp)
   assert(is_active());
   
   snapid_t sn = ++last_snap;
+  snaps[sn].snapid = sn;
   snaps[sn].base = base;
   snaps[sn].name = name;
   snaps[sn].stamp = stamp;

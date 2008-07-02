@@ -18,32 +18,16 @@
 
 #include "MDSTable.h"
 #include "include/interval_set.h"
+#include "snap.h"
 
 class MDS;
 
 class SnapTable : public MDSTable {
 public:
-  struct snapinfo {
-    inodeno_t base;
-    utime_t stamp;
-    string name;
-
-    void encode(bufferlist& bl) const {
-      ::encode(base, bl);
-      ::encode(stamp, bl);
-      ::encode(name, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      ::decode(base, bl);
-      ::decode(stamp, bl);
-      ::decode(name, bl);
-    }
-  };
-  WRITE_CLASS_ENCODER(snapinfo)
   
 protected:
   snapid_t last_snap;
-  map<snapid_t, snapinfo> snaps;
+  map<snapid_t, SnapInfo> snaps;
   set<snapid_t> pending_removal;
 
 public:
@@ -66,6 +50,5 @@ public:
     ::decode(pending_removal, bl);
   }
 };
-WRITE_CLASS_ENCODER(SnapTable::snapinfo)
 
 #endif

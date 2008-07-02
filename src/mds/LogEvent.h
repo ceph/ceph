@@ -36,6 +36,7 @@
 #define EVENT_ANCHOR       40
 #define EVENT_ANCHORCLIENT 41
 
+#define EVENT_SNAP         50
 
 
 

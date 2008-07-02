@@ -60,13 +60,14 @@ class LogSegment {
   version_t allocv;
   version_t sessionmapv;
   version_t anchortablev;
+  version_t snaptablev;
 
   // try to expire
   C_Gather *try_to_expire(MDS *mds);
 
   // cons
   LogSegment(loff_t off) : offset(off), end(off), num_events(0), trimmable_at(0),
-			  allocv(0), sessionmapv(0), anchortablev(0) 
+			   allocv(0), sessionmapv(0), anchortablev(0), snaptablev(0)
   { }
 };
 

@@ -34,6 +34,8 @@
 #include "events/EAnchor.h"
 #include "events/EAnchorClient.h"
 
+#include "events/ESnap.h"
+
 #include "LogSegment.h"
 
 #include "MDS.h"
@@ -44,6 +46,8 @@
 #include "AnchorTable.h"
 #include "AnchorClient.h"
 #include "IdAllocator.h"
+#include "SnapTable.h"
+
 #include "Locker.h"
 
 
@@ -201,6 +205,13 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     dout(10) << "try_to_expire waiting for anchor table to save, need " << anchortablev << dendl;
     if (!gather) gather = new C_Gather;
     mds->anchortable->save(gather->new_sub());
+  }
+
+  // snaptable
+  if (snaptablev > mds->snaptable->get_committed_version()) {
+    dout(10) << "try_to_expire waiting for snap table to save, need " << snaptablev << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->snaptable->save(gather->new_sub());
   }
 
   // FIXME client requests...?
@@ -559,32 +570,33 @@ void EAnchor::replay(MDS *mds)
   if (mds->anchortable->get_version() >= version) {
     dout(10) << "EAnchor.replay event " << version
 	     << " <= table " << mds->anchortable->get_version() << dendl;
-  } else {
-    dout(10) << " EAnchor.replay event " << version
-	     << " - 1 == table " << mds->anchortable->get_version() << dendl;
-    assert(version-1 == mds->anchortable->get_version());
-    
-    switch (op) {
-      // anchortable
-    case ANCHOR_OP_CREATE_PREPARE:
-      mds->anchortable->create_prepare(ino, trace, reqmds);
-      break;
-    case ANCHOR_OP_DESTROY_PREPARE:
-      mds->anchortable->destroy_prepare(ino, reqmds);
-      break;
-    case ANCHOR_OP_UPDATE_PREPARE:
-      mds->anchortable->update_prepare(ino, trace, reqmds);
-      break;
-    case ANCHOR_OP_COMMIT:
-      mds->anchortable->commit(atid);
-      break;
-
-    default:
-      assert(0);
-    }
-    
-    assert(version == mds->anchortable->get_version());
+    return;
   }
+  
+  dout(10) << " EAnchor.replay event " << version
+	   << " - 1 == table " << mds->anchortable->get_version() << dendl;
+  assert(version-1 == mds->anchortable->get_version());
+  
+  switch (op) {
+    // anchortable
+  case ANCHOR_OP_CREATE_PREPARE:
+    mds->anchortable->create_prepare(ino, trace, reqmds);
+    break;
+  case ANCHOR_OP_DESTROY_PREPARE:
+    mds->anchortable->destroy_prepare(ino, reqmds);
+    break;
+  case ANCHOR_OP_UPDATE_PREPARE:
+    mds->anchortable->update_prepare(ino, trace, reqmds);
+    break;
+  case ANCHOR_OP_COMMIT:
+    mds->anchortable->commit(atid);
+    break;
+    
+  default:
+    assert(0);
+  }
+  
+  assert(version == mds->anchortable->get_version());
 }
 
 
@@ -604,6 +616,38 @@ void EAnchorClient::replay(MDS *mds)
     assert(0);
   }
 }
+
+
+// -----------------------
+// ESnap
+
+void ESnap::update_segment()
+{
+  _segment->snaptablev = version;
+}
+
+void ESnap::replay(MDS *mds)
+{
+  if (mds->snaptable->get_version() >= version) {
+    dout(10) << "ESnap.replay event " << version
+	     << " <= table " << mds->snaptable->get_version() << dendl;
+    return;
+  } 
+  
+  dout(10) << " ESnap.replay event " << version
+	   << " - 1 == table " << mds->snaptable->get_version() << dendl;
+  assert(version-1 == mds->snaptable->get_version());
+
+  if (create) {
+    snapid_t s = mds->snaptable->create(snap.base, snap.name, snap.stamp);
+    assert(s == snap.snapid);
+  } else {
+    mds->snaptable->remove(snap.snapid);
+  }
+
+  assert(version == mds->snaptable->get_version());
+}
+
 
 
 // -----------------------

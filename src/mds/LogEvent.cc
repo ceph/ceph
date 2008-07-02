@@ -38,6 +38,7 @@
 #include "events/EAnchor.h"
 #include "events/EAnchorClient.h"
 
+#include "events/ESnap.h"
 
 
 LogEvent *LogEvent::decode(bufferlist& bl)
@@ -75,6 +76,9 @@ LogEvent *LogEvent::decode(bufferlist& bl)
 
   case EVENT_ANCHOR: le = new EAnchor; break;
   case EVENT_ANCHORCLIENT: le = new EAnchorClient; break;
+
+  case EVENT_SNAP: le = new ESnap; break;
+
   default:
     generic_dout(1) << "uh oh, unknown log event type " << type << dendl;
     assert(0);
