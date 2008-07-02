@@ -218,9 +218,10 @@ remaining hard problems
 snapshot notes --
 
 todo
-- basic types (snapid_t, etc.)
-- snap lineage in MOSDOp
+/- basic types (snapid_t, etc.)
+/- snap lineage in MOSDOp
 - rados bits to do clone+write
+/  - cloning
   - figure out how to fix up rados logging
   - snap collections
   - garbage collection

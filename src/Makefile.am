@@ -203,6 +203,7 @@ libmds_a_SOURCES = \
 	mds/AnchorTable.cc \
 	mds/AnchorClient.cc \
 	mds/LogEvent.cc \
+	mds/MDSTable.cc \
 	mds/IdAllocator.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc

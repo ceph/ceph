@@ -16,63 +16,29 @@
 #ifndef __IDALLOCATOR_H
 #define __IDALLOCATOR_H
 
-#include "mdstypes.h"
+#include "MDSTable.h"
 #include "include/interval_set.h"
-#include "include/buffer.h"
-#include "include/Context.h"
 
 class MDS;
 
-class IdAllocator {
-  MDS *mds;
-  inode_t inode;
-
-  static const int STATE_UNDEF   = 0;
-  static const int STATE_OPENING = 1;
-  static const int STATE_ACTIVE  = 2;
-  //static const int STATE_COMMITTING = 3;
-  int state;
-
-  version_t version, committing_version, committed_version;
-
+class IdAllocator : public MDSTable {
   interval_set<inodeno_t> free;   // unused ids
-  
-  map<version_t, list<Context*> > waitfor_save;
 
  public:
-  IdAllocator(MDS *m) :
-    mds(m),
-    state(STATE_UNDEF),
-    version(0), committing_version(0), committed_version(0)
-  {
-  }
-  
-  void init_inode();
+  IdAllocator(MDS *m) : MDSTable(m, "idalloc") { }
 
   // alloc or reclaim ids
   inodeno_t alloc_id();
   void reclaim_id(inodeno_t ino);
-
-  version_t get_version() { return version; }
-  version_t get_committed_version() { return committed_version; }
-  version_t get_committing_version() { return committing_version; }
-
-  // load/save from disk (hack)
-  bool is_undef() { return state == STATE_UNDEF; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_opening() { return state == STATE_OPENING; }
-
-  void reset();
-  void save(Context *onfinish=0, version_t need=0);
-  void save_2(version_t v);
-
-  void shutdown() {
-    if (is_active()) save(0);
+  
+  void init_inode();
+  void reset_state();
+  void encode_state(bufferlist& bl) {
+    ::encode(free.m, bl);
   }
-
-  void load(Context *onfinish);
-  void load_2(int, bufferlist&, Context *onfinish);
-
+  void decode_state(bufferlist::iterator& bl) {
+    ::decode(free.m, bl);
+  }
 };
 
 #endif
