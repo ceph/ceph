@@ -23,7 +23,7 @@
 
 #define dout(x) if (x < g_conf.debug_mds) *_dout << dbeginl << g_clock.now() \
 						 << " mds" << mdcache->mds->get_nodeid() \
-						 << ".snaprealm(" << dirino << ") "
+						 << ".snaprealm(" << inode->ino() << ") "
 
 bool SnapRealm::open_parents(MDRequest *mdr)
 {

@@ -284,6 +284,7 @@ private:
   };
   ~CInode() {
     close_dirfrags();
+    close_snaprealm();
   }
   
 
@@ -384,6 +385,19 @@ public:
 
   void clear_dirty_scattered(int type);
   void finish_scatter_gather_update(int type);
+
+
+  // -- snap --
+  void open_snaprealm();
+  void close_snaprealm();
+  void encode_snap(bufferlist &bl);
+  void decode_snap(bufferlist::iterator& p) {
+    bufferlist snapbl;
+    ::decode(snapbl, p);
+    if (snapbl.length())
+      decode_snap(snapbl);
+  }
+  void decode_snap(bufferlist &bl);
 
   // -- caps -- (new)
   // client caps

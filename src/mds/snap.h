@@ -63,13 +63,32 @@ class MDRequest;
 struct snaplink_t {
   inodeno_t dirino;
   snapid_t first;
+  void encode(bufferlist& bl) const {
+    ::encode(dirino, bl);
+    ::encode(first, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(dirino, bl);
+    ::decode(first, bl);
+  }
 };
+WRITE_CLASS_ENCODER(snaplink_t)
 
 struct SnapRealm {
   // realm state
-  inodeno_t dirino;
   map<snapid_t, SnapInfo> snaps;
   multimap<snapid_t, snaplink_t> parents, children;  // key is "last" (or NOSNAP)
+
+  void encode(bufferlist& bl) const {
+    ::encode(snaps, bl);
+    ::encode(parents, bl);
+    ::encode(children, bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    ::decode(snaps, p);
+    ::decode(parents, p);
+    ::decode(children, p);
+  }
 
   // in-memory state
   MDCache *mdcache;
@@ -82,11 +101,12 @@ struct SnapRealm {
   xlist<CInode*> inodes_with_caps;               // for efficient realm splits
   map<int, CapabilityGroup*> client_cap_groups;  // to identify clients who need snap notifications
 
-  SnapRealm(inodeno_t i, MDCache *c, CInode *in) : dirino(i), mdcache(c), inode(in) {}
+  SnapRealm(MDCache *c, CInode *in) : mdcache(c), inode(in) {}
 
   bool open_parents(MDRequest *mdr);
   void get_snap_list(set<snapid_t>& s);
 };
+WRITE_CLASS_ENCODER(SnapRealm)
 
 
 

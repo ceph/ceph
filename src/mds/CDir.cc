@@ -1048,6 +1048,9 @@ void CDir::_fetched(bufferlist &bl)
 
       map<string, bufferptr> xattrs;
       ::decode(xattrs, p);
+
+      bufferlist snapbl;
+      ::decode(snapbl, p);
       
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -1073,9 +1076,10 @@ void CDir::_fetched(bufferlist &bl)
 	  if (in->is_symlink()) 
 	    in->symlink = symlink;
 	  
-	  // dirfragtree
 	  in->dirfragtree.swap(fragtree);
 	  in->xattrs.swap(xattrs);
+	  in->decode_snap(snapbl);
+
 	  // add 
 	  cache->add_inode( in );
 	
@@ -1294,6 +1298,7 @@ void CDir::_commit(version_t want)
 
       ::encode(in->dirfragtree, bl);
       ::encode(in->xattrs, bl);
+      in->encode_snap(bl);
     }
   }
   assert(n == 0);

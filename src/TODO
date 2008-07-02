@@ -222,6 +222,7 @@ todo
 /- snap lineage in MOSDOp
 - rados bits to do clone+write
 /  - cloning
+  - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
   - figure out how to fix up rados logging
   - snap collections
   - garbage collection

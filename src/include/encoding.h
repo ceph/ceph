@@ -322,6 +322,33 @@ inline void decode(std::map<T,U>& m, bufferlist::iterator& p)
   }
 }
 
+// multimap
+template<class T, class U>
+inline void encode(const std::multimap<T,U>& m, bufferlist& bl)
+{
+  __u32 n = m.size();
+  encode(n, bl);
+  for (typename std::multimap<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl);
+    encode(p->second, bl);
+  }
+}
+template<class T, class U>
+inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    typename std::multimap<T,U>::iterator it;
+    U u;
+    it = m.insert(std::pair<T,U>(k, u));
+    decode(it->second, p);
+  }
+}
+
 // hash_map
 template<class T, class U>
 inline void encode(const __gnu_cxx::hash_map<T,U>& m, bufferlist& bl)

@@ -221,6 +221,8 @@ CInode *MDCache::create_root_inode()
   
   root->inode_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
+  root->open_snaprealm();  // empty snaprealm
+  
   add_inode( root );
 
   return root;

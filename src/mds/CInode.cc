@@ -22,6 +22,8 @@
 #include "MDCache.h"
 #include "AnchorTable.h"
 
+#include "snap.h"
+
 #include "LogSegment.h"
 
 #include "common/Clock.h"
@@ -963,6 +965,39 @@ CInodeDiscover* CInode::replicate_to( int rep )
 }
 
 
+// SNAP
+
+void CInode::open_snaprealm()
+{
+  if (!snaprealm)
+    snaprealm = new SnapRealm(mdcache, this);
+}
+void CInode::close_snaprealm()
+{
+  if (snaprealm) {
+    delete snaprealm;
+    snaprealm = 0;
+  }
+}
+
+void CInode::encode_snap(bufferlist &bl)
+{
+  bufferlist snapbl;
+  if (snaprealm)
+    ::encode(snaprealm, snapbl);
+  ::encode(snapbl, bl);
+}
+
+void CInode::decode_snap(bufferlist& snapbl) 
+{
+  if (snapbl.length()) {
+    open_snaprealm();
+    bufferlist::iterator p = snapbl.begin();
+    ::decode(*snaprealm, p);
+  }
+}
+
+
 
 
 // IMPORT/EXPORT
@@ -973,7 +1008,8 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
-
+  encode_snap(bl);
+  
   bool dirty = is_dirty();
   ::encode(dirty, bl);
 
@@ -1012,6 +1048,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(symlink, p);
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);
+  decode_snap(p);
 
   bool dirty;
   ::decode(dirty, p);
