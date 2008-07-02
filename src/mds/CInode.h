@@ -47,6 +47,7 @@ class CInode;
 class CInodeDiscover;
 class MDCache;
 class LogSegment;
+class SnapRealm;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -132,6 +133,7 @@ class CInode : public MDSCacheObject {
   string           symlink;      // symlink dest, if symlink
   map<string, bufferptr> xattrs;
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
+  SnapRealm        *snaprealm;
 
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
@@ -211,7 +213,7 @@ public:
   // -- distributed state --
 protected:
   // file capabilities
-  map<int, Capability*>  client_caps;         // client -> caps
+  map<int, Capability*> client_caps;         // client -> caps
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
@@ -220,6 +222,7 @@ protected:
   // LogSegment xlists i (may) belong to
   xlist<CInode*>::item xlist_dirty;
 public:
+  xlist<CInode*>::item xlist_caps;
   xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
   xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
@@ -254,13 +257,14 @@ private:
   // ---------------------------
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
+    snaprealm(0),
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
     parent(0), projected_parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    xlist_dirty(this), xlist_open_file(this), 
+    xlist_dirty(this), xlist_caps(this), xlist_open_file(this), 
     xlist_dirty_dirfrag_dir(this), 
     xlist_dirty_dirfrag_dirfragtree(this), 
     xlist_purging_inode(this),

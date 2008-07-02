@@ -780,6 +780,7 @@ struct ceph_mds_file_caps {
 	__le32 seq;
 	__le32 caps, wanted;
 	__le64 ino;
+	__le64 realm;
 	__le64 size, max_size;
 	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;

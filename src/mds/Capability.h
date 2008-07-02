@@ -73,8 +73,9 @@ public:
 
 private:
   CInode *inode;
+  xlist<Capability*>::item cap_group_item;
   __u32 wanted_caps;     // what the client wants (ideally)
-  
+
   map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
   capseq_t last_open;
@@ -86,7 +87,7 @@ public:
   xlist<Capability*>::item session_caps_item;
 
   Capability(CInode *i=0, int want=0, capseq_t s=0) :
-    inode(i),
+    inode(i), cap_group_item(this),
     wanted_caps(want),
     last_sent(s),
     last_recv(s),

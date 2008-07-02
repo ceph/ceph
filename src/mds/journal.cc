@@ -639,7 +639,7 @@ void ESnap::replay(MDS *mds)
   assert(version-1 == mds->snaptable->get_version());
 
   if (create) {
-    snapid_t s = mds->snaptable->create(snap.base, snap.name, snap.stamp);
+    snapid_t s = mds->snaptable->create(snap.dirino, snap.name, snap.stamp);
     assert(s == snap.snapid);
   } else {
     mds->snaptable->remove(snap.snapid);

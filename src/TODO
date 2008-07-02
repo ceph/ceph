@@ -229,6 +229,8 @@ todo
 - client capgroups
 - mds snapid allocation
 - snap creation
+  - async SnapClient for the (possibly remote) SnapTable
+    - hmm, can we generalize any of AnchorClient?
 - mds metadata versioning
 - mds server ops
 
@@ -281,7 +283,7 @@ in SnapRealm,
 
 - when we create a snapshot,
   - xlock snaplock
-  - create realm, if necesarry
+  - create realm, if necessary
   - add it to the realm snaps list.
   - build list of current children
     - send client a capgroup update for each affected realm
