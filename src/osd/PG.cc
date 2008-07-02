@@ -1364,6 +1364,7 @@ int OSD::list_missing_revs(object_t oid, set<object_t>& revs, PG *pg)
   return c;
 }*/
 
+/*
 bool PG::pick_missing_object_rev(object_t& oid)
 {
   map<object_t,eversion_t>::iterator p = missing.missing.upper_bound(oid);
@@ -1377,29 +1378,40 @@ bool PG::pick_missing_object_rev(object_t& oid)
   return false;
 }
 
-bool PG::pick_object_rev(object_t& oid)
+*/
+
+
+bool PG::pick_object_rev(pobject_t& poid, vector<snapid_t> &snapvec)
 {
-  pobject_t t(info.pgid.pool(), 0, oid);
+  pobject_t t = poid;
+  snapid_t first = NOSNAP;
+  int r = sizeof(first);
 
-  if (!osd->store->pick_object_revision_lt(info.pgid, t))
-    return false; // we have no revisions of this object!
-  
-  objectrev_t crev;
-  int r = osd->store->getattr(info.pgid, t, "crev", &crev, sizeof(crev));
-  assert(r >= 0);
-  if (crev <= oid.snap) {
-    dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << dendl;
-    oid = t.oid;
-    return true;
+  dout(10) << "pick_object_rev " << poid << " snapvec " << snapvec << dendl;
+  for (int i=-1; i<(int)snapvec.size(); i++) {
+    if (i < 0)
+      t.oid.snap = CEPH_NOSNAP;
+    else if (snapvec[i] > first) {
+      dout(20) << "pick_object_rev  skipping snap " << snapvec[i] << " > " << first << dendl;
+      continue;
+    } else if (snapvec[i] < poid.oid.snap) {
+      dout(20) << "pick_object_rev  stopping at snap " << snapvec[i] << " < " << poid.oid.snap << dendl;
+      return false;
+    } else
+      t.oid.snap = snapvec[i];
+
+    if (t.oid.snap != CEPH_NOSNAP)
+      r = osd->store->getattr(info.pgid, t, "first_snap", &first, sizeof(first));
+    if (r != -ENOENT) {
+      if (first <= poid.oid.snap) {
+	dout(20) << "pick_object_rev  " << t << " first " << first << " <= " << poid.oid.snap << " -- HIT" << dendl;
+	poid = t;
+	return true;
+      }
+      dout(20) << "pick_object_rev  " << t << " first " << first << " > " << poid.oid.snap << dendl;
+    } else {
+      dout(20) << "pick_object_rev  " << t << " dne" << dendl;
+    }
   }
-
-  return false;  
+  return false;
 }
-
-
-
-
-
-
-
-

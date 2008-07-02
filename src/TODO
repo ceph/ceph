@@ -348,28 +348,70 @@ osd
 - adjust coll_t namespace to allow first_snap/last_snap collections..
   - pg.u.type = CEPH_PG_TYPE_SNAP_LB/UB?
 
+- read: 
+   oid.snap=NOSNAP op.snaps=[3,2,1]  // read latest
+   oid.snap=3      op.snaps=[3,2,1]  // read old snap 3
+- write:
+  - oid.snap=NOSNAP op.snaps=[3,2,1]  // write to latest
+      clone NOSNAP to oid.snaps[0] if oid:snaps[0] != snaps[0]
+        set snap_first based on snaps array.
+    - write(oid.snap=NOSNAP snaps=[3,2,1])  oid.snap=NOSNAP oid:prior=3,2,1
+        -> do nothing, write to existing
+    - write(oid.snap=NOSNAP snaps=[300,2,1])  oid.snap=NOSNAP oid:prior=2,1
+        -> clone to oid.snap=300, snaps=300
+    - write(oid.snap=NOSNAP snaps=[2,1])  oid.snap=NOSNAP oid:prior=3,2,1
+        -> slow request, but who cares.  use snaps=3,2,1, write to existing as above.
+    - write(oid.snap=NOSNAP snaps=[3,2,1])  oid.snap=NOSNAP oid:prior=1
+        -> clone to oid.snap=3, snaps=3,2
 
-rados snapshots
-- integrate revisions into ObjectCacher?
-- clean up oid.rev vs op.rev in osd+osdc
+screw "snap writeback":
+ - if client is buffering, it has exclusive access to the object.  therefore, it can flush older
+   snaps before newer ones.  done.
+ - if multiple clients are writing synchronously, then the client doesn't care if the osd pushes a write "forward" in time to the next snapshot, since it hasn't completed yet.
 
-- attr.crev is rev we were created in.
-- oid.rev=0 is "live".  defined for attr.crev <= rev.
-- otherwise, defined for attr.crev <= rev < oid.rev  (i.e. oid.rev is deletion time.  upper bound, non-inclusive.)
 
-- write|delete is tagged with op.rev
-  - if attr.crev != op.rev
-    - we clone to oid.rev=rev (clone keeps old crev)
-    - tag clone with list of revs it is defined over
-    - change live attr.crev=rev.
-  - apply update
-- read is tagged with op.rev
-  - if 0, we read from 0 (if it exists).
-  - otherwise we choose object rev based on op.rev vs oid.rev, and then verifying attr.crev <= op.rev.
-    - walk backwards through snap lineage?  i.e. if lineage = 1, 5, 30, 77, 100(now), and op.rev = 30, try 100, 77.
+write [10]
+                  NOSNAP follows=10
+write [20,10]
+                  NOSNAP follows=20,10
+                      20 [20,10]
+write [45,42,20,10]
+                  NOSNAP follows=45,42,20,10
+                      45 [45,42]
+                      20 [20,10]                  
+write [42,20,10]
+                  NOSNAP follows=45,42,20,10
+                      45 [45,42]
+                      20 [20,10]
+delete [45,42,20,10]
+                  NOSNAP follows=45,42,20,10   (empty)
+                      45 [45,42]
+                      20 [20,10]
+write [42,20]
+                  NOSNAP follows=45,42,20,10    * just write to head.
+                      45 [45,42]
+                      20 [20,10]
+delete [45,...]
+                  NOSNAP follows=45,42,20,10   (empty)
+                      45 [45,42]
+                      20 [20,10]
+write [60,45,..]
+                  NOSNAP follows=60,45,42,20,10
+                      45 [45,42]
+                      20 [20,10]
+write [70,60,..]
+                  NOSNAP follows=60,45,42,20,10
+		      70 [70]
+                      45 [45,42]
+                      20 [20,10]
 
-- or, tag live (0) object with attr listing which revs exist (and keep it around at size 0 if it doesn't logically exist)
-  - no, the dir lookup on old revs will be in a cached btrfs btree dir node (no inode needed until we have a hit)
+issues:
+- how to log and replication all this cloning...
+  - snap trimming is async from replicated writes
+- snap trimming in general needs to be fast.. and probably a background process..
+  -> logically put per-pg snap removal as a discrete pg log event?
+  - need to index snap_first/last on a per-pg basis... 128-bit collections?  or ditch ebofs?
+
 
 btrfs rev de-duping
 - i.e. when sub_op_push gets an object

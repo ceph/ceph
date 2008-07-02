@@ -883,6 +883,9 @@ struct ceph_osd_request_head {
 	/* semi-hack, fix me */
 	__le32                    shed_count;
 	struct ceph_osd_peer_stat peer_stat;
+
+	__le32 num_snap;
+	__le64 snap[];
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

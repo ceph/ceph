@@ -677,8 +677,7 @@ public:
   }
 
 
-  bool pick_missing_object_rev(object_t& oid);
-  bool pick_object_rev(object_t& oid);
+  bool pick_object_rev(pobject_t& oid, vector<snapid_t> &spanvec);
 
 
 

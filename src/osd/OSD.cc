@@ -2729,38 +2729,22 @@ void OSD::handle_op(MOSDOp *op)
 	delete op;
 	return;
       }
-
-      /*
-    if (read && op->get_oid().rev > 0) {
-    // versioned read.  hrm.
-      // are we missing a revision that we might need?
-      object_t moid = op->get_oid();
-      if (pick_missing_object_rev(moid, pg)) {
-	// is there a local revision we might use instead?
-	object_t loid = op->get_oid();
-	if (store->pick_object_revision_lt(loid) &&
-	    moid <= loid) {
-	  // we need moid.  pull it.
-	  dout(10) << "handle_op read on " << op->get_oid()
-		   << ", have " << loid
-		   << ", but need missing " << moid
-		   << ", pulling" << dendl;
-	  pull(pg, moid);
-	  pg->waiting_for_missing_object[moid].push_back(op);
-	  return;
-	} 
-	  
-	dout(10) << "handle_op read on " << op->get_oid()
-		 << ", have " << loid
-		 << ", don't need missing " << moid 
-		 << dendl;
+      
+      if (op->get_oid().snap > 0) {
+	// snap read.  hrm.
+	// are we missing a revision that we might need?
+	// let's get them all.
+	for (unsigned i=0; i<op->get_snap().size(); i++) {
+	  object_t oid = op->get_oid();
+	  oid.snap = op->get_snap()[i];
+	  if (pg->is_missing_object(oid)) {
+	    dout(10) << "handle_op _may_ need missing rev " << oid << ", pulling" << dendl;
+	    pg->wait_for_missing_object(op->get_oid(), op);
+	    pg->unlock();
+	    return;
+	  }
+	}
       }
-    } else {
-      // live revision.  easy.
-      if (op->get_op() != OSD_OP_PUSH &&
-	  waitfor_missing_object(op, pg)) return;
-    }
-      */
 
     } else {
       // modify
@@ -2866,8 +2850,8 @@ void OSD::handle_op(MOSDOp *op)
 
 void OSD::handle_sub_op(MOSDSubOp *op)
 {
-  dout(10) << "handle_sub_op " << *op << " epoch " << op->get_map_epoch() << dendl;
-  if (op->get_map_epoch() < boot_epoch) {
+  dout(10) << "handle_sub_op " << *op << " epoch " << op->map_epoch << dendl;
+  if (op->map_epoch < boot_epoch) {
     dout(3) << "replica op from before boot" << dendl;
     delete op;
     return;
@@ -2877,13 +2861,13 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   assert(op->get_source().is_osd());
   
   // make sure we have the pg
-  const pg_t pgid = op->get_pg();
+  const pg_t pgid = op->pgid;
 
   // require same or newer map
-  if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+  if (!require_same_or_newer_map(op, op->map_epoch)) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
+  _share_map_incoming(op->get_source_inst(), op->map_epoch);
 
   if (!_have_pg(pgid)) {
     // hmm.

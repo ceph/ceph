@@ -60,11 +60,13 @@ public:
 
 private:
   ceph_osd_request_head head;
-
+  vector<snapid_t> snap;
 
   friend class MOSDOpReply;
 
 public:
+  vector<snapid_t> &get_snap() { return snap; }
+
   osd_reqid_t get_reqid() { return osd_reqid_t(head.client_inst.name, 
 					       head.client_inc,
 					       head.tid); }
@@ -138,15 +140,22 @@ public:
   void set_retry_attempt(bool a) { head.flags = get_flags() | CEPH_OSD_OP_RETRY; }
 
   // marshalling
+  virtual void encode_payload() {
+    head.num_snap = snap.size();
+    ::encode(head, payload);
+    for (unsigned i=0; i<snap.size(); i++)
+      ::encode(snap[i], payload);
+    env.data_off = get_offset();
+  }
+
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
+    snap.resize(head.num_snap);
+    for (unsigned i=0; i<snap.size(); i++)
+      ::decode(snap[i], p);
   }
 
-  virtual void encode_payload() {
-    ::encode(head, payload);
-    env.data_off = get_offset();
-  }
 
   const char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
@@ -156,6 +165,8 @@ public:
     if (get_length()) out << " " << get_offset() << "~" << get_length();
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
+    if (!snap.empty())
+      out << " snap=" << snap;
     out << ")";
   }
 };
