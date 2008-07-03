@@ -988,11 +988,13 @@ SnapRealm *CInode::find_containing_snaprealm()
 {
   CInode *cur = this;
   while (1) {
-    if (!cur->get_parent_dn())
+    if (!cur->get_parent_dn()) {
+      assert(0); // all base inodes should have realms!
       return 0;
+    }
     cur = cur->get_parent_dn()->get_dir()->get_inode();
     if (cur->snaprealm)
-      return snaprealm;
+      return cur->snaprealm;
   }
 }
 

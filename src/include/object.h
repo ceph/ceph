@@ -101,8 +101,12 @@ inline ostream& operator<<(ostream& out, const object_t o) {
   out.fill('0');
   out << setw(8) << o.bno << dec;
   out.unsetf(ios::right);
-  if (o.snap) 
-    out << '.' << o.snap;
+  if (o.snap) {
+    if (o.snap == CEPH_NOSNAP)
+      out << ".head";
+    else
+      out << '.' << o.snap;
+  }
   return out;
 }
 

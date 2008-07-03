@@ -580,10 +580,8 @@ protected:
 
   SnapRealm *get_snap_realm(inodeno_t r, vector<snapid_t> &snaps) {
     SnapRealm *realm = snap_realms[r];
-    if (!realm) {
-      new SnapRealm(r, snaps);
-      snap_realms[r] = realm;
-    }
+    if (!realm)
+      snap_realms[r] = realm = new SnapRealm(r, snaps);
     realm->nref++;
     return realm;
   }
