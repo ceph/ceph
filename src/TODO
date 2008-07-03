@@ -223,6 +223,10 @@ todo
 - rados bits to do clone+write
 /  - cloning
   - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
+
+  - SnapRealm open_parents, get_snap_set need to recursively open/examine parents over given ranges...
+  - realm split
+
   - figure out how to fix up rados logging
   - snap collections
   - garbage collection

@@ -54,6 +54,7 @@ void SnapRealm::get_snap_set(set<snapid_t> &s)
     s.insert(p->first);
 
   // include parent snaps
+  // FIXME........ this is a weird interval DAG...
   for (multimap<snapid_t, snaplink_t>::iterator p = parents.begin();
        p != parents.end();
        p++) {

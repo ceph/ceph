@@ -30,6 +30,7 @@ using namespace std;
 
 
 class CInode;
+class SnapRealm;
 
 class Capability {
 public:
@@ -67,6 +68,8 @@ private:
   bool stale;
 public:
   xlist<Capability*>::item session_caps_item;
+
+  SnapRealm *realm;
   xlist<Capability*>::item snaprealm_caps_item;
 
   Capability(CInode *i=0, int want=0, capseq_t s=0) :
@@ -77,7 +80,7 @@ public:
     last_open(0),
     mseq(0),
     suppress(false), stale(false),
-    session_caps_item(this), snaprealm_caps_item(this) { }
+    session_caps_item(this), realm(0), snaprealm_caps_item(this) { }
   
   capseq_t get_mseq() { return mseq; }
 

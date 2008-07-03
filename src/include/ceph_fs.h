@@ -565,6 +565,9 @@ enum {
 	CEPH_MDS_OP_LTRUNCATE = 0x01303,
 	CEPH_MDS_OP_FSYNC     = 0x00304,
 	CEPH_MDS_OP_READDIR   = 0x00305,
+
+	CEPH_MDS_OP_MKSNAP    = 0x01010,
+	CEPH_MDS_OP_RMSNAP    = 0x01011,
 };
 
 static inline const char *ceph_mds_op_name(int op)
@@ -595,6 +598,8 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_TRUNCATE: return "truncate";
 	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
 	case CEPH_MDS_OP_FSYNC: return "fsync";
+	case CEPH_MDS_OP_MKSNAP: return "mksnap";
+	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
 	default: return "unknown";
 	}
 }
@@ -663,12 +668,12 @@ struct ceph_mds_reply_head {
 	__le32 op;
 	__le32 result;
 	__le32 file_caps;
-	__le64 file_caps_realm;
 	__le32 file_caps_seq;
 	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
-	__le32 num_snaps;
+	__le64 snap_realm;
 	__le64 snap_highwater;
+	__le32 num_snaps;
 	__le64 snaps[];
 } __attribute__ ((packed));
 

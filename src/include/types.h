@@ -199,7 +199,7 @@ inline unsigned char MODE_TO_DT(int mode) {
 
 // --
 
-inline ostream& operator<<(ostream& out, ceph_fsid& f) {
+inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
   return out << hex << f.major << '.' << f.minor << dec;
 }
 
@@ -208,16 +208,16 @@ inline ostream& operator<<(ostream& out, ceph_fsid& f) {
 // -- io helpers --
 
 template<class A, class B>
-inline ostream& operator<<(ostream& out, pair<A,B> v) {
+inline ostream& operator<<(ostream& out, const pair<A,B> v) {
   return out << v.first << "," << v.second;
 }
 
 template<class A>
-inline ostream& operator<<(ostream& out, vector<A>& v) {
+inline ostream& operator<<(ostream& out, const vector<A>& v) {
   out << "[";
-  for (unsigned i=0; i<v.size(); i++) {
-    if (i) out << ",";
-    out << v[i];
+  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+    if (p != v.begin()) out << ",";
+    out << *p;
   }
   out << "]";
   return out;

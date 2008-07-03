@@ -77,6 +77,8 @@
 
 #define SYNCLIENT_MODE_CHUNK    400
 
+#define SYNCLIENT_MODE_MKSNAP 1000
+#define SYNCLIENT_MODE_RMSNAP 1001
 
 
 void parse_syn_options(vector<const char*>& args);
@@ -247,6 +249,9 @@ class SyntheticClient {
   void import_find(const char *basedir, const char *find, bool writedata);
 
   int chunk_file(string &filename);
+
+  void mksnap(const char *base, const char *name);
+  void rmsnap(const char *base, const char *name);
 };
 
 #endif

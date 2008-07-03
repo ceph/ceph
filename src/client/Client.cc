@@ -1091,6 +1091,9 @@ void Client::dispatch(Message *m)
     handle_client_reply((MClientReply*)m);
     break;
 
+  case CEPH_MSG_CLIENT_SNAP:
+    handle_snap((MClientSnap*)m);
+    break;
   case CEPH_MSG_CLIENT_FILECAPS:
     handle_file_caps((MClientFileCaps*)m);
     break;
@@ -1424,9 +1427,7 @@ void Client::check_caps(Inode *in)
   }
 
   if (wanted == 0) {
-    dout(10) << "last caps on " << *in << dendl;
-    in->caps.clear();
-    put_inode(in);
+    remove_all_caps(in);
   }
 }
 
@@ -1508,9 +1509,9 @@ void Client::_flushed(Inode *in, bool checkafter)
  * handle caps update from mds.  including mds to mds caps transitions.
  * do not block.
  */
-void Client::add_update_inode_cap(Inode *in, int mds,
-				  inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
-				  unsigned issued, unsigned seq, unsigned mseq)
+void Client::add_update_cap(Inode *in, int mds,
+			    inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
+			    unsigned issued, unsigned seq, unsigned mseq)
 {
   InodeCap *cap = 0;
   if (in->caps.count(mds)) {
@@ -1521,6 +1522,7 @@ void Client::add_update_inode_cap(Inode *in, int mds,
       assert(in->snaprealm == 0);
       in->snaprealm = get_snap_realm(realm);
       in->get();
+      dout(15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
     }
     if (in->exporting_mds == mds) {
       dout(10) << " clearing exporting_caps on " << mds << dendl;
@@ -1530,7 +1532,7 @@ void Client::add_update_inode_cap(Inode *in, int mds,
     }
     in->caps[mds] = cap = new InodeCap;
   }
-  in->snaprealm->maybe_update(snap_highwater, snaps);
+  maybe_update_snaprealm(in->snaprealm, snap_highwater, snaps);
 
   unsigned old_caps = cap->issued;
   cap->issued |= issued;
@@ -1547,10 +1549,29 @@ void Client::remove_cap(Inode *in, int mds)
   assert(in->caps.count(mds));
   in->caps.erase(mds);
   if (in->caps.empty()) {
+    dout(15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
     put_inode(in);
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
   }
+}
+
+void Client::remove_all_caps(Inode *in)
+{
+  bool wasempty = in->caps.empty();
+  in->caps.clear();
+  if (!wasempty) {
+    dout(15) << "remove_all_caps closing snaprealm " << in->snaprealm << dendl;
+    put_inode(in);
+    put_snap_realm(in->snaprealm);
+    in->snaprealm = 0;
+  }
+}
+
+void Client::maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_highwater, vector<snapid_t>& snaps)
+{
+  if (realm->maybe_update(snap_highwater, snaps))
+    dout(10) << *realm << " now " << snaps << " highwater " << snap_highwater << dendl;
 }
 
 void Client::handle_snap(MClientSnap *m)
@@ -1561,7 +1582,7 @@ void Client::handle_snap(MClientSnap *m)
 
   switch (m->op) {
   case CEPH_SNAP_OP_UPDATE:
-    realm->maybe_update(m->snap_highwater, m->snaps);    
+    maybe_update_snaprealm(realm, m->snap_highwater, m->snaps);
     break;
 
   case CEPH_SNAP_OP_SPLIT:
@@ -1618,9 +1639,9 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   if (m->get_op() == CEPH_CAP_OP_IMPORT) {
     // add/update it
-    add_update_inode_cap(in, mds, 
-			 m->get_realm(), m->get_snap_highwater(), m->get_snaps(), 
-			 m->get_caps(), m->get_seq(), m->get_mseq());
+    add_update_cap(in, mds, 
+		   m->get_realm(), m->get_snap_highwater(), m->get_snaps(), 
+		   m->get_caps(), m->get_seq(), m->get_mseq());
 
     if (in->exporting_mseq < m->get_mseq()) {
       dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
@@ -2956,13 +2977,13 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
 
     // add the cap
     int mds = reply->get_source().num();
-    add_update_inode_cap(in, mds,
-			 reply->get_file_caps_realm(),
-			 reply->get_snap_highwater(),
-			 reply->get_snaps(),
-			 reply->get_file_caps(),
-			 reply->get_file_caps_seq(),
-			 reply->get_file_caps_mseq());    
+    add_update_cap(in, mds,
+		   reply->get_snap_realm(),
+		   reply->get_snap_highwater(),
+		   reply->get_snaps(),
+		   reply->get_file_caps(),
+		   reply->get_file_caps_seq(),
+		   reply->get_file_caps_mseq());    
     dout(5) << "open success, fh is " << f << " combined caps " << cap_string(in->caps_issued()) << dendl;
   }
 
@@ -3335,6 +3356,8 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 
   // avoid livelock with fsync?
   // FIXME
+  
+  dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
   if (g_conf.client_oc) {
     if (in->caps_issued() & CEPH_CAP_WRBUFFER) {
@@ -3363,17 +3386,8 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    // hack
-    if (1) {
-      static int a = 0;
-      in->snaprealm->snaps.insert(in->snaprealm->snaps.begin(), ++a);
-      in->snaprealm->snaps.insert(in->snaprealm->snaps.begin(), ++a);
-      dout(10) << "snaps now " << in->snaprealm->snaps << dendl;
-    }
-
     filer->write(in->inode.ino, &in->inode.layout, 
-		 CEPH_NOSNAP,
-		 in->snaprealm->snaps,
+		 CEPH_NOSNAP, in->snaprealm->snaps,
 		 offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
@@ -3629,6 +3643,53 @@ int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
   return 0;
 }
 
+
+// =============================
+// snaps
+
+int Client::mksnap(const char *relpath, const char *name)
+{
+  Mutex::Locker l(client_lock);
+  filepath path = mkpath(relpath);
+  return _mksnap(path, name);
+}
+int Client::rmsnap(const char *relpath, const char *name)
+{
+  Mutex::Locker l(client_lock);
+  filepath path = mkpath(relpath);
+  return _rmsnap(path, name);
+}
+
+
+int Client::_mksnap(const filepath& path, const char *name, int uid, int gid)
+{
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP, messenger->get_myinst());
+  req->set_filepath(path);
+  req->set_path2(name);
+
+  MClientReply *reply = make_request(req, uid, gid);
+  int res = reply->get_result();
+  delete reply;
+
+  trim_cache();
+  dout(3) << "mksnap(\"" << path << ", '" << name << "'\") = " << res << dendl;
+  return res;
+}
+
+int Client::_rmsnap(const filepath& path, const char *name, int uid, int gid)
+{
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP, messenger->get_myinst());
+  req->set_filepath(path);
+  req->set_path2(name);
+
+  MClientReply *reply = make_request(req, uid, gid);
+  int res = reply->get_result();
+  delete reply;
+
+  trim_cache();
+  dout(3) << "rmsnap(\"" << path << ", '" << name << "'\") = " << res << dendl;
+  return res;
+}
 
 
 
@@ -4389,6 +4450,11 @@ int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
   return 0;
 }
 
+
+
+
+
+// ===============================
 
 void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {

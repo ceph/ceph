@@ -499,6 +499,10 @@ public:
   }
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
+
+    Capability *cap = client_caps[client];
+    cap->realm->remove_cap(client, cap);
+
     delete client_caps[client];
     client_caps.erase(client);
     if (client_caps.empty())

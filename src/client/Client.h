@@ -136,13 +136,20 @@ struct SnapRealm {
   SnapRealm(inodeno_t i) : 
     dirino(i), nref(0), snap_highwater(0) { }
 
-  void maybe_update(snapid_t sh, vector<snapid_t> &s) {
+  bool maybe_update(snapid_t sh, vector<snapid_t> &s) {
     if (sh > snap_highwater) {
       snap_highwater = sh;
       snaps = s;
-    }
+      return true;
+    } 
+    return false;
   }
 };
+
+inline ostream& operator<<(ostream& out, const SnapRealm& r) {
+  return out << "snaprealm(" << r.dirino << " nref=" << r.nref << " hw=" << r.snap_highwater
+	     << " snaps=" << r.snaps << ")";
+}
 
 struct InodeCap {
   unsigned issued;
@@ -779,10 +786,14 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
-  void add_update_inode_cap(Inode *in, int mds,
-			    inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
-			    unsigned issued, unsigned seq, unsigned mseq);
+  void add_update_cap(Inode *in, int mds,
+		      inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
+		      unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
+  void remove_all_caps(Inode *in);
+
+  void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_highwater, vector<snapid_t>& snaps);
+
   void handle_snap(class MClientSnap *m);
   void handle_file_caps(class MClientFileCaps *m);
   void check_caps(Inode *in);
@@ -868,6 +879,9 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _statfs(struct statvfs *stbuf);
 
+  int _mksnap(const filepath &path, const char *name, int uid=-1, int gid=-1);
+  int _rmsnap(const filepath &path, const char *name, int uid=-1, int gid=-1);
+
 
 public:
   int mount();
@@ -940,6 +954,9 @@ public:
   int get_stripe_period(int fd);
   int enumerate_layout(int fd, list<ObjectExtent>& result,
 		       off_t length, off_t offset);
+
+  int mksnap(const char *path, const char *name);
+  int rmsnap(const char *path, const char *name);
 
   // low-level interface
   int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);

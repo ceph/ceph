@@ -115,14 +115,55 @@ struct SnapRealm {
   bool open_parents(MDRequest *mdr);
   void get_snap_set(set<snapid_t>& s);
   void get_snap_vector(vector<snapid_t>& s);
+
   void add_cap(int client, Capability *cap) {
     client_caps[client].push_back(&cap->snaprealm_caps_item);
+    cap->realm = this;
+  }
+  void remove_cap(int client, Capability *cap) {
+    cap->realm = 0;
+    cap->snaprealm_caps_item.remove_myself();
+    if (client_caps[client].empty())
+      client_caps.erase(client);
   }
 };
 WRITE_CLASS_ENCODER(SnapRealm)
 
-
-
+inline ostream& operator<<(ostream& out, const SnapRealm &realm) {
+  out << "snaprealm(" << realm.snaps;
+  if (realm.parents.size()) {
+    out << " parents=(";
+    for (multimap<snapid_t, snaplink_t>::const_iterator p = realm.parents.begin(); 
+	 p != realm.parents.end(); 
+	 p++) {
+      if (p != realm.parents.begin()) out << ",";
+      out << p->second.first << "-";
+      if (p->first == CEPH_NOSNAP)
+	out << "head";
+      else
+	out << p->first;
+      out << "=" << p->second.dirino;
+    }
+    out << ")";
+  }
+  if (realm.children.size()) {
+    out << " children=(";
+    for (multimap<snapid_t, snaplink_t>::const_iterator p = realm.parents.begin(); 
+	 p != realm.parents.end(); 
+	 p++) {
+      if (p != realm.parents.begin()) out << ",";
+      out << p->second.first << "-";
+      if (p->first == CEPH_NOSNAP)
+	out << "head";
+      else
+	out << p->first;
+      out << "=" << p->second.dirino;
+    }
+    out << ")";
+  }
+  out << ")";
+  return out;
+}
 
 
 #endif

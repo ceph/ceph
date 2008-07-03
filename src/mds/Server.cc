@@ -21,6 +21,7 @@
 #include "MDBalancer.h"
 #include "AnchorClient.h"
 #include "IdAllocator.h"
+#include "SnapTable.h"
 
 #include "msg/Messenger.h"
 
@@ -29,6 +30,7 @@
 #include "messages/MClientReply.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientFileCaps.h"
+#include "messages/MClientSnap.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -806,6 +808,15 @@ void Server::dispatch_client_request(MDRequest *mdr)
     break;
   case CEPH_MDS_OP_SYMLINK:
     handle_client_symlink(mdr);
+    break;
+
+
+    // snaps
+  case CEPH_MDS_OP_MKSNAP:
+    handle_client_mksnap(mdr);
+    break;
+  case CEPH_MDS_OP_RMSNAP:
+    handle_client_rmsnap(mdr);
     break;
 
 
@@ -4425,7 +4436,9 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   SnapRealm *realm = cur->find_containing_snaprealm();
   realm->get_snap_vector(reply->get_snaps());
   reply->set_snap_highwater(realm->snap_highwater);
-
+  reply->set_snap_realm(realm->inode->ino());
+  dout(10) << " snaprealm is " << *realm << " snaps=" << reply->get_snaps() << " on " << *realm->inode << dendl;
+  
   //reply->set_file_data_version(fdv);
   reply_request(mdr, reply);
 
@@ -4614,6 +4627,117 @@ void Server::handle_client_openc(MDRequest *mdr)
 
 
 
+
+
+// snaps
+
+void Server::handle_client_mksnap(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+
+  // traverse to path
+  vector<CDentry*> trace;
+  int r = mdcache->path_traverse(mdr, req, 
+				 req->get_filepath(), trace, false,
+				 MDS_TRAVERSE_FORWARD);
+  if (r > 0) return;
+  if (trace.empty()) r = -EINVAL;   // can't snap root
+  if (r < 0) {
+    reply_request(mdr, r);
+    return;
+  }
+  CDentry *dn = trace[trace.size()-1];
+  assert(dn);
+  if (!dn->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, dn->authority().first);
+    return;
+  }
+
+  // dir only
+  CInode *diri = dn->inode;
+  if (!dn->is_primary() || !diri->is_dir()) {
+    reply_request(mdr, -ENOTDIR);
+    return;
+  }
+  dout(10) << "mksnap " << req->get_path2() << " on " << *diri << dendl;
+
+  // lock snap
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  for (int i=0; i<(int)trace.size()-1; i++)
+    rdlocks.insert(&trace[i]->lock);
+  xlocks.insert(&dn->inode->snaplock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (mdr->now == utime_t())
+    mdr->now = g_clock.now();
+
+  // anchor diri
+  if (!diri->inode.anchored) {
+    mds->mdcache->anchor_create(mdr, diri, new C_MDS_RetryRequest(mds->mdcache, mdr));
+    return;
+  }
+
+  // allocate a snapid
+  // HACK
+  snapid_t snapid = mds->snaptable->create(diri->ino(), req->get_path2(), mdr->now);
+  dout(10) << " snapid is " << snapid << dendl;
+
+  // create realm?
+  if (!diri->snaprealm) {
+    dout(10) << "creating snaprealm on " << *diri << dendl;
+    diri->open_snaprealm();
+
+    // link them up
+    // HACK!  parent may be on another mds...
+
+    SnapRealm *parent = diri->find_containing_snaprealm();
+    assert(parent);
+    snaplink_t link;
+    link.first = snapid;
+    link.dirino = diri->ino();
+    parent->children.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
+    link.dirino = parent->inode->ino();
+    diri->snaprealm->parents.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
+
+    // split...
+    // ***
+  }
+
+  // add the snap
+  dout(10) << "snaprealm was " << *diri->snaprealm << dendl;
+  SnapInfo info;
+  info.snapid = snapid;
+  info.name = req->get_path2();
+  info.stamp = mdr->now;
+  diri->snaprealm->snaps[snapid] = info;
+  dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  // build new snaps list
+  vector<snapid_t> snaps;
+  diri->snaprealm->get_snap_vector(snaps);
+
+  // notify clients
+  
+  for (map<int, xlist<Capability*> >::iterator p = diri->snaprealm->client_caps.begin();
+       p != diri->snaprealm->client_caps.end();
+       p++) {
+    assert(!p->second.empty());
+
+    MClientSnap *update = new MClientSnap(CEPH_SNAP_OP_UPDATE, diri->ino());
+    update->snaps = snaps;
+    update->snap_highwater = diri->snaprealm->snap_highwater;
+    mds->send_message_client(update, p->first);
+  }
+
+  // yay
+  reply_request(mdr, 0, diri);
+}
+
+void Server::handle_client_rmsnap(MDRequest *mdr)
+{
+
+}
 
 
 

@@ -56,7 +56,18 @@ void parse_syn_options(vector<const char*>& args)
     if (strcmp(args[i],"--syn") == 0) {
       ++i;
 
-      if (strcmp(args[i],"writefile") == 0) {
+      if (strcmp(args[i], "mksnap") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_MKSNAP);
+	syn_sargs.push_back(args[++i]); // path
+	syn_sargs.push_back(args[++i]); // name
+      }
+      else if (strcmp(args[i], "rmsnap") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_RMSNAP);
+	syn_sargs.push_back(args[++i]); // path
+	syn_sargs.push_back(args[++i]); // name
+      }
+
+      else if (strcmp(args[i],"writefile") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -801,6 +812,25 @@ int SyntheticClient::run()
       }
       break;
       
+    case SYNCLIENT_MODE_MKSNAP:
+      {
+	string base = get_sarg(0);
+	string name = get_sarg(0);
+	if (run_me())
+	  mksnap(base.c_str(), name.c_str());
+	did_run_me();
+      }
+      break;
+    case SYNCLIENT_MODE_RMSNAP:
+      {
+	string base = get_sarg(0);
+	string name = get_sarg(0);
+	if (run_me())
+	  rmsnap(base.c_str(), name.c_str());
+	did_run_me();
+      }
+      break;
+
     default:
       assert(0);
     }
@@ -3192,4 +3222,16 @@ int SyntheticClient::chunk_file(string &filename)
 
   client->close(fd);
   return 0;
+}
+
+
+
+void SyntheticClient::mksnap(const char *base, const char *name)
+{
+  client->mksnap(base, name);
+}
+
+void SyntheticClient::rmsnap(const char *base, const char *name)
+{
+  client->rmsnap(base, name);
 }
