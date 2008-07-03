@@ -40,6 +40,7 @@ public:
   tid_t rep_tid;
   eversion_t version;
   uint32_t inc_lock;
+
   snapid_t follows_snap;
   vector<snapid_t> snaps;
   
@@ -119,7 +120,8 @@ public:
     out << "osd_sub_op(" << reqid
 	<< " " << MOSDOp::get_opname(op)
 	<< " " << poid
-	<< " av" << version;    
+	<< " v " << version
+	<< " follows_snap=" << follows_snap << " snaps=" << snaps;    
     if (length) out << " " << offset << "~" << length;
     out << ")";
   }

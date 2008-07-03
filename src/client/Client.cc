@@ -3319,6 +3319,14 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
+    // hack
+    if (1) {
+      static int a = 0;
+      in->snaprealm->snaps.insert(in->snaprealm->snaps.begin(), ++a);
+      in->snaprealm->snaps.insert(in->snaprealm->snaps.begin(), ++a);
+      dout(10) << "snaps now " << in->snaprealm->snaps << dendl;
+    }
+
     filer->write(in->inode.ino, &in->inode.layout, 
 		 CEPH_NOSNAP,
 		 in->snaprealm->snaps,

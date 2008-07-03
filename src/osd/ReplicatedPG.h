@@ -50,11 +50,13 @@ public:
     eversion_t       pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(MOSDOp *o, tid_t rt, eversion_t av, eversion_t lc) :
+    RepGather(MOSDOp *o, tid_t rt, eversion_t av, eversion_t lc,
+	      snapid_t fs, vector<snapid_t> &sn) :
       op(o), rep_tid(rt),
       applied(false),
       sent_ack(false), sent_commit(false),
       at_version(av), 
+      follows_snap(fs), snaps(sn),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
@@ -83,7 +85,8 @@ protected:
   void apply_repop(RepGather *repop);
   void put_rep_gather(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv);
+  RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
+			    snapid_t follows_snap, vector<snapid_t> &snaps);
   void repop_ack(RepGather *repop,
                  int result, bool commit,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));

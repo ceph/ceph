@@ -377,6 +377,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_STAT, flags);
+    m->get_snaps() = st->snaps;
     if (inc_lock > 0) {
       st->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -505,6 +506,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_READ, flags);
+    m->get_snaps() = rd->snaps;
     if (inc_lock > 0) {
       rd->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -808,6 +810,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   wr->op, flags);
+    m->get_snaps() = wr->snaps;
     if (inc_lock > 0) {
       wr->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);

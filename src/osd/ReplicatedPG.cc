@@ -619,13 +619,13 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       
       unsigned l;
       for (l=1; l<snaps.size() && snaps[l] > follows_snap; l++) ;
-      vector<snapid_t> csnaps;
-      csnaps.insert(snaps.begin(), l);
+      vector<snapid_t> csnaps(l);
+      for (unsigned i=0; i<l; i++)
+	csnaps[i] = snaps[i];
 
       // log clone
       dout(10) << "cloning to " << coid << " v " << at_version << " csnaps=" << csnaps << dendl;
       Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, reqid);
-      log.add(cloneentry);
       dout(10) << "prepare_transaction " << cloneentry << dendl;
       log.add(cloneentry);
       assert(log.top == at_version);
@@ -925,10 +925,12 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv)
+ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
+						      snapid_t follows_snap, vector<snapid_t> &snaps)
 {
   dout(10) << "new_rep_gather rep_tid " << rep_tid << " on " << *op << dendl;
-  RepGather *repop = new RepGather(op, rep_tid, nv, info.last_complete);
+  RepGather *repop = new RepGather(op, rep_tid, nv, info.last_complete,
+				   follows_snap, snaps);
   
   // osds. commits all come to me.
   for (unsigned i=0; i<acting.size(); i++) {
@@ -942,7 +944,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid,
     int osd = acting[i];
     repop->waitfor_ack.insert(osd);
   }
-  
+
   repop->start = g_clock.now();
 
   rep_gather[repop->rep_tid] = repop;
@@ -1198,7 +1200,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_rep_gather(op, rep_tid, av);
+  RepGather *repop = new_rep_gather(op, rep_tid, av, follows, op->get_snaps());
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
 
