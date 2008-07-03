@@ -58,7 +58,7 @@ void MDSTable::save(Context *onfinish, version_t v)
 
   // write (async)
   vector<snapid_t> snaps;
-  mds->filer->write(ino, &layout, snaps,
+  mds->filer->write(ino, &layout, 0, snaps,
                     0, bl.length(), bl,
                     0,
 		    0, new C_MT_Save(this, version));
@@ -113,7 +113,7 @@ void MDSTable::load(Context *onfinish)
 
   C_MT_Load *c = new C_MT_Load(this, onfinish);
   vector<snapid_t> snaps;
-  mds->filer->read(ino, &layout, snaps,
+  mds->filer->read(ino, &layout, 0, snaps,
                    0, ceph_file_layout_su(layout),
                    &c->bl, 0,
                    c);

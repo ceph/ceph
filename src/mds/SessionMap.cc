@@ -63,7 +63,7 @@ void SessionMap::load(Context *onload)
   
   C_SM_Load *c = new C_SM_Load(this);
   vector<snapid_t> snaps;
-  mds->filer->read(inode.ino, &inode.layout, snaps,
+  mds->filer->read(inode.ino, &inode.layout, 0, snaps,
                    0, ceph_file_layout_su(inode.layout),
                    &c->bl, 0,
                    c);
@@ -114,7 +114,7 @@ void SessionMap::save(Context *onsave, version_t needv)
   encode(bl);
   committing = version;
   vector<snapid_t> snaps;
-  mds->filer->write(inode.ino, &inode.layout, snaps,
+  mds->filer->write(inode.ino, &inode.layout, 0, snaps,
                     0, bl.length(), bl,
                     0,
 		    0, new C_SM_Save(this, version));

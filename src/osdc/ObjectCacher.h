@@ -484,22 +484,21 @@ class ObjectCacher {
   // file functions
 
   /*** async+caching (non-blocking) file interface ***/
-  int file_read(inodeno_t ino, ceph_file_layout *layout, vector<snapid_t> &snaps,
+  int file_read(inodeno_t ino, ceph_file_layout *layout, snapid_t snap, vector<snapid_t> &snaps,
                 off_t offset, size_t len, 
                 bufferlist *bl,
 		int flags,
                 Context *onfinish) {
     Objecter::OSDRead *rd = objecter->prepare_read(snaps, bl, flags);
-    filer.file_to_extents(ino, layout, offset, len, rd->extents);
+    filer.file_to_extents(ino, layout, snap, offset, len, rd->extents);
     return readx(rd, ino, onfinish);
   }
 
-  int file_write(inodeno_t ino, ceph_file_layout *layout, vector<snapid_t> &snaps,
+  int file_write(inodeno_t ino, ceph_file_layout *layout, snapid_t snap, vector<snapid_t> &snaps,
                  off_t offset, size_t len, 
-                 bufferlist& bl, int flags,
-		 objectrev_t rev=0) {
+                 bufferlist& bl, int flags) {
     Objecter::OSDWrite *wr = objecter->prepare_write(snaps, bl, flags);
-    filer.file_to_extents(ino, layout, offset, len, wr->extents);
+    filer.file_to_extents(ino, layout, snap, offset, len, wr->extents);
     return writex(wr, ino);
   }
 
@@ -507,22 +506,23 @@ class ObjectCacher {
 
   /*** sync+blocking file interface ***/
   
-  int file_atomic_sync_read(inodeno_t ino, ceph_file_layout *layout, vector<snapid_t> &snaps,
+  int file_atomic_sync_read(inodeno_t ino, ceph_file_layout *layout, 
+			    snapid_t snap, vector<snapid_t> &snaps,
                             off_t offset, size_t len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
     Objecter::OSDRead *rd = objecter->prepare_read(snaps, bl, flags);
-    filer.file_to_extents(ino, layout, offset, len, rd->extents);
+    filer.file_to_extents(ino, layout, snap, offset, len, rd->extents);
     return atomic_sync_readx(rd, ino, lock);
   }
 
-  int file_atomic_sync_write(inodeno_t ino, ceph_file_layout *layout, vector<snapid_t> &snaps,
+  int file_atomic_sync_write(inodeno_t ino, ceph_file_layout *layout, 
+			     snapid_t snap, vector<snapid_t> &snaps,
                              off_t offset, size_t len, 
                              bufferlist& bl, int flags,
-                             Mutex &lock,
-			     objectrev_t rev=0) {
+                             Mutex &lock) {
     Objecter::OSDWrite *wr = objecter->prepare_write(snaps, bl, flags);
-    filer.file_to_extents(ino, layout, offset, len, wr->extents);
+    filer.file_to_extents(ino, layout, snap, offset, len, wr->extents);
     return atomic_sync_writex(wr, ino, lock);
   }
 

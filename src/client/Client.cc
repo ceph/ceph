@@ -1658,7 +1658,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	m->get_size() < in->inode.size) {
       // map range to objects
       list<ObjectExtent> ls;
-      filer->file_to_extents(in->inode.ino, &in->inode.layout, 
+      filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP,
 			     m->get_size(), in->inode.size - m->get_size(),
 			     ls);
       objectcacher->truncate_set(in->inode.ino, ls);
@@ -3157,7 +3157,9 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, in->snaprealm->snaps, offset, size, bl, 0);
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout,
+						CEPH_NOSNAP, in->snaprealm->snaps,
+						offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
     r = objecter->readx(rd, onfinish);
@@ -3317,7 +3319,10 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    filer->write(in->inode.ino, &in->inode.layout, in->snaprealm->snaps, offset, size, bl, 0, onfinish, onsafe);
+    filer->write(in->inode.ino, &in->inode.layout, 
+		 CEPH_NOSNAP,
+		 in->snaprealm->snaps,
+		 offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);
@@ -4326,7 +4331,7 @@ int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  filer->file_to_extents(in->inode.ino, &in->inode.layout, offset, length, result);
+  filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, offset, length, result);
 
   dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;

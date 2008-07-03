@@ -52,6 +52,7 @@ class Filer {
   struct Probe {
     inodeno_t ino;
     ceph_file_layout layout;
+    snapid_t snap;
     vector<snapid_t> snaps;
     __u64 from;        // for !fwd, this is start of extent we are probing, thus possibly < our endpoint.
     __u64 *end;
@@ -67,12 +68,13 @@ class Filer {
     map<object_t, __u64> known;
     map<object_t, tid_t> ops;
 
-    Probe(inodeno_t i, ceph_file_layout &l, vector<snapid_t> &sn, __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
-      ino(i), layout(l), snaps(sn), from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
+    Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn, vector<snapid_t> &sns,
+	  __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
+      ino(i), layout(l), snap(sn), snaps(sns),
+      from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
   };
   
   class C_Probe;
-  //friend class C_Probe;  
 
   void _probe(Probe *p);
   void _probed(Probe *p, object_t oid, __u64 size);
@@ -88,65 +90,64 @@ class Filer {
   /*** async file interface ***/
   Objecter::OSDRead *prepare_read(inodeno_t ino,
 				  ceph_file_layout *layout,
-				  vector<snapid_t>& snaps,
+				  snapid_t snap, vector<snapid_t>& snaps,
 				  __u64 offset, 
 				  size_t len, 
 				  bufferlist *bl, 
 				  int flags) {
     Objecter::OSDRead *rd = objecter->prepare_read(snaps, bl, flags);
-    file_to_extents(ino, layout, offset, len, rd->extents);
+    file_to_extents(ino, layout, snap, offset, len, rd->extents);
     return rd;
   }
   int read(inodeno_t ino,
 	   ceph_file_layout *layout,
-	   vector<snapid_t>& snaps,
+	   snapid_t snap, vector<snapid_t>& snaps,
            __u64 offset, 
            size_t len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
            Context *onfinish) {
-    Objecter::OSDRead *rd = prepare_read(ino, layout, snaps, offset, len, bl, flags);
+    Objecter::OSDRead *rd = prepare_read(ino, layout, snap, snaps, offset, len, bl, flags);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }
 
   int write(inodeno_t ino,
 	    ceph_file_layout *layout,
-	    vector<snapid_t>& snaps,
+	    snapid_t snap, vector<snapid_t>& snaps,
 	    __u64 offset, 
             size_t len, 
             bufferlist& bl,
             int flags, 
             Context *onack,
-            Context *oncommit,
-	    objectrev_t rev=0) {
+            Context *oncommit) {
     Objecter::OSDWrite *wr = objecter->prepare_write(snaps, bl, flags);
-    file_to_extents(ino, layout, offset, len, wr->extents, rev);
+    file_to_extents(ino, layout, snap, offset, len, wr->extents);
     return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
   }
 
   int zero(inodeno_t ino,
 	   ceph_file_layout *layout,
-	   vector<snapid_t>& snaps,
+	   snapid_t snap, vector<snapid_t>& snaps,
 	   __u64 offset,
            size_t len,
 	   int flags,
            Context *onack,
            Context *oncommit) {
     Objecter::OSDModify *z = objecter->prepare_modify(snaps, CEPH_OSD_OP_ZERO, flags);
-    file_to_extents(ino, layout, offset, len, z->extents);
+    file_to_extents(ino, layout, snap, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
   int remove(inodeno_t ino,
 	     ceph_file_layout *layout,
-	     vector<snapid_t>& snaps,
+	     snapid_t snap, vector<snapid_t>& snaps,
 	     __u64 offset,
 	     size_t len,
 	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
     Objecter::OSDModify *z = objecter->prepare_modify(snaps, CEPH_OSD_OP_DELETE, flags);
-    file_to_extents(ino, layout, offset, len, z->extents);
+    file_to_extents(ino, layout, snap, offset, len, z->extents);
     return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
   }
 
@@ -157,7 +158,7 @@ class Filer {
    */
   int probe(inodeno_t ino,
 	    ceph_file_layout *layout,
-	    vector<snapid_t> &snaps,
+	    snapid_t snap, vector<snapid_t> &snaps,
 	    __u64 start_from,
 	    __u64 *end,
 	    bool fwd,
@@ -171,11 +172,10 @@ class Filer {
    * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
    * ranges in objects on (primary) osds)
    */
-  void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
+  void file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t snap,
 		       __u64 offset,
 		       size_t len,
-		       list<ObjectExtent>& extents,
-		       objectrev_t rev=0);
+		       list<ObjectExtent>& extents);
   
 };
 

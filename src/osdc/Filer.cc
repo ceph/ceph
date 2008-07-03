@@ -45,7 +45,7 @@ public:
 
 int Filer::probe(inodeno_t ino,
 		 ceph_file_layout *layout,
-		 vector<snapid_t> &snaps,
+		 snapid_t snap, vector<snapid_t> &snaps,
 		 __u64 start_from,
 		 __u64 *end,           // LB, when !fwd
 		 bool fwd,
@@ -57,7 +57,7 @@ int Filer::probe(inodeno_t ino,
 	   << " starting from " << start_from
 	   << dendl;
 
-  Probe *probe = new Probe(ino, *layout, snaps, start_from, end, flags, fwd, onfinish);
+  Probe *probe = new Probe(ino, *layout, snap, snaps, start_from, end, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
   __u64 period = ceph_file_layout_period(*layout);
@@ -86,7 +86,7 @@ void Filer::_probe(Probe *probe)
 	   << dendl;
   
   // map range onto objects
-  file_to_extents(probe->ino, &probe->layout, probe->from, probe->probing_len, probe->probing);
+  file_to_extents(probe->ino, &probe->layout, 0, probe->from, probe->probing_len, probe->probing);
   
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
@@ -183,10 +183,9 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
 }
 
 
-void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
+void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t snap,
                             __u64 offset, size_t len,
-                            list<ObjectExtent>& extents,
-			    objectrev_t rev) 
+                            list<ObjectExtent>& extents)
 {
   dout(10) << "file_to_extents " << offset << "~" << len 
            << " on " << hex << ino << dec
@@ -217,7 +216,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     
     // find oid, extent
     ObjectExtent *ex = 0;
-    object_t oid( ino, objectno, rev );
+    object_t oid( ino, objectno, snap );
     if (object_extents.count(oid)) 
       ex = &object_extents[oid];
     else {

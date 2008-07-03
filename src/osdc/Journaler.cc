@@ -82,7 +82,7 @@ void Journaler::recover(Context *onread)
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
   vector<snapid_t> snaps;
-  filer.read(ino, &layout, snaps, 0, sizeof(Header), &fin->bl, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+  filer.read(ino, &layout, 0, snaps, 0, sizeof(Header), &fin->bl, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -114,7 +114,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
   vector<snapid_t> snaps;
-  filer.probe(ino, &layout, snaps, h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+  filer.probe(ino, &layout, 0, snaps, h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_probe_end(int r, __s64 end)
@@ -171,7 +171,7 @@ void Journaler::write_head(Context *oncommit)
   bufferlist bl;
   ::encode(last_written, bl);
   vector<snapid_t> snaps;
-  filer.write(ino, &layout, snaps, 0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
+  filer.write(ino, &layout, 0, snaps, 0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
 	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
 }
@@ -342,7 +342,7 @@ void Journaler::_do_flush()
   // flush _start_ pos to _finish_flush
   utime_t now = g_clock.now();
   vector<snapid_t> snaps;
-  filer.write(ino, &layout, snaps, flush_pos, len, write_buf, 
+  filer.write(ino, &layout, 0, snaps, flush_pos, len, write_buf, 
 	      CEPH_OSD_OP_INCLOCK_FAIL,
 	      new C_Flush(this, flush_pos, now, false),  // on ACK
 	      new C_Flush(this, flush_pos, now, true));  // on COMMIT
@@ -531,7 +531,7 @@ void Journaler::_issue_read(__s64 len)
 	   << dendl;
   
   vector<snapid_t> snaps;
-  filer.read(ino, &layout, snaps, requested_pos, len, &reading_buf, CEPH_OSD_OP_INCLOCK_FAIL,
+  filer.read(ino, &layout, 0, snaps, requested_pos, len, &reading_buf, CEPH_OSD_OP_INCLOCK_FAIL,
 	     new C_Read(this));
   requested_pos += len;
 }
@@ -716,7 +716,7 @@ void Journaler::trim()
 	   << dendl;
   
   vector<snapid_t> snaps;
-  filer.remove(ino, &layout, snaps, trimming_pos, trim_to-trimming_pos, CEPH_OSD_OP_INCLOCK_FAIL, 
+  filer.remove(ino, &layout, 0, snaps, trimming_pos, trim_to-trimming_pos, CEPH_OSD_OP_INCLOCK_FAIL, 
 	       NULL, new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }

@@ -3167,7 +3167,7 @@ int SyntheticClient::chunk_file(string &filename)
     
     lock.Lock();
     Context *onfinish = new C_SafeCond(&lock, &cond, &done);
-    filer->read(inode.ino, &inode.layout, snaps, pos, get, &bl, 0, onfinish);
+    filer->read(inode.ino, &inode.layout, 0, snaps, pos, get, &bl, 0, onfinish);
     while (!done)
       cond.Wait(lock);
     lock.Unlock();

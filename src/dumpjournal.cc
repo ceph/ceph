@@ -114,7 +114,8 @@ int main(int argc, const char **argv, const char *envp[])
   Filer filer(objecter);
   bufferlist bl;
   vector<snapid_t> snaps;
-  filer.read(log_inode.ino, &log_inode.layout, snaps, start, len, &bl, 0, new C_SafeCond(&lock, &cond, &done));
+  filer.read(log_inode.ino, &log_inode.layout, 0, snaps,
+	     start, len, &bl, 0, new C_SafeCond(&lock, &cond, &done));
     lock.Lock();
   while (!done)
     cond.Wait(lock);
