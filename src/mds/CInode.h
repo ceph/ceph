@@ -136,6 +136,8 @@ class CInode : public MDSCacheObject {
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   SnapRealm        *snaprealm;
 
+  SnapRealm        *containing_realm;
+
   off_t last_journaled;       // log offset for the last time i was journaled
   off_t last_open_journaled;  // log offset for the last journaled EOpen
 
@@ -486,28 +488,45 @@ public:
     return 0;
   }
   Capability *add_client_cap(int client, CInode *in) {
-    if (client_caps.empty())
+    if (client_caps.empty()) {
       get(PIN_CAPS);
+      containing_realm = find_containing_snaprealm();
+      containing_realm->inodes_with_caps.push_back(&xlist_caps);
+    }
+
     assert(client_caps.count(client) == 0);
     Capability *cap = client_caps[client] = new Capability;
     cap->set_inode(in);
-    
-    SnapRealm *realm = find_containing_snaprealm();
-    realm->add_cap(client, cap);
+   
+    containing_realm->add_cap(client, cap);
     
     return cap;
   }
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
 
-    Capability *cap = client_caps[client];
-    cap->realm->remove_cap(client, cap);
+    containing_realm->remove_cap(client, client_caps[client]);
 
     delete client_caps[client];
     client_caps.erase(client);
-    if (client_caps.empty())
+    if (client_caps.empty()) {
       put(PIN_CAPS);
+      xlist_caps.remove_myself();
+      containing_realm = NULL;
+    }
   }
+  void move_to_containing_realm(SnapRealm *realm) {
+    for (map<int,Capability*>::iterator q = client_caps.begin();
+	 q != client_caps.end();
+	 q++) {
+      containing_realm->remove_cap(q->first, q->second);
+      realm->add_cap(q->first, q->second);
+    }
+    xlist_caps.remove_myself();
+    realm->inodes_with_caps.push_back(&xlist_caps);
+    containing_realm = realm;
+  }
+
   Capability *reconnect_cap(int client, inode_caps_reconnect_t& icr) {
     Capability *cap = get_client_cap(client);
     if (cap) {

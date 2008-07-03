@@ -4684,6 +4684,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   dout(10) << " snapid is " << snapid << dendl;
 
   // create realm?
+  inodeno_t split_parent = 0;
   if (!diri->snaprealm) {
     dout(10) << "creating snaprealm on " << *diri << dendl;
     diri->open_snaprealm();
@@ -4700,8 +4701,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     link.dirino = parent->inode->ino();
     diri->snaprealm->parents.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
 
-    // split...
-    // ***
+    // split existing caps
+    parent->split_at(diri->snaprealm);
+    split_parent = parent->inode->ino();
   }
 
   // add the snap
@@ -4717,16 +4719,23 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   vector<snapid_t> snaps;
   diri->snaprealm->get_snap_vector(snaps);
 
-  // notify clients
-  
+  // notify clients of update|split
+  list<inodeno_t> split_inos;
+  if (split_parent)
+    for (xlist<CInode*>::iterator p = diri->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
+      split_inos.push_back((*p)->ino());
+
   for (map<int, xlist<Capability*> >::iterator p = diri->snaprealm->client_caps.begin();
        p != diri->snaprealm->client_caps.end();
        p++) {
     assert(!p->second.empty());
 
-    MClientSnap *update = new MClientSnap(CEPH_SNAP_OP_UPDATE, diri->ino());
+    MClientSnap *update = new MClientSnap(split_parent ? CEPH_SNAP_OP_SPLIT:CEPH_SNAP_OP_UPDATE,
+					  diri->ino());
     update->snaps = snaps;
     update->snap_highwater = diri->snaprealm->snap_highwater;
+    update->split_parent = split_parent;
+    update->split_inos = split_inos;
     mds->send_message_client(update, p->first);
   }
 

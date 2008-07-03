@@ -1587,20 +1587,25 @@ void Client::handle_snap(MClientSnap *m)
 
   case CEPH_SNAP_OP_SPLIT:
     {
-      SnapRealm *newrealm = get_snap_realm(m->new_realm);
-      for (list<inodeno_t>::iterator p = m->new_inodes.begin();
-	   p != m->new_inodes.end();
+      /*
+       * fixme: this blindly moves the inode from whatever its prior
+       *  realm is.  this needs to somehow be safe from races from
+       *  multiple mds's...
+       */
+      for (list<inodeno_t>::iterator p = m->split_inos.begin();
+	   p != m->split_inos.end();
 	   p++) {
 	if (inode_map.count(*p)) {
 	  Inode *in = inode_map[*p];
-	  dout(10) << " moving " << *in << " into new realm " << m->new_realm << dendl;
+	  dout(10) << " moving " << *in << " from old realm " << m->split_parent << dendl;
 	  if (in->snaprealm)
 	    put_snap_realm(in->snaprealm);
-	  in->snaprealm = newrealm;
-	  newrealm->nref++;
+	  in->snaprealm = realm;
+	  realm->nref++;
 	}
       }
-      put_snap_realm(newrealm);
+      // oh.. update it too
+      maybe_update_snaprealm(realm, m->snap_highwater, m->snaps);
     }
     break;
 

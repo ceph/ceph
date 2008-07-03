@@ -16,6 +16,7 @@
 #include "MDCache.h"
 #include "MDS.h"
 
+#include "messages/MClientSnap.h"
 
 /*
  * SnapRealm
@@ -90,4 +91,37 @@ void SnapRealm::get_snap_vector(vector<snapid_t> &v)
   int i = 0;
   for (set<snapid_t>::reverse_iterator p = s.rbegin(); p != s.rend(); p++)
     v[i++] = *p;
+}
+
+
+void SnapRealm::split_at(SnapRealm *child)
+{
+  dout(10) << "split_at " << *child << dendl;
+
+  xlist<CInode*>::iterator p = inodes_with_caps.begin();
+  while (!p.end()) {
+    CInode *in = *p;
+    ++p;
+
+    // does inode fall within the child realm?
+    CInode *t = in;
+    bool under_child = false;
+    while (t) {
+      t = in->get_parent_dn()->get_dir()->get_inode();
+      if (t == child->inode) {
+	under_child = true;
+	break;
+      }
+      if (t == inode)
+	break;
+    }
+    if (!under_child) {
+      dout(20) << " keeping " << *in << dendl;
+      continue;
+    }
+    
+    dout(20) << " child gets " << *in << dendl;
+    in->move_to_containing_realm(child);
+  }
+
 }

@@ -116,12 +116,12 @@ struct SnapRealm {
   void get_snap_set(set<snapid_t>& s);
   void get_snap_vector(vector<snapid_t>& s);
 
+  void split_at(SnapRealm *child);
+
   void add_cap(int client, Capability *cap) {
     client_caps[client].push_back(&cap->snaprealm_caps_item);
-    cap->realm = this;
   }
   void remove_cap(int client, Capability *cap) {
-    cap->realm = 0;
     cap->snaprealm_caps_item.remove_myself();
     if (client_caps[client].empty())
       client_caps.erase(client);
