@@ -482,6 +482,7 @@ struct ceph_mds_getmap {
 #define CEPH_LOCK_IDFT        32    /* dir frag tree */
 #define CEPH_LOCK_IDIR        64    /* mds internal */
 #define CEPH_LOCK_IXATTR      128
+#define CEPH_LOCK_ISNAP       256
 #define CEPH_LOCK_INO         2048   /* immutable inode bits; not actually a lock */
 
 #define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)  /* alias for either filelock or dirlock */

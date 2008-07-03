@@ -117,6 +117,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_DIRLOCK_OFFSET         = 4 + 3*SimpleLock::WAIT_BITS; // same
   static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
+  static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY_MASK	= (0xffffffff);
 
@@ -276,7 +277,8 @@ private:
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET)
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
+    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET)
   {
     memset(&inode, 0, sizeof(inode));
     state = 0;  
@@ -414,6 +416,7 @@ public:
   FileLock   filelock;
   ScatterLock dirlock;
   SimpleLock xattrlock;
+  SimpleLock snaplock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -423,6 +426,7 @@ public:
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
     case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
+    case CEPH_LOCK_ISNAP: return &snaplock;
     }
     return 0;
   }
@@ -568,6 +572,7 @@ public:
 
     dirlock.replicate_relax();
     xattrlock.replicate_relax();
+    snaplock.replicate_relax();
   }
 
 
@@ -680,6 +685,7 @@ class CInodeDiscover {
   __u32      filelock_state;
   __u32      dirlock_state;
   __u32      xattrlock_state;
+  __u32      snaplock_state;
 
  public:
   CInodeDiscover() {}
@@ -697,6 +703,7 @@ class CInodeDiscover {
     filelock_state = in->filelock.get_replica_state();
     dirlock_state = in->dirlock.get_replica_state();
     xattrlock_state = in->xattrlock.get_replica_state();
+    snaplock_state = in->snaplock.get_replica_state();
   }
   CInodeDiscover(bufferlist::iterator &p) {
     decode(p);
@@ -721,6 +728,7 @@ class CInodeDiscover {
     in->filelock.set_state(filelock_state);
     in->dirlock.set_state(dirlock_state);
     in->xattrlock.set_state(xattrlock_state);
+    in->snaplock.set_state(snaplock_state);
   }
   
   void encode(bufferlist &bl) const {
@@ -735,6 +743,7 @@ class CInodeDiscover {
     ::encode(filelock_state, bl);
     ::encode(dirlock_state, bl);
     ::encode(xattrlock_state, bl);
+    ::encode(snaplock_state, bl);
   }
 
   void decode(bufferlist::iterator &p) {
@@ -749,6 +758,7 @@ class CInodeDiscover {
     ::decode(filelock_state, p);
     ::decode(dirlock_state, p);
     ::decode(xattrlock_state, p);
+    ::decode(snaplock_state, p);
   }  
 
 };

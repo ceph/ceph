@@ -64,8 +64,10 @@ ostream& operator<<(ostream& out, CInode& in)
     assert(in.get_replica_nonce() >= 0);
   }
 
-  if (in.is_symlink()) out << " symlink='" << in.symlink << "'";
-  if (in.is_dir() && !in.dirfragtree.empty()) out << " " << in.dirfragtree;
+  if (in.is_symlink())
+    out << " symlink='" << in.symlink << "'";
+  if (in.is_dir() && !in.dirfragtree.empty())
+    out << " " << in.dirfragtree;
   
   out << " v" << in.get_version();
 
@@ -107,10 +109,11 @@ ostream& operator<<(ostream& out, CInode& in)
   // locks
   out << " " << in.authlock;
   out << " " << in.linklock;
-  out << " " << in.dirfragtreelock;
-  if (in.inode.is_dir())
+  if (in.inode.is_dir()) {
+    out << " " << in.dirfragtreelock;
     out << " " << in.dirlock;
-  else
+    out << " " << in.snaplock;
+  } else
     out << " " << in.filelock;
   out << " " << in.xattrlock;
   
@@ -592,6 +595,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IXATTR:
     ::encode(xattrs, bl);
     break;
+
+  case CEPH_LOCK_ISNAP:
+    encode_snap(bl);
+    break;
   
   default:
     assert(0);
@@ -711,6 +718,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IXATTR:
     ::decode(xattrs, p);
+    break;
+
+  case CEPH_LOCK_ISNAP:
+    decode_snap(p);
     break;
 
   default:
@@ -1041,6 +1052,7 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(filelock, bl);
   ::encode(dirlock, bl);
   ::encode(xattrlock, bl);
+  ::encode(snaplock, bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -1084,4 +1096,5 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(filelock, p);
   ::decode(dirlock, p);
   ::decode(xattrlock, p);
+  ::decode(snaplock, p);
 }
