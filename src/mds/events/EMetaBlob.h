@@ -56,10 +56,11 @@ public:
     fragtree_t dirfragtree;
     map<string,bufferptr> xattrs;
     string symlink;
+    bufferlist snapbl;
     bool dirty;
 
-    fullbit(const nstring& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, const string& sym, bool dr) :
-      dn(d), dnv(v), inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), dirty(dr) { }
+    fullbit(const nstring& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, const string& sym, bufferlist &sbl, bool dr) :
+      dn(d), dnv(v), inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) { }
     fullbit(bufferlist::iterator &p) { decode(p); }
     fullbit() {}
 
@@ -67,20 +68,26 @@ public:
       ::encode(dn, bl);
       ::encode(dnv, bl);
       ::encode(inode, bl);
-      ::encode(dirfragtree, bl);
       ::encode(xattrs, bl);
       if (inode.is_symlink())
 	::encode(symlink, bl);
+      if (inode.is_dir()) {
+	::encode(dirfragtree, bl);
+	::encode(snapbl, bl);
+      }
       ::encode(dirty, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
       ::decode(dnv, bl);
       ::decode(inode, bl);
-      ::decode(dirfragtree, bl);
       ::decode(xattrs, bl);
       if (inode.is_symlink())
 	::decode(symlink, bl);
+      if (inode.is_dir()) {
+	::decode(dirfragtree, bl);
+	::decode(snapbl, bl);
+      }
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
@@ -369,18 +376,21 @@ private:
     in->last_journaled = my_offset;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
+    bufferlist snapbl;
+    in->encode_snap(snapbl);
+
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
 					  dn->get_projected_version(), 
-					  in->inode, in->dirfragtree, in->xattrs, in->symlink, 
+					  in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
 					  dirty));
       if (pi) lump.get_dfull().front().inode = *pi;
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
 					 dn->get_projected_version(),
-					 in->inode, in->dirfragtree, in->xattrs, in->symlink, 
+					 in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
 					 dirty));
       if (pi) lump.get_dfull().back().inode = *pi;
       return &lump.get_dfull().back().inode;
