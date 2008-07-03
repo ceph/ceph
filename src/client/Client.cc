@@ -46,6 +46,7 @@ using namespace std;
 #include "messages/MClientReply.h"
 #include "messages/MClientFileCaps.h"
 #include "messages/MClientLease.h"
+#include "messages/MClientSnap.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -1550,6 +1551,45 @@ void Client::remove_cap(Inode *in, int mds)
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
   }
+}
+
+void Client::handle_snap(MClientSnap *m)
+{
+  dout(10) << "handle_snap " << *m << dendl;
+
+  SnapRealm *realm = get_snap_realm(m->realm);
+
+  switch (m->op) {
+  case CEPH_SNAP_OP_UPDATE:
+    realm->maybe_update(m->snap_highwater, m->snaps);    
+    break;
+
+  case CEPH_SNAP_OP_SPLIT:
+    {
+      SnapRealm *newrealm = get_snap_realm(m->new_realm);
+      for (list<inodeno_t>::iterator p = m->new_inodes.begin();
+	   p != m->new_inodes.end();
+	   p++) {
+	if (inode_map.count(*p)) {
+	  Inode *in = inode_map[*p];
+	  dout(10) << " moving " << *in << " into new realm " << m->new_realm << dendl;
+	  if (in->snaprealm)
+	    put_snap_realm(in->snaprealm);
+	  in->snaprealm = newrealm;
+	  newrealm->nref++;
+	}
+      }
+      put_snap_realm(newrealm);
+    }
+    break;
+
+  default:
+    assert(0);
+  }
+
+  // done.
+  put_snap_realm(realm);
+  delete m;
 }
 
 void Client::handle_file_caps(MClientFileCaps *m)

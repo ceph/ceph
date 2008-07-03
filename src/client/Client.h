@@ -783,6 +783,7 @@ protected:
 			    inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
 			    unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
+  void handle_snap(class MClientSnap *m);
   void handle_file_caps(class MClientFileCaps *m);
   void check_caps(Inode *in);
   void put_cap_ref(Inode *in, int cap);
