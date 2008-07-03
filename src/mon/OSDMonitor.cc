@@ -482,7 +482,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     _booted(m);
     return true;
   }
-  
+
   dout(10) << "preprocess_boot from " << m->get_orig_source_inst() << dendl;
   return false;
 }
@@ -495,9 +495,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   
   // does this osd exist?
   if (!osdmap.exists(from)) {
-    dout(1) << "boot from non-existent osd" << from << dendl;
+    dout(1) << "boot from non-existent osd" << from << ", increase max_osd?" << dendl;
     delete m;
-    return true;
+    return false;
   }
 
   // already up?  mark down first?

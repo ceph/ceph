@@ -119,13 +119,13 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 
 bool ClientMonitor::preprocess_query(Message *m)
 {
-  dout(10) << "preprocess_query " << *m << " from " << m->get_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_MOUNT:
     {
       // already mounted?
-      entity_addr_t addr = m->get_source_addr();
+      entity_addr_t addr = m->get_orig_source_addr();
       if (client_map.addr_client.count(addr)) {
 	int client = client_map.addr_client[addr];
 	dout(7) << " client" << client << " already mounted" << dendl;
@@ -138,7 +138,7 @@ bool ClientMonitor::preprocess_query(Message *m)
   case CEPH_MSG_CLIENT_UNMOUNT:
     {
       // already unmounted?
-      int client = m->get_source().num();
+      int client = m->get_orig_source().num();
       if (client_map.client_addr.count(client) == 0) {
 	dout(7) << " client" << client << " not mounted" << dendl;
 	_unmounted((MClientUnmount*)m);
@@ -157,15 +157,15 @@ bool ClientMonitor::preprocess_query(Message *m)
 
 bool ClientMonitor::prepare_update(Message *m)
 {
-  dout(10) << "prepare_update " << *m << " from " << m->get_source_inst() << dendl;
+  dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_MOUNT:
     {
-      entity_addr_t addr = m->get_source_addr();
+      entity_addr_t addr = m->get_orig_source_addr();
       int client = -1;
-      if (m->get_source().is_client())
-	client = m->get_source().num();
+      if (m->get_orig_source().is_client())
+	client = m->get_orig_source().num();
 
       // choose a client id
       if (client < 0) {
@@ -187,8 +187,8 @@ bool ClientMonitor::prepare_update(Message *m)
 
   case CEPH_MSG_CLIENT_UNMOUNT:
     {
-      assert(m->get_source().is_client());
-      int client = m->get_source().num();
+      assert(m->get_orig_source().is_client());
+      int client = m->get_orig_source().num();
 
       assert(client_map.client_addr.count(client));
       
@@ -212,7 +212,7 @@ bool ClientMonitor::prepare_update(Message *m)
 void ClientMonitor::_mounted(int client, MClientMount *m)
 {
   entity_inst_t to;
-  to.addr = m->get_source_addr();
+  to.addr = m->get_orig_source_addr();
   to.name = entity_name_t::CLIENT(client);
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
@@ -230,10 +230,10 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 
 void ClientMonitor::_unmounted(MClientUnmount *m)
 {
-  dout(10) << "_unmounted " << m->get_source_inst() << dendl;
+  dout(10) << "_unmounted " << m->get_orig_source_inst() << dendl;
   
   // reply with (same) unmount message
-  mon->messenger->send_message(m, m->get_source_inst());
+  mon->messenger->send_message(m, m->get_orig_source_inst());
 
   // auto-shutdown?
   // (hack for fakesyn/newsyn, mostly)
