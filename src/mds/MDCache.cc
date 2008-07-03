@@ -2789,14 +2789,16 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   session->touch_cap(cap);
   
   // send IMPORT
+  SnapRealm *realm = in->find_containing_snaprealm();
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
-					      in->find_containing_snaprealm()->inode->ino(),
+					      realm->inode->ino(),
 					      cap->get_last_seq(),
 					      cap->pending(),
 					      cap->wanted(),
 					      cap->get_mseq());
-  in->find_containing_snaprealm()->get_snap_vector(reap->get_snaps());
+  realm->get_snap_vector(reap->get_snaps());
+  reap->set_snap_highwater(realm->snap_highwater);
   mds->messenger->send_message(reap, session->inst);
 }
 

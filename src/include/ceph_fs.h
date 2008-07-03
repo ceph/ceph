@@ -417,6 +417,7 @@ struct ceph_msg_footer {
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_FILECAPS        0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
+#define CEPH_MSG_CLIENT_SNAP            0x312
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -666,6 +667,7 @@ struct ceph_mds_reply_head {
 	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
 	__le32 num_snaps;
+	__le64 snap_highwater;
 	__le64 snaps[];
 } __attribute__ ((packed));
 
@@ -789,6 +791,7 @@ struct ceph_mds_file_caps {
 	struct ceph_timespec mtime, atime, ctime;
 	__le64 time_warp_seq;
 	__le32 num_snaps;
+	__le64 snap_highwater;
 	__le64 snaps[];
 } __attribute__ ((packed));
 
@@ -812,6 +815,16 @@ struct ceph_mds_cap_reconnect {
 	struct ceph_timespec mtime, atime;
 } __attribute__ ((packed));
 /* followed by encoded string */
+
+
+enum {
+	CEPH_SNAP_OP_UPDATE,
+	CEPH_SNAP_OP_SPLIT,
+};
+
+struct ceph_mds_snap {
+	/* ... */
+};
 
 
 /*

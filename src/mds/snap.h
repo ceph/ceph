@@ -101,6 +101,8 @@ struct SnapRealm {
   MDCache *mdcache;
   CInode *inode;
 
+  snapid_t snap_highwater;  // largest snap this realm has exposed to clients (implicitly or explicitly)
+
   // caches?
   //set<snapid_t> cached_snaps;
   //set<SnapRealm*> cached_active_children;    // active children that are currently open
@@ -108,7 +110,7 @@ struct SnapRealm {
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
-  SnapRealm(MDCache *c, CInode *in) : mdcache(c), inode(in) {}
+  SnapRealm(MDCache *c, CInode *in) : mdcache(c), inode(in), snap_highwater(0) {}
 
   bool open_parents(MDRequest *mdr);
   void get_snap_set(set<snapid_t>& s);

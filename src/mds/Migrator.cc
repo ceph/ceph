@@ -2053,14 +2053,17 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
     }
     cap->merge(it->second);
 
+    SnapRealm *realm = in->find_containing_snaprealm();
     MClientFileCaps *caps = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 						in->inode,
-						in->find_containing_snaprealm()->inode->ino(),
+						realm->inode->ino(),
 						cap->get_last_seq(),
 						cap->pending(),
 						cap->wanted(),
 						cap->get_mseq());
-    in->find_containing_snaprealm()->get_snap_vector(caps->get_snaps());
+    realm->get_snap_vector(caps->get_snaps());
+    caps->set_snap_highwater(realm->snap_highwater);
+
     mds->send_message_client(caps, session->inst);
   }
 

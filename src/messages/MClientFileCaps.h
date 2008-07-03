@@ -37,10 +37,11 @@ class MClientFileCaps : public Message {
   vector<snapid_t> snaps;
 
  public:
-  int       get_caps() { return h.caps; }
-  int       get_wanted() { return h.wanted; }
-  capseq_t  get_seq() { return h.seq; }
-  capseq_t  get_mseq() { return h.migrate_seq; }
+  int      get_caps() { return h.caps; }
+  int      get_wanted() { return h.wanted; }
+  capseq_t get_seq() { return h.seq; }
+  capseq_t get_mseq() { return h.migrate_seq; }
+  snapid_t get_snap_highwater() { return h.snap_highwater; }
   vector<snapid_t> &get_snaps() { return snaps; }
 
   inodeno_t get_ino() { return inodeno_t(h.ino); }
@@ -66,6 +67,8 @@ class MClientFileCaps : public Message {
   void set_size(loff_t s) { h.size = s; }
   void set_mtime(const utime_t &t) { t.encode_timeval(&h.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&h.atime); }
+
+  void set_snap_highwater(snapid_t hw) { h.snap_highwater = hw; }
 
   MClientFileCaps() {}
   MClientFileCaps(int op,

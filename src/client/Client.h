@@ -129,11 +129,18 @@ struct InodeCap;
 
 struct SnapRealm {
   inodeno_t dirino;
-  vector<snapid_t> snaps;
   int nref;
+  snapid_t snap_highwater;
+  vector<snapid_t> snaps;
 
-  SnapRealm(inodeno_t i, vector<snapid_t> &s) : dirino(i), nref(0) {
-    snaps.swap(s);
+  SnapRealm(inodeno_t i) : 
+    dirino(i), nref(0), snap_highwater(0) { }
+
+  void maybe_update(snapid_t sh, vector<snapid_t> &s) {
+    if (sh > snap_highwater) {
+      snap_highwater = sh;
+      snaps = s;
+    }
   }
 };
 
@@ -576,12 +583,12 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
-  map<inodeno_t,SnapRealm*> snap_realms;
+  hash_map<inodeno_t,SnapRealm*> snap_realms;
 
-  SnapRealm *get_snap_realm(inodeno_t r, vector<snapid_t> &snaps) {
+  SnapRealm *get_snap_realm(inodeno_t r) {
     SnapRealm *realm = snap_realms[r];
     if (!realm)
-      snap_realms[r] = realm = new SnapRealm(r, snaps);
+      snap_realms[r] = realm = new SnapRealm(r);
     realm->nref++;
     return realm;
   }
@@ -773,7 +780,7 @@ protected:
 
   // file caps
   void add_update_inode_cap(Inode *in, int mds,
-			    inodeno_t realm, vector<snapid_t> &snaps,
+			    inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
 			    unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
   void handle_file_caps(class MClientFileCaps *m);

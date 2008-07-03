@@ -1508,7 +1508,7 @@ void Client::_flushed(Inode *in, bool checkafter)
  * do not block.
  */
 void Client::add_update_inode_cap(Inode *in, int mds,
-				  inodeno_t realm, vector<snapid_t> &snaps,
+				  inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
 				  unsigned issued, unsigned seq, unsigned mseq)
 {
   InodeCap *cap = 0;
@@ -1518,7 +1518,7 @@ void Client::add_update_inode_cap(Inode *in, int mds,
     mds_sessions[mds].num_caps++;
     if (in->caps.empty()) {
       assert(in->snaprealm == 0);
-      in->snaprealm = get_snap_realm(realm, snaps);
+      in->snaprealm = get_snap_realm(realm);
       in->get();
     }
     if (in->exporting_mds == mds) {
@@ -1529,6 +1529,7 @@ void Client::add_update_inode_cap(Inode *in, int mds,
     }
     in->caps[mds] = cap = new InodeCap;
   }
+  in->snaprealm->maybe_update(snap_highwater, snaps);
 
   unsigned old_caps = cap->issued;
   cap->issued |= issued;
@@ -1577,7 +1578,9 @@ void Client::handle_file_caps(MClientFileCaps *m)
   
   if (m->get_op() == CEPH_CAP_OP_IMPORT) {
     // add/update it
-    add_update_inode_cap(in, mds, m->get_realm(), m->get_snaps(), m->get_caps(), m->get_seq(), m->get_mseq());
+    add_update_inode_cap(in, mds, 
+			 m->get_realm(), m->get_snap_highwater(), m->get_snaps(), 
+			 m->get_caps(), m->get_seq(), m->get_mseq());
 
     if (in->exporting_mseq < m->get_mseq()) {
       dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
@@ -2915,6 +2918,7 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     int mds = reply->get_source().num();
     add_update_inode_cap(in, mds,
 			 reply->get_file_caps_realm(),
+			 reply->get_snap_highwater(),
 			 reply->get_snaps(),
 			 reply->get_file_caps(),
 			 reply->get_file_caps_seq(),

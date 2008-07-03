@@ -68,7 +68,14 @@ void SnapRealm::get_snap_set(set<snapid_t> &s)
 	  q->first >= p->second.first)
 	s.insert(q->first);
   }
-  dout(10) << "build_snap_list " << s << dendl;
+  
+  if (!s.empty()) {
+    snapid_t t = *s.rbegin();
+    if (snap_highwater < t)
+      snap_highwater = t;
+  }
+
+  dout(10) << "build_snap_list " << s << " (highwater " << snap_highwater << ")" << dendl;
 }
 
 /*

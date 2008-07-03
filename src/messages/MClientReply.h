@@ -164,6 +164,7 @@ class MClientReply : public Message {
 
   int get_result() { return (__s32)(__u32)st.result; }
 
+  snapid_t get_snap_highwater() { return st.snap_highwater; }
   vector<snapid_t> &get_snaps() { return snaps; }
 
   unsigned get_file_caps() { return st.file_caps; }
@@ -177,6 +178,7 @@ class MClientReply : public Message {
   void set_file_caps_seq(capseq_t s) { st.file_caps_seq = s; }
   void set_file_caps_mseq(capseq_t s) { st.file_caps_mseq = s; }
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
+  void set_snap_highwater(snapid_t hw) { st.snap_highwater = hw; }
 
   MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
