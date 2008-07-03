@@ -366,7 +366,7 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
   dout(10) << "handle_mon_get_map" << dendl;
   bufferlist bl;
   monmap->encode(bl);
-  messenger->send_message(new MMonMap(bl), m->get_source_inst());
+  messenger->send_message(new MMonMap(bl), m->get_orig_source_inst());
   delete m;
 }
 
