@@ -46,29 +46,27 @@ bool SnapRealm::open_parents(MDRequest *mdr)
  * get list of snaps for this realm.  we must include parents' snaps
  * for the intervals during which they were our parent.
  */
-void SnapRealm::get_snap_set(set<snapid_t> &s)
+void SnapRealm::get_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
 {
-  // start with my snaps
-  for (map<snapid_t, SnapInfo>::iterator p = snaps.begin();
-       p != snaps.end();
+  dout(10) << "get_snap_set [" << first << "," << last << "] on " << *this << dendl;
+
+  // include my snaps within interval [first,last]
+  for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
+       p != snaps.end() && p->first <= last;
        p++)
     s.insert(p->first);
 
-  // include parent snaps
-  // FIXME........ this is a weird interval DAG...
-  for (multimap<snapid_t, snaplink_t>::iterator p = parents.begin();
-       p != parents.end();
+  // include snaps for parents during intervals that intersect [first,last]
+  for (multimap<snapid_t, snaplink_t>::iterator p = parents.lower_bound(first);
+       p != parents.end() && p->first >= first && p->second.first <= last;
        p++) {
     CInode *parent = mdcache->get_inode(p->second.dirino);
     assert(parent);  // call open_parents first!
     assert(parent->snaprealm);
 
-    for (map<snapid_t, SnapInfo>::iterator q = parent->snaprealm->snaps.begin();
-	 q != parent->snaprealm->snaps.end();
-	 q++)
-      if (q->first <= p->first && 
-	  q->first >= p->second.first)
-	s.insert(q->first);
+    parent->snaprealm->get_snap_set(s, 
+				    MAX(first, p->second.first),
+				    MIN(last, p->first));				    
   }
   
   if (!s.empty()) {
@@ -76,8 +74,6 @@ void SnapRealm::get_snap_set(set<snapid_t> &s)
     if (snap_highwater < t)
       snap_highwater = t;
   }
-
-  dout(10) << "build_snap_list " << s << " (highwater " << snap_highwater << ")" << dendl;
 }
 
 /*
@@ -91,12 +87,14 @@ void SnapRealm::get_snap_vector(vector<snapid_t> &v)
   int i = 0;
   for (set<snapid_t>::reverse_iterator p = s.rbegin(); p != s.rend(); p++)
     v[i++] = *p;
+
+  dout(10) << "get_snap_vector " << v << " (highwater " << snap_highwater << ")" << dendl;
 }
 
 
 void SnapRealm::split_at(SnapRealm *child)
 {
-  dout(10) << "split_at " << *child << dendl;
+  dout(10) << "split_at " << *child << " on " << *child->inode << dendl;
 
   xlist<CInode*>::iterator p = inodes_with_caps.begin();
   while (!p.end()) {
@@ -107,12 +105,12 @@ void SnapRealm::split_at(SnapRealm *child)
     CInode *t = in;
     bool under_child = false;
     while (t) {
-      t = in->get_parent_dn()->get_dir()->get_inode();
+      t = t->get_parent_dn()->get_dir()->get_inode();
       if (t == child->inode) {
 	under_child = true;
 	break;
       }
-      if (t == inode)
+      if (t == in)
 	break;
     }
     if (!under_child) {

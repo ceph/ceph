@@ -4695,7 +4695,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     SnapRealm *parent = diri->find_containing_snaprealm();
     assert(parent);
     snaplink_t link;
-    link.first = snapid;
+    link.first = 0;
     link.dirino = diri->ino();
     parent->children.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
     link.dirino = parent->inode->ino();
@@ -4725,18 +4725,39 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     for (xlist<CInode*>::iterator p = diri->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
       split_inos.push_back((*p)->ino());
 
-  for (map<int, xlist<Capability*> >::iterator p = diri->snaprealm->client_caps.begin();
-       p != diri->snaprealm->client_caps.end();
-       p++) {
-    assert(!p->second.empty());
+  list<SnapRealm*> q;
+  q.push_back(diri->snaprealm);
+  while (!q.empty()) {
+    SnapRealm *realm = q.front();
+    q.pop_front();
 
-    MClientSnap *update = new MClientSnap(split_parent ? CEPH_SNAP_OP_SPLIT:CEPH_SNAP_OP_UPDATE,
-					  diri->ino());
-    update->snaps = snaps;
-    update->snap_highwater = diri->snaprealm->snap_highwater;
-    update->split_parent = split_parent;
-    update->split_inos = split_inos;
-    mds->send_message_client(update, p->first);
+    dout(10) << " updating caps under realm " << *realm
+	     << " on " << *realm->inode << dendl;
+
+    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
+	 p != realm->client_caps.end();
+	 p++) {
+      assert(!p->second.empty());
+      
+      MClientSnap *update = new MClientSnap(split_parent ? CEPH_SNAP_OP_SPLIT:CEPH_SNAP_OP_UPDATE,
+					    realm->inode->ino());
+      update->snaps = snaps;
+      update->snap_highwater = diri->snaprealm->snap_highwater;
+      update->split_parent = split_parent;
+      update->split_inos = split_inos;
+      mds->send_message_client(update, p->first);
+    }
+    
+    // active children, too.
+    for (multimap<snapid_t,snaplink_t>::iterator p = realm->children.find(CEPH_NOSNAP);
+	 p != realm->children.end();
+	 p++) {
+      CInode *in = mdcache->get_inode(p->second.dirino);
+      if (in) {
+	assert(in->snaprealm);
+	q.push_back(in->snaprealm);
+      }
+    }
   }
 
   // yay

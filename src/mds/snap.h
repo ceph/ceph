@@ -113,7 +113,7 @@ struct SnapRealm {
   SnapRealm(MDCache *c, CInode *in) : mdcache(c), inode(in), snap_highwater(0) {}
 
   bool open_parents(MDRequest *mdr);
-  void get_snap_set(set<snapid_t>& s);
+  void get_snap_set(set<snapid_t>& s, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
   void get_snap_vector(vector<snapid_t>& s);
 
   void split_at(SnapRealm *child);
