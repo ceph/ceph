@@ -614,19 +614,6 @@ static void ceph_fault(struct ceph_connection *con)
 	spin_unlock(&con->out_queue_lock);
 }
 
-
-static u32 get_global_seq(struct ceph_messenger *msgr, u32 gt)
-{
-	u32 ret;
-	spin_lock(&msgr->global_seq_lock);
-	if (msgr->global_seq < gt)
-		msgr->global_seq = gt;
-	ret = ++msgr->global_seq;
-	spin_unlock(&msgr->global_seq_lock);
-	return ret;
-}
-
-
 /*
  * non-blocking versions
  *
@@ -811,16 +798,27 @@ static void prepare_read_connect(struct ceph_connection *con)
 	con->in_base_pos = 0;
 }
 
+static u32 get_global_seq(struct ceph_messenger *msgr, u32 gt)
+{
+	u32 ret;
+	spin_lock(&msgr->global_seq_lock);
+	if (msgr->global_seq < gt)
+		msgr->global_seq = gt;
+	ret = ++msgr->global_seq;
+	spin_unlock(&msgr->global_seq_lock);
+	return ret;
+}
+
 static void prepare_write_connect(struct ceph_messenger *msgr,
 				  struct ceph_connection *con)
 {
+	con->out_global_seq = cpu_to_le32(con->global_seq);
+	con->out_connect_seq = cpu_to_le32(con->connect_seq);
+
 	con->out_kvec[0].iov_base = &msgr->inst.addr;
 	con->out_kvec[0].iov_len = sizeof(msgr->inst.addr);
-	con->global_seq = get_global_seq(msgr, 0);
-	con->out_global_seq = cpu_to_le32(con->global_seq);
 	con->out_kvec[1].iov_base = &con->out_global_seq;
 	con->out_kvec[1].iov_len = 4;
-	con->out_connect_seq = cpu_to_le32(con->connect_seq);
 	con->out_kvec[2].iov_base = &con->out_connect_seq;
 	con->out_kvec[2].iov_len = 4;
 	con->out_kvec_left = 3;
@@ -833,7 +831,9 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 static void prepare_write_connect_retry(struct ceph_messenger *msgr,
 					struct ceph_connection *con)
 {
+	con->out_global_seq = cpu_to_le32(con->global_seq);
 	con->out_connect_seq = cpu_to_le32(con->connect_seq);
+
 	con->out_kvec[0].iov_base = &con->out_global_seq;
 	con->out_kvec[0].iov_len = 4;
 	con->out_kvec[1].iov_base = &con->out_connect_seq;
@@ -900,6 +900,7 @@ more:
 	if (con->sock == 0) {
 		if (test_and_clear_bit(STANDBY, &con->state))
 			con->connect_seq++;
+		con->global_seq = get_global_seq(msgr, 0);
 		prepare_write_connect(msgr, con);
 		prepare_read_connect(con);
 		set_bit(CONNECTING, &con->state);

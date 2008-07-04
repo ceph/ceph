@@ -884,7 +884,7 @@ int Rank::Pipe::accept()
       }
 
       assert(peer_cseq > existing->connect_seq);
-      assert(peer_gseq > existing->peer_global_seq);
+      assert(peer_gseq >= existing->peer_global_seq);
       if (existing->connect_seq == 0) {
 	dout(10) << "accept we reset (peer sent cseq " << peer_cseq 
 		 << ", " << existing << ".cseq = " << existing->connect_seq
