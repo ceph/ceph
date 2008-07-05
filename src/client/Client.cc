@@ -1510,7 +1510,8 @@ void Client::_flushed(Inode *in, bool checkafter)
  * do not block.
  */
 void Client::add_update_cap(Inode *in, int mds,
-			    inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
+			    inodeno_t realm, snapid_t snap_created, snapid_t snap_highwater,
+			    vector<snapid_t> &snaps,
 			    unsigned issued, unsigned seq, unsigned mseq)
 {
   InodeCap *cap = 0;
@@ -1532,7 +1533,7 @@ void Client::add_update_cap(Inode *in, int mds,
     }
     in->caps[mds] = cap = new InodeCap;
   }
-  maybe_update_snaprealm(in->snaprealm, snap_highwater, snaps);
+  maybe_update_snaprealm(in->snaprealm, snap_created, snap_highwater, snaps);
 
   unsigned old_caps = cap->issued;
   cap->issued |= issued;
@@ -1568,9 +1569,10 @@ void Client::remove_all_caps(Inode *in)
   }
 }
 
-void Client::maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_highwater, vector<snapid_t>& snaps)
+void Client::maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, 
+				    snapid_t snap_highwater, vector<snapid_t>& snaps)
 {
-  if (realm->maybe_update(snap_highwater, snaps))
+  if (realm->maybe_update(snap_created, snap_highwater, snaps))
     dout(10) << *realm << " now " << snaps << " highwater " << snap_highwater << dendl;
 }
 
@@ -1582,7 +1584,7 @@ void Client::handle_snap(MClientSnap *m)
 
   switch (m->op) {
   case CEPH_SNAP_OP_UPDATE:
-    maybe_update_snaprealm(realm, m->snap_highwater, m->snaps);
+    maybe_update_snaprealm(realm, m->snap_created, m->snap_highwater, m->snaps);
     break;
 
   case CEPH_SNAP_OP_SPLIT:
@@ -1597,15 +1599,21 @@ void Client::handle_snap(MClientSnap *m)
 	   p++) {
 	if (inode_map.count(*p)) {
 	  Inode *in = inode_map[*p];
-	  dout(10) << " moving " << *in << " from old realm " << m->split_parent << dendl;
-	  if (in->snaprealm)
+	  if (in->snaprealm) {
+	    if (in->snaprealm->created > m->snap_created) {
+	      dout(10) << " NOT moving " << *in << " from _newer_ realm " 
+		       << *in->snaprealm << dendl;
+	      continue;
+	    }
 	    put_snap_realm(in->snaprealm);
+	  }
+	  dout(10) << " moving " << *in << " from old realm " << m->split_parent << dendl;
 	  in->snaprealm = realm;
 	  realm->nref++;
 	}
       }
-      // oh.. update it too
-      maybe_update_snaprealm(realm, m->snap_highwater, m->snaps);
+      // update it too
+      maybe_update_snaprealm(realm, m->snap_created, m->snap_highwater, m->snaps);
     }
     break;
 
@@ -1645,7 +1653,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (m->get_op() == CEPH_CAP_OP_IMPORT) {
     // add/update it
     add_update_cap(in, mds, 
-		   m->get_realm(), m->get_snap_highwater(), m->get_snaps(), 
+		   m->get_snap_realm(), m->get_snap_created(), m->get_snap_highwater(), m->get_snaps(), 
 		   m->get_caps(), m->get_seq(), m->get_mseq());
 
     if (in->exporting_mseq < m->get_mseq()) {
@@ -2984,6 +2992,7 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     int mds = reply->get_source().num();
     add_update_cap(in, mds,
 		   reply->get_snap_realm(),
+		   reply->get_snap_created(),
 		   reply->get_snap_highwater(),
 		   reply->get_snaps(),
 		   reply->get_file_caps(),

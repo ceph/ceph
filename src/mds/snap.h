@@ -83,15 +83,18 @@ WRITE_CLASS_ENCODER(snaplink_t)
 
 struct SnapRealm {
   // realm state
+  snapid_t created;
   map<snapid_t, SnapInfo> snaps;
   multimap<snapid_t, snaplink_t> parents, children;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
+    ::encode(created, bl);
     ::encode(snaps, bl);
     ::encode(parents, bl);
     ::encode(children, bl);
   }
   void decode(bufferlist::iterator& p) {
+    ::decode(created, p);
     ::decode(snaps, p);
     ::decode(parents, p);
     ::decode(children, p);
@@ -101,7 +104,7 @@ struct SnapRealm {
   MDCache *mdcache;
   CInode *inode;
 
-  snapid_t snap_highwater;  // largest snap this realm has exposed to clients (implicitly or explicitly)
+  snapid_t highwater;  // largest snap this realm has exposed to clients (implicitly or explicitly)
 
   // caches?
   //set<snapid_t> cached_snaps;
@@ -110,7 +113,9 @@ struct SnapRealm {
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
-  SnapRealm(MDCache *c, CInode *in) : mdcache(c), inode(in), snap_highwater(0) {}
+  SnapRealm(MDCache *c, CInode *in) : 
+    created(0),
+    mdcache(c), inode(in), highwater(0) {}
 
   bool open_parents(MDRequest *mdr);
   void get_snap_set(set<snapid_t>& s, snapid_t first=0, snapid_t last=CEPH_NOSNAP);

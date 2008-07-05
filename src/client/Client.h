@@ -130,15 +130,17 @@ struct InodeCap;
 struct SnapRealm {
   inodeno_t dirino;
   int nref;
-  snapid_t snap_highwater;
+  snapid_t created;
+  snapid_t highwater;
   vector<snapid_t> snaps;
 
   SnapRealm(inodeno_t i) : 
-    dirino(i), nref(0), snap_highwater(0) { }
+    dirino(i), nref(0), created(0), highwater(0) { }
 
-  bool maybe_update(snapid_t sh, vector<snapid_t> &s) {
-    if (sh > snap_highwater) {
-      snap_highwater = sh;
+  bool maybe_update(snapid_t c, snapid_t sh, vector<snapid_t> &s) {
+    created = c;
+    if (sh > highwater) {
+      highwater = sh;
       snaps = s;
       return true;
     } 
@@ -147,7 +149,7 @@ struct SnapRealm {
 };
 
 inline ostream& operator<<(ostream& out, const SnapRealm& r) {
-  return out << "snaprealm(" << r.dirino << " nref=" << r.nref << " hw=" << r.snap_highwater
+  return out << "snaprealm(" << r.dirino << " nref=" << r.nref << " c=" << r.created << " hw=" << r.highwater
 	     << " snaps=" << r.snaps << ")";
 }
 
@@ -787,12 +789,14 @@ protected:
 
   // file caps
   void add_update_cap(Inode *in, int mds,
-		      inodeno_t realm, snapid_t snap_highwater, vector<snapid_t> &snaps,
+		      inodeno_t realm, snapid_t snap_created, snapid_t snap_highwater, 
+		      vector<snapid_t> &snaps,
 		      unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
 
-  void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_highwater, vector<snapid_t>& snaps);
+  void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
+			      vector<snapid_t>& snaps);
 
   void handle_snap(class MClientSnap *m);
   void handle_file_caps(class MClientFileCaps *m);

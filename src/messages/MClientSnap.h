@@ -31,7 +31,7 @@ struct MClientSnap : public Message {
   inodeno_t realm;
 
   // new snap state
-  snapid_t snap_highwater;
+  snapid_t snap_created, snap_highwater;
   vector<snapid_t> snaps;
 
   // (for split only)

@@ -2798,7 +2798,8 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 					      cap->wanted(),
 					      cap->get_mseq());
   realm->get_snap_vector(reap->get_snaps());
-  reap->set_snap_highwater(realm->snap_highwater);
+  reap->set_snap_created(realm->created);
+  reap->set_snap_highwater(realm->highwater);
   mds->messenger->send_message(reap, session->inst);
 }
 

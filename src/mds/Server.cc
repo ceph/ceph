@@ -4435,8 +4435,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 
   SnapRealm *realm = cur->find_containing_snaprealm();
   realm->get_snap_vector(reply->get_snaps());
-  reply->set_snap_highwater(realm->snap_highwater);
-  reply->set_snap_realm(realm->inode->ino());
+  reply->set_snap_info(realm->inode->ino(), realm->created, realm->highwater);
   dout(10) << " snaprealm is " << *realm << " snaps=" << reply->get_snaps() << " on " << *realm->inode << dendl;
   
   //reply->set_file_data_version(fdv);
@@ -4663,9 +4662,21 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   // lock snap
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  // rdlock path
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
+
+  // rdlock ancestor snaps
+  CInode *t = diri->get_parent_dn()->get_dir()->get_inode();
+  while (t) {
+    rdlocks.insert(&t->snaplock);
+    t = t->get_parent_dn()->get_dir()->get_inode();
+  }
+
+  // xlock snap
   xlocks.insert(&dn->inode->snaplock);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -4688,6 +4699,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (!diri->snaprealm) {
     dout(10) << "creating snaprealm on " << *diri << dendl;
     diri->open_snaprealm();
+    diri->snaprealm->created = snapid;
 
     // link them up
     // HACK!  parent may be on another mds...
@@ -4742,7 +4754,8 @@ void Server::handle_client_mksnap(MDRequest *mdr)
       MClientSnap *update = new MClientSnap(split_parent ? CEPH_SNAP_OP_SPLIT:CEPH_SNAP_OP_UPDATE,
 					    realm->inode->ino());
       update->snaps = snaps;
-      update->snap_highwater = diri->snaprealm->snap_highwater;
+      update->snap_created = diri->snaprealm->created;
+      update->snap_highwater = diri->snaprealm->highwater;
       update->split_parent = split_parent;
       update->split_inos = split_inos;
       mds->send_message_client(update, p->first);
