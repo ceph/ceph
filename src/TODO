@@ -223,12 +223,7 @@ todo
 - rados bits to do clone+write
 /  - cloning
   - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
-
-/  - SnapRealm open_parents, get_snap_set need to recursively open/examine parents over given ranges...
-/  - realm split
-    - adjust parent/child linkages
-/  - make realm split notifications safe from races from multiple mds's
-    - make sense of snap_highwater...
+  - make sense of snap_highwater...
 
   - figure out how to fix up rados logging
   - snap collections

@@ -980,12 +980,24 @@ CInodeDiscover* CInode::replicate_to( int rep )
 
 void CInode::open_snaprealm()
 {
-  if (!snaprealm)
+  if (!snaprealm) {
     snaprealm = new SnapRealm(mdcache, this);
+
+    snaprealm->open_parent = find_containing_snaprealm();
+    if (snaprealm->open_parent) {
+      snaprealm->open_parent->open_children.insert(snaprealm);
+      dout(10) << " opened snaprealm " << snaprealm
+	       << " parent is " << snaprealm->open_parent
+	       << " siblings are " << snaprealm->open_parent->open_children
+	       << dendl;
+    }
+  }
 }
 void CInode::close_snaprealm()
 {
   if (snaprealm) {
+    if (snaprealm->open_parent)
+      snaprealm->open_parent->open_children.erase(snaprealm);
     delete snaprealm;
     snaprealm = 0;
   }
@@ -998,15 +1010,12 @@ void CInode::close_snaprealm()
 SnapRealm *CInode::find_containing_snaprealm()
 {
   CInode *cur = this;
-  while (1) {
-    if (!cur->get_parent_dn()) {
-      assert(0); // all base inodes should have realms!
-      return 0;
-    }
+  while (cur->get_parent_dn()) {
     cur = cur->get_parent_dn()->get_dir()->get_inode();
     if (cur->snaprealm)
       return cur->snaprealm;
   }
+  return 0;
 }
 
 void CInode::encode_snap(bufferlist &bl)

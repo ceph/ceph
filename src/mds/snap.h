@@ -85,19 +85,17 @@ struct SnapRealm {
   // realm state
   snapid_t created;
   map<snapid_t, SnapInfo> snaps;
-  multimap<snapid_t, snaplink_t> parents, children;  // key is "last" (or NOSNAP)
+  multimap<snapid_t, snaplink_t> parents;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
     ::encode(created, bl);
     ::encode(snaps, bl);
     ::encode(parents, bl);
-    ::encode(children, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(created, p);
     ::decode(snaps, p);
     ::decode(parents, p);
-    ::decode(children, p);
   }
 
   // in-memory state
@@ -107,15 +105,18 @@ struct SnapRealm {
   snapid_t highwater;  // largest snap this realm has exposed to clients (implicitly or explicitly)
 
   // caches?
+  SnapRealm *open_parent;
+  set<SnapRealm*> open_children;    // active children that are currently open
+
   //set<snapid_t> cached_snaps;
-  //set<SnapRealm*> cached_active_children;    // active children that are currently open
 
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
     created(0),
-    mdcache(c), inode(in), highwater(0) {}
+    mdcache(c), inode(in), highwater(0),
+    open_parent(0) {}
 
   bool open_parents(MDRequest *mdr);
   void get_snap_set(set<snapid_t>& s, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
@@ -151,22 +152,7 @@ inline ostream& operator<<(ostream& out, const SnapRealm &realm) {
     }
     out << ")";
   }
-  if (realm.children.size()) {
-    out << " children=(";
-    for (multimap<snapid_t, snaplink_t>::const_iterator p = realm.parents.begin(); 
-	 p != realm.parents.end(); 
-	 p++) {
-      if (p != realm.parents.begin()) out << ",";
-      out << p->second.first << "-";
-      if (p->first == CEPH_NOSNAP)
-	out << "head";
-      else
-	out << p->first;
-      out << "=" << p->second.dirino;
-    }
-    out << ")";
-  }
-  out << ")";
+  out << " " << &realm << ")";
   return out;
 }
 

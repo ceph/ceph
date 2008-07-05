@@ -4668,10 +4668,10 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     rdlocks.insert(&trace[i]->lock);
 
   // rdlock ancestor snaps
-  CInode *t = diri->get_parent_dn()->get_dir()->get_inode();
-  while (t) {
-    rdlocks.insert(&t->snaplock);
+  CInode *t = diri;
+  while (t->get_parent_dn()) {
     t = t->get_parent_dn()->get_dir()->get_inode();
+    rdlocks.insert(&t->snaplock);
   }
 
   // xlock snap
@@ -4704,12 +4704,11 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     // link them up
     // HACK!  parent may be on another mds...
 
-    SnapRealm *parent = diri->find_containing_snaprealm();
+    SnapRealm *parent = diri->snaprealm->open_parent;
     assert(parent);
+    assert(parent->open_children.count(diri->snaprealm));
     snaplink_t link;
     link.first = 0;
-    link.dirino = diri->ino();
-    parent->children.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
     link.dirino = parent->inode->ino();
     diri->snaprealm->parents.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
 
@@ -4761,16 +4760,12 @@ void Server::handle_client_mksnap(MDRequest *mdr)
       mds->send_message_client(update, p->first);
     }
     
-    // active children, too.
-    for (multimap<snapid_t,snaplink_t>::iterator p = realm->children.find(CEPH_NOSNAP);
-	 p != realm->children.end();
-	 p++) {
-      CInode *in = mdcache->get_inode(p->second.dirino);
-      if (in) {
-	assert(in->snaprealm);
-	q.push_back(in->snaprealm);
-      }
-    }
+    // notify for active children, too.
+    dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      q.push_back(*p);
   }
 
   // yay

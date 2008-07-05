@@ -22,9 +22,10 @@
  * SnapRealm
  */
 
-#define dout(x) if (x < g_conf.debug_mds) *_dout << dbeginl << g_clock.now() \
-						 << " mds" << mdcache->mds->get_nodeid() \
-						 << ".snaprealm(" << inode->ino() << ") "
+#define dout(x) if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() \
+						  << " mds" << mdcache->mds->get_nodeid() \
+						  << ".cache.snaprealm(" << inode->ino() \
+						  << " " << this << ") "
 
 bool SnapRealm::open_parents(MDRequest *mdr)
 {
@@ -94,8 +95,27 @@ void SnapRealm::get_snap_vector(vector<snapid_t> &v)
 
 void SnapRealm::split_at(SnapRealm *child)
 {
-  dout(10) << "split_at " << *child << " on " << *child->inode << dendl;
+  dout(10) << "split_at " << *child 
+	   << " on " << *child->inode << dendl;
 
+  // split children
+  dout(10) << " my children are " << open_children << dendl;
+  for (set<SnapRealm*>::iterator p = open_children.begin();
+       p != open_children.end(); ) {
+    SnapRealm *realm = *p;
+    if (realm != child &&
+	child->inode->is_ancestor_of(realm->inode)) {
+      dout(20) << " child gets child realm " << *realm << " on " << *realm->inode << dendl;
+      realm->open_parent = child;
+      child->open_children.insert(realm);
+      open_children.erase(p++);
+    } else {
+      dout(20) << "    keeping child realm " << *realm << " on " << *realm->inode << dendl;
+      p++;
+    }
+  }
+
+  // split inodes_with_caps
   xlist<CInode*>::iterator p = inodes_with_caps.begin();
   while (!p.end()) {
     CInode *in = *p;
@@ -113,13 +133,12 @@ void SnapRealm::split_at(SnapRealm *child)
       if (t == in)
 	break;
     }
-    if (!under_child) {
-      dout(20) << " keeping " << *in << dendl;
-      continue;
+    if (under_child) {
+      dout(20) << " child gets " << *in << dendl;
+      in->move_to_containing_realm(child);
+    } else {
+      dout(20) << "    keeping " << *in << dendl;
     }
-    
-    dout(20) << " child gets " << *in << dendl;
-    in->move_to_containing_realm(child);
   }
 
 }
