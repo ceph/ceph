@@ -428,7 +428,7 @@ class Inode {
 
 struct Fh {
   Inode    *inode;
-  off_t     pos;
+  loff_t     pos;
   int       mds;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
 
@@ -438,7 +438,13 @@ struct Fh {
   bool pos_locked;           // pos is currently in use
   list<Cond*> pos_waiters;   // waiters for pos
 
-  Fh() : inode(0), pos(0), mds(0), mode(0), append(false), pos_locked(false) {}
+  // readahead state
+  loff_t last_pos;
+  loff_t consec_read_bytes;
+  int nr_consec_read;
+
+  Fh() : inode(0), pos(0), mds(0), mode(0), append(false), pos_locked(false),
+	 last_pos(0), consec_read_bytes(0), nr_consec_read(0) {}
 };
 
 
@@ -463,7 +469,7 @@ class Client : public Dispatcher {
   struct DirResult {
     static const int SHIFT = 28;
     static const int64_t MASK = (1 << SHIFT) - 1;
-    static const off_t END = 1ULL << (SHIFT + 32);
+    static const loff_t END = 1ULL << (SHIFT + 32);
 
     filepath path;
     Inode *inode;
@@ -846,7 +852,7 @@ private:
   int _do_lstat(const filepath &path, int mask, Inode **in, int uid=-1, int gid=-1);
   int _opendir(const filepath &path, DirResult **dirpp, int uid=-1, int gid=-1);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t);
+  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, loff_t);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
@@ -863,7 +869,7 @@ private:
   int _rename(const filepath &from, const filepath &to, int uid=-1, int gid=-1);
   int _mkdir(const filepath &path, mode_t mode, int uid=-1, int gid=-1);
   int _rmdir(const filepath &path, int uid=-1, int gid=-1);
-  int _readlink(const filepath &path, char *buf, off_t size, int uid=-1, int gid=-1);
+  int _readlink(const filepath &path, char *buf, loff_t size, int uid=-1, int gid=-1);
   int _symlink(const filepath &path, const char *target, int uid=-1, int gid=-1);
   int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1, frag_info_t *dirstat=0);
   int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
@@ -907,8 +913,8 @@ public:
   int readdir_r(DIR *dirp, struct dirent *de);
   int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
   void rewinddir(DIR *dirp); 
-  off_t telldir(DIR *dirp);
-  void seekdir(DIR *dirp, off_t offset);
+  loff_t telldir(DIR *dirp);
+  void seekdir(DIR *dirp, loff_t offset);
 
   struct dirent_plus *readdirplus(DIR *dirp);
   int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
@@ -924,7 +930,7 @@ public:
   int rmdir(const char *path);
 
   // symlinks
-  int readlink(const char *path, char *buf, off_t size);
+  int readlink(const char *path, char *buf, loff_t size);
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
@@ -939,18 +945,18 @@ public:
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
   int open(const char *path, int flags, mode_t mode=0);
   int close(int fd);
-  off_t lseek(int fd, off_t offset, int whence);
-  int read(int fd, char *buf, off_t size, off_t offset=-1);
-  int write(int fd, const char *buf, off_t size, off_t offset=-1);
-  int fake_write_size(int fd, off_t size);
-  int truncate(const char *file, off_t size);
-  int ftruncate(int fd, off_t size);
+  loff_t lseek(int fd, loff_t offset, int whence);
+  int read(int fd, char *buf, loff_t size, loff_t offset=-1);
+  int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
+  int fake_write_size(int fd, loff_t size);
+  int truncate(const char *file, loff_t size);
+  int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf);
 
   // hpc lazyio
-  int lazyio_propogate(int fd, off_t offset, size_t count);
-  int lazyio_synchronize(int fd, off_t offset, size_t count);
+  int lazyio_propogate(int fd, loff_t offset, size_t count);
+  int lazyio_synchronize(int fd, loff_t offset, size_t count);
 
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
@@ -958,7 +964,7 @@ public:
   int get_stripe_width(int fd);
   int get_stripe_period(int fd);
   int enumerate_layout(int fd, list<ObjectExtent>& result,
-		       off_t length, off_t offset);
+		       loff_t length, loff_t offset);
 
   int mksnap(const char *path, const char *name);
   int rmsnap(const char *path, const char *name);
@@ -985,8 +991,8 @@ public:
   int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
   int ll_open(inodeno_t ino, int flags, Fh **fh, int uid = -1, int gid = -1);
   int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
-  int ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl);
-  int ll_write(Fh *fh, off_t off, off_t len, const char *data);
+  int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
+  int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);

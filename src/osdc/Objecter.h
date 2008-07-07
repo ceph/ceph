@@ -86,7 +86,8 @@ class Objecter {
     int flags;
 
     OSDRead(vector<snapid_t> &s, bufferlist *b, int f) : OSDOp(s), bl(b), onfinish(0), flags(f) {
-      bl->clear();
+      if (bl)
+	bl->clear();
     }
   };
 

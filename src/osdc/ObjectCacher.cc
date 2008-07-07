@@ -749,12 +749,12 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
            bh_it != missing.end();
            bh_it++) {
         bh_read(bh_it->second);
-        if (success) {
+        if (success && onfinish) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
                    << " off " << bh_it->first << dendl;
-          success = false;
-          bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, ino, onfinish) );
+	  bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, ino, onfinish) );
         }
+	success = false;
       }
 
       // bump rx
@@ -762,12 +762,12 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
            bh_it != rx.end();
            bh_it++) {
         touch_bh(bh_it->second);        // bump in lru, so we don't lose it.
-        if (success) {
+        if (success && onfinish) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
                    << " off " << bh_it->first << dendl;
-          success = false;
-          bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, ino, onfinish) );
+	  bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, ino, onfinish) );
         }
+	success = false;
       }      
     } else {
       assert(!hits.empty());
@@ -840,18 +840,22 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
   dout(10) << "readx has all buffers" << dendl;
   
   // ok, assemble into result buffer.
-  rd->bl->clear();
   size_t pos = 0;
-  for (map<size_t,bufferlist>::iterator i = stripe_map.begin();
-       i != stripe_map.end();
-       i++) {
-    assert(pos == i->first);
-    dout(10) << "readx  adding buffer len " << i->second.length() << " at " << pos << dendl;
-    pos += i->second.length();
-    rd->bl->claim_append(i->second);
-    assert(rd->bl->length() == pos);
+  if (rd->bl) {
+    rd->bl->clear();
+    for (map<size_t,bufferlist>::iterator i = stripe_map.begin();
+	 i != stripe_map.end();
+	 i++) {
+      assert(pos == i->first);
+      dout(10) << "readx  adding buffer len " << i->second.length() << " at " << pos << dendl;
+      pos += i->second.length();
+      rd->bl->claim_append(i->second);
+      assert(rd->bl->length() == pos);
+    }
+    dout(10) << "readx  result is " << rd->bl->length() << dendl;
+  } else {
+    dout(10) << "readx  no bufferlist ptr (readahead?), done." << dendl;
   }
-  dout(10) << "readx  result is " << rd->bl->length() << dendl;
 
   // done with read.
   delete rd;

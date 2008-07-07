@@ -155,6 +155,9 @@ struct md_config_t {
   double   client_tick_interval;
   bool client_hack_balance_reads;
   const char *client_trace;
+  loff_t client_readahead_min;
+  loff_t client_readahead_max_bytes;
+  loff_t client_readahead_max_periods;
   int fuse_direct_io;
   bool fuse_ll;
 

@@ -884,9 +884,9 @@ int Rank::Pipe::accept()
       }
 
       assert(peer_cseq > existing->connect_seq);
-      assert(peer_gseq > existing->peer_global_seq);
+      assert(peer_gseq >= existing->peer_global_seq);
       if (existing->connect_seq == 0) {
-	dout(10) << "accept we reset (peer sent cseq " << peer_cseq 
+	dout(0) << "accept we reset (peer sent cseq " << peer_cseq 
 		 << ", " << existing << ".cseq = " << existing->connect_seq
 		 << "), sending RESETSESSION" << dendl;
 	rank.lock.Unlock();
@@ -905,7 +905,7 @@ int Rank::Pipe::accept()
     } // existing
     else if (peer_cseq > 0) {
       // we reset, and they are opening a new session
-      dout(10) << "accept we reset (peer sent cseq " << peer_cseq << "), sending RESETSESSION" << dendl;
+      dout(0) << "accept we reset (peer sent cseq " << peer_cseq << "), sending RESETSESSION" << dendl;
       rank.lock.Unlock();
       char tag = CEPH_MSGR_TAG_RESETSESSION;
       if (tcp_write(sd, &tag, 1) < 0)
@@ -1083,6 +1083,7 @@ int Rank::Pipe::connect()
 
       dout(0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
+      cseq = 0;
       lock.Unlock();
       continue;
     }
