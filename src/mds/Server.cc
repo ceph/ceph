@@ -4434,8 +4434,8 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps_mseq(cap->get_mseq());
 
   SnapRealm *realm = cur->find_containing_snaprealm();
-  realm->get_snap_vector(reply->get_snaps());
-  reply->set_snap_info(realm->inode->ino(), realm->created, realm->highwater);
+  reply->get_snaps() = *realm->get_snap_vector();
+  reply->set_snap_info(realm->inode->ino(), realm->created, realm->snap_highwater);
   dout(10) << " snaprealm is " << *realm << " snaps=" << reply->get_snaps() << " on " << *realm->inode << dendl;
   
   //reply->set_file_data_version(fdv);
@@ -4726,40 +4726,48 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   diri->snaprealm->snaps[snapid] = info;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  // build new snaps list
-  vector<snapid_t> snaps;
-  diri->snaprealm->get_snap_vector(snaps);
-
   // notify clients of update|split
   list<inodeno_t> split_inos;
   if (split_parent)
     for (xlist<CInode*>::iterator p = diri->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
       split_inos.push_back((*p)->ino());
 
+  list<inodeno_t> realms;
+  map<int, MClientSnap*> updates;
   list<SnapRealm*> q;
   q.push_back(diri->snaprealm);
   while (!q.empty()) {
     SnapRealm *realm = q.front();
     q.pop_front();
 
-    dout(10) << " updating caps under realm " << *realm
+    // build new snaps list
+    vector<snapid_t> *snaps;
+    snaps = diri->snaprealm->update_snap_vector(snapid);
+
+    dout(10) << " realm " << *realm
+	     << " snaps " << *snaps
 	     << " on " << *realm->inode << dendl;
 
     for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
 	 p != realm->client_caps.end();
 	 p++) {
       assert(!p->second.empty());
-      
-      MClientSnap *update = new MClientSnap(split_parent ? CEPH_SNAP_OP_SPLIT:CEPH_SNAP_OP_UPDATE,
-					    realm->inode->ino());
-      update->snaps = snaps;
-      update->snap_created = diri->snaprealm->created;
-      update->snap_highwater = diri->snaprealm->highwater;
-      update->split_parent = split_parent;
-      update->split_inos = split_inos;
-      mds->send_message_client(update, p->first);
+      MClientSnap *update;
+      update = updates[p->first];
+      if (!update) {
+	update = new MClientSnap;
+	update->snap_highwater = snapid;
+	if (split_parent) {
+	  update->snap_created = diri->snaprealm->created;
+	  update->split = snapid;
+	  update->split_inos = split_inos;
+	  split_parent = 0;
+	}
+	updates[p->first] = update;
+      }
+      update->realms[realm->inode->ino()] = *snaps;
     }
-    
+     
     // notify for active children, too.
     dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();
@@ -4767,6 +4775,12 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 	 p++)
       q.push_back(*p);
   }
+
+  // send
+  for (map<int,MClientSnap*>::iterator p = updates.begin();
+       p != updates.end();
+       p++)
+    mds->send_message_client(p->second, p->first);
 
   // yay
   reply_request(mdr, 0, diri);

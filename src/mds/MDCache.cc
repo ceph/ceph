@@ -2797,9 +2797,9 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 					      cap->pending(),
 					      cap->wanted(),
 					      cap->get_mseq());
-  realm->get_snap_vector(reap->get_snaps());
+  reap->get_snaps() = *realm->get_snap_vector();
   reap->set_snap_created(realm->created);
-  reap->set_snap_highwater(realm->highwater);
+  reap->set_snap_highwater(realm->snap_highwater);
   mds->messenger->send_message(reap, session->inst);
 }
 
@@ -2970,14 +2970,13 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    vector<snapid_t> snaps;
-    in->find_containing_snaprealm()->get_snap_vector(snaps);
+    vector<snapid_t> *snaps = in->find_containing_snaprealm()->get_snap_vector();
 
     if (in->inode.max_size > in->inode.size) {
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
 	       << " " << *in << dendl;
       file_recovering.insert(in);
-      mds->filer->probe(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, snaps,
+      mds->filer->probe(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, *snaps,
 			in->inode.max_size, &in->inode.size, false,
 			0, new C_MDC_Recover(this, in));    
     } else {

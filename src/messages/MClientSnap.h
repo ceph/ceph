@@ -27,47 +27,39 @@ struct MClientSnap : public Message {
     }
   }
   
-  __u32 op;
-  inodeno_t realm;
+  map<inodeno_t, vector<snapid_t> > realms;
 
   // new snap state
   snapid_t snap_created, snap_highwater;
-  vector<snapid_t> snaps;
 
   // (for split only)
-  inodeno_t split_parent;
+  inodeno_t split;
   list<inodeno_t> split_inos;
   
-  MClientSnap() : Message(CEPH_MSG_CLIENT_SNAP) {}
-  MClientSnap(int o, inodeno_t r) : 
+  MClientSnap() : 
     Message(CEPH_MSG_CLIENT_SNAP),
-    op(o), realm(r),
-    split_parent(0) {} 
+    snap_created(0), snap_highwater(0),
+    split(0) {} 
   
   const char *get_type_name() { return "Csnap"; }
   void print(ostream& out) {
-    out << "client_snap(" << get_opname(op) << " " << realm
-	<< " " << snaps;
-    if (split_parent)
-      out << " split_parent=" << split_parent;
-    out << ")";
+    out << "client_snap(";
+    if (split)
+      out << "split=" << split << " ";
+    out << realms << ")";
   }
 
   void encode_payload() {
-    ::encode(op, payload);
-    ::encode(realm, payload);
+    ::encode(realms, payload);
     ::encode(snap_highwater, payload);
-    ::encode(snaps, payload);
-    ::encode(split_parent, payload);
+    ::encode(split, payload);
     ::encode(split_inos, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(realm, p);
+    ::decode(realms, p);
     ::decode(snap_highwater, p);
-    ::decode(snaps, p);
-    ::decode(split_parent, p);
+    ::decode(split, p);
     ::decode(split_inos, p);
     assert(p.end());
   }

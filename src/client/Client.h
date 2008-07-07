@@ -138,8 +138,9 @@ struct SnapRealm {
     dirino(i), nref(0), created(0), highwater(0) { }
 
   bool maybe_update(snapid_t c, snapid_t sh, vector<snapid_t> &s) {
-    created = c;
-    if (sh > highwater) {
+    if (c)
+      created = c;
+    if (sh >= highwater) {
       highwater = sh;
       snaps = s;
       return true;

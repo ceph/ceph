@@ -1580,49 +1580,39 @@ void Client::handle_snap(MClientSnap *m)
 {
   dout(10) << "handle_snap " << *m << dendl;
 
-  SnapRealm *realm = get_snap_realm(m->realm);
-
-  switch (m->op) {
-  case CEPH_SNAP_OP_UPDATE:
-    maybe_update_snaprealm(realm, m->snap_created, m->snap_highwater, m->snaps);
-    break;
-
-  case CEPH_SNAP_OP_SPLIT:
-    {
-      /*
-       * fixme: this blindly moves the inode from whatever its prior
-       *  realm is.  this needs to somehow be safe from races from
-       *  multiple mds's...
-       */
-      for (list<inodeno_t>::iterator p = m->split_inos.begin();
-	   p != m->split_inos.end();
-	   p++) {
-	if (inode_map.count(*p)) {
-	  Inode *in = inode_map[*p];
-	  if (in->snaprealm) {
-	    if (in->snaprealm->created > m->snap_created) {
-	      dout(10) << " NOT moving " << *in << " from _newer_ realm " 
-		       << *in->snaprealm << dendl;
-	      continue;
-	    }
-	    put_snap_realm(in->snaprealm);
-	  }
-	  dout(10) << " moving " << *in << " from old realm " << m->split_parent << dendl;
-	  in->snaprealm = realm;
-	  realm->nref++;
+  // split?
+  if (m->split) {
+    SnapRealm *realm = get_snap_realm(m->split);
+    realm->created = m->snap_created;
+    dout(10) << " splitting off " << *realm << dendl;
+    for (list<inodeno_t>::iterator p = m->split_inos.begin();
+	 p != m->split_inos.end();
+	 p++) {
+      if (inode_map.count(*p)) {
+	Inode *in = inode_map[*p];
+	if (!in->snaprealm)
+	  continue;
+	if (in->snaprealm->created > m->snap_created) {
+	  dout(10) << " NOT moving " << *in << " from _newer_ realm " 
+		   << *in->snaprealm << dendl;
+	  continue;
 	}
+	dout(10) << " moving " << *in << " from " << *in->snaprealm << dendl;
+	put_snap_realm(in->snaprealm);
+	in->snaprealm = realm;
+	realm->nref++;
       }
-      // update it too
-      maybe_update_snaprealm(realm, m->snap_created, m->snap_highwater, m->snaps);
     }
-    break;
-
-  default:
-    assert(0);
+    put_snap_realm(realm);
   }
 
-  // done.
-  put_snap_realm(realm);
+  for (map<inodeno_t, vector<snapid_t> >::iterator p = m->realms.begin();
+       p != m->realms.end();
+       p++) {
+    SnapRealm *realm = get_snap_realm(p->first);
+    maybe_update_snaprealm(realm, 0, m->snap_highwater, p->second);
+    put_snap_realm(realm);
+  }
   delete m;
 }
 
