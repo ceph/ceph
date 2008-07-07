@@ -444,7 +444,7 @@ class ObjectCacher {
     C_RetryRead(ObjectCacher *_oc, Objecter::OSDRead *r, inodeno_t i, Context *c) : oc(_oc), rd(r), ino(i), onfinish(c) {}
     void finish(int) {
       int r = oc->readx(rd, ino, onfinish);
-      if (r > 0) {
+      if (r > 0 && onfinish) {
         onfinish->finish(r);
         delete onfinish;
       }

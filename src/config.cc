@@ -289,6 +289,9 @@ md_config_t g_conf = {
   client_tick_interval: 1.0,
   client_hack_balance_reads: false,
   client_trace: 0,
+  client_readahead_min: 128*1024,  // readahead at _least_ this much.
+  client_readahead_max_bytes: 8 * 1024*1024,
+  client_readahead_max_periods: 2,  // as multiple of file layout period (object size * num stripes)
   fuse_direct_io: 0,
   fuse_ll: true,
   
@@ -878,6 +881,13 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.client_cache_readdir_ttl = atoi(args[++i]);
     else if (strcmp(args[i], "--client_trace") == 0)
       g_conf.client_trace = args[++i];
+
+    else if (strcmp(args[i], "--client_readahead_min") == 0)
+      g_conf.client_readahead_min = atoi(args[++i]);
+    else if (strcmp(args[i], "--client_readahead_max_bytes") == 0)
+      g_conf.client_readahead_max_bytes = atoi(args[++i]);
+    else if (strcmp(args[i], "--client_readahead_max_periods") == 0)
+      g_conf.client_readahead_max_periods = atoi(args[++i]);
 
     else if (strcmp(args[i], "--fuse_direct_io") == 0)
       g_conf.fuse_direct_io = atoi(args[++i]);

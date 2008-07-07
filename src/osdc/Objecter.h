@@ -85,7 +85,8 @@ class Objecter {
     int flags;
 
     OSDRead(bufferlist *b, int f) : bl(b), onfinish(0), flags(f) {
-      bl->clear();
+      if (bl)
+	bl->clear();
     }
   };
 

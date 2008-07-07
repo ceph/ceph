@@ -1885,9 +1885,12 @@ int Client::unmount()
 
   if (g_conf.client_oc) {
     // release any/all caps
+    hash_map<inodeno_t, Inode*>::iterator next;
     for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
-         p != inode_map.end();
-         p++) {
+         p != inode_map.end(); 
+         p = next) {
+      next = p;
+      next++;
       Inode *in = p->second;
       if (!in) {
 	dout(0) << "null inode_map entry ino " << p->first << dendl;
@@ -2204,7 +2207,7 @@ int Client::_symlink(const filepath &path, const char *target, int uid, int gid)
   return res;
 }
 
-int Client::readlink(const char *relpath, char *buf, off_t size) 
+int Client::readlink(const char *relpath, char *buf, loff_t size) 
 {
   Mutex::Locker lock(client_lock);
   tout << "readlink" << std::endl;
@@ -2213,7 +2216,7 @@ int Client::readlink(const char *relpath, char *buf, off_t size)
   return _readlink(path, buf, size);
 }
 
-int Client::_readlink(const filepath &path, char *buf, off_t size, int uid, int gid) 
+int Client::_readlink(const filepath &path, char *buf, loff_t size, int uid, int gid) 
 { 
   Inode *in;
   int r = _do_lstat(path, CEPH_STAT_MASK_SYMLINK, &in);
@@ -2592,7 +2595,7 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
 //  unsigned char  d_type;      /* type of file */
 //  char           d_name[256]; /* filename */
 //};
-void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, off_t off)
+void Client::_readdir_fill_dirent(struct dirent *de, DirEntry *entry, loff_t off)
 {
   strncpy(de->d_name, entry->d_name.c_str(), 256);
 #ifndef __CYGWIN__
@@ -2811,14 +2814,14 @@ void Client::rewinddir(DIR *dirp)
   d->buffer.clear();
 }
  
-off_t Client::telldir(DIR *dirp)
+loff_t Client::telldir(DIR *dirp)
 {
   DirResult *d = (DirResult*)dirp;
   dout(3) << "telldir(" << dirp << ") = " << d->offset << dendl;
   return d->offset;
 }
 
-void Client::seekdir(DIR *dirp, off_t offset)
+void Client::seekdir(DIR *dirp, loff_t offset)
 {
   dout(3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
   DirResult *d = (DirResult*)dirp;
@@ -2954,7 +2957,7 @@ int Client::_release(Fh *f)
 // ------------
 // read, write
 
-off_t Client::lseek(int fd, off_t offset, int whence)
+loff_t Client::lseek(int fd, loff_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
   tout << "lseek" << std::endl;
@@ -2983,7 +2986,7 @@ off_t Client::lseek(int fd, off_t offset, int whence)
     assert(0);
   }
   
-  off_t pos = f->pos;
+  loff_t pos = f->pos;
 
   dout(3) << "lseek(" << fd << ", " << offset << ", " << whence << ") = " << pos << dendl;
   return pos;
@@ -3021,7 +3024,7 @@ void Client::unlock_fh_pos(Fh *f)
 
 // blocking osd interface
 
-int Client::read(int fd, char *buf, off_t size, off_t offset) 
+int Client::read(int fd, char *buf, loff_t size, loff_t offset) 
 {
   Mutex::Locker lock(client_lock);
   tout << "read" << std::endl;
@@ -3033,7 +3036,7 @@ int Client::read(int fd, char *buf, off_t size, off_t offset)
   Fh *f = fd_map[fd];
   bufferlist bl;
   int r = _read(f, offset, size, &bl);
-  dout(3) << "read(" << fd << ", " << buf << ", " << size << ", " << offset << ") = " << r << dendl;
+  dout(3) << "read(" << fd << ", " << (void*)buf << ", " << size << ", " << offset << ") = " << r << dendl;
   if (r >= 0) {
     bl.copy(0, bl.length(), buf);
     r = bl.length();
@@ -3122,6 +3125,20 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       if (in->cap_refs[CEPH_CAP_RDCACHE] == 0)
 	in->get_cap_ref(CEPH_CAP_RDCACHE);
 
+      // readahead?
+      if (f->nr_consec_read) {
+	loff_t l = f->consec_read_bytes * 2;
+	l = MAX(l, g_conf.client_readahead_min);		       
+	l = MIN(l, MIN(g_conf.client_readahead_max_bytes,
+		       g_conf.client_readahead_max_periods
+		       * ceph_file_layout_period(in->inode.layout)));
+	dout(10) << "readahead " << f->nr_consec_read << " reads " 
+		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
+		 << " (caller wants " << offset << "~" << size << ")" << dendl;
+	objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, l, NULL, 0, 0);
+	dout(10) << "readahead initiated" << dendl;
+      }
+
       // read (and possibly block)
       r = objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish);
       
@@ -3158,9 +3175,22 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     unlock_fh_pos(f);
   }
 
-  put_cap_ref(in, CEPH_CAP_RD);
+  // adjust readahead state
+  if (f->last_pos != offset) {
+    f->nr_consec_read = f->consec_read_bytes = 0;
+  } else {
+    f->nr_consec_read++;
+  }
+  f->consec_read_bytes += bl->length();
+  dout(10) << "readahead nr_consec_read " << f->nr_consec_read
+	   << " for " << f->consec_read_bytes << " bytes" 
+	   << " .. last_pos " << f->last_pos << " .. offset " << offset
+	   << dendl;
+  f->last_pos = offset+bl->length();
 
   // done!
+  put_cap_ref(in, CEPH_CAP_RD);
+
   return rvalue;
 }
 
@@ -3201,7 +3231,7 @@ void Client::sync_write_commit(Inode *in)
   client_lock.Unlock();
 }
 
-int Client::write(int fd, const char *buf, off_t size, off_t offset) 
+int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
 {
   Mutex::Locker lock(client_lock);
   tout << "write" << std::endl;
@@ -3345,7 +3375,7 @@ int Client::_flush(Fh *f)
 }
 
 
-int Client::truncate(const char *relpath, off_t length) 
+int Client::truncate(const char *relpath, loff_t length) 
 {
   Mutex::Locker lock(client_lock);
   tout << "truncate" << std::endl;
@@ -3370,7 +3400,7 @@ int Client::_truncate(const filepath &path, loff_t length, bool followsym, int u
   return res;
 }
 
-int Client::ftruncate(int fd, off_t length) 
+int Client::ftruncate(int fd, loff_t length) 
 {
   Mutex::Locker lock(client_lock);
   tout << "ftruncate" << std::endl;
@@ -3382,7 +3412,7 @@ int Client::ftruncate(int fd, off_t length)
   return _ftruncate(f, length);
 }
 
-int Client::_ftruncate(Fh *fh, off_t length) 
+int Client::_ftruncate(Fh *fh, loff_t length) 
 {
   filepath path(fh->inode->inode.ino);
   return _truncate(path, length, false);
@@ -3521,7 +3551,7 @@ void Client::handle_statfs_reply(MStatfsReply *reply)
 }
 
 
-int Client::lazyio_propogate(int fd, off_t offset, size_t count)
+int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
 {
   client_lock.Lock();
   dout(3) << "op: client->lazyio_propogate(" << fd
@@ -3537,7 +3567,7 @@ int Client::lazyio_propogate(int fd, off_t offset, size_t count)
   return 0;
 }
 
-int Client::lazyio_synchronize(int fd, off_t offset, size_t count)
+int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 {
   client_lock.Lock();
   dout(3) << "op: client->lazyio_synchronize(" << fd
@@ -4196,7 +4226,7 @@ int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags
   return 0;
 }
 
-int Client::ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl)
+int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_read " << fh << " " << off << "~" << len << dendl;
@@ -4208,7 +4238,7 @@ int Client::ll_read(Fh *fh, off_t off, off_t len, bufferlist *bl)
   return _read(fh, off, len, bl);
 }
 
-int Client::ll_write(Fh *fh, off_t off, off_t len, const char *data)
+int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_write " << fh << " " << off << "~" << len << dendl;
@@ -4299,7 +4329,7 @@ int Client::get_stripe_period(int fd)
 }
 
 int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
-			     off_t length, off_t offset)
+			     loff_t length, loff_t offset)
 {
   Mutex::Locker lock(client_lock);
 
