@@ -1897,8 +1897,10 @@ int Client::unmount()
 	assert(in);
       }      
       if (!in->caps.empty()) {
+	in->get();
 	_release(in);
 	_flush(in);
+	put_inode(in);
       }
     }
   }
@@ -3126,7 +3128,9 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	in->get_cap_ref(CEPH_CAP_RDCACHE);
 
       // readahead?
-      if (f->nr_consec_read) {
+      if (f->nr_consec_read &&
+	  (g_conf.client_readahead_max_bytes ||
+	   g_conf.client_readahead_max_periods)) {
 	loff_t l = f->consec_read_bytes * 2;
 	if (g_conf.client_readahead_min)
 	  l = MAX(l, g_conf.client_readahead_min);
@@ -3139,7 +3143,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	  // align with period
 	  l -= (offset+l) % p;
 	// don't read past end of file
-	if (offset+l > in->inode.size)
+	if (offset+l > (loff_t)in->inode.size)
 	  l = in->inode.size - offset;
 
 	dout(10) << "readahead " << f->nr_consec_read << " reads " 
