@@ -204,10 +204,10 @@ CDentry* CDir::add_null_dentry(const nstring& dname)
   dn->version = get_projected_version();
   
   // add to dir
-  assert(items.count(dn->name.c_str()) == 0);
+  assert(items.count(dn->key()) == 0);
   //assert(null_items.count(dn->name) == 0);
 
-  items[dn->name.c_str()] = dn;
+  items[dn->key()] = dn;
   nnull++;
 
   dout(12) << "add_null_dentry " << *dn << dendl;
@@ -236,10 +236,10 @@ CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in)
   dn->version = get_projected_version();
   
   // add to dir
-  assert(items.count(dn->name.c_str()) == 0);
+  assert(items.count(dn->key()) == 0);
   //assert(null_items.count(dn->name) == 0);
 
-  items[dn->name.c_str()] = dn;
+  items[dn->key()] = dn;
   link_inode_work( dn, in );
 
   dout(12) << "add_primary_dentry " << *dn << dendl;
@@ -267,10 +267,10 @@ CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned c
   dn->version = get_projected_version();
   
   // add to dir
-  assert(items.count(dn->name.c_str()) == 0);
+  assert(items.count(dn->key()) == 0);
   //assert(null_items.count(dn->name) == 0);
 
-  items[dn->name.c_str()] = dn;
+  items[dn->key()] = dn;
   nitems++;
 
   dout(12) << "add_remote_dentry " << *dn << dendl;
@@ -300,8 +300,8 @@ void CDir::remove_dentry(CDentry *dn)
   }
   
   // remove from list
-  assert(items.count(dn->name.c_str()) == 1);
-  items.erase(dn->name.c_str());
+  assert(items.count(dn->key()) == 1);
+  items.erase(dn->key());
 
   // adjust dirty counter?
   if (dn->state_test(CDentry::STATE_DIRTY))
@@ -501,9 +501,9 @@ void CDir::steal_dentry(CDentry *dn)
 {
   dout(15) << "steal_dentry " << *dn << dendl;
 
-  items[dn->name.c_str()] = dn;
+  items[dn->key()] = dn;
 
-  dn->dir->items.erase(dn->name.c_str());
+  dn->dir->items.erase(dn->key());
   if (dn->dir->items.empty())
     dn->dir->put(PIN_CHILD);
 
@@ -627,7 +627,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
     CDir::map_t::iterator p = items.begin();
     
     CDentry *dn = p->second;
-    frag_t subfrag = inode->pick_dirfrag(p->first);
+    frag_t subfrag = inode->pick_dirfrag(dn->name);
     int n = (subfrag.value() & (subfrag.mask() ^ frag.mask())) >> subfrag.mask_shift();
     dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << dendl;
     CDir *f = subfrags[n];

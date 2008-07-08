@@ -343,9 +343,9 @@ class MDCache {
   // -- my cache --
   LRU lru;   // dentry lru for expiring items from cache
  protected:
-  hash_map<inodeno_t,CInode*>   inode_map;  // map of inodes by ino
-  CInode *root;                             // root inode
-  CInode *stray;                            // my stray dir
+  hash_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
+  CInode *root;                            // root inode
+  CInode *stray;                           // my stray dir
 
   set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
 
@@ -653,15 +653,17 @@ public:
   bool did_shutdown_log_cap;
 
   // inode_map
-  bool have_inode( inodeno_t ino ) { return inode_map.count(ino) ? true:false; }
-  CInode* get_inode( inodeno_t ino ) {
-    if (have_inode(ino))
-      return inode_map[ino];
+  bool have_inode( inodeno_t ino ) { return have_inode(vinodeno_t(ino, 0)); }
+  bool have_inode( vinodeno_t vino ) { return inode_map.count(vino) ? true:false; }
+  CInode* get_inode( inodeno_t ino, snapid_t s=0 ) {
+    vinodeno_t vino(ino,s);
+    if (have_inode(vino))
+      return inode_map[vino];
     return NULL;
   }
   CDir* get_dirfrag(dirfrag_t df) {
     if (!have_inode(df.ino)) return NULL;
-    return inode_map[df.ino]->get_dirfrag(df.frag);
+    return get_inode(df.ino)->get_dirfrag(df.frag);
   }
   /*
   void get_dirfrags_under(dirfrag_t df, list<CDir*>& ls) {
@@ -853,7 +855,7 @@ private:
   CInode *hack_pick_random_inode() {
     assert(!inode_map.empty());
     int n = rand() % inode_map.size();
-    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+    hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
     while (n--) p++;
     return p->second;
   }

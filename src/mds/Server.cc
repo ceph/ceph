@@ -1917,7 +1917,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dout(12) << "including inode " << *in << dendl;
     
     // dentry
-    ::encode(it->first, dnbl);
+    ::encode(dn->name, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
     // inode

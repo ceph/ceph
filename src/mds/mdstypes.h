@@ -150,6 +150,40 @@ inline ostream& operator<<(ostream &out, const frag_info_t &f) {
 	     << ")";    
 }
 
+struct vinodeno_t {
+  inodeno_t ino;
+  snapid_t snapid;
+
+  vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
+};
+
+inline bool operator==(const vinodeno_t &l, const vinodeno_t &r) {
+  return l.ino == r.ino && l.snapid == r.snapid;
+}
+
+namespace __gnu_cxx {
+  template<> struct hash<vinodeno_t> {
+    size_t operator()(const vinodeno_t &vino) const { 
+      hash<inodeno_t> H;
+      hash<uint64_t> I;
+      return H(vino.ino) ^ I(vino.snapid);
+    }
+  };
+}
+
+
+
+
+inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
+  out << vino.ino;
+  if (vino.snapid == CEPH_NOSNAP)
+    out << ".head";
+  else if (vino.snapid)
+    out << '.' << vino.snapid;
+  return out;
+}
+
+
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
@@ -241,6 +275,26 @@ struct inode_t {
 };
 WRITE_CLASS_ENCODER(inode_t)
 
+
+struct old_inode_t {
+  snapid_t first;
+  inodeno_t inode;
+  map<string,bufferptr> xattrs;
+
+  void encode(bufferlist& bl) const {
+    ::encode(first, bl);
+    ::encode(inode, bl);
+    ::encode(xattrs, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(first, bl);
+    ::decode(inode, bl);
+    ::decode(xattrs, bl);
+  }
+};
+WRITE_CLASS_ENCODER(old_inode_t)
+
+
 /*
  * like an inode, but for a dir frag 
  */
@@ -263,8 +317,28 @@ WRITE_CLASS_ENCODER(fnode_t)
 
 
 
+
+// =======
+// dentries
+
+typedef pair<snapid_t, const char *> dentry_key_t;
+
+struct ltdentrykey
+{
+  bool operator()(const dentry_key_t& k1,
+		  const dentry_key_t& k2) const
+  {
+    return 
+      k1.first < k2.first ||
+      (k1.first == k2.first && strcmp(k1.second, k2.second) < 0);
+  }
+};
+
+
+
+
 // =========
-// reqeusts
+// requests
 
 struct metareqid_t {
   entity_name_t name;

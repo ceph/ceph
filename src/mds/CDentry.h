@@ -76,9 +76,15 @@ class CDentry : public MDSCacheObject, public LRUObject {
     return *this < *(CDentry*)r;
   }
 
- protected:
+public:
   nstring name;
+  snapid_t first, last;
 
+  dentry_key_t key() { 
+    return dentry_key_t(last, name.c_str()); 
+  }
+
+protected:
   inodeno_t remote_ino;      // if remote dentry
   unsigned char remote_d_type;
 
@@ -113,19 +119,11 @@ public:
   SimpleLock lock;
 
 
-
  public:
   // cons
-  CDentry() :
-    remote_ino(0), remote_d_type(0),
-    inode(0), dir(0),
-    version(0), projected_version(0),
-    xlist_dirty(this),
-    dir_offset(0),
-    auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const nstring& n, CInode *in) :
     name(n),
+    first(0), last(CEPH_NOSNAP),
     remote_ino(0), remote_d_type(0),
     inode(in), dir(0),
     version(0), projected_version(0),
@@ -135,6 +133,7 @@ public:
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const nstring& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
     name(n),
+    first(0), last(CEPH_NOSNAP),
     remote_ino(ino), remote_d_type(dt),
     inode(in), dir(0),
     version(0), projected_version(0),

@@ -45,6 +45,9 @@ class Context;
 class CDirDiscover;
 
 
+
+
+
 ostream& operator<<(ostream& out, class CDir& dir);
 
 
@@ -193,7 +196,8 @@ public:
 
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  typedef map<const char *, CDentry*, ltstr> map_t;
+  //typedef map<const char *, CDentry*, ltstr> map_t;
+  typedef map<dentry_key_t, CDentry*, ltdentrykey> map_t;
 protected:
 
   // contents
@@ -282,12 +286,14 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup(const string& s) {
-    nstring ns(s);
-    return lookup(ns);
+  CDentry* lookup(const string& n, snapid_t snap=CEPH_NOSNAP) {
+    return lookup(n.c_str(), snap);
   }
-  CDentry* lookup(const nstring& ns) {
-    map_t::iterator iter = items.find(ns.c_str());
+  CDentry* lookup(const nstring& ns, snapid_t snap=CEPH_NOSNAP) {
+    return lookup(ns.c_str(), snap);
+  }
+  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
+    map_t::iterator iter = items.find(dentry_key_t(snap, n));
     if (iter == items.end()) 
       return 0;
     else

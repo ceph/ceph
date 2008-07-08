@@ -164,8 +164,8 @@ CInode *MDCache::create_inode()
 void MDCache::add_inode(CInode *in) 
 {
   // add to lru, inode map
-  assert(inode_map.count(in->ino()) == 0);  // should be no dup inos!
-  inode_map[ in->ino() ] = in;
+  assert(inode_map.count(in->vino()) == 0);  // should be no dup inos!
+  inode_map[ in->vino() ] = in;
 
   if (in->ino() < MDS_INO_BASE) {
     base_inodes.insert(in);
@@ -188,7 +188,7 @@ void MDCache::remove_inode(CInode *o)
   }
 
   // remove from inode map
-  inode_map.erase(o->ino());    
+  inode_map.erase(o->vino());    
 
   if (o->ino() < MDS_INO_BASE) {
     assert(base_inodes.count(o));
@@ -1939,7 +1939,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       assert(dn->is_primary());
       assert(dn->inode->is_dir());
-      rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
+      rejoin->add_weak_primary_dentry(dir->dirfrag(), dn->name.c_str(), dn->get_inode()->ino());
       dn->get_inode()->get_nested_dirfrags(nested);
     }
   } else {
@@ -1952,7 +1952,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 ++p) {
       CDentry *dn = p->second;
       dout(15) << " add_strong_dentry " << *dn << dendl;
-      rejoin->add_strong_dentry(dir->dirfrag(), p->first, 
+      rejoin->add_strong_dentry(dir->dirfrag(), dn->name, 
 				dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 				dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 				dn->is_remote() ? dn->get_remote_d_type():0, 
@@ -2269,7 +2269,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 
   // FIXME: what about root and stray inodes.
   
-  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -2938,7 +2938,7 @@ void MDCache::identify_files_to_recover()
   */
 
   dout(10) << "identify_files_to_recover" << dendl;
-  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -3475,9 +3475,9 @@ void MDCache::trim_non_auth()
 
   if (lru.lru_get_size() == 0) {
     // root, stray, etc.?
-    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+    hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
     while (p != inode_map.end()) {
-      hash_map<inodeno_t,CInode*>::iterator next = p;
+      hash_map<vinodeno_t,CInode*>::iterator next = p;
       ++next;
       CInode *in = p->second;
       if (!in->is_auth()) {
@@ -4314,7 +4314,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     
     // MISS.  dentry doesn't exist.
     dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << dendl;
-    
+
     if (curdir->is_auth()) {
       // dentry is mine.
       if (curdir->is_complete()) {
@@ -6771,7 +6771,7 @@ void MDCache::show_cache()
 {
   dout(7) << "show_cache" << dendl;
   
-  for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
     // unlinked?
@@ -6810,7 +6810,7 @@ void MDCache::dump_cache()
   ofstream myfile;
   myfile.open(fn);
   
-  for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
     list<CDir*> dfs;

@@ -46,6 +46,15 @@ ostream& operator<<(ostream& out, CDentry& dn)
   
   out << "[dentry " << path;
   
+  if (true || dn.first != 0 || dn.last != CEPH_NOSNAP) {
+    out << " [" << dn.first << ",";
+    if (dn.last == CEPH_NOSNAP) 
+      out << "head";
+    else
+      out << dn.last;
+    out << ']';
+  }
+
   if (dn.is_auth()) {
     out << " auth";
     if (dn.is_replicated()) 

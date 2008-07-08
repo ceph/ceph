@@ -233,7 +233,19 @@ todo
 - mds metadata versioning
   - (dir) inode versions..
 
+  primary file link -> old inode
+  primary dir link -> multiversion inode
+  remote link -> multiversion inode
+
+- for simplicity, don't replicate any snapshot data.
+- or issue any leases or capabilities... the content is static!
+- 
+
+- need rrealms in fraginfo_t
+- rename() needs to create a new realm if src/dst realms differ and (rrealms, or open_children, or not subtree leaf) (similar logic to the anchor update)
+
 - will snapshots and CAS play nice?
+  - cas object refs should follow same deletion semantics as non-cas objects.
 
 - mds server ops
 

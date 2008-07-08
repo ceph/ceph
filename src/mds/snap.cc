@@ -102,9 +102,9 @@ vector<snapid_t> *SnapRealm::get_snap_vector()
   int i = 0;
   for (set<snapid_t>::reverse_iterator p = s.rbegin(); p != s.rend(); p++)
     cached_snaps[i++] = *p;
-
-  dout(10) << "get_snap_vector " << cached_snaps << dendl;
-  //" (highwater " << cached_snaps_stamp << ")" << dendl;
+  
+  dout(10) << "get_snap_vector " << cached_snaps
+	   << " (highwater " << snap_highwater << ")" << dendl;
   return &cached_snaps;
 }
 
@@ -126,7 +126,7 @@ void SnapRealm::split_at(SnapRealm *child)
 	   << " on " << *child->inode << dendl;
 
   // split open_children
-  dout(10) << " my children are " << open_children << dendl;
+  dout(10) << " open_children are " << open_children << dendl;
   for (set<SnapRealm*>::iterator p = open_children.begin();
        p != open_children.end(); ) {
     SnapRealm *realm = *p;
