@@ -135,7 +135,12 @@ public:
 
   void set_want_ack(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ACK; }
   void set_want_commit(bool b) { head.flags = get_flags() | CEPH_OSD_OP_SAFE; }
-  void set_retry_attempt(bool a) { head.flags = get_flags() | CEPH_OSD_OP_RETRY; }
+  void set_retry_attempt(bool a) { 
+    if (a)
+      head.flags = head.flags | CEPH_OSD_OP_RETRY;
+    else
+      head.flags = head.flags & ~CEPH_OSD_OP_RETRY;
+  }
 
   // marshalling
   virtual void decode_payload() {
