@@ -85,27 +85,27 @@ struct SnapRealm {
   // realm state
   snapid_t created;
   map<snapid_t, SnapInfo> snaps;
-  multimap<snapid_t, snaplink_t> parents;  // key is "last" (or NOSNAP)
+  map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
     ::encode(created, bl);
     ::encode(snaps, bl);
-    ::encode(parents, bl);
+    ::encode(past_parents, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(created, p);
     ::decode(snaps, p);
-    ::decode(parents, p);
+    ::decode(past_parents, p);
   }
 
   // in-memory state
   MDCache *mdcache;
   CInode *inode;
 
-  // caches?
-  SnapRealm *open_parent;
+  SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
 
+  // caches?
   vector<snapid_t> cached_snaps;
   snapid_t snap_highwater;
 
@@ -115,7 +115,7 @@ struct SnapRealm {
   SnapRealm(MDCache *c, CInode *in) : 
     created(0),
     mdcache(c), inode(in),
-    open_parent(0),
+    parent(0),
     snap_highwater(0) 
   { }
 
@@ -139,18 +139,14 @@ WRITE_CLASS_ENCODER(SnapRealm)
 
 inline ostream& operator<<(ostream& out, const SnapRealm &realm) {
   out << "snaprealm(" << realm.snaps;
-  if (realm.parents.size()) {
-    out << " parents=(";
-    for (multimap<snapid_t, snaplink_t>::const_iterator p = realm.parents.begin(); 
-	 p != realm.parents.end(); 
+  if (realm.past_parents.size()) {
+    out << " past_parents=(";
+    for (map<snapid_t, snaplink_t>::const_iterator p = realm.past_parents.begin(); 
+	 p != realm.past_parents.end(); 
 	 p++) {
-      if (p != realm.parents.begin()) out << ",";
-      out << p->second.first << "-";
-      if (p->first == CEPH_NOSNAP)
-	out << "head";
-      else
-	out << p->first;
-      out << "=" << p->second.dirino;
+      if (p != realm.past_parents.begin()) out << ",";
+      out << p->second.first << "-" << p->first
+	  << "=" << p->second.dirino;
     }
     out << ")";
   }

@@ -2789,7 +2789,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   session->touch_cap(cap);
   
   // send IMPORT
-  SnapRealm *realm = in->find_containing_snaprealm();
+  SnapRealm *realm = in->find_snaprealm();
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 					      in->inode,
 					      realm->inode->ino(),
@@ -2970,7 +2970,7 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    vector<snapid_t> *snaps = in->find_containing_snaprealm()->get_snap_vector();
+    vector<snapid_t> *snaps = in->find_snaprealm()->get_snap_vector();
 
     if (in->inode.max_size > in->inode.size) {
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 

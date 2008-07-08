@@ -444,7 +444,7 @@ public:
   // -- snap --
   void open_snaprealm();
   void close_snaprealm();
-  SnapRealm *find_containing_snaprealm();
+  SnapRealm *find_snaprealm();
   void encode_snap(bufferlist &bl);
   void decode_snap(bufferlist::iterator& p) {
     bufferlist snapbl;
@@ -490,7 +490,7 @@ public:
   Capability *add_client_cap(int client, CInode *in) {
     if (client_caps.empty()) {
       get(PIN_CAPS);
-      containing_realm = find_containing_snaprealm();
+      containing_realm = find_snaprealm();
       containing_realm->inodes_with_caps.push_back(&xlist_caps);
     }
 

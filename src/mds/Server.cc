@@ -4433,7 +4433,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps_seq(cap->get_last_seq());
   reply->set_file_caps_mseq(cap->get_mseq());
 
-  SnapRealm *realm = cur->find_containing_snaprealm();
+  SnapRealm *realm = cur->find_snaprealm();
   reply->get_snaps() = *realm->get_snap_vector();
   reply->set_snap_info(realm->inode->ino(), realm->created, realm->snap_highwater);
   dout(10) << " snaprealm is " << *realm << " snaps=" << reply->get_snaps() << " on " << *realm->inode << dendl;
@@ -4694,6 +4694,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   snapid_t snapid = mds->snaptable->create(diri->ino(), req->get_path2(), mdr->now);
   dout(10) << " snapid is " << snapid << dendl;
 
+
+  // GO.
+
   // create realm?
   inodeno_t split_parent = 0;
   if (!diri->snaprealm) {
@@ -4701,18 +4704,10 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     diri->open_snaprealm();
     diri->snaprealm->created = snapid;
 
-    // link them up
-    // HACK!  parent may be on another mds...
-
-    SnapRealm *parent = diri->snaprealm->open_parent;
+    // split existing caps
+    SnapRealm *parent = diri->snaprealm->parent;
     assert(parent);
     assert(parent->open_children.count(diri->snaprealm));
-    snaplink_t link;
-    link.first = 0;
-    link.dirino = parent->inode->ino();
-    diri->snaprealm->parents.insert(pair<snapid_t,snaplink_t>(CEPH_NOSNAP, link));
-
-    // split existing caps
     parent->split_at(diri->snaprealm);
     split_parent = parent->inode->ino();
   }

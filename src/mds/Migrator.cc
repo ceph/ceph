@@ -898,7 +898,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
 	    << " exported caps on " << *in << dendl;
     MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
 					     in->inode, 
-					     in->find_containing_snaprealm()->inode->ino(),
+					     in->find_snaprealm()->inode->ino(),
                                              cap->get_last_seq(), 
                                              cap->pending(),
                                              cap->wanted(),
@@ -2053,7 +2053,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
     }
     cap->merge(it->second);
 
-    SnapRealm *realm = in->find_containing_snaprealm();
+    SnapRealm *realm = in->find_snaprealm();
     MClientFileCaps *caps = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
 						in->inode,
 						realm->inode->ino(),

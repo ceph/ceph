@@ -981,14 +981,14 @@ CInodeDiscover* CInode::replicate_to( int rep )
 void CInode::open_snaprealm()
 {
   if (!snaprealm) {
+    SnapRealm *parent = find_snaprealm();
     snaprealm = new SnapRealm(mdcache, this);
-
-    snaprealm->open_parent = find_containing_snaprealm();
-    if (snaprealm->open_parent) {
-      snaprealm->open_parent->open_children.insert(snaprealm);
+    if (parent) {
+      snaprealm->parent = parent;
+      parent->open_children.insert(snaprealm);
       dout(10) << " opened snaprealm " << snaprealm
-	       << " parent is " << snaprealm->open_parent
-	       << " siblings are " << snaprealm->open_parent->open_children
+	       << " parent is " << parent
+	       << " siblings are " << parent->open_children
 	       << dendl;
     }
   }
@@ -996,8 +996,8 @@ void CInode::open_snaprealm()
 void CInode::close_snaprealm()
 {
   if (snaprealm) {
-    if (snaprealm->open_parent)
-      snaprealm->open_parent->open_children.erase(snaprealm);
+    if (snaprealm->parent)
+      snaprealm->parent->open_children.erase(snaprealm);
     delete snaprealm;
     snaprealm = 0;
   }
@@ -1007,15 +1007,12 @@ void CInode::close_snaprealm()
  * note: this is _not_ inclusive of *this->snaprealm, as that is for
  * nested directory content.
  */ 
-SnapRealm *CInode::find_containing_snaprealm()
+SnapRealm *CInode::find_snaprealm()
 {
   CInode *cur = this;
-  while (cur->get_parent_dn()) {
+  while (cur->get_parent_dn() && !cur->snaprealm)
     cur = cur->get_parent_dn()->get_dir()->get_inode();
-    if (cur->snaprealm)
-      return cur->snaprealm;
-  }
-  return 0;
+  return cur->snaprealm;
 }
 
 void CInode::encode_snap(bufferlist &bl)

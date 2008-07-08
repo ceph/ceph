@@ -218,71 +218,24 @@ remaining hard problems
 snapshot notes --
 
 todo
-/- basic types (snapid_t, etc.)
-/- snap lineage in MOSDOp
 - rados bits to do clone+write
-/  - cloning
   - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
-  - make sense of snap_highwater...
-
   - figure out how to fix up rados logging
   - snap collections
   - garbage collection
-- mds types
-- client capgroups
-- mds snapid allocation
+- realms
+  - make better sense of snap_highwater...?
 - snap creation
-  - async SnapClient for the (possibly remote) SnapTable
+  - enforce name uniqueness?
+  - async SnapClient for the possibly remote SnapTable
     - hmm, can we generalize any of AnchorClient?
+
 - mds metadata versioning
+  - (dir) inode versions..
+
+- will snapshots and CAS play nice?
+
 - mds server ops
-
-- base types
-
-typedef __u64 snapid_t;
-#define MAXSNAP (snapid_t)(0xffffffffffffffull)  /* 56 bits.. see ceph_pg */
-#define NOSNAP  (snapid_t)(-1)
-
-- let's go with [first, last] throughout, instead of non-inclusive drev...
-
-
-
-mds
-- break mds hierarchy into snaprealms
-  - keep per-realm inode xlists, so that breaking a realm is O(size(realm))
-
-struct Snap {
-  snapid_t snapid;
-  string name;
-  utime_t ctime;
-};
-
-struct snaplink_t {
-       snaprealm *realm;
-       snapid_t first;
-};
-struct SnapRealm {
-       inodeno_t dirino;
-       map<snapid_t, Snap> snaps;
-
-       int nlink;  
-       multimap<snapid_t, snaplink_t> parents;   // key is "last" (or NOSNAP)
-       multimap<snapid_t, snaplink_t> children;
-
-       xlist<CInode*> inodes_with_caps;   // used for efficient realm splits
-};
-- realm's parent can vary over time; we need to track the full history, so that we know which parents' snaps to include in the snap lineage.
-
-- link client caps to realm, so that snapshot creation is O(num_child_realms*num_clients)
-  - keep per-realm, per-client record with cap refcount, to avoid traversinng realm inode lists looking for caps
-
-struct CapabilityGroup {
-   int client;
-   xlist<Capability*> caps;
-   SnapRealm *realm;
-};
-in SnapRealm, 
-   map<int, CapabilityGroup*> client_cap_groups;  // used to identify clients who need snap notifications
 
 - when we create a snapshot,
   - xlock snaplock

@@ -30,9 +30,19 @@
 bool SnapRealm::open_parents(MDRequest *mdr)
 {
   dout(10) << "open_parents" << dendl;
-  for (multimap<snapid_t, snaplink_t>::iterator p = parents.begin();
-       p != parents.end();
-       p++) {
+
+  // make sure my current parents' parents are open...
+  if (parent) {
+    dout(10) << " parent is " << *parent
+	     << " on " << *parent->inode << dendl;
+    if (!parent->open_parents(mdr))
+      return false;
+  }
+
+  // and my past parents too!
+  for (map<snapid_t, snaplink_t>::iterator p = past_parents.begin();
+       p != past_parents.end();
+       p++) {    
     CInode *parent = mdcache->get_inode(p->second.dirino);
     if (parent)
       continue;
@@ -58,17 +68,22 @@ void SnapRealm::get_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
     s.insert(p->first);
 
   // include snaps for parents during intervals that intersect [first,last]
-  for (multimap<snapid_t, snaplink_t>::iterator p = parents.lower_bound(first);
-       p != parents.end() && p->first >= first && p->second.first <= last;
+  snapid_t thru = first;
+  for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
+       p != past_parents.end() && p->first >= first && p->second.first <= last;
        p++) {
-    CInode *parent = mdcache->get_inode(p->second.dirino);
-    assert(parent);  // call open_parents first!
-    assert(parent->snaprealm);
-
-    parent->snaprealm->get_snap_set(s, 
-				    MAX(first, p->second.first),
-				    MIN(last, p->first));				    
+    CInode *oldparent = mdcache->get_inode(p->second.dirino);
+    assert(oldparent);  // call open_parents first!
+    assert(oldparent->snaprealm);
+    
+    thru = MIN(last, p->first);
+    oldparent->snaprealm->get_snap_set(s, 
+				       MAX(first, p->second.first),
+				       thru);
+    thru++;
   }
+  if (thru <= last && parent)
+    parent->get_snap_set(s, thru, last);
 }
 
 /*
@@ -100,7 +115,7 @@ vector<snapid_t> *SnapRealm::update_snap_vector(snapid_t creating)
     return get_snap_vector();
   }
   snap_highwater = creating;
-  cached_snaps.push_back(creating);
+  cached_snaps.insert(cached_snaps.begin(), creating); // FIXME.. we should store this in reverse!
   return &cached_snaps;
 }
 
@@ -110,7 +125,7 @@ void SnapRealm::split_at(SnapRealm *child)
   dout(10) << "split_at " << *child 
 	   << " on " << *child->inode << dendl;
 
-  // split children
+  // split open_children
   dout(10) << " my children are " << open_children << dendl;
   for (set<SnapRealm*>::iterator p = open_children.begin();
        p != open_children.end(); ) {
@@ -118,7 +133,7 @@ void SnapRealm::split_at(SnapRealm *child)
     if (realm != child &&
 	child->inode->is_ancestor_of(realm->inode)) {
       dout(20) << " child gets child realm " << *realm << " on " << *realm->inode << dendl;
-      realm->open_parent = child;
+      realm->parent = child;
       child->open_children.insert(realm);
       open_children.erase(p++);
     } else {
