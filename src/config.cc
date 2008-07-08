@@ -290,8 +290,8 @@ md_config_t g_conf = {
   client_hack_balance_reads: false,
   client_trace: 0,
   client_readahead_min: 128*1024,  // readahead at _least_ this much.
-  client_readahead_max_bytes: 8 * 1024*1024,
-  client_readahead_max_periods: 2,  // as multiple of file layout period (object size * num stripes)
+  client_readahead_max_bytes: 0,//8 * 1024*1024,
+  client_readahead_max_periods: 4,  // as multiple of file layout period (object size * num stripes)
   fuse_direct_io: 0,
   fuse_ll: true,
   
