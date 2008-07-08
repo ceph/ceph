@@ -3128,10 +3128,18 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       // readahead?
       if (f->nr_consec_read) {
 	loff_t l = f->consec_read_bytes * 2;
-	l = MAX(l, g_conf.client_readahead_min);		       
-	l = MIN(l, MIN(g_conf.client_readahead_max_bytes,
-		       g_conf.client_readahead_max_periods
-		       * ceph_file_layout_period(in->inode.layout)));
+	if (g_conf.client_readahead_min)
+	  l = MAX(l, g_conf.client_readahead_min);
+	if (g_conf.client_readahead_max_bytes)
+	  l = MIN(l, g_conf.client_readahead_max_bytes);
+	loff_t p = ceph_file_layout_period(in->inode.layout);
+	if (g_conf.client_readahead_max_periods)
+	  l = MIN(l, g_conf.client_readahead_max_periods * p);
+	if (l >= 2*p) {
+	  // align with object_size
+	  l -= (offset+l) % in->inode.layout.fl_object_size;
+	}	
+
 	dout(10) << "readahead " << f->nr_consec_read << " reads " 
 		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
 		 << " (caller wants " << offset << "~" << size << ")" << dendl;
