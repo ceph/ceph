@@ -3135,10 +3135,12 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	loff_t p = ceph_file_layout_period(in->inode.layout);
 	if (g_conf.client_readahead_max_periods)
 	  l = MIN(l, g_conf.client_readahead_max_periods * p);
-	if (l >= 2*p) {
-	  // align with object_size
-	  l -= (offset+l) % in->inode.layout.fl_object_size;
-	}	
+	if (l >= 2*p)
+	  // align with period
+	  l -= (offset+l) % p;
+	// don't read past end of file
+	if (offset+l > in->inode.size)
+	  l = in->inode.size - offset;
 
 	dout(10) << "readahead " << f->nr_consec_read << " reads " 
 		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
