@@ -5095,6 +5095,7 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 void MDCache::eval_stray(CDentry *dn)
 {
   dout(10) << "eval_stray " << *dn << dendl;
+  dout(10) << " inode is " << *dn->get_inode() << dendl;
   assert(dn->is_primary());
   CInode *in = dn->inode;
   assert(in);
