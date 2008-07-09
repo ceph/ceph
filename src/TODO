@@ -1,11 +1,10 @@
 v0.3
-- fix mon osdmap send_full/latest ... never use get_source_inst()!
 
 v0.4
-- fix msgr protocol wrt resets, and varying connection close policies
 - ENOSPC
 - finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
-- make kclient sendpage (and rip out io interruption?)
+- make kclient use ->sendpage?
+- rip out io interruption?
 
 
 big items
@@ -46,8 +45,6 @@ kernel client
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- clean up messenger vs ktcp
- - hook into sysfs?
 - vfs
  - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
