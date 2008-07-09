@@ -291,7 +291,7 @@ class ObjectCacher {
     }
     if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
       lru_dirty.lru_remove(bh);
-      lru_rest.lru_insert_mid(bh);
+      lru_rest.lru_insert_top(bh);
       dirty_bh.erase(bh);
     }
 
@@ -319,20 +319,20 @@ class ObjectCacher {
     ob->add_bh(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_insert_top(bh);
-	  dirty_bh.insert(bh);
-	} else {
+      dirty_bh.insert(bh);
+    } else {
       lru_rest.lru_insert_top(bh);
-	}
+    }
     bh_stat_add(bh);
   }
   void bh_remove(Object *ob, BufferHead *bh) {
     ob->remove_bh(bh);
     if (bh->is_dirty()) {
       lru_dirty.lru_remove(bh);
-	  dirty_bh.erase(bh);
-	} else {
+      dirty_bh.erase(bh);
+    } else {
       lru_rest.lru_remove(bh);
-	}
+    }
     bh_stat_sub(bh);
   }
 

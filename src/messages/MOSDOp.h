@@ -67,16 +67,12 @@ private:
 public:
   vector<snapid_t> &get_snaps() { return snaps; }
 
-  osd_reqid_t get_reqid() { return osd_reqid_t(head.client_inst.name, 
+  osd_reqid_t get_reqid() { return osd_reqid_t(get_orig_source(),
 					       head.client_inc,
 					       head.tid); }
   int get_client_inc() { return head.client_inc; }
   tid_t get_client_tid() { return head.tid; }
   
-  entity_name_t get_client() { return head.client_inst.name; }
-  entity_inst_t get_client_inst() { return head.client_inst; }
-  void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a; }
-
   object_t get_oid() { return object_t(head.oid); }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   ceph_object_layout get_layout() { return head.layout; }
@@ -90,8 +86,8 @@ public:
     return get_op() < 10;
   }
 
-  off_t get_length() const { return head.length; }
-  off_t get_offset() const { return head.offset; }
+  loff_t get_length() const { return head.length; }
+  loff_t get_offset() const { return head.offset; }
 
   unsigned get_inc_lock() const { return head.inc_lock; }
 
@@ -103,13 +99,11 @@ public:
   
 
 
-  MOSDOp(entity_inst_t asker, int inc, long tid,
+  MOSDOp(int inc, long tid,
          object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op,
 	 int flags) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
-    head.client_inst.name = asker.name;
-    head.client_inst.addr = asker.addr;
     head.tid = tid;
     head.client_inc = inc;
     head.oid = oid;
@@ -126,8 +120,8 @@ public:
 
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
 
-  void set_length(off_t l) { head.length = l; }
-  void set_offset(off_t o) { head.offset = o; }
+  void set_length(loff_t l) { head.length = l; }
+  void set_offset(loff_t o) { head.offset = o; }
   void set_version(eversion_t v) { head.reassert_version = v; }
   
   int get_flags() const { return head.flags; }
@@ -137,7 +131,12 @@ public:
 
   void set_want_ack(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ACK; }
   void set_want_commit(bool b) { head.flags = get_flags() | CEPH_OSD_OP_SAFE; }
-  void set_retry_attempt(bool a) { head.flags = get_flags() | CEPH_OSD_OP_RETRY; }
+  void set_retry_attempt(bool a) { 
+    if (a)
+      head.flags = head.flags | CEPH_OSD_OP_RETRY;
+    else
+      head.flags = head.flags & ~CEPH_OSD_OP_RETRY;
+  }
 
   // marshalling
   virtual void encode_payload() {

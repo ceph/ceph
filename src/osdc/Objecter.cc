@@ -374,7 +374,7 @@ tid_t Objecter::stat_submit(OSDStat *st)
     int flags = st->flags;
     if (st->onfinish) flags |= CEPH_OSD_OP_ACK;
 
-    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+    MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_STAT, flags);
     m->get_snaps() = st->snaps;
@@ -503,7 +503,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
   if (pg.acker() >= 0) {
     int flags = rd->flags;
     if (rd->onfinish) flags |= CEPH_OSD_OP_ACK;
-    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, last_tid,
+    MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_READ, flags);
     m->get_snaps() = rd->snaps;
@@ -807,7 +807,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " osd" << pg.primary()
            << dendl;
   if (pg.primary() >= 0) {
-    MOSDOp *m = new MOSDOp(messenger->get_myinst(), client_inc, tid,
+    MOSDOp *m = new MOSDOp(client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   wr->op, flags);
     m->get_snaps() = wr->snaps;

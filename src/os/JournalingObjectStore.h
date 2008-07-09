@@ -58,7 +58,7 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_write(coll_t cid, pobject_t oid, off_t off, size_t len, const bufferlist& bl, Context *onsafe) {
+  void journal_write(coll_t cid, pobject_t oid, loff_t off, size_t len, const bufferlist& bl, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
       t.write(cid, oid, off, len, bl);
@@ -69,7 +69,7 @@ protected:
       queue_commit_waiter(onsafe);
   }
   
-  void journal_zero(coll_t cid, pobject_t oid, off_t off, size_t len, Context *onsafe) {
+  void journal_zero(coll_t cid, pobject_t oid, loff_t off, size_t len, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
       t.zero(cid, oid, off, len);
@@ -91,7 +91,7 @@ protected:
       queue_commit_waiter(onsafe);
   }
 
-  void journal_truncate(coll_t cid, pobject_t oid, off_t size, Context *onsafe) {
+  void journal_truncate(coll_t cid, pobject_t oid, loff_t size, Context *onsafe) {
     if (journal && journal->is_writeable()) {
       Transaction t;
       t.truncate(cid, oid, size);

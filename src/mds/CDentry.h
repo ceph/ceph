@@ -96,7 +96,7 @@ protected:
 
   xlist<CDentry*>::item xlist_dirty;
 
-  off_t dir_offset;   
+  loff_t dir_offset;   
 
   int auth_pins, nested_auth_pins;
 #ifdef MDS_AUTHPIN_SET
@@ -147,8 +147,8 @@ public:
   const nstring& get_name() const { return name; }
   inodeno_t get_ino();
 
-  off_t get_dir_offset() { return dir_offset; }
-  void set_dir_offset(off_t o) { dir_offset = o; }
+  loff_t get_dir_offset() { return dir_offset; }
+  void set_dir_offset(loff_t o) { dir_offset = o; }
   void clear_dir_offset() { dir_offset = 0; }
 
   inodeno_t get_remote_ino() { return remote_ino; }

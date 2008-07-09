@@ -3028,9 +3028,9 @@ void MDCache::set_root(CInode *in)
 class C_MDC_PurgeFinish : public Context {
   MDCache *mdc;
   CInode *in;
-  off_t newsize, oldsize;
+  loff_t newsize, oldsize;
 public:
-  C_MDC_PurgeFinish(MDCache *c, CInode *i, off_t ns, off_t os) :
+  C_MDC_PurgeFinish(MDCache *c, CInode *i, loff_t ns, loff_t os) :
     mdc(c), in(i), newsize(ns), oldsize(os) {}
   void finish(int r) {
     mdc->purge_inode_finish(in, newsize, oldsize);
@@ -3039,9 +3039,9 @@ public:
 class C_MDC_PurgeFinish2 : public Context {
   MDCache *mdc;
   CInode *in;
-  off_t newsize, oldsize;
+  loff_t newsize, oldsize;
 public:
-  C_MDC_PurgeFinish2(MDCache *c, CInode *i, off_t ns, off_t os) : 
+  C_MDC_PurgeFinish2(MDCache *c, CInode *i, loff_t ns, loff_t os) : 
     mdc(c), in(i), newsize(ns), oldsize(os) {}
   void finish(int r) {
     mdc->purge_inode_finish_2(in, newsize, oldsize);
@@ -3052,7 +3052,7 @@ public:
  * will be called by on unlink or rmdir or truncate or purge
  * caller responsible for journaling a matching EUpdate
  */
-void MDCache::purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
+void MDCache::purge_inode(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls)
 {
   dout(10) << "purge_inode " << oldsize << " -> " << newsize
 	   << " on " << *in
@@ -3067,7 +3067,7 @@ void MDCache::purge_inode(CInode *in, off_t newsize, off_t oldsize, LogSegment *
   _do_purge_inode(in, newsize, oldsize);
 }
 
-void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
+void MDCache::_do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize)
 {
   in->get(CInode::PIN_PURGING);
 
@@ -3083,7 +3083,7 @@ void MDCache::_do_purge_inode(CInode *in, off_t newsize, off_t oldsize)
   }
 }
 
-void MDCache::purge_inode_finish(CInode *in, off_t newsize, off_t oldsize)
+void MDCache::purge_inode_finish(CInode *in, loff_t newsize, loff_t oldsize)
 {
   dout(10) << "purge_inode_finish " << oldsize << " -> " << newsize
 	   << " on " << *in << dendl;
@@ -3093,7 +3093,7 @@ void MDCache::purge_inode_finish(CInode *in, off_t newsize, off_t oldsize)
 			   new C_MDC_PurgeFinish2(this, in, newsize, oldsize));
 }
 
-void MDCache::purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize)
+void MDCache::purge_inode_finish_2(CInode *in, loff_t newsize, loff_t oldsize)
 {
   dout(10) << "purge_inode_finish_2 " << oldsize << " -> " << newsize 
 	   << " on " << *in << dendl;
@@ -3132,7 +3132,7 @@ void MDCache::purge_inode_finish_2(CInode *in, off_t newsize, off_t oldsize)
     remove_inode(in);
 }
 
-void MDCache::add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogSegment *ls)
+void MDCache::add_recovered_purge(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls)
 {
   assert(purging[in].count(newsize) == 0);
   purging[in][newsize] = oldsize;
@@ -3140,7 +3140,7 @@ void MDCache::add_recovered_purge(CInode *in, off_t newsize, off_t oldsize, LogS
   ls->purging_inodes[in][newsize] = oldsize;
 }
 
-void MDCache::remove_recovered_purge(CInode *in, off_t newsize, off_t oldsize)
+void MDCache::remove_recovered_purge(CInode *in, loff_t newsize, loff_t oldsize)
 {
   purging[in].erase(newsize);
 }
@@ -3149,10 +3149,10 @@ void MDCache::start_recovered_purges()
 {
   dout(10) << "start_recovered_purges (" << purging.size() << " purges)" << dendl;
 
-  for (map<CInode*, map<off_t, off_t> >::iterator p = purging.begin();
+  for (map<CInode*, map<loff_t, loff_t> >::iterator p = purging.begin();
        p != purging.end();
        ++p) {
-    for (map<off_t,off_t>::iterator q = p->second.begin();
+    for (map<loff_t,loff_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
       dout(10) << "start_recovered_purges " 
@@ -5107,6 +5107,7 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 void MDCache::eval_stray(CDentry *dn)
 {
   dout(10) << "eval_stray " << *dn << dendl;
+  dout(10) << " inode is " << *dn->get_inode() << dendl;
   assert(dn->is_primary());
   CInode *in = dn->inode;
   assert(in);
@@ -5209,7 +5210,7 @@ void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   filepath dst;
   rdn->make_path(dst);
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME, mds->messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(src);
   req->set_filepath2(dst);
   req->set_tid(mds->issue_tid());
@@ -5229,7 +5230,7 @@ void MDCache::migrate_stray(CDentry *dn, int from, int to)
   filepath src(dname, MDS_INO_STRAY(from));
   filepath dst(dname, MDS_INO_STRAY(to));
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME, mds->messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(src);
   req->set_filepath2(dst);
   req->set_tid(mds->issue_tid());

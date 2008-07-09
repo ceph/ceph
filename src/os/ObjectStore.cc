@@ -47,7 +47,7 @@ object_t ObjectStore::age_get_oid() {
 
       dout(10) << "age_fill at " << a << " / " << pc << " creating " << hex << oid << dec << " sz " << s << dendl;
 
-      off_t off = 0;
+      loff_t off = 0;
       while (s) {
         ssize_t t = MIN(s, 1024*1024);
         write(oid, t, off, bl, false);

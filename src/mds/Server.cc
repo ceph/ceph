@@ -567,7 +567,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   // clean up request, drop locks, etc.
   // do this before replying, so that we can issue leases
   Session *session = mdr->session;
-  entity_inst_t client_inst = req->get_client_inst();
+  entity_inst_t client_inst = req->get_orig_source_inst();
   mdcache->request_finish(mdr);
   mdr = 0;
 
@@ -666,7 +666,7 @@ void Server::handle_client_request(MClientRequest *req)
   if (logger) logger->inc("hcreq");
 
   if (!mds->is_active() &&
-      !(mds->is_stopping() && req->get_client_inst().name.is_mds())) {
+      !(mds->is_stopping() && req->get_orig_source().is_mds())) {
     dout(5) << " not active (or stopping+mds), discarding request." << dendl;
     delete req;
     return;
@@ -680,10 +680,10 @@ void Server::handle_client_request(MClientRequest *req)
 
   // active session?
   Session *session = 0;
-  if (req->get_client_inst().name.is_client()) {
-    session = mds->sessionmap.get_session(req->get_client_inst().name);
+  if (req->get_orig_source().is_client()) {
+    session = mds->sessionmap.get_session(req->get_orig_source());
     if (!session) {
-      dout(5) << "no session for " << req->get_client_inst().name << ", dropping" << dendl;
+      dout(5) << "no session for " << req->get_orig_source() << ", dropping" << dendl;
       delete req;
       return;
     }
@@ -701,7 +701,7 @@ void Server::handle_client_request(MClientRequest *req)
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0), req->get_client_inst());
+      mds->messenger->send_message(new MClientReply(req, 0), req->get_orig_source_inst());
       delete req;
       return;
     }
@@ -1534,7 +1534,7 @@ void Server::handle_client_stat(MDRequest *mdr)
     return;
 
   mds->balancer->hit_inode(g_clock.now(), ref, META_POP_IRD,
-			   mdr->client_request->get_client_inst().name.num());
+			   mdr->client_request->get_orig_source().num());
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
@@ -1830,7 +1830,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = req->get_client().num();
+  int client = req->get_orig_source().num();
   CInode *diri = rdlock_path_pin_ref(mdr, false, true);  // rdlock dirfragtreelock!
   if (!diri) return;
 
@@ -4238,10 +4238,10 @@ class C_MDS_truncate_purged : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  off_t size;
+  loff_t size;
   utime_t ctime;
 public:
-  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, utime_t ct) :
+  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, loff_t sz, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }
@@ -4425,7 +4425,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
-			     mdr->client_request->get_client_inst().name.num());
+			     mdr->client_request->get_orig_source().num());
 
   // reply
   MClientReply *reply = new MClientReply(req, 0);

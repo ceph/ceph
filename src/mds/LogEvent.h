@@ -53,7 +53,7 @@ class LogSegment;
 class LogEvent {
  private:
   __u32 _type;
-  off_t _start_off,_end_off;
+  loff_t _start_off,_end_off;
 
   friend class MDLog;
 
@@ -65,8 +65,8 @@ class LogEvent {
   virtual ~LogEvent() { }
 
   int get_type() { return _type; }
-  off_t get_start_off() { return _start_off; }
-  off_t get_end_off() { return _end_off; }
+  loff_t get_start_off() { return _start_off; }
+  loff_t get_end_off() { return _end_off; }
 
   // encoding
   virtual void encode(bufferlist& bl) const = 0;

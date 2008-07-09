@@ -34,7 +34,7 @@ public:
   pg_t pgid;
   pobject_t poid;
   int32_t op;
-  off_t offset, length;
+  loff_t offset, length;
   
   // subop metadata
   tid_t rep_tid;
@@ -95,7 +95,7 @@ public:
 
   bool is_read() { return op < 10; }
  
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, off_t of, off_t le,
+  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, loff_t of, loff_t le,
 	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v,
 	    snapid_t fs) :
     Message(MSG_OSD_SUBOP),

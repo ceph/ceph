@@ -46,8 +46,8 @@ class MOSDOpReply : public Message {
   eversion_t get_version() { return head.reassert_version; }
 
   void set_result(int r) { head.result = r; }
-  void set_length(off_t s) { head.length = s; }
-  void set_offset(off_t o) { head.offset = o; }
+  void set_length(loff_t s) { head.length = s; }
+  void set_offset(loff_t o) { head.offset = o; }
   void set_version(eversion_t v) { head.reassert_version = v; }
 
   void set_op(int op) { head.op = op; }

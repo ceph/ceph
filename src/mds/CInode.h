@@ -140,8 +140,8 @@ class CInode : public MDSCacheObject {
   snapid_t                   snapid;      // 0 = multiversion OR head
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
 
-  off_t last_journaled;       // log offset for the last time i was journaled
-  off_t last_open_journaled;  // log offset for the last journaled EOpen
+  loff_t last_journaled;       // log offset for the last time i was journaled
+  loff_t last_open_journaled;  // log offset for the last journaled EOpen
 
   //bool hack_accessed;
   //utime_t hack_load_stamp;

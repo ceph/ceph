@@ -61,11 +61,9 @@ public:
  public:
   // cons
   MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
-  MClientRequest(int op, entity_inst_t ci) : Message(CEPH_MSG_CLIENT_REQUEST) {
+  MClientRequest(int op) : Message(CEPH_MSG_CLIENT_REQUEST) {
     memset(&head, 0, sizeof(head));
     this->head.op = op;
-    this->head.client_inst.name = ci.name;
-    this->head.client_inst.addr = ci.addr;
   }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -73,7 +71,7 @@ public:
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(head.client_inst.name, head.tid); 
+    return metareqid_t(get_orig_source(), head.tid); 
   }
 
   bool open_file_mode_is_readonly() {
@@ -111,14 +109,6 @@ public:
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     head.mds_wants_replica_in_dirino = dirino; }
   
-  void set_client_inst(const entity_inst_t& i) { 
-    head.client_inst.name = i.name; 
-    head.client_inst.addr = i.addr; 
-  }
-  entity_inst_t get_client_inst() { 
-    return entity_inst_t(head.client_inst);
-  }
-  entity_name_t get_client() { return head.client_inst.name; }
   tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
   int get_num_fwd() { return head.num_fwd; }
@@ -158,7 +148,7 @@ public:
 
   const char *get_type_name() { return "creq"; }
   void print(ostream& out) {
-    out << "client_request(" << get_client() 
+    out << "client_request(" << get_orig_source() 
 	<< "." << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
     //if (!get_filepath().empty()) 

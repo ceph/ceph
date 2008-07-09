@@ -1858,7 +1858,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
     utime_t now = g_clock.now();
     if (now - from >= 1.0) {
       double el = now - from;
-      dout(0) << (bytes / el / 1048576.0) << " MB/sec" << dendl;
+      dout(0) << "write " << (bytes / el / 1048576.0) << " MB/sec" << dendl;
       from = now;
       bytes = 0;
     }
@@ -1868,7 +1868,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   
   utime_t stop = g_clock.now();
   double el = stop - start;
-  dout(0) << "total " << (total / el / 1048576.0) << " MB/sec ("
+  dout(0) << "write total " << (total / el / 1048576.0) << " MB/sec ("
 	  << total << " bytes in " << el << " seconds)" << dendl;
 
   client->close(fd);
@@ -1935,6 +1935,10 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
   if (fd < 0) return fd;
 
+  utime_t from = g_clock.now();
+  utime_t start = from;
+  __u64 bytes = 0, total = 0;
+
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) break;
     dout(2) << "reading block " << i << "/" << chunks << dendl;
@@ -1944,6 +1948,17 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
       break;
     }
  
+    bytes += rdsize;
+    total += rdsize;
+
+    utime_t now = g_clock.now();
+    if (now - from >= 1.0) {
+      double el = now - from;
+      dout(0) << "read " << (bytes / el / 1048576.0) << " MB/sec" << dendl;
+      from = now;
+      bytes = 0;
+    }
+
     // verify fingerprint
     int bad = 0;
     uint64_t *p = (uint64_t*)buf;
@@ -1967,7 +1982,12 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
     if (bad && !ignoreprint) 
       dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << dendl;
   }
-  
+
+  utime_t stop = g_clock.now();
+  double el = stop - start;
+  dout(0) << "read total " << (total / el / 1048576.0) << " MB/sec ("
+	  << total << " bytes in " << el << " seconds)" << dendl;
+
   client->close(fd);
   delete[] buf;
 

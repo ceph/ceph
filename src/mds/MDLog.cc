@@ -195,7 +195,7 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   
   // start a new segment?
   //  FIXME: should this go elsewhere?
-  off_t last_seg = get_last_segment_offset();
+  loff_t last_seg = get_last_segment_offset();
   if (!segments.empty() && 
       !writing_subtree_map &&
       (journaler->get_write_pos() / ceph_file_layout_period(log_inode.layout) != (last_seg / ceph_file_layout_period(log_inode.layout)) &&
@@ -267,7 +267,7 @@ void MDLog::start_new_segment(Context *onsync)
   logger->set("seg", segments.size());
 }
 
-void MDLog::_logged_subtree_map(off_t off)
+void MDLog::_logged_subtree_map(loff_t off)
 {
   dout(10) << "_logged_subtree_map at " << off << dendl;
   writing_subtree_map = false;
@@ -297,7 +297,7 @@ void MDLog::trim()
   utime_t stop = g_clock.now();
   stop += 2.0;
 
-  map<off_t,LogSegment*>::iterator p = segments.begin();
+  map<loff_t,LogSegment*>::iterator p = segments.begin();
   int left = num_events;
   while (p != segments.end() && 
 	 ((max_events >= 0 && left-expiring_events-expired_events > max_events) ||
@@ -450,7 +450,7 @@ void MDLog::_replay_thread()
 
   // loop
   int r = 0;
-  off_t new_expire_pos = journaler->get_expire_pos();
+  loff_t new_expire_pos = journaler->get_expire_pos();
   while (1) {
     // wait for read?
     while (!journaler->is_readable() &&
@@ -472,7 +472,7 @@ void MDLog::_replay_thread()
     assert(journaler->is_readable());
     
     // read it
-    off_t pos = journaler->get_read_pos();
+    loff_t pos = journaler->get_read_pos();
     bufferlist bl;
     bool r = journaler->try_read_entry(bl);
     if (!r && journaler->get_error())

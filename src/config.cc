@@ -96,7 +96,7 @@ int _get_bits_of(int v) {
   return n;
 }
 unsigned _page_size = sysconf(_SC_PAGESIZE);
-unsigned long _page_mask = ~(_page_size - 1);
+unsigned long _page_mask = ~(unsigned long)(_page_size - 1);
 unsigned _page_shift = _get_bits_of(_page_size);
 
 int _num_threads = 0;
@@ -290,8 +290,8 @@ md_config_t g_conf = {
   client_hack_balance_reads: false,
   client_trace: 0,
   client_readahead_min: 128*1024,  // readahead at _least_ this much.
-  client_readahead_max_bytes: 8 * 1024*1024,
-  client_readahead_max_periods: 2,  // as multiple of file layout period (object size * num stripes)
+  client_readahead_max_bytes: 0,//8 * 1024*1024,
+  client_readahead_max_periods: 4,  // as multiple of file layout period (object size * num stripes)
   fuse_direct_io: 0,
   fuse_ll: true,
   
@@ -436,7 +436,7 @@ md_config_t g_conf = {
   ebofs: false,
   ebofs_cloneable: false,
   ebofs_verify: false,
-  ebofs_commit_ms:      1000,       // 0 = no forced commit timeout (for debugging/tracing)
+  ebofs_commit_ms:      200,       // 0 = no forced commit timeout (for debugging/tracing)
   ebofs_oc_size:        10000,      // onode cache
   ebofs_cc_size:        10000,      // cnode cache
   ebofs_bc_size:        (50 *256), // 4k blocks, *256 for MB
