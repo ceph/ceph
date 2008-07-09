@@ -121,9 +121,9 @@ public:
 
  public:
   // cons
-  CDentry(const nstring& n, CInode *in) :
+  CDentry(const nstring& n, CInode *in, snapid_t f=0, snapid_t l=CEPH_NOSNAP) :
     name(n),
-    first(0), last(CEPH_NOSNAP),
+    first(f), last(l),
     remote_ino(0), remote_d_type(0),
     inode(in), dir(0),
     version(0), projected_version(0),
@@ -131,9 +131,10 @@ public:
     dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const nstring& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
+  CDentry(const nstring& n, inodeno_t ino, unsigned char dt, CInode *in=0,
+	  snapid_t f=0, snapid_t l=CEPH_NOSNAP) :
     name(n),
-    first(0), last(CEPH_NOSNAP),
+    first(f), last(l),
     remote_ino(ino), remote_d_type(dt),
     inode(in), dir(0),
     version(0), projected_version(0),

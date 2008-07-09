@@ -189,13 +189,14 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
  * linking fun
  */
 
-CDentry* CDir::add_null_dentry(const nstring& dname)
+CDentry* CDir::add_null_dentry(const nstring& dname,
+			       snapid_t first, snapid_t last)
 {
   // foreign
   assert(lookup(dname) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, 0);
+  CDentry* dn = new CDentry(dname, NULL, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -221,13 +222,14 @@ CDentry* CDir::add_null_dentry(const nstring& dname)
 }
 
 
-CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in) 
+CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in,
+				  snapid_t first, snapid_t last) 
 {
   // primary
   assert(lookup(dname) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, 0);
+  CDentry* dn = new CDentry(dname, NULL, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -252,13 +254,14 @@ CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in)
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type) 
+CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type,
+				 snapid_t first, snapid_t last) 
 {
   // foreign
   assert(lookup(dname) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, ino, d_type);
+  CDentry* dn = new CDentry(dname, ino, d_type, NULL, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -1003,9 +1006,14 @@ void CDir::_fetched(bufferlist &bl)
     // dname
     string dname;
     ::decode(dname, p);
-    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname << dendl;
+    snapid_t first, last;
+    ::decode(first, p);
+    ::decode(last, p);
+    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname
+	     << " [" << first << "," << last << "]"
+	     << dendl;
     
-    CDentry *dn = lookup(dname);  // existing dentry?
+    CDentry *dn = lookup(dname, first);  // existing dentry?
 
     if (type == 'L') {
       // hard link
@@ -1022,7 +1030,7 @@ void CDir::_fetched(bufferlist &bl)
         }
       } else {
 	// (remote) link
-	dn = add_remote_dentry(dname, ino, d_type);
+	dn = add_remote_dentry(dname, ino, d_type, first, last);
 	
 	// link to inode?
 	CInode *in = cache->get_inode(ino);   // we may or may not have it.
@@ -1063,8 +1071,8 @@ void CDir::_fetched(bufferlist &bl)
       } else {
 	// add inode
 	CInode *in = 0;
-	if (cache->have_inode(inode.ino)) {
-	  in = cache->get_inode(inode.ino);
+	if (cache->have_inode(inode.ino, first)) {
+	  in = cache->get_inode(inode.ino, first);
 	  dout(-12) << "_fetched  got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << dendl;
@@ -1073,6 +1081,7 @@ void CDir::_fetched(bufferlist &bl)
 	  // inode
 	  in = new CInode(cache);
 	  in->inode = inode;
+	  in->snapid = first;
 	  
 	  // symlink?
 	  if (in->is_symlink()) 
@@ -1086,7 +1095,7 @@ void CDir::_fetched(bufferlist &bl)
 	  cache->add_inode( in );
 	
 	  // link
-	  dn = add_primary_dentry(dname, in);
+	  dn = add_primary_dentry(dname, in, first, last);
 	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 
 	  //in->hack_accessed = false;
@@ -1277,7 +1286,9 @@ void CDir::_commit(version_t want)
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
-      ::encode(it->first, bl);
+      ::encode(dn->name, bl);
+      ::encode(dn->first, bl);
+      ::encode(dn->last, bl);
       ::encode(ino, bl);
       ::encode(d_type, bl);
     } else {
@@ -1289,7 +1300,9 @@ void CDir::_commit(version_t want)
   
       // marker, name, inode, [symlink string]
       bl.append( "I", 1 );         // inode
-      ::encode(it->first, bl);
+      ::encode(dn->name, bl);
+      ::encode(dn->first, bl);
+      ::encode(dn->last, bl);
       ::encode(in->inode, bl);
       
       if (in->is_symlink()) {

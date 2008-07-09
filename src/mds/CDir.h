@@ -300,9 +300,12 @@ protected:
       return iter->second;
   }
 
-  CDentry* add_null_dentry(const nstring& dname);
-  CDentry* add_primary_dentry(const nstring& dname, CInode *in);
-  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type);
+  CDentry* add_null_dentry(const nstring& dname, 
+			   snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  CDentry* add_primary_dentry(const nstring& dname, CInode *in, 
+			      snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type, 
+			     snapid_t first=0, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );

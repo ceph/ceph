@@ -234,6 +234,12 @@ todo
 - mds metadata versioning
   - (dir) inode versions..
 
+- cdir fetch/store versioned dentries
+- migrator import/export of versioned dentries, inodes... drop them on export...
+- emetablob.. journaling a versioned update..
+
+- path_traverse handling of .snapshot?
+
   primary file link -> old inode
   primary dir link -> multiversion inode
   remote link -> multiversion inode
