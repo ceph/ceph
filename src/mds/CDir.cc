@@ -992,7 +992,7 @@ void CDir::_fetched(bufferlist &bl)
   //int num_new_inodes_loaded = 0;
 
   for (int i=0; i<n; i++) {
-    off_t dn_offset = p.get_off();
+    loff_t dn_offset = p.get_off();
 
     // marker
     char type;

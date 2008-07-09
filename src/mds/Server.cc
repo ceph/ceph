@@ -4226,10 +4226,10 @@ class C_MDS_truncate_purged : public Context {
   MDRequest *mdr;
   CInode *in;
   version_t pv;
-  off_t size;
+  loff_t size;
   utime_t ctime;
 public:
-  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, off_t sz, utime_t ct) :
+  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, loff_t sz, utime_t ct) :
     mds(m), mdr(r), in(i), 
     pv(pdv),
     size(sz), ctime(ct) { }

@@ -35,7 +35,7 @@ private:
   pg_t pgid;
   pobject_t poid;
   int32_t op;
-  off_t offset, length;
+  loff_t offset, length;
   
   // subop metadata
   tid_t rep_tid;
@@ -98,8 +98,8 @@ public:
   const pobject_t get_poid() { return poid; }
   const int get_op() { return op; }
   bool is_read() { return op < 10; }
-  const off_t get_length() { return length; }
-  const off_t get_offset() { return offset; }
+  const loff_t get_length() { return length; }
+  const loff_t get_offset() { return offset; }
 
   const tid_t get_rep_tid() { return rep_tid; }
   const eversion_t get_version() { return version; }
@@ -115,7 +115,7 @@ public:
   void set_peer_stat(const osd_peer_stat_t& stat) { peer_stat = stat; }
   const osd_peer_stat_t& get_peer_stat() { return peer_stat; }
  
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, off_t of, off_t le,
+  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, loff_t of, loff_t le,
 	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),

@@ -81,7 +81,7 @@ class MDLog {
 
 
   // -- segments --
-  map<off_t,LogSegment*> segments;
+  map<loff_t,LogSegment*> segments;
   set<LogSegment*> expiring_segments;
   set<LogSegment*> expired_segments;
   int expiring_events;
@@ -89,14 +89,14 @@ class MDLog {
 
   class C_MDL_WroteSubtreeMap : public Context {
     MDLog *mdlog;
-    off_t off;
+    loff_t off;
   public:
-    C_MDL_WroteSubtreeMap(MDLog *l, off_t o) : mdlog(l), off(o) { }
+    C_MDL_WroteSubtreeMap(MDLog *l, loff_t o) : mdlog(l), off(o) { }
     void finish(int r) {
       mdlog->_logged_subtree_map(off);
     }
   };
-  void _logged_subtree_map(off_t off);
+  void _logged_subtree_map(loff_t off);
 
 
   // -- subtreemaps --
@@ -107,7 +107,7 @@ class MDLog {
   friend class MDCache;
 
 public:
-  off_t get_last_segment_offset() {
+  loff_t get_last_segment_offset() {
     assert(!segments.empty());
     return segments.rbegin()->first;
   }

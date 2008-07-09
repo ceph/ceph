@@ -133,8 +133,8 @@ class CInode : public MDSCacheObject {
   map<string, bufferptr> xattrs;
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
 
-  off_t last_journaled;       // log offset for the last time i was journaled
-  off_t last_open_journaled;  // log offset for the last journaled EOpen
+  loff_t last_journaled;       // log offset for the last time i was journaled
+  loff_t last_open_journaled;  // log offset for the last journaled EOpen
 
   //bool hack_accessed;
   //utime_t hack_load_stamp;

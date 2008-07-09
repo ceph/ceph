@@ -34,7 +34,7 @@ public:
 
   void add_inode_caps(inodeno_t ino, 
 		      int wanted, int issued,
-		      off_t sz, utime_t mt, utime_t at) {
+		      loff_t sz, utime_t mt, utime_t at) {
     inode_caps[ino] = inode_caps_reconnect_t(wanted, issued, sz, mt, at);
   }
   void add_inode_path(inodeno_t ino, const string& path) {

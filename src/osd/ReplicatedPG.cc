@@ -721,7 +721,7 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       struct stat st;
       int r = osd->store->stat(info.pgid, poid, &st);
       if (r >= 0) {
-	if (offset == 0 && offset + length >= (off_t)st.st_size) 
+	if (offset == 0 && offset + length >= (loff_t)st.st_size) 
 	  t.remove(info.pgid, poid);
 	else {
 	  t.zero(info.pgid, poid, offset, length);

@@ -434,9 +434,9 @@ public:
   class OndiskLog {
   public:
     // ok
-    off_t bottom;                     // first byte of log. 
-    off_t top;                        // byte following end of log.
-    map<off_t,eversion_t> block_map;  // block -> first stamp logged there
+    loff_t bottom;                     // first byte of log. 
+    loff_t top;                        // byte following end of log.
+    map<loff_t,eversion_t> block_map;  // block -> first stamp logged there
 
     OndiskLog() : bottom(0), top(0) {}
 
@@ -539,8 +539,8 @@ protected:
 
 
   // stats
-  off_t stat_num_bytes;
-  off_t stat_num_blocks;
+  loff_t stat_num_bytes;
+  loff_t stat_num_blocks;
 
   hash_map<object_t, DecayCounter> stat_object_temp_rd;
 
@@ -601,7 +601,7 @@ public:
 
   void finish_recovery();
 
-  off_t get_log_write_pos() {
+  loff_t get_log_write_pos() {
     return 0;
   }
 

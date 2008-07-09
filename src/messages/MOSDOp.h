@@ -88,8 +88,8 @@ public:
     return get_op() < 10;
   }
 
-  off_t get_length() const { return head.length; }
-  off_t get_offset() const { return head.offset; }
+  loff_t get_length() const { return head.length; }
+  loff_t get_offset() const { return head.offset; }
 
   unsigned get_inc_lock() const { return head.inc_lock; }
 
@@ -124,8 +124,8 @@ public:
 
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
 
-  void set_length(off_t l) { head.length = l; }
-  void set_offset(off_t o) { head.offset = o; }
+  void set_length(loff_t l) { head.length = l; }
+  void set_offset(loff_t o) { head.offset = o; }
   void set_version(eversion_t v) { head.reassert_version = v; }
   
   int get_flags() const { return head.flags; }

@@ -1176,7 +1176,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 {
   dout(15) << "  trim_ondisk_log_to v " << v << dendl;
 
-  map<off_t,eversion_t>::iterator p = ondisklog.block_map.begin();
+  map<loff_t,eversion_t>::iterator p = ondisklog.block_map.begin();
   while (p != ondisklog.block_map.end()) {
     dout(15) << "    " << p->first << " -> " << p->second << dendl;
     p++;
@@ -1191,7 +1191,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
     return;  // can't trim anything!
   
   // we can trim!
-  off_t trim = p->first;
+  loff_t trim = p->first;
   dout(10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 
   assert(trim >= ondisklog.bottom);
@@ -1270,7 +1270,7 @@ void PG::read_log(ObjectStore *store)
     assert(log.log.empty());
     while (!p.end()) {
       ::decode(e, p);
-      off_t pos = ondisklog.bottom + p.get_off();
+      loff_t pos = ondisklog.bottom + p.get_off();
       dout(10) << "read_log " << pos << " " << e << dendl;
 
       if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
