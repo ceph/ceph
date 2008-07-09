@@ -640,7 +640,7 @@ int BlockDevice::_read(int fd, block_t bno, unsigned num, bufferlist& bl)
   assert(fd > 0);
   
   __u64 offset = bno * EBOFS_BLOCK_SIZE;
-  __u64 actual = lseek(fd, offset, SEEK_SET);
+  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
   assert(actual == offset);
   
   size_t len = num*EBOFS_BLOCK_SIZE;
@@ -675,9 +675,9 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
   assert(fd > 0);
   
   while (1) {
-    __u64 offset = bno << EBOFS_BLOCK_BITS;
-    assert(bno * EBOFS_BLOCK_SIZE == offset);
-    __u64 actual = lseek(fd, offset, SEEK_SET);
+    __u64 offset = (__u64)bno << EBOFS_BLOCK_BITS;
+    assert((__u64)bno * (__u64)EBOFS_BLOCK_SIZE == offset);
+    __u64 actual = ::lseek64(fd, offset, SEEK_SET);
     assert(actual == offset);
     
     // write buffers
@@ -694,6 +694,12 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
       
       iov[n].iov_base = (void*)i->c_str();
       iov[n].iov_len = MIN(left, i->length());
+
+      /*
+      dout(10) << "_write " << (bno+(len-left))
+	       << "~" << (iov[n].iov_len / 4096)
+	       << " " << *i << dendl;
+      */
       
       assert((((intptr_t)iov[n].iov_base) & ((intptr_t)4095ULL)) == 0);
       assert((iov[n].iov_len & 4095) == 0);
