@@ -47,7 +47,7 @@ class LogSegment {
   xlist<MDSlaveUpdate*> slave_updates;
 
   //xlist<CInode*>  purging_inodes;
-  map<CInode*, map<off_t,off_t> > purging_inodes;
+  map<CInode*, map<loff_t,loff_t> > purging_inodes;
 
   // committed anchor transactions
   hash_set<version_t> pending_commit_atids;

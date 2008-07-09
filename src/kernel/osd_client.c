@@ -57,7 +57,6 @@ struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op)
 
 	/* encode head */
 	head->op = cpu_to_le32(op);
-	head->client_inst = osdc->client->msgr->inst;
 	head->client_inc = 1; /* always, for now. */
 	head->flags = 0;
 

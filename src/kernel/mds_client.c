@@ -965,7 +965,6 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	req->r_direct_hash = -1;
 
 	/* encode head */
-	head->client_inst = mdsc->client->msgr->inst;
 	/* tid, oldest_client_tid set by do_request */
 	head->mdsmap_epoch = cpu_to_le64(mdsc->mdsmap->m_epoch);
 	head->num_fwd = 0;

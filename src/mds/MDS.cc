@@ -246,12 +246,12 @@ void MDS::send_message_mds(Message *m, int mds)
   messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
-void MDS::forward_message_mds(Message *req, int mds)
+void MDS::forward_message_mds(Message *m, int mds)
 {
   // client request?
-  if (req->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-      ((MClientRequest*)req)->get_client_inst().name.is_client()) {
-    MClientRequest *creq = (MClientRequest*)req;
+  if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+      ((MClientRequest*)m)->get_orig_source().is_client()) {
+    MClientRequest *creq = (MClientRequest*)m;
     creq->inc_num_fwd();    // inc forward counter
 
     /*
@@ -265,16 +265,22 @@ void MDS::forward_message_mds(Message *req, int mds)
     // tell the client where it should go
     messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd(),
 						      client_must_resend),
-			    creq->get_client_inst());
+			    creq->get_orig_source_inst());
     
     if (client_must_resend) {
-      delete req;
+      delete m;
       return; 
     }
   }
-  
-  // forward
-  send_message_mds(req, mds);
+
+  // send mdsmap first?
+  if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
+    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), 
+			    mdsmap->get_inst(mds));
+    peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
+  }
+
+  messenger->forward_message(m, mdsmap->get_inst(mds));
 }
 
 

@@ -118,8 +118,9 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
     if (false) {
       if (acting.size() > 1) {
 	int peer = acting[1];
-	dout(-10) << "preprocess_op fwd client read op to osd" << peer << " for " << op->get_client() << " " << op->get_client_inst() << dendl;
-	osd->messenger->send_message(op, osd->osdmap->get_inst(peer));
+	dout(-10) << "preprocess_op fwd client read op to osd" << peer
+		  << " for " << op->get_orig_source() << " " << op->get_orig_source_inst() << dendl;
+	osd->messenger->forward_message(op, osd->osdmap->get_inst(peer));
 	return true;
       }
     }
@@ -160,7 +161,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	ceph_object_layout layout;
 	layout.ol_pgid = info.pgid.u.pg64;
 	layout.ol_stripe_unit = 0;
-	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
+	MOSDOp *pop = new MOSDOp(0, osd->get_tid(),
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
@@ -174,7 +175,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	ceph_object_layout layout;
 	layout.ol_pgid = info.pgid.u.pg64;
 	layout.ol_stripe_unit = 0;
-	MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
+	MOSDOp *pop = new MOSDOp(0, osd->get_tid(),
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
@@ -315,7 +316,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 		  << " " << op->get_reqid()
 		  << dendl;
 	op->set_peer_stat(osd->my_stat);
-	osd->messenger->send_message(op, osd->osdmap->get_inst(shedto));
+	osd->messenger->forward_message(op, osd->osdmap->get_inst(shedto));
 	osd->stat_rd_ops_shed_out++;
 	osd->logger->inc("shdout");
 	return true;
@@ -336,7 +337,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	if (osd->store->getattr(info.pgid, poid, "balance-reads", &v, 1) < 0) {
 	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
-	  osd->messenger->send_message(op, osd->osdmap->get_inst(get_primary()));
+	  osd->messenger->forward_message(op, osd->osdmap->get_inst(get_primary()));
 	  return true;
 	}
       }
@@ -497,7 +498,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	  osd->store->getattr(info.pgid, poid, "balance-reads", &b, 1) < 0) {
 	dout(-10) << "read on replica, object " << poid 
 		  << " dne or no balance-reads, fw back to primary" << dendl;
-	osd->messenger->send_message(op, osd->osdmap->get_inst(get_acker()));
+	osd->messenger->forward_message(op, osd->osdmap->get_inst(get_acker()));
 	return;
       }
     }
@@ -582,7 +583,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   }
   
   // send it
-  osd->messenger->send_message(reply, op->get_client_inst());
+  osd->messenger->send_message(reply, op->get_orig_source_inst());
   
   delete op;
 }
@@ -859,7 +860,7 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
       // send commit.
       MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
       dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, repop->op->get_client_inst());
+      osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
       repop->sent_commit = true;
     }
   }
@@ -874,7 +875,7 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
       // send ack
       MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
       dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, repop->op->get_client_inst());
+      osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
       repop->sent_ack = true;
     }
 
@@ -1161,7 +1162,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
       MOSDOpReply *reply = new MOSDOpReply(op, -EINCLOCKED, osd->osdmap->get_epoch(), true);
-      osd->messenger->send_message(reply, op->get_client_inst());
+      osd->messenger->send_message(reply, op->get_orig_source_inst());
       delete op;
       return;
     }
@@ -1181,7 +1182,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       ceph_object_layout layout;
       layout.ol_pgid = info.pgid.u.pg64;
       layout.ol_stripe_unit = 0;
-      MOSDOp *pop = new MOSDOp(osd->messenger->get_myinst(), 0, osd->get_tid(),
+      MOSDOp *pop = new MOSDOp(0, osd->get_tid(),
 			       poid.oid,
 			       layout,
 			       osd->osdmap->get_epoch(),

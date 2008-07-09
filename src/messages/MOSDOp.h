@@ -65,16 +65,12 @@ private:
   friend class MOSDOpReply;
 
 public:
-  osd_reqid_t get_reqid() { return osd_reqid_t(head.client_inst.name, 
+  osd_reqid_t get_reqid() { return osd_reqid_t(get_orig_source(),
 					       head.client_inc,
 					       head.tid); }
   int get_client_inc() { return head.client_inc; }
   tid_t get_client_tid() { return head.tid; }
   
-  entity_name_t get_client() { return head.client_inst.name; }
-  entity_inst_t get_client_inst() { return head.client_inst; }
-  void set_client_addr(const entity_addr_t& a) { head.client_inst.addr = a; }
-
   object_t get_oid() { return object_t(head.oid); }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   ceph_object_layout get_layout() { return head.layout; }
@@ -101,13 +97,11 @@ public:
   
 
 
-  MOSDOp(entity_inst_t asker, int inc, long tid,
+  MOSDOp(int inc, long tid,
          object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op,
 	 int flags) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
-    head.client_inst.name = asker.name;
-    head.client_inst.addr = asker.addr;
     head.tid = tid;
     head.client_inc = inc;
     head.oid = oid;

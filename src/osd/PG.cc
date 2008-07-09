@@ -1330,7 +1330,7 @@ bool PG::block_if_wrlocked(MOSDOp* op)
   //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&
-      source != op->get_client()) {
+      source != op->get_orig_source()) {
     //the object is locked for writing by someone else -- add the op to the waiting queue      
     waiting_for_wr_unlock[poid.oid].push_back(op);
     return true;

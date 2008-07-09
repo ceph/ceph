@@ -5198,7 +5198,7 @@ void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   filepath dst;
   rdn->make_path(dst);
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME, mds->messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(src);
   req->set_filepath2(dst);
   req->set_tid(mds->issue_tid());
@@ -5218,7 +5218,7 @@ void MDCache::migrate_stray(CDentry *dn, int from, int to)
   filepath src(dname, MDS_INO_STRAY(from));
   filepath dst(dname, MDS_INO_STRAY(to));
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME, mds->messenger->get_myinst());
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(src);
   req->set_filepath2(dst);
   req->set_tid(mds->issue_tid());

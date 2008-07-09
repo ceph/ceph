@@ -592,7 +592,6 @@ static inline const char *ceph_mds_op_name(int op)
 }
 
 struct ceph_mds_request_head {
-	struct ceph_entity_inst client_inst;
 	ceph_tid_t tid, oldest_client_tid;
 	ceph_epoch_t mdsmap_epoch; /* on client */
 	__le32 num_fwd;
@@ -860,7 +859,6 @@ struct ceph_osd_peer_stat {
 } __attribute__ ((packed));
 
 struct ceph_osd_request_head {
-	struct ceph_entity_inst   client_inst;
 	ceph_tid_t                tid;
 	__le32                    client_inc;
 	__le32                    op;
