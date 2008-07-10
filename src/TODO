@@ -235,8 +235,18 @@ todo
   - (dir) inode versions..
 
 - cdir fetch/store versioned dentries
-- migrator import/export of versioned dentries, inodes... drop them on export...
 - emetablob.. journaling a versioned update..
+
+ [0,head] foo
+  becomes
+ [0,10] foo
+ [11,head] foo
+  and blob contains simply
+ [11,head] foo
+  that means replay _AND_ fetch have to convert the [0,head] foo into [0,10] foo.
+?
+
+- migrator import/export of versioned dentries, inodes... drop them on export...
 
 - path_traverse handling of .snapshot?
 
