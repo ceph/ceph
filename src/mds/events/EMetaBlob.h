@@ -51,6 +51,7 @@ public:
    */
   struct fullbit {
     nstring  dn;         // dentry
+    snapid_t dnfirst, dnlast;
     version_t dnv;
     inode_t inode;      // if it's not
     fragtree_t dirfragtree;
@@ -59,13 +60,18 @@ public:
     bufferlist snapbl;
     bool dirty;
 
-    fullbit(const nstring& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, const string& sym, bufferlist &sbl, bool dr) :
-      dn(d), dnv(v), inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) { }
+    fullbit(const nstring& d, snapid_t df, snapid_t dl, 
+	    version_t v, inode_t& i, fragtree_t &dft, 
+	    map<string,bufferptr> &xa, const string& sym, bufferlist &sbl, bool dr) :
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), 
+      inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) { }
     fullbit(bufferlist::iterator &p) { decode(p); }
     fullbit() {}
 
     void encode(bufferlist& bl) const {
       ::encode(dn, bl);
+      ::encode(dnfirst, bl);
+      ::encode(dnlast, bl);
       ::encode(dnv, bl);
       ::encode(inode, bl);
       ::encode(xattrs, bl);
@@ -79,6 +85,8 @@ public:
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
+      ::decode(dnfirst, bl);
+      ::decode(dnlast, bl);
       ::decode(dnv, bl);
       ::decode(inode, bl);
       ::decode(xattrs, bl);
@@ -91,7 +99,7 @@ public:
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " fullbit dn " << dn << " dnv " << dnv
+      out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "]" << " dnv " << dnv
 	  << " inode " << inode.ino
 	  << " dirty=" << dirty << std::endl;
     }
@@ -102,18 +110,21 @@ public:
    */
   struct remotebit {
     nstring dn;
+    snapid_t dnfirst, dnlast;
     version_t dnv;
     inodeno_t ino;
     unsigned char d_type;
     bool dirty;
 
-    remotebit(const nstring& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
-      dn(d), dnv(v), ino(i), d_type(dt), dirty(dr) { }
+    remotebit(const nstring& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit() {}
 
     void encode(bufferlist& bl) const {
       ::encode(dn, bl);
+      ::encode(dnfirst, bl);
+      ::encode(dnlast, bl);
       ::encode(dnv, bl);
       ::encode(ino, bl);
       ::encode(d_type, bl);
@@ -121,6 +132,8 @@ public:
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
+      ::decode(dnfirst, bl);
+      ::decode(dnlast, bl);
       ::decode(dnv, bl);
       ::decode(ino, bl);
       ::decode(d_type, bl);
@@ -139,20 +152,26 @@ public:
    */
   struct nullbit {
     nstring dn;
+    snapid_t dnfirst, dnlast;
     version_t dnv;
     bool dirty;
 
-    nullbit(const nstring& d, version_t v, bool dr) : dn(d), dnv(v), dirty(dr) { }
+    nullbit(const nstring& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
     nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit() {}
 
     void encode(bufferlist& bl) const {
       ::encode(dn, bl);
+      ::encode(dnfirst, bl);
+      ::encode(dnlast, bl);
       ::encode(dnv, bl);
       ::encode(dirty, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
+      ::decode(dnfirst, bl);
+      ::decode(dnlast, bl);
       ::decode(dnv, bl);
       ::decode(dirty, bl);
     }
@@ -328,10 +347,12 @@ private:
     lump.nnull++;
     if (dirty)
       lump.get_dnull().push_front(nullbit(dn->get_name(), 
+					  dn->first, dn->last,
 					  dn->get_projected_version(), 
 					  dirty));
     else
       lump.get_dnull().push_back(nullbit(dn->get_name(), 
+					 dn->first, dn->last,
 					 dn->get_projected_version(), 
 					 dirty));
   }
@@ -351,11 +372,13 @@ private:
     lump.nremote++;
     if (dirty)
       lump.get_dremote().push_front(remotebit(dn->get_name(), 
+					      dn->first, dn->last,
 					      dn->get_projected_version(), 
 					      rino, rdt,
 					      dirty));
     else
       lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					     dn->first, dn->last,
 					     dn->get_projected_version(), 
 					     rino, rdt,
 					     dirty));
@@ -382,6 +405,7 @@ private:
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
+					  dn->first, dn->last,
 					  dn->get_projected_version(), 
 					  in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
 					  dirty));
@@ -389,6 +413,7 @@ private:
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
+					 dn->first, dn->last,
 					 dn->get_projected_version(),
 					 in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
 					 dirty));
