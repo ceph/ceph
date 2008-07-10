@@ -134,6 +134,8 @@ struct SnapRealm {
   snapid_t highwater;
   vector<snapid_t> snaps;
 
+  xlist<Inode*> inodes_with_caps;
+
   SnapRealm(inodeno_t i) : 
     dirino(i), nref(0), created(0), highwater(0) { }
 
@@ -183,6 +185,7 @@ class Inode {
   capseq_t exporting_mseq;
 
   SnapRealm *snaprealm;
+  xlist<Inode*>::item snaprealm_item;
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -237,7 +240,7 @@ class Inode {
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    snaprealm(0),
+    snaprealm(0), snaprealm_item(this),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -807,7 +810,7 @@ protected:
 
   void handle_snap(class MClientSnap *m);
   void handle_file_caps(class MClientFileCaps *m);
-  void check_caps(Inode *in);
+  void check_caps(Inode *in, bool force_dirty=false);
   void put_cap_ref(Inode *in, int cap);
 
   void _release(Inode *in, bool checkafter=true);

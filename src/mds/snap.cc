@@ -110,9 +110,9 @@ vector<snapid_t> *SnapRealm::get_snap_vector()
 
 vector<snapid_t> *SnapRealm::update_snap_vector(snapid_t creating)
 {
-  if (cached_snaps.empty() && !snap_highwater) {
-    snap_highwater = creating;
-    return get_snap_vector();
+  if (!snap_highwater) {
+    assert(cached_snaps.empty());
+    get_snap_vector();
   }
   snap_highwater = creating;
   cached_snaps.insert(cached_snaps.begin(), creating); // FIXME.. we should store this in reverse!

@@ -50,14 +50,16 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   filepath path;
   in.make_path(path);
-  out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/ ":" ");
+  out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/":"");
+  if (in.snapid)
+    out << " SNAP=" << in.snapid;
   if (in.is_auth()) {
-    out << "auth";
+    out << " auth";
     if (in.is_replicated()) 
       out << in.get_replicas();
   } else {
     pair<int,int> a = in.authority();
-    out << "rep@" << a.first;
+    out << " rep@" << a.first;
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
     out << "." << in.get_replica_nonce();

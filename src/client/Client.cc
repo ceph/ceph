@@ -1358,7 +1358,7 @@ void Client::put_cap_ref(Inode *in, int cap)
   }
 }
 
-void Client::check_caps(Inode *in)
+void Client::check_caps(Inode *in, bool force_dirty)
 {
   int wanted = in->caps_wanted();
   int used = in->caps_used();
@@ -1399,6 +1399,10 @@ void Client::check_caps(Inode *in)
       goto ack;
     }
 
+    if (force_dirty &&
+	(cap->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)))
+      goto ack;
+
     if ((cap->issued & ~wanted) == 0)
       continue;     /* nothing extra, all good */
 
@@ -1421,6 +1425,7 @@ void Client::check_caps(Inode *in)
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
+    m->get_snaps() = in->snaprealm->snaps;
     messenger->send_message(m, mdsmap->get_inst(it->first));
     if (wanted == 0)
       mds_sessions[it->first].num_caps--;
@@ -1522,6 +1527,7 @@ void Client::add_update_cap(Inode *in, int mds,
     if (in->caps.empty()) {
       assert(in->snaprealm == 0);
       in->snaprealm = get_snap_realm(realm);
+      in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
       in->get();
       dout(15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
     }
@@ -1554,6 +1560,7 @@ void Client::remove_cap(Inode *in, int mds)
     put_inode(in);
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
+    in->snaprealm_item.remove_myself();
   }
 }
 
@@ -1566,14 +1573,28 @@ void Client::remove_all_caps(Inode *in)
     put_inode(in);
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
+    in->snaprealm_item.remove_myself();
   }
 }
 
 void Client::maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, 
 				    snapid_t snap_highwater, vector<snapid_t>& snaps)
 {
-  if (realm->maybe_update(snap_created, snap_highwater, snaps))
+  if (snap_created)
+    realm->created = snap_created;
+
+  if (realm->highwater == 0 || snap_highwater > realm->highwater) {
     dout(10) << *realm << " now " << snaps << " highwater " << snap_highwater << dendl;
+
+    // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
+    for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
+      Inode *in = *p;
+      check_caps(in, true); // force writeback of write caps
+    }
+
+    realm->snaps = snaps;  // ok.
+    realm->highwater = snap_highwater;
+  }
 }
 
 void Client::handle_snap(MClientSnap *m)
@@ -1584,6 +1605,13 @@ void Client::handle_snap(MClientSnap *m)
   if (m->split) {
     SnapRealm *realm = get_snap_realm(m->split);
     realm->created = m->snap_created;
+    if (realm->snaps.empty()) {
+      // new split.. pretend we have one less snap than we do now!
+      vector<snapid_t>& newsnaps = m->realms[m->split];
+      realm->snaps.resize(newsnaps.size() - 1);
+      for (unsigned i=0; i<realm->snaps.size(); i++)
+	realm->snaps[i] = newsnaps[i+1];
+    }
     dout(10) << " splitting off " << *realm << dendl;
     for (list<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
@@ -1599,7 +1627,10 @@ void Client::handle_snap(MClientSnap *m)
 	}
 	dout(10) << " moving " << *in << " from " << *in->snaprealm << dendl;
 	put_snap_realm(in->snaprealm);
+	in->snaprealm_item.remove_myself();
+
 	in->snaprealm = realm;
+	realm->inodes_with_caps.push_back(&in->snaprealm_item);
 	realm->nref++;
       }
     }
@@ -1609,6 +1640,7 @@ void Client::handle_snap(MClientSnap *m)
   for (map<inodeno_t, vector<snapid_t> >::iterator p = m->realms.begin();
        p != m->realms.end();
        p++) {
+    dout(10) << "realm " << p->first << " snaps " << p->second << dendl;
     SnapRealm *realm = get_snap_realm(p->first);
     maybe_update_snaprealm(realm, 0, m->snap_highwater, p->second);
     put_snap_realm(realm);
@@ -1803,6 +1835,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       m->set_mtime(in->inode.mtime);
       m->set_atime(in->inode.atime);
       m->set_wanted(wanted);
+      m->get_snaps() = in->snaprealm->snaps;  // just in case it's newer (via another mds)
     }
   } else if (old_caps == new_caps) {
     dout(10) << "  caps unchanged at " << cap_string(old_caps) << dendl;

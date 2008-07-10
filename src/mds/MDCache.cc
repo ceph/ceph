@@ -929,6 +929,80 @@ int MDCache::num_subtrees_fullnonauth()
 
 
 
+// ===================================
+// journal helpers
+
+CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
+{
+  if (follows == 0)
+    return in;
+
+  dout(10) << "pick_inode_snap follows " << follows << " on " << *in << dendl;
+
+  SnapRealm *realm = in->find_snaprealm();
+  vector<snapid_t>& snaps = *realm->get_snap_vector();
+  dout(10) << " realm " << *realm << " " << *realm->inode << dendl;
+  dout(10) << " snaps " << snaps << dendl;
+
+  unsigned i=0;
+  while (i+1 < snaps.size() && snaps[i+1] > follows) i++;
+  CInode *t = 0;
+  do {
+    t = get_inode(in->ino(), snaps[i]);
+    if (t)
+      break;
+  } while (i-- > 0);            
+  if (t) {
+    in = t;
+    dout(10) << "pick_inode_snap " << snaps[i] << " found " << *in << dendl;
+  }
+  return in;
+}
+
+CInode *MDCache::cow_inode(CInode *in, snapid_t tosnap)
+{
+  CInode *oldin = new CInode(this);
+  oldin->inode = *in->get_previous_projected_inode();
+  oldin->snapid = tosnap;
+  dout(10) << " oldin " << *oldin << dendl;
+  add_inode(oldin);
+  
+  //if (in->get_caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
+  //oldin->get(CInode::PIN_SNAPCAPS);
+
+  return oldin;
+}
+
+void MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
+{
+  dout(10) << "journal_dirty_inode follows " << follows << " on " << *in << dendl;
+  CDentry *dn = in->parent;
+  dout(10) << " orig dn " << *dn << dendl;
+
+  if (in->snaprealm || in->inode.is_dir()) {
+    // multiversion inode.
+    assert(0);
+  } else {
+    // is dn within current snap?
+    if (follows < dn->first) {
+      metablob->add_primary_dentry(dn, true, 0, in->get_projected_inode());
+    } else {
+      snapid_t oldfirst = dn->first;
+      dn->first = follows+1;
+
+      dout(10) << "    dn " << *dn << dendl;
+      CInode *oldin = cow_inode(in, follows);
+      CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+
+      metablob->add_primary_dentry(olddn, true);
+      metablob->add_primary_dentry(dn, true, 0, in->get_projected_inode());
+    }   
+  }
+}    
+
+
+
 
 // ===================================
 // slave requests

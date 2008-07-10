@@ -123,6 +123,13 @@ struct SnapRealm {
   void get_snap_set(set<snapid_t>& s, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
   vector<snapid_t> *get_snap_vector();
   vector<snapid_t> *update_snap_vector(snapid_t adding=0);
+  snapid_t get_latest_snap() {
+    vector<snapid_t> *snaps = get_snap_vector();
+    if (snaps->empty())
+      return 0;
+    else
+      return (*snaps)[0];
+  }
 
   void split_at(SnapRealm *child);
 

@@ -193,10 +193,10 @@ CDentry* CDir::add_null_dentry(const nstring& dname,
 			       snapid_t first, snapid_t last)
 {
   // foreign
-  assert(lookup(dname) == 0);
-  
+  assert(lookup(dname, last) == 0);
+   
   // create dentry
-  CDentry* dn = new CDentry(dname, NULL, first, last);
+  CDentry* dn = new CDentry(dname, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -226,10 +226,10 @@ CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in,
 				  snapid_t first, snapid_t last) 
 {
   // primary
-  assert(lookup(dname) == 0);
+  assert(lookup(dname, last) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, NULL, first, last);
+  CDentry* dn = new CDentry(dname, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -258,10 +258,10 @@ CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned c
 				 snapid_t first, snapid_t last) 
 {
   // foreign
-  assert(lookup(dname) == 0);
+  assert(lookup(dname, last) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, ino, d_type, NULL, first, last);
+  CDentry* dn = new CDentry(dname, ino, d_type, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);

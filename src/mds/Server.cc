@@ -4754,7 +4754,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 	update->snap_highwater = snapid;
 	if (split_parent) {
 	  update->snap_created = diri->snaprealm->created;
-	  update->split = snapid;
+	  update->split = diri->ino();
 	  update->split_inos = split_inos;
 	  split_parent = 0;
 	}

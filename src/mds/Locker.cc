@@ -1050,8 +1050,14 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   if ((dirty || change_max) &&
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
     EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
-    inode_t *pi = in->project_inode();
-    pi->version = in->pre_dirty();
+
+    snapid_t follows = 0;
+    if (m->get_snaps().size())
+      follows = m->get_snaps()[0];
+    CInode *upi = mdcache->pick_inode_snap(in, follows);
+
+    inode_t *pi = upi->project_inode();
+    pi->version = upi->pre_dirty();
     if (change_max) {
       dout(7) << " max_size " << pi->max_size << " -> " << new_max << dendl;
       pi->max_size = new_max;
@@ -1084,10 +1090,14 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     }
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
-    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
-    mut->auth_pin(in);
-    predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-    le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+    if (upi == in)
+      file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+    mut->auth_pin(upi);
+    predirty_nested(mut, &le->metablob, upi, 0, PREDIRTY_PRIMARY, false);
+
+    mdcache->journal_dirty_inode(&le->metablob, upi, follows);
+    //le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
   }
 

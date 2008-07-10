@@ -464,6 +464,11 @@ public:
   void request_drop_locks(MDRequest *r);
   void request_cleanup(MDRequest *r);
 
+  // journal helpers
+  CInode *pick_inode_snap(CInode *in, snapid_t follows);
+  CInode *cow_inode(CInode *in, snapid_t tosnap);
+  void journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows);
+
   // slaves
   void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {
     uncommitted_masters[reqid].ls = ls;
