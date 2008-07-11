@@ -45,7 +45,7 @@ public:
 
 int Filer::probe(inodeno_t ino,
 		 ceph_file_layout *layout,
-		 snapid_t snap, vector<snapid_t> &snaps,
+		 snapid_t snap, const vector<snapid_t> &snaps,
 		 __u64 start_from,
 		 __u64 *end,           // LB, when !fwd
 		 bool fwd,

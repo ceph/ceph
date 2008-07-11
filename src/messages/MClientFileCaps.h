@@ -35,6 +35,7 @@ class MClientFileCaps : public Message {
  private:
   struct ceph_mds_file_caps h;
   vector<snapid_t> snaps;
+  bufferlist snapbl;
 
  public:
   int      get_caps() { return h.caps; }
@@ -46,6 +47,13 @@ class MClientFileCaps : public Message {
   snapid_t get_snap_created() { return snapid_t(h.snap_created); }
   snapid_t get_snap_highwater() { return snapid_t(h.snap_highwater); }
   vector<snapid_t> &get_snaps() { return snaps; }
+  void set_snaps(const set<snapid_t>& s) {
+    snaps.clear();
+    snapbl.clear();
+    for (set<snapid_t>::const_reverse_iterator p = s.rbegin(); p != s.rend(); p++)
+      ::encode(*p, snapbl);
+    h.num_snaps = s.size();
+  }
 
   inodeno_t get_ino() { return inodeno_t(h.ino); }
   __u64 get_size() { return h.size;  }
@@ -120,10 +128,14 @@ class MClientFileCaps : public Message {
       ::decode(snaps[i], p);
   }
   void encode_payload() {
-    h.num_snaps = snaps.size();
+    if (!snapbl.length())
+      h.num_snaps = snaps.size();
     ::encode(h, payload);
-    for (unsigned i=0; i<snaps.size(); i++)
-      ::encode(snaps[i], payload);
+    if (snapbl.length())
+      payload.claim_append(snapbl);
+    else
+      for (unsigned i=0; i<snaps.size(); i++)
+	::encode(snaps[i], payload);
   }
 };
 

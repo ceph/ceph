@@ -68,7 +68,7 @@ class Filer {
     map<object_t, __u64> known;
     map<object_t, tid_t> ops;
 
-    Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn, vector<snapid_t> &sns,
+    Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn, const vector<snapid_t>& sns,
 	  __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
       ino(i), layout(l), snap(sn), snaps(sns),
       from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
@@ -140,7 +140,7 @@ class Filer {
 
   int remove(inodeno_t ino,
 	     ceph_file_layout *layout,
-	     snapid_t snap, vector<snapid_t>& snaps,
+	     snapid_t snap, const vector<snapid_t>& snaps,
 	     __u64 offset,
 	     size_t len,
 	     int flags,
@@ -158,7 +158,7 @@ class Filer {
    */
   int probe(inodeno_t ino,
 	    ceph_file_layout *layout,
-	    snapid_t snap, vector<snapid_t> &snaps,
+	    snapid_t snap, const vector<snapid_t> &snaps,
 	    __u64 start_from,
 	    __u64 *end,
 	    bool fwd,

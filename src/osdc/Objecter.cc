@@ -336,7 +336,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, __u64 *size, ceph_object_layout ol, vector<snapid_t>& snaps, int flags, Context *onfinish)
+tid_t Objecter::stat(object_t oid, __u64 *size, ceph_object_layout ol, const vector<snapid_t>& snaps, int flags, Context *onfinish)
 {
   OSDStat *st = prepare_stat(snaps, size, flags);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
@@ -452,7 +452,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, vector<snapid_t> &snaps, bufferlist *bl, int flags, 
+tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t> &snaps, bufferlist *bl, int flags, 
                      Context *onfinish)
 {
   OSDRead *rd = prepare_read(snaps, bl, flags);
@@ -710,7 +710,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, vector<snapid_t> &snaps, bufferlist &bl, int flags,
+tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t> &snaps, bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
   OSDWrite *wr = prepare_write(snaps, bl, flags);
@@ -724,7 +724,7 @@ tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol
 
 // zero
 
-tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, vector<snapid_t> &snaps, int flags, 
+tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t> &snaps, int flags, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *z = prepare_modify(snaps, CEPH_OSD_OP_ZERO, flags);
@@ -737,7 +737,7 @@ tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, vector<snapid_t> &snaps,
+tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, const vector<snapid_t> &snaps,
                      Context *onack, Context *oncommit)
 {
   OSDModify *l = prepare_modify(snaps, op, flags);

@@ -73,7 +73,7 @@ class Objecter {
     list<ObjectExtent> extents;
     vector<snapid_t> snaps;
     int inc_lock;
-    OSDOp(vector<snapid_t>& s) : snaps(s), inc_lock(0) {}
+    OSDOp(const vector<snapid_t>& s) : snaps(s), inc_lock(0) {}
     virtual ~OSDOp() {}
   };
 
@@ -85,13 +85,13 @@ class Objecter {
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
     int flags;
 
-    OSDRead(vector<snapid_t> &s, bufferlist *b, int f) : OSDOp(s), bl(b), onfinish(0), flags(f) {
+    OSDRead(const vector<snapid_t> &s, bufferlist *b, int f) : OSDOp(s), bl(b), onfinish(0), flags(f) {
       if (bl)
 	bl->clear();
     }
   };
 
-  OSDRead *prepare_read(vector<snapid_t>& snaps, bufferlist *b, int f) {
+  OSDRead *prepare_read(const vector<snapid_t>& snaps, bufferlist *b, int f) {
     return new OSDRead(snaps, b, f);
   }
 
@@ -101,10 +101,10 @@ class Objecter {
     __u64 *size;  // where the size goes.
     int flags;
     Context *onfinish;
-    OSDStat(vector<snapid_t> &sn, __u64 *s, int f) : OSDOp(sn), tid(0), size(s), flags(f), onfinish(0) { }
+    OSDStat(const vector<snapid_t> &sn, __u64 *s, int f) : OSDOp(sn), tid(0), size(s), flags(f), onfinish(0) { }
   };
 
-  OSDStat *prepare_stat(vector<snapid_t>& snaps, __u64 *s, int f) {
+  OSDStat *prepare_stat(const vector<snapid_t>& snaps, __u64 *s, int f) {
     return new OSDStat(snaps, s, f);
   }
 
@@ -120,10 +120,10 @@ class Objecter {
     map<tid_t, eversion_t>   tid_version;
     map<tid_t, ObjectExtent> waitfor_commit;
 
-    OSDModify(vector<snapid_t>& sn, int o, int f) : OSDOp(sn) ,op(o), flags(f), onack(0), oncommit(0) {}
+    OSDModify(const vector<snapid_t>& sn, int o, int f) : OSDOp(sn) ,op(o), flags(f), onack(0), oncommit(0) {}
   };
 
-  OSDModify *prepare_modify(vector<snapid_t>& snaps, int o, int f) { 
+  OSDModify *prepare_modify(const vector<snapid_t>& snaps, int o, int f) { 
     return new OSDModify(snaps, o, f); 
   }
   
@@ -131,10 +131,10 @@ class Objecter {
   class OSDWrite : public OSDModify {
   public:
     bufferlist bl;
-    OSDWrite(vector<snapid_t>& sn, bufferlist &b, int f) : OSDModify(sn, CEPH_OSD_OP_WRITE, f), bl(b) {}
+    OSDWrite(const vector<snapid_t>& sn, bufferlist &b, int f) : OSDModify(sn, CEPH_OSD_OP_WRITE, f), bl(b) {}
   };
 
-  OSDWrite *prepare_write(vector<snapid_t>& snaps, bufferlist &b, int f) { 
+  OSDWrite *prepare_write(const vector<snapid_t>& snaps, bufferlist &b, int f) { 
     return new OSDWrite(snaps, b, f); 
   }
 
@@ -237,15 +237,15 @@ class Objecter {
   tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
 
   // even lazier
-  tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, vector<snapid_t>& snaps, bufferlist *bl, int flags,
+  tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t>& snaps, bufferlist *bl, int flags,
              Context *onfinish);
-  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, vector<snapid_t>& snaps, bufferlist &bl, int flags,
+  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t>& snaps, bufferlist &bl, int flags,
               Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, vector<snapid_t>& snaps, int flags,
+  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t>& snaps, int flags,
              Context *onack, Context *oncommit);
-  tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, vector<snapid_t>& snaps, int flags, Context *onfinish);
+  tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, const vector<snapid_t>& snaps, int flags, Context *onfinish);
   
-  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, vector<snapid_t>& snaps, Context *onack, Context *oncommit);
+  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, const vector<snapid_t>& snaps, Context *onack, Context *oncommit);
 
 
   void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);

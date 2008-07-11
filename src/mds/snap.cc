@@ -57,9 +57,9 @@ bool SnapRealm::open_parents(MDRequest *mdr)
  * get list of snaps for this realm.  we must include parents' snaps
  * for the intervals during which they were our parent.
  */
-void SnapRealm::get_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
+void SnapRealm::build_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
 {
-  dout(10) << "get_snap_set [" << first << "," << last << "] on " << *this << dendl;
+  dout(10) << "build_snap_set [" << first << "," << last << "] on " << *this << dendl;
 
   // include my snaps within interval [first,last]
   for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
@@ -77,46 +77,60 @@ void SnapRealm::get_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
     assert(oldparent->snaprealm);
     
     thru = MIN(last, p->first);
-    oldparent->snaprealm->get_snap_set(s, 
-				       MAX(first, p->second.first),
-				       thru);
+    oldparent->snaprealm->build_snap_set(s, 
+					 MAX(first, p->second.first),
+					 thru);
     ++thru;
   }
   if (thru <= last && parent)
-    parent->get_snap_set(s, thru, last);
+    parent->build_snap_set(s, thru, last);
 }
 
 /*
  * build vector in reverse sorted order
  */
-vector<snapid_t> *SnapRealm::get_snap_vector()
+const set<snapid_t>& SnapRealm::get_snaps()
 {
   if (!cached_snaps.size()) {
-    dout(10) << "get_snap_vector " << cached_snaps << " (cached)" << dendl;
-    return &cached_snaps;
+    dout(10) << "get_snaps " << cached_snaps << " (cached)" << dendl;
+    return cached_snaps;
   }
 
-  set<snapid_t> s;
-  get_snap_set(s, 0, CEPH_NOSNAP);
-  cached_snaps.resize(s.size());
-  int i = 0;
-  for (set<snapid_t>::reverse_iterator p = s.rbegin(); p != s.rend(); p++)
-    cached_snaps[i++] = *p;
+  cached_snaps.clear();
+  cached_snap_vec.clear();
+  build_snap_set(cached_snaps, 0, CEPH_NOSNAP);
   
-  dout(10) << "get_snap_vector " << cached_snaps
+  dout(10) << "get_snaps " << cached_snaps
 	   << " (highwater " << snap_highwater << ")" << dendl;
-  return &cached_snaps;
+  return cached_snaps;
 }
 
-vector<snapid_t> *SnapRealm::update_snap_vector(snapid_t creating)
+const vector<snapid_t>& SnapRealm::get_snap_vector()
+{
+  if (cached_snap_vec.empty()) {
+    get_snaps();
+
+    cached_snap_vec.resize(cached_snaps.size());
+    unsigned i = 0;
+    for (set<snapid_t>::reverse_iterator p = cached_snaps.rbegin();
+	 p != cached_snaps.rend();
+	 p++)
+      cached_snap_vec[i++] = *p;
+  }
+
+  return cached_snap_vec;
+}
+
+const set<snapid_t>& SnapRealm::update_snaps(snapid_t creating)
 {
   if (!snap_highwater) {
     assert(cached_snaps.empty());
-    get_snap_vector();
+    get_snaps();
   }
   snap_highwater = creating;
-  cached_snaps.insert(cached_snaps.begin(), creating); // FIXME.. we should store this in reverse!
-  return &cached_snaps;
+  cached_snaps.insert(creating);
+  cached_snap_vec.insert(cached_snap_vec.begin(), creating);
+  return cached_snaps;
 }
 
 

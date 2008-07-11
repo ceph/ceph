@@ -4436,7 +4436,7 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps_mseq(cap->get_mseq());
 
   SnapRealm *realm = cur->find_snaprealm();
-  reply->get_snaps() = *realm->get_snap_vector();
+  reply->set_snaps(realm->get_snaps());
   reply->set_snap_info(realm->inode->ino(), realm->created, realm->snap_highwater);
   dout(10) << " snaprealm is " << *realm << " snaps=" << reply->get_snaps() << " on " << *realm->inode << dendl;
   
@@ -4738,11 +4738,11 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     q.pop_front();
 
     // build new snaps list
-    vector<snapid_t> *snaps;
-    snaps = diri->snaprealm->update_snap_vector(snapid);
+    const set<snapid_t> snaps = diri->snaprealm->update_snaps(snapid);
+    const vector<snapid_t> snapvec = diri->snaprealm->get_snap_vector();
 
     dout(10) << " realm " << *realm
-	     << " snaps " << *snaps
+	     << " snaps " << snaps
 	     << " on " << *realm->inode << dendl;
 
     for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
@@ -4762,7 +4762,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 	}
 	updates[p->first] = update;
       }
-      update->realms[realm->inode->ino()] = *snaps;
+      update->realms[realm->inode->ino()] = snapvec;
     }
      
     // notify for active children, too.

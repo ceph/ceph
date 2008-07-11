@@ -152,6 +152,7 @@ class MClientReply : public Message {
   // reply data
   struct ceph_mds_reply_head st;
   vector<snapid_t> snaps;
+  bufferlist snapbl;
   bufferlist trace_bl;
   bufferlist dir_bl;
 
@@ -168,6 +169,13 @@ class MClientReply : public Message {
   snapid_t get_snap_created() { return snapid_t(st.snap_created); }
   snapid_t get_snap_highwater() { return snapid_t(st.snap_highwater); }
   vector<snapid_t> &get_snaps() { return snaps; }
+  void set_snaps(const set<snapid_t>& s) {
+    snaps.clear();
+    snapbl.clear();
+    for (set<snapid_t>::const_reverse_iterator p = s.rbegin(); p != s.rend(); p++)
+      ::encode(*p, snapbl);
+    st.num_snaps = s.size();
+  }
 
   void set_snap_info(inodeno_t r, snapid_t c, snapid_t hw) { 
     st.snap_realm = r; 
@@ -215,10 +223,14 @@ class MClientReply : public Message {
     assert(p.end());
   }
   virtual void encode_payload() {
-    st.num_snaps = snaps.size();
+    if (snapbl.length() == 0)
+      st.num_snaps = snaps.size();
     ::encode(st, payload);
-    for (unsigned i=0; i<snaps.size(); i++)
-      ::encode(snaps[i], payload);
+    if (snapbl.length())
+      payload.claim_append(snapbl);
+    else
+      for (unsigned i=0; i<snaps.size(); i++)
+	::encode(snaps[i], payload);
     ::encode(trace_bl, payload);
     ::encode(dir_bl, payload);
   }

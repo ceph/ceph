@@ -106,7 +106,8 @@ struct SnapRealm {
   set<SnapRealm*> open_children;    // active children that are currently open
 
   // caches?
-  vector<snapid_t> cached_snaps;
+  set<snapid_t> cached_snaps;
+  vector<snapid_t> cached_snap_vec;
   snapid_t snap_highwater;
 
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
@@ -120,15 +121,16 @@ struct SnapRealm {
   { }
 
   bool open_parents(MDRequest *mdr);
-  void get_snap_set(set<snapid_t>& s, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
-  vector<snapid_t> *get_snap_vector();
-  vector<snapid_t> *update_snap_vector(snapid_t adding=0);
+  void build_snap_set(set<snapid_t>& s, snapid_t first, snapid_t last);
+  const set<snapid_t>& get_snaps();
+  const vector<snapid_t>& get_snap_vector();
+  const set<snapid_t>& update_snaps(snapid_t adding=0);
   snapid_t get_latest_snap() {
-    vector<snapid_t> *snaps = get_snap_vector();
-    if (snaps->empty())
+    const set<snapid_t> &snaps = get_snaps();
+    if (snaps.empty())
       return 0;
     else
-      return (*snaps)[0];
+      return *snaps.rbegin();
   }
 
   void split_at(SnapRealm *child);

@@ -932,6 +932,9 @@ int MDCache::num_subtrees_fullnonauth()
 // ===================================
 // journal helpers
 
+/*
+ * find first inode in cache that follows given snapid.  otherwise, return current.
+ */
 CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
 {
   if (follows == 0)
@@ -940,21 +943,22 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   dout(10) << "pick_inode_snap follows " << follows << " on " << *in << dendl;
 
   SnapRealm *realm = in->find_snaprealm();
-  vector<snapid_t>& snaps = *realm->get_snap_vector();
+  const set<snapid_t>& snaps = realm->get_snaps();
   dout(10) << " realm " << *realm << " " << *realm->inode << dendl;
   dout(10) << " snaps " << snaps << dendl;
 
-  unsigned i=0;
-  while (i+1 < snaps.size() && snaps[i+1] > follows) i++;
+  if (snaps.empty())
+    return in;
+
   CInode *t = 0;
-  do {
-    t = get_inode(in->ino(), snaps[i]);
-    if (t)
-      break;
-  } while (i-- > 0);            
-  if (t) {
-    in = t;
-    dout(10) << "pick_inode_snap " << snaps[i] << " found " << *in << dendl;
+  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);
+       p != snaps.end();
+       p++) {
+    t = get_inode(in->ino(), *p);
+    if (t) {
+      in = t;
+      dout(10) << "pick_inode_snap snap " << *p << " found " << *in << dendl;
+    }
   }
   return in;
 }
@@ -2895,7 +2899,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 					      cap->pending(),
 					      cap->wanted(),
 					      cap->get_mseq());
-  reap->get_snaps() = *realm->get_snap_vector();
+  reap->set_snaps(realm->get_snaps());
   reap->set_snap_created(realm->created);
   reap->set_snap_highwater(realm->snap_highwater);
   mds->messenger->send_message(reap, session->inst);
@@ -3068,13 +3072,13 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    vector<snapid_t> *snaps = in->find_snaprealm()->get_snap_vector();
+    const vector<snapid_t>& snaps = in->find_snaprealm()->get_snap_vector();
 
     if (in->inode.max_size > in->inode.size) {
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
 	       << " " << *in << dendl;
       file_recovering.insert(in);
-      mds->filer->probe(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, *snaps,
+      mds->filer->probe(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, snaps,
 			in->inode.max_size, &in->inode.size, false,
 			0, new C_MDC_Recover(this, in));    
     } else {
@@ -3171,7 +3175,7 @@ void MDCache::_do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize)
 
   // remove
   if (newsize < oldsize) {
-    vector<snapid_t> snaps;
+    const vector<snapid_t> snaps = in->find_snaprealm()->get_snap_vector();
     mds->filer->remove(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, snaps,
 		       newsize, oldsize-newsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
