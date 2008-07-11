@@ -1,4 +1,3 @@
 AUTOMAKE_OPTIONS = gnu
-ACLOCAL_AMFLAGS = -I m4
-EXTRA_DIST = m4 web autogen.sh
+EXTRA_DIST = web autogen.sh
 SUBDIRS = src
