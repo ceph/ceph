@@ -497,13 +497,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
   
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
-
-  // stray?  may need to purge (e.g., after all caps are released)
-  if (in->inode.nlink == 0 && !in->is_any_caps() &&
-      in->is_auth() && 
-      in->get_parent_dn() &&
-      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
-    mdcache->eval_stray(in->get_parent_dn());
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -1094,6 +1087,14 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   else if (in->is_auth())
     file_eval(&in->filelock);
   
+  // unlinked stray?  may need to purge (e.g., after all caps are released)
+  if (in->inode.nlink == 0 &&
+      !in->is_any_caps() &&
+      in->is_auth() && 
+      in->get_parent_dn() &&
+      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
+    mdcache->eval_stray(in->get_parent_dn());
+
   delete m;
 }
 
