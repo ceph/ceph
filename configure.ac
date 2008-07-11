@@ -27,15 +27,16 @@ AC_PROG_CXX
 AC_PROG_RANLIB
 AC_PROG_MAKE_SET
 
-# swig
-AX_WITH_PERL
-CEPH_CHECK_SWIG
-SWIG_ENABLE_CXX
-
-
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow])
 AC_CHECK_LIB([pthread], [pthread_create])
+
+# debug crap?
+AC_ARG_WITH([debug],
+            [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
+            [],
+            [with_debug=no])
+AM_CONDITIONAL(WITH_DEBUG, [test "WITH_DEBUG" = "1"])
 
 # fuse?
 AC_ARG_WITH([fuse],

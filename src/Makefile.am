@@ -7,10 +7,10 @@ AUTOMAKE_OPTIONS = gnu
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
 cmon_LDADD = libmon.a libcrush.a libcommon.a
+
+# admin tools
 cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
 cmonctl_LDADD = libcommon.a
-
-# tools
 mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libmon.a libcommon.a libcrush.a
 monmaptool_SOURCES = monmaptool.cc
@@ -19,14 +19,6 @@ crushtool_SOURCES = crushtool.cc
 crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
-
-psim_SOURCES = psim.cc
-psim_LDADD = libcommon.a libcrush.a
-
-test_ebofs_SOURCES = ebofs/test.ebofs.cc
-test_ebofs_LDADD = libebofs.a libcommon.a libos.a
-mkfs_ebofs_SOURCES = ebofs/mkfs.ebofs.cc
-mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
@@ -47,27 +39,45 @@ streamtest_LDADD = libebofs.a libcommon.a libos.a
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
 
-# fuse client
-if WITH_FUSE
-FUSEBIN = cfuse fakefuse
-else
-FUSEBIN = 
-endif
 
+bin_PROGRAMS = \
+	cmon cmds cosd csyn \
+	cmonctl \
+	mkmonfs monmaptool osdmaptool crushtool \
+	streamtest dupstore dumpjournal
+
+# fuse targets?
+if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a
+bin_PROGRAMS += cfuse
+
+if WITH_DEBUG
 fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
 fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a libebofs.a \
 	libclient.a libosdc.a libcrush.a libcommon.a
+bin_PROGRAMS += fakefuse
+endif
 
-# debug targets
+endif
+
+# debug targets?
+if WITH_DEBUG
+psim_SOURCES = psim.cc
+psim_LDADD = libcommon.a libcrush.a
+
+test_ebofs_SOURCES = ebofs/test.ebofs.cc
+test_ebofs_LDADD = libebofs.a libcommon.a libos.a
+mkfs_ebofs_SOURCES = ebofs/mkfs.ebofs.cc
+mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
+
 fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
 fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a libebofs.a \
 	libclient.a libosdc.a libcrush.a libcommon.a
 
-#newsyn_SOURCES = newsyn.cc msg/SimpleMessenger.cc
-#newsyn_LDADD = libmon.a libmds.a libosd.a libebofs.a \
-#	libclient.a libosdc.a libcrush.a libcommon.a
+bin_PROGRAMS += psim test.ebofs mkfs.ebofs fakesyn
+endif
+
 
 ## libcrush.so
 libcrush_so_a_SOURCES = \
@@ -81,36 +91,35 @@ libcrush_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
 #BUILT_SOURCES = libcrush.so
 
 # crushwrapper
-SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
-crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
-	${SWIG} -perl5 -c++ -shadow -outdir . $<
-
-libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
-	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
-
+#SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
+#crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
+#	${SWIG} -perl5 -c++ -shadow -outdir . $<
+#
+#libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
+#	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
 #BUILT_SOURCES = libCrushWrapper.so
 
 
 ## libcephclient.so
-libcephclient_so_a_SOURCES = \
-	client/Client.cc \
-	client/SyntheticClient.cc \
-	client/Trace.cc \
-	msg/Message.cc \
-	common/Logger.cc \
-	common/Clock.cc \
-	common/Timer.cc \
-	common/Finisher.cc \
-	mon/MonMap.cc \
-	mon/MonClient.cc \
-	osd/OSDMap.cc \
-	config.cc \
-	osdc/Objecter.cc \
-	osdc/ObjectCacher.cc \
-	osdc/Filer.cc \
-	osdc/Journaler.cc
-libcephclient_so_a_CXXFLAGS = ${AM_CXXFLAGS} -fPIC
-libcephclient_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
+#libcephclient_so_a_SOURCES = \
+#	client/Client.cc \
+#	client/SyntheticClient.cc \
+#	client/Trace.cc \
+#	msg/Message.cc \
+#	common/Logger.cc \
+#	common/Clock.cc \
+#	common/Timer.cc \
+#	common/Finisher.cc \
+#	mon/MonMap.cc \
+#	mon/MonClient.cc \
+#	osd/OSDMap.cc \
+#	config.cc \
+#	osdc/Objecter.cc \
+#	osdc/ObjectCacher.cc \
+#	osdc/Filer.cc \
+#	osdc/Journaler.cc
+#libcephclient_so_a_CXXFLAGS = ${AM_CXXFLAGS} -fPIC
+#libcephclient_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
 
 #BUILT_SOURCES += libcephclient_so.a
 
@@ -136,14 +145,6 @@ AM_CXXFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE
 AM_CFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE
 AM_LDFLAGS =
 
-bin_PROGRAMS = \
-	cmon cmds cosd csyn \
-	cmonctl \
-	mkmonfs monmaptool osdmaptool crushtool \
-	fakesyn \
-	streamtest dupstore psim dumpjournal \
-	test.ebofs mkfs.ebofs \
-	$(FUSEBIN) $(NEWSYN)
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
@@ -156,9 +157,9 @@ EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh
 
 # cleaning
 clean-local:
-	-rm crush/*.cxx
 	-rm *.so
-	-rm CrushWrapper.pm
+#	-rm crush/*.cxx
+#	-rm CrushWrapper.pm
 
 # libs
 libcommon_a_SOURCES = \
