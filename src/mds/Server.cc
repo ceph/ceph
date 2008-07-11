@@ -1628,7 +1628,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "utime");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1669,7 +1669,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "chmod");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1710,7 +1710,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1769,7 +1769,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1813,7 +1813,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -2007,6 +2007,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
   newi->inode.dirstat.rfiles = 1;
+
+  newi->projected_parent = dn;
   
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
 
@@ -2017,8 +2019,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
 
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-
-  le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
+  mdcache->journal_dirty_inode(&le->metablob, newi, dn->dir->inode->find_snaprealm()->get_latest_snap());
   
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
@@ -2062,7 +2063,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
+  //le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
+  mdcache->journal_dirty_inode(&le->metablob, newi, dn->dir->inode->find_snaprealm()->get_latest_snap());
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
@@ -2100,7 +2102,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
+  mdcache->journal_dirty_inode(&le->metablob, newi, dn->dir->inode->find_snaprealm()->get_latest_snap());
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));

@@ -80,7 +80,7 @@ void SnapRealm::get_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
     oldparent->snaprealm->get_snap_set(s, 
 				       MAX(first, p->second.first),
 				       thru);
-    thru++;
+    ++thru;
   }
   if (thru <= last && parent)
     parent->get_snap_set(s, thru, last);

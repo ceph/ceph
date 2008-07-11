@@ -51,8 +51,11 @@ ostream& operator<<(ostream& out, CInode& in)
   filepath path;
   in.make_path(path);
   out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/":"");
-  if (in.snapid)
-    out << " SNAP=" << in.snapid;
+  if (in.is_multiversion())
+    out << " [" << in.first << ",...]";
+  else 
+    out << " [" << in.first << "," << in.last << "]";
+
   if (in.is_auth()) {
     out << " auth";
     if (in.is_replicated()) 

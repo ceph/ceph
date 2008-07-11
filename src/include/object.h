@@ -38,7 +38,7 @@ struct object_t {
     struct {
       uint64_t ino;    // "file" identifier
       uint32_t bno;    // "block" in that "file"
-      objectrev_t snap; // revision.  normally ctime (as epoch).
+      uint64_t snap;   // snap revision.
     } __attribute__ ((packed));
   };
 

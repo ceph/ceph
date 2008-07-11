@@ -43,8 +43,8 @@ class MClientFileCaps : public Message {
   capseq_t get_mseq() { return h.migrate_seq; }
 
   inodeno_t get_snap_realm() { return inodeno_t(h.snap_realm); }
-  snapid_t get_snap_created() { return h.snap_created; }
-  snapid_t get_snap_highwater() { return h.snap_highwater; }
+  snapid_t get_snap_created() { return snapid_t(h.snap_created); }
+  snapid_t get_snap_highwater() { return snapid_t(h.snap_highwater); }
   vector<snapid_t> &get_snaps() { return snaps; }
 
   inodeno_t get_ino() { return inodeno_t(h.ino); }

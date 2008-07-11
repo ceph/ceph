@@ -1081,7 +1081,8 @@ void CDir::_fetched(bufferlist &bl)
 	  // inode
 	  in = new CInode(cache);
 	  in->inode = inode;
-	  in->snapid = first;
+	  in->first = first;
+	  in->last = last;
 	  
 	  // symlink?
 	  if (in->is_symlink()) 

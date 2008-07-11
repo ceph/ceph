@@ -278,7 +278,7 @@ WRITE_CLASS_ENCODER(inode_t)
 
 struct old_inode_t {
   snapid_t first;
-  inodeno_t inode;
+  inode_t inode;
   map<string,bufferptr> xattrs;
 
   void encode(bufferlist& bl) const {

@@ -1450,12 +1450,18 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
   assert(parent->is_auth());
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
+  SnapRealm *realm = 0;
   for (list<CInode*>::iterator p = lsi.begin();
        p != lsi.end();
        p++) {
     CInode *cur = *p;
-    inode_t *pi = cur->get_projected_inode();
-    blob->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, pi);
+    if (!realm)
+      realm = cur->find_snaprealm();
+    else if (cur->snaprealm)
+      realm = cur->snaprealm;
+    mds->mdcache->journal_dirty_inode(blob, cur, realm->get_latest_snap());
+    //inode_t *pi = cur->get_projected_inode();
+    //blob->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, pi);
   }
  
 }

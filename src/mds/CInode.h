@@ -137,8 +137,10 @@ class CInode : public MDSCacheObject {
   SnapRealm        *snaprealm;
 
   SnapRealm        *containing_realm;
-  snapid_t                   snapid;      // 0 = multiversion OR head
+  snapid_t          first, last;          // last=0 => multiversion or head.
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
+
+  bool is_multiversion() { return snaprealm || inode.is_dir(); }
 
   loff_t last_journaled;       // log offset for the last time i was journaled
   loff_t last_open_journaled;  // log offset for the last journaled EOpen
@@ -263,7 +265,7 @@ private:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     snaprealm(0), containing_realm(0),
-    snapid(0),    
+    first(1), last(0),
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
@@ -316,7 +318,7 @@ private:
 
 
   inodeno_t ino() const { return inode.ino; }
-  vinodeno_t vino() const { return vinodeno_t(inode.ino, snapid); }
+  vinodeno_t vino() const { return vinodeno_t(inode.ino, last); }
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }

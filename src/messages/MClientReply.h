@@ -165,8 +165,8 @@ class MClientReply : public Message {
   int get_result() { return (__s32)(__u32)st.result; }
 
   inodeno_t get_snap_realm() { return inodeno_t((__u64)st.snap_realm); }
-  snapid_t get_snap_created() { return st.snap_created; }
-  snapid_t get_snap_highwater() { return st.snap_highwater; }
+  snapid_t get_snap_created() { return snapid_t(st.snap_created); }
+  snapid_t get_snap_highwater() { return snapid_t(st.snap_highwater); }
   vector<snapid_t> &get_snaps() { return snaps; }
 
   void set_snap_info(inodeno_t r, snapid_t c, snapid_t hw) { 

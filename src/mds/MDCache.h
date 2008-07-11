@@ -466,8 +466,8 @@ public:
 
   // journal helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
-  CInode *cow_inode(CInode *in, snapid_t tosnap);
-  void journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows);
+  CInode *cow_inode(CInode *in, snapid_t first, snapid_t last);
+  void journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   // slaves
   void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {

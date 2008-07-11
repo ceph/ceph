@@ -140,7 +140,24 @@ typedef __u64 coll_t;
 
 
 // snaps
-typedef __u64 snapid_t;
+struct snapid_t {
+  __u64 val;
+  snapid_t(__u64 v=0) : val(v) {}
+  snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
+  snapid_t operator++() { ++val; return *this; }
+  operator __u64() const { return val; }  
+};
+
+inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
+inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+
+inline ostream& operator<<(ostream& out, snapid_t s) {
+  if (s == CEPH_NOSNAP)
+    return out << "head";
+  else
+    return out << s.val;
+}
+
 #define MAXSNAP CEPH_MAXSNAP
 #define NOSNAP  CEPH_NOSNAP
 
