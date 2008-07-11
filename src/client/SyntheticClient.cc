@@ -929,7 +929,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   if (prefix.length()) {
     client->mkdir(prefix.c_str(), 0755);
     struct stat attr;
-    if (client->ll_lookup(1, prefix.c_str(), &attr) == 0) {
+    if (client->ll_lookup(vinodeno_t(1, CEPH_NOSNAP), prefix.c_str(), &attr) == 0) {
       ll_inos[1] = attr.st_ino;
       dout(5) << "'root' ino is " << inodeno_t(attr.st_ino) << dendl;
     } else {
@@ -1129,19 +1129,19 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t r = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_lookup(ll_inos[i], name, &attr) == 0)
+	  client->ll_lookup(vinodeno_t(ll_inos[i],CEPH_NOSNAP), name, &attr) == 0)
 	ll_inos[r] = attr.st_ino;
     } else if (strcmp(op, "ll_forget") == 0) {
       int64_t i = t.get_int();
       int64_t n = t.get_int();
       if (ll_inos.count(i) && 
-	  client->ll_forget(ll_inos[i], n))
+	  client->ll_forget(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n))
 	ll_inos.erase(i);
     } else if (strcmp(op, "ll_getattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
       if (ll_inos.count(i))
-	client->ll_getattr(ll_inos[i], &attr);
+	client->ll_getattr(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &attr);
     } else if (strcmp(op, "ll_setattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
@@ -1154,12 +1154,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       attr.st_atime = t.get_int();
       int mask = t.get_int();
       if (ll_inos.count(i))
-	client->ll_setattr(ll_inos[i], &attr, mask);
+	client->ll_setattr(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &attr, mask);
     } else if (strcmp(op, "ll_readlink") == 0) {
       int64_t i = t.get_int();
       const char *value;
       if (ll_inos.count(i))
-	client->ll_readlink(ll_inos[i], &value);
+	client->ll_readlink(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &value);
     } else if (strcmp(op, "ll_mknod") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -1168,7 +1168,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_mknod(ll_inos[i], n, m, r, &attr) == 0)
+	  client->ll_mknod(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, m, r, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_mkdir") == 0) {
       int64_t i = t.get_int();
@@ -1177,7 +1177,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_mkdir(ll_inos[i], n, m, &attr) == 0)
+	  client->ll_mkdir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, m, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_symlink") == 0) {
       int64_t i = t.get_int();
@@ -1186,18 +1186,18 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
+	  client->ll_symlink(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, v, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
       if (ll_inos.count(i))
-	client->ll_unlink(ll_inos[i], n);
+	client->ll_unlink(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n);
     } else if (strcmp(op, "ll_rmdir") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
       if (ll_inos.count(i))
-	client->ll_rmdir(ll_inos[i], n);
+	client->ll_rmdir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n);
     } else if (strcmp(op, "ll_rename") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -1205,7 +1205,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *nn = t.get_string(buf2, p);
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni))
-	client->ll_rename(ll_inos[i], n, ll_inos[ni], nn);
+	client->ll_rename(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, 
+			  vinodeno_t(ll_inos[ni],CEPH_NOSNAP), nn);
     } else if (strcmp(op, "ll_link") == 0) {
       int64_t i = t.get_int();
       int64_t ni = t.get_int();
@@ -1213,13 +1214,14 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni))
-      client->ll_link(ll_inos[i], ll_inos[ni], nn, &attr);
+      client->ll_link(vinodeno_t(ll_inos[i],CEPH_NOSNAP),
+		      vinodeno_t(ll_inos[ni],CEPH_NOSNAP), nn, &attr);
     } else if (strcmp(op, "ll_opendir") == 0) {
       int64_t i = t.get_int();
       int64_t r = t.get_int();
       void *dirp;
       if (ll_inos.count(i) &&
-	  client->ll_opendir(ll_inos[i], &dirp) == 0)
+	  client->ll_opendir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &dirp) == 0)
 	ll_dirs[r] = dirp;
     } else if (strcmp(op, "ll_releasedir") == 0) {
       int64_t f = t.get_int();
@@ -1233,7 +1235,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t r = t.get_int();
       Fh *fhp;
       if (ll_inos.count(i) &&
-	  client->ll_open(ll_inos[i], f, &fhp) == 0)
+	  client->ll_open(vinodeno_t(ll_inos[i],CEPH_NOSNAP), f, &fhp) == 0)
 	ll_files[r] = fhp;
     } else if (strcmp(op, "ll_create") == 0) {
       int64_t i = t.get_int();
@@ -1245,7 +1247,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       Fh *fhp;
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_create(ll_inos[i], n, m, f, &attr, &fhp) == 0) {
+	  client->ll_create(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, m, f, &attr, &fhp) == 0) {
 	ll_inos[ri] = attr.st_ino;
 	ll_files[r] = fhp;
       }
@@ -1292,7 +1294,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_statfs") == 0) {
       int64_t i = t.get_int();
       if (ll_inos.count(i))
-	{} //client->ll_statfs(ll_inos[i]);
+	{} //client->ll_statfs(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
     } 
 
 

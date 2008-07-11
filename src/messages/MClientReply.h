@@ -81,7 +81,7 @@ struct DirStat {
 };
 
 struct InodeStat {
-  inodeno_t ino;
+  vinodeno_t vino;
   version_t version;
   ceph_file_layout layout;
   utime_t ctime, mtime, atime;
@@ -104,7 +104,8 @@ struct InodeStat {
   void decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
     ::decode(e, p);
-    ino = inodeno_t(e.ino);
+    vino.ino = inodeno_t(e.ino);
+    vino.snapid = snapid_t(e.snapid);
     version = e.version;
     layout = e.layout;
     ctime.decode_timeval(&e.ctime);

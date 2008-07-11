@@ -66,7 +66,6 @@ extern class LogType client_logtype;
 extern class Logger  *client_logger;
 
 
-
 // ============================================
 // types for my local metadata cache
 /* basic structure:
@@ -170,6 +169,7 @@ struct InodeCap {
 class Inode {
  public:
   inode_t   inode;    // the actual inode
+  snapid_t  snapid;
   int       lease_mask, lease_mds;
   utime_t   lease_ttl;
 
@@ -235,8 +235,9 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(inodeno_t ino, ceph_file_layout *layout) : 
+  Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     //inode(_inode),
+    snapid(vino.snapid),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
@@ -248,13 +249,14 @@ class Inode {
   {
     memset(&inode, 0, sizeof(inode));
     //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
-    inode.ino = ino;
+    inode.ino = vino.ino;
   }
   ~Inode() {
     if (symlink) { delete symlink; symlink = 0; }
   }
 
   inodeno_t ino() { return inode.ino; }
+  vinodeno_t vino() { return vinodeno_t(inode.ino, snapid); }
 
   bool is_dir() { return inode.is_dir(); }
 
@@ -598,7 +600,7 @@ protected:
   Objecter              *objecter;     // (non-blocking) osd interface
   
   // cache
-  hash_map<inodeno_t, Inode*> inode_map;
+  hash_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
@@ -659,7 +661,7 @@ protected:
     in->put(n);
     if (in->ref == 0) {
       //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
-      inode_map.erase(in->inode.ino);
+      inode_map.erase(in->vino());
       if (in == root) root = 0;
       delete in;
     }
@@ -764,7 +766,7 @@ protected:
   void dump_cache();  // debug
   
   // find dentry based on filepath
-  Dentry *lookup(const filepath& path);
+  Dentry *lookup(const filepath& path, snapid_t snap=CEPH_NOSNAP);
 
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0);
 
@@ -973,33 +975,33 @@ public:
   int rmsnap(const char *path, const char *name);
 
   // low-level interface
-  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
-  bool ll_forget(inodeno_t ino, int count);
-  Inode *_ll_get_inode(inodeno_t ino);
-  int ll_getattr(inodeno_t ino, struct stat *st, int uid = -1, int gid = -1);
-  int ll_setattr(inodeno_t ino, struct stat *st, int mask, int uid = -1, int gid = -1);
-  int ll_getxattr(inodeno_t ino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
-  int ll_setxattr(inodeno_t ino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
-  int ll_removexattr(inodeno_t ino, const char *name, int uid=-1, int gid=-1);
-  int ll_listxattr(inodeno_t ino, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(inodeno_t ino, void **dirpp, int uid = -1, int gid = -1);
+  int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
+  bool ll_forget(vinodeno_t vino, int count);
+  Inode *_ll_get_inode(vinodeno_t vino);
+  int ll_getattr(vinodeno_t vino, struct stat *st, int uid = -1, int gid = -1);
+  int ll_setattr(vinodeno_t vino, struct stat *st, int mask, int uid = -1, int gid = -1);
+  int ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
+  int ll_setxattr(vinodeno_t vino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(vinodeno_t vino, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(vinodeno_t vino, char *list, size_t size, int uid=-1, int gid=-1);
+  int ll_opendir(vinodeno_t vino, void **dirpp, int uid = -1, int gid = -1);
   void ll_releasedir(void *dirp);
-  int ll_readlink(inodeno_t ino, const char **value, int uid = -1, int gid = -1);
-  int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_unlink(inodeno_t ino, const char *name, int uid = -1, int gid = -1);
-  int ll_rmdir(inodeno_t ino, const char *name, int uid = -1, int gid = -1);
-  int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
-  int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_open(inodeno_t ino, int flags, Fh **fh, int uid = -1, int gid = -1);
-  int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
+  int ll_readlink(vinodeno_t vino, const char **value, int uid = -1, int gid = -1);
+  int ll_mknod(vinodeno_t vino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_mkdir(vinodeno_t vino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_symlink(vinodeno_t vino, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_unlink(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
+  int ll_rmdir(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
+  int ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
+  int ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_open(vinodeno_t vino, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
-  int ll_statfs(inodeno_t, struct statvfs *stbuf);
+  int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

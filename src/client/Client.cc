@@ -208,7 +208,7 @@ void Client::dump_cache()
 
   if (root) dump_inode(root, did);
 
-  for (hash_map<inodeno_t, Inode*>::iterator it = inode_map.begin();
+  for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
     if (did.count(it->second)) continue;
@@ -372,7 +372,8 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
   dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
 
   if (lease->mask & CEPH_STAT_MASK_INODE) {
-    in->inode.ino = st->ino;
+    in->inode.ino = st->vino.ino;
+    in->snapid = st->vino.snapid;
     in->inode.layout = st->layout;
     in->inode.rdev = st->rdev;
 
@@ -424,7 +425,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  dout(12) << "insert_dentry_inode " << dname << " ino " << ist->ino
+  dout(12) << "insert_dentry_inode " << dname << " vino " << ist->vino
            << "  size " << ist->size
            << "  mtime " << ist->mtime
 	   << " dmask " << dmask
@@ -432,14 +433,14 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
            << dendl;
   
   if (dn) {
-    if (dn->inode->inode.ino == ist->ino) {
+    if (dn->inode->vino() == ist->vino) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
-               << " with correct ino " << dn->inode->inode.ino
+               << " with correct vino " << dn->inode->vino()
                << dendl;
     } else {
       dout(12) << " had dentry " << dname
-               << " with WRONG ino " << dn->inode->inode.ino
+               << " with WRONG vino " << dn->inode->vino()
                << dendl;
       unlink(dn, true);
       dn = NULL;
@@ -448,18 +449,18 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   
   if (!dn) {
     // have inode linked elsewhere?  -> unlink and relink!
-    if (inode_map.count(ist->ino)) {
-      Inode *in = inode_map[ist->ino];
+    if (inode_map.count(ist->vino)) {
+      Inode *in = inode_map[ist->vino];
       assert(in);
 
       if (in->dn) {
-        dout(12) << " had ino " << in->inode.ino
+        dout(12) << " had vino " << in->vino()
                  << " not linked or linked at the right position, relinking"
                  << dendl;
         dn = relink_inode(dir, dname, in);
       } else {
         // link
-        dout(12) << " had ino " << in->inode.ino
+        dout(12) << " had vino " << in->vino()
                  << " unlinked, linking" << dendl;
         dn = link(dir, dname, in);
       }
@@ -467,10 +468,10 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   }
 
   if (!dn) {
-    Inode *in = new Inode(ist->ino, &ist->layout);
-    inode_map[ist->ino] = in;
+    Inode *in = new Inode(ist->vino, &ist->layout);
+    inode_map[ist->vino] = in;
     dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with ino " << ist->ino << dendl;
+    dout(12) << " new dentry+node with vino " << ist->vino << dendl;
   } 
 
   assert(dn && dn->inode);
@@ -576,16 +577,16 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   // insert into cache --
   // first inode
   Inode *curi = 0;
-  inodeno_t ino = ist[0].ino;
-  if (!root && ino == 1) {
-    curi = root = new Inode(ino, &ist[0].layout);
+  vinodeno_t vino = ist[0].vino;
+  if (!root && vino.ino == 1) {
+    curi = root = new Inode(vino, &ist[0].layout);
     dout(10) << "insert_trace new root is " << root << dendl;
-    inode_map[ino] = root;
+    inode_map[vino] = root;
     root->dir_auth = 0;
   }
   if (!curi) {
-    assert(inode_map.count(ino));
-    curi = inode_map[ino];
+    assert(inode_map.count(vino));
+    curi = inode_map[vino];
   }
   update_inode(curi, &ist[0], &ilease[0], from);
 
@@ -613,14 +614,15 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
 /*
  * bleh, dentry vs inode semantics here are sloppy
  */
-Dentry *Client::lookup(const filepath& path)
+Dentry *Client::lookup(const filepath& path, snapid_t snapid)
 {
   dout(14) << "lookup " << path << dendl;
 
   Inode *cur;
   if (path.get_ino()) {
-    if (inode_map.count(path.get_ino()))
-      cur = inode_map[path.get_ino()];
+    vinodeno_t vino(path.get_ino(), snapid);
+    if (inode_map.count(vino)) 
+      cur = inode_map[vino];
     else
       return NULL;
   } else
@@ -1186,7 +1188,7 @@ void Client::send_reconnect(int mds)
 
   if (mds_sessions.count(mds)) {
     // i have an open session.
-    for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
+    for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
 	 p != inode_map.end();
 	 p++) {
       Inode *in = p->second;
@@ -1196,14 +1198,14 @@ void Client::send_reconnect(int mds)
 		 << " wants " << cap_string(in->caps_wanted())
 		 << dendl;
 	in->caps[mds]->seq = 0;  // reset seq.
-	m->add_inode_caps(p->first,    // ino
+	m->add_inode_caps(p->first.ino,    // ino
 			  in->caps_wanted(), // wanted
 			  in->caps[mds]->issued,     // issued
 			  in->inode.size, in->inode.mtime, in->inode.atime);
 	filepath path;
 	in->make_path(path);
 	dout(10) << " path on " << p->first << " is " << path << dendl;
-	m->add_inode_path(p->first, path.get_path());
+	m->add_inode_path(p->first.ino, path.get_path());
       }
       if (in->exporting_mds == mds) {
 	dout(10) << " clearing exporting_caps on " << p->first << dendl;
@@ -1253,11 +1255,12 @@ void Client::handle_lease(MClientLease *m)
   mds_sessions[mds].seq++;
 
   Inode *in;
-  if (inode_map.count(m->get_ino()) == 0) {
-    dout(10) << " don't have inode " << m->get_ino() << dendl;
+  vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
+  if (inode_map.count(vino) == 0) {
+    dout(10) << " don't have vino " << vino << dendl;
     goto revoke;
   }
-  in = inode_map[m->get_ino()];
+  in = inode_map[vino];
 
   if (m->get_mask() & CEPH_LOCK_DN) {
     if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
@@ -1618,8 +1621,9 @@ void Client::handle_snap(MClientSnap *m)
     for (list<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
 	 p++) {
-      if (inode_map.count(*p)) {
-	Inode *in = inode_map[*p];
+      vinodeno_t vino(*p, CEPH_NOSNAP);
+      if (inode_map.count(vino)) {
+	Inode *in = inode_map[vino];
 	if (!in->snaprealm)
 	  continue;
 	if (in->snaprealm->created > m->snap_created) {
@@ -1663,13 +1667,14 @@ void Client::handle_file_caps(MClientFileCaps *m)
   mds_sessions[mds].seq++;
 
   Inode *in = 0;
-  if (inode_map.count(m->get_ino())) in = inode_map[ m->get_ino() ];
+  vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
+  if (inode_map.count(vino)) in = inode_map[vino];
   if (!in) {
     /*
      * this can happen if we release caps, and then trim the inode from our cache,
      * but are racing with, e.g., an mds callback.
      */
-    dout(5) << "handle_file_caps don't have ino " << m->get_ino() << dendl;
+    dout(5) << "handle_file_caps don't have vino " << vino << dendl;
     delete m;
     return;
   }
@@ -1999,8 +2004,8 @@ int Client::unmount()
 
   if (g_conf.client_oc) {
     // release any/all caps
-    hash_map<inodeno_t, Inode*>::iterator next;
-    for (hash_map<inodeno_t, Inode*>::iterator p = inode_map.begin();
+    hash_map<vinodeno_t, Inode*>::iterator next;
+    for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
          p != inode_map.end(); 
          p = next) {
       next = p;
@@ -2400,6 +2405,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat)
 	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << dendl;
   memset(st, 0, sizeof(struct stat));
   st->st_ino = in->inode.ino;
+  st->st_dev = in->snapid;
   st->st_mode = in->inode.mode;
   st->st_rdev = in->inode.rdev;
   st->st_nlink = in->inode.nlink;
@@ -3636,7 +3642,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   return _statfs(stbuf);
 }
 
-int Client::ll_statfs(inodeno_t ino, struct statvfs *stbuf)
+int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
 {
   Mutex::Locker lock(client_lock);
   tout << "ll_statfs" << std::endl;
@@ -3789,12 +3795,12 @@ int Client::_rmsnap(const filepath& path, const char *name, int uid, int gid)
 #define FUSE_SET_ATTR_ATIME	(1 << 4)
 #define FUSE_SET_ATTR_MTIME	(1 << 5)
 
-int Client::ll_lookup(inodeno_t parent, const char *name, struct stat *attr, int uid, int gid)
+int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_lookup " << parent << " " << name << dendl;
   tout << "ll_lookup" << std::endl;
-  tout << parent.val << std::endl;
+  tout << parent.ino.val << std::endl;
   tout << name << std::endl;
 
   string dname = name;
@@ -3871,8 +3877,8 @@ int Client::_ll_put(Inode *in, int num)
 void Client::_ll_drop_pins()
 {
   dout(10) << "_ll_drop_pins" << dendl;
-  hash_map<inodeno_t, Inode*>::iterator next;
-  for (hash_map<inodeno_t, Inode*>::iterator it = inode_map.begin();
+  hash_map<vinodeno_t, Inode*>::iterator next;
+  for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it = next) {
     Inode *in = it->second;
@@ -3883,25 +3889,25 @@ void Client::_ll_drop_pins()
   }
 }
 
-bool Client::ll_forget(inodeno_t ino, int num)
+bool Client::ll_forget(vinodeno_t vino, int num)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_forget " << ino << " " << num << dendl;
+  dout(3) << "ll_forget " << vino << " " << num << dendl;
   tout << "ll_forget" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << num << std::endl;
 
-  if (ino == 1) return true;  // ignore forget on root.
+  if (vino.ino == 1) return true;  // ignore forget on root.
 
   bool last = false;
-  if (inode_map.count(ino) == 0) {
-    dout(1) << "WARNING: ll_forget on " << ino << " " << num 
+  if (inode_map.count(vino) == 0) {
+    dout(1) << "WARNING: ll_forget on " << vino << " " << num 
 	    << ", which I don't have" << dendl;
   } else {
-    Inode *in = inode_map[ino];
+    Inode *in = inode_map[vino];
     assert(in);
     if (in->ll_ref < num) {
-      dout(1) << "WARNING: ll_forget on " << ino << " " << num << ", which only has ll_ref=" << in->ll_ref << dendl;
+      dout(1) << "WARNING: ll_forget on " << vino << " " << num << ", which only has ll_ref=" << in->ll_ref << dendl;
       _ll_put(in, in->ll_ref);
       last = true;
     } else {
@@ -3912,43 +3918,43 @@ bool Client::ll_forget(inodeno_t ino, int num)
   return last;
 }
 
-Inode *Client::_ll_get_inode(inodeno_t ino)
+Inode *Client::_ll_get_inode(vinodeno_t vino)
 {
-  if (inode_map.count(ino) == 0) {
-    assert(ino == 1);  // must be the root inode.
+  if (inode_map.count(vino) == 0) {
+    assert(vino.ino == 1);  // must be the root inode.
     Inode *in;
     filepath path(1);
     int r = _do_lstat(path, 0, &in);
     assert(r >= 0);
     return in;
   } else {
-    return inode_map[ino];
+    return inode_map[vino];
   }
 }
 
 
-int Client::ll_getattr(inodeno_t ino, struct stat *attr, int uid, int gid)
+int Client::ll_getattr(vinodeno_t vino, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_getattr " << ino << dendl;
+  dout(3) << "ll_getattr " << vino << dendl;
   tout << "ll_getattr" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
   filepath path(in->ino());
   int res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in, uid, gid);
   if (res == 0)
     fill_stat(in, attr);
-  dout(3) << "ll_getattr " << ino << " = " << res << dendl;
+  dout(3) << "ll_getattr " << vino << " = " << res << dendl;
   return res;
 }
 
-int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask, int uid, int gid)
+int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_setattr " << ino << " mask " << hex << mask << dec << dendl;
+  dout(3) << "ll_setattr " << vino << " mask " << hex << mask << dec << dendl;
   tout << "ll_setattr" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << attr->st_mode << std::endl;
   tout << attr->st_uid << std::endl;
   tout << attr->st_gid << std::endl;
@@ -3957,7 +3963,7 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask, int uid, int 
   tout << attr->st_atime << std::endl;
   tout << mask << std::endl;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
 
   filepath path;
   in->make_path(path);
@@ -3985,22 +3991,22 @@ int Client::ll_setattr(inodeno_t ino, struct stat *attr, int mask, int uid, int 
   assert(r == 0);
   fill_stat(in, attr);
 
-  dout(3) << "ll_setattr " << ino << " = " << r << dendl;
+  dout(3) << "ll_setattr " << vino << " = " << r << dendl;
   return 0;
 }
 
 // ----------
 // xattrs
 
-int Client::ll_getxattr(inodeno_t ino, const char *name, void *value, size_t size, int uid, int gid)
+int Client::ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t size, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_getxattr " << ino << " " << name << " size " << size << dendl;
+  dout(3) << "ll_getxattr " << vino << " " << name << " size " << size << dendl;
   tout << "ll_getxattr" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << name << std::endl;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
 
   filepath path;
   in->make_path(path);
@@ -4029,15 +4035,15 @@ int Client::_getxattr(const filepath &path, const char *name, void *value, size_
   return r;
 }
 
-int Client::ll_listxattr(inodeno_t ino, char *names, size_t size, int uid, int gid)
+int Client::ll_listxattr(vinodeno_t vino, char *names, size_t size, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_listxattr " << ino << " size " << size << dendl;
+  dout(3) << "ll_listxattr " << vino << " size " << size << dendl;
   tout << "ll_listxattr" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << size << std::endl;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
   filepath path;
   in->make_path(path);
   return _listxattr(path, names, size, false, uid, gid);
@@ -4072,19 +4078,19 @@ int Client::_listxattr(const filepath &path, char *name, size_t size,
   return r;
 }
 
-int Client::ll_setxattr(inodeno_t ino, const char *name, const void *value, size_t size, int flags, int uid, int gid)
+int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, size_t size, int flags, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_setxattr " << ino << " " << name << " size " << size << dendl;
+  dout(3) << "ll_setxattr " << vino << " " << name << " size " << size << dendl;
   tout << "ll_setxattr" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << name << std::endl;
 
   // only user xattrs, for now
   if (strncmp(name, "user.", 5))
     return -EOPNOTSUPP;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
   if (in->dn) touch_dn(in->dn);
 
   filepath path;
@@ -4113,19 +4119,19 @@ int Client::_setxattr(const filepath &path, const char *name, const void *value,
   return res;
 }
 
-int Client::ll_removexattr(inodeno_t ino, const char *name, int uid, int gid)
+int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_removexattr " << ino << " " << name << dendl;
+  dout(3) << "ll_removexattr " << vino << " " << name << dendl;
   tout << "ll_removexattr" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << name << std::endl;
 
   // only user xattrs, for now
   if (strncmp(name, "user.", 5))
     return -EOPNOTSUPP;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
   if (in->dn) touch_dn(in->dn);
 
   filepath path;
@@ -4150,14 +4156,14 @@ int Client::_removexattr(const filepath &path, const char *name,
 
 
 
-int Client::ll_readlink(inodeno_t ino, const char **value, int uid, int gid)
+int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_readlink " << ino << dendl;
+  dout(3) << "ll_readlink " << vino << dendl;
   tout << "ll_readlink" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
   if (in->dn) touch_dn(in->dn);
 
   int r = 0;
@@ -4167,16 +4173,16 @@ int Client::ll_readlink(inodeno_t ino, const char **value, int uid, int gid)
     *value = "";
     r = -EINVAL;
   }
-  dout(3) << "ll_readlink " << ino << " = " << r << " (" << *value << ")" << dendl;
+  dout(3) << "ll_readlink " << vino << " = " << r << " (" << *value << ")" << dendl;
   return r;
 }
 
-int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid, int gid)
+int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_mknod " << parent << " " << name << dendl;
   tout << "ll_mknod" << std::endl;
-  tout << parent.val << std::endl;
+  tout << parent.ino.val << std::endl;
   tout << name << std::endl;
   tout << mode << std::endl;
   tout << rdev << std::endl;
@@ -4199,12 +4205,12 @@ int Client::ll_mknod(inodeno_t parent, const char *name, mode_t mode, dev_t rdev
   return r;
 }
 
-int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct stat *attr, int uid, int gid)
+int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_mkdir " << parent << " " << name << dendl;
   tout << "ll_mkdir" << std::endl;
-  tout << parent.val << std::endl;
+  tout << parent.ino.val << std::endl;
   tout << name << std::endl;
   tout << mode << std::endl;
 
@@ -4226,12 +4232,12 @@ int Client::ll_mkdir(inodeno_t parent, const char *name, mode_t mode, struct sta
   return r;
 }
 
-int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, struct stat *attr, int uid, int gid)
+int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_symlink " << parent << " " << name << " -> " << value << dendl;
   tout << "ll_symlink" << std::endl;
-  tout << parent.val << std::endl;
+  tout << parent.ino.val << std::endl;
   tout << name << std::endl;
   tout << value << std::endl;
 
@@ -4253,15 +4259,15 @@ int Client::ll_symlink(inodeno_t parent, const char *name, const char *value, st
   return r;
 }
 
-int Client::ll_unlink(inodeno_t ino, const char *name, int uid, int gid)
+int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_unlink " << ino << " " << name << dendl;
+  dout(3) << "ll_unlink " << vino << " " << name << dendl;
   tout << "ll_unlink" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << name << std::endl;
 
-  Inode *diri = _ll_get_inode(ino);
+  Inode *diri = _ll_get_inode(vino);
 
   filepath path;
   diri->make_path(path);
@@ -4269,15 +4275,15 @@ int Client::ll_unlink(inodeno_t ino, const char *name, int uid, int gid)
   return _unlink(path.c_str(), uid, gid);
 }
 
-int Client::ll_rmdir(inodeno_t ino, const char *name, int uid, int gid)
+int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_rmdir " << ino << " " << name << dendl;
+  dout(3) << "ll_rmdir " << vino << " " << name << dendl;
   tout << "ll_rmdir" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << name << std::endl;
 
-  Inode *diri = _ll_get_inode(ino);
+  Inode *diri = _ll_get_inode(vino);
 
   filepath path;
   diri->make_path(path);
@@ -4285,15 +4291,15 @@ int Client::ll_rmdir(inodeno_t ino, const char *name, int uid, int gid)
   return _rmdir(path.c_str(), uid, gid);
 }
 
-int Client::ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname, int uid, int gid)
+int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_rename " << parent << " " << name << " to "
 	  << newparent << " " << newname << dendl;
   tout << "ll_rename" << std::endl;
-  tout << parent.val << std::endl;
+  tout << parent.ino.val << std::endl;
   tout << name << std::endl;
-  tout << newparent.val << std::endl;
+  tout << newparent.ino.val << std::endl;
   tout << newname << std::endl;
 
   Inode *diri = _ll_get_inode(parent);
@@ -4309,16 +4315,16 @@ int Client::ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, c
   return _rename(path.c_str(), newpath.c_str(), uid, gid);
 }
 
-int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr, int uid, int gid)
+int Client::ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_link " << ino << " to " << newparent << " " << newname << dendl;
+  dout(3) << "ll_link " << vino << " to " << newparent << " " << newname << dendl;
   tout << "ll_link" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << newparent << std::endl;
   tout << newname << std::endl;
 
-  Inode *old = _ll_get_inode(ino);
+  Inode *old = _ll_get_inode(vino);
   Inode *diri = _ll_get_inode(newparent);
 
   filepath path;
@@ -4330,21 +4336,21 @@ int Client::ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, str
 
   int r = _link(path.c_str(), newpath.c_str(), uid, gid);
   if (r == 0) {
-    Inode *in = _ll_get_inode(ino);
+    Inode *in = _ll_get_inode(vino);
     fill_stat(in, attr);
     _ll_get(in);
   }
   return r;
 }
 
-int Client::ll_opendir(inodeno_t ino, void **dirpp, int uid, int gid)
+int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_opendir " << ino << dendl;
+  dout(3) << "ll_opendir " << vino << dendl;
   tout << "ll_opendir" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   
-  Inode *diri = inode_map[ino];
+  Inode *diri = inode_map[vino];
   assert(diri);
   filepath path;
   diri->make_path(path);
@@ -4354,7 +4360,7 @@ int Client::ll_opendir(inodeno_t ino, void **dirpp, int uid, int gid)
 
   tout << (unsigned long)*dirpp << std::endl;
 
-  dout(3) << "ll_opendir " << ino << " = " << r << " (" << *dirpp << ")" << dendl;
+  dout(3) << "ll_opendir " << vino << " = " << r << " (" << *dirpp << ")" << dendl;
   return r;
 }
 
@@ -4367,32 +4373,32 @@ void Client::ll_releasedir(void *dirp)
   _closedir((DirResult*)dirp);
 }
 
-int Client::ll_open(inodeno_t ino, int flags, Fh **fhp, int uid, int gid)
+int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_open " << ino << " " << flags << dendl;
+  dout(3) << "ll_open " << vino << " " << flags << dendl;
   tout << "ll_open" << std::endl;
-  tout << ino.val << std::endl;
+  tout << vino.ino.val << std::endl;
   tout << flags << std::endl;
 
-  Inode *in = _ll_get_inode(ino);
+  Inode *in = _ll_get_inode(vino);
   filepath path;
   in->make_path(path);
 
   int r = _open(path.c_str(), flags, 0, fhp, uid, gid);
 
   tout << (unsigned long)*fhp << std::endl;
-  dout(3) << "ll_open " << ino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
+  dout(3) << "ll_open " << vino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
   return r;
 }
 
-int Client::ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, 
+int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, 
 		      struct stat *attr, Fh **fhp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags << dendl;
   tout << "ll_create" << std::endl;
-  tout << parent.val << std::endl;
+  tout << parent.ino.val << std::endl;
   tout << name << std::endl;
   tout << mode << std::endl;
   tout << flags << std::endl;

@@ -153,7 +153,7 @@ inline ostream& operator<<(ostream &out, const frag_info_t &f) {
 struct vinodeno_t {
   inodeno_t ino;
   snapid_t snapid;
-
+  vinodeno_t() {}
   vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
 };
 

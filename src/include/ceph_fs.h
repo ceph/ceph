@@ -692,6 +692,7 @@ struct ceph_frag_tree_head {
 
 struct ceph_mds_reply_inode {
 	ceph_ino_t ino;
+	__le64 snapid;
 	__le64 version;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
