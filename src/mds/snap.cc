@@ -134,6 +134,36 @@ const set<snapid_t>& SnapRealm::update_snaps(snapid_t creating)
 }
 
 
+void SnapRealm::get_snap_info(bufferlist& bl, snapid_t first, snapid_t last)
+{
+  dout(10) << "get_snap_info snaps " << get_snaps() << dendl;
+
+  // include my snaps within interval [first,last]
+  for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
+       p != snaps.end() && p->first <= last;
+       p++)
+    ::encode(p->second, bl);
+
+  // include snaps for parents during intervals that intersect [first,last]
+  snapid_t thru = first;
+  for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
+       p != past_parents.end() && p->first >= first && p->second.first <= last;
+       p++) {
+    CInode *oldparent = mdcache->get_inode(p->second.dirino);
+    assert(oldparent);  // call open_parents first!
+    assert(oldparent->snaprealm);
+    
+    thru = MIN(last, p->first);
+    oldparent->snaprealm->get_snap_info(bl, 
+					MAX(first, p->second.first),
+					thru);
+    ++thru;
+  }
+  if (thru <= last && parent)
+    parent->get_snap_info(bl, thru, last);
+}
+
+
 void SnapRealm::split_at(SnapRealm *child)
 {
   dout(10) << "split_at " << *child 

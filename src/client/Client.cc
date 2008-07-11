@@ -1590,6 +1590,8 @@ void Client::maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created,
     for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
       Inode *in = *p;
       check_caps(in, true); // force writeback of write caps
+      if (g_conf.client_oc)
+	_flush(in);
     }
 
     realm->snaps = snaps;  // ok.
@@ -3262,14 +3264,16 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	dout(10) << "readahead " << f->nr_consec_read << " reads " 
 		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
 		 << " (caller wants " << offset << "~" << size << ")" << dendl;
-	#warning bleh
-	//objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, l, NULL, 0, 0);
+	objectcacher->file_read(in->inode.ino, &in->inode.layout,
+				CEPH_NOSNAP, in->snaprealm->snaps,
+				offset, l, NULL, 0, 0);
 	dout(10) << "readahead initiated" << dendl;
       }
 
       // read (and possibly block)
-  #warning bleh
-      //r = objectcacher->file_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, onfinish);
+      r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
+				  CEPH_NOSNAP, in->snaprealm->snaps,
+				  offset, size, bl, 0, onfinish);
       
       if (r == 0) {
 	while (!done) 
@@ -3280,8 +3284,9 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	delete onfinish;
       }
     } else {
-  #warning bleh
-      //r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
+      r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout,
+					      CEPH_NOSNAP, in->snaprealm->snaps,
+					      offset, size, bl, 0, client_lock);
     }
     
   } else {
@@ -3448,12 +3453,14 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       objectcacher->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-  #warning bleh
-      //objectcacher->file_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0);
+      objectcacher->file_write(in->inode.ino, &in->inode.layout, 
+			       CEPH_NOSNAP, in->snaprealm->snaps,
+			       offset, size, bl, 0);
     } else {
       // atomic, synchronous, blocking.
-  #warning bleh
-      //objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, offset, size, bl, 0, client_lock);
+      objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout,
+					   CEPH_NOSNAP, in->snaprealm->snaps,
+					   offset, size, bl, 0, client_lock);
     }   
   } else {
     // simple, non-atomic sync write

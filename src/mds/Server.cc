@@ -812,6 +812,9 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
 
     // snaps
+  case CEPH_MDS_OP_LSSNAP:
+    handle_client_lssnap(mdr);
+    break;
   case CEPH_MDS_OP_MKSNAP:
     handle_client_mksnap(mdr);
     break;
@@ -4631,6 +4634,63 @@ void Server::handle_client_openc(MDRequest *mdr)
 
 
 // snaps
+
+void Server::handle_client_lssnap(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+
+  // traverse to path
+  vector<CDentry*> trace;
+  int r = mdcache->path_traverse(mdr, req, 
+				 req->get_filepath(), trace, false,
+				 MDS_TRAVERSE_FORWARD);
+  if (r > 0) return;
+  if (trace.empty()) r = -EINVAL;   // can't snap root
+  if (r < 0) {
+    reply_request(mdr, r);
+    return;
+  }
+  CDentry *dn = trace[trace.size()-1];
+  assert(dn);
+  if (!dn->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, dn->authority().first);
+    return;
+  }
+
+  // dir only
+  CInode *diri = dn->inode;
+  if (!dn->is_primary() || !diri->is_dir()) {
+    reply_request(mdr, -ENOTDIR);
+    return;
+  }
+  dout(10) << "lssnap " << req->get_path2() << " on " << *diri << dendl;
+
+  // lock snap
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  // rdlock path
+  for (int i=0; i<(int)trace.size()-1; i++)
+    rdlocks.insert(&trace[i]->lock);
+
+  // rdlock ancestor snaps
+  CInode *t = diri;
+  rdlocks.insert(&diri->snaplock);
+  while (t->get_parent_dn()) {
+    t = t->get_parent_dn()->get_dir()->get_inode();
+    rdlocks.insert(&t->snaplock);
+  }
+
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  SnapRealm *realm = diri->find_snaprealm();
+  bufferlist snapinfo;
+  realm->get_snap_info(snapinfo);
+
+  MClientReply *reply = new MClientReply(req);
+  reply->set_dir_bl(snapinfo);
+  reply_request(mdr, reply);
+}
 
 void Server::handle_client_mksnap(MDRequest *mdr)
 {

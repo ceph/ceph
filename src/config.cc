@@ -292,11 +292,12 @@ md_config_t g_conf = {
   client_readahead_min: 128*1024,  // readahead at _least_ this much.
   client_readahead_max_bytes: 0,//8 * 1024*1024,
   client_readahead_max_periods: 4,  // as multiple of file layout period (object size * num stripes)
+  client_snapdir: ".snap",
   fuse_direct_io: 0,
   fuse_ll: true,
   
   // --- objectcacher ---
-  client_oc: false,//until snaps are done... true,
+  client_oc: true,
   client_oc_size:      1024*1024* 64,    // MB * n
   client_oc_max_dirty: 1024*1024* 48,    // MB * n  (dirty OR tx.. bigish)
   client_oc_target_dirty:  1024*1024* 8, // target dirty (keep this smallish)

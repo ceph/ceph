@@ -124,6 +124,7 @@ struct SnapRealm {
   void build_snap_set(set<snapid_t>& s, snapid_t first, snapid_t last);
   const set<snapid_t>& get_snaps();
   const vector<snapid_t>& get_snap_vector();
+  void get_snap_info(bufferlist& snapinfo, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
   const set<snapid_t>& update_snaps(snapid_t adding=0);
   snapid_t get_latest_snap() {
     const set<snapid_t> &snaps = get_snaps();

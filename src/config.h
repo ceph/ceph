@@ -158,6 +158,7 @@ struct md_config_t {
   loff_t client_readahead_min;
   loff_t client_readahead_max_bytes;
   loff_t client_readahead_max_periods;
+  const char *client_snapdir;
   int fuse_direct_io;
   bool fuse_ll;
 

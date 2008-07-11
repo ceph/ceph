@@ -23,6 +23,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, off_t of
   ObjectCacher::BufferHead *right = new BufferHead(this);
   right->last_write_tid = left->last_write_tid;
   right->set_state(left->get_state());
+  right->snaps = left->snaps;
   
   off_t newleftlen = off - left->start();
   right->set_start(off);
@@ -401,9 +402,10 @@ void ObjectCacher::bh_read(BufferHead *bh)
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  #warning bleh
-  //objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), &onfinish->bl, 0,
-  //onfinish);
+  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), 
+		 bh->snaps, 
+		 &onfinish->bl, 0,
+		 onfinish);
 }
 
 void ObjectCacher::bh_read_finish(object_t oid, off_t start, size_t length, bufferlist &bl)
@@ -491,11 +493,9 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  tid_t tid = 
-    0;
-  #warning bleh
-  //objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), bh->bl, 0,
-  //                          onack, oncommit);
+  tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(),
+			      bh->snaps, bh->bl, 0,
+			      onack, oncommit);
 
   // set bh last_write_tid
   onack->tid = tid;
@@ -748,6 +748,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       for (map<off_t, BufferHead*>::iterator bh_it = missing.begin();
            bh_it != missing.end();
            bh_it++) {
+	bh_it->second->snaps = rd->snaps;
         bh_read(bh_it->second);
         if (success && onfinish) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
@@ -761,6 +762,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       for (map<off_t, BufferHead*>::iterator bh_it = rx.begin();
            bh_it != rx.end();
            bh_it++) {
+	bh_it->second->snaps = rd->snaps;
         touch_bh(bh_it->second);        // bump in lru, so we don't lose it.
         if (success && onfinish) {
           dout(10) << "readx missed, waiting on " << *bh_it->second 
@@ -878,6 +880,7 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
 
     // map it all into a single bufferhead.
     BufferHead *bh = o->map_write(wr);
+    bh->snaps = wr->snaps;
     
     // adjust buffer pointers (ie "copy" data into my cache)
     // this is over a single ObjectExtent, so we know that

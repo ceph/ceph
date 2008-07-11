@@ -532,9 +532,9 @@ struct ceph_mds_session_head {
  *  & 0x10000 -> follow symlink (e.g. stat(), not lstat()).
  &  & 0x100000 -> use weird ino/path trace
  */
-#define CEPH_MDS_OP_WRITE        0x01000
-#define CEPH_MDS_OP_FOLLOW_LINK  0x10000
-#define CEPH_MDS_OP_INO_PATH  0x100000
+#define CEPH_MDS_OP_WRITE       0x001000
+#define CEPH_MDS_OP_FOLLOW_LINK 0x010000
+#define CEPH_MDS_OP_INO_PATH    0x100000
 enum {
 	CEPH_MDS_OP_FINDINODE = 0x100100,
 
@@ -566,8 +566,9 @@ enum {
 	CEPH_MDS_OP_FSYNC     = 0x00304,
 	CEPH_MDS_OP_READDIR   = 0x00305,
 
-	CEPH_MDS_OP_MKSNAP    = 0x01010,
-	CEPH_MDS_OP_RMSNAP    = 0x01011,
+	CEPH_MDS_OP_MKSNAP    = 0x01400,
+	CEPH_MDS_OP_RMSNAP    = 0x01401,
+	CEPH_MDS_OP_LSSNAP    = 0x00402,
 };
 
 static inline const char *ceph_mds_op_name(int op)

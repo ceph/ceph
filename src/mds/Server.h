@@ -159,6 +159,7 @@ public:
   void _rename_finish(MDRequest *mdr,
 		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
+  void handle_client_lssnap(MDRequest *mdr);
   void handle_client_mksnap(MDRequest *mdr);
   void handle_client_rmsnap(MDRequest *mdr);
 

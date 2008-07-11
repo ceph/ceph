@@ -45,6 +45,7 @@ class ObjectCacher {
     bufferlist  bl;
     tid_t last_write_tid;  // version of bh (if non-zero)
     utime_t last_write;
+    vector<snapid_t> snaps;
     
     map< off_t, list<Context*> > waitfor_read;
     
