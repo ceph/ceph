@@ -35,8 +35,8 @@ AC_CHECK_LIB([pthread], [pthread_create])
 AC_ARG_WITH([debug],
             [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
             [],
-            [want_debug=yes])
-AM_CONDITIONAL(WITH_DEBUG, [test "$want_debug" = "yes"])
+            [with_debug=no])
+AM_CONDITIONAL(WITH_DEBUG, [test "WITH_DEBUG" = "1"])
 
 # fuse?
 AC_ARG_WITH([fuse],
