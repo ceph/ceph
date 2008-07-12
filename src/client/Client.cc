@@ -80,7 +80,8 @@ Logger  *client_logger = 0;
 
 ostream& operator<<(ostream &out, Inode &in)
 {
-  out << in.inode.ino << "("
+  out << in.inode.ino
+      << "s" << in.snapid << "("
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " ref=" << in.ref
@@ -2766,7 +2767,11 @@ int Client::_readdir_get_frag(DirResult *dirp)
   
   dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << dendl;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_READDIR);
+  int op = CEPH_MDS_OP_READDIR;
+  if (dirp->inode && dirp->inode->snapid == SNAPDIR)
+    op = CEPH_MDS_OP_LSSNAP;
+
+  MClientRequest *req = new MClientRequest(op);
   req->set_filepath(dirp->path); 
   req->head.args.readdir.frag = fg;
   
@@ -2786,6 +2791,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
     dirp->inode = diri;
     diri->get();
   }
+  if (!diri)
+    diri = dirp->inode;
 
   if (res == -EAGAIN) {
     dout(10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
@@ -3823,22 +3830,42 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
     goto out;
   }
 
-  // get the inode
-  if (diri->dir &&
-      diri->dir->dentries.count(dname)) {
-    Dentry *dn = diri->dir->dentries[dname];
-    if (dn->lease_mds >= 0 && dn->lease_ttl > now) {
-      touch_dn(dn);
-      in = dn->inode;
-      dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry" << dendl;
+  // .snapshot?
+  if (dname == g_conf.client_snapdir &&
+      diri->snapid == CEPH_NOSNAP) {
+    vinodeno_t vino(parent.ino, SNAPDIR);
+    if (!inode_map.count(vino)) {
+      in = new Inode(vino, &diri->inode.layout);
+      in->inode = diri->inode;
+      in->snapid = SNAPDIR;
+      in->inode.mode = S_IFDIR | 0600;
+      in->dirfragtree.clear();
+      inode_map[vino] = in;
+      diri->get();
+      dout(10) << " created snapshot inode " << *in << dendl;
+    } else {
+      in = inode_map[vino];
+      dout(10) << " had snapshot inode " << *in << dendl;
     }
-  } 
-  if (!in) {
-    filepath path;
-    diri->make_path(path);
-    path.push_dentry(name);
-    _do_lstat(path, 0, &in, uid, gid);
+  } else {
+    // get the inode
+    if (diri->dir &&
+	diri->dir->dentries.count(dname)) {
+      Dentry *dn = diri->dir->dentries[dname];
+      if (dn->lease_mds >= 0 && dn->lease_ttl > now) {
+	touch_dn(dn);
+	in = dn->inode;
+	dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry" << dendl;
+      }
+    } 
+    if (!in) {
+      filepath path;
+      diri->make_path(path);
+      path.push_dentry(name);
+      _do_lstat(path, 0, &in, uid, gid);
+    }
   }
+
   if (in) {
     fill_stat(in, attr);
     _ll_get(in);
@@ -3942,7 +3969,11 @@ int Client::ll_getattr(vinodeno_t vino, struct stat *attr, int uid, int gid)
 
   Inode *in = _ll_get_inode(vino);
   filepath path(in->ino());
-  int res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in, uid, gid);
+  int res;
+  if (vino.snapid < CEPH_NOSNAP)
+    res = 0;
+  else
+    res = _do_lstat(path, CEPH_STAT_MASK_INODE_ALL, &in, uid, gid);
   if (res == 0)
     fill_stat(in, attr);
   dout(3) << "ll_getattr " << vino << " = " << res << dendl;
@@ -4352,11 +4383,22 @@ int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
   
   Inode *diri = inode_map[vino];
   assert(diri);
+
   filepath path;
-  diri->make_path(path);
+  if (vino.snapid == SNAPDIR) {
+    Inode *livediri = inode_map[vinodeno_t(vino.ino, CEPH_NOSNAP)];
+    assert(livediri);
+    livediri->make_path(path);
+  } else
+    diri->make_path(path);
   dout(10) << " ino path is " << path << dendl;
 
-  int r = _opendir(path.c_str(), (DirResult**)dirpp);
+  int r = 0;
+  if (vino.snapid == SNAPDIR) {
+    *dirpp = new DirResult(path, diri);
+  } else {
+    r = _opendir(path.c_str(), (DirResult**)dirpp);
+  }
 
   tout << (unsigned long)*dirpp << std::endl;
 

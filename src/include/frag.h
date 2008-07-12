@@ -162,6 +162,9 @@ public:
   void swap(fragtree_t& other) {
     _splits.swap(other._splits);
   }
+  void clear() {
+    _splits.clear();
+  }
 
   // -------------
   // accessors

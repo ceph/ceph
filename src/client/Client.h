@@ -50,6 +50,9 @@ using std::fstream;
 using namespace __gnu_cxx;
 
 
+#define SNAPDIR (CEPH_NOSNAP-1)
+
+
 
 class MStatfsReply;
 class MClientSession;
@@ -661,6 +664,10 @@ protected:
     in->put(n);
     if (in->ref == 0) {
       //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
+      if (in->snapid == SNAPDIR) {
+	vinodeno_t live(in->inode.ino, CEPH_NOSNAP);
+	put_inode(inode_map[live]);
+      }
       inode_map.erase(in->vino());
       if (in == root) root = 0;
       delete in;

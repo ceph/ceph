@@ -4631,7 +4631,24 @@ void Server::handle_client_openc(MDRequest *mdr)
 
 
 
+static void encode_empty_dirstat(bufferlist& bl)
+{
+  // encode fake dirstat
+  frag_t fg;
+  __s32 auth = CDIR_AUTH_PARENT;
+  __u32 zero;
+  ::encode(fg, bl);
+  ::encode(auth, bl);
+  ::encode(zero, bl);
+}
 
+static void encode_empty_lease(bufferlist& bl)
+{
+  LeaseStat e;
+  e.mask = -1;
+  e.duration_ms = -1;
+  ::encode(e, bl);
+}
 
 // snaps
 
@@ -4684,12 +4701,41 @@ void Server::handle_client_lssnap(MDRequest *mdr)
     return;
 
   SnapRealm *realm = diri->find_snaprealm();
-  bufferlist snapinfo;
-  realm->get_snap_info(snapinfo);
+  map<snapid_t,SnapInfo*> infomap;
+  realm->get_snap_info(infomap);
 
+  snapid_t oldest = diri->get_oldest_snap();
+  dout(10) << " oldest snap for this inode is " << oldest << dendl;
+
+  __u32 num = 0;
+  bufferlist dnbl;
+  for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();
+       p != infomap.end();
+       p++) {
+    if (p->first < oldest)
+      continue;
+
+    dout(10) << p->first << " -> " << *p->second << dendl;
+
+    char nm[20];
+    sprintf(nm, "%llu", (unsigned long long)p->second->snapid);
+    ::encode(nm, dnbl);
+    encode_empty_lease(dnbl);
+    diri->encode_inodestat(dnbl, p->first);
+    encode_empty_lease(dnbl);
+    num++;
+  }
+
+  bufferlist dirbl;
+
+  encode_empty_dirstat(dirbl);
+
+  ::encode(num, dirbl);
+  dirbl.claim_append(dnbl);
+  
   MClientReply *reply = new MClientReply(req);
-  reply->set_dir_bl(snapinfo);
-  reply_request(mdr, reply);
+  reply->set_dir_bl(dirbl);
+  reply_request(mdr, reply, diri);
 }
 
 void Server::handle_client_mksnap(MDRequest *mdr)

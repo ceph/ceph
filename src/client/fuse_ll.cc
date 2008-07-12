@@ -35,9 +35,9 @@ int last_stag = 0;
 hash_map<__u64,int> snap_stag_map;
 hash_map<int,__u64> stag_snap_map;
 
-#define FINO_INO(x) ((x) & ((1ull<<40)-1ull))
-#define FINO_STAG(x) ((x) >> 40)
-#define MAKE_FINO(i,s) ((i) | ((s) << 40))
+#define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
+#define FINO_STAG(x) ((x) >> 48)
+#define MAKE_FINO(i,s) ((i) | ((s) << 48))
 
 static __u64 fino_snap(__u64 fino)
 {
@@ -452,6 +452,9 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
 
   client = c;
 
+  snap_stag_map[CEPH_NOSNAP] = 0;
+  stag_snap_map[0] = CEPH_NOSNAP;
+  
   // set up fuse argc/argv
   int newargc = 0;
   const char **newargv = (const char **) malloc((argc + 10) * sizeof(char *));
@@ -460,6 +463,8 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
 
   newargv[newargc++] = "-o";
   newargv[newargc++] = "allow_other";
+
+  newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
 

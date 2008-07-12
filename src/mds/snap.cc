@@ -134,7 +134,7 @@ const set<snapid_t>& SnapRealm::update_snaps(snapid_t creating)
 }
 
 
-void SnapRealm::get_snap_info(bufferlist& bl, snapid_t first, snapid_t last)
+void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, snapid_t last)
 {
   dout(10) << "get_snap_info snaps " << get_snaps() << dendl;
 
@@ -142,7 +142,7 @@ void SnapRealm::get_snap_info(bufferlist& bl, snapid_t first, snapid_t last)
   for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
        p != snaps.end() && p->first <= last;
        p++)
-    ::encode(p->second, bl);
+    infomap[p->first] = &p->second;
 
   // include snaps for parents during intervals that intersect [first,last]
   snapid_t thru = first;
@@ -154,13 +154,13 @@ void SnapRealm::get_snap_info(bufferlist& bl, snapid_t first, snapid_t last)
     assert(oldparent->snaprealm);
     
     thru = MIN(last, p->first);
-    oldparent->snaprealm->get_snap_info(bl, 
+    oldparent->snaprealm->get_snap_info(infomap,
 					MAX(first, p->second.first),
 					thru);
     ++thru;
   }
   if (thru <= last && parent)
-    parent->get_snap_info(bl, thru, last);
+    parent->get_snap_info(infomap, thru, last);
 }
 
 

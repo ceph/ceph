@@ -599,6 +599,7 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_TRUNCATE: return "truncate";
 	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
 	case CEPH_MDS_OP_FSYNC: return "fsync";
+	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
 	default: return "unknown";

@@ -983,6 +983,14 @@ CInodeDiscover* CInode::replicate_to( int rep )
 
 // SNAP
 
+snapid_t CInode::get_oldest_snap()
+{
+  snapid_t t = CEPH_NOSNAP;
+  if (!old_inodes.empty())
+    t = old_inodes.begin()->second.first;
+  return MIN(t, first);
+}
+
 void CInode::open_snaprealm()
 {
   if (!snaprealm) {
@@ -1035,6 +1043,64 @@ void CInode::decode_snap(bufferlist& snapbl)
     bufferlist::iterator p = snapbl.begin();
     ::decode(*snaprealm, p);
   }
+}
+
+
+void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
+{
+  // pick a version!
+  inode_t *i = &inode;
+  bufferlist xbl;
+  if (!old_inodes.empty()) {
+    map<snapid_t,old_inode_t>::iterator p = old_inodes.lower_bound(snapid);
+    if (p != old_inodes.end()) {
+      assert(p->second.first <= snapid && snapid <= p->first);
+      i = &p->second.inode;
+      ::encode(p->second.xattrs, xbl);
+    }
+  }
+  
+  /*
+   * note: encoding matches struct ceph_client_reply_inode
+   */
+  struct ceph_mds_reply_inode e;
+  memset(&e, 0, sizeof(e));
+  e.ino = i->ino;
+  e.snapid = snapid;
+  e.version = i->version;
+  e.layout = i->layout;
+  i->ctime.encode_timeval(&e.ctime);
+  i->mtime.encode_timeval(&e.mtime);
+  i->atime.encode_timeval(&e.atime);
+  e.time_warp_seq = i->time_warp_seq;
+  e.mode = i->mode;
+  e.uid = i->uid;
+  e.gid = i->gid;
+  e.nlink = i->nlink;
+  e.size = i->size;
+  e.max_size = i->max_size;
+  
+  e.files = i->dirstat.nfiles;
+  e.subdirs = i->dirstat.nsubdirs;
+  i->dirstat.rctime.encode_timeval(&e.rctime);
+  e.rbytes = i->dirstat.rbytes;
+  e.rfiles = i->dirstat.rfiles;
+  e.rsubdirs = i->dirstat.rsubdirs;
+  
+  e.rdev = i->rdev;
+  e.fragtree.nsplits = dirfragtree._splits.size();
+  ::encode(e, bl);
+  for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
+       p != dirfragtree._splits.end();
+       p++) {
+    ::encode(p->first, bl);
+    ::encode(p->second, bl);
+  }
+  ::encode(symlink, bl);
+  
+  if (!xattrs.empty() && xbl.length() == 0)
+    ::encode(xattrs, xbl);
+  ::encode(xbl, bl);
 }
 
 
