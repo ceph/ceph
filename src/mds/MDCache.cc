@@ -1010,8 +1010,8 @@ void MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t foll
 	       << *in << dendl;
     }
   } else {
-    // is dn within current snap?
-    if (follows < dn->first) {
+    // are we within the current snap?
+    if (follows < in->first) {
       metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
     } else {
       snapid_t oldfirst = dn->first;
@@ -1023,7 +1023,12 @@ void MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t foll
       dout(10) << " olddn " << *olddn << dendl;
 
       metablob->add_primary_dentry(olddn, true);
-      metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
+      inode_t *pi;
+      if (in->is_projected())
+	pi = in->get_previous_projected_inode();  // mkdir/mknod/symlink don't bother to project new inodes
+      else
+	pi = &in->inode;	
+      metablob->add_primary_dentry(dn, true, in, pi);
     }   
   }
 }    
@@ -4196,7 +4201,7 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   filepath& origpath,               // what
                            vector<CDentry*>& trace,          // result
-			   snapid_t *psnapid,
+			   snapid_t *psnapid, CInode **psnapdiri,
                            bool follow_trailing_symlink,     // how
                            int onfail)
 {
@@ -4209,6 +4214,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   set< pair<CInode*, string> > symlinks_resolved; 
 
   snapid_t snapid = CEPH_NOSNAP;
+  if (psnapdiri)
+    *psnapdiri = 0;
 
   // root
   CInode *cur = get_inode(origpath.get_ino());
@@ -4235,7 +4242,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   unsigned depth = 0;
   while (depth < path.depth()) {
-    dout(12) << "traverse: path seg depth " << depth << " = " << path[depth] << dendl;
+    dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
+	     << "' snapid " << snapid << dendl;
     
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << dendl;
@@ -4247,6 +4255,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       dout(10) << "traverse: snapdir" << dendl;
       snapid = CEPH_SNAPDIR;
       depth++;
+      assert(psnapdiri);
+      *psnapdiri = cur;
       continue;
     }
     if (snapid == CEPH_SNAPDIR) {
@@ -4502,7 +4512,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   
   // success.
   if (psnapid)
-    *psnapid = CEPH_NOSNAP;
+    *psnapid = snapid;
   if (mds->logger) mds->logger->inc("thit");
   return 0;
 }
@@ -6252,8 +6262,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       dout(5) << "trying discover on dir_update for " << path << dendl;
 
       int r = path_traverse(0, m,
-			    path, trace, NULL, true,
-                            MDS_TRAVERSE_DISCOVER);
+			    path, trace, NULL, NULL,
+                            true, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
       assert(r == 0);

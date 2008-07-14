@@ -154,6 +154,8 @@ inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
 inline ostream& operator<<(ostream& out, snapid_t s) {
   if (s == CEPH_NOSNAP)
     return out << "head";
+  else if (s == CEPH_SNAPDIR)
+    return out << "snapdir";
   else
     return out << s.val;
 }

@@ -986,7 +986,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
     // dn name
-    ::encode(it->first, exportbl);
+    ::encode(dn->name, exportbl);
     
     // state
     dn->encode_export(exportbl);
@@ -1402,7 +1402,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     // must discover it!
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
-    int r = cache->path_traverse(0, m, fpath, trace, NULL, true, MDS_TRAVERSE_DISCOVER);
+    int r = cache->path_traverse(0, m, fpath, trace, NULL, NULL, true, MDS_TRAVERSE_DISCOVER);
     if (r > 0) return; // wait
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;

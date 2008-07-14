@@ -555,8 +555,12 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
 
   // infer tracei/tracedn from mdr?
+  snapid_t snapid = CEPH_NOSNAP;
+  CInode *snapdiri = 0;
   if (!tracei && !tracedn && mdr->ref) {
     tracei = mdr->ref;
+    snapdiri = mdr->ref_snapdiri;
+    snapid = mdr->ref_snapid;
     dout(20) << "inferring tracei to be " << *tracei << dendl;
     if (!mdr->trace.empty()) {
       tracedn = mdr->trace.back();
@@ -578,7 +582,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   } else {
     // send reply, with trace, and possible leases
     if (tracei || tracedn)
-      set_trace_dist(session, reply, tracei, tracedn);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri);
     messenger->send_message(reply, client_inst);
   }
   
@@ -595,13 +599,15 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
  *
  * trace is in reverse order (i.e. root inode comes last)
  */
-void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn)
+void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
+			    snapid_t snapid, CInode *snapdiri)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
   int whoami = mds->get_nodeid();
   int client = session->get_client();
   __u16 numi = 0, numdn = 0;
+  __s16 snapdirpos = -1;
 
   // choose lease duration
   utime_t now = g_clock.now();
@@ -615,10 +621,19 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
  inode:
-  in->encode_inodestat(bl);
-  lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   numi++;
-  dout(20) << " trace added " << lmask << " " << *in << dendl;
+  in->encode_inodestat(bl, snapid);
+  lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+  dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
+
+  if (snapid != CEPH_NOSNAP && in == snapdiri) {
+    snapid = CEPH_NOSNAP;
+    snapdirpos = numi;
+    dout(10) << " snapdiri at pos " << snapdirpos << dendl;
+    in->encode_inodestat(bl, snapid);
+    lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+    dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
+  }
 
   if (!dn)
     dn = in->get_parent_dn();
@@ -629,7 +644,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   ::encode(dn->get_name(), bl);
   lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   numdn++;
-  dout(20) << " trace added " << lmask << " " << *dn << dendl;
+  dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *dn << dendl;
   
   // dir
 #ifdef MDS_VERIFY_FRAGSTAT
@@ -649,6 +664,7 @@ done:
   bufferlist fbl;
   ::encode(numi, fbl);
   ::encode(numdn, fbl);
+  ::encode(snapdirpos, fbl);
   fbl.claim_append(bl);
   reply->set_trace(fbl);
 }
@@ -1249,8 +1265,8 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   // traverse to parent dir
   snapid_t snapid;
   int r = mdcache->path_traverse(mdr, mdr->client_request,
-				 refpath, trace, &snapid, false,
-				 MDS_TRAVERSE_FORWARD);
+				 refpath, trace, &snapid, &mdr->ref_snapdiri,
+				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     reply_request(mdr, r);
@@ -1277,7 +1293,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 
 
-CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, snapid_t *psnapid,
+CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
 				    bool want_auth, bool rdlock_dft)
 {
   dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
@@ -1299,8 +1315,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, snapid_t *psnapid,
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
-				 trace, psnapid, req->follow_trailing_symlink(),
-				 MDS_TRAVERSE_FORWARD);
+				 trace, &mdr->ref_snapid, &mdr->ref_snapdiri,
+				 req->follow_trailing_symlink(), MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     reply_request(mdr, r);
@@ -1844,8 +1860,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   int client = req->get_orig_source().num();
-  snapid_t snapid;
-  CInode *diri = rdlock_path_pin_ref(mdr, &snapid, false, true);  // rdlock dirfragtreelock!
+  CInode *diri = rdlock_path_pin_ref(mdr, false, true);  // rdlock dirfragtreelock!
   if (!diri) return;
 
   // it's a directory, right?
@@ -1893,6 +1908,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   mdr->now = g_clock.real_now();
 
+  snapid_t snapid = mdr->ref_snapid;
+  dout(10) << "snapid " << snapid << dendl;
+
   // build dir contents
   bufferlist dirbl, dnbl;
   dir->encode_dirstat(dirbl, mds->get_nodeid());
@@ -1930,13 +1948,13 @@ void Server::handle_client_readdir(MDRequest *mdr)
     }
     assert(in);
 
-    dout(12) << "including inode " << *in << dendl;
-    
     // dentry
+    dout(12) << "including    dn " << *dn << dendl;
     ::encode(dn->name, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
     // inode
+    dout(12) << "including inode " << *in << dendl;
     in->encode_inodestat(dnbl);
     mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
@@ -1972,9 +1990,10 @@ class C_MDS_mknod_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
+  snapid_t follows;
 public:
-  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
-    mds(m), mdr(r), dn(d), newi(ni) {}
+  C_MDS_mknod_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, snapid_t f) :
+    mds(m), mdr(r), dn(d), newi(ni), follows(f) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -2012,7 +2031,9 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
 
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
   mdr->now = g_clock.real_now();
+
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
 
@@ -2025,7 +2046,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   newi->inode.dirstat.rfiles = 1;
 
   newi->projected_parent = dn;
-  
+  dn->first = newi->first = follows+1;
+    
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
 
   // prepare finisher
@@ -2033,12 +2055,12 @@ void Server::handle_client_mknod(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mknod");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
-
+  
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  mdcache->journal_dirty_inode(&le->metablob, newi, dn->dir->inode->find_snaprealm()->get_latest_snap());
+  mdcache->journal_dirty_inode(&le->metablob, newi, follows);
   
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2053,7 +2075,9 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   if (!dn) return;
 
   // new inode
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
   mdr->now = g_clock.real_now();
+
   CInode *newi = prepare_new_inode(mdr, dn->dir);  
   assert(newi);
 
@@ -2065,6 +2089,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty() - 1;
   newi->inode.dirstat.rsubdirs = 1;
+
+  dn->first = newi->first = follows+1;
 
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
@@ -2080,11 +2106,11 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   //le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
-  mdcache->journal_dirty_inode(&le->metablob, newi, dn->dir->inode->find_snaprealm()->get_latest_snap());
+  mdcache->journal_dirty_inode(&le->metablob, newi, follows);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2098,6 +2124,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   if (!dn) return;
 
   mdr->now = g_clock.real_now();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
@@ -2112,16 +2139,18 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->inode.version = dn->pre_dirty() - 1;
   newi->inode.dirstat.rfiles = 1;
 
+  dn->first = newi->first = follows+1;
+
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  mdcache->journal_dirty_inode(&le->metablob, newi, dn->dir->inode->find_snaprealm()->get_latest_snap());
+  mdcache->journal_dirty_inode(&le->metablob, newi, follows);
 
   // log + wait
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2151,8 +2180,8 @@ void Server::handle_client_link(MDRequest *mdr)
   dout(7) << "handle_client_link discovering target " << targetpath << dendl;
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
-				 targetpath, targettrace, NULL, false,
-				 MDS_TRAVERSE_DISCOVER);
+				 targetpath, targettrace, NULL, NULL,
+				 false, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
   if (r < 0) {
@@ -2690,8 +2719,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, false,
-				 MDS_TRAVERSE_FORWARD);
+				 req->get_filepath(), trace, NULL, NULL,
+				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't unlink root
   if (r < 0) {
@@ -3039,8 +3068,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   // traverse to src
   vector<CDentry*> srctrace;
   int r = mdcache->path_traverse(mdr, req,
-				 srcpath, srctrace, NULL, false,
-				 MDS_TRAVERSE_DISCOVER);
+				 srcpath, srctrace, NULL, NULL,
+				 false, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
   if (r < 0) {
     reply_request(mdr, r);
@@ -3743,8 +3772,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, mdr->slave_request, 
-				 destpath, trace, NULL, false,
-				 MDS_TRAVERSE_DISCOVERXLOCK);
+				 destpath, trace, NULL, NULL,
+				 false, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
       
@@ -3756,8 +3785,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   r = mdcache->path_traverse(mdr, mdr->slave_request,
-			     srcpath, trace, NULL, false,  
-			     MDS_TRAVERSE_DISCOVERXLOCK);
+			     srcpath, trace, NULL, NULL,
+			     false, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);
       
@@ -4567,9 +4596,10 @@ class C_MDS_openc_finish : public Context {
   MDRequest *mdr;
   CDentry *dn;
   CInode *newi;
+  snapid_t follows;
 public:
-  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni) :
-    mds(m), mdr(r), dn(d), newi(ni) {}
+  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, snapid_t f) :
+    mds(m), mdr(r), dn(d), newi(ni), follows(f) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -4624,6 +4654,8 @@ void Server::handle_client_openc(MDRequest *mdr)
     
   // create inode.
   mdr->now = g_clock.real_now();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+
   CInode *in = prepare_new_inode(mdr, dn->dir);
   assert(in);
   
@@ -4634,6 +4666,9 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.version = dn->pre_dirty() - 1;
   in->inode.max_size = in->get_layout_size_increment();
   in->inode.dirstat.rfiles = 1;
+
+  in->projected_parent = dn;
+  dn->first = in->first = follows+1;
   
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -4641,10 +4676,10 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, in, &in->inode);
+  mdcache->journal_dirty_inode(&le->metablob, in, follows);
   
   // log + wait
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in);
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
   mdlog->submit_entry(le, fin);
 }
 
@@ -4680,8 +4715,8 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, false,
-				 MDS_TRAVERSE_FORWARD);
+				 req->get_filepath(), trace, NULL, NULL,
+				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't snap root
   if (r < 0) {
@@ -4766,8 +4801,8 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, false,
-				 MDS_TRAVERSE_FORWARD);
+				 req->get_filepath(), trace, NULL, NULL,
+				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't snap root
   if (r < 0) {

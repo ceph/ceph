@@ -84,7 +84,8 @@ public:
   void dispatch_client_request(MDRequest *mdr);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
-  void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn);
+  void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
+		      snapid_t snapid, CInode *snapdiri);
 
 
   void handle_slave_request(MMDSSlaveRequest *m);
@@ -98,7 +99,7 @@ public:
   CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
   CInode* prepare_new_inode(MDRequest *mdr, CDir *dir);
 
-  CInode* rdlock_path_pin_ref(MDRequest *mdr, snapid_t *psnapid, bool want_auth, bool rdlock_dft=false);
+  CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_dft=false);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);

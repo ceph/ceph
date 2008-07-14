@@ -225,6 +225,8 @@ struct MDRequest : public Mutation {
 
   vector<CDentry*> trace;  // original path traversal.
   CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
+  CInode *ref_snapdiri;
+  snapid_t ref_snapid;
 
   // -- i am a slave request
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
@@ -276,19 +278,19 @@ struct MDRequest : public Mutation {
 
   // ---------------------------------------------------
   MDRequest() : 
-    session(0), client_request(0), ref(0), 
+    session(0), client_request(0), ref(0), ref_snapdiri(0), ref_snapid(CEPH_NOSNAP),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
-    session(0), client_request(req), ref(0), 
+    session(0), client_request(req), ref(0), ref_snapdiri(0),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
-    session(0), client_request(0), ref(0),
+    session(0), client_request(0), ref(0), ref_snapdiri(0),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
@@ -742,7 +744,7 @@ public:
 
   Context *_get_waiter(MDRequest *mdr, Message *req);
   int path_traverse(MDRequest *mdr, Message *req, filepath& path, 
-		    vector<CDentry*>& trace, snapid_t *psnap,
+		    vector<CDentry*>& trace, snapid_t *psnap, CInode **psnapdiri,
 		    bool follow_trailing_sym,
                     int onfail);
   bool path_is_mine(filepath& path);

@@ -179,7 +179,20 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
 
 
 
-
+CDentry *CDir::lookup(const char *name, snapid_t snap)
+{ 
+  dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
+  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name));
+  if (iter == items.end())
+    return 0;
+  if (iter->second->name == name &&
+      iter->second->first <= snap) {
+    dout(20) << "  hit -> " << iter->first << dendl;
+    return iter->second;
+  }
+  dout(20) << "  miss -> " << iter->first << dendl;
+  return 0;
+}
 
 
 

@@ -197,7 +197,7 @@ public:
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
   //typedef map<const char *, CDentry*, ltstr> map_t;
-  typedef map<dentry_key_t, CDentry*, ltdentrykey> map_t;
+  typedef map<dentry_key_t, CDentry*> map_t;
 protected:
 
   // contents
@@ -292,13 +292,7 @@ protected:
   CDentry* lookup(const nstring& ns, snapid_t snap=CEPH_NOSNAP) {
     return lookup(ns.c_str(), snap);
   }
-  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
-    map_t::iterator iter = items.find(dentry_key_t(snap, n));
-    if (iter == items.end()) 
-      return 0;
-    else
-      return iter->second;
-  }
+  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
   CDentry* add_null_dentry(const nstring& dname, 
 			   snapid_t first=1, snapid_t last=CEPH_NOSNAP);

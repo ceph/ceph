@@ -1051,7 +1051,7 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
   // pick a version!
   inode_t *i = &inode;
   bufferlist xbl;
-  if (!old_inodes.empty()) {
+  if (snapid && !old_inodes.empty()) {
     map<snapid_t,old_inode_t>::iterator p = old_inodes.lower_bound(snapid);
     if (p != old_inodes.end()) {
       assert(p->second.first <= snapid && snapid <= p->first);
@@ -1066,7 +1066,7 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
   struct ceph_mds_reply_inode e;
   memset(&e, 0, sizeof(e));
   e.ino = i->ino;
-  e.snapid = snapid;
+  e.snapid = snapid ? (__u64)snapid:CEPH_NOSNAP;  // 0 -> NOSNAP
   e.version = i->version;
   e.layout = i->layout;
   i->ctime.encode_timeval(&e.ctime);

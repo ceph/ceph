@@ -50,9 +50,6 @@ using std::fstream;
 using namespace __gnu_cxx;
 
 
-#define SNAPDIR (CEPH_NOSNAP-1)
-
-
 
 class MStatfsReply;
 class MClientSession;
@@ -627,6 +624,9 @@ protected:
       delete realm;
     }
   }
+
+  Inode *open_snapdir(Inode *diri);
+
 
   // file handles, etc.
   filepath cwd;

@@ -85,6 +85,7 @@ ostream& operator<<(ostream &out, Inode &in)
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " ref=" << in.ref
+      << " parent=" << in.dn
       << ")";
   return out;
 }
@@ -540,13 +541,16 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   }
 
   __u16 numi, numd;
+  __s16 snapdirpos;
   ::decode(numi, p);
   ::decode(numd, p);
-  dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries" << dendl;
+  ::decode(snapdirpos, p);
+  dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries, snapdir at " << snapdirpos << dendl;
+  int icount = 0;
 
   // decode
-  LeaseStat ilease[numi];
-  InodeStat ist[numi];
+  LeaseStat ilease[numi], snapdirlease;
+  InodeStat ist[numi], snapdirst;
   DirStat dst[numd];
   string dname[numd];
   LeaseStat dlease[numd];
@@ -561,7 +565,11 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
 
  inode:
   if (!ileft) goto done;
-  ileft--;
+  ileft--; icount++;
+  if (icount == snapdirpos) {
+    snapdirst.decode(p);
+    ::decode(snapdirlease, p);
+  }
   ist[ileft].decode(p);
   ::decode(ilease[ileft], p);
 
@@ -590,6 +598,7 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
     curi = inode_map[vino];
   }
   update_inode(curi, &ist[0], &ilease[0], from);
+  dout(10) << " (base) curi " << *curi << dendl;
 
   for (unsigned i=0; i<numd; i++) {
     Dir *dir = curi->open_dir();
@@ -603,6 +612,20 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
     }
     
     curi = insert_dentry_inode(dir, dname[i], &dlease[i], &ist[i+1], &ilease[i+1], from);
+    dout(10) << " curi " << *curi << dendl;
+
+    if ((int)i == numi-snapdirpos-1) {
+      Inode *snapdiri = open_snapdir(curi);
+      dout(10) << " snapdir " << *snapdiri << dendl;
+      char s[20];
+      sprintf(s, "%llu", (unsigned long long)snapdirst.vino.snapid);
+      string snapname = s;
+      Dir *snapdir = snapdiri->open_dir();
+      curi = insert_dentry_inode(snapdir, snapname, &snapdirlease, // FIXME
+				 &snapdirst, &snapdirlease, from);
+      dout(10) << " snapped diri " << *curi << dendl;
+    }
+
     update_dir_dist(curi, &dst[i]);  // dir stat info is attached to inode...
   }
   assert(p.end());
@@ -2767,7 +2790,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->path << " fg " << fg << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
-  if (dirp->inode && dirp->inode->snapid == SNAPDIR)
+  if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
     op = CEPH_MDS_OP_LSSNAP;
 
   MClientRequest *req = new MClientRequest(op);
@@ -3801,6 +3824,28 @@ int Client::_rmsnap(const filepath& path, const char *name, int uid, int gid)
 #define FUSE_SET_ATTR_ATIME	(1 << 4)
 #define FUSE_SET_ATTR_MTIME	(1 << 5)
 
+
+Inode *Client::open_snapdir(Inode *diri)
+{
+  Inode *in;
+  vinodeno_t vino(diri->ino(), CEPH_SNAPDIR);
+  if (!inode_map.count(vino)) {
+    in = new Inode(vino, &diri->inode.layout);
+    in->inode = diri->inode;
+    in->snapid = CEPH_SNAPDIR;
+    in->inode.mode = S_IFDIR | 0600;
+    in->dirfragtree.clear();
+    inode_map[vino] = in;
+    in->snapdir_parent = diri;
+    diri->get();
+    dout(10) << "open_snapdir created snapshot inode " << *in << dendl;
+  } else {
+    in = inode_map[vino];
+    dout(10) << "open_snapdir had snapshot inode " << *in << dendl;
+  }
+  return in;
+}
+
 int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
@@ -3832,21 +3877,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
   // .snapshot?
   if (dname == g_conf.client_snapdir &&
       diri->snapid == CEPH_NOSNAP) {
-    vinodeno_t vino(parent.ino, SNAPDIR);
-    if (!inode_map.count(vino)) {
-      in = new Inode(vino, &diri->inode.layout);
-      in->inode = diri->inode;
-      in->snapid = SNAPDIR;
-      in->inode.mode = S_IFDIR | 0600;
-      in->dirfragtree.clear();
-      inode_map[vino] = in;
-      in->snapdir_parent = diri;
-      diri->get();
-      dout(10) << " created snapshot inode " << *in << dendl;
-    } else {
-      in = inode_map[vino];
-      dout(10) << " had snapshot inode " << *in << dendl;
-    }
+    in = open_snapdir(diri);
   } else {
     // get the inode
     if (diri->dir &&
@@ -3862,7 +3893,16 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
       filepath path;
       diri->make_path(path);
       path.push_dentry(name);
-      _do_lstat(path, 0, &in, uid, gid);
+      dout(10) << "ll_lookup on " << path << dendl;
+      //_do_lstat(path, 0, &in, uid, gid);
+      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LSTAT);
+      req->head.args.stat.mask = 0;
+      req->set_filepath(path);
+
+      MClientReply *reply = make_request(req, uid, gid, &in, 0);
+      r = reply->get_result();
+      dout(10) << "ll_lookup lstat res is " << r << dendl;
+      delete reply;
     }
   }
 
@@ -3870,7 +3910,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
     fill_stat(in, attr);
     _ll_get(in);
   } else {
-    r = -ENOENT;
+    if (!r) r = -ENOENT;
     attr->st_ino = 0;
   }
 
@@ -4385,7 +4425,7 @@ int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
   assert(diri);
 
   filepath path;
-  if (vino.snapid == SNAPDIR) {
+  if (vino.snapid == CEPH_SNAPDIR) {
     Inode *livediri = inode_map[vinodeno_t(vino.ino, CEPH_NOSNAP)];
     assert(livediri);
     livediri->make_path(path);
@@ -4394,7 +4434,7 @@ int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
   dout(10) << " ino path is " << path << dendl;
 
   int r = 0;
-  if (vino.snapid == SNAPDIR) {
+  if (vino.snapid == CEPH_SNAPDIR) {
     *dirpp = new DirResult(path, diri);
   } else {
     r = _opendir(path.c_str(), (DirResult**)dirpp);

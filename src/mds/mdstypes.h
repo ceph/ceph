@@ -321,18 +321,27 @@ WRITE_CLASS_ENCODER(fnode_t)
 // =======
 // dentries
 
-typedef pair<snapid_t, const char *> dentry_key_t;
-
-struct ltdentrykey
-{
-  bool operator()(const dentry_key_t& k1,
-		  const dentry_key_t& k2) const
-  {
-    return 
-      k1.first < k2.first ||
-      (k1.first == k2.first && strcmp(k1.second, k2.second) < 0);
-  }
+struct dentry_key_t {
+  snapid_t snapid;
+  const char *name;
+  dentry_key_t() : snapid(0), name(0) {}
+  dentry_key_t(snapid_t s, const char *n) : snapid(s), name(n) {}
 };
+
+inline ostream& operator<<(ostream& out, const dentry_key_t &k)
+{
+  return out << "(" << k.name << "," << k.snapid << ")";
+}
+
+inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
+{
+  /*
+   * order by name, then snap
+   */
+  int c = strcmp(k1.name, k2.name);
+  return 
+    c < 0 || (c == 0 && k1.snapid < k2.snapid);
+}
 
 
 
