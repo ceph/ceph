@@ -4260,12 +4260,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       continue;
     }
     if (snapid == CEPH_SNAPDIR) {
-      snapid = atoll(path[depth].c_str());
+      SnapRealm *realm = cur->find_snaprealm();
+      snapid = realm->resolve_snapname(path[depth]);
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
       if (!snapid)
-	return -ENOENT;
-      SnapRealm *realm = cur->find_snaprealm();
-      if (realm->get_snaps().count(snapid) == 0)
 	return -ENOENT;
       depth++;
       continue;

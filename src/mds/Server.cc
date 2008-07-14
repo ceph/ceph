@@ -594,6 +594,21 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 }
 
 
+static void encode_empty_dirstat(bufferlist& bl)
+{
+  static DirStat empty;
+  empty.encode(bl);
+}
+
+static void encode_empty_lease(bufferlist& bl)
+{
+  LeaseStat e;
+  e.mask = -1;
+  e.duration_ms = -1;
+  ::encode(e, bl);
+}
+
+
 /*
  * pass inode OR dentry (not both, or we may get confused)
  *
@@ -611,7 +626,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
   // choose lease duration
   utime_t now = g_clock.now();
-  int lmask;
+  int lmask = 0;
 
   // start with dentry or inode?
   if (!in) {
@@ -627,12 +642,23 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
+    // do the snap name dentry
+    const string& snapname = in->find_snaprealm()->get_snapname(snapid);
+    dout(10) << " snapname " << snapname << dendl;
+    ::encode(snapname, bl);
+    encode_empty_lease(bl);
+    numdn++;
+    encode_empty_dirstat(bl);
+
+    // back to the live tree
     snapid = CEPH_NOSNAP;
-    snapdirpos = numi;
-    dout(10) << " snapdiri at pos " << snapdirpos << dendl;
     in->encode_inodestat(bl, snapid);
     lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+    numi++;
     dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
+
+    snapdirpos = numi;
+    dout(10) << " snapdiri at pos " << snapdirpos << dendl;
   }
 
   if (!dn)
@@ -4687,24 +4713,6 @@ void Server::handle_client_openc(MDRequest *mdr)
 
 
 
-static void encode_empty_dirstat(bufferlist& bl)
-{
-  // encode fake dirstat
-  frag_t fg;
-  __s32 auth = CDIR_AUTH_PARENT;
-  __u32 zero;
-  ::encode(fg, bl);
-  ::encode(auth, bl);
-  ::encode(zero, bl);
-}
-
-static void encode_empty_lease(bufferlist& bl)
-{
-  LeaseStat e;
-  e.mask = -1;
-  e.duration_ms = -1;
-  ::encode(e, bl);
-}
 
 // snaps
 
@@ -4773,9 +4781,11 @@ void Server::handle_client_lssnap(MDRequest *mdr)
 
     dout(10) << p->first << " -> " << *p->second << dendl;
 
-    char nm[20];
-    sprintf(nm, "%llu", (unsigned long long)p->second->snapid);
-    ::encode(nm, dnbl);
+    // actual
+    if (p->second->dirino == diri->ino())
+      ::encode(p->second->name, dnbl);
+    else
+      ::encode(p->second->get_long_name(), dnbl);
     encode_empty_lease(dnbl);
     diri->encode_inodestat(dnbl, p->first);
     encode_empty_lease(dnbl);
@@ -4847,6 +4857,19 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = g_clock.now();
 
+  // make sure name is unique
+  const string &snapname = req->get_path2();
+  if (diri->snaprealm &&
+      diri->snaprealm->exists(snapname)) {
+    reply_request(mdr, -EEXIST);
+    return;
+  }
+  if (snapname.length() == 0 ||
+      snapname[0] == '_') {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
   // anchor diri
   if (!diri->inode.anchored) {
     mds->mdcache->anchor_create(mdr, diri, new C_MDS_RetryRequest(mds->mdcache, mdr));
@@ -4855,7 +4878,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   // allocate a snapid
   // HACK
-  snapid_t snapid = mds->snaptable->create(diri->ino(), req->get_path2(), mdr->now);
+  snapid_t snapid = mds->snaptable->create(diri->ino(), snapname, mdr->now);
   dout(10) << " snapid is " << snapid << dendl;
 
 
@@ -4879,6 +4902,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   // add the snap
   dout(10) << "snaprealm was " << *diri->snaprealm << dendl;
   SnapInfo info;
+  info.dirino = diri->ino();
   info.snapid = snapid;
   info.name = req->get_path2();
   info.stamp = mdr->now;
@@ -4942,7 +4966,12 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     mds->send_message_client(p->second, p->first);
 
   // yay
-  reply_request(mdr, 0, diri);
+  mdr->ref = diri;
+  mdr->ref_snapid = snapid;
+  mdr->ref_snapdiri = diri;
+  MClientReply *reply = new MClientReply(req, 0);
+  reply->set_snaps(diri->snaprealm->get_snaps());
+  reply_request(mdr, reply);
 }
 
 void Server::handle_client_rmsnap(MDRequest *mdr)

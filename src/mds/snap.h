@@ -25,7 +25,7 @@ struct SnapInfo {
   snapid_t snapid;
   inodeno_t dirino;
   utime_t stamp;
-  string name;
+  string name, long_name;
   
   void encode(bufferlist& bl) const {
     ::encode(snapid, bl);
@@ -39,6 +39,7 @@ struct SnapInfo {
     ::decode(stamp, bl);
     ::decode(name, bl);
   }
+  const string& get_long_name();
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 
@@ -120,9 +121,20 @@ struct SnapRealm {
     snap_highwater(0) 
   { }
 
+  bool exists(const string &name) {
+    for (map<snapid_t,SnapInfo>::iterator p = snaps.begin();
+	 p != snaps.end();
+	 p++)
+      if (p->second.name == name)
+	return true;
+    return false;
+  }
   bool open_parents(MDRequest *mdr);
   void build_snap_set(set<snapid_t>& s, snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+
+  const string& get_snapname(snapid_t snapid, bool actual=true);
+  snapid_t resolve_snapname(const string &name, bool actual=true, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const set<snapid_t>& get_snaps();
   const vector<snapid_t>& get_snap_vector();

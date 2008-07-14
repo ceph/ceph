@@ -80,8 +80,7 @@ Logger  *client_logger = 0;
 
 ostream& operator<<(ostream &out, Inode &in)
 {
-  out << in.inode.ino
-      << "s" << in.snapid << "("
+  out << in.vino() << "("
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " ref=" << in.ref
@@ -546,11 +545,10 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
   ::decode(numd, p);
   ::decode(snapdirpos, p);
   dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries, snapdir at " << snapdirpos << dendl;
-  int icount = 0;
 
   // decode
-  LeaseStat ilease[numi], snapdirlease;
-  InodeStat ist[numi], snapdirst;
+  LeaseStat ilease[numi];
+  InodeStat ist[numi];
   DirStat dst[numd];
   string dname[numd];
   LeaseStat dlease[numd];
@@ -565,18 +563,16 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
 
  inode:
   if (!ileft) goto done;
-  ileft--; icount++;
-  if (icount == snapdirpos) {
-    snapdirst.decode(p);
-    ::decode(snapdirlease, p);
-  }
+  ileft--;
   ist[ileft].decode(p);
+  dout(20) << " got vino " << ist[ileft].vino << dendl;
   ::decode(ilease[ileft], p);
 
  dentry:
   if (!dleft) goto done;
   dleft--;
   ::decode(dname[dleft], p);
+  dout(20) << " got dname " << dname[dleft] << dendl;
   ::decode(dlease[dleft], p);
   dst[dleft].decode(p);
   goto inode;
@@ -615,15 +611,8 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from)
     dout(10) << " curi " << *curi << dendl;
 
     if ((int)i == numi-snapdirpos-1) {
-      Inode *snapdiri = open_snapdir(curi);
-      dout(10) << " snapdir " << *snapdiri << dendl;
-      char s[20];
-      sprintf(s, "%llu", (unsigned long long)snapdirst.vino.snapid);
-      string snapname = s;
-      Dir *snapdir = snapdiri->open_dir();
-      curi = insert_dentry_inode(snapdir, snapname, &snapdirlease, // FIXME
-				 &snapdirst, &snapdirlease, from);
-      dout(10) << " snapped diri " << *curi << dendl;
+      curi = open_snapdir(curi);
+      dout(10) << " snapdir " << *curi << dendl;
     }
 
     update_dir_dist(curi, &dst[i]);  // dir stat info is attached to inode...
@@ -4289,13 +4278,34 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 
   filepath path;
   diri->make_path(path);
-  path.push_dentry(name);
-  int r = _mkdir(path.c_str(), mode, uid, gid);
-  if (r == 0) {
-    string dname(name);
-    Inode *in = diri->dir->dentries[dname]->inode;
-    fill_stat(in, attr);
-    _ll_get(in);
+
+  int r;
+  if (diri->snapid == CEPH_SNAPDIR) {
+    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
+    req->set_filepath(path);
+    req->set_path2(name);
+
+    Inode *in;
+    MClientReply *reply = make_request(req, uid, gid, &in);
+    r = reply->get_result();
+    snapid_t snapid = 0;
+    if (reply->get_snaps().size())
+      snapid = reply->get_snaps()[0];
+    delete reply;
+    dout(10) << "mksnap result is " << r << " vino " << in->vino() << " snapid " << snapid << dendl;
+    if (r == 0) {
+      fill_stat(in, attr);
+      _ll_get(in);
+    }
+  } else {
+    path.push_dentry(name);
+    r = _mkdir(path.c_str(), mode, uid, gid);
+    if (r == 0) {
+      string dname(name);
+      Inode *in = diri->dir->dentries[dname]->inode;
+      fill_stat(in, attr);
+      _ll_get(in);
+    }
   }
   tout << attr->st_ino << std::endl;
   dout(3) << "ll_mkdir " << parent << " " << name

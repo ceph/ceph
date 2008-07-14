@@ -27,6 +27,7 @@
 						  << ".cache.snaprealm(" << inode->ino() \
 						  << " " << this << ") "
 
+
 bool SnapRealm::open_parents(MDRequest *mdr)
 {
   dout(10) << "open_parents" << dendl;
@@ -162,6 +163,91 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
   if (thru <= last && parent)
     parent->get_snap_info(infomap, thru, last);
 }
+
+const string& SnapInfo::get_long_name()
+{
+  if (long_name.length() == 0) {
+    char nm[80];
+    sprintf(nm, "_%s_%llu", name.c_str(), (unsigned long long)dirino);
+    long_name = nm;
+  }
+  return long_name;
+}
+
+const string& SnapRealm::get_snapname(snapid_t snapid, bool actual)
+{
+  if (snaps.count(snapid)) {
+    if (actual)
+      return snaps[snapid].name;
+    else
+      return snaps[snapid].get_long_name();
+  }
+
+  map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(snapid);
+  if (p != snaps.end() && p->first <= snapid) {
+    CInode *oldparent = mdcache->get_inode(p->second.dirino);
+    assert(oldparent);  // call open_parents first!
+    assert(oldparent->snaprealm);
+    
+    return oldparent->snaprealm->get_snapname(snapid, false);
+  }
+
+  return parent->get_snapname(snapid, false);
+}
+
+snapid_t SnapRealm::resolve_snapname(const string& n, bool actual, snapid_t first, snapid_t last)
+{
+  // first try me
+  dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
+
+  snapid_t num;
+  if (n[0] == '~') num = atoll(n.c_str()+1);
+
+  string pname;
+  inodeno_t pdirino;
+  if (!actual) {
+    if (!n.length() ||
+	n[0] != '_') return 0;
+    int next_ = n.find('_', 1);
+    if (next_ < 0) return 0;
+    pname = n.substr(1, next_ - 1);
+    pdirino = atoll(n.c_str() + next_ + 1);
+    dout(10) << " " << n << " -> " << pname << " dirino " << pdirino << dendl;
+  }
+
+  for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
+       p != snaps.end() && p->first <= last;
+       p++) {
+    if (num && p->second.snapid == num)
+      return p->first;
+    if (actual && p->second.name == n)
+	return p->first;
+    if (!actual && p->second.name == pname && p->second.dirino == pdirino)
+      return p->first;
+  }
+
+    // include snaps for parents during intervals that intersect [first,last]
+  snapid_t thru = first;
+  for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
+       p != past_parents.end() && p->first >= first && p->second.first <= last;
+       p++) {
+    CInode *oldparent = mdcache->get_inode(p->second.dirino);
+    assert(oldparent);  // call open_parents first!
+    assert(oldparent->snaprealm);
+    
+    thru = MIN(last, p->first);
+    snapid_t r = oldparent->snaprealm->resolve_snapname(n, false,
+							MAX(first, p->second.first),
+							thru);
+    if (r)
+      return r;
+    ++thru;
+  }
+  if (thru <= last && parent)
+    return parent->resolve_snapname(n, false, thru, last);
+  return 0;
+}
+
 
 
 void SnapRealm::split_at(SnapRealm *child)

@@ -66,11 +66,16 @@ struct DirStat {
   __s32 auth;
   set<__s32> dist;
   
-  DirStat() {}
+  DirStat() : auth(CDIR_AUTH_PARENT) {}
   DirStat(bufferlist::iterator& p) {
     decode(p);
   }
 
+  void encode(bufferlist& bl) {
+    ::encode(frag, bl);
+    ::encode(auth, bl);
+    ::encode(dist, bl);
+  }
   void decode(bufferlist::iterator& p) {
     ::decode(frag, p);
     ::decode(auth, p);
