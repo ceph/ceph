@@ -2106,7 +2106,7 @@ public:
 
 void Client::tick()
 {
-  dout(10) << "tick" << dendl;
+  dout(21) << "tick" << dendl;
   tick_event = new C_C_Tick(this);
   timer.add_event_after(g_conf.client_tick_interval, tick_event);
   
@@ -2114,7 +2114,6 @@ void Client::tick()
   utime_t el = now - last_cap_renew;
   if (mdsmap && el > mdsmap->get_session_timeout() / 3.0)
     renew_caps();
-  
 }
 
 void Client::renew_caps()
@@ -3841,6 +3840,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
       in->inode.mode = S_IFDIR | 0600;
       in->dirfragtree.clear();
       inode_map[vino] = in;
+      in->snapdir_parent = diri;
       diri->get();
       dout(10) << " created snapshot inode " << *in << dendl;
     } else {

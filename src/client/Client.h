@@ -189,6 +189,7 @@ class Inode {
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
+  Inode *snapdir_parent;  // only if we are a snapdir inode
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -217,6 +218,10 @@ class Inode {
       assert(dn->dir && dn->dir->parent_inode);
       dn->dir->parent_inode->make_path(p);
       p.push_dentry(dn->name);
+    } else if (snapdir_parent) {
+      snapdir_parent->make_path(p);
+      string empty;
+      p.push_dentry(empty);
     } else
       p = filepath(inode.ino);
   }
@@ -244,7 +249,7 @@ class Inode {
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    snaprealm(0), snaprealm_item(this),
+    snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -664,10 +669,8 @@ protected:
     in->put(n);
     if (in->ref == 0) {
       //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
-      if (in->snapid == SNAPDIR) {
-	vinodeno_t live(in->inode.ino, CEPH_NOSNAP);
-	put_inode(inode_map[live]);
-      }
+      if (in->snapdir_parent)
+	put_inode(in->snapdir_parent);
       inode_map.erase(in->vino());
       if (in == root) root = 0;
       delete in;
