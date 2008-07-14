@@ -60,9 +60,9 @@ class filepath {
     while (off < (int)path.length()) {
       // skip trailing/duplicate slash(es)
       int nextslash = path.find('/', off);
-      if (nextslash == off) {
-        off++;
-        continue;
+      if (nextslash == 0) {  //      /*if (nextslash == off) {
+	off++;
+	continue;
       }
       if (nextslash < 0) 
         nextslash = path.length();  // no more slashes
