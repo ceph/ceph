@@ -4196,6 +4196,7 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   filepath& origpath,               // what
                            vector<CDentry*>& trace,          // result
+			   snapid_t *psnapid,
                            bool follow_trailing_symlink,     // how
                            int onfail)
 {
@@ -4206,6 +4207,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   // keep a list of symlinks we touch to avoid loops
   set< pair<CInode*, string> > symlinks_resolved; 
+
+  snapid_t snapid = CEPH_NOSNAP;
 
   // root
   CInode *cur = get_inode(origpath.get_ino());
@@ -4237,6 +4240,25 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << dendl;
       return -ENOTDIR;
+    }
+
+    // snapdir?
+    if (path[depth].length() == 0) {
+      dout(10) << "traverse: snapdir" << dendl;
+      snapid = CEPH_SNAPDIR;
+      depth++;
+      continue;
+    }
+    if (snapid == CEPH_SNAPDIR) {
+      snapid = atoll(path[depth].c_str());
+      dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
+      if (!snapid)
+	return -ENOENT;
+      SnapRealm *realm = cur->find_snaprealm();
+      if (realm->get_snaps().count(snapid) == 0)
+	return -ENOENT;
+      depth++;
+      continue;
     }
 
     // open dir
@@ -4301,7 +4323,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
 
     // dentry
-    CDentry *dn = curdir->lookup(path[depth]);
+    CDentry *dn = curdir->lookup(path[depth], snapid);
 
     // null and last_bit and xlocked by me?
     if (dn && dn->is_null() && null_okay) {
@@ -4413,6 +4435,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       continue;
     }
     
+
     // MISS.  dentry doesn't exist.
     dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << dendl;
 
@@ -4478,6 +4501,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   }
   
   // success.
+  if (psnapid)
+    *psnapid = CEPH_NOSNAP;
   if (mds->logger) mds->logger->inc("thit");
   return 0;
 }
@@ -6227,7 +6252,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       dout(5) << "trying discover on dir_update for " << path << dendl;
 
       int r = path_traverse(0, m,
-			    path, trace, true,
+			    path, trace, NULL, true,
                             MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;

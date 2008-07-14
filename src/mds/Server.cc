@@ -1247,8 +1247,9 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
 
   // traverse to parent dir
+  snapid_t snapid;
   int r = mdcache->path_traverse(mdr, mdr->client_request,
-				 refpath, trace, false,
+				 refpath, trace, &snapid, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
@@ -1276,7 +1277,8 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 
 
-CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_dft)
+CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, snapid_t *psnapid,
+				    bool want_auth, bool rdlock_dft)
 {
   dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
 
@@ -1297,7 +1299,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
-				 trace, req->follow_trailing_symlink(),
+				 trace, psnapid, req->follow_trailing_symlink(),
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
@@ -1513,7 +1515,8 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 void Server::handle_client_stat(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  CInode *ref = rdlock_path_pin_ref(mdr, false);
+  snapid_t snapid;
+  CInode *ref = rdlock_path_pin_ref(mdr, &snapid, false);
   if (!ref) return;
 
   // which inode locks do I want?
@@ -1595,11 +1598,13 @@ public:
 void Server::handle_client_utime(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
   __u32 mask;
   if (!cur) return;
 
-  if (cur->is_root()) {
+  if (snapid != CEPH_NOSNAP ||
+      cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1642,10 +1647,12 @@ void Server::handle_client_utime(MDRequest *mdr)
 void Server::handle_client_chmod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
   if (!cur) return;
 
-  if (cur->is_root()) {
+  if (snapid != CEPH_NOSNAP ||
+      cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1683,10 +1690,11 @@ void Server::handle_client_chmod(MDRequest *mdr)
 void Server::handle_client_chown(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
   if (!cur) return;
 
-  if (cur->is_root()) {
+  if (snapid != CEPH_NOSNAP || cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1724,10 +1732,11 @@ void Server::handle_client_chown(MDRequest *mdr)
 void Server::handle_client_setxattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
   if (!cur) return;
 
-  if (cur->is_root()) {
+  if (snapid != CEPH_NOSNAP || cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1780,10 +1789,11 @@ void Server::handle_client_setxattr(MDRequest *mdr)
 void Server::handle_client_removexattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
   if (!cur) return;
 
-  if (cur->is_root()) {
+  if (snapid != CEPH_NOSNAP || cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1834,7 +1844,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   int client = req->get_orig_source().num();
-  CInode *diri = rdlock_path_pin_ref(mdr, false, true);  // rdlock dirfragtreelock!
+  snapid_t snapid;
+  CInode *diri = rdlock_path_pin_ref(mdr, &snapid, false, true);  // rdlock dirfragtreelock!
   if (!diri) return;
 
   // it's a directory, right?
@@ -1892,6 +1903,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
        it++) {
     CDentry *dn = it->second;
     if (dn->is_null()) continue;
+    if (dn->last < snapid || dn->first > snapid)
+      continue;
 
     CInode *in = dn->inode;
 
@@ -2138,7 +2151,7 @@ void Server::handle_client_link(MDRequest *mdr)
   dout(7) << "handle_client_link discovering target " << targetpath << dendl;
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
-				 targetpath, targettrace, false,
+				 targetpath, targettrace, NULL, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
@@ -2677,7 +2690,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, false,
+				 req->get_filepath(), trace, NULL, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't unlink root
@@ -3026,7 +3039,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // traverse to src
   vector<CDentry*> srctrace;
   int r = mdcache->path_traverse(mdr, req,
-				 srcpath, srctrace, false,
+				 srcpath, srctrace, NULL, false,
 				 MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
   if (r < 0) {
@@ -3730,7 +3743,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, mdr->slave_request, 
-				 destpath, trace, false,
+				 destpath, trace, NULL, false,
 				 MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
@@ -3743,7 +3756,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   r = mdcache->path_traverse(mdr, mdr->slave_request,
-			     srcpath, trace, false,  
+			     srcpath, trace, NULL, false,  
 			     MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);
@@ -4300,8 +4313,15 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   }
 
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
   if (!cur) return;
+
+  if (snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+    
 
   // check permissions?  
 
@@ -4355,8 +4375,9 @@ void Server::handle_client_open(MDRequest *mdr)
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
   dout(7) << "open on " << req->get_filepath() << dendl;
-
-  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
+  
+  snapid_t snapid;
+  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, need_auth);
   if (!cur) return;
 
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
@@ -4659,7 +4680,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, false,
+				 req->get_filepath(), trace, NULL, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't snap root
@@ -4745,7 +4766,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, false,
+				 req->get_filepath(), trace, NULL, false,
 				 MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (trace.empty()) r = -EINVAL;   // can't snap root

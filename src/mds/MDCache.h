@@ -742,7 +742,8 @@ public:
 
   Context *_get_waiter(MDRequest *mdr, Message *req);
   int path_traverse(MDRequest *mdr, Message *req, filepath& path, 
-		    vector<CDentry*>& trace, bool follow_trailing_sym,
+		    vector<CDentry*>& trace, snapid_t *psnap,
+		    bool follow_trailing_sym,
                     int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {

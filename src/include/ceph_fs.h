@@ -55,8 +55,9 @@ static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_f
 typedef __le64 ceph_ino_t;
 
 typedef __le64 ceph_snapid_t;
-#define CEPH_MAXSNAP 0xffffffffffffffull  /* 56 bits; see ceph_pg */
-#define CEPH_NOSNAP  ((__u64)(-1))
+#define CEPH_MAXSNAP ((1ull << 56)-1)  /* 56 bits; see ceph_pg */
+#define CEPH_SNAPDIR ((__u64)(-1))
+#define CEPH_NOSNAP  ((__u64)(-2))
 
 struct ceph_object {
 	union {
