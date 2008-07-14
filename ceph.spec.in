@@ -1,9 +1,7 @@
 %define pkg_version @VERSION@
-# Build against the running kernel - this can be changed to whatever
-kernel version you want to build against.
+# Build against the running kernel - this can be changed to whatever kernel version you want to build against.
 %define kernel %(uname -r)
-%define mybuildroot
-%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+%define mybuildroot %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 %define optflags ""
 
 Name:          ceph
@@ -15,8 +13,7 @@ License:       LGPL
 Group:         Utilities/System
 URL:           http://ceph.newdream.net/
 Source:        %{name}-%{pkg_version}.tar.gz
-BuildRequires: gcc-c++, libtool, libtool-ltdl-devel, boost-devel, git,
-perl, perl-devel, gdbm, kernel-devel == %{kernel}
+BuildRequires: gcc-c++, libtool, libtool-ltdl-devel, boost-devel, git, perl, perl-devel, gdbm, kernel-devel == %{kernel}
 BuildRoot:     %{mybuildroot}
 Requires:      ceph-mon, ceph-mds, ceph-osd, kmod-ceph-%{kernel}
 
@@ -59,13 +56,12 @@ Requires:       libstdc++, glibc-devel, glibc, libgcc
 %description -n kmod-ceph-%{kernel}
 kernel-client module
 
-%package        testing
+%package        testing 
 Summary:        kernel-client tools for mounting the ceph file system.
 Group:          Utilities/System
 Requires:       libstdc++, glibc-devel, glibc, libgcc
 %description    testing
-Used as a placeholder for binaries that are installed but unused by the
-user (testing purposes only)
+Used as a placeholder for binaries that are installed but unused by the user (testing purposes only)
 
 %prep
 %setup -q -n %{name}-%{pkg_version}
@@ -74,13 +70,12 @@ user (testing purposes only)
 ./autogen.sh
 %{configure}
 make %{_smp_mflags}
-make -C src/kernel KERNELDIR=/lib/modules/%{kernel}/build # Build the
-kernel module
+make -C src/kernel KERNELDIR=/lib/modules/%{kernel}/build # Build the kernel module
 
 %install
 %{makeinstall}
 mkdir -p $RPM_BUILD_ROOT/lib/modules/%{kernel}/extra
-install src/kernel/ceph.ko $RPM_BUILD_ROOT/lib/modules/%{kernel}/extra
+install src/kernel/ceph.ko $RPM_BUILD_ROOT/lib/modules/%{kernel}/extra   
 # Install the kernel module
 mkdir -p $RPM_BUILD_ROOT/usr/share/ceph
 install README $RPM_BUILD_ROOT/usr/share/ceph
@@ -116,4 +111,3 @@ rm -rf $RPM_BUILD_ROOT
 %files testing
 %{_bindir}/dumpjournal
 %{_bindir}/streamtest
-
