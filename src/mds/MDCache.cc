@@ -981,27 +981,24 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t first, snapid_t last)
   return oldin;
 }
 
-void MDCache::journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
+
+void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t follows)
 {
-  dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
-  CDentry *dn = in->get_projected_parent_dn();
-  dout(10) << " orig dn " << *dn << dendl;
+  dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
-  if (follows == CEPH_NOSNAP)
-    follows = in->find_snaprealm()->get_latest_snap();
-  
-  // are we within the current snap?
-  if (follows < in->first)
-    return;  
+  // nothing to cow on a null dentry
+  assert(!dn->is_null());
 
-  if (in->is_multiversion()) {
+  if (dn->is_primary() && dn->inode->is_multiversion()) {
     // multiversion inode.
+    CInode *in = dn->inode;
+
+    if (follows == CEPH_NOSNAP)
+      follows = in->find_snaprealm()->get_latest_snap();
+
     old_inode_t &old = in->old_inodes[follows];
     old.first = in->first;
-    if (in->is_projected())
-      old.inode = *in->get_previous_projected_inode();
-    else
-      old.inode = in->inode;  // mkdir/mknod/symlink don't bother to project new inodes
+    old.inode = *in->get_previous_projected_inode();
     old.xattrs = in->xattrs;
     
     in->first = follows+1;
@@ -1009,21 +1006,36 @@ void MDCache::journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follow
     dout(10) << " duped to old_inode [" << old.first << "," << follows << "] "
 	     << *in << dendl;
   } else {
+    if (follows == CEPH_NOSNAP)
+      follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+    
     snapid_t oldfirst = dn->first;
+    
+    // update dn.first before adding old dentry to cdir's map
     dn->first = follows+1;
     
     dout(10) << "    dn " << *dn << dendl;
-    CInode *oldin = cow_inode(in, in->first, follows);
-    CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
-    dout(10) << " olddn " << *olddn << dendl;
-    
-    metablob->add_primary_dentry(olddn, true);
-    inode_t *pi;
-    if (in->is_projected())
-      pi = in->get_previous_projected_inode();
-    else
-      pi = &in->inode;  // mkdir/mknod/symlink don't bother to project new inodes
+    if (dn->is_primary()) {
+      CInode *oldin = cow_inode(dn->inode, dn->inode->first, follows);
+      CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+      metablob->add_primary_dentry(olddn, true);
+    } else {
+      assert(dn->is_remote());
+      CDentry *olddn = dn->dir->add_remote_dentry(dn->name, dn->remote_ino, dn->remote_d_type,
+						  oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+      metablob->add_remote_dentry(olddn, true);
+    }
   }
+}
+
+
+void MDCache::journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
+{
+  dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
+  CDentry *dn = in->get_projected_parent_dn();
+  journal_cow_dentry(metablob, dn, follows);
 }
 
 void MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)

@@ -2090,7 +2090,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  mdcache->journal_dirty_inode(&le->metablob, newi, follows);
+  le->metablob.add_primary_dentry(dn, true, newi);
   
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
@@ -2138,8 +2138,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  //le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
-  mdcache->journal_dirty_inode(&le->metablob, newi, follows);
+  le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
   // log + wait
@@ -2180,7 +2179,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  mdcache->journal_dirty_inode(&le->metablob, newi, follows);
+  le->metablob.add_primary_dentry(dn, true, newi);
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
@@ -2317,14 +2316,16 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   pi->ctime = mdr->now;
   pi->version = tipv;
 
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+  dn->first = follows+1;
+
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   le->metablob.add_client_req(mdr->reqid);
   mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);      // new dn
   mds->locker->predirty_nested(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
-  le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
-				 MODE_TO_DT(targeti->inode.mode));  // new remote
-  le->metablob.add_primary_dentry(targeti->parent, true, targeti, pi);  // update old primary
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), MODE_TO_DT(targeti->inode.mode));  // new remote
+  mdcache->journal_dirty_inode(&le->metablob, targeti);
 
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
 }
@@ -2412,7 +2413,9 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
     mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
   }
 
+  snapid_t dnfollows = dn->dir->inode->find_snaprealm()->get_latest_snap();
   if (inc) {
+    dn->first = dnfollows + 1;
     dn->pre_dirty();
     mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
@@ -2420,6 +2423,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   } else {
     dn->pre_dirty();
     mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, -1);
+    mdcache->journal_cow_dentry(&le->metablob, dn, dnfollows);
     le->metablob.add_null_dentry(dn, true);
   }
 
@@ -2561,7 +2565,8 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   // commit case
   mds->locker->predirty_nested(mdr, &le->commit, dn->inode, 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
-  le->commit.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+  //le->commit.add_primary_dentry(dn, true, targeti, pi);  // update old primary
+  mdcache->journal_dirty_inode(&le->commit, targeti);
 
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
 }
@@ -2912,23 +2917,24 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->nlink--;
   pi->ctime = mdr->now;
 
+  // the unlinked dentry
+  dn->pre_dirty();
+  mdcache->journal_cow_dentry(&le->metablob, dn);
+  le->metablob.add_null_dentry(dn, true);
+
   if (dn->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, straydn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-    //le->metablob.add_dir_context(straydn->dir);
     le->metablob.add_primary_dentry(straydn, true, dn->inode, pi);
   } else {
     // remote link.  update remote inode.
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, 0, PREDIRTY_PRIMARY);
-    le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode, pi);
+    //le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode, pi);
+    mdcache->journal_dirty_inode(&le->metablob, dn->inode);
   }
-
-  // the unlinked dentry
-  dn->pre_dirty();
-  le->metablob.add_null_dentry(dn, true);
 
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
@@ -4709,7 +4715,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  mdcache->journal_dirty_inode(&le->metablob, in, follows);
+  le->metablob.add_primary_dentry(dn, true, in);
   
   // log + wait
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
