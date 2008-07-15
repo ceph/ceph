@@ -34,7 +34,7 @@ void SnapTable::reset_state()
   pending_removal.clear();
 }
 
-snapid_t SnapTable::create(inodeno_t base, const string& name, utime_t stamp)
+snapid_t SnapTable::create(inodeno_t base, const string& name, utime_t stamp, version_t *psnapv)
 {
   assert(is_active());
   
@@ -43,7 +43,7 @@ snapid_t SnapTable::create(inodeno_t base, const string& name, utime_t stamp)
   snaps[sn].dirino = base;
   snaps[sn].name = name;
   snaps[sn].stamp = stamp;
-  version++;
+  *psnapv = ++version;
 
   dout(10) << "create(" << base << "," << name << ") = " << sn << dendl;
 

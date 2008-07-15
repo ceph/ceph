@@ -19,14 +19,12 @@
 
 class Logger;
 class LogEvent;
-class C_MDS_rename_finish;
 class MDRequest;
 class Mutation;
 class EMetaBlob;
 class EUpdate;
-class PVList;
 class MMDSSlaveRequest;
-
+struct SnapInfo;
 
 
 
@@ -162,6 +160,7 @@ public:
 
   void handle_client_lssnap(MDRequest *mdr);
   void handle_client_mksnap(MDRequest *mdr);
+  void _mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info);
   void handle_client_rmsnap(MDRequest *mdr);
 
   // helpers

@@ -44,6 +44,7 @@
 #include "events/ESession.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
+#include "events/ESnap.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -4804,6 +4805,19 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   reply_request(mdr, reply, diri);
 }
 
+
+struct C_MDS_mksnap_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *diri;
+  SnapInfo info;
+  C_MDS_mksnap_finish(MDS *m, MDRequest *r, CInode *di, SnapInfo &i) :
+    mds(m), mdr(r), diri(di), info(i) {}
+  void finish(int r) {
+    mds->server->_mksnap_finish(mdr, diri, info);
+  }
+};
+
 void Server::handle_client_mksnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -4854,9 +4868,6 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (mdr->now == utime_t())
-    mdr->now = g_clock.now();
-
   // make sure name is unique
   const string &snapname = req->get_path2();
   if (diri->snaprealm &&
@@ -4876,13 +4887,43 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     return;
   }
 
+  if (mdr->now == utime_t())
+    mdr->now = g_clock.now();
+
   // allocate a snapid
   // HACK
-  snapid_t snapid = mds->snaptable->create(diri->ino(), snapname, mdr->now);
+  version_t snapv;
+  snapid_t snapid = mds->snaptable->create(diri->ino(), snapname, mdr->now, &snapv);
   dout(10) << " snapid is " << snapid << dendl;
 
+  // journal
+  SnapInfo info;
+  info.dirino = diri->ino();
+  info.snapid = snapid;
+  info.name = req->get_path2();
+  info.stamp = mdr->now;
 
-  // GO.
+  inode_t *pi = diri->project_inode();
+  pi->ctime = info.stamp;
+  pi->version = diri->pre_dirty();
+
+  mdr->ls = mdlog->get_current_segment();
+  ESnap *le = new ESnap(mdlog, true, info, snapv);
+  le->metablob.add_client_req(req->get_reqid());
+  mds->locker->predirty_nested(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(&le->metablob, diri, diri->find_snaprealm()->get_latest_snap());
+
+  mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
+}
+
+void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
+{
+  dout(10) << "_mksnap_finish " << *mdr << " " << info << dendl;
+
+  diri->pop_and_dirty_projected_inode(mdr->ls);
+  mdr->apply();
+
+  snapid_t snapid = info.snapid;
 
   // create realm?
   inodeno_t split_parent = 0;
@@ -4899,13 +4940,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     split_parent = parent->inode->ino();
   }
 
-  // add the snap
-  dout(10) << "snaprealm was " << *diri->snaprealm << dendl;
-  SnapInfo info;
-  info.dirino = diri->ino();
-  info.snapid = snapid;
-  info.name = req->get_path2();
-  info.stamp = mdr->now;
+  // create snap
   diri->snaprealm->snaps[snapid] = info;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
@@ -4969,7 +5004,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mdr->ref = diri;
   mdr->ref_snapid = snapid;
   mdr->ref_snapdiri = diri;
-  MClientReply *reply = new MClientReply(req, 0);
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->set_snaps(diri->snaprealm->get_snaps());
   reply_request(mdr, reply);
 }

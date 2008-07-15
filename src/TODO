@@ -237,8 +237,6 @@ todo
 /- cdir fetch/store versioned dentries
 - emetablob.. journaling a versioned update..
 
-- set dir mtime on snap create
-
 - migrator import/export of versioned dentries, inodes... drop them on export...
 
 - path_traverse handling of .snapshot?

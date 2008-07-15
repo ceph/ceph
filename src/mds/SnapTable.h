@@ -34,7 +34,7 @@ public:
   SnapTable(MDS *m) : MDSTable(m, "snap") { }
   
   // alloc or reclaim ids
-  snapid_t create(inodeno_t base, const string& name, utime_t stamp);
+  snapid_t create(inodeno_t base, const string& name, utime_t stamp, version_t *snapv);
   void remove(snapid_t sn);
   
   void init_inode();
