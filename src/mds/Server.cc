@@ -669,7 +669,10 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  dentry:
   ::encode(dn->get_name(), bl);
-  lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
+  if (snapid == CEPH_NOSNAP)
+    lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
+  else
+    encode_empty_lease(bl);
   numdn++;
   dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *dn << dendl;
   
@@ -1814,17 +1817,18 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
 
-  cur->xattrs.erase(name);
-  cur->xattrs[name] = buffer::create(len);
-  if (len)
-    req->get_data().copy(0, len, cur->xattrs[name].c_str());
-  
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(&le->metablob, cur);
+
+  mdcache->journal_cow_inode(&le->metablob, cur);
+  cur->xattrs.erase(name);
+  cur->xattrs[name] = buffer::create(len);
+  if (len)
+    req->get_data().copy(0, len, cur->xattrs[name].c_str());
+  le->metablob.add_primary_dentry(cur->get_parent_dn(), true, cur, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1862,15 +1866,17 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
-  cur->xattrs.erase(name);
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(&le->metablob, cur);
-  
+
+  mdcache->journal_cow_inode(&le->metablob, cur);
+  cur->xattrs.erase(name);
+  le->metablob.add_primary_dentry(cur->get_parent_dn(), true, cur, pi);
+
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 

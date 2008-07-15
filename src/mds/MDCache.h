@@ -469,6 +469,7 @@ public:
   // journal helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
   CInode *cow_inode(CInode *in, snapid_t first, snapid_t last);
+  void journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
   void journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   // slaves
