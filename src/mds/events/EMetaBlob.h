@@ -99,7 +99,7 @@ public:
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "]" << " dnv " << dnv
+      out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode.ino
 	  << " dirty=" << dirty << std::endl;
     }
@@ -140,7 +140,7 @@ public:
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " remotebit dn " << dn << " dnv " << dnv
+      out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
 	  << " dirty=" << dirty << std::endl;
     }
@@ -176,7 +176,7 @@ public:
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " nullbit dn " << dn << " dnv " << dnv
+      out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
     }
   };

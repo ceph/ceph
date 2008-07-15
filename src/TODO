@@ -227,19 +227,15 @@ todo
 - realms
   - make better sense of snap_highwater...?
 - snap creation
-  - enforce name uniqueness?
   - async SnapClient for the possibly remote SnapTable
     - hmm, can we generalize any of AnchorClient?
 
-- mds metadata versioning
-  - (dir) inode versions..
-
 /- cdir fetch/store versioned dentries
 - emetablob.. journaling a versioned update..
+  - replay
+  - fetch may need to adjust loaded dentry first,last?
 
 - migrator import/export of versioned dentries, inodes... drop them on export...
-
-- path_traverse handling of .snapshot?
 
   primary file link -> old inode
   primary dir link -> multiversion inode
@@ -255,7 +251,14 @@ todo
 - will snapshots and CAS play nice?
   - cas object refs should follow same deletion semantics as non-cas objects.
 
+- locker
+  - dirstat/fragstats
+  - leases on snapshotted inodes.. cuz the dirstat updates will be lazy..
+
 - mds server ops
+  - rename
+  - link rollback
+  - rename rollback
 
 - when we create a snapshot,
   - xlock snaplock

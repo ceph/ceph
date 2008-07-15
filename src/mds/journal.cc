@@ -348,13 +348,20 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<fullbit>::iterator p = lump.get_dfull().begin();
 	 p != lump.get_dfull().end();
 	 p++) {
-      CDentry *dn = dir->lookup(p->dn);
+      CDentry *dn = dir->lookup(p->dn, p->dnlast);
+      if (dn && dn->first < p->dnfirst) {
+	dn->last = p->dnfirst-1;
+	dout(10) << "EMetaBlob.replay versioned " << *dn << dendl;
+	dn = 0;
+      } 
       if (!dn) {
-	dn = dir->add_null_dentry(p->dn);
+	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
+	assert(p->dnfirst == dn->first);
+	dn->last = p->dnlast;
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
@@ -407,13 +414,21 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<remotebit>::iterator p = lump.get_dremote().begin();
 	 p != lump.get_dremote().end();
 	 p++) {
-      CDentry *dn = dir->lookup(p->dn);
+      CDentry *dn = dir->lookup(p->dn, p->dnlast);
+      if (dn && dn->first < p->dnfirst) {
+	dn->last = p->dnfirst-1;
+	dn->_mark_dirty(logseg);
+	dout(10) << "EMetaBlob.replay versioned " << *dn << dendl;
+	dn = 0;
+      } 
       if (!dn) {
-	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type);
+	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
+	assert(p->dnfirst == dn->first);
+	dn->last = p->dnlast;
 	if (!dn->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
@@ -429,13 +444,21 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<nullbit>::iterator p = lump.get_dnull().begin();
 	 p != lump.get_dnull().end();
 	 p++) {
-      CDentry *dn = dir->lookup(p->dn);
+      CDentry *dn = dir->lookup(p->dn, p->dnfirst);
+      if (dn && dn->first < p->dnfirst) {
+	dn->last = p->dnfirst-1;
+	dn->_mark_dirty(logseg);
+	dout(10) << "EMetaBlob.replay versioned " << *dn << dendl;
+	dn = 0;
+      } 
       if (!dn) {
-	dn = dir->add_null_dentry(p->dn);
+	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
+	assert(p->dnfirst == dn->first);
+	dn->last = p->dnlast;
 	if (!dn->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
