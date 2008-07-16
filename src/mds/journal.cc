@@ -170,13 +170,13 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // idalloc
-  if (allocv > mds->inotable->get_committed_version()) {
-    dout(10) << "try_to_expire saving inotable table, need " << allocv
+  if (inotablev > mds->inotable->get_committed_version()) {
+    dout(10) << "try_to_expire saving inotable table, need " << inotablev
 	      << ", committed is " << mds->inotable->get_committed_version()
 	      << " (" << mds->inotable->get_committing_version() << ")"
 	      << dendl;
     if (!gather) gather = new C_Gather;
-    mds->inotable->save(gather->new_sub(), allocv);
+    mds->inotable->save(gather->new_sub(), inotablev);
   }
 
   // sessionmap
@@ -285,7 +285,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
   // alloc table update?
   if (!allocated_inos.empty())
-    ls->allocv = alloc_tablev;
+    ls->inotablev = inotablev;
 
   // truncated inodes
   // -> handled directly by Server.cc
@@ -485,21 +485,21 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
   // allocated_inos
   if (!allocated_inos.empty()) {
-    if (mds->inotable->get_version() >= alloc_tablev) {
-      dout(10) << "EMetaBlob.replay inotable tablev " << alloc_tablev
+    if (mds->inotable->get_version() >= inotablev) {
+      dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
       for (list<inodeno_t>::iterator p = allocated_inos.begin();
 	   p != allocated_inos.end();
 	   ++p) {
-	dout(10) << " EMetaBlob.replay inotable " << *p << " tablev " << alloc_tablev
+	dout(10) << " EMetaBlob.replay inotable " << *p << " tablev " << inotablev
 		 << " - 1 == table " << mds->inotable->get_version() << dendl;
-	assert(alloc_tablev-1 == mds->inotable->get_version());
+	assert(inotablev-1 == mds->inotable->get_version());
 	
 	inodeno_t ino = mds->inotable->alloc_id();
 	assert(ino == *p);       // this should match.
       }	
-      assert(alloc_tablev == mds->inotable->get_version());
+      assert(inotablev == mds->inotable->get_version());
     }
   }
 

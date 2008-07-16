@@ -25,7 +25,7 @@ class InoTable : public MDSTable {
   interval_set<inodeno_t> free;   // unused ids
 
  public:
-  InoTable(MDS *m) : MDSTable(m, "idalloc") { }
+  InoTable(MDS *m) : MDSTable(m, "inotable") { }
 
   // alloc or reclaim ids
   inodeno_t alloc_id();

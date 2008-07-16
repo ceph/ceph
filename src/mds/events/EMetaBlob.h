@@ -272,7 +272,7 @@ private:
 
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
-  version_t alloc_tablev;
+  version_t inotablev;
 
   // inodes i've destroyed.
   list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
@@ -287,7 +287,7 @@ private:
     ::encode(table_tids, bl);
     ::encode(allocated_inos, bl);
     if (!allocated_inos.empty())
-      ::encode(alloc_tablev, bl);
+      ::encode(inotablev, bl);
     ::encode(truncated_inodes, bl);
     ::encode(client_reqs, bl);
   } 
@@ -297,7 +297,7 @@ private:
     ::decode(table_tids, bl);
     ::decode(allocated_inos, bl);
     if (!allocated_inos.empty())
-      ::decode(alloc_tablev, bl);
+      ::decode(inotablev, bl);
     ::decode(truncated_inodes, bl);
     ::decode(client_reqs, bl);
   }
@@ -331,7 +331,7 @@ private:
 
   void add_allocated_ino(inodeno_t ino, version_t tablev) {
     allocated_inos.push_back(ino);
-    alloc_tablev = tablev;
+    inotablev = tablev;
   }
 
   void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
@@ -508,7 +508,7 @@ private:
     if (!table_tids.empty())
       out << " table_tids=" << table_tids;
     if (!allocated_inos.empty())
-      out << " inos=" << allocated_inos << " v" << alloc_tablev;
+      out << " inos=" << allocated_inos << " v" << inotablev;
     out << "]";
   }
 

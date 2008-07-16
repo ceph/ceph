@@ -56,7 +56,7 @@ class LogSegment {
   map<int, tid_t> last_client_tids;
 
   // table version
-  version_t allocv;
+  version_t inotablev;
   version_t sessionmapv;
   map<int,version_t> tablev;
 
@@ -65,7 +65,7 @@ class LogSegment {
 
   // cons
   LogSegment(loff_t off) : offset(off), end(off), num_events(0), trimmable_at(0),
-			   allocv(0), sessionmapv(0)
+			   inotablev(0), sessionmapv(0)
   { }
 };
 
