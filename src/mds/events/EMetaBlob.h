@@ -268,8 +268,8 @@ private:
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
 
-  // anchor transactions included in this update.
-  list<version_t>         atids;
+  list<version_t>         atids;  // anchor table transactions
+  list<version_t>         stids;  // snap table transactions
 
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
@@ -286,6 +286,7 @@ private:
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
     ::encode(atids, bl);
+    ::encode(stids, bl);
     ::encode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::encode(alloc_tablev, bl);
@@ -296,6 +297,7 @@ private:
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
     ::decode(atids, bl);
+    ::decode(stids, bl);
     ::decode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::decode(alloc_tablev, bl);
@@ -304,7 +306,7 @@ private:
   }
 
 
-  // soft state
+  // soft stateadd
   off_t last_subtree_map;
   off_t my_offset;
 
@@ -328,6 +330,9 @@ private:
 
   void add_anchor_transaction(version_t atid) {
     atids.push_back(atid);
+  }  
+  void add_snap_transaction(version_t stid) {
+    stids.push_back(stid);
   }  
 
   void add_allocated_ino(inodeno_t ino, version_t tablev) {
@@ -508,6 +513,8 @@ private:
       out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
     if (!atids.empty())
       out << " atids=" << atids;
+    if (!stids.empty())
+      out << " stids=" << stids;
     if (!allocated_inos.empty())
       out << " inos=" << allocated_inos << " v" << alloc_tablev;
     out << "]";

@@ -24,29 +24,25 @@
 
 class ESnap : public LogEvent {
 public:
-  EMetaBlob metablob;
   bool create;   
   SnapInfo snap;
   version_t version;    // table version
 
  public:
   ESnap() : LogEvent(EVENT_SNAP) { }
-  ESnap(MDLog *mdl, bool c, SnapInfo &sn, version_t v) : 
+  ESnap(bool c, SnapInfo &sn, version_t v) : 
     LogEvent(EVENT_SNAP),
-    metablob(mdl),
     create(c), snap(sn), version(v) { }
 
   void encode(bufferlist& bl) const {
     ::encode(create, bl);
     ::encode(snap, bl);
     ::encode(version, bl);
-    ::encode(metablob, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(create, bl);
     ::decode(snap, bl);
     ::decode(version, bl);
-    ::decode(metablob, bl);
   }
 
   void print(ostream& out) {

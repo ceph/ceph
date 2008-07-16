@@ -4896,9 +4896,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   // allocate a snapid
   // HACK
-  version_t snapv;
-  snapid_t snapid = mds->snaptable->create(diri->ino(), snapname, mdr->now, &snapv);
-  dout(10) << " snapid is " << snapid << dendl;
+  version_t stid;
+  snapid_t snapid = mds->snaptable->create(diri->ino(), snapname, mdr->now, &stid);
+  dout(10) << " snapid is " << snapid << " stid " << &stid << dendl;
 
   // journal
   SnapInfo info;
@@ -4912,8 +4912,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   pi->version = diri->pre_dirty();
 
   mdr->ls = mdlog->get_current_segment();
-  ESnap *le = new ESnap(mdlog, true, info, snapv);
+  EUpdate *le = new EUpdate(mdlog, "mksnap");
   le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_snap_transaction(stid);
   mds->locker->predirty_nested(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, diri, diri->find_snaprealm()->get_latest_snap());
 
