@@ -208,7 +208,7 @@ libmds_a_SOURCES = \
 	mds/MDSTableServer.cc \
 	mds/AnchorServer.cc \
 	mds/AnchorClient.cc \
-	mds/SnapTable.cc \
+	mds/SnapServer.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc

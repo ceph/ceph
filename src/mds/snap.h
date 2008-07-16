@@ -133,8 +133,8 @@ struct SnapRealm {
   void build_snap_set(set<snapid_t>& s, snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const string& get_snapname(snapid_t snapid, bool actual=true);
-  snapid_t resolve_snapname(const string &name, bool actual=true, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  const string& get_snapname(snapid_t snapid, inodeno_t atino);
+  snapid_t resolve_snapname(const string &name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const set<snapid_t>& get_snaps();
   const vector<snapid_t>& get_snap_vector();

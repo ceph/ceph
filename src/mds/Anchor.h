@@ -22,21 +22,6 @@ using std::string;
 #include "mdstypes.h"
 #include "include/buffer.h"
 
-enum {
-  ANCHOR_OP_CREATE,
-  ANCHOR_OP_DESTROY,
-  ANCHOR_OP_UPDATE,
-};
-
-inline const char* get_anchor_opname(int o) {
-  switch (o) {
-  case ANCHOR_OP_CREATE: return "create";
-  case ANCHOR_OP_DESTROY: return "destroy";
-  case ANCHOR_OP_UPDATE: return "update";
-  default: assert(0); return 0;
-  }
-}
-
 
 // identifies a anchor table mutation
 

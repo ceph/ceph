@@ -174,10 +174,10 @@ const string& SnapInfo::get_long_name()
   return long_name;
 }
 
-const string& SnapRealm::get_snapname(snapid_t snapid, bool actual)
+const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
 {
   if (snaps.count(snapid)) {
-    if (actual)
+    if (atino == inode->ino())
       return snaps[snapid].name;
     else
       return snaps[snapid].get_long_name();
@@ -189,20 +189,21 @@ const string& SnapRealm::get_snapname(snapid_t snapid, bool actual)
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     
-    return oldparent->snaprealm->get_snapname(snapid, false);
+    return oldparent->snaprealm->get_snapname(snapid, atino);
   }
 
-  return parent->get_snapname(snapid, false);
+  return parent->get_snapname(snapid, atino);
 }
 
-snapid_t SnapRealm::resolve_snapname(const string& n, bool actual, snapid_t first, snapid_t last)
+snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t first, snapid_t last)
 {
   // first try me
   dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
 
-  snapid_t num;
-  if (n[0] == '~') num = atoll(n.c_str()+1);
+  //snapid_t num;
+  //if (n[0] == '~') num = atoll(n.c_str()+1);
 
+  bool actual = (atino == inode->ino());
   string pname;
   inodeno_t pdirino;
   if (!actual) {
@@ -212,14 +213,15 @@ snapid_t SnapRealm::resolve_snapname(const string& n, bool actual, snapid_t firs
     if (next_ < 0) return 0;
     pname = n.substr(1, next_ - 1);
     pdirino = atoll(n.c_str() + next_ + 1);
-    dout(10) << " " << n << " -> " << pname << " dirino " << pdirino << dendl;
+    dout(10) << " " << n << " parses to name '" << pname << "' dirino " << pdirino << dendl;
   }
 
   for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
        p != snaps.end() && p->first <= last;
        p++) {
-    if (num && p->second.snapid == num)
-      return p->first;
+    dout(15) << " ? " << p->second << dendl;
+    //if (num && p->second.snapid == num)
+    //return p->first;
     if (actual && p->second.name == n)
 	return p->first;
     if (!actual && p->second.name == pname && p->second.dirino == pdirino)
@@ -236,7 +238,7 @@ snapid_t SnapRealm::resolve_snapname(const string& n, bool actual, snapid_t firs
     assert(oldparent->snaprealm);
     
     thru = MIN(last, p->first);
-    snapid_t r = oldparent->snaprealm->resolve_snapname(n, false,
+    snapid_t r = oldparent->snaprealm->resolve_snapname(n, atino,
 							MAX(first, p->second.first),
 							thru);
     if (r)
@@ -244,7 +246,7 @@ snapid_t SnapRealm::resolve_snapname(const string& n, bool actual, snapid_t firs
     ++thru;
   }
   if (thru <= last && parent)
-    return parent->resolve_snapname(n, false, thru, last);
+    return parent->resolve_snapname(n, atino, thru, last);
   return 0;
 }
 

@@ -72,6 +72,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
   if (_is_prepared(tid)) {
     _commit(tid);
+    pending_for_mds.erase(tid);
     mds->mdlog->submit_entry(new ETableServer(table, TABLE_OP_COMMIT, 0, -1, tid, version));
     mds->mdlog->wait_for_sync(new C_Commit(this, req));
   }

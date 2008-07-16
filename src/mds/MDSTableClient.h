@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __SNAPCLIENT_H
-#define __SNAPCLIENT_H
+#ifndef __MDSTABLECLIENT_H
+#define __MDSTABLECLIENT_H
 
 #include <vector>
 using std::vector;

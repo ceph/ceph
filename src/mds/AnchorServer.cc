@@ -127,7 +127,7 @@ void AnchorServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
   ::decode(trace, p);
 
   switch (what) {
-  case ANCHOR_OP_CREATE:
+  case TABLE_OP_CREATE:
     version++;
 
     // make sure trace is in table
@@ -138,12 +138,12 @@ void AnchorServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
     break;
 
 
-  case ANCHOR_OP_DESTROY:
+  case TABLE_OP_DESTROY:
     version++;
     pending_destroy[version] = ino;
     break;
     
-  case ANCHOR_OP_UPDATE:
+  case TABLE_OP_UPDATE:
     version++;
     pending_update[version].first = ino;
     pending_update[version].second = trace;
@@ -231,8 +231,6 @@ void AnchorServer::_rollback(version_t tid)
   }
   else
     assert(0);
-
-  pending_for_mds.erase(tid);
 
   // bump version.
   version++;

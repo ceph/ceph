@@ -73,12 +73,13 @@ class MHashReaddirReply;
 class MMDSBeacon;
 
 class InoTable;
-class SnapTable;
-
-class MDSTableClient;
-class MDSTableServer;
+class SnapServer;
+class SnapClient;
 class AnchorServer;
 class AnchorClient;
+
+class MDSTableServer;
+class MDSTableClient;
 
 class MDS : public Dispatcher {
  public:
@@ -109,7 +110,8 @@ class MDS : public Dispatcher {
   AnchorServer *anchorserver;
   AnchorClient *anchorclient;
 
-  SnapTable    *snaptable;
+  SnapServer   *snapserver;
+  SnapClient   *snapclient;
 
   MDSTableClient *get_table_client(int t);
   MDSTableServer *get_table_server(int t);

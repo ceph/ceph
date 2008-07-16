@@ -42,9 +42,8 @@
 #include "MDCache.h"
 #include "Server.h"
 #include "Migrator.h"
-#include "InoTable.h"
-#include "SnapTable.h"
 
+#include "InoTable.h"
 #include "MDSTableClient.h"
 #include "MDSTableServer.h"
 

@@ -21,7 +21,7 @@
 #include "MDBalancer.h"
 #include "AnchorClient.h"
 #include "InoTable.h"
-#include "SnapTable.h"
+#include "SnapClient.h"
 
 #include "msg/Messenger.h"
 
@@ -643,7 +643,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
     // do the snap name dentry
-    const string& snapname = in->find_snaprealm()->get_snapname(snapid);
+    const string& snapname = in->find_snaprealm()->get_snapname(snapid, in->ino());
     dout(10) << " snapname " << snapname << dendl;
     ::encode(snapname, bl);
     encode_empty_lease(bl);
@@ -4894,10 +4894,16 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     mdr->now = g_clock.now();
 
   // allocate a snapid
-  // HACK
-  version_t stid;
-  snapid_t snapid = mds->snaptable->create(diri->ino(), snapname, mdr->now, &stid);
-  dout(10) << " snapid is " << snapid << " stid " << &stid << dendl;
+  if (!mdr->more()->stid) {
+    // prepare an stid
+    mds->snapclient->prepare_create(diri->ino(), snapname, mdr->now, 
+				    &mdr->more()->stid, new C_MDS_RetryRequest(mds->mdcache, mdr));
+    return;
+  }
+
+  version_t stid = mdr->more()->stid;
+  snapid_t snapid = stid;
+  dout(10) << " snapid/stid is " << snapid << dendl;
 
   // journal
   SnapInfo info;
@@ -4926,6 +4932,8 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
+
+  mds->snapclient->commit(mdr->more()->stid, mdr->ls);
 
   snapid_t snapid = info.snapid;
 

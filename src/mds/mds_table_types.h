@@ -40,6 +40,12 @@ enum {
   TABLE_OP_ROLLBACK     =  7,
 };
 
+enum {
+  TABLE_OP_CREATE,
+  TABLE_OP_UPDATE,
+  TABLE_OP_DESTROY,
+};
+
 inline const char *get_mdstable_opname(int op) {
   switch (op) {
   case TABLE_OP_QUERY: return "query";

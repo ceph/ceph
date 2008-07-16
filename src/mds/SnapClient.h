@@ -15,39 +15,30 @@
 #ifndef __SNAPCLIENT_H
 #define __SNAPCLIENT_H
 
-#include <vector>
-using std::vector;
-#include <ext/hash_map>
-using __gnu_cxx::hash_map;
-
-#include "include/types.h"
-#include "msg/Dispatcher.h"
-
+#include "MDSTableClient.h"
 #include "snap.h"
 
 class Context;
 class MDS;
 class LogSegment;
 
-class MDSTableClient : public Dispatcher {
-  MDS *mds;
+class SnapClient : public MDSTableClient {
+public:
+  SnapClient(MDS *m) : MDSTableClient(m, TABLE_SNAP) {}
 
-  // prepares
-  struct _pending_prepare {
-    Context *onfinish;
-    version_t *patid;
-    bufferlist mutation;
-  };
+  void resend_queries() {}
+  void handle_query_result(MMDSTableRequest *m) {}
 
-  hash_map<metareqid_t, _pending_prepare> pending_prepare;
-
-  // pending commits
-  map<version_t, LogSegment*> pending_commit;
-  map<version_t, list<Context*> > ack_waiters;
-
-  void handle_reply(class MAnchor *m);  
-
-
+  void prepare_create(inodeno_t dirino, const string& name, utime_t stamp,
+		      version_t *pstid, Context *onfinish) {
+    bufferlist bl;
+    __u32 op = TABLE_OP_CREATE;
+    ::encode(op, bl);
+    ::encode(dirino, bl);
+    ::encode(name, bl);
+    ::encode(stamp, bl);
+    _prepare(bl, pstid, onfinish);
+  }
 };
 
 #endif

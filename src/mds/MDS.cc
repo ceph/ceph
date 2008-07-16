@@ -35,9 +35,10 @@
 
 #include "AnchorServer.h"
 #include "AnchorClient.h"
+#include "SnapServer.h"
+#include "SnapClient.h"
 
 #include "InoTable.h"
-#include "SnapTable.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -91,8 +92,8 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   balancer = new MDBalancer(this);
 
   inotable = new InoTable(this);
-  snaptable = new SnapTable(this);
-
+  snapserver = new SnapServer(this);
+  snapclient = new SnapClient(this);
   anchorserver = new AnchorServer(this);
   anchorclient = new AnchorClient(this);
 
@@ -128,7 +129,8 @@ MDS::~MDS() {
   if (balancer) { delete balancer; balancer = NULL; }
   if (inotable) { delete inotable; inotable = NULL; }
   if (anchorserver) { delete anchorserver; anchorserver = NULL; }
-  if (snaptable) { delete snaptable; snaptable = NULL; }
+  if (snapserver) { delete snapserver; snapserver = NULL; }
+  if (snapclient) { delete snapclient; snapclient = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
@@ -244,7 +246,7 @@ MDSTableClient *MDS::get_table_client(int t)
 {
   switch (t) {
   case TABLE_ANCHOR: return anchorclient;
-    //case TABLE_SNAP: return snapserver;
+  case TABLE_SNAP: return snapclient;
   default: assert(0);
   }
 }
@@ -253,7 +255,7 @@ MDSTableServer *MDS::get_table_server(int t)
 {
   switch (t) {
   case TABLE_ANCHOR: return anchorserver;
-    //case TABLE_SNAP: return snapserver;
+  case TABLE_SNAP: return snapserver;
   default: assert(0);
   }
 }
@@ -778,8 +780,8 @@ void MDS::boot_create()
 
   if (whoami == 0) {
     dout(10) << "boot_create creating fresh snaptable" << dendl;
-    snaptable->reset();
-    snaptable->save(fin->new_sub());
+    snapserver->reset();
+    snapserver->save(fin->new_sub());
   }
 }
 
@@ -825,7 +827,7 @@ void MDS::boot_start(int step, int r)
       }
       if (whoami == 0) {
 	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
-	snaptable->load(gather->new_sub());
+	snapserver->load(gather->new_sub());
       }
       
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;
