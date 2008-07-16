@@ -36,7 +36,7 @@
 #include "AnchorServer.h"
 #include "AnchorClient.h"
 
-#include "IdAllocator.h"
+#include "InoTable.h"
 #include "SnapTable.h"
 
 #include "common/Logger.h"
@@ -90,7 +90,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  idalloc = new IdAllocator(this);
+  inotable = new InoTable(this);
   snaptable = new SnapTable(this);
 
   anchorserver = new AnchorServer(this);
@@ -126,7 +126,7 @@ MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
-  if (idalloc) { delete idalloc; idalloc = NULL; }
+  if (inotable) { delete inotable; inotable = NULL; }
   if (anchorserver) { delete anchorserver; anchorserver = NULL; }
   if (snaptable) { delete snaptable; snaptable = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
@@ -761,10 +761,10 @@ void MDS::boot_create()
   straydir->mark_dirty(straydir->pre_dirty(), mdlog->get_current_segment());
   straydir->commit(0, fin->new_sub());
  
-  // fixme: fake out idalloc (reset, pretend loaded)
-  dout(10) << "boot_create creating fresh idalloc table" << dendl;
-  idalloc->reset();
-  idalloc->save(fin->new_sub());
+  // fixme: fake out inotable (reset, pretend loaded)
+  dout(10) << "boot_create creating fresh inotable table" << dendl;
+  inotable->reset();
+  inotable->save(fin->new_sub());
 
   // write empty sessionmap
   sessionmap.save(fin->new_sub());
@@ -813,8 +813,8 @@ void MDS::boot_start(int step, int r)
   case 1:
     {
       C_Gather *gather = new C_Gather(new C_MDS_BootStart(this, 2));
-      dout(2) << "boot_start " << step << ": opening idalloc" << dendl;
-      idalloc->load(gather->new_sub());
+      dout(2) << "boot_start " << step << ": opening inotable" << dendl;
+      inotable->load(gather->new_sub());
 
       dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
       sessionmap.load(gather->new_sub());

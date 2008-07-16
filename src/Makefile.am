@@ -203,7 +203,7 @@ libmds_a_SOURCES = \
 	mds/CInode.cc \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
-	mds/IdAllocator.cc \
+	mds/InoTable.cc \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
 	mds/AnchorServer.cc \
@@ -340,7 +340,7 @@ noinst_HEADERS = \
 	mds/AnchorClient.h\
 	mds/CDentry.h\
 	mds/CDir.h\
-	mds/IdAllocator.h\
+	mds/InoTable.h\
 	mds/LocalLock.h\
 	mds/LogEvent.h\
 	mds/MDBalancer.h\

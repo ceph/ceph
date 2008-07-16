@@ -42,7 +42,7 @@
 #include "MDCache.h"
 #include "Server.h"
 #include "Migrator.h"
-#include "IdAllocator.h"
+#include "InoTable.h"
 #include "SnapTable.h"
 
 #include "MDSTableClient.h"
@@ -170,13 +170,13 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // idalloc
-  if (allocv > mds->idalloc->get_committed_version()) {
-    dout(10) << "try_to_expire saving idalloc table, need " << allocv
-	      << ", committed is " << mds->idalloc->get_committed_version()
-	      << " (" << mds->idalloc->get_committing_version() << ")"
+  if (allocv > mds->inotable->get_committed_version()) {
+    dout(10) << "try_to_expire saving inotable table, need " << allocv
+	      << ", committed is " << mds->inotable->get_committed_version()
+	      << " (" << mds->inotable->get_committing_version() << ")"
 	      << dendl;
     if (!gather) gather = new C_Gather;
-    mds->idalloc->save(gather->new_sub(), allocv);
+    mds->inotable->save(gather->new_sub(), allocv);
   }
 
   // sessionmap
@@ -485,21 +485,21 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
   // allocated_inos
   if (!allocated_inos.empty()) {
-    if (mds->idalloc->get_version() >= alloc_tablev) {
-      dout(10) << "EMetaBlob.replay idalloc tablev " << alloc_tablev
-	       << " <= table " << mds->idalloc->get_version() << dendl;
+    if (mds->inotable->get_version() >= alloc_tablev) {
+      dout(10) << "EMetaBlob.replay inotable tablev " << alloc_tablev
+	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
       for (list<inodeno_t>::iterator p = allocated_inos.begin();
 	   p != allocated_inos.end();
 	   ++p) {
-	dout(10) << " EMetaBlob.replay idalloc " << *p << " tablev " << alloc_tablev
-		 << " - 1 == table " << mds->idalloc->get_version() << dendl;
-	assert(alloc_tablev-1 == mds->idalloc->get_version());
+	dout(10) << " EMetaBlob.replay inotable " << *p << " tablev " << alloc_tablev
+		 << " - 1 == table " << mds->inotable->get_version() << dendl;
+	assert(alloc_tablev-1 == mds->inotable->get_version());
 	
-	inodeno_t ino = mds->idalloc->alloc_id();
+	inodeno_t ino = mds->inotable->alloc_id();
 	assert(ino == *p);       // this should match.
       }	
-      assert(alloc_tablev == mds->idalloc->get_version());
+      assert(alloc_tablev == mds->inotable->get_version());
     }
   }
 

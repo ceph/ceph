@@ -12,22 +12,22 @@
  * 
  */
 
-#include "IdAllocator.h"
+#include "InoTable.h"
 #include "MDS.h"
 
 #include "include/types.h"
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".idalloc: "
+#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".inotable: "
 
-void IdAllocator::init_inode()
+void InoTable::init_inode()
 {
   ino = MDS_INO_IDS_OFFSET + mds->get_nodeid();
   layout = g_default_file_layout;
 }
 
-void IdAllocator::reset_state()
+void InoTable::reset_state()
 {
   // use generic range. FIXME THIS IS CRAP
   free.clear();
@@ -42,27 +42,17 @@ void IdAllocator::reset_state()
   free.insert(start, end);
 }
 
-inodeno_t IdAllocator::alloc_id() 
+inodeno_t InoTable::alloc_id() 
 {
   assert(is_active());
   
   // pick one
   inodeno_t id = free.start();
   free.erase(id);
-  dout(10) << "idalloc " << this << ": alloc id " << id << dendl;
+  dout(10) << "alloc id " << id << dendl;
 
   version++;
   
   return id;
-}
-
-void IdAllocator::reclaim_id(inodeno_t id) 
-{
-  assert(is_active());
-  
-  dout(10) << "idalloc " << this << ": reclaim id " << id << dendl;
-  free.insert(id);
-
-  version++;
 }
 

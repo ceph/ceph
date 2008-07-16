@@ -72,7 +72,7 @@ class MHashReaddirReply;
 
 class MMDSBeacon;
 
-class IdAllocator;
+class InoTable;
 class SnapTable;
 
 class MDSTableClient;
@@ -104,7 +104,7 @@ class MDS : public Dispatcher {
   MDLog        *mdlog;
   MDBalancer   *balancer;
 
-  IdAllocator  *idalloc;
+  InoTable     *inotable;
 
   AnchorServer *anchorserver;
   AnchorClient *anchorclient;

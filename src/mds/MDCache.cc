@@ -72,7 +72,7 @@
 #include "messages/MMDSFragmentNotify.h"
 
 
-#include "IdAllocator.h"
+#include "InoTable.h"
 
 #include "common/Timer.h"
 
@@ -150,7 +150,7 @@ CInode *MDCache::create_inode()
   CInode *in = new CInode(this);
 
   // assign ino
-  in->inode.ino = mds->idalloc->alloc_id();
+  in->inode.ino = mds->inotable->alloc_id();
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
 

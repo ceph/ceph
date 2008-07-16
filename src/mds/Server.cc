@@ -20,7 +20,7 @@
 #include "Migrator.h"
 #include "MDBalancer.h"
 #include "AnchorClient.h"
-#include "IdAllocator.h"
+#include "InoTable.h"
 #include "SnapTable.h"
 
 #include "msg/Messenger.h"
@@ -2080,7 +2080,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
+  le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
   
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
@@ -2129,7 +2129,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
+  le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
@@ -2170,7 +2170,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_allocated_ino(newi->ino(), mds->idalloc->get_version());
+  le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
@@ -4704,7 +4704,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_allocated_ino(in->ino(), mds->idalloc->get_version());
+  le->metablob.add_allocated_ino(in->ino(), mds->inotable->get_version());
   mds->locker->predirty_nested(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, in);
   

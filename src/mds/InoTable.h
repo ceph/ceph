@@ -13,23 +13,22 @@
  */
 
 
-#ifndef __IDALLOCATOR_H
-#define __IDALLOCATOR_H
+#ifndef __INOTABLE_H
+#define __INOTABLE_H
 
 #include "MDSTable.h"
 #include "include/interval_set.h"
 
 class MDS;
 
-class IdAllocator : public MDSTable {
+class InoTable : public MDSTable {
   interval_set<inodeno_t> free;   // unused ids
 
  public:
-  IdAllocator(MDS *m) : MDSTable(m, "idalloc") { }
+  InoTable(MDS *m) : MDSTable(m, "idalloc") { }
 
   // alloc or reclaim ids
   inodeno_t alloc_id();
-  void reclaim_id(inodeno_t ino);
   
   void init_inode();
   void reset_state();
