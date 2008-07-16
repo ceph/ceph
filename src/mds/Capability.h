@@ -62,10 +62,12 @@ private:
   capseq_t last_sent, last_recv;
   capseq_t last_open;
   capseq_t mseq;
-  
+
   bool suppress;
   bool stale;
 public:
+  snapid_t client_follows;
+  
   xlist<Capability*>::item session_caps_item;
 
   xlist<Capability*>::item snaprealm_caps_item;
@@ -78,6 +80,7 @@ public:
     last_open(0),
     mseq(0),
     suppress(false), stale(false),
+    client_follows(0),
     session_caps_item(this), snaprealm_caps_item(this) { }
   
   capseq_t get_mseq() { return mseq; }

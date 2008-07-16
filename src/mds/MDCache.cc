@@ -962,21 +962,35 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   return in;
 }
 
-CInode *MDCache::cow_inode(CInode *in, snapid_t first, snapid_t last)
+CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 {
+  assert(last >= in->first);
+
   CInode *oldin = new CInode(this);
   oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
   oldin->xattrs = in->xattrs;
 
-  oldin->first = first;
+  oldin->first = in->first;
   oldin->last = last;
+  in->first = last+1;
 
   dout(10) << " oldin " << *oldin << dendl;
   add_inode(oldin);
   
-  //if (in->get_caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
-  //oldin->get(CInode::PIN_SNAPCAPS);
+  map<int,Capability*>::iterator p = in->client_caps.begin();
+  while (p != in->client_caps.end()) {
+    Capability *cap = p->second;
+    assert(cap->client_follows >= oldin->first);
+    if (cap->client_follows <= last) {
+      // move to oldin
+      int client = p->first;
+      dout(10) << " moving client" << client << " cap " << cap << " to cloned inode" << dendl;
+      p++;
+      oldin->steal_client_cap(client, cap);
+    } else
+      p++;
+  }
 
   return oldin;
 }
@@ -989,11 +1003,15 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
   // nothing to cow on a null dentry
   assert(!dn->is_null());
 
+  // within current snap?
+  if (follows < dn->first)
+    return;
+
   if (dn->is_primary() && dn->inode->is_multiversion()) {
     // multiversion inode.
     CInode *in = dn->inode;
 
-    if (follows == CEPH_NOSNAP)
+    if (follows == CEPH_NOSNAP || follows == 0)
       follows = in->find_snaprealm()->get_latest_snap();
 
     old_inode_t &old = in->old_inodes[follows];
@@ -1016,7 +1034,8 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     
     dout(10) << "    dn " << *dn << dendl;
     if (dn->is_primary()) {
-      CInode *oldin = cow_inode(dn->inode, dn->inode->first, follows);
+      assert(oldfirst == dn->inode->first);
+      CInode *oldin = cow_inode(dn->inode, follows);
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_primary_dentry(olddn, true);

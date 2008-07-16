@@ -226,9 +226,6 @@ todo
   - garbage collection
 - realms
   - make better sense of snap_highwater...?
-- snap creation
-  - async SnapClient for the possibly remote SnapTable
-    - hmm, can we generalize any of AnchorClient?
 
 /- cdir fetch/store versioned dentries
 - emetablob.. journaling a versioned update..
@@ -242,8 +239,6 @@ todo
   remote link -> multiversion inode
 
 - for simplicity, don't replicate any snapshot data.
-- or issue any leases or capabilities... the content is static!
-- 
 
 - need rrealms in fraginfo_t
 - rename() needs to create a new realm if src/dst realms differ and (rrealms, or open_children, or not subtree leaf) (similar logic to the anchor update)

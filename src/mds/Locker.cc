@@ -932,17 +932,33 @@ void Locker::share_inode_max_size(CInode *in)
 void Locker::handle_client_file_caps(MClientFileCaps *m)
 {
   int client = m->get_source().num();
-  CInode *in = mdcache->get_inode(m->get_ino());
+
+  snapid_t follows = 0;
+  if (m->get_snaps().size())
+    follows = m->get_snaps()[0];
+
+  dout(7) << "handle_client_file_caps on " << m->get_ino() << " follows " << follows << dendl;
+
+  CInode *head_in = mdcache->get_inode(m->get_ino());
+  if (!head_in) {
+    dout(7) << "handle_client_file_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
+    delete m;
+    return;
+  }
+
+  CInode *in = 0;
+  if (head_in) {
+    in = mdcache->pick_inode_snap(head_in, follows);
+    if (in != head_in)
+      dout(10) << " head inode " << *head_in << dendl;
+    dout(10) << "  cap inode " << *in << dendl;
+  }
+
   Capability *cap = 0;
   if (in) 
     cap = in->get_client_cap(client);
-
-  if (!in || !cap) {
-    if (!in) {
-      dout(7) << "handle_client_file_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
-    } else {
-      dout(7) << "handle_client_file_caps no cap for client" << client << " on " << *in << dendl;
-    }
+  if (!cap) {
+    dout(7) << "handle_client_file_caps no cap for client" << client << " on " << *in << dendl;
     delete m;
     return;
   } 
@@ -963,6 +979,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
   int has = cap->confirmed();
   dout(10) << "client had " << cap_string(had) << ", has " << cap_string(has) << dendl;
+
+  cap->client_follows = follows;
 
   // update wanted
   if (cap->wanted() != wanted) {
@@ -1051,13 +1069,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
     EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
 
-    snapid_t follows = 0;
-    if (m->get_snaps().size())
-      follows = m->get_snaps()[0];
-    CInode *upi = mdcache->pick_inode_snap(in, follows);
-
-    inode_t *pi = upi->project_inode();
-    pi->version = upi->pre_dirty();
+    inode_t *pi = in->project_inode();
+    pi->version = in->pre_dirty();
     if (change_max) {
       dout(7) << " max_size " << pi->max_size << " -> " << new_max << dendl;
       pi->max_size = new_max;
@@ -1090,12 +1103,11 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     }
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
-    if (upi == in)
-      file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
-    mut->auth_pin(upi);
-    predirty_nested(mut, &le->metablob, upi, 0, PREDIRTY_PRIMARY, false);
+    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+    mut->auth_pin(in);
+    predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
 
-    mdcache->journal_dirty_inode(&le->metablob, upi, follows);
+    mdcache->journal_dirty_inode(&le->metablob, in, follows);
     //le->metablob.add_primary_dentry(in->parent, true, 0, pi);
 
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
