@@ -5216,7 +5216,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
   mds->locker->predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-  le->metablob.add_anchor_transaction(atid);
+  le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
 }
 

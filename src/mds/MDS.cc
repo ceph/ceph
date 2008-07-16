@@ -33,7 +33,7 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 
-#include "AnchorTable.h"
+#include "AnchorServer.h"
 #include "AnchorClient.h"
 
 #include "IdAllocator.h"
@@ -57,7 +57,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 
-#include "messages/MAnchor.h"
+#include "messages/MMDSTableRequest.h"
 
 #include "config.h"
 
@@ -90,11 +90,11 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
-  anchorclient = new AnchorClient(this);
   idalloc = new IdAllocator(this);
-
-  anchortable = new AnchorTable(this);
   snaptable = new SnapTable(this);
+
+  anchorserver = new AnchorServer(this);
+  anchorclient = new AnchorClient(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -127,7 +127,7 @@ MDS::~MDS() {
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
   if (idalloc) { delete idalloc; idalloc = NULL; }
-  if (anchortable) { delete anchortable; anchortable = NULL; }
+  if (anchorserver) { delete anchorserver; anchorserver = NULL; }
   if (snaptable) { delete snaptable; snaptable = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
@@ -236,6 +236,36 @@ void MDS::reopen_logger(utime_t start)
   mdlog->reopen_logger(start, append);
   server->reopen_logger(start, append);
 }
+
+
+
+
+MDSTableClient *MDS::get_table_client(int t)
+{
+  switch (t) {
+  case TABLE_ANCHOR: return anchorclient;
+    //case TABLE_SNAP: return snapserver;
+  default: assert(0);
+  }
+}
+
+MDSTableServer *MDS::get_table_server(int t)
+{
+  switch (t) {
+  case TABLE_ANCHOR: return anchorserver;
+    //case TABLE_SNAP: return snapserver;
+  default: assert(0);
+  }
+}
+
+
+
+
+
+
+
+
+
 
 void MDS::send_message_mds(Message *m, int mds)
 {
@@ -742,8 +772,8 @@ void MDS::boot_create()
   // fixme: fake out anchortable
   if (mdsmap->get_anchortable() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << dendl;
-    anchortable->create_fresh();
-    anchortable->save(fin->new_sub());
+    anchorserver->reset();
+    anchorserver->save(fin->new_sub());
   }
 
   if (whoami == 0) {
@@ -791,7 +821,7 @@ void MDS::boot_start(int step, int r)
 
       if (mdsmap->get_anchortable() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
-	anchortable->load(gather->new_sub());
+	anchorserver->load(gather->new_sub());
       }
       if (whoami == 0) {
 	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
@@ -949,7 +979,7 @@ void MDS::recovery_done()
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_anchortable() == whoami) 
-    anchortable->finish_recovery();
+    anchorserver->finish_recovery();
   
   // kick anchorclient (resent COMMITs)
   anchorclient->finish_recovery();
@@ -969,8 +999,8 @@ void MDS::handle_mds_recovery(int who)
   
   mdcache->handle_mds_recovery(who);
 
-  if (anchortable)
-    anchortable->handle_mds_recovery(who);
+  if (anchorserver)
+    anchorserver->handle_mds_recovery(who);
   anchorclient->handle_mds_recovery(who);
   
   queue_waiters(waiting_for_active_peer[who]);
@@ -1094,12 +1124,17 @@ void MDS::_dispatch(Message *m)
       balancer->proc_message(m);
       break;
 
-      // anchor
-    case MSG_MDS_ANCHOR:
-      if (((MAnchor*)m)->get_op() < 0)
-	anchorclient->dispatch(m);
-      else
-	anchortable->dispatch(m);
+    case MSG_MDS_TABLE_REQUEST:
+      {
+	MMDSTableRequest *req = (MMDSTableRequest*)m;
+	if (req->op < 0) {
+	  MDSTableClient *client = get_table_client(req->table);
+	  client->handle_request(req);
+	} else {
+	  MDSTableServer *server = get_table_server(req->table);
+	  server->handle_request(req);
+	}
+      }
       break;
 
       // OSD

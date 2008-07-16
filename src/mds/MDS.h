@@ -54,13 +54,9 @@ class Filer;
 
 class Server;
 class Locker;
-class AnchorTable;
-class AnchorClient;
 class MDCache;
 class MDLog;
 class MDBalancer;
-class IdAllocator;
-class SnapTable;
 
 class CInode;
 class CDir;
@@ -76,6 +72,13 @@ class MHashReaddirReply;
 
 class MMDSBeacon;
 
+class IdAllocator;
+class SnapTable;
+
+class MDSTableClient;
+class MDSTableServer;
+class AnchorServer;
+class AnchorClient;
 
 class MDS : public Dispatcher {
  public:
@@ -103,10 +106,13 @@ class MDS : public Dispatcher {
 
   IdAllocator  *idalloc;
 
-  AnchorTable  *anchortable;
+  AnchorServer *anchorserver;
   AnchorClient *anchorclient;
 
   SnapTable    *snaptable;
+
+  MDSTableClient *get_table_client(int t);
+  MDSTableServer *get_table_server(int t);
 
   Logger       *logger, *logger2;
 

@@ -53,6 +53,8 @@ using namespace std;
 
 
 
+// CAPS
+
 typedef __u32 capseq_t;
 
 inline string cap_string(int cap)

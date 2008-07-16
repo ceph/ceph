@@ -86,8 +86,8 @@
 
 #define MSG_MDS_BEACON             90  // to monitor
 #define MSG_MDS_SLAVE_REQUEST      91
+#define MSG_MDS_TABLE_REQUEST      92
 
-#define MSG_MDS_ANCHOR             0x100
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
 

@@ -31,10 +31,9 @@
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
 
-#include "events/EAnchor.h"
-#include "events/EAnchorClient.h"
+#include "events/ETableClient.h"
+#include "events/ETableServer.h"
 
-#include "events/ESnap.h"
 
 #include "LogSegment.h"
 
@@ -43,10 +42,11 @@
 #include "MDCache.h"
 #include "Server.h"
 #include "Migrator.h"
-#include "AnchorTable.h"
-#include "AnchorClient.h"
 #include "IdAllocator.h"
 #include "SnapTable.h"
+
+#include "MDSTableClient.h"
+#include "MDSTableServer.h"
 
 #include "Locker.h"
 
@@ -190,28 +190,32 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // pending commit atids
-  for (hash_set<version_t>::iterator p = pending_commit_atids.begin();
-       p != pending_commit_atids.end();
+  for (map<int, hash_set<version_t> >::iterator p = pending_commit_tids.begin();
+       p != pending_commit_tids.end();
        ++p) {
-    if (!gather) gather = new C_Gather;
-    assert(!mds->anchorclient->has_committed(*p));
-    dout(10) << "try_to_expire anchor transaction " << *p 
-	     << " pending commit (not yet acked), waiting" << dendl;
-    mds->anchorclient->wait_for_ack(*p, gather->new_sub());
+    MDSTableClient *client = mds->get_table_client(p->first);
+    for (hash_set<version_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      if (!gather) gather = new C_Gather;
+      assert(!client->has_committed(*q));
+      dout(10) << "try_to_expire " << get_mdstable_name(p->first) << " transaction " << *q 
+	       << " pending commit (not yet acked), waiting" << dendl;
+      client->wait_for_ack(*q, gather->new_sub());
+    }
   }
   
-  // anchortable
-  if (anchortablev > mds->anchortable->get_committed_version()) {
-    dout(10) << "try_to_expire waiting for anchor table to save, need " << anchortablev << dendl;
-    if (!gather) gather = new C_Gather;
-    mds->anchortable->save(gather->new_sub());
-  }
-
-  // snaptable
-  if (snaptablev > mds->snaptable->get_committed_version()) {
-    dout(10) << "try_to_expire waiting for snap table to save, need " << snaptablev << dendl;
-    if (!gather) gather = new C_Gather;
-    mds->snaptable->save(gather->new_sub());
+  // table servers
+  for (map<int, version_t>::iterator p = tablev.begin();
+       p != tablev.end();
+       p++) {
+    MDSTableServer *server = mds->get_table_server(p->first);
+    if (p->second > server->get_committed_version()) {
+      dout(10) << "try_to_expire waiting for " << get_mdstable_name(p->first) 
+	       << " to save, need " << p->second << dendl;
+      if (!gather) gather = new C_Gather;
+      server->save(gather->new_sub());
+    }
   }
 
   // FIXME client requests...?
@@ -470,12 +474,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     }
   }
 
-  // anchor transactions
-  for (list<version_t>::iterator p = atids.begin();
-       p != atids.end();
+  // table client transactions
+  for (list<pair<__u8,version_t> >::iterator p = table_tids.begin();
+       p != table_tids.end();
        ++p) {
-    dout(10) << "EMetaBlob.replay noting anchor transaction " << *p << dendl;
-    mds->anchorclient->got_journaled_agree(*p, logseg);
+    dout(10) << "EMetaBlob.replay noting " << get_mdstable_name(p->first) << " transaction " << p->second << dendl;
+    MDSTableClient *client = mds->get_table_client(p->first);
+    client->got_journaled_agree(p->second, logseg);
   }
 
   // allocated_inos
@@ -580,73 +585,58 @@ void ESessions::replay(MDS *mds)
 
 
 
-// -----------------------
-// EAnchor
 
-void EAnchor::update_segment()
+void ETableServer::update_segment()
 {
-  _segment->anchortablev = version;
+  _segment->tablev[table] = version;
 }
 
-void EAnchor::replay(MDS *mds)
+void ETableServer::replay(MDS *mds)
 {
-  if (mds->anchortable->get_version() >= version) {
-    dout(10) << "EAnchor.replay event " << version
-	     << " <= table " << mds->anchortable->get_version() << dendl;
+  MDSTableServer *server = mds->get_table_server(table);
+  if (server->get_version() >= version) {
+    dout(10) << "ETableServer.replay " << get_mdstable_name(table) << " event " << version
+	     << " <= table " << server->get_version() << dendl;
     return;
   }
   
-  dout(10) << " EAnchor.replay event " << version
-	   << " - 1 == table " << mds->anchortable->get_version() << dendl;
-  assert(version-1 == mds->anchortable->get_version());
+  dout(10) << " ETableServer.replay " << get_mdstable_name(table) << " event " << version
+	   << " - 1 == table " << server->get_version() << dendl;
+  assert(version-1 == server->get_version());
   
   switch (op) {
-    // anchortable
-  case ANCHOR_OP_CREATE_PREPARE:
-    mds->anchortable->create_prepare(ino, trace, reqmds);
+  case TABLE_OP_PREPARE:
+    server->_prepare(mutation, reqid, bymds);
     break;
-  case ANCHOR_OP_DESTROY_PREPARE:
-    mds->anchortable->destroy_prepare(ino, reqmds);
+  case TABLE_OP_COMMIT:
+    server->_commit(tid);
     break;
-  case ANCHOR_OP_UPDATE_PREPARE:
-    mds->anchortable->update_prepare(ino, trace, reqmds);
-    break;
-  case ANCHOR_OP_COMMIT:
-    mds->anchortable->commit(atid);
-    break;
-    
   default:
     assert(0);
   }
   
-  assert(version == mds->anchortable->get_version());
+  assert(version == server->get_version());
 }
 
 
-// EAnchorClient
-
-void EAnchorClient::replay(MDS *mds)
+void ETableClient::replay(MDS *mds)
 {
-  dout(10) << " EAnchorClient.replay op " << op << " atid " << atid << dendl;
+  dout(10) << " ETableClient.replay " << get_mdstable_name(table)
+	   << " op " << get_mdstable_opname(op)
+	   << " tid " << tid << dendl;
     
-  switch (op) {
-    // anchorclient
-  case ANCHOR_OP_ACK:
-    mds->anchorclient->got_journaled_ack(atid);
-    break;
-    
-  default:
-    assert(0);
-  }
+  MDSTableClient *client = mds->get_table_client(table);
+  assert(op == TABLE_OP_ACK);
+  client->got_journaled_ack(tid);
 }
 
 
 // -----------------------
 // ESnap
-
+/*
 void ESnap::update_segment()
 {
-  _segment->snaptablev = version;
+  _segment->tablev[TABLE_SNAP] = version;
 }
 
 void ESnap::replay(MDS *mds)
@@ -671,6 +661,7 @@ void ESnap::replay(MDS *mds)
 
   assert(version == mds->snaptable->get_version());
 }
+*/
 
 
 

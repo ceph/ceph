@@ -20,7 +20,6 @@
 
 #include "MDS.h"
 #include "MDCache.h"
-#include "AnchorTable.h"
 
 #include "snap.h"
 

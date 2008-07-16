@@ -33,10 +33,8 @@
 
 #define EVENT_PURGEFINISH  30
 
-#define EVENT_ANCHOR       40
-#define EVENT_ANCHORCLIENT 41
-
-#define EVENT_SNAP         50
+#define EVENT_TABLECLIENT  42
+#define EVENT_TABLESERVER  43
 
 
 

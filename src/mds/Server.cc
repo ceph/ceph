@@ -44,7 +44,6 @@
 #include "events/ESession.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
-#include "events/ESnap.h"
 
 #include "include/filepath.h"
 #include "common/Timer.h"
@@ -2422,7 +2421,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   }
 
   if (mdr->more()->dst_reanchor_atid)
-    le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
+    le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
@@ -2931,7 +2930,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   }
 
   if (mdr->more()->dst_reanchor_atid)
-    le->metablob.add_anchor_transaction(mdr->more()->dst_reanchor_atid);
+    le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
@@ -3672,9 +3671,9 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   // anchor updates?
   if (mdr->more()->src_reanchor_atid)
-    metablob->add_anchor_transaction(mdr->more()->src_reanchor_atid);
+    metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->src_reanchor_atid);
   if (mdr->more()->dst_reanchor_atid)
-    metablob->add_anchor_transaction(mdr->more()->dst_reanchor_atid);
+    metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 }
 
 
@@ -4914,7 +4913,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mksnap");
   le->metablob.add_client_req(req->get_reqid());
-  le->metablob.add_snap_transaction(stid);
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mds->locker->predirty_nested(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, diri, diri->find_snaprealm()->get_latest_snap());
 

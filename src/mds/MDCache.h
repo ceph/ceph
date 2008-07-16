@@ -257,6 +257,9 @@ struct MDRequest : public Mutation {
     map<__u32,entity_inst_t> imported_client_map;
     map<CInode*, map<__u32,Capability::Export> > cap_imports;
     
+    // for snaps
+    version_t stid;
+
     // called when slave commits or aborts
     Context *slave_commit;
     bufferlist rollback_bl;
@@ -271,6 +274,7 @@ struct MDRequest : public Mutation {
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       destdn_was_remote_inode(0), was_link_merge(false),
+      stid(0),
       slave_commit(0),
       fragment_in(0), fragment_bits(0) { }
   } *_more;

@@ -12,46 +12,43 @@
  * 
  */
 
-#ifndef __MDS_ESNAP_H
-#define __MDS_ESNAP_H
+#ifndef __MDS_ETABLECLIENT_H
+#define __MDS_ETABLECLIENT_H
 
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
+#include "../mds_table_types.h"
 #include "../LogEvent.h"
-#include "../snap.h"
 
-class ESnap : public LogEvent {
-public:
-  bool create;   
-  SnapInfo snap;
-  version_t version;    // table version
+struct ETableClient : public LogEvent {
+  __u16 table;
+  __s16 op;
+  version_t tid;
 
- public:
-  ESnap() : LogEvent(EVENT_SNAP) { }
-  ESnap(bool c, SnapInfo &sn, version_t v) : 
-    LogEvent(EVENT_SNAP),
-    create(c), snap(sn), version(v) { }
+  ETableClient() : LogEvent(EVENT_TABLECLIENT) { }
+  ETableClient(int t, int o, version_t ti) :
+    LogEvent(EVENT_TABLECLIENT),
+    table(t), op(o), tid(ti) { }
 
   void encode(bufferlist& bl) const {
-    ::encode(create, bl);
-    ::encode(snap, bl);
-    ::encode(version, bl);
+    ::encode(table, bl);
+    ::encode(op, bl);
+    ::encode(tid, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(create, bl);
-    ::decode(snap, bl);
-    ::decode(version, bl);
+    ::decode(table, bl);
+    ::decode(op, bl);
+    ::decode(tid, bl);
   }
 
   void print(ostream& out) {
-    out << "ESnap " << (create ? "create":"remove")
-	<< " " << snap 
-	<< " v " << version;
+    out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstable_opname(op);
+    if (tid) out << " tid " << tid;
   }  
 
-  void update_segment();
+  //void update_segment();
   void replay(MDS *mds);  
 };
 

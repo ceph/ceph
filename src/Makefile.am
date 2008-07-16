@@ -201,11 +201,13 @@ libmds_a_SOURCES = \
 	mds/CDentry.cc \
 	mds/CDir.cc \
 	mds/CInode.cc \
-	mds/AnchorTable.cc \
-	mds/AnchorClient.cc \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
 	mds/IdAllocator.cc \
+	mds/MDSTableClient.cc \
+	mds/MDSTableServer.cc \
+	mds/AnchorServer.cc \
+	mds/AnchorClient.cc \
 	mds/SnapTable.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
@@ -336,7 +338,6 @@ noinst_HEADERS = \
 	kernel/super.h\
 	mds/Anchor.h\
 	mds/AnchorClient.h\
-	mds/AnchorTable.h\
 	mds/CDentry.h\
 	mds/CDir.h\
 	mds/IdAllocator.h\
@@ -347,8 +348,6 @@ noinst_HEADERS = \
 	mds/Migrator.h\
 	mds/ScatterLock.h\
 	mds/SimpleLock.h\
-	mds/events/EAnchor.h\
-	mds/events/EAnchorClient.h\
 	mds/events/ESessions.h\
 	mds/events/EUpdate.h\
 	mds/events/EExport.h\
@@ -443,8 +442,8 @@ noinst_HEADERS = \
 	messages/MOSDBoot.h\
 	messages/MOSDPGCreate.h\
 	messages/MStatfsReply.h\
-	messages/MAnchor.h\
 	messages/MCacheExpire.h\
+	messages/MMDSTableRequest.h\
 	messages/MDiscoverReply.h\
 	messages/MOSDFailure.h\
 	messages/MExportDir.h\

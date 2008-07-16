@@ -268,8 +268,7 @@ private:
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
 
-  list<version_t>         atids;  // anchor table transactions
-  list<version_t>         stids;  // snap table transactions
+  list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
@@ -285,8 +284,7 @@ private:
   void encode(bufferlist& bl) const {
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
-    ::encode(atids, bl);
-    ::encode(stids, bl);
+    ::encode(table_tids, bl);
     ::encode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::encode(alloc_tablev, bl);
@@ -296,8 +294,7 @@ private:
   void decode(bufferlist::iterator &bl) {
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
-    ::decode(atids, bl);
-    ::decode(stids, bl);
+    ::decode(table_tids, bl);
     ::decode(allocated_inos, bl);
     if (!allocated_inos.empty())
       ::decode(alloc_tablev, bl);
@@ -328,11 +325,8 @@ private:
     client_reqs.push_back(r);
   }
 
-  void add_anchor_transaction(version_t atid) {
-    atids.push_back(atid);
-  }  
-  void add_snap_transaction(version_t stid) {
-    stids.push_back(stid);
+  void add_table_transaction(int table, version_t tid) {
+    table_tids.push_back(pair<__u8, version_t>(table, tid));
   }  
 
   void add_allocated_ino(inodeno_t ino, version_t tablev) {
@@ -511,10 +505,8 @@ private:
     out << "[metablob";
     if (!lump_order.empty()) 
       out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
-    if (!atids.empty())
-      out << " atids=" << atids;
-    if (!stids.empty())
-      out << " stids=" << stids;
+    if (!table_tids.empty())
+      out << " table_tids=" << table_tids;
     if (!allocated_inos.empty())
       out << " inos=" << allocated_inos << " v" << alloc_tablev;
     out << "]";

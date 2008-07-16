@@ -96,7 +96,7 @@ using namespace std;
 
 #include "messages/MHeartbeat.h"
 
-#include "messages/MAnchor.h"
+#include "messages/MMDSTableRequest.h"
 
 //#include "messages/MInodeUpdate.h"
 #include "messages/MCacheExpire.h"
@@ -365,8 +365,8 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     m = new MCacheExpire();
     break;
 
-  case MSG_MDS_ANCHOR:
-    m = new MAnchor();
+  case MSG_MDS_TABLE_REQUEST:
+    m = new MMDSTableRequest;
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:
