@@ -1561,8 +1561,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 void Server::handle_client_stat(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  snapid_t snapid;
-  CInode *ref = rdlock_path_pin_ref(mdr, &snapid, false);
+  CInode *ref = rdlock_path_pin_ref(mdr, false);
   if (!ref) return;
 
   // which inode locks do I want?
@@ -1644,12 +1643,11 @@ public:
 void Server::handle_client_utime(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   __u32 mask;
   if (!cur) return;
 
-  if (snapid != CEPH_NOSNAP ||
+  if (mdr->ref_snapid != CEPH_NOSNAP ||
       cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
@@ -1693,11 +1691,10 @@ void Server::handle_client_utime(MDRequest *mdr)
 void Server::handle_client_chmod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  if (snapid != CEPH_NOSNAP ||
+  if (mdr->ref_snapid != CEPH_NOSNAP ||
       cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
@@ -1736,11 +1733,10 @@ void Server::handle_client_chmod(MDRequest *mdr)
 void Server::handle_client_chown(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  if (snapid != CEPH_NOSNAP || cur->is_root()) {
+  if (mdr->ref_snapid != CEPH_NOSNAP || cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1778,11 +1774,10 @@ void Server::handle_client_chown(MDRequest *mdr)
 void Server::handle_client_setxattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  if (snapid != CEPH_NOSNAP || cur->is_root()) {
+  if (mdr->ref_snapid != CEPH_NOSNAP || cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -1836,11 +1831,10 @@ void Server::handle_client_setxattr(MDRequest *mdr)
 void Server::handle_client_removexattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  if (snapid != CEPH_NOSNAP || cur->is_root()) {
+  if (mdr->ref_snapid != CEPH_NOSNAP || cur->is_root()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -4381,11 +4375,10 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   }
 
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, true);
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  if (snapid != CEPH_NOSNAP) {
+  if (mdr->ref_snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EINVAL);
     return;
   }
@@ -4444,8 +4437,7 @@ void Server::handle_client_open(MDRequest *mdr)
 
   dout(7) << "open on " << req->get_filepath() << dendl;
   
-  snapid_t snapid;
-  CInode *cur = rdlock_path_pin_ref(mdr, &snapid, need_auth);
+  CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
   if (!cur) return;
 
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
