@@ -435,7 +435,7 @@ md_config_t g_conf = {
 
   // --- ebofs ---
   ebofs: false,
-  ebofs_cloneable: false,
+  ebofs_cloneable: true,
   ebofs_verify: false,
   ebofs_commit_ms:      200,       // 0 = no forced commit timeout (for debugging/tracing)
   ebofs_oc_size:        10000,      // onode cache

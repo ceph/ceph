@@ -2998,7 +2998,8 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
 {
   dout(7) << "_clone " << from << " -> " << to << dendl;
 
-  if (!g_conf.ebofs_cloneable) 
+  assert(g_conf.ebofs_cloneable);
+  if (!g_conf.ebofs_cloneable)
     return -1;  // no!
 
   Onode *fon = get_onode(from);
