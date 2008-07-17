@@ -1053,6 +1053,7 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
   if (snapid && !old_inodes.empty()) {
     map<snapid_t,old_inode_t>::iterator p = old_inodes.lower_bound(snapid);
     if (p != old_inodes.end()) {
+      dout(15) << "encode_inodestat snapid " << snapid << " to old_inode [" << p->second.first << "," << p->first << "]" << dendl;
       assert(p->second.first <= snapid && snapid <= p->first);
       i = &p->second.inode;
       ::encode(p->second.xattrs, xbl);

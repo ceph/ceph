@@ -2048,7 +2048,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 
     Capability *cap = in->get_client_cap(it->first);
     if (!cap) {
-      cap = in->add_client_cap(it->first, in);
+      cap = in->add_client_cap(it->first);
       session->touch_cap(cap);
     }
     cap->merge(it->second);

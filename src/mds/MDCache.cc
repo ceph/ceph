@@ -978,18 +978,20 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   dout(10) << " oldin " << *oldin << dendl;
   add_inode(oldin);
   
-  map<int,Capability*>::iterator p = in->client_caps.begin();
-  while (p != in->client_caps.end()) {
+  for(map<int,Capability*>::iterator p = in->client_caps.begin();
+      p != in->client_caps.end();
+      p++) {
     Capability *cap = p->second;
-    assert(cap->client_follows >= oldin->first);
     if (cap->client_follows <= last) {
       // move to oldin
       int client = p->first;
-      dout(10) << " moving client" << client << " cap " << cap << " to cloned inode" << dendl;
-      p++;
-      oldin->steal_client_cap(client, cap);
-    } else
-      p++;
+      Capability *newcap = oldin->add_client_cap(client, in->containing_realm);
+      newcap->issue(cap->issued());
+      newcap->client_follows = cap->client_follows;
+      dout(10) << " cloning client" << client << " cap " << cap
+	       << " to " << newcap << " on cloned inode" << dendl;
+      cap->client_follows = last;
+    }
   }
 
   return oldin;
@@ -1003,16 +1005,16 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
   // nothing to cow on a null dentry
   assert(!dn->is_null());
 
-  // within current snap?
-  if (follows < dn->first)
-    return;
-
   if (dn->is_primary() && dn->inode->is_multiversion()) {
     // multiversion inode.
     CInode *in = dn->inode;
 
     if (follows == CEPH_NOSNAP || follows == 0)
       follows = in->find_snaprealm()->get_latest_snap();
+
+    // already cloned?
+    if (follows < in->first)
+      return;
 
     old_inode_t &old = in->old_inodes[follows];
     old.first = in->first;
@@ -1021,11 +1023,15 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     
     in->first = follows+1;
     
-    dout(10) << " duped to old_inode [" << old.first << "," << follows << "] "
+    dout(10) << " duped to old_inode [" << old.first << "," << follows << "] on "
 	     << *in << dendl;
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+    
+    // already cloned?
+    if (follows < dn->first)
+      return;
     
     snapid_t oldfirst = dn->first;
     

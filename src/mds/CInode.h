@@ -450,16 +450,19 @@ public:
     if (c) return c->pending();
     return 0;
   }
-  Capability *add_client_cap(int client, CInode *in) {
+  Capability *add_client_cap(int client, SnapRealm *conrealm=0) {
     if (client_caps.empty()) {
       get(PIN_CAPS);
-      containing_realm = find_snaprealm();
+      if (conrealm)
+	containing_realm = conrealm;
+      else
+	containing_realm = find_snaprealm();
       containing_realm->inodes_with_caps.push_back(&xlist_caps);
     }
 
     assert(client_caps.count(client) == 0);
     Capability *cap = client_caps[client] = new Capability;
-    cap->set_inode(in);
+    cap->set_inode(this);
    
     containing_realm->add_cap(client, cap);
     
@@ -478,29 +481,6 @@ public:
       containing_realm = NULL;
     }
   }
-  void steal_client_cap(int client, Capability *cap) {
-    // remove
-    CInode *from = cap->get_inode();
-    assert(from->ino() == ino());
-    containing_realm = from->containing_realm;   // hackish!
-    from->containing_realm->remove_cap(client, cap);
-    from->client_caps.erase(client);
-    if (from->client_caps.empty()) {
-      from->put(PIN_CAPS);
-      from->xlist_caps.remove_myself();
-      from->containing_realm = NULL;
-    }
-
-    // add
-    if (client_caps.empty()) {
-      get(PIN_CAPS);
-      //containing_realm = find_snaprealm();  // see hacky above
-      containing_realm->inodes_with_caps.push_back(&xlist_caps);
-    }
-    assert(client_caps.count(client) == 0);
-    cap->set_inode(this);
-    containing_realm->add_cap(client, cap);
-  }
   void move_to_containing_realm(SnapRealm *realm) {
     for (map<int,Capability*>::iterator q = client_caps.begin();
 	 q != client_caps.end();
@@ -518,7 +498,7 @@ public:
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      cap = add_client_cap(client, this);
+      cap = add_client_cap(client);
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }
