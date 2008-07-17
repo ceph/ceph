@@ -352,30 +352,31 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	 p != lump.get_dfull().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn, p->dnlast);
-      if (dn && dn->first < p->dnfirst) {
-	dn->last = p->dnfirst-1;
-	dout(10) << "EMetaBlob.replay versioned " << *dn << dendl;
-	dn = 0;
-      } 
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
-	assert(p->dnfirst == dn->first);
-	dn->last = p->dnlast;
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
+	dn->first = p->dnfirst;
+	assert(dn->last == p->dnlast);
       }
 
-      CInode *in = mds->mdcache->get_inode(p->inode.ino);
+      CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
 	in = new CInode(mds->mdcache);
+	in->first = p->dnfirst;
+	if (p->dnlast < CEPH_NOSNAP)
+	  in->last = p->dnlast;
 	in->inode = p->inode;
-	in->dirfragtree = p->dirfragtree;
 	in->xattrs = p->xattrs;
+	if (in->inode.is_dir()) {
+	  in->dirfragtree = p->dirfragtree;
+	  in->decode_snap_blob(p->snapbl);
+	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
 	if (!dn->is_null()) {
@@ -398,8 +399,11 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
 	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
 	in->inode = p->inode;
-	in->dirfragtree = p->dirfragtree;
 	in->xattrs = p->xattrs;
+	if (in->inode.is_dir()) {
+	  in->dirfragtree = p->dirfragtree;
+	  in->decode_snap_blob(p->snapbl);
+	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_inode() != in) {
@@ -408,8 +412,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
-	  dout(10) << "EMetaBlob.replay had " << *in << dendl;
+	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
+   	in->first = p->dnfirst;
       }
     }
 
@@ -418,20 +423,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	 p != lump.get_dremote().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn, p->dnlast);
-      if (dn && dn->first < p->dnfirst) {
-	dn->last = p->dnfirst-1;
-	dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay versioned " << *dn << dendl;
-	dn = 0;
-      } 
       if (!dn) {
 	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
-	assert(p->dnfirst == dn->first);
-	dn->last = p->dnlast;
 	if (!dn->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
@@ -439,7 +436,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
+	dn->first = p->dnfirst;
+	assert(dn->last == p->dnlast);
       }
     }
 
@@ -448,20 +447,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	 p != lump.get_dnull().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn, p->dnfirst);
-      if (dn && dn->first < p->dnfirst) {
-	dn->last = p->dnfirst-1;
-	dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay versioned " << *dn << dendl;
-	dn = 0;
-      } 
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
-	assert(p->dnfirst == dn->first);
-	dn->last = p->dnlast;
+	dn->first = p->dnfirst;
 	if (!dn->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
@@ -469,6 +461,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
+	assert(dn->last == p->dnlast);
       }
     }
   }

@@ -2406,8 +2406,8 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
     mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
   }
 
-  snapid_t dnfollows = dn->dir->inode->find_snaprealm()->get_latest_snap();
   if (inc) {
+    snapid_t dnfollows = dn->dir->inode->find_snaprealm()->get_latest_snap();
     dn->first = dnfollows + 1;
     dn->pre_dirty();
     mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
@@ -2416,7 +2416,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   } else {
     dn->pre_dirty();
     mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, -1);
-    mdcache->journal_cow_dentry(&le->metablob, dn, dnfollows);
+    mdcache->journal_cow_dentry(&le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
   }
 
@@ -4921,7 +4921,21 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mds->locker->predirty_nested(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(&le->metablob, diri, diri->find_snaprealm()->get_latest_snap());
+  mdcache->journal_cow_inode(&le->metablob, diri);
+  
+  // project the snaprealm
+  bufferlist snapbl;
+  if (diri->snaprealm) {
+    diri->snaprealm->snaps[snapid] = info;
+    diri->encode_snap_blob(snapbl);
+    diri->snaprealm->snaps.erase(snapid);
+  } else {
+    SnapRealm t(mdcache, diri);
+    t.created = snapid;
+    t.snaps[snapid] = info;
+    ::encode(t, snapbl);
+  }
+  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
 }

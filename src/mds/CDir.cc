@@ -1103,7 +1103,7 @@ void CDir::_fetched(bufferlist &bl)
 	  
 	  in->dirfragtree.swap(fragtree);
 	  in->xattrs.swap(xattrs);
-	  in->decode_snap(snapbl);
+	  in->decode_snap_blob(snapbl);
 
 	  // add 
 	  cache->add_inode( in );
@@ -1321,13 +1321,15 @@ void CDir::_commit(version_t want)
       
       if (in->is_symlink()) {
         // include symlink destination!
-        dout(18) << "    inlcuding symlink ptr " << in->symlink << dendl;
+        dout(18) << "    including symlink ptr " << in->symlink << dendl;
 	::encode(in->symlink, bl);
       }
 
       ::encode(in->dirfragtree, bl);
       ::encode(in->xattrs, bl);
-      in->encode_snap(bl);
+      bufferlist snapbl;
+      in->encode_snap_blob(snapbl);
+      ::encode(snapbl, bl);
     }
   }
   assert(n == 0);

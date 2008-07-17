@@ -385,12 +385,12 @@ private:
 
   // return remote pointer to to-be-journaled inode
   inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
     return add_primary_dentry(add_dir(dn->get_dir(), false),
-			      dn, dirty, in, pi, pdft);
+			      dn, dirty, in, pi, pdft, psnapbl);
   }
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
     if (!in) 
       in = dn->get_inode();
 
@@ -399,7 +399,10 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     bufferlist snapbl;
-    in->encode_snap(snapbl);
+    if (psnapbl)
+      snapbl = *psnapbl;
+    else
+      in->encode_snap_blob(snapbl);
 
     lump.nfull++;
     if (dirty) {

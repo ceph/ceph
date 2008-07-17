@@ -408,14 +408,18 @@ public:
   void open_snaprealm();
   void close_snaprealm();
   SnapRealm *find_snaprealm();
-  void encode_snap(bufferlist &bl);
+  void encode_snap_blob(bufferlist &bl);
+  void decode_snap_blob(bufferlist &bl);
+  void encode_snap(bufferlist& bl) {
+    bufferlist snapbl;
+    encode_snap_blob(snapbl);
+    ::encode(snapbl, bl);
+  }    
   void decode_snap(bufferlist::iterator& p) {
     bufferlist snapbl;
     ::decode(snapbl, p);
-    if (snapbl.length())
-      decode_snap(snapbl);
+    decode_snap_blob(snapbl);
   }
-  void decode_snap(bufferlist &bl);
 
   // -- caps -- (new)
   // client caps

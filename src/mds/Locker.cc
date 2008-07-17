@@ -938,7 +938,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     follows = m->get_snaps()[0];
   dout(7) << "handle_client_file_caps on " << m->get_ino()
 	  << " follows " << follows 
-	  << " op " << m->get_op() << dendl;
+	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
@@ -972,13 +972,17 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	    << " client" << client << " on " << *in << dendl;
     int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
     int has = cap->confirmed();
-    if (in->last != 0 && in->last < CEPH_NOSNAP) {
+
+    // this cap now follows a later snap (i.e. the one initiating this flush, or later)
+    cap->client_follows = follows+1;
+
+    if (in->last && in->last <= follows) {
       dout(10) << "  flushsnap releasing cloned cap" << dendl;
       in->remove_client_cap(client);
     } else {
       dout(10) << "  flushsnap NOT releasing live cap" << dendl;
     }
-    _do_cap_update(in, has|had, 0, follows, m);
+    _do_cap_update(in, has|had, in->get_caps_wanted(), follows, m);
   } else {
 
     // for this and all subsequent versions of this inode,
@@ -992,8 +996,6 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	       << ", had " << cap_string(had) 
 	       << ", has " << cap_string(has)
 	       << " on " << *in << dendl;
-      
-      _do_cap_update(in, had, in->get_caps_wanted() | wanted, follows, m);
       
       if (m->get_seq() < cap->get_last_open()) {
 	/* client may be trying to release caps (i.e. inode closed, etc.)
@@ -1015,6 +1017,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 		 << " -> " << cap_string(wanted) << dendl;
 	cap->set_wanted(wanted);
       }
+
+      _do_cap_update(in, had, in->get_caps_wanted() | wanted, follows, m);      
       
       // done?
       if (in->last == CEPH_NOSNAP || in->last == 0)
@@ -1099,7 +1103,7 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
     if (change_max) {
-      dout(7) << " max_size " << pi->max_size << " -> " << new_max << dendl;
+      dout(7) << "  max_size " << pi->max_size << " -> " << new_max << dendl;
       pi->max_size = new_max;
     }    
     if (dirty_mtime) {
@@ -1135,7 +1139,6 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
 
     mdcache->journal_dirty_inode(&le->metablob, in, follows);
-    //le->metablob.add_primary_dentry(in->parent, true, 0, pi);
 
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
   }
@@ -1496,7 +1499,7 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
       realm = cur->find_snaprealm();
     else if (cur->snaprealm)
       realm = cur->snaprealm;
-    mds->mdcache->journal_dirty_inode(blob, cur, realm->get_latest_snap());
+    mds->mdcache->journal_dirty_inode(blob, cur);
     //inode_t *pi = cur->get_projected_inode();
     //blob->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, pi);
   }

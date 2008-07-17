@@ -1027,20 +1027,20 @@ SnapRealm *CInode::find_snaprealm()
   return cur->snaprealm;
 }
 
-void CInode::encode_snap(bufferlist &bl)
+void CInode::encode_snap_blob(bufferlist &snapbl)
 {
-  bufferlist snapbl;
-  if (snaprealm)
-    ::encode(snaprealm, snapbl);
-  ::encode(snapbl, bl);
+  if (snaprealm) {
+    ::encode(*snaprealm, snapbl);
+    dout(20) << "encode_snap_blob " << *snaprealm << dendl;
+  }
 }
-
-void CInode::decode_snap(bufferlist& snapbl) 
+void CInode::decode_snap_blob(bufferlist& snapbl) 
 {
   if (snapbl.length()) {
     open_snaprealm();
     bufferlist::iterator p = snapbl.begin();
     ::decode(*snaprealm, p);
+    dout(20) << "decode_snap_blob " << *snaprealm << dendl;
   }
 }
 

@@ -962,12 +962,15 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   return in;
 }
 
-CInode *MDCache::cow_inode(CInode *in, snapid_t last)
+CInode *MDCache::cow_inode(CInode *in, snapid_t last, bool write_to_clone)
 {
   assert(last >= in->first);
 
   CInode *oldin = new CInode(this);
-  oldin->inode = *in->get_previous_projected_inode();
+  if (write_to_clone)
+    oldin->inode = *in->get_projected_inode();
+  else
+    oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
   oldin->xattrs = in->xattrs;
 
@@ -984,7 +987,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       p++) {
     Capability *cap = p->second;
     if ((cap->issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
-	cap->client_follows <= last) {
+	cap->client_follows < last) {
       // clone to oldin
       int client = p->first;
       Capability *newcap = oldin->add_client_cap(client, in->containing_realm);
@@ -997,6 +1000,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   }
   if (oldin->is_any_caps())
     oldin->filelock.set_state(LOCK_LOCK);
+  else
+    oldin->inode.max_size = 0;
 
   return oldin;
 }
@@ -1009,12 +1014,20 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
   // nothing to cow on a null dentry
   assert(!dn->is_null());
 
+  /*
+   * normally, we write to the head, and make a clone of ther previous
+   * dentry+inode state.  unless the follow snapid specified.
+   */
+  bool write_to_clone = false;
+
   if (dn->is_primary() && dn->inode->is_multiversion()) {
     // multiversion inode.
     CInode *in = dn->inode;
 
     if (follows == CEPH_NOSNAP || follows == 0)
       follows = in->find_snaprealm()->get_latest_snap();
+    //else
+    //write_to_clone = true;
 
     // already cloned?
     if (follows < in->first)
@@ -1022,7 +1035,10 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
 
     old_inode_t &old = in->old_inodes[follows];
     old.first = in->first;
-    old.inode = *in->get_previous_projected_inode();
+    if (write_to_clone)
+      old.inode = *in->get_projected_inode();
+    else
+      old.inode = *in->get_previous_projected_inode();
     old.xattrs = in->xattrs;
     
     in->first = follows+1;
@@ -1032,6 +1048,8 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+    //else
+    //write_to_clone = true;
     
     // already cloned?
     if (follows < dn->first)
@@ -1045,7 +1063,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     dout(10) << "    dn " << *dn << dendl;
     if (dn->is_primary()) {
       assert(oldfirst == dn->inode->first);
-      CInode *oldin = cow_inode(dn->inode, follows);
+      CInode *oldin = cow_inode(dn->inode, follows, write_to_clone);
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_primary_dentry(olddn, true);
@@ -1069,8 +1087,9 @@ void MDCache::journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follow
 
 void MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
-  journal_cow_inode(metablob, in, follows);
-  metablob->add_primary_dentry(in->get_projected_parent_dn(), true, in, in->get_projected_inode());
+  CDentry *dn = in->get_projected_parent_dn();
+  journal_cow_dentry(metablob, dn, follows);
+  metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
 }
 
 
