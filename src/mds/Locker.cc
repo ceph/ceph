@@ -993,7 +993,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	       << ", has " << cap_string(has)
 	       << " on " << *in << dendl;
       
-      _do_cap_update(in, had, wanted, follows, m);
+      _do_cap_update(in, had, in->get_caps_wanted() | wanted, follows, m);
       
       if (m->get_seq() < cap->get_last_open()) {
 	/* client may be trying to release caps (i.e. inode closed, etc.)
@@ -1031,7 +1031,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 }
 
 
-void Locker::_do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientFileCaps *m)
+void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientFileCaps *m)
 {
   dout(10) << "_do_cap_update had " << cap_string(had) << " on " << *in << dendl;
 
@@ -1066,18 +1066,18 @@ void Locker::_do_cap_update(CInode *in, int had, int wanted, snapid_t follows, M
   uint64_t new_max = latest->max_size;
 
   if (in->is_auth()) {
-    if (latest->max_size && (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
+    if (latest->max_size && (all_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
       change_max = true;
       new_max = 0;
     }
-    else if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+    else if ((all_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
 	(size << 1) >= latest->max_size) {
       dout(10) << "wr caps wanted, and size " << size
 	       << " *2 >= max " << latest->max_size << ", increasing" << dendl;
       change_max = true;
       new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
     }
-    if ((wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+    if ((all_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
 	m->get_max_size() > new_max) {
       dout(10) << "client requests file_max " << m->get_max_size()
 	       << " > max " << latest->max_size << dendl;
