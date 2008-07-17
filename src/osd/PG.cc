@@ -1384,33 +1384,53 @@ bool PG::pick_missing_object_rev(object_t& oid)
 bool PG::pick_object_rev(pobject_t& poid, vector<snapid_t> &snapvec)
 {
   pobject_t t = poid;
-  snapid_t first = NOSNAP;
-  int r = sizeof(first);
+  vector<snapid_t> csnap(1);
+  int r;
 
   dout(10) << "pick_object_rev " << poid << " snapvec " << snapvec << dendl;
-  for (int i=-1; i<(int)snapvec.size(); i++) {
-    if (i < 0)
-      t.oid.snap = CEPH_NOSNAP;
-    else if (snapvec[i] > first) {
-      dout(20) << "pick_object_rev  skipping snap " << snapvec[i] << " > " << first << dendl;
-      continue;
-    } else if (snapvec[i] < poid.oid.snap) {
-      dout(20) << "pick_object_rev  stopping at snap " << snapvec[i] << " < " << poid.oid.snap << dendl;
-      return false;
-    } else
-      t.oid.snap = snapvec[i];
+  snapid_t want = poid.oid.snap;
 
-    if (t.oid.snap != CEPH_NOSNAP)
-      r = osd->store->getattr(info.pgid, t, "first_snap", &first, sizeof(first));
-    if (r != -ENOENT) {
-      if (first <= poid.oid.snap) {
-	dout(20) << "pick_object_rev  " << t << " first " << first << " <= " << poid.oid.snap << " -- HIT" << dendl;
-	poid = t;
-	return true;
-      }
-      dout(20) << "pick_object_rev  " << t << " first " << first << " > " << poid.oid.snap << dendl;
+  for (int i=-1; i<(int)snapvec.size(); i++) {
+    snapid_t last;
+    if (i < 0)
+      last = t.oid.snap = CEPH_NOSNAP;
+    else
+      last = t.oid.snap = snapvec[i];
+    if (last < want) {
+      dout(20) << "pick_object_rev  stopping at clone " << t << ": last " << last << " < want " << want << dendl;
+      return false;
+    }
+    
+    if (last == CEPH_NOSNAP) {
+      csnap.resize(1);
+      csnap[0] = NOSNAP;
     } else {
-      dout(20) << "pick_object_rev  " << t << " dne" << dendl;
+      r = osd->store->getattr(info.pgid, t, "snaps", &csnap[0], 0);
+      if (r == -ENOENT) {
+	dout(20) << "pick_object_rev  " << t << " dne" << dendl;
+	continue;
+      }
+
+      csnap.resize(r / sizeof(csnap[0]));
+      int r2 = osd->store->getattr(info.pgid, t, "snaps", &csnap[0], r);
+      assert(r == r2);
+    }
+
+    snapid_t first = csnap[csnap.size()-1];
+    dout(20) << "pick_object_rev ? " << t << " [" << first << "," << last << "] csnap " << csnap << dendl;
+    assert(csnap[0] == last);
+
+    if (first <= want) {
+      dout(20) << "pick_object_rev  " << t << " first " << first << " <= " << poid.oid.snap << " -- HIT" << dendl;
+      poid = t;
+      return true;
+    }
+
+    dout(20) << "pick_object_rev  skipping clone " << t << ": first " << first << " > want " << want << dendl;
+    while (i+1 < (int)snapvec.size() &&
+	   snapvec[i+1] > first) {
+      i++;
+      dout(20) << "pick_object_rev    and snap " << snapvec[i] << dendl;
     }
   }
   return false;
