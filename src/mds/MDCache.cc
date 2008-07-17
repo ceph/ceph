@@ -978,21 +978,25 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   dout(10) << " oldin " << *oldin << dendl;
   add_inode(oldin);
   
-  for(map<int,Capability*>::iterator p = in->client_caps.begin();
+  // clone caps?
+  for (map<int,Capability*>::iterator p = in->client_caps.begin();
       p != in->client_caps.end();
       p++) {
     Capability *cap = p->second;
-    if (cap->client_follows <= last) {
-      // move to oldin
+    if ((cap->issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	cap->client_follows <= last) {
+      // clone to oldin
       int client = p->first;
       Capability *newcap = oldin->add_client_cap(client, in->containing_realm);
       newcap->issue(cap->issued());
       newcap->client_follows = cap->client_follows;
-      dout(10) << " cloning client" << client << " cap " << cap
+      dout(10) << " cloning client" << client << " wr cap " << cap
 	       << " to " << newcap << " on cloned inode" << dendl;
       cap->client_follows = last;
     }
   }
+  if (oldin->is_any_caps())
+    oldin->filelock.set_state(LOCK_LOCK);
 
   return oldin;
 }

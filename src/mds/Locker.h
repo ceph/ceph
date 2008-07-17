@@ -212,6 +212,8 @@ protected:
 
  protected:
   void handle_client_file_caps(class MClientFileCaps *m);
+  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientFileCaps *m);
+
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);

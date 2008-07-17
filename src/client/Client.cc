@@ -1374,7 +1374,7 @@ void Client::put_cap_ref(Inode *in, int cap)
   }
 }
 
-void Client::check_caps(Inode *in, bool force_dirty)
+void Client::check_caps(Inode *in, bool flush_snap)
 {
   int wanted = in->caps_wanted();
   int used = in->caps_used();
@@ -1415,7 +1415,7 @@ void Client::check_caps(Inode *in, bool force_dirty)
       goto ack;
     }
 
-    if (force_dirty &&
+    if (flush_snap &&
 	(cap->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)))
       goto ack;
 
@@ -1431,7 +1431,13 @@ void Client::check_caps(Inode *in, bool force_dirty)
     */
     
   ack:
-    MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_ACK,
+    int op = CEPH_CAP_OP_ACK;
+    if (flush_snap)
+      op = CEPH_CAP_OP_FLUSHSNAP;
+    else if (wanted == 0)
+      op = CEPH_CAP_OP_RELEASE;
+    dout(10) << "  op = " << op << dendl;
+    MClientFileCaps *m = new MClientFileCaps(op,
 					     in->inode, 
 					     0,
                                              cap->seq,
@@ -1443,11 +1449,11 @@ void Client::check_caps(Inode *in, bool force_dirty)
     in->requested_max_size = in->wanted_max_size;
     m->get_snaps() = in->snaprealm->snaps;
     messenger->send_message(m, mdsmap->get_inst(it->first));
-    if (wanted == 0)
+    if (wanted == 0 && !flush_snap)
       mds_sessions[it->first].num_caps--;
   }
 
-  if (wanted == 0) {
+  if (wanted == 0 && !flush_snap) {
     remove_all_caps(in);
   }
 }
@@ -1797,13 +1803,10 @@ void Client::handle_file_caps(MClientFileCaps *m)
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
             << ", which we don't want caps for, releasing." << dendl;
-    m->set_op(CEPH_CAP_OP_ACK);
+    m->set_op(CEPH_CAP_OP_RELEASE);
     m->set_caps(0);
     m->set_wanted(0);
     messenger->send_message(m, m->get_source_inst());
-
-    // FIXME...
-
     return;
   }
 

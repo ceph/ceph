@@ -781,13 +781,29 @@ static inline int ceph_caps_for_mode(int mode)
 }
 
 enum {
-	CEPH_CAP_OP_GRANT,   /* mds->client grant */
-	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
-	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
-	CEPH_CAP_OP_TRUNC,   /* mds->client trunc notify (invalidate size+mtime) */
-	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
-	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
+	CEPH_CAP_OP_GRANT,     /* mds->client grant */
+	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify (invalidate size+mtime) */
+	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
+	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
+	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was a recall) */
+	CEPH_CAP_OP_REQUEST,   /* client->mds request (update wanted bits) */
+	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
+	CEPH_CAP_OP_RELEASE,   /* client->mds released cap entirely */
 };
+
+inline static const char* ceph_cap_op_name(int op) {
+	switch (op) {
+	case CEPH_CAP_OP_GRANT: return "grant";
+	case CEPH_CAP_OP_TRUNC: return "trunc";
+	case CEPH_CAP_OP_EXPORT: return "export";
+	case CEPH_CAP_OP_IMPORT: return "import";
+	case CEPH_CAP_OP_ACK: return "ack";
+	case CEPH_CAP_OP_REQUEST: return "request";
+	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
+	case CEPH_CAP_OP_RELEASE: return "release";
+	default: return 0;
+	}
+}
 
 struct ceph_mds_file_caps {
 	__le32 op;

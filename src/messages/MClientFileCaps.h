@@ -19,19 +19,6 @@
 
 
 class MClientFileCaps : public Message {
- public:
-  static const char* get_opname(int op) {
-    switch (op) {
-    case CEPH_CAP_OP_GRANT: return "grant";
-    case CEPH_CAP_OP_ACK: return "ack";
-    case CEPH_CAP_OP_REQUEST: return "request";
-    case CEPH_CAP_OP_TRUNC: return "trunc";
-    case CEPH_CAP_OP_EXPORT: return "export";
-    case CEPH_CAP_OP_IMPORT: return "import";
-    default: assert(0); return 0;
-    }
-  }
-
  private:
   struct ceph_mds_file_caps h;
   vector<snapid_t> snaps;
@@ -107,7 +94,7 @@ class MClientFileCaps : public Message {
 
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
-    out << "client_file_caps(" << get_opname(h.op)
+    out << "client_file_caps(" << ceph_cap_op_name(h.op)
 	<< " ino " << inodeno_t(h.ino)
 	<< " seq " << h.seq 
 	<< " caps " << cap_string(h.caps)

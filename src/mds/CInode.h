@@ -479,6 +479,7 @@ public:
       put(PIN_CAPS);
       xlist_caps.remove_myself();
       containing_realm = NULL;
+      xlist_open_file.remove_myself();  // unpin logsegment
     }
   }
   void move_to_containing_realm(SnapRealm *realm) {

@@ -936,8 +936,9 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   snapid_t follows = 0;
   if (m->get_snaps().size())
     follows = m->get_snaps()[0];
-
-  dout(7) << "handle_client_file_caps on " << m->get_ino() << " follows " << follows << dendl;
+  dout(7) << "handle_client_file_caps on " << m->get_ino()
+	  << " follows " << follows 
+	  << " op " << m->get_op() << dendl;
 
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
@@ -961,52 +962,78 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     dout(7) << "handle_client_file_caps no cap for client" << client << " on " << *in << dendl;
     delete m;
     return;
-  } 
-  
+  }  
   assert(cap);
 
-  // filter wanted based on what we could ever give out (given auth/replica status)
-  int wanted = m->get_wanted() & in->filelock.caps_allowed_ever();
-  
-  dout(7) << "handle_client_file_caps seq " << m->get_seq() 
-          << " confirms caps " << cap_string(m->get_caps()) 
-          << " wants " << cap_string(wanted)
-          << " from client" << client
-          << " on " << *in 
-          << dendl;  
-  
-  // confirm caps
-  int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
-  int has = cap->confirmed();
-  dout(10) << "client had " << cap_string(had) << ", has " << cap_string(has) << dendl;
 
-  cap->client_follows = follows;
-
-  // update wanted
-  if (cap->wanted() != wanted) {
-    if (m->get_seq() < cap->get_last_open()) {
-      /* this is awkward.
-	 client may be trying to release caps (i.e. inode closed, etc.) by setting reducing wanted
-	 set.
-	 but it may also be opening the same filename, not sure that it'll map to the same inode.
-	 so, we don't want wanted reductions to clobber mds's notion of wanted unless we're
-	 sure the client has seen all the latest caps.
-      */
-      dout(10) << "handle_client_file_caps ignoring wanted " << cap_string(m->get_wanted())
-		<< " bc seq " << m->get_seq() << " < last open " << cap->get_last_open() << dendl;
-    } else if (wanted == 0) {
-      // outright release?
-      dout(7) << " cap for client" << client << " is now null, removing from " << *in << dendl;
+  // flushsnap?
+  if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
+    dout(7) << " flushsnap follows " << follows
+	    << " client" << client << " on " << *in << dendl;
+    int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
+    int has = cap->confirmed();
+    if (in->last != 0 && in->last < CEPH_NOSNAP) {
+      dout(10) << "  flushsnap releasing cloned cap" << dendl;
       in->remove_client_cap(client);
-
-      if (!in->is_any_caps())
-	in->xlist_open_file.remove_myself();  // unpin logsegment
-      if (!in->is_auth())
-	request_inode_file_caps(in);
     } else {
-      cap->set_wanted(wanted);
+      dout(10) << "  flushsnap NOT releasing live cap" << dendl;
+    }
+    _do_cap_update(in, has|had, 0, follows, m);
+  } else {
+
+    // for this and all subsequent versions of this inode,
+    while (1) {
+      // filter wanted based on what we could ever give out (given auth/replica status)
+      int wanted = m->get_wanted() & head_in->filelock.caps_allowed_ever();
+      int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
+      int has = cap->confirmed();
+      cap->client_follows = follows;
+      dout(10) << " follows " << follows
+	       << ", had " << cap_string(had) 
+	       << ", has " << cap_string(has)
+	       << " on " << *in << dendl;
+      
+      _do_cap_update(in, had, wanted, follows, m);
+      
+      if (m->get_seq() < cap->get_last_open()) {
+	/* client may be trying to release caps (i.e. inode closed, etc.)
+	 * by setting reducing wanted set.  but it may also be opening the
+	 * same filename, not sure that it'll map to the same inode.  so,
+	 * we don't want RELEASE or wanted updates to clobber mds's notion
+	 * of wanted unless we're sure the client has seen all the latest
+	 * caps.
+	 */
+	dout(10) << " ignoring release|wanted " << cap_string(m->get_wanted())
+		 << " bc seq " << m->get_seq() << " < last open " << cap->get_last_open() << dendl;
+      } else if (m->get_op() == CEPH_CAP_OP_RELEASE) {
+	dout(7) << " release client" << client << " on " << *in << dendl;
+	in->remove_client_cap(client);
+	if (!in->is_auth())
+	  request_inode_file_caps(in);
+      } else if (wanted != cap->wanted()) {
+	dout(10) << " wanted " << cap_string(cap->wanted())
+		 << " -> " << cap_string(wanted) << dendl;
+	cap->set_wanted(wanted);
+      }
+      
+      // done?
+      if (in->last == CEPH_NOSNAP || in->last == 0)
+	break;
+     
+      // next!
+      in = mdcache->pick_inode_snap(in, in->last);
+      cap = in->get_client_cap(client);
+      assert(cap);    
     }
   }
+
+  delete m;
+}
+
+
+void Locker::_do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientFileCaps *m)
+{
+  dout(10) << "_do_cap_update had " << cap_string(had) << " on " << *in << dendl;
 
   inode_t *latest = in->get_projected_inode();
 
@@ -1016,8 +1043,8 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   uint64_t size = m->get_size();
 
   // atime|mtime|size?
-  bool had_or_has_wr = (had|has) & CEPH_CAP_WR;
-  bool excl = (had|has) & CEPH_CAP_EXCL;
+  bool had_or_has_wr = had & CEPH_CAP_WR;
+  bool excl = had & CEPH_CAP_EXCL;
   bool dirty_atime = false;
   bool dirty_mtime = false;
   bool dirty_ctime = false;
@@ -1118,8 +1145,6 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     file_eval_gather(&in->filelock);
   else if (in->is_auth())
     file_eval(&in->filelock);
-  
-  delete m;
 }
 
 
