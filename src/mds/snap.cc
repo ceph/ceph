@@ -92,17 +92,20 @@ void SnapRealm::build_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
  */
 const set<snapid_t>& SnapRealm::get_snaps()
 {
-  if (!cached_snaps.size()) {
-    dout(10) << "get_snaps " << cached_snaps << " (cached)" << dendl;
-    return cached_snaps;
+  if (cached_snaps.empty()) {
+    cached_snaps.clear();
+    cached_snap_vec.clear();
+    build_snap_set(cached_snaps, 0, CEPH_NOSNAP);
+    
+    dout(10) << "get_snaps " << cached_snaps
+	     << " (highwater " << snap_highwater << ")" 
+	     << dendl;
+  } else {
+    dout(10) << "get_snaps " << cached_snaps
+	     << " (highwater " << snap_highwater << ")" 
+	     << " (cached)"
+	     << dendl;
   }
-
-  cached_snaps.clear();
-  cached_snap_vec.clear();
-  build_snap_set(cached_snaps, 0, CEPH_NOSNAP);
-  
-  dout(10) << "get_snaps " << cached_snaps
-	   << " (highwater " << snap_highwater << ")" << dendl;
   return cached_snaps;
 }
 

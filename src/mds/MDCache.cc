@@ -3134,13 +3134,16 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
+    snapid_t snap = in->last;
+    if (snap == 0) snap = CEPH_NOSNAP;  // FIXME
     const vector<snapid_t>& snaps = in->find_snaprealm()->get_snap_vector();
 
     if (in->inode.max_size > in->inode.size) {
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
+	       << " snap " << snap << " snaps " << snaps
 	       << " " << *in << dendl;
       file_recovering.insert(in);
-      mds->filer->probe(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, snaps,
+      mds->filer->probe(in->inode.ino, &in->inode.layout, snap, snaps,
 			in->inode.max_size, &in->inode.size, false,
 			0, new C_MDC_Recover(this, in));    
     } else {

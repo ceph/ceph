@@ -86,7 +86,7 @@ void Filer::_probe(Probe *probe)
 	   << dendl;
   
   // map range onto objects
-  file_to_extents(probe->ino, &probe->layout, 0, probe->from, probe->probing_len, probe->probing);
+  file_to_extents(probe->ino, &probe->layout, probe->snap, probe->from, probe->probing_len, probe->probing);
   
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
