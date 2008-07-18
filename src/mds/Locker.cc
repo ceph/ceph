@@ -3403,8 +3403,9 @@ void Locker::file_eval(FileLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  // not xlocked!
-  if (lock->is_xlocked() || lock->get_parent()->is_frozen()) return;
+  if (lock->is_xlocked() || 
+      lock->is_wrlocked() || 
+      lock->get_parent()->is_frozen()) return;
   
   // * -> loner?
   if (!lock->is_rdlocked() &&
