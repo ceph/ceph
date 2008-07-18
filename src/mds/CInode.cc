@@ -49,11 +49,11 @@ ostream& operator<<(ostream& out, CInode& in)
 {
   filepath path;
   in.make_path(path);
-  out << "[inode " << in.inode.ino << " " << path << (in.is_dir() ? "/":"");
-  if (in.is_multiversion())
-    out << " [" << in.first << ",...]";
-  else 
-    out << " [" << in.first << "," << in.last << "]";
+  out << "[inode " << in.inode.ino;
+  out << " [" 
+      << (in.is_multiversion() ? "...":"")
+      << in.first << "," << in.last << "]";
+  out << " " << path << (in.is_dir() ? "/":"");
 
   if (in.is_auth()) {
     out << " auth";

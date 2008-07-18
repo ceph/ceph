@@ -127,10 +127,8 @@ const vector<snapid_t>& SnapRealm::get_snap_vector()
 
 const set<snapid_t>& SnapRealm::update_snaps(snapid_t creating)
 {
-  if (!snap_highwater) {
-    assert(cached_snaps.empty());
-    get_snaps();
-  }
+  get_snaps();
+
   snap_highwater = creating;
   cached_snaps.insert(creating);
   cached_snap_vec.insert(cached_snap_vec.begin(), creating);
