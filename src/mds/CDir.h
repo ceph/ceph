@@ -202,8 +202,10 @@ protected:
 
   // contents
   map_t items;       // non-null AND null
-  unsigned nitems;             // # non-null
-  unsigned nnull;              // # null
+  unsigned num_head_items;
+  unsigned num_head_null;
+  unsigned num_snap_items;
+  unsigned num_snap_null;
 
   int num_dirty;
 
@@ -268,11 +270,12 @@ protected:
 
   map_t::iterator begin() { return items.begin(); }
   map_t::iterator end() { return items.end(); }
-  unsigned get_size() { 
-    return nitems; 
-  }
-  unsigned get_nitems() { return nitems; }
-  unsigned get_nnull() { return nnull; }
+
+  unsigned get_num_head_items() { return num_head_items; }
+  unsigned get_num_head_null() { return num_head_null; }
+  unsigned get_num_snap_items() { return num_snap_items; }
+  unsigned get_num_snap_null() { return num_snap_null; }
+  unsigned get_num_any() { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
   
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 

@@ -143,7 +143,7 @@ void Migrator::export_empty_import(CDir *dir)
     dout(7) << " freezing or frozen" << dendl;
     return;
   }
-  if (dir->get_size() > 0) {
+  if (dir->get_num_head_items() > 0) {
     dout(7) << " not actually empty" << dendl;
     return;
   }
@@ -956,7 +956,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
 {
   int num_exported = 0;
 
-  dout(7) << "encode_export_dir " << *dir << " " << dir->nitems << " items" << dendl;
+  dout(7) << "encode_export_dir " << *dir << " " << dir->get_num_head_items() << " head items" << dendl;
   
   assert(dir->get_projected_version() == dir->get_version());
 
@@ -1960,7 +1960,7 @@ void Migrator::import_finish(CDir *dir)
   mds->mdcache->maybe_send_pending_resolves();
 
   // is it empty?
-  if (dir->get_size() == 0 &&
+  if (dir->get_num_head_items() == 0 &&
       !dir->inode->is_auth()) {
     // reexport!
     export_empty_import(dir);

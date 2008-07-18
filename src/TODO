@@ -232,6 +232,11 @@ todo
   - replay
   - fetch may need to adjust loaded dentry first,last?
 
+- hard link backpointers
+  - anchor source dir
+  - build snaprealm for any hardlinked file
+  - include snaps for all (primary+remote) parents
+
 - migrator import/export of versioned dentries, inodes... drop them on export...
 
   primary file link -> old inode

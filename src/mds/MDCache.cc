@@ -3452,7 +3452,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   dir->remove_dentry(dn);
   
   // reexport?
-  if (dir->get_size() == 0 && dir->is_subtree_root())
+  if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
     migrator->export_empty_import(dir);
   
   if (mds->logger) mds->logger->inc("cex");

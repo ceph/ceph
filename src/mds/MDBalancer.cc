@@ -268,7 +268,7 @@ void MDBalancer::export_empties()
 	dir->is_frozen()) 
       continue;
     
-    if (!dir->inode->is_root() && dir->get_size() == 0) 
+    if (!dir->inode->is_root() && dir->get_num_head_items() == 0) 
       mds->mdcache->migrator->export_empty_import(dir);
   }
 }
@@ -819,7 +819,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
       dir->is_auth() &&
       
       ((g_conf.mds_bal_split_size > 0 &&
-	dir->get_size() > (unsigned)g_conf.mds_bal_split_size) ||
+	dir->get_num_head_items() > (unsigned)g_conf.mds_bal_split_size) ||
        (v > g_conf.mds_bal_split_rd && type == META_POP_IRD) ||
        (v > g_conf.mds_bal_split_wr && type == META_POP_IWR)) &&
       split_queue.count(dir->dirfrag()) == 0) {

@@ -2558,7 +2558,6 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   // commit case
   mds->locker->predirty_nested(mdr, &le->commit, dn->inode, 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
-  //le->commit.add_primary_dentry(dn, true, targeti, pi);  // update old primary
   mdcache->journal_dirty_inode(&le->commit, targeti);
 
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
@@ -2925,7 +2924,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     // remote link.  update remote inode.
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
     mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, 0, PREDIRTY_PRIMARY);
-    //le->metablob.add_primary_dentry(dn->inode->parent, true, dn->inode, pi);
     mdcache->journal_dirty_inode(&le->metablob, dn->inode);
   }
 
@@ -3017,8 +3015,8 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
     assert(dir);
 
     // does the frag _look_ empty?
-    if (dir->get_size()) {
-      dout(10) << "dir_is_nonempty still " << dir->get_size() << " items in frag " << *dir << dendl;
+    if (dir->get_num_head_items()) {
+      dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() << " cached items in frag " << *dir << dendl;
       reply_request(mdr, -ENOTEMPTY);
       return true;
     }
