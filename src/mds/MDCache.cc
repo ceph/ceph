@@ -20,8 +20,10 @@
 #include "Locker.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
-#include "AnchorClient.h"
 #include "Migrator.h"
+
+#include "AnchorClient.h"
+#include "SnapClient.h"
 
 #include "MDSMap.h"
 
@@ -66,6 +68,7 @@
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientFileCaps.h"
+#include "messages/MClientSnap.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -5280,6 +5283,101 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED, 0);
+}
+
+
+// -------------------------------------------------------------------------------
+// SNAPREALMS
+
+struct C_MDC_snaprealm_create_finish : public Context {
+  MDCache *cache;
+  MDRequest *mdr;
+  CInode *in;
+  C_MDC_snaprealm_create_finish(MDCache *c, MDRequest *m, CInode *i) : cache(c), mdr(m), in(i) {}
+  void finish(int r) {
+    cache->_snaprealm_create_finish(mdr, in);
+  }
+};
+
+void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
+{
+  dout(10) << "snaprealm_create " << *in << dendl;
+  assert(!in->snaprealm);
+
+  if (!in->inode.anchored) {
+    mds->mdcache->anchor_create(mdr, in, new C_MDS_RetryRequest(mds->mdcache, mdr));
+    return;
+  }
+
+  // allocate an id..
+  if (!mdr->more()->stid) {
+    mds->snapclient->prepare_create_realm(in->ino(), &mdr->more()->stid, 
+					  new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+
+  EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
+  le->metablob.add_table_transaction(TABLE_SNAP, mdr->more()->stid);
+
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+
+  SnapRealm t(this, in);
+  t.created = mdr->more()->stid;
+  bufferlist snapbl;
+  ::encode(t, snapbl);
+  
+  journal_cow_inode(&le->metablob, in);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
+
+  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, in));
+}
+
+void MDCache::_snaprealm_create_finish(MDRequest *mdr, CInode *in)
+{
+  dout(10) << "_snaprealm_create_finish " << *in << dendl;
+
+  in->pop_and_dirty_projected_inode(mdr->ls);
+  mdr->apply();
+
+  // create
+  in->open_snaprealm();
+  in->snaprealm->created = mdr->more()->stid;
+
+  // split existing caps
+  SnapRealm *parent = in->snaprealm->parent;
+  assert(parent);
+  assert(parent->open_children.count(in->snaprealm));
+  parent->split_at(in->snaprealm);
+
+  // notify clients of update|split
+  list<inodeno_t> split_inos;
+  for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
+    split_inos.push_back((*p)->ino());
+  
+  const vector<snapid_t> snaps = in->snaprealm->get_snap_vector();
+  map<int, MClientSnap*> updates;
+  for (map<int, xlist<Capability*> >::iterator p = in->snaprealm->client_caps.begin();
+       p != in->snaprealm->client_caps.end();
+       p++) {
+    assert(!p->second.empty());
+    MClientSnap *update = updates[p->first] = new MClientSnap;
+    update->snap_created = in->snaprealm->created;
+    update->split = in->ino();
+    update->split_inos = split_inos;
+    update->realms[in->ino()] = snaps;
+    updates[p->first] = update;
+  }
+  
+  // send
+  for (map<int,MClientSnap*>::iterator p = updates.begin();
+       p != updates.end();
+       p++)
+    mds->send_message_client(p->second, p->first);
+
+  // done.
+  mdr->more()->stid = 0;  // caller will likely need to reuse this
+  dispatch_request(mdr);
 }
 
 

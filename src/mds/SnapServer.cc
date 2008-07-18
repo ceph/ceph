@@ -72,12 +72,18 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
   switch (what) {
   case TABLE_OP_CREATE:
     {
+      version++;
+
       SnapInfo info;
       ::decode(info.dirino, p);
-      ::decode(info.name, p);
-      ::decode(info.stamp, p);
-      info.snapid = ++version;
-      pending_create[version] = info;
+      if (!p.end()) {
+	::decode(info.name, p);
+	::decode(info.stamp, p);
+	info.snapid = version;
+	pending_create[version] = info;
+      } else {
+	pending_noop.insert(version);
+      }
     }
     break;
 
@@ -116,7 +122,11 @@ void SnapServer::_commit(version_t tid)
     snaps.erase(pending_destroy[tid]);
     pending_destroy.erase(tid);
   }
-  else
+  else if (pending_noop.count(tid)) {
+    dout(7) << "commit " << tid << " noop" << dendl;
+    pending_noop.erase(tid);
+  }
+  else 
     assert(0);
 
   // bump version.
@@ -135,6 +145,11 @@ void SnapServer::_rollback(version_t tid)
     dout(7) << "rollback " << tid << " destroy " << pending_destroy[tid] << dendl;
     pending_destroy.erase(tid);
   }
+  
+  else if (pending_noop.count(tid)) {
+    dout(7) << "rollback " << tid << " noop" << dendl;
+    pending_noop.erase(tid);
+  }    
 
   else
     assert(0);

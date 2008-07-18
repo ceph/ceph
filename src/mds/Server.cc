@@ -3255,6 +3255,13 @@ void Server::handle_client_rename(MDRequest *mdr)
     return;
   }
 
+  // moving between snaprealms?
+  if (!srci->snaprealm &&
+      srci->find_snaprealm() != destdn->dir->inode->find_snaprealm()) {
+    dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
+    mds->mdcache->snaprealm_create(mdr, srci);
+    return;
+  }
 
   // set done_locking flag, to avoid problems with wrlock moving auth target
   mdr->done_locking = true;
@@ -4886,14 +4893,15 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     return;
   }
 
-  // anchor diri
-  if (!diri->inode.anchored) {
-    mds->mdcache->anchor_create(mdr, diri, new C_MDS_RetryRequest(mds->mdcache, mdr));
-    return;
-  }
-
   if (mdr->now == utime_t())
     mdr->now = g_clock.now();
+
+
+  // create snaprealm?
+  if (!diri->snaprealm) {
+    mds->mdcache->snaprealm_create(mdr, diri);
+    return;
+  }
 
   // allocate a snapid
   if (!mdr->more()->stid) {
@@ -4927,16 +4935,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   
   // project the snaprealm
   bufferlist snapbl;
-  if (diri->snaprealm) {
-    diri->snaprealm->snaps[snapid] = info;
-    diri->encode_snap_blob(snapbl);
-    diri->snaprealm->snaps.erase(snapid);
-  } else {
-    SnapRealm t(mdcache, diri);
-    t.created = snapid;
-    t.snaps[snapid] = info;
-    ::encode(t, snapbl);
-  }
+  diri->snaprealm->snaps[snapid] = info;
+  diri->encode_snap_blob(snapbl);
+  diri->snaprealm->snaps.erase(snapid);
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
@@ -4951,32 +4952,10 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 
   mds->snapclient->commit(mdr->more()->stid, mdr->ls);
 
-  snapid_t snapid = info.snapid;
-
-  // create realm?
-  inodeno_t split_parent = 0;
-  if (!diri->snaprealm) {
-    dout(10) << "creating snaprealm on " << *diri << dendl;
-    diri->open_snaprealm();
-    diri->snaprealm->created = snapid;
-
-    // split existing caps
-    SnapRealm *parent = diri->snaprealm->parent;
-    assert(parent);
-    assert(parent->open_children.count(diri->snaprealm));
-    parent->split_at(diri->snaprealm);
-    split_parent = parent->inode->ino();
-  }
-
   // create snap
+  snapid_t snapid = info.snapid;
   diri->snaprealm->snaps[snapid] = info;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
-
-  // notify clients of update|split
-  list<inodeno_t> split_inos;
-  if (split_parent)
-    for (xlist<CInode*>::iterator p = diri->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
-      split_inos.push_back((*p)->ino());
 
   list<inodeno_t> realms;
   map<int, MClientSnap*> updates;
@@ -5003,17 +4982,11 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
       if (!update) {
 	update = new MClientSnap;
 	update->snap_highwater = snapid;
-	if (split_parent) {
-	  update->snap_created = diri->snaprealm->created;
-	  update->split = diri->ino();
-	  update->split_inos = split_inos;
-	  split_parent = 0;
-	}
 	updates[p->first] = update;
       }
       update->realms[realm->inode->ino()] = snapvec;
     }
-     
+
     // notify for active children, too.
     dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();

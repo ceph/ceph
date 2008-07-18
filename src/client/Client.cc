@@ -1629,13 +1629,7 @@ void Client::handle_snap(MClientSnap *m)
   if (m->split) {
     SnapRealm *realm = get_snap_realm(m->split);
     realm->created = m->snap_created;
-    if (realm->snaps.empty()) {
-      // new split.. pretend we have one less snap than we do now!
-      vector<snapid_t>& newsnaps = m->realms[m->split];
-      realm->snaps.resize(newsnaps.size() - 1);
-      for (unsigned i=0; i<realm->snaps.size(); i++)
-	realm->snaps[i] = newsnaps[i+1];
-    }
+    realm->snaps = m->realms[m->split];
     dout(10) << " splitting off " << *realm << dendl;
     for (list<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
@@ -1660,15 +1654,16 @@ void Client::handle_snap(MClientSnap *m)
       }
     }
     put_snap_realm(realm);
-  }
-
-  for (map<inodeno_t, vector<snapid_t> >::iterator p = m->realms.begin();
-       p != m->realms.end();
-       p++) {
-    dout(10) << "realm " << p->first << " snaps " << p->second << dendl;
-    SnapRealm *realm = get_snap_realm(p->first);
-    maybe_update_snaprealm(realm, 0, m->snap_highwater, p->second);
-    put_snap_realm(realm);
+  } else {
+    // regular update
+    for (map<inodeno_t, vector<snapid_t> >::iterator p = m->realms.begin();
+	 p != m->realms.end();
+	 p++) {
+      dout(10) << "realm " << p->first << " snaps " << p->second << dendl;
+      SnapRealm *realm = get_snap_realm(p->first);
+      maybe_update_snaprealm(realm, 0, m->snap_highwater, p->second);
+      put_snap_realm(realm);
+    }
   }
   delete m;
 }

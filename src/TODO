@@ -83,6 +83,8 @@ mds
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
 
+- rename: importing inode... also journal imported client map?
+
 - rerun destro trace against latest, with various journal lengths
 
 - lease length heuristics
@@ -242,6 +244,8 @@ todo
   primary file link -> old inode
   primary dir link -> multiversion inode
   remote link -> multiversion inode
+
+** HRM, how to cope with split notifications from multiple mds's racing to client...
 
 - for simplicity, don't replicate any snapshot data.
 

@@ -30,6 +30,7 @@ protected:
   
   map<version_t, SnapInfo> pending_create;
   map<version_t, snapid_t> pending_destroy;
+  set<version_t>           pending_noop;
 
 public:
   SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP) { }
@@ -46,6 +47,7 @@ public:
     ::encode(pending_removal, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
+    ::encode(pending_noop, bl);
     ::encode(pending_for_mds, bl);
   }
   void decode_state(bufferlist::iterator& bl) {
@@ -54,6 +56,7 @@ public:
     ::decode(pending_removal, bl);
     ::decode(pending_create, bl);
     ::decode(pending_destroy, bl);
+    ::decode(pending_noop, bl);
     ::decode(pending_for_mds, bl);
   }
 

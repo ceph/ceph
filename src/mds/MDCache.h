@@ -785,6 +785,11 @@ protected:
   friend class C_MDC_AnchorPrepared;
   friend class C_MDC_AnchorLogged;
 
+  // -- snaprealms --
+public:
+  void snaprealm_create(MDRequest *mdr, CInode *in);
+  void _snaprealm_create_finish(MDRequest *mdr, CInode *in);
+
   // -- stray --
 public:
   void eval_stray(CDentry *dn);

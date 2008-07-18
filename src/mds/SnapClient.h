@@ -39,6 +39,14 @@ public:
     ::encode(stamp, bl);
     _prepare(bl, pstid, onfinish);
   }
+
+  void prepare_create_realm(inodeno_t ino, version_t *pstid, Context *onfinish) {
+    bufferlist bl;
+    __u32 op = TABLE_OP_CREATE;
+    ::encode(op, bl);
+    ::encode(ino, bl);
+    _prepare(bl, pstid, onfinish);
+  }
 };
 
 #endif
