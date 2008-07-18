@@ -504,7 +504,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       
       EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+      journal_dirty_inode(&le->metablob, in);
       
       mds->mdlog->submit_entry(le);
       mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, 
@@ -962,15 +962,12 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   return in;
 }
 
-CInode *MDCache::cow_inode(CInode *in, snapid_t last, bool write_to_clone)
+CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 {
   assert(last >= in->first);
 
   CInode *oldin = new CInode(this);
-  if (write_to_clone)
-    oldin->inode = *in->get_projected_inode();
-  else
-    oldin->inode = *in->get_previous_projected_inode();
+  oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
   oldin->xattrs = in->xattrs;
 
@@ -1018,7 +1015,6 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
    * normally, we write to the head, and make a clone of ther previous
    * dentry+inode state.  unless the follow snapid specified.
    */
-  bool write_to_clone = false;
 
   if (dn->is_primary() && dn->inode->is_multiversion()) {
     // multiversion inode.
@@ -1026,8 +1022,6 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
 
     if (follows == CEPH_NOSNAP || follows == 0)
       follows = in->find_snaprealm()->get_latest_snap();
-    //else
-    //write_to_clone = true;
 
     // already cloned?
     if (follows < in->first)
@@ -1035,10 +1029,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
 
     old_inode_t &old = in->old_inodes[follows];
     old.first = in->first;
-    if (write_to_clone)
-      old.inode = *in->get_projected_inode();
-    else
-      old.inode = *in->get_previous_projected_inode();
+    old.inode = *in->get_previous_projected_inode();
     old.xattrs = in->xattrs;
     
     in->first = follows+1;
@@ -1048,22 +1039,19 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
-    //else
-    //write_to_clone = true;
     
     // already cloned?
     if (follows < dn->first)
       return;
-    
-    snapid_t oldfirst = dn->first;
-    
+       
     // update dn.first before adding old dentry to cdir's map
+    snapid_t oldfirst = dn->first;
     dn->first = follows+1;
     
     dout(10) << "    dn " << *dn << dendl;
     if (dn->is_primary()) {
       assert(oldfirst == dn->inode->first);
-      CInode *oldin = cow_inode(dn->inode, follows, write_to_clone);
+      CInode *oldin = cow_inode(dn->inode, follows);
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_primary_dentry(olddn, true);
@@ -1085,11 +1073,11 @@ void MDCache::journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follow
   journal_cow_dentry(metablob, dn, follows);
 }
 
-void MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
+inode_t *MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   CDentry *dn = in->get_projected_parent_dn();
   journal_cow_dentry(metablob, dn, follows);
-  metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
+  return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
 }
 
 
@@ -5265,7 +5253,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
   mds->locker->predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+  journal_dirty_inode(&le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
 }

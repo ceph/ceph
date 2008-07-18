@@ -886,7 +886,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
     predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   else
     le->metablob.add_dir_context(in->get_parent_dir());
-  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, in);
   le->add_ino(in->ino());
   mut->ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
@@ -1500,8 +1500,6 @@ void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
     else if (cur->snaprealm)
       realm = cur->snaprealm;
     mds->mdcache->journal_dirty_inode(blob, cur);
-    //inode_t *pi = cur->get_projected_inode();
-    //blob->add_primary_dentry(cur->get_projected_parent_dn(), true, 0, pi);
   }
  
 }
@@ -2433,7 +2431,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, in);
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));

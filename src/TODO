@@ -256,7 +256,6 @@ todo
   - leases on snapshotted inodes.. cuz the dirstat updates will be lazy..
 
 - mds server ops
-  - rename
   - link rollback
   - rename rollback
 

@@ -472,10 +472,10 @@ public:
 
   // journal helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
-  CInode *cow_inode(CInode *in, snapid_t last, bool write_to_clone=false);
+  CInode *cow_inode(CInode *in, snapid_t last);
   void journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);
   void journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
-  void journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  inode_t *journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   // slaves
   void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {

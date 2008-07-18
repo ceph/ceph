@@ -1254,7 +1254,6 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   dn = dir->add_null_dentry(dname);
   dn->mark_new();
   dout(10) << "prepare_null_dentry added " << *dn << dendl;
-
   return dn;
 }
 
@@ -1822,7 +1821,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   cur->xattrs[name] = buffer::create(len);
   if (len)
     req->get_data().copy(0, len, cur->xattrs[name].c_str());
-  le->metablob.add_primary_dentry(cur->get_parent_dn(), true, cur, pi);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -1868,7 +1867,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
 
   mdcache->journal_cow_inode(&le->metablob, cur);
   cur->xattrs.erase(name);
-  le->metablob.add_primary_dentry(cur->get_parent_dn(), true, cur, pi);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -2407,8 +2406,6 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   }
 
   if (inc) {
-    snapid_t dnfollows = dn->dir->inode->find_snaprealm()->get_latest_snap();
-    dn->first = dnfollows + 1;
     dn->pre_dirty();
     mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
@@ -3016,20 +3013,12 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 
     // does the frag _look_ empty?
     if (dir->get_num_head_items()) {
-      dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() << " cached items in frag " << *dir << dendl;
+      dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() 
+	       << " cached items in frag " << *dir << dendl;
       reply_request(mdr, -ENOTEMPTY);
       return true;
     }
 
-    // dir looks empty but incomplete?
-    /* actually, screw this, it's cheaper to just rely on dirstat!
-    if (dir->is_auth() && !dir->is_complete()) {
-      dout(7) << "dir_is_nonempty fetching incomplete dir " << *dir << dendl;
-      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
-      return true;
-    }
-    */
-    
     // not dir auth?
     if (!dir->is_auth()) {
       dout(10) << "dir_is_nonempty non-auth dirfrag for " << *dir << dendl;
@@ -3621,10 +3610,11 @@ void Server::_rename_prepare(MDRequest *mdr,
   // add it all to the metablob
   // target inode
   if (!linkmerge) {
-    if (destdn->is_primary())
+    if (destdn->is_primary()) {
       tji = metablob->add_primary_dentry(straydn, true, destdn->inode, tpi);
-    else if (destdn->is_remote()) {
+    } else if (destdn->is_remote()) {
       metablob->add_dir_context(destdn->inode->get_parent_dir());
+      mdcache->journal_cow_dentry(metablob, destdn->inode->parent);
       tji = metablob->add_primary_dentry(destdn->inode->parent, true, destdn->inode, tpi);
     }
   }
@@ -3632,16 +3622,30 @@ void Server::_rename_prepare(MDRequest *mdr,
   // dest
   if (srcdn->is_remote()) {
     if (!linkmerge) {
+      if (!destdn->is_null())
+	mdcache->journal_cow_dentry(metablob, destdn);
+      else
+	destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
       metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), srcdn->get_remote_d_type());
+      mdcache->journal_cow_dentry(metablob, srcdn->inode->get_parent_dn());
       ji = metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true, srcdn->inode, pi);
     } else {
+      if (!destdn->is_null())
+	mdcache->journal_cow_dentry(metablob, destdn);
+      else
+	destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
       metablob->add_primary_dentry(destdn, true, destdn->inode, pi); 
     }
   } else if (srcdn->is_primary()) {
+    if (!destdn->is_null())
+      mdcache->journal_cow_dentry(metablob, destdn);
+    else
+      destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
     ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi); 
   }
     
   // src
+  mdcache->journal_cow_dentry(metablob, srcdn);
   metablob->add_null_dentry(srcdn, true);
 
   // new subtree?
@@ -4414,7 +4418,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->version = pdv;
   pi->size = le64_to_cpu(req->head.args.truncate.length);
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, fin);
 }
@@ -4612,7 +4616,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->version = pdv;
   pi->size = 0;
   mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  le->metablob.add_primary_dentry(cur->parent, true, 0, pi);
+  mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, fin);
 }
