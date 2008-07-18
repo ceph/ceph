@@ -48,7 +48,9 @@ static __u64 fino_snap(__u64 fino)
 }
 static vinodeno_t fino_vino(inodeno_t fino)
 {
-  return vinodeno_t(FINO_INO(fino), fino_snap(fino));
+  vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
+  //cout << "fino_vino " << fino << " -> " << vino << std::endl;
+  return vino;
 }
 
 
@@ -62,7 +64,9 @@ static __u64 make_fake_ino(inodeno_t ino, snapid_t snapid)
     stag_snap_map[stag] = snapid;
   } else 
     stag = snap_stag_map[snapid];
-  return MAKE_FINO(ino, stag);
+  inodeno_t fino = MAKE_FINO(ino, stag);
+  //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;
+  return fino;
 }
 
 static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
@@ -95,9 +99,10 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   
   (void) fi;
 
-  if (client->ll_getattr(fino_vino(ino), &stbuf, ctx->uid, ctx->gid) == 0) 
+  if (client->ll_getattr(fino_vino(ino), &stbuf, ctx->uid, ctx->gid) == 0) {
+    stbuf.st_ino = make_fake_ino(stbuf.st_ino, stbuf.st_dev);
     fuse_reply_attr(req, &stbuf, 0);
-  else
+  } else
     fuse_reply_err(req, ENOENT);
 }
 

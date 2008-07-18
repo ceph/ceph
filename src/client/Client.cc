@@ -2416,7 +2416,8 @@ int Client::_do_lstat(const filepath &path, int mask, Inode **in, int uid, int g
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat) 
 {
-  dout(10) << "fill_stat on " << in->inode.ino << " mode 0" << oct << in->inode.mode << dec
+  dout(10) << "fill_stat on " << in->inode.ino << " snap/dev" << in->snapid 
+	   << " mode 0" << oct << in->inode.mode << dec
 	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << dendl;
   memset(st, 0, sizeof(struct stat));
   st->st_ino = in->inode.ino;
