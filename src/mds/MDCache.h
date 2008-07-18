@@ -666,12 +666,12 @@ public:
   bool did_shutdown_log_cap;
 
   // inode_map
-  bool have_inode(inodeno_t ino, snapid_t snap=0) { return have_inode(vinodeno_t(ino, snap)); }
+  bool have_inode(inodeno_t ino, snapid_t snap=CEPH_NOSNAP) {
+    return have_inode(vinodeno_t(ino, snap));
+  }
   bool have_inode(vinodeno_t vino) { return inode_map.count(vino) ? true:false; }
-  CInode* get_inode(inodeno_t ino, snapid_t s=0) {
-    if (s == CEPH_NOSNAP)
-      s = 0;  // ugly hack.
-    vinodeno_t vino(ino,s);
+  CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
+    vinodeno_t vino(ino, s);
     if (have_inode(vino))
       return inode_map[vino];
     return NULL;

@@ -976,7 +976,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
     // this cap now follows a later snap (i.e. the one initiating this flush, or later)
     cap->client_follows = follows+1;
 
-    if (in->last && in->last <= follows) {
+    if (in->last <= follows) {
       dout(10) << "  flushsnap releasing cloned cap" << dendl;
       in->remove_client_cap(client);
     } else {
@@ -1021,7 +1021,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
       _do_cap_update(in, had, in->get_caps_wanted() | wanted, follows, m);      
       
       // done?
-      if (in->last == CEPH_NOSNAP || in->last == 0)
+      if (in->last == CEPH_NOSNAP)
 	break;
      
       // next!

@@ -266,7 +266,7 @@ private:
   CInode(MDCache *c, bool auth=true) : 
     mdcache(c),
     snaprealm(0), containing_realm(0),
-    first(1), last(0),
+    first(1), last(CEPH_NOSNAP),
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),

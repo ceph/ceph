@@ -3135,7 +3135,6 @@ void MDCache::do_file_recover()
     file_recover_queue.erase(in);
 
     snapid_t snap = in->last;
-    if (snap == 0) snap = CEPH_NOSNAP;  // FIXME
     const vector<snapid_t>& snaps = in->find_snaprealm()->get_snap_vector();
 
     if (in->inode.max_size > in->inode.size) {
