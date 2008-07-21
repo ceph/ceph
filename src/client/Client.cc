@@ -1644,12 +1644,40 @@ inodeno_t Client::update_snap_trace(bufferlist& bl)
     if (info.seq > realm->seq) {
       dout(10) << "update_snap_trace " << *realm << " seq " << info.seq << " > " << realm->seq
 	       << dendl;
+
+      // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
+      //  flush me + children
+      list<SnapRealm*> q;
+      q.push_back(realm);
+      while (!q.empty()) {
+	SnapRealm *realm = q.front();
+	q.pop_front();
+	dout(10) << " flushing caps on " << *realm << dendl;
+	
+	for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
+	  Inode *in = *p;
+	  check_caps(in, true); // force writeback of write caps
+	  if (g_conf.client_oc)
+	    _flush(in);
+	}
+	
+	for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
+	     p != realm->pchildren.end(); 
+	     p++)
+	  q.push_back(*p);
+      }
+
+      
+      // update
       realm->created = info.created;
       if (realm->parent != info.parent) {
 	realm->parent = info.parent;
-	if (realm->pparent)
+	if (realm->pparent) {
+	  realm->pparent->pchildren.erase(realm);
 	  put_snap_realm(realm->pparent);
+	}
 	realm->pparent = get_snap_realm(info.parent);
+	realm->pparent->pchildren.insert(realm);
       }
       realm->parent = info.parent;
       realm->parent_since = info.parent_since;
@@ -1657,13 +1685,6 @@ inodeno_t Client::update_snap_trace(bufferlist& bl)
       realm->my_snaps = info.my_snaps;
       realm->seq = info.seq;
 
-      // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
-      for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
-	Inode *in = *p;
-	check_caps(in, true); // force writeback of write caps
-	if (g_conf.client_oc)
-	  _flush(in);
-      }
       realm->invalidate_cache();
       dout(15) << "  snaps " << realm->get_snaps() << dendl;
     } else {

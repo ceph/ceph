@@ -128,6 +128,8 @@ struct SnapRealm {
   vector<snapid_t> my_snaps;
 
   SnapRealm *pparent;
+  set<SnapRealm*> pchildren;
+
   vector<snapid_t> cached_snaps;  // my_snaps + parent snaps + past_parent_snaps
 
   xlist<Inode*> inodes_with_caps;
