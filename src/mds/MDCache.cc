@@ -2952,9 +2952,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
 					      cap->pending(),
 					      cap->wanted(),
 					      cap->get_mseq());
-  reap->set_snaps(realm->get_snaps());
-  reap->set_snap_created(realm->created);
-  reap->set_snap_highwater(realm->snap_highwater);
+  realm->build_snap_trace(reap->snapbl);
   mds->messenger->send_message(reap, session->inst);
 }
 
@@ -5342,7 +5340,7 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, CInode *in)
 
   // create
   in->open_snaprealm();
-  in->snaprealm->created = mdr->more()->stid;
+  in->snaprealm->seq = in->snaprealm->created = mdr->more()->stid;
 
   // split existing caps
   SnapRealm *parent = in->snaprealm->parent;
@@ -5355,6 +5353,9 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, CInode *in)
   for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
     split_inos.push_back((*p)->ino());
   
+  bufferlist snapbl;
+  in->snaprealm->build_snap_trace(snapbl);
+
   const vector<snapid_t> snaps = in->snaprealm->get_snap_vector();
   map<int, MClientSnap*> updates;
   for (map<int, xlist<Capability*> >::iterator p = in->snaprealm->client_caps.begin();
@@ -5362,10 +5363,9 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, CInode *in)
        p++) {
     assert(!p->second.empty());
     MClientSnap *update = updates[p->first] = new MClientSnap;
-    update->snap_created = in->snaprealm->created;
     update->split = in->ino();
     update->split_inos = split_inos;
-    update->realms[in->ino()] = snaps;
+    update->bl = snapbl;
     updates[p->first] = update;
   }
   

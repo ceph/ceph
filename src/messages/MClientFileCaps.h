@@ -21,26 +21,13 @@
 class MClientFileCaps : public Message {
  private:
   struct ceph_mds_file_caps h;
-  vector<snapid_t> snaps;
+ public:
   bufferlist snapbl;
 
- public:
   int      get_caps() { return h.caps; }
   int      get_wanted() { return h.wanted; }
   capseq_t get_seq() { return h.seq; }
   capseq_t get_mseq() { return h.migrate_seq; }
-
-  inodeno_t get_snap_realm() { return inodeno_t(h.snap_realm); }
-  snapid_t get_snap_created() { return snapid_t(h.snap_created); }
-  snapid_t get_snap_highwater() { return snapid_t(h.snap_highwater); }
-  vector<snapid_t> &get_snaps() { return snaps; }
-  void set_snaps(const set<snapid_t>& s) {
-    snaps.clear();
-    snapbl.clear();
-    for (set<snapid_t>::const_reverse_iterator p = s.rbegin(); p != s.rend(); p++)
-      ::encode(*p, snapbl);
-    h.num_snaps = s.size();
-  }
 
   inodeno_t get_ino() { return inodeno_t(h.ino); }
   __u64 get_size() { return h.size;  }
@@ -53,6 +40,12 @@ class MClientFileCaps : public Message {
   int       get_migrate_seq() { return h.migrate_seq; }
   int       get_op() { return h.op; }
 
+  //inodeno_t get_snap_realm() { return inodeno_t(h.snap_realm); }
+  //snapid_t get_snap_created() { return snapid_t(h.snap_created); }
+  //snapid_t get_snap_highwater() { return snapid_t(h.snap_highwater); }
+  snapid_t get_snap_follows() { return snapid_t(h.snap_follows); }
+  void set_snap_follows(snapid_t s) { h.snap_follows = s; }
+
   void set_caps(int c) { h.caps = c; }
   void set_wanted(int w) { h.wanted = w; }
 
@@ -64,9 +57,6 @@ class MClientFileCaps : public Message {
   void set_size(loff_t s) { h.size = s; }
   void set_mtime(const utime_t &t) { t.encode_timeval(&h.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&h.atime); }
-
-  void set_snap_created(snapid_t c) { h.snap_created = c; }
-  void set_snap_highwater(snapid_t hw) { h.snap_highwater = hw; }
 
   MClientFileCaps() {}
   MClientFileCaps(int op,
@@ -82,7 +72,6 @@ class MClientFileCaps : public Message {
     h.caps = caps;
     h.wanted = wanted;
     h.ino = inode.ino;
-    h.snap_realm = realm;
     h.size = inode.size;
     h.max_size = inode.max_size;
     h.migrate_seq = mseq;
@@ -102,7 +91,7 @@ class MClientFileCaps : public Message {
 	<< " size " << h.size << "/" << h.max_size
 	<< " mtime " << utime_t(h.mtime)
 	<< " tws " << h.time_warp_seq
-	<< " snaps " << snaps;
+	<< " follows " << snapid_t(h.snap_follows);
     if (h.migrate_seq)
       out << " mseq " << h.migrate_seq;
     out << ")";
@@ -111,19 +100,11 @@ class MClientFileCaps : public Message {
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(h, p);
-    snaps.resize(h.num_snaps);
-    for (unsigned i=0; i<snaps.size(); i++)
-      ::decode(snaps[i], p);
+    ::decode(snapbl, p);
   }
   void encode_payload() {
-    if (!snapbl.length())
-      h.num_snaps = snaps.size();
     ::encode(h, payload);
-    if (snapbl.length())
-      payload.claim_append(snapbl);
-    else
-      for (unsigned i=0; i<snaps.size(); i++)
-	::encode(snaps[i], payload);
+    ::encode(snapbl, payload);
   }
 };
 

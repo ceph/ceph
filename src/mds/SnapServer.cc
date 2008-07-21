@@ -41,7 +41,7 @@ snapid_t SnapServer::create(inodeno_t base, const string& name, utime_t stamp, v
   
   snapid_t sn = ++last_snap;
   snaps[sn].snapid = sn;
-  snaps[sn].dirino = base;
+  snaps[sn].ino = base;
   snaps[sn].name = name;
   snaps[sn].stamp = stamp;
   *psnapv = ++version;
@@ -75,7 +75,7 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
       version++;
 
       SnapInfo info;
-      ::decode(info.dirino, p);
+      ::decode(info.ino, p);
       if (!p.end()) {
 	::decode(info.name, p);
 	::decode(info.stamp, p);

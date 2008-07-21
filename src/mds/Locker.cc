@@ -933,9 +933,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 {
   int client = m->get_source().num();
 
-  snapid_t follows = 0;
-  if (m->get_snaps().size())
-    follows = m->get_snaps()[0];
+  snapid_t follows = m->get_snap_follows();
   dout(7) << "handle_client_file_caps on " << m->get_ino()
 	  << " follows " << follows 
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;

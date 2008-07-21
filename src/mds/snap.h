@@ -23,19 +23,19 @@
  */
 struct SnapInfo {
   snapid_t snapid;
-  inodeno_t dirino;
+  inodeno_t ino;
   utime_t stamp;
   string name, long_name;
   
   void encode(bufferlist& bl) const {
     ::encode(snapid, bl);
-    ::encode(dirino, bl);
+    ::encode(ino, bl);
     ::encode(stamp, bl);
     ::encode(name, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(snapid, bl);
-    ::decode(dirino, bl);
+    ::decode(ino, bl);
     ::decode(stamp, bl);
     ::decode(name, bl);
   }
@@ -45,7 +45,7 @@ WRITE_CLASS_ENCODER(SnapInfo)
 
 inline ostream& operator<<(ostream& out, const SnapInfo &sn) {
   return out << "snap(" << sn.snapid
-	     << " " << sn.dirino
+	     << " " << sn.ino
 	     << " '" << sn.name
 	     << "' " << sn.stamp << ")";
 }
@@ -62,21 +62,18 @@ class MDCache;
 class MDRequest;
 
 
-/*
- * CapabilityGroup - group per-realm, per-client caps for efficient
- * client snap notifications.
- */
+
 #include "Capability.h"
 
 struct snaplink_t {
-  inodeno_t dirino;
+  inodeno_t ino;
   snapid_t first;
   void encode(bufferlist& bl) const {
-    ::encode(dirino, bl);
+    ::encode(ino, bl);
     ::encode(first, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(dirino, bl);
+    ::decode(ino, bl);
     ::decode(first, bl);
   }
 };
@@ -84,17 +81,19 @@ WRITE_CLASS_ENCODER(snaplink_t)
 
 struct SnapRealm {
   // realm state
-  snapid_t created;
+  snapid_t created, seq;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
     ::encode(created, bl);
+    ::encode(seq, bl);
     ::encode(snaps, bl);
     ::encode(past_parents, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(created, p);
+    ::decode(seq, p);
     ::decode(snaps, p);
     ::decode(past_parents, p);
   }
@@ -105,20 +104,19 @@ struct SnapRealm {
 
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
+  map<snapid_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
 
   // caches?
   set<snapid_t> cached_snaps;
   vector<snapid_t> cached_snap_vec;
-  snapid_t snap_highwater;
 
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
-    created(0),
+    created(0), seq(0),
     mdcache(c), inode(in),
-    parent(0),
-    snap_highwater(0) 
+    parent(0)
   { }
 
   bool exists(const string &name) {
@@ -133,12 +131,13 @@ struct SnapRealm {
   void build_snap_set(set<snapid_t>& s, snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
+  void build_snap_trace(bufferlist& snapbl);
+
   const string& get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(const string &name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const set<snapid_t>& get_snaps();
   const vector<snapid_t>& get_snap_vector();
-  const set<snapid_t>& update_snaps(snapid_t adding=0);
   snapid_t get_latest_snap() {
     const set<snapid_t> &snaps = get_snaps();
     if (snaps.empty())
@@ -161,7 +160,8 @@ struct SnapRealm {
 WRITE_CLASS_ENCODER(SnapRealm)
 
 inline ostream& operator<<(ostream& out, const SnapRealm &realm) {
-  out << "snaprealm(" << realm.snaps;
+  out << "snaprealm(seq " << realm.seq
+      << " snaps=" << realm.snaps;
   if (realm.past_parents.size()) {
     out << " past_parents=(";
     for (map<snapid_t, snaplink_t>::const_iterator p = realm.past_parents.begin(); 
@@ -169,13 +169,18 @@ inline ostream& operator<<(ostream& out, const SnapRealm &realm) {
 	 p++) {
       if (p != realm.past_parents.begin()) out << ",";
       out << p->second.first << "-" << p->first
-	  << "=" << p->second.dirino;
+	  << "=" << p->second.ino;
     }
     out << ")";
   }
   out << " " << &realm << ")";
   return out;
 }
+
+
+
+
+
 
 
 #endif

@@ -139,30 +139,6 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 typedef __u64 coll_t;
 
 
-// snaps
-struct snapid_t {
-  __u64 val;
-  snapid_t(__u64 v=0) : val(v) {}
-  snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
-  snapid_t operator++() { ++val; return *this; }
-  operator __u64() const { return val; }  
-};
-
-inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
-inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
-
-inline ostream& operator<<(ostream& out, snapid_t s) {
-  if (s == CEPH_NOSNAP)
-    return out << "head";
-  else if (s == CEPH_SNAPDIR)
-    return out << "snapdir";
-  else
-    return out << s.val;
-}
-
-#define MAXSNAP CEPH_MAXSNAP
-#define NOSNAP  CEPH_NOSNAP
-
 
 // --------------------------------------
 // ino
@@ -209,6 +185,61 @@ inline int DT_TO_MODE(int dt) {
 inline unsigned char MODE_TO_DT(int mode) {
   return mode >> 12;
 }
+
+
+
+// snaps
+struct snapid_t {
+  __u64 val;
+  snapid_t(__u64 v=0) : val(v) {}
+  snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
+  snapid_t operator++() { ++val; return *this; }
+  operator __u64() const { return val; }  
+};
+
+inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
+inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+
+inline ostream& operator<<(ostream& out, snapid_t s) {
+  if (s == CEPH_NOSNAP)
+    return out << "head";
+  else if (s == CEPH_SNAPDIR)
+    return out << "snapdir";
+  else
+    return out << s.val;
+}
+
+#define MAXSNAP CEPH_MAXSNAP
+#define NOSNAP  CEPH_NOSNAP
+
+
+struct SnapRealmInfo {
+  inodeno_t ino, parent;
+  snapid_t created;
+  snapid_t parent_since;
+  vector<snapid_t> prior_parent_snaps;  // before parent_since
+  vector<snapid_t> my_snaps;
+  snapid_t seq;
+
+  void encode(bufferlist& bl) const {
+    ::encode(ino, bl);
+    ::encode(parent, bl);
+    ::encode(parent_since, bl);
+    ::encode(prior_parent_snaps, bl);
+    ::encode(my_snaps, bl);
+    ::encode(seq, bl);
+  };
+  void decode(bufferlist::iterator& bl) {
+    ::decode(ino, bl);
+    ::decode(parent, bl);
+    ::decode(parent_since, bl);
+    ::decode(prior_parent_snaps, bl);
+    ::decode(my_snaps, bl);
+    ::decode(seq, bl);
+  }
+};
+WRITE_CLASS_ENCODER(SnapRealmInfo)
+
 
 
 

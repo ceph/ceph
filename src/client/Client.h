@@ -101,21 +101,11 @@ class Dentry : public LRUObject {
   }
   
   Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
-
-  /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
-  Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
-    name = new char[n.length()+1];
-    strcpy((char*)name, n.c_str());
-  }
-  ~Dentry() {
-    delete[] name;
-    }*/
 };
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
-  //hash_map<const char*, Dentry*, hash<const char*>, eqstr> dentries;
   hash_map<nstring, Dentry*> dentries;
 
   Dir(Inode* in) { parent_inode = in; }
@@ -127,32 +117,48 @@ class Dir {
 struct InodeCap;
 
 struct SnapRealm {
-  inodeno_t dirino;
+  inodeno_t ino;
   int nref;
   snapid_t created;
-  snapid_t highwater;
-  vector<snapid_t> snaps;
+  snapid_t seq;
+  
+  inodeno_t parent;
+  snapid_t parent_since;
+  vector<snapid_t> prior_parent_snaps;  // snaps prior to parent_since
+  vector<snapid_t> my_snaps;
+
+  SnapRealm *pparent;
+  vector<snapid_t> cached_snaps;  // my_snaps + parent snaps + past_parent_snaps
 
   xlist<Inode*> inodes_with_caps;
 
   SnapRealm(inodeno_t i) : 
-    dirino(i), nref(0), created(0), highwater(0) { }
+    ino(i), nref(0), created(0), seq(0),
+    pparent(NULL) { }
 
-  bool maybe_update(snapid_t c, snapid_t sh, vector<snapid_t> &s) {
-    if (c)
-      created = c;
-    if (sh >= highwater) {
-      highwater = sh;
-      snaps = s;
-      return true;
-    } 
-    return false;
+  void build_snaps();
+  void invalidate_cache() {
+    cached_snaps.clear();
+  }
+  const vector<snapid_t>& get_snaps() {
+    if (cached_snaps.empty())
+      build_snaps();
+    return cached_snaps;
+  }
+  snapid_t get_follows() {
+    get_snaps();
+    if (cached_snaps.empty())
+      return 0;
+    return cached_snaps[0];
   }
 };
 
 inline ostream& operator<<(ostream& out, const SnapRealm& r) {
-  return out << "snaprealm(" << r.dirino << " nref=" << r.nref << " c=" << r.created << " hw=" << r.highwater
-	     << " snaps=" << r.snaps << ")";
+  return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
+	     << " parent=" << r.parent
+	     << " my_snaps=" << r.my_snaps
+	     << " cached_snaps=" << r.cached_snaps
+	     << ")";
 }
 
 struct InodeCap {
@@ -620,10 +626,12 @@ protected:
   }
   void put_snap_realm(SnapRealm *realm) {
     if (realm->nref-- == 0) {
-      snap_realms.erase(realm->dirino);
+      snap_realms.erase(realm->ino);
       delete realm;
     }
   }
+  inodeno_t update_snap_trace(bufferlist& bl);
+  inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
 
   Inode *open_snapdir(Inode *diri);
 
@@ -811,8 +819,7 @@ protected:
 
   // file caps
   void add_update_cap(Inode *in, int mds,
-		      inodeno_t realm, snapid_t snap_created, snapid_t snap_highwater, 
-		      vector<snapid_t> &snaps,
+		      bufferlist& snapbl,
 		      unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);

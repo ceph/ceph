@@ -90,7 +90,7 @@ class Filer {
   /*** async file interface ***/
   Objecter::OSDRead *prepare_read(inodeno_t ino,
 				  ceph_file_layout *layout,
-				  snapid_t snap, vector<snapid_t>& snaps,
+				  snapid_t snap, const vector<snapid_t>& snaps,
 				  __u64 offset, 
 				  size_t len, 
 				  bufferlist *bl, 
@@ -113,7 +113,7 @@ class Filer {
 
   int write(inodeno_t ino,
 	    ceph_file_layout *layout,
-	    snapid_t snap, vector<snapid_t>& snaps,
+	    snapid_t snap, const vector<snapid_t>& snaps,
 	    __u64 offset, 
             size_t len, 
             bufferlist& bl,

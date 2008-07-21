@@ -27,10 +27,7 @@ struct MClientSnap : public Message {
     }
   }
   
-  map<inodeno_t, vector<snapid_t> > realms;
-
-  // new snap state
-  snapid_t snap_created, snap_highwater;
+  bufferlist bl;
 
   // (for split only)
   inodeno_t split;
@@ -38,27 +35,24 @@ struct MClientSnap : public Message {
   
   MClientSnap() : 
     Message(CEPH_MSG_CLIENT_SNAP),
-    snap_created(0), snap_highwater(0),
     split(0) {} 
   
   const char *get_type_name() { return "Csnap"; }
   void print(ostream& out) {
     out << "client_snap(";
     if (split)
-      out << "split=" << split << " ";
-    out << realms << ")";
+      out << "split=" << split;
+    out << ")";
   }
 
   void encode_payload() {
-    ::encode(realms, payload);
-    ::encode(snap_highwater, payload);
+    ::encode(bl, payload);
     ::encode(split, payload);
     ::encode(split_inos, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(realms, p);
-    ::decode(snap_highwater, p);
+    ::decode(bl, p);
     ::decode(split, p);
     ::decode(split_inos, p);
     assert(p.end());

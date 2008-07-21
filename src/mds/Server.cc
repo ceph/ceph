@@ -4528,9 +4528,8 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   reply->set_file_caps_mseq(cap->get_mseq());
 
   SnapRealm *realm = cur->find_snaprealm();
-  reply->set_snaps(realm->get_snaps());
-  reply->set_snap_info(realm->inode->ino(), realm->created, realm->snap_highwater);
-  dout(10) << " snaprealm is " << *realm << " snaps=" << reply->get_snaps() << " on " << *realm->inode << dendl;
+  realm->build_snap_trace(reply->snapbl);
+  dout(10) << " snaprealm is " << *realm << " on " << *realm->inode << dendl;
   
   //reply->set_file_data_version(fdv);
   reply_request(mdr, reply);
@@ -4795,7 +4794,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
     dout(10) << p->first << " -> " << *p->second << dendl;
 
     // actual
-    if (p->second->dirino == diri->ino())
+    if (p->second->ino == diri->ino())
       ::encode(p->second->name, dnbl);
     else
       ::encode(p->second->get_long_name(), dnbl);
@@ -4917,7 +4916,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   // journal
   SnapInfo info;
-  info.dirino = diri->ino();
+  info.ino = diri->ino();
   info.snapid = snapid;
   info.name = req->get_path2();
   info.stamp = mdr->now;
@@ -4933,11 +4932,14 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mds->locker->predirty_nested(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(&le->metablob, diri);
   
-  // project the snaprealm
+  // project the snaprealm.. hack!
   bufferlist snapbl;
+  snapid_t old_seq = diri->snaprealm->seq;
   diri->snaprealm->snaps[snapid] = info;
+  diri->snaprealm->seq = snapid;
   diri->encode_snap_blob(snapbl);
   diri->snaprealm->snaps.erase(snapid);
+  diri->snaprealm->seq = old_seq;
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
@@ -4955,9 +4957,12 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   // create snap
   snapid_t snapid = info.snapid;
   diri->snaprealm->snaps[snapid] = info;
+  diri->snaprealm->seq = snapid;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  list<inodeno_t> realms;
+  bufferlist snapbl;
+  diri->snaprealm->build_snap_trace(snapbl);
+
   map<int, MClientSnap*> updates;
   list<SnapRealm*> q;
   q.push_back(diri->snaprealm);
@@ -4965,26 +4970,17 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
     SnapRealm *realm = q.front();
     q.pop_front();
 
-    // build new snaps list
-    const set<snapid_t> snaps = diri->snaprealm->update_snaps(snapid);
-    const vector<snapid_t> snapvec = diri->snaprealm->get_snap_vector();
-
     dout(10) << " realm " << *realm
-	     << " snaps " << snaps
 	     << " on " << *realm->inode << dendl;
 
     for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
 	 p != realm->client_caps.end();
 	 p++) {
       assert(!p->second.empty());
-      MClientSnap *update;
-      update = updates[p->first];
-      if (!update) {
-	update = new MClientSnap;
-	update->snap_highwater = snapid;
-	updates[p->first] = update;
+      if (updates.count(p->first) == 0) {
+	MClientSnap *update = updates[p->first] = new MClientSnap;
+	update->bl = snapbl;
       }
-      update->realms[realm->inode->ino()] = snapvec;
     }
 
     // notify for active children, too.
@@ -5006,7 +5002,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   mdr->ref_snapid = snapid;
   mdr->ref_snapdiri = diri;
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply->set_snaps(diri->snaprealm->get_snaps());
+  diri->snaprealm->build_snap_trace(reply->snapbl);
   reply_request(mdr, reply);
 }
 

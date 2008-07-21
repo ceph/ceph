@@ -2061,9 +2061,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 						cap->pending(),
 						cap->wanted(),
 						cap->get_mseq());
-    caps->set_snaps(realm->get_snaps());
-    caps->set_snap_created(realm->created);
-    caps->set_snap_highwater(realm->snap_highwater);
+    realm->build_snap_trace(caps->snapbl);
 
     mds->send_message_client(caps, session->inst);
   }

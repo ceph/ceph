@@ -485,7 +485,7 @@ class ObjectCacher {
   // file functions
 
   /*** async+caching (non-blocking) file interface ***/
-  int file_read(inodeno_t ino, ceph_file_layout *layout, snapid_t snap, vector<snapid_t> &snaps,
+  int file_read(inodeno_t ino, ceph_file_layout *layout, snapid_t snap, const vector<snapid_t> &snaps,
                 off_t offset, size_t len, 
                 bufferlist *bl,
 		int flags,
@@ -495,7 +495,7 @@ class ObjectCacher {
     return readx(rd, ino, onfinish);
   }
 
-  int file_write(inodeno_t ino, ceph_file_layout *layout, snapid_t snap, vector<snapid_t> &snaps,
+  int file_write(inodeno_t ino, ceph_file_layout *layout, snapid_t snap, const vector<snapid_t> &snaps,
                  off_t offset, size_t len, 
                  bufferlist& bl, int flags) {
     Objecter::OSDWrite *wr = objecter->prepare_write(snaps, bl, flags);
@@ -508,7 +508,7 @@ class ObjectCacher {
   /*** sync+blocking file interface ***/
   
   int file_atomic_sync_read(inodeno_t ino, ceph_file_layout *layout, 
-			    snapid_t snap, vector<snapid_t> &snaps,
+			    snapid_t snap, const vector<snapid_t> &snaps,
                             off_t offset, size_t len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
@@ -518,7 +518,7 @@ class ObjectCacher {
   }
 
   int file_atomic_sync_write(inodeno_t ino, ceph_file_layout *layout, 
-			     snapid_t snap, vector<snapid_t> &snaps,
+			     snapid_t snap, const vector<snapid_t> &snaps,
                              off_t offset, size_t len, 
                              bufferlist& bl, int flags,
                              Mutex &lock) {

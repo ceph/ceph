@@ -1447,7 +1447,7 @@ void Client::check_caps(Inode *in, bool flush_snap)
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
-    m->get_snaps() = in->snaprealm->snaps;
+    m->set_snap_follows(in->snaprealm->get_follows());
     messenger->send_message(m, mdsmap->get_inst(it->first));
     if (wanted == 0 && !flush_snap)
       mds_sessions[it->first].num_caps--;
@@ -1537,10 +1537,11 @@ void Client::_flushed(Inode *in, bool checkafter)
  * do not block.
  */
 void Client::add_update_cap(Inode *in, int mds,
-			    inodeno_t realm, snapid_t snap_created, snapid_t snap_highwater,
-			    vector<snapid_t> &snaps,
+			    bufferlist& snapbl,
 			    unsigned issued, unsigned seq, unsigned mseq)
 {
+  inodeno_t realm = update_snap_trace(snapbl);
+
   InodeCap *cap = 0;
   if (in->caps.count(mds)) {
     cap = in->caps[mds];
@@ -1561,7 +1562,6 @@ void Client::add_update_cap(Inode *in, int mds,
     }
     in->caps[mds] = cap = new InodeCap;
   }
-  maybe_update_snaprealm(in->snaprealm, snap_created, snap_highwater, snaps);
 
   unsigned old_caps = cap->issued;
   cap->issued |= issued;
@@ -1599,37 +1599,99 @@ void Client::remove_all_caps(Inode *in)
   }
 }
 
-void Client::maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, 
-				    snapid_t snap_highwater, vector<snapid_t>& snaps)
+void SnapRealm::build_snaps()
 {
-  if (snap_created)
-    realm->created = snap_created;
+  set<snapid_t> snaps;
+  
+  // start with prior_parents?
+  for (unsigned i=0; i<prior_parent_snaps.size(); i++)
+    snaps.insert(prior_parent_snaps[i]);
 
-  if (realm->highwater == 0 || snap_highwater > realm->highwater) {
-    dout(10) << *realm << " now " << snaps << " highwater " << snap_highwater << dendl;
-
-    // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
-    for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
-      Inode *in = *p;
-      check_caps(in, true); // force writeback of write caps
-      if (g_conf.client_oc)
-	_flush(in);
-    }
-
-    realm->snaps = snaps;  // ok.
-    realm->highwater = snap_highwater;
+  // current parent's snaps
+  if (pparent) {
+    const vector<snapid_t> psnaps = pparent->get_snaps();
+    for (unsigned i=0; i<psnaps.size(); i++)
+      if (psnaps[i] >= parent_since)
+	snaps.insert(psnaps[i]);
   }
+
+  // my snaps
+  for (unsigned i=0; i<my_snaps.size(); i++)
+    snaps.insert(my_snaps[i]);
+
+  // ok!
+  cached_snaps.resize(0);
+  cached_snaps.reserve(snaps.size());
+  for (set<snapid_t>::reverse_iterator p = snaps.rbegin(); p != snaps.rend(); p++)
+    cached_snaps.push_back(*p);
+
+  cout << *this << " build_snaps got " << cached_snaps << std::endl;
+}
+
+inodeno_t Client::update_snap_trace(bufferlist& bl)
+{
+  inodeno_t first_realm = 0;
+  dout(10) << "update_snap_trace len " << bl.length() << dendl;
+
+  bufferlist::iterator p = bl.begin();
+  while (!p.end()) {
+    SnapRealmInfo info;
+    ::decode(info, p);
+    if (first_realm == 0)
+      first_realm = info.ino;
+    SnapRealm *realm = get_snap_realm(info.ino);
+
+    if (info.seq > realm->seq) {
+      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq << " > " << realm->seq
+	       << dendl;
+      realm->created = info.created;
+      if (realm->parent != info.parent) {
+	realm->parent = info.parent;
+	if (realm->pparent)
+	  put_snap_realm(realm->pparent);
+	realm->pparent = get_snap_realm(info.parent);
+      }
+      realm->parent = info.parent;
+      realm->parent_since = info.parent_since;
+      realm->prior_parent_snaps = info.prior_parent_snaps;
+      realm->my_snaps = info.my_snaps;
+      realm->seq = info.seq;
+
+      // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
+      for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
+	Inode *in = *p;
+	check_caps(in, true); // force writeback of write caps
+	if (g_conf.client_oc)
+	  _flush(in);
+      }
+      realm->invalidate_cache();
+      dout(15) << "  snaps " << realm->get_snaps() << dendl;
+    } else {
+      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq << " < " << realm->seq << ", SKIPPING"
+	       << dendl;
+    }
+    
+    put_snap_realm(realm);
+  }
+
+  return first_realm;
 }
 
 void Client::handle_snap(MClientSnap *m)
 {
   dout(10) << "handle_snap " << *m << dendl;
 
-  // split?
+  list<Inode*> to_move;
+  SnapRealm *realm = 0;
+
   if (m->split) {
-    SnapRealm *realm = get_snap_realm(m->split);
-    realm->created = m->snap_created;
-    realm->snaps = m->realms[m->split];
+    SnapRealmInfo info;
+    bufferlist::iterator p = m->bl.begin();    
+    ::decode(info, p);
+    assert(info.ino == m->split);
+    
+    // flush, then move, ino's.
+    realm = get_snap_realm(info.ino);
     dout(10) << " splitting off " << *realm << dendl;
     for (list<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
@@ -1639,32 +1701,40 @@ void Client::handle_snap(MClientSnap *m)
 	Inode *in = inode_map[vino];
 	if (!in->snaprealm)
 	  continue;
-	if (in->snaprealm->created > m->snap_created) {
+	if (in->snaprealm->created > info.created) {
 	  dout(10) << " NOT moving " << *in << " from _newer_ realm " 
 		   << *in->snaprealm << dendl;
 	  continue;
 	}
 	dout(10) << " moving " << *in << " from " << *in->snaprealm << dendl;
-	put_snap_realm(in->snaprealm);
-	in->snaprealm_item.remove_myself();
 
-	in->snaprealm = realm;
-	realm->inodes_with_caps.push_back(&in->snaprealm_item);
-	realm->nref++;
+	// first, writeback in _old_ realm context
+	// ???
+	check_caps(in, true);
+	if (g_conf.client_oc)
+	  _flush(in);
+
+	if (in->snaprealm) {
+	  put_snap_realm(in->snaprealm);
+	  in->snaprealm_item.remove_myself();
+	  to_move.push_back(in);
+	}
       }
     }
-    put_snap_realm(realm);
-  } else {
-    // regular update
-    for (map<inodeno_t, vector<snapid_t> >::iterator p = m->realms.begin();
-	 p != m->realms.end();
-	 p++) {
-      dout(10) << "realm " << p->first << " snaps " << p->second << dendl;
-      SnapRealm *realm = get_snap_realm(p->first);
-      maybe_update_snaprealm(realm, 0, m->snap_highwater, p->second);
-      put_snap_realm(realm);
-    }
   }
+
+  update_snap_trace(m->bl);
+
+  if (realm) {
+    for (list<Inode*>::iterator p = to_move.begin(); p != to_move.end(); p++) {
+      Inode *in = *p;
+      in->snaprealm = realm;
+      realm->inodes_with_caps.push_back(&in->snaprealm_item);
+      realm->nref++;
+    }
+    put_snap_realm(realm);
+  }
+
   delete m;
 }
 
@@ -1696,7 +1766,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
   if (m->get_op() == CEPH_CAP_OP_IMPORT) {
     // add/update it
     add_update_cap(in, mds, 
-		   m->get_snap_realm(), m->get_snap_created(), m->get_snap_highwater(), m->get_snaps(), 
+		   m->snapbl,
 		   m->get_caps(), m->get_seq(), m->get_mseq());
 
     if (in->exporting_mseq < m->get_mseq()) {
@@ -1853,7 +1923,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       m->set_mtime(in->inode.mtime);
       m->set_atime(in->inode.atime);
       m->set_wanted(wanted);
-      m->get_snaps() = in->snaprealm->snaps;  // just in case it's newer (via another mds)
+      m->set_snap_follows(in->snaprealm->get_follows());
     }
   } else if (old_caps == new_caps) {
     dout(10) << "  caps unchanged at " << cap_string(old_caps) << dendl;
@@ -3041,10 +3111,7 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
     // add the cap
     int mds = reply->get_source().num();
     add_update_cap(in, mds,
-		   reply->get_snap_realm(),
-		   reply->get_snap_created(),
-		   reply->get_snap_highwater(),
-		   reply->get_snaps(),
+		   reply->snapbl,
 		   reply->get_file_caps(),
 		   reply->get_file_caps_seq(),
 		   reply->get_file_caps_mseq());    
@@ -3288,14 +3355,14 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
 		 << " (caller wants " << offset << "~" << size << ")" << dendl;
 	objectcacher->file_read(in->inode.ino, &in->inode.layout,
-				CEPH_NOSNAP, in->snaprealm->snaps,
+				CEPH_NOSNAP, in->snaprealm->get_snaps(),
 				offset, l, NULL, 0, 0);
 	dout(10) << "readahead initiated" << dendl;
       }
 
       // read (and possibly block)
       r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
-				  CEPH_NOSNAP, in->snaprealm->snaps,
+				  CEPH_NOSNAP, in->snaprealm->get_snaps(),
 				  offset, size, bl, 0, onfinish);
       
       if (r == 0) {
@@ -3308,7 +3375,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       }
     } else {
       r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout,
-					      CEPH_NOSNAP, in->snaprealm->snaps,
+					      CEPH_NOSNAP, in->snaprealm->get_snaps(),
 					      offset, size, bl, 0, client_lock);
     }
     
@@ -3317,7 +3384,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   
     // do sync read
     Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout,
-						CEPH_NOSNAP, in->snaprealm->snaps,
+						CEPH_NOSNAP, in->snaprealm->get_snaps(),
 						offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
@@ -3477,12 +3544,12 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       
       // async, caching, non-blocking.
       objectcacher->file_write(in->inode.ino, &in->inode.layout, 
-			       CEPH_NOSNAP, in->snaprealm->snaps,
+			       CEPH_NOSNAP, in->snaprealm->get_snaps(),
 			       offset, size, bl, 0);
     } else {
       // atomic, synchronous, blocking.
       objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout,
-					   CEPH_NOSNAP, in->snaprealm->snaps,
+					   CEPH_NOSNAP, in->snaprealm->get_snaps(),
 					   offset, size, bl, 0, client_lock);
     }   
   } else {
@@ -3496,7 +3563,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
     filer->write(in->inode.ino, &in->inode.layout, 
-		 CEPH_NOSNAP, in->snaprealm->snaps,
+		 CEPH_NOSNAP, in->snaprealm->get_snaps(),
 		 offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)
@@ -4287,11 +4354,9 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
     Inode *in;
     MClientReply *reply = make_request(req, uid, gid, &in);
     r = reply->get_result();
-    snapid_t snapid = 0;
-    if (reply->get_snaps().size())
-      snapid = reply->get_snaps()[0];
+    update_snap_trace(reply->snapbl);
     delete reply;
-    dout(10) << "mksnap result is " << r << " vino " << in->vino() << " snapid " << snapid << dendl;
+    dout(10) << "mksnap result is " << r << " vino " << in->vino() << dendl;
     if (r == 0) {
       fill_stat(in, attr);
       _ll_get(in);

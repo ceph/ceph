@@ -673,10 +673,6 @@ struct ceph_mds_reply_head {
 	__le32 file_caps_seq;
 	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
-	__le64 snap_realm;
-	__le64 snap_created, snap_highwater;
-	__le32 num_snaps;
-	__le64 snaps[];
 } __attribute__ ((packed));
 
 /*
@@ -814,10 +810,7 @@ struct ceph_mds_file_caps {
 	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
 	__le64 time_warp_seq;
-	__le64 snap_realm;
-	__le64 snap_created, snap_highwater;
-	__le32 num_snaps;
-	__le64 snaps[];
+	__le64 snap_follows;
 } __attribute__ ((packed));
 
 
