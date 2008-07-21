@@ -152,6 +152,10 @@ inline bool operator<(const utime_t& a, const utime_t& b)
 {
   return (a.sec() < b.sec()) || (a.sec() == b.sec() && a.usec() < b.usec());
 }
+inline bool operator==(const utime_t& a, const utime_t& b)
+{
+  return a.sec() == b.sec() && a.usec() == b.usec();
+}
 
 // ostream
 inline std::ostream& operator<<(std::ostream& out, const utime_t& t)

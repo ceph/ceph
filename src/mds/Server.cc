@@ -1495,6 +1495,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
+  wrlocks.insert(&dn->dir->inode->nestlock); // also, wrlock on dir mtime
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
@@ -2068,7 +2069,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   if ((newi->inode.mode & S_IFMT) == 0)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty() - 1;
-  newi->inode.dirstat.rfiles = 1;
+  newi->inode.rstat.rfiles = 1;
 
   newi->projected_parent = dn;
   dn->first = newi->first = follows+1;
@@ -2113,7 +2114,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode |= S_IFDIR;
   newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty() - 1;
-  newi->inode.dirstat.rsubdirs = 1;
+  newi->inode.rstat.rsubdirs = 1;
 
   dn->first = newi->first = follows+1;
 
@@ -2161,7 +2162,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
   newi->inode.version = dn->pre_dirty() - 1;
-  newi->inode.dirstat.rfiles = 1;
+  newi->inode.rstat.rfiles = 1;
 
   dn->first = newi->first = follows+1;
 
@@ -2236,6 +2237,7 @@ void Server::handle_client_link(MDRequest *mdr)
     rdlocks.insert(&linktrace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
+  wrlocks.insert(&dn->dir->inode->nestlock);
   for (int i=0; i<(int)targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
@@ -2543,7 +2545,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   rollback.old_ctime = targeti->inode.ctime;   // we hold versionlock; no concorrent projections
   fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
-  rollback.old_dir_rctime = pf->fragstat.rctime;
+  rollback.old_dir_rctime = pf->rstat.rctime;
   rollback.was_inc = inc;
   ::encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
@@ -2676,9 +2678,10 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   pf->version = parent->pre_dirty();
   if (pf->fragstat.mtime == pi->ctime) {
     pf->fragstat.mtime = rollback.old_dir_mtime;
-    if (pf->fragstat.rctime == pi->ctime)
-      pf->fragstat.rctime = rollback.old_dir_rctime;
+    if (pf->rstat.rctime == pi->ctime)
+      pf->rstat.rctime = rollback.old_dir_rctime;
     mut->add_updated_scatterlock(&parent->get_inode()->dirlock);
+    mut->add_updated_scatterlock(&parent->get_inode()->nestlock);
   }
 
   // inode
@@ -2825,9 +2828,12 @@ void Server::handle_client_unlink(MDRequest *mdr)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
   wrlocks.insert(&dn->dir->inode->dirlock);
+  wrlocks.insert(&dn->dir->inode->nestlock);
   xlocks.insert(&in->linklock);
-  if (straydn)
+  if (straydn) {
     wrlocks.insert(&straydn->dir->inode->dirlock);
+    wrlocks.insert(&straydn->dir->inode->nestlock);
+  }
   if (in->is_dir())
     rdlocks.insert(&in->dirlock);   // to verify it's empty
 
@@ -3214,20 +3220,24 @@ void Server::handle_client_rename(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   // straydn?
-  if (straydn)
+  if (straydn) {
     wrlocks.insert(&straydn->dir->inode->dirlock);
+    wrlocks.insert(&straydn->dir->inode->nestlock);
+  }
 
   // rdlock sourcedir path, xlock src dentry
   for (int i=0; i<(int)srctrace.size()-1; i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   wrlocks.insert(&srcdn->dir->inode->dirlock);
+  wrlocks.insert(&srcdn->dir->inode->nestlock);
 
   // rdlock destdir path, xlock dest dentry
   for (int i=0; i<(int)desttrace.size(); i++)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
   wrlocks.insert(&destdn->dir->inode->dirlock);
+  wrlocks.insert(&destdn->dir->inode->nestlock);
 
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
@@ -3349,7 +3359,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
     if (srcdn->is_primary() &&
 	(srcdn->inode->is_anchored() || 
-	 (srcdn->inode->is_dir() && (srcdn->inode->inode.dirstat.ranchors ||
+	 (srcdn->inode->is_dir() && (srcdn->inode->inode.rstat.ranchors ||
 				     srcdn->inode->nested_anchors ||
 				     !mdcache->is_leaf_subtree(mdcache->get_subtree_root(srcdn->dir))))) &&
 	!mdr->more()->src_reanchor_atid) {
@@ -3501,6 +3511,7 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
 					 mdr->ls,
 					 mdr->more()->cap_imports, updated_scatterlocks);
   srcdn->inode->dirlock.clear_updated();  
+  srcdn->inode->nestlock.clear_updated();  
 
   // hack: force back to !auth and clean, temporarily
   srcdn->inode->state_clear(CInode::STATE_AUTH);
@@ -3599,13 +3610,13 @@ void Server::_rename_prepare(MDRequest *mdr,
   // sub off target
   if (destdn->is_auth() && !destdn->is_null())
     mdcache->predirty_journal_parents(mdr, metablob, destdn->inode, destdn->dir,
-				 (destdn->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
+				      (destdn->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
   
   // move srcdn
   int predirty_primary = (srcdn->is_primary() && srcdn->dir != destdn->dir) ? PREDIRTY_PRIMARY:0;
   int flags = predirty_dir | predirty_primary;
   if (srcdn->is_auth())
-    mdcache->predirty_journal_parents(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1);
+    mdcache->predirty_journal_parents(mdr, metablob, srcdn->inode, srcdn->dir, PREDIRTY_SHALLOW|flags, -1);
   if (destdn->is_auth())
     mdcache->predirty_journal_parents(mdr, metablob, srcdn->inode, destdn->dir, flags, 1);
 
@@ -3907,7 +3918,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   
   rollback.orig_src.dirfrag = srcdn->dir->dirfrag();
   rollback.orig_src.dirfrag_old_mtime = srcdn->dir->get_projected_fnode()->fragstat.mtime;
-  rollback.orig_src.dirfrag_old_rctime = srcdn->dir->get_projected_fnode()->fragstat.rctime;
+  rollback.orig_src.dirfrag_old_rctime = srcdn->dir->get_projected_fnode()->rstat.rctime;
   rollback.orig_src.dname = srcdn->name;
   if (srcdn->is_primary())
     rollback.orig_src.ino = srcdn->inode->ino();
@@ -3919,7 +3930,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   
   rollback.orig_dest.dirfrag = destdn->dir->dirfrag();
   rollback.orig_dest.dirfrag_old_mtime = destdn->dir->get_projected_fnode()->fragstat.mtime;
-  rollback.orig_dest.dirfrag_old_rctime = destdn->dir->get_projected_fnode()->fragstat.rctime;
+  rollback.orig_dest.dirfrag_old_rctime = destdn->dir->get_projected_fnode()->rstat.rctime;
   rollback.orig_dest.dname = destdn->name;
   if (destdn->is_primary())
     rollback.orig_dest.ino = destdn->inode->ino();
@@ -3931,7 +3942,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   if (straydn) {
     rollback.stray.dirfrag = straydn->dir->dirfrag();
     rollback.stray.dirfrag_old_mtime = straydn->dir->get_projected_fnode()->fragstat.mtime;
-    rollback.stray.dirfrag_old_rctime = straydn->dir->get_projected_fnode()->fragstat.rctime;
+    rollback.stray.dirfrag_old_rctime = straydn->dir->get_projected_fnode()->rstat.rctime;
     rollback.stray.dname = straydn->name;
   }
   ::encode(rollback, mdr->more()->rollback_bl);
@@ -4066,7 +4077,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 }
 
 void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, utime_t ctime, 
-			  bool isdir, int linkunlink, bool primary, frag_info_t &dirstat)
+			  bool isdir, int linkunlink, bool primary, frag_info_t &dirstat, nest_info_t &rstat)
 {
   fnode_t *pf;
   if (dir->is_auth()) {
@@ -4078,22 +4089,24 @@ void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, ut
 
   if (isdir) {
     pf->fragstat.nsubdirs += linkunlink;
-    pf->fragstat.rsubdirs += linkunlink;
+    pf->rstat.rsubdirs += linkunlink;
   } else {
     pf->fragstat.nfiles += linkunlink;
-    pf->fragstat.rfiles += linkunlink;
+    pf->rstat.rfiles += linkunlink;
   }    
   if (primary) {
-    pf->fragstat.rbytes += linkunlink * dirstat.rbytes;
-    pf->fragstat.rfiles += linkunlink * dirstat.rfiles;
-    pf->fragstat.rsubdirs += linkunlink * dirstat.rsubdirs;
-    pf->fragstat.ranchors += linkunlink * dirstat.ranchors;
+    pf->rstat.rbytes += linkunlink * rstat.rbytes;
+    pf->rstat.rfiles += linkunlink * rstat.rfiles;
+    pf->rstat.rsubdirs += linkunlink * rstat.rsubdirs;
+    pf->rstat.ranchors += linkunlink * rstat.ranchors;
+    pf->rstat.rsnaprealms += linkunlink * rstat.rsnaprealms;
   }
   if (pf->fragstat.mtime == ctime) {
     pf->fragstat.mtime = r.dirfrag_old_mtime;
-    if (pf->fragstat.rctime == ctime)
-      pf->fragstat.rctime = r.dirfrag_old_rctime;
+    if (pf->rstat.rctime == ctime)
+      pf->rstat.rctime = r.dirfrag_old_rctime;
     mut->add_updated_scatterlock(&dir->get_inode()->dirlock);
+    mut->add_updated_scatterlock(&dir->get_inode()->nestlock);
   }
 }
 
@@ -4187,7 +4200,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     pi->ctime = rollback.orig_src.old_ctime;
 
   _rollback_repair_dir(mut, srcdir, rollback.orig_src, rollback.ctime,
-		       in->is_dir(), 1, srcdn->is_primary(), pi->dirstat);
+		       in->is_dir(), 1, srcdn->is_primary(), pi->dirstat, pi->rstat);
 
   // repair dest
   CInode *target = 0;
@@ -4214,16 +4227,17 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   }
   if (target)
     _rollback_repair_dir(mut, destdir, rollback.orig_dest, rollback.ctime,
-			 target->is_dir(), 0, destdn->is_primary(), ti->dirstat);
+			 target->is_dir(), 0, destdn->is_primary(), ti->dirstat, ti->rstat);
   else {
     frag_info_t blah;
-    _rollback_repair_dir(mut, destdir, rollback.orig_dest, rollback.ctime, 0, -1, 0, blah);
+    nest_info_t blah2;
+    _rollback_repair_dir(mut, destdir, rollback.orig_dest, rollback.ctime, 0, -1, 0, blah, blah2);
   }
 
   // repair stray
   if (straydir)
     _rollback_repair_dir(mut, straydir, rollback.stray, rollback.ctime,
-			 target->is_dir(), -1, true, ti->dirstat);
+			 target->is_dir(), -1, true, ti->dirstat, ti->rstat);
 
   dout(-10) << "  srcdn back to " << *srcdn << dendl;
   dout(-10) << "   srci back to " << *srcdn->inode << dendl;
@@ -4703,7 +4717,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
   in->inode.max_size = in->get_layout_size_increment();
-  in->inode.dirstat.rfiles = 1;
+  in->inode.rstat.rfiles = 1;
 
   in->projected_parent = dn;
   dn->first = in->first = follows+1;

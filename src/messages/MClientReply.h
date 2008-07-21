@@ -95,6 +95,7 @@ struct InodeStat {
   version_t time_warp_seq;
 
   frag_info_t dirstat;
+  nest_info_t rstat;
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
@@ -128,10 +129,11 @@ struct InodeStat {
     memset(&dirstat, 0, sizeof(dirstat));
     dirstat.nfiles = e.files;
     dirstat.nsubdirs = e.subdirs;
-    dirstat.rctime.decode_timeval(&e.rctime);
-    dirstat.rbytes = e.rbytes;
-    dirstat.rfiles = e.rfiles;
-    dirstat.rsubdirs = e.rsubdirs;
+
+    rstat.rctime.decode_timeval(&e.rctime);
+    rstat.rbytes = e.rbytes;
+    rstat.rfiles = e.rfiles;
+    rstat.rsubdirs = e.rsubdirs;
 
     int n = e.fragtree.nsplits;
     while (n) {

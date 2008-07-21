@@ -99,9 +99,9 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " s=" << dir.fnode.fragstat.size() 
       << "=" << dir.fnode.fragstat.nfiles
       << "+" << dir.fnode.fragstat.nsubdirs;
-  out << " rb=" << dir.fnode.fragstat.rbytes << "/" << dir.fnode.accounted_fragstat.rbytes;
-  out << " rf=" << dir.fnode.fragstat.rfiles << "/" << dir.fnode.accounted_fragstat.rfiles;
-  out << " rd=" << dir.fnode.fragstat.rsubdirs << "/" << dir.fnode.accounted_fragstat.rsubdirs;
+  out << " rb=" << dir.fnode.rstat.rbytes << "/" << dir.fnode.accounted_rstat.rbytes;
+  out << " rf=" << dir.fnode.rstat.rfiles << "/" << dir.fnode.accounted_rstat.rfiles;
+  out << " rd=" << dir.fnode.rstat.rsubdirs << "/" << dir.fnode.accounted_rstat.rsubdirs;
 
   out << " hs=" << dir.get_num_head_items() << "+" << dir.get_num_head_null();
   out << ",ss=" << dir.get_num_snap_items() << "+" << dir.get_num_snap_null();
@@ -556,11 +556,13 @@ void CDir::steal_dentry(CDentry *dn)
 	fnode.fragstat.nsubdirs++;
       else
 	fnode.fragstat.nfiles++;
-      fnode.fragstat.rbytes += pi->accounted_dirstat.rbytes;
-      fnode.fragstat.rfiles += pi->accounted_dirstat.rfiles;
-      fnode.fragstat.rsubdirs += pi->accounted_dirstat.rsubdirs;
-      if (pi->accounted_dirstat.rctime > fnode.fragstat.rctime)
-	fnode.fragstat.rctime = pi->accounted_dirstat.rctime;
+      fnode.rstat.rbytes += pi->accounted_rstat.rbytes;
+      fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
+      fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
+      fnode.rstat.ranchors += pi->accounted_rstat.ranchors;
+      fnode.rstat.rsnaprealms += pi->accounted_rstat.ranchors;
+      if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
+	fnode.rstat.rctime = pi->accounted_rstat.rctime;
     } else if (dn->is_remote()) {
       if (dn->get_remote_d_type() == (S_IFDIR >> 12))
 	fnode.fragstat.nsubdirs++;
@@ -625,13 +627,12 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   
   double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
 
-  frag_info_t olddiff;  // old += f - af;
-  bool changed_mtime;
-  dout(10) << "           fragstat " << fnode.fragstat << dendl;
-  dout(10) << " accounted_fragstat " << fnode.accounted_fragstat << dendl;
+  nest_info_t olddiff;  // old += f - af;
+  dout(10) << "           rstat " << fnode.rstat << dendl;
+  dout(10) << " accounted_rstat " << fnode.accounted_rstat << dendl;
   olddiff.zero();
-  olddiff.take_diff(fnode.fragstat, fnode.accounted_fragstat, changed_mtime);
-  dout(10) << "            olddiff " << olddiff << dendl;
+  olddiff.take_diff(fnode.rstat, fnode.accounted_rstat);
+  dout(10) << "         olddiff " << olddiff << dendl;
 
   // create subfrag dirs
   int n = 0;
@@ -682,9 +683,9 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   // give any outstanding frag stat differential to first frag
   //   af[0] -= olddiff
   dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
-  frag_info_t zero;
+  nest_info_t zero;
   zero.zero();
-  subfrags[0]->fnode.accounted_fragstat.take_diff(zero, olddiff, changed_mtime);
+  subfrags[0]->fnode.accounted_rstat.take_diff(zero, olddiff);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters, replay);

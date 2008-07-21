@@ -103,12 +103,12 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " nl=" << in.inode.nlink;
   }
 
-  out << " rb=" << in.inode.dirstat.rbytes;
-  if (in.is_projected()) out << "/" << in.inode.accounted_dirstat.rbytes;
-  out << " rf=" << in.inode.dirstat.rfiles;
-  if (in.is_projected()) out << "/" << in.inode.accounted_dirstat.rfiles;
-  out << " rd=" << in.inode.dirstat.rsubdirs;
-  if (in.is_projected()) out << "/" << in.inode.accounted_dirstat.rsubdirs;
+  out << " rb=" << in.inode.rstat.rbytes;
+  if (in.is_projected()) out << "/" << in.inode.accounted_rstat.rbytes;
+  out << " rf=" << in.inode.rstat.rfiles;
+  if (in.is_projected()) out << "/" << in.inode.accounted_rstat.rfiles;
+  out << " rd=" << in.inode.rstat.rsubdirs;
+  if (in.is_projected()) out << "/" << in.inode.accounted_rstat.rsubdirs;
   
   // locks
   out << " " << in.authlock;
@@ -117,6 +117,7 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " " << in.dirfragtreelock;
     out << " " << in.dirlock;
     out << " " << in.snaplock;
+    out << " " << in.nestlock;
   } else
     out << " " << in.filelock;
   out << " " << in.xattrlock;
@@ -596,6 +597,30 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     }
     break;
 
+  case CEPH_LOCK_INEST:
+     {
+      dout(15) << "encode_lock_state inode.rstat is " << inode.rstat << dendl;
+      ::encode(inode.rstat, bl);  // only meaningful if i am auth.
+      bufferlist tmp;
+      __u32 n = 0;
+      for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	   p != dirfrags.end();
+	   ++p)
+	if (is_auth() || p->second->is_auth()) {
+	  dout(15) << "encode_lock_state rstat for " << *p->second << dendl;
+	  dout(20) << "             rstat " << p->second->fnode.rstat << dendl;
+	  dout(20) << "   accounted_rstat " << p->second->fnode.accounted_rstat << dendl;
+	  frag_t fg = p->second->dirfrag().frag;
+	  ::encode(fg, tmp);
+	  ::encode(p->second->fnode.rstat, tmp);
+	  ::encode(p->second->fnode.accounted_rstat, tmp);
+	  n++;
+	}
+      ::encode(n, bl);
+      bl.claim_append(tmp);
+    }
+    break;
+    
   case CEPH_LOCK_IXATTR:
     ::encode(xattrs, bl);
     break;
@@ -603,6 +628,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_ISNAP:
     encode_snap(bl);
     break;
+
   
   default:
     assert(0);
@@ -720,6 +746,52 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     }
     break;
 
+  case CEPH_LOCK_INEST:
+    {
+      nest_info_t rstat;
+      ::decode(rstat, p);
+      if (!is_auth()) {
+	dout(10) << " taking inode rstat " << rstat << " for " << *this << dendl;
+	inode.rstat = rstat;    // take inode summation if replica
+      }
+      __u32 n;
+      ::decode(n, p);
+      dout(10) << " ...got " << n << " rstats on " << *this << dendl;
+      while (n--) {
+	frag_t fg;
+	nest_info_t rstat;
+	nest_info_t accounted_rstat;
+	::decode(fg, p);
+	::decode(rstat, p);
+	::decode(accounted_rstat, p);
+	dout(10) << fg << " got changed rstat " << rstat << dendl;
+	dout(20) << fg << "   accounted_rstat " << accounted_rstat << dendl;
+
+	CDir *dir = get_dirfrag(fg);
+	if (is_auth()) {
+	  assert(dir);                // i am auth; i had better have this dir open
+	  dout(10) << " " << fg << "           rstat " << rstat << " on " << *dir << dendl;
+	  dout(20) << " " << fg << " accounted_rstat " << accounted_rstat << dendl;
+	  dir->fnode.rstat = rstat;
+	  dir->fnode.accounted_rstat = accounted_rstat;
+	  if (!(rstat == accounted_rstat))
+	    dirlock.set_updated();
+	} else {
+	  if (dir &&
+	      dir->is_auth() &&
+	      !(dir->fnode.accounted_rstat == rstat)) {
+	    dout(10) << " setting accounted_rstat " << rstat << " and setting dirty bit on "
+		     << *dir << dendl;
+	    fnode_t *pf = dir->get_projected_fnode();
+	    pf->accounted_rstat = rstat;
+	    if (dir->is_auth())
+	      dir->_set_dirty_flag();	    // bit of a hack
+	  }
+	}
+      }
+    }
+    break;
+
   case CEPH_LOCK_IXATTR:
     ::decode(xattrs, p);
     break;
@@ -739,6 +811,10 @@ void CInode::clear_dirty_scattered(int type)
   switch (type) {
   case CEPH_LOCK_IDIR:
     xlist_dirty_dirfrag_dir.remove_myself();
+    break;
+
+  case CEPH_LOCK_INEST:
+    xlist_dirty_dirfrag_nest.remove_myself();
     break;
 
   case CEPH_LOCK_IDFT:
@@ -786,6 +862,34 @@ void CInode::finish_scatter_gather_update(int type)
       assert(pi->dirstat.size() >= 0);
       assert(pi->dirstat.nfiles >= 0);
       assert(pi->dirstat.nsubdirs >= 0);
+    }
+    break;
+
+  case CEPH_LOCK_INEST:
+    {
+      // adjust summation
+      assert(is_auth());
+      inode_t *pi = get_projected_inode();
+      dout(20) << "         orig rstat " << pi->rstat << dendl;
+      for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	   p != dirfrags.end();
+	   p++) {
+	fnode_t *pf = p->second->get_projected_fnode();
+	if (pf->accounted_rstat.version == pi->rstat.version) {
+	  dout(20) << "  frag " << p->first << " " << *p->second << dendl;
+	  dout(20) << "             rstat " << pf->rstat << dendl;
+	  dout(20) << "   accounted_rstat " << pf->rstat << dendl;
+	  pi->rstat.take_diff(pf->rstat, 
+			      pf->accounted_rstat);
+	} else {
+	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
+	  dout(20) << "    ignoring OLD accounted_rstat " << pf->rstat << dendl;
+	}
+      }
+      pi->rstat.version++;
+      dout(20) << "        final rstat " << pi->rstat << dendl;
+      assert(pi->rstat.rfiles >= 0);
+      assert(pi->rstat.rsubdirs >= 0);
     }
     break;
 
@@ -1081,10 +1185,10 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
   
   e.files = i->dirstat.nfiles;
   e.subdirs = i->dirstat.nsubdirs;
-  i->dirstat.rctime.encode_timeval(&e.rctime);
-  e.rbytes = i->dirstat.rbytes;
-  e.rfiles = i->dirstat.rfiles;
-  e.rsubdirs = i->dirstat.rsubdirs;
+  i->rstat.rctime.encode_timeval(&e.rctime);
+  e.rbytes = i->rstat.rbytes;
+  e.rfiles = i->rstat.rfiles;
+  e.rsubdirs = i->rstat.rsubdirs;
   
   e.rdev = i->rdev;
   e.fragtree.nsplits = dirfragtree._splits.size();
@@ -1129,6 +1233,7 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(dirlock, bl);
   ::encode(xattrlock, bl);
   ::encode(snaplock, bl);
+  ::encode(nestlock, bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -1173,4 +1278,5 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(dirlock, p);
   ::decode(xattrlock, p);
   ::decode(snaplock, p);
+  ::decode(nestlock, p);
 }

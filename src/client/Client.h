@@ -788,7 +788,7 @@ protected:
   // find dentry based on filepath
   Dentry *lookup(const filepath& path, snapid_t snap=CEPH_NOSNAP);
 
-  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0);
+  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
 
   
   // trace generation

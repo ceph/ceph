@@ -532,10 +532,13 @@ void MDCache::eval_subtree_root(CDir *dir)
   if (dir->inode->is_auth() &&
       dir->inode->dirlock.is_stable()) {
     // force the issue a bit
-    if (!dir->inode->is_frozen())
+    if (!dir->inode->is_frozen()) {
       mds->locker->scatter_eval(&dir->inode->dirlock);
-    else
+      mds->locker->scatter_eval(&dir->inode->nestlock);
+    } else {
       mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+      mds->locker->try_scatter_eval(&dir->inode->nestlock);  // ** may or may not be auth_pinned **
+    }
   }
   
 }
@@ -933,7 +936,7 @@ int MDCache::num_subtrees_fullnonauth()
 
 
 // ===================================
-// journal helpers
+// journal and snap/cow helpers
 
 /*
  * find first inode in cache that follows given snapid.  otherwise, return current.
@@ -1011,13 +1014,8 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
 {
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
-  // nothing to cow on a null dentry
+  // nothing to cow on a null dentry, fix caller
   assert(!dn->is_null());
-
-  /*
-   * normally, we write to the head, and make a clone of ther previous
-   * dentry+inode state.  unless the follow snapid specified.
-   */
 
   if (dn->is_primary() && dn->inode->is_multiversion()) {
     // multiversion inode.
@@ -1034,6 +1032,9 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     old.first = in->first;
     old.inode = *in->get_previous_projected_inode();
     old.xattrs = in->xattrs;
+
+    //if (!(old.inode.dirstat == old.inode.accounted_dirstat))
+    //in->dirty_old_dirstats.insert(follows);
     
     in->first = follows+1;
     
@@ -1106,7 +1107,8 @@ inode_t *MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t 
  */
 void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
-				       int flags, int linkunlink)
+				       int flags, int linkunlink,
+				       snapid_t cfollows)
 {
   bool primary_dn = flags & PREDIRTY_PRIMARY;
   bool do_parent_mtime = flags & PREDIRTY_DIR;
@@ -1121,6 +1123,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	   << " linkunlink=" <<  linkunlink
 	   << (primary_dn ? " primary_dn":" remote_dn")
 	   << (shallow ? " SHALLOW":"")
+	   << " follows " << cfollows
 	   << " " << *in << dendl;
 
   if (!parent) {
@@ -1136,9 +1139,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
   inode_t *curi = in->get_projected_inode();
 
-  __s64 drbytes = 1, drfiles = 0, drsubdirs = 0, dranchors = 0, drsnaprealms = 0;
-  utime_t rctime;
-
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
   CInode *cur = in;
@@ -1149,11 +1149,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     // opportunistically adjust parent dirfrag
     CInode *pin = parent->get_inode();
 
-    if (do_parent_mtime || linkunlink) {
-      assert(mut->wrlocks.count(&pin->dirlock) ||
-	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
-    }
-
     // inode -> dirfrag
     mut->auth_pin(parent);
     mut->add_projected_fnode(parent);
@@ -1161,60 +1156,75 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     fnode_t *pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
 
-    if (do_parent_mtime) {
-      pf->fragstat.mtime = mut->now;
-      if (mut->now > pf->fragstat.rctime) {
-	dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
-	pf->fragstat.rctime = mut->now;
-      } else {
-	dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
+    if (do_parent_mtime || linkunlink) {
+      assert(mut->wrlocks.count(&pin->dirlock) ||
+	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
+
+      if (do_parent_mtime) {
+	pf->fragstat.mtime = mut->now;
+	if (mut->now > pf->rstat.rctime) {
+	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
+	  pf->rstat.rctime = mut->now;
+	} else {
+	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
+	}
+      }
+      if (linkunlink) {
+	dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
+	if (in->is_dir()) {
+	  pf->fragstat.nsubdirs += linkunlink;
+	  pf->rstat.rsubdirs += linkunlink;
+	} else {
+ 	  pf->fragstat.nfiles += linkunlink;
+ 	  pf->rstat.rfiles += linkunlink;
+	}
       }
     }
-    if (linkunlink) {
-      dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
-      if (in->is_dir())
-	pf->fragstat.nsubdirs += linkunlink;
-      else
-	pf->fragstat.nfiles += linkunlink;
+
+
+    /*
+    if (follows == CEPH_NOSNAP || follows == 0)
+      follows = parent->inode->find_snaprealm()->get_latest_snap();
+
+    // cow fnode?
+    snapid_t follows = cfollows;
+    if (follows >= first &&
+	!(pf->fragstat == pf->accounted_fragstat)) {
+      dout(10) << " cow fnode, follows " << follows << dendl;
+      dirty_old_fnodes[follows] = parent->get_projected_fnode();
     }
-    if (primary_dn) {
+    first = follows+1;
+    */
+    // which fnode to write to?
+    //fnode_t *pf = 0;
+    /* fixme
+    if (dirty_old_fnodes.size() &&
+	dirty_old_fnodes.rbegin()->first > follows) {
+      map<snapid_t,fnode_t>::iterator p = dirty_old_fnodes.upper_bound(follows);
+      dout(10) << " cloning dirty_old_fnode " << p->first << " to follows " << follows << dendl;
+      dirty_old_fnodes[follows] = p->second;
+      pf = &p->fragstat;
+      }
+    }
+    */
+    //if (!pf) {
+
+    if (primary_dn) { 
+      nest_info_t delta;
+      delta.zero();
       if (linkunlink == 0) {
-	drbytes = curi->dirstat.rbytes - curi->accounted_dirstat.rbytes;
-	drfiles = curi->dirstat.rfiles - curi->accounted_dirstat.rfiles;
-	drsubdirs = curi->dirstat.rsubdirs - curi->accounted_dirstat.rsubdirs;
-	dranchors = curi->dirstat.ranchors - curi->accounted_dirstat.ranchors;
-	drsnaprealms = curi->dirstat.rsnaprealms - curi->accounted_dirstat.rsnaprealms;
+	delta.add(curi->rstat);
+	delta.sub(curi->accounted_rstat);
       } else if (linkunlink < 0) {
-	drbytes = 0 - curi->accounted_dirstat.rbytes;
-	drfiles = 0 - curi->accounted_dirstat.rfiles;
-	drsubdirs = 0 - curi->accounted_dirstat.rsubdirs;
-	dranchors = 0 - curi->accounted_dirstat.ranchors;
-	drsnaprealms = 0 - curi->accounted_dirstat.rsnaprealms;
+	delta.sub(curi->accounted_rstat);
       } else {
-	drbytes = curi->dirstat.rbytes;
-	drfiles = curi->dirstat.rfiles;
-	drsubdirs = curi->dirstat.rsubdirs;
-	dranchors = curi->dirstat.ranchors;
-	drsnaprealms = curi->dirstat.rsnaprealms;
+	delta.add(curi->rstat);
       }
-      rctime = MAX(curi->ctime, curi->dirstat.rctime);
 
-      dout(10) << "predirty_journal_parents delta "
-	       << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
-	       << *parent << dendl;
-      pf->fragstat.rbytes += drbytes;
-      pf->fragstat.rfiles += drfiles;
-      pf->fragstat.rsubdirs += drsubdirs;
-      pf->fragstat.ranchors += dranchors;
-      pf->fragstat.rsnaprealms += drsnaprealms;
-      pf->fragstat.rctime = rctime;
-    
-      curi->accounted_dirstat = curi->dirstat;
-    } else {
-      dout(10) << "predirty_journal_parents no delta (remote dentry, or rename within same dir) in " << *parent << dendl;
-      pf->fragstat.rfiles += linkunlink;
+      dout(10) << "predirty_journal_parents delta " << delta << " " << *parent << dendl;
+      pf->rstat.add(delta);
+      curi->accounted_rstat = curi->rstat;
     }
-
 
     // stop?
     if (pin->is_base())
@@ -1226,22 +1236,25 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       stop = true;
     }
     if (!stop &&
-	mut->wrlocks.count(&pin->dirlock) == 0 &&
+	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->can_auth_pin() ||
 	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
-	 !mds->locker->scatter_wrlock_try(&pin->dirlock, mut, false))) {  // ** do not initiate.. see above comment **
-      dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->dirlock
+	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false))) {  // ** do not initiate.. see above comment **
+      dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
       stop = true;
     }
     if (stop) {
-      dout(10) << "predirty_journal_parents stop.  marking dirlock on " << *pin << dendl;
-      mds->locker->mark_updated_scatterlock(&pin->dirlock);
-      mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
-      mut->add_updated_scatterlock(&pin->dirlock);
+      dout(10) << "predirty_journal_parents stop.  marking nestlock on " << *pin << dendl;
+      mds->locker->mark_updated_scatterlock(&pin->nestlock);
+      mut->ls->dirty_dirfrag_nest.push_back(&pin->xlist_dirty_dirfrag_nest);
+      mut->add_updated_scatterlock(&pin->nestlock);
       break;
     }
     mds->locker->local_wrlock_grab(&pin->versionlock, mut);
+
+    assert(mut->wrlocks.count(&pin->nestlock) ||
+	   mut->is_slave());
 
     // dirfrag -> diri
     mut->auth_pin(pin);
@@ -1250,14 +1263,27 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
-    pi->dirstat.version++;
-    dout(15) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
-    dout(15) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
-    bool touched_mtime = false;
-    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
-    if (touched_mtime)
-      pi->mtime = pi->ctime = pi->dirstat.mtime;
-    dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+
+    // dirstat
+    if (do_parent_mtime || linkunlink) {
+      pi->dirstat.version++;
+      dout(15) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
+      dout(15) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
+      bool touched_mtime = false;
+      pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      if (touched_mtime)
+	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+    }
+
+    // rstat
+    if (primary_dn) {
+      pi->rstat.version++;
+      dout(15) << "predirty_journal_parents take_diff " << pf->rstat << dendl;
+      dout(15) << "predirty_journal_parents         - " << pf->accounted_rstat << dendl;
+      pi->rstat.take_diff(pf->rstat, pf->accounted_rstat);
+      dout(15) << "predirty_journal_parents     gives " << pi->rstat << " on " << *pin << dendl;
+    }
 
     // next parent!
     cur = pin;
@@ -2186,7 +2212,10 @@ void MDCache::rejoin_send_rejoins()
 				    root->linklock.get_state(),
 				    root->dirfragtreelock.get_state(),
 				    root->filelock.get_state(),
-				    root->dirlock.get_state());
+				    root->dirlock.get_state(),
+				    root->nestlock.get_state(),
+				    root->snaplock.get_state(),
+				    root->xattrlock.get_state());
       }
       if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
     	p->second->add_weak_inode(in->ino());
@@ -2196,7 +2225,10 @@ void MDCache::rejoin_send_rejoins()
 				    in->linklock.get_state(),
 				    in->dirfragtreelock.get_state(),
 				    in->filelock.get_state(),
-				    in->dirlock.get_state());
+				    in->dirlock.get_state(),
+				    in->nestlock.get_state(),
+				    in->snaplock.get_state(),
+				    in->xattrlock.get_state());
       }
     }
   }  
@@ -2326,7 +2358,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->linklock.get_state(),
 				 in->dirfragtreelock.get_state(),
 				 in->filelock.get_state(),
-				 in->dirlock.get_state());
+				 in->dirlock.get_state(),
+				 in->nestlock.get_state(),
+				 in->snaplock.get_state(),
+				 in->xattrlock.get_state());
 	in->get_nested_dirfrags(nested);
       }
     }
@@ -2519,7 +2554,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 			      in->linklock.get_replica_state(), 
 			      in->dirfragtreelock.get_replica_state(), 
 			      in->filelock.get_replica_state(),
-			      in->dirlock.get_replica_state());
+			      in->dirlock.get_replica_state(),
+			      in->nestlock.get_replica_state(),
+			      in->snaplock.get_replica_state(),
+			      in->xattrlock.get_replica_state());
       }
     }
   }
@@ -2543,7 +2581,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 			    in->linklock.get_replica_state(), 
 			    in->dirfragtreelock.get_replica_state(), 
 			    in->filelock.get_replica_state(),
-			    in->dirlock.get_replica_state());
+			    in->dirlock.get_replica_state(),
+			    in->nestlock.get_replica_state(),
+			    in->snaplock.get_replica_state(),
+			    in->xattrlock.get_replica_state());
   }
 
   if (survivor) {
@@ -3223,7 +3264,10 @@ void MDCache::rejoin_send_acks()
 					  in->linklock.get_replica_state(),
 					  in->dirfragtreelock.get_replica_state(),
 					  in->filelock.get_replica_state(),
-					  in->dirlock.get_replica_state());
+					  in->dirlock.get_replica_state(),
+					  in->nestlock.get_replica_state(),
+					  in->snaplock.get_replica_state(),
+					  in->xattrlock.get_replica_state());
 	}
 	
 	// subdirs in this subtree?
@@ -3243,7 +3287,10 @@ void MDCache::rejoin_send_acks()
 				      root->linklock.get_replica_state(),
 				      root->dirfragtreelock.get_replica_state(),
 				      root->filelock.get_replica_state(),
-				      root->dirlock.get_replica_state());
+				      root->dirlock.get_replica_state(),
+				      root->nestlock.get_replica_state(),
+				      root->snaplock.get_replica_state(),
+				      root->xattrlock.get_replica_state());
     }
   if (stray)
     for (map<int,int>::iterator r = stray->replicas_begin();
@@ -3255,7 +3302,10 @@ void MDCache::rejoin_send_acks()
 				      stray->linklock.get_replica_state(),
 				      stray->dirfragtreelock.get_replica_state(),
 				      stray->filelock.get_replica_state(),
-				      stray->dirlock.get_replica_state());
+				      stray->dirlock.get_replica_state(),
+				      stray->nestlock.get_replica_state(),
+				      stray->snaplock.get_replica_state(),
+				      stray->xattrlock.get_replica_state());
     }
 
   // send acks
@@ -5445,11 +5495,11 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   inode_t *pi = in->project_inode();
   if (add) {
     pi->anchored = true;
-    pi->dirstat.ranchors++;
+    pi->rstat.ranchors++;
     in->parent->adjust_nested_anchors(1);
   } else {
     pi->anchored = false;
-    pi->dirstat.ranchors--;
+    pi->rstat.ranchors--;
     in->parent->adjust_nested_anchors(-1);
   }
   pi->version = in->pre_dirty();
@@ -5529,7 +5579,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
 
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
-  pi->dirstat.rsnaprealms++;
+  pi->rstat.rsnaprealms++;
 
   SnapRealm t(this, in);
   t.created = mdr->more()->stid;
@@ -7029,6 +7079,11 @@ void MDCache::fragment_stored(MDRequest *mdr)
   mds->locker->mark_updated_scatterlock(&diri->dirlock);
   mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
   mdr->add_updated_scatterlock(&diri->dirlock);
+
+  // dirlock
+  mds->locker->mark_updated_scatterlock(&diri->nestlock);
+  mdr->ls->dirty_dirfrag_nest.push_back(&diri->xlist_dirty_dirfrag_nest);
+  mdr->add_updated_scatterlock(&diri->nestlock);
 
   // journal new dirfrag fragstats for each new fragment.
   for (list<CDir*>::iterator p = resultfrags.begin();

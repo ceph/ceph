@@ -139,6 +139,12 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     if (!gather) gather = new C_Gather;
     mds->locker->scatter_nudge(&in->dirfragtreelock, gather->new_sub());
   }
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->locker->scatter_nudge(&in->nestlock, gather->new_sub());
+  }
 
   // open files
   if (!open_files.empty()) {

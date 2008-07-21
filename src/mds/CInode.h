@@ -118,6 +118,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
   static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
+  static const int WAIT_NESTLOCK_OFFSET        = 4 + 7*SimpleLock::WAIT_BITS;
 
   static const int WAIT_ANY_MASK	= (0xffffffff);
 
@@ -137,8 +138,9 @@ class CInode : public MDSCacheObject {
   SnapRealm        *snaprealm;
 
   SnapRealm        *containing_realm;
-  snapid_t          first, last;          // last=0 => multiversion or head.
+  snapid_t          first, last;
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
+  set<snapid_t> dirty_old_dirstats;
 
   bool is_multiversion() { return snaprealm || inode.is_dir(); }
   snapid_t get_oldest_snap();
@@ -233,6 +235,7 @@ public:
   xlist<CInode*>::item xlist_caps;
   xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
+  xlist<CInode*>::item xlist_dirty_dirfrag_nest;
   xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
   xlist<CInode*>::item xlist_purging_inode;
 
@@ -275,6 +278,7 @@ private:
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_caps(this), xlist_open_file(this), 
     xlist_dirty_dirfrag_dir(this), 
+    xlist_dirty_dirfrag_nest(this), 
     xlist_dirty_dirfrag_dirfragtree(this), 
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
@@ -286,7 +290,8 @@ private:
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
     xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
-    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET)
+    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
+    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET)
   {
     memset(&inode, 0, sizeof(inode));
     state = 0;  
@@ -382,6 +387,7 @@ public:
   ScatterLock dirlock;
   SimpleLock xattrlock;
   SimpleLock snaplock;
+  ScatterLock nestlock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -392,6 +398,7 @@ public:
     case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
     case CEPH_LOCK_ISNAP: return &snaplock;
+    case CEPH_LOCK_INEST: return &nestlock;
     }
     return 0;
   }
@@ -567,6 +574,7 @@ public:
     dirlock.replicate_relax();
     xattrlock.replicate_relax();
     snaplock.replicate_relax();
+    nestlock.replicate_relax();
   }
 
 
@@ -680,6 +688,7 @@ class CInodeDiscover {
   __u32      dirlock_state;
   __u32      xattrlock_state;
   __u32      snaplock_state;
+  __u32      nestlock_state;
 
  public:
   CInodeDiscover() {}
@@ -698,6 +707,7 @@ class CInodeDiscover {
     dirlock_state = in->dirlock.get_replica_state();
     xattrlock_state = in->xattrlock.get_replica_state();
     snaplock_state = in->snaplock.get_replica_state();
+    nestlock_state = in->nestlock.get_replica_state();
   }
   CInodeDiscover(bufferlist::iterator &p) {
     decode(p);
@@ -723,6 +733,7 @@ class CInodeDiscover {
     in->dirlock.set_state(dirlock_state);
     in->xattrlock.set_state(xattrlock_state);
     in->snaplock.set_state(snaplock_state);
+    in->nestlock.set_state(nestlock_state);
   }
   
   void encode(bufferlist &bl) const {
@@ -738,6 +749,7 @@ class CInodeDiscover {
     ::encode(dirlock_state, bl);
     ::encode(xattrlock_state, bl);
     ::encode(snaplock_state, bl);
+    ::encode(nestlock_state, bl);
   }
 
   void decode(bufferlist::iterator &p) {
@@ -753,6 +765,7 @@ class CInodeDiscover {
     ::decode(dirlock_state, p);
     ::decode(xattrlock_state, p);
     ::decode(snaplock_state, p);
+    ::decode(nestlock_state, p);
   }  
 
 };

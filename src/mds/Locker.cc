@@ -348,6 +348,7 @@ void Locker::eval_gather(SimpleLock *lock)
     return file_eval_gather((FileLock*)lock);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_eval_gather((ScatterLock*)lock);
   default:
     return simple_eval_gather(lock);
@@ -361,6 +362,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
     return file_rdlock_start((FileLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_rdlock_start((ScatterLock*)lock, mut);
   default:
     return simple_rdlock_start(lock, mut);
@@ -374,6 +376,7 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
     return file_rdlock_finish((FileLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_rdlock_finish((ScatterLock*)lock, mut);
   default:
     return simple_rdlock_finish(lock, mut);
@@ -385,6 +388,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_wrlock_start((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mut);
@@ -401,6 +405,7 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_wrlock_finish((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_finish((LocalLock*)lock, mut);
@@ -420,6 +425,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     return local_xlock_start((LocalLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_xlock_start((ScatterLock*)lock, mut);
   default:
     return simple_xlock_start(lock, mut);
@@ -435,6 +441,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
     return local_xlock_finish((LocalLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     return scatter_xlock_finish((ScatterLock*)lock, mut);
   default:
     return simple_xlock_finish(lock, mut);
@@ -878,7 +885,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
     dout(10) << "check_inode_max_size also forcing size " 
 	     << pi->size << " -> " << new_size << dendl;
     pi->size = new_size;
-    pi->dirstat.rbytes = new_size;
+    pi->rstat.rbytes = new_size;
   }
 
   EOpen *le = new EOpen(mds->mdlog);
@@ -1118,7 +1125,7 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
       dout(7) << "  size " << pi->size << " -> " << size
 	      << " for " << *in << dendl;
       pi->size = size;
-      pi->dirstat.rbytes = size;
+      pi->rstat.rbytes = size;
     }
     if (dirty_atime) {
       dout(7) << "  atime " << pi->atime << " -> " << atime
@@ -1134,8 +1141,7 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     mut->ls = mds->mdlog->get_current_segment();
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
     mut->auth_pin(in);
-    mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-
+    mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
     mdcache->journal_dirty_inode(&le->metablob, in, follows);
 
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
@@ -1336,6 +1342,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IFILE:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_ISNAP:
     {
@@ -1350,6 +1357,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       case CEPH_LOCK_IDFT: return &in->dirfragtreelock;
       case CEPH_LOCK_IFILE: return &in->filelock;
       case CEPH_LOCK_IDIR: return &in->dirlock;
+      case CEPH_LOCK_INEST: return &in->nestlock;
       case CEPH_LOCK_IXATTR: return &in->xattrlock;
       case CEPH_LOCK_ISNAP: return &in->snaplock;
       }
@@ -1390,6 +1398,7 @@ void Locker::handle_lock(MLock *m)
     
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_INEST:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;
 

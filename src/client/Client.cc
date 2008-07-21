@@ -388,6 +388,7 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
     in->xattrs.swap(st->xattrs);
     in->inode.dirstat = st->dirstat;
+    in->inode.rstat = st->rstat;
 
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
@@ -2500,7 +2501,7 @@ int Client::_do_lstat(const filepath &path, int mask, Inode **in, int uid, int g
 }
 
 
-int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat) 
+int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat) 
 {
   dout(10) << "fill_stat on " << in->inode.ino << " snap/dev" << in->snapid 
 	   << " mode 0" << oct << in->inode.mode << dec
@@ -2518,7 +2519,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat)
   st->st_mtime = in->inode.mtime;
   if (in->inode.is_dir()) {
     //st->st_size = in->inode.dirstat.size();
-    st->st_size = in->inode.dirstat.rbytes;
+    st->st_size = in->inode.rstat.rbytes;
     st->st_blocks = 1;
   } else {
     st->st_size = in->inode.size;
@@ -2528,6 +2529,8 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat)
 
   if (dirstat)
     *dirstat = in->inode.dirstat;
+  if (rstat)
+    *rstat = in->inode.rstat;
 
   return in->lease_mask;
 }

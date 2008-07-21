@@ -83,6 +83,51 @@ struct frag_info_t {
   __s64 nsubdirs;      // subdirs
   __s64 size() const { return nfiles + nsubdirs; }
 
+  void zero() {
+    memset(this, 0, sizeof(*this));
+  }
+
+  // *this += cur - acc; acc = cur
+  void take_diff(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
+    if (!(cur.mtime == acc.mtime)) {
+      mtime = cur.mtime;
+      touched_mtime = true;
+    }
+    nfiles += cur.nfiles - acc.nfiles;
+    nsubdirs += cur.nsubdirs - acc.nsubdirs;
+    acc = cur;
+    acc.version = version;
+  }
+
+  void encode(bufferlist &bl) const {
+    ::encode(version, bl);
+    ::encode(mtime, bl);
+    ::encode(nfiles, bl);
+    ::encode(nsubdirs, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
+    ::decode(mtime, bl);
+    ::decode(nfiles, bl);
+    ::decode(nsubdirs, bl);
+ }
+};
+WRITE_CLASS_ENCODER(frag_info_t)
+
+inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+inline ostream& operator<<(ostream &out, const frag_info_t &f) {
+  return out << "f(v" << f.version
+	     << " m" << f.mtime
+	     << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs
+	     << ")";    
+}
+
+struct nest_info_t {
+  version_t version;
+
   // this frag + children
   utime_t rctime;
   __s64 rbytes;
@@ -96,14 +141,22 @@ struct frag_info_t {
   void zero() {
     memset(this, 0, sizeof(*this));
   }
-  void take_diff(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
-    if (cur.mtime > mtime) {
-      rctime = mtime = cur.mtime;
-      touched_mtime = true;
-    }
-    nfiles += cur.nfiles - acc.nfiles;
-    nsubdirs += cur.nsubdirs - acc.nsubdirs;
 
+  void sub(const nest_info_t &other) {
+    add(other, -1);
+  }
+  void add(const nest_info_t &other, int fac=1) {
+    if (other.rctime > rctime)
+      rctime = other.rctime;
+    rbytes += fac*other.rbytes;
+    rfiles += fac*other.rfiles;
+    rsubdirs += fac*other.rsubdirs;
+    ranchors += fac*other.ranchors;
+    rsnaprealms += fac*other.rsnaprealms;
+  }
+
+  // *this += cur - acc; acc = cur
+  void take_diff(const nest_info_t &cur, nest_info_t &acc) {
     if (cur.rctime > rctime)
       rctime = cur.rctime;
     rbytes += cur.rbytes - acc.rbytes;
@@ -117,9 +170,6 @@ struct frag_info_t {
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
-    ::encode(mtime, bl);
-    ::encode(nfiles, bl);
-    ::encode(nsubdirs, bl);
     ::encode(rbytes, bl);
     ::encode(rfiles, bl);
     ::encode(rsubdirs, bl);
@@ -129,9 +179,6 @@ struct frag_info_t {
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
-    ::decode(mtime, bl);
-    ::decode(nfiles, bl);
-    ::decode(nsubdirs, bl);
     ::decode(rbytes, bl);
     ::decode(rfiles, bl);
     ::decode(rsubdirs, bl);
@@ -140,21 +187,19 @@ struct frag_info_t {
     ::decode(rctime, bl);
  }
 };
-WRITE_CLASS_ENCODER(frag_info_t)
+WRITE_CLASS_ENCODER(nest_info_t)
 
-inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
+inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
 }
 
-inline ostream& operator<<(ostream &out, const frag_info_t &f) {
-  return out << "f(v" << f.version
-	     << " m" << f.mtime
-	     << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs
-	     << " rc" << f.rctime
-	     << " b" << f.rbytes
-	     << " a" << f.ranchors
-	     << " sr" << f.rsnaprealms
-	     << " " << f.rsize() << "=" << f.rfiles << "+" << f.rsubdirs
+inline ostream& operator<<(ostream &out, const nest_info_t &n) {
+  return out << "n(v" << n.version
+	     << " rc" << n.rctime
+	     << " b" << n.rbytes
+	     << " a" << n.ranchors
+	     << " sr" << n.rsnaprealms
+	     << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs
 	     << ")";    
 }
 
@@ -218,8 +263,8 @@ struct inode_t {
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
   // dirfrag, recursive accounting
-  frag_info_t dirstat;             
-  frag_info_t accounted_dirstat;   // what dirfrag has seen
+  frag_info_t dirstat;
+  nest_info_t rstat, accounted_rstat;
  
   // special stuff
   version_t version;           // auth only
@@ -250,7 +295,8 @@ struct inode_t {
     ::encode(time_warp_seq, bl);
 
     ::encode(dirstat, bl);
-    ::encode(accounted_dirstat, bl);
+    ::encode(rstat, bl);
+    ::encode(accounted_rstat, bl);
 
     ::encode(version, bl);
     ::encode(file_data_version, bl);
@@ -275,7 +321,8 @@ struct inode_t {
     ::decode(time_warp_seq, p);
     
     ::decode(dirstat, p);
-    ::decode(accounted_dirstat, p);
+    ::decode(rstat, p);
+    ::decode(accounted_rstat, p);
 
     ::decode(version, p);
     ::decode(file_data_version, p);
@@ -309,16 +356,21 @@ WRITE_CLASS_ENCODER(old_inode_t)
 struct fnode_t {
   version_t version;
   frag_info_t fragstat, accounted_fragstat;
+  nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
     ::encode(fragstat, bl);
     ::encode(accounted_fragstat, bl);
+    ::encode(rstat, bl);
+    ::encode(accounted_rstat, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
     ::decode(fragstat, bl);
     ::decode(accounted_fragstat, bl);
+    ::decode(rstat, bl);
+    ::decode(accounted_rstat, bl);
   }
 };
 WRITE_CLASS_ENCODER(fnode_t)

@@ -48,12 +48,12 @@ class MMDSCacheRejoin : public Message {
     int32_t linklock;
     int32_t dirfragtreelock;
     int32_t filelock;
-    int32_t dirlock;
+    int32_t dirlock, nestlock, snaplock, xattrlock;
     inode_strong() {}
-    inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0, int dl=0) : 
+    inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0, int dl=0, int nl=0, int snl=0, int xal=0) : 
       caps_wanted(cw),
       nonce(n),
-      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f), dirlock(dl) { }
+      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f), dirlock(dl), nestlock(nl), snaplock(snl), xattrlock(xal) { }
     void encode(bufferlist &bl) const {
       ::encode(caps_wanted, bl);
       ::encode(nonce, bl);
@@ -62,6 +62,9 @@ class MMDSCacheRejoin : public Message {
       ::encode(dirfragtreelock, bl);
       ::encode(filelock, bl);
       ::encode(dirlock, bl);
+      ::encode(nestlock, bl);
+      ::encode(snaplock, bl);
+      ::encode(xattrlock, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(caps_wanted, bl);
@@ -71,6 +74,9 @@ class MMDSCacheRejoin : public Message {
       ::decode(dirfragtreelock, bl);
       ::decode(filelock, bl);
       ::decode(dirlock, bl);
+      ::decode(nestlock, bl);
+      ::decode(snaplock, bl);
+      ::decode(xattrlock, bl);
     }
   };
   WRITE_CLASS_ENCODER(inode_strong)
@@ -197,8 +203,8 @@ class MMDSCacheRejoin : public Message {
   void add_weak_inode(inodeno_t i) {
     weak_inodes.insert(i);
   }
-  void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f, int dl) {
-    strong_inodes[i] = inode_strong(n, cw, a, l, dft, f, dl);
+  void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f, int dl, int nl, int snl, int xl) {
+    strong_inodes[i] = inode_strong(n, cw, a, l, dft, f, dl, nl, snl, xl);
   }
   void add_full_inode(inode_t &i, const string& s, const fragtree_t &f) {
     full_inodes.push_back(inode_full(i, s, f));
