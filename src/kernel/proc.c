@@ -62,7 +62,7 @@ int ceph_proc_init(void)
 {
 	struct proc_dir_entry *pde;
 
-	proc_fs_ceph = proc_mkdir("ceph", proc_root_fs);
+	proc_fs_ceph = proc_mkdir("fs/ceph", NULL);
 	if (!proc_fs_ceph)
 		return -ENOMEM;
 
@@ -91,5 +91,5 @@ void ceph_proc_cleanup()
 	remove_proc_entry("debug", proc_fs_ceph);
 	remove_proc_entry("debug_msgr", proc_fs_ceph);
 	remove_proc_entry("debug_console", proc_fs_ceph);
-	remove_proc_entry("ceph", proc_root_fs);
+	remove_proc_entry("fs/ceph", NULL);
 }
