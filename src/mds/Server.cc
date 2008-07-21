@@ -1677,7 +1677,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "utime");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1719,7 +1719,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chmod");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, cur);
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1760,7 +1760,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
@@ -1814,7 +1814,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
 
   mdcache->journal_cow_inode(&le->metablob, cur);
   cur->xattrs.erase(name);
@@ -1863,7 +1863,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
 
   mdcache->journal_cow_inode(&le->metablob, cur);
   cur->xattrs.erase(name);
@@ -2081,7 +2081,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
   
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
   
   // log + wait
@@ -2129,7 +2129,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true); // dirty AND complete
   
@@ -2170,7 +2170,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
   // log + wait
@@ -2314,8 +2314,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   le->metablob.add_client_req(mdr->reqid);
-  mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);      // new dn
-  mds->locker->predirty_nested(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
+  mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);      // new dn
+  mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), MODE_TO_DT(targeti->inode.mode));  // new remote
   mdcache->journal_dirty_inode(&le->metablob, targeti);
 
@@ -2407,12 +2407,12 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
 
   if (inc) {
     dn->pre_dirty();
-    mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
 				   MODE_TO_DT(targeti->inode.mode));  // new remote
   } else {
     dn->pre_dirty();
-    mds->locker->predirty_nested(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, -1);
     mdcache->journal_cow_dentry(&le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
   }
@@ -2554,7 +2554,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
 
   // commit case
-  mds->locker->predirty_nested(mdr, &le->commit, dn->inode, 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
+  mdcache->predirty_journal_parents(mdr, &le->commit, dn->inode, 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
   mdcache->journal_dirty_inode(&le->commit, targeti);
 
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
@@ -2914,13 +2914,13 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (dn->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
-    mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
-    mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, straydn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, straydn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     le->metablob.add_primary_dentry(straydn, true, dn->inode, pi);
   } else {
     // remote link.  update remote inode.
-    mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
-    mds->locker->predirty_nested(mdr, &le->metablob, dn->inode, 0, PREDIRTY_PRIMARY);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, 0, PREDIRTY_PRIMARY);
     mdcache->journal_dirty_inode(&le->metablob, dn->inode);
   }
 
@@ -3598,16 +3598,16 @@ void Server::_rename_prepare(MDRequest *mdr,
   
   // sub off target
   if (destdn->is_auth() && !destdn->is_null())
-    mds->locker->predirty_nested(mdr, metablob, destdn->inode, destdn->dir,
+    mdcache->predirty_journal_parents(mdr, metablob, destdn->inode, destdn->dir,
 				 (destdn->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
   
   // move srcdn
   int predirty_primary = (srcdn->is_primary() && srcdn->dir != destdn->dir) ? PREDIRTY_PRIMARY:0;
   int flags = predirty_dir | predirty_primary;
   if (srcdn->is_auth())
-    mds->locker->predirty_nested(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1);
+    mdcache->predirty_journal_parents(mdr, metablob, srcdn->inode, srcdn->dir, flags, -1);
   if (destdn->is_auth())
-    mds->locker->predirty_nested(mdr, metablob, srcdn->inode, destdn->dir, flags, 1);
+    mdcache->predirty_journal_parents(mdr, metablob, srcdn->inode, destdn->dir, flags, 1);
 
   metablob->add_dir_context(srcdn->dir);
   metablob->add_dir_context(destdn->dir);
@@ -4424,7 +4424,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = le64_to_cpu(req->head.args.truncate.length);
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, fin);
@@ -4621,7 +4621,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
-  mds->locker->predirty_nested(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, cur);
   
   mdlog->submit_entry(le, fin);
@@ -4713,7 +4713,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_allocated_ino(in->ino(), mds->inotable->get_version());
-  mds->locker->predirty_nested(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, in);
   
   // log + wait
@@ -4929,7 +4929,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mksnap");
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
-  mds->locker->predirty_nested(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(&le->metablob, diri);
   
   // project the snaprealm.. hack!

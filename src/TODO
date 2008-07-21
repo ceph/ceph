@@ -230,9 +230,11 @@ todo
   - make better sense of snap_highwater...?
 
 /- cdir fetch/store versioned dentries
-- emetablob.. journaling a versioned update..
-  - replay
+/- emetablob.. journaling a versioned update..
+/  - replay
   - fetch may need to adjust loaded dentry first,last?
+
+- client reconnect vs snaps
 
 - hard link backpointers
   - anchor source dir
@@ -245,11 +247,9 @@ todo
   primary dir link -> multiversion inode
   remote link -> multiversion inode
 
-** HRM, how to cope with split notifications from multiple mds's racing to client...
-
 - for simplicity, don't replicate any snapshot data.
 
-- need rrealms in fraginfo_t
+- need rsnaprealms in fraginfo_t
 - rename() needs to create a new realm if src/dst realms differ and (rrealms, or open_children, or not subtree leaf) (similar logic to the anchor update)
 
 - will snapshots and CAS play nice?

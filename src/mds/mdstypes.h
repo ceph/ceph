@@ -89,7 +89,9 @@ struct frag_info_t {
   __s64 rfiles;
   __s64 rsubdirs;
   __s64 rsize() const { return rfiles + rsubdirs; }
+
   __s64 ranchors;  // for dirstat, includes inode's anchored flag.
+  __s64 rsnaprealms;
 
   void zero() {
     memset(this, 0, sizeof(*this));
@@ -108,6 +110,7 @@ struct frag_info_t {
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
     ranchors += cur.ranchors - acc.ranchors;
+    rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
     acc = cur;
     acc.version = version;
   }
@@ -121,6 +124,7 @@ struct frag_info_t {
     ::encode(rfiles, bl);
     ::encode(rsubdirs, bl);
     ::encode(ranchors, bl);
+    ::encode(rsnaprealms, bl);
     ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -132,6 +136,7 @@ struct frag_info_t {
     ::decode(rfiles, bl);
     ::decode(rsubdirs, bl);
     ::decode(ranchors, bl);
+    ::decode(rsnaprealms, bl);
     ::decode(rctime, bl);
  }
 };
@@ -148,6 +153,7 @@ inline ostream& operator<<(ostream &out, const frag_info_t &f) {
 	     << " rc" << f.rctime
 	     << " b" << f.rbytes
 	     << " a" << f.ranchors
+	     << " sr" << f.rsnaprealms
 	     << " " << f.rsize() << "=" << f.rfiles << "+" << f.rsubdirs
 	     << ")";    
 }

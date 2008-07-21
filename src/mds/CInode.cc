@@ -754,6 +754,8 @@ void CInode::clear_dirty_scattered(int type)
 void CInode::finish_scatter_gather_update(int type)
 {
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
+  assert(is_auth());
+
   switch (type) {
   case CEPH_LOCK_IDIR:
     {
@@ -788,9 +790,6 @@ void CInode::finish_scatter_gather_update(int type)
     break;
 
   case CEPH_LOCK_IDFT:
-    {
-      assert(is_auth());
-    }
     break;
 
   default:

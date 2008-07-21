@@ -1085,6 +1085,210 @@ inode_t *MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t 
 
 
 
+// nested ---------------------------------------------------------------
+
+
+/*
+ * NOTE: we _have_ to delay the scatter if we are called during a
+ * rejoin, because we can't twiddle locks between when the
+ * rejoin_(weak|strong) is received and when we send the rejoin_ack.
+ * normally, this isn't a problem: a recover mds doesn't twiddle locks
+ * (no requests), and a survivor acks immediately.  _except_ that
+ * during rejoin_(weak|strong) processing, we may complete a lock
+ * gather, and do a scatter_writebehind.. and we _can't_ twiddle the
+ * scatterlock state in that case or the lock states will get out of
+ * sync between the auth and replica.
+ *
+ * the simple solution is to never do the scatter here.  instead, put
+ * the scatterlock on a list if it isn't already wrlockable.  this is
+ * probably the best plan anyway, since we avoid too many
+ * scatters/locks under normal usage.
+ */
+void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
+				       CInode *in, CDir *parent,
+				       int flags, int linkunlink)
+{
+  bool primary_dn = flags & PREDIRTY_PRIMARY;
+  bool do_parent_mtime = flags & PREDIRTY_DIR;
+  bool shallow = flags & PREDIRTY_SHALLOW;
+
+  // declare now?
+  if (mut->now == utime_t())
+    mut->now = g_clock.real_now();
+
+  dout(10) << "predirty_journal_parents"
+	   << (do_parent_mtime ? " do_parent_mtime":"")
+	   << " linkunlink=" <<  linkunlink
+	   << (primary_dn ? " primary_dn":" remote_dn")
+	   << (shallow ? " SHALLOW":"")
+	   << " " << *in << dendl;
+
+  if (!parent) {
+    assert(primary_dn);
+    parent = in->get_projected_parent_dn()->get_dir();
+  }
+
+  if (flags == 0 && linkunlink == 0) {
+    dout(10) << " no flags/linkunlink, just adding dir context to blob(s)" << dendl;
+    blob->add_dir_context(parent);
+    return;
+  }
+
+  inode_t *curi = in->get_projected_inode();
+
+  __s64 drbytes = 1, drfiles = 0, drsubdirs = 0, dranchors = 0, drsnaprealms = 0;
+  utime_t rctime;
+
+  // build list of inodes to wrlock, dirty, and update
+  list<CInode*> lsi;
+  CInode *cur = in;
+  while (parent) {
+    //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
+    assert(parent->is_auth());
+    
+    // opportunistically adjust parent dirfrag
+    CInode *pin = parent->get_inode();
+
+    if (do_parent_mtime || linkunlink) {
+      assert(mut->wrlocks.count(&pin->dirlock) ||
+	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
+    }
+
+    // inode -> dirfrag
+    mut->auth_pin(parent);
+    mut->add_projected_fnode(parent);
+
+    fnode_t *pf = parent->project_fnode();
+    pf->version = parent->pre_dirty();
+
+    if (do_parent_mtime) {
+      pf->fragstat.mtime = mut->now;
+      if (mut->now > pf->fragstat.rctime) {
+	dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
+	pf->fragstat.rctime = mut->now;
+      } else {
+	dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
+      }
+    }
+    if (linkunlink) {
+      dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
+      if (in->is_dir())
+	pf->fragstat.nsubdirs += linkunlink;
+      else
+	pf->fragstat.nfiles += linkunlink;
+    }
+    if (primary_dn) {
+      if (linkunlink == 0) {
+	drbytes = curi->dirstat.rbytes - curi->accounted_dirstat.rbytes;
+	drfiles = curi->dirstat.rfiles - curi->accounted_dirstat.rfiles;
+	drsubdirs = curi->dirstat.rsubdirs - curi->accounted_dirstat.rsubdirs;
+	dranchors = curi->dirstat.ranchors - curi->accounted_dirstat.ranchors;
+	drsnaprealms = curi->dirstat.rsnaprealms - curi->accounted_dirstat.rsnaprealms;
+      } else if (linkunlink < 0) {
+	drbytes = 0 - curi->accounted_dirstat.rbytes;
+	drfiles = 0 - curi->accounted_dirstat.rfiles;
+	drsubdirs = 0 - curi->accounted_dirstat.rsubdirs;
+	dranchors = 0 - curi->accounted_dirstat.ranchors;
+	drsnaprealms = 0 - curi->accounted_dirstat.rsnaprealms;
+      } else {
+	drbytes = curi->dirstat.rbytes;
+	drfiles = curi->dirstat.rfiles;
+	drsubdirs = curi->dirstat.rsubdirs;
+	dranchors = curi->dirstat.ranchors;
+	drsnaprealms = curi->dirstat.rsnaprealms;
+      }
+      rctime = MAX(curi->ctime, curi->dirstat.rctime);
+
+      dout(10) << "predirty_journal_parents delta "
+	       << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
+	       << *parent << dendl;
+      pf->fragstat.rbytes += drbytes;
+      pf->fragstat.rfiles += drfiles;
+      pf->fragstat.rsubdirs += drsubdirs;
+      pf->fragstat.ranchors += dranchors;
+      pf->fragstat.rsnaprealms += drsnaprealms;
+      pf->fragstat.rctime = rctime;
+    
+      curi->accounted_dirstat = curi->dirstat;
+    } else {
+      dout(10) << "predirty_journal_parents no delta (remote dentry, or rename within same dir) in " << *parent << dendl;
+      pf->fragstat.rfiles += linkunlink;
+    }
+
+
+    // stop?
+    if (pin->is_base())
+      break;
+
+    bool stop = false;
+    if (!pin->is_auth() || pin->is_ambiguous_auth()) {
+      dout(10) << "predirty_journal_parents !auth or ambig on " << *pin << dendl;
+      stop = true;
+    }
+    if (!stop &&
+	mut->wrlocks.count(&pin->dirlock) == 0 &&
+	(!pin->can_auth_pin() ||
+	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
+	 !mds->locker->scatter_wrlock_try(&pin->dirlock, mut, false))) {  // ** do not initiate.. see above comment **
+      dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->dirlock
+	       << " on " << *pin << dendl;
+      stop = true;
+    }
+    if (stop) {
+      dout(10) << "predirty_journal_parents stop.  marking dirlock on " << *pin << dendl;
+      mds->locker->mark_updated_scatterlock(&pin->dirlock);
+      mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
+      mut->add_updated_scatterlock(&pin->dirlock);
+      break;
+    }
+    mds->locker->local_wrlock_grab(&pin->versionlock, mut);
+
+    // dirfrag -> diri
+    mut->auth_pin(pin);
+    mut->add_projected_inode(pin);
+    lsi.push_front(pin);
+
+    inode_t *pi = pin->project_inode();
+    pi->version = pin->pre_dirty();
+    pi->dirstat.version++;
+    dout(15) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
+    dout(15) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
+    bool touched_mtime = false;
+    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+    if (touched_mtime)
+      pi->mtime = pi->ctime = pi->dirstat.mtime;
+    dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+
+    // next parent!
+    cur = pin;
+    curi = pi;
+    parent = cur->get_projected_parent_dn()->get_dir();
+    linkunlink = 0;
+    do_parent_mtime = false;
+    primary_dn = true;
+  }
+
+  // now, stick it in the blob
+  assert(parent->is_auth());
+  blob->add_dir_context(parent);
+  blob->add_dir(parent, true);
+  SnapRealm *realm = 0;
+  for (list<CInode*>::iterator p = lsi.begin();
+       p != lsi.end();
+       p++) {
+    CInode *cur = *p;
+    if (!realm)
+      realm = cur->find_snaprealm();
+    else if (cur->snaprealm)
+      realm = cur->snaprealm;
+    journal_dirty_inode(blob, cur);
+  }
+ 
+}
+
+
+
+
 // ===================================
 // slave requests
 
@@ -5253,7 +5457,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
-  mds->locker->predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_dirty_inode(&le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
@@ -5277,7 +5481,9 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   // tell the anchortable we've committed
   mds->anchorclient->commit(atid, mut->ls);
 
+  // drop locks and finish
   mds->locker->drop_locks(mut);
+  delete mut;
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED, 0);
@@ -5290,10 +5496,12 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 struct C_MDC_snaprealm_create_finish : public Context {
   MDCache *cache;
   MDRequest *mdr;
+  Mutation *mut;
   CInode *in;
-  C_MDC_snaprealm_create_finish(MDCache *c, MDRequest *m, CInode *i) : cache(c), mdr(m), in(i) {}
+  C_MDC_snaprealm_create_finish(MDCache *c, MDRequest *m, Mutation *mu, CInode *i) : 
+    cache(c), mdr(m), mut(mu), in(i) {}
   void finish(int r) {
-    cache->_snaprealm_create_finish(mdr, in);
+    cache->_snaprealm_create_finish(mdr, mut, in);
   }
 };
 
@@ -5314,29 +5522,38 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
     return;
   }
 
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
   le->metablob.add_table_transaction(TABLE_SNAP, mdr->more()->stid);
 
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
+  pi->dirstat.rsnaprealms++;
 
   SnapRealm t(this, in);
   t.created = mdr->more()->stid;
   bufferlist snapbl;
   ::encode(t, snapbl);
   
+  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_cow_inode(&le->metablob, in);
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
-  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, in));
+  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
 }
 
-void MDCache::_snaprealm_create_finish(MDRequest *mdr, CInode *in)
+void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)
 {
   dout(10) << "_snaprealm_create_finish " << *in << dendl;
 
-  in->pop_and_dirty_projected_inode(mdr->ls);
-  mdr->apply();
+  // apply
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
+  delete mut;
+
+  // tell table we've committed
+  mds->snapclient->commit(mdr->more()->stid, mut->ls);
 
   // create
   in->open_snaprealm();

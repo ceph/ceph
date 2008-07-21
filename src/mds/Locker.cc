@@ -883,7 +883,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
 
   EOpen *le = new EOpen(mds->mdlog);
   if (forceupdate)  // FIXME if/when we do max_size nested accounting
-    predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+    mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   else
     le->metablob.add_dir_context(in->get_parent_dir());
   mdcache->journal_dirty_inode(&le->metablob, in);
@@ -1134,7 +1134,7 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     mut->ls = mds->mdlog->get_current_segment();
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
     mut->auth_pin(in);
-    predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
+    mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
 
     mdcache->journal_dirty_inode(&le->metablob, in, follows);
 
@@ -1302,204 +1302,6 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     }
   }
   assert(n == lock->get_num_client_lease());
-}
-
-
-// nested ---------------------------------------------------------------
-
-
-/*
- * NOTE: we _have_ to delay the scatter if we are called during a
- * rejoin, because we can't twiddle locks between when the
- * rejoin_(weak|strong) is received and when we send the rejoin_ack.
- * normally, this isn't a problem: a recover mds doesn't twiddle locks
- * (no requests), and a survivor acks immediately.  _except_ that
- * during rejoin_(weak|strong) processing, we may complete a lock
- * gather, and do a scatter_writebehind.. and we _can't_ twiddle the
- * scatterlock state in that case or the lock states will get out of
- * sync between the auth and replica.
- *
- * the simple solution is to never do the scatter here.  instead, put
- * the scatterlock on a list if it isn't already wrlockable.  this is
- * probably the best plan anyway, since we avoid too many
- * scatters/locks under normal usage.
- */
-void Locker::predirty_nested(Mutation *mut, EMetaBlob *blob,
-			     CInode *in, CDir *parent,
-			     int flags, int linkunlink)
-{
-  bool primary_dn = flags & PREDIRTY_PRIMARY;
-  bool do_parent_mtime = flags & PREDIRTY_DIR;
-  bool shallow = flags & PREDIRTY_SHALLOW;
-
-  // declare now?
-  if (mut->now == utime_t())
-    mut->now = g_clock.real_now();
-
-  dout(10) << "predirty_nested"
-	   << (do_parent_mtime ? " do_parent_mtime":"")
-	   << " linkunlink=" <<  linkunlink
-	   << (primary_dn ? " primary_dn":" remote_dn")
-	   << (shallow ? " SHALLOW":"")
-	   << " " << *in << dendl;
-
-  if (!parent) {
-    assert(primary_dn);
-    parent = in->get_projected_parent_dn()->get_dir();
-  }
-
-  if (flags == 0 && linkunlink == 0) {
-    dout(10) << " no flags/linkunlink, just adding dir context to blob(s)" << dendl;
-    blob->add_dir_context(parent);
-    return;
-  }
-
-  inode_t *curi = in->get_projected_inode();
-
-  __s64 drbytes = 1, drfiles = 0, drsubdirs = 0, dranchors = 0;
-  utime_t rctime;
-
-  // build list of inodes to wrlock, dirty, and update
-  list<CInode*> lsi;
-  CInode *cur = in;
-  while (parent) {
-    //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
-    assert(parent->is_auth());
-    
-    // opportunistically adjust parent dirfrag
-    CInode *pin = parent->get_inode();
-
-    if (do_parent_mtime || linkunlink) {
-      assert(mut->wrlocks.count(&pin->dirlock) ||
-	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
-    }
-
-    // inode -> dirfrag
-    mut->auth_pin(parent);
-    mut->add_projected_fnode(parent);
-
-    fnode_t *pf = parent->project_fnode();
-    pf->version = parent->pre_dirty();
-
-    if (do_parent_mtime) {
-      pf->fragstat.mtime = mut->now;
-      if (mut->now > pf->fragstat.rctime) {
-	dout(10) << "predirty_nested updating mtime on " << *parent << dendl;
-	pf->fragstat.rctime = mut->now;
-      } else {
-	dout(10) << "predirty_nested updating mtime UNDERWATER on " << *parent << dendl;
-      }
-    }
-    if (linkunlink) {
-      dout(10) << "predirty_nested updating size on " << *parent << dendl;
-      if (in->is_dir())
-	pf->fragstat.nsubdirs += linkunlink;
-      else
-	pf->fragstat.nfiles += linkunlink;
-    }
-    if (primary_dn) {
-      if (linkunlink == 0) {
-	drbytes = curi->dirstat.rbytes - curi->accounted_dirstat.rbytes;
-	drfiles = curi->dirstat.rfiles - curi->accounted_dirstat.rfiles;
-	drsubdirs = curi->dirstat.rsubdirs - curi->accounted_dirstat.rsubdirs;
-	dranchors = curi->dirstat.ranchors - curi->accounted_dirstat.ranchors;
-      } else if (linkunlink < 0) {
-	drbytes = 0 - curi->accounted_dirstat.rbytes;
-	drfiles = 0 - curi->accounted_dirstat.rfiles;
-	drsubdirs = 0 - curi->accounted_dirstat.rsubdirs;
-	dranchors = 0 - curi->accounted_dirstat.ranchors;
-      } else {
-	drbytes = curi->dirstat.rbytes;
-	drfiles = curi->dirstat.rfiles;
-	drsubdirs = curi->dirstat.rsubdirs;
-	dranchors = curi->dirstat.ranchors;
-      }
-      rctime = MAX(curi->ctime, curi->dirstat.rctime);
-
-      dout(10) << "predirty_nested delta "
-	       << drbytes << " bytes / " << drfiles << " files / " << drsubdirs << " subdirs for " 
-	       << *parent << dendl;
-      pf->fragstat.rbytes += drbytes;
-      pf->fragstat.rfiles += drfiles;
-      pf->fragstat.rsubdirs += drsubdirs;
-      pf->fragstat.ranchors += dranchors;
-      pf->fragstat.rctime = rctime;
-    
-      curi->accounted_dirstat = curi->dirstat;
-    } else {
-      dout(10) << "predirty_nested no delta (remote dentry, or rename within same dir) in " << *parent << dendl;
-      pf->fragstat.rfiles += linkunlink;
-    }
-
-
-    // stop?
-    if (pin->is_base())
-      break;
-
-    bool stop = false;
-    if (!pin->is_auth() || pin->is_ambiguous_auth()) {
-      dout(10) << "predirty_nested !auth or ambig on " << *pin << dendl;
-      stop = true;
-    }
-    if (!stop &&
-	mut->wrlocks.count(&pin->dirlock) == 0 &&
-	(!pin->can_auth_pin() ||
-	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
-	 !scatter_wrlock_try(&pin->dirlock, mut, false))) {  // ** do not initiate.. see above comment **
-      dout(10) << "predirty_nested can't wrlock one of " << pin->versionlock << " or " << pin->dirlock
-	       << " on " << *pin << dendl;
-      stop = true;
-    }
-    if (stop) {
-      dout(10) << "predirty_nested stop.  marking dirlock on " << *pin << dendl;
-      mark_updated_scatterlock(&pin->dirlock);
-      mut->ls->dirty_dirfrag_dir.push_back(&pin->xlist_dirty_dirfrag_dir);
-      mut->add_updated_scatterlock(&pin->dirlock);
-      break;
-    }
-    local_wrlock_grab(&pin->versionlock, mut);
-
-    // dirfrag -> diri
-    mut->auth_pin(pin);
-    mut->add_projected_inode(pin);
-    lsi.push_front(pin);
-
-    inode_t *pi = pin->project_inode();
-    pi->version = pin->pre_dirty();
-    pi->dirstat.version++;
-    dout(15) << "predirty_nested take_diff " << pf->fragstat << dendl;
-    dout(15) << "predirty_nested         - " << pf->accounted_fragstat << dendl;
-    bool touched_mtime = false;
-    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
-    if (touched_mtime)
-      pi->mtime = pi->ctime = pi->dirstat.mtime;
-    dout(15) << "predirty_nested     gives " << pi->dirstat << " on " << *pin << dendl;
-
-    // next parent!
-    cur = pin;
-    curi = pi;
-    parent = cur->get_projected_parent_dn()->get_dir();
-    linkunlink = 0;
-    do_parent_mtime = false;
-    primary_dn = true;
-  }
-
-  // now, stick it in the blob
-  assert(parent->is_auth());
-  blob->add_dir_context(parent);
-  blob->add_dir(parent, true);
-  SnapRealm *realm = 0;
-  for (list<CInode*>::iterator p = lsi.begin();
-       p != lsi.end();
-       p++) {
-    CInode *cur = *p;
-    if (!realm)
-      realm = cur->find_snaprealm();
-    else if (cur->snaprealm)
-      realm = cur->snaprealm;
-    mds->mdcache->journal_dirty_inode(blob, cur);
-  }
- 
 }
 
 
@@ -2420,15 +2222,13 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mut->locks.insert(lock);
 
   inode_t *pi = in->project_inode();
-
-  //????pi->mtime = in->inode.mtime;   // make sure an intermediate version isn't goofing us up
   pi->version = in->pre_dirty();
   lock->get_parent()->finish_scatter_gather_update(lock->get_type());
   
   lock->clear_updated();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
-  predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(&le->metablob, in);
   
   mds->mdlog->submit_entry(le);

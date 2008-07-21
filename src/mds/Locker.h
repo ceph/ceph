@@ -54,11 +54,6 @@ class ScatterLock;
 class LocalLock;
 class MDCache;
 
-// flags for predirty_nested()
-static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
-static const int PREDIRTY_DIR = 2;     // update parent dir mtime/size
-static const int PREDIRTY_SHALLOW = 4; // only go to immediate parrent (for easier rollback)
-
 class Locker {
 private:
   MDS *mds;
@@ -167,12 +162,10 @@ protected:
   xlist<ScatterLock*> updated_scatterlocks;
 public:
   void mark_updated_scatterlock(ScatterLock *lock);
-  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, CDir *dir,
-		       int flags, int linkunlink=0);
 
   // local
-protected:
   void local_wrlock_grab(LocalLock *lock, Mutation *mut);
+protected:
   bool local_wrlock_start(LocalLock *lock, MDRequest *mut);
   void local_wrlock_finish(LocalLock *lock, Mutation *mut);
   bool local_xlock_start(LocalLock *lock, MDRequest *mut);

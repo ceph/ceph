@@ -341,6 +341,12 @@ struct MDSlaveUpdate {
 };
 
 
+// flags for predirty_journal_parents()
+static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
+static const int PREDIRTY_DIR = 2;     // update parent dir mtime/size
+static const int PREDIRTY_SHALLOW = 4; // only go to immediate parrent (for easier rollback)
+
+
 class MDCache {
  public:
   // my master
@@ -476,6 +482,9 @@ public:
   void journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);
   void journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
   inode_t *journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  void predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
+				CInode *in, CDir *parent,
+				int flags, int linkunlink=0);
 
   // slaves
   void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {
@@ -788,7 +797,7 @@ protected:
   // -- snaprealms --
 public:
   void snaprealm_create(MDRequest *mdr, CInode *in);
-  void _snaprealm_create_finish(MDRequest *mdr, CInode *in);
+  void _snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in);
 
   // -- stray --
 public:
