@@ -56,7 +56,9 @@ class Thread {
   }
   int create() {
     _num_threads.inc();
-    return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
+    int r = pthread_create( &thread_id, NULL, _entry_func, (void*)this );
+    generic_dout(10) << "thread " << thread_id << " start" << dendl;
+    return r;
   }
   int join(void **prval = 0) {
     if (thread_id == 0) {
@@ -83,6 +85,7 @@ class Thread {
       }
       assert(0); // none of these should happen.
     }
+    generic_dout(10) << "thread " << thread_id << " stop" << dendl;
     thread_id = 0;
     return status;
   }
