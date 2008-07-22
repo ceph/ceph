@@ -1093,6 +1093,23 @@ snapid_t CInode::get_oldest_snap()
   return MIN(t, first);
 }
 
+/*
+ * pick/create an old_inode that we can write into.
+ */
+map<snapid_t,old_inode_t>::iterator CInode::pick_dirty_old_inode(snapid_t last)
+{
+  dout(10) << "pick_dirty_old_inode last " << last << dendl;
+  SnapRealm *realm = find_snaprealm();
+  dout(10) << " realm " << *realm << dendl;
+  const set<snapid_t>& snaps = realm->get_snaps();
+  dout(10) << " snaps " << snaps << dendl;
+  
+  //snapid_t snap = snaps.lower_bound(last);
+
+
+  
+}
+
 void CInode::open_snaprealm()
 {
   if (!snaprealm) {

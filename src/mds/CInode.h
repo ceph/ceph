@@ -140,7 +140,7 @@ class CInode : public MDSCacheObject {
   SnapRealm        *containing_realm;
   snapid_t          first, last;
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
-  set<snapid_t> dirty_old_dirstats;
+  set<snapid_t> dirty_old_rstats;
 
   bool is_multiversion() { return snaprealm || inode.is_dir(); }
   snapid_t get_oldest_snap();
@@ -182,6 +182,8 @@ class CInode : public MDSCacheObject {
     else
       return &inode;
   }
+
+  map<snapid_t,old_inode_t>::iterator pick_dirty_old_inode(snapid_t last);
 
   // -- cache infrastructure --
 private:

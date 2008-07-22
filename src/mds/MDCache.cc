@@ -1033,8 +1033,8 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     old.inode = *in->get_previous_projected_inode();
     old.xattrs = in->xattrs;
 
-    //if (!(old.inode.dirstat == old.inode.accounted_dirstat))
-    //in->dirty_old_dirstats.insert(follows);
+    if (!(old.inode.rstat == old.inode.accounted_rstat))
+      in->dirty_old_rstats.insert(follows);
     
     in->first = follows+1;
     
@@ -1159,7 +1159,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     if (do_parent_mtime || linkunlink) {
       assert(mut->wrlocks.count(&pin->dirlock) ||
 	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
-
+      assert(cfollows == CEPH_NOSNAP);
+      
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->now;
 	if (mut->now > pf->rstat.rctime) {
@@ -1182,34 +1183,26 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     }
 
 
-    /*
-    if (follows == CEPH_NOSNAP || follows == 0)
-      follows = parent->inode->find_snaprealm()->get_latest_snap();
-
     // cow fnode?
     snapid_t follows = cfollows;
-    if (follows >= first &&
+    SnapRealm *prealm = 0;
+    if (follows == CEPH_NOSNAP || follows == 0) {
+      prealm = parent->inode->find_snaprealm();
+      follows = prealm->get_latest_snap();
+    }
+    dout(10) << " frag head is [" << parent->first << ",head]" << dendl;
+    dout(10) << " follows " << follows << dendl;
+    if (follows >= parent->first &&
 	!(pf->fragstat == pf->accounted_fragstat)) {
-      dout(10) << " cow fnode, follows " << follows << dendl;
-      dirty_old_fnodes[follows] = parent->get_projected_fnode();
+      dout(10) << " head fragstat snapped and not fully accounted, cow to dirty_old_fnode ["
+	       << parent->first << "," << follows << "]" << dendl;
+      parent->dirty_old_fnodes[follows].first = parent->first;
+      parent->dirty_old_fnodes[follows].second = *parent->get_projected_fnode();
     }
-    first = follows+1;
-    */
-    // which fnode to write to?
-    //fnode_t *pf = 0;
-    /* fixme
-    if (dirty_old_fnodes.size() &&
-	dirty_old_fnodes.rbegin()->first > follows) {
-      map<snapid_t,fnode_t>::iterator p = dirty_old_fnodes.upper_bound(follows);
-      dout(10) << " cloning dirty_old_fnode " << p->first << " to follows " << follows << dendl;
-      dirty_old_fnodes[follows] = p->second;
-      pf = &p->fragstat;
-      }
-    }
-    */
-    //if (!pf) {
-
+    parent->first = follows+1;
+    
     if (primary_dn) { 
+      // head
       nest_info_t delta;
       delta.zero();
       if (linkunlink == 0) {
@@ -1220,10 +1213,38 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       } else {
 	delta.add(curi->rstat);
       }
-
       dout(10) << "predirty_journal_parents delta " << delta << " " << *parent << dendl;
       pf->rstat.add(delta);
       curi->accounted_rstat = curi->rstat;
+
+      // snapped?
+      for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+	   p != cur->dirty_old_rstats.end();
+	   p++) {
+	old_inode_t& old = cur->old_inodes[*p];
+
+	fnode_t *pf;
+	if (parent->dirty_old_fnodes.count(*p) == 0) {
+	  pf = &parent->dirty_old_fnodes[*p].second;
+	  pf->rstat.zero();
+	  pf->accounted_rstat.zero();
+	} else 
+	  pf = &parent->dirty_old_fnodes[*p].second;
+	
+	nest_info_t delta;
+	delta.zero();
+	if (linkunlink == 0) {
+	  delta.add(old.inode.rstat);
+	  delta.sub(old.inode.accounted_rstat);
+	} else if (linkunlink < 0) {
+	  delta.sub(old.inode.accounted_rstat);
+	} else {
+	  delta.add(old.inode.rstat);
+	}
+	dout(10) << "   snap " << *p << " delta " << delta << dendl;
+	pf->rstat.add(delta);
+	old.inode.accounted_rstat = old.inode.rstat;
+      }
     }
 
     // stop?
@@ -1276,6 +1297,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
     }
 
+    // parent dn [first,last]?
+    CDentry *parentdn = cur->get_projected_parent_dn();
+    dout(10) << "predirty_journal_parents parentdn is " << *parentdn << dendl;
+
     // rstat
     if (primary_dn) {
       pi->rstat.version++;
@@ -1283,6 +1308,18 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(15) << "predirty_journal_parents         - " << pf->accounted_rstat << dendl;
       pi->rstat.take_diff(pf->rstat, pf->accounted_rstat);
       dout(15) << "predirty_journal_parents     gives " << pi->rstat << " on " << *pin << dendl;
+
+      // snapped?
+      if (parent->dirty_old_fnodes.size()) {
+	for (map<snapid_t,pair<snapid_t,fnode_t> >::iterator p = parent->dirty_old_fnodes.begin();
+	     p != parent->dirty_old_fnodes.end();
+	     p++) {
+	  dout(10) << "  dirty_old_fnode [" << p->second.first << "," << p->first << "]" << dendl;
+	  map<snapid_t,old_inode_t>::iterator q = pin->pick_dirty_old_inode(p->first);
+	  q->second.inode.rstat.version++;
+	  q->second.inode.rstat.take_diff(p->second.second.rstat, p->second.second.accounted_rstat);
+	}
+      }
     }
 
     // next parent!
@@ -1311,6 +1348,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   }
  
 }
+
 
 
 
