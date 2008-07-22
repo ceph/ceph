@@ -179,7 +179,8 @@ void Timer::cancel_timer()
     dout(10) << "waiting for thread to finish" << dendl;
     void *ptr;
     timer_thread.join(&ptr);
-    
+    thread_stop = false;
+
     dout(10) << "thread finished, exit code " << ptr << dendl;
   }
 }

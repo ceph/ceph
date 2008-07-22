@@ -115,6 +115,8 @@ int main(int argc, const char **argv)
        << " dev " << dev
        << std::endl;
 
+  g_timer.shutdown();
+
   rank.start();
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::fast_fail());
