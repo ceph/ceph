@@ -19,8 +19,9 @@
 #include <pthread.h>
 #include <signal.h>
 #include <errno.h>
+#include "include/atomic.h"
 
-extern int _num_threads;  // hack: in config.cc
+extern atomic_t _num_threads;  // hack: in config.cc
 
 class Thread {
  private:
@@ -36,7 +37,7 @@ class Thread {
  private:
   static void *_entry_func(void *arg) {
     void *r = ((Thread*)arg)->entry();
-    _num_threads--;
+    _num_threads.dec();
     return r;
   }
 
@@ -45,7 +46,7 @@ class Thread {
   bool is_started() { return thread_id != 0; }
   bool am_self() { return (pthread_self() == thread_id); }
 
-  static int get_num_threads() { return _num_threads; }
+  static int get_num_threads() { return _num_threads.test(); }
 
   int kill(int signal) {
     if (thread_id)
@@ -54,7 +55,7 @@ class Thread {
       return -EINVAL;
   }
   int create() {
-    _num_threads++;
+    _num_threads.inc();
     return pthread_create( &thread_id, NULL, _entry_func, (void*)this );
   }
   int join(void **prval = 0) {

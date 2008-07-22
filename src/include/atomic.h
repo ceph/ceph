@@ -47,6 +47,7 @@ class atomic_t {
   long nref;
 public:
   atomic_t(int i=0) : lock(false), nref(i) {}
+  atomic_t(const atomic_t& other);
   void inc() { 
     lock.Lock();
     ++nref;
