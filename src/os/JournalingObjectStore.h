@@ -30,6 +30,11 @@ protected:
   }
   void journal_stop() {
     finisher.stop();
+    if (journal) {
+      journal->close();
+      delete journal;
+      journal = 0;
+    }
   }
   int journal_replay();
 
