@@ -1028,18 +1028,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     if (follows < in->first)
       return;
 
-    old_inode_t &old = in->old_inodes[follows];
-    old.first = in->first;
-    old.inode = *in->get_previous_projected_inode();
-    old.xattrs = in->xattrs;
-
-    if (!(old.inode.rstat == old.inode.accounted_rstat))
-      in->dirty_old_rstats.insert(follows);
-    
-    in->first = follows+1;
-    
-    dout(10) << " duped to old_inode [" << old.first << "," << follows << "] on "
-	     << *in << dendl;
+    in->cow_old_inode(follows);
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
@@ -1087,6 +1076,125 @@ inode_t *MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t 
 
 
 // nested ---------------------------------------------------------------
+
+
+void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
+					  CDir *parent, int linkunlink)
+{
+  dout(10) << "project_rstat_inode_to_frag [" << ofirst << "," << last << "]" << dendl;
+  dout(10) << "  inode           rstat " << inode.rstat << dendl;
+  dout(10) << "  inode accounted_rstat " << inode.accounted_rstat << dendl;
+  nest_info_t delta;
+  delta.zero();
+  if (linkunlink == 0) {
+    delta.add(inode.rstat);
+    delta.sub(inode.accounted_rstat);
+  } else if (linkunlink < 0) {
+    delta.sub(inode.accounted_rstat);
+  } else {
+    delta.add(inode.rstat);
+  }
+  dout(10) << "                  delta " << delta << dendl;
+
+  inode.accounted_rstat = inode.rstat;
+
+  while (last >= ofirst) {
+    // pick fnode version to update
+    fnode_t *pf;
+    snapid_t first;
+    if (last == CEPH_NOSNAP) {
+      first = MAX(ofirst, parent->first);
+      pf = parent->get_projected_fnode();
+      dout(10) << " projecting to head [" << first << "," << last << "] " << pf->rstat << dendl;
+
+      if (first > parent->first &&
+	  !(pf->fragstat == pf->accounted_fragstat)) {
+	dout(10) << "  target snapped and not fully accounted, cow to dirty_old_fnode ["
+		 << parent->first << "," << (first-1) << "] "
+		 << " " << pf->rstat << "/" << pf->accounted_rstat
+		 << dendl;
+	parent->dirty_old_fnodes[first-1].first = parent->first;
+	parent->dirty_old_fnodes[first-1].second = *pf;
+	parent->first = first;
+      }
+    } else if (last >= parent->first) {
+      first = parent->first;
+      parent->dirty_old_fnodes[last].first = first;
+      parent->dirty_old_fnodes[last].second = *parent->get_projected_fnode();
+      pf = &parent->dirty_old_fnodes[last].second;
+      dout(10) << " projecting to newly split dirty_old_fnode [" << first << "," << last << "] "
+	       << " " << pf->rstat << "/" << pf->accounted_rstat << dendl;
+    } else {
+      map<snapid_t,pair<snapid_t,fnode_t> >::iterator p = parent->dirty_old_fnodes.lower_bound(last);
+      if (p == parent->dirty_old_fnodes.end()) {
+	first = ofirst;
+	parent->dirty_old_fnodes[last].first = first;
+	pf = &parent->dirty_old_fnodes[last].second;      
+      } else {
+	first = p->second.first;
+	if (last < p->first) {
+	  parent->dirty_old_fnodes[last] = p->second;
+	  p->second.first = last+1;
+	}
+	pf = &parent->dirty_old_fnodes[last].second;
+      }
+    }
+    
+    // apply
+    pf->rstat.add(delta);
+    inode.accounted_rstat = inode.rstat;
+    dout(10) << " result " << pf->rstat << " " << *parent << dendl;
+
+    last = first-1;
+  }
+}
+
+void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapid_t last, 
+					  CInode *pin)
+{
+  dout(10) << "project_rstat_frag_to_inode [" << ofirst << "," << last << "]" << dendl;
+  dout(10) << "  frag           rstat " << fnode.rstat << dendl;
+  dout(10) << "  frag accounted_rstat " << fnode.accounted_rstat << dendl;
+  nest_info_t delta = fnode.rstat;
+  delta.sub(fnode.accounted_rstat);
+  dout(10) << "                 delta " << delta << dendl;
+
+  fnode.accounted_rstat = fnode.rstat;
+
+  while (last >= ofirst) {
+    inode_t *pi;
+    snapid_t first;
+    if (last == pin->last) {
+      pi = pin->get_projected_inode();
+      first = MAX(ofirst, pin->first);
+      if (first > pin->first)
+	pin->cow_old_inode(first-1);
+    } else if (last >= pin->first) {
+      first = pin->first;
+      pin->cow_old_inode(last);
+    } else {
+      map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
+      if (p == pin->old_inodes.end()) {
+	dout(10) << " no old_inode <= " << last << ", done." << dendl;
+	break;
+      }
+      first = p->second.first;
+      if (p->first > last) {
+	dout(10) << " splitting old_inode [" << first << "," << p->first << "] to ["
+		 << (last+1) << "," << p->first << dendl;
+	pin->old_inodes[last] = p->second;
+	p->second.first = last+1;
+      }
+    }
+    dout(10) << " projecting to [" << first << "," << last << "]" << dendl;
+    
+    pi->rstat.version++;
+    pi->rstat.add(delta);
+    dout(15) << "    result " << pi->rstat << dendl;
+    
+    last = first-1;
+  }
+}
 
 
 /*
@@ -1182,69 +1290,27 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       }
     }
 
-
-    // cow fnode?
-    snapid_t follows = cfollows;
-    SnapRealm *prealm = 0;
-    if (follows == CEPH_NOSNAP || follows == 0) {
-      prealm = parent->inode->find_snaprealm();
-      follows = prealm->get_latest_snap();
-    }
-    dout(10) << " frag head is [" << parent->first << ",head]" << dendl;
-    dout(10) << " follows " << follows << dendl;
-    if (follows >= parent->first &&
-	!(pf->fragstat == pf->accounted_fragstat)) {
-      dout(10) << " head fragstat snapped and not fully accounted, cow to dirty_old_fnode ["
-	       << parent->first << "," << follows << "]" << dendl;
-      parent->dirty_old_fnodes[follows].first = parent->first;
-      parent->dirty_old_fnodes[follows].second = *parent->get_projected_fnode();
-    }
-    parent->first = follows+1;
     
+    // rstat
+    snapid_t follows;
     if (primary_dn) { 
-      // head
-      nest_info_t delta;
-      delta.zero();
-      if (linkunlink == 0) {
-	delta.add(curi->rstat);
-	delta.sub(curi->accounted_rstat);
-      } else if (linkunlink < 0) {
-	delta.sub(curi->accounted_rstat);
-      } else {
-	delta.add(curi->rstat);
+      follows = cfollows;
+      if (follows == CEPH_NOSNAP || follows == 0) {
+	SnapRealm *prealm = parent->inode->find_snaprealm();
+	follows = prealm->get_latest_snap();
       }
-      dout(10) << "predirty_journal_parents delta " << delta << " " << *parent << dendl;
-      pf->rstat.add(delta);
-      curi->accounted_rstat = curi->rstat;
 
-      // snapped?
+      dout(10) << "    frag head is [" << parent->first << ",head] " << dendl;
+      dout(10) << " inode update is [" << follows+1 << "," << cur->last << "]" << dendl;
+      project_rstat_inode_to_frag(cur->inode, follows+1, cur->last, parent, linkunlink);
+      
       for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
 	   p != cur->dirty_old_rstats.end();
 	   p++) {
 	old_inode_t& old = cur->old_inodes[*p];
-
-	fnode_t *pf;
-	if (parent->dirty_old_fnodes.count(*p) == 0) {
-	  pf = &parent->dirty_old_fnodes[*p].second;
-	  pf->rstat.zero();
-	  pf->accounted_rstat.zero();
-	} else 
-	  pf = &parent->dirty_old_fnodes[*p].second;
-	
-	nest_info_t delta;
-	delta.zero();
-	if (linkunlink == 0) {
-	  delta.add(old.inode.rstat);
-	  delta.sub(old.inode.accounted_rstat);
-	} else if (linkunlink < 0) {
-	  delta.sub(old.inode.accounted_rstat);
-	} else {
-	  delta.add(old.inode.rstat);
-	}
-	dout(10) << "   snap " << *p << " delta " << delta << dendl;
-	pf->rstat.add(delta);
-	old.inode.accounted_rstat = old.inode.rstat;
+	project_rstat_inode_to_frag(old.inode, old.first, *p, parent);
       }
+      cur->dirty_old_rstats.clear();
     }
 
     // stop?
@@ -1260,7 +1326,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->can_auth_pin() ||
 	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
-	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false))) {  // ** do not initiate.. see above comment **
+	 //true
+	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
+	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
       stop = true;
@@ -1303,23 +1371,12 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // rstat
     if (primary_dn) {
-      pi->rstat.version++;
-      dout(15) << "predirty_journal_parents take_diff " << pf->rstat << dendl;
-      dout(15) << "predirty_journal_parents         - " << pf->accounted_rstat << dendl;
-      pi->rstat.take_diff(pf->rstat, pf->accounted_rstat);
-      dout(15) << "predirty_journal_parents     gives " << pi->rstat << " on " << *pin << dendl;
-
-      // snapped?
-      if (parent->dirty_old_fnodes.size()) {
-	for (map<snapid_t,pair<snapid_t,fnode_t> >::iterator p = parent->dirty_old_fnodes.begin();
-	     p != parent->dirty_old_fnodes.end();
-	     p++) {
-	  dout(10) << "  dirty_old_fnode [" << p->second.first << "," << p->first << "]" << dendl;
-	  map<snapid_t,old_inode_t>::iterator q = pin->pick_dirty_old_inode(p->first);
-	  q->second.inode.rstat.version++;
-	  q->second.inode.rstat.take_diff(p->second.second.rstat, p->second.second.accounted_rstat);
-	}
-      }
+      project_rstat_frag_to_inode(*pf, follows+1, CEPH_NOSNAP, pin);
+      for (map<snapid_t,pair<snapid_t,fnode_t> >::iterator p = parent->dirty_old_fnodes.begin();
+	   p != parent->dirty_old_fnodes.end();
+	   p++)
+	project_rstat_frag_to_inode(p->second.second, p->second.first, p->first, pin);
+      parent->dirty_old_fnodes.clear();
     }
 
     // next parent!

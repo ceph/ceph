@@ -844,15 +844,15 @@ void CInode::finish_scatter_gather_update(int type)
 	   p != dirfrags.end();
 	   p++) {
 	fnode_t *pf = p->second->get_projected_fnode();
-	if (pf->accounted_fragstat.version == pi->dirstat.version) {
+	if (true) { // FIXME pf->accounted_fragstat.version == pi->dirstat.version) {
 	  dout(20) << "  frag " << p->first << " " << *p->second << dendl;
 	  dout(20) << "             fragstat " << pf->fragstat << dendl;
-	  dout(20) << "   accounted_fragstat " << pf->fragstat << dendl;
+	  dout(20) << "   accounted_fragstat " << pf->accounted_fragstat << dendl;
 	  pi->dirstat.take_diff(pf->fragstat, 
 				pf->accounted_fragstat, touched_mtime);
 	} else {
 	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
-	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->fragstat << dendl;
+	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->accounted_fragstat << dendl;
 	}
       }
       if (touched_mtime)
@@ -875,19 +875,19 @@ void CInode::finish_scatter_gather_update(int type)
 	   p != dirfrags.end();
 	   p++) {
 	fnode_t *pf = p->second->get_projected_fnode();
-	if (pf->accounted_rstat.version == pi->rstat.version) {
+	if (true) { // FIXME pf->accounted_rstat.version == pi->rstat.version) {
 	  dout(20) << "  frag " << p->first << " " << *p->second << dendl;
 	  dout(20) << "             rstat " << pf->rstat << dendl;
-	  dout(20) << "   accounted_rstat " << pf->rstat << dendl;
+	  dout(20) << "   accounted_rstat " << pf->accounted_rstat << dendl;
 	  pi->rstat.take_diff(pf->rstat, 
 			      pf->accounted_rstat);
 	} else {
 	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
-	  dout(20) << "    ignoring OLD accounted_rstat " << pf->rstat << dendl;
+	  dout(20) << "    ignoring OLD accounted_rstat " << pf->accounted_rstat << dendl;
 	}
       }
       pi->rstat.version++;
-      dout(20) << "        final rstat " << pi->rstat << dendl;
+      dout(20) << "       final rstat " << pi->rstat << dendl;
       assert(pi->rstat.rfiles >= 0);
       assert(pi->rstat.rsubdirs >= 0);
     }
@@ -1093,10 +1093,29 @@ snapid_t CInode::get_oldest_snap()
   return MIN(t, first);
 }
 
+
+void CInode::cow_old_inode(snapid_t follows)
+{
+  assert(follows >= first);
+
+  old_inode_t &old = old_inodes[follows];
+  old.first = first;
+  old.inode = *get_previous_projected_inode();
+  old.xattrs = xattrs;
+  
+  if (!(old.inode.rstat == old.inode.accounted_rstat))
+    dirty_old_rstats.insert(follows);
+  
+  first = follows+1;
+
+  dout(10) << "cow_old_inode to [" << old.first << "," << follows << "] on "
+	   << *this << dendl;
+}
+
 /*
  * pick/create an old_inode that we can write into.
  */
-map<snapid_t,old_inode_t>::iterator CInode::pick_dirty_old_inode(snapid_t last)
+/*map<snapid_t,old_inode_t>::iterator CInode::pick_dirty_old_inode(snapid_t last)
 {
   dout(10) << "pick_dirty_old_inode last " << last << dendl;
   SnapRealm *realm = find_snaprealm();
@@ -1109,6 +1128,7 @@ map<snapid_t,old_inode_t>::iterator CInode::pick_dirty_old_inode(snapid_t last)
 
   
 }
+*/
 
 void CInode::open_snaprealm()
 {

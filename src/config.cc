@@ -336,7 +336,7 @@ md_config_t g_conf = {
 
   mds_tick_interval: 5,
 
-  mds_scatter_nudge_interval: 15,  // how quickly dirstat changes propagate up the hierarchy
+  mds_scatter_nudge_interval: 5,  // how quickly dirstat changes propagate up the hierarchy
 
   mds_log: true,
   mds_log_max_events: -1,

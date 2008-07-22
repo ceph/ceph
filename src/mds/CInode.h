@@ -185,6 +185,8 @@ class CInode : public MDSCacheObject {
 
   map<snapid_t,old_inode_t>::iterator pick_dirty_old_inode(snapid_t last);
 
+  void cow_old_inode(snapid_t follows);
+
   // -- cache infrastructure --
 private:
   map<frag_t,CDir*> dirfrags; // cached dir fragments

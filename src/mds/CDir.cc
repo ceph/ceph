@@ -143,6 +143,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   inode = in;
   frag = fg;
   this->cache = mdcache;
+
+  first = 1;
   
   num_head_items = num_head_null = 0;
   num_snap_items = num_snap_null = 0;

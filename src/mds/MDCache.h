@@ -482,6 +482,11 @@ public:
   void journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);
   void journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
   inode_t *journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+
+  void project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
+				   CDir *parent, int linkunlink=0);
+  void project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapid_t last, 
+				   CInode *pin);
   void predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
 				int flags, int linkunlink=0,

@@ -1023,7 +1023,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 	cap->set_wanted(wanted);
       }
 
-      _do_cap_update(in, had, in->get_caps_wanted() | wanted, follows, m);      
+      _do_cap_update(in, has|had, in->get_caps_wanted() | wanted, follows, m);      
       
       // done?
       if (in->last == CEPH_NOSNAP)
@@ -2266,6 +2266,13 @@ void Locker::scatter_eval(ScatterLock *lock)
   assert(lock->is_stable());
 
   if (lock->get_parent()->is_frozen()) return;
+  
+  if (lock->get_type() == CEPH_LOCK_INEST &&
+      !lock->is_rdlocked() &&
+      lock->get_state() != LOCK_SCATTER) {
+    scatter_scatter(lock);
+    return;
+  }
 
   CInode *in = (CInode*)lock->get_parent();
   if (!in->has_subtree_root_dirfrag() || in->is_base()) {
