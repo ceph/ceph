@@ -330,6 +330,13 @@ int Ebofs::umount()
   dout(5) << "umount stopping finisher thread" << dendl;
   finisher.stop();
 
+  // close journal
+  if (journal) {
+    journal->close();
+    delete journal;
+    journal = 0;
+  }
+
   trim_bc(0);
   trim_inodes(0);
 
