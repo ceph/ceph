@@ -226,13 +226,8 @@ todo
   - figure out how to fix up rados logging
   - snap collections
   - garbage collection
-- realms
-  - make better sense of snap_highwater...?
 
-/- cdir fetch/store versioned dentries
-/- emetablob.. journaling a versioned update..
-/  - replay
-  - fetch may need to adjust loaded dentry first,last?
+- fetch may need to adjust loaded dentry first,last?
 
 - client reconnect vs snaps
 
@@ -256,7 +251,6 @@ todo
 
 - locker
   - dirstat/fragstats
-  - leases on snapshotted inodes.. cuz the dirstat updates will be lazy..
 
 - mds server ops
   - link rollback
