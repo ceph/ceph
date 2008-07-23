@@ -1,6 +1,8 @@
 %define pkg_version @VERSION@
 # Build against the running kernel - this can be changed to whatever kernel version you want to build against.
 %define kernel %(uname -r)
+# Get the kernel version that is running, but chop off the architecture part (e.g. 2.6.25.10-86.fc9.x86_64 goes to 2.6.25.10-86.fc9)
+%define knoarch %(uname -r | sed s/\.[^.]*$//g)
 %define mybuildroot %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 %define optflags ""
 
@@ -13,7 +15,7 @@ License:       LGPL
 Group:         Utilities/System
 URL:           http://ceph.newdream.net/
 Source:        %{name}-%{pkg_version}.tar.gz
-BuildRequires: gcc-c++, libtool, libtool-ltdl-devel, boost-devel, git, perl, perl-devel, gdbm, kernel-devel == %{kernel}
+BuildRequires: fuse-devel, gcc-c++, libtool, libtool-ltdl-devel, boost-devel, git, perl, perl-devel, gdbm, kernel-devel == %{knoarch}
 BuildRoot:     %{mybuildroot}
 Requires:      ceph-mon, ceph-mds, ceph-osd, kmod-ceph-%{kernel}
 
