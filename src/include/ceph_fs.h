@@ -6,6 +6,9 @@
 #ifndef _FS_CEPH_CEPH_FS_H
 #define _FS_CEPH_CEPH_FS_H
 
+#define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up */
+
+
 #ifdef __KERNEL__
 # include <linux/in.h>
 # include <linux/types.h>
