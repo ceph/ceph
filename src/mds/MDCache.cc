@@ -1127,32 +1127,60 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
       dout(10) << " projecting to newly split dirty_old_fnode [" << first << "," << last << "] "
 	       << " " << pf->rstat << "/" << pf->accounted_rstat << dendl;
     } else {
+      // be careful, dirty_old_fnodes is a _sparse_ map
+      first = ofirst;
+
+      // find any intersection with last
       map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.lower_bound(last);
       if (p == parent->dirty_old_fnodes.end()) {
-	first = ofirst;
-	parent->dirty_old_fnodes[last].first = first;
-	pf = &parent->dirty_old_fnodes[last].fnode;      
-      } else {
-	first = p->second.first;
-	if (last < p->first) {
-	  parent->dirty_old_fnodes[last] = p->second;
-	  p->second.first = last+1;
+	dout(20) << "  no dirty_old_fnode with last >= last " << last << dendl;
+	if (!parent->dirty_old_fnodes.empty() && parent->dirty_old_fnodes.rbegin()->first >= first) {
+	  dout(20) << "  last dirty_old_fnode ends at " << parent->dirty_old_fnodes.rbegin()->first << dendl;
+	  first = parent->dirty_old_fnodes.rbegin()->first+1;
 	}
-	pf = &parent->dirty_old_fnodes[last].fnode;
+      } else {
+	if (p->second.first <= last) {
+	  // it intersects [first,last]
+	  if (p->second.first < first) {
+	    dout(10) << " splitting off left bit [" << p->second.first << "," << first-1 << "]" << dendl;
+	    parent->dirty_old_fnodes[first-1] = p->second;
+	    p->second.first = first;
+	  }
+	  if (p->second.first > first)
+	    first = p->second.first;
+	  if (last < p->first) {
+	    dout(10) << " splitting off right bit [" << last+1 << "," << p->first << "]" << dendl;
+	    parent->dirty_old_fnodes[last] = p->second;
+	    p->second.first = last+1;
+	  }
+	} else {
+	  // it is to the _right_ of [first,last]
+	  p = parent->dirty_old_fnodes.lower_bound(first);
+	  if (p->first > first) {
+	    dout(10) << " staying to the right of [" << p->second.first << "," << p->first << "]..." << dendl;
+	    first = p->first+1;
+	  }
+	  dout(10) << " projecting to new dirty_old_fnode [" << first << "," << last << "]" << dendl;
+	}
       }
+      dout(10) << " projecting to dirty_old_fnode [" << first << "," << last << "]" << dendl;
+      parent->dirty_old_fnodes[last].first = first;
+      pf = &parent->dirty_old_fnodes[last].fnode;
     }
     
     // apply
+    dout(10) << "  project to [" << first << "," << last << "] " << pf->rstat << dendl;
+    assert(last >= first);
     pf->rstat.add(delta);
     inode.accounted_rstat = inode.rstat;
-    dout(10) << " result " << pf->rstat << " " << *parent << dendl;
+    dout(10) << "      result [" << first << "," << last << "] " << pf->rstat << " " << *parent << dendl;
 
     last = first-1;
   }
 }
 
 void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapid_t last, 
-					  CInode *pin)
+					  CInode *pin, bool cow_head)
 {
   dout(10) << "project_rstat_frag_to_inode [" << ofirst << "," << last << "]" << dendl;
   dout(10) << "  frag           rstat " << fnode.rstat << dendl;
@@ -1163,6 +1191,8 @@ void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapi
 
   fnode.accounted_rstat = fnode.rstat;
 
+  inode_t *pi_to_cow = cow_head ? pin->get_projected_inode() : pin->get_previous_projected_inode();
+
   while (last >= ofirst) {
     inode_t *pi;
     snapid_t first;
@@ -1170,27 +1200,34 @@ void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapi
       pi = pin->get_projected_inode();
       first = MAX(ofirst, pin->first);
       if (first > pin->first) {
-	old_inode_t& old = pin->cow_old_inode(first-1, pi);
+	old_inode_t& old = pin->cow_old_inode(first-1, pi_to_cow);
 	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
       }
-    } else if (last >= pin->first) {
-      first = pin->first;
-      old_inode_t& old = pin->cow_old_inode(last, pin->get_projected_inode());
-      pi = &old.inode;
-      pin->dirty_old_rstats.insert(last);
     } else {
-      map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
-      if (p == pin->old_inodes.end()) {
-	dout(10) << " no old_inode <= " << last << ", done." << dendl;
-	break;
+      if (last >= pin->first) {
+	first = pin->first;
+	pin->cow_old_inode(last, pi_to_cow);
+      } else {
+	map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
+	if (p == pin->old_inodes.end()) {
+	  dout(10) << " no old_inode <= " << last << ", done." << dendl;
+	  break;
+	}
+	first = p->second.first;
+	if (p->first > last) {
+	  dout(10) << " splitting right old_inode [" << first << "," << p->first << "] to ["
+		   << (last+1) << "," << p->first << dendl;
+	  pin->old_inodes[last] = p->second;
+	  p->second.first = last+1;
+	  pin->dirty_old_rstats.insert(p->first);
+	}
       }
-      first = p->second.first;
-      if (p->first > last) {
-	dout(10) << " splitting old_inode [" << first << "," << p->first << "] to ["
-		 << (last+1) << "," << p->first << dendl;
-	pin->old_inodes[last] = p->second;
-	p->second.first = last+1;
-	pin->dirty_old_rstats.insert(p->first);
+      if (first < ofirst) {
+	dout(10) << " splitting left old_inode [" << first << "," << last << "] to ["
+		 << first << "," << ofirst-1 << dendl;
+	pin->old_inodes[ofirst-1] = pin->old_inodes[last];
+	pin->dirty_old_rstats.insert(ofirst-1);
+	pin->old_inodes[last].first = first = ofirst;
       }
       pi = &pin->old_inodes[last].inode;
       pin->dirty_old_rstats.insert(last);
@@ -1300,12 +1337,13 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     
     // rstat
-    snapid_t follows;
-    follows = cfollows;
-    if (follows == CEPH_NOSNAP || follows == 0) {
-      SnapRealm *prealm = parent->inode->find_snaprealm();
-      follows = prealm->get_latest_snap();
-    }
+    SnapRealm *prealm = parent->inode->find_snaprealm();
+    snapid_t latest = prealm->get_latest_snap();
+
+    snapid_t follows = cfollows;
+    if (follows == CEPH_NOSNAP || follows == 0)
+      follows = latest;
+
     snapid_t first = follows+1;
     if (cur->first > first)
       first = cur->first;
@@ -1360,6 +1398,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     mut->add_projected_inode(pin);
     lsi.push_front(pin);
 
+    pin->pre_cow_old_inode();  // avoid cow mayhem
+
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
 
@@ -1381,11 +1421,11 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // rstat
     if (primary_dn) {
-      project_rstat_frag_to_inode(*pf, first, CEPH_NOSNAP, pin);
+      project_rstat_frag_to_inode(*pf, first, CEPH_NOSNAP, pin, false);
       for (map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.begin();
 	   p != parent->dirty_old_fnodes.end();
 	   p++)
-	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin);
+	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin, false);
       parent->dirty_old_fnodes.clear();
     }
 

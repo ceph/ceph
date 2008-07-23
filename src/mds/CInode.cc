@@ -163,7 +163,7 @@ inode_t *CInode::project_inode()
   dout(15) << "project_inode " << projected_inode.back() << dendl;
   return projected_inode.back();
 }
-  
+
 void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
 {
   assert(!projected_inode.empty());
@@ -887,11 +887,11 @@ void CInode::finish_scatter_gather_update(int type)
 	   p++) {
 	CDir *dir = p->second;
 	fnode_t *pf = dir->get_projected_fnode();
-	mdcache->project_rstat_frag_to_inode(*pf, dir->first, CEPH_NOSNAP, this);
+	mdcache->project_rstat_frag_to_inode(*pf, dir->first, CEPH_NOSNAP, this, true);
 	for (map<snapid_t,old_fnode_t>::iterator q = dir->dirty_old_fnodes.begin();
 	     q != dir->dirty_old_fnodes.end();
 	     q++)
-	  mdcache->project_rstat_frag_to_inode(q->second.fnode, q->second.first, q->first, this);
+	  mdcache->project_rstat_frag_to_inode(q->second.fnode, q->second.first, q->first, this, true);
 	dir->dirty_old_fnodes.clear();
       }
       pi->rstat.version++;
@@ -1120,6 +1120,13 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
 	   << *this << dendl;
 
   return old;
+}
+
+void CInode::pre_cow_old_inode()
+{
+  snapid_t follows = find_snaprealm()->get_latest_snap();
+  if (first <= follows)
+    cow_old_inode(follows, get_projected_inode());
 }
 
 /*

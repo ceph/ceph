@@ -480,7 +480,7 @@ public:
   void project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
 				   CDir *parent, int linkunlink=0);
   void project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapid_t last, 
-				   CInode *pin);
+				   CInode *pin, bool cow_head);
   void predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
 				int flags, int linkunlink=0,

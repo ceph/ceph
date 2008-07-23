@@ -2231,10 +2231,12 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mut->wrlocks.insert(lock);
   mut->locks.insert(lock);
 
+  in->pre_cow_old_inode();  // avoid cow mayhem
+
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
+
   lock->get_parent()->finish_scatter_gather_update(lock->get_type());
-  
   lock->clear_updated();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");

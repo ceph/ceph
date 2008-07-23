@@ -186,6 +186,7 @@ class CInode : public MDSCacheObject {
   map<snapid_t,old_inode_t>::iterator pick_dirty_old_inode(snapid_t last);
 
   old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
+  void pre_cow_old_inode();
 
   // -- cache infrastructure --
 private:
