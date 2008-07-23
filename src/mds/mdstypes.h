@@ -376,6 +376,21 @@ struct fnode_t {
 WRITE_CLASS_ENCODER(fnode_t)
 
 
+struct old_fnode_t {
+  snapid_t first;
+  fnode_t fnode;
+
+  void encode(bufferlist& bl) const {
+    ::encode(first, bl);
+    ::encode(fnode, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(first, bl);
+    ::decode(fnode, bl);
+  }
+};
+WRITE_CLASS_ENCODER(old_fnode_t)
+
 
 
 // =======

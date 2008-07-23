@@ -158,7 +158,7 @@ class CDir : public MDSCacheObject {
 
   fnode_t fnode;
   snapid_t first;
-  map<snapid_t,pair<snapid_t,fnode_t> > dirty_old_fnodes;  // [value.first,key]
+  map<snapid_t,old_fnode_t> dirty_old_fnodes;  // [value.first,key]
 
 protected:
   version_t projected_version;

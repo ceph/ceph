@@ -1114,29 +1114,29 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 		 << " " << pf->rstat << "/" << pf->accounted_rstat
 		 << dendl;
 	parent->dirty_old_fnodes[first-1].first = parent->first;
-	parent->dirty_old_fnodes[first-1].second = *pf;
+	parent->dirty_old_fnodes[first-1].fnode = *pf;
 	parent->first = first;
       }
     } else if (last >= parent->first) {
       first = parent->first;
       parent->dirty_old_fnodes[last].first = first;
-      parent->dirty_old_fnodes[last].second = *parent->get_projected_fnode();
-      pf = &parent->dirty_old_fnodes[last].second;
+      parent->dirty_old_fnodes[last].fnode = *parent->get_projected_fnode();
+      pf = &parent->dirty_old_fnodes[last].fnode;
       dout(10) << " projecting to newly split dirty_old_fnode [" << first << "," << last << "] "
 	       << " " << pf->rstat << "/" << pf->accounted_rstat << dendl;
     } else {
-      map<snapid_t,pair<snapid_t,fnode_t> >::iterator p = parent->dirty_old_fnodes.lower_bound(last);
+      map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.lower_bound(last);
       if (p == parent->dirty_old_fnodes.end()) {
 	first = ofirst;
 	parent->dirty_old_fnodes[last].first = first;
-	pf = &parent->dirty_old_fnodes[last].second;      
+	pf = &parent->dirty_old_fnodes[last].fnode;      
       } else {
 	first = p->second.first;
 	if (last < p->first) {
 	  parent->dirty_old_fnodes[last] = p->second;
 	  p->second.first = last+1;
 	}
-	pf = &parent->dirty_old_fnodes[last].second;
+	pf = &parent->dirty_old_fnodes[last].fnode;
       }
     }
     
@@ -1302,7 +1302,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
       dout(10) << "    frag head is [" << parent->first << ",head] " << dendl;
       dout(10) << " inode update is [" << follows+1 << "," << cur->last << "]" << dendl;
-      project_rstat_inode_to_frag(cur->inode, follows+1, cur->last, parent, linkunlink);
+      project_rstat_inode_to_frag(*curi, follows+1, cur->last, parent, linkunlink);
       
       for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
 	   p != cur->dirty_old_rstats.end();
@@ -1372,10 +1372,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     // rstat
     if (primary_dn) {
       project_rstat_frag_to_inode(*pf, follows+1, CEPH_NOSNAP, pin);
-      for (map<snapid_t,pair<snapid_t,fnode_t> >::iterator p = parent->dirty_old_fnodes.begin();
+      for (map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.begin();
 	   p != parent->dirty_old_fnodes.end();
 	   p++)
-	project_rstat_frag_to_inode(p->second.second, p->second.first, p->first, pin);
+	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin);
       parent->dirty_old_fnodes.clear();
     }
 

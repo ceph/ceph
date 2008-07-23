@@ -1337,15 +1337,15 @@ void ObjectCacher::purge(Object *ob)
        p != ob->data.end();
        p++) {
     BufferHead *bh = p->second;
-	if (!bh->is_clean())
-	  dout(0) << "purge forcibly removing " << *ob << " " << *bh << dendl;
-	bh_remove(ob, bh);
-	delete bh;
+    if (!bh->is_clean())
+      dout(0) << "purge forcibly removing " << *ob << " " << *bh << dendl;
+    bh_remove(ob, bh);
+    delete bh;
   }
-
+  
   if (ob->can_close()) {
-	dout(10) << "trim trimming " << *ob << dendl;
-	close_object(ob);
+    dout(10) << "trim trimming " << *ob << dendl;
+    close_object(ob);
   }
 }
 
