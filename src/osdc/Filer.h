@@ -26,13 +26,6 @@
  * "files" are identified by ino. 
  */
 
-#include <set>
-#include <map>
-using namespace std;
-
-#include <ext/hash_map>
-using namespace __gnu_cxx;
-
 #include "include/types.h"
 
 #include "osd/OSDMap.h"

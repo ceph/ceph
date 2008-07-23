@@ -15,9 +15,6 @@
 #ifndef __ANCHORCLIENT_H
 #define __ANCHORCLIENT_H
 
-#include <ext/hash_map>
-using __gnu_cxx::hash_map;
-
 #include "MDSTableClient.h"
 #include "Anchor.h"
 

@@ -14,8 +14,6 @@
 #include "Filer.h"
 
 class Objecter;
-class Objecter::OSDRead;
-class Objecter::OSDWrite;
 
 class ObjectCacher {
  public:

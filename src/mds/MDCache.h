@@ -17,12 +17,6 @@
 #ifndef __MDCACHE_H
 #define __MDCACHE_H
 
-#include <string>
-#include <vector>
-#include <map>
-#include <set>
-#include <ext/hash_map>
-
 #include "include/types.h"
 #include "include/filepath.h"
 
