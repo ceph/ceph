@@ -16,6 +16,8 @@
 #ifndef __CLIENT_TRACE_H
 #define __CLIENT_TRACE_H
 
+#include <stdlib.h>
+
 #include <cassert>
 #include <list>
 #include <string>

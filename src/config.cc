@@ -99,7 +99,7 @@ unsigned _page_size = sysconf(_SC_PAGESIZE);
 unsigned long _page_mask = ~(unsigned long)(_page_size - 1);
 unsigned _page_shift = _get_bits_of(_page_size);
 
-int _num_threads = 0;
+atomic_t _num_threads(0);
 
 // file layouts
 struct ceph_file_layout g_default_file_layout = {

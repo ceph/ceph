@@ -144,7 +144,8 @@ AC_TYPE_UINT8_T
 
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
-	src/Makefile])
+	src/Makefile
+	ceph.spec])
 AC_OUTPUT
 
 AM_INIT_AUTOMAKE
