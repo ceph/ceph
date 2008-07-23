@@ -92,7 +92,7 @@ void SnapRealm::build_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
  */
 const set<snapid_t>& SnapRealm::get_snaps()
 {
-  if (cached_snaps.empty()) {
+  if (cached_snaps.empty() || cached_snaps_seq < seq) {
     cached_snaps.clear();
     cached_snap_vec.clear();
     build_snap_set(cached_snaps, 0, CEPH_NOSNAP);
@@ -111,9 +111,9 @@ const set<snapid_t>& SnapRealm::get_snaps()
 
 const vector<snapid_t>& SnapRealm::get_snap_vector()
 {
-  if (cached_snap_vec.empty()) {
-    get_snaps();
+  get_snaps();
 
+  if (cached_snap_vec.empty()) {
     cached_snap_vec.resize(cached_snaps.size());
     unsigned i = 0;
     for (set<snapid_t>::reverse_iterator p = cached_snaps.rbegin();

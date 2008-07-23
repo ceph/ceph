@@ -107,6 +107,7 @@ struct SnapRealm {
   map<snapid_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
 
   // caches?
+  snapid_t cached_snaps_seq;
   set<snapid_t> cached_snaps;
   vector<snapid_t> cached_snap_vec;
 
