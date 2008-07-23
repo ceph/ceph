@@ -15,11 +15,6 @@
 #ifndef __MDSTABLECLIENT_H
 #define __MDSTABLECLIENT_H
 
-#include <vector>
-using std::vector;
-#include <ext/hash_map>
-using __gnu_cxx::hash_map;
-
 #include "include/types.h"
 #include "include/Context.h"
 #include "mds_table_types.h"
@@ -40,6 +35,8 @@ protected:
     Context *onfinish;
     version_t *ptid;
     bufferlist mutation;
+
+    _pending_prepare() : onfinish(0), ptid(0) {}
   };
 
   hash_map<__u64, _pending_prepare> pending_prepare;
