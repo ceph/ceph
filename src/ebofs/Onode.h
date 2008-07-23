@@ -355,7 +355,7 @@ public:
 
     map<block_t,ExtentCsum>::iterator p = extent_map.lower_bound(len);
     if (p != extent_map.begin() &&
-        (p == extent_map.end() || p->first > len && p->first)) {
+        (p == extent_map.end() ||( p->first > len && p->first))) {
       p--;
       ExtentCsum &o = p->second;
       if (o.ex.length > len - p->first) {
@@ -422,7 +422,7 @@ public:
     }
 
     if (p != extent_map.begin() &&
-        (p == extent_map.end() || p->first > start && p->first)) {
+        (p == extent_map.end() || (p->first > start && p->first))) {
       p--;
       if (p->second.ex.length > start - p->first) {
         extent_t ex;
