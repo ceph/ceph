@@ -1102,13 +1102,13 @@ snapid_t CInode::get_oldest_snap()
 }
 
 
-void CInode::cow_old_inode(snapid_t follows)
+old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
 {
   assert(follows >= first);
 
   old_inode_t &old = old_inodes[follows];
   old.first = first;
-  old.inode = *get_previous_projected_inode();
+  old.inode = *pi;
   old.xattrs = xattrs;
   
   if (!(old.inode.rstat == old.inode.accounted_rstat))
@@ -1118,6 +1118,8 @@ void CInode::cow_old_inode(snapid_t follows)
 
   dout(10) << "cow_old_inode to [" << old.first << "," << follows << "] on "
 	   << *this << dendl;
+
+  return old;
 }
 
 /*

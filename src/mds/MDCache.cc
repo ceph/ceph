@@ -274,6 +274,8 @@ CInode *MDCache::create_stray_inode(int whose)
   in->inode.nlink = 1;
   in->inode.layout = g_default_mds_dir_layout;
   
+  in->open_snaprealm();
+
   add_inode( in );
 
   return in;
@@ -1028,7 +1030,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     if (follows < in->first)
       return;
 
-    in->cow_old_inode(follows);
+    in->cow_old_inode(follows, in->get_previous_projected_inode());
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
@@ -1167,11 +1169,15 @@ void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapi
     if (last == pin->last) {
       pi = pin->get_projected_inode();
       first = MAX(ofirst, pin->first);
-      if (first > pin->first)
-	pin->cow_old_inode(first-1);
+      if (first > pin->first) {
+	old_inode_t& old = pin->cow_old_inode(first-1, pi);
+	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
+      }
     } else if (last >= pin->first) {
       first = pin->first;
-      pin->cow_old_inode(last);
+      old_inode_t& old = pin->cow_old_inode(last, pin->get_projected_inode());
+      pi = &old.inode;
+      pin->dirty_old_rstats.insert(last);
     } else {
       map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
       if (p == pin->old_inodes.end()) {
@@ -1184,13 +1190,15 @@ void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapi
 		 << (last+1) << "," << p->first << dendl;
 	pin->old_inodes[last] = p->second;
 	p->second.first = last+1;
+	pin->dirty_old_rstats.insert(p->first);
       }
+      pi = &pin->old_inodes[last].inode;
+      pin->dirty_old_rstats.insert(last);
     }
-    dout(10) << " projecting to [" << first << "," << last << "]" << dendl;
-    
+    dout(10) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
     pi->rstat.version++;
     pi->rstat.add(delta);
-    dout(15) << "    result " << pi->rstat << dendl;
+    dout(15) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
     
     last = first-1;
   }
@@ -1293,16 +1301,18 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     
     // rstat
     snapid_t follows;
+    follows = cfollows;
+    if (follows == CEPH_NOSNAP || follows == 0) {
+      SnapRealm *prealm = parent->inode->find_snaprealm();
+      follows = prealm->get_latest_snap();
+    }
+    snapid_t first = follows+1;
+    if (cur->first > first)
+      first = cur->first;
     if (primary_dn) { 
-      follows = cfollows;
-      if (follows == CEPH_NOSNAP || follows == 0) {
-	SnapRealm *prealm = parent->inode->find_snaprealm();
-	follows = prealm->get_latest_snap();
-      }
-
       dout(10) << "    frag head is [" << parent->first << ",head] " << dendl;
-      dout(10) << " inode update is [" << follows+1 << "," << cur->last << "]" << dendl;
-      project_rstat_inode_to_frag(*curi, follows+1, cur->last, parent, linkunlink);
+      dout(10) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+      project_rstat_inode_to_frag(*curi, first, cur->last, parent, linkunlink);
       
       for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
 	   p != cur->dirty_old_rstats.end();
@@ -1326,8 +1336,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->can_auth_pin() ||
 	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
-	 //true
-	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
+	 true
+	 //!mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
 	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
@@ -1371,7 +1381,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // rstat
     if (primary_dn) {
-      project_rstat_frag_to_inode(*pf, follows+1, CEPH_NOSNAP, pin);
+      project_rstat_frag_to_inode(*pf, first, CEPH_NOSNAP, pin);
       for (map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.begin();
 	   p != parent->dirty_old_fnodes.end();
 	   p++)
