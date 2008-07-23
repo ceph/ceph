@@ -1981,7 +1981,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // inode
     dout(12) << "including inode " << *in << dendl;
-    in->encode_inodestat(dnbl);
+    in->encode_inodestat(dnbl, snapid);
     mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 
