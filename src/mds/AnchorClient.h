@@ -15,11 +15,6 @@
 #ifndef __ANCHORCLIENT_H
 #define __ANCHORCLIENT_H
 
-#include <vector>
-using std::vector;
-#include <ext/hash_map>
-using __gnu_cxx::hash_map;
-
 #include "include/types.h"
 #include "msg/Dispatcher.h"
 

@@ -17,16 +17,6 @@
 #ifndef __MDS_H
 #define __MDS_H
 
-#include <list>
-#include <vector>
-#include <set>
-#include <map>
-#include <ostream>
-using namespace std;
-
-#include <ext/hash_map>
-using namespace __gnu_cxx;
-
 #include "mdstypes.h"
 
 #include "msg/Dispatcher.h"

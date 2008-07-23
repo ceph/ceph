@@ -15,6 +15,7 @@
 #ifndef __SIMPLEMESSENGER_H
 #define __SIMPLEMESSENGER_H
 
+#include "include/types.h"
 
 #include <list>
 #include <map>
@@ -22,9 +23,6 @@ using namespace std;
 #include <ext/hash_map>
 #include <ext/hash_set>
 using namespace __gnu_cxx;
-
-
-#include "include/types.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
