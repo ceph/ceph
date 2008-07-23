@@ -1374,8 +1374,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->can_auth_pin() ||
 	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
-	 true
-	 //!mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
+	 //true
+	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
 	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
