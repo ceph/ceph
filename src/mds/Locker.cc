@@ -1163,9 +1163,9 @@ void Locker::handle_client_lease(MClientLease *m)
   assert(m->get_source().is_client());
   int client = m->get_source().num();
 
-  CInode *in = mdcache->get_inode(m->get_ino());
+  CInode *in = mdcache->get_inode(m->get_ino(), m->get_last());
   if (!in) {
-    dout(7) << "handle_client_lease don't have ino " << m->get_ino() << dendl;
+    dout(7) << "handle_client_lease don't have ino " << m->get_ino() << "." << m->get_last() << dendl;
     delete m;
     return;
   }
@@ -1298,13 +1298,13 @@ void Locker::revoke_client_leases(SimpleLock *lock)
       mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
 						mask,
 						dn->get_dir()->ino(),
+						dn->get_dir()->get_inode()->first, CEPH_NOSNAP,
 						dn->get_name()),
 			       l->client);
     } else {
       CInode *in = (CInode*)lock->get_parent();
       mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
-						lock->get_type(),
-						in->ino()),
+						lock->get_type(), in->ino(), in->first, in->last),
 			       l->client);
     }
   }

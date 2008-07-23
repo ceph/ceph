@@ -1294,7 +1294,7 @@ void Client::handle_lease(MClientLease *m)
   
  revoke:
   messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE,
-					   m->get_mask(), m->get_ino(), m->dname),
+					   m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname),
 			  m->get_source_inst());
   delete m;
 }
@@ -1323,7 +1323,7 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
   if (mds >= 0 && mdsmap->is_up(mds)) {
     dout(10) << "release_lease mds" << mds << " mask " << mask
 	     << " on " << in->ino() << " " << dname << dendl;
-    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, mask, in->ino(), dname),
+    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, mask, in->ino(), in->snapid, in->snapid, dname),
 			    mdsmap->get_inst(mds));
   }
 }

@@ -1008,6 +1008,21 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   else
     oldin->inode.max_size = 0;
 
+  // clone leases?
+  if (in->last != CEPH_NOSNAP) {
+    // only if we are not the head, and our lease may cover an
+    // instance in either the old or new inodes valid interval.
+    for (hash_map<int,ClientLease*>::iterator p = in->client_lease_map.begin();
+	 p != in->client_lease_map.end();
+	 p++) {
+      dout(10) << " cloning client" << p->first << " lease on " << p->second->mask << " to cloned inode" << dendl;
+      ClientLease *l = oldin->add_client_lease(p->first, p->second->mask);
+      l->ttl = p->second->ttl;
+      p->second->session_lease_item.get_xlist()->push_back(&l->session_lease_item);
+      p->second->lease_item.get_xlist()->push_back(&l->lease_item);
+    }
+  }
+
   return oldin;
 }
 
@@ -1295,6 +1310,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   // build list of inodes to wrlock, dirty, and update
   list<CInode*> lsi;
   CInode *cur = in;
+  CDentry *parentdn = cur->get_projected_parent_dn();
   while (parent) {
     //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
     assert(parent->is_auth());
@@ -1337,26 +1353,38 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     
     // rstat
-    SnapRealm *prealm = parent->inode->find_snaprealm();
-    snapid_t latest = prealm->get_latest_snap();
-
-    snapid_t follows = cfollows;
-    if (follows == CEPH_NOSNAP || follows == 0)
-      follows = latest;
-
-    snapid_t first = follows+1;
-    if (cur->first > first)
-      first = cur->first;
     if (primary_dn) { 
+      SnapRealm *prealm = parent->inode->find_snaprealm();
+      snapid_t latest = prealm->get_latest_snap();
+      
+      snapid_t follows = cfollows;
+      if (follows == CEPH_NOSNAP || follows == 0)
+	follows = latest;
+      
+      snapid_t first = follows+1;
+      if (cur->first > first)
+	first = cur->first;
+
       dout(10) << "    frag head is [" << parent->first << ",head] " << dendl;
       dout(10) << " inode update is [" << first << "," << cur->last << "]" << dendl;
-      project_rstat_inode_to_frag(*curi, first, cur->last, parent, linkunlink);
+
+      /*
+       * FIXME.  this incompletely propagates rstats to _old_ parents
+       * (i.e. shortly after a directory rename).  but we need full
+       * blow hard link backpointers to make this work properly...
+       */
+      snapid_t floor = parentdn->first;
+      dout(10) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
+
+      if (cur->last >= floor)
+	project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
       
       for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
 	   p != cur->dirty_old_rstats.end();
 	   p++) {
 	old_inode_t& old = cur->old_inodes[*p];
-	project_rstat_inode_to_frag(old.inode, old.first, *p, parent);
+	if (*p >= floor)
+	  project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
       }
       cur->dirty_old_rstats.clear();
     }
@@ -1398,7 +1426,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     mut->add_projected_inode(pin);
     lsi.push_front(pin);
 
-    pin->pre_cow_old_inode();  // avoid cow mayhem
+    pin->pre_cow_old_inode();  // avoid cow mayhem!
 
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
@@ -1415,24 +1443,32 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
     }
 
-    // parent dn [first,last]?
-    CDentry *parentdn = cur->get_projected_parent_dn();
-    dout(10) << "predirty_journal_parents parentdn is " << *parentdn << dendl;
+    /* 
+     * the rule here is to follow the _oldest_ parent with dirty rstat
+     * data.  if we don't propagate all data, we add ourselves to the
+     * nudge list.  that way all rstat data will (eventually) get
+     * pushed up the tree.
+     *
+     * actually, no.  for now, silently drop rstats for old parents.  we need 
+     * hard link backpointers to do the above properly.
+     */
+    parentdn = pin->get_projected_parent_dn();
 
     // rstat
     if (primary_dn) {
-      project_rstat_frag_to_inode(*pf, first, CEPH_NOSNAP, pin, false);
       for (map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.begin();
 	   p != parent->dirty_old_fnodes.end();
 	   p++)
 	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin, false);
       parent->dirty_old_fnodes.clear();
+      
+      project_rstat_frag_to_inode(*pf, pin->first, CEPH_NOSNAP, pin, false);
     }
 
     // next parent!
     cur = pin;
     curi = pi;
-    parent = cur->get_projected_parent_dn()->get_dir();
+    parent = parentdn->get_dir();
     linkunlink = 0;
     do_parent_mtime = false;
     primary_dn = true;
@@ -1442,15 +1478,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   assert(parent->is_auth());
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
-  SnapRealm *realm = 0;
   for (list<CInode*>::iterator p = lsi.begin();
        p != lsi.end();
        p++) {
     CInode *cur = *p;
-    if (!realm)
-      realm = cur->find_snaprealm();
-    else if (cur->snaprealm)
-      realm = cur->snaprealm;
     journal_dirty_inode(blob, cur);
   }
  

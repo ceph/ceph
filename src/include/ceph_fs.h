@@ -826,6 +826,7 @@ struct ceph_mds_lease {
 	__u8 action;
 	__le16 mask;
 	__le64 ino;
+	__le64 first, last;
 } __attribute__ ((packed));
 /* followed by a __le32+string for dname */
 

@@ -249,7 +249,6 @@ todo
 
 - for simplicity, don't replicate any snapshot data.
 
-- need rsnaprealms in fraginfo_t
 - rename() needs to create a new realm if src/dst realms differ and (rrealms, or open_children, or not subtree leaf) (similar logic to the anchor update)
 
 - will snapshots and CAS play nice?
