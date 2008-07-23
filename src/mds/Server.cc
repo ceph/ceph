@@ -451,7 +451,7 @@ void Server::process_reconnected_caps()
       }
     } else {
       // note that client should perform stale/reap cleanup during reconnect.
-      assert(issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER) == 0);   // ????
+      assert((issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0);   // ????
       if (in->filelock.is_xlocked())
 	in->filelock.set_state(LOCK_LOCK);
       else

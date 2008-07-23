@@ -415,7 +415,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   
   // success?
   if (m->get_result() == -EINCLOCKED &&
-      st->flags & CEPH_OSD_OP_INCLOCK_FAIL == 0) {
+      (st->flags & CEPH_OSD_OP_INCLOCK_FAIL) == 0) {
     dout(7) << " got -EINCLOCKED, resubmitting" << dendl;
     stat_submit(st);
     delete m;
