@@ -114,5 +114,6 @@ void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace,
   __u32 op = TABLE_OP_UPDATE;
   ::encode(op, bl);
   ::encode(ino, bl);
+  ::encode(trace, bl);
   _prepare(bl, patid, onfinish);
 }
