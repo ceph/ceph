@@ -21,7 +21,8 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
-
+#include <sys/uio.h>
+#include <limits.h>
 #include <sys/user.h>
 
 #include "config.h"

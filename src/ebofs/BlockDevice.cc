@@ -27,6 +27,7 @@
 #include <errno.h>
 
 #include <sys/uio.h>
+#include <limits.h>
 
 #include <sys/ioctl.h>
 
