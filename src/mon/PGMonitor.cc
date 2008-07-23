@@ -45,11 +45,11 @@ struct kb_t {
 };
 ostream& operator<<(ostream& out, const kb_t& kb)
 {
-  if (kb.v > 2048*1024*1024*1024ULL)
+  if (kb.v > 2048ull*1024ull*1024ull*1024ULL)
     return out << (kb.v >> 40) << " PB";    
-  if (kb.v > 2048*1024*1024ULL)
+  if (kb.v > 2048ull*1024ull*1024ULL)
     return out << (kb.v >> 30) << " TB";    
-  if (kb.v > 2048*1024ULL)
+  if (kb.v > 2048ull*1024ULL)
     return out << (kb.v >> 20) << " GB";    
   if (kb.v > 2048ULL)
     return out << (kb.v >> 10) << " MB";
