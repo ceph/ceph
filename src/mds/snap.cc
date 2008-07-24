@@ -27,7 +27,6 @@
 						  << ".cache.snaprealm(" << inode->ino() \
 						  << " seq " << seq << " " << this << ") "
 
-
 bool SnapRealm::open_parents(MDRequest *mdr)
 {
   dout(10) << "open_parents" << dendl;
@@ -69,7 +68,6 @@ void SnapRealm::build_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
     s.insert(p->first);
 
   // include snaps for parents during intervals that intersect [first,last]
-  snapid_t thru = first;
   for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
        p != past_parents.end() && p->first >= first && p->second.first <= last;
        p++) {
@@ -77,14 +75,13 @@ void SnapRealm::build_snap_set(set<snapid_t> &s, snapid_t first, snapid_t last)
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     
-    thru = MIN(last, p->first);
+    snapid_t thru = MIN(last, p->first);
     oldparent->snaprealm->build_snap_set(s, 
 					 MAX(first, p->second.first),
 					 thru);
-    ++thru;
   }
-  if (thru <= last && parent)
-    parent->build_snap_set(s, thru, last);
+  if (current_parent_since <= last && parent)
+    parent->build_snap_set(s, current_parent_since, last);
 }
 
 /*
@@ -136,7 +133,6 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     infomap[p->first] = &p->second;
 
   // include snaps for parents during intervals that intersect [first,last]
-  snapid_t thru = first;
   for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
        p != past_parents.end() && p->first >= first && p->second.first <= last;
        p++) {
@@ -144,14 +140,13 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     
-    thru = MIN(last, p->first);
+    snapid_t thru = MIN(last, p->first);
     oldparent->snaprealm->get_snap_info(infomap,
 					MAX(first, p->second.first),
 					thru);
-    ++thru;
   }
-  if (thru <= last && parent)
-    parent->get_snap_info(infomap, thru, last);
+  if (current_parent_since <= last && parent)
+    parent->get_snap_info(infomap, current_parent_since, last);
 }
 
 const string& SnapInfo::get_long_name()
@@ -173,15 +168,16 @@ const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
       return snaps[snapid].get_long_name();
   }
 
-  map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(snapid);
-  if (p != snaps.end() && p->first <= snapid) {
+  map<snapid_t,snaplink_t>::iterator p = past_parents.lower_bound(snapid);
+  if (p != past_parents.end() && p->second.first <= snapid) {
     CInode *oldparent = mdcache->get_inode(p->second.ino);
     assert(oldparent);  // call open_parents first!
-    assert(oldparent->snaprealm);
-    
+    assert(oldparent->snaprealm);    
     return oldparent->snaprealm->get_snapname(snapid, atino);
   }
 
+  assert(current_parent_since <= snapid);
+  assert(parent);
   return parent->get_snapname(snapid, atino);
 }
 
@@ -219,7 +215,6 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
   }
 
     // include snaps for parents during intervals that intersect [first,last]
-  snapid_t thru = first;
   for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
        p != past_parents.end() && p->first >= first && p->second.first <= last;
        p++) {
@@ -227,16 +222,15 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     
-    thru = MIN(last, p->first);
+    snapid_t thru = MIN(last, p->first);
     snapid_t r = oldparent->snaprealm->resolve_snapname(n, atino,
 							MAX(first, p->second.first),
 							thru);
     if (r)
       return r;
-    ++thru;
   }
-  if (thru <= last && parent)
-    return parent->resolve_snapname(n, atino, thru, last);
+  if (current_parent_since <= last && parent)
+    return parent->resolve_snapname(n, atino, current_parent_since, last);
   return 0;
 }
 

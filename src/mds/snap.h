@@ -82,18 +82,21 @@ WRITE_CLASS_ENCODER(snaplink_t)
 struct SnapRealm {
   // realm state
   snapid_t created, seq;
+  snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
     ::encode(created, bl);
     ::encode(seq, bl);
+    ::encode(current_parent_since, bl);
     ::encode(snaps, bl);
     ::encode(past_parents, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(created, p);
     ::decode(seq, p);
+    ::decode(current_parent_since, p);
     ::decode(snaps, p);
     ::decode(past_parents, p);
   }
@@ -116,6 +119,7 @@ struct SnapRealm {
 
   SnapRealm(MDCache *c, CInode *in) : 
     created(0), seq(0),
+    current_parent_since(1),
     mdcache(c), inode(in),
     parent(0)
   { }
@@ -128,6 +132,7 @@ struct SnapRealm {
 	return true;
     return false;
   }
+
   bool open_parents(MDRequest *mdr);
   void build_snap_set(set<snapid_t>& s, snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
@@ -147,6 +152,13 @@ struct SnapRealm {
       return *snaps.rbegin();
   }
 
+  void change_open_parent_to(SnapRealm *newp) {
+    if (parent)
+      parent->open_children.erase(this);
+    parent = newp;
+    if (parent)
+      parent->open_children.insert(this);
+  }
   void split_at(SnapRealm *child);
 
   void add_cap(int client, Capability *cap) {

@@ -813,8 +813,15 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
+  // fix up snaprealms
+  assert(diri->snaprealm);
+  SnapRealm *newparent = diri->parent->dir->inode->find_snaprealm();
+  if (newparent != diri->snaprealm->parent)
+    diri->snaprealm->change_open_parent_to(newparent);
+
   //show_subtrees();
 
+  // adjust subtree
   list<CDir*> dfls;
   diri->get_dirfrags(dfls);
   for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {

@@ -3252,7 +3252,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (oldin->is_dir())
       rdlocks.insert(&oldin->dirlock);
   }
-  
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
   
@@ -3655,11 +3655,34 @@ void Server::_rename_prepare(MDRequest *mdr,
       metablob->add_primary_dentry(destdn, true, destdn->inode, pi); 
     }
   } else if (srcdn->is_primary()) {
+    // project snap parent update?
+    bufferlist snapbl;
+    if (destdn->is_auth() && srcdn->inode->snaprealm) {
+      SnapRealm *realm = srcdn->inode->snaprealm;
+      snapid_t oldlast = realm->parent->get_latest_snap();
+      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_latest_snap();
+      snapid_t first = realm->current_parent_since;
+
+      snapid_t old_since = realm->current_parent_since;
+      realm->current_parent_since = MAX(oldlast, newlast) + 1;
+      if (oldlast >= first) {
+	realm->past_parents[oldlast].ino = realm->parent->inode->ino();
+	realm->past_parents[oldlast].first = first;
+	dout(10) << " projecting new past_parent [" << first << "," << oldlast << "] = "
+		 << realm->parent->inode->ino() << " on " << *realm << dendl;
+      }
+      dout(10) << " projected current_parent_since " << realm->current_parent_since << " on" << *realm << dendl;
+      ::encode(*realm, snapbl);
+      if (oldlast >= first)
+	realm->past_parents.erase(oldlast);
+      realm->current_parent_since = old_since;
+    }
+    
     if (!destdn->is_null())
       mdcache->journal_cow_dentry(metablob, destdn);
     else
       destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
-    ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi); 
+    ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi, 0, &snapbl); 
   }
     
   // src
@@ -3763,6 +3786,23 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
     if (destdn->is_auth())
       destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
+
+    // snap parent update?
+    if (destdn->is_auth() && destdn->inode->snaprealm) {
+      SnapRealm *realm = destdn->inode->snaprealm;
+      snapid_t oldlast = srcdn->dir->inode->find_snaprealm()->get_latest_snap();
+      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_latest_snap();
+      snapid_t first = realm->current_parent_since;
+      
+      if (oldlast >= realm->current_parent_since) {
+	realm->past_parents[oldlast].ino = srcdn->dir->inode->find_snaprealm()->inode->ino();
+	realm->past_parents[oldlast].first = realm->current_parent_since;
+	dout(10) << " adding past_parent [" << realm->past_parents[oldlast].first << "," << oldlast << "] = "
+		 << realm->past_parents[oldlast].ino << " on " << *realm << dendl;
+      }
+      realm->current_parent_since = MAX(oldlast, newlast) + 1;
+      dout(10) << " set current_parent_since " << realm->current_parent_since << " on " << *realm << dendl;
+    }
   }
 
   // src
