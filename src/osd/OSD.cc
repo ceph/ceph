@@ -1105,6 +1105,7 @@ void OSD::send_pg_stats()
     m->osd_stat.num_blocks = stbuf.f_blocks;
     m->osd_stat.num_blocks_avail = stbuf.f_bavail;
     m->osd_stat.num_objects = stbuf.f_files;
+    dout(20) << " osd_stat " << m->osd_stat << dendl;
     
     int mon = monmap->pick_mon();
     messenger->send_message(m, monmap->get_inst(mon));  
@@ -1348,7 +1349,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
   
     take_peer_stat(from, m->peer_stat);
-    heartbeat_from_stamp[from] = m->get_recv_stamp();
+    heartbeat_from_stamp[from] = g_clock.now(); // don't let _my_ lag interfere... //  m->get_recv_stamp();
   }
 
   delete m;

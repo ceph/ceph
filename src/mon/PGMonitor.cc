@@ -265,6 +265,10 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   }
       
   // osd stat
+  dout(10) << " got " << stats->osd_stat << dendl;
+  pending_inc.osd_stat_updates[from] = stats->osd_stat;
+  
+  // apply to live map too (screw consistency)
   if (pg_map.osd_stat.count(from))
     pg_map.stat_osd_sub(pg_map.osd_stat[from]);
   pg_map.osd_stat[from] = stats->osd_stat;
