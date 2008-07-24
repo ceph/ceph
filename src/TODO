@@ -256,6 +256,10 @@ todo
   - link rollback
   - rename rollback
 
+- snaplock semantics
+  - fast bcast of any updates?
+  - what about dir rename snaprealm update?  make parallel update on each mds?
+
 - when we create a snapshot,
   - xlock snaplock
   - create realm, if necessary
