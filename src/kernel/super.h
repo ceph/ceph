@@ -127,6 +127,7 @@ extern struct kobject *ceph_kobj;
 struct ceph_client {
 	__u32 whoami;                   /* my client number */
 
+	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
 	struct ceph_fsid fsid;
 
