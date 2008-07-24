@@ -1116,7 +1116,13 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
   inode.accounted_rstat = inode.rstat;
 
   while (last >= ofirst) {
-    // pick fnode version to update
+    /*
+     * pick fnode version to update.  at each iteration, we want to
+     * pick a segment ending in 'last' to update.  split as necessary
+     * to make that work.  then, adjust first up so that we only
+     * update one segment at a time.  then loop to cover the whole
+     * [ofirst,last] interval.
+     */    
     fnode_t *pf;
     snapid_t first;
     if (last == CEPH_NOSNAP) {
@@ -1142,7 +1148,8 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
       dout(10) << " projecting to newly split dirty_old_fnode [" << first << "," << last << "] "
 	       << " " << pf->rstat << "/" << pf->accounted_rstat << dendl;
     } else {
-      // be careful, dirty_old_fnodes is a _sparse_ map
+      // be careful, dirty_old_fnodes is a _sparse_ map.
+      // sorry, this is ugly.
       first = ofirst;
 
       // find any intersection with last
@@ -1154,8 +1161,9 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 	  first = parent->dirty_old_fnodes.rbegin()->first+1;
 	}
       } else {
+	// *p last is >= last
 	if (p->second.first <= last) {
-	  // it intersects [first,last]
+	  // *p intersects [first,last]
 	  if (p->second.first < first) {
 	    dout(10) << " splitting off left bit [" << p->second.first << "," << first-1 << "]" << dendl;
 	    parent->dirty_old_fnodes[first-1] = p->second;
@@ -1169,9 +1177,11 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 	    p->second.first = last+1;
 	  }
 	} else {
-	  // it is to the _right_ of [first,last]
+	  // *p is to the _right_ of [first,last]
 	  p = parent->dirty_old_fnodes.lower_bound(first);
-	  if (p->first > first) {
+	  // new *p last is >= first
+	  if (p->second.first <= last &&  // new *p isn't also to the right, and
+	      p->first >= first) {        // it intersects our first bit,
 	    dout(10) << " staying to the right of [" << p->second.first << "," << p->first << "]..." << dendl;
 	    first = p->first+1;
 	  }
@@ -1459,10 +1469,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       for (map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.begin();
 	   p != parent->dirty_old_fnodes.end();
 	   p++)
-	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin, false);
+	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin, true);//false);
       parent->dirty_old_fnodes.clear();
-      
-      project_rstat_frag_to_inode(*pf, pin->first, CEPH_NOSNAP, pin, false);
+      project_rstat_frag_to_inode(*pf, parent->first, CEPH_NOSNAP, pin, true);//false);
     }
 
     // next parent!
