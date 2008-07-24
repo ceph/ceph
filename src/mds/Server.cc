@@ -2318,7 +2318,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_client_req(mdr->reqid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);      // new dn
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
-  le->metablob.add_remote_dentry(dn, true, targeti->ino(), MODE_TO_DT(targeti->inode.mode));  // new remote
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
   mdcache->journal_dirty_inode(&le->metablob, targeti);
 
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
@@ -2410,8 +2410,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   if (inc) {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, 1);
-    le->metablob.add_remote_dentry(dn, true, targeti->ino(), 
-				   MODE_TO_DT(targeti->inode.mode));  // new remote
+    le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type()); // new remote
   } else {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->dir, PREDIRTY_DIR, -1);

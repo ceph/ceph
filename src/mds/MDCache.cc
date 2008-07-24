@@ -1053,6 +1053,17 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
       return;
 
     in->cow_old_inode(follows, in->get_previous_projected_inode());
+
+    if (in->get_projected_parent_dn() != dn) {
+      snapid_t oldfirst = dn->first;
+      dn->first = follows+1;
+      CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
+						  oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+      metablob->add_remote_dentry(olddn, true);
+
+      // FIXME: adjust link count here?  hmm.
+    }
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_latest_snap();

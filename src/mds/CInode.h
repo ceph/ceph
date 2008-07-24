@@ -330,6 +330,8 @@ private:
 
   inodeno_t ino() const { return inode.ino; }
   vinodeno_t vino() const { return vinodeno_t(inode.ino, last); }
+  int d_type() const { return MODE_TO_DT(inode.mode); }
+
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }
