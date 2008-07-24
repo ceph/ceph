@@ -1349,7 +1349,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
   
     take_peer_stat(from, m->peer_stat);
-    heartbeat_from_stamp[from] = m->get_recv_stamp();
+    heartbeat_from_stamp[from] = g_clock.now(); // don't let _my_ lag interfere... //  m->get_recv_stamp();
   }
 
   delete m;
