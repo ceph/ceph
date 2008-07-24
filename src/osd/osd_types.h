@@ -253,6 +253,11 @@ struct osd_stat_t {
 WRITE_CLASS_ENCODER(osd_stat_t)
 
 
+inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
+  return out << "osd_stat(" << (s.num_blocks-s.num_blocks_avail) << "/" << s.num_blocks << " used, " 
+	     << s.num_objects << " objects)";
+}
+
 
 /*
  * pg states

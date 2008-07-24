@@ -1105,6 +1105,7 @@ void OSD::send_pg_stats()
     m->osd_stat.num_blocks = stbuf.f_blocks;
     m->osd_stat.num_blocks_avail = stbuf.f_bavail;
     m->osd_stat.num_objects = stbuf.f_files;
+    dout(20) << " osd_stat " << m->osd_stat << dendl;
     
     int mon = monmap->pick_mon();
     messenger->send_message(m, monmap->get_inst(mon));  
