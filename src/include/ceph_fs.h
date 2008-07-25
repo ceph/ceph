@@ -840,10 +840,24 @@ struct ceph_mds_cap_reconnect {
 /* followed by encoded string */
 
 
+/*
+ * snaps
+ */
 enum {
-	CEPH_SNAP_OP_UPDATE,
+	CEPH_SNAP_OP_CREATE,
+	CEPH_SNAP_OP_DESTROY,
 	CEPH_SNAP_OP_SPLIT,
 };
+
+static inline const char *ceph_snap_op_name(int o) {
+	switch (o) {
+	case CEPH_SNAP_OP_CREATE: return "create";
+	case CEPH_SNAP_OP_DESTROY: return "destroy";
+	case CEPH_SNAP_OP_SPLIT: return "split";
+	default: return "???";
+	}
+}
+
 
 struct ceph_mds_snap {
 	/* ... */

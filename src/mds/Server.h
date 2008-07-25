@@ -162,6 +162,7 @@ public:
   void handle_client_mksnap(MDRequest *mdr);
   void _mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info);
   void handle_client_rmsnap(MDRequest *mdr);
+  void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
 
   // helpers
   void _rename_prepare_witness(MDRequest *mdr, int who,

@@ -5833,7 +5833,7 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
        p != in->snaprealm->client_caps.end();
        p++) {
     assert(!p->second.empty());
-    MClientSnap *update = updates[p->first] = new MClientSnap;
+    MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_SPLIT);
     update->split = in->ino();
     update->split_inos = split_inos;
     update->bl = snapbl;

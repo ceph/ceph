@@ -47,6 +47,15 @@ public:
     ::encode(ino, bl);
     _prepare(bl, pstid, onfinish);
   }
+
+  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, Context *onfinish) {
+    bufferlist bl;
+    __u32 op = TABLE_OP_DESTROY;
+    ::encode(op, bl);
+    ::encode(ino, bl);
+    ::encode(snapid, bl);
+    _prepare(bl, pstid, onfinish);
+  }
 };
 
 #endif

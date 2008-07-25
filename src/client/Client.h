@@ -632,7 +632,7 @@ protected:
       delete realm;
     }
   }
-  inodeno_t update_snap_trace(bufferlist& bl);
+  inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
   inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
 
   Inode *open_snapdir(Inode *diri);

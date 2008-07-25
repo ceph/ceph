@@ -1629,7 +1629,7 @@ void SnapRealm::build_snaps()
   cout << *this << " build_snaps got " << cached_snaps << std::endl;
 }
 
-inodeno_t Client::update_snap_trace(bufferlist& bl)
+inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 {
   inodeno_t first_realm = 0;
   dout(10) << "update_snap_trace len " << bl.length() << dendl;
@@ -1646,26 +1646,28 @@ inodeno_t Client::update_snap_trace(bufferlist& bl)
       dout(10) << "update_snap_trace " << *realm << " seq " << info.seq << " > " << realm->seq
 	       << dendl;
 
-      // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
-      //  flush me + children
-      list<SnapRealm*> q;
-      q.push_back(realm);
-      while (!q.empty()) {
-	SnapRealm *realm = q.front();
-	q.pop_front();
-	dout(10) << " flushing caps on " << *realm << dendl;
-	
-	for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
-	  Inode *in = *p;
-	  check_caps(in, true); // force writeback of write caps
-	  if (g_conf.client_oc)
-	    _flush(in);
+      if (flush) {
+	// writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
+	//  flush me + children
+	list<SnapRealm*> q;
+	q.push_back(realm);
+	while (!q.empty()) {
+	  SnapRealm *realm = q.front();
+	  q.pop_front();
+	  dout(10) << " flushing caps on " << *realm << dendl;
+	  
+	  for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
+	    Inode *in = *p;
+	    check_caps(in, true); // force writeback of write caps
+	    if (g_conf.client_oc)
+	      _flush(in);
+	  }
+	  
+	  for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
+	       p != realm->pchildren.end(); 
+	       p++)
+	    q.push_back(*p);
 	}
-	
-	for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
-	     p != realm->pchildren.end(); 
-	     p++)
-	  q.push_back(*p);
       }
 
       
@@ -1706,7 +1708,8 @@ void Client::handle_snap(MClientSnap *m)
   list<Inode*> to_move;
   SnapRealm *realm = 0;
 
-  if (m->split) {
+  if (m->op == CEPH_SNAP_OP_SPLIT) {
+    assert(m->split);
     SnapRealmInfo info;
     bufferlist::iterator p = m->bl.begin();    
     ::decode(info, p);
@@ -1745,7 +1748,7 @@ void Client::handle_snap(MClientSnap *m)
     }
   }
 
-  update_snap_trace(m->bl);
+  update_snap_trace(m->bl, m->op == CEPH_SNAP_OP_CREATE);
 
   if (realm) {
     for (list<Inode*>::iterator p = to_move.begin(); p != to_move.end(); p++) {
@@ -4456,6 +4459,17 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 
   filepath path;
   diri->make_path(path);
+
+  if (diri->snapid == CEPH_SNAPDIR) {
+    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
+    req->set_filepath(path);
+    req->set_path2(name);
+    MClientReply *reply = make_request(req, uid, gid);
+    int r = reply->get_result();
+    delete reply;
+    return r;
+  }
+
   path.push_dentry(name);
   return _rmdir(path.c_str(), uid, gid);
 }

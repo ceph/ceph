@@ -18,40 +18,34 @@
 #include "msg/Message.h"
 
 struct MClientSnap : public Message {
-
-  static const char *get_opname(int o) {
-    switch (o) {
-    case CEPH_SNAP_OP_UPDATE: return "update";
-    case CEPH_SNAP_OP_SPLIT: return "split";
-    default: return "???";
-    }
-  }
-  
+  __u32 op;
   bufferlist bl;
 
   // (for split only)
   inodeno_t split;
   list<inodeno_t> split_inos;
   
-  MClientSnap() : 
+  MClientSnap(int o=0) : 
     Message(CEPH_MSG_CLIENT_SNAP),
-    split(0) {} 
+    op(o), split(0) {} 
   
-  const char *get_type_name() { return "Csnap"; }
+  const char *get_type_name() { return "client_snap"; }
   void print(ostream& out) {
-    out << "client_snap(";
+    out << "client_snap(" << ceph_snap_op_name(op);
     if (split)
-      out << "split=" << split;
+      out << " split=" << split;
     out << ")";
   }
 
   void encode_payload() {
+    ::encode(op, payload);
     ::encode(bl, payload);
     ::encode(split, payload);
     ::encode(split_inos, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(op, p);
     ::decode(bl, p);
     ::decode(split, p);
     ::decode(split_inos, p);

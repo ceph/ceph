@@ -5040,13 +5040,14 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 
     dout(10) << " realm " << *realm
 	     << " on " << *realm->inode << dendl;
+    realm->invalidate_cached_snaps();
 
     for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
 	 p != realm->client_caps.end();
 	 p++) {
       assert(!p->second.empty());
       if (updates.count(p->first) == 0) {
-	MClientSnap *update = updates[p->first] = new MClientSnap;
+	MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_CREATE);
 	update->bl = snapbl;
       }
     }
@@ -5055,10 +5056,8 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
     dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();
 	 p != realm->open_children.end();
-	 p++) {
-      (*p)->invalidate_cached_snaps();
+	 p++)
       q.push_back(*p);
-    }
   }
 
   // send
@@ -5076,10 +5075,168 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   reply_request(mdr, reply);
 }
 
+
+
+struct C_MDS_rmsnap_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *diri;
+  snapid_t snapid;
+  C_MDS_rmsnap_finish(MDS *m, MDRequest *r, CInode *di, snapid_t sn) :
+    mds(m), mdr(r), diri(di), snapid(sn) {}
+  void finish(int r) {
+    mds->server->_rmsnap_finish(mdr, diri, snapid);
+  }
+};
+
 void Server::handle_client_rmsnap(MDRequest *mdr)
 {
+  MClientRequest *req = mdr->client_request;
 
+  // traverse to path
+  vector<CDentry*> trace;
+  int r = mdcache->path_traverse(mdr, req, 
+				 req->get_filepath(), trace, NULL, NULL,
+				 false, MDS_TRAVERSE_FORWARD);
+  if (r > 0) return;
+  if (trace.empty()) r = -EINVAL;   // can't snap root
+  if (r < 0) {
+    reply_request(mdr, r);
+    return;
+  }
+  CDentry *dn = trace[trace.size()-1];
+  assert(dn);
+  if (!dn->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, dn->authority().first);
+    return;
+  }
+
+  // dir only
+  CInode *diri = dn->inode;
+  if (!dn->is_primary() || !diri->is_dir()) {
+    reply_request(mdr, -ENOTDIR);
+    return;
+  }
+  dout(10) << "rmsnap " << req->get_path2() << " on " << *diri << dendl;
+
+  // does snap exist?
+  const string &snapname = req->get_path2();
+  if (snapname.length() == 0 || snapname[0] == '_') {
+    reply_request(mdr, -EINVAL);   // can't prune a parent snap, currently.
+    return;
+  }
+  if (diri->snaprealm &&
+      !diri->snaprealm->exists(snapname)) {
+    reply_request(mdr, -ENOENT);
+    return;
+  }
+  snapid_t snapid = diri->snaprealm->resolve_snapname(snapname, diri->ino());
+  dout(10) << " snapname " << snapname << " is " << snapid << dendl;
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  for (int i=0; i<(int)trace.size()-1; i++)
+    rdlocks.insert(&trace[i]->lock);
+  mds->locker->include_snap_rdlocks(rdlocks, diri);
+  xlocks.insert(&dn->inode->snaplock);
+
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // prepare
+  if (!mdr->more()->stid) {
+    mds->snapclient->prepare_destroy(diri->ino(), snapid,
+				     &mdr->more()->stid,
+				     new C_MDS_RetryRequest(mds->mdcache, mdr));
+    return;
+  }
+  version_t stid = mdr->more()->stid;
+  dout(10) << " stid is " << stid << dendl;
+
+  // journal
+  inode_t *pi = diri->project_inode();
+  pi->ctime = mdr->now;
+  pi->version = diri->pre_dirty();
+  
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "rmsnap");
+  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_cow_inode(&le->metablob, diri);
+  
+  // project the snaprealm.. hack!
+  bufferlist snapbl;
+  snapid_t old_seq = diri->snaprealm->seq;
+  SnapInfo old_info = diri->snaprealm->snaps[snapid];
+  diri->snaprealm->snaps.erase(snapid);
+  diri->snaprealm->seq = stid;
+  diri->encode_snap_blob(snapbl);
+  diri->snaprealm->snaps[snapid] = old_info;
+  diri->snaprealm->seq = old_seq;
+  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
+
+  mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
 }
+
+void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
+{
+  dout(10) << "_rmsnap_finish " << *mdr << " " << snapid << dendl;
+
+  diri->pop_and_dirty_projected_inode(mdr->ls);
+  mdr->apply();
+
+  mds->snapclient->commit(mdr->more()->stid, mdr->ls);
+
+  // remove snap
+  diri->snaprealm->snaps.erase(snapid);
+  diri->snaprealm->seq = mdr->more()->stid;
+  dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  bufferlist snapbl;
+  diri->snaprealm->build_snap_trace(snapbl);
+
+  map<int, MClientSnap*> updates;
+  list<SnapRealm*> q;
+  q.push_back(diri->snaprealm);
+  while (!q.empty()) {
+    SnapRealm *realm = q.front();
+    q.pop_front();
+
+    dout(10) << " realm " << *realm
+	     << " on " << *realm->inode << dendl;
+    realm->invalidate_cached_snaps();
+
+    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
+	 p != realm->client_caps.end();
+	 p++) {
+      assert(!p->second.empty());
+      if (updates.count(p->first) == 0) {
+	MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_DESTROY);
+	update->bl = snapbl;
+      }
+    }
+
+    // notify for active children, too.
+    dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      q.push_back(*p);
+  }
+
+  // send
+  for (map<int,MClientSnap*>::iterator p = updates.begin();
+       p != updates.end();
+       p++)
+    mds->send_message_client(p->second, p->first);
+
+  // yay
+  mdr->ref = diri;
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  reply_request(mdr, reply);
+}
+
+
 
 
 
