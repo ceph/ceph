@@ -9,16 +9,39 @@ v0.4
 
 big items
 - ENOSPC
-- quotas
-/  - accounting
-  - enforcement
-- rados cow/snapshot infrastructure
-- mds snapshots
+- enforceable quotas?
+- snapshots
 - mds security enforcement
 - client, user authentication
 - cas
+- osd failure declarations
+- libuuid?
 
-- use libuuid
+
+snapshots
+- rados bits to do clone+write
+  - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
+  - figure out how to fix up rados logging
+  - snap collections
+  - garbage collection
+
+- client reconnect vs snaps
+
+- hard link backpointers
+  - anchor source dir
+  - build snaprealm for any hardlinked file
+  - include snaps for all (primary+remote) parents
+
+- migrator import/export of versioned dentries, inodes... drop them on export...
+
+- pin/unpin open_past_parents.
+- call open_parents() where needed.
+
+- mds server ops
+  - link rollback
+  - rename rollback
+
+
 
 userspace client
 - handle session STALE
@@ -219,110 +242,6 @@ remaining hard problems
 
 
 snapshot notes --
-
-todo
-- rados bits to do clone+write
-  - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
-  - figure out how to fix up rados logging
-  - snap collections
-  - garbage collection
-
-- fetch may need to adjust loaded dentry first,last?
-
-- client reconnect vs snaps
-
-- hard link backpointers
-  - anchor source dir
-  - build snaprealm for any hardlinked file
-  - include snaps for all (primary+remote) parents
-
-- migrator import/export of versioned dentries, inodes... drop them on export...
-
-  primary file link -> old inode
-  primary dir link -> multiversion inode
-  remote link -> multiversion inode
-
-- for simplicity, don't replicate any snapshot data.
-
-- rename() needs to create a new realm if src/dst realms differ and (rrealms, or open_children, or not subtree leaf) (similar logic to the anchor update)
-
-- will snapshots and CAS play nice?
-  - cas object refs should follow same deletion semantics as non-cas objects.
-
-- locker
-  - dirstat/fragstats
-
-- mds server ops
-  - link rollback
-  - rename rollback
-
-- snaplock semantics
-  - fast bcast of any updates?
-  - what about dir rename snaprealm update?  make parallel update on each mds?
-
-  - for local subtrees, all updates are prepared in one go, so no locking is really needed..
-    but if a realm spans MDSs, you can get ordering vs snap boundary strangeness, even from a single client!
-    - async cap writeback assume they can always do a write... but follow an explicit snap, so no worries there.
-
-  - for multi-mds ops, you definitely want to rdlock ancestor snaplocks.
-     - but that doesnt necessarily mean you need to xlock the dir's snaplock...
-     - altho in most cases, the dentry is xlocked, so most nested ops would be similarly affected...
-
-
-- when we create a snapshot,
-  - xlock snaplock
-  - create realm, if necessary
-  - add it to the realm snaps list.
-  - build list of current children
-    - send client a capgroup update for each affected realm
-      (as we unlock the snaplock?  or via a separate lock event that pushes the update out to replicas?)
-- when a client is opening a file
-  - if it is in an existing capgroup, all is well.
-  - if it is not, rdlock all ancestor snaprealms, and open a new capgroup with the client.
-    - or shoudl we even bother rdlocking?  the snap creation is going to be somewhat async, regardless...
-
-- what is snapid?
-  - can we get away with it _not_ being ordered?
-    - for osds.. yes.
-    - for mds.. may make the cdentry range info tricky!
-  - osds need to see snapid deletion events in osdmap incrementals.  or, snapmap?
-  - so... assign it via mds0
-
-metadata
-- fix up inode_map to key off vinodeno.. or have a second map for non-zero snapids.. 
-  - no, just key of vinodeno_t, and make it 
-
-CInode *get_inode(inodeno_t ino, snapid_t sn=NOSNAP);
-
-struct vinodeno_t {
-  inodeno_t ino;
-  snapid_t snapid;
-};
-
-- dentry: replace dname -> ino, rino+rtype with
-     (dname, first, last) -> vino, vino+rtype
-  - live dentries have last = NOSNAP.  kept in separate map:
-     - map<string, CDentry*> items;
-     - map<pair<string,dsnap>, CDentry> vitems;
-  - or?  clean up dir item map/hash at the same time (keep name storage in CDentry)
-     - map<pair<snapid_t, const char *>, CDentry*> items;  // all items
-  - or?
-       map<snapid_t, map<const char*>, CDentry*> items;  // lastsnap -> name ->
-      - no.. then all the CDir::map_t coded loops break
-
-CDentry *lookup(string &dname, snapid_t sn=NOSNAP);
-
-  - track vitem count in fragstat.
-     - when vitem count gets large, add pointer in fnode indicating vitem range stored in separate dir object.
-
-
-client
-- also keep caps linked into snaprealm list
-- current snapid (lineage) for each snaprealm.
-  - just keep it simple; don't bother with snaprealm linkages!
-- attach snapid (lineage) to each dirty page
-  - can we cow page if its dirty but a different realm?
-    ...hmm probably not, but we can flush it in write_begin, just like when we do a read to make it clean
 
 
 osd
