@@ -1497,7 +1497,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
   wrlocks.insert(&dn->dir->inode->nestlock); // also, wrlock on dir mtime
-  mds->locker->include_snap_rdlocks(rdlocks, mdr->ref);
+  mds->locker->include_snap_rdlocks(rdlocks, dn->dir->inode);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
@@ -2068,7 +2068,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
 
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);
@@ -2112,7 +2112,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   if (!dn) return;
 
   // new inode
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);  
@@ -2160,7 +2160,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   if (!dn) return;
 
   mdr->now = g_clock.real_now();
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
@@ -2323,7 +2323,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   pi->ctime = mdr->now;
   pi->version = tipv;
 
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
   dn->first = follows+1;
 
   // log + wait
@@ -3663,7 +3663,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdn->is_null())
 	mdcache->journal_cow_dentry(metablob, destdn);
       else
-	destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
+	destdn->first = destdn->dir->inode->find_snaprealm()->get_last_created()+1;
       metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), srcdn->get_remote_d_type());
       mdcache->journal_cow_dentry(metablob, srcdn->inode->get_parent_dn());
       ji = metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true, srcdn->inode, pi);
@@ -3671,16 +3671,18 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdn->is_null())
 	mdcache->journal_cow_dentry(metablob, destdn);
       else
-	destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
+	destdn->first = destdn->dir->inode->find_snaprealm()->get_last_created()+1;
       metablob->add_primary_dentry(destdn, true, destdn->inode, pi); 
     }
   } else if (srcdn->is_primary()) {
     // project snap parent update?
     bufferlist snapbl;
-    if (destdn->is_auth() && srcdn->inode->snaprealm) {
+    if (!srcdn->inode->snaprealm)
+      srcdn->inode->open_snaprealm();
+    if (destdn->is_auth()) {
       SnapRealm *realm = srcdn->inode->snaprealm;
-      snapid_t oldlast = realm->parent->get_latest_snap();
-      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_latest_snap();
+      snapid_t oldlast = realm->parent->get_newest_snap();
+      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_last_created();
       snapid_t first = realm->current_parent_since;
 
       snapid_t old_since = realm->current_parent_since;
@@ -3701,7 +3703,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (!destdn->is_null())
       mdcache->journal_cow_dentry(metablob, destdn);
     else
-      destdn->first = destdn->dir->inode->find_snaprealm()->get_latest_snap()+1;
+      destdn->first = destdn->dir->inode->find_snaprealm()->get_last_created()+1;
     ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi, 0, &snapbl); 
   }
     
@@ -3808,10 +3810,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
 
     // snap parent update?
-    if (destdn->is_auth() && destdn->inode->snaprealm) {
+    if (destdn->inode->is_dir()) {
       SnapRealm *realm = destdn->inode->snaprealm;
-      snapid_t oldlast = srcdn->dir->inode->find_snaprealm()->get_latest_snap();
-      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_latest_snap();
+      snapid_t oldlast = srcdn->dir->inode->find_snaprealm()->get_newest_snap();
+      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_last_created();
       snapid_t first = realm->current_parent_since;
       
       if (oldlast >= realm->current_parent_since) {
@@ -4768,7 +4770,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     
   // create inode.
   mdr->now = g_clock.real_now();
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
 
   CInode *in = prepare_new_inode(mdr, dn->dir);
   assert(in);
@@ -4997,11 +4999,14 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   // project the snaprealm.. hack!
   bufferlist snapbl;
   snapid_t old_seq = diri->snaprealm->seq;
+  snapid_t old_lc = diri->snaprealm->last_created;
   diri->snaprealm->snaps[snapid] = info;
   diri->snaprealm->seq = snapid;
+  diri->snaprealm->last_created = snapid;
   diri->encode_snap_blob(snapbl);
   diri->snaprealm->snaps.erase(snapid);
   diri->snaprealm->seq = old_seq;
+  diri->snaprealm->last_created = old_lc;
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
@@ -5020,6 +5025,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   snapid_t snapid = info.snapid;
   diri->snaprealm->snaps[snapid] = info;
   diri->snaprealm->seq = snapid;
+  diri->snaprealm->last_created = snapid;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   bufferlist snapbl;
@@ -5049,8 +5055,10 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
     dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();
 	 p != realm->open_children.end();
-	 p++)
+	 p++) {
+      (*p)->invalidate_cached_snaps();
       q.push_back(*p);
+    }
   }
 
   // send

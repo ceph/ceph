@@ -1046,7 +1046,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     CInode *in = dn->inode;
 
     if (follows == CEPH_NOSNAP || follows == 0)
-      follows = in->find_snaprealm()->get_latest_snap();
+      follows = in->find_snaprealm()->get_newest_snap();
 
     // already cloned?
     if (follows < in->first)
@@ -1066,7 +1066,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     }
   } else {
     if (follows == CEPH_NOSNAP)
-      follows = dn->dir->inode->find_snaprealm()->get_latest_snap();
+      follows = dn->dir->inode->find_snaprealm()->get_newest_snap();
     
     // already cloned?
     if (follows < dn->first)
@@ -1383,7 +1383,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     // rstat
     if (primary_dn) { 
       SnapRealm *prealm = parent->inode->find_snaprealm();
-      snapid_t latest = prealm->get_latest_snap();
+      snapid_t latest = prealm->get_newest_snap();
       
       snapid_t follows = cfollows;
       if (follows == CEPH_NOSNAP || follows == 0)
@@ -4761,7 +4761,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       dout(10) << "traverse: snapdir" << dendl;
       snapid = CEPH_SNAPDIR;
       depth++;
-      assert(psnapdiri);
+      if (!psnapdiri)
+	return -EINVAL;
       *psnapdiri = cur;
       continue;
     }
