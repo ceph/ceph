@@ -161,6 +161,7 @@ public:
   void handle_client_lssnap(MDRequest *mdr);
   void handle_client_mksnap(MDRequest *mdr);
   void _mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info);
+  void _invalidate_and_send_snap_updates(CInode *diri, int snapop);
   void handle_client_rmsnap(MDRequest *mdr);
   void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
 
