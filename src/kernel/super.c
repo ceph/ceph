@@ -418,7 +418,7 @@ bad:
 }
 
 static int parse_mount_args(int flags, char *options, const char *dev_name,
-			    struct ceph_mount_args *args)
+			    struct ceph_mount_args *args, const char **path)
 {
 	char *c;
 	int len, err;
@@ -453,11 +453,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* path on server */
 	c++;
 	while (*c == '/') c++;  /* remove leading '/'(s) */
-	if (strlen(c) >= sizeof(args->path))
-		return -ENAMETOOLONG;
-	strcpy(args->path, c);
+	*path = c;
 
-	dout(15, "server path '%s'\n", args->path);
+	dout(15, "server path '%s'\n", *path);
 
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
@@ -635,7 +633,8 @@ static int have_all_maps(struct ceph_client *client)
 		client->mdsc.mdsmap && client->mdsc.mdsmap->m_epoch;
 }
 
-static struct dentry *open_root_dentry(struct ceph_client *client)
+static struct dentry *open_root_dentry(struct ceph_client *client,
+				       const char *path)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req = 0;
@@ -644,9 +643,9 @@ static struct dentry *open_root_dentry(struct ceph_client *client)
 	struct dentry *root;
 
 	/* open dir */
-	dout(30, "open_root_inode opening '%s'\n", client->mount_args.path);
+	dout(30, "open_root_inode opening '%s'\n", path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN,
-				       1, client->mount_args.path, 0, 0,
+				       1, path, 0, 0,
 				       NULL, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
@@ -668,7 +667,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client)
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
+int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
+	       const char *path)
 {
 	struct ceph_entity_addr *myaddr = 0;
 	struct ceph_msg *mount_msg;
@@ -730,7 +730,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
 	}
 
 	dout(30, "mount opening base mountpoint\n");
-	root = open_root_dentry(client);
+	root = open_root_dentry(client, path);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
 		goto out;
@@ -894,6 +894,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
+	const char *path;
 
 	dout(25, "ceph_get_sb\n");
 
@@ -902,7 +903,8 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (IS_ERR(client))
 		return PTR_ERR(client);
 
-	err = parse_mount_args(flags, data, dev_name, &client->mount_args);
+	err = parse_mount_args(flags, data, dev_name,
+			       &client->mount_args, &path);
 	if (err < 0)
 		goto out;
 
@@ -922,7 +924,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	} else
 		dout(20, "get_sb using new client %p\n", client);
 
-	err = ceph_mount(client, mnt);
+	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
 	dout(22, "root ino %llx\n", ceph_ino(mnt->mnt_root->d_inode));
