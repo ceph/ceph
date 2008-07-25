@@ -1121,6 +1121,9 @@ void CDir::_fetched(bufferlist &bl)
 
       bufferlist snapbl;
       ::decode(snapbl, p);
+
+      map<snapid_t,old_inode_t> old_inodes;
+      ::decode(old_inodes, p);
       
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -1151,6 +1154,7 @@ void CDir::_fetched(bufferlist &bl)
 	  in->dirfragtree.swap(fragtree);
 	  in->xattrs.swap(xattrs);
 	  in->decode_snap_blob(snapbl);
+	  in->old_inodes.swap(old_inodes);
 
 	  // add 
 	  cache->add_inode( in );
@@ -1388,6 +1392,10 @@ void CDir::_commit(version_t want)
       bufferlist snapbl;
       in->encode_snap_blob(snapbl);
       ::encode(snapbl, bl);
+
+      if (in->is_multiversion())
+	in->purge_stale_snap_data(snaps);
+      ::encode(in->old_inodes, bl);
     }
   }
   assert(n == 0);

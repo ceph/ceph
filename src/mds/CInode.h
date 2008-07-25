@@ -187,6 +187,7 @@ class CInode : public MDSCacheObject {
 
   old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
   void pre_cow_old_inode();
+  void purge_stale_snap_data(const set<snapid_t>& snaps);
 
   // -- cache infrastructure --
 private:

@@ -1129,6 +1129,24 @@ void CInode::pre_cow_old_inode()
     cow_old_inode(follows, get_projected_inode());
 }
 
+void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
+{
+  dout(10) << "purge_stale_snap_data " << snaps << dendl;
+
+  if (old_inodes.empty())
+    return;
+
+  map<snapid_t,old_inode_t>::iterator p = old_inodes.begin();
+  while (p != old_inodes.end()) {
+    set<snapid_t>::const_iterator q = snaps.lower_bound(p->second.first);
+    if (q == snaps.end() || *q > p->first) {
+      dout(10) << " purging old_inode [" << p->second.first << "," << p->first << "]" << dendl;
+      old_inodes.erase(p++);
+    } else
+      p++;
+  }
+}
+
 /*
  * pick/create an old_inode that we can write into.
  */
