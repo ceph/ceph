@@ -121,7 +121,16 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
 
 
 
-
+void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
+{
+  // rdlock ancestor snaps
+  CInode *t = in;
+  rdlocks.insert(&in->snaplock);
+  while (t->get_parent_dn()) {
+    t = t->get_parent_dn()->get_dir()->get_inode();
+    rdlocks.insert(&t->snaplock);
+  }
+}
 
 
 

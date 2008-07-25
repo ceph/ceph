@@ -74,6 +74,8 @@ protected:
 
   // -- locks --
 public:
+  void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
+
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,

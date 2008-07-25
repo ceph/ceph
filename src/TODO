@@ -260,6 +260,15 @@ todo
   - fast bcast of any updates?
   - what about dir rename snaprealm update?  make parallel update on each mds?
 
+  - for local subtrees, all updates are prepared in one go, so no locking is really needed..
+    but if a realm spans MDSs, you can get ordering vs snap boundary strangeness, even from a single client!
+    - async cap writeback assume they can always do a write... but follow an explicit snap, so no worries there.
+
+  - for multi-mds ops, you definitely want to rdlock ancestor snaplocks.
+     - but that doesnt necessarily mean you need to xlock the dir's snaplock...
+     - altho in most cases, the dentry is xlocked, so most nested ops would be similarly affected...
+
+
 - when we create a snapshot,
   - xlock snaplock
   - create realm, if necessary

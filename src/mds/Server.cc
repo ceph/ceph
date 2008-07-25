@@ -1407,6 +1407,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
     rdlocks.insert(&trace[i]->lock);
   if (rdlock_dft)
     rdlocks.insert(&ref->dirfragtreelock);
+  mds->locker->include_snap_rdlocks(rdlocks, ref);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, empty, empty))
     return 0;
@@ -1496,6 +1497,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
   wrlocks.insert(&dn->dir->inode->nestlock); // also, wrlock on dir mtime
+  mds->locker->include_snap_rdlocks(rdlocks, mdr->ref);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return 0;
@@ -1657,6 +1659,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   xlocks.insert(&cur->filelock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -1704,6 +1707,8 @@ void Server::handle_client_chmod(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   xlocks.insert(&cur->authlock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -1745,6 +1750,8 @@ void Server::handle_client_chown(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   xlocks.insert(&cur->authlock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -1786,6 +1793,8 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   xlocks.insert(&cur->xattrlock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -1843,6 +1852,8 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   xlocks.insert(&cur->xattrlock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -2241,6 +2252,8 @@ void Server::handle_client_link(MDRequest *mdr)
   for (int i=0; i<(int)targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
+  mds->locker->include_snap_rdlocks(rdlocks, targeti);
+  mds->locker->include_snap_rdlocks(rdlocks, dn->dir->inode);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2835,6 +2848,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
   if (in->is_dir())
     rdlocks.insert(&in->dirlock);   // to verify it's empty
+  mds->locker->include_snap_rdlocks(rdlocks, dn->dir->inode);
+  mds->locker->include_snap_rdlocks(rdlocks, dn->inode);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -3251,6 +3266,12 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (oldin->is_dir())
       rdlocks.insert(&oldin->dirlock);
   }
+  mds->locker->include_snap_rdlocks(rdlocks, srcdn->dir->inode);
+  mds->locker->include_snap_rdlocks(rdlocks, destdn->dir->inode);
+  if (srcdn->is_primary() && srcdn->inode->is_dir())
+    xlocks.insert(&srcdn->inode->snaplock);  // FIXME: an auth bcast could be sufficient?
+  else
+    rdlocks.insert(&srcdn->inode->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -4452,6 +4473,8 @@ void Server::handle_client_truncate(MDRequest *mdr)
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
   xlocks.insert(&cur->filelock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
   
@@ -4818,13 +4841,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
 
-  // rdlock ancestor snaps
-  CInode *t = diri;
-  rdlocks.insert(&diri->snaplock);
-  while (t->get_parent_dn()) {
-    t = t->get_parent_dn()->get_dir()->get_inode();
-    rdlocks.insert(&t->snaplock);
-  }
+  mds->locker->include_snap_rdlocks(rdlocks, diri);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -4918,15 +4935,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   // rdlock path
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
-
-  // rdlock ancestor snaps
-  CInode *t = diri;
-  while (t->get_parent_dn()) {
-    t = t->get_parent_dn()->get_dir()->get_inode();
-    rdlocks.insert(&t->snaplock);
-  }
-
-  // xlock snap
+  mds->locker->include_snap_rdlocks(rdlocks, diri);
   xlocks.insert(&dn->inode->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
