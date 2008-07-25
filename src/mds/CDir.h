@@ -315,6 +315,7 @@ private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
   void remove_null_dentries();
+  void purge_stale_snap_data(const set<snapid_t>& snaps);
 
 public:
   void split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay);

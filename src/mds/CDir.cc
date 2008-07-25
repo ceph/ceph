@@ -504,23 +504,39 @@ void CDir::unlink_inode_work( CDentry *dn )
 void CDir::remove_null_dentries() {
   dout(12) << "remove_null_dentries " << *this << dendl;
 
-  list<CDentry*> dns;
-  for (CDir::map_t::iterator it = items.begin();
-       it != items.end(); 
-       it++) {
-    if (it->second->is_null())
-      dns.push_back(it->second);
+  CDir::map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    p++;
+    if (dn->is_null())
+      remove_dentry(dn);
   }
-  
-  for (list<CDentry*>::iterator it = dns.begin();
-       it != dns.end();
-       it++) {
-    CDentry *dn = *it;
-    remove_dentry(dn);
-  }
+
   assert(num_snap_null == 0);
   assert(num_head_null == 0);
   assert(get_num_any() == items.size());
+}
+
+
+void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
+{
+  dout(10) << "purge_stale_snap_data " << snaps << dendl;
+
+  CDir::map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    p++;
+
+    if (dn->last == CEPH_NOSNAP)
+      continue;
+
+    set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
+    if (p == snaps.end() ||
+	*p > dn->last) {
+      dout(10) << " purging " << *dn << dendl;
+      remove_dentry(dn);
+    }
+  }
 }
 
 
@@ -1313,13 +1329,24 @@ void CDir::_commit(version_t want)
   int32_t n = num_head_items + num_snap_items;
   ::encode(n, bl);
 
-  for (map_t::iterator it = items.begin();
-       it != items.end();
-       it++) {
-    CDentry *dn = it->second;
+  const set<snapid_t>& snaps = inode->find_snaprealm()->get_snaps();
+
+  map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    p++;
     
     if (dn->is_null()) 
       continue;  // skip negative entries
+
+    if (dn->last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
+      if (p == snaps.end() || *p > dn->last) {
+	dout(10) << " purging " << *dn << dendl;
+	remove_dentry(dn);
+	continue;
+      }
+    }
     
     n--;
 
@@ -1327,7 +1354,7 @@ void CDir::_commit(version_t want)
     if (dn->is_remote()) {
       inodeno_t ino = dn->get_remote_ino();
       unsigned char d_type = dn->get_remote_d_type();
-      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' remote ino " << ino << dendl;
+      dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' remote ino " << ino << dendl;
       
       // marker, name, ino
       bl.append( "L", 1 );         // remote link
@@ -1341,7 +1368,7 @@ void CDir::_commit(version_t want)
       CInode *in = dn->get_inode();
       assert(in);
 
-      dout(14) << " pos " << bl.length() << " dn '" << it->first << "' inode " << *in << dendl;
+      dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' inode " << *in << dendl;
   
       // marker, name, inode, [symlink string]
       bl.append( "I", 1 );         // inode
@@ -1366,12 +1393,12 @@ void CDir::_commit(version_t want)
   assert(n == 0);
 
   // write it.
-  vector<snapid_t> snaps;
+  vector<snapid_t> snapvec;
   cache->mds->objecter->write( get_ondisk_object(),
 			       0, bl.length(),
 			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										    g_default_mds_dir_layout ),
-			       snaps,
+			       snapvec,
 			       bl, 0,
 			       NULL, new C_Dir_Committed(this, get_version()) );
 }
