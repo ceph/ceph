@@ -1048,6 +1048,17 @@ void CDir::_fetched(bufferlist &bl)
   int32_t n;
   ::decode(n, p);
 
+  snapid_t got_newest_seq;
+  ::decode(got_newest_seq, p);
+  SnapRealm *realm = inode->find_snaprealm();
+  const set<snapid_t>& snaps = realm->get_snaps();
+  bool purge_stale = false;
+  if (got_newest_seq < realm->get_newest_seq()) {
+    dout(10) << " got newest_seq " << got_newest_seq << " < " << realm->get_newest_seq()
+	     << ", will purge stale entries using snaps " << snaps << dendl;
+    purge_stale = true;
+  }
+
   //int num_new_inodes_loaded = 0;
 
   for (int i=0; i<n; i++) {
@@ -1066,6 +1077,15 @@ void CDir::_fetched(bufferlist &bl)
     dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname
 	     << " [" << first << "," << last << "]"
 	     << dendl;
+
+    bool stale = false;
+    if (purge_stale && last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps.lower_bound(first);
+      if (p == snaps.end() || *p > last) {
+	dout(10) << " skipping stale dentry on [" << first << "," << last << "]" << dendl;
+	stale = true;
+      }
+    }
     
     /*
      * look for existing dentry for _last_ snap, because unlink +
@@ -1073,7 +1093,9 @@ void CDir::_fetched(bufferlist &bl)
      * doesn't exist) but for which no explicit negative dentry is in
      * the cache.
      */
-    CDentry *dn = lookup(dname, last);
+    CDentry *dn = 0;
+    if (!stale)
+      dn = lookup(dname, last);
 
     if (type == 'L') {
       // hard link
@@ -1081,6 +1103,9 @@ void CDir::_fetched(bufferlist &bl)
       unsigned char d_type;
       ::decode(ino, p);
       ::decode(d_type, p);
+
+      if (stale)
+	continue;
 
       if (dn) {
         if (dn->get_inode() == 0) {
@@ -1107,24 +1132,22 @@ void CDir::_fetched(bufferlist &bl)
       
       // parse out inode
       inode_t inode;
-      ::decode(inode, p);
-
       string symlink;
+      fragtree_t fragtree;
+      map<string, bufferptr> xattrs;
+      bufferlist snapbl;
+      map<snapid_t,old_inode_t> old_inodes;
+      ::decode(inode, p);
       if (inode.is_symlink())
         ::decode(symlink, p);
-
-      fragtree_t fragtree;
       ::decode(fragtree, p);
-
-      map<string, bufferptr> xattrs;
       ::decode(xattrs, p);
-
-      bufferlist snapbl;
       ::decode(snapbl, p);
-
-      map<snapid_t,old_inode_t> old_inodes;
       ::decode(old_inodes, p);
       
+      if (stale)
+	continue;
+
       if (dn) {
         if (dn->get_inode() == 0) {
           dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
@@ -1155,6 +1178,8 @@ void CDir::_fetched(bufferlist &bl)
 	  in->xattrs.swap(xattrs);
 	  in->decode_snap_blob(snapbl);
 	  in->old_inodes.swap(old_inodes);
+	  if (purge_stale)
+	    in->purge_stale_snap_data(snaps);
 
 	  // add 
 	  cache->add_inode( in );
@@ -1334,6 +1359,8 @@ void CDir::_commit(version_t want)
   ::encode(n, bl);
 
   const set<snapid_t>& snaps = inode->find_snaprealm()->get_snaps();
+  snapid_t newest_seq = inode->find_snaprealm()->get_newest_seq();
+  ::encode(newest_seq, bl);
 
   map_t::iterator p = items.begin();
   while (p != items.end()) {

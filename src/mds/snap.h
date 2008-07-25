@@ -166,6 +166,10 @@ struct SnapRealm {
     else
       return *cached_snaps.rbegin();
   }
+  snapid_t get_newest_seq() {
+    check_cache();
+    return cached_seq;
+  }
 
   void change_open_parent_to(SnapRealm *newp) {
     if (parent)
