@@ -25,21 +25,21 @@ snapshots
   - snap collections
   - garbage collection
 
+mds
+- migrator import/export of versioned dentries, inodes... drop them on export...
+/- pin/unpin open_past_parents.
+/- call open_parents() where needed.
+  - what about during recovery?  e.g. client reconnected caps...
+- resolve/rejoin vs snapshots!
 - client reconnect vs snaps
+- mds server ops
+  - link rollback
+  - rename rollback
 
 - hard link backpointers
   - anchor source dir
   - build snaprealm for any hardlinked file
   - include snaps for all (primary+remote) parents
-
-- migrator import/export of versioned dentries, inodes... drop them on export...
-
-/- pin/unpin open_past_parents.
-- call open_parents() where needed.
-
-- mds server ops
-  - link rollback
-  - rename rollback
 
 
 

@@ -27,33 +27,66 @@
 						  << ".cache.snaprealm(" << inode->ino() \
 						  << " seq " << seq << " " << this << ") "
 
-bool SnapRealm::open_parents(MDRequest *mdr)
+bool SnapRealm::open_parents(MDRequest *mdr, snapid_t first, snapid_t last)
 {
-  dout(10) << "open_parents" << dendl;
+  dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
+  if (open)
+    return true;
 
   // make sure my current parents' parents are open...
   if (parent) {
-    dout(10) << " parent is " << *parent
+    dout(10) << " current parent [" << current_parent_since << ",head] is " << *parent
 	     << " on " << *parent->inode << dendl;
-    if (!parent->open_parents(mdr))
+    if (last >= current_parent_since &&
+	!parent->open_parents(mdr, MAX(first, current_parent_since), last))
       return false;
   }
 
   // and my past parents too!
-  for (map<snapid_t, snaplink_t>::iterator p = past_parents.begin();
+  assert(past_parents.size() >= open_past_parents.size());
+  if (past_parents.size() > open_past_parents.size()) {
+    for (map<snapid_t, snaplink_t>::iterator p = past_parents.begin();
+	 p != past_parents.end();
+	 p++) {    
+      dout(10) << " past_parent [" << p->second.first << "," << p->first << "] is "
+	       << p->second.ino << dendl;
+      CInode *parent = mdcache->get_inode(p->second.ino);
+      if (!parent) {
+	mdcache->open_remote_ino(p->second.ino, mdr, 
+				 new C_MDS_RetryRequest(mdcache, mdr));
+	return false;
+      }
+      assert(parent->snaprealm);  // hmm!
+      if (!open_past_parents.count(p->second.ino)) {
+	open_past_parents[p->second.ino] = parent->snaprealm;
+	parent->get(CInode::PIN_PASTSNAPPARENT);
+      }
+      if (!parent->snaprealm->open_parents(mdr, p->second.first, p->first))
+	return false;
+    }
+  }
+
+  open = true;
+  return true;
+}
+
+bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
+{
+  dout(10) << "have_past_parents_open [" << first << "," << last << "]" << dendl;
+  for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
        p != past_parents.end();
-       p++) {    
-    CInode *parent = mdcache->get_inode(p->second.ino);
-    if (!parent) {
-      mdcache->open_remote_ino(p->second.ino, mdr, 
-			       new C_MDS_RetryRequest(mdcache, mdr));
+       p++) {
+    if (p->second.first > last)
+      break;
+    dout(10) << " past parent [" << p->second.first << "," << p->first << "] was "
+	     << p->second.ino << dendl;
+    if (open_past_parents.count(p->second.ino) == 0) {
+      dout(10) << " past parent " << p->second.ino << " is not open" << dendl;
       return false;
     }
-    assert(parent->snaprealm);  // hmm!
-    if (!open_past_parents.count(p->second.ino)) {
-      open_past_parents[p->second.ino] = parent->snaprealm;
-      parent->get(CInode::PIN_PASTSNAPPARENT);
-    }
+    if (!open_past_parents[p->second.ino]->have_past_parents_open(MAX(first, p->second.first),
+								  MIN(last, p->first)))
+      return false;
   }
   return true;
 }

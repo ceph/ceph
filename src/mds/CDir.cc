@@ -1047,16 +1047,19 @@ void CDir::_fetched(bufferlist &bl)
   
   int32_t n;
   ::decode(n, p);
-
   snapid_t got_newest_seq;
   ::decode(got_newest_seq, p);
+
+  // purge stale snaps?
+  //  * only if we have past_parents open!
+  const set<snapid_t> *snaps = 0;
   SnapRealm *realm = inode->find_snaprealm();
-  const set<snapid_t>& snaps = realm->get_snaps();
-  bool purge_stale = false;
-  if (got_newest_seq < realm->get_newest_seq()) {
+  if (!realm->have_past_parents_open()) {
+    dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
+  } else if (got_newest_seq < realm->get_newest_seq()) {
+    snaps = &realm->get_snaps();
     dout(10) << " got newest_seq " << got_newest_seq << " < " << realm->get_newest_seq()
-	     << ", will purge stale entries using snaps " << snaps << dendl;
-    purge_stale = true;
+	     << ", snap purge based on " << *snaps << dendl;
   }
 
   //int num_new_inodes_loaded = 0;
@@ -1079,9 +1082,9 @@ void CDir::_fetched(bufferlist &bl)
 	     << dendl;
 
     bool stale = false;
-    if (purge_stale && last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps.lower_bound(first);
-      if (p == snaps.end() || *p > last) {
+    if (snaps && last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps->lower_bound(first);
+      if (p == snaps->end() || *p > last) {
 	dout(10) << " skipping stale dentry on [" << first << "," << last << "]" << dendl;
 	stale = true;
       }
@@ -1178,8 +1181,8 @@ void CDir::_fetched(bufferlist &bl)
 	  in->xattrs.swap(xattrs);
 	  in->decode_snap_blob(snapbl);
 	  in->old_inodes.swap(old_inodes);
-	  if (purge_stale)
-	    in->purge_stale_snap_data(snaps);
+	  if (snaps)
+	    in->purge_stale_snap_data(*snaps);
 
 	  // add 
 	  cache->add_inode( in );
@@ -1358,8 +1361,17 @@ void CDir::_commit(version_t want)
   int32_t n = num_head_items + num_snap_items;
   ::encode(n, bl);
 
-  const set<snapid_t>& snaps = inode->find_snaprealm()->get_snaps();
-  snapid_t newest_seq = inode->find_snaprealm()->get_newest_seq();
+  // snap purge?
+  const set<snapid_t> *snaps = 0;
+  snapid_t newest_seq = 0;
+  SnapRealm *realm = inode->find_snaprealm();
+  if (realm->have_past_parents_open()) {
+    snaps = &realm->get_snaps();
+    newest_seq = realm->get_newest_seq();
+    dout(10) << " snap purge based on " << *snaps << dendl;
+  } else {
+    dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
+  }
   ::encode(newest_seq, bl);
 
   map_t::iterator p = items.begin();
@@ -1370,9 +1382,9 @@ void CDir::_commit(version_t want)
     if (dn->is_null()) 
       continue;  // skip negative entries
 
-    if (dn->last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
-      if (p == snaps.end() || *p > dn->last) {
+    if (snaps && dn->last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
+      if (p == snaps->end() || *p > dn->last) {
 	dout(10) << " purging " << *dn << dendl;
 	remove_dentry(dn);
 	continue;
@@ -1420,8 +1432,8 @@ void CDir::_commit(version_t want)
       in->encode_snap_blob(snapbl);
       ::encode(snapbl, bl);
 
-      if (in->is_multiversion())
-	in->purge_stale_snap_data(snaps);
+      if (in->is_multiversion() && snaps)
+	in->purge_stale_snap_data(*snaps);
       ::encode(in->old_inodes, bl);
     }
   }

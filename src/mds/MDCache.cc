@@ -4837,6 +4837,12 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     }
 
 
+    // make sure snaprealm parents are open...
+    if (cur->snaprealm && !cur->snaprealm->open && mdr &&
+	!cur->snaprealm->open_parents(mdr))
+      return 1;
+
+
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
 

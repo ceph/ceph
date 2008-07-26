@@ -109,6 +109,7 @@ struct SnapRealm {
   MDCache *mdcache;
   CInode *inode;
 
+  bool open;                        // set to true once all past_parents are opened
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
   map<inodeno_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
@@ -126,7 +127,7 @@ struct SnapRealm {
     created(0), last_created(0), seq(0),
     current_parent_since(1),
     mdcache(c), inode(in),
-    parent(0)
+    open(false), parent(0)
   { }
 
   bool exists(const string &name) {
@@ -138,7 +139,8 @@ struct SnapRealm {
     return false;
   }
 
-  bool open_parents(MDRequest *mdr);
+  bool open_parents(MDRequest *mdr, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void close_parents();
 
   void build_snap_set(set<snapid_t>& s, 
