@@ -81,25 +81,28 @@ WRITE_CLASS_ENCODER(snaplink_t)
 
 struct SnapRealm {
   // realm state
+  snapid_t seq;                     // basically, a version/seq # for changes to _this_ realm.
   snapid_t created;                 // when this realm was created.
   snapid_t last_created;            // last snap created in _this_ realm.
-  snapid_t seq;                     // basically, a version/seq # for changes to _this_ realm.
+  snapid_t last_destroyed;          // seq for last removal
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
+    ::encode(seq, bl);
     ::encode(created, bl);
     ::encode(last_created, bl);
-    ::encode(seq, bl);
+    ::encode(last_destroyed, bl);
     ::encode(current_parent_since, bl);
     ::encode(snaps, bl);
     ::encode(past_parents, bl);
   }
   void decode(bufferlist::iterator& p) {
+    ::decode(seq, p);
     ::decode(created, p);
     ::decode(last_created, p);
-    ::decode(seq, p);
+    ::decode(last_destroyed, p);
     ::decode(current_parent_since, p);
     ::decode(snaps, p);
     ::decode(past_parents, p);
@@ -117,6 +120,7 @@ struct SnapRealm {
   // cache
   snapid_t cached_seq;           // max seq over self and all past+present parents.
   snapid_t cached_last_created;  // max last_created over all past+present parents
+  snapid_t cached_last_destroyed;
   set<snapid_t> cached_snaps;
   vector<snapid_t> cached_snap_vec;
 
@@ -124,7 +128,8 @@ struct SnapRealm {
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
-    created(0), last_created(0), seq(0),
+    seq(0), created(0),
+    last_created(0), last_destroyed(0),
     current_parent_since(1),
     mdcache(c), inode(in),
     open(false), parent(0)
@@ -144,7 +149,7 @@ struct SnapRealm {
   void close_parents();
 
   void build_snap_set(set<snapid_t>& s, 
-		      snapid_t& max_seq, snapid_t& max_last_created,
+		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
 		      snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
@@ -160,6 +165,10 @@ struct SnapRealm {
     cached_seq = 0;
   }
   snapid_t get_last_created() {
+    check_cache();
+    return cached_last_created;
+  }
+  snapid_t get_last_destroyed() {
     check_cache();
     return cached_last_created;
   }

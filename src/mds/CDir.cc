@@ -1047,8 +1047,8 @@ void CDir::_fetched(bufferlist &bl)
   
   int32_t n;
   ::decode(n, p);
-  snapid_t got_newest_seq;
-  ::decode(got_newest_seq, p);
+  snapid_t got_last_destroyed;
+  ::decode(got_last_destroyed, p);
 
   // purge stale snaps?
   //  * only if we have past_parents open!
@@ -1056,9 +1056,9 @@ void CDir::_fetched(bufferlist &bl)
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (got_newest_seq < realm->get_newest_seq()) {
+  } else if (got_last_destroyed < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
-    dout(10) << " got newest_seq " << got_newest_seq << " < " << realm->get_newest_seq()
+    dout(10) << " got last_destroyed " << got_last_destroyed << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
   }
 
@@ -1361,18 +1361,18 @@ void CDir::_commit(version_t want)
   int32_t n = num_head_items + num_snap_items;
   ::encode(n, bl);
 
+  SnapRealm *realm = inode->find_snaprealm();
+  snapid_t last_destroyed = realm->get_last_destroyed();
+  ::encode(last_destroyed, bl);
+
   // snap purge?
   const set<snapid_t> *snaps = 0;
-  snapid_t newest_seq = 0;
-  SnapRealm *realm = inode->find_snaprealm();
   if (realm->have_past_parents_open()) {
     snaps = &realm->get_snaps();
-    newest_seq = realm->get_newest_seq();
     dout(10) << " snap purge based on " << *snaps << dendl;
   } else {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
   }
-  ::encode(newest_seq, bl);
 
   map_t::iterator p = items.begin();
   while (p != items.end()) {

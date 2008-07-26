@@ -106,7 +106,7 @@ void SnapRealm::close_parents()
  * for the intervals during which they were our parent.
  */
 void SnapRealm::build_snap_set(set<snapid_t> &s,
-			       snapid_t& max_seq, snapid_t& max_last_created,
+			       snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
 			       snapid_t first, snapid_t last)
 {
   dout(10) << "build_snap_set [" << first << "," << last << "] on " << *this << dendl;
@@ -115,6 +115,8 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     max_seq = seq;
   if (last_created > max_last_created)
     max_last_created = last_created;
+  if (last_destroyed > max_last_destroyed)
+    max_last_destroyed = last_destroyed;
 
   // include my snaps within interval [first,last]
   for (map<snapid_t, SnapInfo>::iterator p = snaps.lower_bound(first); // first element >= first
@@ -129,19 +131,16 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     CInode *oldparent = mdcache->get_inode(p->second.ino);
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
-    
-    snapid_t thru = MIN(last, p->first);
-    oldparent->snaprealm->build_snap_set(s, max_seq, max_last_created,
+    oldparent->snaprealm->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
 					 MAX(first, p->second.first),
-					 thru);
+					 MIN(last, p->first));
   }
   if (current_parent_since <= last && parent)
-    parent->build_snap_set(s, max_seq, max_last_created, current_parent_since, last);
+    parent->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
+			   MAX(first, current_parent_since), last);
 }
 
-/*
- * build vector in reverse sorted order
- */
+
 void SnapRealm::check_cache()
 {
   if (cached_seq >= seq)
@@ -150,14 +149,17 @@ void SnapRealm::check_cache()
   cached_snaps.clear();
   cached_snap_vec.clear();
   cached_last_created = last_created;
+  cached_last_destroyed = last_destroyed;
   cached_seq = seq;
-  build_snap_set(cached_snaps, cached_seq, cached_last_created, 0, CEPH_NOSNAP);
+  build_snap_set(cached_snaps, cached_seq, cached_last_created, cached_last_destroyed,
+		 0, CEPH_NOSNAP);
   
   dout(10) << "check_cache " << cached_snaps
 	   << " seq " << seq
 	   << " cached_seq " << cached_seq
-	   << " cached_last_created " << cached_last_created << ")" 
-	   << dendl;
+	   << " cached_last_created " << cached_last_created
+	   << " cached_last_destroyed " << cached_last_destroyed
+	   << ")" << dendl;
 }
 
 const set<snapid_t>& SnapRealm::get_snaps()
@@ -169,6 +171,9 @@ const set<snapid_t>& SnapRealm::get_snaps()
   return cached_snaps;
 }
 
+/*
+ * build vector in reverse sorted order
+ */
 const vector<snapid_t>& SnapRealm::get_snap_vector()
 {
   check_cache();
@@ -202,14 +207,12 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     CInode *oldparent = mdcache->get_inode(p->second.ino);
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
-    
-    snapid_t thru = MIN(last, p->first);
     oldparent->snaprealm->get_snap_info(infomap,
 					MAX(first, p->second.first),
-					thru);
+					MIN(last, p->first));
   }
   if (current_parent_since <= last && parent)
-    parent->get_snap_info(infomap, current_parent_since, last);
+    parent->get_snap_info(infomap, MAX(first, current_parent_since), last);
 }
 
 const string& SnapInfo::get_long_name()
@@ -284,16 +287,14 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
     CInode *oldparent = mdcache->get_inode(p->second.ino);
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
-    
-    snapid_t thru = MIN(last, p->first);
     snapid_t r = oldparent->snaprealm->resolve_snapname(n, atino,
 							MAX(first, p->second.first),
-							thru);
+							MIN(last, p->first));
     if (r)
       return r;
   }
-  if (current_parent_since <= last && parent)
-    return parent->resolve_snapname(n, atino, current_parent_since, last);
+  if (parent && current_parent_since <= last)
+    return parent->resolve_snapname(n, atino, MAX(first, current_parent_since), last);
   return 0;
 }
 
@@ -364,8 +365,8 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
     if (!past_parents.empty()) {
       snapid_t last = past_parents.rbegin()->first;
       set<snapid_t> past;
-      snapid_t max_seq, max_last_created;
-      build_snap_set(past, max_seq, max_last_created, 0, last);
+      snapid_t max_seq, max_last_created, max_last_destroyed;
+      build_snap_set(past, max_seq, max_last_created, max_last_destroyed, 0, last);
       info.prior_parent_snaps.reserve(past.size());
       for (set<snapid_t>::reverse_iterator p = past.rbegin(); p != past.rend(); p++)
 	info.prior_parent_snaps.push_back(*p);
