@@ -111,7 +111,7 @@ struct SnapRealm {
 
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
-  map<snapid_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
+  map<inodeno_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
 
   // cache
   snapid_t cached_seq;           // max seq over self and all past+present parents.
@@ -139,6 +139,8 @@ struct SnapRealm {
   }
 
   bool open_parents(MDRequest *mdr);
+  void close_parents();
+
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created,
 		      snapid_t first, snapid_t last);

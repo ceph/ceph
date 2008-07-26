@@ -34,7 +34,7 @@ snapshots
 
 - migrator import/export of versioned dentries, inodes... drop them on export...
 
-- pin/unpin open_past_parents.
+/- pin/unpin open_past_parents.
 - call open_parents() where needed.
 
 - mds server ops

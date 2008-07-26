@@ -44,14 +44,29 @@ bool SnapRealm::open_parents(MDRequest *mdr)
        p != past_parents.end();
        p++) {    
     CInode *parent = mdcache->get_inode(p->second.ino);
-    if (parent)
-      continue;
-    mdcache->open_remote_ino(p->second.ino, mdr, 
-			     new C_MDS_RetryRequest(mdcache, mdr));
-    return false;
+    if (!parent) {
+      mdcache->open_remote_ino(p->second.ino, mdr, 
+			       new C_MDS_RetryRequest(mdcache, mdr));
+      return false;
+    }
+    assert(parent->snaprealm);  // hmm!
+    if (!open_past_parents.count(p->second.ino)) {
+      open_past_parents[p->second.ino] = parent->snaprealm;
+      parent->get(CInode::PIN_PASTSNAPPARENT);
+    }
   }
   return true;
 }
+
+void SnapRealm::close_parents()
+{
+  for (map<inodeno_t,SnapRealm*>::iterator p = open_past_parents.begin();
+       p != open_past_parents.end();
+       p++)
+    p->second->inode->put(CInode::PIN_PASTSNAPPARENT);
+  open_past_parents.clear();
+}
+
 
 /*
  * get list of snaps for this realm.  we must include parents' snaps

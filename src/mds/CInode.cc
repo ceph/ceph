@@ -1183,6 +1183,8 @@ void CInode::open_snaprealm()
 void CInode::close_snaprealm()
 {
   if (snaprealm) {
+    dout(15) << "close_snaprealm " << *snaprealm << dendl;
+    snaprealm->close_parents();
     if (snaprealm->parent)
       snaprealm->parent->open_children.erase(snaprealm);
     delete snaprealm;

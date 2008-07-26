@@ -3817,8 +3817,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       snapid_t first = realm->current_parent_since;
       
       if (oldlast >= realm->current_parent_since) {
-	realm->past_parents[oldlast].ino = srcdn->dir->inode->find_snaprealm()->inode->ino();
+	SnapRealm *oldparent = srcdn->dir->inode->find_snaprealm();
+	realm->past_parents[oldlast].ino = oldparent->inode->ino();
 	realm->past_parents[oldlast].first = realm->current_parent_since;
+	realm->open_past_parents[srcdn->dir->inode->ino()] = oldparent;
 	dout(10) << " adding past_parent [" << realm->past_parents[oldlast].first << "," << oldlast << "] = "
 		 << realm->past_parents[oldlast].ino << " on " << *realm << dendl;
       }
