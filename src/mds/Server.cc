@@ -1948,16 +1948,38 @@ void Server::handle_client_readdir(MDRequest *mdr)
   snapid_t snapid = mdr->ref_snapid;
   dout(10) << "snapid " << snapid << dendl;
 
+
+  // purge stale snap data?
+  const set<snapid_t> *snaps = 0;
+  SnapRealm *realm = diri->find_snaprealm();
+  if (realm->get_last_destroyed() > dir->snap_purged_thru) {
+    snaps = &realm->get_snaps();
+    dout(10) << " last_destroyed " << realm->get_last_destroyed() << " > " << dir->snap_purged_thru
+	     << ", doing snap purge with " << *snaps << dendl;
+    dir->snap_purged_thru = realm->get_last_destroyed();
+    assert(snaps->count(snapid));  // just checkin'! 
+  }
+  bool purged_any = false;
+
   // build dir contents
   bufferlist dirbl, dnbl;
   dir->encode_dirstat(dirbl, mds->get_nodeid());
 
   __u32 numfiles = 0;
-  for (CDir::map_t::iterator it = dir->begin(); 
-       it != dir->end(); 
-       it++) {
+  CDir::map_t::iterator it = dir->begin(); 
+  while (it != dir->end()) {
     CDentry *dn = it->second;
+    it++;
+
     if (dn->is_null()) continue;
+    if (snaps && dn->last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
+      if (p == snaps->end() || *p > dn->last) {
+	dir->remove_dentry(dn);
+	purged_any = true;
+	continue;
+      }
+    }
     if (dn->last < snapid || dn->first > snapid)
       continue;
 
@@ -2002,6 +2024,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
   ::encode(numfiles, dirbl);
   dirbl.claim_append(dnbl);
   
+  if (purged_any)
+    dir->log_mark_dirty();
+
   // yay, reply
   MClientReply *reply = new MClientReply(req);
   reply->set_dir_bl(dirbl);

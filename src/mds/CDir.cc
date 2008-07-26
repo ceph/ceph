@@ -19,9 +19,10 @@
 #include "CDentry.h"
 #include "CInode.h"
 
+#include "MDSMap.h"
 #include "MDS.h"
 #include "MDCache.h"
-#include "MDSMap.h"
+#include "MDLog.h"
 #include "LogSegment.h"
 
 #include "include/Context.h"
@@ -954,6 +955,23 @@ void CDir::mark_clean()
 }
 
 
+struct C_Dir_Dirty : public Context {
+  CDir *dir;
+  version_t pv;
+  LogSegment *ls;
+  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : dir(d), pv(p), ls(l) {}
+  void finish(int r) {
+    dir->mark_dirty(pv, ls);
+  }
+};
+
+void CDir::log_mark_dirty()
+{
+  MDLog *mdlog = inode->mdcache->mds->mdlog;
+  version_t pv = pre_dirty();
+  mdlog->wait_for_sync(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
+}
+
 
 
 void CDir::first_get()
@@ -1047,8 +1065,11 @@ void CDir::_fetched(bufferlist &bl)
   
   int32_t n;
   ::decode(n, p);
-  snapid_t got_last_destroyed;
-  ::decode(got_last_destroyed, p);
+  snapid_t got_snap_purged_thru;
+  ::decode(got_snap_purged_thru, p);
+
+  if (got_snap_purged_thru > snap_purged_thru)
+    snap_purged_thru = got_snap_purged_thru;
 
   // purge stale snaps?
   //  * only if we have past_parents open!
@@ -1056,11 +1077,15 @@ void CDir::_fetched(bufferlist &bl)
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (got_last_destroyed < realm->get_last_destroyed()) {
+  } else if (snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
-    dout(10) << " got last_destroyed " << got_last_destroyed << " < " << realm->get_last_destroyed()
+    dout(10) << " snap_purged_thru " << got_snap_purged_thru
+	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
+    snap_purged_thru = realm->get_last_destroyed();
   }
+  bool purged_any = false;
+
 
   //int num_new_inodes_loaded = 0;
 
@@ -1087,6 +1112,7 @@ void CDir::_fetched(bufferlist &bl)
       if (p == snaps->end() || *p > last) {
 	dout(10) << " skipping stale dentry on [" << first << "," << last << "]" << dendl;
 	stale = true;
+	purged_any = true;
       }
     }
     
@@ -1245,6 +1271,9 @@ void CDir::_fetched(bufferlist &bl)
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
   //hack_num_accessed = 0;
 
+  if (purged_any)
+    log_mark_dirty();
+
   // mark complete, !fetching
   state_set(STATE_COMPLETE);
   state_clear(STATE_FETCHING);
@@ -1354,25 +1383,26 @@ void CDir::_commit(version_t want)
   
   if (cache->mds->logger) cache->mds->logger->inc("dir_c");
 
+  // snap purge?
+  SnapRealm *realm = inode->find_snaprealm();
+  const set<snapid_t> *snaps = 0;
+  if (!realm->have_past_parents_open()) {
+    dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
+  } else if (snap_purged_thru < realm->get_last_destroyed()) {
+    snaps = &realm->get_snaps();
+    dout(10) << " snap_purged_thru " << snap_purged_thru
+	     << " < " << realm->get_last_destroyed()
+	     << ", snap purge based on " << *snaps << dendl;
+    snap_purged_thru = realm->get_last_destroyed();
+  }
+
   // encode
   bufferlist bl;
 
   ::encode(fnode, bl);
   int32_t n = num_head_items + num_snap_items;
   ::encode(n, bl);
-
-  SnapRealm *realm = inode->find_snaprealm();
-  snapid_t last_destroyed = realm->get_last_destroyed();
-  ::encode(last_destroyed, bl);
-
-  // snap purge?
-  const set<snapid_t> *snaps = 0;
-  if (realm->have_past_parents_open()) {
-    snaps = &realm->get_snaps();
-    dout(10) << " snap purge based on " << *snaps << dendl;
-  } else {
-    dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  }
+  ::encode(snap_purged_thru, bl);
 
   map_t::iterator p = items.begin();
   while (p != items.end()) {

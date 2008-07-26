@@ -194,6 +194,7 @@ public:
     }
   }
   void mark_dirty(version_t pv, LogSegment *ls);
+  void log_mark_dirty();
   void mark_clean();
 
 public:
@@ -210,6 +211,10 @@ protected:
   unsigned num_snap_null;
 
   int num_dirty;
+
+public:
+  snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
+protected:
 
   // state
   version_t committing_version;
