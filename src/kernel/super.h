@@ -103,7 +103,6 @@ struct ceph_mount_args {
 	struct ceph_entity_addr my_addr;
 	int num_mon;
 	struct ceph_entity_addr mon_addr[5];
-	char path[100];
 	int wsize;
 	int osd_timeout;
 };
@@ -127,6 +126,7 @@ extern struct kobject *ceph_kobj;
 struct ceph_client {
 	__u32 whoami;                   /* my client number */
 
+	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
 	struct ceph_fsid fsid;
 

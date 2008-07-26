@@ -418,7 +418,7 @@ bad:
 }
 
 static int parse_mount_args(int flags, char *options, const char *dev_name,
-			    struct ceph_mount_args *args)
+			    struct ceph_mount_args *args, const char **path)
 {
 	char *c;
 	int len, err;
@@ -453,11 +453,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* path on server */
 	c++;
 	while (*c == '/') c++;  /* remove leading '/'(s) */
-	if (strlen(c) >= sizeof(args->path))
-		return -ENAMETOOLONG;
-	strcpy(args->path, c);
+	*path = c;
 
-	dout(15, "server path '%s'\n", args->path);
+	dout(15, "server path '%s'\n", *path);
 
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
@@ -566,65 +564,66 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
  */
 struct ceph_client *ceph_create_client(void)
 {
-	struct ceph_client *cl;
+	struct ceph_client *client;
 	int err = -ENOMEM;
 
-	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
-	if (cl == NULL)
+	client = kzalloc(sizeof(*client), GFP_KERNEL);
+	if (client == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	init_waitqueue_head(&cl->mount_wq);
-	spin_lock_init(&cl->sb_lock);
+	mutex_init(&client->mount_mutex);
 
-	cl->sb = 0;
-	cl->mount_state = CEPH_MOUNT_MOUNTING;
-	cl->whoami = -1;
+	init_waitqueue_head(&client->mount_wq);
+	spin_lock_init(&client->sb_lock);
 
-	cl->msgr = 0;
+	client->sb = 0;
+	client->mount_state = CEPH_MOUNT_MOUNTING;
+	client->whoami = -1;
 
-	cl->wb_wq = create_workqueue("ceph-writeback");
-	if (cl->wb_wq == 0)
+	client->msgr = 0;
+
+	client->wb_wq = create_workqueue("ceph-writeback");
+	if (client->wb_wq == 0)
 		goto fail;
-	cl->trunc_wq = create_workqueue("ceph-trunc");
-	if (cl->trunc_wq == 0)
+	client->trunc_wq = create_workqueue("ceph-trunc");
+	if (client->trunc_wq == 0)
 		goto fail;
 
 	/* subsystems */
-	err = ceph_monc_init(&cl->monc, cl);
+	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
 		return ERR_PTR(err);
-	ceph_mdsc_init(&cl->mdsc, cl);
-	ceph_osdc_init(&cl->osdc, cl);
+	ceph_mdsc_init(&client->mdsc, client);
+	ceph_osdc_init(&client->osdc, client);
 
-	return cl;
+	return client;
 
 fail:
-	/* fixme: use type->init() eventually */
 	return ERR_PTR(-ENOMEM);
 }
 
-void ceph_destroy_client(struct ceph_client *cl)
+void ceph_destroy_client(struct ceph_client *client)
 {
-	dout(10, "destroy_client %p\n", cl);
+	dout(10, "destroy_client %p\n", client);
 
 	/* unmount */
 	/* ... */
 
-	ceph_monc_stop(&cl->monc);
-	ceph_osdc_stop(&cl->osdc);
+	ceph_monc_stop(&client->monc);
+	ceph_osdc_stop(&client->osdc);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
-	if (cl->client_kobj)
-		kobject_put(cl->client_kobj);
+	if (client->client_kobj)
+		kobject_put(client->client_kobj);
 #endif
-	if (cl->wb_wq)
-		destroy_workqueue(cl->wb_wq);
-	if (cl->trunc_wq)
-		destroy_workqueue(cl->trunc_wq);
-	if (cl->msgr)
-		ceph_messenger_destroy(cl->msgr);
-	kfree(cl);
-	dout(10, "destroy_client %p done\n", cl);
+	if (client->wb_wq)
+		destroy_workqueue(client->wb_wq);
+	if (client->trunc_wq)
+		destroy_workqueue(client->trunc_wq);
+	if (client->msgr)
+		ceph_messenger_destroy(client->msgr);
+	kfree(client);
+	dout(10, "destroy_client %p done\n", client);
 }
 
 static int have_all_maps(struct ceph_client *client)
@@ -634,7 +633,8 @@ static int have_all_maps(struct ceph_client *client)
 		client->mdsc.mdsmap && client->mdsc.mdsmap->m_epoch;
 }
 
-static struct dentry *open_root_dentry(struct ceph_client *client)
+static struct dentry *open_root_dentry(struct ceph_client *client,
+				       const char *path)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req = 0;
@@ -643,9 +643,9 @@ static struct dentry *open_root_dentry(struct ceph_client *client)
 	struct dentry *root;
 
 	/* open dir */
-	dout(30, "open_root_inode opening '%s'\n", client->mount_args.path);
+	dout(30, "open_root_inode opening '%s'\n", path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN,
-				       1, client->mount_args.path, 0, 0,
+				       1, path, 0, 0,
 				       NULL, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
@@ -667,7 +667,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client)
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
+int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
+	       const char *path)
 {
 	struct ceph_entity_addr *myaddr = 0;
 	struct ceph_msg *mount_msg;
@@ -678,27 +679,37 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
 	char r;
 
 	dout(10, "mount start\n");
+	mutex_lock(&client->mount_mutex);
 
 	/* messenger */
-	if (client->mount_args.flags & CEPH_MOUNT_MYIP)
-		myaddr = &client->mount_args.my_addr;
-	client->msgr = ceph_messenger_create(myaddr);
-	if (IS_ERR(client->msgr)) {
-		err = PTR_ERR(client->msgr);
-		client->msgr = 0;
-		return err;
+	if (client->msgr == NULL) {
+		if (client->mount_args.flags & CEPH_MOUNT_MYIP)
+			myaddr = &client->mount_args.my_addr;
+		client->msgr = ceph_messenger_create(myaddr);
+		if (IS_ERR(client->msgr)) {
+			err = PTR_ERR(client->msgr);
+			client->msgr = 0;
+			goto out;
+		}
+		client->msgr->parent = client;
+		client->msgr->dispatch = ceph_dispatch;
+		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
+		client->msgr->peer_reset = ceph_peer_reset;
 	}
-	client->msgr->parent = client;
-	client->msgr->dispatch = ceph_dispatch;
-	client->msgr->prepare_pages = ceph_osdc_prepare_pages;
-	client->msgr->peer_reset = ceph_peer_reset;
-
-	while (1) {
+	
+	while (!have_all_maps(client)) {
+		err = -EIO;
+		if (attempts == 0)
+			goto out;
+		dout(10, "mount sending mount request, %d attempts left\n",
+		     attempts--);
 		get_random_bytes(&r, 1);
 		which = r % client->mount_args.num_mon;
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
-		if (IS_ERR(mount_msg))
-			return PTR_ERR(mount_msg);
+		if (IS_ERR(mount_msg)) {
+			err = PTR_ERR(mount_msg);
+			goto out;
+		}
 		mount_msg->hdr.dst.name.type =
 			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		mount_msg->hdr.dst.name.num = cpu_to_le32(which);
@@ -715,24 +726,24 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt)
 						       6*HZ);
 		dout(10, "mount wait got %d\n", err);
 		if (err == -EINTR)
-			return err;
-		if (have_all_maps(client))
-			break;  /* success */
-		dout(10, "mount still waiting for mount, attempts=%d\n",
-		     attempts);
-		if (--attempts == 0)
-			return -EIO;
+			goto out;
 	}
 
 	dout(30, "mount opening base mountpoint\n");
-	root = open_root_dentry(client);
-	if (IS_ERR(root))
-		return PTR_ERR(root);
+	root = open_root_dentry(client, path);
+	if (IS_ERR(root)) {
+		err = PTR_ERR(root);
+		goto out;
+	}
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
 	client->mount_state = CEPH_MOUNT_MOUNTED;
 	dout(10, "mount success\n");
-	return 0;
+	err = 0;
+
+out:
+	mutex_unlock(&client->mount_mutex);
+	return err;
 }
 
 
@@ -883,6 +894,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	struct ceph_client *client;
 	int err;
 	int (*compare_super)(struct super_block *, void *) = ceph_compare_super;
+	const char *path;
 
 	dout(25, "ceph_get_sb\n");
 
@@ -891,7 +903,8 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (IS_ERR(client))
 		return PTR_ERR(client);
 
-	err = parse_mount_args(flags, data, dev_name, &client->mount_args);
+	err = parse_mount_args(flags, data, dev_name,
+			       &client->mount_args, &path);
 	if (err < 0)
 		goto out;
 
@@ -911,7 +924,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	} else
 		dout(20, "get_sb using new client %p\n", client);
 
-	err = ceph_mount(client, mnt);
+	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
 	dout(22, "root ino %llx\n", ceph_ino(mnt->mnt_root->d_inode));

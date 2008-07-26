@@ -46,9 +46,9 @@ class MOSDFailure : public Message {
   }
 
   const char *get_type_name() { return "osd_failure"; }
-  /*void print(ostream& out) {
+  void print(ostream& out) {
     out << "osd_failure(" << failed << " e" << epoch << ")";
-    }*/
+  }
 };
 
 #endif
