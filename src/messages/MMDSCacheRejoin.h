@@ -19,6 +19,8 @@
 
 #include "include/types.h"
 
+#include "mds/CInode.h"
+
 // sent from replica to auth
 
 class MMDSCacheRejoin : public Message {
@@ -43,64 +45,23 @@ class MMDSCacheRejoin : public Message {
   // -- types --
   struct inode_strong { 
     int32_t caps_wanted;
-    int32_t nonce;
-    int32_t authlock;
-    int32_t linklock;
-    int32_t dirfragtreelock;
-    int32_t filelock;
-    int32_t dirlock, nestlock, snaplock, xattrlock;
+    int32_t dirlock, nestlock;
     inode_strong() {}
-    inode_strong(int n, int cw=0, int a=0, int l=0, int dft=0, int f=0, int dl=0, int nl=0, int snl=0, int xal=0) : 
+    inode_strong(int cw, int dl, int nl) : 
       caps_wanted(cw),
-      nonce(n),
-      authlock(a), linklock(l), dirfragtreelock(dft), filelock(f), dirlock(dl), nestlock(nl), snaplock(snl), xattrlock(xal) { }
+      dirlock(dl), nestlock(nl) { }
     void encode(bufferlist &bl) const {
       ::encode(caps_wanted, bl);
-      ::encode(nonce, bl);
-      ::encode(authlock, bl);
-      ::encode(linklock, bl);
-      ::encode(dirfragtreelock, bl);
-      ::encode(filelock, bl);
       ::encode(dirlock, bl);
       ::encode(nestlock, bl);
-      ::encode(snaplock, bl);
-      ::encode(xattrlock, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(caps_wanted, bl);
-      ::decode(nonce, bl);
-      ::decode(authlock, bl);
-      ::decode(linklock, bl);
-      ::decode(dirfragtreelock, bl);
-      ::decode(filelock, bl);
       ::decode(dirlock, bl);
       ::decode(nestlock, bl);
-      ::decode(snaplock, bl);
-      ::decode(xattrlock, bl);
     }
   };
   WRITE_CLASS_ENCODER(inode_strong)
-
-  struct inode_full {
-    inode_t inode;
-    string symlink;
-    fragtree_t dirfragtree;
-    inode_full() {}
-    inode_full(const inode_t& i, const string& s, const fragtree_t& f) :
-      inode(i), symlink(s), dirfragtree(f) {}
-
-    void decode(bufferlist::iterator& p) {
-      ::decode(inode, p);
-      ::decode(symlink, p);
-      ::decode(dirfragtree, p);
-    }
-    void encode(bufferlist& bl) const {
-      ::encode(inode, bl);
-      ::encode(symlink, bl);
-      ::encode(dirfragtree, bl);
-    }
-  };
-  WRITE_CLASS_ENCODER(inode_full)
 
   struct dirfrag_strong {
     int32_t nonce;
@@ -180,7 +141,8 @@ class MMDSCacheRejoin : public Message {
   map<inodeno_t,string> cap_export_paths;
 
   // full
-  list<inode_full> full_inodes;
+  bufferlist inode_base;
+  bufferlist inode_locks;
 
   // authpins, xlocks
   map<inodeno_t, metareqid_t> authpinned_inodes;
@@ -203,11 +165,16 @@ class MMDSCacheRejoin : public Message {
   void add_weak_inode(inodeno_t i) {
     weak_inodes.insert(i);
   }
-  void add_strong_inode(inodeno_t i, int n, int cw, int a, int l, int dft, int f, int dl, int nl, int snl, int xl) {
-    strong_inodes[i] = inode_strong(n, cw, a, l, dft, f, dl, nl, snl, xl);
+  void add_strong_inode(inodeno_t i, int cw, int dl, int nl) {
+    strong_inodes[i] = inode_strong(cw, dl, nl);
   }
-  void add_full_inode(inode_t &i, const string& s, const fragtree_t &f) {
-    full_inodes.push_back(inode_full(i, s, f));
+  void add_inode_locks(CInode *in, int nonce) {
+    ::encode(in->inode.ino, inode_locks);
+    in->_encode_locks_state(inode_locks);
+  }
+  void add_inode_base(CInode *in) {
+    ::encode(in->inode.ino, inode_base);
+    in->_encode_base(inode_base);
   }
   void add_inode_authpin(inodeno_t ino, const metareqid_t& ri) {
     authpinned_inodes[ino] = ri;
@@ -256,7 +223,8 @@ class MMDSCacheRejoin : public Message {
   void encode_payload() {
     ::encode(op, payload);
     ::encode(strong_inodes, payload);
-    ::encode(full_inodes, payload);
+    ::encode(inode_base, payload);
+    ::encode(inode_locks, payload);
     ::encode(authpinned_inodes, payload);
     ::encode(xlocked_inodes, payload);
     ::encode(cap_export_bl, payload);
@@ -272,7 +240,8 @@ class MMDSCacheRejoin : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(strong_inodes, p);
-    ::decode(full_inodes, p);
+    ::decode(inode_base, p);
+    ::decode(inode_locks, p);
     ::decode(authpinned_inodes, p);
     ::decode(xlocked_inodes, p);
     ::decode(cap_export_bl, p);
@@ -293,7 +262,6 @@ class MMDSCacheRejoin : public Message {
 };
 
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)
-WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_full)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dirfrag_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_weak)

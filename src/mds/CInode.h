@@ -374,6 +374,16 @@ private:
   void add_waiter(int tag, Context *c);
 
 
+  // -- encode/decode helpers --
+  void _encode_base(bufferlist& bl);
+  void _decode_base(bufferlist::iterator& p);
+  void _encode_locks_full(bufferlist& bl);
+  void _decode_locks_full(bufferlist::iterator& p);
+  void _encode_locks_state(bufferlist& bl);
+  void _decode_locks_state(bufferlist::iterator& p);
+  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
+
+
   // -- import/export --
   void encode_export(bufferlist& bl);
   void finish_export(utime_t now);
@@ -684,98 +694,48 @@ public:
 // discover
 
 class CInodeDiscover {
-  
-  inode_t    inode;
-  string     symlink;
-  fragtree_t dirfragtree;
-  map<string, bufferptr> xattrs;
+  inodeno_t ino;
+  bufferlist base;
+  bufferlist locks;
   __s32        replica_nonce;
   
-  __u32      authlock_state;
-  __u32      linklock_state;
-  __u32      dirfragtreelock_state;
-  __u32      filelock_state;
-  __u32      dirlock_state;
-  __u32      xattrlock_state;
-  __u32      snaplock_state;
-  __u32      nestlock_state;
-
  public:
   CInodeDiscover() {}
   CInodeDiscover(CInode *in, int nonce) {
-    inode = in->inode;
-    symlink = in->symlink;
-    dirfragtree = in->dirfragtree;
-    xattrs = in->xattrs;
-
+    ino = in->ino();
+    in->_encode_base(base);
+    in->_encode_locks_state(locks);
     replica_nonce = nonce;
-
-    authlock_state = in->authlock.get_replica_state();
-    linklock_state = in->linklock.get_replica_state();
-    dirfragtreelock_state = in->dirfragtreelock.get_replica_state();
-    filelock_state = in->filelock.get_replica_state();
-    dirlock_state = in->dirlock.get_replica_state();
-    xattrlock_state = in->xattrlock.get_replica_state();
-    snaplock_state = in->snaplock.get_replica_state();
-    nestlock_state = in->nestlock.get_replica_state();
   }
   CInodeDiscover(bufferlist::iterator &p) {
     decode(p);
   }
 
-  inodeno_t get_ino() { return inode.ino; }
+  inodeno_t get_ino() { return ino; }
   int get_replica_nonce() { return replica_nonce; }
 
   void update_inode(CInode *in) {
-    if (in->parent && inode.anchored != in->inode.anchored)
-      in->parent->adjust_nested_anchors((int)inode.anchored - (int)in->inode.anchored);
-    in->inode = inode;
-    in->symlink = symlink;
-    in->dirfragtree = dirfragtree;
-    in->xattrs = xattrs;
+    bufferlist::iterator p = base.begin();
+    in->_decode_base(p);
     in->replica_nonce = replica_nonce;
   }
   void init_inode_locks(CInode *in) {
-    in->authlock.set_state(authlock_state);
-    in->linklock.set_state(linklock_state);
-    in->dirfragtreelock.set_state(dirfragtreelock_state);
-    in->filelock.set_state(filelock_state);
-    in->dirlock.set_state(dirlock_state);
-    in->xattrlock.set_state(xattrlock_state);
-    in->snaplock.set_state(snaplock_state);
-    in->nestlock.set_state(nestlock_state);
+    bufferlist::iterator p = base.begin();
+    in->_decode_locks_state(p);
   }
   
   void encode(bufferlist &bl) const {
-    ::encode(inode, bl);
-    ::encode(symlink, bl);
-    ::encode(dirfragtree, bl);
-    ::encode(xattrs, bl);
+    ::encode(ino, bl);
+    ::encode(base, bl);
+    ::encode(locks, bl);
     ::encode(replica_nonce, bl);
-    ::encode(authlock_state, bl);
-    ::encode(linklock_state, bl);
-    ::encode(dirfragtreelock_state, bl);
-    ::encode(filelock_state, bl);
-    ::encode(dirlock_state, bl);
-    ::encode(xattrlock_state, bl);
-    ::encode(snaplock_state, bl);
-    ::encode(nestlock_state, bl);
   }
 
   void decode(bufferlist::iterator &p) {
-    ::decode(inode, p);
-    ::decode(symlink, p);
-    ::decode(dirfragtree, p);
-    ::decode(xattrs, p);
+    ::decode(ino, p);
+    ::decode(base, p);
+    ::decode(locks, p);
     ::decode(replica_nonce, p);
-    ::decode(authlock_state, p);
-    ::decode(linklock_state, p);
-    ::decode(dirfragtreelock_state, p);
-    ::decode(filelock_state, p);
-    ::decode(dirlock_state, p);
-    ::decode(xattrlock_state, p);
-    ::decode(snaplock_state, p);
-    ::decode(nestlock_state, p);
   }  
 
 };

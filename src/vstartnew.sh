@@ -43,8 +43,8 @@ done
 
 # mds
 $CEPH_BIN/cmds -d --debug_ms 1 --debug_mds 20 --mds_log_max_segments 10 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_BIN/cmds -d --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#./cmonctl mds set_max_mds 2
+$CEPH_BIN/cmds -d --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+./cmonctl mds set_max_mds 2
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

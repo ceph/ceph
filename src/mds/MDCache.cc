@@ -2409,29 +2409,17 @@ void MDCache::rejoin_send_rejoins()
       // strong
       if (p->first == 0 && root) {
 	p->second->add_weak_inode(root->ino());
-	p->second->add_strong_inode(root->ino(), root->get_replica_nonce(),
+	p->second->add_strong_inode(root->ino(),
 				    root->get_caps_wanted(),
-				    root->authlock.get_state(),
-				    root->linklock.get_state(),
-				    root->dirfragtreelock.get_state(),
-				    root->filelock.get_state(),
 				    root->dirlock.get_state(),
-				    root->nestlock.get_state(),
-				    root->snaplock.get_state(),
-				    root->xattrlock.get_state());
+				    root->nestlock.get_state());
       }
       if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
     	p->second->add_weak_inode(in->ino());
-  	p->second->add_strong_inode(in->ino(), in->get_replica_nonce(),
+  	p->second->add_strong_inode(in->ino(),
 				    in->get_caps_wanted(),
-				    in->authlock.get_state(),
-				    in->linklock.get_state(),
-				    in->dirfragtreelock.get_state(),
-				    in->filelock.get_state(),
 				    in->dirlock.get_state(),
-				    in->nestlock.get_state(),
-				    in->snaplock.get_state(),
-				    in->xattrlock.get_state());
+				    in->nestlock.get_state());
       }
     }
   }  
@@ -2555,16 +2543,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       if (dn->is_primary()) {
 	CInode *in = dn->get_inode();
 	dout(15) << " add_strong_inode " << *in << dendl;
-	rejoin->add_strong_inode(in->ino(), in->get_replica_nonce(),
+	rejoin->add_strong_inode(in->ino(),
 				 in->get_caps_wanted(),
-				 in->authlock.get_state(),
-				 in->linklock.get_state(),
-				 in->dirfragtreelock.get_state(),
-				 in->filelock.get_state(),
 				 in->dirlock.get_state(),
-				 in->nestlock.get_state(),
-				 in->snaplock.get_state(),
-				 in->xattrlock.get_state());
+				 in->nestlock.get_state());
 	in->get_nested_dirfrags(nested);
       }
     }
@@ -2749,18 +2731,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	in->dirlock.set_state(LOCK_SCATTER);
 
       if (ack) {
-	ack->add_full_inode(in->inode, in->symlink, in->dirfragtree);
-	ack->add_strong_inode(in->ino(), 
-			      inonce,
-			      0,
-			      in->authlock.get_replica_state(), 
-			      in->linklock.get_replica_state(), 
-			      in->dirfragtreelock.get_replica_state(), 
-			      in->filelock.get_replica_state(),
-			      in->dirlock.get_replica_state(),
-			      in->nestlock.get_replica_state(),
-			      in->snaplock.get_replica_state(),
-			      in->xattrlock.get_replica_state());
+	ack->add_inode_base(in);
+	ack->add_inode_locks(in, inonce);
       }
     }
   }
@@ -2777,17 +2749,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     dout(10) << " have base " << *in << dendl;
     
     if (ack) 
-      ack->add_strong_inode(in->ino(), 
-			    inonce,
-			    0,
-			    in->authlock.get_replica_state(), 
-			    in->linklock.get_replica_state(), 
-			    in->dirfragtreelock.get_replica_state(), 
-			    in->filelock.get_replica_state(),
-			    in->dirlock.get_replica_state(),
-			    in->nestlock.get_replica_state(),
-			    in->snaplock.get_replica_state(),
-			    in->xattrlock.get_replica_state());
+      ack->add_inode_locks(in, inonce);
   }
 
   if (survivor) {
@@ -3150,38 +3112,34 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	assert(0);  // uh oh.	
       }
       dn->set_replica_nonce(q->second.nonce);
-      mds->locker->rejoin_set_state(&dn->lock, q->second.lock, waiters);
+      dn->lock.set_state_rejoin(q->second.lock, waiters);
       dn->state_clear(CDentry::STATE_REJOINING);
       dout(10) << " got " << *dn << dendl;
     }
   }
 
   // full inodes
-  for (list<MMDSCacheRejoin::inode_full>::iterator p = ack->full_inodes.begin();
-       p != ack->full_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->inode.ino);
+  bufferlist::iterator p = ack->inode_base.begin();
+  while (!p.end()) {
+    inodeno_t ino;
+    ::decode(ino, p);
+    CInode *in = get_inode(ino);
     if (!in) continue;
-    if (in->parent && in->inode.anchored != p->inode.anchored)
-      in->parent->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-    in->inode = p->inode;
-    in->symlink = p->symlink;
-    in->dirfragtree = p->dirfragtree;
+    in->_decode_base(p);
     dout(10) << " got inode content " << *in << dendl;
   }
 
   // inodes
-  for (map<inodeno_t, MMDSCacheRejoin::inode_strong>::iterator p = ack->strong_inodes.begin();
-       p != ack->strong_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->first);
+  p = ack->inode_locks.begin();
+  while (!p.end()) {
+    inodeno_t ino;
+    ::decode(ino, p);
+    int32_t nonce;
+    ::decode(nonce, p);
+    CInode *in = get_inode(ino);
     if (!in) continue;
-    in->set_replica_nonce(p->second.nonce);
-    mds->locker->rejoin_set_state(&in->authlock, p->second.authlock, waiters);
-    mds->locker->rejoin_set_state(&in->linklock, p->second.linklock, waiters);
-    mds->locker->rejoin_set_state(&in->dirfragtreelock, p->second.dirfragtreelock, waiters);
-    mds->locker->rejoin_set_state(&in->filelock, p->second.filelock, waiters);
-    mds->locker->rejoin_set_state(&in->dirlock, p->second.dirlock, waiters);
+    in->set_replica_nonce(nonce);
+    in->_decode_locks_rejoin(p, waiters);
     in->state_clear(CInode::STATE_REJOINING);
     dout(10) << " got " << *in << dendl;
   }
@@ -3219,7 +3177,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
     }
     
     dout(10) << " sending " << *in << dendl;
-    full->add_full_inode(in->inode, in->symlink, in->dirfragtree);
+    full->add_inode_base(in);
   }
 
   mds->send_message_mds(full, missing->get_source().num());
@@ -3231,20 +3189,17 @@ void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
   int from = full->get_source().num();
   
   // integrate full inodes
-  for (list<MMDSCacheRejoin::inode_full>::iterator p = full->full_inodes.begin();
-       p != full->full_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->inode.ino);
+  bufferlist::iterator p = full->inode_base.begin();
+  while (!p.end()) {
+    inodeno_t ino;
+    ::decode(ino, p);
+    CInode *in = get_inode(ino);
     assert(in);
+    in->_decode_base(p);
 
     set<CInode*>::iterator q = rejoin_undef_inodes.find(in);
     if (q != rejoin_undef_inodes.end()) {
       CInode *in = *q;
-      if (in->parent && in->inode.anchored != p->inode.anchored)
-	in->parent->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-      in->inode = p->inode;
-      in->symlink = p->symlink;
-      in->dirfragtree = p->dirfragtree;
       in->state_clear(CInode::STATE_REJOINUNDEF);
       dout(10) << " got full " << *in << dendl;
       rejoin_undef_inodes.erase(q);
@@ -3461,16 +3416,8 @@ void MDCache::rejoin_send_acks()
 	for (map<int,int>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_full_inode(in->inode, in->symlink, in->dirfragtree);
-	  ack[r->first]->add_strong_inode(in->ino(), r->second, 0,
-					  in->authlock.get_replica_state(),
-					  in->linklock.get_replica_state(),
-					  in->dirfragtreelock.get_replica_state(),
-					  in->filelock.get_replica_state(),
-					  in->dirlock.get_replica_state(),
-					  in->nestlock.get_replica_state(),
-					  in->snaplock.get_replica_state(),
-					  in->xattrlock.get_replica_state());
+	  ack[r->first]->add_inode_base(in);
+	  ack[r->first]->add_inode_locks(in, r->second);
 	}
 	
 	// subdirs in this subtree?
@@ -3479,36 +3426,20 @@ void MDCache::rejoin_send_acks()
     }
   }
 
-  // root inodes too
-  if (root) 
+  // base inodes too
+  if (root && root->is_auth()) 
     for (map<int,int>::iterator r = root->replicas_begin();
 	 r != root->replicas_end();
 	 ++r) {
-      ack[r->first]->add_full_inode(root->inode, root->symlink, root->dirfragtree);
-      ack[r->first]->add_strong_inode(root->ino(), r->second, 0,
-				      root->authlock.get_replica_state(),
-				      root->linklock.get_replica_state(),
-				      root->dirfragtreelock.get_replica_state(),
-				      root->filelock.get_replica_state(),
-				      root->dirlock.get_replica_state(),
-				      root->nestlock.get_replica_state(),
-				      root->snaplock.get_replica_state(),
-				      root->xattrlock.get_replica_state());
+      ack[r->first]->add_inode_base(root);
+      ack[r->first]->add_inode_locks(root, r->second);
     }
   if (stray)
     for (map<int,int>::iterator r = stray->replicas_begin();
 	 r != stray->replicas_end();
 	 ++r) {
-      ack[r->first]->add_full_inode(stray->inode, stray->symlink, stray->dirfragtree);
-      ack[r->first]->add_strong_inode(stray->ino(), r->second, 0,
-				      stray->authlock.get_replica_state(),
-				      stray->linklock.get_replica_state(),
-				      stray->dirfragtreelock.get_replica_state(),
-				      stray->filelock.get_replica_state(),
-				      stray->dirlock.get_replica_state(),
-				      stray->nestlock.get_replica_state(),
-				      stray->snaplock.get_replica_state(),
-				      stray->xattrlock.get_replica_state());
+      ack[r->first]->add_inode_base(stray);
+      ack[r->first]->add_inode_locks(stray, r->second);
     }
 
   // send acks
@@ -4045,7 +3976,7 @@ void MDCache::trim_non_auth()
     if (dn->is_auth()) {
       // add back into lru (at the top)
       lru.lru_insert_top(dn);
-      
+
       if (!first_auth) {
 	first_auth = dn;
       } else {

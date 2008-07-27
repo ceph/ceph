@@ -459,25 +459,6 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 
 
 
-/** rejoin_set_state
- * @lock the lock 
- * @s the new state
- * @waiters list for anybody waiting on this lock
- */
-void Locker::rejoin_set_state(SimpleLock *lock, int s, list<Context*>& waiters)
-{
-  if (!lock->is_stable()) {
-    lock->set_state(s);
-    lock->get_parent()->auth_unpin(lock);
-  } else {
-    lock->set_state(s);
-  }
-  lock->take_waiting(SimpleLock::WAIT_ALL, waiters);
-}
-
-
-
-
 // file i/o -----------------------------------------
 
 version_t Locker::issue_file_data_version(CInode *in)

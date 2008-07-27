@@ -27,7 +27,6 @@ snapshots
 
 mds
 - migrator import/export of versioned dentries, inodes... drop them on export...
-- purge snap during readdir
 /- call open_parents() where needed.
   - what about during recovery?  e.g. client reconnected caps...
 - resolve/rejoin vs snapshots!

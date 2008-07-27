@@ -1283,23 +1283,30 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
 
 
 
-// IMPORT/EXPORT
 
-void CInode::encode_export(bufferlist& bl)
+void CInode::_encode_base(bufferlist& bl)
 {
-  ::encode(inode, bl);
+   ::encode(inode, bl);
   ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
   encode_snap(bl);
-  
-  bool dirty = is_dirty();
-  ::encode(dirty, bl);
+}
+void CInode::_decode_base(bufferlist::iterator& p)
+{
+  bool was_anchored = inode.anchored;
+  ::decode(inode, p);
+  if (parent && was_anchored != inode.anchored)
+    parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
 
-  ::encode(pop, bl);
- 
-  ::encode(replica_map, bl);
+  ::decode(symlink, p);
+  ::decode(dirfragtree, p);
+  ::decode(xattrs, p);
+  decode_snap(p);
+}
 
+void CInode::_encode_locks_full(bufferlist& bl)
+{
   ::encode(authlock, bl);
   ::encode(linklock, bl);
   ::encode(dirfragtreelock, bl);
@@ -1308,7 +1315,68 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(xattrlock, bl);
   ::encode(snaplock, bl);
   ::encode(nestlock, bl);
+}
+void CInode::_decode_locks_full(bufferlist::iterator& p)
+{
+  ::decode(authlock, p);
+  ::decode(linklock, p);
+  ::decode(dirfragtreelock, p);
+  ::decode(filelock, p);
+  ::decode(dirlock, p);
+  ::decode(xattrlock, p);
+  ::decode(snaplock, p);
+  ::decode(nestlock, p);
+}
 
+void CInode::_encode_locks_state(bufferlist& bl)
+{
+  authlock.encode_state(bl);
+  linklock.encode_state(bl);
+  dirfragtreelock.encode_state(bl);
+  filelock.encode_state(bl);
+  dirlock.encode_state(bl);
+  nestlock.encode_state(bl);
+  xattrlock.encode_state(bl);
+  snaplock.encode_state(bl);
+}
+void CInode::_decode_locks_state(bufferlist::iterator& p)
+{
+  authlock.decode_state(p);
+  linklock.decode_state(p);
+  dirfragtreelock.decode_state(p);
+  filelock.decode_state(p);
+  dirlock.decode_state(p);
+  nestlock.decode_state(p);
+  xattrlock.decode_state(p);
+  snaplock.decode_state(p);
+}
+void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
+{
+  authlock.decode_state_rejoin(p, waiters);
+  linklock.decode_state_rejoin(p, waiters);
+  dirfragtreelock.decode_state_rejoin(p, waiters);
+  filelock.decode_state_rejoin(p, waiters);
+  dirlock.decode_state_rejoin(p, waiters);
+  nestlock.decode_state_rejoin(p, waiters);
+  xattrlock.decode_state_rejoin(p, waiters);
+  snaplock.decode_state_rejoin(p, waiters);
+}
+
+
+// IMPORT/EXPORT
+
+void CInode::encode_export(bufferlist& bl)
+{
+  _encode_base(bl);
+
+  bool dirty = is_dirty();
+  ::encode(dirty, bl);
+
+  ::encode(pop, bl);
+
+  ::encode(replica_map, bl);
+
+  _encode_locks_full(bl);
   get(PIN_TEMPEXPORTING);
 }
 
@@ -1325,15 +1393,7 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  bool was_anchored = inode.anchored;
-  ::decode(inode, p);
-  if (parent && was_anchored != inode.anchored)
-    parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
-
-  ::decode(symlink, p);
-  ::decode(dirfragtree, p);
-  ::decode(xattrs, p);
-  decode_snap(p);
+  _decode_base(p);
 
   bool dirty;
   ::decode(dirty, p);
@@ -1345,12 +1405,5 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(replica_map, p);
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
-  ::decode(authlock, p);
-  ::decode(linklock, p);
-  ::decode(dirfragtreelock, p);
-  ::decode(filelock, p);
-  ::decode(dirlock, p);
-  ::decode(xattrlock, p);
-  ::decode(snaplock, p);
-  ::decode(nestlock, p);
+  _decode_locks_full(p);
 }

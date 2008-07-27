@@ -156,7 +156,17 @@ public:
     state = s; 
     assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
-  };
+  }
+  void set_state_rejoin(int s, list<Context*>& waiters) {
+    if (!is_stable()) {
+      state = s;
+      get_parent()->auth_unpin(this);
+    } else {
+      state = s;
+    }
+    take_waiting(SimpleLock::WAIT_ALL, waiters);
+  }
+
   bool is_stable() {
     return state >= 0;
   }
@@ -235,6 +245,18 @@ public:
     ::decode(state, p);
     ::decode(gather_set, p);
   }
+  void encode_state(bufferlist& bl) const {
+    ::encode(state, bl);
+  }
+  void decode_state(bufferlist::iterator& p) {
+    ::decode(state, p);
+  }
+  void decode_state_rejoin(bufferlist::iterator& p, list<Context*>& waiters) {
+    __s32 s;
+    ::decode(s, p);
+    set_state_rejoin(s, waiters);
+  }
+
 
   
   // simplelock specifics
