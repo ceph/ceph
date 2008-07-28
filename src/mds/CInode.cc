@@ -529,6 +529,7 @@ void CInode::mark_clean()
 void CInode::set_object_info(MDSCacheObjectInfo &info)
 {
   info.ino = ino();
+  info.snapid = last;
 }
 
 void CInode::encode_lock_state(int type, bufferlist& bl)

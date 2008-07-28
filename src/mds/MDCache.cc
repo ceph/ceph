@@ -322,14 +322,14 @@ MDSCacheObject *MDCache::get_object(MDSCacheObjectInfo &info)
 {
   // inode?
   if (info.ino) 
-    return get_inode(info.ino);
+    return get_inode(info.ino, info.snapid);
 
   // dir or dentry.
   CDir *dir = get_dirfrag(info.dirfrag);
   if (!dir) return 0;
     
   if (info.dname.length()) 
-    return dir->lookup(info.dname);
+    return dir->lookup(info.dname, info.snapid);
   else
     return dir;
 }

@@ -841,6 +841,7 @@ public:
   inodeno_t ino;
   dirfrag_t dirfrag;
   nstring dname;
+  snapid_t snapid;
 
   MDSCacheObjectInfo() : ino(0) {}
 
@@ -848,11 +849,13 @@ public:
     ::encode(ino, bl);
     ::encode(dirfrag, bl);
     ::encode(dname, bl);
+    ::encode(snapid, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(ino, p);
     ::decode(dirfrag, p);
     ::decode(dname, p);
+    ::decode(snapid, p);
   }
 };
 
@@ -1179,8 +1182,9 @@ inline ostream& operator<<(ostream& out, MDSCacheObject &o) {
 }
 
 inline ostream& operator<<(ostream& out, const MDSCacheObjectInfo &info) {
-  if (info.ino) return out << info.ino;
-  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname;
+  if (info.ino) return out << info.ino << "." << info.snapid;
+  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname
+				      << " snap " << info.snapid;
   return out << info.dirfrag;
 }
 

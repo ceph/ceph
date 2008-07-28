@@ -103,9 +103,11 @@ ostream& operator<<(ostream& out, CDentry& dn)
 
 bool operator<(const CDentry& l, const CDentry& r)
 {
-  if (l.get_dir()->ino() < r.get_dir()->ino()) return true;
-  if (l.get_dir()->ino() == r.get_dir()->ino() &&
-      l.get_name() < r.get_name()) return true;
+  if ((l.get_dir()->ino() < r.get_dir()->ino()) ||
+      (l.get_dir()->ino() == r.get_dir()->ino() &&
+       (l.get_name() < r.get_name() ||
+	(l.get_name() == r.get_name() && l.last < r.last))))
+    return true;
   return false;
 }
 
@@ -381,6 +383,7 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 {
   info.dirfrag = dir->dirfrag();
   info.dname = name;
+  info.snapid = last;
 }
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)

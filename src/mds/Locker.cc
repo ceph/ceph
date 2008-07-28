@@ -1319,7 +1319,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
 	fg = diri->pick_dirfrag(info.dname);
 	dir = diri->get_dirfrag(fg);
 	if (dir) 
-	  dn = dir->lookup(info.dname);
+	  dn = dir->lookup(info.dname, info.snapid);
       }
       if (!dn) {
 	dout(7) << "get_lock don't have dn " << info.dirfrag.ino << " " << info.dname << dendl;
@@ -1337,7 +1337,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_ISNAP:
     {
-      CInode *in = mdcache->get_inode(info.ino);
+      CInode *in = mdcache->get_inode(info.ino, info.snapid);
       if (!in) {
 	dout(7) << "get_lock don't have ino " << info.ino << dendl;
 	return 0;

@@ -340,7 +340,9 @@ private:
   CInode *get_parent_inode();
   
   bool is_lt(const MDSCacheObject *r) const {
-    return ino() < ((CInode*)r)->ino();
+    CInode *o = (CInode*)r;
+    return ino() < o->ino() ||
+      (ino() == o->ino() && last < o->last);
   }
 
   int64_t get_layout_size_increment() {
