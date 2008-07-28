@@ -75,6 +75,7 @@ class MDiscoverReply : public Message {
   bool wanted_base_dir;
   bool wanted_xlocked;
   inodeno_t wanted_ino;
+  snapid_t wanted_snapid;
 
   // and the response
   bool flag_error_dn;
@@ -97,6 +98,7 @@ class MDiscoverReply : public Message {
   bool get_wanted_base_dir() { return wanted_base_dir; }
   bool get_wanted_xlocked() { return wanted_xlocked; }
   inodeno_t get_wanted_ino() { return wanted_ino; }
+  snapid_t get_wanted_snapid() { return wanted_snapid; }
 
   bool is_flag_error_dn() { return flag_error_dn; }
   bool is_flag_error_ino() { return flag_error_ino; }
@@ -119,6 +121,7 @@ class MDiscoverReply : public Message {
     wanted_base_dir(dis->wants_base_dir()),
     wanted_xlocked(dis->wants_xlocked()),
     wanted_ino(dis->get_want_ino()),
+    wanted_snapid(dis->get_snapid()),
     flag_error_dn(false),
     flag_error_ino(false),
     flag_error_dir(false),
@@ -131,6 +134,7 @@ class MDiscoverReply : public Message {
     wanted_base_dir(false),
     wanted_xlocked(false),
     wanted_ino(inodeno_t()),
+    wanted_snapid(CEPH_NOSNAP),
     flag_error_dn(false),
     flag_error_ino(false),
     flag_error_dir(false),
@@ -173,6 +177,7 @@ class MDiscoverReply : public Message {
     ::decode(base_dir_frag, p);
     ::decode(wanted_base_dir, p);
     ::decode(wanted_xlocked, p);
+    ::decode(wanted_snapid, p);
     ::decode(flag_error_dn, p);
     ::decode(flag_error_ino, p);
     ::decode(flag_error_dir, p);
@@ -188,6 +193,7 @@ class MDiscoverReply : public Message {
     ::encode(base_dir_frag, payload);
     ::encode(wanted_base_dir, payload);
     ::encode(wanted_xlocked, payload);
+    ::encode(wanted_snapid, payload);
     ::encode(flag_error_dn, payload);
     ::encode(flag_error_ino, payload);
     ::encode(flag_error_dir, payload);

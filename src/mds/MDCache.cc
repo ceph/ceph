@@ -4726,7 +4726,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       } else {
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
-	discover_path(cur, path.postfixpath(depth), _get_waiter(mdr, req),
+	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 	if (mds->logger) mds->logger->inc("tdis");
         return 1;
@@ -4916,7 +4916,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if ((onfail == MDS_TRAVERSE_DISCOVER ||
            onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
-	discover_path(curdir, path.postfixpath(depth), _get_waiter(mdr, req),
+	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 	if (mds->logger) mds->logger->inc("tdis");
         return 1;
@@ -5960,6 +5960,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
     filepath want_path;
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   want_ino,
+				   CEPH_NOSNAP,
 				   want_path,
 				   false);
     mds->send_message_mds(dis, from);
@@ -5983,6 +5984,7 @@ void MDCache::discover_dir_frag(CInode *base,
     filepath want_path;
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
+				   CEPH_NOSNAP,
 				   want_path,
 				   true);  // need the base dir open
     dis->set_base_dir_frag(approx_fg);
@@ -5996,6 +5998,7 @@ void MDCache::discover_dir_frag(CInode *base,
 }
 
 void MDCache::discover_path(CInode *base,
+			    snapid_t snap,
 			    filepath want_path,
 			    Context *onfinish,
 			    bool want_xlocked,
@@ -6003,7 +6006,7 @@ void MDCache::discover_path(CInode *base,
 {
   if (from < 0) from = base->authority().first;
 
-  dout(7) << "discover_path " << base->ino() << " " << want_path << " from mds" << from
+  dout(7) << "discover_path " << base->ino() << " " << want_path << " snap " << snap << " from mds" << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
 
@@ -6016,6 +6019,7 @@ void MDCache::discover_path(CInode *base,
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
+				   snap,
 				   want_path,
 				   true,        // we want the base dir; we are relative to ino.
 				   want_xlocked);
@@ -6028,13 +6032,14 @@ void MDCache::discover_path(CInode *base,
 }
 
 void MDCache::discover_path(CDir *base,
+			    snapid_t snap,
 			    filepath want_path,
 			    Context *onfinish,
 			    bool want_xlocked)
 {
   int from = base->authority().first;
 
-  dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " from mds" << from
+  dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " snap " << snap << " from mds" << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
 
@@ -6047,6 +6052,7 @@ void MDCache::discover_path(CDir *base,
   if (!base->is_waiting_for_dentry(want_path[0]) || !onfinish) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
+				   snap,
 				   want_path,
 				   false,   // no base dir; we are relative to dir
 				   want_xlocked);
@@ -6078,6 +6084,7 @@ void MDCache::discover_ino(CDir *base,
   if (!base->is_waiting_for_ino(want_ino)) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->dirfrag(),
+				   CEPH_NOSNAP,
 				   want_ino,
 				   want_xlocked);
     mds->send_message_mds(dis, from);
@@ -6145,11 +6152,15 @@ void MDCache::handle_discover(MDiscover *dis)
   CInode *cur = 0;
   MDiscoverReply *reply = new MDiscoverReply(dis);
 
+  snapid_t snapid = dis->get_snapid();
+
   // get started.
   if (dis->get_base_ino() == MDS_INO_ROOT) {
     // wants root
     dout(7) << "handle_discover from mds" << dis->get_asker()
-	    << " wants root + " << dis->get_want().get_path() << dendl;
+	    << " wants root + " << dis->get_want().get_path()
+	    << " snap " << snapid
+	    << dendl;
 
     assert(mds->get_nodeid() == 0);
     assert(root->is_auth());
@@ -6164,8 +6175,9 @@ void MDCache::handle_discover(MDiscover *dis)
   else if (dis->get_base_ino() == MDS_INO_STRAY(whoami)) {
     // wants root
     dout(7) << "handle_discover from mds" << dis->get_asker()
-	    << " wants stray + " << dis->get_want().get_path() << dendl;
-    
+	    << " wants stray + " << dis->get_want().get_path()
+	    << " snap " << snapid
+	    << dendl;
     reply->starts_with = MDiscoverReply::INODE;
     replicate_inode(stray, dis->get_asker(), reply->trace);
     dout(10) << "added stray " << *stray << dendl;
@@ -6174,7 +6186,7 @@ void MDCache::handle_discover(MDiscover *dis)
   }
   else {
     // there's a base inode
-    cur = get_inode(dis->get_base_ino());
+    cur = get_inode(dis->get_base_ino(), snapid);
     
     if (!cur) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
@@ -6293,12 +6305,12 @@ void MDCache::handle_discover(MDiscover *dis)
     CDentry *dn = 0;
     if (dis->get_want_ino()) {
       // lookup by ino
-      CInode *in = get_inode(dis->get_want_ino());
+      CInode *in = get_inode(dis->get_want_ino(), snapid);
       if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir)
 	dn = in->get_parent_dn();
     } else if (dis->get_want().depth() > 0) {
       // lookup dentry
-      dn = curdir->lookup( dis->get_dentry(i) );
+      dn = curdir->lookup(dis->get_dentry(i), snapid);
     } else 
       break; // done!
           
@@ -6528,13 +6540,13 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	// don't actaully need the hint, now
 	if (dir->lookup(m->get_error_dentry()) == 0 &&
 	    dir->is_waiting_for_dentry(m->get_error_dentry())) 
-	  discover_path(dir, m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
+	  discover_path(dir, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
 	else 
 	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
 		  << m->get_error_dentry() << dendl;
       } else {
 	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
-	  discover_path(cur, m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
+	  discover_path(cur, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
 	else
 	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
       }
