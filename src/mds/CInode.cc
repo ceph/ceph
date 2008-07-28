@@ -649,8 +649,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   ::decode(newfirst, p);
 
   if (!is_auth() && newfirst != first) {
-    assert(newfirst > first);
     dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
+    assert(newfirst > first);
     first = newfirst;
   }
 

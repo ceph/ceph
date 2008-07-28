@@ -392,6 +392,7 @@ private:
   void encode_replica(int who, bufferlist& bl) {
     __u32 nonce = add_replica(who);
     ::encode(nonce, bl);
+    ::encode(first, bl);
     ::encode(dir_rep, bl);
     ::encode(dir_rep_by, bl);
   }
@@ -399,6 +400,7 @@ private:
     __u32 nonce;
     ::decode(nonce, p);
     replica_nonce = nonce;
+    ::decode(first, p);
     ::decode(dir_rep, p);
     ::decode(dir_rep_by, p);
   }

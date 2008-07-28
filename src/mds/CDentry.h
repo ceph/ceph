@@ -215,6 +215,7 @@ public:
   void encode_replica(int mds, bufferlist& bl) {
     __u32 nonce = add_replica(mds);
     ::encode(nonce, bl);
+    ::encode(first, bl);
     ::encode(remote_ino, bl);
     ::encode(remote_d_type, bl);
     __s32 ls = lock.get_replica_state();

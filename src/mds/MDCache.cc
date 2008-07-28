@@ -3803,7 +3803,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->get_replica_nonce());
+      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->name, dn->last, dn->get_replica_nonce());
     }
   }
 
@@ -3920,7 +3920,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_inode(df, in->ino(), in->get_replica_nonce());
+      expiremap[a]->add_inode(df, in->vino(), in->get_replica_nonce());
     }
   }
 
@@ -4100,7 +4100,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
 
     // INODES
-    for (map<inodeno_t,int>::iterator it = p->second.inodes.begin();
+    for (map<vinodeno_t,int>::iterator it = p->second.inodes.begin();
 	 it != p->second.inodes.end();
 	 it++) {
       CInode *in = get_inode(it->first);
@@ -4161,7 +4161,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
     
     // DENTRIES
-    for (map<dirfrag_t, map<nstring,int> >::iterator pd = p->second.dentries.begin();
+    for (map<dirfrag_t, map<pair<nstring,snapid_t>,int> >::iterator pd = p->second.dentries.begin();
 	 pd != p->second.dentries.end();
 	 ++pd) {
       dout(10) << " dn expires in dir " << pd->first << dendl;
@@ -4176,23 +4176,23 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	assert(dir->is_auth());
       }
       
-      for (map<nstring,int>::iterator p = pd->second.begin();
+      for (map<pair<nstring,snapid_t>,int>::iterator p = pd->second.begin();
 	   p != pd->second.end();
 	   ++p) {
 	int nonce = p->second;
 	CDentry *dn;
 	
 	if (dir) {
-	  dn = dir->lookup(p->first);
+	  dn = dir->lookup(p->first.first, p->first.second);
 	} else {
 	  // which dirfrag for this dentry?
-	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first));
+	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first.first));
 	  assert(dir->is_auth());
-	  dn = dir->lookup(p->first);
+	  dn = dir->lookup(p->first.first, p->first.second);
 	} 
 
 	if (!dn) 
-	  dout(0) << "  missing dentry for " << p->first << " in " << *dir << dendl;
+	  dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << " in " << *dir << dendl;
 	assert(dn);
 	
 	if (nonce == dn->get_replica_nonce(from)) {
@@ -6621,16 +6621,18 @@ CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
 CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished)
 {
   nstring name;
+  snapid_t last;
   ::decode(name, p);
+  ::decode(last, p);
 
-  CDentry *dn = dir->lookup(name);
+  CDentry *dn = dir->lookup(name, last);
   
   // have it?
   if (dn) {
     dn->decode_replica(p, false);
     dout(7) << "add_replica_dentry had " << *dn << dendl;
   } else {
-    dn = dir->add_null_dentry(name);
+    dn = dir->add_null_dentry(name, 1 /* this will get updated below */, last);
     dn->decode_replica(p, true);
     dout(7) << "add_replica_dentry added " << *dn << dendl;
   }
@@ -6643,10 +6645,13 @@ CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Co
 CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished)
 {
   inodeno_t ino;
+  snapid_t last;
   ::decode(ino, p);
-  CInode *in = get_inode(ino);
+  ::decode(last, p);
+  CInode *in = get_inode(ino, last);
   if (!in) {
     in = new CInode(this, false);
+    in->last = last;
     in->decode_replica(p, true);
     add_inode(in);
     if (in->is_base()) {

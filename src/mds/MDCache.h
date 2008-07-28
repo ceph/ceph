@@ -680,6 +680,9 @@ public:
     return have_inode(vinodeno_t(ino, snap));
   }
   bool have_inode(vinodeno_t vino) { return inode_map.count(vino) ? true:false; }
+  CInode* get_inode(vinodeno_t vino) {
+    return get_inode(vino.ino, vino.snapid);
+  }
   CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
     vinodeno_t vino(ino, s);
     if (have_inode(vino))
@@ -829,10 +832,12 @@ public:
   }
   void replicate_dentry(CDentry *dn, int to, bufferlist& bl) {
     ::encode(dn->name, bl);
+    ::encode(dn->last, bl);
     dn->encode_replica(to, bl);
   }
   void replicate_inode(CInode *in, int to, bufferlist& bl) {
     ::encode(in->inode.ino, bl);  // bleh, minor assymetry here
+    ::encode(in->last, bl);
     in->encode_replica(to, bl);
   }
   

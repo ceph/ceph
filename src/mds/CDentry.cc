@@ -353,6 +353,8 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
   ::decode(nonce, p);
   replica_nonce = nonce;
   
+  ::decode(first, p);
+
   inodeno_t rino;
   unsigned char rdtype;
   ::decode(rino, p);
@@ -383,6 +385,8 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
+  ::encode(first, bl);
+
   // null, ino, or remote_ino?
   char c;
   if (is_primary()) {
@@ -403,7 +407,18 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
 {  
-  if (bl.length() == 0) {
+  bufferlist::iterator p = bl.begin();
+
+  snapid_t newfirst;
+  ::decode(newfirst, p);
+
+  if (!is_auth() && newfirst != first) {
+    dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
+    assert(newfirst > first);
+    first = newfirst;
+  }
+
+  if (p.end()) {
     // null
     assert(is_null());
     return;
@@ -411,8 +426,6 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 
   char c;
   inodeno_t ino;
-
-  bufferlist::iterator p = bl.begin();
   ::decode(c, p);
 
   switch (c) {

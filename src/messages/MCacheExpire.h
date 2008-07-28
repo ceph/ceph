@@ -24,9 +24,9 @@ public:
     that makes it less work to process when exports are in progress.
   */
   struct realm {
-    map<inodeno_t, __s32> inodes;
+    map<vinodeno_t, __s32> inodes;
     map<dirfrag_t, __s32> dirs;
-    map<dirfrag_t, map<nstring,__s32> > dentries;
+    map<dirfrag_t, map<pair<nstring,snapid_t>,__s32> > dentries;
 
     void encode(bufferlist &bl) const {
       ::encode(inodes, bl);
@@ -50,35 +50,20 @@ public:
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }
 
-  virtual const char *get_type_name() { return "CEx";}
+  virtual const char *get_type_name() { return "cache_expire";}
   
-  void add_inode(dirfrag_t r, inodeno_t ino, int nonce) {
-    realms[r].inodes[ino] = nonce;
+  void add_inode(dirfrag_t r, vinodeno_t vino, int nonce) {
+    realms[r].inodes[vino] = nonce;
   }
   void add_dir(dirfrag_t r, dirfrag_t df, int nonce) {
     realms[r].dirs[df] = nonce;
   }
-  void add_dentry(dirfrag_t r, dirfrag_t df, const nstring& dn, int nonce) {
-    realms[r].dentries[df][dn] = nonce;
+  void add_dentry(dirfrag_t r, dirfrag_t df, const nstring& dn, snapid_t last, int nonce) {
+    realms[r].dentries[df][pair<nstring,snapid_t>(dn,last)] = nonce;
   }
 
   void add_realm(dirfrag_t df, realm& r) {
-    realm& myr = realms[df];
-    for (map<inodeno_t, int>::iterator p = r.inodes.begin();
-	 p != r.inodes.end();
-	 ++p)
-      myr.inodes[p->first] = p->second;
-    for (map<dirfrag_t, int>::iterator p = r.dirs.begin();
-	 p != r.dirs.end();
-	 ++p)
-      myr.dirs[p->first] = p->second;
-    for (map<dirfrag_t, map<nstring,int> >::iterator p = r.dentries.begin();
-	 p != r.dentries.end();
-	 ++p)
-      for (map<nstring,int>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) 
-	myr.dentries[p->first][q->first] = q->second;
+    realms[df] = r;
   }
 
   void decode_payload() {

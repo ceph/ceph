@@ -208,10 +208,25 @@ struct vinodeno_t {
   snapid_t snapid;
   vinodeno_t() {}
   vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
+
+  void encode(bufferlist& bl) const {
+    ::encode(ino, bl);
+    ::encode(snapid, bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    ::decode(ino, p);
+    ::decode(snapid, p);
+  }
 };
+WRITE_CLASS_ENCODER(vinodeno_t)
 
 inline bool operator==(const vinodeno_t &l, const vinodeno_t &r) {
   return l.ino == r.ino && l.snapid == r.snapid;
+}
+inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
+  return 
+    l.ino < r.ino ||
+    (l.ino == r.ino && l.snapid < r.snapid);
 }
 
 namespace __gnu_cxx {
