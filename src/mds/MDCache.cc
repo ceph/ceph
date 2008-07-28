@@ -1141,42 +1141,45 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
      * update one segment at a time.  then loop to cover the whole
      * [ofirst,last] interval.
      */    
-    fnode_t *pf;
+    nest_info_t *prstat;
     snapid_t first;
+    fnode_t *pf = parent->get_projected_fnode();
     if (last == CEPH_NOSNAP) {
       first = MAX(ofirst, parent->first);
-      pf = parent->get_projected_fnode();
-      dout(10) << " projecting to head [" << first << "," << last << "] " << pf->rstat << dendl;
+      prstat = &pf->rstat;
+      dout(10) << " projecting to head [" << first << "," << last << "] " << *prstat << dendl;
 
       if (first > parent->first &&
-	  !(pf->fragstat == pf->accounted_fragstat)) {
-	dout(10) << "  target snapped and not fully accounted, cow to dirty_old_fnode ["
+	  !(pf->rstat == pf->accounted_rstat)) {
+	dout(10) << "  target snapped and not fully accounted, cow to dirty_old_rstat ["
 		 << parent->first << "," << (first-1) << "] "
-		 << " " << pf->rstat << "/" << pf->accounted_rstat
+		 << " " << *prstat << "/" << pf->accounted_rstat
 		 << dendl;
-	parent->dirty_old_fnodes[first-1].first = parent->first;
-	parent->dirty_old_fnodes[first-1].fnode = *pf;
+	parent->dirty_old_rstat[first-1].first = parent->first;
+	parent->dirty_old_rstat[first-1].rstat = pf->rstat;
+	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
 	parent->first = first;
       }
     } else if (last >= parent->first) {
       first = parent->first;
-      parent->dirty_old_fnodes[last].first = first;
-      parent->dirty_old_fnodes[last].fnode = *parent->get_projected_fnode();
-      pf = &parent->dirty_old_fnodes[last].fnode;
+      parent->dirty_old_rstat[last].first = first;
+      parent->dirty_old_rstat[last].rstat = pf->rstat;
+      parent->dirty_old_rstat[last].accounted_rstat = pf->accounted_rstat;
+      prstat = &parent->dirty_old_rstat[last].rstat;
       dout(10) << " projecting to newly split dirty_old_fnode [" << first << "," << last << "] "
-	       << " " << pf->rstat << "/" << pf->accounted_rstat << dendl;
+	       << " " << *prstat << "/" << pf->accounted_rstat << dendl;
     } else {
-      // be careful, dirty_old_fnodes is a _sparse_ map.
+      // be careful, dirty_old_rstat is a _sparse_ map.
       // sorry, this is ugly.
       first = ofirst;
 
       // find any intersection with last
-      map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.lower_bound(last);
-      if (p == parent->dirty_old_fnodes.end()) {
-	dout(20) << "  no dirty_old_fnode with last >= last " << last << dendl;
-	if (!parent->dirty_old_fnodes.empty() && parent->dirty_old_fnodes.rbegin()->first >= first) {
-	  dout(20) << "  last dirty_old_fnode ends at " << parent->dirty_old_fnodes.rbegin()->first << dendl;
-	  first = parent->dirty_old_fnodes.rbegin()->first+1;
+      map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.lower_bound(last);
+      if (p == parent->dirty_old_rstat.end()) {
+	dout(20) << "  no dirty_old_rstat with last >= last " << last << dendl;
+	if (!parent->dirty_old_rstat.empty() && parent->dirty_old_rstat.rbegin()->first >= first) {
+	  dout(20) << "  last dirty_old_rstat ends at " << parent->dirty_old_rstat.rbegin()->first << dendl;
+	  first = parent->dirty_old_rstat.rbegin()->first+1;
 	}
       } else {
 	// *p last is >= last
@@ -1184,55 +1187,56 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 	  // *p intersects [first,last]
 	  if (p->second.first < first) {
 	    dout(10) << " splitting off left bit [" << p->second.first << "," << first-1 << "]" << dendl;
-	    parent->dirty_old_fnodes[first-1] = p->second;
+	    parent->dirty_old_rstat[first-1] = p->second;
 	    p->second.first = first;
 	  }
 	  if (p->second.first > first)
 	    first = p->second.first;
 	  if (last < p->first) {
 	    dout(10) << " splitting off right bit [" << last+1 << "," << p->first << "]" << dendl;
-	    parent->dirty_old_fnodes[last] = p->second;
+	    parent->dirty_old_rstat[last] = p->second;
 	    p->second.first = last+1;
 	  }
 	} else {
 	  // *p is to the _right_ of [first,last]
-	  p = parent->dirty_old_fnodes.lower_bound(first);
+	  p = parent->dirty_old_rstat.lower_bound(first);
 	  // new *p last is >= first
 	  if (p->second.first <= last &&  // new *p isn't also to the right, and
 	      p->first >= first) {        // it intersects our first bit,
 	    dout(10) << " staying to the right of [" << p->second.first << "," << p->first << "]..." << dendl;
 	    first = p->first+1;
 	  }
-	  dout(10) << " projecting to new dirty_old_fnode [" << first << "," << last << "]" << dendl;
+	  dout(10) << " projecting to new dirty_old_rstat [" << first << "," << last << "]" << dendl;
 	}
       }
-      dout(10) << " projecting to dirty_old_fnode [" << first << "," << last << "]" << dendl;
-      parent->dirty_old_fnodes[last].first = first;
-      pf = &parent->dirty_old_fnodes[last].fnode;
+      dout(10) << " projecting to dirty_old_rstat [" << first << "," << last << "]" << dendl;
+      parent->dirty_old_rstat[last].first = first;
+      prstat = &parent->dirty_old_rstat[last].rstat;
     }
     
     // apply
-    dout(10) << "  project to [" << first << "," << last << "] " << pf->rstat << dendl;
+    dout(10) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
     assert(last >= first);
-    pf->rstat.add(delta);
+    prstat->add(delta);
     inode.accounted_rstat = inode.rstat;
-    dout(10) << "      result [" << first << "," << last << "] " << pf->rstat << " " << *parent << dendl;
+    dout(10) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
 
     last = first-1;
   }
 }
 
-void MDCache::project_rstat_frag_to_inode(fnode_t& fnode, snapid_t ofirst, snapid_t last, 
+void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
+					  snapid_t ofirst, snapid_t last, 
 					  CInode *pin, bool cow_head)
 {
   dout(10) << "project_rstat_frag_to_inode [" << ofirst << "," << last << "]" << dendl;
-  dout(10) << "  frag           rstat " << fnode.rstat << dendl;
-  dout(10) << "  frag accounted_rstat " << fnode.accounted_rstat << dendl;
-  nest_info_t delta = fnode.rstat;
-  delta.sub(fnode.accounted_rstat);
+  dout(10) << "  frag           rstat " << rstat << dendl;
+  dout(10) << "  frag accounted_rstat " << accounted_rstat << dendl;
+  nest_info_t delta = rstat;
+  delta.sub(accounted_rstat);
   dout(10) << "                 delta " << delta << dendl;
 
-  fnode.accounted_rstat = fnode.rstat;
+  accounted_rstat = rstat;
 
   inode_t *pi_to_cow = cow_head ? pin->get_projected_inode() : pin->get_previous_projected_inode();
 
@@ -1484,12 +1488,12 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // rstat
     if (primary_dn) {
-      for (map<snapid_t,old_fnode_t>::iterator p = parent->dirty_old_fnodes.begin();
-	   p != parent->dirty_old_fnodes.end();
+      for (map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
+	   p != parent->dirty_old_rstat.end();
 	   p++)
-	project_rstat_frag_to_inode(p->second.fnode, p->second.first, p->first, pin, true);//false);
-      parent->dirty_old_fnodes.clear();
-      project_rstat_frag_to_inode(*pf, parent->first, CEPH_NOSNAP, pin, true);//false);
+	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
+      parent->dirty_old_rstat.clear();
+      project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
     }
 
     // next parent!
@@ -4871,9 +4875,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
 	    MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
 	    reply->mark_unsolicited();
-	    reply->add_dentry( dn->replicate_to( from ) );
+	    reply->starts_with = MDiscoverReply::DENTRY;
+	    replicate_dentry(dn, from, reply->trace);
 	    if (dn->is_primary())
-	      reply->add_inode( dn->inode->replicate_to( from ) );
+	      replicate_inode(dn->inode, from, reply->trace);
 	    mds->send_message_mds(reply, req->get_source().num());
 	  }
 	}

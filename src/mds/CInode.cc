@@ -590,6 +590,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(20) << "   accounted_fragstat " << p->second->fnode.accounted_fragstat << dendl;
 	  frag_t fg = p->second->dirfrag().frag;
 	  ::encode(fg, tmp);
+	  ::encode(p->second->first, tmp);
 	  ::encode(p->second->fnode.fragstat, tmp);
 	  ::encode(p->second->fnode.accounted_fragstat, tmp);
 	  n++;
@@ -617,7 +618,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  ::encode(p->second->first, tmp);
 	  ::encode(p->second->fnode.rstat, tmp);
 	  ::encode(p->second->fnode.accounted_rstat, tmp);
-	  ::encode(p->second->dirty_old_fnodes, tmp);
+	  ::encode(p->second->dirty_old_rstat, tmp);
 	  n++;
 	}
       ::encode(n, bl);
@@ -728,11 +729,9 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	frag_t fg;
 	frag_info_t fragstat;
 	frag_info_t accounted_fragstat;
-	map<snapid_t,old_fnode_t> dirty_old_fnodes;
 	::decode(fg, p);
 	::decode(fragstat, p);
 	::decode(accounted_fragstat, p);
-	::decode(dirty_old_fnodes, p);
 	dout(10) << fg << " got changed fragstat " << fragstat << dendl;
 	dout(20) << fg << "   accounted_fragstat " << accounted_fragstat << dendl;
 
@@ -743,22 +742,18 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dout(20) << " " << fg << " accounted_fragstat " << accounted_fragstat << dendl;
 	  dir->fnode.fragstat = fragstat;
 	  dir->fnode.accounted_fragstat = accounted_fragstat;
-	  dir->dirty_old_fnodes.swap(dirty_old_fnodes);
-	  if (!(fragstat == accounted_fragstat) ||
-	      dirty_old_fnodes.size())
+	  if (!(fragstat == accounted_fragstat))
 	    dirlock.set_updated();
 	} else {
 	  if (dir &&
 	      dir->is_auth() &&
-	      (!(dir->fnode.accounted_fragstat == fragstat) ||
-	       dirty_old_fnodes.size())) {
+	      !(dir->fnode.accounted_fragstat == fragstat)) {
 	    dout(10) << " setting accounted_fragstat " << fragstat << " and setting dirty bit on "
 		     << *dir << dendl;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_fragstat = fragstat;
 	    if (dir->is_auth())
 	      dir->_set_dirty_flag();	    // bit of a hack
-	    dir->dirty_old_fnodes.swap(dirty_old_fnodes);
 	  }
 	}
       }
@@ -781,10 +776,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	snapid_t fgfirst;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
+	map<snapid_t,old_rstat_t> dirty_old_rstat;
 	::decode(fg, p);
 	::decode(fgfirst, p);
 	::decode(rstat, p);
 	::decode(accounted_rstat, p);
+	::decode(dirty_old_rstat, p);
 	dout(10) << fg << " got changed rstat " << rstat << dendl;
 	dout(20) << fg << "   accounted_rstat " << accounted_rstat << dendl;
 
@@ -795,7 +792,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dout(20) << " " << fg << " accounted_rstat " << accounted_rstat << dendl;
 	  dir->fnode.rstat = rstat;
 	  dir->fnode.accounted_rstat = accounted_rstat;
-	  if (!(rstat == accounted_rstat))
+	  dir->dirty_old_rstat.swap(dirty_old_rstat);
+	  if (!(rstat == accounted_rstat) || dir->dirty_old_rstat.size())
 	    dirlock.set_updated();
 	} else {
 	  if (dir &&
@@ -808,6 +806,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    pf->accounted_rstat = rstat;
 	    if (dir->is_auth())
 	      dir->_set_dirty_flag();	    // bit of a hack
+	    dir->dirty_old_rstat.swap(dirty_old_rstat);
 	  }
 	}
       }
@@ -898,12 +897,12 @@ void CInode::finish_scatter_gather_update(int type)
 	   p++) {
 	CDir *dir = p->second;
 	fnode_t *pf = dir->get_projected_fnode();
-	mdcache->project_rstat_frag_to_inode(*pf, dir->first, CEPH_NOSNAP, this, true);
-	for (map<snapid_t,old_fnode_t>::iterator q = dir->dirty_old_fnodes.begin();
-	     q != dir->dirty_old_fnodes.end();
+	mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, dir->first, CEPH_NOSNAP, this, true);
+	for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
+	     q != dir->dirty_old_rstat.end();
 	     q++)
-	  mdcache->project_rstat_frag_to_inode(q->second.fnode, q->second.first, q->first, this, true);
-	dir->dirty_old_fnodes.clear();
+	  mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat, q->second.first, q->first, this, true);
+	dir->dirty_old_rstat.clear();
       }
       pi->rstat.version++;
       dout(20) << "       final rstat " << pi->rstat << dendl;

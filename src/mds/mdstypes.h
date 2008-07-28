@@ -376,20 +376,22 @@ struct fnode_t {
 WRITE_CLASS_ENCODER(fnode_t)
 
 
-struct old_fnode_t {
+struct old_rstat_t {
   snapid_t first;
-  fnode_t fnode;
+  nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist& bl) const {
     ::encode(first, bl);
-    ::encode(fnode, bl);
+    ::encode(rstat, bl);
+    ::encode(accounted_rstat, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(first, bl);
-    ::decode(fnode, bl);
+    ::decode(rstat, bl);
+    ::decode(accounted_rstat, bl);    
   }
 };
-WRITE_CLASS_ENCODER(old_fnode_t)
+WRITE_CLASS_ENCODER(old_rstat_t)
 
 
 
