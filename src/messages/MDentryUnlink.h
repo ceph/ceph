@@ -24,23 +24,14 @@ class MDentryUnlink : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   nstring& get_dn() { return dn; }
 
-  CInodeDiscover *strayin;
-  CDirDiscover *straydir;
-  CDentryDiscover *straydn;
+  bufferlist straybl;
 
   MDentryUnlink() :
-    Message(MSG_MDS_DENTRYUNLINK),
-    strayin(0), straydir(0), straydn(0) { }
+    Message(MSG_MDS_DENTRYUNLINK) { }
   MDentryUnlink(dirfrag_t df, nstring& n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
-    dn(n),
-    strayin(0), straydir(0), straydn(0) { }
-  ~MDentryUnlink() {
-    delete strayin;
-    delete straydir;
-    delete straydn;
-  }
+    dn(n) {}
 
   const char *get_type_name() { return "dentry_unlink";}
   void print(ostream& o) {
@@ -51,26 +42,12 @@ class MDentryUnlink : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(dn, p);
-
-    bool isstray;
-    ::decode(isstray, p);
-    if (isstray) {
-      strayin = new CInodeDiscover(p);
-      straydir = new CDirDiscover(p);
-      straydn = new CDentryDiscover(p);
-    }
+    ::decode(straybl, p);
   }
   void encode_payload() {
     ::encode(dirfrag, payload);
     ::encode(dn, payload);
-
-    bool isstray = strayin ? true:false;
-    ::encode(isstray, payload);
-    if (isstray) {
-      strayin->encode(payload);
-      straydir->encode(payload);
-      straydn->encode(payload);
-    }
+    ::encode(straybl, payload);
   }
 };
 

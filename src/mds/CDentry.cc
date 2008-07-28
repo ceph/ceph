@@ -274,13 +274,6 @@ void CDentry::unlink_remote()
 }
 
 
-CDentryDiscover *CDentry::replicate_to(int who)
-{
-  int nonce = add_replica(who);
-  return new CDentryDiscover(this, nonce);
-}
-
-
 // ----------------------------
 // auth pins
 
@@ -352,6 +345,32 @@ void CDentry::adjust_nested_anchors(int by)
   assert(nested_anchors >= 0);
   dir->adjust_nested_anchors(by);
 }
+
+
+void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
+{
+  __u32 nonce;
+  ::decode(nonce, p);
+  replica_nonce = nonce;
+  
+  inodeno_t rino;
+  unsigned char rdtype;
+  ::decode(rino, p);
+  ::decode(rdtype, p);
+  if (rino) {
+    if (is_null())
+      dir->link_remote_inode(this, rino, rdtype);
+    else
+      assert(is_remote() && remote_ino == rino);
+  }
+  
+  __s32 ls;
+  ::decode(ls, p);
+  if (is_new)
+    lock.set_state(ls);
+}
+
+
 
 // ----------------------------
 // locking

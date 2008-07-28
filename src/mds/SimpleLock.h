@@ -248,8 +248,13 @@ public:
   void encode_state(bufferlist& bl) const {
     ::encode(state, bl);
   }
-  void decode_state(bufferlist::iterator& p) {
-    ::decode(state, p);
+  void decode_state(bufferlist::iterator& p, bool is_new=true) {
+    if (is_new)
+      ::decode(state, p);
+    else {
+      __s32 blah;
+      ::decode(blah, p);
+    }
   }
   void decode_state_rejoin(bufferlist::iterator& p, list<Context*>& waiters) {
     __s32 s;

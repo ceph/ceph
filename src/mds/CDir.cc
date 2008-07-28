@@ -750,16 +750,6 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
 
 
 
-CDirDiscover *CDir::replicate_to(int mds)
-{
-  assert(is_auth());
-  return new CDirDiscover( this, add_replica(mds) );
-}
-
-
-
-
-
 /****************************************
  * WAITING
  */

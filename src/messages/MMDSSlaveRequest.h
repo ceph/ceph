@@ -68,10 +68,10 @@ class MMDSSlaveRequest : public Message {
 
  private:
   metareqid_t reqid;
-  char op;
+  __s16 op;
 
   // for locking
-  char lock_type;  // lock object type
+  __u16 lock_type;  // lock object type
   MDSCacheObjectInfo object_info;
   
   // for authpins

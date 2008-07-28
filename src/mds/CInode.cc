@@ -533,6 +533,8 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
+  ::encode(first, bl);
+
   switch (type) {
   case CEPH_LOCK_IAUTH:
     ::encode(inode.ctime, bl);
@@ -641,6 +643,15 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   utime_t tm;
+
+  snapid_t newfirst;
+  ::decode(newfirst, p);
+
+  if (!is_auth() && newfirst != first) {
+    assert(newfirst > first);
+    dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
+    first = newfirst;
+  }
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
@@ -1077,20 +1088,6 @@ pair<int,int> CInode::authority()
 }
 
 
-CInodeDiscover* CInode::replicate_to( int rep )
-{
-  assert(is_auth());
-
-  // relax locks?
-  if (!is_replicated())
-    replicate_relax_locks();
-  
-  // return the thinger
-  int nonce = add_replica( rep );
-  return new CInodeDiscover( this, nonce );
-}
-
-
 // SNAP
 
 snapid_t CInode::get_oldest_snap()
@@ -1286,7 +1283,7 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
 
 void CInode::_encode_base(bufferlist& bl)
 {
-   ::encode(inode, bl);
+  ::encode(inode, bl);
   ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
@@ -1339,16 +1336,16 @@ void CInode::_encode_locks_state(bufferlist& bl)
   xattrlock.encode_state(bl);
   snaplock.encode_state(bl);
 }
-void CInode::_decode_locks_state(bufferlist::iterator& p)
+void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
-  authlock.decode_state(p);
-  linklock.decode_state(p);
-  dirfragtreelock.decode_state(p);
-  filelock.decode_state(p);
-  dirlock.decode_state(p);
-  nestlock.decode_state(p);
-  xattrlock.decode_state(p);
-  snaplock.decode_state(p);
+  authlock.decode_state(p, is_new);
+  linklock.decode_state(p, is_new);
+  dirfragtreelock.decode_state(p, is_new);
+  filelock.decode_state(p, is_new);
+  dirlock.decode_state(p, is_new);
+  nestlock.decode_state(p, is_new);
+  xattrlock.decode_state(p, is_new);
+  snaplock.decode_state(p, is_new);
 }
 void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
 {

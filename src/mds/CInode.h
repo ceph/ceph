@@ -44,7 +44,6 @@ class CDentry;
 class CDir;
 class Message;
 class CInode;
-class CInodeDiscover;
 class MDCache;
 class LogSegment;
 class SnapRealm;
@@ -270,7 +269,6 @@ private:
   friend class MDCache;
   friend class CDir;
   friend class CInodeExport;
-  friend class CInodeDiscover;
 
  public:
   // ---------------------------
@@ -367,7 +365,28 @@ private:
   void mark_clean();
 
 
-  CInodeDiscover* replicate_to(int rep);
+  void encode_replica(int rep, bufferlist& bl) {
+    assert(is_auth());
+    
+    // relax locks?
+    if (!is_replicated())
+      replicate_relax_locks();
+    
+    
+    __u32 nonce = add_replica(rep);
+    ::encode(nonce, bl);
+    
+    _encode_base(bl);
+    _encode_locks_state(bl);
+  }
+  void decode_replica(bufferlist::iterator& p, bool is_new) {
+    __u32 nonce;
+    ::decode(nonce, p);
+    replica_nonce = nonce;
+    
+    _decode_base(p);
+    _decode_locks_state(p, is_new);  
+  }
 
 
   // -- waiting --
@@ -380,7 +399,7 @@ private:
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
   void _encode_locks_state(bufferlist& bl);
-  void _decode_locks_state(bufferlist::iterator& p);
+  void _decode_locks_state(bufferlist::iterator& p, bool is_new);
   void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
 
 
@@ -670,76 +689,8 @@ public:
     return remote_parents.size(); 
   }
 
-
-  /*
-  // for giving to clients
-  void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
-    if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
-        (!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << dendl;
-      ls = cached_by;
-    }
-  }
-  */
-
   void print(ostream& out);
 
 };
-
-
-
-
-// -- encoded state
-
-// discover
-
-class CInodeDiscover {
-  inodeno_t ino;
-  bufferlist base;
-  bufferlist locks;
-  __s32        replica_nonce;
-  
- public:
-  CInodeDiscover() {}
-  CInodeDiscover(CInode *in, int nonce) {
-    ino = in->ino();
-    in->_encode_base(base);
-    in->_encode_locks_state(locks);
-    replica_nonce = nonce;
-  }
-  CInodeDiscover(bufferlist::iterator &p) {
-    decode(p);
-  }
-
-  inodeno_t get_ino() { return ino; }
-  int get_replica_nonce() { return replica_nonce; }
-
-  void update_inode(CInode *in) {
-    bufferlist::iterator p = base.begin();
-    in->_decode_base(p);
-    in->replica_nonce = replica_nonce;
-  }
-  void init_inode_locks(CInode *in) {
-    bufferlist::iterator p = base.begin();
-    in->_decode_locks_state(p);
-  }
-  
-  void encode(bufferlist &bl) const {
-    ::encode(ino, bl);
-    ::encode(base, bl);
-    ::encode(locks, bl);
-    ::encode(replica_nonce, bl);
-  }
-
-  void decode(bufferlist::iterator &p) {
-    ::decode(ino, p);
-    ::decode(base, p);
-    ::decode(locks, p);
-    ::decode(replica_nonce, p);
-  }  
-
-};
-WRITE_CLASS_ENCODER(CInodeDiscover)
-
 
 #endif

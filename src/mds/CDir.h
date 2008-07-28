@@ -42,7 +42,6 @@ class CDentry;
 class MDCache;
 class MDCluster;
 class Context;
-class CDirDiscover;
 
 
 
@@ -233,8 +232,8 @@ protected:
   int nested_anchors;
 
   // cache control  (defined for authority; hints for replicas)
-  int      dir_rep;
-  set<int> dir_rep_by;      // if dir_rep == REP_LIST
+  __s32      dir_rep;
+  set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -390,7 +389,20 @@ private:
     ::encode(dist, bl);
   }
 
-  CDirDiscover *replicate_to(int mds);
+  void encode_replica(int who, bufferlist& bl) {
+    __u32 nonce = add_replica(who);
+    ::encode(nonce, bl);
+    ::encode(dir_rep, bl);
+    ::encode(dir_rep_by, bl);
+  }
+  void decode_replica(bufferlist::iterator& p) {
+    __u32 nonce;
+    ::decode(nonce, p);
+    replica_nonce = nonce;
+    ::decode(dir_rep, p);
+    ::decode(dir_rep_by, p);
+  }
+
 
 
   // -- state --
@@ -554,61 +566,8 @@ public:
   CDir *get_frozen_tree_root();
 
 
-
   ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
 };
-
-
-
-// -- encoded state --
-
-// discover
-
-class CDirDiscover {
-  dirfrag_t dirfrag;
-  __s32     nonce;
-  __s32     dir_rep;
-  set<__s32> rep_by;
-
- public:
-  CDirDiscover() {}
-  CDirDiscover(CDir *dir, int nonce) {
-    dirfrag = dir->dirfrag();
-    this->nonce = nonce;
-    dir_rep = dir->dir_rep;
-    rep_by = dir->dir_rep_by;
-  }
-  CDirDiscover(bufferlist::iterator &p) { decode(p); }
-
-  void update_dir(CDir *dir) {
-    assert(dir->dirfrag() == dirfrag);
-    assert(!dir->is_auth());
-
-    dir->replica_nonce = nonce;
-    dir->dir_rep = dir_rep;
-    dir->dir_rep_by = rep_by;
-  }
-
-  dirfrag_t get_dirfrag() { return dirfrag; }
-
-  void encode(bufferlist& bl) const {
-    ::encode(dirfrag, bl);
-    ::encode(nonce, bl);
-    ::encode(dir_rep, bl);
-    ::encode(rep_by, bl);
-  }
-
-  void decode(bufferlist::iterator &bl) {
-    ::decode(dirfrag, bl);
-    ::decode(nonce, bl);
-    ::decode(dir_rep, bl);
-    ::decode(rep_by, bl);
-  }
-
-};
-WRITE_CLASS_ENCODER(CDirDiscover)
-
-
 
 #endif

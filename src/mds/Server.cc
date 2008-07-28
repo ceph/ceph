@@ -3002,9 +3002,9 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << dendl;
     MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
     if (straydn) {
-      unlink->strayin = straydn->dir->inode->replicate_to(it->first);
-      unlink->straydir = straydn->dir->replicate_to(it->first);
-      unlink->straydn = straydn->replicate_to(it->first);
+      mdcache->replicate_inode(straydn->dir->inode, it->first, unlink->straybl);
+      mdcache->replicate_dir(straydn->dir, it->first, unlink->straybl);
+      mdcache->replicate_dentry(straydn, it->first, unlink->straybl);
     }
     mds->send_message_mds(unlink, it->first);
   }
@@ -3518,15 +3518,9 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
   req->now = mdr->now;
   
   if (straydn) {
-    CInodeDiscover *indis = straydn->dir->inode->replicate_to(who);
-    CDirDiscover *dirdis = straydn->dir->replicate_to(who);
-    CDentryDiscover *dndis = straydn->replicate_to(who);
-    indis->encode(req->stray);
-    dirdis->encode(req->stray);
-    dndis->encode(req->stray);
-    delete indis;
-    delete dirdis;
-    delete dndis;
+    mdcache->replicate_inode(straydn->dir->inode, who, req->stray);
+    mdcache->replicate_dir(straydn->dir, who, req->stray);
+    mdcache->replicate_dentry(straydn, who, req->stray);
   }
   
   // srcdn auth will verify our current witness list is sufficient
@@ -3943,8 +3937,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   CDentry *straydn = 0;
   if (destdn->is_primary() && !linkmerge) {
     assert(mdr->slave_request->stray.length() > 0);
-    straydn = mdcache->add_replica_stray(mdr->slave_request->stray, 
-					 destdn->inode, mdr->slave_to_mds);
+    straydn = mdcache->add_replica_stray(mdr->slave_request->stray, mdr->slave_to_mds);
     assert(straydn);
     mdr->pin(straydn);
   }

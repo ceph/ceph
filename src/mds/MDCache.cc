@@ -6150,7 +6150,8 @@ void MDCache::handle_discover(MDiscover *dis)
     assert(root->is_auth());
 
     // add root
-    reply->add_inode( root->replicate_to( dis->get_asker() ) );
+    reply->starts_with = MDiscoverReply::INODE;
+    replicate_inode(root, dis->get_asker(), reply->trace);
     dout(10) << "added root " << *root << dendl;
 
     cur = root;
@@ -6160,7 +6161,8 @@ void MDCache::handle_discover(MDiscover *dis)
     dout(7) << "handle_discover from mds" << dis->get_asker()
 	    << " wants stray + " << dis->get_want().get_path() << dendl;
     
-    reply->add_inode( stray->replicate_to( dis->get_asker() ) );
+    reply->starts_with = MDiscoverReply::INODE;
+    replicate_inode(stray, dis->get_asker(), reply->trace);
     dout(10) << "added stray " << *stray << dendl;
 
     cur = stray;
@@ -6276,7 +6278,9 @@ void MDCache::handle_discover(MDiscover *dis)
       dout(7) << "handle_discover not adding unwanted base dir " << *curdir << dendl;
     } else {
       assert(!curdir->is_ambiguous_auth()); // would be frozen.
-      reply->add_dir( curdir->replicate_to(dis->get_asker()) );
+      if (!reply->trace.length())
+	reply->starts_with = MDiscoverReply::DIR;
+      replicate_dir(curdir, dis->get_asker(), reply->trace);
       dout(7) << "handle_discover added dir " << *curdir << dendl;
     }
 
@@ -6357,7 +6361,9 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // add dentry
-    reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
+    if (!reply->trace.length())
+      reply->starts_with = MDiscoverReply::DENTRY;
+    replicate_dentry(dn, dis->get_asker(), reply->trace);
     dout(7) << "handle_discover added dentry " << *dn << dendl;
     
     if (!dn->is_primary()) break;  // stop on null or remote link.
@@ -6366,7 +6372,7 @@ void MDCache::handle_discover(MDiscover *dis)
     CInode *next = dn->inode;
     assert(next->is_auth());
     
-    reply->add_inode( next->replicate_to( dis->get_asker() ) );
+    replicate_inode(next, dis->get_asker(), reply->trace);
     dout(7) << "handle_discover added inode " << *next << dendl;
     
     // descend, keep going.
@@ -6392,22 +6398,24 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     return;
   }
   */
+  dout(7) << "discover_reply " << *m << dendl;
 
   list<Context*> finished, error;
   int from = m->get_source().num();
 
   // starting point
   CInode *cur = get_inode(m->get_base_ino());
+  bufferlist::iterator p = m->trace.begin();
 
-  if (m->has_base_inode()) {
-    assert(m->get_base_ino() < MDS_INO_BASE);
-    assert(!m->has_base_dentry());
-    assert(!m->has_base_dir());
+  int next = m->starts_with;
 
+  if (next == MDiscoverReply::INODE) {
     // add base inode
-    cur = add_replica_inode(m->get_inode(0), NULL, finished);
-
+    cur = add_replica_inode(p, NULL, finished);
     dout(7) << "discover_reply got base inode " << *cur << dendl;
+    assert(cur->is_base());
+
+    next = MDiscoverReply::DIR;
     
     // take waiters
     finished.swap(waiting_for_base_ino[from][cur->ino()]);
@@ -6415,10 +6423,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
   assert(cur);
 
-  dout(7) << "discover_reply " << *cur
-	  << " + " << m->get_num_dentries() << " dn, "
-	  << m->get_num_inodes() << " inodes"
-	  << dendl;
   
   // fyi
   if (m->is_flag_error_dir()) 
@@ -6428,13 +6432,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   if (m->is_flag_error_ino()) 
     dout(7) << " flag error, ino = " << m->get_wanted_ino() << dendl;
 
-  dout(10) << "depth = " << m->get_depth()
-	   << ", has base_dir/base_dn/root = " 
-	   << m->has_base_dir() << " / " << m->has_base_dentry() << " / " << m->has_base_inode()
-	   << ", num dirs/dentries/inodes = " 
-	   << m->get_num_dirs() << " / " << m->get_num_dentries() << " / " << m->get_num_inodes()
-	   << dendl;
-  
   // decrement discover counters
   if (!m->is_unsolicited()) {
     if (m->get_wanted_base_dir()) {
@@ -6453,26 +6450,23 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   // loop over discover results.
   // indexes follow each ([[dir] dentry] inode) 
   // can start, end with any type.
-  for (int i=m->has_base_inode(); i<m->get_depth(); i++) {
-    dout(10) << "discover_reply i=" << i << " cur " << *cur << dendl;
-
+  while (!p.end()) {
     // dir
     frag_t fg;
     CDir *curdir = 0;
-    if (i > 0 || m->has_base_dir()) {
-      assert(m->get_dir(i).get_dirfrag().ino == cur->ino());
-      fg = m->get_dir(i).get_dirfrag().frag;
-      curdir = add_replica_dir(cur, fg, m->get_dir(i), 
-			       m->get_source().num(),
-			       finished);
+    if (next == MDiscoverReply::DIR)
+      curdir = add_replica_dir(p, cur, m->get_source().num(), finished);
+    else {
+      // note: this can only happen our first way around this loop.
+      if (p.end() && m->is_flag_error_dn()) {
+	fg = cur->pick_dirfrag(m->get_error_dentry());
+	curdir = cur->get_dirfrag(fg);
+      } else
+	curdir = cur->get_dirfrag(m->get_base_dir_frag());
     }
-    if (!curdir) {
-      fg = cur->pick_dirfrag(m->get_dentry(i).get_dname());
-      curdir = cur->get_dirfrag(fg);
-    }
-    
+
     // dentry error?
-    if (i == m->get_depth()-1 && (m->is_flag_error_dn() || m->is_flag_error_ino())) {
+    if (p.end() && (m->is_flag_error_dn() || m->is_flag_error_ino())) {
       // error!
       assert(cur->is_dir());
       if (curdir) {
@@ -6486,25 +6480,26 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	  curdir->take_ino_waiting(m->get_wanted_ino(), error);
 	}
       } else {
-        dout(7) << " flag_error on dentry " << m->get_error_dentry() 
+	dout(7) << " flag_error on dentry " << m->get_error_dentry() 
 		<< ", triggering dir?" << dendl;
-        cur->take_waiting(CInode::WAIT_DIR, error);
+	cur->take_waiting(CInode::WAIT_DIR, error);
       }
       break;
     }
-
     assert(curdir);
 
+    if (p.end())
+      break;
+    
     // dentry
-    CDentry *dn = 0;
-    if (i >= m->get_last_dentry()) break;
-    if (i > 0 || m->has_base_dentry()) 
-      dn = add_replica_dentry(curdir, m->get_dentry(i), finished);
-
+    CDentry *dn = add_replica_dentry(p, curdir, finished);
+    
     // inode
-    if (i >= m->get_last_inode()) break;
-    cur = add_replica_inode(m->get_inode(i), dn, finished);
+    cur = add_replica_inode(p, dn, finished);
+
+    next = MDiscoverReply::DIR;
   }
+
 
   // dir error?
   // or dir_auth hint?
@@ -6561,28 +6556,32 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 // ----------------------------
 // REPLICAS
 
-CDir *MDCache::add_replica_dir(CInode *diri, 
-			       frag_t fg, CDirDiscover &dis, int from,
+CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, int from,
 			       list<Context*>& finished)
 {
+  dirfrag_t df;
+  ::decode(df, p);
+
+  assert(diri->ino() == df.ino);
+
   // add it (_replica_)
-  CDir *dir = diri->get_dirfrag(fg);
+  CDir *dir = diri->get_dirfrag(df.frag);
 
   if (dir) {
     // had replica. update w/ new nonce.
-    dis.update_dir(dir);
+    dir->decode_replica(p);
     dout(7) << "add_replica_dir had " << *dir << " nonce " << dir->replica_nonce << dendl;
   } else {
     // force frag to leaf in the diri tree
-    if (!diri->dirfragtree.is_leaf(fg)) {
-      dout(7) << "add_replica_dir forcing frag " << fg << " to leaf in the fragtree "
+    if (!diri->dirfragtree.is_leaf(df.frag)) {
+      dout(7) << "add_replica_dir forcing frag " << df.frag << " to leaf in the fragtree "
 	      << diri->dirfragtree << dendl;
-      diri->dirfragtree.force_to_leaf(fg);
+      diri->dirfragtree.force_to_leaf(df.frag);
     }
 
     // add replica.
-    dir = diri->add_dirfrag( new CDir(diri, fg, this, false) );
-    dis.update_dir(dir);
+    dir = diri->add_dirfrag( new CDir(diri, df.frag, this, false) );
+    dir->decode_replica(p);
 
     // is this a dir_auth delegation boundary?
     if (from != diri->authority().first ||
@@ -6613,43 +6612,37 @@ CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
 
   return dir;
 }
-		
-CDentry *MDCache::add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished)
+
+CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished)
 {
-  CDentry *dn = dir->lookup( dis.get_dname() );
+  nstring name;
+  ::decode(name, p);
+
+  CDentry *dn = dir->lookup(name);
   
   // have it?
   if (dn) {
-    dis.update_dentry(dn);
+    dn->decode_replica(p, false);
     dout(7) << "add_replica_dentry had " << *dn << dendl;
   } else {
-    dn = dir->add_null_dentry(dis.get_dname());
-    dis.update_dentry(dn);
-    dis.init_dentry_lock(dn);
+    dn = dir->add_null_dentry(name);
+    dn->decode_replica(p, true);
     dout(7) << "add_replica_dentry added " << *dn << dendl;
   }
-  
-  // remote_ino linkage?
-  if (dis.get_remote_ino()) {
-    if (dn->is_null()) 
-      dir->link_remote_inode(dn, dis.get_remote_ino(), dis.get_remote_d_type());
-    
-    // hrm.  yeah.
-    assert(dn->is_remote() && dn->get_remote_ino() == dis.get_remote_ino());
-  }
 
-  dir->take_dentry_waiting(dis.get_dname(), finished);
+  dir->take_dentry_waiting(name, finished);
 
   return dn;
 }
 
-CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Context*>& finished)
+CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished)
 {
-  CInode *in = get_inode(dis.get_ino());
+  inodeno_t ino;
+  ::decode(ino, p);
+  CInode *in = get_inode(ino);
   if (!in) {
     in = new CInode(this, false);
-    dis.update_inode(in);
-    dis.init_inode_locks(in);
+    in->decode_replica(p, true);
     add_inode(in);
     if (in->is_base()) {
       if (in->ino() == MDS_INO_ROOT)
@@ -6660,11 +6653,14 @@ CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Contex
 	assert(0);
     }
     dout(10) << "add_replica_inode added " << *in << dendl;
-    if (dn && dn->is_null()) 
+    if (dn) {
+      assert(dn->is_null());
       dn->dir->link_primary_inode(dn, in);
+    }
   } else {
-    dis.update_inode(in);
+    in->decode_replica(p, false);
     dout(10) << "add_replica_inode had " << *in << dendl;
+    assert(!dn || dn->inode == in);
   }
 
   if (dn) {
@@ -6678,31 +6674,19 @@ CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Contex
 }
 
     
-CDentry *MDCache::add_replica_stray(bufferlist &bl, CInode *in, int from)
+CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
 {
   list<Context*> finished;
   bufferlist::iterator p = bl.begin();
-  
-  // inode
-  CInodeDiscover indis(p);
-  CInode *strayin = add_replica_inode(indis, NULL, finished);
+
+  CInode *strayin = add_replica_inode(p, NULL, finished);
   dout(15) << "strayin " << *strayin << dendl;
-  
-  // dir
-  CDirDiscover dirdis(p);
-  CDir *straydir = add_replica_dir(strayin, dirdis.get_dirfrag().frag, dirdis,
-					    from, finished);
+  CDir *straydir = add_replica_dir(p, strayin, from, finished);
   dout(15) << "straydir " << *straydir << dendl;
-  
-  // dentry
-  CDentryDiscover dndis(p);
-  
-  string straydname;
-  in->name_stray_dentry(straydname);
-  CDentry *straydn = add_replica_dentry(straydir, dndis, finished);
+  CDentry *straydn = add_replica_dentry(p, straydir, finished);
+  dout(15) << "straydn " << *straydn << dendl;
 
   mds->queue_waiters(finished);
-
   return straydn;
 }
 
@@ -6861,16 +6845,13 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     } else {
       dout(7) << "handle_dentry_unlink on " << *dn << dendl;
       
-      // move to stray?
-      CDentry *straydn = 0;
-      if (m->strayin) {
-	list<Context*> finished;
-	CInode *in = add_replica_inode(*m->strayin, NULL, finished);
-	CDir *dir = add_replica_dir(in, m->straydir->get_dirfrag().frag, *m->straydir,
-				    m->get_source().num(), finished);
-	straydn = add_replica_dentry(dir, *m->straydn, finished);
-	if (!finished.empty()) mds->queue_waiters(finished);
-      }
+      // straydn
+      bufferlist::iterator p = m->straybl.begin();
+      list<Context*> finished;
+      CInode *strayin = add_replica_inode(p, NULL, finished);
+      CDir *straydir = add_replica_dir(p, strayin, m->get_source().num(), finished);
+      CDentry *straydn = add_replica_dentry(p, straydir, finished);
+      if (!finished.empty()) mds->queue_waiters(finished);
 
       // open inode?
       if (dn->is_primary()) {
@@ -7258,9 +7239,7 @@ void MDCache::fragment_logged(MDRequest *mdr)
     if (bits < 0) {
       // freshly replicate new basedir to peer on merge
       CDir *base = resultfrags.front();
-      CDirDiscover *basedis = base->replicate_to(p->first);
-      basedis->encode(notify->basebl);
-      delete basedis;
+      replicate_dir(base, p->first, notify->basebl);
     }
     mds->send_message_mds(notify, p->first);
   } 
@@ -7307,9 +7286,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     //  (adjust_dir_fragments expects base to already exist, if non-auth)
     if (notify->get_bits() < 0) {
       bufferlist::iterator p = notify->basebl.begin();
-      CDirDiscover basedis(p);
-      add_replica_dir(diri, notify->get_basefrag(), basedis,
-		      notify->get_source().num(), waiters);
+      add_replica_dir(p, diri, notify->get_source().num(), waiters);
     }
 
     // refragment

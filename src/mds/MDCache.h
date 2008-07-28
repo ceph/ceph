@@ -820,22 +820,28 @@ protected:
   void handle_discover(MDiscover *dis);
   void handle_discover_reply(MDiscoverReply *m);
 
-  CDir* add_replica_dir(CInode *diri, 
-			frag_t fg, CDirDiscover& dis, 
-			int from,
-			list<Context*>& finished);
-  CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
-
-  CDentry *add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished);
-public: // for Server::handle_slave_rename_prep
-  CInode *add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Context*>& finished);
-
 public:
-  CDentry *add_replica_stray(bufferlist &bl, CInode *strayin, int from);
+  void replicate_dir(CDir *dir, int to, bufferlist& bl) {
+    dirfrag_t df = dir->dirfrag();
+    ::encode(df, bl);
+    dir->encode_replica(to, bl);
+  }
+  void replicate_dentry(CDentry *dn, int to, bufferlist& bl) {
+    ::encode(dn->name, bl);
+    dn->encode_replica(to, bl);
+  }
+  void replicate_inode(CInode *in, int to, bufferlist& bl) {
+    ::encode(in->inode.ino, bl);  // bleh, minor assymetry here
+    in->encode_replica(to, bl);
+  }
+  
+  CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, int from, list<Context*>& finished);
+  CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
+  CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished);
+  CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished);
+  CDentry *add_replica_stray(bufferlist &bl, int from);
+
 protected:
-
-    
-
   // -- namespace --
   void handle_dentry_unlink(MDentryUnlink *m);
 

@@ -37,7 +37,6 @@ class CDir;
 class MDRequest;
 
 class Message;
-class CDentryDiscover;
 class Anchor;
 
 class CDentry;
@@ -213,8 +212,15 @@ public:
   bool is_new() { return state_test(STATE_NEW); }
   
   // -- replication
-  CDentryDiscover *replicate_to(int rep);
-
+  void encode_replica(int mds, bufferlist& bl) {
+    __u32 nonce = add_replica(mds);
+    ::encode(nonce, bl);
+    ::encode(remote_ino, bl);
+    ::encode(remote_d_type, bl);
+    __s32 ls = lock.get_replica_state();
+    ::encode(ls, bl);
+  }
+  void decode_replica(bufferlist::iterator& p, bool is_new);
 
   // -- exporting
   // note: this assumes the dentry already exists.  
@@ -273,59 +279,6 @@ public:
 };
 
 ostream& operator<<(ostream& out, CDentry& dn);
-
-
-
-class CDentryDiscover {
-  nstring dname;
-  __s32  replica_nonce;
-  __s32  lockstate;
-  __s64  dir_offset;
-  inodeno_t remote_ino;
-  unsigned char remote_d_type;
-
-public:
-  CDentryDiscover() {}
-  CDentryDiscover(CDentry *dn, int nonce) :
-    dname(dn->get_name()), replica_nonce(nonce),
-    lockstate(dn->lock.get_replica_state()),
-    dir_offset(dn->get_dir_offset()),
-    remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
-  CDentryDiscover(bufferlist::iterator &p) { decode(p); }
-
-  nstring& get_dname() { return dname; }
-  int get_nonce() { return replica_nonce; }
-  bool is_remote() { return remote_ino ? true:false; }
-  inodeno_t get_remote_ino() { return remote_ino; }
-  unsigned char get_remote_d_type() { return remote_d_type; }
-
-  void update_dentry(CDentry *dn) {
-    dn->set_dir_offset(dir_offset);
-    dn->set_replica_nonce(replica_nonce);
-  }
-  void init_dentry_lock(CDentry *dn) {
-    dn->lock.set_state( lockstate );
-  }
-
-  void encode(bufferlist &bl) const {
-    ::encode(dname, bl);
-    ::encode(dir_offset, bl);
-    ::encode(remote_ino, bl);
-    ::encode(remote_d_type, bl);
-    ::encode(replica_nonce, bl);
-    ::encode(lockstate, bl);
-  }
-  
-  void decode(bufferlist::iterator &bl) {
-    ::decode(dname, bl);
-    ::decode(dir_offset, bl);
-    ::decode(remote_ino, bl);
-    ::decode(remote_d_type, bl);
-    ::decode(replica_nonce, bl);
-    ::decode(lockstate, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CDentryDiscover)
 
 
 #endif
