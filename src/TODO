@@ -27,10 +27,14 @@ snapshots
 
 mds
 - migrator import/export of versioned dentries, inodes... drop them on export...
+- dentry waiters
+- resolve
+- rejoin
+- client reconnect
+  - esp cap claim
+
 /- call open_parents() where needed.
   - what about during recovery?  e.g. client reconnected caps...
-- resolve/rejoin vs snapshots!
-- client reconnect vs snaps
 - mds server ops
   - link rollback
   - rename rollback
