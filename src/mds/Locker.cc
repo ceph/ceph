@@ -1392,6 +1392,8 @@ void Locker::handle_lock(MLock *m)
   case CEPH_LOCK_DN:
   case CEPH_LOCK_IAUTH:
   case CEPH_LOCK_ILINK:
+  case CEPH_LOCK_ISNAP:
+  case CEPH_LOCK_IXATTR:
     handle_simple_lock(lock, m);
     break;
     
