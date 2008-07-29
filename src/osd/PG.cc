@@ -409,16 +409,16 @@ void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
         missing.loc[p->first] = omissing.loc[p->first];
       } else {
         dout(10) << "proc_missing " << p->first << " " << p->second
-                 << " also LOST on source, osd" << fromosd << dendl;
+                 << " also missing on osd" << fromosd << dendl;
       }
     } 
     else if (p->second <= olog.top) {
       dout(10) << "proc_missing " << p->first << " " << p->second
-               << " is on source, osd" << fromosd << dendl;
+               << " is on osd" << fromosd << dendl;
       missing.loc[p->first] = fromosd;
     } else {
       dout(10) << "proc_missing " << p->first << " " << p->second
-               << " > olog.top " << olog.top << ", not found...."
+               << " > olog.top " << olog.top << ", also missing on osd" << fromosd
                << dendl;
     }
   }
