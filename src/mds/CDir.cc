@@ -754,23 +754,35 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
  * WAITING
  */
 
-void CDir::add_dentry_waiter(const nstring& dname, Context *c) 
+void CDir::add_dentry_waiter(const nstring& dname, snapid_t snapid, Context *c) 
 {
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
-  waiting_on_dentry[dname].push_back(c);
-  dout(10) << "add_dentry_waiter dentry " << dname << " " << c << " on " << *this << dendl;
+  waiting_on_dentry[string_snap_t(dname, snapid)].push_back(c);
+  dout(10) << "add_dentry_waiter dentry " << dname
+	   << " snap " << snapid
+	   << " " << c << " on " << *this << dendl;
 }
 
-void CDir::take_dentry_waiting(const nstring& dname, list<Context*>& ls)
+void CDir::take_dentry_waiting(const nstring& dname, snapid_t first, snapid_t last,
+			       list<Context*>& ls)
 {
-  if (waiting_on_dentry.empty()) return;
-  if (waiting_on_dentry.count(dname) == 0) return;
-  dout(10) << "take_dentry_waiting dentry " << dname
-	   << " x " << waiting_on_dentry[dname].size() 
-	   << " on " << *this << dendl;
-  ls.splice(ls.end(), waiting_on_dentry[dname]);
-  waiting_on_dentry.erase(dname);
+  if (waiting_on_dentry.empty())
+    return;
+  
+  string_snap_t lb(dname, first);
+  string_snap_t ub(dname, last);
+  map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.lower_bound(lb);
+  while (p != waiting_on_dentry.end() &&
+	 !(ub < p->first)) {
+    dout(10) << "take_dentry_waiting dentry " << dname
+	     << " [" << first << "," << last << "] found waiter on snap "
+	     << p->first.snapid
+	     << " on " << *this << dendl;
+    ls.splice(ls.end(), p->second);
+    waiting_on_dentry.erase(p++);
+  }
+
   if (waiting_on_dentry.empty())
     put(PIN_DNWAITER);
 }
@@ -799,12 +811,12 @@ void CDir::take_ino_waiting(inodeno_t ino, list<Context*>& ls)
 void CDir::take_sub_waiting(list<Context*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
-  for (hash_map<nstring, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
+  for (map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
        p != waiting_on_dentry.end();
        ++p) 
     ls.splice(ls.end(), p->second);
   waiting_on_dentry.clear();
-  for (hash_map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
+  for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
        p != waiting_on_ino.end();
        ++p) 
     ls.splice(ls.end(), p->second);
@@ -846,13 +858,17 @@ void CDir::add_waiter(int tag, Context *c)
 /* NOTE: this checks dentry waiters too */
 void CDir::take_waiting(int mask, list<Context*>& ls)
 {
-  if (mask & WAIT_DENTRY) {
+  if ((mask & WAIT_DENTRY) && waiting_on_dentry.size()) {
     // take each each dentry waiter
-    hash_map<nstring, list<Context*> >::iterator it = 
+    map<string_snap_t, list<Context*> >::iterator it = 
       waiting_on_dentry.begin(); 
     while (it != waiting_on_dentry.end()) {
-      take_dentry_waiting((it++)->first, ls);   // not post-inc
+      nstring name = it->first.name;
+      snapid_t snap = it->first.snapid;
+      it++;
+      take_dentry_waiting(name, snap, snap, ls);
     }
+    put(PIN_DNWAITER);
   }
   
   // waiting

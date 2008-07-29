@@ -6047,7 +6047,7 @@ void MDCache::discover_path(CDir *base,
     return;
   }
 
-  if (!base->is_waiting_for_dentry(want_path[0]) || !onfinish) {
+  if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
 				   snap,
@@ -6058,7 +6058,7 @@ void MDCache::discover_path(CDir *base,
   }
 
   // register + wait
-  if (onfinish) base->add_dentry_waiter(want_path[0], onfinish);
+  if (onfinish) base->add_dentry_waiter(want_path[0], snap, onfinish);
   discover_dir_sub[from][base->dirfrag()]++;
 }
 
@@ -6488,7 +6488,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	if (m->get_error_dentry().length()) {
 	  dout(7) << " flag_error on dentry " << m->get_error_dentry()
 		  << ", triggering dentry" << dendl;
-	  curdir->take_dentry_waiting(m->get_error_dentry(), error);
+	  curdir->take_dentry_waiting(m->get_error_dentry(), 
+				      m->get_wanted_snapid(), m->get_wanted_snapid(), error);
 	} else {
 	  dout(7) << " flag_error on ino " << m->get_wanted_ino()
 		  << ", triggering ino" << dendl;
@@ -6537,7 +6538,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       if (dir) {
 	// don't actaully need the hint, now
 	if (dir->lookup(m->get_error_dentry()) == 0 &&
-	    dir->is_waiting_for_dentry(m->get_error_dentry())) 
+	    dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) 
 	  discover_path(dir, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
 	else 
 	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
@@ -6647,7 +6648,7 @@ CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Co
     dout(7) << "add_replica_dentry added " << *dn << dendl;
   }
 
-  dir->take_dentry_waiting(name, finished);
+  dir->take_dentry_waiting(name, dn->first, dn->last, finished);
 
   return dn;
 }

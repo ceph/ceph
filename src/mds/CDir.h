@@ -44,7 +44,17 @@ class MDCluster;
 class Context;
 
 
-
+struct string_snap_t {
+  nstring name;
+  snapid_t snapid;
+  string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(const nstring& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
+};
+inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
+  int c = strcmp(l.name.c_str(), r.name.c_str());
+  return c < 0 || (c == 0 && l.snapid < r.snapid);
+}
 
 
 ostream& operator<<(ostream& out, class CDir& dir);
@@ -457,15 +467,15 @@ private:
     
   // -- waiters --
 protected:
-  hash_map< nstring, list<Context*> > waiting_on_dentry;
-  hash_map< inodeno_t, list<Context*> > waiting_on_ino;
+  map< string_snap_t, list<Context*> > waiting_on_dentry;
+  map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
-  bool is_waiting_for_dentry(const string& dn) {
-    return waiting_on_dentry.count(dn);
+  bool is_waiting_for_dentry(const char *dname, snapid_t snap) {
+    return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const nstring& dentry, Context *c);
-  void take_dentry_waiting(const nstring& dentry, list<Context*>& ls);
+  void add_dentry_waiter(const nstring& dentry, snapid_t snap, Context *c);
+  void take_dentry_waiting(const nstring& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
 
   bool is_waiting_for_ino(inodeno_t ino) {
     return waiting_on_ino.count(ino);
