@@ -1134,7 +1134,6 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
   dout(10) << "  inode           rstat " << inode.rstat << dendl;
   dout(10) << "  inode accounted_rstat " << inode.accounted_rstat << dendl;
   nest_info_t delta;
-  delta.zero();
   if (linkunlink == 0) {
     delta.add(inode.rstat);
     delta.sub(inode.accounted_rstat);
@@ -1172,8 +1171,8 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 	parent->dirty_old_rstat[first-1].first = parent->first;
 	parent->dirty_old_rstat[first-1].rstat = pf->rstat;
 	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
-	parent->first = first;
       }
+      parent->first = first;
     } else if (last >= parent->first) {
       first = parent->first;
       parent->dirty_old_rstat[last].first = first;

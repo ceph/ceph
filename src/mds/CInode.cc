@@ -728,9 +728,11 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
       while (n--) {
 	frag_t fg;
+	snapid_t fgfirst;
 	frag_info_t fragstat;
 	frag_info_t accounted_fragstat;
 	::decode(fg, p);
+	::decode(fgfirst, p);
 	::decode(fragstat, p);
 	::decode(accounted_fragstat, p);
 	dout(10) << fg << " got changed fragstat " << fragstat << dendl;
@@ -743,6 +745,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dout(20) << " " << fg << " accounted_fragstat " << accounted_fragstat << dendl;
 	  dir->fnode.fragstat = fragstat;
 	  dir->fnode.accounted_fragstat = accounted_fragstat;
+	  dir->first = fgfirst;
 	  if (!(fragstat == accounted_fragstat))
 	    dirlock.set_updated();
 	} else {
@@ -805,8 +808,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dir->first = fgfirst;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_rstat = rstat;
-	    if (dir->is_auth())
-	      dir->_set_dirty_flag();	    // bit of a hack
+	    dir->_set_dirty_flag();	    // bit of a hack
 	    dir->dirty_old_rstat.swap(dirty_old_rstat);
 	  }
 	}

@@ -81,6 +81,9 @@ struct frag_info_t {
   utime_t mtime;
   __s64 nfiles;        // files
   __s64 nsubdirs;      // subdirs
+
+  frag_info_t() : version(0), nfiles(0), nsubdirs(0) {}
+
   __s64 size() const { return nfiles + nsubdirs; }
 
   void zero() {
@@ -137,6 +140,10 @@ struct nest_info_t {
 
   __s64 ranchors;  // for dirstat, includes inode's anchored flag.
   __s64 rsnaprealms;
+
+  nest_info_t() : version(0),
+		  rbytes(0), rfiles(0), rsubdirs(0),
+		  ranchors(0), rsnaprealms(0) {}
 
   void zero() {
     memset(this, 0, sizeof(*this));

@@ -48,7 +48,8 @@ ostream& operator<<(ostream& out, CDir& dir)
 {
   filepath path;
   dir.get_inode()->make_path(path);
-  out << "[dir " << dir.dirfrag() << " " << path << "/";
+  out << "[dir " << dir.dirfrag() << " " << path << "/"
+      << " [" << dir.first << ",head]";
   if (dir.is_auth()) {
     out << " auth";
     if (dir.is_replicated())
@@ -649,7 +650,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   nest_info_t olddiff;  // old += f - af;
   dout(10) << "           rstat " << fnode.rstat << dendl;
   dout(10) << " accounted_rstat " << fnode.accounted_rstat << dendl;
-  olddiff.zero();
   olddiff.take_diff(fnode.rstat, fnode.accounted_rstat);
   dout(10) << "         olddiff " << olddiff << dendl;
 
@@ -703,7 +703,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   //   af[0] -= olddiff
   dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
   nest_info_t zero;
-  zero.zero();
   subfrags[0]->fnode.accounted_rstat.take_diff(zero, olddiff);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
@@ -1594,6 +1593,7 @@ void CDir::finish_export(utime_t now)
   pop_me.zero(now);
   pop_auth_subtree.zero(now);
   put(PIN_TEMPEXPORTING);
+  dirty_old_rstat.clear();
 }
 
 void CDir::decode_import(bufferlist::iterator& blp)
