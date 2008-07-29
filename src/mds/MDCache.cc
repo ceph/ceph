@@ -4273,22 +4273,15 @@ void MDCache::inode_remove_replica(CInode *in, int from, bool will_readd)
   if (in->linklock.remove_replica(from)) mds->locker->simple_eval_gather(&in->linklock);
   if (in->dirfragtreelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirfragtreelock);
   if (in->filelock.remove_replica(from)) mds->locker->file_eval_gather(&in->filelock);
+  if (in->snaplock.remove_replica(from)) mds->locker->simple_eval_gather(&in->snaplock);
+  if (in->xattrlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->xattrlock);
 
   // don't complete gather if we will re-add (i.e. we are rejoining)
   // and dirlock must_gather actual data...
   if ((!will_readd || !in->dirlock.must_gather()) &&
       in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
-  
-  // alone now?
-  /*
-  if (!in->is_replicated()) {
-    mds->locker->simple_eval_gather(&in->authlock);
-    mds->locker->simple_eval_gather(&in->linklock);
-    mds->locker->simple_eval_gather(&in->dirfragtreelock);
-    mds->locker->file_eval_gather(&in->filelock);
-    mds->locker->scatter_eval_gather(&in->dirlock);
-  }
-  */
+  if ((!will_readd || !in->dirlock.must_gather()) &&
+      in->nestlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->nestlock);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)
