@@ -26,8 +26,7 @@ snapshots
   - garbage collection
 
 mds
-- migrator import/export of versioned dentries, inodes... drop them on export...
-- dentry waiters
+- dentry waiters?
 - resolve
 - rejoin
 - client reconnect
@@ -119,7 +118,6 @@ mds
 - handle slow client reconnect (i.e. after mds has gone active)
 
 - fix reconnect/rejoin open file weirdness
-- get rid of C*Discover objects for replicate_to .. encode to bufferlists directly?
 
 - can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?

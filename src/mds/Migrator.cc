@@ -860,6 +860,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
   assert(!in->is_replica(mds->get_nodeid()));
 
   ::encode(in->inode.ino, enc_state);
+  ::encode(in->last, enc_state);
   in->encode_export(enc_state);
 
   // caps 
@@ -985,6 +986,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     
     // dn name
     ::encode(dn->name, exportbl);
+    ::encode(dn->last, exportbl);
     
     // state
     dn->encode_export(exportbl);
@@ -1962,12 +1964,14 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   dout(15) << "decode_import_inode on " << *dn << dendl;
 
   inodeno_t ino;
+  snapid_t last;
   ::decode(ino, blp);
-  
+  ::decode(last, blp);
+
   bool added = false;
-  CInode *in = cache->get_inode(ino);
+  CInode *in = cache->get_inode(ino, last);
   if (!in) {
-    in = new CInode(mds->mdcache);
+    in = new CInode(mds->mdcache, true, 1, last);
     added = true;
   } else {
     in->state_set(CInode::STATE_AUTH);
@@ -2117,11 +2121,13 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     // dentry
     string dname;
+    snapid_t last;
     ::decode(dname, blp);
+    ::decode(last, blp);
     
-    CDentry *dn = dir->lookup(dname);
+    CDentry *dn = dir->lookup(dname, last);
     if (!dn)
-      dn = dir->add_null_dentry(dname);
+      dn = dir->add_null_dentry(dname, 1, last);
     
     dn->decode_import(blp, ls);
 

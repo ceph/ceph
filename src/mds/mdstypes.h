@@ -920,7 +920,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // state
  protected:
-  unsigned state;     // state bits
+  __u32 state;     // state bits
 
  public:
   unsigned get_state() const { return state; }

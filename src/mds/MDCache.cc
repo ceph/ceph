@@ -981,13 +981,11 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 {
   assert(last >= in->first);
 
-  CInode *oldin = new CInode(this);
+  CInode *oldin = new CInode(this, true, in->first, last);
   oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
   oldin->xattrs = in->xattrs;
 
-  oldin->first = in->first;
-  oldin->last = last;
   in->first = last+1;
 
   dout(10) << " oldin " << *oldin << dendl;
@@ -6662,8 +6660,7 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
   ::decode(last, p);
   CInode *in = get_inode(ino, last);
   if (!in) {
-    in = new CInode(this, false);
-    in->last = last;
+    in = new CInode(this, false, 1, last);
     in->decode_replica(p, true);
     add_inode(in);
     if (in->is_base()) {

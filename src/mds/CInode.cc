@@ -1283,14 +1283,17 @@ void CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
 
 void CInode::_encode_base(bufferlist& bl)
 {
+  ::encode(first, bl);
   ::encode(inode, bl);
   ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
+  ::encode(old_inodes, bl);
   encode_snap(bl);
 }
 void CInode::_decode_base(bufferlist::iterator& p)
 {
+  ::decode(first, p);
   bool was_anchored = inode.anchored;
   ::decode(inode, p);
   if (parent && was_anchored != inode.anchored)
@@ -1299,6 +1302,7 @@ void CInode::_decode_base(bufferlist::iterator& p)
   ::decode(symlink, p);
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);
+  ::decode(old_inodes, p);
   decode_snap(p);
 }
 

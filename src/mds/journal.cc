@@ -373,9 +373,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
       CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
-	in = new CInode(mds->mdcache);
-	in->first = p->dnfirst;
-	in->last = p->dnlast;
+	in = new CInode(mds->mdcache, true, p->dnfirst, p->dnlast);
 	in->inode = p->inode;
 	in->xattrs = p->xattrs;
 	if (in->inode.is_dir()) {

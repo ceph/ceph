@@ -227,6 +227,7 @@ public:
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export(bufferlist& bl) {
+    ::encode(first, bl);
     ::encode(state, bl);
     ::encode(version, bl);
     ::encode(projected_version, bl);
@@ -247,7 +248,8 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
-    int nstate;
+    ::decode(first, blp);
+    __u32 nstate;
     ::decode(nstate, blp);
     ::decode(version, blp);
     ::decode(projected_version, blp);

@@ -272,10 +272,10 @@ private:
 
  public:
   // ---------------------------
-  CInode(MDCache *c, bool auth=true) : 
+  CInode(MDCache *c, bool auth=true, snapid_t f=1, snapid_t l=CEPH_NOSNAP) : 
     mdcache(c),
     snaprealm(0), containing_realm(0),
-    first(1), last(CEPH_NOSNAP),
+    first(f), last(l),
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
@@ -373,7 +373,6 @@ private:
     // relax locks?
     if (!is_replicated())
       replicate_relax_locks();
-    
     
     __u32 nonce = add_replica(rep);
     ::encode(nonce, bl);

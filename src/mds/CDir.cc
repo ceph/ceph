@@ -1184,10 +1184,8 @@ void CDir::_fetched(bufferlist &bl)
 	  assert(0);  // this shouldn't happen!! 
 	} else {
 	  // inode
-	  in = new CInode(cache);
+	  in = new CInode(cache, true, first, last);
 	  in->inode = inode;
-	  in->first = first;
-	  in->last = last;
 	  
 	  // symlink?
 	  if (in->is_symlink()) 
@@ -1556,7 +1554,9 @@ void CDir::_committed(version_t v)
 void CDir::encode_export(bufferlist& bl)
 {
   assert(!is_projected());
+  ::encode(first, bl);
   ::encode(fnode, bl);
+  ::encode(dirty_old_rstat, bl);
   ::encode(committed_version, bl);
   ::encode(committed_version_equivalent, bl);
 
@@ -1582,7 +1582,9 @@ void CDir::finish_export(utime_t now)
 
 void CDir::decode_import(bufferlist::iterator& blp)
 {
+  ::decode(first, blp);
   ::decode(fnode, blp);
+  ::decode(dirty_old_rstat, blp);
   projected_version = fnode.version;
   ::decode(committed_version, blp);
   ::decode(committed_version_equivalent, blp);
