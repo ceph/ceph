@@ -106,10 +106,10 @@ class CInode : public MDSCacheObject {
   static const int STATE_RECOVERING = (1<<11);
 
   // -- waiters --
-  static const int WAIT_DIR         = (1<<0);
-  static const int WAIT_ANCHORED    = (1<<1);
-  static const int WAIT_UNANCHORED  = (1<<2);
-  static const int WAIT_FROZEN      = (1<<3);
+  static const __u64 WAIT_DIR         = (1<<0);
+  static const __u64 WAIT_ANCHORED    = (1<<1);
+  static const __u64 WAIT_UNANCHORED  = (1<<2);
+  static const __u64 WAIT_FROZEN      = (1<<3);
   
   static const int WAIT_AUTHLOCK_OFFSET        = 4;
   static const int WAIT_LINKLOCK_OFFSET        = 4 +   SimpleLock::WAIT_BITS;
@@ -121,7 +121,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
   static const int WAIT_NESTLOCK_OFFSET        = 4 + 7*SimpleLock::WAIT_BITS;
 
-  static const int WAIT_ANY_MASK	= (0xffffffff);
+  static const __u64 WAIT_ANY_MASK	= (__u64)(-1);
 
   // misc
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
@@ -391,7 +391,7 @@ private:
 
 
   // -- waiting --
-  void add_waiter(int tag, Context *c);
+  void add_waiter(__u64 tag, Context *c);
 
 
   // -- encode/decode helpers --

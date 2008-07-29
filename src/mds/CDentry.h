@@ -67,7 +67,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // -- wait --
   static const int WAIT_LOCK_OFFSET = 8;
 
-  void add_waiter(int tag, Context *c);
+  void add_waiter(__u64 tag, Context *c);
 
   static const int EXPORT_NONCE = 1;
 

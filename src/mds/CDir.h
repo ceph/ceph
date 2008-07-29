@@ -127,15 +127,15 @@ class CDir : public MDSCacheObject {
 
 
   // -- wait masks --
-  static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
-  static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const int WAIT_FROZEN       = (1<<2);  // auth pins removed
+  static const __u64 WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
+  static const __u64 WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
+  static const __u64 WAIT_FROZEN       = (1<<2);  // auth pins removed
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const int WAIT_ANY_MASK  = (0xffffffff);
-  static const int WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
-  static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
+  static const __u64 WAIT_ANY_MASK  = (0xffffffff);
+  static const __u64 WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
+  static const __u64 WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
 
 
@@ -471,9 +471,9 @@ public:
 
   void take_sub_waiting(list<Context*>& ls);  // dentry or ino
 
-  void add_waiter(int mask, Context *c);
-  void take_waiting(int mask, list<Context*>& ls);  // may include dentry waiters
-  void finish_waiting(int mask, int result = 0);    // ditto
+  void add_waiter(__u64 mask, Context *c);
+  void take_waiting(__u64 mask, list<Context*>& ls);  // may include dentry waiters
+  void finish_waiting(__u64 mask, int result = 0);    // ditto
   
 
   // -- import/export --

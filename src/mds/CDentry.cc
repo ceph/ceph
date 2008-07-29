@@ -132,7 +132,7 @@ pair<int,int> CDentry::authority()
 }
 
 
-void CDentry::add_waiter(int tag, Context *c)
+void CDentry::add_waiter(__u64 tag, Context *c)
 {
   // wait on the directory?
   if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {

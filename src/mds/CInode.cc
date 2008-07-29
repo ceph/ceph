@@ -943,7 +943,7 @@ bool CInode::is_freezing()
   return false;
 }
 
-void CInode::add_waiter(int tag, Context *c) 
+void CInode::add_waiter(__u64 tag, Context *c) 
 {
   dout(10) << "add_waiter tag " << tag 
 	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)

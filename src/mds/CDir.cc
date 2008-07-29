@@ -825,7 +825,7 @@ void CDir::take_sub_waiting(list<Context*>& ls)
 
 
 
-void CDir::add_waiter(int tag, Context *c) 
+void CDir::add_waiter(__u64 tag, Context *c) 
 {
   // hierarchical?
 
@@ -856,7 +856,7 @@ void CDir::add_waiter(int tag, Context *c)
 
 
 /* NOTE: this checks dentry waiters too */
-void CDir::take_waiting(int mask, list<Context*>& ls)
+void CDir::take_waiting(__u64 mask, list<Context*>& ls)
 {
   if ((mask & WAIT_DENTRY) && waiting_on_dentry.size()) {
     // take each each dentry waiter
@@ -876,7 +876,7 @@ void CDir::take_waiting(int mask, list<Context*>& ls)
 }
 
 
-void CDir::finish_waiting(int mask, int result) 
+void CDir::finish_waiting(__u64 mask, int result) 
 {
   dout(11) << "finish_waiting mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
 

@@ -929,8 +929,8 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
 
   // -- wait --
-  const static int WAIT_SINGLEAUTH  = (1<<30);
-  const static int WAIT_UNFREEZE    = (1<<29); // pka AUTHPINNABLE
+  const static __u64 WAIT_SINGLEAUTH  = (1ull<<60);
+  const static __u64 WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
 
 
   // ============================================
@@ -1136,25 +1136,25 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  multimap<int, Context*>  waiting;
+  multimap<__u64, Context*>  waiting;
 
  public:
-  bool is_waiter_for(int mask) {
+  bool is_waiter_for(__u64 mask) {
     return waiting.count(mask) > 0;    // FIXME: not quite right.
   }
-  virtual void add_waiter(int mask, Context *c) {
+  virtual void add_waiter(__u64 mask, Context *c) {
     if (waiting.empty())
       get(PIN_WAITER);
-    waiting.insert(pair<int,Context*>(mask, c));
+    waiting.insert(pair<__u64,Context*>(mask, c));
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
 			       << dendl;
     
   }
-  virtual void take_waiting(int mask, list<Context*>& ls) {
+  virtual void take_waiting(__u64 mask, list<Context*>& ls) {
     if (waiting.empty()) return;
-    multimap<int,Context*>::iterator it = waiting.begin();
+    multimap<__u64,Context*>::iterator it = waiting.begin();
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
@@ -1175,7 +1175,7 @@ protected:
     if (waiting.empty())
       put(PIN_WAITER);
   }
-  void finish_waiting(int mask, int result = 0) {
+  void finish_waiting(__u64 mask, int result = 0) {
     list<Context*> finished;
     take_waiting(mask, finished);
     finish_contexts(finished, result);
@@ -1189,9 +1189,9 @@ protected:
   virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void finish_lock_waiters(int type, int mask, int r=0) { assert(0); }
-  virtual void add_lock_waiter(int type, int mask, Context *c) { assert(0); }
-  virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
+  virtual void finish_lock_waiters(int type, __u64 mask, int r=0) { assert(0); }
+  virtual void add_lock_waiter(int type, __u64 mask, Context *c) { assert(0); }
+  virtual bool is_lock_waiting(int type, __u64 mask) { assert(0); return false; }
 
   virtual void clear_dirty_scattered(int type) { assert(0); }
   virtual void finish_scatter_gather_update(int type) { }
