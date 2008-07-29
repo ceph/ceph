@@ -2666,11 +2666,16 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     }
 
     pg = _lookup_lock_pg(pgid);
-
-    dout(10) << *pg << " removing." << dendl;
-    assert(pg->get_role() == -1);
-    
-    _remove_unlock_pg(pg);
+    if (pg->info.history.same_since <= m->get_epoch()) {
+      dout(10) << *pg << " removing." << dendl;
+      assert(pg->get_role() == -1);
+      assert(pg->get_primary() == m->get_source().num());
+      _remove_unlock_pg(pg);
+    } else {
+      dout(10) << *pg << " ignoring remove request, pg changed in epoch "
+	       << pg->info.history.same_since << " > " << m->get_epoch() << dendl;
+      pg->unlock();
+    }
   }
 
   delete m;

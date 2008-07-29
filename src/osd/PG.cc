@@ -1102,7 +1102,7 @@ void PG::purge_strays()
       MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
       osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
     } else {
-      dout(10) << "not sending PGRemote to down osd" << *p << dendl;
+      dout(10) << "not sending PGRemove to down osd" << *p << dendl;
     }
     peer_info.erase(*p);
   }
