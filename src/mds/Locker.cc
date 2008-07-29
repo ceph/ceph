@@ -489,7 +489,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
 
   mut->apply();
   drop_locks(mut);
-  mut->drop_local_auth_pins();
+  mut->cleanup();
   delete mut;
   
   if (share && in->is_auth() && in->filelock.is_stable())
@@ -876,7 +876,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
     mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   else
     le->metablob.add_dir_context(in->get_parent_dir());
-  mdcache->journal_dirty_inode(&le->metablob, in);
+  mdcache->journal_dirty_inode(mut, &le->metablob, in);
   le->add_ino(in->ino());
   mut->ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
@@ -1137,7 +1137,7 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
     mut->auth_pin(in);
     mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
-    mdcache->journal_dirty_inode(&le->metablob, in, follows);
+    mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
   }
@@ -2245,7 +2245,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(&le->metablob, in);
+  mdcache->journal_dirty_inode(mut, &le->metablob, in);
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
@@ -2259,7 +2259,7 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
 
   mut->apply();
   drop_locks(mut);
-  mut->drop_local_auth_pins();
+  mut->cleanup();
   delete mut;
 
   //scatter_eval_gather(lock);

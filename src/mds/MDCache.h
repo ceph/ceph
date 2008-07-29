@@ -102,6 +102,9 @@ struct Mutation {
   list<CDir*> projected_fnodes;
   list<ScatterLock*> updated_scatterlocks;
 
+  list<CInode*> dirty_cow_inodes;
+  list<CDentry*> dirty_cow_dentries;
+
   Mutation() : 
     ls(0),
     slave_to_mds(-1),
@@ -111,7 +114,10 @@ struct Mutation {
     ls(0),
     slave_to_mds(slave_to), 
     done_locking(false), committing(false), aborted(false) {}
-  virtual ~Mutation() {}
+  virtual ~Mutation() {
+    assert(pins.empty());
+    assert(auth_pins.empty());
+  }
 
   bool is_master() { return slave_to_mds < 0; }
   bool is_slave() { return slave_to_mds >= 0; }
@@ -128,6 +134,13 @@ struct Mutation {
       in->get_stickydirs();
       stickydirs.insert(in);
     }
+  }
+  void drop_pins() {
+    for (set<MDSCacheObject*>::iterator it = pins.begin();
+	 it != pins.end();
+	 it++) 
+      (*it)->put(MDSCacheObject::PIN_REQUEST);
+    pins.clear();
   }
 
   // auth pins
@@ -181,13 +194,37 @@ struct Mutation {
     updated_scatterlocks.push_back(lock);
   }
 
+  void add_cow_inode(CInode *in) {
+    pin(in);
+    dirty_cow_inodes.push_back(in);
+  }
+  void add_cow_dentry(CDentry *dn) {
+    pin(dn);
+    dirty_cow_dentries.push_back(dn);
+  }
+
   void apply() {
     pop_and_dirty_projected_inodes();
     pop_and_dirty_projected_fnodes();
+
+    for (list<CInode*>::iterator p = dirty_cow_inodes.begin();
+	 p != dirty_cow_inodes.end();
+	 p++) 
+      (*p)->_mark_dirty(ls);
+    for (list<CDentry*>::iterator p = dirty_cow_dentries.begin();
+	 p != dirty_cow_dentries.end();
+	 p++) 
+      (*p)->_mark_dirty(ls);
+
     for (list<ScatterLock*>::iterator p = updated_scatterlocks.begin();
 	 p != updated_scatterlocks.end();
 	 p++)
       (*p)->set_updated();
+  }
+
+  void cleanup() {
+    drop_local_auth_pins();
+    drop_pins();
   }
 
   virtual void print(ostream &out) {
@@ -422,7 +459,7 @@ public:
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
-  void subtree_merge_writebehind_finish(CInode *in, LogSegment *ls);
+  void subtree_merge_writebehind_finish(CInode *in, Mutation *mut);
   void eval_subtree_root(CDir *dir);
   CDir *get_subtree_root(CDir *dir);
   bool is_leaf_subtree(CDir *dir) {
@@ -473,9 +510,9 @@ public:
   // journal helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
   CInode *cow_inode(CInode *in, snapid_t last);
-  void journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);
-  void journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
-  inode_t *journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  void journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);
+  void journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  inode_t *journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   void project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
 				   CDir *parent, int linkunlink=0);

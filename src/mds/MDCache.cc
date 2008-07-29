@@ -443,11 +443,11 @@ void MDCache::try_subtree_merge(CDir *dir)
 class C_MDC_SubtreeMergeWB : public Context {
   MDCache *mdcache;
   CInode *in;
-  LogSegment *ls;
+  Mutation *mut;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, LogSegment *s) : mdcache(mdc), in(i), ls(s) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
   void finish(int r) { 
-    mdcache->subtree_merge_writebehind_finish(in, ls);
+    mdcache->subtree_merge_writebehind_finish(in, mut);
   }
 };
 
@@ -507,23 +507,29 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       inode_t *pi = in->project_inode();
       pi->version = in->pre_dirty();
       
+      Mutation *mut = new Mutation;
+      mut->ls = mds->mdlog->get_current_segment();
       EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      journal_dirty_inode(&le->metablob, in);
+      journal_dirty_inode(mut, &le->metablob, in);
       
       mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, 
-							 mds->mdlog->get_current_segment()));
+      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, mut));
     }
   } 
 
   show_subtrees(15);
 }
 
-void MDCache::subtree_merge_writebehind_finish(CInode *in, LogSegment *ls)
+void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
-  in->pop_and_dirty_projected_inode(ls);
+  in->pop_and_dirty_projected_inode(mut->ls);
+
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+
   in->auth_unpin(this);
 }
 
@@ -1038,7 +1044,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 }
 
 
-void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t follows)
+void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows)
 {
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
@@ -1065,6 +1071,7 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
 						  oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_remote_dentry(olddn, true);
+      mut->add_cow_dentry(olddn);
 
       // FIXME: adjust link count here?  hmm.
     }
@@ -1084,31 +1091,34 @@ void MDCache::journal_cow_dentry(EMetaBlob *metablob, CDentry *dn, snapid_t foll
     if (dn->is_primary()) {
       assert(oldfirst == dn->inode->first);
       CInode *oldin = cow_inode(dn->inode, follows);
+      mut->add_cow_inode(oldin);
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_primary_dentry(olddn, true);
+      mut->add_cow_dentry(olddn);
     } else {
       assert(dn->is_remote());
       CDentry *olddn = dn->dir->add_remote_dentry(dn->name, dn->remote_ino, dn->remote_d_type,
 						  oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_remote_dentry(olddn, true);
+      mut->add_cow_dentry(olddn);
     }
   }
 }
 
 
-void MDCache::journal_cow_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
+void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
   CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(metablob, dn, follows);
+  journal_cow_dentry(mut, metablob, dn, follows);
 }
 
-inode_t *MDCache::journal_dirty_inode(EMetaBlob *metablob, CInode *in, snapid_t follows)
+inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(metablob, dn, follows);
+  journal_cow_dentry(mut, metablob, dn, follows);
   return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
 }
 
@@ -1517,7 +1527,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
        p != lsi.end();
        p++) {
     CInode *cur = *p;
-    journal_dirty_inode(blob, cur);
+    journal_dirty_inode(mut, blob, cur);
   }
  
 }
@@ -5484,11 +5494,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
     (*p)->put_stickydirs();
 
   // drop cache pins
-  for (set<MDSCacheObject*>::iterator it = mdr->pins.begin();
-       it != mdr->pins.end();
-       it++) 
-    (*it)->put(MDSCacheObject::PIN_REQUEST);
-  mdr->pins.clear();
+  mdr->drop_pins();
 
   // remove from map
   active_requests.erase(mdr->reqid);
@@ -5676,7 +5682,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  journal_dirty_inode(&le->metablob, in);
+  journal_dirty_inode(mut, &le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
 }
@@ -5701,6 +5707,7 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 
   // drop locks and finish
   mds->locker->drop_locks(mut);
+  mut->cleanup();
   delete mut;
 
   // trigger waiters
@@ -5755,7 +5762,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   ::encode(t, snapbl);
   
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  journal_cow_inode(&le->metablob, in);
+  journal_cow_inode(mut, &le->metablob, in);
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
@@ -5768,6 +5775,7 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   // apply
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
+  mut->cleanup();
   delete mut;
 
   // tell table we've committed
