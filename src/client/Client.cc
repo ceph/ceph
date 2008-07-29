@@ -924,7 +924,6 @@ void Client::handle_client_session(MClientSession *m)
 
   switch (m->op) {
   case CEPH_SESSION_OPEN:
-    assert(mds_sessions.count(from) == 0);
     mds_sessions[from].seq = 0;
     break;
 

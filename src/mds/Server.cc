@@ -247,6 +247,7 @@ version_t Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
     Session *session = mds->sessionmap.get_or_add_session(p->second);
     if (session->is_undef() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
+    mds->sessionmap.touch_session(session);
   }
   return pv;
 }
