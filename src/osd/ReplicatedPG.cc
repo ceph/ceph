@@ -1605,20 +1605,16 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 void ReplicatedPG::on_osd_failure(int o)
 {
   dout(10) << "on_osd_failure " << o << dendl;
-  // do async; repop_ack() may modify pg->repop_gather
-  list<RepGather*> ls;  
-  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
-       p != rep_gather.end();
-       p++) {
-    dout(-1) << "checking repop tid " << p->first << dendl;
-    if (p->second->waitfor_ack.count(o) ||
-	p->second->waitfor_commit.count(o)) 
-      ls.push_back(p->second);
+
+  hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin();
+  while (p != rep_gather.end()) {
+    RepGather *repop = p->second;
+    p++;
+    dout(-1) << "checking repop tid " << repop->rep_tid << dendl;
+    if (repop->waitfor_ack.count(o) ||
+	repop->waitfor_commit.count(o))
+      repop_ack(repop, -1, true, o);
   }
-  for (list<RepGather*>::iterator p = ls.begin();
-       p != ls.end();
-       p++)
-    repop_ack(*p, -1, true, o);
 }
 
 void ReplicatedPG::on_acker_change()
@@ -1638,26 +1634,32 @@ void ReplicatedPG::on_change()
     if (!p->second->applied)
       apply_repop(p->second);
 
-  // artificially ack+commit any replicas who dropped out of the pg
-  hash_map<tid_t,RepGather*>::iterator next;
-  for (hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin(); 
-       p != rep_gather.end();
-       p = next) {
-    next = p;
-    next++;
+  hash_map<tid_t,RepGather*>::iterator p = rep_gather.begin(); 
+  while (p != rep_gather.end()) {
+    RepGather *repop = p->second;
 
-    dout(-1) << "checking repop tid " << p->first << dendl;
-    set<int> all;
-    set_union(p->second->waitfor_commit.begin(), p->second->waitfor_commit.end(),
-	      p->second->waitfor_ack.begin(), p->second->waitfor_ack.end(),
-	      inserter(all, all.begin()));
-    for (set<int>::iterator q = all.begin(); q != all.end(); q++) {
-      bool have = false;
-      for (unsigned i=1; i<acting.size(); i++)
-	if (acting[i] == *q) 
-	  have = true;
-      if (!have)
-	repop_ack(p->second, -1, true, *q);
+    if (acting.empty() || acting[0] != osd->get_nodeid()) {
+      // no longer primary.  hose repops.
+      dout(-1) << "no longer primary, aborting repop tid " << repop->rep_tid << dendl;
+      rep_gather.erase(p++);
+      delete repop->op;
+      delete repop;
+    } else {
+      // still primary. artificially ack+commit any replicas who dropped out of the pg
+      p++;
+      dout(-1) << "checking repop tid " << repop->rep_tid << dendl;
+      set<int> all;
+      set_union(repop->waitfor_commit.begin(), repop->waitfor_commit.end(),
+		repop->waitfor_ack.begin(), repop->waitfor_ack.end(),
+		inserter(all, all.begin()));
+      for (set<int>::iterator q = all.begin(); q != all.end(); q++) {
+	bool have = false;
+	for (unsigned i=1; i<acting.size(); i++)
+	  if (acting[i] == *q) 
+	    have = true;
+	if (!have)
+	  repop_ack(repop, -EIO, true, *q);
+      }
     }
   }
 }
