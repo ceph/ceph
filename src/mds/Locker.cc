@@ -953,6 +953,18 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   }  
   assert(cap);
 
+  // freezing|frozen?
+  if (in->is_freezing() || in->is_frozen()) {
+    dout(7) << "handle_client_file_caps freezing|frozen on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+  if (m->get_mseq() < cap->get_mseq()) {
+    dout(7) << "handle_client_file_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
+	    << ", dropping" << dendl;
+    delete m;
+    return;
+  }
 
   // flushsnap?
   if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {

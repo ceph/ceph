@@ -1444,7 +1444,7 @@ void Client::check_caps(Inode *in, bool flush_snap)
                                              cap->seq,
                                              cap->issued,
                                              wanted,
-					     0);
+					     cap->mseq);
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
@@ -1949,6 +1949,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       m->set_atime(in->inode.atime);
       m->set_wanted(wanted);
       m->set_snap_follows(in->snaprealm->get_follows());
+      m->set_migrate_seq(cap->mseq);
     }
   } else if (old_caps == new_caps) {
     dout(10) << "  caps unchanged at " << cap_string(old_caps) << dendl;

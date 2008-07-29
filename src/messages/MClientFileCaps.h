@@ -51,7 +51,7 @@ class MClientFileCaps : public Message {
 
   void set_max_size(__u64 ms) { h.max_size = ms; }
 
-  void set_migrate_seq(int m) { h.migrate_seq = m; }
+  void set_migrate_seq(unsigned m) { h.migrate_seq = m; }
   void set_op(int o) { h.op = o; }
 
   void set_size(loff_t s) { h.size = s; }
