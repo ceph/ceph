@@ -43,20 +43,6 @@ class MDCache;
 class MDCluster;
 class Context;
 
-
-struct string_snap_t {
-  nstring name;
-  snapid_t snapid;
-  string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
-  string_snap_t(const nstring& n, snapid_t s) : name(n), snapid(s) {}
-  string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
-};
-inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
-  int c = strcmp(l.name.c_str(), r.name.c_str());
-  return c < 0 || (c == 0 && l.snapid < r.snapid);
-}
-
-
 ostream& operator<<(ostream& out, class CDir& dir);
 
 

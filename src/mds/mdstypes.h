@@ -436,6 +436,37 @@ inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
 }
 
 
+/*
+ * string_snap_t is a simple (nstring, snapid_t) pair
+ */
+struct string_snap_t {
+  nstring name;
+  snapid_t snapid;
+  string_snap_t() {}
+  string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(const nstring& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+    ::encode(snapid, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+    ::decode(snapid, bl);
+  }
+};
+WRITE_CLASS_ENCODER(string_snap_t)
+
+inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
+  int c = strcmp(l.name.c_str(), r.name.c_str());
+  return c < 0 || (c == 0 && l.snapid < r.snapid);
+}
+
+inline ostream& operator<<(ostream& out, const string_snap_t &k)
+{
+  return out << "(" << k.name << "," << k.snapid << ")";
+}
+
 
 
 // =========
