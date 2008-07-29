@@ -1958,7 +1958,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dout(10) << " last_destroyed " << realm->get_last_destroyed() << " > " << dir->snap_purged_thru
 	     << ", doing snap purge with " << *snaps << dendl;
     dir->snap_purged_thru = realm->get_last_destroyed();
-    assert(snaps->count(snapid));  // just checkin'! 
+    assert(snapid == CEPH_NOSNAP || snaps->count(snapid));  // just checkin'! 
   }
   bool purged_any = false;
 
@@ -4962,6 +4962,15 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   xlocks.insert(&dn->inode->snaplock);
+  if (!diri->is_anchored()) {
+    // we need to anchor... get these locks up front!
+    CDentry *dn = diri->get_parent_dn();
+    while (dn) {
+      rdlocks.insert(&dn->lock);
+      dn = dn->get_dir()->get_inode()->get_parent_dn();
+    }
+    xlocks.insert(&diri->linklock); 
+  }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;

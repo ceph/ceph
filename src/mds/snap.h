@@ -170,7 +170,7 @@ struct SnapRealm {
   }
   snapid_t get_last_destroyed() {
     check_cache();
-    return cached_last_created;
+    return cached_last_destroyed;
   }
   snapid_t get_newest_snap() {
     check_cache();

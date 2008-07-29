@@ -5551,6 +5551,7 @@ public:
 void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
+  dout(10) << "anchor_create " << *in << dendl;
 
   // auth pin
   if (!in->can_auth_pin() &&
