@@ -624,6 +624,7 @@ protected:
   map<inodeno_t,string> cap_import_paths;
   
   set<CInode*> rejoin_undef_inodes;
+  set<CInode*> rejoin_potential_updated_scatterlocks;
 
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -763,7 +764,7 @@ public:
       lru.lru_midtouch(dn);
   }
 
-  void inode_remove_replica(CInode *in, int rep, bool will_readd=false);
+  void inode_remove_replica(CInode *in, int rep);
   void dentry_remove_replica(CDentry *dn, int rep);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);

@@ -2343,32 +2343,25 @@ void MDCache::recalc_auth_bits()
 // REJOIN
 
 /*
- * notes on scatterlock recovery
+ * notes on scatterlock recovery:
  *
- * NO?  - a recovering mds _always_ scatters scatterlocks at subtree roots, to ensure
- *    that any potentially dirty data is recovered.  
+ * - recovering inode replica sends scatterlock data for any subtree
+ *   roots (the only ones that are possibly dirty).
  *
- * - if auth+replicas all fail, recovering auth scatters the scatterlock.
+ * - surviving auth incorporates any provided scatterlock data.  any
+ *   pending gathers are then finished, as with the other lock types.
  *
- * - if recovering mds fails and there are one or more survivors, 
- *   - if all survivors are sync, sync
- *   - if all survivors are scatter, scatter
- *   - otherwise, gather to lock.   (or... let's do this every time?)
+ * that takes care of surviving auth + (recovering replica)*.
  *
- * to combine those,
- * - recovering mds:
- *   - any strong(sync) rejoins -> gather to lock from sync.  else,
- *   - [any weak | strong(scatter) rejoins ->] gather to lock from scatter
- *
- *
- * for surviving auth:
- *
- * - recovering replica sends scatterlock state for any subtree roots
- *   (the only ones that are possibly dirty).
- *
- * - surviving auth uses scatterlock state to finish any pending
- *   gather.  (see handle_cache_rejoin_weak inode_scatterlocks block,
- *   and inode_remove_gather will_readd logic)
+ * - surviving replica sends strong_inode, which includes current
+ *   scatterlock state, AND any dirty scatterlock data.  this
+ *   provides the recovering auth with everything it might need.
+ * 
+ * - recovering auth must pick initial scatterlock state based on
+ *   (weak|strong) rejoins.
+ *   - always assimilate scatterlock data (it can't hurt)
+ *   - any surviving replica in SCATTER state -> SCATTER.  otherwise, SYNC.
+ *   - include base inode in ack for all inodes that saw scatterlock content
  *
  */
 
@@ -2423,11 +2416,9 @@ void MDCache::rejoin_send_rejoins()
     assert(dir->is_subtree_root());
     assert(!dir->is_ambiguous_dir_auth());
 
-    int auth = dir->get_dir_auth().first;
-    assert(auth >= 0);
-    
-    if (mds->is_rejoin() && dir->is_auth()) {
-      // include scatterlock state?
+    // my subtree?
+    if (dir->is_auth()) {
+      // include scatterlock state with parent inode's subtree?
       int inauth = dir->inode->authority().first;
       if (rejoins.count(inauth)) {
 	dout(10) << " sending scatterlock state to mds" << inauth << " for " << *dir << dendl;
@@ -2435,7 +2426,11 @@ void MDCache::rejoin_send_rejoins()
       }
       continue;  // skip my own regions!
     }
-    if (rejoins.count(auth) == 0) continue;   // don't care about this node's regions
+
+    int auth = dir->get_dir_auth().first;
+    assert(auth >= 0);
+    if (rejoins.count(auth) == 0)
+      continue;   // don't care about this node's subtrees
 
     rejoin_walk(dir, rejoins[auth]);
   }
@@ -2710,27 +2705,16 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
 
-  if (!mds->is_rejoin()) {
-    // survivor.  use provided scatterlock state to complete any
-    // pending gathers...
-    for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
-	 p != weak->inode_scatterlocks.end();
-	 p++) {
-      CInode *in = get_inode(p->first);
-      assert(in);
-      if (in->dirlock.must_gather()) {
-	dout(10) << " completing " << in->dirlock << " must_gather gather on " << *in << dendl;
-	in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
-	in->dirlock.remove_gather(from);
-      	mds->locker->scatter_eval_gather(&in->dirlock);
-      }
-      if (in->nestlock.must_gather()) {
-	dout(10) << " completing " << in->nestlock << " must_gather gather on " << *in << dendl;
-	in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
-	in->nestlock.remove_gather(from);
-      	mds->locker->scatter_eval_gather(&in->nestlock);
-      }
-    }
+  // assimilate any potentially dirty scatterlock state
+  for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
+       p != weak->inode_scatterlocks.end();
+       p++) {
+    CInode *in = get_inode(p->first);
+    assert(in);
+    in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
+    in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
+    if (!survivor)
+      rejoin_potential_updated_scatterlocks.insert(in);
   }
   
   // walk weak map
@@ -2768,7 +2752,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       assert(in);
 
       if (survivor && in->is_replica(from)) 
-	inode_remove_replica(in, from, true);  // this induces a lock gather completion... usually!
+	inode_remove_replica(in, from);
       int inonce = in->add_replica(from);
       dout(10) << " have " << *in << dendl;
 
@@ -2800,6 +2784,14 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
   if (survivor) {
     // survivor.  do everything now.
+    for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
+	 p != weak->inode_scatterlocks.end();
+	 p++) {
+      CInode *in = get_inode(p->first);
+      dout(10) << " including base inode (due to potential scatterlock update) " << *in << dendl;
+      ack->add_inode_base(in);
+    }
+
     rejoin_scour_survivor_replicas(from, ack);
     mds->send_message_mds(ack, from);
   } else {
@@ -2948,6 +2940,17 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 
   MMDSCacheRejoin *missing = 0;  // if i'm missing something..
   
+  // assimilate any potentially dirty scatterlock state
+  for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = strong->inode_scatterlocks.begin();
+       p != strong->inode_scatterlocks.end();
+       p++) {
+    CInode *in = get_inode(p->first);
+    assert(in);
+    in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
+    in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
+    rejoin_potential_updated_scatterlocks.insert(in);
+  }
+
   // strong dirfrags/dentries.
   //  also process auth_pins, xlocks.
   for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = strong->strong_dirfrags.begin();
@@ -3510,6 +3513,17 @@ void MDCache::rejoin_send_acks()
       ack[r->first]->add_inode_base(stray);
       ack[r->first]->add_inode_locks(stray, r->second);
     }
+
+  // include inode base for any inodes whose scatterlocks may have updated
+  for (set<CInode*>::iterator p = rejoin_potential_updated_scatterlocks.begin();
+       p != rejoin_potential_updated_scatterlocks.end();
+       p++) {
+    CInode *in = *p;
+    for (map<int,int>::iterator r = in->replicas_begin();
+	 r != in->replicas_end();
+	 ++r)
+      ack[r->first]->add_inode_base(in);
+  }
 
   // send acks
   for (map<int,MMDSCacheRejoin*>::iterator p = ack.begin();
@@ -4299,7 +4313,7 @@ void MDCache::discard_delayed_expire(CDir *dir)
   delayed_expire.erase(dir);  
 }
 
-void MDCache::inode_remove_replica(CInode *in, int from, bool will_readd)
+void MDCache::inode_remove_replica(CInode *in, int from)
 {
   in->remove_replica(from);
   in->mds_caps_wanted.erase(from);
@@ -4313,14 +4327,8 @@ void MDCache::inode_remove_replica(CInode *in, int from, bool will_readd)
   if (in->snaplock.remove_replica(from)) mds->locker->simple_eval_gather(&in->snaplock);
   if (in->xattrlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->xattrlock);
 
-  // don't complete gather if we will re-add (i.e. we are rejoining)
-  // and dirlock must_gather actual data...
-  if (!(will_readd && in->dirlock.must_gather()) && 
-      in->dirlock.remove_replica(from))
-    mds->locker->scatter_eval_gather(&in->dirlock);
-  if (!(will_readd || in->dirlock.must_gather()) &&
-      in->nestlock.remove_replica(from)) 
-    mds->locker->scatter_eval_gather(&in->nestlock);
+  if (in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
+  if (in->nestlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->nestlock);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)

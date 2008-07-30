@@ -239,11 +239,11 @@ class MMDSCacheRejoin : public Message {
     ::encode(strong_inodes, payload);
     ::encode(inode_base, payload);
     ::encode(inode_locks, payload);
+    ::encode(inode_scatterlocks, payload);
     ::encode(authpinned_inodes, payload);
     ::encode(xlocked_inodes, payload);
     ::encode(cap_export_bl, payload);
     ::encode(strong_dirfrags, payload);
-    ::encode(dirfrag_stat, payload);
     ::encode(weak, payload);
     ::encode(weak_inodes, payload);
     ::encode(strong_dentries, payload);
@@ -256,6 +256,7 @@ class MMDSCacheRejoin : public Message {
     ::decode(strong_inodes, p);
     ::decode(inode_base, p);
     ::decode(inode_locks, p);
+    ::decode(inode_scatterlocks, p);
     ::decode(authpinned_inodes, p);
     ::decode(xlocked_inodes, p);
     ::decode(cap_export_bl, p);
@@ -265,7 +266,6 @@ class MMDSCacheRejoin : public Message {
       ::decode(cap_export_paths, q);
     }
     ::decode(strong_dirfrags, p);
-    ::decode(dirfrag_stat, p);
     ::decode(weak, p);
     ::decode(weak_inodes, p);
     ::decode(strong_dentries, p);

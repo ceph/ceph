@@ -584,18 +584,20 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       __u32 n = 0;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
-	   ++p)
-	if (is_auth() || p->second->is_auth()) {
-	  dout(15) << "encode_lock_state fragstat for " << *p->second << dendl;
-	  dout(20) << "             fragstat " << p->second->fnode.fragstat << dendl;
-	  dout(20) << "   accounted_fragstat " << p->second->fnode.accounted_fragstat << dendl;
-	  frag_t fg = p->second->dirfrag().frag;
+	   ++p) {
+	frag_t fg = p->first;
+	CDir *dir = dir;
+	if (is_auth() || dir->is_auth()) {
+	  dout(15) << fg << " " << *dir << dendl;
+	  dout(20) << fg << "           fragstat " << dir->fnode.fragstat << dendl;
+	  dout(20) << fg << " accounted_fragstat " << dir->fnode.accounted_fragstat << dendl;
 	  ::encode(fg, tmp);
-	  ::encode(p->second->first, tmp);
-	  ::encode(p->second->fnode.fragstat, tmp);
-	  ::encode(p->second->fnode.accounted_fragstat, tmp);
+	  ::encode(dir->first, tmp);
+	  ::encode(dir->fnode.fragstat, tmp);
+	  ::encode(dir->fnode.accounted_fragstat, tmp);
 	  n++;
 	}
+      }
       ::encode(n, bl);
       bl.claim_append(tmp);
     }
@@ -738,29 +740,34 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	::decode(fgfirst, p);
 	::decode(fragstat, p);
 	::decode(accounted_fragstat, p);
-	dout(10) << fg << " got changed fragstat " << fragstat << dendl;
-	dout(20) << fg << "   accounted_fragstat " << accounted_fragstat << dendl;
+	dout(10) << fg << " [" << fgfirst << ",head] " << dendl;
+	dout(10) << fg << "           fragstat " << fragstat << dendl;
+	dout(20) << fg << " accounted_fragstat " << accounted_fragstat << dendl;
 
 	CDir *dir = get_dirfrag(fg);
 	if (is_auth()) {
 	  assert(dir);                // i am auth; i had better have this dir open
-	  dout(10) << " " << fg << "           fragstat " << fragstat << " on " << *dir << dendl;
-	  dout(20) << " " << fg << " accounted_fragstat " << accounted_fragstat << dendl;
+	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+		   << " on " << *dir << dendl;
+	  dir->first = fgfirst;
 	  dir->fnode.fragstat = fragstat;
 	  dir->fnode.accounted_fragstat = accounted_fragstat;
 	  dir->first = fgfirst;
-	  if (!(fragstat == accounted_fragstat))
+	  if (!(fragstat == accounted_fragstat)) {
+	    dout(10) << fg << " setting dirlock updated flag" << dendl;
 	    dirlock.set_updated();
+	  }
 	} else {
 	  if (dir &&
 	      dir->is_auth() &&
 	      !(dir->fnode.accounted_fragstat == fragstat)) {
-	    dout(10) << " setting accounted_fragstat " << fragstat << " and setting dirty bit on "
-		     << *dir << dendl;
+	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+		     << " on " << *dir << dendl;
+	    dir->first = fgfirst;
+	    dout(10) << fg << " setting accounted_fragstat and setting dirty bit" << dendl;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_fragstat = fragstat;
-	    if (dir->is_auth())
-	      dir->_set_dirty_flag();	    // bit of a hack
+	    dir->_set_dirty_flag();	    // bit of a hack
 	  }
 	}
       }
@@ -813,9 +820,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
-	  
-	    dout(10) << fg << " setting accounted_rstat " << rstat
-		     << " and setting dirty flag" << dendl;
+	    
+	    dout(10) << fg << " setting accounted_rstat and setting dirty bit" << dendl;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_rstat = rstat;
 	    dir->dirty_old_rstat.swap(dirty_old_rstat);
