@@ -1655,8 +1655,10 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	  q.pop_front();
 	  dout(10) << " flushing caps on " << *realm << dendl;
 	  
-	  for (xlist<Inode*>::iterator p = realm->inodes_with_caps.begin(); !p.end(); ++p) {
+	  xlist<Inode*>::iterator p = realm->inodes_with_caps.begin();
+	  while (!p.end()) {
 	    Inode *in = *p;
+	    ++p;
 	    check_caps(in, true); // force writeback of write caps
 	    if (g_conf.client_oc)
 	      _flush(in);
@@ -1690,8 +1692,8 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
       realm->invalidate_cache();
       dout(15) << "  snaps " << realm->get_snaps() << dendl;
     } else {
-      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq << " < " << realm->seq << ", SKIPPING"
-	       << dendl;
+      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq
+	       << " <= " << realm->seq << ", SKIPPING" << dendl;
     }
     
     put_snap_realm(realm);
@@ -1793,16 +1795,18 @@ void Client::handle_file_caps(MClientFileCaps *m)
 		   m->snapbl,
 		   m->get_caps(), m->get_seq(), m->get_mseq());
 
-    if (in->exporting_mseq < m->get_mseq()) {
+    if (m->get_mseq() > in->exporting_mseq) {
       dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
-	      << " IMPORT from mds" << mds << ", clearing exporting_issued " << cap_string(in->exporting_issued) 
+	      << " IMPORT from mds" << mds
+	      << ", clearing exporting_issued " << cap_string(in->exporting_issued) 
 	      << " mseq " << in->exporting_mseq << dendl;
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
       in->exporting_mds = -1;
     } else {
       dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
-	      << " IMPORT from mds" << mds << ", keeping exporting_issued " << cap_string(in->exporting_issued) 
+	      << " IMPORT from mds" << mds 
+	      << ", keeping exporting_issued " << cap_string(in->exporting_issued) 
 	      << " mseq " << in->exporting_mseq << " by mds" << in->exporting_mds << dendl;
     }
     delete m;
@@ -1828,13 +1832,18 @@ void Client::handle_file_caps(MClientFileCaps *m)
 	break;
       }
     }
-    if (cap && !found_higher_mseq) {
-      dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds" << mds
-	      << ", setting exporting_issued " << cap_string(cap->issued) << dendl;
-      in->exporting_issued = cap->issued;
-      in->exporting_mseq = m->get_mseq();
-      in->exporting_mds = mds;
+    if (cap) {
+      if (!found_higher_mseq) {
+	dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
+		<< " EXPORT from mds" << mds
+		<< ", setting exporting_issued " << cap_string(cap->issued) << dendl;
+	in->exporting_issued = cap->issued;
+	in->exporting_mseq = m->get_mseq();
+	in->exporting_mds = mds;
+      } else 
+	dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
+		<< " EXPORT from mds" << mds
+		<< ", just removing old cap" << dendl;
       remove_cap(in, mds);
     }
 
