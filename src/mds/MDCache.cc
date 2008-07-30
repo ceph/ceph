@@ -1000,7 +1000,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 
   in->first = last+1;
 
-  dout(10) << " oldin " << *oldin << dendl;
+  dout(10) << "cow_inode to " << *oldin << dendl;
   add_inode(oldin);
   
   // clone caps?
@@ -6219,12 +6219,10 @@ void MDCache::handle_discover(MDiscover *dis)
     
     if (!cur) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
-	      << " don't have base ino " << dis->get_base_ino() 
+	      << " don't have base ino " << dis->get_base_ino() << "." << snapid
 	      << dendl;
       reply->set_flag_error_dir();
-    }
-
-    if (dis->wants_base_dir()) {
+    } else if (dis->wants_base_dir()) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
 	      << " wants basedir+" << dis->get_want().get_path() 
 	      << " has " << *cur 
