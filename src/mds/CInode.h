@@ -414,7 +414,7 @@ private:
   
 
   // for giving to clients
-  void encode_inodestat(bufferlist& bl, snapid_t snapid=CEPH_NOSNAP);
+  bool encode_inodestat(bufferlist& bl, snapid_t snapid=CEPH_NOSNAP);
 
 
   // -- locks --

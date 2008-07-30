@@ -609,6 +609,14 @@ static void encode_empty_lease(bufferlist& bl)
   ::encode(e, bl);
 }
 
+static void encode_null_lease(bufferlist& bl)
+{
+  LeaseStat e;
+  e.mask = 0;
+  e.duration_ms = 0;
+  ::encode(e, bl);
+}
+
 
 /*
  * pass inode OR dentry (not both, or we may get confused)
@@ -638,8 +646,12 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  inode:
   numi++;
-  in->encode_inodestat(bl, snapid);
-  lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+  if (in->encode_inodestat(bl, snapid))
+    lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+  else {
+    lmask = 0;
+    encode_null_lease(bl);
+  }
   dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
@@ -653,7 +665,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
     // back to the live tree
     snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, snapid);
+    bool valid = in->encode_inodestat(bl, snapid);
+    assert(valid);
     lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
     numi++;
     dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
@@ -1380,6 +1393,9 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   dout(10) << "ref is " << *ref << dendl;
 
   // fw to inode auth?
+  if (mdr->ref_snapid != CEPH_NOSNAP)
+    want_auth = true;
+
   if (want_auth && !ref->is_auth()) {
     if (ref->is_ambiguous_auth()) {
       dout(10) << "waiting for single auth on " << *ref << dendl;
@@ -2015,7 +2031,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // inode
     dout(12) << "including inode " << *in << dendl;
-    in->encode_inodestat(dnbl, snapid);
+    bool valid = in->encode_inodestat(dnbl, snapid);
+    assert(valid);
     mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 

@@ -415,6 +415,10 @@ struct old_rstat_t {
 };
 WRITE_CLASS_ENCODER(old_rstat_t)
 
+inline ostream& operator<<(ostream& out, const old_rstat_t& o) {
+  return out << "old_rstat(first " << o.first << " " << o.rstat << " " << o.accounted_rstat << ")";
+}
+
 
 
 // =======
