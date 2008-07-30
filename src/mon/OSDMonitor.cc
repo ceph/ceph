@@ -167,11 +167,13 @@ bool OSDMonitor::update_from_paxos()
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
-  // kick pgmon, make sure it's seen the latest map
-  mon->pgmon->check_osd_map(osdmap.epoch);
+  if (mon->is_leader()) {
+    // kick pgmon, make sure it's seen the latest map
+    mon->pgmon->check_osd_map(osdmap.epoch);
 
-  // new map!
-  bcast_latest_mds();
+    bcast_latest_mds();
+  }
+
   send_to_waiting();
     
   return true;
@@ -704,11 +706,12 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
-  if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
+
+  if (!mon->is_leader()) return;
 
 
   // mark down osds out?
