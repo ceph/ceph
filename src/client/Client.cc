@@ -396,7 +396,10 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     update_inode_file_bits(in, st->size, st->ctime, st->mtime, st->atime, in->caps_issued(), st->time_warp_seq);
   }
 
-  if (lease->mask && ttl > in->lease_ttl) {
+  if (lease->mask && 
+      ttl > in->lease_ttl &&
+      (in->lease_ttl < from || (in->lease_mask & ~lease->mask) == 0)  // not taking anything away
+      ) {
     in->lease_ttl = ttl;
     in->lease_mask = lease->mask;
     in->lease_mds = from;
@@ -482,7 +485,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
     utime_t ttl = from;
     ttl += (float)dlease->duration_ms * 1000.0;
     if (ttl > dn->lease_ttl) {
-      dout(10) << "got dentry lease on " << dname << " ttl " << ttl << dendl;
+      dout(10) << "got dentry lease on " << dname << " dur " << dlease->duration_ms << "ms ttl " << ttl << dendl;
       dn->lease_ttl = ttl;
       dn->lease_mds = from;
     }
@@ -3974,10 +3977,15 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
     if (diri->dir &&
 	diri->dir->dentries.count(dname)) {
       Dentry *dn = diri->dir->dentries[dname];
-      if (dn->lease_mds >= 0 && dn->lease_ttl > now) {
+      if ((dn->lease_mds >= 0 && dn->lease_ttl > now) ||
+	  diri->lease_mds >= 0 && diri->lease_ttl > now && (diri->lease_mask & CEPH_LOCK_ICONTENT)) {
 	touch_dn(dn);
 	in = dn->inode;
-	dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry" << dendl;
+	dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry|ICONTENT" << dendl;
+      } else {
+	dout(1) << "ll_lookup " << parent << " " << name << " -> have dentry, but not valid lease"
+		<< " (mds" << dn->lease_mds << " ttl " << dn->lease_ttl << ")"
+		<< dendl;
       }
     } 
     if (!in) {
