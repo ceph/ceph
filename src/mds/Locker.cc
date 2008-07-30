@@ -1233,6 +1233,7 @@ void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int clie
   e.mask = mask;
   e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
   ::encode(e, bl);
+  dout(20) << "_issue_client_lease mask " << e.mask << " dur " << e.duration_ms << "ms" << dendl;
 }
   
 

@@ -595,26 +595,28 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 }
 
 
-static void encode_empty_dirstat(bufferlist& bl)
+void Server::encode_empty_dirstat(bufferlist& bl)
 {
   static DirStat empty;
   empty.encode(bl);
 }
 
-static void encode_empty_lease(bufferlist& bl)
+void Server::encode_infinite_lease(bufferlist& bl)
 {
   LeaseStat e;
   e.mask = -1;
   e.duration_ms = -1;
   ::encode(e, bl);
+  dout(20) << "encode_infinite_lease " << e << dendl;
 }
 
-static void encode_null_lease(bufferlist& bl)
+void Server::encode_null_lease(bufferlist& bl)
 {
   LeaseStat e;
   e.mask = 0;
   e.duration_ms = 0;
   ::encode(e, bl);
+  dout(20) << "encode_null_lease " << e << dendl;
 }
 
 
@@ -659,7 +661,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     const string& snapname = in->find_snaprealm()->get_snapname(snapid, in->ino());
     dout(10) << " snapname " << snapname << dendl;
     ::encode(snapname, bl);
-    encode_empty_lease(bl);
+    encode_infinite_lease(bl);
     numdn++;
     encode_empty_dirstat(bl);
 
@@ -685,7 +687,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   if (snapid == CEPH_NOSNAP)
     lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   else
-    encode_empty_lease(bl);
+    encode_null_lease(bl);
   numdn++;
   dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *dn << dendl;
   
@@ -4847,6 +4849,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 void Server::handle_client_lssnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  int client = req->get_orig_source().num();
 
   // traverse to path
   vector<CDentry*> trace;
@@ -4893,6 +4896,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   snapid_t oldest = diri->get_oldest_snap();
   dout(10) << " oldest snap for this inode is " << oldest << dendl;
 
+  utime_t now = g_clock.now();
   __u32 num = 0;
   bufferlist dnbl;
   for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();
@@ -4908,9 +4912,9 @@ void Server::handle_client_lssnap(MDRequest *mdr)
       ::encode(p->second->name, dnbl);
     else
       ::encode(p->second->get_long_name(), dnbl);
-    encode_empty_lease(dnbl);
+    encode_infinite_lease(dnbl);
     diri->encode_inodestat(dnbl, p->first);
-    encode_empty_lease(dnbl);
+    mds->locker->issue_client_lease(diri, client, dnbl, now, mdr->session);
     num++;
   }
 

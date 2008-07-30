@@ -60,6 +60,10 @@ struct LeaseStat {
 };
 WRITE_CLASS_ENCODER(LeaseStat)
 
+inline ostream& operator<<(ostream& out, const LeaseStat& l) {
+  return out << "lease(mask " << l.mask << " dur " << l.duration_ms << ")";
+}
+
 struct DirStat {
   // mds distribution hints
   frag_t frag;
