@@ -1268,15 +1268,22 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 	first = pin->first;
 	pin->cow_old_inode(last, pi_to_cow);
       } else {
+	// our life is easier here because old_inodes is not sparse
+	// (although it may not begin at snapid 1)
 	map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
 	if (p == pin->old_inodes.end()) {
 	  dout(10) << " no old_inode <= " << last << ", done." << dendl;
 	  break;
 	}
 	first = p->second.first;
+	if (first > last) {
+	  dout(10) << " oldest old_inode is [" << first << "," << p->first << "], done." << dendl;
+	  assert(p == pin->old_inodes.begin());
+	  break;
+	}
 	if (p->first > last) {
 	  dout(10) << " splitting right old_inode [" << first << "," << p->first << "] to ["
-		   << (last+1) << "," << p->first << dendl;
+		   << (last+1) << "," << p->first << "]" << dendl;
 	  pin->old_inodes[last] = p->second;
 	  p->second.first = last+1;
 	  pin->dirty_old_rstats.insert(p->first);
@@ -1284,7 +1291,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       }
       if (first < ofirst) {
 	dout(10) << " splitting left old_inode [" << first << "," << last << "] to ["
-		 << first << "," << ofirst-1 << dendl;
+		 << first << "," << ofirst-1 << "]" << dendl;
 	pin->old_inodes[ofirst-1] = pin->old_inodes[last];
 	pin->dirty_old_rstats.insert(ofirst-1);
 	pin->old_inodes[last].first = first = ofirst;
@@ -1293,7 +1300,6 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       pin->dirty_old_rstats.insert(last);
     }
     dout(10) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
-    pi->rstat.version++;
     pi->rstat.add(delta);
     dout(15) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
     
@@ -1478,7 +1484,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // dirstat
     if (do_parent_mtime || linkunlink) {
-      pi->dirstat.version++;
       dout(15) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
       dout(15) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
@@ -2363,6 +2368,15 @@ void MDCache::recalc_auth_bits()
  *   - any surviving replica in SCATTER state -> SCATTER.  otherwise, SYNC.
  *   - include base inode in ack for all inodes that saw scatterlock content
  *
+ * also, for scatter gather,
+ *
+ * - auth increments {frag,r}stat.version on completion of any gather.
+ *
+ * - auth incorporates changes in a gather _only_ if the version
+ *   matches.
+ *
+ * - replica discards changes any time the scatterlock syncs, and
+ *   after recovery.
  */
 
 

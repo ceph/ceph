@@ -586,7 +586,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	   p != dirfrags.end();
 	   ++p) {
 	frag_t fg = p->first;
-	CDir *dir = dir;
+	CDir *dir = p->second;
 	if (is_auth() || dir->is_auth()) {
 	  dout(15) << fg << " " << *dir << dendl;
 	  dout(20) << fg << "           fragstat " << dir->fnode.fragstat << dendl;
@@ -758,15 +758,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dirlock.set_updated();
 	  }
 	} else {
-	  if (dir &&
-	      dir->is_auth() &&
-	      !(dir->fnode.accounted_fragstat == fragstat)) {
+	  if (dir && dir->is_auth()) {
 	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
+
 	    dout(10) << fg << " setting accounted_fragstat and setting dirty bit" << dendl;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_fragstat = fragstat;
+	    pf->fragstat.version = fragstat.version;
+	    assert(pf->fragstat == fragstat);
 	    dir->_set_dirty_flag();	    // bit of a hack
 	  }
 	}
@@ -814,17 +815,17 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    nestlock.set_updated();
 	  }
 	} else {
-	  if (dir &&
-	      dir->is_auth() &&
-	      !(dir->fnode.accounted_rstat == rstat)) {
+	  if (dir && dir->is_auth()) {
 	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
 	    
-	    dout(10) << fg << " setting accounted_rstat and setting dirty bit" << dendl;
+	    dout(10) << fg << " resetting accounted_rstat and setting dirty bit" << dendl;
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_rstat = rstat;
-	    dir->dirty_old_rstat.swap(dirty_old_rstat);
+	    pf->rstat.version = rstat.version;
+	    assert(rstat == pf->rstat);
+	    dir->dirty_old_rstat.clear();
 	    dir->_set_dirty_flag();	    // bit of a hack, FIXME?
 	  }
 	}
@@ -878,27 +879,30 @@ void CInode::finish_scatter_gather_update(int type)
       // adjust summation
       assert(is_auth());
       inode_t *pi = get_projected_inode();
+
       bool touched_mtime = false;
-      dout(20) << "         orig dirstat " << pi->dirstat << dendl;
+      dout(20) << "  orig dirstat " << pi->dirstat << dendl;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   p++) {
-	fnode_t *pf = p->second->get_projected_fnode();
-	if (true) { // FIXME pf->accounted_fragstat.version == pi->dirstat.version) {
-	  dout(20) << "  frag " << p->first << " " << *p->second << dendl;
-	  dout(20) << "             fragstat " << pf->fragstat << dendl;
-	  dout(20) << "   accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  pi->dirstat.take_diff(pf->fragstat, 
-				pf->accounted_fragstat, touched_mtime);
+	frag_t fg = p->first;
+	CDir *dir = p->second;
+	dout(20) << fg << " " << *dir << dendl;
+	fnode_t *pf = dir->get_projected_fnode();
+	if (pf->accounted_fragstat.version == pi->dirstat.version) {
+	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
+	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
+	  pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
 	} else {
-	  dout(20) << "  frag " << p->first << " on " << *p->second << dendl;
-	  dout(20) << "    ignoring OLD accounted_fragstat " << pf->accounted_fragstat << dendl;
+	  dout(20) << fg << " skipping OLD accounted_fragstat " << pf->accounted_fragstat << dendl;
+	  pf->accounted_fragstat = pf->fragstat;
 	}
+	pf->fragstat.version = pf->accounted_fragstat.version = pi->dirstat.version + 1;
       }
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       pi->dirstat.version++;
-      dout(20) << "        final dirstat " << pi->dirstat << dendl;
+      dout(20) << " final dirstat " << pi->dirstat << dendl;
       assert(pi->dirstat.size() >= 0);
       assert(pi->dirstat.nfiles >= 0);
       assert(pi->dirstat.nsubdirs >= 0);
@@ -910,23 +914,34 @@ void CInode::finish_scatter_gather_update(int type)
       // adjust summation
       assert(is_auth());
       inode_t *pi = get_projected_inode();
-      dout(20) << "         orig rstat " << pi->rstat << dendl;
+      dout(20) << "  orig rstat " << pi->rstat << dendl;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   p++) {
+	frag_t fg = p->first;
 	CDir *dir = p->second;
+	dout(20) << fg << " " << *dir << dendl;
 	fnode_t *pf = dir->get_projected_fnode();
-	mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
-					     dir->first, CEPH_NOSNAP, this, true);
-	for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
-	     q != dir->dirty_old_rstat.end();
-	     q++)
-	  mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
-					       q->second.first, q->first, this, true);
+	if (pf->accounted_rstat.version == pi->rstat.version) {
+	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
+	  dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
+	  dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
+	  mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
+					       dir->first, CEPH_NOSNAP, this, true);
+	  for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
+	       q != dir->dirty_old_rstat.end();
+	       q++)
+	    mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
+						 q->second.first, q->first, this, true);
+	} else {
+	  dout(20) << fg << " skipping OLD accounted_rstat " << pf->accounted_rstat << dendl;
+	  pf->accounted_rstat = pf->rstat;
+	}
 	dir->dirty_old_rstat.clear();
+	pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version + 1;
       }
       pi->rstat.version++;
-      dout(20) << "       final rstat " << pi->rstat << dendl;
+      dout(20) << " final rstat " << pi->rstat << dendl;
       assert(pi->rstat.rfiles >= 0);
       assert(pi->rstat.rsubdirs >= 0);
     }
