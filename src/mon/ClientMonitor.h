@@ -152,9 +152,9 @@ public:
   };
 
 
-private:
   Map client_map;
 
+private:
   // leader
   Incremental pending_inc;
 
@@ -175,7 +175,7 @@ private:
  public:
   ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
-  //void tick();  // check state, take actions
+  void tick();  // check state, take actions
 
 };
 

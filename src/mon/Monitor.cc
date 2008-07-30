@@ -446,6 +446,7 @@ void Monitor::tick()
   
   osdmon->tick();
   mdsmon->tick();
+  clientmon->tick();
   pgmon->tick();
   
   // next tick!

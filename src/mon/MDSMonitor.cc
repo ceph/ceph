@@ -630,6 +630,7 @@ void MDSMonitor::tick()
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
+  update_from_paxos();
   dout(10) << *this << dendl;
 
   // expand mds cluster?
