@@ -18,14 +18,7 @@ big items
 - libuuid?
 
 
-snapshots
-- rados bits to do clone+write
-  - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
-  - figure out how to fix up rados logging
-  - snap collections
-  - garbage collection
-
-mds
+snaps on mds
 - cap release probably needs ack by mds.  or, mds needs to possibly initiate recovery on import?  no, release should pbly just be acked by mds... like it was way back when... bah!
 
 - scatterlock recovery
@@ -44,6 +37,15 @@ mds
   - build snaprealm for any hardlinked file
   - include snaps for all (primary+remote) parents
 
+snaps on osd
+- clean up snap context packaging..
+  - seq, not just snap list
+  - keep newest object around on osd?
+  - hmm, can we eliminate the snap list for reads?
+  - fix cloning on unlinked file (where snaps=[], but head may have follows_snap attr)
+- figure out how to fix up rados logging
+- snap collections
+- garbage collection
 
 
 userspace client
