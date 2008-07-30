@@ -131,9 +131,9 @@ class MMDSCacheRejoin : public Message {
   int32_t op;
 
   // weak
-  map<dirfrag_t, pair<frag_info_t, frag_info_t> > dirfrag_stat;
   map<dirfrag_t, map<string_snap_t, dn_weak> > weak;
   set<vinodeno_t> weak_inodes;
+  map<inodeno_t, pair<bufferlist,bufferlist> > inode_scatterlocks;
 
   // strong
   map<dirfrag_t, dirfrag_strong> strong_dirfrags;
@@ -194,15 +194,18 @@ class MMDSCacheRejoin : public Message {
     xlocked_inodes[ino][lt] = ri;
   }
 
+  void add_scatterlock_state(CInode *in) {
+    if (inode_scatterlocks.count(in->ino()))
+      return;  // already added this one
+    in->encode_lock_state(CEPH_LOCK_IDIR, inode_scatterlocks[in->ino()].first);
+    in->encode_lock_state(CEPH_LOCK_INEST, inode_scatterlocks[in->ino()].second);
+  }
+
   void copy_cap_exports(bufferlist &bl) {
     cap_export_bl = bl;
   }
   
   // dirfrags
-  void add_dirfrag_stat(dirfrag_t df, const frag_info_t &fs, const frag_info_t &afs) {
-    dirfrag_stat[df].first = fs;
-    dirfrag_stat[df].second = afs;
-  }
   void add_weak_dirfrag(dirfrag_t df) {
     weak[df];
   }
