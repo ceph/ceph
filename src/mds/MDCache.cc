@@ -989,6 +989,14 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   return in;
 }
 
+/*
+ * note: i'm currently cheating wrt dirty and inode.version on cow
+ * items.  instead of doing a full dir predirty, i just take the
+ * original item's version, and set the dirty flag (via
+ * mutation::add_cow_{inode,dentry}() and mutation::apply().  that
+ * means a special case in the dir commit clean sweep assertions.
+ * bah.
+ */
 CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 {
   assert(last >= in->first);

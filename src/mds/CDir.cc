@@ -1525,7 +1525,7 @@ void CDir::_committed(version_t v)
 	}
       } else {
 	dout(15) << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << dendl;
-	assert(in->is_dirty());
+	assert(in->is_dirty() || in->last < CEPH_NOSNAP);  // special case for cow snap items (not predirtied)
       }
     }
   }
