@@ -6591,6 +6591,9 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     // dentry
     CDentry *dn = add_replica_dentry(p, curdir, finished);
     
+    if (p.end())
+      break;
+
     // inode
     cur = add_replica_inode(p, dn, finished);
 
