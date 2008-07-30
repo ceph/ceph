@@ -95,8 +95,6 @@ protected:
 
   xlist<CDentry*>::item xlist_dirty;
 
-  loff_t dir_offset;   
-
   int auth_pins, nested_auth_pins;
 #ifdef MDS_AUTHPIN_SET
   multiset<void*> auth_pin_set;
@@ -128,7 +126,6 @@ public:
     inode(0), dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
-    dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
   CDentry(const nstring& n, inodeno_t ino, unsigned char dt,
@@ -139,7 +136,6 @@ public:
     inode(0), dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
-    dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
 
@@ -147,10 +143,6 @@ public:
   CDir *get_dir() const { return dir; }
   const nstring& get_name() const { return name; }
   inodeno_t get_ino();
-
-  loff_t get_dir_offset() { return dir_offset; }
-  void set_dir_offset(loff_t o) { dir_offset = o; }
-  void clear_dir_offset() { dir_offset = 0; }
 
   inodeno_t get_remote_ino() { return remote_ino; }
   unsigned char get_remote_d_type() { return remote_d_type; }

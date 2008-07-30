@@ -364,8 +364,6 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
     num_snap_null--;
   }
   assert(get_num_any() == items.size());
-
-  dn->clear_dir_offset();
 }
 
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
@@ -374,7 +372,6 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
   assert(dn->is_null());
 
   link_inode_work(dn,in);
-  dn->clear_dir_offset();
   
   if (dn->last == CEPH_NOSNAP)
     num_head_null--;
@@ -418,7 +415,6 @@ void CDir::unlink_inode( CDentry *dn )
     dout(12) << "unlink_inode " << *dn << " " << *dn->inode << dendl;
   }
 
-  dn->clear_dir_offset();
   unlink_inode_work(dn);
 
   if (dn->last == CEPH_NOSNAP)
@@ -1235,9 +1231,6 @@ void CDir::_fetched(bufferlist &bl)
       assert(0);
     }
     
-    // make note of dentry position in the directory
-    dn->dir_offset = dn_offset;
-
     /** clean underwater item?
      * Underwater item is something that is dirty in our cache from
      * journal replay, but was previously flushed to disk before the
