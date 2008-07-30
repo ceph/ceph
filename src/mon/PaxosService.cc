@@ -114,7 +114,7 @@ void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
-  assert(mon->is_leader());
+  assert(mon->is_leader() && paxos->is_active());
 
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);

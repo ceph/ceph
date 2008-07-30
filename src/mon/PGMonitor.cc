@@ -81,12 +81,14 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
 
 void PGMonitor::tick() 
 {
+  if (!mon->is_leader()) return; 
+  if (!paxos->is_active()) return;
+
+  update_from_paxos();
   dout(10) << *this << dendl;
 
   /*
   // magic incantation that Sage told me
-  if (!mon->is_leader()) return; 
-  if (!paxos->is_active()) return;
 
 
   // Is it the nth second? If not, do nothing.

@@ -31,6 +31,11 @@
 #define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client v" << client_map.version << " "
 
 
+ostream& operator<<(ostream& out, ClientMonitor& om)
+{
+  return out << "v" << om.client_map.version << ": "
+	     << om.client_map.client_addr.size() << " clients, next is client" << om.client_map.next_client;
+}
 
 bool ClientMonitor::update_from_paxos()
 {
@@ -247,4 +252,11 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
   }
 }
 
+void ClientMonitor::tick()
+{
+  if (!mon->is_leader()) return;
+  if (!paxos->is_active()) return;
 
+  update_from_paxos();
+  dout(10) << *this << dendl;
+}

@@ -704,10 +704,12 @@ void OSDMonitor::bcast_full_osd()
 
 void OSDMonitor::tick()
 {
-  dout(10) << *this << dendl;
-
   if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
+
+  update_from_paxos();
+  dout(10) << *this << dendl;
+
 
   // mark down osds out?
   utime_t now = g_clock.now();
