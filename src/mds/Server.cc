@@ -2993,8 +2993,8 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     straydn->dir->link_primary_inode(straydn, in);
   }
 
-  mdr->apply();
   dn->mark_dirty(dnpv, mdr->ls);  
+  mdr->apply();
   
   // share unlink news with replicas
   for (map<int,int>::iterator it = dn->replicas_begin();
