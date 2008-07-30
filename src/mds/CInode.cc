@@ -824,7 +824,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    fnode_t *pf = dir->get_projected_fnode();
 	    pf->accounted_rstat = rstat;
 	    pf->rstat.version = rstat.version;
-	    assert(rstat == pf->rstat);
 	    dir->dirty_old_rstat.clear();
 	    dir->_set_dirty_flag();	    // bit of a hack, FIXME?
 	  }

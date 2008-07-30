@@ -1324,6 +1324,22 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
  * probably the best plan anyway, since we avoid too many
  * scatters/locks under normal usage.
  */
+/*
+ * some notes on dirlock/nestlock scatterlock semantics:
+ *
+ * the fragstat (dirlock) will never be updated without
+ * dirlock+nestlock wrlock held by the caller.
+ *
+ * the rstat (nestlock) _may_ get updated without a wrlock when nested
+ * data is pushed up the tree.  this could be changed with some
+ * restructuring here, but in its current form we ensure that the
+ * fragstat+rstat _always_ reflect an accurrate summation over the dir
+ * frag, which is nice.  and, we only need to track frags that need to
+ * be nudged (and not inodes with pending rstat changes that need to
+ * be pushed into the frag).  a consequence of this is that the
+ * accounted_rstat on scatterlock sync may not match our current
+ * rstat.  this is normal and expected.
+ */
 void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
 				       int flags, int linkunlink,
