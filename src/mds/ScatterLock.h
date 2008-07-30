@@ -77,7 +77,7 @@ public:
     updated(false),
     xlistitem_updated(this) {}
 
-  int get_replica_state() {
+  int get_replica_state() const {
     switch (state) {
     case LOCK_SYNC: 
       return LOCK_SYNC;

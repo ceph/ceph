@@ -245,8 +245,9 @@ public:
     ::decode(state, p);
     ::decode(gather_set, p);
   }
-  void encode_state(bufferlist& bl) const {
-    ::encode(state, bl);
+  void encode_state_for_replica(bufferlist& bl) const {
+    __u32 s = get_replica_state();
+    ::encode(s, bl);
   }
   void decode_state(bufferlist::iterator& p, bool is_new=true) {
     if (is_new)
@@ -265,7 +266,7 @@ public:
 
   
   // simplelock specifics
-  int get_replica_state() {
+  virtual int get_replica_state() const {
     switch (state) {
     case LOCK_LOCK:
     case LOCK_GLOCKR: 

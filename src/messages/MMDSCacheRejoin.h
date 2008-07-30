@@ -173,11 +173,12 @@ class MMDSCacheRejoin : public Message {
   void add_strong_inode(vinodeno_t i, int cw, int dl, int nl) {
     strong_inodes[i] = inode_strong(cw, dl, nl);
   }
-  void add_inode_locks(CInode *in, int nonce) {
+  void add_inode_locks(CInode *in, __u32 nonce) {
     ::encode(in->inode.ino, inode_locks);
     ::encode(in->last, inode_locks);
+    ::encode(nonce, inode_locks);
     bufferlist bl;
-    in->_encode_locks_state(bl);
+    in->_encode_locks_state_for_replica(bl);
     inode_locks.claim_append(bl);
   }
   void add_inode_base(CInode *in) {

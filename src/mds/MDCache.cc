@@ -2808,8 +2808,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     int inonce = in->add_replica(from);
     dout(10) << " have base " << *in << dendl;
     
-    if (ack) 
+    if (ack) {
+      ack->add_inode_base(in);
       ack->add_inode_locks(in, inonce);
+    }
   }
 
   if (survivor) {
@@ -3224,7 +3226,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   while (!p.end()) {
     inodeno_t ino;
     snapid_t last;
-    int32_t nonce;
+    __u32 nonce;
     bufferlist lockbl;
     ::decode(ino, p);
     ::decode(last, p);

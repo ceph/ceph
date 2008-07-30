@@ -102,7 +102,7 @@ class FileLock : public SimpleLock {
     SimpleLock(o, t, wo),
     num_wrlock(0) { }
   
-  int get_replica_state() {
+  int get_replica_state() const {
     switch (state) {
     case LOCK_LOCK:
     case LOCK_GLOCKM:

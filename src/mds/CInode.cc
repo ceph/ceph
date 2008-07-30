@@ -1375,16 +1375,16 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(nestlock, p);
 }
 
-void CInode::_encode_locks_state(bufferlist& bl)
+void CInode::_encode_locks_state_for_replica(bufferlist& bl)
 {
-  authlock.encode_state(bl);
-  linklock.encode_state(bl);
-  dirfragtreelock.encode_state(bl);
-  filelock.encode_state(bl);
-  dirlock.encode_state(bl);
-  nestlock.encode_state(bl);
-  xattrlock.encode_state(bl);
-  snaplock.encode_state(bl);
+  authlock.encode_state_for_replica(bl);
+  linklock.encode_state_for_replica(bl);
+  dirfragtreelock.encode_state_for_replica(bl);
+  filelock.encode_state_for_replica(bl);
+  dirlock.encode_state_for_replica(bl);
+  nestlock.encode_state_for_replica(bl);
+  xattrlock.encode_state_for_replica(bl);
+  snaplock.encode_state_for_replica(bl);
 }
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {

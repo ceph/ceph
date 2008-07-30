@@ -1107,7 +1107,7 @@ void CDir::_fetched(bufferlist &bl)
     snapid_t first, last;
     ::decode(first, p);
     ::decode(last, p);
-    dout(24) << "_fetched parsed marker '" << type << "' dname '" << dname
+    dout(24) << "_fetched pos " << dn_offset << " marker '" << type << "' dname '" << dname
 	     << " [" << first << "," << last << "]"
 	     << dendl;
 

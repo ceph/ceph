@@ -378,7 +378,7 @@ private:
     ::encode(nonce, bl);
     
     _encode_base(bl);
-    _encode_locks_state(bl);
+    _encode_locks_state_for_replica(bl);
   }
   void decode_replica(bufferlist::iterator& p, bool is_new) {
     __u32 nonce;
@@ -399,7 +399,7 @@ private:
   void _decode_base(bufferlist::iterator& p);
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
-  void _encode_locks_state(bufferlist& bl);
+  void _encode_locks_state_for_replica(bufferlist& bl);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
   void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
 
