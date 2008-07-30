@@ -632,6 +632,8 @@ void MDSMonitor::tick()
 
   update_from_paxos();
   dout(10) << *this << dendl;
+  
+  bool do_propose = false;
 
   // expand mds cluster?
   int cursize = pending_mdsmap.get_num_in_mds() +
@@ -662,7 +664,7 @@ void MDSMonitor::tick()
     // remove from standby list(s)
     pending_mdsmap.standby.erase(addr);
     pending_mdsmap.standby_any.erase(addr);
-    propose_pending();
+    do_propose = true;
   }
 
   // check beacon timestamps
@@ -733,9 +735,12 @@ void MDSMonitor::tick()
     }
 
     last_beacon.erase(addr);
+    do_propose = true;
+  }
+
+  if (do_propose)
     propose_pending();
   }
-}
 
 
 void MDSMonitor::do_stop()
