@@ -875,6 +875,11 @@ void EExport::replay(MDS *mds)
 // -----------------------
 // EImportStart
 
+void EImportStart::update_segment()
+{
+  _segment->sessionmapv = cmapv;
+}
+
 void EImportStart::replay(MDS *mds)
 {
   dout(10) << "EImportStart.replay " << base << dendl;
@@ -898,6 +903,7 @@ void EImportStart::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;
   }
+  _segment->sessionmapv = cmapv;
 }
 
 // -----------------------
