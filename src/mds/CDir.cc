@@ -1068,13 +1068,17 @@ void CDir::_fetched(bufferlist &bl)
 	   << ", " << len << " bytes"
 	   << dendl;
   
-  int32_t n;
+  __s32 n;
   ::decode(n, p);
-  snapid_t got_snap_purged_thru;
-  ::decode(got_snap_purged_thru, p);
 
-  if (got_snap_purged_thru > snap_purged_thru)
-    snap_purged_thru = got_snap_purged_thru;
+  // take the loaded fnode?
+  // only if we are a fresh CDir* with no prior state.
+  if (get_version() == 0) {
+    assert(!is_projected());
+    assert(!state_test(STATE_COMMITTING));
+    fnode = got_fnode;
+    projected_version = committing_version = committed_version = got_fnode.version;
+  }
 
   // purge stale snaps?
   //  * only if we have past_parents open!
@@ -1082,20 +1086,20 @@ void CDir::_fetched(bufferlist &bl)
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (snap_purged_thru < realm->get_last_destroyed()) {
+  } else if (fnode.snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
-    dout(10) << " snap_purged_thru " << got_snap_purged_thru
+    dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    snap_purged_thru = realm->get_last_destroyed();
+    fnode.snap_purged_thru = realm->get_last_destroyed();
   }
   bool purged_any = false;
 
 
   //int num_new_inodes_loaded = 0;
-
+  loff_t baseoff = p.get_off();
   for (int i=0; i<n; i++) {
-    loff_t dn_offset = p.get_off();
+    loff_t dn_offset = p.get_off() - baseoff;
 
     // marker
     char type;
@@ -1248,28 +1252,19 @@ void CDir::_fetched(bufferlist &bl)
      */
     if (committed_version == 0 &&     
 	dn &&
-	dn->get_version() <= got_fnode.version &&
+	dn->get_version() <= fnode.version &&
 	dn->is_dirty()) {
       dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
       dn->mark_clean();
 
       if (dn->get_inode()) {
-	assert(dn->get_inode()->get_version() <= got_fnode.version);
+	assert(dn->get_inode()->get_version() <= fnode.version);
 	dout(10) << "_fetched  had underwater inode " << *dn->get_inode() << ", marking clean" << dendl;
 	dn->get_inode()->mark_clean();
       }
     }
   }
   //assert(off == len);  FIXME  no, directories may shrink.  add this back in when we properly truncate objects on write.
-
-  // take the loaded fnode?
-  // only if we are a fresh CDir* with no prior state.
-  if (get_version() == 0) {
-    assert(!is_projected());
-    assert(!state_test(STATE_COMMITTING));
-    fnode = got_fnode;
-    projected_version = committing_version = committed_version = got_fnode.version;
-  }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
   //hack_num_accessed = 0;
@@ -1391,22 +1386,17 @@ void CDir::_commit(version_t want)
   const set<snapid_t> *snaps = 0;
   if (!realm->have_past_parents_open()) {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (snap_purged_thru < realm->get_last_destroyed()) {
+  } else if (fnode.snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
-    dout(10) << " snap_purged_thru " << snap_purged_thru
+    dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    snap_purged_thru = realm->get_last_destroyed();
+    fnode.snap_purged_thru = realm->get_last_destroyed();
   }
 
   // encode
   bufferlist bl;
-
-  ::encode(fnode, bl);
-  int32_t n = num_head_items + num_snap_items;
-  ::encode(n, bl);
-  ::encode(snap_purged_thru, bl);
-
+  __u32 n = 0;
   map_t::iterator p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
@@ -1424,7 +1414,7 @@ void CDir::_commit(version_t want)
       }
     }
     
-    n--;
+    n++;
 
     // primary or remote?
     if (dn->is_remote()) {
@@ -1470,16 +1460,22 @@ void CDir::_commit(version_t want)
       ::encode(in->old_inodes, bl);
     }
   }
-  assert(n == 0);
+
+  // header
+  assert(n == (num_head_items + num_snap_items));
+  bufferlist finalbl;
+  ::encode(fnode, finalbl);
+  ::encode(n, finalbl);
+  finalbl.claim_append(bl);
 
   // write it.
   vector<snapid_t> snapvec;
   cache->mds->objecter->write( get_ondisk_object(),
-			       0, bl.length(),
+			       0, finalbl.length(),
 			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										    g_default_mds_dir_layout ),
 			       snapvec,
-			       bl, 0,
+			       finalbl, 0,
 			       NULL, new C_Dir_Committed(this, get_version()) );
 }
 

@@ -377,11 +377,13 @@ WRITE_CLASS_ENCODER(old_inode_t)
  */
 struct fnode_t {
   version_t version;
+  snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
+    ::encode(snap_purged_thru, bl);
     ::encode(fragstat, bl);
     ::encode(accounted_fragstat, bl);
     ::encode(rstat, bl);
@@ -389,6 +391,7 @@ struct fnode_t {
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
+    ::decode(snap_purged_thru, bl);
     ::decode(fragstat, bl);
     ::decode(accounted_fragstat, bl);
     ::decode(rstat, bl);

@@ -207,10 +207,6 @@ protected:
 
   int num_dirty;
 
-public:
-  snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
-protected:
-
   // state
   version_t committing_version;
   version_t committed_version;
