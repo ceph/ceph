@@ -131,7 +131,9 @@ class Node {
 
 class NodePool {
  protected:
-  hash_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
+  //hash_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
+  unordered_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
+  //map<nodeid_t, Node*> node_map;
   
  public:
   vector<extent_t> region_loc;    // region locations
@@ -520,7 +522,9 @@ class NodePool {
 
   void release_all() {
     while (!node_map.empty()) {
-      hash_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
+      //hash_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
+      unordered_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
+      //map<nodeid_t,Node*>::iterator i = node_map.begin();
       debofs(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << dendl;
       release( i->second );
     }
