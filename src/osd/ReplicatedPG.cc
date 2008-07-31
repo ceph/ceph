@@ -1566,23 +1566,15 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 
 
-  // am i primary?  are others missing this too?
   if (is_primary()) {
+    // are others missing this too?
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_missing.count(peer));
       if (peer_missing[peer].is_missing(poid.oid)) 
 	push(poid, peer);  // ok, push it, and they (will) have it now.
     }
-  }
 
-  // kick waiters
-  if (waiting_for_missing_object.count(poid.oid)) {
-    osd->take_waiters(waiting_for_missing_object[poid.oid]);
-    waiting_for_missing_object.erase(poid.oid);
-  }
-
-  if (is_primary()) {
     // continue recovery
     if (info.is_uptodate())
       uptodate_set.insert(osd->get_nodeid());
@@ -1594,6 +1586,12 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
 
   delete op;
+
+  // kick waiters
+  if (waiting_for_missing_object.count(poid.oid)) {
+    osd->take_waiters(waiting_for_missing_object[poid.oid]);
+    waiting_for_missing_object.erase(poid.oid);
+  }
 }
 
 
