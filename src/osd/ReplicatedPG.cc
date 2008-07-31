@@ -1742,8 +1742,12 @@ bool ReplicatedPG::do_recovery()
 
   // done?
   assert(missing.num_missing() == 0);
-  assert(info.last_complete == info.last_update);
   
+  if (info.last_complete != info.last_update) {
+    dout(7) << "do_recovery last_complete " << info.last_complete << " -> " << info.last_update << dendl;
+    info.last_complete = info.last_update;
+  }
+
   if (is_primary()) {
     // i am primary
     uptodate_set.insert(osd->whoami);
