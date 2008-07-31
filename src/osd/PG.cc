@@ -243,46 +243,64 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
     log.log.swap(olog.log);
     log.index();
 
-    // find split point (old log.top) in new log
-    // add new items to missing along the way.
-    for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();
-         p != log.log.rend();
-         p++) {
+    // first, find split point (old log.top) in new log
+    list<Log::Entry>::iterator split = log.log.end();
+    list<Log::Entry>::iterator p = log.log.end();
+    while (p != log.log.begin()) {
+      p--;
       if (p->version <= log.top) {
-        // ok, p is at split point.
-
-        // was our old log divergent?
-        if (log.top > p->version) { 
-          dout(10) << "merge_log i was (possibly) divergent for (" << p->version << "," << log.top << "]" << dendl;
-          if (p->version < oldest_update)
-            oldest_update = p->version;
-          
-          while (!olog.log.empty() && 
-                 olog.log.rbegin()->version > p->version) {
-            Log::Entry &oe = *olog.log.rbegin();  // old entry (possibly divergent)
-            if (log.objects.count(oe.oid)) {
-              if (log.objects[oe.oid]->version < oe.version) {
-                dout(10) << "merge_log  divergent entry " << oe
-                         << " not superceded by " << *log.objects[oe.oid]
-                         << ", adding to missing" << dendl;
-                missing.add_event(oe);
-              } else {
-                dout(10) << "merge_log  divergent entry " << oe
-                         << " superceded by " << *log.objects[oe.oid] 
-                         << ", ignoring" << dendl;
-              }
-            } else {
-              dout(10) << "merge_log  divergent entry " << oe << ", adding to missing" << dendl;
-              missing.add_event(oe);
-            }
-            olog.log.pop_back();  // discard divergent entry
-          }
-        }
-        break;
+	split = p; // p is last entry shared by both logs.
+	dout(10) << "merge_log split point is " << *split << dendl;
+	p++;       // move past the split point, tho...
+	break;
       }
-
-      dout(10) << "merge_log merging " << *p << ", not missing" << dendl;
+    }
+    
+    // first, add new items (_after_ split) to missing
+    for (; p != log.log.end(); p++) {
+      dout(10) << "merge_log merging " << *p << dendl;
       missing.add_event(*p);
+    }
+
+    // was our old log divergent?
+    if (split != log.log.end() && log.top > split->version) {
+      dout(10) << "merge_log i was (possibly) divergent for (" 
+	       << split->version << "," << log.top << "]" << dendl;
+      assert(!olog.log.empty());
+      
+      if (split->version < oldest_update)
+	oldest_update = split->version;
+      
+      // find the same entry in the old log
+      p = olog.log.end();
+      while (p != olog.log.begin()) {
+	p--;
+	if (p->version == split->version)
+	  break;
+      }
+      assert(p->version == split->version);
+
+      /*
+       * FIXME: what if we have a divergent update vs a non-divergent delete?
+       */
+      for (p++; p != olog.log.end(); p++) {
+	Log::Entry &oe = *p;  // old entry (possibly divergent)
+	if (log.objects.count(oe.oid)) {
+	  if (log.objects[oe.oid]->version < oe.version) {
+	    dout(10) << "merge_log  divergent entry " << oe
+		     << " not superceded by " << *log.objects[oe.oid]
+		     << ", adding to missing" << dendl;
+	    missing.add_event(oe);
+	  } else {
+	    dout(10) << "merge_log  divergent entry " << oe
+		       << " superceded by " << *log.objects[oe.oid] 
+		     << ", ignoring" << dendl;
+	  }
+	} else {
+	  dout(10) << "merge_log  divergent entry " << oe << ", adding to missing" << dendl;
+	  missing.add_event(oe);
+	}
+      }
     }
 
     info.last_update = log.top = olog.top;
@@ -1071,6 +1089,13 @@ void PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
   state_set(PG_STATE_CLEAN);
+  assert(info.last_complete == info.last_update);
+
+  ObjectStore::Transaction t;
+  t.collection_setattr(info.pgid, "info", &info, sizeof(info));
+  osd->store->apply_transaction(t);
+  osd->store->sync();
+
   purge_strays();
   update_stats();
 }
