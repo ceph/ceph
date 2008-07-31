@@ -536,6 +536,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   // create collection
   assert(!store->collection_exists(pgid));
   t.create_collection(pgid);
+  pg->write_log(t);
 
   return pg;
 }
