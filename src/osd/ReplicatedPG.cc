@@ -1703,6 +1703,7 @@ bool ReplicatedPG::do_recovery()
            << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
            << dendl;
   dout(10) << "do_recovery " << missing << dendl;
+  dout(15) << "do_recovery " << missing.missing << dendl;
 
   // can we slow down on this PG?
   if (osd->num_pulling >= g_conf.osd_max_pull && !pulling.empty()) {
@@ -1720,7 +1721,9 @@ bool ReplicatedPG::do_recovery()
 
     dout(10) << "do_recovery "
              << *log.requested_to
+	     << (latest->is_update() ? " (update)":"")
              << (pulling.count(latest->oid) ? " (pulling)":"")
+	     << (missing.is_missing(latest->oid) ? " (missing)":"")
              << dendl;
 
     if (latest->is_update() &&
