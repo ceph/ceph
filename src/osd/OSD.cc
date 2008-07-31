@@ -954,6 +954,16 @@ void OSD::heartbeat()
   if (logger) logger->set("hbto", heartbeat_to.size());
   if (logger) logger->set("hbfrom", heartbeat_from.size());
 
+  
+  // hmm.. am i all alone?
+  if (heartbeat_from.empty() || heartbeat_to.empty()) {
+    dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
+    int mon = monmap->pick_mon();
+    messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
+                            monmap->get_inst(mon));
+  }
+
+
   // hack: fake reorg?
   if (osdmap && g_conf.fake_osdmap_updates) {
     int mon = monmap->pick_mon();
