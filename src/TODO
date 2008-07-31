@@ -72,6 +72,8 @@ crush
 - "knob" bucket
 
 pgmon
+- include osd vector with pg state
+  - check for orphan pgs
 - monitor pg states, notify on out?
 - watch osd utilization; adjust overload in cluster map
 

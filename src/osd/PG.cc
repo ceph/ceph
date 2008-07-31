@@ -203,7 +203,7 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
                  << ", ignoring" << dendl;
       } else {
         dout(10) << " divergent " << *pp << ", adding to missing" << dendl;
-        peer_missing[from].add(pp->oid, pp->version);
+        peer_missing[from].add_event(*pp);
       }
 
       ++pp;
@@ -265,7 +265,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
                 dout(10) << "merge_log  divergent entry " << oe
                          << " not superceded by " << *log.objects[oe.oid]
                          << ", adding to missing" << dendl;
-                missing.add(oe.oid, oe.version);
+                missing.add_event(oe);
               } else {
                 dout(10) << "merge_log  divergent entry " << oe
                          << " superceded by " << *log.objects[oe.oid] 
@@ -273,7 +273,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
               }
             } else {
               dout(10) << "merge_log  divergent entry " << oe << ", adding to missing" << dendl;
-              missing.add(oe.oid, oe.version);
+              missing.add_event(oe);
             }
             olog.log.pop_back();  // discard divergent entry
           }
@@ -281,13 +281,8 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
         break;
       }
 
-      if (p->is_delete()) {
-        dout(10) << "merge_log merging " << *p << ", not missing" << dendl;
-        missing.rm(p->oid, p->version);
-      } else {
-        dout(10) << "merge_log merging " << *p << ", now missing" << dendl;
-        missing.add(p->oid, p->version);
-      }
+      dout(10) << "merge_log merging " << *p << ", not missing" << dendl;
+      missing.add_event(*p);
     }
 
     info.last_update = log.top = olog.top;
@@ -319,12 +314,8 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
         dout(15) << *to << dendl;
         
         // new missing object?
-        if (to->version > info.last_complete) {
-          if (to->is_update()) 
-            missing.add(to->oid, to->version);
-          else 
-          missing.rm(to->oid, to->version);
-        }
+        if (to->version > info.last_complete)
+	  missing.add_event(*to);
       }
       assert(to != olog.log.end());
       
@@ -356,10 +347,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
         dout(10) << "merge_log " << *from << dendl;
         
         // add to missing
-        if (from->is_update()) {
-          missing.add(from->oid, from->version);
-        } else
-          missing.rm(from->oid, from->version);
+	missing.add_event(*from);
       }
       
       // remove divergent items
@@ -1010,7 +998,7 @@ void PG::activate(ObjectStore::Transaction& t,
              p != m->log.log.end();
              p++) 
           if (p->version > plu)
-            pm.add(p->oid, p->version);
+            pm.add_event(*p);
       }
       
       if (m) {
@@ -1307,7 +1295,7 @@ void PG::read_log(ObjectStore *store)
     pobject_t poid(info.pgid.pool(), 0, i->oid);
     int r = osd->store->getattr(info.pgid, poid, "version", &v, sizeof(v));
     if (r < 0 || v < i->version) 
-      missing.add(i->oid, i->version);
+      missing.add_event(*i);
   }
 }
 
