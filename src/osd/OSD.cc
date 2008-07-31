@@ -755,12 +755,7 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
   }
 
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
-  for (hash_map<pg_t, list<Message*> >::iterator p = waiting_for_pg.begin();
-       p != waiting_for_pg.end();
-       p++)
-    take_waiters(p->second);
-  waiting_for_pg.clear();
-
+  wake_all_pg_waiters();
 
   // finishers?
   finished_lock.Lock();
@@ -1828,6 +1823,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
   logger->set("numpg", pg_map.size());
 
+  wake_all_pg_waiters();   // the pg mapping may have shifted
+
   update_heartbeat_peers();
 }
 
@@ -2056,10 +2053,8 @@ void OSD::kick_pg_split_queue()
       t.collection_setattr(pg->info.pgid, "info", (char*)&pg->info, sizeof(pg->info));
       pg->write_log(t);
 
-      if (waiting_for_pg.count(pg->info.pgid)) {
-        take_waiters(waiting_for_pg[pg->info.pgid]);
-        waiting_for_pg.erase(pg->info.pgid);
-      }
+      wake_pg_waiters(pg->info.pgid);
+
       pg->peer(t, query_map, &info_map);
       pg->update_stats();
       pg->unlock();
@@ -2191,10 +2186,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     PG *pg = try_create_pg(pgid, t);
     if (pg) {
       created++;
-      if (waiting_for_pg.count(pgid)) {
-        take_waiters(waiting_for_pg[pgid]);
-        waiting_for_pg.erase(pgid);
-      }
+      wake_pg_waiters(pg->info.pgid);
       pg->peer(t, query_map, &info_map);
       pg->update_stats();
       pg->unlock();
@@ -2340,10 +2332,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       dout(10) << *pg << " is new" << dendl;
     
       // kick any waiters
-      if (waiting_for_pg.count(pgid)) {
-        take_waiters(waiting_for_pg[pgid]);
-        waiting_for_pg.erase(pgid);
-      }
+      wake_pg_waiters(pg->info.pgid);
     } else {
       // already had it.  am i (still) the primary?
       pg = _lookup_lock_pg(pgid);
