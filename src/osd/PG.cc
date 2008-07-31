@@ -409,16 +409,16 @@ void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
         missing.loc[p->first] = omissing.loc[p->first];
       } else {
         dout(10) << "proc_missing " << p->first << " " << p->second
-                 << " also LOST on source, osd" << fromosd << dendl;
+                 << " also missing on osd" << fromosd << dendl;
       }
     } 
     else if (p->second <= olog.top) {
       dout(10) << "proc_missing " << p->first << " " << p->second
-               << " is on source, osd" << fromosd << dendl;
+               << " is on osd" << fromosd << dendl;
       missing.loc[p->first] = fromosd;
     } else {
       dout(10) << "proc_missing " << p->first << " " << p->second
-               << " > olog.top " << olog.top << ", not found...."
+               << " > olog.top " << olog.top << ", also missing on osd" << fromosd
                << dendl;
     }
   }
@@ -1102,7 +1102,7 @@ void PG::purge_strays()
       MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
       osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
     } else {
-      dout(10) << "not sending PGRemote to down osd" << *p << dendl;
+      dout(10) << "not sending PGRemove to down osd" << *p << dendl;
     }
     peer_info.erase(*p);
   }

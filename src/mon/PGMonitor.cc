@@ -81,11 +81,12 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
 
 void PGMonitor::tick() 
 {
-  if (!mon->is_leader()) return; 
   if (!paxos->is_active()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
+
+  if (!mon->is_leader()) return; 
 
   /*
   // magic incantation that Sage told me
@@ -151,7 +152,8 @@ bool PGMonitor::update_from_paxos()
       paxosv > 10)
     paxos->trim_to(paxosv-10);
 
-  send_pg_creates();
+  if (mon->is_leader())
+    send_pg_creates();
 
   return true;
 }

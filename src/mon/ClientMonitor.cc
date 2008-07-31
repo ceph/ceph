@@ -254,9 +254,12 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
 
 void ClientMonitor::tick()
 {
-  if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
+
+  if (!mon->is_leader()) return;
+
+  // ...
 }

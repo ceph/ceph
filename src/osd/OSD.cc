@@ -502,6 +502,8 @@ int OSD::read_superblock()
 
 PG *OSD::_open_lock_pg(pg_t pgid)
 {
+  assert(osd_lock.is_locked());
+
   // create
   PG *pg;
   if (pgid.is_rep())
@@ -522,6 +524,7 @@ PG *OSD::_open_lock_pg(pg_t pgid)
 
 PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 {
+  assert(osd_lock.is_locked());
   dout(10) << "_create_lock_pg " << pgid << dendl;
 
   if (pg_map.count(pgid)) 
@@ -559,11 +562,13 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
 
 bool OSD::_have_pg(pg_t pgid)
 {
+  assert(osd_lock.is_locked());
   return pg_map.count(pgid);
 }
 
 PG *OSD::_lookup_lock_pg(pg_t pgid)
 {
+  assert(osd_lock.is_locked());
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
   pg->lock();
@@ -573,6 +578,7 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
 
 void OSD::_remove_unlock_pg(PG *pg) 
 {
+  assert(osd_lock.is_locked());
   pg_t pgid = pg->info.pgid;
 
   dout(10) << "_remove_unlock_pg " << pgid << dendl;
@@ -604,6 +610,7 @@ void OSD::_remove_unlock_pg(PG *pg)
 
 void OSD::load_pgs()
 {
+  assert(osd_lock.is_locked());
   dout(10) << "load_pgs" << dendl;
   assert(pg_map.empty());
 
@@ -732,6 +739,8 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
  */
 void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 {
+  assert(osd_lock.is_locked());
+
   if (pg_map.count(pgid)) {
     PG *pg = _lookup_lock_pg(pgid);
     if (pg->is_crashed() &&
@@ -852,6 +861,13 @@ void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
 
 void OSD::update_heartbeat_peers()
 {
+  assert(osd_lock.is_locked());
+
+  // filter heartbeat_from_stamp to only include osds that remain in
+  // heartbeat_from.
+  map<int, utime_t> stamps;
+  stamps.swap(heartbeat_from_stamp);
+
   // build heartbeat to/from set
   heartbeat_to.clear();
   heartbeat_from.clear();
@@ -868,8 +884,11 @@ void OSD::update_heartbeat_peers()
     else if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
       for (unsigned i=1; i<pg->acting.size(); i++) {
-	assert(pg->acting[i] != whoami);
-	heartbeat_from.insert(pg->acting[i]);
+	int p = pg->acting[i]; // peer
+	assert(p != whoami);
+	heartbeat_from.insert(p);
+	if (stamps.count(p))
+	  heartbeat_from_stamp[p] = stamps[p];
       }
     }
   }
@@ -1071,6 +1090,8 @@ void OSD::send_failures()
 
 void OSD::send_pg_stats()
 {
+  assert(osd_lock.is_locked());
+
   dout(10) << "send_pg_stats" << dendl;
 
   // grab queue
@@ -1393,6 +1414,7 @@ void OSD::note_up_osd(int osd)
 
 void OSD::handle_osd_map(MOSDMap *m)
 {
+  assert(osd_lock.is_locked());
   if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
     delete m;
@@ -1596,6 +1618,8 @@ void OSD::handle_osd_map(MOSDMap *m)
  */
 void OSD::advance_map(ObjectStore::Transaction& t)
 {
+  assert(osd_lock.is_locked());
+
   dout(7) << "advance_map epoch " << osdmap->get_epoch() 
           << "  " << pg_map.size() << " pgs"
           << dendl;
@@ -1753,6 +1777,8 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
 void OSD::activate_map(ObjectStore::Transaction& t)
 {
+  assert(osd_lock.is_locked());
+
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
   map< int, list<PG::Info> >  notify_list;  // primary -> list
@@ -2446,7 +2472,6 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       // merge log
       pg->merge_log(log, missing, from);
       pg->proc_missing(log, missing, from);
-      assert(pg->missing.num_lost() == 0);
       
       // ok activate!
       pg->activate(t, info_map);
@@ -2508,6 +2533,8 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
  */
 void OSD::handle_pg_query(MOSDPGQuery *m) 
 {
+  assert(osd_lock.is_locked());
+
   dout(7) << "handle_pg_query from " << m->get_source() << " epoch " << m->get_epoch() << dendl;
   int from = m->get_source().num();
   
@@ -2629,6 +2656,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
 void OSD::handle_pg_remove(MOSDPGRemove *m)
 {
+  assert(osd_lock.is_locked());
+
   dout(7) << "handle_pg_remove from " << m->get_source() << dendl;
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
@@ -2645,11 +2674,16 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     }
 
     pg = _lookup_lock_pg(pgid);
-
-    dout(10) << *pg << " removing." << dendl;
-    assert(pg->get_role() == -1);
-    
-    _remove_unlock_pg(pg);
+    if (pg->info.history.same_since <= m->get_epoch()) {
+      dout(10) << *pg << " removing." << dendl;
+      assert(pg->get_role() == -1);
+      assert(pg->get_primary() == m->get_source().num());
+      _remove_unlock_pg(pg);
+    } else {
+      dout(10) << *pg << " ignoring remove request, pg changed in epoch "
+	       << pg->info.history.same_since << " > " << m->get_epoch() << dendl;
+      pg->unlock();
+    }
   }
 
   delete m;

@@ -1422,7 +1422,17 @@ void Rank::Pipe::reader()
 	continue;
       }
       in_seq++;
-      assert(in_seq == m->get_seq());
+
+      if (in_seq != m->get_seq()) {
+	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
+		<< " for " << *m << " from " << m->get_source() << dendl;
+	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
+		<< " for " << *m << " from " << m->get_source() << dendl;
+	assert(in_seq == m->get_seq()); // for now!
+	fault();
+	delete m;
+	continue;
+      }
 
       if (in_seq == 1) 
 	policy = rank.policy_map[m->get_source().type()];  /* apply policy */

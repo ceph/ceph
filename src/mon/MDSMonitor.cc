@@ -132,25 +132,27 @@ bool MDSMonitor::update_from_paxos()
   dout(4) << "new map" << dendl;
   print_map(mdsmap, 0);
 
-  // bcast map to mds, waiters
-  if (mon->is_leader())
+  if (mon->is_leader()) {
+    // bcast map to mds
     bcast_latest_mds();
-  send_to_waiting();
 
-  // make sure last_beacon is populated
-  for (map<int32_t,entity_inst_t>::iterator p = mdsmap.mds_inst.begin();
-       p != mdsmap.mds_inst.end();
-       ++p) 
-    if (last_beacon.count(p->second.addr) == 0 &&
-	mdsmap.get_state(p->first) != MDSMap::STATE_DNE &&
-	mdsmap.get_state(p->first) != MDSMap::STATE_STOPPED &&
-	mdsmap.get_state(p->first) != MDSMap::STATE_FAILED)
-      last_beacon[p->second.addr] = g_clock.now();
-  for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
-       p != mdsmap.standby.end();
-       ++p )
-    if (last_beacon.count(p->first) == 0)
-      last_beacon[p->first] = g_clock.now();
+    // make sure last_beacon is populated
+    for (map<int32_t,entity_inst_t>::iterator p = mdsmap.mds_inst.begin();
+	 p != mdsmap.mds_inst.end();
+	 ++p) 
+      if (last_beacon.count(p->second.addr) == 0 &&
+	  mdsmap.get_state(p->first) != MDSMap::STATE_DNE &&
+	  mdsmap.get_state(p->first) != MDSMap::STATE_STOPPED &&
+	  mdsmap.get_state(p->first) != MDSMap::STATE_FAILED)
+	last_beacon[p->second.addr] = g_clock.now();
+    for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
+	 p != mdsmap.standby.end();
+	 ++p )
+      if (last_beacon.count(p->first) == 0)
+	last_beacon[p->first] = g_clock.now();
+  }
+
+  send_to_waiting();
 
   return true;
 }
@@ -627,13 +629,14 @@ void MDSMonitor::tick()
 {
   // make sure mds's are still alive
   // ...if i am an active leader
-  if (!mon->is_leader()) return;
   if (!paxos->is_active()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
   
   bool do_propose = false;
+
+  if (!mon->is_leader()) return;
 
   // expand mds cluster?
   int cursize = pending_mdsmap.get_num_in_mds() +

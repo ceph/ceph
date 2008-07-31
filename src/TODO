@@ -6,6 +6,8 @@ v0.4
 - make kclient use ->sendpage?
 - rip out io interruption?
 
+bugs
+- journal assert(header.wrap) in print_header()
 
 big items
 - ENOSPC
