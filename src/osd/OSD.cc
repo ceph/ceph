@@ -863,6 +863,11 @@ void OSD::update_heartbeat_peers()
 {
   assert(osd_lock.is_locked());
 
+  // filter heartbeat_from_stamp to only include osds that remain in
+  // heartbeat_from.
+  map<int, utime_t> stamps;
+  stamps.swap(heartbeat_from_stamp);
+
   // build heartbeat to/from set
   heartbeat_to.clear();
   heartbeat_from.clear();
@@ -879,8 +884,11 @@ void OSD::update_heartbeat_peers()
     else if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
       for (unsigned i=1; i<pg->acting.size(); i++) {
-	assert(pg->acting[i] != whoami);
-	heartbeat_from.insert(pg->acting[i]);
+	int p = pg->acting[i]; // peer
+	assert(p != whoami);
+	heartbeat_from.insert(p);
+	if (stamps.count(p))
+	  heartbeat_from_stamp[p] = stamps[p];
       }
     }
   }
