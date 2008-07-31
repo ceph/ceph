@@ -617,11 +617,11 @@ protected:
   set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
-  map<vinodeno_t,map<int,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
-  map<vinodeno_t,string> cap_export_paths;
+  map<inodeno_t,map<int,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
+  map<inodeno_t,string> cap_export_paths;
 
-  map<vinodeno_t,map<int,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<vinodeno_t,string> cap_import_paths;
+  map<inodeno_t,map<int,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
+  map<inodeno_t,string> cap_import_paths;
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
@@ -641,14 +641,14 @@ protected:
 public:
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
-  void rejoin_export_caps(vinodeno_t vino, int client, cap_reconnect_t& icr) {
-    cap_exports[vino][client] = icr.capinfo;
-    cap_export_paths[vino] = icr.path;
+  void rejoin_export_caps(inodeno_t ino, int client, cap_reconnect_t& icr) {
+    cap_exports[ino][client] = icr.capinfo;
+    cap_export_paths[ino] = icr.path;
   }
-  void rejoin_recovered_caps(vinodeno_t vino, int client, cap_reconnect_t& icr, 
+  void rejoin_recovered_caps(inodeno_t ino, int client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
-    cap_imports[vino][client][frommds] = icr.capinfo;
-    cap_import_paths[vino] = icr.path;
+    cap_imports[ino][client][frommds] = icr.capinfo;
+    cap_import_paths[ino] = icr.path;
   }
   void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);
 
@@ -822,7 +822,7 @@ public:
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
 
-  C_Gather *parallel_fetch(map<vinodeno_t,string>& pathmap);
+  C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   

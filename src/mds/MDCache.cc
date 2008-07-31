@@ -2717,7 +2717,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
 
     // check cap exports
-    for (map<vinodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
+    for (map<inodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
@@ -2733,7 +2733,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     assert(mds->is_rejoin());
 
     // check cap exports.
-    for (map<vinodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
+    for (map<inodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
@@ -2869,13 +2869,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
  * returns a C_Gather* is there is work to do.  caller is responsible for setting
  * the C_Gather completer.
  */
-C_Gather *MDCache::parallel_fetch(map<vinodeno_t,string>& pathmap)
+C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
   // scan list
   set<CDir*> fetch_queue;
-  map<vinodeno_t,string>::iterator p = pathmap.begin();
+  map<inodeno_t,string>::iterator p = pathmap.begin();
   while (p != pathmap.end()) {
     CInode *in = get_inode(p->first);
     if (in) {
@@ -3434,7 +3434,7 @@ void MDCache::rejoin_gather_finish()
   
   // process cap imports
   //  ino -> client -> frommds -> capex
-  for (map<vinodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
+  for (map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
        p != cap_imports.end();
        ++p) {
     CInode *in = get_inode(p->first);
@@ -3476,7 +3476,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& 
   // send IMPORT
   SnapRealm *realm = in->find_snaprealm();
   MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
-					      in->inode, in->last,
+					      in->inode,
 					      realm->inode->ino(),
 					      cap->get_last_seq(),
 					      cap->pending(),

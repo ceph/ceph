@@ -541,13 +541,14 @@ struct cap_reconnect_t {
   ceph_mds_cap_reconnect capinfo;
 
   cap_reconnect_t() {}
-  cap_reconnect_t(const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at) : 
+  cap_reconnect_t(const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at, inodeno_t sr) : 
     path(p) {
     capinfo.wanted = w;
     capinfo.issued = i;
     capinfo.size = sz;
     capinfo.mtime = mt;
     capinfo.atime = at;
+    capinfo.snaprealm = sr;
   }
 
   void encode(bufferlist& bl) const {
@@ -560,6 +561,7 @@ struct cap_reconnect_t {
   }
 };
 WRITE_CLASS_ENCODER(cap_reconnect_t)
+
 
 
 // ================================================================

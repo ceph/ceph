@@ -118,6 +118,7 @@ WRITE_RAW_ENCODER(ceph_mds_lease)
 WRITE_RAW_ENCODER(ceph_mds_reply_head)
 WRITE_RAW_ENCODER(ceph_mds_reply_inode)
 WRITE_RAW_ENCODER(ceph_mds_cap_reconnect)
+WRITE_RAW_ENCODER(ceph_mds_snaprealm_reconnect)
 WRITE_RAW_ENCODER(ceph_frag_tree_split)
 WRITE_RAW_ENCODER(ceph_inopath_item)
 

@@ -619,7 +619,7 @@ bool Locker::issue_caps(CInode *in)
 		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
 		<< dendl;
         mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
-						     in->inode, in->last,
+						     in->inode,
 						     in->find_snaprealm()->inode->ino(),
 						     cap->get_last_seq(),
 						     cap->pending(),
@@ -642,7 +642,7 @@ void Locker::issue_truncate(CInode *in)
        it++) {
     Capability *cap = it->second;
     mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_TRUNC,
-						 in->inode, in->last,
+						 in->inode,
 						 in->find_snaprealm()->inode->ino(),
 						 cap->get_last_seq(),
 						 cap->pending(),
@@ -902,7 +902,7 @@ void Locker::share_inode_max_size(CInode *in)
     if (cap->pending() & CEPH_CAP_WR) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
       mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
-						   in->inode, in->last,
+						   in->inode,
 						   in->find_snaprealm()->inode->ino(),
 						   cap->get_last_seq(),
 						   cap->pending(),

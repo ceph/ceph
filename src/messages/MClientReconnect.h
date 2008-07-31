@@ -20,8 +20,9 @@
 
 class MClientReconnect : public Message {
 public:
-  map<vinodeno_t, cap_reconnect_t>  caps;
   __u8 closed;  // true if this session was closed by the client.
+  map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
+  map<inodeno_t, ceph_mds_snaprealm_reconnect> realms;
 
   MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT),
 		       closed(false) { }
@@ -33,10 +34,15 @@ public:
 	<< caps.size() << " caps)";
   }
 
-  void add_cap(vinodeno_t ino, const string& path,
+  void add_cap(inodeno_t ino, const string& path,
 	       int wanted, int issued,
-	       loff_t sz, utime_t mt, utime_t at) {
-    caps[ino] = cap_reconnect_t(path, wanted, issued, sz, mt, at);
+	       loff_t sz, utime_t mt, utime_t at,
+	       inodeno_t sr) {
+    caps[ino] = cap_reconnect_t(path, wanted, issued, sz, mt, at, sr);
+  }
+  void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
+    realms[ino].seq = seq;
+    realms[ino].parent = parent;
   }
 
   void encode_payload() {

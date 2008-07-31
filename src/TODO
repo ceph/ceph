@@ -28,6 +28,15 @@ snaps on mds
 - client reconnect
   - esp cap claim
 
+- client snap caps
+  - NO CAP STATE FOR SNAPPED INODES.  
+  - mds grants open access (yes/no), but there is no state, since there is no concurrency.
+    (mds doesn't grant access until filelock it is readable, i.e., snapped data has flushed)
+  - client _should_ only send FLUSHSNAP _after_ data is flushed.  this will require much more sophisticated barriers in the client's cache.
+  - reconnect should map caps into snaprealms, and include snaprealm state, such that those can be brought in sync w/ the mds.
+  - reconnect does _not_ need any per-cap snap-related info.
+
+
 /- call open_parents() where needed.
   - what about during recovery?  e.g. client reconnected caps...
 - mds server ops

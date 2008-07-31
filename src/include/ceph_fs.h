@@ -808,7 +808,6 @@ inline static const char* ceph_cap_op_name(int op) {
 struct ceph_mds_file_caps {
 	__le32 op;
 	__le64 ino;
-	__le64 snapid;
 	__le32 seq;
 	__le32 caps, wanted;
 	__le64 size, max_size;
@@ -837,9 +836,14 @@ struct ceph_mds_cap_reconnect {
 	__le32 issued;
 	__le64 size;
 	struct ceph_timespec mtime, atime;
+	__le64 snaprealm;
 } __attribute__ ((packed));
 /* followed by encoded string */
 
+struct ceph_mds_snaprealm_reconnect {
+	__le64 seq;
+	__le64 parent;  /* parent realm */
+} __attribute__ ((packed));
 
 /*
  * snaps
