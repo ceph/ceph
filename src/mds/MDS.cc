@@ -655,8 +655,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 	handle_mds_recovery(*p);
   }
 
-  // did someone fail or stop?
-  if (is_active() || is_stopping()) {
+  // did someone fail?
+  if (true) {
     // new failed?
     set<int> oldfailed, failed;
     oldmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
@@ -664,7 +664,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
       if (oldfailed.count(*p) == 0)
 	mdcache->handle_mds_failure(*p);
-
+    
     // or down then up?
     //  did their addr/inst change?
     set<int> up;
@@ -673,7 +673,8 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (oldmap->have_inst(*p) &&
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
 	mdcache->handle_mds_failure(*p);
-
+  }
+  if (is_active() || is_stopping()) {
     // did anyone stop?
     set<int> oldstopped, stopped;
     oldmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);

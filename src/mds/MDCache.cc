@@ -136,7 +136,7 @@ void MDCache::log_stat(Logger *logger)
 bool MDCache::shutdown()
 {
   if (lru.lru_get_size() > 0) {
-    dout(7) << "WARNING: mdcache shutodwn with non-empty cache" << dendl;
+    dout(7) << "WARNING: mdcache shutdown with non-empty cache" << dendl;
     //show_cache();
     show_subtrees();
     //dump();
@@ -2305,6 +2305,12 @@ void MDCache::recalc_auth_bits()
 {
   dout(7) << "recalc_auth_bits" << dendl;
 
+  set<CInode*> subtree_inodes;
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p)
+    subtree_inodes.insert(p->first->inode);      
+
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
@@ -2352,6 +2358,12 @@ void MDCache::recalc_auth_bits()
 	    dn->inode->state_clear(CInode::STATE_AUTH);
 	    if (dn->inode->is_dirty())
 	      dn->inode->mark_clean();
+	    // avoid touching scatterlocks for our subtree roots!
+	    if (subtree_inodes.count(dn->inode) == 0) {
+	      dn->inode->dirlock.clear_updated();
+	      dn->inode->nestlock.clear_updated();
+	      dn->inode->dirfragtreelock.clear_updated();
+	    }
 	  }
 
 	  // recurse?
@@ -3226,12 +3238,14 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     if (!in) continue;
     bufferlist::iterator q = basebl.begin();
     in->_decode_base(q);
-    dout(10) << " got inode content " << *in << dendl;
+    dout(10) << " got inode base " << *in << dendl;
   }
 
   // inodes
   p = ack->inode_locks.begin();
+  dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
   while (!p.end()) {
+    dout(10) << " p pos is " << p.get_off() << dendl;
     inodeno_t ino;
     snapid_t last;
     __u32 nonce;
@@ -3240,14 +3254,14 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     ::decode(last, p);
     ::decode(nonce, p);
     ::decode(lockbl, p);
-
+    
     CInode *in = get_inode(ino, last);
     if (!in) continue;
     in->set_replica_nonce(nonce);
     bufferlist::iterator q = lockbl.begin();
     in->_decode_locks_rejoin(q, waiters);
     in->state_clear(CInode::STATE_REJOINING);
-    dout(10) << " got " << *in << dendl;
+    dout(10) << " got inode locks " << *in << dendl;
   }
 
   // done?
@@ -5076,9 +5090,9 @@ bool MDCache::path_is_mine(filepath& path)
 {
   dout(15) << "path_is_mine " << path << dendl;
   
-  // start at root.  FIXME.
-  CInode *cur = root;
-  assert(cur);
+  CInode *cur = get_inode(path.get_ino());
+  if (!cur)
+    return false;  // who knows!
 
   for (unsigned i=0; i<path.depth(); i++) {
     dout(15) << "path_is_mine seg " << i << ": " << path[i] << " under " << *cur << dendl;
@@ -5171,12 +5185,15 @@ int MDCache::inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item> &inopath
  *
  * @path - path to traverse (as far as we can)
  *
- * assumes we _don't_ have the full path.  (if we do, we return NULL.)
+ * assumes we _don't_ have the full path.  (if we do, we throw an assertion.)
+ * assumes that we are path for the path (we open dirfrags willy-nilly).
  */
 CDir *MDCache::path_traverse_to_dir(filepath& path)
 {
-  CInode *cur = root;
-  assert(cur);
+  CInode *cur = get_inode(path.get_ino());
+  if (!cur)
+    return 0;   // useless!
+
   for (unsigned i=0; i<path.depth(); i++) {
     dout(20) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << dendl;
     frag_t fg = cur->pick_dirfrag(path[i]);
@@ -5186,8 +5203,8 @@ CDir *MDCache::path_traverse_to_dir(filepath& path)
     assert(dn->is_primary());
     cur = dn->get_inode();
   }
-
-  return NULL; // oh, we have the full path.
+  assert(0);
+  //return NULL; // oh, we have the full path.
 }
 
 
