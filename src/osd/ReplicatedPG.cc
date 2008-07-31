@@ -1748,6 +1748,9 @@ bool ReplicatedPG::do_recovery()
     info.last_complete = info.last_update;
   }
 
+  log.complete_to == log.log.end();
+  log.requested_to = log.log.end();
+
   if (is_primary()) {
     // i am primary
     uptodate_set.insert(osd->whoami);
