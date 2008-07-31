@@ -392,23 +392,28 @@ public:
   public:
     class iterator {
       list *bl;
-      std::list<ptr> &ls;
+      std::list<ptr> *ls; // meh.. just here to avoid an extra pointer dereference..
       unsigned off;  // in bl
       std::list<ptr>::iterator p;
       unsigned p_off; // in *p
     public:
       // constructor.  position.
       iterator(list *l, unsigned o=0) : 
-	bl(l), ls(bl->_buffers), off(0), p(ls.begin()), p_off(0) {
+	bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
 	advance(o);
       }
       iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
-	bl(l), ls(bl->_buffers), off(o), p(ip), p_off(po) { }
+	bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) { }
 
+      iterator(const iterator& other) : bl(other.bl),
+					ls(other.ls),
+					off(other.off),
+					p(other.p),
+					p_off(other.p_off) {}
       iterator operator=(const iterator& other) {
 	if (this != &other) {
 	  bl = other.bl;
-	  ls = bl->_buffers;
+	  ls = other.ls;
 	  off = other.off;
 	  p = other.p;
 	  p_off = other.p_off;
@@ -419,14 +424,15 @@ public:
       unsigned get_off() { return off; }
 
       bool end() {
-	return p == ls.end();
+	return p == ls->end();
+	//return off == bl->length();
       }
 
       void advance(unsigned o) {
 	//cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
 	p_off += o;
 	while (p_off > 0) {
-	  assert(p != ls.end());
+	  assert(p != ls->end());
 	  if (p_off >= p->length()) {
 	    // skip this buffer
 	    p_off -= p->length();
@@ -441,17 +447,17 @@ public:
 
       void seek(unsigned o) {
 	//cout << this << " seek " << o << std::endl;
-	p = ls.begin();
+	p = ls->begin();
 	off = p_off = 0;
 	advance(o);
       }
 
       char operator*() {
-	assert(p != ls.end());
+	assert(p != ls->end());
 	return (*p)[p_off];
       }
       iterator& operator++() {
-	assert(p != ls.end());
+	assert(p != ls->end());
 	advance(1);
 	return *this;
       }
@@ -460,9 +466,9 @@ public:
       // note that these all _append_ to dest!
 
       void copy(unsigned len, char *dest) {
-	if (p == ls.end()) seek(off);
+	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls.end());
+	  assert(p != ls->end());
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -475,9 +481,9 @@ public:
       }
 
       void copy(unsigned len, list &dest) {
-	if (p == ls.end()) seek(off);
+	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls.end());
+	  assert(p != ls->end());
 	  
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -489,9 +495,9 @@ public:
       }
 
       void copy(unsigned len, std::string &dest) {
-	if (p == ls.end()) seek(off);
+	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls.end());
+	  assert(p != ls->end());
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -506,9 +512,9 @@ public:
 
       void copy_in(unsigned len, const char *src) {
 	// copy
-	if (p == ls.end()) seek(off);
+	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls.end());
+	  assert(p != ls->end());
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -521,7 +527,7 @@ public:
       }
 
       void copy_in(unsigned len, const list& otherl) {
-	if (p == ls.end()) seek(off);
+	if (p == ls->end()) seek(off);
 	unsigned left = len;
 	for (std::list<ptr>::const_iterator i = otherl._buffers.begin();
 	     i != otherl._buffers.end();
