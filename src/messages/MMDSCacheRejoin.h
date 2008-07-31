@@ -179,14 +179,14 @@ class MMDSCacheRejoin : public Message {
     ::encode(nonce, inode_locks);
     bufferlist bl;
     in->_encode_locks_state_for_replica(bl);
-    inode_locks.claim_append(bl);
+    ::encode(bl, inode_locks);
   }
   void add_inode_base(CInode *in) {
     ::encode(in->inode.ino, inode_base);
     ::encode(in->last, inode_base);
     bufferlist bl;
     in->_encode_base(bl);
-    inode_base.claim_append(bl);
+    ::encode(bl, inode_base);
   }
   void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri) {
     authpinned_inodes[ino] = ri;
