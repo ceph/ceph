@@ -1213,15 +1213,15 @@ void Client::send_reconnect(int mds)
 		 << " " << cap_string(in->caps[mds]->issued)
 		 << " wants " << cap_string(in->caps_wanted())
 		 << dendl;
-	in->caps[mds]->seq = 0;  // reset seq.
-	m->add_inode_caps(p->first.ino,    // ino
-			  in->caps_wanted(), // wanted
-			  in->caps[mds]->issued,     // issued
-			  in->inode.size, in->inode.mtime, in->inode.atime);
 	filepath path;
 	in->make_path(path);
 	dout(10) << " path on " << p->first << " is " << path << dendl;
-	m->add_inode_path(p->first.ino, path.get_path());
+
+	in->caps[mds]->seq = 0;  // reset seq.
+	m->add_cap(p->first, path.get_path(),   // ino
+		   in->caps_wanted(), // wanted
+		   in->caps[mds]->issued,     // issued
+		   in->inode.size, in->inode.mtime, in->inode.atime);
       }
       if (in->exporting_mds == mds) {
 	dout(10) << " clearing exporting_caps on " << p->first << dendl;
@@ -1441,7 +1441,7 @@ void Client::check_caps(Inode *in, bool flush_snap)
       op = CEPH_CAP_OP_RELEASE;
     dout(10) << "  op = " << op << dendl;
     MClientFileCaps *m = new MClientFileCaps(op,
-					     in->inode, 
+					     in->inode, in->snapid,
 					     0,
                                              cap->seq,
                                              cap->issued,

@@ -807,9 +807,10 @@ inline static const char* ceph_cap_op_name(int op) {
 
 struct ceph_mds_file_caps {
 	__le32 op;
+	__le64 ino;
+	__le64 snapid;
 	__le32 seq;
 	__le32 caps, wanted;
-	__le64 ino;
 	__le64 size, max_size;
 	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;

@@ -376,46 +376,46 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   } else {
     
     // caps
-    for (map<inodeno_t, inode_caps_reconnect_t>::iterator p = m->inode_caps.begin();
-	 p != m->inode_caps.end();
+    for (map<vinodeno_t, cap_reconnect_t>::iterator p = m->caps.begin();
+	 p != m->caps.end();
 	 ++p) {
       CInode *in = mdcache->get_inode(p->first);
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
 	dout(15) << "open caps on " << *in << dendl;
-	Capability *cap = in->reconnect_cap(from, p->second);
+	Capability *cap = in->reconnect_cap(from, p->second.capinfo);
 	session->touch_cap(cap);
 	reconnected_caps.insert(in);
 	continue;
       }
       
-      filepath path = m->inode_path[p->first];
+      filepath path = p->second.path;
       if ((in && !in->is_auth()) ||
 	  !mds->mdcache->path_is_mine(path)) {
 	// not mine.
-	dout(0) << "non-auth " << p->first << " " << m->inode_path[p->first]
+	dout(0) << "non-auth " << p->first << " " << path
 		<< ", will pass off to authority" << dendl;
 	
 	// mark client caps stale.
 	inode_t fake_inode;
 	memset(&fake_inode, 0, sizeof(fake_inode));
-	fake_inode.ino = p->first;
+	fake_inode.ino = p->first.ino;
 	MClientFileCaps *stale = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
-						     fake_inode, 
+						     fake_inode, p->first.snapid,
 						     0,
 						     0,
 						     0,                // doesn't matter.
-						     p->second.wanted, // doesn't matter.
+						     p->second.capinfo.wanted, // doesn't matter.
 						     0);  // FIXME get proper mseq here?  hmm.
 	mds->send_message_client(stale, m->get_source_inst());
 
 	// add to cap export list.
-	mdcache->rejoin_export_caps(p->first, m->inode_path[p->first], from, p->second);
+	mdcache->rejoin_export_caps(p->first, from, p->second);
       } else {
 	// mine.  fetch later.
-	dout(0) << "missing " << p->first << " " << m->inode_path[p->first]
+	dout(0) << "missing " << p->first << " " << path
 		<< " (mine), will load later" << dendl;
-	mdcache->rejoin_recovered_caps(p->first, m->inode_path[p->first], from, p->second, 
+	mdcache->rejoin_recovered_caps(p->first, from, p->second, 
 				       -1);  // "from" me.
       }
     }

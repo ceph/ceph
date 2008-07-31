@@ -535,36 +535,31 @@ namespace __gnu_cxx {
 }
 
 
-// inode caps info for client reconnect
-struct inode_caps_reconnect_t {
-  int32_t wanted;
-  int32_t issued;
-  uint64_t size;
-  utime_t mtime, atime;
+// cap info for client reconnect
+struct cap_reconnect_t {
+  string path;
+  ceph_mds_cap_reconnect capinfo;
 
-  inode_caps_reconnect_t() {}
-  inode_caps_reconnect_t(int w, int i) : 
-    wanted(w), issued(i), size(0) {}
-  inode_caps_reconnect_t(int w, int i, uint64_t sz, utime_t mt, utime_t at) : 
-    wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
+  cap_reconnect_t() {}
+  cap_reconnect_t(const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at) : 
+    path(p) {
+    capinfo.wanted = w;
+    capinfo.issued = i;
+    capinfo.size = sz;
+    capinfo.mtime = mt;
+    capinfo.atime = at;
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(path, bl);
+    ::encode(capinfo, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(path, bl);
+    ::decode(capinfo, bl);
+  }
 };
-
-static inline void encode(const inode_caps_reconnect_t &ic, bufferlist &bl)
-{
-  ::encode(ic.wanted, bl);
-  ::encode(ic.issued, bl);
-  ::encode(ic.size, bl);
-  ::encode(ic.mtime, bl);
-  ::encode(ic.atime, bl);
-}
-static inline void decode(inode_caps_reconnect_t &ic, bufferlist::iterator &p)
-{
-  ::decode(ic.wanted, p);
-  ::decode(ic.issued, p);
-  ::decode(ic.size, p);
-  ::decode(ic.mtime, p);
-  ::decode(ic.atime, p);
-}
+WRITE_CLASS_ENCODER(cap_reconnect_t)
 
 
 // ================================================================

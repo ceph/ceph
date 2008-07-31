@@ -101,6 +101,12 @@ public:
   operator double() {
     return (double)sec() + ((double)usec() / 1000000.0L);
   }
+  operator ceph_timespec() {
+    ceph_timespec ts;
+    ts.tv_sec = sec();
+    ts.tv_nsec = nsec();
+    return ts;
+  }
 };
 WRITE_CLASS_ENCODER(utime_t)
 

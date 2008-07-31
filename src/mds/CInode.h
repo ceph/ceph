@@ -545,7 +545,7 @@ public:
     containing_realm = realm;
   }
 
-  Capability *reconnect_cap(int client, inode_caps_reconnect_t& icr) {
+  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
@@ -555,8 +555,8 @@ public:
       cap->issue(icr.issued);
     }
     inode.size = MAX(inode.size, icr.size);
-    inode.mtime = MAX(inode.mtime, icr.mtime);
-    inode.atime = MAX(inode.atime, icr.atime);
+    inode.mtime = MAX(inode.mtime, utime_t(icr.mtime));
+    inode.atime = MAX(inode.atime, utime_t(icr.atime));
     return cap;
   }
   void clear_client_caps() {

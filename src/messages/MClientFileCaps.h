@@ -30,6 +30,8 @@ class MClientFileCaps : public Message {
   capseq_t get_mseq() { return h.migrate_seq; }
 
   inodeno_t get_ino() { return inodeno_t(h.ino); }
+  snapid_t get_snapid() { return snapid_t(h.snapid); }
+
   __u64 get_size() { return h.size;  }
   __u64 get_max_size() { return h.max_size;  }
   utime_t get_ctime() { return utime_t(h.ctime); }
@@ -61,6 +63,7 @@ class MClientFileCaps : public Message {
   MClientFileCaps() {}
   MClientFileCaps(int op,
 		  inode_t& inode,
+		  snapid_t snapid,
 		  inodeno_t realm,
                   long seq,
                   int caps,
@@ -68,10 +71,11 @@ class MClientFileCaps : public Message {
 		  int mseq) :
     Message(CEPH_MSG_CLIENT_FILECAPS) {
     h.op = op;
+    h.ino = inode.ino;
+    h.snapid = snapid;
     h.seq = seq;
     h.caps = caps;
     h.wanted = wanted;
-    h.ino = inode.ino;
     h.size = inode.size;
     h.max_size = inode.max_size;
     h.migrate_seq = mseq;
