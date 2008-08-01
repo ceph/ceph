@@ -1752,7 +1752,7 @@ void Client::handle_snap(MClientSnap *m)
     }
   }
 
-  update_snap_trace(m->bl, m->op == CEPH_SNAP_OP_CREATE);
+  update_snap_trace(m->bl, m->op != CEPH_SNAP_OP_DESTROY);
 
   if (realm) {
     for (list<Inode*>::iterator p = to_move.begin(); p != to_move.end(); p++) {

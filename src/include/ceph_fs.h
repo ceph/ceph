@@ -849,6 +849,7 @@ struct ceph_mds_snaprealm_reconnect {
  * snaps
  */
 enum {
+	CEPH_SNAP_OP_UPDATE,  /* CREATE or DESTROY */
 	CEPH_SNAP_OP_CREATE,
 	CEPH_SNAP_OP_DESTROY,
 	CEPH_SNAP_OP_SPLIT,
@@ -856,6 +857,7 @@ enum {
 
 static inline const char *ceph_snap_op_name(int o) {
 	switch (o) {
+	case CEPH_SNAP_OP_UPDATE: return "update";
 	case CEPH_SNAP_OP_CREATE: return "create";
 	case CEPH_SNAP_OP_DESTROY: return "destroy";
 	case CEPH_SNAP_OP_SPLIT: return "split";

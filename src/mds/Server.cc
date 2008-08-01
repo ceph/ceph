@@ -375,6 +375,22 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 			new C_MDS_session_finish(mds, session, false, pv));
   } else {
     
+    // snaprealms
+    for (map<inodeno_t, ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
+	 p != m->realms.end();
+	 p++) {
+      CInode *in = mdcache->get_inode(p->first);
+      if (in) {
+	assert(in->snaprealm);
+	if (in->snaprealm->have_past_parents_open())
+	  mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->second.seq));
+	else
+	  mdcache->add_reconnected_snaprealm(from, p->first, snapid_t(p->second.seq));
+      } else {
+	mdcache->add_reconnected_snaprealm(from, p->first, snapid_t(p->second.seq));
+      }
+    }
+
     // caps
     for (map<inodeno_t, cap_reconnect_t>::iterator p = m->caps.begin();
 	 p != m->caps.end();
@@ -385,7 +401,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	dout(15) << "open caps on " << *in << dendl;
 	Capability *cap = in->reconnect_cap(from, p->second.capinfo);
 	session->touch_cap(cap);
-	reconnected_caps.insert(in);
+	mds->mdcache->add_reconnected_cap(in);
 	continue;
       }
       
@@ -423,47 +439,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // remove from gather set
   client_reconnect_gather.erase(from);
-  if (client_reconnect_gather.empty()) reconnect_gather_finish();
+  if (client_reconnect_gather.empty())
+    reconnect_gather_finish();
 
   delete m;
 }
 
-/*
- * called by mdcache, late in rejoin (right before acks are sent)
- */
-void Server::process_reconnected_caps()
-{
-  dout(10) << "process_reconnected_caps" << dendl;
-
-  // adjust filelock state appropriately
-  for (set<CInode*>::iterator p = reconnected_caps.begin();
-       p != reconnected_caps.end();
-       ++p) {
-    CInode *in = *p;
-    int issued = in->get_caps_issued();
-    if (in->is_auth()) {
-      // wr?
-      if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
-	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
-	  in->filelock.set_state(LOCK_LONER);
-	} else {
-	  in->filelock.set_state(LOCK_MIXED);
-	}
-      }
-    } else {
-      // note that client should perform stale/reap cleanup during reconnect.
-      assert((issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0);   // ????
-      if (in->filelock.is_xlocked())
-	in->filelock.set_state(LOCK_LOCK);
-      else
-	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
-    }
-    dout(15) << " issued " << cap_string(issued)
-	     << " chose " << in->filelock
-	     << " on " << *in << dendl;
-  }
-  reconnected_caps.clear();  // clean up
-}
 
 
 void Server::reconnect_gather_finish()
@@ -2010,7 +1991,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	dn->link_remote(in);
       } else {
 	mdcache->open_remote_ino(dn->get_remote_ino(),
-				 mdr,
 				 new C_MDS_RetryRequest(mdcache, mdr));
 
 	// touch everything i _do_ have
@@ -4617,12 +4597,14 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
 
   // register new cap
-  Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
+  bool is_new = false;
+  Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
 
   // drop our locks (they may interfere with us issuing new caps)
   mdcache->request_drop_locks(mdr);
 
-  cap->set_suppress(false);  // stop suppressing messages on this cap
+  if (is_new)
+    cap->dec_suppress();  // stop suppressing messages on new cap
 
   dout(12) << "_do_open issued caps " << cap_string(cap->pending())
 	   << " for " << req->get_source()

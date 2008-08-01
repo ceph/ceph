@@ -27,18 +27,20 @@
 						  << ".cache.snaprealm(" << inode->ino() \
 						  << " seq " << seq << " " << this << ") "
 
-bool SnapRealm::open_parents(MDRequest *mdr, snapid_t first, snapid_t last)
+bool SnapRealm::open_parents(Context *finish, snapid_t first, snapid_t last)
 {
   dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
-  if (open)
+  if (open) {
+    delete finish;
     return true;
+  }
 
   // make sure my current parents' parents are open...
   if (parent) {
     dout(10) << " current parent [" << current_parent_since << ",head] is " << *parent
 	     << " on " << *parent->inode << dendl;
     if (last >= current_parent_since &&
-	!parent->open_parents(mdr, MAX(first, current_parent_since), last))
+	!parent->open_parents(finish, MAX(first, current_parent_since), last))
       return false;
   }
 
@@ -52,8 +54,7 @@ bool SnapRealm::open_parents(MDRequest *mdr, snapid_t first, snapid_t last)
 	       << p->second.ino << dendl;
       CInode *parent = mdcache->get_inode(p->second.ino);
       if (!parent) {
-	mdcache->open_remote_ino(p->second.ino, mdr, 
-				 new C_MDS_RetryRequest(mdcache, mdr));
+	mdcache->open_remote_ino(p->second.ino, finish);
 	return false;
       }
       assert(parent->snaprealm);  // hmm!
@@ -61,18 +62,22 @@ bool SnapRealm::open_parents(MDRequest *mdr, snapid_t first, snapid_t last)
 	open_past_parents[p->second.ino] = parent->snaprealm;
 	parent->get(CInode::PIN_PASTSNAPPARENT);
       }
-      if (!parent->snaprealm->open_parents(mdr, p->second.first, p->first))
+      if (!parent->snaprealm->open_parents(finish, p->second.first, p->first))
 	return false;
     }
   }
 
   open = true;
+  delete finish;
   return true;
 }
 
 bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
 {
   dout(10) << "have_past_parents_open [" << first << "," << last << "]" << dendl;
+  if (open)
+    return true;
+
   for (map<snapid_t, snaplink_t>::iterator p = past_parents.lower_bound(first);
        p != past_parents.end();
        p++) {
@@ -88,6 +93,8 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
 								  MIN(last, p->first)))
       return false;
   }
+
+  open = true;
   return true;
 }
 

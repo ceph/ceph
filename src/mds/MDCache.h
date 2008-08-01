@@ -650,8 +650,30 @@ public:
     cap_imports[ino][client][frommds] = icr.capinfo;
     cap_import_paths[ino] = icr.path;
   }
-  void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);
 
+  // [reconnect/rejoin caps]
+  set<CInode*> reconnected_caps;
+  map<inodeno_t,map<int, snapid_t> > reconnected_snaprealms;
+
+  void add_reconnected_cap(CInode *in) {
+    reconnected_caps.insert(in);
+  }
+  void add_reconnected_snaprealm(int client, inodeno_t ino, snapid_t seq) {
+    reconnected_snaprealms[ino][client] = seq;
+  }
+  void process_reconnected_caps();
+  void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);
+  void finish_snaprealm_reconnect(int client, SnapRealm *realm, snapid_t seq);
+
+  // cap imports.  delayed snap parent opens.
+  set<CInode*> missing_snap_parents;
+  map<int,set<CInode*> > delayed_imported_caps;
+
+  void do_cap_import(Session *session, CInode *in, Capability *cap);
+  void do_delayed_cap_imports();
+  void open_snap_parents();
+
+  
 
   friend class Locker;
   friend class Migrator;
@@ -817,8 +839,8 @@ public:
   
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
-  void open_remote_ino(inodeno_t ino, MDRequest *mdr, Context *fin);
-  void open_remote_ino_2(inodeno_t ino, MDRequest *mdr,
+  void open_remote_ino(inodeno_t ino, Context *fin);
+  void open_remote_ino_2(inodeno_t ino,
                          vector<Anchor>& anchortrace,
                          Context *onfinish);
 

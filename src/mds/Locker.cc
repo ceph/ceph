@@ -498,7 +498,8 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
 
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
-				   Session *session)
+				   Session *session,
+				   bool& is_new)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   
@@ -514,8 +515,10 @@ Capability* Locker::issue_new_caps(CInode *in,
     cap = in->add_client_cap(my_client);
     session->touch_cap(cap);
     cap->set_wanted(my_want);
-    cap->set_suppress(true); // suppress file cap messages for new cap (we'll bundle with the open() reply)
+    cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
+    is_new = true;
   } else {
+    is_new = false;
     // make sure it wants sufficient caps
     if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client

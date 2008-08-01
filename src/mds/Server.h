@@ -58,7 +58,6 @@ public:
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
-  set<CInode*> reconnected_caps;
 
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, bool open, version_t pv);
@@ -69,10 +68,6 @@ public:
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
-  void add_reconnected_cap_inode(CInode *in) {
-    reconnected_caps.insert(in);
-  }
-  void process_reconnected_caps();
   void reconnect_gather_finish();
   void reconnect_tick();
   

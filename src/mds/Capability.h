@@ -63,7 +63,7 @@ private:
   capseq_t last_open;
   capseq_t mseq;
 
-  bool suppress;
+  int suppress;
   bool stale;
 public:
   snapid_t client_follows;
@@ -79,7 +79,7 @@ public:
     last_recv(s),
     last_open(0),
     mseq(0),
-    suppress(false), stale(false),
+    suppress(0), stale(false),
     client_follows(0),
     session_caps_item(this), snaprealm_caps_item(this) { }
   
@@ -88,8 +88,9 @@ public:
   capseq_t get_last_open() { return last_open; }
   void set_last_open() { last_open = last_sent; }
 
-  bool is_suppress() { return suppress; }
-  void set_suppress(bool b) { suppress = b; }
+  bool is_suppress() { return suppress > 0; }
+  void inc_suppress() { suppress++; }
+  void dec_suppress() { suppress--; }
 
   bool is_stale() { return stale; }
   void set_stale(bool b) { stale = b; }

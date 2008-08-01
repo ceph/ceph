@@ -112,8 +112,14 @@ public:
   public:
     C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
     void finish(int r) {
-      if (gather->sub_finish(num))
+      if (gather->sub_finish(num)) {
 	delete gather;   // last one!
+	gather = 0;
+      }
+    }
+    ~C_GatherSub() {
+      if (gather)
+	gather->rm_sub(num);
     }
   };
 
@@ -139,6 +145,10 @@ public:
     num++;
     waitfor.insert(num);
     return new C_GatherSub(this, num);
+  }
+  void rm_sub(int n) {
+    num--;
+    waitfor.erase(n);
   }
 
   bool empty() { return num == 0; }

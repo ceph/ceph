@@ -195,7 +195,7 @@ protected:
   // -- file i/o --
  public:
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session);
+  Capability* issue_new_caps(CInode *in, int mode, Session *session, bool& is_new);
   bool issue_caps(CInode *in);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
