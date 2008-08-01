@@ -226,6 +226,7 @@ class NodePool {
       bufferptr newbit = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*(usemap_even.length - have));
       newbit.zero();
       bl.push_back(newbit);
+      bl.rebuild();
       assert(bl.buffers().size() == 1);
       usemap_data = bl.buffers().front();
       usemap_bits.set_data(usemap_data.c_str(), usemap_data.length());
