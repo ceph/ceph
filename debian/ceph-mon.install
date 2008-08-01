@@ -1,1 +1,8 @@
 usr/bin/cmon
+usr/bin/cmonctl
+usr/bin/crushtool
+usr/bin/mkmonfs
+usr/bin/monmaptool
+usr/bin/osdmaptool
+usr/bin/csyn
+
