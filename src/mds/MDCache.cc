@@ -3445,9 +3445,11 @@ void MDCache::rejoin_gather_finish()
 	 ++q) 
       for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
-	   ++r) 
+	   ++r) {
+	add_reconnected_cap(in, q->first, inodeno_t(q->second.snaprealm));
 	if (r->first >= 0)
 	  rejoin_import_cap(in, q->first, r->second, r->first);
+      }
   }
   
   process_reconnected_caps();
@@ -3477,10 +3479,10 @@ void MDCache::process_reconnected_caps()
   map<int,MClientSnap*> splits;
 
   // adjust filelock state appropriately
-  for (set<CInode*>::iterator p = reconnected_caps.begin();
+  for (map<CInode*,map<int,inodeno_t> >::iterator p = reconnected_caps.begin();
        p != reconnected_caps.end();
        ++p) {
-    CInode *in = *p;
+    CInode *in = p->first;
     int issued = in->get_caps_issued();
     if (in->is_auth()) {
       // wr?
@@ -3516,9 +3518,26 @@ void MDCache::process_reconnected_caps()
       }
     }
 
-    // also, make sure each cap is in the correct snaprealm.
-    //SnapRealm *r = 
-    
+    // also, make sure client's cap is in the correct snaprealm.
+    SnapRealm *realm = in->find_snaprealm();
+    for (map<int,inodeno_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      if (q->second == realm->inode->ino()) {
+	dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
+      } else {
+	dout(15) << "  client" << q->first << " has wrong realm " << q->second
+		 << " != " << realm->inode->ino() << dendl;
+	MClientSnap *snap;
+	if (splits.count(q->first) == 0) {
+	  splits[q->first] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
+	  snap->split = realm->inode->ino();
+	  realm->build_snap_trace_maybe(snap->bl);
+	} else 
+	  snap = splits[q->first]; 
+	snap->split_inos.push_back(in->ino());	
+      }
+    }    
   }
 }
 

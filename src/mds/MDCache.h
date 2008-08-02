@@ -652,11 +652,11 @@ public:
   }
 
   // [reconnect/rejoin caps]
-  set<CInode*> reconnected_caps;
+  map<CInode*,map<int, inodeno_t> >  reconnected_caps;   // inode -> client -> realmino
   map<inodeno_t,map<int, snapid_t> > reconnected_snaprealms;
 
-  void add_reconnected_cap(CInode *in) {
-    reconnected_caps.insert(in);
+  void add_reconnected_cap(CInode *in, int client, inodeno_t realm) {
+    reconnected_caps[in][client] = realm;
   }
   void add_reconnected_snaprealm(int client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
