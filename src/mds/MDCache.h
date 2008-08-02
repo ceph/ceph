@@ -49,6 +49,7 @@ class MLock;
 class Message;
 class MClientRequest;
 class MMDSSlaveRequest;
+class MClientSnap;
 
 class MMDSFragmentNotify;
 
@@ -662,16 +663,21 @@ public:
     reconnected_snaprealms[ino][client] = seq;
   }
   void process_reconnected_caps();
+  void prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
+			   map<int,MClientSnap*>& splits);
+  void send_realm_splits(map<int,MClientSnap*>& splits);
   void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);
   void finish_snaprealm_reconnect(int client, SnapRealm *realm, snapid_t seq);
 
   // cap imports.  delayed snap parent opens.
-  set<CInode*> missing_snap_parents;
+  //  realm inode -> client -> cap inodes needing to split to this realm
+  map<CInode*,map<int, set<inodeno_t> > > missing_snap_parents; 
   map<int,set<CInode*> > delayed_imported_caps;
 
   void do_cap_import(Session *session, CInode *in, Capability *cap);
   void do_delayed_cap_imports();
   void open_snap_parents();
+
 
   
 

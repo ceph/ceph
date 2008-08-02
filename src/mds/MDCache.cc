@@ -3439,14 +3439,13 @@ void MDCache::rejoin_gather_finish()
        ++p) {
     CInode *in = get_inode(p->first);
     assert(in);
-    reconnected_caps.insert(in);
     for (map<int, map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) 
       for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
-	add_reconnected_cap(in, q->first, inodeno_t(q->second.snaprealm));
+	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
 	if (r->first >= 0)
 	  rejoin_import_cap(in, q->first, r->second, r->first);
       }
@@ -3474,15 +3473,13 @@ void MDCache::process_reconnected_caps()
 {
   dout(10) << "process_reconnected_caps" << dendl;
 
-  set<CInode*> have_open_snap_parents;
-
   map<int,MClientSnap*> splits;
 
   // adjust filelock state appropriately
-  for (map<CInode*,map<int,inodeno_t> >::iterator p = reconnected_caps.begin();
-       p != reconnected_caps.end();
-       ++p) {
+  map<CInode*,map<int,inodeno_t> >::iterator p = reconnected_caps.begin();
+  while (p != reconnected_caps.end()) {
     CInode *in = p->first;
+    p++;
     int issued = in->get_caps_issued();
     if (in->is_auth()) {
       // wr?
@@ -3506,20 +3503,24 @@ void MDCache::process_reconnected_caps()
 	     << " on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
-    if (!missing_snap_parents.count(realm->inode) &&
-	!have_open_snap_parents.count(realm->inode)) {
-      if (realm->have_past_parents_open()) {
-	dout(10) << " have past snap parents for realm " << *realm << " on " << *realm->inode << dendl;
-	have_open_snap_parents.insert(realm->inode);
-      } else {
-	dout(10) << " MISSING past snap parents for realm " << *realm << " on " << *realm->inode << dendl;
-	missing_snap_parents.insert(realm->inode);
+
+    // is this realm's parents fully open?
+    if (realm->have_past_parents_open()) {
+      dout(10) << " have past snap parents for realm " << *realm 
+	       << " on " << *realm->inode << dendl;
+    } else {
+      if (!missing_snap_parents.count(realm->inode)) {
+	dout(10) << " MISSING past snap parents for realm " << *realm
+		 << " on " << *realm->inode << dendl;
 	realm->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
+	missing_snap_parents[realm->inode].size();   // just to get it into the map!
+      } else {
+	dout(10) << " (already) MISSING past snap parents for realm " << *realm 
+		 << " on " << *realm->inode << dendl;
       }
     }
 
     // also, make sure client's cap is in the correct snaprealm.
-    SnapRealm *realm = in->find_snaprealm();
     for (map<int,inodeno_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
@@ -3528,18 +3529,54 @@ void MDCache::process_reconnected_caps()
       } else {
 	dout(15) << "  client" << q->first << " has wrong realm " << q->second
 		 << " != " << realm->inode->ino() << dendl;
-	MClientSnap *snap;
-	if (splits.count(q->first) == 0) {
-	  splits[q->first] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
-	  snap->split = realm->inode->ino();
-	  realm->build_snap_trace_maybe(snap->bl);
-	} else 
-	  snap = splits[q->first]; 
-	snap->split_inos.push_back(in->ino());	
+	if (realm->have_past_parents_open()) {
+	  // ok, include in a split message _now_.
+	  prepare_realm_split(realm, q->first, in->ino(), splits);
+	} else {
+	  // send the split later.
+	  missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	}
       }
-    }    
-  }
+    }
+  }    
+  reconnected_caps.clear();
+
+  send_realm_splits(splits);
 }
+
+void MDCache::prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
+				  map<int,MClientSnap*>& splits)
+{
+  MClientSnap *snap;
+  if (splits.count(client) == 0) {
+    splits[client] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
+    snap->split = realm->inode->ino();
+    realm->build_snap_trace(snap->bl);
+  } else 
+    snap = splits[client]; 
+  snap->split_inos.push_back(ino);	
+}
+
+void MDCache::send_realm_splits(map<int,MClientSnap*>& splits)
+{
+  dout(10) << "send_realm_splits" << dendl;
+  
+  for (map<int,MClientSnap*>::iterator p = splits.begin();
+       p != splits.end();
+       p++) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first));
+    if (session) {
+      dout(10) << " client" << p->first << " split " << p->second->split
+	       << " inos " << p->second->split_inos << dendl;
+      mds->send_message_client(p->second, session->inst);
+    } else {
+      dout(10) << " no session for client" << p->first << dendl;
+      delete p->second;
+    }
+  }
+  splits.clear();
+}
+
 
 void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds)
 {
@@ -3581,7 +3618,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
     in->auth_pin(this);
     cap->inc_suppress();
     delayed_imported_caps[client].insert(in);
-    missing_snap_parents.insert(in);
+    missing_snap_parents[in].size();
   }
 }
 
@@ -3624,14 +3661,25 @@ void MDCache::open_snap_parents()
 {
   dout(10) << "open_snap_parents" << dendl;
   
+  map<int,MClientSnap*> splits;
   C_Gather *gather = new C_Gather;
 
-  set<CInode*>::iterator p = missing_snap_parents.begin();
+  map<CInode*,map<int,set<inodeno_t> > >::iterator p = missing_snap_parents.begin();
   while (p != missing_snap_parents.end()) {
-    CInode *in = *p;
+    CInode *in = p->first;
     assert(in->snaprealm);
     if (in->snaprealm->open_parents(gather->new_sub())) {
       dout(10) << " past parents now open on " << *in << dendl;
+      
+      // include in a (now safe) snap split?
+      for (map<int,set<inodeno_t> >::iterator q = p->second.begin();
+	   q != p->second.end();
+	   q++)
+	for (set<inodeno_t>::iterator r = q->second.begin();
+	     r != q->second.end();
+	     r++)
+	  prepare_realm_split(in->snaprealm, q->first, *r, splits);
+
       missing_snap_parents.erase(p++);
 
       in->put(CInode::PIN_OPENINGSNAPPARENTS);
@@ -3650,6 +3698,8 @@ void MDCache::open_snap_parents()
       p++;
     }
   }
+
+  send_realm_splits(splits);
 
   if (gather->get_num()) {
     dout(10) << "open_snap_parents - waiting for " << gather->get_num() << dendl;

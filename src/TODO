@@ -23,11 +23,6 @@ big items
 snaps on mds
 - cap release probably needs ack by mds.  or, mds needs to possibly initiate recovery on import?  no, release should pbly just be acked by mds... like it was way back when... bah!
 
-/- scatterlock recovery
-- test rejoin
-- client reconnect
-  - esp cap claim
-
 - client snap caps
   - NO CAP STATE FOR SNAPPED INODES.  
   - mds grants open access (yes/no), but there is no state, since there is no concurrency.
@@ -35,6 +30,15 @@ snaps on mds
   - client _should_ only send FLUSHSNAP _after_ data is flushed.  this will require much more sophisticated barriers in the client's cache.
   - reconnect should map caps into snaprealms, and include snaprealm state, such that those can be brought in sync w/ the mds.
   - reconnect does _not_ need any per-cap snap-related info.
+
+- mds open within snapshot
+- client snap read
+
+
+- test rejoin
+- client reconnect
+  - esp cap claim
+
 
 
 /- call open_parents() where needed.

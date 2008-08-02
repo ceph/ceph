@@ -41,9 +41,6 @@ class MClientFileCaps : public Message {
   int       get_migrate_seq() { return h.migrate_seq; }
   int       get_op() { return h.op; }
 
-  //inodeno_t get_snap_realm() { return inodeno_t(h.snap_realm); }
-  //snapid_t get_snap_created() { return snapid_t(h.snap_created); }
-  //snapid_t get_snap_highwater() { return snapid_t(h.snap_highwater); }
   snapid_t get_snap_follows() { return snapid_t(h.snap_follows); }
   void set_snap_follows(snapid_t s) { h.snap_follows = s; }
 
