@@ -455,24 +455,24 @@ void MDSMonitor::committed()
 {
   // check for failed
   set<int> failed;
-  mdsmap.get_failed_mds_set(failed);
+  pending_mdsmap.get_failed_mds_set(failed);
 
-  if (!mdsmap.standby.empty() && !failed.empty()) {
+  if (!pending_mdsmap.standby.empty() && !failed.empty()) {
     bool didtakeover = false;
     set<int>::iterator p = failed.begin();
     while (p != failed.end()) {
       int f = *p++;
       
       // someone standby for me?
-      if (mdsmap.standby_for.count(f) &&
-	  !mdsmap.standby_for[f].empty()) {
-	dout(0) << "mds" << f << " standby " << *mdsmap.standby_for[f].begin() << " taking over" << dendl;
-	take_over(*mdsmap.standby_for[f].begin(), f);
+      if (pending_mdsmap.standby_for.count(f) &&
+	  !pending_mdsmap.standby_for[f].empty()) {
+	dout(0) << "mds" << f << " standby " << *pending_mdsmap.standby_for[f].begin() << " taking over" << dendl;
+	take_over(*pending_mdsmap.standby_for[f].begin(), f);
 	didtakeover = true;
       }
-      else if (!mdsmap.standby_any.empty()) {
-	dout(0) << "standby " << mdsmap.standby.begin()->first << " taking over for mds" << f << dendl;
-	take_over(mdsmap.standby.begin()->first, f);
+      else if (!pending_mdsmap.standby_any.empty()) {
+	dout(0) << "standby " << pending_mdsmap.standby.begin()->first << " taking over for mds" << f << dendl;
+	take_over(pending_mdsmap.standby.begin()->first, f);
 	didtakeover = true;
       }
     }
@@ -715,7 +715,7 @@ void MDSMonitor::tick()
 	assert(0);
       }
 	  
-      dout(10) << "no beacon from mds" << *p << " since " << last_beacon[addr]
+      dout(10) << "no beacon from mds" << mds << " " << *p << " since " << last_beacon[addr]
 	       << ", marking " << pending_mdsmap.get_state_name(newstate)
 	       << dendl;
       
@@ -743,7 +743,7 @@ void MDSMonitor::tick()
 
   if (do_propose)
     propose_pending();
-  }
+}
 
 
 void MDSMonitor::do_stop()
