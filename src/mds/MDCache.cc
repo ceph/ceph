@@ -5621,15 +5621,15 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   }
 
   if (!dir && in->is_auth()) {
-    if (dir->is_frozen_dir()) {
-      dout(7) << "traverse: " << *dir << " is frozen_dir, waiting" << dendl;
-      dir->add_waiter(CDir::WAIT_UNFREEZE, onfinish);
+    if (in->is_frozen_dir()) {
+      dout(7) << "traverse: " << *in << " is frozen_dir, waiting" << dendl;
+      in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE, onfinish);
       return;
     }
     dir = in->get_or_open_dirfrag(this, frag);
   }
-  
   assert(dir);
+
   if (dir->is_auth()) {
     if (dir->is_complete()) {
       // hrm.  requery anchor table.
