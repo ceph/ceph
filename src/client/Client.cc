@@ -1708,6 +1708,9 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 void Client::handle_snap(MClientSnap *m)
 {
   dout(10) << "handle_snap " << *m << dendl;
+  int mds = m->get_source().num();
+
+  mds_sessions[mds].seq++;
 
   list<Inode*> to_move;
   SnapRealm *realm = 0;
