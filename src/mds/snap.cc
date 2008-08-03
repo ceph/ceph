@@ -27,20 +27,18 @@
 						  << ".cache.snaprealm(" << inode->ino() \
 						  << " seq " << seq << " " << this << ") "
 
-bool SnapRealm::open_parents(Context *finish, snapid_t first, snapid_t last)
+bool SnapRealm::_open_parents(Context *finish, snapid_t first, snapid_t last)
 {
   dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
-  if (open) {
-    delete finish;
+  if (open) 
     return true;
-  }
 
   // make sure my current parents' parents are open...
   if (parent) {
     dout(10) << " current parent [" << current_parent_since << ",head] is " << *parent
 	     << " on " << *parent->inode << dendl;
     if (last >= current_parent_since &&
-	!parent->open_parents(finish, MAX(first, current_parent_since), last))
+	!parent->_open_parents(finish, MAX(first, current_parent_since), last))
       return false;
   }
 
@@ -62,13 +60,12 @@ bool SnapRealm::open_parents(Context *finish, snapid_t first, snapid_t last)
 	open_past_parents[p->second.ino] = parent->snaprealm;
 	parent->get(CInode::PIN_PASTSNAPPARENT);
       }
-      if (!parent->snaprealm->open_parents(finish, p->second.first, p->first))
+      if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
 	return false;
     }
   }
 
   open = true;
-  delete finish;
   return true;
 }
 

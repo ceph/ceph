@@ -144,7 +144,13 @@ struct SnapRealm {
     return false;
   }
 
-  bool open_parents(Context *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  bool _open_parents(Context *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  bool open_parents(Context *retryorfinish) {
+    if (!_open_parents(retryorfinish))
+      return false;
+    delete retryorfinish;
+    return true;
+  }
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void close_parents();
 
