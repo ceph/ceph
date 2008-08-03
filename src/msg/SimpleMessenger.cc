@@ -840,7 +840,7 @@ int Rank::Pipe::accept()
 
       if (peer_cseq < existing->connect_seq) {
 	if (peer_cseq == 0) {
-	  dout(10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
+	  dout(-10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
