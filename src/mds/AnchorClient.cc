@@ -48,8 +48,6 @@ void AnchorClient::handle_query_result(class MMDSTableRequest *m)
     onfinish->finish(0);
     delete onfinish;
   }
-
-  delete m;
 }
 
 void AnchorClient::resend_queries()

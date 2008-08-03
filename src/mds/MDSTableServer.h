@@ -74,7 +74,6 @@ private:
  public:
   virtual void handle_query(MMDSTableRequest *m) = 0;
   virtual void _prepare(bufferlist &bl, __u64 reqid, int bymds) = 0;
-  virtual bool _is_prepared(version_t tid) = 0;
   virtual void _commit(version_t tid) = 0;
   virtual void _rollback(version_t tid) = 0;
 

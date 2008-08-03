@@ -44,9 +44,9 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
   int from = req->get_source().num();
 
   _prepare(req->bl, req->reqid, from);
-  pending_for_mds[req->reqid].mds = from;
-  pending_for_mds[req->reqid].reqid = req->reqid;
-  pending_for_mds[req->reqid].tid = version;
+  pending_for_mds[version].mds = from;
+  pending_for_mds[version].reqid = req->reqid;
+  pending_for_mds[version].tid = version;
 
   ETableServer *le = new ETableServer(table, TABLE_OP_PREPARE, req->reqid, from, version, version);
   le->mutation = req->bl;
@@ -70,7 +70,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
   version_t tid = req->tid;
 
-  if (_is_prepared(tid)) {
+  if (pending_for_mds.count(tid)) {
     _commit(tid);
     pending_for_mds.erase(tid);
     mds->mdlog->submit_entry(new ETableServer(table, TABLE_OP_COMMIT, 0, -1, tid, version));
@@ -124,8 +124,9 @@ void MDSTableServer::handle_mds_recovery(int who)
   for (map<version_t,_pending>::iterator p = pending_for_mds.begin();
        p != pending_for_mds.end();
        p++) {
-    if (who >= 0 && p->second.mds != who) continue;
+    if (who >= 0 && p->second.mds != who)
+      continue;
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_AGREE, p->second.reqid, p->second.tid);
-    mds->send_message_mds(reply, who);
+    mds->send_message_mds(reply, p->second.mds);
   }
 }

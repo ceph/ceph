@@ -155,14 +155,6 @@ void AnchorServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
   //dump();
 }
 
-bool AnchorServer::_is_prepared(version_t tid)
-{
-  return 
-    pending_create.count(tid) ||
-    pending_destroy.count(tid) ||
-    pending_update.count(tid);
-}
-
 void AnchorServer::_commit(version_t tid)
 {
   if (pending_create.count(tid)) {
@@ -202,8 +194,6 @@ void AnchorServer::_commit(version_t tid)
   else
     assert(0);
 
-  pending_for_mds.erase(tid);
-
   // bump version.
   version++;
   //dump();
@@ -241,11 +231,12 @@ void AnchorServer::_rollback(version_t tid)
 void AnchorServer::handle_query(MMDSTableRequest *req)
 {
   bufferlist::iterator p = req->bl.begin();
-  inodeno_t curino;
-  ::decode(curino, p);
-  dout(7) << "handle_lookup " << *req << " ino " << curino << dendl;
+  inodeno_t ino;
+  ::decode(ino, p);
+  dout(7) << "handle_lookup " << *req << " ino " << ino << dendl;
 
   vector<Anchor> trace;
+  inodeno_t curino = ino;
   while (true) {
     assert(anchor_map.count(curino) == 1);
     Anchor &anchor = anchor_map[curino];
@@ -253,14 +244,15 @@ void AnchorServer::handle_query(MMDSTableRequest *req)
     dout(10) << "handle_lookup  adding " << anchor << dendl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
     
-    if (anchor.dirino < MDS_INO_BASE) break;
+    if (anchor.dirino < MDS_INO_BASE)
+      break;
     curino = anchor.dirino;
   }
 
   // reply
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_QUERY_REPLY, req->reqid, version);
-  ::encode(curino, req->bl);
-  ::encode(trace, req->bl);
+  ::encode(ino, reply->bl);
+  ::encode(trace, reply->bl);
   mds->send_message_mds(reply, req->get_source().num());
 
   delete req;
