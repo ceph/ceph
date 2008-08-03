@@ -465,7 +465,7 @@ void MDS::reset_beacon_killer()
   utime_t when = beacon_last_acked_stamp;
   when += g_conf.mds_beacon_grace;
   
-  dout(15) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
+  dout(25) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
 	   << ", will die at " << when << dendl;
   
   if (beacon_killer) timer.cancel_event(beacon_killer);
@@ -901,7 +901,9 @@ void MDS::replay_start()
 
 void MDS::replay_done()
 {
-  dout(1) << "replay_done" << dendl;
+  dout(1) << "replay_done in=" << mdsmap->get_num_in_mds()
+	  << " failed=" << mdsmap->get_num_mds(MDSMap::STATE_FAILED)
+	  << dendl;
 
   if (mdsmap->get_num_in_mds() == 1 &&
       mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
