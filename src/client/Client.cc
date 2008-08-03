@@ -1234,7 +1234,7 @@ void Client::send_reconnect(int mds)
     // reset my cap seq number
     mds_sessions[mds].seq = 0;
   } else {
-    dout(10) << " i had no session with this mds";
+    dout(10) << " i had no session with this mds" << dendl;
     m->closed = true;
   }
 
@@ -1728,7 +1728,7 @@ void Client::handle_snap(MClientSnap *m)
       vinodeno_t vino(*p, CEPH_NOSNAP);
       if (inode_map.count(vino)) {
 	Inode *in = inode_map[vino];
-	if (!in->snaprealm)
+	if (!in->snaprealm || in->snaprealm == realm)
 	  continue;
 	if (in->snaprealm->created > info.created) {
 	  dout(10) << " NOT moving " << *in << " from _newer_ realm " 
