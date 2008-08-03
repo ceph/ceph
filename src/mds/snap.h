@@ -152,6 +152,7 @@ struct SnapRealm {
     return true;
   }
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  void add_open_past_parent(SnapRealm *parent);
   void close_parents();
 
   void build_snap_set(set<snapid_t>& s, 
