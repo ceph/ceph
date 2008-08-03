@@ -66,7 +66,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 	       << ", already committing, resending COMMIT"
 	       << dendl;      
       MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_COMMIT, 0, tid);
-      mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+      mds->send_message_mds(req, mds->mdsmap->get_tableserver());
     }
     else {
       dout(10) << "stray agree on " << reqid
@@ -74,7 +74,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 	       << ", sending ROLLBACK"
 	       << dendl;      
       MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_ROLLBACK, 0, tid);
-      mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+      mds->send_message_mds(req, mds->mdsmap->get_tableserver());
     }
     break;
 
@@ -129,7 +129,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, Context *on
   pending_prepare[reqid].ptid = ptid;
   pending_prepare[reqid].onfinish = onfinish;
 
-  mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+  mds->send_message_mds(req, mds->mdsmap->get_tableserver());
 }
 
 void MDSTableClient::commit(version_t tid, LogSegment *ls)
@@ -142,7 +142,7 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
   // send message
   MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_COMMIT, 0, tid);
-  mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+  mds->send_message_mds(req, mds->mdsmap->get_tableserver());
 }
 
 
@@ -163,7 +163,7 @@ void MDSTableClient::resend_commits()
        ++p) {
     dout(10) << "resending commit on " << p->first << dendl;
     MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_COMMIT, 0, p->first);
-    mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+    mds->send_message_mds(req, mds->mdsmap->get_tableserver());
   }
 }
 
@@ -171,7 +171,7 @@ void MDSTableClient::handle_mds_recovery(int who)
 {
   dout(7) << "handle_mds_recovery mds" << who << dendl;
 
-  if (who != mds->mdsmap->get_anchortable()) 
+  if (who != mds->mdsmap->get_tableserver()) 
     return; // do nothing.
 
   resend_queries();
@@ -183,7 +183,7 @@ void MDSTableClient::handle_mds_recovery(int who)
     dout(10) << "resending " << p->first << dendl;
     MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_PREPARE, p->first);
     req->bl = p->second.mutation;
-    mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+    mds->send_message_mds(req, mds->mdsmap->get_tableserver());
   } 
 
   resend_commits();

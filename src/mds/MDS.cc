@@ -772,14 +772,12 @@ void MDS::boot_create()
   // write empty sessionmap
   sessionmap.save(fin->new_sub());
   
-  // fixme: fake out anchortable
-  if (mdsmap->get_anchortable() == whoami) {
+  // initialize tables
+  if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << dendl;
     anchorserver->reset();
     anchorserver->save(fin->new_sub());
-  }
 
-  if (whoami == 0) {
     dout(10) << "boot_create creating fresh snaptable" << dendl;
     snapserver->reset();
     snapserver->save(fin->new_sub());
@@ -822,11 +820,10 @@ void MDS::boot_start(int step, int r)
       dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
       sessionmap.load(gather->new_sub());
 
-      if (mdsmap->get_anchortable() == whoami) {
+      if (mdsmap->get_tableserver() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
 	anchorserver->load(gather->new_sub());
-      }
-      if (whoami == 0) {
+
 	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
 	snapserver->load(gather->new_sub());
       }
@@ -983,11 +980,14 @@ void MDS::recovery_done()
   assert(is_active());
   
   // kick anchortable (resent AGREEs)
-  if (mdsmap->get_anchortable() == whoami) 
+  if (mdsmap->get_tableserver() == whoami) {
     anchorserver->finish_recovery();
+    snapserver->finish_recovery();
+  }
   
   // kick anchorclient (resent COMMITs)
   anchorclient->finish_recovery();
+  snapclient->finish_recovery();
   
   mdcache->start_recovered_purges();
   mdcache->do_file_recover();
@@ -1004,9 +1004,12 @@ void MDS::handle_mds_recovery(int who)
   
   mdcache->handle_mds_recovery(who);
 
-  if (anchorserver)
+  if (anchorserver) {
     anchorserver->handle_mds_recovery(who);
+    snapserver->handle_mds_recovery(who);
+  }
   anchorclient->handle_mds_recovery(who);
+  snapclient->handle_mds_recovery(who);
   
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);

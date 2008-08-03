@@ -74,7 +74,7 @@ void AnchorClient::_lookup(inodeno_t ino)
 {
   MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_QUERY, 0, 0);
   ::encode(ino, req->bl);
-  mds->send_message_mds(req, mds->mdsmap->get_anchortable());
+  mds->send_message_mds(req, mds->mdsmap->get_tableserver());
 }
 
 
