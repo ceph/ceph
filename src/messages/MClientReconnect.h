@@ -48,11 +48,13 @@ public:
   void encode_payload() {
     ::encode(closed, payload);
     ::encode(caps, payload);
+    ::encode(realms, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(closed, p);
     ::decode(caps, p);
+    ::decode(realms, p);
   }
 
 };
