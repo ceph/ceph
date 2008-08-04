@@ -419,6 +419,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
    	in->first = p->dnfirst;
       }
+
+      // verify open snaprealm parents
+      if (in->snaprealm) {
+	SnapRealm *actual = in->get_parent_dn()->get_dir()->inode->find_snaprealm();
+	if (actual != in->snaprealm->parent) {
+	  dout(10) << "EMetaBlob.replay fixing snaprealm open_parent" << dendl;
+	  in->snaprealm->change_open_parent_to(actual);
+	}
+      }
     }
 
     // remote dentries
