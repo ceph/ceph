@@ -1631,6 +1631,40 @@ void SnapRealm::build_snaps()
   cout << *this << " build_snaps got " << cached_snaps << std::endl;
 }
 
+void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
+{
+  list<SnapRealm*> q;
+  q.push_back(realm);
+
+  while (!q.empty()) {
+    realm = q.front();
+    q.pop_front();
+
+    dout(10) << "invalidate_snaprealm_and_children " << *realm << dendl;
+    realm->invalidate_cache();
+
+    for (set<SnapRealm*>::iterator p = realm->pchildren.begin();
+	 p != realm->pchildren.end(); 
+	 p++)
+      q.push_back(*p);
+  }
+}
+
+void Client::adjust_realm_parent(SnapRealm *realm, inodeno_t parent)
+{
+  if (realm->parent != parent) {
+    dout(10) << "adjust_realm_parent " << *realm
+	     << " " << realm->parent << " -> " << parent << dendl;
+    realm->parent = parent;
+    if (realm->pparent) {
+      realm->pparent->pchildren.erase(realm);
+      put_snap_realm(realm->pparent);
+    }
+    realm->pparent = get_snap_realm(parent);
+    realm->pparent->pchildren.insert(realm);
+  }
+}
+
 inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 {
   inodeno_t first_realm = 0;
@@ -1673,32 +1707,27 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	    q.push_back(*p);
 	}
       }
+    }
 
-      
+    // _always_ verify parent
+    adjust_realm_parent(realm, info.parent);
+
+    if (info.seq > realm->seq) {
       // update
       realm->created = info.created;
-      if (realm->parent != info.parent) {
-	realm->parent = info.parent;
-	if (realm->pparent) {
-	  realm->pparent->pchildren.erase(realm);
-	  put_snap_realm(realm->pparent);
-	}
-	realm->pparent = get_snap_realm(info.parent);
-	realm->pparent->pchildren.insert(realm);
-      }
       realm->parent = info.parent;
       realm->parent_since = info.parent_since;
       realm->prior_parent_snaps = info.prior_parent_snaps;
       realm->my_snaps = info.my_snaps;
       realm->seq = info.seq;
 
-      realm->invalidate_cache();
+      invalidate_snaprealm_and_children(realm);
       dout(15) << "  snaps " << realm->get_snaps() << dendl;
     } else {
       dout(10) << "update_snap_trace " << *realm << " seq " << info.seq
 	       << " <= " << realm->seq << ", SKIPPING" << dendl;
     }
-    
+        
     put_snap_realm(realm);
   }
 
@@ -1752,6 +1781,18 @@ void Client::handle_snap(MClientSnap *m)
 	  to_move.push_back(in);
 	}
       }
+    }
+
+    // move child snaprealms, too
+    for (list<inodeno_t>::iterator p = m->split_realms.begin();
+	 p != m->split_realms.end();
+	 p++) {
+      dout(10) << "adjusting snaprealm " << *p << " parent" << dendl;
+      SnapRealm *child = get_snap_realm_maybe(*p);
+      if (!child)
+	continue;
+      adjust_realm_parent(child, realm->ino);
+      put_snap_realm(child);
     }
   }
 

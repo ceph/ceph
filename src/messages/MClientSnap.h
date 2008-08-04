@@ -24,6 +24,7 @@ struct MClientSnap : public Message {
   // (for split only)
   inodeno_t split;
   list<inodeno_t> split_inos;
+  list<inodeno_t> split_realms;
   
   MClientSnap(int o=0) : 
     Message(CEPH_MSG_CLIENT_SNAP),
@@ -42,6 +43,7 @@ struct MClientSnap : public Message {
     ::encode(bl, payload);
     ::encode(split, payload);
     ::encode(split_inos, payload);
+    ::encode(split_realms, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -49,6 +51,7 @@ struct MClientSnap : public Message {
     ::decode(bl, p);
     ::decode(split, p);
     ::decode(split_inos, p);
+    ::decode(split_realms, p);
     assert(p.end());
   }
 

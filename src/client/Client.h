@@ -626,14 +626,23 @@ protected:
     realm->nref++;
     return realm;
   }
+  SnapRealm *get_snap_realm_maybe(inodeno_t r) {
+    if (snap_realms.count(r) == 0)
+      return NULL;
+    SnapRealm *realm = snap_realms[r];
+    realm->nref++;
+    return realm;
+  }
   void put_snap_realm(SnapRealm *realm) {
     if (realm->nref-- == 0) {
       snap_realms.erase(realm->ino);
       delete realm;
     }
   }
+  void adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
   inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
   inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
+  void invalidate_snaprealm_and_children(SnapRealm *realm);
 
   Inode *open_snapdir(Inode *diri);
 
