@@ -639,7 +639,7 @@ protected:
       delete realm;
     }
   }
-  void adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
+  bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
   inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
   inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
   void invalidate_snaprealm_and_children(SnapRealm *realm);

@@ -1204,6 +1204,7 @@ void Client::send_reconnect(int mds)
 
   if (mds_sessions.count(mds)) {
     // i have an open session.
+    hash_set<inodeno_t> did_snaprealm;
     for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
 	 p != inode_map.end();
 	 p++) {
@@ -1215,13 +1216,19 @@ void Client::send_reconnect(int mds)
 		 << dendl;
 	filepath path;
 	in->make_path(path);
-	dout(10) << " path on " << p->first << " is " << path << dendl;
+	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
 	m->add_cap(p->first.ino, path.get_path(),   // ino
 		   in->caps_wanted(), // wanted
 		   in->caps[mds]->issued,     // issued
 		   in->inode.size, in->inode.mtime, in->inode.atime, in->snaprealm->ino);
+
+	if (did_snaprealm.count(in->snaprealm->ino) == 0) {
+	  dout(10) << " snaprealm " << *in->snaprealm << dendl;
+	  m->add_snaprealm(in->snaprealm->ino, in->snaprealm->seq, in->snaprealm->parent);
+	  did_snaprealm.insert(in->snaprealm->ino);
+	}	
       }
       if (in->exporting_mds == mds) {
 	dout(10) << " clearing exporting_caps on " << p->first << dendl;
@@ -1230,6 +1237,7 @@ void Client::send_reconnect(int mds)
 	in->exporting_mseq = 0;
       }
     }
+
 
     // reset my cap seq number
     mds_sessions[mds].seq = 0;
@@ -1650,7 +1658,7 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
   }
 }
 
-void Client::adjust_realm_parent(SnapRealm *realm, inodeno_t parent)
+bool Client::adjust_realm_parent(SnapRealm *realm, inodeno_t parent)
 {
   if (realm->parent != parent) {
     dout(10) << "adjust_realm_parent " << *realm
@@ -1662,7 +1670,9 @@ void Client::adjust_realm_parent(SnapRealm *realm, inodeno_t parent)
     }
     realm->pparent = get_snap_realm(parent);
     realm->pparent->pchildren.insert(realm);
+    return true;
   }
+  return false;
 }
 
 inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
@@ -1707,10 +1717,11 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	    q.push_back(*p);
 	}
       }
+
     }
 
     // _always_ verify parent
-    adjust_realm_parent(realm, info.parent);
+    bool invalidate = adjust_realm_parent(realm, info.parent);
 
     if (info.seq > realm->seq) {
       // update
@@ -1720,12 +1731,15 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
       realm->prior_parent_snaps = info.prior_parent_snaps;
       realm->my_snaps = info.my_snaps;
       realm->seq = info.seq;
-
+      invalidate = true;
+    }
+    if (invalidate) {
       invalidate_snaprealm_and_children(realm);
+      dout(15) << "update_snap_trace " << *realm << " self|parent updated" << dendl;
       dout(15) << "  snaps " << realm->get_snaps() << dendl;
     } else {
       dout(10) << "update_snap_trace " << *realm << " seq " << info.seq
-	       << " <= " << realm->seq << ", SKIPPING" << dendl;
+	       << " <= " << realm->seq << " and same parent, SKIPPING" << dendl;
     }
         
     put_snap_realm(realm);
