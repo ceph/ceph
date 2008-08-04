@@ -473,9 +473,11 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   for (list<pair<__u8,version_t> >::iterator p = table_tids.begin();
        p != table_tids.end();
        ++p) {
-    dout(10) << "EMetaBlob.replay noting " << get_mdstable_name(p->first) << " transaction " << p->second << dendl;
+    dout(10) << "EMetaBlob.replay noting " << get_mdstable_name(p->first)
+	     << " transaction " << p->second << dendl;
     MDSTableClient *client = mds->get_table_client(p->first);
     client->got_journaled_agree(p->second, logseg);
+    logseg->pending_commit_tids[p->first].insert(p->second);
   }
 
   // allocated_inos
