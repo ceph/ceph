@@ -44,9 +44,8 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 
     // add mds local osds, but don't put them in the crush mapping func
     for (int i=0; i<mds_local_osd; i++) {
-      set_max_osd(i+num_osd);
-      set_state(i, CEPH_OSD_EXISTS);
-      set_offload(i, CEPH_OSD_OUT);
+      set_state(i+num_osd, CEPH_OSD_EXISTS);
+      set_offload(i+num_osd, CEPH_OSD_OUT);
     }
   }
 }

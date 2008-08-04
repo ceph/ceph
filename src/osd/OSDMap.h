@@ -261,20 +261,21 @@ private:
   int get_num_osds() { 
     int n = 0;
     for (int i=0; i<max_osd; i++)
-      if (osd_state[i] & CEPH_OSD_EXISTS) n++;
+      //if (osd_state[i] & CEPH_OSD_EXISTS) 
+	n++;
     return n;
   }
   int get_num_up_osds() {
     int n = 0;
     for (int i=0; i<max_osd; i++)
-      if (osd_state[i] & CEPH_OSD_EXISTS &&
+      if (//osd_state[i] & CEPH_OSD_EXISTS &&
 	  osd_state[i] & CEPH_OSD_UP) n++;
     return n;
   }
   int get_num_in_osds() {
     int n = 0;
     for (int i=0; i<max_osd; i++)
-      if (osd_state[i] & CEPH_OSD_EXISTS &&
+      if (//osd_state[i] & CEPH_OSD_EXISTS &&
 	  crush.get_offload(i) != CEPH_OSD_OUT) n++;
     return n;
   }
@@ -291,7 +292,7 @@ private:
     crush.set_offload(o, off);
   }
 
-  bool exists(int osd) { return osd < max_osd && osd_state[osd] & CEPH_OSD_EXISTS; }
+  bool exists(int osd) { return osd < max_osd/* && osd_state[osd] & CEPH_OSD_EXISTS*/; }
   bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
   bool is_down(int osd) { assert(exists(osd)); return !is_up(osd); }
   bool is_down_clean(int osd) { 
