@@ -654,7 +654,7 @@ public:
 
   // [reconnect/rejoin caps]
   map<CInode*,map<int, inodeno_t> >  reconnected_caps;   // inode -> client -> realmino
-  map<inodeno_t,map<int, snapid_t> > reconnected_snaprealms;
+  map<inodeno_t,map<int, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
 
   void add_reconnected_cap(CInode *in, int client, inodeno_t realm) {
     reconnected_caps[in][client] = realm;

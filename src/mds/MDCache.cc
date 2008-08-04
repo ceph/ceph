@@ -3504,7 +3504,7 @@ void MDCache::process_reconnected_caps()
 
     SnapRealm *realm = in->find_snaprealm();
 
-    // is this realm's parents fully open?
+    // are this realm's parents fully open?
     if (realm->have_past_parents_open()) {
       dout(10) << " have past snap parents for realm " << *realm 
 	       << " on " << *realm->inode << dendl;
@@ -6180,9 +6180,11 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   
   send_realm_splits(updates);
 
+  /*
   static int count = 5;
   if (--count == 0)
     assert(0);  // hack test test **********
+  */
 
   // done.
   mdr->more()->stid = 0;  // caller will likely need to reuse this

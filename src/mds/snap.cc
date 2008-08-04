@@ -27,6 +27,30 @@
 						  << ".cache.snaprealm(" << inode->ino() \
 						  << " seq " << seq << " " << this << ") "
 
+ostream& operator<<(ostream& out, const SnapRealm& realm) 
+{
+  out << "snaprealm(" << realm.inode->ino()
+      << " seq " << realm.seq
+      << " lc " << realm.last_created
+      << " snaps=" << realm.snaps;
+  if (realm.past_parents.size()) {
+    out << " past_parents=(";
+    for (map<snapid_t, snaplink_t>::const_iterator p = realm.past_parents.begin(); 
+	 p != realm.past_parents.end(); 
+	 p++) {
+      if (p != realm.past_parents.begin()) out << ",";
+      out << p->second.first << "-" << p->first
+	  << "=" << p->second.ino;
+    }
+    out << ")";
+  }
+  out << " " << &realm << ")";
+  return out;
+}
+
+
+
+
 void SnapRealm::add_open_past_parent(SnapRealm *parent)
 {
   open_past_parents[parent->inode->ino()] = parent;

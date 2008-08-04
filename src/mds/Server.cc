@@ -382,11 +382,16 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       CInode *in = mdcache->get_inode(p->first);
       if (in) {
 	assert(in->snaprealm);
-	if (in->snaprealm->have_past_parents_open())
+	if (in->snaprealm->have_past_parents_open()) {
+	  dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
 	  mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->second.seq));
-	else
+	} else {
+	  dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
 	  mdcache->add_reconnected_snaprealm(from, p->first, snapid_t(p->second.seq));
+	}
       } else {
+	dout(15) << "open snaprealm (w/o inode) on " << p->first
+		 << " seq " << p->second.seq << dendl;
 	mdcache->add_reconnected_snaprealm(from, p->first, snapid_t(p->second.seq));
       }
     }
@@ -398,7 +403,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       CInode *in = mdcache->get_inode(p->first);
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
-	dout(15) << "open caps on " << *in << dendl;
+	dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
+		 << " on " << *in << dendl;
 	Capability *cap = in->reconnect_cap(from, p->second.capinfo);
 	session->touch_cap(cap);
 	mds->mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));

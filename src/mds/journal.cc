@@ -371,6 +371,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	assert(dn->last == p->dnlast);
       }
 
+      bool do_snap_split = false;
       CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
 	in = new CInode(mds->mdcache, true, p->dnfirst, p->dnlast);
@@ -379,6 +380,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (in->inode.is_dir()) {
 	  in->dirfragtree = p->dirfragtree;
 	  in->decode_snap_blob(p->snapbl);
+	  if (in->snaprealm)
+	    do_snap_split = true;
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
@@ -405,7 +408,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	in->xattrs = p->xattrs;
 	if (in->inode.is_dir()) {
 	  in->dirfragtree = p->dirfragtree;
+	  bool had = in->snaprealm ? true:false;
 	  in->decode_snap_blob(p->snapbl);
+	  if (!had && in->snaprealm)
+	    do_snap_split = true;
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
@@ -418,16 +424,22 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
    	in->first = p->dnfirst;
-      }
 
-      // verify open snaprealm parents
-      if (in->snaprealm) {
-	SnapRealm *actual = in->get_parent_dn()->get_dir()->inode->find_snaprealm();
-	if (actual != in->snaprealm->parent) {
-	  dout(10) << "EMetaBlob.replay fixing snaprealm open_parent" << dendl;
-	  in->snaprealm->change_open_parent_to(actual);
+	// verify open snaprealm parent
+	if (in->snaprealm) {
+	  SnapRealm *actual = in->get_parent_dn()->get_dir()->inode->find_snaprealm();
+	  if (actual != in->snaprealm->parent) {
+	    dout(10) << "EMetaBlob.replay  fixing snaprealm open parent" << dendl;
+	    in->snaprealm->change_open_parent_to(actual);
+	  }
 	}
       }
+
+      if (do_snap_split && in->snaprealm) {
+	dout(10) << "EMetaBlob.reply  splitting snaprealm" << dendl;
+	in->snaprealm->parent->split_at(in->snaprealm);
+      }
+
     }
 
     // remote dentries
