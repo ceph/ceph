@@ -3552,6 +3552,12 @@ void MDCache::prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
     splits[client] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
     snap->split = realm->inode->ino();
     realm->build_snap_trace(snap->bl);
+
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      snap->split_realms.push_back((*p)->inode->ino());
+    
   } else 
     snap = splits[client]; 
   snap->split_inos.push_back(ino);	
@@ -3567,7 +3573,7 @@ void MDCache::send_realm_splits(map<int,MClientSnap*>& splits)
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first));
     if (session) {
       dout(10) << " client" << p->first << " split " << p->second->split
-	       << " inos " << p->second->split_inos << dendl;
+              << " inos " << p->second->split_inos << dendl;
       mds->send_message_client(p->second, session->inst);
     } else {
       dout(10) << " no session for client" << p->first << dendl;
@@ -6134,28 +6140,49 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   list<inodeno_t> split_inos;
   for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
     split_inos.push_back((*p)->ino());
+
+  list<inodeno_t> split_realms;
+  for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
+       p != in->snaprealm->open_children.end();
+       p++)
+    split_realms.push_back((*p)->inode->ino());
   
   bufferlist snapbl;
   in->snaprealm->build_snap_trace(snapbl);
 
   const vector<snapid_t> snaps = in->snaprealm->get_snap_vector();
   map<int, MClientSnap*> updates;
-  for (map<int, xlist<Capability*> >::iterator p = in->snaprealm->client_caps.begin();
-       p != in->snaprealm->client_caps.end();
-       p++) {
-    assert(!p->second.empty());
-    MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_SPLIT);
-    update->split = in->ino();
-    update->split_inos = split_inos;
-    update->bl = snapbl;
-    updates[p->first] = update;
+  
+  // send splits for all clients with caps in this _or nested_ realms.
+  list<SnapRealm*> q;
+  q.push_back(in->snaprealm);
+  while (!q.empty()) {
+    SnapRealm *realm = q.front();
+    q.pop_front();
+
+    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
+	 p != realm->client_caps.end();
+	 p++) {
+      assert(!p->second.empty());
+      MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_SPLIT);
+      update->split = in->ino();
+      update->split_inos = split_inos;
+      update->split_realms = split_realms;
+      update->bl = snapbl;
+      updates[p->first] = update;
+    }
+
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      q.push_back(*p);   
   }
   
-  // send
-  for (map<int,MClientSnap*>::iterator p = updates.begin();
-       p != updates.end();
-       p++)
-    mds->send_message_client(p->second, p->first);
+  send_realm_splits(updates);
+
+  static int count = 5;
+  if (--count == 0)
+    assert(0);  // hack test test **********
 
   // done.
   mdr->more()->stid = 0;  // caller will likely need to reuse this
