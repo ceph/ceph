@@ -445,7 +445,8 @@ int FileStore::umount()
 
 int FileStore::transaction_start(int len)
 {
-  if (!btrfs || !btrfs_trans_start_end)
+  if (!btrfs || !btrfs_trans_start_end ||
+      !g_conf.filestore_btrfs_trans)
     return 0;
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
@@ -481,7 +482,8 @@ int FileStore::transaction_start(int len)
 
 void FileStore::transaction_end(int fd)
 {
-  if (!btrfs || !btrfs_trans_start_end)
+  if (!btrfs || !btrfs_trans_start_end ||
+      !g_conf.filestore_btrfs_trans)
     return;
 
   char fn[80];

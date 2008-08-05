@@ -291,6 +291,7 @@ struct md_config_t {
   bool  filestore_fake_attrs;
   bool  filestore_fake_collections;
   const char  *filestore_dev;
+  bool filestore_btrfs_trans;
   
   // ebofs
   bool  ebofs;
