@@ -6134,7 +6134,6 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   SnapRealm *parent = in->snaprealm->parent;
   assert(parent);
   assert(parent->open_children.count(in->snaprealm));
-  parent->split_at(in->snaprealm);
 
   // notify clients of update|split
   list<inodeno_t> split_inos;

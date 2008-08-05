@@ -1202,12 +1202,13 @@ void CInode::open_snaprealm()
     SnapRealm *parent = find_snaprealm();
     snaprealm = new SnapRealm(mdcache, this);
     if (parent) {
-      snaprealm->parent = parent;
-      parent->open_children.insert(snaprealm);
-      dout(10) << " opened snaprealm " << snaprealm
+      dout(10) << "open_snaprealm " << snaprealm
 	       << " parent is " << parent
 	       << " siblings are " << parent->open_children
 	       << dendl;
+      snaprealm->parent = parent;
+      parent->split_at(snaprealm);
+      parent->open_children.insert(snaprealm);
     }
   }
 }

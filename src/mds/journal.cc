@@ -434,12 +434,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  }
 	}
       }
-
-      if (do_snap_split && in->snaprealm) {
-	dout(10) << "EMetaBlob.reply  splitting snaprealm" << dendl;
-	in->snaprealm->parent->split_at(in->snaprealm);
-      }
-
     }
 
     // remote dentries
