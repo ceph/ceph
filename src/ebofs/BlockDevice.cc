@@ -12,9 +12,9 @@
  * 
  */
 
+#include "config.h"
 #include "BlockDevice.h"
 
-#include "config.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -34,6 +34,9 @@
 #ifndef __CYGWIN__
 #ifndef DARWIN
 #include <linux/fs.h>
+#else
+/* lseek works on 64-bit offsets on OS/X */
+#define lseek64 lseek
 #endif
 #endif
 

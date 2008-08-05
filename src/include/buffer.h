@@ -17,7 +17,22 @@
 
 #define _XOPEN_SOURCE 600
 #include <stdlib.h>
+#ifdef DARWIN
+
+#ifndef MAP_ANON
+#define MAP_ANON 0x1000
+#endif
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0x100000
+void	*valloc(size_t);
+#endif
+
+
+
+#else
+
 #include <malloc.h>
+#endif
 #include <stdint.h>
 #include <assert.h>
 #include <string.h>

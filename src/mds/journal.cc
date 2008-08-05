@@ -12,6 +12,7 @@
  * 
  */
 
+#include "config.h"
 #include "events/EString.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"

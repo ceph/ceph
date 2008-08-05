@@ -445,6 +445,9 @@ int FileStore::umount()
 
 int FileStore::transaction_start(int len)
 {
+#ifdef DARWIN
+  return 0;
+#else
   if (!btrfs || !btrfs_trans_start_end ||
       !g_conf.filestore_btrfs_trans)
     return 0;
@@ -478,10 +481,14 @@ int FileStore::transaction_start(int len)
   ::mknod(fn, 0644, 0);
 
   return fd;
+#endif /* DARWIN */
 }
 
 void FileStore::transaction_end(int fd)
 {
+#ifdef DARWIN
+  return;
+#else
   if (!btrfs || !btrfs_trans_start_end ||
       !g_conf.filestore_btrfs_trans)
     return;
@@ -500,10 +507,15 @@ void FileStore::transaction_end(int fd)
     _handle_signal(sig_pending);
   }
   sig_lock.Unlock();
+#endif /* DARWIN */
 }
 
 unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 {
+#ifdef DARWIN
+  return ObjectStore::apply_transaction(t, onsafe);
+#else
+
   // no btrfs transaction support?
   // or, use trans start/end ioctls?
   if (!btrfs || btrfs_trans_start_end)
@@ -896,6 +908,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
     delete onsafe;
 
   return r;
+#endif /* DARWIN */
 }
 
 
@@ -1050,9 +1063,13 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   if (n < 0)
       return -errno;
   int r = 0;
+#ifndef DARWIN
   if (btrfs)
     r = ::ioctl(n, BTRFS_IOC_CLONE, o);
   else {
+#else 
+    {
+#endif /* DARWIN */
     struct stat st;
     ::fstat(o, &st);
 

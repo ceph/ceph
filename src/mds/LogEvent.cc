@@ -12,6 +12,7 @@
  * 
  */
 
+#include "config.h"
 #include "LogEvent.h"
 
 #include "MDS.h"
