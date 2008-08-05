@@ -148,12 +148,6 @@ struct SnapRealm {
       build_snap_context();
     return cached_snap_context;
   }
-  snapid_t get_follows() {
-    get_snap_context();
-    if (cached_snap_context.empty())
-      return 0;
-    return cached_snap_context.snaps[0];
-  }
 };
 
 inline ostream& operator<<(ostream& out, const SnapRealm& r) {

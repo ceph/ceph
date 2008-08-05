@@ -1460,7 +1460,7 @@ void Client::check_caps(Inode *in, bool flush_snap)
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
-    m->set_snap_follows(in->snaprealm->get_follows());
+    m->set_snap_follows(in->snaprealm->get_snap_context().seq);
     messenger->send_message(m, mdsmap->get_inst(it->first));
     if (wanted == 0 && !flush_snap)
       mds_sessions[it->first].num_caps--;
@@ -2025,7 +2025,7 @@ void Client::handle_file_caps(MClientFileCaps *m)
       m->set_mtime(in->inode.mtime);
       m->set_atime(in->inode.atime);
       m->set_wanted(wanted);
-      m->set_snap_follows(in->snaprealm->get_follows());
+      m->set_snap_follows(in->snaprealm->get_snap_context().seq);
       m->set_migrate_seq(cap->mseq);
     }
   } else if (old_caps == new_caps) {
