@@ -6113,28 +6113,11 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
 }
 
-void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)
+
+void MDCache::do_realm_split_notify(CInode *in)
 {
-  dout(10) << "_snaprealm_create_finish " << *in << dendl;
-
-  // apply
-  in->pop_and_dirty_projected_inode(mut->ls);
-  mut->apply();
-  mut->cleanup();
-  delete mut;
-
-  // tell table we've committed
-  mds->snapclient->commit(mdr->more()->stid, mut->ls);
-
-  // create
-  in->open_snaprealm();
-  in->snaprealm->seq = in->snaprealm->created = mdr->more()->stid;
-
-  // split existing caps
-  SnapRealm *parent = in->snaprealm->parent;
-  assert(parent);
-  assert(parent->open_children.count(in->snaprealm));
-
+  dout(10) << "do_realm_split_notify " << *in->snaprealm << " " << *in << dendl;
+  
   // notify clients of update|split
   list<inodeno_t> split_inos;
   for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
@@ -6178,6 +6161,26 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   }
   
   send_realm_splits(updates);
+}
+
+void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)
+{
+  dout(10) << "_snaprealm_create_finish " << *in << dendl;
+
+  // apply
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+
+  // tell table we've committed
+  mds->snapclient->commit(mdr->more()->stid, mut->ls);
+
+  // create
+  in->open_snaprealm();
+  in->snaprealm->seq = in->snaprealm->created = mdr->more()->stid;
+
+  do_realm_split_notify(in);
 
   /*
   static int count = 5;

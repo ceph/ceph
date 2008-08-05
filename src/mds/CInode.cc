@@ -837,7 +837,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_ISNAP:
-    decode_snap(p);
+    {
+      bool had = snaprealm ? true:false;
+      decode_snap(p);
+      if (!had && snaprealm) {
+	assert(!is_auth());
+	mdcache->do_realm_split_notify(this);
+      }
+    }
     break;
 
   default:
