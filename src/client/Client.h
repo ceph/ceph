@@ -188,6 +188,7 @@ class Inode {
 
   // per-mds caps
   map<int,InodeCap*> caps;            // mds -> InodeCap
+  int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
   capseq_t exporting_mseq;
@@ -253,6 +254,7 @@ class Inode {
     snapid(vino.snapid),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
@@ -289,7 +291,7 @@ class Inode {
   bool put_cap_ref(int cap);
 
   int caps_issued() {
-    int c = exporting_issued;
+    int c = exporting_issued | snap_caps;
     for (map<int,InodeCap*>::iterator it = caps.begin();
          it != caps.end();
          it++)

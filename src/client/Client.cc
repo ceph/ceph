@@ -1394,6 +1394,8 @@ void Client::check_caps(Inode *in, bool flush_snap)
 	   << " wanted " << cap_string(wanted)
 	   << " used " << cap_string(used)
 	   << dendl;
+
+  assert(in->snapid == CEPH_NOSNAP);
   
   if (in->caps.empty())
     return;   // guard if at end of func
@@ -3205,14 +3207,22 @@ int Client::_open(const filepath &path, int flags, mode_t mode, Fh **fhp, int ui
 
     dout(10) << in->inode.ino << " mode " << cmode << dendl;
 
-    // add the cap
     int mds = reply->get_source().num();
-    add_update_cap(in, mds,
-		   reply->snapbl,
-		   reply->get_file_caps(),
-		   reply->get_file_caps_seq(),
-		   reply->get_file_caps_mseq());    
-    dout(5) << "open success, fh is " << f << " combined caps " << cap_string(in->caps_issued()) << dendl;
+    if (in->snapid == CEPH_NOSNAP) {
+      // add the cap
+      add_update_cap(in, mds,
+		     reply->snapbl,
+		     reply->get_file_caps(),
+		     reply->get_file_caps_seq(),
+		     reply->get_file_caps_mseq());    
+      dout(5) << "open success, fh is " << f << " combined caps " << cap_string(in->caps_issued()) << dendl;
+    } else {
+      in->snap_caps |= reply->get_file_caps();
+      in->snap_cap_refs++;
+      dout(5) << "open success, fh is " << f << " combined IMMUTABLE SNAP caps " 
+	      << cap_string(in->caps_issued()) << dendl;
+
+    }
   }
 
   delete reply;
@@ -3248,11 +3258,17 @@ int Client::_release(Fh *f)
   dout(5) << "_release " << f << dendl;
   Inode *in = f->inode;
 
-  if (in->put_open_ref(f->mode))
-    check_caps(in);
-  put_inode( in );
+  if (in->snapid == CEPH_NOSNAP) {
+    if (in->put_open_ref(f->mode))
+      check_caps(in);
+  } else {
+    assert(in->snap_cap_refs > 0);
+    in->snap_cap_refs--;
+  }
 
+  put_inode( in );
   delete f;
+
   return 0;
 }
 
@@ -3458,9 +3474,16 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       }
 
       // read (and possibly block)
-      r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
-				  CEPH_NOSNAP, in->snaprealm->get_snaps(),
-				  offset, size, bl, 0, onfinish);
+      vector<snapid_t> emptysnaps;
+      if (in->snapid == CEPH_NOSNAP)
+	r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
+				    CEPH_NOSNAP, in->snaprealm->get_snaps(),
+				    offset, size, bl, 0, onfinish);
+      else
+	r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
+				    in->snapid, emptysnaps,
+				    offset, size, bl, 0, onfinish);
+
       
       if (r == 0) {
 	while (!done) 
@@ -3575,6 +3598,8 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 {
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
+
+  assert(in->snapid == CEPH_NOSNAP);
 
   // use/adjust fd pos?
   if (offset < 0) {

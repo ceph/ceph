@@ -1335,7 +1335,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
       CDentry *last = mdr->trace[mdr->trace.size()-1];
       assert(last->get_inode() == mdr->ref);
     }
-    dout(10) << "rdlock_path_pin_ref had " << *mdr->ref << dendl;
+    dout(10) << "rdlock_path_pin_ref had snap " << mdr->ref_snapid << " " << *mdr->ref << dendl;
     return mdr->ref;
   }
 
@@ -4550,6 +4550,14 @@ void Server::handle_client_open(MDRequest *mdr)
     return;
   }
   
+  // snapped data is read only
+  if (mdr->ref_snapid != CEPH_NOSNAP &&
+      (cmode & CEPH_FILE_MODE_WR)) {
+    dout(7) << "snap " << mdr->ref_snapid << " is read-only " << *cur << dendl;
+    reply_request(mdr, -EPERM);
+    return;
+  }
+
   // hmm, check permissions or something.
 
   // O_TRUNC
@@ -4580,21 +4588,47 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 {
   MClientRequest *req = mdr->client_request;
   int cmode = ceph_flags_to_mode(req->head.args.open.flags);
-  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
+  if (cur->inode.is_dir()) 
+    cmode = CEPH_FILE_MODE_PIN;
 
-  // register new cap
-  bool is_new = false;
-  Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
+  // prepare reply
+  MClientReply *reply = new MClientReply(req, 0);
 
-  // drop our locks (they may interfere with us issuing new caps)
-  mdcache->request_drop_locks(mdr);
+  if (mdr->ref_snapid == CEPH_NOSNAP) {
+    // register new cap
+    bool is_new = false;
+    Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
+    
+    // drop our locks (they may interfere with us issuing new caps)
+    mdcache->request_drop_locks(mdr);
+    
+    if (is_new)
+      cap->dec_suppress();  // stop suppressing messages on new cap
+    
+    dout(12) << "_do_open issued caps " << cap_string(cap->pending())
+	     << " for " << req->get_orig_source()
+	     << " on " << *cur << dendl;
 
-  if (is_new)
-    cap->dec_suppress();  // stop suppressing messages on new cap
+    reply->set_file_caps(cap->pending());
+    reply->set_file_caps_seq(cap->get_last_seq());
+    reply->set_file_caps_mseq(cap->get_mseq());
 
-  dout(12) << "_do_open issued caps " << cap_string(cap->pending())
-	   << " for " << req->get_source()
-	   << " on " << *cur << dendl;
+    // make sure this inode gets into the journal
+    if (!cur->xlist_open_file.is_on_xlist()) {
+      LogSegment *ls = mds->mdlog->get_current_segment();
+      EOpen *le = new EOpen(mds->mdlog);
+      le->add_clean_inode(cur);
+      ls->open_files.push_back(&cur->xlist_open_file);
+      mds->mdlog->submit_entry(le);
+    }
+  } else {
+    int caps = ceph_caps_for_mode(cmode);
+    dout(12) << "_do_open issued IMMUTABLE SNAP caps " << cap_string(caps)
+	     << " for " << req->get_orig_source()
+	     << " snapid " << mdr->ref_snapid
+	     << " on " << *cur << dendl;
+    reply->set_file_caps(caps);
+  }
   
   // hit pop
   mdr->now = g_clock.now();
@@ -4604,28 +4638,13 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
 			     mdr->client_request->get_orig_source().num());
-
-  // reply
-  MClientReply *reply = new MClientReply(req, 0);
-  reply->set_file_caps(cap->pending());
-  reply->set_file_caps_seq(cap->get_last_seq());
-  reply->set_file_caps_mseq(cap->get_mseq());
-
+  
   SnapRealm *realm = cur->find_snaprealm();
   realm->build_snap_trace(reply->snapbl);
   dout(10) << " snaprealm is " << *realm << " on " << *realm->inode << dendl;
-  
+
   //reply->set_file_data_version(fdv);
   reply_request(mdr, reply);
-
-  // make sure this inode gets into the journal
-  if (!cur->xlist_open_file.is_on_xlist()) {
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    EOpen *le = new EOpen(mds->mdlog);
-    le->add_clean_inode(cur);
-    ls->open_files.push_back(&cur->xlist_open_file);
-    mds->mdlog->submit_entry(le);
-  }
 }
 
 
@@ -4738,6 +4757,7 @@ public:
 
     // set/pin ref inode for open()
     mdr->ref = newi;
+    mdr->ref_snapid = CEPH_NOSNAP;
     mdr->pin(newi);
     mdr->trace.push_back(dn);
 
