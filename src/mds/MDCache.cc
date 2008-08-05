@@ -3541,7 +3541,7 @@ void MDCache::process_reconnected_caps()
   }    
   reconnected_caps.clear();
 
-  send_realm_splits(splits);
+  send_snaps(splits);
 }
 
 void MDCache::prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
@@ -3563,17 +3563,19 @@ void MDCache::prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
   snap->split_inos.push_back(ino);	
 }
 
-void MDCache::send_realm_splits(map<int,MClientSnap*>& splits)
+void MDCache::send_snaps(map<int,MClientSnap*>& splits)
 {
-  dout(10) << "send_realm_splits" << dendl;
+  dout(10) << "send_snaps" << dendl;
   
   for (map<int,MClientSnap*>::iterator p = splits.begin();
        p != splits.end();
        p++) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first));
     if (session) {
-      dout(10) << " client" << p->first << " split " << p->second->split
-              << " inos " << p->second->split_inos << dendl;
+      dout(10) << " client" << p->first
+	       << " split " << p->second->split
+	       << " inos " << p->second->split_inos
+	       << dendl;
       mds->send_message_client(p->second, session->inst);
     } else {
       dout(10) << " no session for client" << p->first << dendl;
@@ -3705,7 +3707,7 @@ void MDCache::open_snap_parents()
     }
   }
 
-  send_realm_splits(splits);
+  send_snaps(splits);
 
   if (gather->get_num()) {
     dout(10) << "open_snap_parents - waiting for " << gather->get_num() << dendl;
@@ -6160,7 +6162,46 @@ void MDCache::do_realm_split_notify(CInode *in)
       q.push_back(*p);   
   }
   
-  send_realm_splits(updates);
+  send_snaps(updates);
+}
+
+void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
+{
+  dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
+
+  bufferlist snapbl;
+  in->snaprealm->build_snap_trace(snapbl);
+
+  map<int, MClientSnap*> updates;
+  list<SnapRealm*> q;
+  q.push_back(in->snaprealm);
+  while (!q.empty()) {
+    SnapRealm *realm = q.front();
+    q.pop_front();
+
+    dout(10) << " realm " << *realm
+	     << " on " << *realm->inode << dendl;
+    realm->invalidate_cached_snaps();
+
+    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
+	 p != realm->client_caps.end();
+	 p++) {
+      assert(!p->second.empty());
+      if (updates.count(p->first) == 0) {
+	MClientSnap *update = updates[p->first] = new MClientSnap(snapop);
+	update->bl = snapbl;
+      }
+    }
+
+    // notify for active children, too.
+    dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      q.push_back(*p);
+  }
+
+  send_snaps(updates);
 }
 
 void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)

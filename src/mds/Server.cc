@@ -5067,7 +5067,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   diri->snaprealm->last_created = snapid;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  _invalidate_and_send_snap_updates(diri, CEPH_SNAP_OP_CREATE);
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_CREATE);
 
   // yay
   mdr->ref = diri;
@@ -5077,48 +5077,6 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   diri->snaprealm->build_snap_trace(reply->snapbl);
   reply_request(mdr, reply);
 }
-
-void Server::_invalidate_and_send_snap_updates(CInode *diri, int snapop)
-{
-  bufferlist snapbl;
-  diri->snaprealm->build_snap_trace(snapbl);
-
-  map<int, MClientSnap*> updates;
-  list<SnapRealm*> q;
-  q.push_back(diri->snaprealm);
-  while (!q.empty()) {
-    SnapRealm *realm = q.front();
-    q.pop_front();
-
-    dout(10) << " realm " << *realm
-	     << " on " << *realm->inode << dendl;
-    realm->invalidate_cached_snaps();
-
-    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
-	 p != realm->client_caps.end();
-	 p++) {
-      assert(!p->second.empty());
-      if (updates.count(p->first) == 0) {
-	MClientSnap *update = updates[p->first] = new MClientSnap(snapop);
-	update->bl = snapbl;
-      }
-    }
-
-    // notify for active children, too.
-    dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
-    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
-	 p != realm->open_children.end();
-	 p++)
-      q.push_back(*p);
-  }
-
-  // send
-  for (map<int,MClientSnap*>::iterator p = updates.begin();
-       p != updates.end();
-       p++)
-    mds->send_message_client(p->second, p->first);
-}
-
 
 
 // RMSNAP
@@ -5243,7 +5201,7 @@ void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
   diri->snaprealm->seq = stid;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  _invalidate_and_send_snap_updates(diri, CEPH_SNAP_OP_DESTROY);
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);
 
   // yay
   mdr->ref = diri;
