@@ -71,9 +71,8 @@ class Objecter {
   class OSDOp {
   public:
     list<ObjectExtent> extents;
-    vector<snapid_t> snaps;
     int inc_lock;
-    OSDOp(const vector<snapid_t>& s) : snaps(s), inc_lock(0) {}
+    OSDOp() : inc_lock(0) {}
     virtual ~OSDOp() {}
   };
 
@@ -85,14 +84,14 @@ class Objecter {
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
     int flags;
 
-    OSDRead(const vector<snapid_t> &s, bufferlist *b, int f) : OSDOp(s), bl(b), onfinish(0), flags(f) {
+    OSDRead(bufferlist *b, int f) : OSDOp(), bl(b), onfinish(0), flags(f) {
       if (bl)
 	bl->clear();
     }
   };
 
-  OSDRead *prepare_read(const vector<snapid_t>& snaps, bufferlist *b, int f) {
-    return new OSDRead(snaps, b, f);
+  OSDRead *prepare_read(bufferlist *b, int f) {
+    return new OSDRead(b, f);
   }
 
   class OSDStat : public OSDOp {
@@ -101,16 +100,17 @@ class Objecter {
     __u64 *size;  // where the size goes.
     int flags;
     Context *onfinish;
-    OSDStat(const vector<snapid_t> &sn, __u64 *s, int f) : OSDOp(sn), tid(0), size(s), flags(f), onfinish(0) { }
+    OSDStat(__u64 *s, int f) : OSDOp(), tid(0), size(s), flags(f), onfinish(0) { }
   };
 
-  OSDStat *prepare_stat(const vector<snapid_t>& snaps, __u64 *s, int f) {
-    return new OSDStat(snaps, s, f);
+  OSDStat *prepare_stat(__u64 *s, int f) {
+    return new OSDStat(s, f);
   }
 
   // generic modify
   class OSDModify : public OSDOp {
   public:
+    SnapContext snapc;
     int op;
     list<ObjectExtent> extents;
     int flags;
@@ -120,22 +120,22 @@ class Objecter {
     map<tid_t, eversion_t>   tid_version;
     map<tid_t, ObjectExtent> waitfor_commit;
 
-    OSDModify(const vector<snapid_t>& sn, int o, int f) : OSDOp(sn) ,op(o), flags(f), onack(0), oncommit(0) {}
+    OSDModify(const SnapContext& sc, int o, int f) : OSDOp(), snapc(sc), op(o), flags(f), onack(0), oncommit(0) {}
   };
 
-  OSDModify *prepare_modify(const vector<snapid_t>& snaps, int o, int f) { 
-    return new OSDModify(snaps, o, f); 
+  OSDModify *prepare_modify(const SnapContext& sc, int o, int f) { 
+    return new OSDModify(sc, o, f); 
   }
   
   // write (includes the bufferlist)
   class OSDWrite : public OSDModify {
   public:
     bufferlist bl;
-    OSDWrite(const vector<snapid_t>& sn, bufferlist &b, int f) : OSDModify(sn, CEPH_OSD_OP_WRITE, f), bl(b) {}
+    OSDWrite(const SnapContext& sc, bufferlist &b, int f) : OSDModify(sc, CEPH_OSD_OP_WRITE, f), bl(b) {}
   };
 
-  OSDWrite *prepare_write(const vector<snapid_t>& snaps, bufferlist &b, int f) { 
-    return new OSDWrite(snaps, b, f); 
+  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, int f) { 
+    return new OSDWrite(sc, b, f); 
   }
 
   
@@ -237,15 +237,15 @@ class Objecter {
   tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
 
   // even lazier
-  tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t>& snaps, bufferlist *bl, int flags,
+  tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags,
              Context *onfinish);
-  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t>& snaps, bufferlist &bl, int flags,
+  tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish);
+
+  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
               Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t>& snaps, int flags,
+  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags,
              Context *onack, Context *oncommit);
-  tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, const vector<snapid_t>& snaps, int flags, Context *onfinish);
-  
-  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, const vector<snapid_t>& snaps, Context *onack, Context *oncommit);
+  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, const SnapContext& snapc, Context *onack, Context *oncommit);
 
 
   void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);

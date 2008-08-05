@@ -130,7 +130,7 @@ struct SnapRealm {
   SnapRealm *pparent;
   set<SnapRealm*> pchildren;
 
-  vector<snapid_t> cached_snaps;  // my_snaps + parent snaps + past_parent_snaps
+  SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps
 
   xlist<Inode*> inodes_with_caps;
 
@@ -138,20 +138,21 @@ struct SnapRealm {
     ino(i), nref(0), created(0), seq(0),
     pparent(NULL) { }
 
-  void build_snaps();
+  void build_snap_context();
   void invalidate_cache() {
-    cached_snaps.clear();
+    cached_snap_context.clear();
   }
-  const vector<snapid_t>& get_snaps() {
-    if (cached_snaps.empty())
-      build_snaps();
-    return cached_snaps;
+
+  const SnapContext& get_snap_context() {
+    if (cached_snap_context.seq == 0)
+      build_snap_context();
+    return cached_snap_context;
   }
   snapid_t get_follows() {
-    get_snaps();
-    if (cached_snaps.empty())
+    get_snap_context();
+    if (cached_snap_context.empty())
       return 0;
-    return cached_snaps[0];
+    return cached_snap_context.snaps[0];
   }
 };
 
@@ -159,7 +160,7 @@ inline ostream& operator<<(ostream& out, const SnapRealm& r) {
   return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
 	     << " parent=" << r.parent
 	     << " my_snaps=" << r.my_snaps
-	     << " cached_snaps=" << r.cached_snaps
+	     << " cached_snapc=" << r.cached_snap_context
 	     << ")";
 }
 

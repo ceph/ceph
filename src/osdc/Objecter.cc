@@ -336,9 +336,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 // stat -----------------------------------
 
-tid_t Objecter::stat(object_t oid, __u64 *size, ceph_object_layout ol, const vector<snapid_t>& snaps, int flags, Context *onfinish)
+tid_t Objecter::stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish)
 {
-  OSDStat *st = prepare_stat(snaps, size, flags);
+  OSDStat *st = prepare_stat(size, flags);
   st->extents.push_back(ObjectExtent(oid, 0, 0));
   st->extents.front().layout = ol;
   st->onfinish = onfinish;
@@ -377,7 +377,6 @@ tid_t Objecter::stat_submit(OSDStat *st)
     MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_STAT, flags);
-    m->get_snaps() = st->snaps;
     if (inc_lock > 0) {
       st->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -452,10 +451,10 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t> &snaps, bufferlist *bl, int flags, 
+tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
                      Context *onfinish)
 {
-  OSDRead *rd = prepare_read(snaps, bl, flags);
+  OSDRead *rd = prepare_read(bl, flags);
   rd->extents.push_back(ObjectExtent(oid, off, len));
   rd->extents.front().layout = ol;
   readx(rd, onfinish);
@@ -506,7 +505,6 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
     MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   CEPH_OSD_OP_READ, flags);
-    m->get_snaps() = rd->snaps;
     if (inc_lock > 0) {
       rd->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -710,10 +708,10 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t> &snaps, bufferlist &bl, int flags,
+tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
-  OSDWrite *wr = prepare_write(snaps, bl, flags);
+  OSDWrite *wr = prepare_write(snapc, bl, flags);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
@@ -724,10 +722,10 @@ tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol
 
 // zero
 
-tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const vector<snapid_t> &snaps, int flags, 
+tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *z = prepare_modify(snaps, CEPH_OSD_OP_ZERO, flags);
+  OSDModify *z = prepare_modify(snapc, CEPH_OSD_OP_ZERO, flags);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
   modifyx(z, onack, oncommit);
@@ -737,10 +735,10 @@ tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, const vector<snapid_t> &snaps,
+tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, const SnapContext& snapc,
                      Context *onack, Context *oncommit)
 {
-  OSDModify *l = prepare_modify(snaps, op, flags);
+  OSDModify *l = prepare_modify(snapc, op, flags);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().layout = ol;
   modifyx(l, onack, oncommit);
@@ -810,7 +808,8 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     MOSDOp *m = new MOSDOp(client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   wr->op, flags);
-    m->get_snaps() = wr->snaps;
+    m->set_snap_seq(wr->snapc.seq);
+    m->get_snaps() = wr->snapc.snaps;
     if (inc_lock > 0) {
       wr->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);

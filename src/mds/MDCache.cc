@@ -3906,15 +3906,11 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    snapid_t snap = in->last;
-    const vector<snapid_t>& snaps = in->find_snaprealm()->get_snap_vector();
-
     if (in->inode.max_size > in->inode.size) {
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
-	       << " snap " << snap << " snaps " << snaps
 	       << " " << *in << dendl;
       file_recovering.insert(in);
-      mds->filer->probe(in->inode.ino, &in->inode.layout, snap, snaps,
+      mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
 			in->inode.max_size, &in->inode.size, false,
 			0, new C_MDC_Recover(this, in));    
     } else {
@@ -4011,8 +4007,8 @@ void MDCache::_do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize)
 
   // remove
   if (newsize < oldsize) {
-    const vector<snapid_t> snaps = in->find_snaprealm()->get_snap_vector();
-    mds->filer->remove(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, snaps,
+    const SnapContext& snapc = in->find_snaprealm()->get_snap_context();
+    mds->filer->remove(in->inode.ino, &in->inode.layout, snapc,
 		       newsize, oldsize-newsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
@@ -6134,7 +6130,6 @@ void MDCache::do_realm_split_notify(CInode *in)
   bufferlist snapbl;
   in->snaprealm->build_snap_trace(snapbl);
 
-  const vector<snapid_t> snaps = in->snaprealm->get_snap_vector();
   map<int, MClientSnap*> updates;
   
   // send splits for all clients with caps in this _or nested_ realms.

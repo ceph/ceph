@@ -122,7 +122,7 @@ struct SnapRealm {
   snapid_t cached_last_created;  // max last_created over all past+present parents
   snapid_t cached_last_destroyed;
   set<snapid_t> cached_snaps;
-  vector<snapid_t> cached_snap_vec;
+  SnapContext cached_snap_context;
 
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
@@ -170,7 +170,7 @@ struct SnapRealm {
 
   void check_cache();
   const set<snapid_t>& get_snaps();
-  const vector<snapid_t>& get_snap_vector();
+  const SnapContext& get_snap_context();
   void invalidate_cached_snaps() {
     cached_seq = 0;
   }

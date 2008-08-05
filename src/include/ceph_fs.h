@@ -946,6 +946,7 @@ struct ceph_osd_request_head {
 	__le32                    shed_count;
 	struct ceph_osd_peer_stat peer_stat;
 
+	__le64 snap_seq;
 	__le32 num_snaps;
 	__le64 snaps[];
 } __attribute__ ((packed));

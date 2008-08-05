@@ -84,6 +84,75 @@ namespace __gnu_cxx {
 }
 
 
+
+// -- io helpers --
+
+template<class A, class B>
+inline ostream& operator<<(ostream& out, const pair<A,B> v) {
+  return out << v.first << "," << v.second;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const vector<A>& v) {
+  out << "[";
+  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+    if (p != v.begin()) out << ",";
+    out << *p;
+  }
+  out << "]";
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const list<A>& ilist) {
+  for (typename list<A>::const_iterator it = ilist.begin();
+       it != ilist.end();
+       it++) {
+    if (it != ilist.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const set<A>& iset) {
+  for (typename set<A>::const_iterator it = iset.begin();
+       it != iset.end();
+       it++) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
+  for (typename multiset<A>::const_iterator it = iset.begin();
+       it != iset.end();
+       it++) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A,class B>
+inline ostream& operator<<(ostream& out, const map<A,B>& m) 
+{
+  out << "{";
+  for (typename map<A,B>::const_iterator it = m.begin();
+       it != m.end();
+       it++) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  out << "}";
+  return out;
+}
+
+
+
+
 /*
  * comparators for stl containers
  */
@@ -243,7 +312,20 @@ struct SnapRealmInfo {
 WRITE_CLASS_ENCODER(SnapRealmInfo)
 
 
+struct SnapContext {
+  snapid_t seq;
+  vector<snapid_t> snaps;
 
+  void clear() {
+    seq = 0;
+    snaps.clear();
+  }
+  bool empty() { return seq == 0; }
+};
+
+inline ostream& operator<<(ostream& out, const SnapContext& snapc) {
+  return out << snapc.seq << "=" << snapc.snaps;
+}
 
 // dentries
 #define MAX_DENTRY_LEN 255
@@ -256,71 +338,6 @@ inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
 }
 
 
-
-// -- io helpers --
-
-template<class A, class B>
-inline ostream& operator<<(ostream& out, const pair<A,B> v) {
-  return out << v.first << "," << v.second;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const vector<A>& v) {
-  out << "[";
-  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); p++) {
-    if (p != v.begin()) out << ",";
-    out << *p;
-  }
-  out << "]";
-  return out;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const list<A>& ilist) {
-  for (typename list<A>::const_iterator it = ilist.begin();
-       it != ilist.end();
-       it++) {
-    if (it != ilist.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const set<A>& iset) {
-  for (typename set<A>::const_iterator it = iset.begin();
-       it != iset.end();
-       it++) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
-  for (typename multiset<A>::const_iterator it = iset.begin();
-       it != iset.end();
-       it++) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A,class B>
-inline ostream& operator<<(ostream& out, const map<A,B>& m) 
-{
-  out << "{";
-  for (typename map<A,B>::const_iterator it = m.begin();
-       it != m.end();
-       it++) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  out << "}";
-  return out;
-}
 
 
 

@@ -43,6 +43,8 @@ snaps on mds
   - build snaprealm for any hardlinked file
   - include snaps for all (primary+remote) parents
 
+- does snap_follows in MClientFileCaps properly handle snap deletion?
+
 snaps on osd
 - clean up snap context packaging..
   - seq, not just snap list

@@ -180,7 +180,8 @@ void SnapRealm::check_cache()
     return;
 
   cached_snaps.clear();
-  cached_snap_vec.clear();
+  cached_snap_context.clear();
+
   cached_last_created = last_created;
   cached_last_destroyed = last_destroyed;
   cached_seq = seq;
@@ -207,20 +208,21 @@ const set<snapid_t>& SnapRealm::get_snaps()
 /*
  * build vector in reverse sorted order
  */
-const vector<snapid_t>& SnapRealm::get_snap_vector()
+const SnapContext& SnapRealm::get_snap_context()
 {
   check_cache();
 
-  if (cached_snap_vec.empty()) {
-    cached_snap_vec.resize(cached_snaps.size());
+  if (!cached_snap_context.seq) {
+    cached_snap_context.seq = cached_seq;
+    cached_snap_context.snaps.resize(cached_snaps.size());
     unsigned i = 0;
     for (set<snapid_t>::reverse_iterator p = cached_snaps.rbegin();
 	 p != cached_snaps.rend();
 	 p++)
-      cached_snap_vec[i++] = *p;
+      cached_snap_context.snaps[i++] = *p;
   }
 
-  return cached_snap_vec;
+  return cached_snap_context;
 }
 
 void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, snapid_t last)

@@ -1568,7 +1568,7 @@ void Client::add_update_cap(Inode *in, int mds,
       dout(15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
     }
     if (in->exporting_mds == mds) {
-      dout(10) << " clearing exporting_caps on " << mds << dendl;
+      dout(10) << "add_update_cap clearing exporting_caps on " << mds << dendl;
       in->exporting_mds = -1;
       in->exporting_issued = 0;
       in->exporting_mseq = 0;
@@ -1581,6 +1581,8 @@ void Client::add_update_cap(Inode *in, int mds,
   cap->implemented |= issued;
   cap->seq = seq;
   cap->mseq = mseq;
+  dout(10) << "add_update_cap issued " << cap_string(old_caps) << " -> " << cap_string(cap->issued)
+	   << " from mds" << mds << dendl;
 
   if (issued & ~old_caps)
     signal_cond_list(in->waitfor_caps);
@@ -1612,9 +1614,10 @@ void Client::remove_all_caps(Inode *in)
   }
 }
 
-void SnapRealm::build_snaps()
+void SnapRealm::build_snap_context()
 {
   set<snapid_t> snaps;
+  snapid_t max_seq = seq;
   
   // start with prior_parents?
   for (unsigned i=0; i<prior_parent_snaps.size(); i++)
@@ -1622,10 +1625,12 @@ void SnapRealm::build_snaps()
 
   // current parent's snaps
   if (pparent) {
-    const vector<snapid_t> psnaps = pparent->get_snaps();
-    for (unsigned i=0; i<psnaps.size(); i++)
-      if (psnaps[i] >= parent_since)
-	snaps.insert(psnaps[i]);
+    const SnapContext& psnapc = pparent->get_snap_context();
+    for (unsigned i=0; i<psnapc.snaps.size(); i++)
+      if (psnapc.snaps[i] >= parent_since)
+	snaps.insert(psnapc.snaps[i]);
+    if (psnapc.seq > max_seq)
+      max_seq = psnapc.seq;
   }
 
   // my snaps
@@ -1633,12 +1638,13 @@ void SnapRealm::build_snaps()
     snaps.insert(my_snaps[i]);
 
   // ok!
-  cached_snaps.resize(0);
-  cached_snaps.reserve(snaps.size());
+  cached_snap_context.seq = max_seq;
+  cached_snap_context.snaps.resize(0);
+  cached_snap_context.snaps.reserve(snaps.size());
   for (set<snapid_t>::reverse_iterator p = snaps.rbegin(); p != snaps.rend(); p++)
-    cached_snaps.push_back(*p);
+    cached_snap_context.snaps.push_back(*p);
 
-  cout << *this << " build_snaps got " << cached_snaps << std::endl;
+  cout << *this << " build_snap_context got " << cached_snap_context << std::endl;
 }
 
 void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
@@ -1738,7 +1744,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
     if (invalidate) {
       invalidate_snaprealm_and_children(realm);
       dout(15) << "update_snap_trace " << *realm << " self|parent updated" << dendl;
-      dout(15) << "  snaps " << realm->get_snaps() << dendl;
+      dout(15) << "  snapc " << realm->get_snap_context() << dendl;
     } else {
       dout(10) << "update_snap_trace " << *realm << " seq " << info.seq
 	       << " <= " << realm->seq << " and same parent, SKIPPING" << dendl;
@@ -3467,21 +3473,17 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	dout(10) << "readahead " << f->nr_consec_read << " reads " 
 		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
 		 << " (caller wants " << offset << "~" << size << ")" << dendl;
-	objectcacher->file_read(in->inode.ino, &in->inode.layout,
-				CEPH_NOSNAP, in->snaprealm->get_snaps(),
+	objectcacher->file_read(in->inode.ino, &in->inode.layout, in->snapid,
 				offset, l, NULL, 0, 0);
 	dout(10) << "readahead initiated" << dendl;
       }
 
       // read (and possibly block)
-      vector<snapid_t> emptysnaps;
       if (in->snapid == CEPH_NOSNAP)
-	r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
-				    CEPH_NOSNAP, in->snaprealm->get_snaps(),
+	r = objectcacher->file_read(in->inode.ino, &in->inode.layout, in->snapid,
 				    offset, size, bl, 0, onfinish);
       else
-	r = objectcacher->file_read(in->inode.ino, &in->inode.layout,
-				    in->snapid, emptysnaps,
+	r = objectcacher->file_read(in->inode.ino, &in->inode.layout, in->snapid,
 				    offset, size, bl, 0, onfinish);
 
       
@@ -3494,8 +3496,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	delete onfinish;
       }
     } else {
-      r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout,
-					      CEPH_NOSNAP, in->snaprealm->get_snaps(),
+      r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout, in->snapid,
 					      offset, size, bl, 0, client_lock);
     }
     
@@ -3503,8 +3504,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout,
-						CEPH_NOSNAP, in->snaprealm->get_snaps(),
+    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, in->snapid,
 						offset, size, bl, 0);
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       rd->flags |= CEPH_OSD_OP_BALANCE_READS;
@@ -3665,13 +3665,11 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       objectcacher->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-      objectcacher->file_write(in->inode.ino, &in->inode.layout, 
-			       CEPH_NOSNAP, in->snaprealm->get_snaps(),
+      objectcacher->file_write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
 			       offset, size, bl, 0);
     } else {
       // atomic, synchronous, blocking.
-      objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout,
-					   CEPH_NOSNAP, in->snaprealm->get_snaps(),
+      objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
 					   offset, size, bl, 0, client_lock);
     }   
   } else {
@@ -3684,8 +3682,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_WRBUFFER);
     
-    filer->write(in->inode.ino, &in->inode.layout, 
-		 CEPH_NOSNAP, in->snaprealm->get_snaps(),
+    filer->write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, 0, onfinish, onsafe);
     
     while (!done)

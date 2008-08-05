@@ -57,8 +57,8 @@ void MDSTable::save(Context *onfinish, version_t v)
     waitfor_save[version].push_back(onfinish);
 
   // write (async)
-  vector<snapid_t> snaps;
-  mds->filer->write(ino, &layout, 0, snaps,
+  SnapContext snapc;
+  mds->filer->write(ino, &layout, snapc,
                     0, bl.length(), bl,
                     0,
 		    0, new C_MT_Save(this, version));
@@ -112,8 +112,7 @@ void MDSTable::load(Context *onfinish)
   state = STATE_OPENING;
 
   C_MT_Load *c = new C_MT_Load(this, onfinish);
-  vector<snapid_t> snaps;
-  mds->filer->read(ino, &layout, 0, snaps,
+  mds->filer->read(ino, &layout, 0,
                    0, ceph_file_layout_su(layout),
                    &c->bl, 0,
                    c);

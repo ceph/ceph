@@ -45,7 +45,7 @@ public:
 
 int Filer::probe(inodeno_t ino,
 		 ceph_file_layout *layout,
-		 snapid_t snap, const vector<snapid_t> &snaps,
+		 snapid_t snapid,
 		 __u64 start_from,
 		 __u64 *end,           // LB, when !fwd
 		 bool fwd,
@@ -57,7 +57,7 @@ int Filer::probe(inodeno_t ino,
 	   << " starting from " << start_from
 	   << dendl;
 
-  Probe *probe = new Probe(ino, *layout, snap, snaps, start_from, end, flags, fwd, onfinish);
+  Probe *probe = new Probe(ino, *layout, snapid, start_from, end, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
   __u64 period = ceph_file_layout_period(*layout);
@@ -86,14 +86,14 @@ void Filer::_probe(Probe *probe)
 	   << dendl;
   
   // map range onto objects
-  file_to_extents(probe->ino, &probe->layout, probe->snap, probe->from, probe->probing_len, probe->probing);
+  file_to_extents(probe->ino, &probe->layout, probe->snapid, probe->from, probe->probing_len, probe->probing);
   
   for (list<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, probe->snaps, probe->flags, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, probe->flags, c);
   }
 }
 
