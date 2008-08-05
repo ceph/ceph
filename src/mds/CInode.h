@@ -454,8 +454,8 @@ public:
 
 
   // -- snap --
-  void open_snaprealm();
-  void close_snaprealm();
+  void open_snaprealm(bool no_split=false);
+  void close_snaprealm(bool no_join=false);
   SnapRealm *find_snaprealm();
   void encode_snap_blob(bufferlist &bl);
   void decode_snap_blob(bufferlist &bl);

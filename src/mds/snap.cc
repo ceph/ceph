@@ -385,7 +385,6 @@ void SnapRealm::split_at(SnapRealm *child)
 
 
 
-
 void SnapRealm::build_snap_trace(bufferlist& snapbl)
 {
   SnapRealmInfo info;
@@ -420,4 +419,46 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 
   if (parent)
     parent->build_snap_trace(snapbl);
+}
+
+
+
+
+void SnapRealm::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
+{
+  snapid_t newlast = newparent->get_last_created();
+  snapid_t oldlast = parent->get_newest_snap();
+  snapid_t first = current_parent_since;
+
+  if (oldlast >= current_parent_since) {
+    past_parents[oldlast].ino = parent->inode->ino();
+    past_parents[oldlast].first = first;
+    dout(10) << "project_past_parent new past_parent [" << first << "," << oldlast << "] = "
+	     << parent->inode->ino() << dendl;
+  }
+  current_parent_since = MAX(oldlast, newlast) + 1;
+  dout(10) << "project_past_parent current_parent_since " << current_parent_since << dendl;
+
+  ::encode(*this, snapbl);
+
+  if (oldlast >= first)
+    past_parents.erase(oldlast);
+  current_parent_since = first;
+}
+
+void SnapRealm::add_past_parent(SnapRealm *oldparent)
+{
+  snapid_t newlast = parent->get_last_created();
+  snapid_t oldlast = oldparent->get_newest_snap();
+  snapid_t first = current_parent_since;
+  
+  if (oldlast >= current_parent_since) {
+    past_parents[oldlast].ino = oldparent->inode->ino();
+    past_parents[oldlast].first = first;
+    add_open_past_parent(oldparent);
+    dout(10) << "add_past_parent [" << first << "," << oldlast << "] = "
+	     << oldparent->inode->ino() << dendl;
+  }
+  current_parent_since = MAX(oldlast, newlast) + 1;
+  dout(10) << "add_past_parent current_parent_since " << current_parent_since << dendl;
 }

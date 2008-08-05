@@ -1206,7 +1206,7 @@ void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
 }
 */
 
-void CInode::open_snaprealm()
+void CInode::open_snaprealm(bool nosplit)
 {
   if (!snaprealm) {
     SnapRealm *parent = find_snaprealm();
@@ -1217,18 +1217,22 @@ void CInode::open_snaprealm()
 	       << " siblings are " << parent->open_children
 	       << dendl;
       snaprealm->parent = parent;
-      parent->split_at(snaprealm);
+      if (!nosplit)
+	parent->split_at(snaprealm);
       parent->open_children.insert(snaprealm);
     }
   }
 }
-void CInode::close_snaprealm()
+void CInode::close_snaprealm(bool nojoin)
 {
   if (snaprealm) {
     dout(15) << "close_snaprealm " << *snaprealm << dendl;
     snaprealm->close_parents();
-    if (snaprealm->parent)
+    if (snaprealm->parent) {
       snaprealm->parent->open_children.erase(snaprealm);
+      //if (!nojoin)
+      //snaprealm->parent->join(snaprealm);
+    }
     delete snaprealm;
     snaprealm = 0;
   }

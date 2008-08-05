@@ -34,15 +34,6 @@ snaps on mds
 - mds open within snapshot
 - client snap read
 
-
-- test rejoin
-- client reconnect
-  - esp cap claim
-
-
-
-/- call open_parents() where needed.
-  - what about during recovery?  e.g. client reconnected caps...
 - mds server ops
   - link rollback
   - rename rollback

@@ -155,6 +155,9 @@ struct SnapRealm {
   void add_open_past_parent(SnapRealm *parent);
   void close_parents();
 
+  void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
+  void add_past_parent(SnapRealm *oldparent);
+
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
 		      snapid_t first, snapid_t last);
@@ -199,6 +202,7 @@ struct SnapRealm {
       parent->open_children.insert(this);
   }
   void split_at(SnapRealm *child);
+  void join(SnapRealm *child);
 
   void add_cap(int client, Capability *cap) {
     client_caps[client].push_back(&cap->snaprealm_caps_item);

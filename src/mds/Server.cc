@@ -2491,7 +2491,7 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
     for (map<int,int>::iterator it = dn->replicas_begin();
 	 it != dn->replicas_end();
 	 it++) {
-      dout(7) << "_unlink_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
+      dout(7) << "_link_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
       MDentryUnlink *unlink = new MDentryUnlink(dn->dir->dirfrag(), dn->name);
       mds->send_message_mds(unlink, it->first);
     }
@@ -2961,11 +2961,20 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   le->metablob.add_null_dentry(dn, true);
 
   if (dn->is_primary()) {
+    // project snaprealm, too
+    bufferlist snapbl;
+    if (!dn->inode->snaprealm) {
+      dn->inode->open_snaprealm(true);   // don't do a split
+      dn->inode->snaprealm->project_past_parent(straydn->dir->inode->snaprealm, snapbl);
+      dn->inode->close_snaprealm(true);  // or a matching join
+    } else
+      dn->inode->snaprealm->project_past_parent(straydn->dir->inode->snaprealm, snapbl);
+
     // primary link.  add stray dentry.
     assert(straydn);
     mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
     mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, straydn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-    le->metablob.add_primary_dentry(straydn, true, dn->inode, pi);
+    le->metablob.add_primary_dentry(straydn, true, dn->inode, pi, 0, &snapbl);
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, dn->dir, PREDIRTY_DIR, -1);
@@ -2994,6 +3003,12 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
     straydn->dir->link_primary_inode(straydn, in);
+
+    if (!straydn->inode->snaprealm) {
+      straydn->inode->open_snaprealm();
+      mdcache->do_realm_split_notify(straydn->inode);
+    }
+    straydn->inode->snaprealm->add_past_parent(dn->dir->inode->find_snaprealm());
   }
 
   dn->mark_dirty(dnpv, mdr->ls);  
@@ -3700,28 +3715,8 @@ void Server::_rename_prepare(MDRequest *mdr,
   } else if (srcdn->is_primary()) {
     // project snap parent update?
     bufferlist snapbl;
-    if (!srcdn->inode->snaprealm)
-      srcdn->inode->open_snaprealm();
-    if (destdn->is_auth()) {
-      SnapRealm *realm = srcdn->inode->snaprealm;
-      snapid_t oldlast = realm->parent->get_newest_snap();
-      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_last_created();
-      snapid_t first = realm->current_parent_since;
-
-      snapid_t old_since = realm->current_parent_since;
-      realm->current_parent_since = MAX(oldlast, newlast) + 1;
-      if (oldlast >= first) {
-	realm->past_parents[oldlast].ino = realm->parent->inode->ino();
-	realm->past_parents[oldlast].first = first;
-	dout(10) << " projecting new past_parent [" << first << "," << oldlast << "] = "
-		 << realm->parent->inode->ino() << " on " << *realm << dendl;
-      }
-      dout(10) << " projected current_parent_since " << realm->current_parent_since << " on" << *realm << dendl;
-      ::encode(*realm, snapbl);
-      if (oldlast >= first)
-	realm->past_parents.erase(oldlast);
-      realm->current_parent_since = old_since;
-    }
+    if (destdn->is_auth() && srcdn->inode->snaprealm)
+      srcdn->inode->snaprealm->project_past_parent(destdn->dir->inode->find_snaprealm(), snapbl);
     
     if (!destdn->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn);
@@ -3833,23 +3828,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->inode->pop_and_dirty_projected_inode(mdr->ls);
 
     // snap parent update?
-    if (destdn->inode->is_dir()) {
-      SnapRealm *realm = destdn->inode->snaprealm;
-      snapid_t oldlast = srcdn->dir->inode->find_snaprealm()->get_newest_snap();
-      snapid_t newlast = destdn->dir->inode->find_snaprealm()->get_last_created();
-      snapid_t first = realm->current_parent_since;
-      
-      if (oldlast >= realm->current_parent_since) {
-	SnapRealm *oldparent = srcdn->dir->inode->find_snaprealm();
-	realm->past_parents[oldlast].ino = oldparent->inode->ino();
-	realm->past_parents[oldlast].first = realm->current_parent_since;
-	realm->add_open_past_parent(oldparent);
-	dout(10) << " adding past_parent [" << realm->past_parents[oldlast].first << "," << oldlast << "] = "
-		 << realm->past_parents[oldlast].ino << " on " << *realm << dendl;
-      }
-      realm->current_parent_since = MAX(oldlast, newlast) + 1;
-      dout(10) << " set current_parent_since " << realm->current_parent_since << " on " << *realm << dendl;
-    }
+    if (destdn->is_auth() && destdn->inode->snaprealm)
+      destdn->inode->snaprealm->add_past_parent(srcdn->dir->inode->find_snaprealm());
   }
 
   // src
