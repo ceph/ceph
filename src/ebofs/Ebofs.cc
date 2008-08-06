@@ -2475,6 +2475,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
  
     case Transaction::OP_WRITE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 offset, len;
@@ -2491,6 +2493,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_ZERO:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 offset, len;
@@ -2505,6 +2509,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRIMCACHE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 offset, len;
@@ -2516,6 +2522,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRUNCATE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 len;
@@ -2529,6 +2537,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_REMOVE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         if (_remove(oid) < 0) {
@@ -2540,6 +2550,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_SETATTR:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
@@ -2555,6 +2567,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_SETATTRS:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         map<string,bufferptr> *pattrset;
@@ -2568,6 +2582,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_RMATTR:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
@@ -2581,6 +2597,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_CLONE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         pobject_t noid;
