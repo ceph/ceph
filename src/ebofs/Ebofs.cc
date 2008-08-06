@@ -3698,6 +3698,31 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   return r;
 }
 
+int Ebofs::collection_getattr(coll_t cid, const char *name, bufferlist& bl)
+{
+  ebofs_lock.Lock();
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << dendl;
+
+  Cnode *cn = get_cnode(cid);
+  if (!cn) {
+    ebofs_lock.Unlock();
+    return -ENOENT;
+  }
+
+  string n(name);
+  int r;
+  if (cn->attr.count(n) == 0) {
+    r = -1;
+  } else {
+    bl.push_back(cn->attr[n]);
+    r = bl.length();
+  }
+  
+  put_cnode(cn);
+  ebofs_lock.Unlock();
+  return r;
+}
+
 int Ebofs::collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();

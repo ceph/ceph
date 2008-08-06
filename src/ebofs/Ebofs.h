@@ -293,6 +293,7 @@ protected:
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
   int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_getattr(coll_t cid, const char *name, void *value, size_t size);
+  int collection_getattr(coll_t cid, const char *name, bufferlist& bl);
   int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
   int collection_listattr(coll_t oid, vector<string>& attrs);

@@ -1317,6 +1317,23 @@ int FileStore::collection_getattr(coll_t c, const char *name,
   return r < 0 ? -errno:r;
 }
 
+int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_getattr(c, name, bl);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = do_getxattr(fn, name, NULL, 0);
+    if (r > 0) {
+      bl.push_back(buffer::create(r));
+      r = do_getxattr(fn, name, bl.c_str(), r);
+    }
+  }
+  return r < 0 ? -errno:r;
+}
+
 int FileStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
   int r;
