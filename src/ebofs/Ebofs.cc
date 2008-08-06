@@ -1179,7 +1179,7 @@ csum_t Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
   off += sizeof(ec);
   
   // attr
-  for (map<string, bufferptr >::iterator i = cn->attr.begin();
+  for (map<string, bufferptr>::iterator i = cn->attr.begin();
        i != cn->attr.end();
        i++) {
     bl.copy_in(off, i->first.length()+1, i->first.c_str());
@@ -1218,7 +1218,8 @@ void Ebofs::write_cnode(Cnode *cn)
     allocator.release(cn->cnode_loc);
   allocator.allocate(cn->cnode_loc, blocks, Allocator::NEAR_LAST_FWD);
   
-  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << dendl;
+  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc
+	   << " bufptr " << (void*)bl.c_str() << dendl;
 
   // encode
   unsigned off = 0;
@@ -3479,6 +3480,7 @@ bool Ebofs::collection_exists(coll_t cid)
   ebofs_lock.Lock();
   dout(10) << "collection_exists " << hex << cid << dec << dendl;
   bool r = _collection_exists(cid);
+  dout(10) << "collection_exists " << hex << cid << dec << " = " << r << dendl;
   ebofs_lock.Unlock();
   return r;
 }

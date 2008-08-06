@@ -45,6 +45,7 @@ do
    ls -al $dev
    ssh cosd$host cd ceph/src \; ./cosd --mkfs_for_osd $osd $dev # --osd_auto_weight 1
    ssh cosd$host cd ceph/src \; ./cosd $dev -d --debug_ms 1 --debug_osd 20 --debug_filestore 10
+#   ssh cosd$host cd ceph/src \; valgrind --leak-check-full --show-reachable-yes ./cosd $dev --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd \&
  done
 done
 

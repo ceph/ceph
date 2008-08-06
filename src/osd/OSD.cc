@@ -2121,8 +2121,9 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 
   map< int, map<pg_t,PG::Query> > query_map;
   map<int, MOSDPGInfo*> info_map;
+
   ObjectStore::Transaction t;
-  int created = 0;
+  vector<PG*> to_peer;
 
   for (map<pg_t,MOSDPGCreate::create_rec>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
@@ -2185,22 +2186,25 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
     
     PG *pg = try_create_pg(pgid, t);
-    if (pg) {
-      created++;
-      wake_pg_waiters(pg->info.pgid);
-      pg->peer(t, query_map, &info_map);
-      pg->update_stats();
-      pg->unlock();
-    }
+    if (pg)
+      to_peer.push_back(pg);
   }
 
   store->apply_transaction(t);
+
+  for (vector<PG*>::iterator p = to_peer.begin(); p != to_peer.end(); p++) {
+    PG *pg = *p;
+    wake_pg_waiters(pg->info.pgid);
+    pg->peer(t, query_map, &info_map);
+    pg->update_stats();
+    pg->unlock();
+  }
 
   do_queries(query_map);
   do_infos(info_map);
 
   kick_pg_split_queue();
-  if (created)
+  if (to_peer.size())
     update_heartbeat_peers();
   delete m;
 }
