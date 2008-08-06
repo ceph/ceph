@@ -432,6 +432,7 @@ md_config_t g_conf = {
   filestore_fake_attrs: false,
   filestore_fake_collections: false,   
   filestore_dev: 0,
+  filestore_btrfs_trans: true,
 
   // --- ebofs ---
   ebofs: false,
@@ -952,6 +953,8 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.filestore_fake_attrs = true;//atoi(args[++i]);
     else if (strcmp(args[i], "--filestore_fake_collections") == 0) 
       g_conf.filestore_fake_collections = true;//atoi(args[++i]);
+    else if (strcmp(args[i], "--filestore_btrfs_trans") == 0) 
+      g_conf.filestore_btrfs_trans = atoi(args[++i]);
 
     else if (strcmp(args[i], "--osd_balance_reads") == 0) 
       g_conf.osd_balance_reads = atoi(args[++i]);

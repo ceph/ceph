@@ -606,7 +606,6 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   if (op == CEPH_OSD_OP_WRNOOP) 
     return;
 
-
   // clone?
   if (poid.oid.snap) {
     assert(poid.oid.snap == NOSNAP);
@@ -754,7 +753,9 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   info.last_update = at_version;
   
   // write pg info
-  t.collection_setattr(info.pgid, "info", &info, sizeof(info));
+  bufferlist infobl;
+  ::encode(info, infobl);
+  t.collection_setattr(info.pgid, "info", infobl);
 
   // prepare log append
   append_log(t, logentry, trim_to);
@@ -1516,29 +1517,23 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   
   
   // apply to disk!
-  t.collection_setattr(info.pgid, "info", &info, sizeof(info));
+  bufferlist bl;
+  ::encode(info, bl);
+  t.collection_setattr(info.pgid, "info", bl);
   unsigned r = osd->store->apply_transaction(t);
   assert(r == 0);
 
 
 
-  // am i primary?  are others missing this too?
   if (is_primary()) {
+    // are others missing this too?
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_missing.count(peer));
       if (peer_missing[peer].is_missing(poid.oid)) 
 	push(poid, peer);  // ok, push it, and they (will) have it now.
     }
-  }
 
-  // kick waiters
-  if (waiting_for_missing_object.count(poid.oid)) {
-    osd->take_waiters(waiting_for_missing_object[poid.oid]);
-    waiting_for_missing_object.erase(poid.oid);
-  }
-
-  if (is_primary()) {
     // continue recovery
     if (info.is_uptodate())
       uptodate_set.insert(osd->get_nodeid());
@@ -1550,6 +1545,12 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
 
   delete op;
+
+  // kick waiters
+  if (waiting_for_missing_object.count(poid.oid)) {
+    osd->take_waiters(waiting_for_missing_object[poid.oid]);
+    waiting_for_missing_object.erase(poid.oid);
+  }
 }
 
 
@@ -1659,6 +1660,7 @@ bool ReplicatedPG::do_recovery()
            << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
            << dendl;
   dout(10) << "do_recovery " << missing << dendl;
+  dout(15) << "do_recovery " << missing.missing << dendl;
 
   // can we slow down on this PG?
   if (osd->num_pulling >= g_conf.osd_max_pull && !pulling.empty()) {
@@ -1676,7 +1678,9 @@ bool ReplicatedPG::do_recovery()
 
     dout(10) << "do_recovery "
              << *log.requested_to
+	     << (latest->is_update() ? " (update)":"")
              << (pulling.count(latest->oid) ? " (pulling)":"")
+	     << (missing.is_missing(latest->oid) ? " (missing)":"")
              << dendl;
 
     if (latest->is_update() &&
@@ -1697,8 +1701,15 @@ bool ReplicatedPG::do_recovery()
 
   // done?
   assert(missing.num_missing() == 0);
-  assert(info.last_complete == info.last_update);
   
+  if (info.last_complete != info.last_update) {
+    dout(7) << "do_recovery last_complete " << info.last_complete << " -> " << info.last_update << dendl;
+    info.last_complete = info.last_update;
+  }
+
+  log.complete_to == log.log.end();
+  log.requested_to = log.log.end();
+
   if (is_primary()) {
     // i am primary
     uptodate_set.insert(osd->whoami);

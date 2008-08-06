@@ -289,6 +289,20 @@ private:
 			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);
 
+  void wake_pg_waiters(pg_t pgid) {
+    if (waiting_for_pg.count(pgid)) {
+      take_waiters(waiting_for_pg[pgid]);
+      waiting_for_pg.erase(pgid);
+    }
+  }
+  void wake_all_pg_waiters() {
+    for (hash_map<pg_t, list<Message*> >::iterator p = waiting_for_pg.begin();
+	 p != waiting_for_pg.end();
+	 p++)
+      take_waiters(p->second);
+    waiting_for_pg.clear();
+  }
+
   class C_Activate : public Context {
     OSD *osd;
     pg_t pgid;

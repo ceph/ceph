@@ -131,7 +131,9 @@ class Node {
 
 class NodePool {
  protected:
-  hash_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
+  //hash_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
+  unordered_map<nodeid_t, Node*, rjhash<uint64_t> >  node_map;      // open node map
+  //map<nodeid_t, Node*> node_map;
   
  public:
   vector<extent_t> region_loc;    // region locations
@@ -224,6 +226,7 @@ class NodePool {
       bufferptr newbit = buffer::create_page_aligned(EBOFS_BLOCK_SIZE*(usemap_even.length - have));
       newbit.zero();
       bl.push_back(newbit);
+      bl.rebuild();
       assert(bl.buffers().size() == 1);
       usemap_data = bl.buffers().front();
       usemap_bits.set_data(usemap_data.c_str(), usemap_data.length());
@@ -409,8 +412,6 @@ class NodePool {
       num_dirty--;
       num_clean++;
 
-      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id() << dendl;
-      
       bufferlist bl;
       if (1) {
 	bufferptr bp = n->get_buffer().clone();  // dup it now
@@ -418,6 +419,11 @@ class NodePool {
       } else {
 	bl.append(n->get_buffer());  // this isn't working right .. fixme
       }
+
+      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id()
+		 << " " << (void*)bl.c_str()
+		 << dendl;
+      
       dev.write(n->get_id(), EBOFS_NODE_BLOCKS, 
                 bl,
                 new C_NP_FlushNode(this, n->get_id()), "node");
@@ -520,7 +526,9 @@ class NodePool {
 
   void release_all() {
     while (!node_map.empty()) {
-      hash_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
+      //hash_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
+      unordered_map<nodeid_t,Node*,rjhash<uint64_t> >::iterator i = node_map.begin();
+      //map<nodeid_t,Node*>::iterator i = node_map.begin();
       debofs(2) << "ebofs.nodepool.release_all leftover " << i->first << " " << i->second << dendl;
       release( i->second );
     }

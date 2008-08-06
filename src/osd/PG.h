@@ -168,77 +168,6 @@ public:
 
   
   /*
-   * Missing - summary of missing objects.
-   *  kept in memory, as a supplement to Log.
-   *  also used to pass missing info in messages.
-   */
-  class Missing {
-  public:
-    map<object_t, eversion_t> missing;   // oid -> v
-    map<eversion_t, object_t> rmissing;  // v -> oid
-
-    map<object_t, int>       loc;       // where i think i can get them.
-
-    int num_lost() const { return missing.size() - loc.size(); }
-    int num_missing() const { return missing.size(); }
-
-    bool is_missing(object_t oid) {
-      return missing.count(oid);
-    }
-    bool is_missing(object_t oid, eversion_t v) {
-      return missing.count(oid) && missing[oid] <= v;
-    }
-    void add(object_t oid) {
-      eversion_t z;
-      add(oid,z);
-    }
-    void add(object_t oid, eversion_t v) {
-      if (missing.count(oid)) {
-        if (missing[oid] > v) return;   // already missing newer.
-        rmissing.erase(missing[oid]);
-      }
-      missing[oid] = v;
-      rmissing[v] = oid;
-    }
-    void rm(object_t oid, eversion_t when) {
-      if (missing.count(oid) && missing[oid] < when) {
-        rmissing.erase(missing[oid]);
-        missing.erase(oid);
-        loc.erase(oid);
-      }        
-    }
-    void got(object_t oid, eversion_t v) {
-      assert(missing.count(oid));
-      assert(missing[oid] <= v);
-      loc.erase(oid);
-      rmissing.erase(missing[oid]);
-      missing.erase(oid);
-    }
-    void got(object_t oid) {
-      assert(missing.count(oid));
-      loc.erase(oid);
-      rmissing.erase(missing[oid]);
-      missing.erase(oid);
-    }
-
-    void encode(bufferlist &bl) const {
-      ::encode(missing, bl);
-      ::encode(loc, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(missing, bl);
-      ::decode(loc, bl);
-
-      for (map<object_t,eversion_t>::iterator it = missing.begin();
-           it != missing.end();
-           it++) 
-        rmissing[it->second] = it->first;
-    }
-  };
-  WRITE_CLASS_ENCODER(Missing)
-
-
-  /*
    * Log - incremental log of recent pg changes.
    *  also, serves as a recovery queue.
    *
@@ -442,6 +371,85 @@ public:
 
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
   };
+
+
+  /*
+   * Missing - summary of missing objects.
+   *  kept in memory, as a supplement to Log.
+   *  also used to pass missing info in messages.
+   */
+  class Missing {
+  public:
+    map<object_t, eversion_t> missing;   // oid -> v
+    map<eversion_t, object_t> rmissing;  // v -> oid
+
+    map<object_t, int>       loc;       // where i think i can get them.
+
+    int num_lost() const { return missing.size() - loc.size(); }
+    int num_missing() const { return missing.size(); }
+
+    bool is_missing(object_t oid) {
+      return missing.count(oid);
+    }
+    bool is_missing(object_t oid, eversion_t v) {
+      return missing.count(oid) && missing[oid] <= v;
+    }
+    void add(object_t oid) {
+      eversion_t z;
+      add(oid,z);
+    }
+    
+    void add_event(Log::Entry& e) {
+      if (e.is_update())
+	add(e.oid, e.version);
+      else
+	rm(e.oid, e.version);
+    }
+
+    void add(object_t oid, eversion_t v) {
+      if (missing.count(oid)) {
+        if (missing[oid] > v) return;   // already missing newer.
+        rmissing.erase(missing[oid]);
+      }
+      missing[oid] = v;
+      rmissing[v] = oid;
+    }
+    void rm(object_t oid, eversion_t when) {
+      if (missing.count(oid) && missing[oid] < when) {
+        rmissing.erase(missing[oid]);
+        missing.erase(oid);
+        loc.erase(oid);
+      }        
+    }
+    void got(object_t oid, eversion_t v) {
+      assert(missing.count(oid));
+      assert(missing[oid] <= v);
+      loc.erase(oid);
+      rmissing.erase(missing[oid]);
+      missing.erase(oid);
+    }
+    void got(object_t oid) {
+      assert(missing.count(oid));
+      loc.erase(oid);
+      rmissing.erase(missing[oid]);
+      missing.erase(oid);
+    }
+
+    void encode(bufferlist &bl) const {
+      ::encode(missing, bl);
+      ::encode(loc, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(missing, bl);
+      ::decode(loc, bl);
+
+      for (map<object_t,eversion_t>::iterator it = missing.begin();
+           it != missing.end();
+           it++) 
+        rmissing[it->second] = it->first;
+    }
+  };
+  WRITE_CLASS_ENCODER(Missing)
 
 
   /*** PG ****/

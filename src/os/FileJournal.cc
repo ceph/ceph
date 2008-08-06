@@ -12,6 +12,7 @@
  * 
  */
 
+#include "config.h"
 #include "FileJournal.h"
 
 #include <stdio.h>
@@ -20,7 +21,6 @@
 #include <fcntl.h>
 
 
-#include "config.h"
 
 #define dout(x) if (x <= g_conf.debug_journal) *_dout << dbeginl << g_clock.now() << " journal "
 #define derr(x) if (x <= g_conf.debug_journal) *_derr << dbeginl << g_clock.now() << " journal "

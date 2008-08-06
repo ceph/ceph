@@ -633,13 +633,13 @@ Onode* Ebofs::new_onode(pobject_t oid)
   onode_map[oid] = on;
   onode_lru.lru_insert_top(on);
   
-  assert(object_tab->lookup(oid) < 0);
-  ebofs_inode_ptr ptr(on->onode_loc, 0);
-  object_tab->insert(oid, ptr);  // even tho i'm not placed yet
-
   on->get();
   on->onode_loc.start = 0;
   on->onode_loc.length = 0;
+
+  assert(object_tab->lookup(oid) < 0);
+  ebofs_inode_ptr ptr(on->onode_loc, 0);
+  object_tab->insert(oid, ptr);  // even tho i'm not placed yet
 
   dirty_onode(on);
 
@@ -1050,14 +1050,14 @@ Cnode* Ebofs::new_cnode(coll_t cid)
   cnode_map[cid] = cn;
   cnode_lru.lru_insert_top(cn);
   
-  assert(collection_tab->lookup(cid) < 0);
-  ebofs_inode_ptr ptr(cn->cnode_loc, 0);
-  collection_tab->insert(cid, ptr);  // even tho i'm not placed yet
-  
   cn->get();
   cn->cnode_loc.start = 0;
   cn->cnode_loc.length = 0;
 
+  assert(collection_tab->lookup(cid) < 0);
+  ebofs_inode_ptr ptr(cn->cnode_loc, 0);
+  collection_tab->insert(cid, ptr);  // even tho i'm not placed yet
+  
   dirty_cnode(cn);
 
   return cn;
@@ -1179,7 +1179,7 @@ csum_t Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
   off += sizeof(ec);
   
   // attr
-  for (map<string, bufferptr >::iterator i = cn->attr.begin();
+  for (map<string, bufferptr>::iterator i = cn->attr.begin();
        i != cn->attr.end();
        i++) {
     bl.copy_in(off, i->first.length()+1, i->first.c_str());
@@ -1218,7 +1218,8 @@ void Ebofs::write_cnode(Cnode *cn)
     allocator.release(cn->cnode_loc);
   allocator.allocate(cn->cnode_loc, blocks, Allocator::NEAR_LAST_FWD);
   
-  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc << dendl;
+  dout(10) << "write_cnode " << *cn << " to " << cn->cnode_loc
+	   << " bufptr " << (void*)bl.c_str() << dendl;
 
   // encode
   unsigned off = 0;
@@ -2474,6 +2475,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
  
     case Transaction::OP_WRITE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 offset, len;
@@ -2490,6 +2493,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_ZERO:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 offset, len;
@@ -2504,6 +2509,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRIMCACHE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 offset, len;
@@ -2515,6 +2522,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_TRUNCATE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         __u64 len;
@@ -2528,6 +2537,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_REMOVE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         if (_remove(oid) < 0) {
@@ -2539,6 +2550,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_SETATTR:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
@@ -2554,6 +2567,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_SETATTRS:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         map<string,bufferptr> *pattrset;
@@ -2567,6 +2582,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       
     case Transaction::OP_RMATTR:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
@@ -2580,6 +2597,8 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 
     case Transaction::OP_CLONE:
       {
+	coll_t cid;
+	t.get_cid(cid);
         pobject_t oid;
 	t.get_oid(oid);
         pobject_t noid;
@@ -3507,6 +3526,7 @@ bool Ebofs::collection_exists(coll_t cid)
   ebofs_lock.Lock();
   dout(10) << "collection_exists " << hex << cid << dec << dendl;
   bool r = _collection_exists(cid);
+  dout(10) << "collection_exists " << hex << cid << dec << " = " << r << dendl;
   ebofs_lock.Unlock();
   return r;
 }
@@ -3699,6 +3719,31 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, void *value, size_t 
   } else {
     r = MIN( cn->attr[n].length(), size );
     memcpy(value, cn->attr[n].c_str(), r);
+  }
+  
+  put_cnode(cn);
+  ebofs_lock.Unlock();
+  return r;
+}
+
+int Ebofs::collection_getattr(coll_t cid, const char *name, bufferlist& bl)
+{
+  ebofs_lock.Lock();
+  dout(10) << "collection_setattr " << hex << cid << dec << " '" << name << dendl;
+
+  Cnode *cn = get_cnode(cid);
+  if (!cn) {
+    ebofs_lock.Unlock();
+    return -ENOENT;
+  }
+
+  string n(name);
+  int r;
+  if (cn->attr.count(n) == 0) {
+    r = -1;
+  } else {
+    bl.push_back(cn->attr[n]);
+    r = bl.length();
   }
   
   put_cnode(cn);

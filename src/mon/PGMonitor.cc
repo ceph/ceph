@@ -128,18 +128,15 @@ bool PGMonitor::update_from_paxos()
   while (paxosv > pg_map.version) {
     bufferlist bl;
     bool success = paxos->read(pg_map.version+1, bl);
-    if (success) {
-      dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
-      PGMap::Incremental inc;
-      bufferlist::iterator p = bl.begin();
-      inc.decode(p);
-      pg_map.apply_incremental(inc);
-      
-      dout(0) << *this << dendl;
-    } else {
-      dout(7) << "update_from_paxos  couldn't read incremental " << pg_map.version+1 << dendl;
-      return false;
-    }
+    assert(success);
+
+    dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
+    PGMap::Incremental inc;
+    bufferlist::iterator p = bl.begin();
+    inc.decode(p);
+    pg_map.apply_incremental(inc);
+    
+    dout(0) << *this << dendl;
   }
 
   // save latest

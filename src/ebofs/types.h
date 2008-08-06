@@ -29,6 +29,9 @@
 using namespace std;
 using namespace __gnu_cxx;
 
+#include <tr1/unordered_map>
+using std::tr1::unordered_map;
+
 
 #include "include/object.h"
 

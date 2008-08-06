@@ -104,6 +104,7 @@ public:
 			readonly(0),
 			oc(0),
 			dirty(false), dangling(false), deleted(false) { 
+    onode_loc.start = 0;
     onode_loc.length = 0;
   }
   ~Onode() {

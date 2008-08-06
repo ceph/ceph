@@ -445,7 +445,11 @@ int FileStore::umount()
 
 int FileStore::transaction_start(int len)
 {
-  if (!btrfs || !btrfs_trans_start_end)
+#ifdef DARWIN
+  return 0;
+#else
+  if (!btrfs || !btrfs_trans_start_end ||
+      !g_conf.filestore_btrfs_trans)
     return 0;
 
   int fd = ::open(basedir.c_str(), O_RDONLY);
@@ -477,11 +481,16 @@ int FileStore::transaction_start(int len)
   ::mknod(fn, 0644, 0);
 
   return fd;
+#endif /* DARWIN */
 }
 
 void FileStore::transaction_end(int fd)
 {
-  if (!btrfs || !btrfs_trans_start_end)
+#ifdef DARWIN
+  return;
+#else
+  if (!btrfs || !btrfs_trans_start_end ||
+      !g_conf.filestore_btrfs_trans)
     return;
 
   char fn[80];
@@ -498,10 +507,15 @@ void FileStore::transaction_end(int fd)
     _handle_signal(sig_pending);
   }
   sig_lock.Unlock();
+#endif /* DARWIN */
 }
 
 unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 {
+#ifdef DARWIN
+  return ObjectStore::apply_transaction(t, onsafe);
+#else
+
   // no btrfs transaction support?
   // or, use trans start/end ioctls?
   if (!btrfs || btrfs_trans_start_end)
@@ -894,6 +908,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
     delete onsafe;
 
   return r;
+#endif /* DARWIN */
 }
 
 
@@ -1048,9 +1063,13 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   if (n < 0)
       return -errno;
   int r = 0;
+#ifndef DARWIN
   if (btrfs)
     r = ::ioctl(n, BTRFS_IOC_CLONE, o);
   else {
+#else 
+    {
+#endif /* DARWIN */
     struct stat st;
     ::fstat(o, &st);
 
@@ -1317,6 +1336,23 @@ int FileStore::collection_getattr(coll_t c, const char *name,
     char fn[200];
     get_cdir(c, fn);
     r = do_getxattr(fn, name, value, size);   
+  }
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_getattr(c, name, bl);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = do_getxattr(fn, name, NULL, 0);
+    if (r > 0) {
+      bl.push_back(buffer::create(r));
+      r = do_getxattr(fn, name, bl.c_str(), r);
+    }
   }
   return r < 0 ? -errno:r;
 }

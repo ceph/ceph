@@ -197,14 +197,17 @@ public:
       blen++;
     }
     void setattr(coll_t cid, pobject_t oid, const char* name, const void* val, int len) {
+      bufferlist bl;
+      bl.append((char*)val, len);
+      setattr(cid, oid, name, bl);
+    }
+    void setattr(coll_t cid, pobject_t oid, const char* name, bufferlist& val) {
       int op = OP_SETATTR;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
       attrnames.push_back(name);
-      bufferlist bl;
-      bl.append((char*)val,len);
-      bls.push_back(bl);
+      bls.push_back(val);
       len++;
       blen++;
     }
@@ -267,16 +270,20 @@ public:
        blen++;
    }
     void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
+      bufferlist bl;
+      bl.append((char*)val, len);
+      collection_setattr(cid, name, bl);
+    }
+    void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
       int op = OP_COLL_SETATTR;
       ops.push_back(op);
       cids.push_back(cid);
       attrnames.push_back(name);
-      bufferlist bl;
-      bl.append((char*)val, len);
-      bls.push_back(bl);
+      bls.push_back(val);
       len++;
       blen++;
     }
+
     void collection_rmattr(coll_t cid, const char* name) {
       int op = OP_COLL_RMATTR;
       ops.push_back(op);
@@ -598,6 +605,7 @@ public:
                                 Context *onsafe=0) = 0;
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) = 0;
+  virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
 
   virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
   virtual int collection_setattrs(coll_t cid, map<string,bufferptr> &aset) = 0;

@@ -13,6 +13,7 @@
  */
 
 
+#include "config.h"
 #include "Clock.h"
 
 // public

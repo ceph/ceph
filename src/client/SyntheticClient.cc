@@ -17,6 +17,7 @@
 using namespace std;
 
 
+#include "config.h"
 #include "SyntheticClient.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"

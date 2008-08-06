@@ -28,6 +28,7 @@
 #include <iostream>
 using namespace std;
 
+#include "config.h"
 
 // ceph stuff
 #include "Client.h"

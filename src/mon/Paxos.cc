@@ -779,9 +779,6 @@ bool Paxos::is_readable()
 
 bool Paxos::read(version_t v, bufferlist &bl)
 {
-  if (!is_readable()) 
-    return false;
-
   if (!mon->store->get_bl_sn(bl, machine_name, v))
     return false;
   return true;
@@ -789,8 +786,6 @@ bool Paxos::read(version_t v, bufferlist &bl)
 
 version_t Paxos::read_current(bufferlist &bl)
 {
-  if (!is_readable()) 
-    return 0;
   if (read(last_committed, bl))
     return last_committed;
   return 0;

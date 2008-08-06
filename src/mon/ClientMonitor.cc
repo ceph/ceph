@@ -63,21 +63,17 @@ bool ClientMonitor::update_from_paxos()
   while (paxosv > client_map.version) {
     bufferlist bl;
     bool success = paxos->read(client_map.version+1, bl);
-    if (success) {
-      dout(7) << "update_from_paxos  applying incremental " << client_map.version+1 << dendl;
-      Incremental inc;
-      bufferlist::iterator p = bl.begin();
-      inc.decode(p);
-      client_map.apply_incremental(inc);
+    assert(success);
 
-      dout(1) << client_map.client_addr.size() << " clients (+" 
-	      << inc.mount.size() << " -" << inc.unmount.size() << ")" 
-	      << dendl;
-      
-    } else {
-      dout(7) << "update_from_paxos  couldn't read incremental " << client_map.version+1 << dendl;
-      return false;
-    }
+    dout(7) << "update_from_paxos  applying incremental " << client_map.version+1 << dendl;
+    Incremental inc;
+    bufferlist::iterator p = bl.begin();
+    inc.decode(p);
+    client_map.apply_incremental(inc);
+    
+    dout(1) << client_map.client_addr.size() << " clients (+" 
+	    << inc.mount.size() << " -" << inc.unmount.size() << ")" 
+	    << dendl;
   }
 
   // save latest
