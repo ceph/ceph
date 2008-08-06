@@ -37,6 +37,7 @@
 #define SYNCLIENT_MODE_CREATESHARED 13     // num
 #define SYNCLIENT_MODE_OPENSHARED   14     // num count
 
+#define SYNCLIENT_MODE_RMFILE      19
 #define SYNCLIENT_MODE_WRITEFILE   20
 #define SYNCLIENT_MODE_READFILE    21
 #define SYNCLIENT_MODE_WRITEBATCH  22
@@ -219,6 +220,7 @@ class SyntheticClient {
   int create_shared(int num);
   int open_shared(int num, int count);
 
+  int rm_file(string& fn);
   int write_file(string& fn, int mb, int chunk);
   int write_fd(int fd, int size, int wrsize);
 

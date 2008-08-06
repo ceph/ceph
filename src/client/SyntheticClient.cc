@@ -57,7 +57,9 @@ void parse_syn_options(vector<const char*>& args)
     if (strcmp(args[i],"--syn") == 0) {
       ++i;
 
-      if (strcmp(args[i],"writefile") == 0) {
+      if (strcmp(args[i],"rmfile") == 0) {
+        syn_modes.push_back( SYNCLIENT_MODE_RMFILE );
+      } else if (strcmp(args[i],"writefile") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
         syn_iargs.push_back( atoi(args[++i]) );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -591,6 +593,16 @@ int SyntheticClient::run()
           dout(2) << "repeatwalk " << sarg1 << dendl;
           while (full_walk(sarg1) == 0) ;
         }
+	did_run_me();
+      }
+      break;
+
+    case SYNCLIENT_MODE_RMFILE:
+      {
+        string sarg1 = get_sarg(0);
+        if (run_me()) {
+          rm_file(sarg1);
+	}
 	did_run_me();
       }
       break;
@@ -1781,6 +1793,11 @@ int SyntheticClient::check_first_primary(int fh) {
   list<ObjectExtent> extents;
   client->enumerate_layout(fh, extents, 1, 0);  
   return client->osdmap->get_pg_primary(pg_t((extents.begin())->layout.ol_pgid));
+}
+
+int SyntheticClient::rm_file(string& fn)
+{
+  return client->unlink(fn.c_str());
 }
 
 int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
