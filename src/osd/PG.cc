@@ -935,7 +935,9 @@ void PG::activate(ObjectStore::Transaction& t,
   assert(info.last_complete >= log.bottom || log.backlog);
 
   // write pg info
-  t.collection_setattr(info.pgid, "info", (char*)&info, sizeof(info));
+  bufferlist bl;
+  ::encode(info, bl);
+  t.collection_setattr(info.pgid, "info", bl);
   
   // write log
   write_log(t);
@@ -1092,7 +1094,9 @@ void PG::finish_recovery()
   assert(info.last_complete == info.last_update);
 
   ObjectStore::Transaction t;
-  t.collection_setattr(info.pgid, "info", &info, sizeof(info));
+  bufferlist bl;
+  ::encode(info, bl);
+  t.collection_setattr(info.pgid, "info", bl);
   osd->store->apply_transaction(t);
   osd->store->sync();
 
@@ -1180,7 +1184,9 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  t.collection_setattr(info.pgid, "info", &info, sizeof(info)); 
+  bufferlist infobl;
+  ::encode(info, infobl);
+  t.collection_setattr(info.pgid, "info", infobl);
 
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }

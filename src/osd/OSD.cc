@@ -557,9 +557,9 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
   pg->set_role(0);
   pg->acting.swap(acting);
   pg->info.history.epoch_created = 
-    pg->info.history.last_epoch_started = 
-    pg->info.history.same_since = 
-    pg->info.history.same_primary_since = 
+    pg->info.history.last_epoch_started =
+    pg->info.history.same_since =
+    pg->info.history.same_primary_since =
     pg->info.history.same_acker_since = osdmap->get_epoch();
   pg->write_log(t);
   
@@ -634,7 +634,10 @@ void OSD::load_pgs()
     PG *pg = _open_lock_pg(pgid);
 
     // read pg info
-    store->collection_getattr(pgid, "info", &pg->info, sizeof(pg->info));
+    bufferlist bl;
+    store->collection_getattr(pgid, "info", bl);
+    bufferlist::iterator p = bl.begin();
+    ::decode(pg->info, p);
     
     // read pg log
     pg->read_log(store);
@@ -1604,7 +1607,9 @@ void OSD::handle_osd_map(MOSDMap *m)
        i++) {
     pg_t pgid = i->first;
     PG *pg = i->second;
-    t.collection_setattr( pgid, "info", &pg->info, sizeof(pg->info));
+    bufferlist bl;
+    ::encode(pg->info, bl);
+    t.collection_setattr( pgid, "info", bl );
   }
 
   // superblock and commit
@@ -2058,7 +2063,9 @@ void OSD::kick_pg_split_queue()
       PG *pg = q->second;
       // fix up pg metadata
       pg->info.last_complete = pg->info.last_update;
-      t.collection_setattr(pg->info.pgid, "info", (char*)&pg->info, sizeof(pg->info));
+      bufferlist bl;
+      ::encode(pg->info, bl);
+      t.collection_setattr(pg->info.pgid, "info", bl);
       pg->write_log(t);
 
       wake_pg_waiters(pg->info.pgid);

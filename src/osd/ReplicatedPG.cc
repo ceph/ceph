@@ -663,7 +663,9 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
   info.last_update = version;
   
   // write pg info
-  t.collection_setattr(pgid, "info", &info, sizeof(info));
+  bufferlist infobl;
+  ::encode(info, infobl);
+  t.collection_setattr(pgid, "info", infobl);
 
   // clone?
   if (crev && rev && rev > crev) {
@@ -1560,7 +1562,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   
   
   // apply to disk!
-  t.collection_setattr(info.pgid, "info", &info, sizeof(info));
+  bufferlist bl;
+  ::encode(info, bl);
+  t.collection_setattr(info.pgid, "info", bl);
   unsigned r = osd->store->apply_transaction(t);
   assert(r == 0);
 
