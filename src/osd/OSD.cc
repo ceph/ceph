@@ -536,6 +536,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   // create collection
   assert(!store->collection_exists(pgid));
   t.create_collection(pgid);
+
   pg->write_log(t);
 
   return pg;
@@ -543,10 +544,16 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
 
 PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t)
 {
+  assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
   assert(whoami == acting[0]);
-  
-  PG *pg = _create_lock_pg(pgid, t);
+  assert(pg_map.count(pgid) == 0);
+
+  PG *pg = _open_lock_pg(pgid);
+
+  assert(!store->collection_exists(pgid));
+  t.create_collection(pgid);
+
   pg->set_role(0);
   pg->acting.swap(acting);
   pg->info.history.epoch_created = 
