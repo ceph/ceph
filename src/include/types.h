@@ -321,7 +321,17 @@ struct SnapContext {
     snaps.clear();
   }
   bool empty() { return seq == 0; }
+
+  void encode(bufferlist& bl) const {
+    ::encode(seq, bl);
+    ::encode(snaps, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(seq, bl);
+    ::decode(snaps, bl);
+  }
 };
+WRITE_CLASS_ENCODER(SnapContext)
 
 inline ostream& operator<<(ostream& out, const SnapContext& snapc) {
   return out << snapc.seq << "=" << snapc.snaps;

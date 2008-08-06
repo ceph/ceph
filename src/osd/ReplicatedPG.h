@@ -120,7 +120,7 @@ protected:
   bool do_recovery();
   void do_peer_recovery();
 
-
+  bool pick_read_snap(pobject_t& poid);
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 

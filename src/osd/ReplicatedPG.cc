@@ -448,6 +448,83 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 // ========================================================================
 // READS
 
+
+/*
+ * return false if object doesn't (logically) exist
+ */
+bool ReplicatedPG::pick_read_snap(pobject_t& poid)
+{
+  pobject_t head = poid;
+  head.oid.snap = CEPH_NOSNAP;
+
+  bufferptr bp;
+  int r = osd->store->getattr(info.pgid, head, "snapc", bp);
+  if (r < 0)
+    return false;  // if head doesn't exist, no snapped version will either.
+  bufferlist bl;
+  bl.push_back(bp);
+  bufferlist::iterator p = bl.begin();
+  SnapContext snapc;
+  ::decode(snapc, p);
+
+  dout(10) << "pick_read_snap " << poid << " snapc " << snapc << dendl;
+  snapid_t want = poid.oid.snap;
+  vector<snapid_t> csnap;
+  pobject_t t = poid;
+
+  for (int i=-1; i<(int)snapc.snaps.size(); i++) {
+    snapid_t last;
+    if (i < 0)
+      last = t.oid.snap = CEPH_NOSNAP;
+    else
+      last = t.oid.snap = snapc.snaps[i];
+    if (last < want) {
+      dout(20) << "pick_read_snap  stopping (DNE) at clone " << t
+	       << ": last " << last << " < want " << want << dendl;
+      return false;
+    }
+    
+    if (last == CEPH_NOSNAP) {
+      csnap.resize(1);
+      csnap[0] = CEPH_NOSNAP;
+    } else {
+      bufferptr bp;
+      r = osd->store->getattr(info.pgid, t, "snaps", bp);
+      if (r < 0) {
+	dout(20) << "pick_read_snap  " << t << " dne" << dendl;
+	continue;
+      }
+      bufferlist bl;
+      bl.push_back(bp);
+      bufferlist::iterator p = bl.begin();
+      ::decode(csnap, p);
+      dout(20) << "pick_read_snap  " << t << " snaps " << csnap << dendl;
+    }
+    
+    snapid_t first = csnap[csnap.size()-1];
+    dout(20) << "pick_read_snap ? " << t << " [" << first << "," << last
+	     << "] csnap " << csnap << dendl;
+    assert(csnap[0] == last);
+
+    if (first <= want) {
+      dout(20) << "pick_read_snap  " << t << " first " << first << " <= " << poid.oid.snap
+	       << " -- HIT" << dendl;
+      poid = t;
+      return true;
+    }
+
+    dout(20) << "pick_read_snap  skipping clone " << t
+	     << ": first " << first << " > want " << want << dendl;
+    while (i+1 < (int)snapc.snaps.size() &&
+	   snapc.snaps[i+1] > first) {
+      i++;
+      dout(20) << "pick_read_snap    and snap " << snapc.snaps[i] << dendl;
+    }
+  }
+  return false;
+}
+
+
 void ReplicatedPG::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
@@ -510,7 +587,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   long r = 0;
 
   // do it.
-  if (poid.oid.snap && !pick_object_rev(poid, op->get_snaps())) {
+  if (poid.oid.snap && !pick_read_snap(poid)) {
     // we have no revision for this request.
     r = -EEXIST;
     goto done;

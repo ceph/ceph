@@ -685,9 +685,6 @@ public:
   }
 
 
-  bool pick_object_rev(pobject_t& oid, vector<snapid_t> &spanvec);
-
-
 
   // abstract bits
   virtual bool preprocess_op(MOSDOp *op, utime_t now) { return false; } 
