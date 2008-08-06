@@ -412,8 +412,6 @@ class NodePool {
       num_dirty--;
       num_clean++;
 
-      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id() << dendl;
-      
       bufferlist bl;
       if (1) {
 	bufferptr bp = n->get_buffer().clone();  // dup it now
@@ -421,6 +419,11 @@ class NodePool {
       } else {
 	bl.append(n->get_buffer());  // this isn't working right .. fixme
       }
+
+      debofs(20) << "ebofs.nodepool.commit_start writing node " << n->get_id()
+		 << " " << (void*)bl.c_str()
+		 << dendl;
+      
       dev.write(n->get_id(), EBOFS_NODE_BLOCKS, 
                 bl,
                 new C_NP_FlushNode(this, n->get_id()), "node");

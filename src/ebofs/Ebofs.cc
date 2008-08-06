@@ -633,13 +633,13 @@ Onode* Ebofs::new_onode(pobject_t oid)
   onode_map[oid] = on;
   onode_lru.lru_insert_top(on);
   
-  assert(object_tab->lookup(oid) < 0);
-  ebofs_inode_ptr ptr(on->onode_loc, 0);
-  object_tab->insert(oid, ptr);  // even tho i'm not placed yet
-
   on->get();
   on->onode_loc.start = 0;
   on->onode_loc.length = 0;
+
+  assert(object_tab->lookup(oid) < 0);
+  ebofs_inode_ptr ptr(on->onode_loc, 0);
+  object_tab->insert(oid, ptr);  // even tho i'm not placed yet
 
   dirty_onode(on);
 
@@ -1050,14 +1050,14 @@ Cnode* Ebofs::new_cnode(coll_t cid)
   cnode_map[cid] = cn;
   cnode_lru.lru_insert_top(cn);
   
-  assert(collection_tab->lookup(cid) < 0);
-  ebofs_inode_ptr ptr(cn->cnode_loc, 0);
-  collection_tab->insert(cid, ptr);  // even tho i'm not placed yet
-  
   cn->get();
   cn->cnode_loc.start = 0;
   cn->cnode_loc.length = 0;
 
+  assert(collection_tab->lookup(cid) < 0);
+  ebofs_inode_ptr ptr(cn->cnode_loc, 0);
+  collection_tab->insert(cid, ptr);  // even tho i'm not placed yet
+  
   dirty_cnode(cn);
 
   return cn;
