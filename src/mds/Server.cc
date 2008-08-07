@@ -4595,6 +4595,17 @@ void Server::handle_client_open(MDRequest *mdr)
       return;
     }
   } 
+
+  // rdlock filelock if snapped.
+  //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata.
+  if (mdr->ref_snapid != CEPH_NOSNAP && !cur->is_dir()) {
+    set<SimpleLock*> rdlocks = mdr->rdlocks;
+    set<SimpleLock*> wrlocks = mdr->wrlocks;
+    set<SimpleLock*> xlocks = mdr->xlocks;
+    rdlocks.insert(&cur->filelock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+  }
   
   // do it
   _do_open(mdr, cur);

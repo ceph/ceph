@@ -21,9 +21,6 @@ big items
 
 
 snaps on mds
-- snapserver needs to allocate contiguous snapids
-  - need to return allocated id with prepare to client.. and handle all the corner cases..
-
 - cap release probably needs ack by mds.  or, mds needs to possibly initiate recovery on import?  no, release should pbly just be acked by mds... like it was way back when... bah!
 
 - mds server ops
@@ -36,9 +33,8 @@ snaps on mds
   - include snaps for all (primary+remote) parents
 
 snaps on osd
-- figure out how to fix up rados logging
-- snap collections
 - garbage collection
+- efficient recovery of clones
 
 
 userspace client
