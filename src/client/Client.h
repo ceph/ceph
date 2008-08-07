@@ -187,6 +187,8 @@ class Inode {
   unsigned exporting_issued;
   int exporting_mds;
   capseq_t exporting_mseq;
+  utime_t hold_caps_until;
+  xlist<Inode*>::item cap_delay_item;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -251,6 +253,7 @@ class Inode {
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
+    cap_delay_item(this),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
@@ -614,6 +617,7 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
+  xlist<Inode*> delayed_caps;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
   SnapRealm *get_snap_realm(inodeno_t r) {
@@ -837,7 +841,8 @@ protected:
 
   void handle_snap(class MClientSnap *m);
   void handle_file_caps(class MClientFileCaps *m);
-  void check_caps(Inode *in, bool force_dirty=false);
+  void cap_delay_requeue(Inode *in);
+  void check_caps(Inode *in, bool is_delayed, bool flush_snap=false);
   void put_cap_ref(Inode *in, int cap);
 
   void _release(Inode *in, bool checkafter=true);

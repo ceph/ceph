@@ -1381,12 +1381,21 @@ bool Inode::put_cap_ref(int cap)
 void Client::put_cap_ref(Inode *in, int cap)
 {
   if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
-    check_caps(in);
+    check_caps(in, false);
     signal_cond_list(in->waitfor_commit);
   }
 }
 
-void Client::check_caps(Inode *in, bool flush_snap)
+void Client::cap_delay_requeue(Inode *in)
+{
+  dout(10) << "cap_delay_requeue on " << *in << dendl;
+  in->hold_caps_until = g_clock.now();
+  in->hold_caps_until += 5.0;
+
+  delayed_caps.push_back(&in->cap_delay_item);
+}
+
+void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
 {
   int wanted = in->caps_wanted();
   int used = in->caps_used();
@@ -1394,6 +1403,8 @@ void Client::check_caps(Inode *in, bool flush_snap)
   dout(10) << "check_caps on " << *in
 	   << " wanted " << cap_string(wanted)
 	   << " used " << cap_string(used)
+	   << " is_delayed=" << is_delayed
+	   << " flush_snap=" << flush_snap
 	   << dendl;
 
   assert(in->snapid == CEPH_NOSNAP);
@@ -1401,14 +1412,25 @@ void Client::check_caps(Inode *in, bool flush_snap)
   if (in->caps.empty())
     return;   // guard if at end of func
   
-  map<int,InodeCap*>::iterator next;
-  for (map<int,InodeCap*>::iterator it = in->caps.begin();
-       it != in->caps.end();
-       it = next) {
-    next = it;
-    next++;
+  if (!is_delayed)
+    cap_delay_requeue(in);
+#if 0
+  else {
+    // delayed.  induce flush?
+    if ((in->caps_file_wanted() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0 &&
+	(in->caps_used() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)))
+      _flush(in, true);
+  }
+#endif
 
+  utime_t now = g_clock.now();
+
+  map<int,InodeCap*>::iterator it = in->caps.begin();
+  while (it != in->caps.end()) {
+    int mds = it->first;
     InodeCap *cap = it->second;
+    it++;
+
     int revoking = cap->implemented & ~cap->issued;
     
     if (in->wanted_max_size > in->inode.max_size &&
@@ -1436,13 +1458,10 @@ void Client::check_caps(Inode *in, bool flush_snap)
     if ((cap->issued & ~wanted) == 0)
       continue;     /* nothing extra, all good */
 
-    /*
-    if (time_before(jiffies, ci->i_hold_caps_until)) {
-    // delaying cap release for a bit
-    dout(30, "delaying cap release\n");
-    continue;
+    if (now < in->hold_caps_until) {
+      dout(10) << "delaying cap release" << dendl;
+      continue;
     }
-    */
     
   ack:
     int op = CEPH_CAP_OP_ACK;
@@ -1450,7 +1469,6 @@ void Client::check_caps(Inode *in, bool flush_snap)
       op = CEPH_CAP_OP_FLUSHSNAP;
     else if (wanted == 0)
       op = CEPH_CAP_OP_RELEASE;
-    dout(10) << "  op = " << op << dendl;
     MClientFileCaps *m = new MClientFileCaps(op,
 					     in->inode,
 					     0,
@@ -1462,13 +1480,11 @@ void Client::check_caps(Inode *in, bool flush_snap)
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
     m->set_snap_follows(in->snaprealm->get_snap_context().seq);
-    messenger->send_message(m, mdsmap->get_inst(it->first));
-    if (wanted == 0 && !flush_snap)
-      mds_sessions[it->first].num_caps--;
-  }
-
-  if (wanted == 0 && !flush_snap) {
-    remove_all_caps(in);
+    messenger->send_message(m, mdsmap->get_inst(mds));
+    if (wanted == 0 && !flush_snap) {
+      mds_sessions[mds].num_caps--;
+      remove_cap(in, mds);
+    }
   }
 }
 
@@ -1715,7 +1731,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	  while (!p.end()) {
 	    Inode *in = *p;
 	    ++p;
-	    check_caps(in, true); // force writeback of write caps
+	    check_caps(in, false, true); // force writeback of write caps
 	    if (g_conf.client_oc)
 	      _flush(in);
 	  }
@@ -1794,7 +1810,7 @@ void Client::handle_snap(MClientSnap *m)
 
 	// first, writeback in _old_ realm context
 	// ???
-	check_caps(in, true);
+	check_caps(in, false, true);
 	if (g_conf.client_oc)
 	  _flush(in);
 
@@ -2298,6 +2314,17 @@ void Client::tick()
   utime_t el = now - last_cap_renew;
   if (mdsmap && el > mdsmap->get_session_timeout() / 3.0)
     renew_caps();
+
+  // delayed caps
+  xlist<Inode*>::iterator p = delayed_caps.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
+    if (in->hold_caps_until > now)
+      break;
+    delayed_caps.pop_front();
+    check_caps(in, true);
+  }
 }
 
 void Client::renew_caps()
@@ -3266,8 +3293,11 @@ int Client::_release(Fh *f)
   Inode *in = f->inode;
 
   if (in->snapid == CEPH_NOSNAP) {
-    if (in->put_open_ref(f->mode))
-      check_caps(in);
+    if (in->put_open_ref(f->mode)) {
+      if (in->caps_used() & (CEPH_CAP_WRBUFFER|CEPH_CAP_WR))
+	_flush(in, true);
+      check_caps(in, false);
+    }
   } else {
     assert(in->snap_cap_refs > 0);
     in->snap_cap_refs--;
@@ -3636,7 +3666,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       endoff > in->wanted_max_size) {
     dout(10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
     in->wanted_max_size = endoff;
-    check_caps(in);
+    check_caps(in, false);
   }
   
   // wait for caps, max_size
@@ -3707,7 +3737,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     
     if ((in->inode.size << 1) >= in->inode.max_size &&
 	(in->reported_size << 1) < in->inode.max_size)
-      check_caps(in);
+      check_caps(in, false);
       
     dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
