@@ -472,9 +472,18 @@ bool ReplicatedPG::pick_read_snap(pobject_t& poid)
 
   // head?
   if (want > snapset.seq) {
-    dout(10) << "pick_read_snap  " << head << " want " << want << " > snapset seq " << snapset.seq << " -- HIT" << dendl;
-    poid = head;
-    return true;
+    if (snapset.head_exists) {
+      dout(10) << "pick_read_snap  " << head
+	       << " want " << want << " > snapset seq " << snapset.seq
+	       << " -- HIT" << dendl;
+      poid = head;
+      return true;
+    } else {
+      dout(10) << "pick_read_snap  " << head
+	       << " want " << want << " > snapset seq " << snapset.seq
+	       << " but head_exists = false -- DNE" << dendl;
+      return false;
+    }
   }
 
   // which clone would it be?
