@@ -3167,10 +3167,6 @@ int Ebofs::_setattr(pobject_t oid, const char *name, const void *value, size_t s
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
-  if (on->readonly) {
-    put_onode(on);
-    return -EACCES;
-  }
 
   string n(name);
   on->attr[n] = buffer::copy((char*)value, size);
@@ -3211,10 +3207,6 @@ int Ebofs::_setattrs(pobject_t oid, map<string,bufferptr>& attrset)
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
-  if (on->readonly) {
-    put_onode(on);
-    return -EACCES;
-  }
 
   on->attr = attrset;
   dirty_onode(on);
@@ -3348,10 +3340,6 @@ int Ebofs::_rmattr(pobject_t oid, const char *name)
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
-  if (on->readonly) {
-    put_onode(on);
-    return -EACCES;
-  }
 
   string n(name);
   on->attr.erase(n);
