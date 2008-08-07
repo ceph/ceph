@@ -1,5 +1,3 @@
-v0.3
-
 v0.4
 - ENOSPC
 - finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)

@@ -36,7 +36,7 @@
 
 #include "msg/Messenger.h"
 
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
@@ -895,7 +895,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
     Capability *cap = it->second;
     dout(7) << "finish_export_inode telling client" << it->first
 	    << " exported caps on " << *in << dendl;
-    MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
 					     in->inode,
 					     in->find_snaprealm()->inode->ino(),
                                              cap->get_last_seq(), 

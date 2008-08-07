@@ -558,7 +558,7 @@ static __u64 calc_layout(struct ceph_osd_client *osdc,
 	__u64 toff = off, tlen = len;
 
 	reqhead->oid.ino = ino;
-	reqhead->oid.rev = 0;
+	reqhead->oid.snap = 0;
 
 	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
 				 &off, &len);

@@ -419,7 +419,7 @@ struct ceph_msg_footer {
 #define CEPH_MSG_CLIENT_REQUEST         24
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
-#define CEPH_MSG_CLIENT_FILECAPS        0x310
+#define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
 
@@ -805,7 +805,7 @@ inline static const char* ceph_cap_op_name(int op) {
 	}
 }
 
-struct ceph_mds_file_caps {
+struct ceph_mds_caps {
 	__le32 op;
 	__le64 ino;
 	__le32 seq;

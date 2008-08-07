@@ -203,8 +203,8 @@ protected:
   void remove_stale_leases(Session *session);
 
  protected:
-  void handle_client_file_caps(class MClientFileCaps *m);
-  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientFileCaps *m);
+  void handle_client_caps(class MClientCaps *m);
+  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientCaps *m);
 
 
   void request_inode_file_caps(CInode *in);

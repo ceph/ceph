@@ -1385,7 +1385,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
  *  0 - ok
  *  1 - send the msg back to mds
  */
-int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_file_caps *grant,
+int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			  struct ceph_mds_session *session)
 {
 	struct ceph_inode_cap *cap;
@@ -1569,7 +1569,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 }
 
 void ceph_handle_cap_trunc(struct inode *inode,
-			   struct ceph_mds_file_caps *trunc,
+			   struct ceph_mds_caps *trunc,
 			   struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -1612,7 +1612,7 @@ void ceph_handle_cap_trunc(struct inode *inode,
 			   &ci->i_vmtruncate_work);
 }
 
-void ceph_handle_cap_export(struct inode *inode, struct ceph_mds_file_caps *ex,
+void ceph_handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 			    struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -1650,7 +1650,7 @@ out:
 	spin_unlock(&inode->i_lock);
 }
 
-void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_file_caps *im,
+void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
 			    struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);

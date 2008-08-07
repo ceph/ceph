@@ -58,7 +58,7 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
 
@@ -253,8 +253,8 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
   case CEPH_MSG_CLIENT_REPLY:
     m = new MClientReply;
     break;
-  case CEPH_MSG_CLIENT_FILECAPS:
-    m = new MClientFileCaps;
+  case CEPH_MSG_CLIENT_CAPS:
+    m = new MClientCaps;
     break;
   case CEPH_MSG_CLIENT_LEASE:
     m = new MClientLease;

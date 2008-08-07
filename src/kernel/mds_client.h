@@ -144,8 +144,8 @@ extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc,
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 				     struct ceph_msg *msg);
 
-extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
-				      struct ceph_msg *msg);
+extern void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
+				  struct ceph_msg *msg);
 
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);

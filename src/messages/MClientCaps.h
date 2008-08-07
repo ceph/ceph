@@ -12,15 +12,15 @@
  * 
  */
 
-#ifndef __MCLIENTFILECAPS_H
-#define __MCLIENTFILECAPS_H
+#ifndef __MCLIENTCAPS_H
+#define __MCLIENTCAPS_H
 
 #include "msg/Message.h"
 
 
-class MClientFileCaps : public Message {
+class MClientCaps : public Message {
  private:
-  struct ceph_mds_file_caps h;
+  struct ceph_mds_caps h;
  public:
   bufferlist snapbl;
 
@@ -56,15 +56,15 @@ class MClientFileCaps : public Message {
   void set_mtime(const utime_t &t) { t.encode_timeval(&h.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&h.atime); }
 
-  MClientFileCaps() {}
-  MClientFileCaps(int op,
-		  inode_t& inode,
-		  inodeno_t realm,
-                  long seq,
-                  int caps,
-                  int wanted,
-		  int mseq) :
-    Message(CEPH_MSG_CLIENT_FILECAPS) {
+  MClientCaps() {}
+  MClientCaps(int op,
+	      inode_t& inode,
+	      inodeno_t realm,
+	      long seq,
+	      int caps,
+	      int wanted,
+	      int mseq) :
+    Message(CEPH_MSG_CLIENT_CAPS) {
     h.op = op;
     h.ino = inode.ino;
     h.seq = seq;
@@ -81,7 +81,7 @@ class MClientFileCaps : public Message {
 
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
-    out << "client_file_caps(" << ceph_cap_op_name(h.op)
+    out << "client_caps(" << ceph_cap_op_name(h.op)
 	<< " ino " << inodeno_t(h.ino)
 	<< " seq " << h.seq 
 	<< " caps " << cap_string(h.caps)

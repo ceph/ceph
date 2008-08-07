@@ -45,7 +45,7 @@
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -73,8 +73,8 @@ void Locker::dispatch(Message *m)
     break;
 
     // client sync
-  case CEPH_MSG_CLIENT_FILECAPS:
-    handle_client_file_caps((MClientFileCaps*)m);
+  case CEPH_MSG_CLIENT_CAPS:
+    handle_client_caps((MClientCaps*)m);
     break;
   case CEPH_MSG_CLIENT_LEASE:
     handle_client_lease((MClientLease*)m);
@@ -617,11 +617,11 @@ bool Locker::issue_caps(CInode *in)
 
       if (seq > 0 && 
           !cap->is_suppress()) {
-        dout(7) << "   sending MClientFileCaps to client" << it->first
+        dout(7) << "   sending MClientCaps to client" << it->first
 		<< " seq " << cap->get_last_seq()
 		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
 		<< dendl;
-        mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
+        mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
 						     in->inode,
 						     in->find_snaprealm()->inode->ino(),
 						     cap->get_last_seq(),
@@ -644,7 +644,7 @@ void Locker::issue_truncate(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
-    mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_TRUNC,
+    mds->send_message_client(new MClientCaps(CEPH_CAP_OP_TRUNC,
 						 in->inode,
 						 in->find_snaprealm()->inode->ino(),
 						 cap->get_last_seq(),
@@ -904,7 +904,7 @@ void Locker::share_inode_max_size(CInode *in)
     Capability *cap = it->second;
     if (cap->pending() & CEPH_CAP_WR) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
-      mds->send_message_client(new MClientFileCaps(CEPH_CAP_OP_GRANT,
+      mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
 						   in->inode,
 						   in->find_snaprealm()->inode->ino(),
 						   cap->get_last_seq(),
@@ -922,18 +922,18 @@ void Locker::share_inode_max_size(CInode *in)
  * - we are calling back previously issued caps (fewer than the client previously had)
  * - or if the client releases (any of) its caps on its own
  */
-void Locker::handle_client_file_caps(MClientFileCaps *m)
+void Locker::handle_client_caps(MClientCaps *m)
 {
   int client = m->get_source().num();
 
   snapid_t follows = m->get_snap_follows();
-  dout(7) << "handle_client_file_caps on " << m->get_ino()
+  dout(7) << "handle_client_caps on " << m->get_ino()
 	  << " follows " << follows 
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
-    dout(7) << "handle_client_file_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
+    dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
     delete m;
     return;
   }
@@ -950,7 +950,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
   if (in) 
     cap = in->get_client_cap(client);
   if (!cap) {
-    dout(7) << "handle_client_file_caps no cap for client" << client << " on " << *in << dendl;
+    dout(7) << "handle_client_caps no cap for client" << client << " on " << *in << dendl;
     delete m;
     return;
   }  
@@ -958,12 +958,12 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 
   // freezing|frozen?
   if (in->is_freezing() || in->is_frozen()) {
-    dout(7) << "handle_client_file_caps freezing|frozen on " << *in << dendl;
+    dout(7) << "handle_client_caps freezing|frozen on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
     return;
   }
   if (m->get_mseq() < cap->get_mseq()) {
-    dout(7) << "handle_client_file_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
+    dout(7) << "handle_client_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
 	    << ", dropping" << dendl;
     delete m;
     return;
@@ -1038,7 +1038,7 @@ void Locker::handle_client_file_caps(MClientFileCaps *m)
 }
 
 
-void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientFileCaps *m)
+void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m)
 {
   dout(10) << "_do_cap_update had " << cap_string(had) << " on " << *in << dendl;
 

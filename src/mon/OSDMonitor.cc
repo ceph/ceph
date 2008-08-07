@@ -619,7 +619,7 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
   }
 
   if (max > osdmap.max_snap && 
-      (__s64)max > pending_inc.new_max_snap) {
+      max > pending_inc.new_max_snap) {
     dout(10) << " new_max_snap " << max << dendl;
     pending_inc.new_max_snap = max;
   } else {

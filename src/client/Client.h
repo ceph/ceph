@@ -840,7 +840,7 @@ protected:
 			      vector<snapid_t>& snaps);
 
   void handle_snap(class MClientSnap *m);
-  void handle_file_caps(class MClientFileCaps *m);
+  void handle_caps(class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void check_caps(Inode *in, bool is_delayed, bool flush_snap=false);
   void put_cap_ref(Inode *in, int cap);

@@ -45,7 +45,7 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
 
@@ -1113,8 +1113,8 @@ void Client::dispatch(Message *m)
   case CEPH_MSG_CLIENT_SNAP:
     handle_snap((MClientSnap*)m);
     break;
-  case CEPH_MSG_CLIENT_FILECAPS:
-    handle_file_caps((MClientFileCaps*)m);
+  case CEPH_MSG_CLIENT_CAPS:
+    handle_caps((MClientCaps*)m);
     break;
   case CEPH_MSG_CLIENT_LEASE:
     handle_lease((MClientLease*)m);
@@ -1472,13 +1472,13 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
       op = CEPH_CAP_OP_FLUSHSNAP;
     else if (wanted == 0)
       op = CEPH_CAP_OP_RELEASE;
-    MClientFileCaps *m = new MClientFileCaps(op,
-					     in->inode,
-					     0,
-                                             cap->seq,
-                                             cap->issued,
-                                             wanted,
-					     cap->mseq);
+    MClientCaps *m = new MClientCaps(op,
+				     in->inode,
+				     0,
+				     cap->seq,
+				     cap->issued,
+				     wanted,
+				     cap->mseq);
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
@@ -1853,7 +1853,7 @@ void Client::handle_snap(MClientSnap *m)
   delete m;
 }
 
-void Client::handle_file_caps(MClientFileCaps *m)
+void Client::handle_caps(MClientCaps *m)
 {
   int mds = m->get_source().num();
 

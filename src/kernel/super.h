@@ -459,16 +459,16 @@ extern void ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_handle_cap_grant(struct inode *inode,
-				 struct ceph_mds_file_caps *grant,
+				 struct ceph_mds_caps *grant,
 				 struct ceph_mds_session *session);
 extern void ceph_handle_cap_trunc(struct inode *inode,
-				  struct ceph_mds_file_caps *trunc,
+				  struct ceph_mds_caps *trunc,
 				  struct ceph_mds_session *session);
 extern void ceph_handle_cap_export(struct inode *inode,
-				   struct ceph_mds_file_caps *ex,
+				   struct ceph_mds_caps *ex,
 				   struct ceph_mds_session *session);
 extern void ceph_handle_cap_import(struct inode *inode,
-				   struct ceph_mds_file_caps *im,
+				   struct ceph_mds_caps *im,
 				   struct ceph_mds_session *session);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);

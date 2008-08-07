@@ -182,7 +182,7 @@ struct ltstr
 WRITE_RAW_ENCODER(ceph_fsid)
 WRITE_RAW_ENCODER(ceph_file_layout)
 WRITE_RAW_ENCODER(ceph_mds_request_head)
-WRITE_RAW_ENCODER(ceph_mds_file_caps)
+WRITE_RAW_ENCODER(ceph_mds_caps)
 WRITE_RAW_ENCODER(ceph_mds_lease)
 WRITE_RAW_ENCODER(ceph_mds_reply_head)
 WRITE_RAW_ENCODER(ceph_mds_reply_inode)

@@ -1460,13 +1460,13 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq, int mds)
 {
-	struct ceph_mds_file_caps *fc;
+	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
 	dout(10, "send_cap_ack ino %llx caps %d wanted %d seq %u size %llu\n",
 	     ino, caps, wanted, (unsigned)seq, size);
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_FILECAPS, sizeof(*fc), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, 0);
 	if (IS_ERR(msg))
 		return;
 
@@ -1490,21 +1490,21 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 	send_msg_mds(mdsc, msg, mds);
 }
 
-void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
-			       struct ceph_msg *msg)
+void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
+			   struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_session *session;
 	struct inode *inode;
-	struct ceph_mds_file_caps *h;
+	struct ceph_mds_caps *h;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	int op;
 	u32 seq;
 	u64 ino, size, max_size;
 	ino_t inot;
 
-	dout(10, "handle_filecaps from mds%d\n", mds);
+	dout(10, "handle_caps from mds%d\n", mds);
 
 	/* decode */
 	if (msg->front.iov_len != sizeof(*h))
@@ -1521,7 +1521,7 @@ void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
 	session = __get_session(&client->mdsc, mds);
 	spin_unlock(&mdsc->lock);
 	if (!session) {
-		dout(10, "WTF, got filecap but no session for mds%d\n", mds);
+		dout(10, "WTF, got cap but no session for mds%d\n", mds);
 		return;
 	}
 
@@ -1573,7 +1573,7 @@ no_inode:
 	return;
 
 bad:
-	dout(10, "corrupt filecaps message\n");
+	dout(10, "corrupt caps message\n");
 	return;
 }
 

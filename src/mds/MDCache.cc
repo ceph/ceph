@@ -67,7 +67,7 @@
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 #include "messages/MClientSnap.h"
 
 #include "messages/MMDSSlaveRequest.h"
@@ -3610,7 +3610,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
   SnapRealm *realm = in->find_snaprealm();
   if (realm->have_past_parents_open()) {
     dout(10) << "do_cap_import " << session->inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
-    MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
+    MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
 						in->inode,
 						realm->inode->ino(),
 						cap->get_last_seq(),

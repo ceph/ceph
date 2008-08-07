@@ -29,7 +29,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientReconnect.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 #include "messages/MClientSnap.h"
 
 #include "messages/MMDSSlaveRequest.h"
@@ -422,7 +422,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	inode_t fake_inode;
 	memset(&fake_inode, 0, sizeof(fake_inode));
 	fake_inode.ino = p->first;
-	MClientFileCaps *stale = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT,
 						     fake_inode,
 						     0,
 						     0,

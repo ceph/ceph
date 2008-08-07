@@ -402,7 +402,7 @@ noinst_HEADERS = \
 	messages/MOSDIn.h\
 	messages/MMDSBoot.h\
 	messages/MClientMount.h\
-	messages/MClientFileCaps.h\
+	messages/MClientCaps.h\
 	messages/MClientLease.h\
 	messages/MOSDMap.h\
 	messages/MOSDOp.h\
