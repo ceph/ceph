@@ -157,6 +157,8 @@ struct SnapRealm {
 
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
   void add_past_parent(SnapRealm *oldparent);
+  void prune_past_parents();
+  bool has_past_parents() { return !past_parents.empty(); }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,

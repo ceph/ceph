@@ -480,3 +480,25 @@ void SnapRealm::add_past_parent(SnapRealm *oldparent)
 
   invalidate_cached_snaps();
 }
+
+void SnapRealm::prune_past_parents()
+{
+  dout(10) << "prune_past_parents" << dendl;
+  check_cache();
+  assert(open);
+
+  map<snapid_t, snaplink_t>::iterator p = past_parents.begin();
+  while (p != past_parents.end()) {
+    set<snapid_t>::iterator q = cached_snaps.lower_bound(p->second.first);
+    if (q == cached_snaps.end() ||
+	*q > p->first) {
+      dout(10) << "prune_past_parents pruning [" << p->second.first << "," << p->first 
+	       << "] " << p->second.ino << dendl;
+      past_parents.erase(p++);
+    } else {
+      dout(10) << "prune_past_parents keeping [" << p->second.first << "," << p->first 
+	       << "] " << p->second.ino << dendl;
+      p++;
+    }
+  }
+}
