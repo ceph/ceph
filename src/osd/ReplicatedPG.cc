@@ -721,6 +721,16 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
       t.setattr(info.pgid.to_coll(), coid, "version", &at_version, sizeof(at_version));
       
+      // add to snap bound collections
+      coll_t fc = info.pgid.to_snap_coll(snaps[0]);
+      t.create_collection(fc);
+      t.collection_add(fc, info.pgid.to_coll(), coid);
+      if (snaps.size() > 1) {
+	coll_t lc = info.pgid.to_snap_coll(snaps[snaps.size()-1]);
+	t.create_collection(lc);
+	t.collection_add(lc, info.pgid.to_coll(), coid);
+      }
+
       snapset.clones.push_back(coid.oid.snap);
       
       at_version.version++;

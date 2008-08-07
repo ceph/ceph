@@ -118,14 +118,20 @@ public:
   
   operator uint64_t() const { return u.pg64; }
 
-  coll_t to_coll() const {
-    return coll_t(u.pg64, 0); 
-  }
   pobject_t to_pobject() const { 
     return pobject_t(OSD_METADATA_PG_POOL,   // osd metadata 
 		     0,
 		     object_t(u.pg64, 0));
   }
+
+  coll_t to_coll() const {
+    return coll_t(u.pg64, 0); 
+  }
+  coll_t to_snap_coll(snapid_t sn) const {
+    return coll_t(u.pg64, sn);
+  }
+
+
 } __attribute__ ((packed));
 
 inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.u.pg64, bl); }
