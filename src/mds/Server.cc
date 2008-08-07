@@ -2656,6 +2656,9 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
 	   << " " << *targeti << dendl;
 
   if (r == 0) {
+    // drop our pins, etc.
+    mdr->cleanup();
+
     // write a commit to the journal
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_commit", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_COMMIT, ESlaveUpdate::LINK);
@@ -2748,9 +2751,10 @@ void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
   mut->apply();
   if (mdr)
     mds->mdcache->request_finish(mdr);
-  else {
+  else
     mds->mdcache->finish_rollback(mut->reqid);
-  }
+  mut->cleanup();
+  delete mut;
 }
 
 
@@ -4115,6 +4119,9 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       mds->queue_waiters(finished);
     }
 
+    // drop our pins
+    mdr->cleanup();
+
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
   } else {
     if (srcdn->is_auth() && destdn->is_primary() &&
@@ -4354,6 +4361,9 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, 
   else {
     mds->mdcache->finish_rollback(mut->reqid);
   }
+
+  mut->cleanup();
+  delete mut;
 }
 
 
