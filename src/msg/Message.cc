@@ -46,6 +46,8 @@ using namespace std;
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 
+#include "messages/MRemoveSnaps.h"
+
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 
@@ -222,6 +224,10 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     break;
   case MSG_OSD_PG_CREATE:
     m = new MOSDPGCreate;
+    break;
+
+  case MSG_REMOVE_SNAPS:
+    m = new MRemoveSnaps;
     break;
 
 

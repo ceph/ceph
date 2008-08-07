@@ -48,7 +48,7 @@
 #define MSG_PGSTATSACK 87
 
 #define MSG_OSD_PG_CREATE      88
-
+#define MSG_REMOVE_SNAPS 89
 
 
 

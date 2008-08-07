@@ -399,6 +399,8 @@ void MDS::tick()
 
   if (is_active()) {
     balancer->tick();
+    if (snapserver)
+      snapserver->check_osd_map(false);
   }
 }
 
@@ -1151,6 +1153,8 @@ void MDS::_dispatch(Message *m)
       break;
     case CEPH_MSG_OSD_MAP:
       objecter->handle_osd_map((MOSDMap*)m);
+      if (snapserver)
+	snapserver->check_osd_map(true);
       break;
       
       // MDS

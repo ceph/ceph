@@ -95,7 +95,7 @@ public:
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
 
-    int64_t new_max_snap;
+    snapid_t new_max_snap;
     interval_set<snapid_t> removed_snaps;
     
     void encode(bufferlist& bl) {
@@ -245,6 +245,13 @@ private:
     return last_pg_change;
   }
 
+  snapid_t get_max_snap() { return max_snap; }
+  bool is_removed_snap(snapid_t sn) { 
+    if (sn > max_snap)
+      return false;
+    return removed_snaps.contains(sn); 
+  }
+
   /***** cluster state *****/
   /* osds */
   int get_max_osd() const { return max_osd; }
@@ -348,14 +355,6 @@ private:
     return -1;
   }
 
-  // snaps
-  
-  // returns true if a snap has been deleted.
-  bool snap_removed(snapid_t s) {
-    if (s > max_snap)
-      return false;
-    return removed_snaps.contains(s);
-  }
 
   void apply_incremental(Incremental &inc) {
     if (inc.epoch == 1)

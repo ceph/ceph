@@ -119,6 +119,9 @@ private:
   bool preprocess_out(class MOSDOut *m);
   bool prepare_out(class MOSDOut *m);
 
+  bool preprocess_remove_snaps(class MRemoveSnaps *m);
+  bool prepare_remove_snaps(class MRemoveSnaps *m);
+
  public:
   OSDMonitor(Monitor *mn, Paxos *p) : 
     PaxosService(mn, p) { }

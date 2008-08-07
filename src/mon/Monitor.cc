@@ -291,6 +291,7 @@ void Monitor::dispatch(Message *m)
     case MSG_OSD_IN:
     case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
+    case MSG_REMOVE_SNAPS:
       osdmon->dispatch(m);
       break;
 

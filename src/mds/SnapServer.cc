@@ -14,9 +14,13 @@
 
 #include "SnapServer.h"
 #include "MDS.h"
+#include "osd/OSDMap.h"
 
 #include "include/types.h"
 #include "messages/MMDSTableRequest.h"
+#include "messages/MRemoveSnaps.h"
+
+#include "msg/Messenger.h"
 
 #include "config.h"
 
@@ -32,32 +36,7 @@ void SnapServer::reset_state()
 {
   last_snap = 0;
   snaps.clear();
-  pending_removal.clear();
-}
-
-snapid_t SnapServer::create(inodeno_t base, const string& name, utime_t stamp, version_t *psnapv)
-{
-  assert(is_active());
-  
-  snapid_t sn = ++last_snap;
-  snaps[sn].snapid = sn;
-  snaps[sn].ino = base;
-  snaps[sn].name = name;
-  snaps[sn].stamp = stamp;
-  *psnapv = ++version;
-
-  dout(10) << "create(" << base << "," << name << ") = " << sn << dendl;
-
-  return sn;
-}
-
-void SnapServer::remove(snapid_t sn) 
-{
-  assert(is_active());
-
-  snaps.erase(sn);
-  pending_removal.insert(sn);
-  version++;
+  pending_purge.clear();
 }
 
 
@@ -66,10 +45,10 @@ void SnapServer::remove(snapid_t sn)
 void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
 {
   bufferlist::iterator p = bl.begin();
-  __u32 what;
-  ::decode(what, p);
+  __u32 op;
+  ::decode(op, p);
 
-  switch (what) {
+  switch (op) {
   case TABLE_OP_CREATE:
     {
       version++;
@@ -81,18 +60,23 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
 	::decode(info.stamp, p);
 	info.snapid = version;
 	pending_create[version] = info;
+	dout(10) << "prepare v" << version << " create " << info << dendl;
       } else {
 	pending_noop.insert(version);
+	dout(10) << "prepare v" << version << " noop" << dendl;
       }
     }
     break;
 
   case TABLE_OP_DESTROY:
     {
+      inodeno_t ino;
       snapid_t snapid;
+      ::decode(ino, p);    // not used, currently.
       ::decode(snapid, p);
       version++;
       pending_destroy[version] = snapid;
+      dout(10) << "prepare v" << version << " destroy " << snapid << dendl;
     }
     break;
     
@@ -118,8 +102,10 @@ void SnapServer::_commit(version_t tid)
   } 
 
   else if (pending_destroy.count(tid)) {
-    dout(7) << "commit " << tid << " destroy " << pending_destroy[tid] << dendl;
-    snaps.erase(pending_destroy[tid]);
+    snapid_t sn = pending_destroy[tid];
+    dout(7) << "commit " << tid << " destroy " << sn << dendl;
+    snaps.erase(sn);
+    pending_purge.insert(sn);
     pending_destroy.erase(tid);
   }
   else if (pending_noop.count(tid)) {
@@ -189,3 +175,39 @@ void SnapServer::handle_query(MMDSTableRequest *req)
 }
 
 
+
+void SnapServer::check_osd_map(bool force)
+{
+  if (!force && version == last_checked_osdmap) {
+    dout(10) << "check_osd_map - version unchanged" << dendl;
+    return;
+  }
+  dout(10) << "check_osd_map pending_purge=" << pending_purge << dendl;
+
+  vector<snapid_t> purge;
+  bool purged = false;
+
+  set<snapid_t>::iterator p = pending_purge.begin();
+  while (p != pending_purge.end()) {
+    if (mds->osdmap->is_removed_snap(*p)) {
+      dout(10) << " osdmap marks " << *p << " as removed" << dendl;
+      pending_purge.erase(p++);
+      purged = true;
+    } else {
+      purge.push_back(*p);
+      p++;
+    }
+  }
+
+  if (purged)
+    version++;
+
+  if (!purge.empty()) {
+    dout(10) << "requesting removal of " << purge << dendl;
+    MRemoveSnaps *m = new MRemoveSnaps(purge);
+    int mon = mds->monmap->pick_mon();
+    mds->messenger->send_message(m, mds->monmap->get_inst(mon));
+  }
+
+  last_checked_osdmap = version;
+}

@@ -27,6 +27,7 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MMonCommand.h"
+#include "messages/MRemoveSnaps.h"
 
 #include "common/Timer.h"
 
@@ -280,6 +281,9 @@ bool OSDMonitor::preprocess_query(Message *m)
   case MSG_OSD_OUT:
     return preprocess_out((MOSDOut*)m);
     */
+
+  case MSG_REMOVE_SNAPS:
+    return preprocess_remove_snaps((MRemoveSnaps*)m);
     
   default:
     assert(0);
@@ -308,6 +312,9 @@ bool OSDMonitor::prepare_update(Message *m)
   case MSG_OSD_OUT:
     return prepare_out((MOSDOut*)m);
     */
+
+  case MSG_REMOVE_SNAPS:
+    return prepare_remove_snaps((MRemoveSnaps*)m);
 
   default:
     assert(0);
@@ -574,6 +581,53 @@ void OSDMonitor::_alive(MOSDAlive *m)
 	  << dendl;
   send_latest(m->get_orig_source_inst(), m->map_epoch);
   delete m;
+}
+
+
+// ---
+
+bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
+{
+  dout(7) << "preprocess_remove_snaps " << *m << dendl;
+  
+  for (vector<snapid_t>::iterator p = m->snaps.begin(); 
+       p != m->snaps.end();
+       p++) {
+    if (*p > osdmap.max_snap ||
+	!osdmap.removed_snaps.contains(*p))
+      return false;
+  }
+  delete m;
+  return true;
+}
+
+bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
+{
+  dout(7) << "prepare_remove_snaps " << *m << dendl;
+
+  snapid_t max;
+  for (vector<snapid_t>::iterator p = m->snaps.begin(); 
+       p != m->snaps.end();
+       p++) {
+    if (*p > max)
+      max = *p;
+
+    if (!osdmap.removed_snaps.contains(*p)) {
+      dout(10) << " adding " << *p << " to removed_snaps" << dendl;
+      pending_inc.removed_snaps.insert(*p);
+    }
+  }
+
+  if (max > osdmap.max_snap && 
+      (__s64)max > pending_inc.new_max_snap) {
+    dout(10) << " new_max_snap " << max << dendl;
+    pending_inc.new_max_snap = max;
+  } else {
+    dout(10) << " max_snap " << osdmap.max_snap << " still >= " << max << dendl;
+  }
+
+  delete m;
+  return true;
 }
 
 
