@@ -411,4 +411,32 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 }
 
 
+// -------
+
+/*
+ * attached to object head.  describes most recent snap context, and
+ * set of existing clones.
+ */
+struct SnapSet {
+  snapid_t seq;
+  vector<snapid_t> snaps;
+  vector<snapid_t> clones;
+
+  void encode(bufferlist& bl) const {
+    ::encode(seq, bl);
+    ::encode(snaps, bl);
+    ::encode(clones, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(seq, bl);
+    ::decode(snaps, bl);
+    ::decode(clones, bl);
+  }
+};
+WRITE_CLASS_ENCODER(SnapSet)
+
+inline ostream& operator<<(ostream& out, const SnapSet& cs) {
+  return out << cs.seq << "=" << cs.snaps << "~" << cs.clones;
+}
+
 #endif

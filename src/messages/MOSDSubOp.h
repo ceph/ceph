@@ -41,8 +41,8 @@ public:
   eversion_t version;
   uint32_t inc_lock;
 
-  snapid_t follows_snap;
-  vector<snapid_t> snaps;
+  SnapSet snapset;
+  SnapContext snapc;
   
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
@@ -62,8 +62,8 @@ public:
     ::decode(rep_tid, p);
     ::decode(version, p);
     ::decode(inc_lock, p);
-    ::decode(follows_snap, p);
-    ::decode(snaps, p);
+    ::decode(snapset, p);
+    ::decode(snapc, p);
     ::decode(pg_trim_to, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
@@ -80,8 +80,8 @@ public:
     ::encode(rep_tid, payload);
     ::encode(version, payload);
     ::encode(inc_lock, payload);
-    ::encode(follows_snap, payload);
-    ::encode(snaps, payload);
+    ::encode(snapset, payload);
+    ::encode(snapc, payload);
     ::encode(pg_trim_to, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
@@ -96,8 +96,7 @@ public:
   bool is_read() { return op < 10; }
  
   MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, loff_t of, loff_t le,
-	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v,
-	    snapid_t fs) :
+	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
     reqid(r),
@@ -108,8 +107,7 @@ public:
     length(le),
     rep_tid(rtid),
     version(v),
-    inc_lock(il),
-    follows_snap(fs)
+    inc_lock(il)
   {
     memset(&peer_stat, 0, sizeof(peer_stat));
   }
@@ -121,7 +119,7 @@ public:
 	<< " " << MOSDOp::get_opname(op)
 	<< " " << poid
 	<< " v " << version
-	<< " follows_snap=" << follows_snap << " snaps=" << snaps;    
+	<< " snapset=" << snapset << " snapc=" << snapc;    
     if (length) out << " " << offset << "~" << length;
     out << ")";
   }

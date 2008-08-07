@@ -44,19 +44,19 @@ public:
     set<int>         osds;
     eversion_t       at_version;
 
-    snapid_t follows_snap;
-    vector<snapid_t> snaps;
+    SnapSet snapset;
+    SnapContext snapc;
 
     eversion_t       pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
     RepGather(MOSDOp *o, tid_t rt, eversion_t av, eversion_t lc,
-	      snapid_t fs, vector<snapid_t> &sn) :
+	      SnapSet& ss, SnapContext& sc) :
       op(o), rep_tid(rt),
       applied(false),
       sent_ack(false), sent_commit(false),
       at_version(av), 
-      follows_snap(fs), snaps(sn),
+      snapset(ss), snapc(sc),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
@@ -86,7 +86,7 @@ protected:
   void put_rep_gather(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
   RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
-			    snapid_t follows_snap, vector<snapid_t> &snaps);
+			    SnapSet& snapset, SnapContext& snapc);
   void repop_ack(RepGather *repop,
                  int result, bool commit,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
@@ -106,7 +106,7 @@ protected:
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, int op, eversion_t at_version,
 			   off_t offset, off_t length, bufferlist& bl,
-			   snapid_t follows_snap, vector<snapid_t>& snaps,
+			   SnapSet& snapset, SnapContext& snapc,
 			   __u32 inc_lock, eversion_t trim_to);
   
   friend class C_OSD_ModifyCommit;

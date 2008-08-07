@@ -1098,7 +1098,8 @@ void PG::finish_recovery()
   ::encode(info, bl);
   t.collection_setattr(info.pgid, "info", bl);
   osd->store->apply_transaction(t);
-  osd->store->sync();
+  //osd->store->sync();  
+#warning fix finish_recovery sync behavior
 
   purge_strays();
   update_stats();

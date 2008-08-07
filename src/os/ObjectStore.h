@@ -577,6 +577,12 @@ public:
   virtual int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset, Context *onsafe=0) = 0;
   virtual int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size) = 0;
   virtual int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& value) = 0;
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferlist& value) {
+    bufferptr bp;
+    int r = getattr(cid, oid, name, bp);
+    value.push_back(bp);
+    return r;
+  }
   virtual int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {return 0;};
 
   virtual int rmattr(coll_t cid, pobject_t oid, const char *name,
