@@ -82,6 +82,18 @@ private:
 
   void handle_request(MMDSTableRequest *m);
 
+  virtual void encode_server_state(bufferlist& bl) = 0;
+  virtual void decode_server_state(bufferlist::iterator& bl) = 0;
+
+  void encode_state(bufferlist& bl) {
+    encode_server_state(bl);
+    ::encode(pending_for_mds, bl);
+  }
+  void decode_state(bufferlist::iterator& bl) {
+    decode_server_state(bl);
+    ::decode(pending_for_mds, bl);
+  }
+
   // recovery
   void finish_recovery();
   void handle_mds_recovery(int who);

@@ -39,23 +39,21 @@ public:
     
   void init_inode();
   void reset_state();
-  void encode_state(bufferlist& bl) {
+  void encode_server_state(bufferlist& bl) {
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
     ::encode(pending_purge, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_noop, bl);
-    ::encode(pending_for_mds, bl);
   }
-  void decode_state(bufferlist::iterator& bl) {
+  void decode_server_state(bufferlist::iterator& bl) {
     ::decode(last_snap, bl);
     ::decode(snaps, bl);
     ::decode(pending_purge, bl);
     ::decode(pending_create, bl);
     ::decode(pending_destroy, bl);
     ::decode(pending_noop, bl);
-    ::decode(pending_for_mds, bl);
   }
 
   // server bits
