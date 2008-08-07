@@ -756,7 +756,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	t.get_oid(oid);
 	pobject_t noid;
 	t.get_oid(noid);
-	//clone(cid, oid, noid);
+	clone(cid, oid, noid);
 	
 	dout(10) << "clone " << cid << " " << oid << dendl;
 	char *ofn = new char[80];
@@ -1083,13 +1083,22 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
     struct stat st;
     ::fstat(o, &st);
 
-#ifdef SPLICE_F_MOVE
+#if 0 //der, this doesn't work on non-pipes? #ifdef SPLICE_F_MOVE
+    dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE size " << st.st_size << dendl;
+
     loff_t op = 0, np = 0;
-    while (op < st.st_size && r >= 0)
-      r = ::splice(o, &op, n, &np, st.st_size-op, 0);
+    while (op < st.st_size && r >= 0) {
+      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE op " << op << " np " << np << dendl;
+      r = ::splice(o, &op, n, &np, st.st_size-op, SPLICE_F_MOVE);
+      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE r= " << r << dendl;
+      if (r < 0)
+	dout(0) << "clone " << ofn << " -> " << nfn << " error " << strerror(errno) << dendl;
+    }
 #else
+    dout(20) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
+
     loff_t pos = 0;
-    int buflen = 4096*10;
+    int buflen = 4096*32;
     char buf[buflen];
     while (pos < st.st_size) {
       int l = MIN(st.st_size-pos, buflen);
