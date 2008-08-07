@@ -825,12 +825,6 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
-  // fix up snaprealms
-  assert(diri->snaprealm);
-  SnapRealm *newparent = diri->parent->dir->inode->find_snaprealm();
-  if (newparent != diri->snaprealm->parent)
-    diri->snaprealm->change_open_parent_to(newparent);
-
   //show_subtrees();
 
   // adjust subtree
@@ -959,6 +953,7 @@ int MDCache::num_subtrees_fullnonauth()
 // ===================================
 // journal and snap/cow helpers
 
+
 /*
  * find first inode in cache that follows given snapid.  otherwise, return current.
  */
@@ -1067,8 +1062,10 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       follows = in->find_snaprealm()->get_newest_snap();
 
     // already cloned?
-    if (follows < in->first)
+    if (follows < in->first) {
+      dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *in << dendl;
       return;
+    }
 
     in->cow_old_inode(follows, in->get_previous_projected_inode());
 
@@ -1088,8 +1085,10 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       follows = dn->dir->inode->find_snaprealm()->get_newest_snap();
     
     // already cloned?
-    if (follows < dn->first)
+    if (follows < dn->first) {
+      dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *dn << dendl;
       return;
+    }
        
     // update dn.first before adding old dentry to cdir's map
     snapid_t oldfirst = dn->first;

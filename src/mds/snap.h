@@ -194,13 +194,8 @@ struct SnapRealm {
     return cached_seq;
   }
 
-  void change_open_parent_to(SnapRealm *newp) {
-    if (parent)
-      parent->open_children.erase(this);
-    parent = newp;
-    if (parent)
-      parent->open_children.insert(this);
-  }
+  void adjust_parent();
+
   void split_at(SnapRealm *child);
   void join(SnapRealm *child);
 

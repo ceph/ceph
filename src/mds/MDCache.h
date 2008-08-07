@@ -508,7 +508,7 @@ public:
   void request_drop_locks(MDRequest *r);
   void request_cleanup(MDRequest *r);
 
-  // journal helpers
+  // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
   CInode *cow_inode(CInode *in, snapid_t last);
   void journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);

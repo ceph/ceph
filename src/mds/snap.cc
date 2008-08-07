@@ -188,7 +188,7 @@ void SnapRealm::check_cache()
   build_snap_set(cached_snaps, cached_seq, cached_last_created, cached_last_destroyed,
 		 0, CEPH_NOSNAP);
   
-  dout(10) << "check_cache " << cached_snaps
+  dout(10) << "check_cache rebuilt " << cached_snaps
 	   << " seq " << seq
 	   << " cached_seq " << cached_seq
 	   << " cached_last_created " << cached_last_created
@@ -334,6 +334,20 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
 }
 
 
+void SnapRealm::adjust_parent()
+{
+  SnapRealm *newparent = inode->get_parent_dn()->get_dir()->get_inode()->find_snaprealm();
+  if (newparent != parent) {
+    dout(10) << "adjust_parent " << parent << " -> " << newparent << dendl;
+    if (parent)
+      parent->open_children.erase(this);
+    parent = newparent;
+    if (parent)
+      parent->open_children.insert(this);
+    
+    invalidate_cached_snaps();
+  }
+}
 
 void SnapRealm::split_at(SnapRealm *child)
 {
@@ -463,4 +477,6 @@ void SnapRealm::add_past_parent(SnapRealm *oldparent)
   }
   current_parent_since = MAX(oldlast, newlast) + 1;
   dout(10) << "add_past_parent current_parent_since " << current_parent_since << dendl;
+
+  invalidate_cached_snaps();
 }

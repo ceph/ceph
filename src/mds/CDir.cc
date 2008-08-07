@@ -405,6 +405,10 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 
   if (in->inode.anchored + in->nested_anchors)
     dn->adjust_nested_anchors(in->nested_anchors + in->inode.anchored);
+
+  // verify open snaprealm parent
+  if (in->snaprealm)
+    in->snaprealm->adjust_parent();
 }
 
 void CDir::unlink_inode( CDentry *dn )
