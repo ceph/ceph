@@ -22,7 +22,7 @@ class MOSDPGInfo : public Message {
   epoch_t epoch;
 
 public:
-  list<PG::Info> pg_info;
+  vector<PG::Info> pg_info;
 
   epoch_t get_epoch() { return epoch; }
 

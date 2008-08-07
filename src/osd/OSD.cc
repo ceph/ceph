@@ -2532,7 +2532,7 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   map<int,MOSDPGInfo*> info_map;
   int created = 0;
 
-  for (list<PG::Info>::iterator p = m->pg_info.begin();
+  for (vector<PG::Info>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) 
     _process_pg_info(m->get_epoch(), from, *p, empty_log, empty_missing, &info_map, created);

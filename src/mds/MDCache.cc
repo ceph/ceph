@@ -6119,11 +6119,11 @@ void MDCache::do_realm_split_notify(CInode *in)
   dout(10) << "do_realm_split_notify " << *in->snaprealm << " " << *in << dendl;
   
   // notify clients of update|split
-  list<inodeno_t> split_inos;
+  vector<inodeno_t> split_inos;
   for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
     split_inos.push_back((*p)->ino());
 
-  list<inodeno_t> split_realms;
+  vector<inodeno_t> split_realms;
   for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
        p != in->snaprealm->open_children.end();
        p++)

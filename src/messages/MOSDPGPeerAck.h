@@ -23,7 +23,7 @@ class MOSDPGPeerAck : public Message {
   version_t       map_version;
 
  public:
-  list<pg_t>                pg_dne;   // pg dne
+  vector<pg_t>                pg_dne;   // pg dne
   map<pg_t, PGReplicaInfo > pg_state; // state, lists, etc.
 
   version_t get_version() { return map_version; }

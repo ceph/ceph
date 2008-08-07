@@ -23,8 +23,8 @@ struct MClientSnap : public Message {
 
   // (for split only)
   inodeno_t split;
-  list<inodeno_t> split_inos;
-  list<inodeno_t> split_realms;
+  vector<inodeno_t> split_inos;
+  vector<inodeno_t> split_realms;
   
   MClientSnap(int o=0) : 
     Message(CEPH_MSG_CLIENT_SNAP),

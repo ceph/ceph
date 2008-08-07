@@ -1793,7 +1793,7 @@ void Client::handle_snap(MClientSnap *m)
     // flush, then move, ino's.
     realm = get_snap_realm(info.ino);
     dout(10) << " splitting off " << *realm << dendl;
-    for (list<inodeno_t>::iterator p = m->split_inos.begin();
+    for (vector<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
 	 p++) {
       vinodeno_t vino(*p, CEPH_NOSNAP);
@@ -1823,7 +1823,7 @@ void Client::handle_snap(MClientSnap *m)
     }
 
     // move child snaprealms, too
-    for (list<inodeno_t>::iterator p = m->split_realms.begin();
+    for (vector<inodeno_t>::iterator p = m->split_realms.begin();
 	 p != m->split_realms.end();
 	 p++) {
       dout(10) << "adjusting snaprealm " << *p << " parent" << dendl;
