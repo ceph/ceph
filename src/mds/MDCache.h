@@ -291,6 +291,7 @@ struct MDRequest : public Mutation {
     
     // for snaps
     version_t stid;
+    bufferlist snapidbl;
 
     // called when slave commits or aborts
     Context *slave_commit;

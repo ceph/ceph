@@ -89,7 +89,7 @@ void AnchorClient::prepare_create(inodeno_t ino, vector<Anchor>& trace,
   ::encode(op, bl);
   ::encode(ino, bl);
   ::encode(trace, bl);
-  _prepare(bl, patid, onfinish);
+  _prepare(bl, patid, 0, onfinish);
 }
 
 void AnchorClient::prepare_destroy(inodeno_t ino, 
@@ -100,7 +100,7 @@ void AnchorClient::prepare_destroy(inodeno_t ino,
   __u32 op = TABLE_OP_DESTROY;
   ::encode(op, bl);
   ::encode(ino, bl);
-  _prepare(bl, patid, onfinish);
+  _prepare(bl, patid, 0, onfinish);
 }
 
 
@@ -113,5 +113,5 @@ void AnchorClient::prepare_update(inodeno_t ino, vector<Anchor>& trace,
   ::encode(op, bl);
   ::encode(ino, bl);
   ::encode(trace, bl);
-  _prepare(bl, patid, onfinish);
+  _prepare(bl, patid, 0, onfinish);
 }

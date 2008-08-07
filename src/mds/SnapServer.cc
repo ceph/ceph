@@ -58,9 +58,11 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
       if (!p.end()) {
 	::decode(info.name, p);
 	::decode(info.stamp, p);
-	info.snapid = version;
+	info.snapid = ++last_snap;
 	pending_create[version] = info;
 	dout(10) << "prepare v" << version << " create " << info << dendl;
+	bl.clear();
+	::encode(info.snapid, bl);
       } else {
 	pending_noop.insert(version);
 	dout(10) << "prepare v" << version << " noop" << dendl;

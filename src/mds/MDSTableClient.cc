@@ -54,6 +54,8 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
       dout(10) << "got agree on " << reqid << " atid " << tid << dendl;
       Context *onfinish = pending_prepare[reqid].onfinish;
       *pending_prepare[reqid].ptid = tid;
+      if (pending_prepare[reqid].pbl)
+	*pending_prepare[reqid].pbl = m->bl;
       pending_prepare.erase(reqid);
       if (onfinish) {
         onfinish->finish(0);
@@ -116,7 +118,8 @@ void MDSTableClient::_logged_ack(version_t tid)
   }
 }
 
-void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, Context *onfinish)
+void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl,
+			      Context *onfinish)
 {
   __u64 reqid = ++last_reqid;
   dout(10) << "_prepare " << reqid << dendl;
@@ -127,6 +130,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, Context *on
 
   pending_prepare[reqid].mutation = mutation;
   pending_prepare[reqid].ptid = ptid;
+  pending_prepare[reqid].pbl = pbl;
   pending_prepare[reqid].onfinish = onfinish;
 
   mds->send_message_mds(req, mds->mdsmap->get_tableserver());

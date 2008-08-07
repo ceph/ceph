@@ -5025,13 +5025,16 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (!mdr->more()->stid) {
     // prepare an stid
     mds->snapclient->prepare_create(diri->ino(), snapname, mdr->now, 
-				    &mdr->more()->stid, new C_MDS_RetryRequest(mds->mdcache, mdr));
+				    &mdr->more()->stid, &mdr->more()->snapidbl,
+				    new C_MDS_RetryRequest(mds->mdcache, mdr));
     return;
   }
 
   version_t stid = mdr->more()->stid;
-  snapid_t snapid = stid;
-  dout(10) << " snapid/stid is " << snapid << dendl;
+  snapid_t snapid;
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  ::decode(snapid, p);
+  dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
   // journal
   SnapInfo info;

@@ -30,14 +30,14 @@ public:
   void handle_query_result(MMDSTableRequest *m) {}
 
   void prepare_create(inodeno_t dirino, const string& name, utime_t stamp,
-		      version_t *pstid, Context *onfinish) {
+		      version_t *pstid, bufferlist *pbl, Context *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
     ::encode(op, bl);
     ::encode(dirino, bl);
     ::encode(name, bl);
     ::encode(stamp, bl);
-    _prepare(bl, pstid, onfinish);
+    _prepare(bl, pstid, pbl, onfinish);
   }
 
   void prepare_create_realm(inodeno_t ino, version_t *pstid, Context *onfinish) {
@@ -45,7 +45,7 @@ public:
     __u32 op = TABLE_OP_CREATE;
     ::encode(op, bl);
     ::encode(ino, bl);
-    _prepare(bl, pstid, onfinish);
+    _prepare(bl, pstid, 0, onfinish);
   }
 
   void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, Context *onfinish) {
@@ -54,7 +54,7 @@ public:
     ::encode(op, bl);
     ::encode(ino, bl);
     ::encode(snapid, bl);
-    _prepare(bl, pstid, onfinish);
+    _prepare(bl, pstid, 0, onfinish);
   }
 };
 

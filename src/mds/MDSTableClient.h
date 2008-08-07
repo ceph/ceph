@@ -34,9 +34,10 @@ protected:
   struct _pending_prepare {
     Context *onfinish;
     version_t *ptid;
+    bufferlist *pbl; 
     bufferlist mutation;
 
-    _pending_prepare() : onfinish(0), ptid(0) {}
+    _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
   };
 
   hash_map<__u64, _pending_prepare> pending_prepare;
@@ -64,7 +65,7 @@ public:
 
   void handle_request(MMDSTableRequest *m);
 
-  void _prepare(bufferlist& mutation, version_t *ptid, Context *onfinish);
+  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, Context *onfinish);
   void commit(version_t tid, LogSegment *ls);
 
   // for recovery (by other nodes)

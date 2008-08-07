@@ -42,7 +42,7 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
 {
   dout(7) << "handle_prepare " << *req << dendl;
   int from = req->get_source().num();
-
+  
   _prepare(req->bl, req->reqid, from);
   pending_for_mds[version].mds = from;
   pending_for_mds[version].reqid = req->reqid;
@@ -57,6 +57,7 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 {
   dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_AGREE, req->reqid, tid);
+  reply->bl = req->bl;
   mds->send_message_mds(reply, req->get_source().num());
   delete req;
 }
