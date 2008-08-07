@@ -82,6 +82,9 @@ ostream& operator<<(ostream& out, CInode& in)
 #endif
   }
 
+  if (in.snaprealm)
+    out << " snaprealm=" << in.snaprealm;
+
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";

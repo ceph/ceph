@@ -4006,7 +4006,10 @@ void MDCache::_do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize)
 
   // remove
   if (newsize < oldsize) {
-    const SnapContext& snapc = in->find_snaprealm()->get_snap_context();
+    SnapRealm *realm = in->find_snaprealm();
+    dout(10) << "_do_purge_inode realm " << *realm << dendl;
+    const SnapContext& snapc = realm->get_snap_context();
+    dout(10) << "_do_purge_inode snapc " << snapc << " on " << *in << dendl;
     mds->filer->remove(in->inode.ino, &in->inode.layout, snapc,
 		       newsize, oldsize-newsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));

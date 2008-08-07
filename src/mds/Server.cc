@@ -3007,12 +3007,18 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
     straydn->dir->link_primary_inode(straydn, in);
-
+    
+    SnapRealm *oldparent = dn->dir->inode->find_snaprealm();
+    
+    bool isnew = false;
     if (!straydn->inode->snaprealm) {
       straydn->inode->open_snaprealm();
-      mdcache->do_realm_split_notify(straydn->inode);
+      straydn->inode->snaprealm->seq = oldparent->get_newest_seq();
+      isnew = true;
     }
-    straydn->inode->snaprealm->add_past_parent(dn->dir->inode->find_snaprealm());
+    straydn->inode->snaprealm->add_past_parent(oldparent);
+    if (isnew)
+      mdcache->do_realm_split_notify(straydn->inode);
   }
 
   dn->mark_dirty(dnpv, mdr->ls);  
