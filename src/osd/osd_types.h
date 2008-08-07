@@ -419,16 +419,21 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
  */
 struct SnapSet {
   snapid_t seq;
+  bool head_exists;
   vector<snapid_t> snaps;
   vector<snapid_t> clones;
 
+  SnapSet() : head_exists(false) {}
+
   void encode(bufferlist& bl) const {
     ::encode(seq, bl);
+    ::encode(head_exists, bl);
     ::encode(snaps, bl);
     ::encode(clones, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(seq, bl);
+    ::decode(head_exists, bl);
     ::decode(snaps, bl);
     ::decode(clones, bl);
   }
@@ -436,7 +441,9 @@ struct SnapSet {
 WRITE_CLASS_ENCODER(SnapSet)
 
 inline ostream& operator<<(ostream& out, const SnapSet& cs) {
-  return out << cs.seq << "=" << cs.snaps << "~" << cs.clones;
+  return out << cs.seq << "=" << cs.snaps << ":"
+	     << cs.clones
+	     << (cs.head_exists ? "+head":"");
 }
 
 #endif

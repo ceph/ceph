@@ -684,7 +684,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       dout(10) << " using newer snapc " << snapc << dendl;
     }
 
-    if (snapset.seq &&                   // object exists
+    if (snapset.head_exists &&           // head exists
 	snapc.snaps.size() &&            // there are snaps
 	snapc.snaps[0] > snapset.seq) {  // existing object is old
       // clone
@@ -727,6 +727,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       dout(10) << " munging DELETE -> TRUNCATE(0) bc of clones " << snapset.clones << dendl;
       op = CEPH_OSD_OP_TRUNCATE;
       length = 0;
+      snapset.head_exists = false;
     }
   }
 
@@ -779,6 +780,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
       t.write(info.pgid, poid, offset, length, nbl);
       if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      snapset.head_exists = true;
     }
     break;
     
