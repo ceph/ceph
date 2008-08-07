@@ -1380,7 +1380,7 @@ bool Inode::put_cap_ref(int cap)
 
 void Client::put_cap_ref(Inode *in, int cap)
 {
-  if (in->put_cap_ref(cap)) {
+  if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
     check_caps(in);
     signal_cond_list(in->waitfor_commit);
   }
