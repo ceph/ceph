@@ -1799,7 +1799,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  map< int, list<PG::Info> >  notify_list;  // primary -> list
+  map< int, vector<PG::Info> >  notify_list;  // primary -> list
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
@@ -2232,9 +2232,9 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, list<PG::Info> >& notify_list) 
+void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list) 
 {
-  for (map< int, list<PG::Info> >::iterator it = notify_list.begin();
+  for (map< int, vector<PG::Info> >::iterator it = notify_list.begin();
        it != notify_list.end();
        it++) {
     if (it->first == whoami) {
@@ -2296,7 +2296,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
-  for (list<PG::Info>::iterator it = m->get_pg_list().begin();
+  for (vector<PG::Info>::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        it++) {
     pg_t pgid = it->pgid;
@@ -2559,7 +2559,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   int created = 0;
-  map< int, list<PG::Info> > notify_list;
+  map< int, vector<PG::Info> > notify_list;
   
   for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();

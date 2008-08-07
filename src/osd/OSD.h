@@ -396,7 +396,7 @@ private:
   // -- generic pg recovery --
   int num_pulling;
 
-  void do_notifies(map< int, list<PG::Info> >& notify_list);
+  void do_notifies(map< int, vector<PG::Info> >& notify_list);
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
   void do_infos(map<int, MOSDPGInfo*>& info_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);

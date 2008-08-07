@@ -419,12 +419,7 @@ noinst_HEADERS = \
 	messages/MOSDPGLog.h\
 	messages/MPGStats.h\
 	messages/MPing.h\
-	messages/MOSDPGPeer.h\
-	messages/MOSDPGPeerAck.h\
-	messages/MOSDPGPeerRequest.h\
 	messages/MHeartbeat.h\
-	messages/MOSDPGSummary.h\
-	messages/MOSDPGUpdate.h\
 	messages/MExportCaps.h\
 	messages/MMDSGetMap.h\
 	messages/MMonCommandAck.h\

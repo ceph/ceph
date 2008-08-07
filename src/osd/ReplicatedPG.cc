@@ -1831,7 +1831,7 @@ bool ReplicatedPG::do_recovery()
   } else {
     // tell primary
     dout(7) << "do_recovery complete, telling primary" << dendl;
-    list<PG::Info> ls;
+    vector<PG::Info> ls;
     ls.push_back(info);
     osd->messenger->send_message(new MOSDPGNotify(osd->osdmap->get_epoch(),
                                                   ls),
