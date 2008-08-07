@@ -453,8 +453,8 @@ public:
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, int a) {
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
-  void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, pair<int,int> auth);
-  void adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bounds, int a) {
+  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, pair<int,int> auth);
+  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, int a) {
     adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
@@ -557,9 +557,9 @@ public:
 protected:
   // [resolve]
   // from EImportStart w/o EImportFinish during journal replay
-  map<dirfrag_t, list<dirfrag_t> >            my_ambiguous_imports;  
+  map<dirfrag_t, vector<dirfrag_t> >            my_ambiguous_imports;  
   // from MMDSResolves
-  map<int, map<dirfrag_t, list<dirfrag_t> > > other_ambiguous_imports;  
+  map<int, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
 
   map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
 
@@ -597,7 +597,7 @@ public:
   }
 
   // ambiguous imports
-  void add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds);
+  void add_ambiguous_import(dirfrag_t base, vector<dirfrag_t>& bounds);
   void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
   bool have_ambiguous_import(dirfrag_t base) {
     return my_ambiguous_imports.count(base);

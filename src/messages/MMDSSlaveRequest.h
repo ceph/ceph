@@ -75,7 +75,7 @@ class MMDSSlaveRequest : public Message {
   MDSCacheObjectInfo object_info;
   
   // for authpins
-  list<MDSCacheObjectInfo> authpins;
+  vector<MDSCacheObjectInfo> authpins;
 
  public:
   // for rename prep
@@ -97,7 +97,7 @@ public:
   int get_lock_type() { return lock_type; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
-  list<MDSCacheObjectInfo>& get_authpins() { return authpins; }
+  vector<MDSCacheObjectInfo>& get_authpins() { return authpins; }
 
   void set_lock_type(int t) { lock_type = t; }
 

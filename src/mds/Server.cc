@@ -1068,7 +1068,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   list<MDSCacheObject*> objects;
   bool fail = false;
 
-  for (list<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
+  for (vector<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
        p != mdr->slave_request->get_authpins().end();
        ++p) {
     MDSCacheObject *object = mdcache->get_object(*p);
@@ -1141,7 +1141,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
   // added auth pins?
   set<MDSCacheObject*> pinned;
-  for (list<MDSCacheObjectInfo>::iterator p = ack->get_authpins().begin();
+  for (vector<MDSCacheObjectInfo>::iterator p = ack->get_authpins().begin();
        p != ack->get_authpins().end();
        ++p) {
     MDSCacheObject *object = mdcache->get_object(*p);

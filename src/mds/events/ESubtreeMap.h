@@ -21,7 +21,7 @@
 class ESubtreeMap : public LogEvent {
 public:
   EMetaBlob metablob;
-  map<dirfrag_t, list<dirfrag_t> > subtrees;
+  map<dirfrag_t, vector<dirfrag_t> > subtrees;
 
   ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP) { }
   

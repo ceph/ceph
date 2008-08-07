@@ -671,7 +671,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
 }
 
 
-void MDCache::adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bound_dfs, pair<int,int> auth)
+void MDCache::adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bound_dfs, pair<int,int> auth)
 {
   dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir 
@@ -680,7 +680,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bound_dfs,
   
   // make bounds list
   set<CDir*> bounds;
-  for (list<dirfrag_t>::iterator p = bound_dfs.begin();
+  for (vector<dirfrag_t>::iterator p = bound_dfs.begin();
        p != bound_dfs.end();
        ++p) {
     CDir *bd = get_dirfrag(*p);
@@ -1762,7 +1762,7 @@ void MDCache::send_resolve_now(int who)
       assert(migrator->get_import_state(dir->dirfrag()) >= Migrator::IMPORT_LOGGINGSTART);
       set<CDir*> bounds;
       get_subtree_bounds(dir, bounds);
-      list<dirfrag_t> dfls;
+      vector<dirfrag_t> dfls;
       for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
 	dfls.push_back((*p)->dirfrag());
       m->add_ambiguous_import(dir->dirfrag(), dfls);
@@ -1781,7 +1781,7 @@ void MDCache::send_resolve_now(int who)
   }
 
   // ambiguous
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
        p != my_ambiguous_imports.end();
        ++p) 
     m->add_ambiguous_import(p->first, p->second);
@@ -1969,7 +1969,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
     MMDSResolveAck *ack = new MMDSResolveAck;
-    for (list<metareqid_t>::iterator p = m->slave_requests.begin();
+    for (vector<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
       if (uncommitted_masters.count(*p)) {  //mds->sessionmap.have_completed_request(*p)) {
@@ -1989,9 +1989,9 @@ void MDCache::handle_resolve(MMDSResolve *m)
   // am i a surviving ambiguous importer?
   if (mds->is_active() || mds->is_stopping()) {
     // check for any import success/failure (from this node)
-    map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
+    map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
-      map<dirfrag_t, list<dirfrag_t> >::iterator next = p;
+      map<dirfrag_t, vector<dirfrag_t> >::iterator next = p;
       next++;
       CDir *dir = get_dirfrag(p->first);
       assert(dir);
@@ -2002,7 +2002,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	
 	// check if sender claims the subtree
 	bool claimed_by_sender = false;
-	for (map<dirfrag_t, list<dirfrag_t> >::iterator q = m->subtrees.begin();
+	for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = m->subtrees.begin();
 	     q != m->subtrees.end();
 	     ++q) {
 	  CDir *base = get_dirfrag(q->first);
@@ -2010,7 +2010,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
 
 	  bool inside = true;
-	  for (list<dirfrag_t>::iterator r = q->second.begin();
+	  for (vector<dirfrag_t>::iterator r = q->second.begin();
 	       r != q->second.end();
 	       ++r) {
 	    CDir *bound = get_dirfrag(*r);
@@ -2037,7 +2037,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   }    
 
   // update my dir_auth values
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->subtrees.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
        ++pi) {
     CInode *diri = get_inode(pi->first.ino);
@@ -2060,7 +2060,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
 
   // note ambiguous imports too
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
        pi != m->ambiguous_imports.end();
        ++pi) {
     dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
@@ -2106,7 +2106,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
   dout(10) << "handle_resolve_ack " << *ack << " from " << ack->get_source() << dendl;
   int from = ack->get_source().num();
 
-  for (list<metareqid_t>::iterator p = ack->commit.begin();
+  for (vector<metareqid_t>::iterator p = ack->commit.begin();
        p != ack->commit.end();
        ++p) {
     dout(10) << " commit on slave " << *p << dendl;
@@ -2131,7 +2131,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     }
   }
 
-  for (list<metareqid_t>::iterator p = ack->abort.begin();
+  for (vector<metareqid_t>::iterator p = ack->abort.begin();
        p != ack->abort.end();
        ++p) {
     dout(10) << " abort on slave " << *p << dendl;
@@ -2183,13 +2183,13 @@ void MDCache::disambiguate_imports()
   dout(10) << "disambiguate_imports" << dendl;
 
   // other nodes' ambiguous imports
-  for (map<int, map<dirfrag_t, list<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
+  for (map<int, map<dirfrag_t, vector<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
        p != other_ambiguous_imports.end();
        ++p) {
     int who = p->first;
     dout(10) << "ambiguous imports for mds" << who << dendl;
 
-    for (map<dirfrag_t, list<dirfrag_t> >::iterator q = p->second.begin();
+    for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
       dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
@@ -2210,7 +2210,7 @@ void MDCache::disambiguate_imports()
 
   // my ambiguous imports
   while (!my_ambiguous_imports.empty()) {
-    map<dirfrag_t, list<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
+    map<dirfrag_t, vector<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
 
     CDir *dir = get_dirfrag(q->first);
     if (!dir) continue;
@@ -2245,7 +2245,7 @@ void MDCache::disambiguate_imports()
 }
 
 
-void MDCache::add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds) 
+void MDCache::add_ambiguous_import(dirfrag_t base, vector<dirfrag_t>& bounds) 
 {
   assert(my_ambiguous_imports.count(base) == 0);
   my_ambiguous_imports[base].swap( bounds );
@@ -2255,7 +2255,7 @@ void MDCache::add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds)
 void MDCache::add_ambiguous_import(CDir *base, const set<CDir*>& bounds)
 {
   // make a list
-  list<dirfrag_t> binos;
+  vector<dirfrag_t> binos;
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) 
@@ -2280,7 +2280,7 @@ void MDCache::cancel_ambiguous_import(dirfrag_t df)
 void MDCache::finish_ambiguous_import(dirfrag_t df)
 {
   assert(my_ambiguous_imports.count(df));
-  list<dirfrag_t> bounds;
+  vector<dirfrag_t> bounds;
   bounds.swap(my_ambiguous_imports[df]);
   my_ambiguous_imports.erase(df);
   

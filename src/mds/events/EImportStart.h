@@ -26,7 +26,7 @@
 class EImportStart : public LogEvent {
 protected:
   dirfrag_t base;
-  list<dirfrag_t> bounds;
+  vector<dirfrag_t> bounds;
 
  public:
   EMetaBlob metablob;
@@ -34,8 +34,8 @@ protected:
   version_t cmapv;
 
   EImportStart(dirfrag_t di,
-	       list<dirfrag_t>& b) : LogEvent(EVENT_IMPORTSTART), 
-				     base(di), bounds(b) { }
+	       vector<dirfrag_t>& b) : LogEvent(EVENT_IMPORTSTART), 
+				       base(di), bounds(b) { }
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
   void print(ostream& out) {

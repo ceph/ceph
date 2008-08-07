@@ -800,7 +800,7 @@ void ESubtreeMap::replay(MDS *mds)
   metablob.replay(mds, _segment);
   
   // restore import/export maps
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator p = subtrees.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
