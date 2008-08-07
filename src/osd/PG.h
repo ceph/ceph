@@ -178,7 +178,7 @@ public:
    */
   class Log {
   public:
-    /** top, bottom
+    /*
      *    top - newest entry (update|delete)
      * bottom - entry previous to oldest (update|delete) for which we have
      *          complete negative information.  
@@ -187,14 +187,14 @@ public:
     eversion_t top;       // newest entry (update|delete)
     eversion_t bottom;    // version prior to oldest (update|delete) 
 
-    /** backlog - true if log is a complete summary of pg contents.  
-     * updated will include all items in pg, but deleted will not include
-     * negative entries for items deleted prior to 'bottom'.
+    /*
+     * backlog - true if log is a complete summary of pg contents.
+     * updated will include all items in pg, but deleted will not
+     * include negative entries for items deleted prior to 'bottom'.
      */
     bool      backlog;
     
     /** Entry
-     * mapped from the eversion_t, so don't include that.
      */
     class Entry {
     public:

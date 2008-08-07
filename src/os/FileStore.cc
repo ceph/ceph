@@ -166,10 +166,14 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
   //parse_object(t+1);
 }
 
-pobject_t FileStore::parse_object(char *s)
+bool FileStore::parse_object(char *s, pobject_t& o)
 {
-  pobject_t o;
   //assert(sizeof(o) == 28);
+  if (s[4] != '.' ||
+      s[9] != '.' ||
+      s[26] != '.' ||
+      s[35] != '.')
+    return false;
   dout(0) << "  got object " << s << dendl;
   o.volume = strtoll(s, 0, 16);
   assert(s[4] == '.');
@@ -181,21 +185,27 @@ pobject_t FileStore::parse_object(char *s)
   assert(s[35] == '.');
   o.oid.snap = strtoll(s+36, 0, 16);
   dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
-  return o;
+  return true;
 }
 
-coll_t FileStore::parse_coll(char *s)
+bool FileStore::parse_coll(char *s, coll_t& c)
 {
-  return strtoll(s, 0, 16);
+  if (s[16] == '.' && strlen(s) == 33) {
+    s[16] = 0;
+    c.high = strtoll(s, 0, 16);
+    c.low = strtoll(s+17, 0, 16);
+    return true;
+  } else 
+    return false;
 }
 
 void FileStore::get_cdir(coll_t cid, char *s) 
 {
-  assert(sizeof(cid) == 8);
+  assert(sizeof(cid) == 16);
 #ifdef __LP64__
-  sprintf(s, "%s/%016lx", basedir.c_str(), cid);
+  sprintf(s, "%s/%016lx.%016lx", basedir.c_str(), cid.high, cid.low);
 #else
-  sprintf(s, "%s/%016llx", basedir.c_str(), cid);
+  sprintf(s, "%s/%016llx.%016llx", basedir.c_str(), cid.high, cid.low);
 #endif
 }
 
@@ -1428,8 +1438,9 @@ int FileStore::list_collections(list<coll_t>& ls)
     if (strlen(de->d_name) != 16)
       continue;
     errno = 0;
-    coll_t c = parse_coll(de->d_name);
-    if (c) ls.push_back(c);
+    coll_t c;
+    if (parse_coll(de->d_name, c))
+      ls.push_back(c);
   }
   
   ::closedir(dir);
@@ -1544,9 +1555,9 @@ int FileStore::collection_list(coll_t c, list<pobject_t>& ls)
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
-    pobject_t o = parse_object(de->d_name);
-    if (errno) continue;
-    ls.push_back(o);
+    pobject_t o;
+    if (parse_object(de->d_name, o))
+      ls.push_back(o);
   }
   
   ::closedir(dir);

@@ -441,7 +441,7 @@ void PG::generate_backlog()
   log.backlog = true;
 
   list<pobject_t> olist;
-  osd->store->collection_list(info.pgid, olist);
+  osd->store->collection_list(info.pgid.to_coll(), olist);
   
   int local = 0;
   map<eversion_t,Log::Entry> add;
@@ -457,7 +457,7 @@ void PG::generate_backlog()
     Log::Entry e;
     e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
     e.oid = oid;
-    osd->store->getattr(info.pgid, pobject_t(0,0,oid), 
+    osd->store->getattr(info.pgid.to_coll(), pobject_t(0,0,oid), 
                         "version",
                         &e.version, sizeof(e.version));
     add[e.version] = e;
@@ -937,7 +937,7 @@ void PG::activate(ObjectStore::Transaction& t,
   // write pg info
   bufferlist bl;
   ::encode(info, bl);
-  t.collection_setattr(info.pgid, "info", bl);
+  t.collection_setattr(info.pgid.to_coll(), "info", bl);
   
   // write log
   write_log(t);
@@ -1096,7 +1096,7 @@ void PG::finish_recovery()
   ObjectStore::Transaction t;
   bufferlist bl;
   ::encode(info, bl);
-  t.collection_setattr(info.pgid, "info", bl);
+  t.collection_setattr(info.pgid.to_coll(), "info", bl);
   osd->store->apply_transaction(t);
   //osd->store->sync();  
 #warning fix finish_recovery sync behavior
@@ -1180,14 +1180,14 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove(info.pgid, info.pgid.to_pobject() );
-  t.write(info.pgid, info.pgid.to_pobject() , 0, bl.length(), bl);
-  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.remove(info.pgid.to_coll(), info.pgid.to_pobject() );
+  t.write(info.pgid.to_coll(), info.pgid.to_pobject() , 0, bl.length(), bl);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   bufferlist infobl;
   ::encode(info, infobl);
-  t.collection_setattr(info.pgid, "info", infobl);
+  t.collection_setattr(info.pgid.to_coll(), "info", infobl);
 
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }
@@ -1221,9 +1221,9 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   while (p != ondisklog.block_map.begin()) 
     ondisklog.block_map.erase(ondisklog.block_map.begin());
   
-  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(info.pgid, info.pgid.to_pobject(), 0, ondisklog.bottom);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.zero(info.pgid.to_coll(), info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1241,14 +1241,14 @@ void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry,
     bl.push_back(bp);
   }
   */
-  t.write(info.pgid,  info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
+  t.write(info.pgid.to_coll(),  info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
     ondisklog.block_map[ondisklog.top] = logentry.version;
   
   ondisklog.top += bl.length();
-  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   // trim?
   if (trim_to > log.bottom) {
@@ -1266,9 +1266,9 @@ void PG::read_log(ObjectStore *store)
   int r;
   // load bounds
   ondisklog.bottom = ondisklog.top = 0;
-  r = store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   assert(r == sizeof(ondisklog.bottom));
-  r = store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   assert(r == sizeof(ondisklog.top));
 
   dout(10) << "read_log [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
@@ -1279,7 +1279,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(info.pgid, info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(info.pgid.to_coll(), info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log data doesn't match attrs" << dendl;
       assert(0);
@@ -1325,7 +1325,7 @@ void PG::read_log(ObjectStore *store)
 
     eversion_t v;
     pobject_t poid(info.pgid.pool(), 0, i->oid);
-    int r = osd->store->getattr(info.pgid, poid, "version", &v, sizeof(v));
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
     if (r < 0 || v < i->version) 
       missing.add_event(*i);
   }
@@ -1346,7 +1346,7 @@ bool PG::block_if_wrlocked(MOSDOp* op)
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
   entity_name_t source;
-  int len = osd->store->getattr(info.pgid, poid, "wrlock", &source, sizeof(entity_name_t));
+  int len = osd->store->getattr(info.pgid.to_coll(), poid, "wrlock", &source, sizeof(entity_name_t));
   //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&

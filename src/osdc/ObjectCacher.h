@@ -99,7 +99,6 @@ class ObjectCacher {
     ObjectCacher *oc;
     object_t  oid;   // this _always_ is oid.rev=0
     inodeno_t ino;
-    objectrev_t rev; // last rev we're written
     ceph_object_layout layout;
     
   public:

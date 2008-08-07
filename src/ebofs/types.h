@@ -64,8 +64,6 @@ inline ostream& operator<<(ostream& out, const extent_t& ex)
 
 // objects
 
-typedef uint64_t coll_t;
-
 struct ebofs_onode {
   csum_t onode_csum;  // from after onode_csum to base + onode_bytes
   __u32 onode_bytes;    

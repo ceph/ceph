@@ -28,7 +28,6 @@ using namespace __gnu_cxx;
 
 #include "encoding.h"
 
-typedef uint64_t objectrev_t;
 
 struct object_t {
   union {
@@ -116,6 +115,61 @@ namespace __gnu_cxx {
       return H(r.ino) ^ I(r.bno) ^ H(r.snap);
     }
   };
-
 }
+
+
+struct coll_t {
+  __u64 high;
+  __u64 low;
+
+  coll_t(__u64 h=0, __u64 l=0) : high(h), low(l) {}
+  
+  void encode(bufferlist& bl) const {
+    ::encode(high, bl);
+    ::encode(low, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u64 h, l;
+    ::decode(h, bl);
+    ::decode(l, bl);
+    high = h;
+    low = l;
+  }
+} __attribute__ ((packed));
+WRITE_CLASS_ENCODER(coll_t)
+
+inline ostream& operator<<(ostream& out, const coll_t& c) {
+  return out << c.high << '.' << c.low;
+}
+
+inline bool operator<(const coll_t& l, const coll_t& r) {
+  return l.high < r.high || (l.high == r.high && l.low < r.low);
+}
+inline bool operator<=(const coll_t& l, const coll_t& r) {
+  return l.high < r.high || (l.high == r.high && l.low <= r.low);
+}
+inline bool operator==(const coll_t& l, const coll_t& r) {
+  return l.high == r.high && l.low == r.low;
+}
+inline bool operator!=(const coll_t& l, const coll_t& r) {
+  return l.high == r.high && l.low == r.low;
+}
+inline bool operator>(const coll_t& l, const coll_t& r) {
+  return l.high > r.high || (l.high == r.high && l.low > r.low);
+}
+inline bool operator>=(const coll_t& l, const coll_t& r) {
+  return l.high > r.high || (l.high == r.high && l.low >= r.low);
+}
+
+
+namespace __gnu_cxx {
+  template<> struct hash<coll_t> {
+    size_t operator()(const coll_t &c) const { 
+      static rjhash<uint64_t> H;
+      return H(c.high) ^ H(c.low);
+    }
+  };
+}
+
+
 #endif

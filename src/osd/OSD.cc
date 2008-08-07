@@ -534,8 +534,8 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   PG *pg = _open_lock_pg(pgid);
 
   // create collection
-  assert(!store->collection_exists(pgid));
-  t.create_collection(pgid);
+  assert(!store->collection_exists(pgid.to_coll()));
+  t.create_collection(pgid.to_coll());
 
   pg->write_log(t);
 
@@ -551,8 +551,8 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
 
   PG *pg = _open_lock_pg(pgid);
 
-  assert(!store->collection_exists(pgid));
-  t.create_collection(pgid);
+  assert(!store->collection_exists(pgid.to_coll()));
+  t.create_collection(pgid.to_coll());
 
   pg->set_role(0);
   pg->acting.swap(acting);
@@ -593,16 +593,16 @@ void OSD::_remove_unlock_pg(PG *pg)
 
   // remove from store
   list<pobject_t> olist;
-  store->collection_list(pgid, olist);
+  store->collection_list(pgid.to_coll(), olist);
   
   ObjectStore::Transaction t;
   {
     for (list<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
-      t.remove(pgid, *p);
-    t.remove(pgid, pgid.to_pobject());  // log too
-    t.remove_collection(pgid);
+      t.remove(pgid.to_coll(), *p);
+    t.remove(pgid.to_coll(), pgid.to_pobject());  // log too
+    t.remove_collection(pgid.to_coll());
   }
   store->apply_transaction(t);
 
@@ -630,12 +630,14 @@ void OSD::load_pgs()
        it++) {
     if (*it == 0)
       continue;
-    pg_t pgid = *it;
+    if (it->low != 0)
+      continue;
+    pg_t pgid = it->high;
     PG *pg = _open_lock_pg(pgid);
 
     // read pg info
     bufferlist bl;
-    store->collection_getattr(pgid, "info", bl);
+    store->collection_getattr(pgid.to_coll(), "info", bl);
     bufferlist::iterator p = bl.begin();
     ::decode(pg->info, p);
     
@@ -1609,7 +1611,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = i->second;
     bufferlist bl;
     ::encode(pg->info, bl);
-    t.collection_setattr( pgid, "info", bl );
+    t.collection_setattr( pgid.to_coll(), "info", bl );
   }
 
   // superblock and commit
@@ -2065,7 +2067,7 @@ void OSD::kick_pg_split_queue()
       pg->info.last_complete = pg->info.last_update;
       bufferlist bl;
       ::encode(pg->info, bl);
-      t.collection_setattr(pg->info.pgid, "info", bl);
+      t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
       pg->write_log(t);
 
       wake_pg_waiters(pg->info.pgid);
@@ -2094,7 +2096,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   pg_t parentid = parent->info.pgid;
 
   list<pobject_t> olist;
-  store->collection_list(parent->info.pgid, olist);  
+  store->collection_list(parent->info.pgid.to_coll(), olist);  
 
   while (!olist.empty()) {
     pobject_t poid = olist.front();
@@ -2108,15 +2110,15 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       PG *child = children[pgid];
       assert(child);
       eversion_t v;
-      store->getattr(parentid, poid, "version", &v, sizeof(v));
+      store->getattr(parentid.to_coll(), poid, "version", &v, sizeof(v));
       if (v > child->info.last_update) {
 	child->info.last_update = v;
 	dout(25) << "        tagging pg with v " << v << "  > " << child->info.last_update << dendl;
       } else {
 	dout(25) << "    not tagging pg with v " << v << " <= " << child->info.last_update << dendl;
       }
-      t.collection_add(pgid, parentid, poid);
-      t.collection_remove(parentid, poid);
+      t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
+      t.collection_remove(parentid.to_coll(), poid);
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
     }

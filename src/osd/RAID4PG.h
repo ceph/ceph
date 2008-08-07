@@ -25,6 +25,7 @@ public:
 
 protected:
 
+  /*
   void prepare_log_transaction(ObjectStore::Transaction& t, 
 			       MOSDOp *op, eversion_t& version, 
 			       objectrev_t crev, objectrev_t rev,
@@ -32,6 +33,7 @@ protected:
   void prepare_op_transaction(ObjectStore::Transaction& t, 
 			      MOSDOp *op, eversion_t& version, 
 			      objectrev_t crev, objectrev_t rev);
+  */
 
   void op_stat(MOSDOp *op);
   int op_read(MOSDOp *op);

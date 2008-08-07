@@ -118,6 +118,9 @@ public:
   
   operator uint64_t() const { return u.pg64; }
 
+  coll_t to_coll() const {
+    return coll_t(u.pg64, 0); 
+  }
   pobject_t to_pobject() const { 
     return pobject_t(OSD_METADATA_PG_POOL,   // osd metadata 
 		     0,

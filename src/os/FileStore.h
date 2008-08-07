@@ -56,8 +56,8 @@ class FileStore : public JournalingObjectStore {
   //void get_oname(pobject_t oid, char *s);
   void get_cdir(coll_t cid, char *s);
   void get_coname(coll_t cid, pobject_t oid, char *s);
-  pobject_t parse_object(char *s);
-  coll_t parse_coll(char *s);
+  bool parse_object(char *s, pobject_t& o);
+  bool parse_coll(char *s, coll_t& c);
 
   // sync thread
   Mutex lock;
