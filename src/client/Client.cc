@@ -1414,6 +1414,9 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
   
   if (!is_delayed)
     cap_delay_requeue(in);
+  else
+    in->hold_caps_until = utime_t();
+
 #if 0
   else {
     // delayed.  induce flush?
@@ -2202,6 +2205,15 @@ int Client::unmount()
   // empty lru cache
   lru.lru_set_max(0);
   trim_cache();
+
+  // flush delayed caps
+  xlist<Inode*>::iterator p = delayed_caps.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
+    delayed_caps.pop_front();
+    check_caps(in, true);
+  }
 
   if (g_conf.client_oc) {
     // release any/all caps
@@ -3289,7 +3301,7 @@ int Client::_release(Fh *f)
 {
   //dout(3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
   //dout(3) << "op: open_files.erase( " << fh << " );" << dendl;
-  dout(5) << "_release " << f << dendl;
+  dout(5) << "_release " << f << " mode " << f->mode << dendl;
   Inode *in = f->inode;
 
   if (in->snapid == CEPH_NOSNAP) {
