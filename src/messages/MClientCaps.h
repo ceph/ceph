@@ -98,11 +98,12 @@ class MClientCaps : public Message {
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(h, p);
-    ::decode(snapbl, p);
+    ::decode_nohead(h.snap_trace_len, snapbl, p);
   }
   void encode_payload() {
+    h.snap_trace_len = snapbl.length();
     ::encode(h, payload);
-    ::encode(snapbl, payload);
+    ::encode_nohead(snapbl, payload);
   }
 };
 

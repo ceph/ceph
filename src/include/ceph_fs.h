@@ -815,6 +815,7 @@ struct ceph_mds_caps {
 	struct ceph_timespec mtime, atime, ctime;
 	__le64 time_warp_seq;
 	__le64 snap_follows;
+	__le32 snap_trace_len;
 } __attribute__ ((packed));
 
 
