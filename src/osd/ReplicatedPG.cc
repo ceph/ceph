@@ -1522,8 +1522,11 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   pobject_t poid = op->get_poid();
   eversion_t v = op->get_version();
 
-  if (!is_missing_object(poid.oid)) {
-    dout(7) << "sub_op_push not missing " << poid << dendl;
+  // are we missing (this specific version)?
+  //  (if version is wrong, it is either old (we don't want it) or 
+  //   newer (peering is buggy))
+  if (!missing.is_missing(poid.oid, v)) {
+    dout(7) << "sub_op_push not missing " << poid << " v" << v << dendl;
     dout(15) << " but i AM missing " << missing.missing << dendl;
     return;
   }
