@@ -184,13 +184,14 @@ WRITE_RAW_ENCODER(ceph_file_layout)
 WRITE_RAW_ENCODER(ceph_mds_request_head)
 WRITE_RAW_ENCODER(ceph_mds_caps)
 WRITE_RAW_ENCODER(ceph_mds_lease)
+WRITE_RAW_ENCODER(ceph_mds_snap_head)
+WRITE_RAW_ENCODER(ceph_mds_snap_realm)
 WRITE_RAW_ENCODER(ceph_mds_reply_head)
 WRITE_RAW_ENCODER(ceph_mds_reply_inode)
 WRITE_RAW_ENCODER(ceph_mds_cap_reconnect)
 WRITE_RAW_ENCODER(ceph_mds_snaprealm_reconnect)
 WRITE_RAW_ENCODER(ceph_frag_tree_split)
 WRITE_RAW_ENCODER(ceph_inopath_item)
-
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
 
@@ -278,33 +279,41 @@ inline ostream& operator<<(ostream& out, snapid_t s) {
     return out << s.val;
 }
 
-#define MAXSNAP CEPH_MAXSNAP
-#define NOSNAP  CEPH_NOSNAP
 
 
 struct SnapRealmInfo {
-  inodeno_t ino, parent;
-  snapid_t created;
-  snapid_t parent_since;
-  vector<snapid_t> prior_parent_snaps;  // before parent_since
+  mutable ceph_mds_snap_realm h;
   vector<snapid_t> my_snaps;
-  snapid_t seq;
+  vector<snapid_t> prior_parent_snaps;  // before parent_since
+
+  SnapRealmInfo() {
+    memset(&h, 0, sizeof(h));
+  }
+  SnapRealmInfo(inodeno_t ino, snapid_t created, snapid_t seq, snapid_t current_parent_since) {
+    memset(&h, 0, sizeof(h));
+    h.ino = ino;
+    h.created = created;
+    h.seq = seq;
+    h.parent_since = current_parent_since;
+  }
+  
+  inodeno_t ino() { return inodeno_t(h.ino); }
+  inodeno_t parent() { return inodeno_t(h.parent); }
+  snapid_t seq() { return snapid_t(h.seq); }
+  snapid_t parent_since() { return snapid_t(h.parent_since); }
+  snapid_t created() { return snapid_t(h.created); }
 
   void encode(bufferlist& bl) const {
-    ::encode(ino, bl);
-    ::encode(parent, bl);
-    ::encode(parent_since, bl);
-    ::encode(prior_parent_snaps, bl);
-    ::encode(my_snaps, bl);
-    ::encode(seq, bl);
-  };
+    h.num_snaps = my_snaps.size();
+    h.num_prior_parent_snaps = prior_parent_snaps.size();
+    ::encode(h, bl);
+    ::encode_nohead(my_snaps, bl);
+    ::encode_nohead(prior_parent_snaps, bl);
+  }
   void decode(bufferlist::iterator& bl) {
-    ::decode(ino, bl);
-    ::decode(parent, bl);
-    ::decode(parent_since, bl);
-    ::decode(prior_parent_snaps, bl);
-    ::decode(my_snaps, bl);
-    ::decode(seq, bl);
+    ::decode(h, bl);
+    ::decode_nohead(h.num_snaps, my_snaps, bl);
+    ::decode_nohead(h.num_prior_parent_snaps, prior_parent_snaps, bl);
   }
 };
 WRITE_CLASS_ENCODER(SnapRealmInfo)

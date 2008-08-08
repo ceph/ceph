@@ -274,6 +274,20 @@ inline void decode(std::vector<T>& v, bufferlist::iterator& p)
     decode(v[i], p);
 }
 
+template<class T>
+inline void encode_nohead(const std::vector<T>& v, bufferlist& bl)
+{
+  for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
+{
+  v.resize(len);
+  for (__u32 i=0; i<v.size(); i++) 
+    decode(v[i], p);
+}
+
 // map (pointers)
 template<class T, class U>
 inline void encode(const std::map<T,U*>& m, bufferlist& bl)
@@ -442,6 +456,16 @@ inline void decode(bufferlist& s, bufferlist::iterator& p)
 {
   __u32 len;
   decode(len, p);
+  s.clear();
+  p.copy(len, s);
+}
+
+inline void encode_nohead(const bufferlist& s, bufferlist& bl) 
+{
+  bl.append(s);
+}
+inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
+{
   s.clear();
   p.copy(len, s);
 }

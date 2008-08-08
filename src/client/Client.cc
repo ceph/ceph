@@ -1713,11 +1713,11 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
     SnapRealmInfo info;
     ::decode(info, p);
     if (first_realm == 0)
-      first_realm = info.ino;
-    SnapRealm *realm = get_snap_realm(info.ino);
+      first_realm = info.ino();
+    SnapRealm *realm = get_snap_realm(info.ino());
 
-    if (info.seq > realm->seq) {
-      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq << " > " << realm->seq
+    if (info.seq() > realm->seq) {
+      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq() << " > " << realm->seq
 	       << dendl;
 
       if (flush) {
@@ -1749,16 +1749,16 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
     }
 
     // _always_ verify parent
-    bool invalidate = adjust_realm_parent(realm, info.parent);
+    bool invalidate = adjust_realm_parent(realm, info.parent());
 
-    if (info.seq > realm->seq) {
+    if (info.seq() > realm->seq) {
       // update
-      realm->created = info.created;
-      realm->parent = info.parent;
-      realm->parent_since = info.parent_since;
+      realm->created = info.created();
+      realm->parent = info.parent();
+      realm->parent_since = info.parent_since();
       realm->prior_parent_snaps = info.prior_parent_snaps;
       realm->my_snaps = info.my_snaps;
-      realm->seq = info.seq;
+      realm->seq = info.seq();
       invalidate = true;
     }
     if (invalidate) {
@@ -1766,7 +1766,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
       dout(15) << "update_snap_trace " << *realm << " self|parent updated" << dendl;
       dout(15) << "  snapc " << realm->get_snap_context() << dendl;
     } else {
-      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq
+      dout(10) << "update_snap_trace " << *realm << " seq " << info.seq()
 	       << " <= " << realm->seq << " and same parent, SKIPPING" << dendl;
     }
         
@@ -1786,15 +1786,15 @@ void Client::handle_snap(MClientSnap *m)
   list<Inode*> to_move;
   SnapRealm *realm = 0;
 
-  if (m->op == CEPH_SNAP_OP_SPLIT) {
-    assert(m->split);
+  if (m->head.op == CEPH_SNAP_OP_SPLIT) {
+    assert(m->head.split);
     SnapRealmInfo info;
     bufferlist::iterator p = m->bl.begin();    
     ::decode(info, p);
-    assert(info.ino == m->split);
+    assert(info.ino() == m->head.split);
     
     // flush, then move, ino's.
-    realm = get_snap_realm(info.ino);
+    realm = get_snap_realm(info.ino());
     dout(10) << " splitting off " << *realm << dendl;
     for (vector<inodeno_t>::iterator p = m->split_inos.begin();
 	 p != m->split_inos.end();
@@ -1804,7 +1804,7 @@ void Client::handle_snap(MClientSnap *m)
 	Inode *in = inode_map[vino];
 	if (!in->snaprealm || in->snaprealm == realm)
 	  continue;
-	if (in->snaprealm->created > info.created) {
+	if (in->snaprealm->created > info.created()) {
 	  dout(10) << " NOT moving " << *in << " from _newer_ realm " 
 		   << *in->snaprealm << dendl;
 	  continue;
@@ -1838,7 +1838,7 @@ void Client::handle_snap(MClientSnap *m)
     }
   }
 
-  update_snap_trace(m->bl, m->op != CEPH_SNAP_OP_DESTROY);
+  update_snap_trace(m->bl, m->head.op != CEPH_SNAP_OP_DESTROY);
 
   if (realm) {
     for (list<Inode*>::iterator p = to_move.begin(); p != to_move.end(); p++) {

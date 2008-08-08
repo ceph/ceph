@@ -3549,7 +3549,7 @@ void MDCache::prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
   MClientSnap *snap;
   if (splits.count(client) == 0) {
     splits[client] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
-    snap->split = realm->inode->ino();
+    snap->head.split = realm->inode->ino();
     realm->build_snap_trace(snap->bl);
 
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();
@@ -3572,7 +3572,7 @@ void MDCache::send_snaps(map<int,MClientSnap*>& splits)
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first));
     if (session) {
       dout(10) << " client" << p->first
-	       << " split " << p->second->split
+	       << " split " << p->second->head.split
 	       << " inos " << p->second->split_inos
 	       << dendl;
       mds->send_message_client(p->second, session->inst);
@@ -6146,7 +6146,7 @@ void MDCache::do_realm_split_notify(CInode *in)
 	 p++) {
       assert(!p->second.empty());
       MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_SPLIT);
-      update->split = in->ino();
+      update->head.split = in->ino();
       update->split_inos = split_inos;
       update->split_realms = split_realms;
       update->bl = snapbl;

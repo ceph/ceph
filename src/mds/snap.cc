@@ -403,13 +403,10 @@ void SnapRealm::split_at(SnapRealm *child)
 
 void SnapRealm::build_snap_trace(bufferlist& snapbl)
 {
-  SnapRealmInfo info;
-  info.ino = inode->ino();
-  info.seq = seq;
-  info.parent_since = current_parent_since;
+  SnapRealmInfo info(inode->ino(), created, seq, current_parent_since);
 
   if (parent) {
-    info.parent = parent->inode->ino();
+    info.h.parent = parent->inode->ino();
     if (!past_parents.empty()) {
       snapid_t last = past_parents.rbegin()->first;
       set<snapid_t> past;
@@ -422,7 +419,7 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 	       << info.prior_parent_snaps << dendl;
     }
   } else 
-    info.parent = 0;
+    info.h.parent = 0;
 
   info.my_snaps.reserve(snaps.size());
   for (map<snapid_t,SnapInfo>::reverse_iterator p = snaps.rbegin();

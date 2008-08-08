@@ -830,6 +830,7 @@ struct ceph_mds_lease {
 } __attribute__ ((packed));
 /* followed by a __le32+string for dname */
 
+
 /* client reconnect */
 struct ceph_mds_cap_reconnect {
 	__le32 wanted;
@@ -865,11 +866,28 @@ static inline const char *ceph_snap_op_name(int o) {
 	}
 }
 
-
-struct ceph_mds_snap {
-	/* ... */
+struct ceph_mds_snap_head {
+	__le32 op;
+	__le64 split;
+	__le32 num_split_inos;
+	__le32 num_split_realms;
+	__le32 trace_len;
 };
+/* followed by split inos, then split realms, then the trace blob */
 
+/*
+ * encode info about a snaprealm, as viewed by a client
+ */
+struct ceph_mds_snap_realm {
+	__le64 ino;           /* ino */
+	__le64 created;       /* snap: when created */
+	__le64 parent;        /* ino: parent realm */
+	__le64 parent_since;  /* snap: same parent since */
+	__le64 seq;           /* snap: version */
+	__le32 num_snaps;
+	__le32 num_prior_parent_snaps;
+};
+/* followed by my snaps, then prior parent snaps */
 
 /*
  * osd map
