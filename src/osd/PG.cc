@@ -946,6 +946,13 @@ void PG::activate(ObjectStore::Transaction& t,
   clean_up_local(t); 
 
   // init complete pointer
+  if (missing.num_missing() == 0 &&
+      info.last_complete != info.last_update) {
+    dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
+	     << " -> " << info.last_update << dendl;
+    info.last_complete = info.last_update;
+  }
+
   if (info.last_complete == info.last_update) {
     dout(10) << "activate - complete" << dendl;
     log.complete_to == log.log.end();
@@ -1030,6 +1037,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
       // update our missing
       if (peer_missing[peer].num_missing() == 0) {
+	peer_info[peer].last_complete = peer_info[peer].last_update;
         dout(10) << "activate peer osd" << peer << " already uptodate, " << peer_info[peer] << dendl;
 	assert(peer_info[peer].is_uptodate());
         uptodate_set.insert(peer);
