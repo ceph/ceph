@@ -550,15 +550,15 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
  * object boundary.
  */
 static __u64 calc_layout(struct ceph_osd_client *osdc,
-			 ceph_ino_t ino, struct ceph_file_layout *layout,
+			 struct ceph_vino vino, struct ceph_file_layout *layout,
 			 __u64 off, __u64 len,
 			 struct ceph_osd_request *req)
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
 	__u64 toff = off, tlen = len;
 
-	reqhead->oid.ino = ino;
-	reqhead->oid.snap = 0;
+	reqhead->oid.ino = vino.ino;
+	reqhead->oid.snap = vino.snap;
 
 	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
 				 &off, &len);
@@ -581,7 +581,7 @@ static __u64 calc_layout(struct ceph_osd_client *osdc,
 /*
  * synchronous read direct to user buffer
  */
-int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
+int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			struct ceph_file_layout *layout,
 			__u64 off, __u64 len,
 			char __user *data)
@@ -591,7 +591,8 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	int nr_pages, i, po, left, l;
 	__s32 rc;
 
-	dout(10, "sync_read on ino %llx at %llu~%llu\n", ino, off, len);
+	dout(10, "sync_read on vino %llx.%llx at %llu~%llu\n", vino.ino,
+	     vino.snap, off, len);
 
 	/* request msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
@@ -603,7 +604,7 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	len = calc_layout(osdc, ino, layout, off, len, req);
+	len = calc_layout(osdc, vino, layout, off, len, req);
 	nr_pages = calc_pages_for(off, len);  /* recalc */
 	dout(10, "sync_read %llu~%llu -> %d pages\n", off, len, nr_pages);
 
@@ -658,7 +659,7 @@ out:
 /*
  * read a single page.
  */
-int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
+int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 		       struct ceph_file_layout *layout,
 		       loff_t off, loff_t len,
 		       struct page *page)
@@ -668,7 +669,8 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	struct ceph_osd_request *req;
 	__s32 rc;
 
-	dout(10, "readpage on ino %llx at %lld~%lld\n", ino, off, len);
+	dout(10, "readpage on ino %llx.%llx at %lld~%lld\n", vino.ino,
+	     vino.snap, off, len);
 
 	/* request msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
@@ -683,7 +685,7 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	}
 	req->r_pages[0] = page;
 
-	len = calc_layout(osdc, ino, layout, off, len, req);
+	len = calc_layout(osdc, vino, layout, off, len, req);
 	BUG_ON(len != PAGE_CACHE_SIZE);
 
 	rc = do_request(osdc, req);
@@ -700,7 +702,7 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
  */
 int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct address_space *mapping,
-			ceph_ino_t ino, struct ceph_file_layout *layout,
+			struct ceph_vino vino, struct ceph_file_layout *layout,
 			__u64 off, __u64 len,
 			struct list_head *page_list, int nr_pages)
 {
@@ -717,7 +719,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	 * we can that falls within the range specified by
 	 * nr_pages.
 	 */
-	dout(10, "readpages on ino %llx on %llu~%llu\n", ino, off, len);
+	dout(10, "readpages on ino %llx.%llx on %llu~%llu\n", vino.ino,
+	     vino.snap, off, len);
 
 	/* alloc request, w/ optimistically-sized page vector */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ);
@@ -748,7 +751,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	dout(10, "readpages contig page extent is %llu~%llu\n", off, len);
 
 	/* request msg */
-	len = calc_layout(osdc, ino, layout, off, len, req);
+	len = calc_layout(osdc, vino, layout, off, len, req);
 	req->r_nr_pages = calc_pages_for(off, len);
 	dout(10, "readpages final extent is %llu~%llu -> %d pages\n",
 	     off, len, req->r_nr_pages);
@@ -766,7 +769,7 @@ out:
 /*
  * synchronous write.  from userspace.
  */
-int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct ceph_file_layout *layout,
 			 __u64 off, __u64 len, const char __user *data)
 {
@@ -776,7 +779,8 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	int nr_pages, i, po, l, left;
 	__s32 rc;
 
-	dout(10, "sync_write on ino %llx at %llu~%llu\n", ino, off, len);
+	dout(10, "sync_write on ino %llx.%llx at %llu~%llu\n", vino.ino,
+	     vino.snap, off, len);
 
 	/* request msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE);
@@ -793,7 +797,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 		return PTR_ERR(req);
 	}
 
-	len = calc_layout(osdc, ino, layout, off, len, req);
+	len = calc_layout(osdc, vino, layout, off, len, req);
 	nr_pages = calc_pages_for(off, len);  /* recalc */
 	dout(10, "sync_write %llu~%llu -> %d pages\n", off, len, nr_pages);
 
@@ -839,7 +843,7 @@ out:
 /*
  * do a write job for N pages
  */
-int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
+int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct ceph_file_layout *layout,
 			 loff_t off, loff_t len,
 			 struct page **pages, int nr_pages)
@@ -848,6 +852,8 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	struct ceph_osd_request_head *reqhead;
 	struct ceph_osd_request *req;
 	int rc = 0;
+
+	BUG_ON(vino.snap != CEPH_NOSNAP);
 
 	/* request + msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE);
@@ -865,7 +871,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	else
 		reqhead->flags = CEPH_OSD_OP_SAFE;
 
-	len = calc_layout(osdc, ino, layout, off, len, req);
+	len = calc_layout(osdc, vino, layout, off, len, req);
 	nr_pages = calc_pages_for(off, len);
 	dout(10, "writepages %llu~%llu -> %d pages\n", off, len, nr_pages);
 

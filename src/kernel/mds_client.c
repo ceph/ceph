@@ -468,12 +468,12 @@ static int choose_mds(struct ceph_mds_client *mdsc,
 	if (mode == USE_CAP_MDS) {
 		mds = ceph_get_cap_mds(dentry->d_inode);
 		if (mds >= 0) {
-			dout(20, "choose_mds %p %llx mds%d (cap)\n",
-			     dentry->d_inode, ceph_ino(dentry->d_inode), mds);
+			dout(20, "choose_mds %p %llx.%llx mds%d (cap)\n",
+			     dentry->d_inode, ceph_vinop(dentry->d_inode), mds);
 			return mds;
 		}
-		derr(0, "choose_mds %p %llx has NO CAPS, using auth\n",
-		     dentry->d_inode, ceph_ino(dentry->d_inode));
+		derr(0, "choose_mds %p %llx.%llx has NO CAPS, using auth\n",
+		     dentry->d_inode, ceph_vinop(dentry->d_inode));
 		WARN_ON(1);
 		mode = USE_AUTH_MDS;
 	}
@@ -498,9 +498,10 @@ static int choose_mds(struct ceph_mds_client *mdsc,
 					get_random_bytes(&r, 1);
 					r %= frag->ndist;
 					mds = frag->dist[r];
-					dout(20, "choose_mds %p %llx frag %u "
-					     "mds%d (%d/%d)\n", dentry->d_inode,
-					     ceph_ino(&ci->vfs_inode),
+					dout(20, "choose_mds %p %llx.%llx "
+					     "frag %u mds%d (%d/%d)\n",
+					     dentry->d_inode,
+					     ceph_vinop(&ci->vfs_inode),
 					     frag->frag, frag->mds,
 					     (int)r, frag->ndist);
 					return mds;
@@ -508,9 +509,10 @@ static int choose_mds(struct ceph_mds_client *mdsc,
 				mode = USE_AUTH_MDS;
 				if (frag->mds >= 0) {
 					mds = frag->mds;
-					dout(20, "choose_mds %p %llx frag %u "
-					     "mds%d (auth)\n", dentry->d_inode,
-					     ceph_ino(&ci->vfs_inode),
+					dout(20, "choose_mds %p %llx.%llx "
+					     "frag %u mds%d (auth)\n",
+					     dentry->d_inode,
+					     ceph_vinop(&ci->vfs_inode),
 					     frag->frag, mds);
 					return mds;
 				}
@@ -1082,8 +1084,11 @@ retry:
 	send_msg_mds(mdsc, req->r_request, mds);
 	wait_for_completion(&req->r_completion);
 	spin_lock(&mdsc->lock);
-	if (req->r_reply == NULL)
+	if (req->r_reply == NULL) {
+		put_session(session);
+		req->r_session = 0;
 		goto retry;
+	}
 
 	/* clean up request, parse reply */
 	__unregister_request(mdsc, req);
@@ -1331,9 +1336,9 @@ retry:
 		ceph_decode_need(&p, end, sizeof(u64) +
 				 sizeof(struct ceph_mds_cap_reconnect),
 				 needmore);
-		dout(10, " adding cap %p on ino %llx inode %p\n", cap,
-		     ceph_ino(&ci->vfs_inode), &ci->vfs_inode);
-		ceph_encode_64(&p, ceph_ino(&ci->vfs_inode));
+		dout(10, " adding cap %p on ino %llx.%llx inode %p\n", cap,
+		     ceph_vinop(&ci->vfs_inode), &ci->vfs_inode);
+		ceph_encode_64(&p, ceph_vino(&ci->vfs_inode).ino);
 		rec = p;
 		p += sizeof(*rec);
 		BUG_ON(p > end);
@@ -1501,8 +1506,8 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	int op;
 	u32 seq;
-	u64 ino, size, max_size;
-	ino_t inot;
+	struct ceph_vino vino;
+	u64 size, max_size;
 
 	dout(10, "handle_caps from mds%d\n", mds);
 
@@ -1511,7 +1516,8 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		goto bad;
 	h = msg->front.iov_base;
 	op = le32_to_cpu(h->op);
-	ino = le64_to_cpu(h->ino);
+	vino.ino = le64_to_cpu(h->ino);
+	vino.snap = CEPH_NOSNAP;
 	seq = le32_to_cpu(h->seq);
 	size = le64_to_cpu(h->size);
 	max_size = le64_to_cpu(h->max_size);
@@ -1529,18 +1535,12 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	session->s_seq++;
 
 	/* lookup ino */
-	inot = ceph_ino_to_ino(ino);
-#if BITS_PER_LONG == 64
-	inode = ilookup(sb, ino);
-#else
-	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
-#endif
-	dout(20, "op %d ino %llx inode %p\n", op, ino, inode);
+	inode = ceph_find_inode(sb, vino);
+	dout(20, "op %d ino %llx inode %p\n", op, vino.ino, inode);
 
 	if (!inode) {
-		dout(10, "wtf, i don't have ino %lu=%llx?  closing out cap\n",
-		     inot, ino);
-		send_cap_ack(mdsc, ino, 0, 0, seq, size, 0, 0, 0, 0, mds);
+		dout(10, "i don't have ino %llx, sending release\n", vino.ino);
+		send_cap_ack(mdsc, vino.ino, 0, 0, seq, size, 0, 0, 0, 0, mds);
 		goto no_inode;
 	}
 
@@ -1646,7 +1646,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 		dout(20, "done invalidating pages on %p\n", inode);
 	}
 
-	send_cap_ack(mdsc, ceph_ino(inode),
+	send_cap_ack(mdsc, ceph_vino(inode).ino,
 		     keep, wanted, seq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     session->s_mds);
@@ -1756,17 +1756,17 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct dentry *parent, *dentry;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	struct ceph_mds_lease *h = msg->front.iov_base;
-	u64 ino;
+	struct ceph_vino vino;
 	int mask;
 	struct qstr dname;
-	ino_t inot;
 
 	dout(10, "handle_lease from mds%d\n", mds);
 
 	/* decode */
 	if (msg->front.iov_len < sizeof(*h) + sizeof(u32))
 		goto bad;
-	ino = le64_to_cpu(h->ino);
+	vino.ino = le64_to_cpu(h->ino);
+	vino.snap = CEPH_NOSNAP;
 	mask = le16_to_cpu(h->mask);
 	dname.name = (void *)h + sizeof(*h) + sizeof(u32);
 	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(u32);
@@ -1786,21 +1786,15 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	mutex_lock(&session->s_mutex);
 
 	/* lookup inode */
-	inot = ceph_ino_to_ino(ino);
-#if BITS_PER_LONG == 64
-	inode = ilookup(sb, ino);
-#else
-	inode = ilookup5(sb, inot, ceph_ino_compare, &ino);
-#endif
+	inode = ceph_find_inode(sb, vino);
 	dout(20, "action is %d, mask %d, ino %llx %p\n", h->action,
-	     mask, ino, inode);
-
-	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
-
+	     mask, vino.ino, inode);
 	if (inode == NULL) {
-		dout(10, "i don't have inode %llx\n", ino);
+		dout(10, "i don't have inode %llx\n", vino.ino);
 		goto release;
 	}
+
+	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
 
 	/* inode */
 	ci = ceph_inode(inode);
@@ -1904,7 +1898,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	lease = msg->front.iov_base;
 	lease->action = CEPH_MDS_LEASE_RELEASE;
 	lease->mask = mask;
-	lease->ino = cpu_to_le64(ceph_ino(inode));
+	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
 	if (dentry)
 		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,

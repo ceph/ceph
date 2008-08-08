@@ -21,31 +21,27 @@ const struct inode_operations ceph_symlink_iops;
 /*
  * find or create an inode, given the ceph ino number
  */
-struct inode *ceph_get_inode(struct super_block *sb, __u64 ino)
+struct inode *ceph_get_inode(struct super_block *sb, struct ceph_vino vino)
 {
 	struct inode *inode;
 	struct ceph_inode_info *ci;
-	ino_t inot;
+	ino_t t = ceph_vino_to_ino(vino);
 
-	inot = ceph_ino_to_ino(ino);
-#if BITS_PER_LONG == 64
-	inode = iget_locked(sb, ino);
-#else
-	inode = iget5_locked(sb, inot, ceph_ino_compare, ceph_set_ino_cb, &ino);
-#endif
+	inode = iget5_locked(sb, t, ceph_ino_compare, ceph_set_ino_cb, &vino);
 	if (inode == NULL)
 		return ERR_PTR(-ENOMEM);
 	if (inode->i_state & I_NEW) {
-		dout(40, "get_inode created new inode %p %llx\n", inode,
-		     ceph_ino(inode));
+		dout(40, "get_inode created new inode %p %llx.%llx\n", inode,
+		     ceph_vinop(inode));
 		unlock_new_inode(inode);
 	}
 
 	ci = ceph_inode(inode);
-	ceph_set_ino(inode, ino);
+	ceph_set_ino(inode, vino);
 	ci->i_hashval = inode->i_ino;
 
-	dout(30, "get_inode on %lu=%llx got %p\n", inode->i_ino, ino, inode);
+	dout(30, "get_inode on %lu=%llx.%llx got %p\n", inode->i_ino, vino.ino,
+	     vino.snap, inode);
 	return inode;
 }
 
@@ -112,7 +108,8 @@ retry:
 	rb_link_node(&frag->node, parent, p);
 	rb_insert_color(&frag->node, &ci->i_fragtree);
 
-	dout(20, "get_frag added %llx frag %x\n", ceph_ino(&ci->vfs_inode), f);
+	dout(20, "get_frag added %llx.%llx frag %x\n",
+	     ceph_vinop(&ci->vfs_inode), f);
 
 out:
 	kfree(newfrag);
@@ -183,14 +180,14 @@ static int ceph_fill_dirfrag(struct inode *inode,
 			goto out;
 		if (frag->split_by == 0) {
 			/* tree leaf, remove */
-			dout(20, "fill_dirfrag removed %llx frag %x (no ref)\n",
-			     ceph_ino(inode), id);
+			dout(20, "fill_dirfrag removed %llx.%llx frag %x"
+			     " (no ref)\n", ceph_vinop(inode), id);
 			rb_erase(&frag->node, &ci->i_fragtree);
 			kfree(frag);
 		} else {
 			/* tree branch, keep */
-			dout(20, "fill_dirfrag cleared %llx frag %x referral\n",
-			     ceph_ino(inode), id);
+			dout(20, "fill_dirfrag cleared %llx.%llx frag %x"
+			     " referral\n", ceph_vinop(inode), id);
 			frag->mds = -1;
 			frag->ndist = 0;
 		}
@@ -201,8 +198,8 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	/* find/add this frag to store mds delegation info */
 	frag = __ceph_get_frag(ci, id);
 	if (IS_ERR(frag)) {
-		derr(0, "fill_dirfrag ENOMEM on mds ref ino %llx frag %x\n",
-		     ceph_ino(inode), le32_to_cpu(dirinfo->frag));
+		derr(0, "fill_dirfrag ENOMEM on mds ref %llx.%llx frag %x\n",
+		     ceph_vinop(inode), le32_to_cpu(dirinfo->frag));
 		err = -ENOMEM;
 		goto out;
 	}
@@ -211,8 +208,8 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
 	for (i = 0; i < frag->ndist; i++)
 		frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
-	dout(20, "fill_dirfrag %llx frag %x referral mds %d ndist=%d\n",
-	     ceph_ino(inode), frag->frag, frag->mds, frag->ndist);
+	dout(20, "fill_dirfrag %llx.%llx frag %x referral mds %d ndist=%d\n",
+	     ceph_vinop(inode), frag->frag, frag->mds, frag->ndist);
 
 out:
 	spin_unlock(&inode->i_lock);
@@ -362,8 +359,8 @@ no_change:
 		u32 id = le32_to_cpu(info->fragtree.splits[i].frag);
 		struct ceph_inode_frag *frag = __ceph_get_frag(ci, id);
 		if (IS_ERR(frag)) {
-			derr(0,"ENOMEM on ino %llx frag %x\n",
-			     ceph_ino(inode), id);
+			derr(0,"ENOMEM on ino %llx.%llx frag %x\n",
+			     ceph_vinop(inode), id);
 			continue;
 		}
 		frag->split_by =
@@ -635,27 +632,27 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 	realdn = d_materialise_unique(dn, in);
 	if (IS_ERR(realdn)) {
 		derr(0, "error splicing %p (%d) with %p (%d) "
-		     "inode %p ino %llx\n",
+		     "inode %p ino %llx.%llx\n",
 		     dn, atomic_read(&dn->d_count),
 		     realdn, atomic_read(&realdn->d_count),
 		     realdn->d_inode,
-		     ceph_ino(realdn->d_inode));
+		     ceph_vinop(realdn->d_inode));
 		if (prehash)
 			*prehash = false; /* don't rehash on error */
 		goto out;
 	} else if (realdn) {
 		dout(10, "dn %p (%d) spliced with %p (%d) "
-		     "inode %p ino %llx\n",
+		     "inode %p ino %llx.%llx\n",
 		     dn, atomic_read(&dn->d_count),
 		     realdn, atomic_read(&realdn->d_count),
 		     realdn->d_inode,
-		     ceph_ino(realdn->d_inode));
+		     ceph_vinop(realdn->d_inode));
 		dput(dn);
 		dn = realdn;
 		ceph_init_dentry(dn);
 	} else
-		dout(10, "dn %p attached to %p ino %llx\n",
-		     dn, dn->d_inode, ceph_ino(dn->d_inode));
+		dout(10, "dn %p attached to %p ino %llx.%llx\n",
+		     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 	if ((!prehash || *prehash) && d_unhashed(dn))
 		d_rehash(dn);
 out:
@@ -684,7 +681,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct inode *in;
 	struct ceph_mds_reply_inode *ininfo;
 	int d = 0;
-	u64 ino;
+	struct ceph_vino vino;
 	int have_icontent = 0;
 	bool have_lease = 0;
 
@@ -709,15 +706,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	}
 #endif
 
-	ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
+	vino.ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
+	vino.snap = le64_to_cpu(rinfo->trace_in[0].in->snapid);
 	if (likely(dn)) {
 		in = dn->d_inode;
 		/* trace should start at root, or have only 1 dentry
 		 * (if it is in mds stray dir) */
-		WARN_ON(ino != 1 && rinfo->trace_numd != 1);
+		WARN_ON(vino.ino != 1 && rinfo->trace_numd != 1);
 	} else {
 		/* first reply (i.e. mount) */
-		in = ceph_get_inode(sb, ino);
+		in = ceph_get_inode(sb, vino);
 		if (IS_ERR(in))
 			return PTR_ERR(in);
 		dn = d_alloc_root(in);
@@ -727,7 +725,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 	}
 
-	if (ino == 1) {
+	if (vino.ino == 1) {
 		err = ceph_fill_inode(in, &rinfo->trace_in[0],
 				      rinfo->trace_numd ?
 				      rinfo->trace_dir[0]:0);
@@ -849,19 +847,22 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* attach proper inode */
 		ininfo = rinfo->trace_in[d+1].in;
+		vino.ino = le64_to_cpu(ininfo->ino);
+		vino.snap = le64_to_cpu(ininfo->snapid);
 		if (dn->d_inode) {
-			if (ceph_ino(dn->d_inode) != le64_to_cpu(ininfo->ino)) {
-				dout(10, "dn %p wrong inode %p ino %llx\n",
-				     dn, dn->d_inode, ceph_ino(dn->d_inode));
+			if (ceph_vino(dn->d_inode).ino != vino.ino ||
+			    ceph_vino(dn->d_inode).snap != vino.snap) {
+				dout(10, "dn %p wrong inode %p ino %llx.%llx\n",
+				     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 				d_delete(dn);
 				dput(dn);
 				goto retry_lookup;
 			}
-			dout(10, "dn %p correct %p ino %llx\n",
-			     dn, dn->d_inode, ceph_ino(dn->d_inode));
+			dout(10, "dn %p correct %p ino %llx.%llx\n",
+			     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 			in = dn->d_inode;
 		} else {
-			in = ceph_get_inode(dn->d_sb, le64_to_cpu(ininfo->ino));
+			in = ceph_get_inode(dn->d_sb, vino);
 			if (IS_ERR(in)) {
 				derr(30, "get_inode badness\n");
 				err = PTR_ERR(in);
@@ -931,7 +932,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* find existing inode */
 		ininfo = rinfo->trace_in[d+1].in;
-		in = ceph_get_inode(parent->d_sb, le64_to_cpu(ininfo->ino));
+		vino.ino = le64_to_cpu(ininfo->ino);
+		vino.snap = le64_to_cpu(ininfo->snapid);
+		in = ceph_get_inode(parent->d_sb, vino);
 		if (IS_ERR(in)) {
 			derr(30, "ceph_get_inode badness\n");
 			err = PTR_ERR(in);
@@ -996,10 +999,14 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 		ceph_fill_dirfrag(parent->d_inode, rinfo->dir_dir);
 
 	for (i = 0; i < rinfo->dir_nr; i++) {
+		struct ceph_vino vino;
 		/* dentry */
 		dname.name = rinfo->dir_dname[i];
-		dname.len = rinfo->dir_dname_len[i];
+		dname.len = le32_to_cpu(rinfo->dir_dname_len[i]);
 		dname.hash = full_name_hash(dname.name, dname.len);
+
+		vino.ino = le64_to_cpu(rinfo->dir_in[i].in->ino);
+		vino.snap = le64_to_cpu(rinfo->dir_in[i].in->snapid);
 
 retry_lookup:
 		dn = d_lookup(parent, &dname);
@@ -1016,8 +1023,8 @@ retry_lookup:
 			}
 			ceph_init_dentry(dn);
 		} else if (dn->d_inode &&
-			   ceph_ino(dn->d_inode) !=
-			   le64_to_cpu(rinfo->dir_in[i].in->ino)) {
+			   (ceph_vino(dn->d_inode).ino != vino.ino ||
+			    ceph_vino(dn->d_inode).snap != vino.snap)) {
 			dout(10, " dn %p points to wrong inode %p\n",
 			     dn, dn->d_inode);
 			d_delete(dn);
@@ -1029,8 +1036,7 @@ retry_lookup:
 		if (dn->d_inode)
 			in = dn->d_inode;
 		else {
-			in = ceph_get_inode(parent->d_sb,
-					    rinfo->dir_in[i].in->ino);
+			in = ceph_get_inode(parent->d_sb, vino);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
 				d_delete(dn);
@@ -1149,8 +1155,8 @@ int ceph_add_cap(struct inode *inode,
 		}
 	}
 
-	dout(10, "add_cap inode %p (%llx) got cap %xh now %xh seq %d from %d\n",
-	     inode, ceph_ino(inode), issued, issued|cap->issued, seq, mds);
+	dout(10, "add_cap inode %p (%llx.%llx) cap %xh now %xh seq %d mds%d\n",
+	     inode, ceph_vinop(inode), issued, issued|cap->issued, seq, mds);
 	cap->issued |= issued;
 	cap->implemented |= issued;
 	cap->seq = seq;
@@ -1419,8 +1425,8 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 		 * or we'll be mixing up different instances of caps on the
 		 * same inode, and confuse the mds.
 		 */
-		dout(10, "no cap on %p ino %llx from mds%d, ignoring\n",
-		     inode, ci->i_ceph_ino, mds);
+		dout(10, "no cap on %p ino %llx.%llx from mds%d, ignoring\n",
+		     inode, ci->i_vino.ino, ci->i_vino.snap, mds);
 		goto out;
 	}
 	dout(10, " cap %p\n", cap);
@@ -1819,11 +1825,11 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 	u64 pathbase;
 
 	if (ia_valid & ATTR_FILE) {
-		dout(5, "prepare_setattr dentry %p (inode %llx)\n", dentry,
-		     ceph_ino(dentry->d_inode));
+		dout(5, "prepare_setattr dentry %p (inode %llx.%llx)\n", dentry,
+		     ceph_vinop(dentry->d_inode));
 		req = ceph_mdsc_create_request(mdsc, op,
-					       ceph_ino(dentry->d_inode), "",
-					       0, 0,
+					       ceph_vino(dentry->d_inode).ino,
+					       "", 0, 0,
 					       dentry, USE_CAP_MDS);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
@@ -2174,8 +2180,8 @@ out:
 	return err;
 
 bad:
-	derr(10, "corrupt xattr info on %p %llx\n", dentry->d_inode,
-	     ceph_ino(dentry->d_inode));
+	derr(10, "corrupt xattr info on %p %llx.%llx\n", dentry->d_inode,
+	     ceph_vinop(dentry->d_inode));
 	err = -EIO;
 	goto out;
 }
@@ -2240,8 +2246,8 @@ out:
 	return err;
 
 bad:
-	derr(10, "corrupt xattr info on %p %llx\n", dentry->d_inode,
-	     ceph_ino(dentry->d_inode));
+	derr(10, "corrupt xattr info on %p %llx.%llx\n", dentry->d_inode,
+	     ceph_vinop(dentry->d_inode));
 	err = -EIO;
 	goto out;
 }

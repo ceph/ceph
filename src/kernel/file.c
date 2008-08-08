@@ -84,8 +84,8 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
 
-	dout(5, "open inode %p ino %llx file %p flags %d (%d)\n", inode,
-	     ceph_ino(inode), file, flags, file->f_flags);
+	dout(5, "open inode %p ino %llx.%llx file %p flags %d (%d)\n", inode,
+	     ceph_vinop(inode), file, flags, file->f_flags);
 	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
@@ -119,7 +119,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (err == 0)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
-	dout(5, "open result=%d on %llx\n", err, ceph_ino(inode));
+	dout(5, "open result=%d on %llx.%llx\n", err, ceph_vinop(inode));
 out:
 	dput(dentry);
 	return err;
@@ -212,7 +212,7 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	dout(10, "sync_read on file %p %lld~%u\n", file, *offset,
 	     (unsigned)count);
 
-	ret = ceph_osdc_sync_read(&client->osdc, ceph_ino(inode),
+	ret = ceph_osdc_sync_read(&client->osdc, ceph_vino(inode),
 				  &ci->i_layout,
 				  pos, count, data);
 	if (ret > 0)
@@ -235,7 +235,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	if (file->f_flags & O_APPEND)
 		pos = i_size_read(inode);
 
-	ret = ceph_osdc_sync_write(&client->osdc, ceph_ino(inode),
+	ret = ceph_osdc_sync_write(&client->osdc, ceph_vino(inode),
 				   &ci->i_layout,
 				   pos, count, data);
 	if (ret > 0) {
@@ -265,16 +265,16 @@ ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 
 	__ceph_do_pending_vmtruncate(inode);
 
-	dout(10, "aio_read %llx %llu~%u trying to get caps on %p\n",
-	     ceph_ino(inode), pos, (unsigned)len, inode);
+	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
+	     ceph_vinop(inode), pos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
 							 CEPH_CAP_RDCACHE,
 							 &got, -1));
 	if (ret < 0)
 		goto out;
-	dout(10, "aio_read %llx %llu~%u got cap refs %d\n",
-	     ceph_ino(inode), pos, (unsigned)len, got);
+	dout(10, "aio_read %llx.%llx %llu~%u got cap refs %d\n",
+	     ceph_vinop(inode), pos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_RDCACHE) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
@@ -284,8 +284,8 @@ ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		ret = generic_file_aio_read(iocb, iov, nr_segs, pos);
 
 out:
-	dout(10, "aio_read %llx dropping cap refs on %d\n", ceph_ino(inode),
-	     got);
+	dout(10, "aio_read %llx.%llx dropping cap refs on %d\n",
+	     ceph_vinop(inode), got);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }

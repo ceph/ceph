@@ -18,6 +18,10 @@ big items
 - libuuid?
 
 
+yehuda
+- what is the purpose of ceph_inode_info.i_hashval.. can we remove it..
+
+
 snaps on mds
 - cap release probably needs ack by mds.  or, mds needs to possibly initiate recovery on import?  no, release should pbly just be acked by mds... like it was way back when... bah!
 

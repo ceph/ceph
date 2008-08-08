@@ -106,7 +106,7 @@ static int ceph_readpage(struct file *filp, struct page *page)
 
 	dout(10, "readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
-	err = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
+	err = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (unlikely(err < 0))
 		goto out;
@@ -143,7 +143,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	BUG_ON(list_empty(page_list));
 	page = list_entry(page_list->prev, struct page, lru);
 	offset = page->index << PAGE_CACHE_SHIFT;
-	rc = ceph_osdc_readpages(osdc, mapping, ceph_ino(inode), &ci->i_layout,
+	rc = ceph_osdc_readpages(osdc, mapping, ceph_vino(inode), &ci->i_layout,
 				 offset, nr_pages << PAGE_CACHE_SHIFT,
 				 page_list, nr_pages);
 	if (rc < 0)
@@ -211,7 +211,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	page_cache_get(page);
 	was_dirty = PageDirty(page);
 	set_page_writeback(page);
-	err = ceph_osdc_writepages(osdc, ceph_ino(inode), &ci->i_layout,
+	err = ceph_osdc_writepages(osdc, ceph_vino(inode), &ci->i_layout,
 				   page_off, len, &page, 1);
 	if (err >= 0) {
 		if (was_dirty) {
@@ -429,7 +429,7 @@ get_more_pages:
 			dout(10, "writepages got %d pages at %llu~%llu\n",
 			     locked_pages, offset, len);
 			rc = ceph_osdc_writepages(&client->osdc,
-						  ceph_ino(inode),
+						  ceph_vino(inode),
 						  &ci->i_layout,
 						  offset, len,
 						  pagep,
@@ -542,7 +542,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	/* or, do sub-page granularity dirty accounting? */
 	/* try to read the full page */
 	ci = ceph_inode(inode);
-	r = ceph_osdc_readpage(osdc, ceph_ino(inode), &ci->i_layout,
+	r = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
 			       page_off, PAGE_SIZE, page);
 	if (r < 0)
 		return r;

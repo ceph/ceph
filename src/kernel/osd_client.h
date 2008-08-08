@@ -7,6 +7,7 @@
 #include <linux/completion.h>
 
 #include "ceph_fs.h"
+#include "types.h"
 #include "osdmap.h"
 
 struct ceph_msg;
@@ -60,46 +61,56 @@ extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc,
 				 struct ceph_msg *msg);
 extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 
-extern int ceph_osdc_readpage(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_readpage(struct ceph_osd_client *osdc,
+			      struct ceph_vino vino,
 			      struct ceph_file_layout *layout,
 			      loff_t off, loff_t len,
 			      struct page *page);
 extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			       struct address_space *mapping,
-			       ceph_ino_t ino, struct ceph_file_layout *layout,
+			       struct ceph_vino vino,
+			       struct ceph_file_layout *layout,
 			       __u64 off, __u64 len,
 			       struct list_head *page_list, int nr_pages);
-extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			      struct ceph_file_layout *layout,
-			      loff_t off, loff_t len,
-			      struct page *page);
-extern int ceph_osdc_commit_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
-			      struct ceph_file_layout *layout,
-			      loff_t off, loff_t len,
-			      struct page *page);
-extern int ceph_osdc_writepages(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc,
+				   struct ceph_vino vino,
+				   struct ceph_file_layout *layout,
+				   loff_t off, loff_t len,
+				   struct page *page);
+extern int ceph_osdc_commit_write(struct ceph_osd_client *osdc,
+				  struct ceph_vino vino,
+				  struct ceph_file_layout *layout,
+				  loff_t off, loff_t len,
+				  struct page *page);
+extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
+				struct ceph_vino vino,
 				struct ceph_file_layout *layout,
 				loff_t off, loff_t len,
 				struct page **pagevec, int nr_pages);
 
-extern int ceph_osdc_sync_read(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_sync_read(struct ceph_osd_client *osdc,
+			       struct ceph_vino vino,
 			       struct ceph_file_layout *layout,
 			       __u64 off, __u64 len,
 			       char __user *data);
-extern int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_sync_write(struct ceph_osd_client *osdc,
+				struct ceph_vino vino,
 				struct ceph_file_layout *layout,
 				__u64 off, __u64 len,
 				const char __user *data);
 
-extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_prepare_write(struct ceph_osd_client *osdc,
+				   struct ceph_vino vino,
 				   struct ceph_file_layout *layout,
 				   loff_t off, loff_t len,
 				   struct page *page);
-extern int ceph_osdc_commit_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_commit_write(struct ceph_osd_client *osdc,
+				  struct ceph_vino vino,
 				  struct ceph_file_layout *layout,
 				  loff_t off, loff_t len,
 				  struct page *page);
-extern int ceph_osdc_writepage(struct ceph_osd_client *osdc, ceph_ino_t ino,
+extern int ceph_osdc_writepage(struct ceph_osd_client *osdc,
+			       struct ceph_vino vino,
 			       struct ceph_file_layout *layout,
 			       loff_t off, loff_t len,
 			       struct page *page);

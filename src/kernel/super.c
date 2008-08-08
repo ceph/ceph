@@ -46,8 +46,8 @@ static int ceph_write_inode(struct inode *inode, int unused)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
 	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
-		dout(30, "ceph_write_inode %llx .. atime updated\n",
-		     ceph_ino(inode));
+		dout(30, "ceph_write_inode %llx.%llx .. atime updated\n",
+		     ceph_vinop(inode));
 		/* eventually push this async to mds ... */
 	}
 	return 0;
@@ -198,7 +198,7 @@ static void ceph_destroy_inode(struct inode *inode)
 	struct ceph_inode_frag *frag;
 	struct rb_node *n;
 	
-	dout(30, "destroy_inode %p ino %llx\n", inode, ceph_ino(inode));
+	dout(30, "destroy_inode %p ino %llx.%llx\n", inode, ceph_vinop(inode));
 	kfree(ci->i_symlink);
 	while ((n = rb_first(&ci->i_fragtree)) != 0) {
 		frag = rb_entry(n, struct ceph_inode_frag, node);
@@ -927,7 +927,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
-	dout(22, "root ino %llx\n", ceph_ino(mnt->mnt_root->d_inode));
+	dout(22, "root ino %llx.%llx\n", ceph_vinop(mnt->mnt_root->d_inode));
 	return 0;
 
 out_splat:

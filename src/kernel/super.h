@@ -9,6 +9,7 @@
 #include <linux/sysfs.h>
 
 #include "ceph_fs.h"
+#include "types.h"
 #include "messenger.h"
 #include "mon_client.h"
 #include "mds_client.h"
@@ -203,7 +204,8 @@ struct ceph_dir_info {
 };
 
 struct ceph_inode_info {
-	u64 i_ceph_ino;   /* make this ifdef away on 64 bit */
+	struct ceph_vino i_vino;   /* ceph ino + snap */
+	unsigned long i_hashval;
 
 	u64 i_version;
 	u64 i_time_warp_seq;
@@ -247,7 +249,6 @@ struct ceph_inode_info {
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	atomic_t i_wrbuffer_ref;
 
-	unsigned long i_hashval;
 
 	struct work_struct i_wb_work;  /* writeback work */
 
@@ -304,47 +305,51 @@ static inline void ceph_queue_writeback(struct ceph_client *cl,
 
 
 /*
- * ino_t is <64 bits on many architectures... blech
+ * ino_t is <64 bits on many architectures, blech.
+ * let snapped inos chain up on the same linux ino_t.
  */
-static inline ino_t ceph_ino_to_ino(u64 cephino)
+static inline ino_t ceph_vino_to_ino(struct ceph_vino vino)
 {
-	ino_t ino = (ino_t)cephino;
+	ino_t ino = (ino_t)vino.ino;
 #if BITS_PER_LONG == 32
-	ino ^= cephino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+	ino ^= vino.ino >> (sizeof(u64)-sizeof(ino_t)) * 8;
 #endif
 	return ino;
 }
 
-static inline void ceph_set_ino(struct inode *inode, __u64 ino)
+static inline void ceph_set_ino(struct inode *inode, struct ceph_vino vino)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	ci->i_ceph_ino = ino;
-	inode->i_ino = ceph_ino_to_ino(ino);
+	ci->i_vino = vino;
+	inode->i_ino = ceph_vino_to_ino(vino);
 }
 
 static inline int ceph_set_ino_cb(struct inode *inode, void *data)
 {
-	ceph_set_ino(inode, *(__u64 *)data);
+	ceph_set_ino(inode, *(struct ceph_vino *)data);
 	return 0;
 }
 
-static inline u64 ceph_ino(struct inode *inode)
+static inline struct ceph_vino ceph_vino(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	return ci->i_ceph_ino;
+	return ci->i_vino;
 }
+#define ceph_vinop(i) ceph_inode(i)->i_vino.ino, ceph_inode(i)->i_vino.snap
 
 static inline int ceph_ino_compare(struct inode *inode, void *data)
 {
-	__u64 ino = *(__u64 *)data;
+	struct ceph_vino *pvino = (struct ceph_vino *)data;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	return (ci->i_ceph_ino == ino);
+	return (ci->i_vino.ino == pvino->ino &&
+		ci->i_vino.snap == pvino->snap);
 }
 
-static inline struct inode *ceph_find_inode(struct super_block *sb, __u64 ino)
+static inline struct inode *ceph_find_inode(struct super_block *sb,
+					    struct ceph_vino vino)
 {
-	ino_t inot = ceph_ino_to_ino(ino);
-	return ilookup5(sb, inot, ceph_ino_compare, &ino);
+	ino_t t = ceph_vino_to_ino(vino);
+	return ilookup5(sb, t, ceph_ino_compare, &vino);
 }
 
 
@@ -438,7 +443,8 @@ extern const char *ceph_msg_type_name(int type);
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
 extern const struct inode_operations ceph_special_iops;
-extern struct inode *ceph_get_inode(struct super_block *sb, u64 ino);
+extern struct inode *ceph_get_inode(struct super_block *sb,
+				    struct ceph_vino vino);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_info_in *iinfo,
 			   struct ceph_mds_reply_dirfrag *dirinfo);

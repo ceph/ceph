@@ -92,7 +92,7 @@ retry:
 		goto retry;
 	}
 
-	*base = ceph_ino(temp->d_inode);
+	*base = ceph_vino(temp->d_inode).ino;
 	*plen = len;
 	dout(10, "build_path_dentry on %p %d built %llx '%.*s'\n",
 	     dentry, atomic_read(&dentry->d_count), *base, len, path);
@@ -133,15 +133,21 @@ nextfrag:
 	if (fi->frag != frag || fi->last_readdir == NULL) {
 		struct ceph_mds_request *req;
 		struct ceph_mds_request_head *rhead;
+		char *path;
+		int pathlen;
+		u64 pathbase;
 
 		frag = ceph_choose_frag(ceph_inode(inode), frag, 0);
 
 		/* query mds */
-		dout(10, "dir_readdir querying mds for ino %llx frag %x\n",
-		     ceph_ino(inode), frag);
+		dout(10, "dir_readdir querying mds for ino %llx.%llx frag %x\n",
+		     ceph_vinop(inode), frag);
+		path = ceph_build_dentry_path(filp->f_dentry, &pathlen,
+					      &pathbase, 1);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR,
-					       ceph_ino(inode), "", 0, 0,
+					       pathbase, path, 0, 0,
 					       filp->f_dentry, USE_AUTH_MDS);
+		kfree(path);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
 		req->r_direct_hash = frag_value(frag);
@@ -302,8 +308,9 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	dout(10, "do_lookup %p mask %d\n", dentry, mask);
 	if (on_inode) {
 		/* stat ino directly */
+		WARN_ON(ceph_vino(dentry->d_inode).snap != CEPH_NOSNAP);
 		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
-					       ceph_ino(dentry->d_inode), 0,
+					       ceph_vino(dentry->d_inode).ino,0,
 					       0, 0,
 					       dentry, USE_CAP_MDS);
 	} else {
@@ -658,7 +665,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 
-	if (ceph_ino(dir) != 1 &&  /* ICONTENT useless on root inode */
+	if (ceph_vino(dir).ino != 1 &&  /* ICONTENT useless on root inode */
 	    ceph_inode(dir)->i_version == dentry->d_time &&
 	    ceph_inode_lease_valid(dir, CEPH_LOCK_ICONTENT)) {
 		dout(20, "dentry_revalidate %p %lu ICONTENT on dir %p %llu\n",
