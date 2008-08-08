@@ -108,6 +108,8 @@ dentry:
 	*p += sizeof(struct ceph_mds_reply_lease);
 
 	/* dir */
+	if (unlikely(*p + sizeof(struct ceph_mds_reply_dirfrag) > end))
+		goto bad;
 	info->trace_dir[numd] = *p;
 	*p += sizeof(struct ceph_mds_reply_dirfrag) +
 		sizeof(__u32)*le32_to_cpu(info->trace_dir[numd]->ndist);
@@ -199,10 +201,10 @@ static int parse_reply_info(struct ceph_msg *msg,
 
 	memset(info, 0, sizeof(*info));
 	info->head = msg->front.iov_base;
-
-	/* trace */
 	p = msg->front.iov_base + sizeof(struct ceph_mds_reply_head);
 	end = p + msg->front.iov_len;
+
+	/* trace */
 	ceph_decode_32_safe(&p, end, len, bad);
 	if (len > 0) {
 		err = parse_reply_info_trace(&p, p+len, info);
@@ -300,8 +302,7 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 		if (mdsc->max_sessions < newmax) {
 			if (mdsc->sessions) {
 				memcpy(sa, mdsc->sessions,
-				       mdsc->max_sessions *
-				       sizeof(struct ceph_mds_session));
+				       mdsc->max_sessions * sizeof(void*));
 				kfree(mdsc->sessions);
 			}
 			mdsc->sessions = sa;
@@ -390,7 +391,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
 
-	req = kmalloc(sizeof(*req), GFP_NOFS);
+	req = kzalloc(sizeof(*req), GFP_NOFS);
 	req->r_request = msg;
 	req->r_reply = 0;
 	req->r_err = 0;
@@ -850,6 +851,11 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		session->s_ttl = jiffies + HZ*mdsc->mdsmap->m_session_autoclose;
 	spin_unlock(&mdsc->lock);
 
+	if (!session) {
+		dout(10, "handle_session no session for mds%d\n", mds);
+		return;
+	}
+
 	mutex_lock(&session->s_mutex);
 
 	was_stale = session->s_cap_ttl == 0 ||
@@ -1067,10 +1073,10 @@ retry:
 	}
 
 	/* make request? */
-	if (req->r_session == 0)
+	if (req->r_from_time == 0)
 		req->r_from_time = jiffies;
 	BUG_ON(req->r_session);
-	req->r_session = session;
+	req->r_session = session; /* request now owns the session ref */
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
 	req->r_attempts++;
 	rhead = req->r_request->front.iov_base;
@@ -1087,8 +1093,7 @@ retry:
 	wait_for_completion(&req->r_completion);
 	spin_lock(&mdsc->lock);
 	if (req->r_reply == NULL) {
-		put_session(session);
-		req->r_session = 0;
+		put_request_sessions(req);
 		goto retry;
 	}
 
