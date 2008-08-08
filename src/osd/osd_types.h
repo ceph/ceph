@@ -262,13 +262,14 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 /*
  * pg states
  */
-#define PG_STATE_CREATING   1  // creating
-#define PG_STATE_ACTIVE     2  // i am active.  (primary: replicas too)
-#define PG_STATE_CLEAN      4  // peers are complete, clean of stray replicas.
-#define PG_STATE_CRASHED    8  // all replicas went down. 
-#define PG_STATE_REPLAY    16  // crashed, waiting for replay
-#define PG_STATE_STRAY     32  // i must notify the primary i exist.
-#define PG_STATE_SPLITTING 64  // i am splitting
+#define PG_STATE_CREATING    1  // creating
+#define PG_STATE_ACTIVE      2  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN       4  // peers are complete, clean of stray replicas.
+#define PG_STATE_CRASHED     8  // all replicas went down, clients needs to replay
+#define PG_STATE_DOWN       16  // a needed replica is down, PG offline
+#define PG_STATE_REPLAY     32  // crashed, waiting for replay
+#define PG_STATE_STRAY      64  // i must notify the primary i exist.
+#define PG_STATE_SPLITTING 128  // i am splitting
 
 static inline std::string pg_state_string(int state) {
   std::string st;
@@ -276,6 +277,7 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_ACTIVE) st += "active+";
   if (state & PG_STATE_CLEAN) st += "clean+";
   if (state & PG_STATE_CRASHED) st += "crashed+";
+  if (state & PG_STATE_DOWN) st += "down+";
   if (state & PG_STATE_REPLAY) st += "replay+";
   if (state & PG_STATE_STRAY) st += "stray+";
   if (state & PG_STATE_SPLITTING) st += "splitting+";

@@ -593,6 +593,8 @@ void PG::build_prior()
 
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
+  state_clear(PG_STATE_DOWN);
+  bool any_up = false;
   bool some_down = false;
 
   must_notify_mon = false;
@@ -641,6 +643,10 @@ void PG::build_prior()
     int num_still_up_or_clean = 0;
     for (unsigned i=0; i<acting.size(); i++) {
       if (osd->osdmap->is_up(acting[i])) {  // is up now
+	if (first_epoch <= info.history.last_epoch_started &&  // FIXME this is sloppy i think?
+	    last_epoch >= info.history.last_epoch_started)
+	  any_up = true;
+
 	if (acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(acting[i]);
 
@@ -670,8 +676,14 @@ void PG::build_prior()
     }
   }
 
+  if (!any_up) {
+    dout(10) << "build_prior  no osds are up from the last epoch started, PG is down for now." << dendl;
+    state_set(PG_STATE_DOWN);
+  }
+
   dout(10) << "build_prior = " << prior_set
 	   << (is_crashed() ? " crashed":"")
+	   << (is_down() ? " down":"")
 	   << (some_down ? " some_down":"")
 	   << (must_notify_mon ? " must_notify_mon":"")
 	   << dendl;
@@ -800,6 +812,12 @@ void PG::peer(ObjectStore::Transaction& t,
   }
 
   dout(10) << " oldest_update " << oldest_update << dendl;
+
+
+  if (is_down()) {
+    dout(10) << " down.  we wait." << dendl;    
+    return;
+  }
 
   have_master_log = true;
 
