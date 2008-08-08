@@ -874,6 +874,9 @@ void OSD::update_heartbeat_peers()
   map<int, utime_t> stamps;
   stamps.swap(heartbeat_from_stamp);
 
+  set<int> old_heartbeat_from;
+  old_heartbeat_from.swap(heartbeat_from);
+
   // build heartbeat to/from set
   heartbeat_to.clear();
   heartbeat_from.clear();
@@ -893,7 +896,7 @@ void OSD::update_heartbeat_peers()
 	int p = pg->acting[i]; // peer
 	assert(p != whoami);
 	heartbeat_from.insert(p);
-	if (stamps.count(p))
+	if (stamps.count(p) && old_heartbeat_from.count(p))  // have a stamp _AND_ i'm not new to the set
 	  heartbeat_from_stamp[p] = stamps[p];
       }
     }
