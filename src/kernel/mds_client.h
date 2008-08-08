@@ -27,7 +27,7 @@ struct ceph_mds_reply_info_in {
 struct ceph_mds_reply_info {
 	struct ceph_mds_reply_head    *head;
 
-	int trace_numi, trace_numd;
+	int trace_numi, trace_numd, trace_snapdirpos;
 	struct ceph_mds_reply_info_in *trace_in;
 	struct ceph_mds_reply_lease   **trace_ilease;
 	struct ceph_mds_reply_dirfrag **trace_dir;
@@ -134,6 +134,7 @@ extern const char *ceph_mds_op_name(int op);
 
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
+extern void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc);
 extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,

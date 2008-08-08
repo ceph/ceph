@@ -60,7 +60,7 @@ static void ceph_put_super(struct super_block *s)
 	int seconds = 15;
 
 	dout(30, "put_super\n");
-	ceph_mdsc_stop(&cl->mdsc);
+	ceph_mdsc_close_sessions(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
 
 	rc = wait_event_timeout(cl->mount_wq,
@@ -609,6 +609,7 @@ void ceph_destroy_client(struct ceph_client *client)
 	/* unmount */
 	/* ... */
 
+	ceph_mdsc_stop(&client->mdsc);
 	ceph_monc_stop(&client->monc);
 	ceph_osdc_stop(&client->osdc);
 

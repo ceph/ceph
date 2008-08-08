@@ -53,14 +53,16 @@ bad:
 static int parse_reply_info_trace(void **p, void *end,
 				  struct ceph_mds_reply_info *info)
 {
-	__u16 numi, numd;
+	__u16 numi, numd, snapdirpos;
 	int err = -EINVAL;
 
-	ceph_decode_need(p, end, 2*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 3*sizeof(__u16), bad);
 	ceph_decode_16(p, numi);
 	ceph_decode_16(p, numd);
+	ceph_decode_16(p, snapdirpos);
 	info->trace_numi = numi;
 	info->trace_numd = numd;
+	info->trace_snapdirpos = snapdirpos;
 	if (numi == 0) {
 		info->trace_in = 0;
 		goto done;   /* hrm, this shouldn't actually happen, but.. */
@@ -2022,13 +2024,13 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 /*
  * called after sb is ro.
  */
-void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
+void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_session *session;
 	int i;
 	int n;
 
-	dout(10, "stop\n");
+	dout(10, "close_sessions\n");
 
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
 
@@ -2073,6 +2075,12 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 
 	spin_unlock(&mdsc->lock);
 	dout(10, "stopped\n");
+}
+
+void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
+{
+	dout(10, "stop\n");
+	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
 }
 
 
