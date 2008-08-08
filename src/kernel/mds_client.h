@@ -42,6 +42,9 @@ struct ceph_mds_reply_info {
 	__u32                         *dir_dname_len;
 	struct ceph_mds_reply_lease   **dir_dlease;
 	struct ceph_mds_reply_info_in *dir_in;
+
+	void *snapblob;
+	int snapblob_len;
 };
 
 /*

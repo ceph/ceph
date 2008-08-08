@@ -220,6 +220,11 @@ static int parse_reply_info(struct ceph_msg *msg,
 			goto bad;
 	}
 
+	/* snap blob */
+	ceph_decode_32_safe(&p, end, len, bad);
+	info->snapblob_len = len;
+	info->snapblob = *p;
+
 	return 0;
 bad:
 	derr(1, "parse_reply err %d\n", err);

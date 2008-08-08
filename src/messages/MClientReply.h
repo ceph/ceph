@@ -209,16 +209,16 @@ public:
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(st, p);
-    ::decode(snapbl, p);
     ::decode(trace_bl, p);
     ::decode(dir_bl, p);
+    ::decode(snapbl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
     ::encode(st, payload);
-    ::encode(snapbl, payload);
     ::encode(trace_bl, payload);
     ::encode(dir_bl, payload);
+    ::encode(snapbl, payload);
   }
 
 
