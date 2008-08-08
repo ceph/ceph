@@ -1571,18 +1571,22 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 
   if (is_primary()) {
-    // are others missing this too?
-    for (unsigned i=1; i<acting.size(); i++) {
-      int peer = acting[i];
-      assert(peer_missing.count(peer));
-      if (peer_missing[peer].is_missing(poid.oid)) 
-	push(poid, peer);  // ok, push it, and they (will) have it now.
-    }
-
-    // continue recovery
     if (info.is_uptodate())
       uptodate_set.insert(osd->get_nodeid());
-    do_recovery();
+    
+    if (is_active()) {
+      // are others missing this too?  (only if we're active.. skip
+      // this part if we're still repeering, it'll just confuse us)
+      for (unsigned i=1; i<acting.size(); i++) {
+	int peer = acting[i];
+	assert(peer_missing.count(peer));
+	if (peer_missing[peer].is_missing(poid.oid)) 
+	  push(poid, peer);  // ok, push it, and they (will) have it now.
+      }
+
+      do_recovery();      // continue recovery
+    }
+
   } else {
     // ack if i'm a replica and being pushed to.
     MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), false); 

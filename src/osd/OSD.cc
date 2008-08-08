@@ -2487,6 +2487,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   } else {
     if (!pg->info.dne()) {
       // i am REPLICA
+      
       // merge log
       pg->merge_log(log, missing, from);
       pg->proc_missing(log, missing, from);
