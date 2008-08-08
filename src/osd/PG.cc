@@ -177,12 +177,16 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
     eversion_t lu = peer_info[from].last_update;
     while (pp != olog.log.rend()) {
       if (!log.logged_object(pp->oid)) {
-        dout(10) << " divergent " << *pp << " not in our log, generating backlog" << dendl;
-	//dout(0) << "log" << dendl;
-	//log.print(*_dout);
-	//dout(0) << "olog" << dendl;
-	//olog.print(*_dout);
-        generate_backlog();
+	if (!log.backlog) {
+	  dout(10) << " divergent " << *pp << " not in our log, generating backlog" << dendl;
+	  //dout(0) << "log" << dendl;
+	  //log.print(*_dout);
+	  //dout(0) << "olog" << dendl;
+	  //olog.print(*_dout);
+	  generate_backlog();
+	} else {
+	  dout(10) << " divergent " << *pp << " not in our log, already have backlog" << dendl;
+	}
       }
       
       if (!log.objects.count(pp->oid)) {
