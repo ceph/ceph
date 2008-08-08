@@ -1170,15 +1170,18 @@ void PG::update_stats()
 {
   dout(15) << "update_stats" << dendl;
 
+  pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
-    pg_stats_lock.Lock();
+    pg_stats_valid = true;
     pg_stats.reported = info.last_update;
     pg_stats.state = state;
     pg_stats.num_bytes = stat_num_bytes;
     pg_stats.num_blocks = stat_num_blocks;
-    pg_stats_lock.Unlock();
+  } else {
+    pg_stats_valid = false;
   }
+  pg_stats_lock.Unlock();
 
   // put in osd stat_queue
   osd->pg_stat_queue_lock.Lock();
@@ -1186,6 +1189,13 @@ void PG::update_stats()
     osd->pg_stat_queue[info.pgid] = info.last_update;    
   osd->osd_stat_updated = true;
   osd->pg_stat_queue_lock.Unlock();
+}
+
+void PG::clear_stats()
+{
+  pg_stats_lock.Lock();
+  pg_stats_valid = false;
+  pg_stats_lock.Unlock();
 }
 
 

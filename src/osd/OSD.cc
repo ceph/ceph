@@ -1131,8 +1131,11 @@ void OSD::send_pg_stats()
 	continue;
       PG *pg = pg_map[pgid];
       pg->pg_stats_lock.Lock();
-      m->pg_stat[pgid] = pg->pg_stats;
-      dout(20) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+      if (pg->pg_stats_valid) {
+	pg->pg_stats_valid = false;
+	m->pg_stat[pgid] = pg->pg_stats;
+	dout(20) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+      }
       pg->pg_stats_lock.Unlock();
     }
     
@@ -1725,6 +1728,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       // old primary?
       if (oldrole == 0) {
 	pg->state_clear(PG_STATE_CLEAN);
+	pg->clear_stats();
 	
 	// take replay queue waiters
 	list<Message*> ls;

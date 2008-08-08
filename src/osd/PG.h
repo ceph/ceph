@@ -553,9 +553,11 @@ protected:
   hash_map<object_t, DecayCounter> stat_object_temp_rd;
 
   Mutex pg_stats_lock;
+  bool pg_stats_valid;
   pg_stat_t pg_stats;
 
   void update_stats();
+  void clear_stats();
 
 public:
   void clear_primary_state();
@@ -624,7 +626,8 @@ public:
     state(0),
     have_master_log(true),
     must_notify_mon(false),
-    stat_num_bytes(0), stat_num_blocks(0)
+    stat_num_bytes(0), stat_num_blocks(0),
+    pg_stats_valid(false)
   { }
   virtual ~PG() { }
   
