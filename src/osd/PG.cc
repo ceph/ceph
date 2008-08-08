@@ -676,7 +676,8 @@ void PG::build_prior()
     }
   }
 
-  if (!any_up) {
+  if (info.history.last_epoch_started < info.history.same_since &&
+      !any_up) {
     dout(10) << "build_prior  no osds are up from the last epoch started, PG is down for now." << dendl;
     state_set(PG_STATE_DOWN);
   }
@@ -763,7 +764,9 @@ void PG::peer(ObjectStore::Transaction& t,
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
        it++) {
-    if (it->second.last_update > newest_update) {
+    if (it->second.last_update > newest_update ||
+	(it->second.last_update == newest_update &&    // prefer osds in the prior set
+	 prior_set.count(newest_update_osd) == 0)) {
       newest_update = it->second.last_update;
       newest_update_osd = it->first;
     }
@@ -774,6 +777,8 @@ void PG::peer(ObjectStore::Transaction& t,
         peers_complete_thru = it->second.last_complete;
     }    
   }
+  if (newest_update == info.last_update)   // or just me, if nobody better.
+    newest_update_osd = osd->whoami;
 
   // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
@@ -943,6 +948,7 @@ void PG::activate(ObjectStore::Transaction& t,
   // twiddle pg state
   state_set(PG_STATE_ACTIVE);
   state_clear(PG_STATE_STRAY);
+  state_clear(PG_STATE_DOWN);
   if (is_crashed()) {
     //assert(is_replay());      // HELP.. not on replica?
     state_clear(PG_STATE_CRASHED);

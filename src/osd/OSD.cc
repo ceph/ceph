@@ -1704,6 +1704,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
+    pg->state_clear(PG_STATE_DOWN);
     
     // reset primary state?
     if (oldrole == 0 || pg->get_role() == 0)

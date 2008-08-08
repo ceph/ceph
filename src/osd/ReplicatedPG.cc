@@ -1285,6 +1285,20 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
            << " v " << nv 
            << " " << op->get_offset() << "~" << op->get_length()
            << dendl;  
+
+  // sanity checks
+  if (op->get_map_epoch() < info.history.same_primary_since) {
+    dout(10) << "sub_op_modify discarding old sub_op from "
+	     << op->get_map_epoch() << " < " << info.history.same_primary_since << dendl;
+    delete op;
+    return;
+  }
+  if (!is_active()) {
+    dout(10) << "sub_op_modify not active" << dendl;
+    delete op;
+    return;
+  }
+  assert(is_replica());
   
   // note peer's stat
   int fromosd = op->get_source().num();
@@ -1478,37 +1492,20 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 {
   const pobject_t poid = op->get_poid();
   const eversion_t v = op->get_version();
-  int from = op->get_source().num();
 
   dout(7) << "op_pull " << poid << " v " << op->get_version()
           << " from " << op->get_source()
           << dendl;
 
-  // is a replica asking?  are they missing it?
-  if (is_primary()) {
-    // primary
-    assert(peer_missing.count(from));  // we had better know this, from the peering process.
-
-    if (!peer_missing[from].is_missing(poid.oid)) {
-      dout(7) << "op_pull replica isn't actually missing it, we must have already pushed to them" << dendl;
-      delete op;
-      return;
-    }
-
-    // do we have it yet?
-    if (is_missing_object(poid.oid)) {
-      wait_for_missing_object(poid.oid, op);
-      return;
-    }
-  } else {
-    // non-primary
-    if (missing.is_missing(poid.oid)) {
-      dout(7) << "op_pull not primary, and missing " << poid << ", ignoring" << dendl;
-      delete op;
-      return;
-    }
+  if (op->get_map_epoch() < info.history.same_primary_since) {
+    dout(10) << "sub_op_pull discarding old sub_op from "
+	     << op->get_map_epoch() << " < " << info.history.same_primary_since << dendl;
+    delete op;
+    return;
   }
-    
+
+  assert(!is_primary());  // we should be a replica or stray.
+
   // push it back!
   push(poid, op->get_source().num());
 }
@@ -1522,6 +1519,30 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   pobject_t poid = op->get_poid();
   eversion_t v = op->get_version();
 
+  dout(7) << "op_push " 
+          << poid 
+          << " v " << v 
+          << " size " << op->get_length() << " " << op->get_data().length()
+          << dendl;
+
+  if (is_replica()) {
+    // replica should only accept pushes from the current primary.
+    if (op->get_map_epoch() < info.history.same_primary_since) {
+      dout(10) << "sub_op_push discarding old sub_op from "
+	       << op->get_map_epoch() << " < " << info.history.same_primary_since << dendl;
+      delete op;
+      return;
+    }
+    // FIXME: actually, no, what i really want here is a personal "same_role_since"
+    if (!is_active()) {
+      dout(10) << "sub_op_push not active" << dendl;
+      delete op;
+      return;
+    }
+  } else {
+    // primary will accept pushes anytime.
+  }
+
   // are we missing (this specific version)?
   //  (if version is wrong, it is either old (we don't want it) or 
   //   newer (peering is buggy))
@@ -1531,12 +1552,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     return;
   }
   
-  dout(7) << "op_push " 
-          << poid 
-          << " v " << v 
-          << " size " << op->get_length() << " " << op->get_data().length()
-          << dendl;
-
   assert(op->get_data().length() == op->get_length());
   
   // write object and add it to the PG

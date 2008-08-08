@@ -645,6 +645,7 @@ public:
   void       set_role(int r) { role = r; }
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
+  bool       is_replica() const { return role > 0; }
   bool       is_acker() const { 
     if (g_conf.osd_rep == OSD_REP_PRIMARY)
       return is_primary();
@@ -662,6 +663,7 @@ public:
 
   bool is_complete() const { return info.last_complete == info.last_update; }
 
+  int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
@@ -794,11 +796,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     out << " pct " << pg.peers_complete_thru;
     if (!pg.have_master_log) out << " !hml";
   }
-  if (pg.is_active()) out << " active";
-  if (pg.is_crashed()) out << " crashed";
-  if (pg.is_replay()) out << " replay";
-  if (pg.is_clean()) out << " clean";
-  if (pg.is_stray()) out << " stray";
+
+  out << " " << pg_state_string(pg.get_state());
+
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
