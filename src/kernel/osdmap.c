@@ -626,6 +626,7 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	pgid.pg.preferred = preferred;
 	pgid.pg.type = fl->fl_pg_type;
 	pgid.pg.size = fl->fl_pg_size;
+	pgid.pg.pool = fl->fl_pg_pool;
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);
 	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
