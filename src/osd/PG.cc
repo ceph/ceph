@@ -360,7 +360,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
         if (from == olog.log.begin()) break;
         from--;
         //dout(0) << "? " << *from << dendl;
-        if (from->version < log.top) {
+        if (from->version <= log.top) {
           from++;
           break;
         }
