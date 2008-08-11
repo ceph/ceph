@@ -1183,14 +1183,23 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			cap = le32_to_cpu(rinfo->head->file_caps);
 			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
 			mseq = le32_to_cpu(rinfo->head->file_caps_mseq);
-			err = ceph_add_cap(req->r_last_inode,
-					   req->r_session,
-					   req->r_fmode,
-					   cap, capseq, mseq,
-					   rinfo->snapblob,
-					   rinfo->snapblob_len);
-			if (err)
-				goto done;
+			if (ceph_vino(req->r_last_inode).snap == CEPH_NOSNAP) {
+				err = ceph_add_cap(req->r_last_inode,
+						   req->r_session,
+						   req->r_fmode,
+						   cap, capseq, mseq,
+						   rinfo->snapblob,
+						   rinfo->snapblob_len);
+				if (err)
+					goto done;
+			} else {
+				struct ceph_inode_info *ci =
+					ceph_inode(req->r_last_inode);
+				spin_lock(&req->r_last_inode->i_lock);
+				ci->i_snap_caps |= cap;
+				__ceph_get_fmode(ci, req->r_fmode);
+				spin_unlock(&req->r_last_inode->i_lock);
+			}
 		}
 
 		/* readdir result? */

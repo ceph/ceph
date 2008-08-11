@@ -176,6 +176,11 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_wanted_max_size = 0;
 	ci->i_requested_max_size = 0;
 
+	ci->i_cap_exporting_mds = 0;
+	ci->i_cap_exporting_mseq = 0;
+	ci->i_cap_exporting_issued = 0;
+	ci->i_snap_caps = 0;
+
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = 0;
 	atomic_set(&ci->i_wrbuffer_ref, 0);

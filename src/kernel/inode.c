@@ -59,6 +59,7 @@ struct inode *ceph_get_snapdir(struct inode *parent)
 	inode->i_gid = parent->i_gid;
 	inode->i_op = &ceph_dir_iops;
 	inode->i_fop = &ceph_dir_fops;
+	ceph_inode(inode)->i_snap_caps = CEPH_CAP_PIN; /* so we can open */
 	return inode;
 }
 
@@ -1217,7 +1218,7 @@ int ceph_add_cap(struct inode *inode,
 
 int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 {
-	int have = 0;
+	int have = ci->i_snap_caps;
 	struct ceph_inode_cap *cap;
 	struct list_head *p;
 	u32 gen;
@@ -1425,7 +1426,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 		last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
 
-	if (last)
+	if (last && ci->i_vino.snap == CEPH_NOSNAP)
 		ceph_check_caps(ci, 0);
 }
 

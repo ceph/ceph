@@ -242,6 +242,7 @@ struct ceph_inode_info {
 	int i_cap_exporting_mds;
 	unsigned i_cap_exporting_mseq;
 	unsigned i_cap_exporting_issued;
+	unsigned i_snap_caps;
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
 	loff_t i_max_size;      /* size authorized by mds */
