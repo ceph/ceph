@@ -587,7 +587,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   // do it.
   if (poid.oid.snap && !pick_read_snap(poid)) {
     // we have no revision for this request.
-    r = -EEXIST;
+    r = -ENOENT;
     goto done;
   } 
   
