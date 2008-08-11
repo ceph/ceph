@@ -86,7 +86,7 @@ protected:
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
   
   // push/pull
-  map<object_t, eversion_t> pulling;  // which objects are currently being pulled
+  map<object_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
   map<object_t, set<int> > pushing;
 
 

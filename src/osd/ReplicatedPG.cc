@@ -1413,7 +1413,8 @@ void ReplicatedPG::pull(pobject_t poid)
   
   // take note
   assert(pulling.count(poid.oid) == 0);
-  pulling[poid.oid] = v;
+  pulling[poid.oid].first = v;
+  pulling[poid.oid].second = fromosd;
 }
 
 
@@ -1638,6 +1639,18 @@ void ReplicatedPG::on_osd_failure(int o)
     if (repop->waitfor_ack.count(o) ||
 	repop->waitfor_commit.count(o))
       repop_ack(repop, -1, true, o);
+  }
+  
+  // remove from pushing map
+  {
+    map<object_t, pair<eversion_t,int> >::iterator p = pulling.begin();
+    while (p != pulling.end())
+      if (p->second.second == o) {
+	dout(10) << " forgetting pull of " << p->first << " " << p->second.first
+		 << " from osd" << o << dendl;
+	pulling.erase(p++);
+      } else
+	p++;
   }
 }
 
