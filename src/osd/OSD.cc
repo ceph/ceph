@@ -433,6 +433,11 @@ int OSD::shutdown()
   delete threadpool;
   threadpool = 0;
 
+  // zap waiters (bleh, this is messy)
+  finished_lock.Lock();
+  finished.clear();
+  finished_lock.Unlock();
+
   // close pgs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
