@@ -277,6 +277,8 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 	    strcmp(dentry->d_name.name, client->mount_args.snapdir_name) == 0) {
 		struct inode *parent = dentry->d_parent->d_inode;
 		struct inode *inode = ceph_get_snapdir(parent);
+		dout(10, "ENOENT on snapdir %p '%.*s', linking to snapdir %p\n",
+		     dentry, dentry->d_name.len, dentry->d_name.name, inode);
 		d_add(dentry, inode);
 		err = 0;
 	}

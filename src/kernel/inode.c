@@ -919,6 +919,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		if (d == rinfo->trace_numi-rinfo->trace_snapdirpos-1) {
 			struct inode *snapdir = ceph_get_snapdir(dn->d_inode);
+			dput(dn);
 			dn = d_find_alias(snapdir);
 			iput(snapdir);
 			dout(10, " snapdir dentry is %p\n", dn);
@@ -1013,11 +1014,12 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 	struct dentry *dn;
 	struct inode *in;
 	int i;
+	struct inode *snapdir = 0;
 
 	if (le32_to_cpu(rinfo->head->op) == CEPH_MDS_OP_LSSNAP) {
-		in = ceph_get_snapdir(parent->d_inode);
-		parent = d_find_alias(in);
-		iput(in);
+		snapdir = ceph_get_snapdir(parent->d_inode);
+		parent = d_find_alias(snapdir);
+		dput(parent);
 		dout(10, "readdir_prepopulate %d items under SNAPDIR dn %p\n",
 		     rinfo->dir_nr, parent);
 	} else {
@@ -1086,6 +1088,8 @@ retry_lookup:
 				   req->r_session, req->r_from_time);
 		dput(dn);
 	}
+
+	iput(snapdir);
 	dout(10, "readdir_prepopulate done\n");
 	return 0;
 }
@@ -2128,6 +2132,12 @@ static int do_getattr(struct dentry *dentry, int mask)
 {
 	int want_inode = 0;
 	struct dentry *ret;
+
+	if (ceph_vino(dentry->d_inode).snap == CEPH_SNAPDIR) {
+		dout(30, "getattr dentry %p inode %p SNAPDIR\n", dentry,
+		     dentry->d_inode);
+		return 0;
+	}
 
 	dout(30, "getattr dentry %p inode %p\n", dentry,
 	     dentry->d_inode);
