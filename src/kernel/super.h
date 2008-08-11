@@ -313,11 +313,10 @@ static inline void ceph_queue_writeback(struct ceph_client *cl,
 
 /*
  * ino_t is <64 bits on many architectures, blech.
- * let snapped inos chain up on the same linux ino_t.
  */
 static inline ino_t ceph_vino_to_ino(struct ceph_vino vino)
 {
-	ino_t ino = (ino_t)vino.ino;
+	ino_t ino = (ino_t)vino.ino ^ (vino.snap << 20);
 #if BITS_PER_LONG == 32
 	ino ^= vino.ino >> (sizeof(u64)-sizeof(ino_t)) * 8;
 #endif

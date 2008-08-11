@@ -2178,6 +2178,7 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	dout(30, "getattr returned %d\n", err);
 	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
+		stat->ino = ceph_vino(dentry->d_inode).ino;
 		if (ceph_vino(dentry->d_inode).snap != CEPH_NOSNAP)
 			stat->dev = ceph_vino(dentry->d_inode).snap;
 		else
