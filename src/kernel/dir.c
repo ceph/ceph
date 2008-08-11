@@ -43,11 +43,16 @@ char *ceph_build_dentry_path(struct dentry *dentry, int *plen, __u64 *base,
 retry:
 	len = 0;
 	for (temp = dentry; !IS_ROOT(temp);) {
+		struct inode *inode = temp->d_inode;
 		if (len >= min &&
-		    temp->d_inode &&
+		    inode &&
+		    ceph_vino(inode).snap == CEPH_NOSNAP &&
 		    !ceph_dentry_revalidate(temp, 0))
 			break;
-		len += 1 + temp->d_name.len;
+		if (inode && ceph_vino(inode).snap == CEPH_SNAPDIR)
+			len++;  /* slash only */
+		else
+			len += 1 + temp->d_name.len;
 		temp = temp->d_parent;
 		if (temp == NULL) {
 			derr(1, "corrupt dentry %p\n", dentry);
@@ -63,17 +68,21 @@ retry:
 	pos = len;
 	path[pos] = 0;	/* trailing null */
 	for (temp = dentry; !IS_ROOT(temp) && pos != 0; ) {
-		pos -= temp->d_name.len;
-		if (pos < 0) {
-			break;
+		if (temp->d_inode &&
+		    ceph_vino(temp->d_inode).snap == CEPH_SNAPDIR) {
+			dout(50, "build_path_dentry path+%d: %p SNAPDIR\n",
+			     pos, temp);
 		} else {
+			pos -= temp->d_name.len;
+			if (pos < 0)
+				break;
 			strncpy(path + pos, temp->d_name.name,
 				temp->d_name.len);
 			dout(50, "build_path_dentry path+%d: %p '%.*s'\n",
 			     pos, temp, temp->d_name.len, path + pos);
-			if (pos)
-				path[--pos] = '/';
 		}
+		if (pos)
+			path[--pos] = '/';
 		temp = temp->d_parent;
 		if (temp == NULL) {
 			derr(1, "corrupt dentry\n");
@@ -136,6 +145,8 @@ nextfrag:
 		char *path;
 		int pathlen;
 		u64 pathbase;
+		int op = ceph_vino(inode).snap == CEPH_SNAPDIR ?
+			CEPH_MDS_OP_LSSNAP:CEPH_MDS_OP_READDIR;
 
 		frag = ceph_choose_frag(ceph_inode(inode), frag, 0);
 
@@ -144,7 +155,7 @@ nextfrag:
 		     ceph_vinop(inode), frag);
 		path = ceph_build_dentry_path(filp->f_dentry, &pathlen,
 					      &pathbase, 1);
-		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_READDIR,
+		req = ceph_mdsc_create_request(mdsc, op,
 					       pathbase, path, 0, 0,
 					       filp->f_dentry, USE_AUTH_MDS);
 		kfree(path);
@@ -259,6 +270,17 @@ loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 				  struct dentry *dentry, int err)
 {
+	struct ceph_client *client = ceph_client(dentry->d_sb);
+
+	/* snap dir? */
+	if (err == -ENOENT &&
+	    strcmp(dentry->d_name.name, client->mount_args.snapdir_name) == 0) {
+		struct inode *parent = dentry->d_parent->d_inode;
+		struct inode *inode = ceph_get_snapdir(parent);
+		d_add(dentry, inode);
+		err = 0;
+	}
+
 	if (err == -ENOENT) {
 		/* no trace? */
 		if (req->r_reply_info.trace_numd == 0) {
@@ -661,6 +683,13 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
+
+	/* always validate snapped metadata, for now */
+	if (ceph_vino(dir).snap != CEPH_NOSNAP) {
+		dout(10, "d_revalidate %p '%.*s' inode %p is SNAPPED\n", dentry,
+		     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
+		return 1;
+	}
 
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);

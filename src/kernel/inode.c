@@ -45,6 +45,23 @@ struct inode *ceph_get_inode(struct super_block *sb, struct ceph_vino vino)
 	return inode;
 }
 
+struct inode *ceph_get_snapdir(struct inode *parent)
+{
+	struct ceph_vino vino = {
+		.ino = ceph_vino(parent).ino,
+		.snap = CEPH_SNAPDIR,
+	};
+	struct inode *inode = ceph_get_inode(parent->i_sb, vino);
+	if (IS_ERR(inode))
+		return ERR_PTR(PTR_ERR(inode));
+	inode->i_mode = parent->i_mode;
+	inode->i_uid = parent->i_uid;
+	inode->i_gid = parent->i_gid;
+	inode->i_op = &ceph_dir_iops;
+	inode->i_fop = &ceph_dir_fops;
+	return inode;
+}
+
 
 const struct inode_operations ceph_file_iops = {
 	.setattr = ceph_setattr,
@@ -631,11 +648,9 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		d_drop(dn);
 	realdn = d_materialise_unique(dn, in);
 	if (IS_ERR(realdn)) {
-		derr(0, "error splicing %p (%d) with %p (%d) "
+		derr(0, "error splicing %p (%d) "
 		     "inode %p ino %llx.%llx\n",
-		     dn, atomic_read(&dn->d_count),
-		     realdn, atomic_read(&realdn->d_count),
-		     realdn->d_inode,
+		     dn, atomic_read(&dn->d_count), in,
 		     ceph_vinop(realdn->d_inode));
 		if (prehash)
 			*prehash = false; /* don't rehash on error */
@@ -901,6 +916,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		dput(parent);
 		parent = NULL;
+
+		if (d == rinfo->trace_numi-rinfo->trace_snapdirpos-1) {
+			struct inode *snapdir = ceph_get_snapdir(dn->d_inode);
+			dn = d_find_alias(snapdir);
+			dout(10, " snapdir dentry is %p\n", dn);
+		}
 		continue;
 
 

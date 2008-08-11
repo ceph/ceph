@@ -107,6 +107,7 @@ struct ceph_mount_args {
 	struct ceph_entity_addr mon_addr[5];
 	int wsize;
 	int osd_timeout;
+	char *snapdir_name;
 };
 
 enum {
@@ -513,6 +514,7 @@ extern const struct inode_operations ceph_file_iops;
 extern const struct inode_operations ceph_special_iops;
 extern struct inode *ceph_get_inode(struct super_block *sb,
 				    struct ceph_vino vino);
+extern struct inode *ceph_get_snapdir(struct inode *parent);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_info_in *iinfo,
 			   struct ceph_mds_reply_dirfrag *dirinfo);

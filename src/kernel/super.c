@@ -434,6 +434,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->flags = CEPH_MOUNT_DEFAULT;
 	args->osd_timeout = 5;  /* seconds */
 	args->mount_attempts = 2;  /* 2 attempts */
+	args->snapdir_name = ".snap";
 
 	/* ip1[,ip2...]:/server/path */
 	c = strchr(dev_name, ':');
