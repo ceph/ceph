@@ -889,6 +889,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_down(osd)) {
 	ss << "osd" << osd << " is already down";
+      } else if (!osdmap.exists(osd)) {
+	ss << "osd" << osd << " does not exist";
       } else {
 	pending_inc.new_down[osd] = false;
 	ss << "marked down osd" << osd;
@@ -901,6 +903,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_out(osd)) {
 	ss << "osd" << osd << " is already out";
+      } else if (!osdmap.exists(osd)) {
+	ss << "osd" << osd << " does not exist";
       } else {
 	pending_inc.new_offload[osd] = CEPH_OSD_OUT;
 	ss << "marked out osd" << osd;
@@ -913,6 +917,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_in(osd)) {
 	ss << "osd" << osd << " is already in";
+      } else if (!osdmap.exists(osd)) {
+	ss << "osd" << osd << " does not exist";
       } else {
 	pending_inc.new_offload[osd] = CEPH_OSD_IN;
 	ss << "marked in osd" << osd;
