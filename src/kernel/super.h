@@ -23,6 +23,7 @@ extern int ceph_debug_mdsc;
 extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
 extern int ceph_debug_inode;
+extern int ceph_debug_snap;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
@@ -147,6 +148,9 @@ struct ceph_client {
 
 	struct kobject *client_kobj;
 
+	struct mutex snaprealm_mutex;
+	struct radix_tree_root snaprealms;
+
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;
 	int num_sb;      /* ref count (for each sb_info that points to me) */
@@ -249,6 +253,8 @@ struct ceph_inode_info {
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	atomic_t i_wrbuffer_ref;
 
+	struct ceph_snaprealm *snaprealm;
+	struct list_head snaprealm_item;
 
 	struct work_struct i_wb_work;  /* writeback work */
 
@@ -424,6 +430,49 @@ struct ceph_file_info {
 	char *dir_info;
 	int dir_info_len;
 };
+
+
+
+/*
+ * snapshots
+ */
+
+struct ceph_snaprealm {
+	u64 ino;
+	int nref;
+	u64 created, seq;
+	u64 parent_ino;
+	u64 parent_since;
+
+	u64 *prior_parent_snaps;
+	int num_prior_parent_snaps;
+	u64 *snaps;
+	int num_snaps;
+	
+	struct ceph_snaprealm *parent;
+	struct list_head child_item;
+	struct list_head children;
+
+	/* cached snap context */
+	u64 cached_seq;       /* 0 => invalidated */
+	u64 *cached_snaps;
+	int num_cached_snaps;
+
+	struct list_head inodes_with_caps;
+};
+
+/* snap.c */
+extern struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_client *client,
+						 u64 ino);
+extern struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_client *client,
+						  u64 ino);
+extern void ceph_put_snaprealm(struct ceph_snaprealm *realm);
+extern int ceph_adjust_snaprealm_parent(struct ceph_client *client,
+					struct ceph_snaprealm *realm, u64 p);
+extern u64 ceph_update_snap_trace(struct ceph_client *client,
+				  void *p, void *e, int must_flush);
+extern int ceph_snaprealm_build_context(struct ceph_snaprealm *realm);
+extern void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm);
 
 
 /*

@@ -1753,12 +1753,11 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 
     if (info.seq() > realm->seq) {
       // update
+      realm->seq = info.seq();
       realm->created = info.created();
-      realm->parent = info.parent();
       realm->parent_since = info.parent_since();
       realm->prior_parent_snaps = info.prior_parent_snaps;
       realm->my_snaps = info.my_snaps;
-      realm->seq = info.seq();
       invalidate = true;
     }
     if (invalidate) {

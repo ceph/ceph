@@ -223,7 +223,7 @@ static int parse_reply_info(struct ceph_msg *msg,
 	/* snap blob */
 	ceph_decode_32_safe(&p, end, len, bad);
 	info->snapblob_len = len;
-	info->snapblob = *p;
+	info->snapblob = p;
 
 	return 0;
 bad:
@@ -1178,6 +1178,11 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	if (err)
 		goto done;
 	if (result == 0) {
+		/* snap trace? */
+		if (rinfo->snapblob_len)
+			ceph_update_snap_trace(mdsc->client, rinfo->snapblob,
+				       rinfo->snapblob+rinfo->snapblob_len, 0);
+
 		/* caps? */
 		if (req->r_expects_cap && req->r_last_inode) {
 			cap = le32_to_cpu(rinfo->head->file_caps);
@@ -1192,7 +1197,8 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		}
 
 		/* readdir result? */
-		ceph_readdir_prepopulate(req);
+		if (rinfo->dir_nr)
+			ceph_readdir_prepopulate(req);
 	}
 
 done:
