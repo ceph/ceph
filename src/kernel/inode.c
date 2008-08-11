@@ -651,7 +651,7 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		derr(0, "error splicing %p (%d) "
 		     "inode %p ino %llx.%llx\n",
 		     dn, atomic_read(&dn->d_count), in,
-		     ceph_vinop(realdn->d_inode));
+		     ceph_vinop(in));
 		if (prehash)
 			*prehash = false; /* don't rehash on error */
 		goto out;
@@ -760,7 +760,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		parent = dn;
 		dn = 0;
 
-		dout(10, "fill_trace %d/%d parent %p inode %p '%.*s'"
+		dout(10, "fill_trace %d/%d parent %p inode %p: '%.*s'"
 		     " ic %d dmask %d\n",
 		     (d+1), rinfo->trace_numd, parent, parent->d_inode,
 		     (int)dname.len, dname.name,
@@ -920,6 +920,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (d == rinfo->trace_numi-rinfo->trace_snapdirpos-1) {
 			struct inode *snapdir = ceph_get_snapdir(dn->d_inode);
 			dn = d_find_alias(snapdir);
+			iput(snapdir);
 			dout(10, " snapdir dentry is %p\n", dn);
 		}
 		continue;
@@ -1013,11 +1014,18 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 	struct inode *in;
 	int i;
 
-	dout(10, "readdir_prepopulate %d items under dentry %p\n",
-	     rinfo->dir_nr, parent);
-
-	if (rinfo->dir_dir)
-		ceph_fill_dirfrag(parent->d_inode, rinfo->dir_dir);
+	if (le32_to_cpu(rinfo->head->op) == CEPH_MDS_OP_LSSNAP) {
+		in = ceph_get_snapdir(parent->d_inode);
+		parent = d_find_alias(in);
+		iput(in);
+		dout(10, "readdir_prepopulate %d items under SNAPDIR dn %p\n",
+		     rinfo->dir_nr, parent);
+	} else {
+		dout(10, "readdir_prepopulate %d items under dn %p\n",
+		     rinfo->dir_nr, parent);
+		if (rinfo->dir_dir)
+			ceph_fill_dirfrag(parent->d_inode, rinfo->dir_dir);
+	}
 
 	for (i = 0; i < rinfo->dir_nr; i++) {
 		struct ceph_vino vino;
@@ -2158,8 +2166,13 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 
 	err = do_getattr(dentry, CEPH_STAT_MASK_INODE_ALL);
 	dout(30, "getattr returned %d\n", err);
-	if (!err)
+	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
+		if (ceph_vino(dentry->d_inode).snap != CEPH_NOSNAP)
+			stat->dev = ceph_vino(dentry->d_inode).snap;
+		else
+			stat->dev = 0;
+	}
 	return err;
 }
 
