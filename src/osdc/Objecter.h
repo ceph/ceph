@@ -175,11 +175,7 @@ class Objecter {
   hash_map<pg_t,PG> pg_map;
   
   
-  PG &get_pg(pg_t pgid) {
-    if (!pg_map.count(pgid)) 
-      osdmap->pg_to_acting_osds(pgid, pg_map[pgid].acting);
-    return pg_map[pgid];
-  }
+  PG &get_pg(pg_t pgid);
   void close_pg(pg_t pgid) {
     assert(pg_map.count(pgid));
     assert(pg_map[pgid].active_tids.empty());

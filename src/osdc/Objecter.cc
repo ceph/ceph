@@ -149,6 +149,17 @@ void Objecter::maybe_request_map()
 }
 
 
+Objecter::PG &Objecter::get_pg(pg_t pgid)
+{
+  if (!pg_map.count(pgid)) {
+    osdmap->pg_to_acting_osds(pgid, pg_map[pgid].acting);
+    dout(10) << "get_pg " << pgid << " is new, " << pg_map[pgid].acting << dendl;
+  } else {
+    dout(10) << "get_pg " << pgid << " is old, " << pg_map[pgid].acting << dendl;
+  }
+  return pg_map[pgid];
+}
+
 
 void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 {
@@ -166,6 +177,8 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 
     if (other == pg.acting) 
       continue; // no change.
+
+    dout(10) << "scan_pgs " << pgid << " " << pg.acting << " -> " << other << dendl;
     
     other.swap(pg.acting);
 
