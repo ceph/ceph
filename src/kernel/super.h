@@ -444,6 +444,12 @@ struct ceph_snap_context {
 	u64 snaps[];
 };
 
+static inline struct ceph_snap_context *ceph_get_snap_context(struct ceph_snap_context *sc)
+{
+	atomic_inc(&sc->nref);
+	return sc;
+}
+
 static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
 {
 	if (!sc)

@@ -48,6 +48,7 @@ static int ceph_set_page_dirty(struct page *page)
 		 * set PagePrivate so that we get invalidatepage callback
 		 * on truncate for proper dirty page accounting for mmap
 		 */
+		page->private = (unsigned long)ceph_get_snap_context(ci->i_snaprealm->cached_context);
 		SetPagePrivate(page);
 		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
 		     mapping->host, page,
@@ -69,10 +70,12 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	if (offset == 0)
 		ClearPageChecked(page);
 	if (!PageDirty(page)) {
+		ceph_put_snap_context((void *)page->private);
 		ClearPagePrivate(page);
 		return;
 	}
 	if (!page->mapping) {
+		ceph_put_snap_context((void *)page->private);
 		ClearPagePrivate(page);
 		return;
 	}
@@ -81,6 +84,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
 		     &ci->vfs_inode, page, page->index, offset);
 		atomic_dec(&ci->i_wrbuffer_ref);
+		ceph_put_snap_context((void *)page->private);
 		ClearPagePrivate(page);
 	} else
 		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
@@ -92,6 +96,7 @@ static int ceph_releasepage(struct page *page, gfp_t g)
 	struct inode *inode = page->mapping ? page->mapping->host:0;
 	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
 	WARN_ON(PageDirty(page));
+	ceph_put_snap_context((void *)page->private);
 	ClearPagePrivate(page);
 	return 0;
 }
@@ -212,7 +217,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	was_dirty = PageDirty(page);
 	set_page_writeback(page);
 	err = ceph_osdc_writepages(osdc, ceph_vino(inode), &ci->i_layout,
-				   ci->i_snaprealm->cached_context,
+				   (void *)page->private,
 				   page_off, len, &page, 1);
 	if (err >= 0) {
 		if (was_dirty) {
@@ -263,6 +268,7 @@ static int ceph_writepages(struct address_space *mapping,
 	int should_loop = 1;
 	struct page **pages;
 	pgoff_t max_pages = 0;
+	struct ceph_snap_context *snapc = 0;
 	struct pagevec pvec;
 	int done = 0;
 	int rc = 0;
@@ -342,6 +348,15 @@ get_more_pages:
 				break;
 			}
 
+			/* only if matching snap context */
+			if (!snapc)
+				snapc = (void *)page->private;
+			else if (snapc != (void *)page->private) {
+				dout(20, "snapc %p != %p\n",
+				     (void *)page->private, snapc);
+				break;
+			}
+
 			/* only dirty pages, or wrbuffer accounting breaks! */
 			if (unlikely(!PageDirty(page)) ||
 			    unlikely(page->mapping != mapping)) {
@@ -387,6 +402,7 @@ get_more_pages:
 			/* ok */
 			set_page_writeback(page);
 			cleaned++;
+			ceph_put_snap_context((void *)page->private);
 			ClearPagePrivate(page);
 
 			dout(20, "%p locked+cleaned page %p idx %lu\n",
@@ -432,7 +448,7 @@ get_more_pages:
 			rc = ceph_osdc_writepages(&client->osdc,
 						  ceph_vino(inode),
 						  &ci->i_layout,
-						  ci->i_snaprealm->cached_context,
+						  snapc,
 						  offset, len,
 						  pagep,
 						  locked_pages);
