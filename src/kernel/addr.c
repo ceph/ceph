@@ -45,9 +45,11 @@ static int ceph_set_page_dirty(struct page *page)
 		ci = ceph_inode(mapping->host);
 		atomic_inc(&ci->i_wrbuffer_ref);
 		/*
-		 * set PagePrivate so that we get invalidatepage callback
-		 * on truncate for proper dirty page accounting for mmap
+		 * reference snap context in page->private.  also set
+		 * PagePrivate so that we get invalidatepage callback
+		 * on truncate for dirty page accounting for mmap.
 		 */
+		ceph_put_snap_context((void *)page->private);
 		page->private = (unsigned long)ceph_get_snap_context(ci->i_snaprealm->cached_context);
 		SetPagePrivate(page);
 		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
@@ -182,13 +184,13 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	return 0;
 }
 
-
 /*
  * ceph_writepage:
  *  clear dirty page, and set the writeback flag in the radix tree.
  *  to actually write data to the remote OSDs.
+ * leave pages locked.
  */
-static int ceph_writepage(struct page *page, struct writeback_control *wbc)
+static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 {
 	struct inode *inode;
 	struct ceph_inode_info *ci;
@@ -227,12 +229,19 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 		SetPageUptodate(page);
 		err = 0;  /* vfs expects us to return 0 */
 	} else {
-		wbc->pages_skipped++;
+		if (wbc)
+			wbc->pages_skipped++;
 		ceph_set_page_dirty(page);
 	}
 	end_page_writeback(page);
-	unlock_page(page);
 	page_cache_release(page);
+	return err;
+}
+
+static int ceph_writepage(struct page *page, struct writeback_control *wbc)
+{
+	int err = writepage_nounlock(page, wbc);
+	unlock_page(page);
 	return err;
 }
 
@@ -545,8 +554,15 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	if (!ci->i_snaprealm->cached_context) {
 		r = ceph_snaprealm_build_context(ci->i_snaprealm);
 		if (r < 0)
-			return r;
-	}		
+			goto fail;
+	}
+	if (page->private &&
+	    (void *)page->private != ci->i_snaprealm->cached_context) {
+		/* force early writeback of snapped page */
+		r = writepage_nounlock(page, 0);
+		if (r < 0)
+			goto fail;
+	}
 
 	if (PageUptodate(page))
 		return 0;
@@ -569,7 +585,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	r = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
 			       page_off, PAGE_SIZE, page);
 	if (r < 0)
-		return r;
+		goto fail;
 	if (r < pos_in_page) {
 		void *kaddr = kmap_atomic(page, KM_USER1);
 		dout(20, "write_begin zeroing pre %d~%d\n", r, pos_in_page-r);
@@ -587,6 +603,10 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 		kunmap_atomic(kaddr, KM_USER1);
 	}
 	return 0;
+
+fail:
+	unlock_page(page);
+	return r;
 }
 
 /*
