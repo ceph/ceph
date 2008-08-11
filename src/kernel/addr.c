@@ -212,6 +212,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
 	was_dirty = PageDirty(page);
 	set_page_writeback(page);
 	err = ceph_osdc_writepages(osdc, ceph_vino(inode), &ci->i_layout,
+				   ci->i_snaprealm->cached_context,
 				   page_off, len, &page, 1);
 	if (err >= 0) {
 		if (was_dirty) {
@@ -431,6 +432,7 @@ get_more_pages:
 			rc = ceph_osdc_writepages(&client->osdc,
 						  ceph_vino(inode),
 						  &ci->i_layout,
+						  ci->i_snaprealm->cached_context,
 						  offset, len,
 						  pagep,
 						  locked_pages);
@@ -504,7 +506,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 			    struct page **pagep, void **fsdata)
 {
 	struct inode *inode = file->f_dentry->d_inode;
-	struct ceph_inode_info *ci;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	struct page *page;
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
@@ -522,6 +524,13 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 
 	dout(10, "write_begin file %p inode %p page %p %d~%d\n", file,
 	     inode, page, (int)pos, (int)len);
+
+	/* build snap context */
+	if (!ci->i_snaprealm->cached_context) {
+		r = ceph_snaprealm_build_context(ci->i_snaprealm);
+		if (r < 0)
+			return r;
+	}		
 
 	if (PageUptodate(page))
 		return 0;
@@ -541,7 +550,6 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	/* we need to read it. */
 	/* or, do sub-page granularity dirty accounting? */
 	/* try to read the full page */
-	ci = ceph_inode(inode);
 	r = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
 			       page_off, PAGE_SIZE, page);
 	if (r < 0)

@@ -253,8 +253,8 @@ struct ceph_inode_info {
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	atomic_t i_wrbuffer_ref;
 
-	struct ceph_snaprealm *snaprealm;
-	struct list_head snaprealm_item;
+	struct ceph_snaprealm *i_snaprealm;
+	struct list_head i_snaprealm_item;
 
 	struct work_struct i_wb_work;  /* writeback work */
 
@@ -437,6 +437,21 @@ struct ceph_file_info {
  * snapshots
  */
 
+struct ceph_snap_context {
+	atomic_t nref;
+	u64 seq;
+	int num_snaps;
+	u64 snaps[];
+};
+
+static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
+{
+	if (!sc)
+		return;
+	if (atomic_dec_and_test(&sc->nref))
+		kfree(sc);
+}
+
 struct ceph_snaprealm {
 	u64 ino;
 	int nref;
@@ -453,10 +468,7 @@ struct ceph_snaprealm {
 	struct list_head child_item;
 	struct list_head children;
 
-	/* cached snap context */
-	u64 cached_seq;       /* 0 => invalidated */
-	u64 *cached_snaps;
-	int num_cached_snaps;
+	struct ceph_snap_context *cached_context;
 
 	struct list_head inodes_with_caps;
 };
@@ -469,8 +481,9 @@ extern struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_client *client,
 extern void ceph_put_snaprealm(struct ceph_snaprealm *realm);
 extern int ceph_adjust_snaprealm_parent(struct ceph_client *client,
 					struct ceph_snaprealm *realm, u64 p);
-extern u64 ceph_update_snap_trace(struct ceph_client *client,
-				  void *p, void *e, int must_flush);
+extern struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
+						     void *p, void *e,
+						     int must_flush);
 extern int ceph_snaprealm_build_context(struct ceph_snaprealm *realm);
 extern void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm);
 
@@ -508,7 +521,8 @@ extern int ceph_dentry_lease_valid(struct dentry *dentry);
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session,
 			int fmode, unsigned issued,
-			unsigned cap, unsigned seq);
+			unsigned cap, unsigned seq,
+			void *snapblob, int snapblob_len);
 extern void __ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);

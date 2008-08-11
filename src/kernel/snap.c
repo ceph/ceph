@@ -47,7 +47,7 @@ void ceph_put_snaprealm(struct ceph_snaprealm *realm)
 	if (realm->nref == 0) {
 		kfree(realm->prior_parent_snaps);
 		kfree(realm->snaps);
-		kfree(realm->cached_snaps);
+		ceph_put_snap_context(realm->cached_context);
 		kfree(realm);
 	}
 }
@@ -89,54 +89,58 @@ static int cmpu64_rev(const void *a, const void *b)
 int ceph_snaprealm_build_context(struct ceph_snaprealm *realm)
 {
 	struct ceph_snaprealm *parent = realm->parent;
+	struct ceph_snap_context *sc;
 	int err = 0;
 	int i;
 	int num = realm->num_prior_parent_snaps + realm->num_snaps;
 
 	if (parent) {
-		if (!parent->cached_seq) {
+		if (!parent->cached_context) {
 			err = ceph_snaprealm_build_context(parent);
 			if (err)
 				goto fail;
 		}
-		num += parent->num_cached_snaps;  /* possible overestimate */
+		num += parent->cached_context->num_snaps;
 	}
 
-	if (realm->cached_snaps)
-		kfree(realm->cached_snaps);
+	if (realm->cached_context)
+		ceph_put_snap_context(realm->cached_context);
 	err = -ENOMEM;
-	realm->cached_snaps = kmalloc(num * sizeof(u64), GFP_NOFS);
-	if (!realm->cached_snaps)
+	realm->cached_context = sc = kzalloc(sizeof(*sc) + num*sizeof(u64),
+					     GFP_NOFS);
+	if (!realm->cached_context)
 		goto fail;
+	atomic_set(&sc->nref, 1);
 
 	/* build (reverse sorted) snap vector */
 	num = 0;
-	realm->cached_seq = realm->seq;
+	sc->seq = realm->seq;
 	if (parent) {
-		for (i = 0; i < parent->num_cached_snaps; i++)
-			if (parent->cached_snaps[i] >= realm->parent_since)
-				realm->cached_snaps[num++] =
-					parent->cached_snaps[i];
-		if (parent->cached_seq > realm->cached_seq)
-			realm->cached_seq = parent->cached_seq;
+		for (i = 0; i < parent->cached_context->num_snaps; i++)
+			if (parent->cached_context->snaps[i] >=
+			    realm->parent_since)
+				sc->snaps[num++] =
+					parent->cached_context->snaps[i];
+		if (parent->cached_context->seq > sc->seq)
+			sc->seq = parent->cached_context->seq;
 	}
-	memcpy(realm->cached_snaps + num, realm->snaps,
+	memcpy(sc->snaps + num, realm->snaps,
 	       sizeof(u64)*realm->num_snaps);
 	num += realm->num_snaps;
-	memcpy(realm->cached_snaps + num, realm->prior_parent_snaps,
+	memcpy(sc->snaps + num, realm->prior_parent_snaps,
 	       sizeof(u64)*realm->num_prior_parent_snaps);
 	num += realm->num_prior_parent_snaps;
 
-	sort(realm->cached_snaps, num, sizeof(u64), cmpu64_rev, NULL);
-	realm->num_cached_snaps = num;
+	sort(sc->snaps, num, sizeof(u64), cmpu64_rev, NULL);
+	sc->num_snaps = num;
 	dout(10, "snaprealm_build_context %llx %p : seq %lld %d snaps\n",
-	     realm->ino, realm, realm->cached_seq, realm->num_cached_snaps);
+	     realm->ino, realm, sc->seq, sc->num_snaps);
 	return 0;
 
 fail:
-	if (realm->cached_snaps) {
-		kfree(realm->cached_snaps);
-		realm->cached_snaps = 0;
+	if (realm->cached_context) {
+		ceph_put_snap_context(realm->cached_context);
+		realm->cached_context = 0;
 	}
 	derr(0, "snaprealm_build_context %llx %p fail %d\n", realm->ino,
 	     realm, err);
@@ -149,8 +153,11 @@ void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm)
 	struct ceph_snaprealm *child;
 
 	dout(10, "invalidate_snaprealm %llx %p\n", realm->ino, realm);
-	realm->cached_seq = 0;
-	
+	if (realm->cached_context) {
+		ceph_put_snap_context(realm->cached_context);
+		realm->cached_context = 0;
+	}
+
 	list_for_each(p, &realm->children) {
 		child = list_entry(p, struct ceph_snaprealm, child_item);
 		ceph_invalidate_snaprealm(child);
@@ -160,27 +167,29 @@ void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm)
 
 static int dup_array(u64 **dst, u64 *src, int num)
 {
+	int i;
+
 	if (*dst)
 		kfree(*dst);
 	if (num) {
 		*dst = kmalloc(sizeof(u64) * num, GFP_NOFS);
 		if (!*dst)
 			return -1;
-		memcpy(*dst, src, sizeof(u64) * num);
+		for (i = 0; i < num; i++)
+			(*dst)[i] = le64_to_cpu(src[i]);
 	} else
 		*dst = 0;
 	return 0;
 }
 
-u64 ceph_update_snap_trace(struct ceph_client *client,
-			   void *p, void *e, int must_flush)
+struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
+					      void *p, void *e, int must_flush)
 {
 	struct ceph_mds_snap_realm *ri;
 	int err = -ENOMEM;
-	u64 first = 0;
 	u64 *snaps;
 	u64 *prior_parent_snaps;
-	struct ceph_snaprealm *realm;
+	struct ceph_snaprealm *realm, *first = 0;
 	int invalidate;
 
 more:
@@ -197,8 +206,10 @@ more:
 	realm = ceph_get_snaprealm(client, le64_to_cpu(ri->ino));
 	if (!realm)
 		goto fail;
-	if (!first)
-		first = realm->ino;
+	if (!first) {
+		first = realm;
+		realm->nref++;
+	}
 
 	if (le64_to_cpu(ri->seq) > realm->seq) {
 		dout(10, "update_snap_trace updating %llx %p %lld -> %lld\n",

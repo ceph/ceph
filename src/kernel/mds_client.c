@@ -1178,11 +1178,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	if (err)
 		goto done;
 	if (result == 0) {
-		/* snap trace? */
-		if (rinfo->snapblob_len)
-			ceph_update_snap_trace(mdsc->client, rinfo->snapblob,
-				       rinfo->snapblob+rinfo->snapblob_len, 0);
-
 		/* caps? */
 		if (req->r_expects_cap && req->r_last_inode) {
 			cap = le32_to_cpu(rinfo->head->file_caps);
@@ -1191,7 +1186,9 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			err = ceph_add_cap(req->r_last_inode,
 					   req->r_session,
 					   req->r_fmode,
-					   cap, capseq, mseq);
+					   cap, capseq, mseq,
+					   rinfo->snapblob,
+					   rinfo->snapblob_len);
 			if (err)
 				goto done;
 		}

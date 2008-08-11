@@ -182,6 +182,8 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_hold_caps_until = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
+	ci->i_snaprealm = 0;
+
 	ci->i_hashval = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);

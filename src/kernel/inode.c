@@ -1104,14 +1104,21 @@ int ceph_get_cap_mds(struct inode *inode)
 int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session,
 		 int fmode, unsigned issued,
-		 unsigned seq, unsigned mseq)
+		 unsigned seq, unsigned mseq,
+		 void *snapblob, int snapblob_len)
 {
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_inode_cap *cap, *new_cap = 0;
 	int i;
 	int is_new = 0;
+	struct ceph_snaprealm *realm = 0;
 
+	if (snapblob_len)
+		realm = ceph_update_snap_trace(ceph_inode_to_client(inode),
+					       snapblob, snapblob+snapblob_len,
+					       0);
+	
 	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode,
 	     session->s_mds, issued, seq);
 	spin_lock(&inode->i_lock);
@@ -1154,6 +1161,11 @@ int ceph_add_cap(struct inode *inode,
 			ci->i_cap_exporting_mds = -1;
 		}
 	}
+	if (!ci->i_snaprealm) {
+		ci->i_snaprealm = realm;
+		list_add(&ci->i_snaprealm_item, &realm->inodes_with_caps);
+	} else
+		ceph_put_snaprealm(realm);
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %xh now %xh seq %d mds%d\n",
 	     inode, ceph_vinop(inode), issued, issued|cap->issued, seq, mds);
@@ -1679,7 +1691,7 @@ void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
 		     inode, ci, mds, mseq);
 	}
 
-	ceph_add_cap(inode, session, -1, issued, seq, mseq);
+	ceph_add_cap(inode, session, -1, issued, seq, mseq, 0, 0); /* FIXME */
 }
 
 
