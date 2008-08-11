@@ -103,12 +103,9 @@ int ceph_snaprealm_build_context(struct ceph_snaprealm *realm)
 		num += parent->cached_context->num_snaps;
 	}
 
-	if (realm->cached_context)
-		ceph_put_snap_context(realm->cached_context);
 	err = -ENOMEM;
-	realm->cached_context = sc = kzalloc(sizeof(*sc) + num*sizeof(u64),
-					     GFP_NOFS);
-	if (!realm->cached_context)
+	sc = kzalloc(sizeof(*sc) + num*sizeof(u64), GFP_NOFS);
+	if (!sc)
 		goto fail;
 	atomic_set(&sc->nref, 1);
 
@@ -135,6 +132,10 @@ int ceph_snaprealm_build_context(struct ceph_snaprealm *realm)
 	sc->num_snaps = num;
 	dout(10, "snaprealm_build_context %llx %p : seq %lld %d snaps\n",
 	     realm->ino, realm, sc->seq, sc->num_snaps);
+
+	if (realm->cached_context)
+		ceph_put_snap_context(realm->cached_context);
+	realm->cached_context = sc;
 	return 0;
 
 fail:
@@ -147,20 +148,17 @@ fail:
 	return err;
 }
 
-void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm)
+void ceph_rebuild_snaprealms(struct ceph_snaprealm *realm)
 {
 	struct list_head *p;
 	struct ceph_snaprealm *child;
 
-	dout(10, "invalidate_snaprealm %llx %p\n", realm->ino, realm);
-	if (realm->cached_context) {
-		ceph_put_snap_context(realm->cached_context);
-		realm->cached_context = 0;
-	}
+	dout(10, "rebuild_snaprealms %llx %p\n", realm->ino, realm);
+	ceph_snaprealm_build_context(realm);
 
 	list_for_each(p, &realm->children) {
 		child = list_entry(p, struct ceph_snaprealm, child_item);
-		ceph_invalidate_snaprealm(child);
+		ceph_rebuild_snaprealms(child);
 	}
 }
 
@@ -190,7 +188,7 @@ struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
 	u64 *snaps;
 	u64 *prior_parent_snaps;
 	struct ceph_snaprealm *realm, *first = 0;
-	int invalidate;
+	int invalidate = 0;
 
 more:
 	ceph_decode_need(&p, e, sizeof(*ri), bad);
@@ -221,8 +219,8 @@ more:
 		dout(10, "update_snap_trace %llx %p seq %lld unchanged\n",
 		     realm->ino, realm, realm->seq);
 
-	invalidate = ceph_adjust_snaprealm_parent(client, realm,
-						  le64_to_cpu(ri->parent));
+	invalidate += ceph_adjust_snaprealm_parent(client, realm,
+						   le64_to_cpu(ri->parent));
 	
 	if (le64_to_cpu(ri->seq) > realm->seq) {
 		realm->seq = le64_to_cpu(ri->seq);
@@ -241,12 +239,13 @@ more:
 		invalidate = 1;
 	}
 
-	if (invalidate)
-		ceph_invalidate_snaprealm(realm);
-
 	ceph_put_snaprealm(realm);
 	if (p < e)
 		goto more;
+
+	if (invalidate)
+		ceph_rebuild_snaprealms(realm);
+
 	return first;
 
 bad:
