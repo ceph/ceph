@@ -237,14 +237,15 @@ more:
 			      realm->num_prior_parent_snaps) < 0)
 			goto fail;
 		invalidate = 1;
-	}
+	} else if (!realm->cached_context)
+		invalidate = 1;
+
+	if (p >= e && invalidate)
+		ceph_rebuild_snaprealms(realm);
 
 	ceph_put_snaprealm(realm);
 	if (p < e)
 		goto more;
-
-	if (invalidate)
-		ceph_rebuild_snaprealms(realm);
 
 	return first;
 

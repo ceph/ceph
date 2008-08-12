@@ -65,6 +65,7 @@ class MClientCaps : public Message {
 	      int wanted,
 	      int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
+    memset(&h, 0, sizeof(h));
     h.op = op;
     h.ino = inode.ino;
     h.seq = seq;

@@ -1517,6 +1517,8 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
 			grant->time_warp_seq = cpu_to_le64(ci->i_time_warp_seq);
+			grant->snap_follows =
+			     cpu_to_le64(ci->i_snaprealm->cached_context->seq);
 			reply = 1;
 			wake = 1;
 		}

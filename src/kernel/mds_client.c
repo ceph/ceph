@@ -1487,13 +1487,13 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 			 int wanted, __u32 seq, __u64 size, __u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
-			 u64 time_warp_seq, int mds)
+			 u64 time_warp_seq, u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
-	dout(10, "send_cap_ack ino %llx caps %d wanted %d seq %u size %llu\n",
-	     ino, caps, wanted, (unsigned)seq, size);
+	dout(10, "send_cap_ack %llx ca %d wa %d seq %u follows %lld sz %llu\n",
+	     ino, caps, wanted, (unsigned)seq, follows, size);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, 0);
 	if (IS_ERR(msg))
@@ -1510,6 +1510,7 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
 	fc->ino = cpu_to_le64(ino);
 	fc->size = cpu_to_le64(size);
 	fc->max_size = cpu_to_le64(max_size);
+	fc->snap_follows = cpu_to_le64(follows);
 	if (mtime)
 		ceph_encode_timespec(&fc->mtime, mtime);
 	if (atime)
@@ -1564,7 +1565,7 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 
 	if (!inode) {
 		dout(10, "i don't have ino %llx, sending release\n", vino.ino);
-		send_cap_ack(mdsc, vino.ino, 0, 0, seq, size, 0, 0, 0, 0, mds);
+		send_cap_ack(mdsc, vino.ino, 0, 0, seq, size, 0, 0, 0, 0, 0, mds);
 		goto no_inode;
 	}
 
@@ -1629,8 +1630,8 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~wanted;
 	int keep;
-	__u64 seq, time_warp_seq;
-	__u64 size, max_size;
+	u64 seq, time_warp_seq, follows;
+	u64 size, max_size;
 	struct timespec mtime, atime;
 	int removed_last = 0;
 	int wake = 0;
@@ -1653,6 +1654,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	mtime = inode->i_mtime;
 	atime = inode->i_atime;
 	time_warp_seq = ci->i_time_warp_seq;
+	follows = ci->i_snaprealm->cached_context->seq;
 	if (wanted == 0) {
 		__ceph_remove_cap(cap);
 		removed_last = list_empty(&ci->i_caps);
@@ -1673,7 +1675,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	send_cap_ack(mdsc, ceph_vino(inode).ino,
 		     keep, wanted, seq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
-		     session->s_mds);
+		     follows, session->s_mds);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
