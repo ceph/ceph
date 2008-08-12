@@ -70,7 +70,7 @@ const struct inode_operations ceph_file_iops = {
 	.setxattr = ceph_setxattr,
 	.getxattr = ceph_getxattr,
 	.listxattr = ceph_listxattr,
-	.removexattr = ceph_removexattr
+	.removexattr = ceph_removexattr,
 };
 
 const struct inode_operations ceph_special_iops = {
@@ -2064,6 +2064,9 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	const unsigned int ia_valid = attr->ia_valid;
 	int err;
 
+	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+		return -EROFS;
+
 	__ceph_do_pending_vmtruncate(inode);
 
 	err = inode_change_ok(inode, attr);
@@ -2314,6 +2317,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		  const void *value, size_t size, int flags)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
+	struct inode *inode = dentry->d_inode;
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
@@ -2324,6 +2328,9 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	int i, nr_pages;
 	struct page **pages = 0;
 	void *kaddr;
+
+	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+		return -EROFS;
 
 	/* only support user.* xattrs, for now */
 	if (strncmp(name, "user.", 5) != 0)
@@ -2367,7 +2374,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_request->hdr.data_len = cpu_to_le32(size);
 	req->r_request->hdr.data_off = cpu_to_le32(0);
 
-	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_IXATTR);
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IXATTR);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -2384,11 +2391,15 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct inode *inode = dentry->d_inode;
 	struct ceph_mds_request *req;
 	char *path;
 	int pathlen;
 	u64 pathbase;
 	int err;
+
+	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+		return -EROFS;
 
 	/* only support user.* xattrs, for now */
 	if (strncmp(name, "user.", 5) != 0)
@@ -2404,7 +2415,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	ceph_mdsc_lease_release(mdsc, dentry->d_inode, 0, CEPH_LOCK_IXATTR);
+	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IXATTR);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

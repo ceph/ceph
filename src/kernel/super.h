@@ -579,9 +579,10 @@ extern int ceph_release(struct inode *inode, struct file *filp);
 
 
 /* dir.c */
-extern const struct inode_operations ceph_dir_iops;
 extern const struct file_operations ceph_dir_fops;
-extern struct dentry_operations ceph_dentry_ops;
+extern const struct inode_operations ceph_dir_iops;
+extern struct dentry_operations ceph_dentry_ops, ceph_snap_dentry_ops,
+	ceph_snapdir_dentry_ops;
 
 extern char *ceph_build_dentry_path(struct dentry *dn, int *len, __u64 *base,
 				    int min);
@@ -592,7 +593,12 @@ extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
-	dentry->d_op = &ceph_dentry_ops;
+	if (ceph_vino(dentry->d_parent->d_inode).snap == CEPH_NOSNAP)
+		dentry->d_op = &ceph_dentry_ops;
+	else if (ceph_vino(dentry->d_parent->d_inode).snap == CEPH_SNAPDIR)
+		dentry->d_op = &ceph_snapdir_dentry_ops;
+	else
+		dentry->d_op = &ceph_snap_dentry_ops;
 	dentry->d_time = 0;
 }
 

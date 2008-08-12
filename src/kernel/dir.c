@@ -271,11 +271,11 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 				  struct dentry *dentry, int err)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
+	struct inode *parent = dentry->d_parent->d_inode;
 
 	/* snap dir? */
 	if (err == -ENOENT &&
 	    strcmp(dentry->d_name.name, client->mount_args.snapdir_name) == 0) {
-		struct inode *parent = dentry->d_parent->d_inode;
 		struct inode *inode = ceph_get_snapdir(parent);
 		dout(10, "ENOENT on snapdir %p '%.*s', linking to snapdir %p\n",
 		     dentry, dentry->d_name.len, dentry->d_name.name, inode);
@@ -392,6 +392,9 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	u64 pathbase;
 	int err;
 
+	if (ceph_vino(dir).snap != CEPH_NOSNAP)
+		return -EROFS;
+
 	dout(5, "dir_mknod in dir %p dentry %p mode 0%o rdev %d\n",
 	     dir, dentry, mode, rdev);
 	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
@@ -437,6 +440,10 @@ static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 {
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
+
+	if (ceph_vino(dir).snap != CEPH_NOSNAP)
+		return -EROFS;
+
 	if (nd) {
 		BUG_ON((nd->flags & LOOKUP_OPEN) == 0);
 		dentry = ceph_lookup_open(dir, dentry, nd, mode, 0);
@@ -460,6 +467,9 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 	int pathlen;
 	u64 pathbase;
 	int err;
+
+	if (ceph_vino(dir).snap != CEPH_NOSNAP)
+		return -EROFS;
 
 	dout(5, "dir_symlink in dir %p dentry %p to '%s'\n", dir, dentry, dest);
 	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 1);
@@ -508,7 +518,9 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		snap[snaplen] = 0;
 		pathdentry = d_find_alias(dir);
 		dout(5, "dir_mksnap dir %p '%s' dn %p\n", dir, snap, dentry);
-	} else
+	} else if (ceph_vino(dir).snap != CEPH_NOSNAP)
+		return -EROFS;
+	else
 		dout(5, "dir_mkdir dir %p dn %p mode 0%o\n", dir, dentry, mode);
 	path = ceph_build_dentry_path(pathdentry, &pathlen, &pathbase, 1);
 	if (pathdentry != dentry)
@@ -551,6 +563,9 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	int oldpathlen, pathlen;
 	u64 oldpathbase, pathbase;
 	int err;
+
+	if (ceph_vino(dir).snap != CEPH_NOSNAP)
+		return -EROFS;
 
 	dout(5, "dir_link in dir %p old_dentry %p dentry %p\n", dir,
 	     old_dentry, dentry);
@@ -620,7 +635,9 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		snap[snaplen] = 0;
 		pathdentry = d_find_alias(dir);
 		dout(5, "dir_rmsnap dir %p '%s' dn %p\n", dir, snap, dentry);
-	} else
+	} else if (ceph_vino(dir).snap != CEPH_NOSNAP)
+		return -EROFS;
+	else
 		dout(5, "dir_unlink/rmdir dir %p dn %p inode %p\n",
 		     dir, dentry, inode);
 	path = ceph_build_dentry_path(pathdentry, &pathlen, &pathbase, 1);
@@ -664,6 +681,12 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	int oldpathlen, newpathlen;
 	u64 oldpathbase, newpathbase;
 	int err;
+
+	if (ceph_vino(old_dir).snap != ceph_vino(new_dir).snap)
+		return -EXDEV;
+	if (ceph_vino(old_dir).snap != CEPH_NOSNAP ||
+	    ceph_vino(new_dir).snap != CEPH_NOSNAP)
+		return -EROFS;
 
 	dout(5, "dir_rename in dir %p dentry %p to dir %p dentry %p\n",
 	     old_dir, old_dentry, new_dir, new_dentry);
@@ -748,6 +771,12 @@ static void ceph_dentry_release(struct dentry *dentry)
 	BUG_ON(dentry->d_fsdata);
 }
 
+static int ceph_snapdir_dentry_revalidate(struct dentry *dentry,
+					  struct nameidata *nd)
+{
+	return 1; /* FIXME */
+}
+
 /*
  * reading from a dir
  */
@@ -828,3 +857,9 @@ struct dentry_operations ceph_dentry_ops = {
 	.d_release = ceph_dentry_release,
 };
 
+struct dentry_operations ceph_snapdir_dentry_ops = {
+	.d_revalidate = ceph_snapdir_dentry_revalidate,
+};
+
+struct dentry_operations ceph_snap_dentry_ops = {
+};

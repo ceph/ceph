@@ -84,6 +84,9 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
 
+	if (ceph_vino(inode).snap != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
+		return -EROFS;
+
 	dout(5, "open inode %p ino %llx.%llx file %p flags %d (%d)\n", inode,
 	     ceph_vinop(inode), file, flags, file->f_flags);
 	fmode = ceph_flags_to_mode(flags);
@@ -229,6 +232,9 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	int ret = 0;
 	off_t pos = *offset;
 
+	if (ceph_vino(file->f_dentry->d_inode).snap != CEPH_NOSNAP)
+		return -EROFS;
+
 	dout(10, "sync_write on file %p %lld~%u\n", file, *offset,
 	     (unsigned)count);
 
@@ -326,6 +332,9 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	int got = 0;
 	int ret;
 
+	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+		return -EROFS;
+
 	__ceph_do_pending_vmtruncate(inode);
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
@@ -392,3 +401,4 @@ const struct file_operations ceph_file_fops = {
 	.splice_write = generic_file_splice_write,
 	.unlocked_ioctl = ceph_ioctl,
 };
+
