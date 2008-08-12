@@ -339,10 +339,18 @@ static inline int ceph_set_ino_cb(struct inode *inode, void *data)
 
 static inline struct ceph_vino ceph_vino(struct inode *inode)
 {
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	return ci->i_vino;
+	return ceph_inode(inode)->i_vino;
 }
 #define ceph_vinop(i) ceph_inode(i)->i_vino.ino, ceph_inode(i)->i_vino.snap
+
+static inline u64 ceph_ino(struct inode *inode)
+{
+	return ceph_inode(inode)->i_vino.ino;
+}
+static inline u64 ceph_snap(struct inode *inode)
+{
+	return ceph_inode(inode)->i_vino.snap;
+}
 
 static inline int ceph_ino_compare(struct inode *inode, void *data)
 {
@@ -593,9 +601,9 @@ extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);
 
 static inline void ceph_init_dentry(struct dentry *dentry) {
-	if (ceph_vino(dentry->d_parent->d_inode).snap == CEPH_NOSNAP)
+	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
 		dentry->d_op = &ceph_dentry_ops;
-	else if (ceph_vino(dentry->d_parent->d_inode).snap == CEPH_SNAPDIR)
+	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)
 		dentry->d_op = &ceph_snapdir_dentry_ops;
 	else
 		dentry->d_op = &ceph_snap_dentry_ops;

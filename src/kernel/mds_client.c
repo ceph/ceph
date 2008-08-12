@@ -1183,7 +1183,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			cap = le32_to_cpu(rinfo->head->file_caps);
 			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
 			mseq = le32_to_cpu(rinfo->head->file_caps_mseq);
-			if (ceph_vino(req->r_last_inode).snap == CEPH_NOSNAP) {
+			if (ceph_snap(req->r_last_inode) == CEPH_NOSNAP) {
 				err = ceph_add_cap(req->r_last_inode,
 						   req->r_session,
 						   req->r_fmode,
@@ -1362,7 +1362,7 @@ retry:
 				 needmore);
 		dout(10, " adding cap %p on ino %llx.%llx inode %p\n", cap,
 		     ceph_vinop(&ci->vfs_inode), &ci->vfs_inode);
-		ceph_encode_64(&p, ceph_vino(&ci->vfs_inode).ino);
+		ceph_encode_64(&p, ceph_ino(&ci->vfs_inode));
 		rec = p;
 		p += sizeof(*rec);
 		BUG_ON(p > end);

@@ -84,7 +84,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
 
-	if (ceph_vino(inode).snap != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
+	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
 		return -EROFS;
 
 	dout(5, "open inode %p ino %llx.%llx file %p flags %d (%d)\n", inode,
@@ -232,7 +232,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	int ret = 0;
 	off_t pos = *offset;
 
-	if (ceph_vino(file->f_dentry->d_inode).snap != CEPH_NOSNAP)
+	if (ceph_snap(file->f_dentry->d_inode) != CEPH_NOSNAP)
 		return -EROFS;
 
 	dout(10, "sync_write on file %p %lld~%u\n", file, *offset,
@@ -332,7 +332,7 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	int got = 0;
 	int ret;
 
-	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
 	__ceph_do_pending_vmtruncate(inode);

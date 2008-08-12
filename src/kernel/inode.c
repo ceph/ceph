@@ -48,7 +48,7 @@ struct inode *ceph_get_inode(struct super_block *sb, struct ceph_vino vino)
 struct inode *ceph_get_snapdir(struct inode *parent)
 {
 	struct ceph_vino vino = {
-		.ino = ceph_vino(parent).ino,
+		.ino = ceph_ino(parent),
 		.snap = CEPH_SNAPDIR,
 	};
 	struct inode *inode = ceph_get_inode(parent->i_sb, vino);
@@ -866,8 +866,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		vino.ino = le64_to_cpu(ininfo->ino);
 		vino.snap = le64_to_cpu(ininfo->snapid);
 		if (dn->d_inode) {
-			if (ceph_vino(dn->d_inode).ino != vino.ino ||
-			    ceph_vino(dn->d_inode).snap != vino.snap) {
+			if (ceph_ino(dn->d_inode) != vino.ino ||
+			    ceph_snap(dn->d_inode) != vino.snap) {
 				dout(10, "dn %p wrong inode %p ino %llx.%llx\n",
 				     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 				d_delete(dn);
@@ -1055,8 +1055,8 @@ retry_lookup:
 			}
 			ceph_init_dentry(dn);
 		} else if (dn->d_inode &&
-			   (ceph_vino(dn->d_inode).ino != vino.ino ||
-			    ceph_vino(dn->d_inode).snap != vino.snap)) {
+			   (ceph_ino(dn->d_inode) != vino.ino ||
+			    ceph_snap(dn->d_inode) != vino.snap)) {
 			dout(10, " dn %p points to wrong inode %p\n",
 			     dn, dn->d_inode);
 			d_delete(dn);
@@ -1874,7 +1874,7 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 		dout(5, "prepare_setattr dentry %p (inode %llx.%llx)\n", dentry,
 		     ceph_vinop(dentry->d_inode));
 		req = ceph_mdsc_create_request(mdsc, op,
-					       ceph_vino(dentry->d_inode).ino,
+					       ceph_ino(dentry->d_inode),
 					       "", 0, 0,
 					       dentry, USE_CAP_MDS);
 	} else {
@@ -2064,7 +2064,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	const unsigned int ia_valid = attr->ia_valid;
 	int err;
 
-	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
 	__ceph_do_pending_vmtruncate(inode);
@@ -2137,7 +2137,7 @@ static int do_getattr(struct dentry *dentry, int mask)
 	int want_inode = 0;
 	struct dentry *ret;
 
-	if (ceph_vino(dentry->d_inode).snap == CEPH_SNAPDIR) {
+	if (ceph_snap(dentry->d_inode) == CEPH_SNAPDIR) {
 		dout(30, "getattr dentry %p inode %p SNAPDIR\n", dentry,
 		     dentry->d_inode);
 		return 0;
@@ -2182,9 +2182,9 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	dout(30, "getattr returned %d\n", err);
 	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
-		stat->ino = ceph_vino(dentry->d_inode).ino;
-		if (ceph_vino(dentry->d_inode).snap != CEPH_NOSNAP)
-			stat->dev = ceph_vino(dentry->d_inode).snap;
+		stat->ino = ceph_ino(dentry->d_inode);
+		if (ceph_snap(dentry->d_inode) != CEPH_NOSNAP)
+			stat->dev = ceph_snap(dentry->d_inode);
 		else
 			stat->dev = 0;
 	}
@@ -2329,7 +2329,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct page **pages = 0;
 	void *kaddr;
 
-	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
 	/* only support user.* xattrs, for now */
@@ -2398,7 +2398,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	u64 pathbase;
 	int err;
 
-	if (ceph_vino(inode).snap != CEPH_NOSNAP)
+	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
 	/* only support user.* xattrs, for now */
