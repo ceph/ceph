@@ -189,8 +189,6 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_snaprealm = 0;
 
-	ci->i_hashval = 0;
-
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
 
 	ci->i_vmtruncate_to = -1;

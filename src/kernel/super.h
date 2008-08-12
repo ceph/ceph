@@ -210,7 +210,6 @@ struct ceph_dir_info {
 
 struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */
-	unsigned long i_hashval;
 
 	u64 i_version;
 	u64 i_time_warp_seq;
@@ -314,26 +313,21 @@ static inline void ceph_queue_writeback(struct ceph_client *cl,
 
 /*
  * ino_t is <64 bits on many architectures, blech.
+ * don't include snap in hash... just for now!
  */
 static inline ino_t ceph_vino_to_ino(struct ceph_vino vino)
 {
-	ino_t ino = (ino_t)vino.ino ^ (vino.snap << 20);
+	ino_t ino = (ino_t)vino.ino;  /* ^ (vino.snap << 20); */
 #if BITS_PER_LONG == 32
 	ino ^= vino.ino >> (sizeof(u64)-sizeof(ino_t)) * 8;
 #endif
 	return ino;
 }
 
-static inline void ceph_set_ino(struct inode *inode, struct ceph_vino vino)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	ci->i_vino = vino;
-	inode->i_ino = ceph_vino_to_ino(vino);
-}
-
 static inline int ceph_set_ino_cb(struct inode *inode, void *data)
 {
-	ceph_set_ino(inode, *(struct ceph_vino *)data);
+	ceph_inode(inode)->i_vino = *(struct ceph_vino *)data;
+	inode->i_ino = ceph_vino_to_ino(*(struct ceph_vino *)data);
 	return 0;
 }
 

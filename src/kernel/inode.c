@@ -31,14 +31,12 @@ struct inode *ceph_get_inode(struct super_block *sb, struct ceph_vino vino)
 	if (inode == NULL)
 		return ERR_PTR(-ENOMEM);
 	if (inode->i_state & I_NEW) {
-		dout(40, "get_inode created new inode %p %llx.%llx\n", inode,
-		     ceph_vinop(inode));
+		dout(40, "get_inode created new inode %p %llx.%llx ino %llx\n",
+		     inode, ceph_vinop(inode), (u64)inode->i_ino);
 		unlock_new_inode(inode);
 	}
 
 	ci = ceph_inode(inode);
-	ceph_set_ino(inode, vino);
-	ci->i_hashval = inode->i_ino;
 
 	dout(30, "get_inode on %lu=%llx.%llx got %p\n", inode->i_ino, vino.ino,
 	     vino.snap, inode);
@@ -392,11 +390,6 @@ no_change:
 	/* set dirinfo? */
 	if (dirinfo)
 		ceph_fill_dirfrag(inode, dirinfo);
-
-	if (ci->i_hashval != inode->i_ino) {
-		insert_inode_hash(inode);
-		ci->i_hashval = inode->i_ino;
-	}
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFIFO:
