@@ -654,8 +654,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
     // back to the live tree
     snapid = CEPH_NOSNAP;
-    bool valid = in->encode_inodestat(bl, snapid);
-    assert(valid);
+    in->encode_inodestat(bl, snapid);
     lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
     numi++;
     dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
