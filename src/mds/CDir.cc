@@ -536,6 +536,8 @@ void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
     if (p == snaps.end() ||
 	*p > dn->last) {
       dout(10) << " purging " << *dn << dendl;
+      if (dn->is_primary() && dn->inode->is_dirty())
+	dn->inode->mark_clean();
       remove_dentry(dn);
     }
   }
@@ -1404,6 +1406,8 @@ void CDir::_commit(version_t want)
       set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
       if (p == snaps->end() || *p > dn->last) {
 	dout(10) << " purging " << *dn << dendl;
+	if (dn->is_primary() && dn->inode->is_dirty())
+	  dn->inode->mark_clean();
 	remove_dentry(dn);
 	continue;
       }
