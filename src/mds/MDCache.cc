@@ -6087,7 +6087,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
 
   // allocate an id..
   if (!mdr->more()->stid) {
-    mds->snapclient->prepare_create_realm(in->ino(), &mdr->more()->stid, 
+    mds->snapclient->prepare_create_realm(in->ino(), &mdr->more()->stid, &mdr->more()->snapidbl,
 					  new C_MDS_RetryRequest(this, mdr));
     return;
   }
@@ -6101,8 +6101,12 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   pi->version = in->pre_dirty();
   pi->rstat.rsnaprealms++;
 
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);
+
   SnapRealm t(this, in);
-  t.created = mdr->more()->stid;
+  t.created = seq;
   bufferlist snapbl;
   ::encode(t, snapbl);
   
@@ -6215,8 +6219,12 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   mds->snapclient->commit(mdr->more()->stid, mut->ls);
 
   // create
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);
+
   in->open_snaprealm();
-  in->snaprealm->seq = in->snaprealm->created = mdr->more()->stid;
+  in->snaprealm->seq = in->snaprealm->created = seq;
 
   do_realm_split_notify(in);
 

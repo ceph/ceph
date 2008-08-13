@@ -5179,12 +5179,15 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   // prepare
   if (!mdr->more()->stid) {
     mds->snapclient->prepare_destroy(diri->ino(), snapid,
-				     &mdr->more()->stid,
+				     &mdr->more()->stid, &mdr->more()->snapidbl,
 				     new C_MDS_RetryRequest(mds->mdcache, mdr));
     return;
   }
   version_t stid = mdr->more()->stid;
-  dout(10) << " stid is " << stid << dendl;
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);  
+  dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
 
   // journal
   inode_t *pi = diri->project_inode();
@@ -5204,8 +5207,8 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   snapid_t old_ld = diri->snaprealm->last_destroyed;
   SnapInfo old_info = diri->snaprealm->snaps[snapid];
   diri->snaprealm->snaps.erase(snapid);
-  diri->snaprealm->seq = stid;
-  diri->snaprealm->last_destroyed = stid;
+  diri->snaprealm->seq = seq;
+  diri->snaprealm->last_destroyed = seq;
   diri->encode_snap_blob(snapbl);
   diri->snaprealm->snaps[snapid] = old_info;
   diri->snaprealm->seq = old_seq;
@@ -5219,6 +5222,9 @@ void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
 {
   dout(10) << "_rmsnap_finish " << *mdr << " " << snapid << dendl;
   snapid_t stid = mdr->more()->stid;
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);  
 
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
@@ -5227,8 +5233,8 @@ void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
 
   // remove snap
   diri->snaprealm->snaps.erase(snapid);
-  diri->snaprealm->last_destroyed = stid;
-  diri->snaprealm->seq = stid;
+  diri->snaprealm->last_destroyed = seq;
+  diri->snaprealm->seq = seq;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);

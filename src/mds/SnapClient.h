@@ -40,21 +40,21 @@ public:
     _prepare(bl, pstid, pbl, onfinish);
   }
 
-  void prepare_create_realm(inodeno_t ino, version_t *pstid, Context *onfinish) {
+  void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, Context *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
     ::encode(op, bl);
     ::encode(ino, bl);
-    _prepare(bl, pstid, 0, onfinish);
+    _prepare(bl, pstid, pbl, onfinish);
   }
 
-  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, Context *onfinish) {
+  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, Context *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_DESTROY;
     ::encode(op, bl);
     ::encode(ino, bl);
     ::encode(snapid, bl);
-    _prepare(bl, pstid, 0, onfinish);
+    _prepare(bl, pstid, pbl, onfinish);
   }
 };
 
