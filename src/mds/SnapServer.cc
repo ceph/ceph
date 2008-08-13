@@ -34,7 +34,7 @@ void SnapServer::init_inode()
 
 void SnapServer::reset_state()
 {
-  last_snap = 0;
+  last_snap = 1;  /* snapid 1 reserved for initial root snaprealm */
   snaps.clear();
   pending_purge.clear();
 }

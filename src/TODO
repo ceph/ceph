@@ -34,6 +34,10 @@ snaps on osd
 - garbage collection
 - efficient recovery of clones
 
+snaps on kclient
+- cap import
+- replace mdsc->lock with a mutex
+  - snaprealm mutex, too!  with another weird inversion/acquisition lameness in check_caps, too.
 
 userspace client
 - handle session STALE
