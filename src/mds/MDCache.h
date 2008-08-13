@@ -666,7 +666,6 @@ public:
   void process_reconnected_caps();
   void prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
 			   map<int,MClientSnap*>& splits);
-  void do_realm_split_notify(CInode *in);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop);
   void send_snaps(map<int,MClientSnap*>& splits);
   void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);

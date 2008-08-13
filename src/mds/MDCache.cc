@@ -6119,58 +6119,24 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
 }
 
 
-void MDCache::do_realm_split_notify(CInode *in)
-{
-  dout(10) << "do_realm_split_notify " << *in->snaprealm << " " << *in << dendl;
-  
-  // notify clients of update|split
-  vector<inodeno_t> split_inos;
-  for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
-    split_inos.push_back((*p)->ino());
-
-  vector<inodeno_t> split_realms;
-  for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
-       p != in->snaprealm->open_children.end();
-       p++)
-    split_realms.push_back((*p)->inode->ino());
-  
-  bufferlist snapbl;
-  in->snaprealm->build_snap_trace(snapbl);
-
-  map<int, MClientSnap*> updates;
-  
-  // send splits for all clients with caps in this _or nested_ realms.
-  list<SnapRealm*> q;
-  q.push_back(in->snaprealm);
-  while (!q.empty()) {
-    SnapRealm *realm = q.front();
-    q.pop_front();
-
-    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
-	 p != realm->client_caps.end();
-	 p++) {
-      assert(!p->second.empty());
-      MClientSnap *update = updates[p->first] = new MClientSnap(CEPH_SNAP_OP_SPLIT);
-      update->head.split = in->ino();
-      update->split_inos = split_inos;
-      update->split_realms = split_realms;
-      update->bl = snapbl;
-      updates[p->first] = update;
-    }
-
-    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
-	 p != realm->open_children.end();
-	 p++)
-      q.push_back(*p);   
-  }
-  
-  send_snaps(updates);
-}
-
 void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
 {
   dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
 
+  vector<inodeno_t> split_inos;
+  vector<inodeno_t> split_realms;
+
+  if (snapop == CEPH_SNAP_OP_SPLIT) {
+    // notify clients of update|split
+    for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
+      split_inos.push_back((*p)->ino());
+    
+    for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
+	 p != in->snaprealm->open_children.end();
+	 p++)
+      split_realms.push_back((*p)->inode->ino());
+  }
+
   bufferlist snapbl;
   in->snaprealm->build_snap_trace(snapbl);
 
@@ -6181,8 +6147,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
     SnapRealm *realm = q.front();
     q.pop_front();
 
-    dout(10) << " realm " << *realm
-	     << " on " << *realm->inode << dendl;
+    dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
     realm->invalidate_cached_snaps();
 
     for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
@@ -6190,8 +6155,12 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
 	 p++) {
       assert(!p->second.empty());
       if (updates.count(p->first) == 0) {
-	MClientSnap *update = updates[p->first] = new MClientSnap(snapop);
+	MClientSnap *update = new MClientSnap(snapop);
+	update->head.split = in->ino();
+	update->split_inos = split_inos;
+	update->split_realms = split_realms;
 	update->bl = snapbl;
+	updates[p->first] = update;
       }
     }
 
@@ -6227,7 +6196,7 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   in->open_snaprealm();
   in->snaprealm->seq = in->snaprealm->created = seq;
 
-  do_realm_split_notify(in);
+  do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 
   /*
   static int count = 5;

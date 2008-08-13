@@ -3018,7 +3018,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     }
     straydn->inode->snaprealm->add_past_parent(oldparent);
     if (isnew)
-      mdcache->do_realm_split_notify(straydn->inode);
+      mdcache->do_realm_invalidate_and_update_notify(straydn->inode, CEPH_SNAP_OP_SPLIT);
   }
 
   dn->mark_dirty(dnpv, mdr->ls);  
@@ -5025,13 +5025,6 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = g_clock.now();
 
-
-  // create snaprealm?
-  if (!diri->snaprealm) {
-    mds->mdcache->snaprealm_create(mdr, diri);
-    return;
-  }
-
   // allocate a snapid
   if (!mdr->more()->stid) {
     // prepare an stid
@@ -5067,6 +5060,12 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   
   // project the snaprealm.. hack!
   bufferlist snapbl;
+  bool newrealm = false;
+  if (!diri->snaprealm) {
+    newrealm = true;
+    diri->open_snaprealm(true);
+    diri->snaprealm->created = snapid;
+  }
   snapid_t old_seq = diri->snaprealm->seq;
   snapid_t old_lc = diri->snaprealm->last_created;
   diri->snaprealm->snaps[snapid] = info;
@@ -5076,6 +5075,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   diri->snaprealm->snaps.erase(snapid);
   diri->snaprealm->seq = old_seq;
   diri->snaprealm->last_created = old_lc;
+  if (newrealm)
+    diri->close_snaprealm(true);
+  
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
@@ -5092,12 +5094,18 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 
   // create snap
   snapid_t snapid = info.snapid;
+  int op = CEPH_SNAP_OP_CREATE;
+  if (!diri->snaprealm) {
+    diri->open_snaprealm();
+    diri->snaprealm->created = snapid;
+    op = CEPH_SNAP_OP_SPLIT;
+  }
   diri->snaprealm->snaps[snapid] = info;
   diri->snaprealm->seq = snapid;
   diri->snaprealm->last_created = snapid;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_CREATE);
+  mdcache->do_realm_invalidate_and_update_notify(diri, op);
 
   // yay
   mdr->ref = diri;

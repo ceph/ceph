@@ -845,11 +845,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       if (snaprealm)
 	seq = snaprealm->seq;
       decode_snap(p);
-      if (snaprealm && snaprealm->seq != seq) {
-	if (!seq)
-	  mdcache->do_realm_split_notify(this);
-	mdcache->do_realm_invalidate_and_update_notify(this, CEPH_SNAP_OP_UPDATE);
-      }
+      if (snaprealm && snaprealm->seq != seq)
+	mdcache->do_realm_invalidate_and_update_notify(this, seq ? CEPH_SNAP_OP_UPDATE:CEPH_SNAP_OP_SPLIT);
     }
     break;
 
