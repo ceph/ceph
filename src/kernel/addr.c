@@ -19,6 +19,7 @@ static int ceph_set_page_dirty(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
 	struct ceph_inode_info *ci;
+	struct ceph_snap_context *snapc;
 
 	if (unlikely(!mapping))
 		return !TestSetPageDirty(page);
@@ -50,12 +51,15 @@ static int ceph_set_page_dirty(struct page *page)
 		 * on truncate for dirty page accounting for mmap.
 		 */
 		ceph_put_snap_context((void *)page->private);
-		page->private = (unsigned long)ceph_get_snap_context(ci->i_snaprealm->cached_context);
+		snapc = ceph_get_snap_context(ci->i_snaprealm->cached_context);
+		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
 		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
 		     mapping->host, page,
 		     atomic_read(&ci->i_wrbuffer_ref)-1,
 		     atomic_read(&ci->i_wrbuffer_ref));
+		dout(20, "%p  page %p snapc is %p seq %lld (%d snaps)\n",
+		     mapping->host, page, snapc, snapc->seq, snapc->num_snaps);
 	} else
 		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
 	write_unlock_irq(&mapping->tree_lock);
@@ -358,9 +362,12 @@ get_more_pages:
 			}
 
 			/* only if matching snap context */
-			if (!snapc)
+			if (!snapc) {
 				snapc = (void *)page->private;
-			else if (snapc != (void *)page->private) {
+				ceph_get_snap_context(snapc);
+				dout(20, " snapc is %p seq %lld (%d snaps)\n",
+				     snapc, snapc->seq, snapc->num_snaps);
+			} else if (snapc != (void *)page->private) {
 				dout(20, "snapc %p != %p\n",
 				     (void *)page->private, snapc);
 				break;
@@ -519,6 +526,7 @@ get_more_pages:
 	kfree(pages);
 	if (rc > 0)
 		rc = 0;  /* vfs expects us to return 0 */
+	ceph_put_snap_context(snapc);
 	dout(10, "writepages done, rc = %d\n", rc);
 	return rc;
 }
@@ -550,12 +558,9 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	dout(10, "write_begin file %p inode %p page %p %d~%d\n", file,
 	     inode, page, (int)pos, (int)len);
 
-	/* build snap context */
-	if (!ci->i_snaprealm->cached_context) {
-		r = ceph_snaprealm_build_context(ci->i_snaprealm);
-		if (r < 0)
-			goto fail;
-	}
+	/* check snap context */
+	BUG_ON(!ci->i_snaprealm);
+	BUG_ON(!ci->i_snaprealm->cached_context);
 	if (page->private &&
 	    (void *)page->private != ci->i_snaprealm->cached_context) {
 		/* force early writeback of snapped page */
