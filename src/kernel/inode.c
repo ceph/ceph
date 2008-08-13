@@ -1312,6 +1312,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int flush_snap)
 	struct list_head *p;
 	int wanted, used;
 	struct ceph_mds_session *session = 0;  /* if non-NULL, i hold s_mutex */
+	int took_snap_mutex = 0;             /* true if mdsc->snap_mutex held */
 	int removed_last;
 
 retry:
@@ -1381,6 +1382,18 @@ ack:
 			mutex_unlock(&session->s_mutex);
 			session = 0;
 		}
+		/* take snap_mutex before session mutex */
+		if (!flush_snap && !took_snap_mutex) {
+			if (mutex_trylock(&mdsc->snap_mutex) == 0) {
+				dout(10, "inverting snap/in locks on %p\n",
+				     inode);
+				spin_unlock(&inode->i_lock);
+				mutex_lock(&mdsc->snap_mutex);
+				took_snap_mutex = 1;
+				goto retry;
+			}
+			took_snap_mutex = 1;
+		}
 		if (!session) {
 			session = cap->session;
 			if (mutex_trylock(&session->s_mutex) == 0) {
@@ -1408,6 +1421,8 @@ ack:
 out:
 	if (session)
 		mutex_unlock(&session->s_mutex);
+	if (took_snap_mutex)
+		mutex_unlock(&mdsc->snap_mutex);
 }
 
 void ceph_inode_set_size(struct inode *inode, loff_t size)

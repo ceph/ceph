@@ -1536,11 +1536,11 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	/* find session */
 	mutex_lock(&mdsc->mutex);
 	session = __get_session(mdsc, mds);
-	mutex_lock(&mdsc->snap_mutex);
+	if (session)
+		mutex_lock(&mdsc->snap_mutex);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got cap but no session for mds%d\n", mds);
-		mutex_unlock(&mdsc->snap_mutex);
 		return;
 	}
 
@@ -2239,6 +2239,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	spin_unlock(&mdsc->cap_delay_lock);
 
 	mutex_lock(&mdsc->mutex);
+	mutex_lock(&mdsc->snap_mutex);
 
 	/* close sessions, caps */
 	while (1) {
@@ -2264,6 +2265,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 
 	WARN_ON(!list_empty(&mdsc->cap_delay_list));
 
+	mutex_unlock(&mdsc->snap_mutex);
 	mutex_unlock(&mdsc->mutex);
 	dout(10, "stopped\n");
 }
