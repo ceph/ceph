@@ -1716,7 +1716,8 @@ out:
 }
 
 void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
-			    struct ceph_mds_session *session)
+			    struct ceph_mds_session *session,
+			    void *snaptrace, int snaptrace_len)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
@@ -1738,7 +1739,8 @@ void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
 		     inode, ci, mds, mseq);
 	}
 
-	ceph_add_cap(inode, session, -1, issued, seq, mseq, 0, 0); /* FIXME */
+	ceph_add_cap(inode, session, -1, issued, seq, mseq,
+		     snaptrace, snaptrace_len);
 }
 
 

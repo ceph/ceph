@@ -1590,7 +1590,9 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_CAP_OP_IMPORT:
-		ceph_handle_cap_import(inode, h, session);
+		ceph_handle_cap_import(inode, h, session,
+				       msg->front.iov_base + sizeof(*h),
+				       le32_to_cpu(h->snap_trace_len));
 		break;
 	}
 

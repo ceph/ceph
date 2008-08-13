@@ -559,7 +559,8 @@ extern void ceph_handle_cap_export(struct inode *inode,
 				   struct ceph_mds_session *session);
 extern void ceph_handle_cap_import(struct inode *inode,
 				   struct ceph_mds_caps *im,
-				   struct ceph_mds_session *session);
+				   struct ceph_mds_session *session,
+				   void *snaptrace, int snaptrace_len);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
