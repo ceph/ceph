@@ -582,7 +582,6 @@ struct ceph_client *ceph_create_client(void)
 
 	init_waitqueue_head(&client->mount_wq);
 	spin_lock_init(&client->sb_lock);
-	INIT_RADIX_TREE(&client->snaprealms, GFP_NOFS);
 
 	client->sb = 0;
 	client->mount_state = CEPH_MOUNT_MOUNTING;

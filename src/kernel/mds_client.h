@@ -120,15 +120,20 @@ struct ceph_mds_request {
  * mds client state
  */
 struct ceph_mds_client {
-	struct mutex            mutex;         /* all nested structures */
-	struct mutex            snap_mutex;    /* all snaprealms */
 	struct ceph_client      *client;
+	struct mutex            mutex;         /* all nested structures */
+
 	struct ceph_mdsmap      *mdsmap;
+	struct completion       map_waiters, session_close_waiters;
+
 	struct ceph_mds_session **sessions;    /* NULL if no session */
 	int                     max_sessions;  /* len of s_mds_sessions */
+
+	struct mutex            snap_mutex;    /* all snaprealms */
+	struct radix_tree_root  snaprealms;
+
 	__u64                   last_tid;      /* most recent mds request */
 	struct radix_tree_root  request_tree;  /* pending mds requests */
-	struct completion       map_waiters, session_close_waiters;
 	struct delayed_work     delayed_work;  /* delayed work */
 	unsigned long last_renew_caps;
 	struct list_head cap_delay_list;

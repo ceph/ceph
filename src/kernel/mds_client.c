@@ -253,17 +253,6 @@ static struct ceph_mds_session *__get_session(struct ceph_mds_client *mdsc,
 	return session;
 }
 
-static struct ceph_mds_session *get_session(struct ceph_mds_client *mdsc,
-					    int mds)
-{
-	struct ceph_mds_session *session;
-	mutex_lock(&mdsc->mutex);
-	session = __get_session(mdsc, mds);
-	mutex_unlock(&mdsc->mutex);
-	return session;
-}
-
-
 static void put_session(struct ceph_mds_session *s)
 {
 	BUG_ON(s == NULL);
@@ -380,16 +369,13 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 	}
 }
 
-static struct ceph_mds_request *
-find_request_and_lock(struct ceph_mds_client *mdsc, __u64 tid)
+static struct ceph_mds_request *__get_request(struct ceph_mds_client *mdsc,
+					     __u64 tid)
 {
 	struct ceph_mds_request *req;
-	mutex_lock(&mdsc->mutex);
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
 	if (req)
 		get_request(req);
-	else
-		mutex_unlock(&mdsc->mutex);
 	return req;
 }
 
@@ -1131,9 +1117,11 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	tid = le64_to_cpu(head->tid);
 
 	/* get request, session */
-	req = find_request_and_lock(mdsc, tid);
+	mutex_lock(&mdsc->mutex);
+	req = __get_request(mdsc, tid);
 	if (!req) {
 		dout(1, "handle_reply on unknown tid %llu\n", tid);
+		mutex_unlock(&mdsc->mutex);
 		return;
 	}
 	dout(10, "handle_reply %p r_expects_cap=%d\n", req, req->r_expects_cap);
@@ -1149,6 +1137,8 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		return;
 	}
 	BUG_ON(req->r_reply);
+	if (req->r_expects_cap)
+		mutex_lock(&mdsc->snap_mutex);
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&req->r_session->s_mutex);
@@ -1199,6 +1189,8 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 
 done:
+	if (req->r_expects_cap)
+		mutex_unlock(&mdsc->snap_mutex);
 	mutex_unlock(&req->r_session->s_mutex);
 	mutex_lock(&mdsc->mutex);
 	if (err) {
@@ -1241,18 +1233,21 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	ceph_decode_8(&p, must_resend);
 
 	/* handle */
-	req = find_request_and_lock(mdsc, tid);
-	if (!req)
-		return;  /* dup reply? */
+	mutex_lock(&mdsc->mutex);
+	req = __get_request(mdsc, tid);
+	if (!req) {
+		dout(10, "forward %llu dne\n", tid);
+		goto out;  /* dup reply? */
+	}
 
 	/* do we have a session with the dest mds? */
-	/* yes.  adjust mds set, but mds will do the forward. */
 	if (fwd_seq <= req->r_num_fwd) {
 		dout(10, "forward %llu to mds%d - old seq %d <= %d\n",
 		     tid, next_mds, req->r_num_fwd, fwd_seq);
 	} else if (!must_resend &&
 		   have_session(mdsc, next_mds) &&
 		   mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
+		/* yes.  adjust mds set, but mds will do the forward. */
 		dout(10, "forward %llu to mds%d (mds fwded)\n", tid, next_mds);
 		req->r_num_fwd = fwd_seq;
 		req->r_resend_mds = next_mds;
@@ -1268,9 +1263,10 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		req->r_resend_mds = next_mds;
 		complete(&req->r_completion);
 	}
-	mutex_unlock(&mdsc->mutex);
 
 	ceph_mdsc_put_request(req);
+out:
+	mutex_unlock(&mdsc->mutex);
 	return;
 
 bad:
@@ -1515,7 +1511,6 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 			   struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
-	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_session *session;
 	struct inode *inode;
 	struct ceph_mds_caps *h;
@@ -1539,9 +1534,13 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	max_size = le64_to_cpu(h->max_size);
 
 	/* find session */
-	session = get_session(&client->mdsc, mds);
+	mutex_lock(&mdsc->mutex);
+	session = __get_session(mdsc, mds);
+	mutex_lock(&mdsc->snap_mutex);
+	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got cap but no session for mds%d\n", mds);
+		mutex_unlock(&mdsc->snap_mutex);
 		return;
 	}
 
@@ -1561,6 +1560,7 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 
 	switch (op) {
 	case CEPH_CAP_OP_GRANT:
+		mutex_unlock(&mdsc->snap_mutex);
 		if (ceph_handle_cap_grant(inode, h, session) == 1) {
 			dout(10, "sending reply back to mds%d\n", mds);
 			ceph_msg_get(msg);
@@ -1569,10 +1569,12 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_CAP_OP_TRUNC:
+		mutex_unlock(&mdsc->snap_mutex);
 		ceph_handle_cap_trunc(inode, h, session);
 		break;
 
 	case CEPH_CAP_OP_EXPORT:
+		mutex_unlock(&mdsc->snap_mutex);
 		ceph_handle_cap_export(inode, h, session);
 		break;
 
@@ -1580,7 +1582,12 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		ceph_handle_cap_import(inode, h, session,
 				       msg->front.iov_base + sizeof(*h),
 				       le32_to_cpu(h->snap_trace_len));
+		mutex_unlock(&mdsc->snap_mutex);
 		break;
+
+	default:
+		mutex_unlock(&mdsc->snap_mutex);
+		derr(10, "unknown cap op %d %s\n", op, ceph_cap_op_name(op));
 	}
 
 	iput(inode);
@@ -1750,7 +1757,6 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 			   struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
-	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_session *session;
 	int mds = le32_to_cpu(msg->hdr.src.name.num);
 	u64 split;
@@ -1779,7 +1785,11 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 	     ceph_snap_op_name(op), split, trace_len);
 
 	/* find session */
-	session = get_session(&client->mdsc, mds);
+	mutex_lock(&mdsc->mutex);
+	session = __get_session(mdsc, mds);
+	if (session)
+		mutex_lock(&mdsc->snap_mutex);
+	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got snap but no session for mds%d\n", mds);
 		return;
@@ -1799,7 +1809,7 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 		ceph_decode_need(&p, e, sizeof(*ri), bad);
 		ri = p;
 
-		realm = ceph_get_snaprealm(client, split);
+		realm = ceph_get_snaprealm(mdsc, split);
 		if (IS_ERR(realm))
 			goto out;
 		dout(10, "splitting snaprealm %llx %p\n", realm->ino, realm);
@@ -1845,18 +1855,18 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 
 		for (i = 0; i < num_split_realms; i++) {
 			struct ceph_snaprealm *child =
-				ceph_get_snaprealm(client,
+				ceph_get_snaprealm(mdsc,
 					   le64_to_cpu(split_realms[i]));
 			if (!child)
 				continue;
-			ceph_adjust_snaprealm_parent(client, child, realm->ino);
+			ceph_adjust_snaprealm_parent(mdsc, child, realm->ino);
 			ceph_put_snaprealm(child);
 		}
 
 		ceph_put_snaprealm(realm);
 	}
 
-	realm = ceph_update_snap_trace(client, p, e,
+	realm = ceph_update_snap_trace(mdsc, p, e,
 				       op != CEPH_SNAP_OP_DESTROY);
 	if (IS_ERR(realm))
 		goto bad;
@@ -1884,6 +1894,7 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 	}
 
 	ceph_put_snaprealm(realm);
+	mutex_unlock(&mdsc->snap_mutex);
 	return;
 
 bad:
@@ -1954,14 +1965,16 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		goto bad;
 
 	/* find session */
-	session = get_session(mdsc, mds);
+	mutex_lock(&mdsc->mutex);
+	session = __get_session(mdsc, mds);
+	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got lease but no session for mds%d\n", mds);
 		return;
 	}
-	session->s_seq++;
 
 	mutex_lock(&session->s_mutex);
+	session->s_seq++;
 
 	/* lookup inode */
 	inode = ceph_find_inode(sb, vino);
@@ -2160,7 +2173,8 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->sessions = 0;
 	mdsc->max_sessions = 0;
 	mdsc->last_tid = 0;
-	INIT_RADIX_TREE(&mdsc->request_tree, GFP_ATOMIC);
+	INIT_RADIX_TREE(&mdsc->snaprealms, GFP_NOFS);
+	INIT_RADIX_TREE(&mdsc->request_tree, GFP_NOFS);
 	init_completion(&mdsc->map_waiters);
 	init_completion(&mdsc->session_close_waiters);
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);

@@ -149,9 +149,6 @@ struct ceph_client {
 
 	struct kobject *client_kobj;
 
-	struct mutex snaprealm_mutex;
-	struct radix_tree_root snaprealms;
-
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;
 	int num_sb;      /* ref count (for each sb_info that points to me) */
@@ -494,14 +491,14 @@ struct ceph_snaprealm {
 };
 
 /* snap.c */
-extern struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_client *client,
+extern struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_mds_client *mdsc,
 						 u64 ino);
-extern struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_client *client,
+extern struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_mds_client *mdsc,
 						  u64 ino);
 extern void ceph_put_snaprealm(struct ceph_snaprealm *realm);
-extern int ceph_adjust_snaprealm_parent(struct ceph_client *client,
+extern int ceph_adjust_snaprealm_parent(struct ceph_mds_client *mdsc,
 					struct ceph_snaprealm *realm, u64 p);
-extern struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
+extern struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_mds_client *mc,
 						     void *p, void *e,
 						     int must_flush);
 extern int ceph_build_snap_context(struct ceph_snaprealm *realm);

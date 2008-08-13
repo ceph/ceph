@@ -1140,9 +1140,10 @@ int ceph_add_cap(struct inode *inode,
 	int i;
 	int is_new = 0;
 	struct ceph_snaprealm *realm = 0;
+	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 
 	if (snapblob_len)
-		realm = ceph_update_snap_trace(ceph_inode_to_client(inode),
+		realm = ceph_update_snap_trace(mdsc,
 					       snapblob, snapblob+snapblob_len,
 					       0);
 	

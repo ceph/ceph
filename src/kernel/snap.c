@@ -1,4 +1,5 @@
 
+#include <linux/radix-tree.h>
 #include <linux/sort.h>
 
 int ceph_debug_snap = -1;
@@ -9,14 +10,14 @@ int ceph_debug_snap = -1;
 #include "decode.h"
 
 
-struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_client *client, u64 ino)
+struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_mds_client *mdsc, u64 ino)
 {
 	struct ceph_snaprealm *realm;
 
-	realm = radix_tree_lookup(&client->snaprealms, ino);
+	realm = radix_tree_lookup(&mdsc->snaprealms, ino);
 	if (!realm) {
 		realm = kzalloc(sizeof(*realm), GFP_NOFS);
-		radix_tree_insert(&client->snaprealms, ino, realm);
+		radix_tree_insert(&mdsc->snaprealms, ino, realm);
 		realm->nref = 1;    /* in tree */
 		realm->ino = ino;
 		INIT_LIST_HEAD(&realm->children);
@@ -30,13 +31,10 @@ struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_client *client, u64 ino)
 	return realm;
 }
 
-struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_client *client, u64 ino)
+struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_mds_client *mdsc,
+					   u64 ino)
 {
-	struct ceph_snaprealm *realm;
-
-	realm = radix_tree_lookup(&client->snaprealms, ino);
-
-	return realm;
+	return radix_tree_lookup(&mdsc->snaprealms, ino);
 }
 
 void ceph_put_snaprealm(struct ceph_snaprealm *realm)
@@ -52,7 +50,7 @@ void ceph_put_snaprealm(struct ceph_snaprealm *realm)
 	}
 }
 
-int ceph_adjust_snaprealm_parent(struct ceph_client *client,
+int ceph_adjust_snaprealm_parent(struct ceph_mds_client *mdsc,
 				 struct ceph_snaprealm *realm, u64 parentino)
 {
 	struct ceph_snaprealm *parent;
@@ -60,7 +58,7 @@ int ceph_adjust_snaprealm_parent(struct ceph_client *client,
 	if (realm->parent_ino == parentino)
 		return 0;
 
-	parent = ceph_get_snaprealm(client, parentino);
+	parent = ceph_get_snaprealm(mdsc, parentino);
 	if (!parent)
 		return -ENOMEM;
 	dout(20, "adjust_snaprealm_parent %llx %p: %llx %p -> %llx %p\n",
@@ -193,7 +191,7 @@ static int dup_array(u64 **dst, u64 *src, int num)
 	return 0;
 }
 
-struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
+struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 					      void *p, void *e, int must_flush)
 {
 	struct ceph_mds_snap_realm *ri;
@@ -215,7 +213,7 @@ more:
 	prior_parent_snaps = p;
 	p += sizeof(u64) * le32_to_cpu(ri->num_prior_parent_snaps);
 
-	realm = ceph_get_snaprealm(client, le64_to_cpu(ri->ino));
+	realm = ceph_get_snaprealm(mdsc, le64_to_cpu(ri->ino));
 	if (!realm)
 		goto fail;
 	if (!first) {
@@ -240,7 +238,7 @@ more:
 		dout(10, "update_snap_trace %llx %p seq %lld unchanged\n",
 		     realm->ino, realm, realm->seq);
 
-	invalidate += ceph_adjust_snaprealm_parent(client, realm,
+	invalidate += ceph_adjust_snaprealm_parent(mdsc, realm,
 						   le64_to_cpu(ri->parent));
 	
 	if (le64_to_cpu(ri->seq) > realm->seq) {
