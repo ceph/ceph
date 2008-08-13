@@ -140,7 +140,10 @@ class MDiscoverReply : public Message {
     flag_error_dir(false),
     dir_auth_hint(CDIR_AUTH_UNKNOWN) {
   }
-  const char *get_type_name() { return "DisR"; }
+  const char *get_type_name() { return "discover_reply"; }
+  void print(ostream& out) {
+    out << "discover_reply(" << base_ino << ")";
+  }
   
   // builders
   bool is_empty() {

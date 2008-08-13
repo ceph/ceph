@@ -6855,7 +6855,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   int next = m->starts_with;
 
-  if (next == MDiscoverReply::INODE) {
+  if (!p.end() && next == MDiscoverReply::INODE) {
     // add base inode
     cur = add_replica_inode(p, NULL, finished);
     dout(7) << "discover_reply got base inode " << *cur << dendl;
