@@ -873,7 +873,7 @@ struct ceph_mds_snap_head {
 	__le32 num_split_inos;
 	__le32 num_split_realms;
 	__le32 trace_len;
-};
+} __attribute__ ((packed));
 /* followed by split inos, then split realms, then the trace blob */
 
 /*
@@ -887,7 +887,7 @@ struct ceph_mds_snap_realm {
 	__le64 seq;           /* snap: version */
 	__le32 num_snaps;
 	__le32 num_prior_parent_snaps;
-};
+} __attribute__ ((packed));
 /* followed by my snaps, then prior parent snaps */
 
 /*

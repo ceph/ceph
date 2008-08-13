@@ -1484,16 +1484,18 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 
 /* caps */
 
-static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int caps,
-			 int wanted, __u32 seq, __u64 size, __u64 max_size,
+static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int op,
+			 int caps, int wanted, __u32 seq,
+			 __u64 size, __u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq, u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
-	dout(10, "send_cap_ack %llx ca %d wa %d seq %u follows %lld sz %llu\n",
-	     ino, caps, wanted, (unsigned)seq, follows, size);
+	dout(10, "send_cap_ack %s %llx caps %d wanted %d seq %u follows %lld"
+	     " size %llu\n", ceph_cap_op_name(op), ino, caps, wanted,
+	     (unsigned)seq, follows, size);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, 0);
 	if (IS_ERR(msg))
@@ -1537,7 +1539,7 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	dout(10, "handle_caps from mds%d\n", mds);
 
 	/* decode */
-	if (msg->front.iov_len != sizeof(*h))
+	if (msg->front.iov_len < sizeof(*h))
 		goto bad;
 	h = msg->front.iov_base;
 	op = le32_to_cpu(h->op);
@@ -1565,7 +1567,8 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 
 	if (!inode) {
 		dout(10, "i don't have ino %llx, sending release\n", vino.ino);
-		send_cap_ack(mdsc, vino.ino, 0, 0, seq, size, 0, 0, 0, 0, 0, mds);
+		send_cap_ack(mdsc, vino.ino, CEPH_CAP_OP_RELEASE, 0, 0, seq,
+			     size, 0, 0, 0, 0, 0, mds);
 		goto no_inode;
 	}
 
@@ -1598,7 +1601,7 @@ no_inode:
 	return;
 
 bad:
-	dout(10, "corrupt caps message\n");
+	derr(10, "corrupt caps message\n");
 	return;
 }
 
@@ -1623,7 +1626,8 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session,
 			 struct ceph_inode_cap *cap,
-			 int used, int wanted, int cancel_work)
+			 int used, int wanted,
+			 int cancel_work, int flush_snap)
 {
 	struct ceph_inode_info *ci = cap->ci;
 	struct inode *inode = &ci->vfs_inode;
@@ -1635,6 +1639,12 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	struct timespec mtime, atime;
 	int removed_last = 0;
 	int wake = 0;
+	int op = CEPH_CAP_OP_ACK;
+
+	if (flush_snap)
+		op = CEPH_CAP_OP_FLUSHSNAP;
+	else if (wanted == 0)
+		op = CEPH_CAP_OP_RELEASE;
 
 	dout(10, "__send_cap cap %p session %p %d -> %d\n", cap, cap->session,
 	     cap->issued, cap->issued & wanted);
@@ -1655,12 +1665,14 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	atime = inode->i_atime;
 	time_warp_seq = ci->i_time_warp_seq;
 	follows = ci->i_snaprealm->cached_context->seq;
-	if (wanted == 0) {
+	if (wanted == 0 && !flush_snap) {
 		__ceph_remove_cap(cap);
 		removed_last = list_empty(&ci->i_caps);
 		if (removed_last && cancel_work)
 			__cap_delay_cancel(mdsc, ci);
 	}
+	if (flush_snap)
+		cap->flushed_snap = follows; /* so we only flush it once */
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_RDCACHE) {
@@ -1673,13 +1685,13 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	}
 
 	send_cap_ack(mdsc, ceph_vino(inode).ino,
-		     keep, wanted, seq,
+		     op, keep, wanted, seq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     follows, session->s_mds);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
-	if (wanted == 0)
+	if (wanted == 0 && !flush_snap)
 		iput(inode);  /* removed cap */
 
 	return removed_last;
@@ -1702,7 +1714,7 @@ static void check_delayed_caps(struct ceph_mds_client *mdsc)
 		list_del_init(&ci->i_cap_delay_list);
 		spin_unlock(&mdsc->cap_delay_lock);
 		dout(10, "check_delayed_caps on %p\n", &ci->vfs_inode);
-		ceph_check_caps(ci, 1);
+		ceph_check_caps(ci, 1, 0);
 		iput(&ci->vfs_inode);
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
@@ -1736,9 +1748,164 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 			used = wanted = 0;
 		}
 
-		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1);
+		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1, 0);
 	}
 }
+
+
+/*
+ * snap
+ */
+
+void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
+			   struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->client->sb;
+	struct ceph_client *client = ceph_sb_to_client(sb);
+	struct ceph_mds_session *session;
+	int mds = le32_to_cpu(msg->hdr.src.name.num);
+	u64 split;
+	int op;
+	int trace_len;
+	struct ceph_snaprealm *realm = 0;
+	void *p = msg->front.iov_base;
+	void *e = p + msg->front.iov_len;
+	struct ceph_mds_snap_head *h;
+	int num_split_inos, num_split_realms;
+	__le64 *split_inos = 0, *split_realms = 0;
+	int i;
+
+	/* decode */
+	if (msg->front.iov_len < sizeof(*h))
+		goto bad;
+	h = p;
+	op = le32_to_cpu(h->op);
+	split = le64_to_cpu(h->split);
+	trace_len = le32_to_cpu(h->trace_len);
+	num_split_inos = le32_to_cpu(h->num_split_inos);
+	num_split_realms = le32_to_cpu(h->num_split_realms);
+	p += sizeof(*h);
+
+	dout(10, "handle_snap from mds%d op %s split %llx tracelen %d\n", mds,
+	     ceph_snap_op_name(op), split, trace_len);
+
+	/* find session */
+	spin_lock(&mdsc->lock);
+	session = __get_session(&client->mdsc, mds);
+	spin_unlock(&mdsc->lock);
+	if (!session) {
+		dout(10, "WTF, got snap but no session for mds%d\n", mds);
+		return;
+	}
+
+	mutex_lock(&session->s_mutex);
+	session->s_seq++;
+	mutex_unlock(&session->s_mutex);
+
+	if (op == CEPH_SNAP_OP_SPLIT) {
+		struct ceph_mds_snap_realm *ri;
+
+		split_inos = p;
+		p += sizeof(u64) * num_split_inos;
+		split_realms = p;
+		p += sizeof(u64) * num_split_realms;
+		ceph_decode_need(&p, e, sizeof(*ri), bad);
+		ri = p;
+
+		realm = ceph_get_snaprealm(client, split);
+		if (IS_ERR(realm))
+			goto out;
+		dout(10, "splitting snaprealm %llx %p\n", realm->ino, realm);
+
+		for (i = 0; i < num_split_inos; i++) {
+			struct ceph_vino vino = {
+				.ino = le64_to_cpu(split_inos[i]),
+				.snap = CEPH_NOSNAP,
+			};
+			struct inode *inode = ceph_find_inode(sb, vino);
+			struct ceph_inode_info *ci;
+			if (!inode)
+				continue;
+			ci = ceph_inode(inode);
+			spin_lock(&inode->i_lock);
+			if (!ci->i_snaprealm)
+				goto skip_inode;
+			if (ci->i_snaprealm->created > le64_to_cpu(ri->created)) {
+				dout(15, " leaving %p in newer realm %llx %p\n",
+				     inode, ci->i_snaprealm->ino,
+				     ci->i_snaprealm);
+				goto skip_inode;
+			}
+			dout(15, " will move %p to split realm %llx %p\n",
+			     inode, realm->ino, realm);
+			/*
+			 * remove from list, but don't re-add yet.  we
+			 * don't want the caps to be flushed (again) by
+			 * ceph_update_snap_trace below.
+			 */
+			list_del_init(&ci->i_snaprealm_item);
+			spin_unlock(&inode->i_lock);
+
+			ceph_check_caps(ci, 0, 1);
+
+			iput(inode);
+			continue;
+
+		skip_inode:
+			spin_unlock(&inode->i_lock);
+			iput(inode);
+		}
+
+		for (i = 0; i < num_split_realms; i++) {
+			struct ceph_snaprealm *child =
+				ceph_get_snaprealm(client,
+					   le64_to_cpu(split_realms[i]));
+			if (!child)
+				continue;
+			ceph_adjust_snaprealm_parent(client, child, realm->ino);
+			ceph_put_snaprealm(child);
+		}
+
+		ceph_put_snaprealm(realm);
+	}
+
+	realm = ceph_update_snap_trace(client, p, e,
+				       op != CEPH_SNAP_OP_DESTROY);
+	if (IS_ERR(realm))
+		goto bad;
+
+	if (op == CEPH_SNAP_OP_SPLIT) {
+		for (i = 0; i < num_split_inos; i++) {
+			struct ceph_vino vino = {
+				.ino = le64_to_cpu(split_inos[i]),
+				.snap = CEPH_NOSNAP,
+			};
+			struct inode *inode = ceph_find_inode(sb, vino);
+			struct ceph_inode_info *ci;
+			if (!inode)
+				continue;
+			ci = ceph_inode(inode);
+			spin_lock(&inode->i_lock);
+			/* _now_ add to newly split realm */
+			ceph_put_snaprealm(ci->i_snaprealm);
+			list_add(&ci->i_snaprealm_item,
+				 &realm->inodes_with_caps);
+			ci->i_snaprealm = realm;
+			realm->nref++;
+			spin_unlock(&inode->i_lock);
+		}
+	}
+
+	ceph_put_snaprealm(realm);
+	return;
+
+bad:
+	derr(10, "corrupt snap message from mds%d\n", mds);
+out:
+	return;
+}
+
+
 
 static int close_session(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session)

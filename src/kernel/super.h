@@ -176,6 +176,7 @@ struct ceph_inode_cap {
 	int implemented;  /* what we've implemneted (for tracking revocation) */
 	u32 seq, mseq, gen;
 	int flags;  /* stale, etc.? */
+	u64 flushed_snap;
 	struct ceph_inode_info *ci;
 	struct list_head ci_caps;       /* per-ci caplist */
 	struct ceph_mds_session *session;
@@ -449,6 +450,10 @@ struct ceph_snap_context {
 
 static inline struct ceph_snap_context *ceph_get_snap_context(struct ceph_snap_context *sc)
 {
+	/*
+	printk("get_snap_context %p %d -> %d\n", sc, atomic_read(&sc->nref),
+	       atomic_read(&sc->nref)+1);
+	*/
 	atomic_inc(&sc->nref);
 	return sc;
 }
@@ -457,8 +462,14 @@ static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
 {
 	if (!sc)
 		return;
-	if (atomic_dec_and_test(&sc->nref))
+	/*
+	printk("put_snap_context %p %d -> %d\n", sc, atomic_read(&sc->nref),
+	       atomic_read(&sc->nref)-1);
+	*/
+	if (atomic_dec_and_test(&sc->nref)) {
+		/*printk(" deleting snap_context %p\n", sc);*/
 		kfree(sc);
+	}
 }
 
 struct ceph_snaprealm {
@@ -493,7 +504,7 @@ extern int ceph_adjust_snaprealm_parent(struct ceph_client *client,
 extern struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
 						     void *p, void *e,
 						     int must_flush);
-extern int ceph_snaprealm_build_context(struct ceph_snaprealm *realm);
+extern int ceph_build_snap_context(struct ceph_snaprealm *realm);
 extern void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm);
 
 
@@ -553,7 +564,7 @@ extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed);
+extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int flush);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);

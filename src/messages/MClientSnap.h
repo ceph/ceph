@@ -35,7 +35,8 @@ struct MClientSnap : public Message {
   void print(ostream& out) {
     out << "client_snap(" << ceph_snap_op_name(head.op);
     if (head.split)
-      out << " split=" << head.split;
+      out << " split=" << inodeno_t(head.split);
+    out << " tracelen=" << bl.length();
     out << ")";
   }
 

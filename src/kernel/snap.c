@@ -86,7 +86,7 @@ static int cmpu64_rev(const void *a, const void *b)
 	return 0;
 }
 
-int ceph_snaprealm_build_context(struct ceph_snaprealm *realm)
+int ceph_build_snap_context(struct ceph_snaprealm *realm)
 {
 	struct ceph_snaprealm *parent = realm->parent;
 	struct ceph_snap_context *sc;
@@ -96,13 +96,26 @@ int ceph_snaprealm_build_context(struct ceph_snaprealm *realm)
 
 	if (parent) {
 		if (!parent->cached_context) {
-			err = ceph_snaprealm_build_context(parent);
+			err = ceph_build_snap_context(parent);
 			if (err)
 				goto fail;
 		}
 		num += parent->cached_context->num_snaps;
 	}
 
+	/* do i need to update? */
+	if (realm->cached_context && realm->cached_context->seq <= realm->seq &&
+	    (!parent ||
+	     realm->cached_context->seq <= parent->cached_context->seq)) {
+		dout(10, "build_snap_context %llx %p: %p seq %lld (%d snaps)"
+		     " (unchanged)\n",
+		     realm->ino, realm, realm->cached_context, 
+		     realm->cached_context->seq,
+		     realm->cached_context->num_snaps);
+		return 0;
+	}
+
+	/* build new */
 	err = -ENOMEM;
 	sc = kzalloc(sizeof(*sc) + num*sizeof(u64), GFP_NOFS);
 	if (!sc)
@@ -130,8 +143,8 @@ int ceph_snaprealm_build_context(struct ceph_snaprealm *realm)
 
 	sort(sc->snaps, num, sizeof(u64), cmpu64_rev, NULL);
 	sc->num_snaps = num;
-	dout(10, "snaprealm_build_context %llx %p : seq %lld %d snaps\n",
-	     realm->ino, realm, sc->seq, sc->num_snaps);
+	dout(10, "build_snap_context %llx %p: %p seq %lld (%d snaps)\n",
+	     realm->ino, realm, sc, sc->seq, sc->num_snaps);
 
 	if (realm->cached_context)
 		ceph_put_snap_context(realm->cached_context);
@@ -143,7 +156,7 @@ fail:
 		ceph_put_snap_context(realm->cached_context);
 		realm->cached_context = 0;
 	}
-	derr(0, "snaprealm_build_context %llx %p fail %d\n", realm->ino,
+	derr(0, "build_snap_context %llx %p fail %d\n", realm->ino,
 	     realm, err);
 	return err;
 }
@@ -154,7 +167,7 @@ void ceph_rebuild_snaprealms(struct ceph_snaprealm *realm)
 	struct ceph_snaprealm *child;
 
 	dout(10, "rebuild_snaprealms %llx %p\n", realm->ino, realm);
-	ceph_snaprealm_build_context(realm);
+	ceph_build_snap_context(realm);
 
 	list_for_each(p, &realm->children) {
 		child = list_entry(p, struct ceph_snaprealm, child_item);
@@ -190,6 +203,7 @@ struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_client *client,
 	struct ceph_snaprealm *realm, *first = 0;
 	int invalidate = 0;
 
+	dout(10, "update_snap_trace must_flush=%d\n", must_flush);
 more:
 	ceph_decode_need(&p, e, sizeof(*ri), bad);
 	ri = p;
@@ -210,10 +224,17 @@ more:
 	}
 
 	if (le64_to_cpu(ri->seq) > realm->seq) {
+		struct list_head *p;
 		dout(10, "update_snap_trace updating %llx %p %lld -> %lld\n",
 		     realm->ino, realm, realm->seq, le64_to_cpu(ri->seq));
 		
-		// flush caps... and data?
+		list_for_each(p, &realm->inodes_with_caps) {
+			struct ceph_inode_info *ci =
+				list_entry(p, struct ceph_inode_info,
+					   i_snaprealm_item);
+			ceph_check_caps(ci, 0, 1);
+		}
+		dout(20, "update_snap_trace cap flush done\n");
 
 	} else
 		dout(10, "update_snap_trace %llx %p seq %lld unchanged\n",
@@ -240,6 +261,9 @@ more:
 	} else if (!realm->cached_context)
 		invalidate = 1;
 
+	dout(10, "done with %llx %p, invalidated=%d, %p %p\n", realm->ino,
+	     realm, invalidate, p, e);
+
 	if (p >= e && invalidate)
 		ceph_rebuild_snaprealms(realm);
 
@@ -253,7 +277,7 @@ bad:
 	err = -EINVAL;
 fail:
 	derr(10, "update_snap_trace error %d\n", err);
-	return 0;	
+	return ERR_PTR(err);	
 }
 
 

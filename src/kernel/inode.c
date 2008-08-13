@@ -1172,6 +1172,7 @@ int ceph_add_cap(struct inode *inode,
 		cap->issued = cap->implemented = 0;
 		cap->mds = mds;
 		cap->flags = 0;
+		cap->flushed_snap = 0;
 
 		cap->ci = ci;
 		list_add(&cap->ci_caps, &ci->i_caps);
@@ -1301,7 +1302,7 @@ void __ceph_cap_delay_requeue(struct ceph_mds_client *mdsc,
  *  release, ack revoked caps to mds as appropriate.
  * @is_delayed if caller just dropped a cap ref, and we probably want to delay
  */
-void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
+void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int flush_snap)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -1348,6 +1349,21 @@ retry:
 			goto ack;
 		}
 
+		/* flush snap? */
+		if (flush_snap &&
+		    (cap->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))) {
+			if (cap->flushed_snap >=
+			    ci->i_snaprealm->cached_context->seq) {
+				dout(10, "flushed_snap %llu >= seq %lld, "
+				     "not flushing mds%d\n",
+				     cap->flushed_snap,
+				     ci->i_snaprealm->cached_context->seq,
+				     cap->session->s_mds);
+				continue;  /* already flushed for this snap */
+			}
+			goto ack;
+		}
+
 		if ((cap->issued & ~wanted) == 0)
 			continue;     /* nothing extra, all good */
 
@@ -1377,9 +1393,11 @@ ack:
 
 		/* send_cap drops i_lock */
 		removed_last = __ceph_mdsc_send_cap(mdsc, session, cap,
-						    used, wanted, !is_delayed);
+						    used, wanted, !is_delayed,
+						    flush_snap);
 		if (removed_last)
 			goto out;
+		/* retake i_lock and restart our cap scan. */
 		goto retry;
 	}
 
@@ -1403,7 +1421,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 	} else
 		spin_unlock(&inode->i_lock);
 }
@@ -1420,7 +1438,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last && ci->i_vino.snap == CEPH_NOSNAP)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 }
 
 
@@ -1577,7 +1595,7 @@ static int apply_truncate(struct inode *inode, loff_t size)
 		spin_unlock(&inode->i_lock);
 	}
 	if (atomic_read(&ci->i_wrbuffer_ref) == 0)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 	return rc;
 }
 
@@ -1610,7 +1628,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
 		vmtruncate(inode, to);
 		if (atomic_read(&ci->i_wrbuffer_ref) == 0)
-			ceph_check_caps(ci, 0);
+			ceph_check_caps(ci, 0, 0);
 	} else
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }
@@ -1815,7 +1833,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	     last ? "last":"");
 
 	if (last)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 }
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
@@ -1833,7 +1851,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)
 	WARN_ON(v < 0);
 
 	if (was_last)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 }
 
 
