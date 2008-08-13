@@ -1,9 +1,10 @@
 #ifndef _FS_CEPH_MDS_CLIENT_H
 #define _FS_CEPH_MDS_CLIENT_H
 
-#include <linux/radix-tree.h>
-#include <linux/list.h>
 #include <linux/completion.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/radix-tree.h>
 #include <linux/spinlock.h>
 
 #include "types.h"
@@ -119,7 +120,8 @@ struct ceph_mds_request {
  * mds client state
  */
 struct ceph_mds_client {
-	spinlock_t              lock;          /* all nested structures */
+	struct mutex            mutex;         /* all nested structures */
+	struct mutex            snap_mutex;    /* all snaprealms */
 	struct ceph_client      *client;
 	struct ceph_mdsmap      *mdsmap;
 	struct ceph_mds_session **sessions;    /* NULL if no session */
