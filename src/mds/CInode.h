@@ -274,7 +274,7 @@ private:
 
  public:
   // ---------------------------
-  CInode(MDCache *c, bool auth=true, snapid_t f=1, snapid_t l=CEPH_NOSNAP) : 
+  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
     mdcache(c),
     snaprealm(0), containing_realm(0),
     first(f), last(l),

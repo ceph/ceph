@@ -296,11 +296,11 @@ protected:
   CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
   CDentry* add_null_dentry(const nstring& dname, 
-			   snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_primary_dentry(const nstring& dname, CInode *in, 
-			      snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type, 
-			     snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
