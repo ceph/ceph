@@ -2096,7 +2096,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, false);
   if (!dn) return;
 
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);
@@ -2140,7 +2140,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   if (!dn) return;
 
   // new inode
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);  
@@ -2188,7 +2188,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   if (!dn) return;
 
   mdr->now = g_clock.real_now();
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
 
   CInode *newi = prepare_new_inode(mdr, dn->dir);
   assert(newi);
@@ -2351,7 +2351,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   pi->ctime = mdr->now;
   pi->version = tipv;
 
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   dn->first = follows+1;
 
   // log + wait
@@ -3710,7 +3710,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdn->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn);
       else
-	destdn->first = destdn->dir->inode->find_snaprealm()->get_last_created()+1;
+	destdn->first = destdn->dir->inode->find_snaprealm()->get_newest_seq()+1;
       metablob->add_remote_dentry(destdn, true, srcdn->get_remote_ino(), srcdn->get_remote_d_type());
       mdcache->journal_cow_dentry(mdr, metablob, srcdn->inode->get_parent_dn());
       ji = metablob->add_primary_dentry(srcdn->inode->get_parent_dn(), true, srcdn->inode, pi);
@@ -3718,7 +3718,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdn->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn);
       else
-	destdn->first = destdn->dir->inode->find_snaprealm()->get_last_created()+1;
+	destdn->first = destdn->dir->inode->find_snaprealm()->get_newest_seq()+1;
       metablob->add_primary_dentry(destdn, true, destdn->inode, pi); 
     }
   } else if (srcdn->is_primary()) {
@@ -3730,7 +3730,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (!destdn->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn);
     else
-      destdn->first = destdn->dir->inode->find_snaprealm()->get_last_created()+1;
+      destdn->first = destdn->dir->inode->find_snaprealm()->get_newest_seq()+1;
     ji = metablob->add_primary_dentry(destdn, true, srcdn->inode, pi, 0, &snapbl); 
   }
     
@@ -4822,7 +4822,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     
   // create inode.
   mdr->now = g_clock.real_now();
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_last_created();
+  snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
 
   CInode *in = prepare_new_inode(mdr, dn->dir);
   assert(in);
