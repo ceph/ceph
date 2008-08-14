@@ -740,9 +740,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				      rinfo->trace_dir[0]:0);
 		if (err < 0)
 			return err;
-		mask = update_inode_lease(in, rinfo->trace_ilease[0],
-					 session, req->r_from_time);
-		//have_icontent = mask & CEPH_LOCK_ICONTENT;
+		if (rinfo->trace_numd == 0)
+			update_inode_lease(in, rinfo->trace_ilease[0],
+					   session, req->r_from_time);
 		if (sb->s_root == NULL)
 			sb->s_root = dn;
 	}
@@ -767,6 +767,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			     parent->d_inode);
 			goto no_dir_mutex;
 		}
+
+		/* update inode lease */
+		mask = update_inode_lease(in, rinfo->trace_ilease[d],
+					  session, req->r_from_time);
+		have_icontent = mask & CEPH_LOCK_ICONTENT;
 
 		/* do we have a dn lease? */
 		have_lease = have_icontent ||
@@ -807,7 +812,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			if (!dn) {
 				derr(0, "d_alloc enomem\n");
 				err = -ENOMEM;
-				goto out_dir;
+				goto out_dir_no_inode;
 			}
 			dout(10, "fill_trace d_alloc %p '%.*s'\n", dn,
 			     dn->d_name.len, dn->d_name.name);
@@ -828,10 +833,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			d_instantiate(dn, NULL);
 			if (have_lease && d_unhashed(dn))
 				d_rehash(dn);
-			in = 0;
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
 					    session, req->r_from_time);
-			goto out_dir;
+			goto out_dir_no_inode;
 		}
 
 		/* rename? */
@@ -877,8 +881,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				err = PTR_ERR(in);
 				d_delete(dn);
 				dn = NULL;
-				in = NULL;
-				goto out_dir;
+				goto out_dir_no_inode;
 			}
 			dn = splice_dentry(dn, in, &have_lease);
 		}
@@ -901,12 +904,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			iput(in);
 			d_delete(dn);
 			dn = NULL;
+			in = 0;
 			break;
 		}
-		mask = update_inode_lease(dn->d_inode,
-					 rinfo->trace_ilease[d+1],
-					 session, req->r_from_time);
-		have_icontent = mask & CEPH_LOCK_ICONTENT;
 
 		dput(parent);
 		parent = NULL;
@@ -921,10 +921,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		continue;
 
 
-	out_dir:
+	out_dir_no_inode:
 		/* drop i_mutex */
 		if (req->r_locked_dir != parent->d_inode)
 			mutex_unlock(&parent->d_inode->i_mutex);
+		in = 0;
 		break;
 
 
@@ -944,6 +945,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (d+1 == rinfo->trace_numi) {
 			if (dn && dn->d_inode)
 				d_delete(dn);
+			in = 0;
 			break;
 		}
 
@@ -955,7 +957,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (IS_ERR(in)) {
 			derr(30, "ceph_get_inode badness\n");
 			err = PTR_ERR(in);
-			in = NULL;
+			in = 0;
 			break;
 		}
 		existing = d_find_alias(in);
@@ -982,6 +984,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	}
 	if (parent)
 		dput(parent);
+
+	if (in) {
+		update_inode_lease(dn->d_inode,
+				   rinfo->trace_ilease[d],
+				   session, req->r_from_time);
+	}
 
 	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
 	if (req->r_old_dentry)
