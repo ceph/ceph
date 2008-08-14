@@ -44,11 +44,13 @@ retry:
 	len = 0;
 	for (temp = dentry; !IS_ROOT(temp);) {
 		struct inode *inode = temp->d_inode;
+		/*
 		if (len >= min &&
 		    inode &&
 		    ceph_snap(inode) == CEPH_NOSNAP &&
 		    !ceph_dentry_revalidate(temp, 0))
 			break;
+		*/
 		if (inode && ceph_snap(inode) == CEPH_SNAPDIR)
 			len++;  /* slash only */
 		else
