@@ -199,7 +199,7 @@ struct ceph_inode_frag {
 	int dist[MAX_DIRFRAG_REP];
 };
 
-#define STATIC_CAPS 2
+#define STATIC_CAPS 1
 
 struct ceph_dir_info {
 	u64 nfiles, nsubdirs;
@@ -541,7 +541,7 @@ extern int ceph_add_cap(struct inode *inode,
 			int fmode, unsigned issued,
 			unsigned cap, unsigned seq,
 			void *snapblob, int snapblob_len);
-extern void __ceph_remove_cap(struct ceph_inode_cap *cap);
+extern int __ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_cap(struct ceph_inode_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int ceph_get_cap_mds(struct inode *inode);

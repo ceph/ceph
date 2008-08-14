@@ -1550,7 +1550,6 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	/* lookup ino */
 	inode = ceph_find_inode(sb, vino);
 	dout(20, "op %d ino %llx inode %p\n", op, vino.ino, inode);
-
 	if (!inode) {
 		dout(10, "i don't have ino %llx, sending release\n", vino.ino);
 		send_cap_ack(mdsc, vino.ino, CEPH_CAP_OP_RELEASE, 0, 0, seq,
@@ -1574,8 +1573,8 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_CAP_OP_EXPORT:
-		mutex_unlock(&mdsc->snap_mutex);
 		ceph_handle_cap_export(inode, h, session);
+		mutex_unlock(&mdsc->snap_mutex);
 		break;
 
 	case CEPH_CAP_OP_IMPORT:
@@ -1615,7 +1614,7 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 
 /*
  * called with i_lock, then drops it.
- * caller should hold s_mutex.
+ * caller should hold snap_mutex, s_mutex.
  *
  * returns true if we removed the last cap on this inode.
  */
@@ -1662,8 +1661,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	time_warp_seq = ci->i_time_warp_seq;
 	follows = ci->i_snaprealm->cached_context->seq;
 	if (wanted == 0 && !flush_snap) {
-		__ceph_remove_cap(cap);
-		removed_last = list_empty(&ci->i_caps);
+		removed_last = __ceph_remove_cap(cap);
 		if (removed_last && cancel_work)
 			__cap_delay_cancel(mdsc, ci);
 	}
@@ -1687,7 +1685,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
-	if (wanted == 0 && !flush_snap)
+	if (removed_last)
 		iput(inode);  /* removed cap */
 
 	return removed_last;

@@ -1124,7 +1124,7 @@ int ceph_get_cap_mds(struct inode *inode)
 }
 
 /*
- * caller should hold session s_mutex.
+ * caller should hold session snap_mutex, s_mutex.
  *
  * @fmode can be negative, in which case it is ignored.
  */
@@ -1146,7 +1146,7 @@ int ceph_add_cap(struct inode *inode,
 		realm = ceph_update_snap_trace(mdsc,
 					       snapblob, snapblob+snapblob_len,
 					       0);
-	
+
 	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode,
 	     session->s_mds, issued, seq);
 	spin_lock(&inode->i_lock);
@@ -1243,13 +1243,15 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 }
 
 /*
- * caller should hold i_lock and session s_mutex.
+ * caller should hold i_lock, snap_mutex, and session s_mutex.
+ * returns true if this is the last cap.  if so, caller should iput.
  */
-void __ceph_remove_cap(struct ceph_inode_cap *cap)
+int __ceph_remove_cap(struct ceph_inode_cap *cap)
 {
 	struct ceph_mds_session *session = cap->session;
+	struct ceph_inode_info *ci = cap->ci;
 
-	dout(20, "__ceph_remove_cap %p from %p\n", cap, &cap->ci->vfs_inode);
+	dout(20, "__ceph_remove_cap %p from %p\n", cap, &ci->vfs_inode);
 
 	/* remove from session list */
 	list_del_init(&cap->session_caps);
@@ -1260,22 +1262,30 @@ void __ceph_remove_cap(struct ceph_inode_cap *cap)
 	cap->session = 0;
 	cap->mds = -1;  /* mark unused */
 
-	if (cap < cap->ci->i_static_caps ||
-	    cap >= cap->ci->i_static_caps + STATIC_CAPS)
+	if (cap < ci->i_static_caps ||
+	    cap >= ci->i_static_caps + STATIC_CAPS)
 		kfree(cap);
+
+	if (list_empty(&ci->i_caps)) {
+		list_del_init(&ci->i_snaprealm_item);
+		return 1;
+	}
+	return 0;
 }
 
 /*
- * caller should hold session s_mutex.
+ * caller should hold snap_mutex and session s_mutex.
  */
 void ceph_remove_cap(struct ceph_inode_cap *cap)
 {
 	struct inode *inode = &cap->ci->vfs_inode;
+	int was_last;
 
 	spin_lock(&inode->i_lock);
-	__ceph_remove_cap(cap);
+	was_last = __ceph_remove_cap(cap);
 	spin_unlock(&inode->i_lock);
-	iput(inode);
+	if (was_last)
+		iput(inode);
 }
 
 /*
@@ -1459,7 +1469,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 
 
 /*
- * caller holds s_mutex.
+ * caller holds s_mutex.  NOT snap_mutex.
  * return value:
  *  0 - ok
  *  1 - send the msg back to mds
@@ -1649,6 +1659,9 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }
 
+/*
+ * caller hold s_mutex, NOT snap_mutex.
+ */
 void ceph_handle_cap_trunc(struct inode *inode,
 			   struct ceph_mds_caps *trunc,
 			   struct ceph_mds_session *session)
@@ -1701,6 +1714,7 @@ void ceph_handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 	unsigned mseq = le32_to_cpu(ex->migrate_seq);
 	struct ceph_inode_cap *cap = 0, *t;
 	struct list_head *p;
+	int was_last = 0;
 
 	dout(10, "handle_cap_export inode %p ci %p mds%d mseq %d\n",
 	     inode, ci, mds, mseq);
@@ -1724,11 +1738,13 @@ void ceph_handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 		ci->i_cap_exporting_mds = mds;
 		ci->i_cap_exporting_mseq = mseq;
 		ci->i_cap_exporting_issued = cap->issued;
-		__ceph_remove_cap(cap);
+		was_last = __ceph_remove_cap(cap);
 	}
 
 out:
 	spin_unlock(&inode->i_lock);
+	if (was_last)
+		iput(inode);
 }
 
 void ceph_handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
