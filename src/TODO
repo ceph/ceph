@@ -21,6 +21,8 @@ big items
 snaps on mds
 - cap release probably needs ack by mds.  or, mds needs to possibly initiate recovery on import?  no, release should pbly just be acked by mds... like it was way back when... bah!
 
+- file size recovery needs to probe possibly a _range_ snaps.
+
 - mds server ops
   - link rollback
   - rename rollback
@@ -33,10 +35,7 @@ snaps on mds
 snaps on osd
 - garbage collection
 - efficient recovery of clones
-
-snaps on kclient
-- replace mdsc->lock with a mutex
-  - snaprealm mutex, too!  with another weird inversion/acquisition lameness in check_caps, too.
+  - include inter-clone diff intervals in SnapSet.
 
 userspace client
 - handle session STALE
