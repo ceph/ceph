@@ -22,6 +22,7 @@
 #include "MDSMap.h"
 #include "MDS.h"
 #include "MDCache.h"
+#include "Locker.h"
 #include "MDLog.h"
 #include "LogSegment.h"
 
@@ -1618,6 +1619,13 @@ void CDir::decode_import(bufferlist::iterator& blp)
   if (!replica_map.empty()) get(PIN_REPLICATED);
 
   replica_nonce = 0;  // no longer defined
+
+  // did we import some dirty scatterlock data?
+  if (dirty_old_rstat.size() ||
+      !(fnode.rstat == fnode.accounted_rstat))
+    cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
+  if (!(fnode.fragstat == fnode.accounted_fragstat))
+    cache->mds->locker->mark_updated_scatterlock(&inode->dirlock);
 }
 
 

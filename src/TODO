@@ -99,6 +99,8 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 mds
+- whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
+
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
