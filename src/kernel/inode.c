@@ -1108,6 +1108,7 @@ int ceph_add_cap(struct inode *inode,
 
 	dout(10, "ceph_add_cap on %p mds%d cap %d seq %d\n", inode,
 	     session->s_mds, issued, seq);
+retry:
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(inode, mds);
 	if (!cap) {
@@ -1117,14 +1118,15 @@ int ceph_add_cap(struct inode *inode,
 				break;
 			}
 		if (!cap) {
-			if (new_cap)
+			if (new_cap) {
 				cap = new_cap;
-			else {
+				new_cap = 0;
+			} else {
 				spin_unlock(&inode->i_lock);
 				new_cap = kmalloc(sizeof(*cap), GFP_NOFS);
 				if (new_cap == 0)
 					return -ENOMEM;
-				spin_lock(&inode->i_lock);
+				goto retry;
 			}
 		}
 
@@ -1161,6 +1163,8 @@ int ceph_add_cap(struct inode *inode,
 	spin_unlock(&inode->i_lock);
 	if (is_new)
 		igrab(inode);
+	if (new_cap)
+		kfree(new_cap);
 	return 0;
 }
 
