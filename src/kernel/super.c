@@ -214,7 +214,11 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) 
+qstatic void init_once(void *foo)
+#else
 static void init_once(struct kmem_cache *cachep, void *foo)
+#endif
 {
 	struct ceph_inode_info *ci = foo;
 	dout(10, "init_once on %p\n", &ci->vfs_inode);

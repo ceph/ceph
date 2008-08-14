@@ -30,7 +30,11 @@ static int ceph_set_page_dirty(struct page *page)
 		return 0;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) 
+	spin_lock_irq(&mapping->tree_lock);
+#else
 	write_lock_irq(&mapping->tree_lock);
+#endif
 	if (page->mapping) {	/* Race with truncate? */
 		WARN_ON_ONCE(!PageUptodate(page));
 
@@ -62,7 +66,11 @@ static int ceph_set_page_dirty(struct page *page)
 		     mapping->host, page, snapc, snapc->seq, snapc->num_snaps);
 	} else
 		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) 
+	spin_unlock_irq(&mapping->tree_lock);
+#else
 	write_unlock_irq(&mapping->tree_lock);
+#endif
 	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
 
 	return 1;
@@ -356,8 +364,12 @@ get_more_pages:
 			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+			else if (!trylock_page(page)) {
+#else
 			else if (TestSetPageLocked(page)) {
-				dout(20, "couldn't TestSetPageLocked %p\n", page);
+#endif
+				dout(20, "couldn't lock page %p\n", page);
 				break;
 			}
 
