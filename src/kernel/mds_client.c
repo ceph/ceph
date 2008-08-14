@@ -1470,7 +1470,7 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 /* caps */
 
 static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int op,
-			 int caps, int wanted, __u32 seq,
+			 int caps, int wanted, __u64 seq, __u64 mseq,
 			 __u64 size, __u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq, u64 follows, int mds)
@@ -1478,9 +1478,9 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int op,
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
-	dout(10, "send_cap_ack %s %llx caps %d wanted %d seq %u follows %lld"
-	     " size %llu\n", ceph_cap_op_name(op), ino, caps, wanted,
-	     (unsigned)seq, follows, size);
+	dout(10, "send_cap_ack %s %llx caps %d wanted %d seq %llu/%llu"
+	     " follows %lld size %llu\n", ceph_cap_op_name(op), ino,
+	     caps, wanted, seq, mseq, follows, size);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, 0);
 	if (IS_ERR(msg))
@@ -1492,6 +1492,7 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int op,
 
 	fc->op = cpu_to_le32(CEPH_CAP_OP_ACK);  /* misnomer */
 	fc->seq = cpu_to_le64(seq);
+	fc->migrate_seq = cpu_to_le64(mseq);
 	fc->caps = cpu_to_le32(caps);
 	fc->wanted = cpu_to_le32(wanted);
 	fc->ino = cpu_to_le64(ino);
@@ -1553,7 +1554,7 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, "i don't have ino %llx, sending release\n", vino.ino);
 		send_cap_ack(mdsc, vino.ino, CEPH_CAP_OP_RELEASE, 0, 0, seq,
-			     size, 0, 0, 0, 0, 0, mds);
+			     size, 0, 0, 0, 0, 0, 0, mds);
 		goto no_inode;
 	}
 
@@ -1629,7 +1630,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~wanted;
 	int keep;
-	u64 seq, time_warp_seq, follows;
+	u64 seq, mseq, time_warp_seq, follows;
 	u64 size, max_size;
 	struct timespec mtime, atime;
 	int removed_last = 0;
@@ -1652,6 +1653,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 
 	keep = cap->issued;
 	seq = cap->seq;
+	mseq = cap->mseq;
 	size = inode->i_size;
 	ci->i_reported_size = size;
 	max_size = ci->i_wanted_max_size;
@@ -1679,7 +1681,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	}
 
 	send_cap_ack(mdsc, ceph_vino(inode).ino,
-		     op, keep, wanted, seq,
+		     op, keep, wanted, seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     follows, session->s_mds);
 
