@@ -553,9 +553,11 @@ protected:
   hash_map<object_t, DecayCounter> stat_object_temp_rd;
 
   Mutex pg_stats_lock;
+  bool pg_stats_valid;
   pg_stat_t pg_stats;
 
   void update_stats();
+  void clear_stats();
 
 public:
   void clear_primary_state();
@@ -624,7 +626,8 @@ public:
     state(0),
     have_master_log(true),
     must_notify_mon(false),
-    stat_num_bytes(0), stat_num_blocks(0)
+    stat_num_bytes(0), stat_num_blocks(0),
+    pg_stats_valid(false)
   { }
   virtual ~PG() { }
   
@@ -645,6 +648,7 @@ public:
   void       set_role(int r) { role = r; }
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
+  bool       is_replica() const { return role > 0; }
   bool       is_acker() const { 
     if (g_conf.osd_rep == OSD_REP_PRIMARY)
       return is_primary();
@@ -662,8 +666,10 @@ public:
 
   bool is_complete() const { return info.last_complete == info.last_update; }
 
+  int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
+  bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
@@ -789,11 +795,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     out << " pct " << pg.peers_complete_thru;
     if (!pg.have_master_log) out << " !hml";
   }
-  if (pg.is_active()) out << " active";
-  if (pg.is_crashed()) out << " crashed";
-  if (pg.is_replay()) out << " replay";
-  if (pg.is_clean()) out << " clean";
-  if (pg.is_stray()) out << " stray";
+
+  out << " " << pg_state_string(pg.get_state());
+
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();

@@ -177,12 +177,16 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
     eversion_t lu = peer_info[from].last_update;
     while (pp != olog.log.rend()) {
       if (!log.logged_object(pp->oid)) {
-        dout(10) << " divergent " << *pp << " not in our log, generating backlog" << dendl;
-	//dout(0) << "log" << dendl;
-	//log.print(*_dout);
-	//dout(0) << "olog" << dendl;
-	//olog.print(*_dout);
-        generate_backlog();
+	if (!log.backlog) {
+	  dout(10) << " divergent " << *pp << " not in our log, generating backlog" << dendl;
+	  //dout(0) << "log" << dendl;
+	  //log.print(*_dout);
+	  //dout(0) << "olog" << dendl;
+	  //olog.print(*_dout);
+	  generate_backlog();
+	} else {
+	  dout(10) << " divergent " << *pp << " not in our log, already have backlog" << dendl;
+	}
       }
       
       if (!log.objects.count(pp->oid)) {
@@ -356,7 +360,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
         if (from == olog.log.begin()) break;
         from--;
         //dout(0) << "? " << *from << dendl;
-        if (from->version < log.top) {
+        if (from->version <= log.top) {
           from++;
           break;
         }
@@ -589,6 +593,8 @@ void PG::build_prior()
 
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
+  state_clear(PG_STATE_DOWN);
+  bool any_up = false;
   bool some_down = false;
 
   must_notify_mon = false;
@@ -637,6 +643,10 @@ void PG::build_prior()
     int num_still_up_or_clean = 0;
     for (unsigned i=0; i<acting.size(); i++) {
       if (osd->osdmap->is_up(acting[i])) {  // is up now
+	if (first_epoch <= info.history.last_epoch_started &&  // FIXME this is sloppy i think?
+	    last_epoch >= info.history.last_epoch_started)
+	  any_up = true;
+
 	if (acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(acting[i]);
 
@@ -666,8 +676,15 @@ void PG::build_prior()
     }
   }
 
+  if (info.history.last_epoch_started < info.history.same_since &&
+      !any_up) {
+    dout(10) << "build_prior  no osds are up from the last epoch started, PG is down for now." << dendl;
+    state_set(PG_STATE_DOWN);
+  }
+
   dout(10) << "build_prior = " << prior_set
 	   << (is_crashed() ? " crashed":"")
+	   << (is_down() ? " down":"")
 	   << (some_down ? " some_down":"")
 	   << (must_notify_mon ? " must_notify_mon":"")
 	   << dendl;
@@ -747,7 +764,9 @@ void PG::peer(ObjectStore::Transaction& t,
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
        it++) {
-    if (it->second.last_update > newest_update) {
+    if (it->second.last_update > newest_update ||
+	(it->second.last_update == newest_update &&    // prefer osds in the prior set
+	 prior_set.count(newest_update_osd) == 0)) {
       newest_update = it->second.last_update;
       newest_update_osd = it->first;
     }
@@ -758,6 +777,8 @@ void PG::peer(ObjectStore::Transaction& t,
         peers_complete_thru = it->second.last_complete;
     }    
   }
+  if (newest_update == info.last_update)   // or just me, if nobody better.
+    newest_update_osd = osd->whoami;
 
   // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
@@ -796,6 +817,12 @@ void PG::peer(ObjectStore::Transaction& t,
   }
 
   dout(10) << " oldest_update " << oldest_update << dendl;
+
+
+  if (is_down()) {
+    dout(10) << " down.  we wait." << dendl;    
+    return;
+  }
 
   have_master_log = true;
 
@@ -921,6 +948,7 @@ void PG::activate(ObjectStore::Transaction& t,
   // twiddle pg state
   state_set(PG_STATE_ACTIVE);
   state_clear(PG_STATE_STRAY);
+  state_clear(PG_STATE_DOWN);
   if (is_crashed()) {
     //assert(is_replay());      // HELP.. not on replica?
     state_clear(PG_STATE_CRASHED);
@@ -946,6 +974,13 @@ void PG::activate(ObjectStore::Transaction& t,
   clean_up_local(t); 
 
   // init complete pointer
+  if (missing.num_missing() == 0 &&
+      info.last_complete != info.last_update) {
+    dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
+	     << " -> " << info.last_update << dendl;
+    info.last_complete = info.last_update;
+  }
+
   if (info.last_complete == info.last_update) {
     dout(10) << "activate - complete" << dendl;
     log.complete_to == log.log.end();
@@ -1030,6 +1065,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
       // update our missing
       if (peer_missing[peer].num_missing() == 0) {
+	peer_info[peer].last_complete = peer_info[peer].last_update;
         dout(10) << "activate peer osd" << peer << " already uptodate, " << peer_info[peer] << dendl;
 	assert(peer_info[peer].is_uptodate());
         uptodate_set.insert(peer);
@@ -1135,15 +1171,18 @@ void PG::update_stats()
 {
   dout(15) << "update_stats" << dendl;
 
+  pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
-    pg_stats_lock.Lock();
+    pg_stats_valid = true;
     pg_stats.reported = info.last_update;
     pg_stats.state = state;
     pg_stats.num_bytes = stat_num_bytes;
     pg_stats.num_blocks = stat_num_blocks;
-    pg_stats_lock.Unlock();
+  } else {
+    pg_stats_valid = false;
   }
+  pg_stats_lock.Unlock();
 
   // put in osd stat_queue
   osd->pg_stat_queue_lock.Lock();
@@ -1151,6 +1190,13 @@ void PG::update_stats()
     osd->pg_stat_queue[info.pgid] = info.last_update;    
   osd->osd_stat_updated = true;
   osd->pg_stat_queue_lock.Unlock();
+}
+
+void PG::clear_stats()
+{
+  pg_stats_lock.Lock();
+  pg_stats_valid = false;
+  pg_stats_lock.Unlock();
 }
 
 

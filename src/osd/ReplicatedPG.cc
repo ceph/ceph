@@ -1358,6 +1358,20 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
            << " v " << op->version
 	   << " " << op->offset << "~" << op->length
 	   << dendl;  
+
+  // sanity checks
+  if (op->map_epoch < info.history.same_primary_since) {
+    dout(10) << "sub_op_modify discarding old sub_op from "
+	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+    delete op;
+    return;
+  }
+  if (!is_active()) {
+    dout(10) << "sub_op_modify not active" << dendl;
+    delete op;
+    return;
+  }
+  assert(is_replica());
   
   // note peer's stat
   int fromosd = op->get_source().num();
@@ -1472,7 +1486,8 @@ void ReplicatedPG::pull(pobject_t poid)
   
   // take note
   assert(pulling.count(poid.oid) == 0);
-  pulling[poid.oid] = v;
+  pulling[poid.oid].first = v;
+  pulling[poid.oid].second = fromosd;
 }
 
 
@@ -1551,37 +1566,20 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 {
   const pobject_t poid = op->poid;
   const eversion_t v = op->version;
-  int from = op->get_source().num();
 
   dout(7) << "op_pull " << poid << " v " << op->version
           << " from " << op->get_source()
           << dendl;
 
-  // is a replica asking?  are they missing it?
-  if (is_primary()) {
-    // primary
-    assert(peer_missing.count(from));  // we had better know this, from the peering process.
-
-    if (!peer_missing[from].is_missing(poid.oid)) {
-      dout(7) << "op_pull replica isn't actually missing it, we must have already pushed to them" << dendl;
-      delete op;
-      return;
-    }
-
-    // do we have it yet?
-    if (is_missing_object(poid.oid)) {
-      wait_for_missing_object(poid.oid, op);
-      return;
-    }
-  } else {
-    // non-primary
-    if (missing.is_missing(poid.oid)) {
-      dout(7) << "op_pull not primary, and missing " << poid << ", ignoring" << dendl;
-      delete op;
-      return;
-    }
+  if (op->map_epoch < info.history.same_primary_since) {
+    dout(10) << "sub_op_pull discarding old sub_op from "
+	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+    delete op;
+    return;
   }
-    
+
+  assert(!is_primary());  // we should be a replica or stray.
+
   // push it back!
   push(poid, op->get_source().num());
 }
@@ -1595,18 +1593,39 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   pobject_t poid = op->poid;
   eversion_t v = op->version;
 
-  if (!is_missing_object(poid.oid)) {
-    dout(7) << "sub_op_push not missing " << poid << dendl;
-    dout(15) << " but i AM missing " << missing.missing << dendl;
-    return;
-  }
-  
   dout(7) << "op_push " 
           << poid 
           << " v " << v 
           << " size " << op->length << " " << op->get_data().length()
           << dendl;
 
+  if (is_replica()) {
+    // replica should only accept pushes from the current primary.
+    if (op->map_epoch < info.history.same_primary_since) {
+      dout(10) << "sub_op_push discarding old sub_op from "
+	       << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+      delete op;
+      return;
+    }
+    // FIXME: actually, no, what i really want here is a personal "same_role_since"
+    if (!is_active()) {
+      dout(10) << "sub_op_push not active" << dendl;
+      delete op;
+      return;
+    }
+  } else {
+    // primary will accept pushes anytime.
+  }
+
+  // are we missing (this specific version)?
+  //  (if version is wrong, it is either old (we don't want it) or 
+  //   newer (peering is buggy))
+  if (!missing.is_missing(poid.oid, v)) {
+    dout(7) << "sub_op_push not missing " << poid << " v" << v << dendl;
+    dout(15) << " but i AM missing " << missing.missing << dendl;
+    return;
+  }
+  
   assert(op->get_data().length() == op->length);
   
   // write object and add it to the PG
@@ -1644,18 +1663,22 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 
   if (is_primary()) {
-    // are others missing this too?
-    for (unsigned i=1; i<acting.size(); i++) {
-      int peer = acting[i];
-      assert(peer_missing.count(peer));
-      if (peer_missing[peer].is_missing(poid.oid)) 
-	push(poid, peer);  // ok, push it, and they (will) have it now.
-    }
-
-    // continue recovery
     if (info.is_uptodate())
       uptodate_set.insert(osd->get_nodeid());
-    do_recovery();
+    
+    if (is_active()) {
+      // are others missing this too?  (only if we're active.. skip
+      // this part if we're still repeering, it'll just confuse us)
+      for (unsigned i=1; i<acting.size(); i++) {
+	int peer = acting[i];
+	assert(peer_missing.count(peer));
+	if (peer_missing[peer].is_missing(poid.oid)) 
+	  push(poid, peer);  // ok, push it, and they (will) have it now.
+      }
+
+      do_recovery();      // continue recovery
+    }
+
   } else {
     // ack if i'm a replica and being pushed to.
     MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), false); 
@@ -1689,6 +1712,18 @@ void ReplicatedPG::on_osd_failure(int o)
     if (repop->waitfor_ack.count(o) ||
 	repop->waitfor_commit.count(o))
       repop_ack(repop, -1, true, o);
+  }
+  
+  // remove from pushing map
+  {
+    map<object_t, pair<eversion_t,int> >::iterator p = pulling.begin();
+    while (p != pulling.end())
+      if (p->second.second == o) {
+	dout(10) << " forgetting pull of " << p->first << " " << p->second.first
+		 << " from osd" << o << dendl;
+	pulling.erase(p++);
+      } else
+	p++;
   }
 }
 
@@ -1735,6 +1770,31 @@ void ReplicatedPG::on_change()
 	if (!have)
 	  repop_ack(repop, -EIO, true, *q);
       }
+    }
+  }
+  
+  // remove strays from pushing map
+  {
+    map<object_t, set<int> >::iterator p = pushing.begin();
+    while (p != pushing.end()) {
+      set<int>::iterator q = p->second.begin();
+      while (q != p->second.end()) {
+	int o = *q++;
+	bool have = false;
+	for (unsigned i=1; i<acting.size(); i++)
+	  if (acting[i] == o) {
+	    have = true;
+	    break;
+	  }
+	if (!have) {
+	  dout(10) << " forgetting push of " << p->first << " to (now stray) osd" << o << dendl;
+	  p->second.erase(o);
+	}
+      }
+      if (p->second.empty())
+	pushing.erase(p++);
+      else
+	p++;	
     }
   }
 }

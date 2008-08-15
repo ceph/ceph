@@ -433,6 +433,11 @@ int OSD::shutdown()
   delete threadpool;
   threadpool = 0;
 
+  // zap waiters (bleh, this is messy)
+  finished_lock.Lock();
+  finished.clear();
+  finished_lock.Unlock();
+
   // close pgs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
@@ -876,6 +881,9 @@ void OSD::update_heartbeat_peers()
   map<int, utime_t> stamps;
   stamps.swap(heartbeat_from_stamp);
 
+  set<int> old_heartbeat_from;
+  old_heartbeat_from.swap(heartbeat_from);
+
   // build heartbeat to/from set
   heartbeat_to.clear();
   heartbeat_from.clear();
@@ -895,7 +903,7 @@ void OSD::update_heartbeat_peers()
 	int p = pg->acting[i]; // peer
 	assert(p != whoami);
 	heartbeat_from.insert(p);
-	if (stamps.count(p))
+	if (stamps.count(p) && old_heartbeat_from.count(p))  // have a stamp _AND_ i'm not new to the set
 	  heartbeat_from_stamp[p] = stamps[p];
       }
     }
@@ -1133,8 +1141,11 @@ void OSD::send_pg_stats()
 	continue;
       PG *pg = pg_map[pgid];
       pg->pg_stats_lock.Lock();
-      m->pg_stat[pgid] = pg->pg_stats;
-      dout(20) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+      if (pg->pg_stats_valid) {
+	pg->pg_stats_valid = false;
+	m->pg_stat[pgid] = pg->pg_stats;
+	dout(20) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+      }
       pg->pg_stats_lock.Unlock();
     }
     
@@ -1706,6 +1717,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
+    pg->state_clear(PG_STATE_DOWN);
     
     // reset primary state?
     if (oldrole == 0 || pg->get_role() == 0)
@@ -1726,6 +1738,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       // old primary?
       if (oldrole == 0) {
 	pg->state_clear(PG_STATE_CLEAN);
+	pg->clear_stats();
 	
 	// take replay queue waiters
 	list<Message*> ls;
@@ -2478,17 +2491,22 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     assert(pg->peer_log_requested.count(from) ||
            pg->peer_summary_requested.count(from));
     
-    pg->proc_replica_log(log, missing, from);
-
-    // peer
-    map< int, map<pg_t,PG::Query> > query_map;
-    pg->peer(t, query_map, info_map);
-    pg->update_stats();
-    do_queries(query_map);
+    if (!pg->is_active()) {
+      pg->proc_replica_log(log, missing, from);
+      
+      // peer
+      map< int, map<pg_t,PG::Query> > query_map;
+      pg->peer(t, query_map, info_map);
+      pg->update_stats();
+      do_queries(query_map);
+    } else {
+      dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+    }
 
   } else {
     if (!pg->info.dne()) {
       // i am REPLICA
+      
       // merge log
       pg->merge_log(log, missing, from);
       pg->proc_missing(log, missing, from);
