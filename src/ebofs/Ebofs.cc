@@ -457,7 +457,8 @@ int Ebofs::commit_thread_entry()
     }
     
     if (!dirty && !limbo_blocks) {
-      dout(10) << "commit_thread not dirty" << dendl;
+      dout(10) << "commit_thread not dirty - kicking waiters" << dendl;
+      finisher.queue(commit_waiters[super_epoch]);
     }
     else {
       // --- wait for partials to finish ---
