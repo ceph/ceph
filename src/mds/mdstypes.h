@@ -262,7 +262,6 @@ inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
-  ceph_file_layout layout;  // ?immutable?
   uint32_t   rdev;    // if special file
 
   // affected by any inode change...
@@ -278,6 +277,7 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
+  ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
   utime_t    mtime;   // file data modify time.
@@ -299,7 +299,6 @@ struct inode_t {
 
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
-    ::encode(layout, bl);
     ::encode(rdev, bl);
     ::encode(ctime, bl);
 
@@ -310,6 +309,7 @@ struct inode_t {
     ::encode(nlink, bl);
     ::encode(anchored, bl);
 
+    ::encode(layout, bl);
     ::encode(size, bl);
     ::encode(max_size, bl);
     ::encode(mtime, bl);
@@ -325,7 +325,6 @@ struct inode_t {
   }
   void decode(bufferlist::iterator &p) {
     ::decode(ino, p);
-    ::decode(layout, p);
     ::decode(rdev, p);
     ::decode(ctime, p);
 
@@ -336,6 +335,7 @@ struct inode_t {
     ::decode(nlink, p);
     ::decode(anchored, p);
 
+    ::decode(layout, p);
     ::decode(size, p);
     ::decode(max_size, p);
     ::decode(mtime, p);

@@ -572,6 +572,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case CEPH_LOCK_IFILE:
+    ::encode(inode.layout, bl);
     ::encode(inode.size, bl);
     ::encode(inode.max_size, bl);
     ::encode(inode.mtime, bl);
@@ -716,6 +717,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IFILE:
+    ::decode(inode.layout, p);
     ::decode(inode.size, p);
     ::decode(inode.max_size, p);
     ::decode(inode.mtime, p);

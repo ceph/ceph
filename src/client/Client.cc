@@ -1981,6 +1981,7 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   cap->seq = m->get_seq();
+  in->inode.layout = m->get_layout();
 
   // don't want it?
   int wanted = in->caps_wanted();

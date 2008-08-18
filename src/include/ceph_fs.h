@@ -14,10 +14,12 @@
 # include <linux/types.h>
 # include <asm/fcntl.h>
 #else
-# define _LINUX_TYPES_H   /* we don't want linux/types.h's __u32, __le32, etc. */
 # include <netinet/in.h>
-# include "inttypes.h"
-# include "byteorder.h"
+# ifndef _LINUX_TYPES_H
+#  define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
+#  include "inttypes.h"
+#  include "byteorder.h"
+# endif
 # include <fcntl.h>
 #endif
 
@@ -107,10 +109,10 @@ static inline __u32 frag_mask_shift(__u32 f) {
 	return 24 - frag_bits(f);
 }
 
-static inline bool frag_contains_value(__u32 f, __u32 v) {
+static inline int frag_contains_value(__u32 f, __u32 v) {
 	return (v & frag_mask(f)) == frag_value(f);
 }
-static inline bool frag_contains_frag(__u32 f, __u32 sub) {
+static inline int frag_contains_frag(__u32 f, __u32 sub) {
 	/* as specific as us, and contained by us */
 	return frag_bits(sub) >= frag_bits(f) &&
 		(frag_value(sub) & frag_mask(f)) == frag_value(f);
@@ -120,11 +122,11 @@ static inline __u32 frag_parent(__u32 f) {
 	return frag_make(frag_bits(f) - 1,
 			 frag_value(f) & (frag_mask(f) << 1));
 }
-static inline bool frag_is_left_child(__u32 f) {
+static inline int frag_is_left_child(__u32 f) {
 	return frag_bits(f) > 0 &&
 		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 0;
 }
-static inline bool frag_is_right_child(__u32 f) {
+static inline int frag_is_right_child(__u32 f) {
 	return frag_bits(f) > 0 &&
 		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 1;
 }
@@ -144,10 +146,10 @@ static inline __u32 frag_make_child(__u32 f, int by, int i) {
 	return frag_make(newbits,
 			 frag_value(f) | (i << (24 - newbits)));
 }
-static inline bool frag_is_leftmost(__u32 f) {
+static inline int frag_is_leftmost(__u32 f) {
 	return frag_value(f) == 0;
 }
-static inline bool frag_is_rightmost(__u32 f) {
+static inline int frag_is_rightmost(__u32 f) {
 	return frag_value(f) == frag_mask(f);
 }
 static inline __u32 frag_next(__u32 f) {
@@ -498,11 +500,11 @@ struct ceph_mds_getmap {
 #define CEPH_STAT_MASK_INODE    CEPH_LOCK_INO
 #define CEPH_STAT_MASK_TYPE     CEPH_LOCK_INO  /* mode >> 12 */
 #define CEPH_STAT_MASK_SYMLINK  CEPH_LOCK_INO
-#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_INO
 #define CEPH_STAT_MASK_UID      CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_GID      CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_MODE     CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_NLINK    CEPH_LOCK_ILINK
+#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_MTIME    CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
@@ -549,6 +551,7 @@ enum {
 	CEPH_MDS_OP_LCHOWN    = 0x01103,
 	CEPH_MDS_OP_LSETXATTR = 0x01104,
 	CEPH_MDS_OP_LRMXATTR  = 0x01105,
+	CEPH_MDS_OP_LSETLAYOUT= 0x01106,
 	
 	CEPH_MDS_OP_STAT      = 0x10100,
 	CEPH_MDS_OP_UTIME     = 0x11101,
@@ -588,6 +591,7 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LCHMOD: return "lchmod";
 	case CEPH_MDS_OP_CHOWN: return "chown";
 	case CEPH_MDS_OP_LCHOWN: return "lchown";
+	case CEPH_MDS_OP_LSETLAYOUT: return "lsetlayout";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
@@ -660,6 +664,9 @@ struct ceph_mds_request_head {
 		struct {
 			__le32 flags;
 		} __attribute__ ((packed)) setxattr;
+		struct {
+			struct ceph_file_layout layout;
+		} __attribute__ ((packed)) setlayout;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
@@ -732,8 +739,10 @@ struct ceph_mds_reply_dirfrag {
 
 static inline int ceph_flags_to_mode(int flags)
 {
+#ifdef O_DIRECTORY  /* fixme */
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)
 		return CEPH_FILE_MODE_PIN;
+#endif
 #ifdef O_LAZY
 	if (flags & O_LAZY)
 		return CEPH_FILE_MODE_LAZY;
@@ -813,6 +822,7 @@ struct ceph_mds_caps {
 	__le64 size, max_size;
 	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
+	struct ceph_file_layout layout;
 	__le64 time_warp_seq;
 	__le64 snap_follows;
 	__le32 snap_trace_len;

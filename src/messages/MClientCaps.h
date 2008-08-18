@@ -38,6 +38,8 @@ class MClientCaps : public Message {
   utime_t get_atime() { return utime_t(h.atime); }
   __u64 get_time_warp_seq() { return h.time_warp_seq; }
 
+  ceph_file_layout& get_layout() { return h.layout; }
+
   int       get_migrate_seq() { return h.migrate_seq; }
   int       get_op() { return h.op; }
 
@@ -71,6 +73,7 @@ class MClientCaps : public Message {
     h.seq = seq;
     h.caps = caps;
     h.wanted = wanted;
+    h.layout = inode.layout;
     h.size = inode.size;
     h.max_size = inode.max_size;
     h.migrate_seq = mseq;

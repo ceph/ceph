@@ -806,6 +806,9 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_LCHOWN:
     handle_client_chown(mdr);
     break;
+  case CEPH_MDS_OP_LSETLAYOUT:
+    handle_client_setlayout(mdr);
+    break;
   case CEPH_MDS_OP_TRUNCATE:
   case CEPH_MDS_OP_LTRUNCATE:
     handle_client_truncate(mdr);
@@ -818,6 +821,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_LRMXATTR:
     handle_client_removexattr(mdr);
     break;
+
   case CEPH_MDS_OP_READDIR:
     handle_client_readdir(mdr);
     break;
@@ -1779,6 +1783,47 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
+void Server::handle_client_setlayout(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  CInode *cur = rdlock_path_pin_ref(mdr, true);
+  if (!cur) return;
+
+  if (mdr->ref_snapid != CEPH_NOSNAP || cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+  if (cur->is_dir()) {
+    reply_request(mdr, -EISDIR);
+    return;
+  }
+
+  // write
+  set<SimpleLock*> rdlocks = mdr->rdlocks;
+  set<SimpleLock*> wrlocks = mdr->wrlocks;
+  set<SimpleLock*> xlocks = mdr->xlocks;
+  xlocks.insert(&cur->filelock);
+  mds->locker->include_snap_rdlocks(rdlocks, cur);
+
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // project update
+  inode_t *pi = cur->project_inode();
+  pi->layout = req->head.args.setlayout.layout;
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+  
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "setlayout");
+  le->metablob.add_client_req(req->get_reqid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  
+  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
 
 // XATTRS
 
@@ -1888,8 +1933,6 @@ void Server::handle_client_removexattr(MDRequest *mdr)
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
-
-
 
 
 

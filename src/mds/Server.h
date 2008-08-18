@@ -107,6 +107,7 @@ public:
   void handle_client_utime(MDRequest *mdr);
   void handle_client_chmod(MDRequest *mdr);
   void handle_client_chown(MDRequest *mdr);
+  void handle_client_setlayout(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
   void handle_client_truncate(MDRequest *mdr);
   void handle_client_setxattr(MDRequest *mdr);
