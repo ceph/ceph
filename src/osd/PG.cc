@@ -1123,22 +1123,42 @@ void PG::activate(ObjectStore::Transaction& t,
 }
 
 
+struct C_PG_FinishRecovery : public Context {
+  PG *pg;
+  C_PG_FinishRecovery(PG *p) : pg(p) {}
+  void finish(int r) {
+    pg->_finish_recovery(this);
+  }
+};
+
 void PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
+  /*
+   * sync all this before purging strays.  but don't block!
+   */
+  finish_sync_event = new C_PG_FinishRecovery(this);
+
   ObjectStore::Transaction t;
   bufferlist bl;
   ::encode(info, bl);
   t.collection_setattr(info.pgid.to_coll(), "info", bl);
-  osd->store->apply_transaction(t);
-  //osd->store->sync();  
-#warning fix finish_recovery sync behavior
+  osd->store->apply_transaction(t, finish_sync_event);
+}
 
-  purge_strays();
-  update_stats();
+void PG::_finish_recovery(Context *c)
+{
+  lock();
+  if (c == finish_sync_event) {
+    finish_sync_event = 0;
+    dout(10) << "_finish_recovery" << dendl;
+    purge_strays();
+    update_stats();
+  }
+  unlock();
 }
 
 

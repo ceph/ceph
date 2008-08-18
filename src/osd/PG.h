@@ -609,7 +609,11 @@ public:
 
   void purge_strays();
 
+
+  Context *finish_sync_event;
+
   void finish_recovery();
+  void _finish_recovery(Context *c);
 
   loff_t get_log_write_pos() {
     return 0;
@@ -627,7 +631,8 @@ public:
     have_master_log(true),
     must_notify_mon(false),
     stat_num_bytes(0), stat_num_blocks(0),
-    pg_stats_valid(false)
+    pg_stats_valid(false),
+    finish_sync_event(NULL)
   { }
   virtual ~PG() { }
   
