@@ -49,6 +49,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
+- snap ordered writeout?
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
