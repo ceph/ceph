@@ -798,6 +798,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dout(10, "fill_trace provided dn %p '%.*s'\n",
 				     dn, dn->d_name.len, dn->d_name.name);
 				ceph_init_dentry(dn);  /* just in case */
+			} else if (dn == req->r_last_dentry) {
+				dout(10, "fill_trace matches provided dn %p\n",
+				     dn);
+				dput(req->r_last_dentry);
 			} else {
 				dout(10, "fill_trace NOT using provided dn %p "
 				     "(parent %p)\n", req->r_last_dentry,
@@ -965,7 +969,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			if (dn)
 				dput(dn);
 			dn = existing;
-			dout(10, " using existing %p\n", dn);
+			dout(10, " using existing %p alias %p\n", in, dn);
 		} else {
 			if (dn && dn->d_inode == NULL) {
 				dout(10, " instantiating provided %p\n", dn);
