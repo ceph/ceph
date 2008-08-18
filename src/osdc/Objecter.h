@@ -241,7 +241,9 @@ class Objecter {
               Context *onack, Context *oncommit);
   tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags,
              Context *onack, Context *oncommit);
-  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, const SnapContext& snapc, Context *onack, Context *oncommit);
+
+  // no snapc for lock ops
+  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
 
 
   void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);

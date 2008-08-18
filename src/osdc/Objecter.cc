@@ -748,9 +748,10 @@ tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, const SnapContext& snapc,
+tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol,
                      Context *onack, Context *oncommit)
 {
+  SnapContext snapc; // null is fine
   OSDModify *l = prepare_modify(snapc, op, flags);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().layout = ol;
