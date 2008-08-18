@@ -5028,6 +5028,10 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     reply_request(mdr, -ENOTDIR);
     return;
   }
+  if (diri->is_base()) {  // no snaps on root dir, until we can store it
+    reply_request(mdr, -EPERM);
+    return;
+  }
   dout(10) << "mksnap " << req->get_path2() << " on " << *diri << dendl;
 
   // lock snap
