@@ -10,7 +10,6 @@ bugs
 big items
 - ENOSPC
 - enforceable quotas?
-- snapshots
 - mds security enforcement
 - client, user authentication
 - cas
@@ -62,8 +61,6 @@ kernel client
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
-- vfs
- - can we use dentry_path(), if it gets merged into mainline?
 - io / osd client
   - osd ack vs commit handling.  hmm!
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
