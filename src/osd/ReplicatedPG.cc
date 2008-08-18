@@ -681,6 +681,19 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   if (op == CEPH_OSD_OP_WRNOOP) 
     return;
 
+  // munge zero into remove?
+  if (op == CEPH_OSD_OP_ZERO) {
+    struct stat st;
+    int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
+    if (r >= 0) {
+      if (offset == 0 && offset + length >= (loff_t)st.st_size) {
+	dout(10) << " munging ZERO " << offset << "~" << length
+		 << " -> DELETE (size is " << st.st_size << ")" << dendl;
+	op = CEPH_OSD_OP_DELETE;
+      }
+    }
+  }
+
   // clone?
   if (poid.oid.snap) {
     assert(poid.oid.snap == CEPH_NOSNAP);
@@ -800,25 +813,14 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       t.write(info.pgid.to_coll(), poid, offset, length, nbl);
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       snapset.head_exists = true;
+      snapset.head_diffs.insert(offset, length);
     }
     break;
     
   case CEPH_OSD_OP_ZERO:
-    {
-      // zero, remove, or truncate?
-      struct stat st;
-      int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
-      if (r >= 0) {
-	if (offset == 0 && offset + length >= (loff_t)st.st_size) 
-	  t.remove(info.pgid.to_coll(), poid);
-	else {
-	  t.zero(info.pgid.to_coll(), poid, offset, length);
-	  if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
-	}
-      } else {
-	// noop?
-	dout(10) << "apply_transaction zero on " << poid << ", but dne?  stat returns " << r << dendl;
-      }
+    { // zero
+      t.zero(info.pgid.to_coll(), poid, offset, length);
+      if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
     }
     break;
 
