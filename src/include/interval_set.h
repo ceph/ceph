@@ -199,6 +199,13 @@ class interval_set {
       }
     }
   }
+
+  void swap(interval_set<T>& other) {
+    m.swap(other.m);
+    int t = _size;
+    _size = other._size;
+    other._size = t;
+  }    
   
   void erase(T val) {
     erase(val, 1);
@@ -263,6 +270,11 @@ class interval_set {
       else
         pa++; 
     }
+  }
+  void intersection_of(const interval_set& b) {
+    interval_set a;
+    a.m.swap(m);
+    intersection_of(a, b);
   }
 
   void union_of(const interval_set &a, const interval_set &b) {

@@ -18,6 +18,7 @@
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/pobject.h"
+#include "include/interval_set.h"
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
@@ -424,6 +425,13 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 
 // -------
 
+inline void encode(const interval_set<__u64>& s, bufferlist& bl) {
+  ::encode(s.m, bl);
+}
+inline void decode(interval_set<__u64>& s, bufferlist::iterator& bl) {
+  ::decode(s.m, bl);
+}
+
 /*
  * attached to object head.  describes most recent snap context, and
  * set of existing clones.
@@ -433,6 +441,8 @@ struct SnapSet {
   bool head_exists;
   vector<snapid_t> snaps;
   vector<snapid_t> clones;
+  interval_set<__u64> head_diffs;                   // subset of data that is "new"
+  map<snapid_t, interval_set<__u64> > clone_diffs;  // diff to previous
 
   SnapSet() : head_exists(false) {}
 
@@ -441,12 +451,16 @@ struct SnapSet {
     ::encode(head_exists, bl);
     ::encode(snaps, bl);
     ::encode(clones, bl);
+    ::encode(head_diffs, bl);
+    ::encode(clone_diffs, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(seq, bl);
     ::decode(head_exists, bl);
     ::decode(snaps, bl);
     ::decode(clones, bl);
+    ::decode(head_diffs, bl);
+    ::decode(clone_diffs, bl);
   }
 };
 WRITE_CLASS_ENCODER(SnapSet)

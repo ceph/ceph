@@ -34,8 +34,7 @@ snaps on mds
 
 snaps on osd
 - garbage collection
-- efficient recovery of clones
-  - include inter-clone diff intervals in SnapSet.
+- efficient recovery of clones using the clone diff info
 
 userspace client
 - handle session STALE

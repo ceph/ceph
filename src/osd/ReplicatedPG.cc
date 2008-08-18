@@ -745,6 +745,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       }
 
       snapset.clones.push_back(coid.oid.snap);
+      snapset.clone_diffs[coid.oid.snap].swap(snapset.head_diffs);
       
       at_version.version++;
     }
@@ -813,7 +814,9 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       t.write(info.pgid.to_coll(), poid, offset, length, nbl);
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       snapset.head_exists = true;
-      snapset.head_diffs.insert(offset, length);
+      interval_set<__u64> ch;
+      ch.insert(offset, length);
+      snapset.head_diffs.union_of(ch);
     }
     break;
     
@@ -821,6 +824,9 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     { // zero
       t.zero(info.pgid.to_coll(), poid, offset, length);
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      interval_set<__u64> ch;
+      ch.insert(offset, length);
+      snapset.head_diffs.union_of(ch);
     }
     break;
 
@@ -828,12 +834,16 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     { // truncate
       t.truncate(info.pgid.to_coll(), poid, length);
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      interval_set<__u64> keep;
+      keep.insert(0, length);
+      snapset.head_diffs.intersection_of(keep);
     }
     break;
     
   case CEPH_OSD_OP_DELETE:
     { // delete
       t.remove(info.pgid.to_coll(), poid);
+      snapset.head_diffs.clear();
     }
     break;
     
