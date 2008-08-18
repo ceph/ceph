@@ -834,6 +834,7 @@ const struct file_operations ceph_dir_fops = {
 	.llseek = ceph_dir_llseek,
 	.open = ceph_open,
 	.release = ceph_release,
+	.unlocked_ioctl = ceph_ioctl,
 };
 
 const struct inode_operations ceph_dir_iops = {

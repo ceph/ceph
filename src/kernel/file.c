@@ -8,7 +8,6 @@ int ceph_debug_file = -1;
 #include "super.h"
 
 #include "mds_client.h"
-#include "ioctl.h"
 
 #include <linux/namei.h>
 
@@ -381,47 +380,6 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	 */
 
 	return 0;
-}
-
-
-/*
- * ioctls
- */
-
-static long ceph_ioctl_get_layout(struct file *file, void __user *arg)
-{
-	struct ceph_inode_info *ci = ceph_inode(file->f_dentry->d_inode);
-
-	if (copy_to_user(arg, &ci->i_layout, sizeof(ci->i_layout)))
-		return -EFAULT;
-
-	return 0;
-}
-
-static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
-{
-	struct inode *inode = file->f_dentry->d_inode;
-	struct ceph_file_layout l;
-
-	if (copy_from_user(&l, arg, sizeof(l)))
-		return -EFAULT;
-
-	/* validate */
-	/* ... */
-
-	return 0;
-}
-
-static long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	switch (cmd) {
-	case CEPH_IOC_GET_LAYOUT:
-		return ceph_ioctl_get_layout(file, (void __user *)arg);
-
-	case CEPH_IOC_SET_LAYOUT:
-		return ceph_ioctl_set_layout(file, (void __user *)arg);
-	}
-	return -ENOTTY;
 }
 
 const struct file_operations ceph_file_fops = {

@@ -1562,6 +1562,9 @@ int ceph_handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 
 	cap->seq = seq;
 
+	/* layout may have changed */
+	ci->i_layout = grant->layout;
+
 	/* revocation? */
 	if (cap->issued & ~newcaps) {
 		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
@@ -2195,7 +2198,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	return 0;
 }
 
-static int do_getattr(struct dentry *dentry, int mask)
+int ceph_do_getattr(struct dentry *dentry, int mask)
 {
 	int want_inode = 0;
 	struct dentry *ret;
@@ -2241,7 +2244,7 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 {
 	int err;
 
-	err = do_getattr(dentry, CEPH_STAT_MASK_INODE_ALL);
+	err = ceph_do_getattr(dentry, CEPH_STAT_MASK_INODE_ALL);
 	dout(30, "getattr returned %d\n", err);
 	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
@@ -2264,7 +2267,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	int err;
 	void *p, *end;
 
-	err = do_getattr(dentry, CEPH_STAT_MASK_XATTR);
+	err = ceph_do_getattr(dentry, CEPH_STAT_MASK_XATTR);
 	if (err)
 		return err;
 
@@ -2319,7 +2322,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	void *p, *end;
 	int err;
 
-	err = do_getattr(dentry, CEPH_STAT_MASK_XATTR);
+	err = ceph_do_getattr(dentry, CEPH_STAT_MASK_XATTR);
 	if (err)
 		return err;
 

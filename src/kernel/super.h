@@ -24,6 +24,7 @@ extern int ceph_debug_osdc;
 extern int ceph_debug_addr;
 extern int ceph_debug_inode;
 extern int ceph_debug_snap;
+extern int ceph_debug_ioctl;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
@@ -568,6 +569,7 @@ extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
 extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
+extern int ceph_do_getattr(struct dentry *dentry, int mask);
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			struct kstat *stat);
@@ -612,6 +614,9 @@ static inline void ceph_init_dentry(struct dentry *dentry) {
 		dentry->d_op = &ceph_snap_dentry_ops;
 	dentry->d_time = 0;
 }
+
+/* ioctl.c */
+extern long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* export.c */
 extern const struct export_operations ceph_export_ops;
