@@ -280,6 +280,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_REPLAY     32  // crashed, waiting for replay
 #define PG_STATE_STRAY      64  // i must notify the primary i exist.
 #define PG_STATE_SPLITTING 128  // i am splitting
+#define PG_STATE_SNAPTRIM  256  // i am trimming snapshot data
 
 static inline std::string pg_state_string(int state) {
   std::string st;
@@ -291,6 +292,7 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_REPLAY) st += "replay+";
   if (state & PG_STATE_STRAY) st += "stray+";
   if (state & PG_STATE_SPLITTING) st += "splitting+";
+  if (state & PG_STATE_SNAPTRIM) st += "trimmingsnap+";
   if (!st.length()) 
     st = "inactive";
   else 
@@ -425,12 +427,8 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 
 // -------
 
-inline void encode(const interval_set<__u64>& s, bufferlist& bl) {
-  ::encode(s.m, bl);
-}
-inline void decode(interval_set<__u64>& s, bufferlist::iterator& bl) {
-  ::decode(s.m, bl);
-}
+WRITE_CLASS_ENCODER(interval_set<__u64>)
+
 
 /*
  * attached to object head.  describes most recent snap context, and

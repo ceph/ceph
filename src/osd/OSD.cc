@@ -1531,6 +1531,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   while (cur < superblock.newest_map) {
     dout(10) << "cur " << cur << " < newest " << superblock.newest_map << dendl;
 
+    OSDMap::Incremental inc;
+
     if (m->incremental_maps.count(cur+1) ||
         store->exists(0, get_inc_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
@@ -1544,7 +1546,8 @@ void OSD::handle_osd_map(MOSDMap *m)
         get_inc_map_bl(cur+1, bl);
       }
 
-      OSDMap::Incremental inc(bl);
+      bufferlist::iterator p = bl.begin();
+      inc.decode(p);
       osdmap->apply_incremental(inc);
 
       // archive the full map
@@ -1579,6 +1582,10 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap *newmap = new OSDMap;
       newmap->decode(bl);
 
+      // fake inc->removed_snaps
+      inc.removed_snaps = newmap->get_removed_snaps();
+      inc.removed_snaps.subtract(osdmap->get_removed_snaps());
+
       // kill connections to newly down osds
       set<int> old;
       osdmap->get_all_osds(old);
@@ -1598,7 +1605,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     cur++;
     superblock.current_epoch = cur;
-    advance_map(t);
+    advance_map(t, inc.removed_snaps);
     advanced = true;
   }
 
@@ -1647,12 +1654,13 @@ void OSD::handle_osd_map(MOSDMap *m)
  * scan placement groups, initiate any replication
  * activities.
  */
-void OSD::advance_map(ObjectStore::Transaction& t)
+void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps)
 {
   assert(osd_lock.is_locked());
 
   dout(7) << "advance_map epoch " << osdmap->get_epoch() 
           << "  " << pg_map.size() << " pgs"
+	  << " removed_snaps " << removed_snaps
           << dendl;
   
   // scan pg creations
@@ -1683,11 +1691,26 @@ void OSD::advance_map(ObjectStore::Transaction& t)
        it++) {
     pg_t pgid = it->first;
     PG *pg = it->second;
-    
+
     // get new acting set
     vector<int> tacting;
     int nrep = osdmap->pg_to_acting_osds(pgid, tacting);
     int role = osdmap->calc_pg_role(whoami, tacting, nrep);
+
+    // adjust removed_snaps?
+    if (!removed_snaps.empty()) {
+      pg->lock();
+      for (map<snapid_t,snapid_t>::iterator p = removed_snaps.m.begin();
+	   p != removed_snaps.m.end();
+	   p++)
+	for (snapid_t t = 0; t < p->second; ++t)
+	  pg->info.removed_snaps.insert(p->first + t);
+      dout(10) << *pg << " removed_snaps now " << pg->info.removed_snaps << dendl;
+      bufferlist bl;
+      ::encode(pg->info, bl);
+      t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
+      pg->unlock();
+    }   
     
     // no change?
     if (tacting == pg->acting) 

@@ -66,6 +66,8 @@ public:
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
+    set<snapid_t> removed_snaps; // snaps we need to trim
+
     struct History {
       epoch_t epoch_created;       // epoch in which PG was created
       epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
@@ -115,6 +117,7 @@ public:
       ::encode(log_bottom, bl);
       ::encode(log_backlog, bl);
       history.encode(bl);
+      ::encode(removed_snaps, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(pgid, bl);
@@ -123,6 +126,7 @@ public:
       ::decode(log_bottom, bl);
       ::decode(log_backlog, bl);
       history.decode(bl);
+      ::decode(removed_snaps, bl);
     }
   };
   WRITE_CLASS_ENCODER(Info::History)
@@ -806,6 +810,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
+  if (pg.info.removed_snaps.size())
+    out << " rs=" << pg.info.removed_snaps;
   out << "]";
 
 

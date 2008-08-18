@@ -260,7 +260,7 @@ private:
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   
-  void advance_map(ObjectStore::Transaction& t);
+  void advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps);
   void activate_map(ObjectStore::Transaction& t);
 
   void get_map(epoch_t e, OSDMap &m);

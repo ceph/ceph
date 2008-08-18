@@ -251,6 +251,7 @@ private:
       return false;
     return removed_snaps.contains(sn); 
   }
+  interval_set<snapid_t>& get_removed_snaps() { return removed_snaps; }
 
   /***** cluster state *****/
   /* osds */

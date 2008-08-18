@@ -92,6 +92,18 @@ class interval_set {
     return _size;
   }
 
+  void encode(bufferlist& bl) const {
+    ::encode(m, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(m, bl);
+    _size = 0;
+    for (typename map<T,T>::const_iterator p = m.begin();
+         p != m.end();
+         p++)
+      _size += p->second;
+  }
+
   void clear() {
     m.clear();
     _size = 0;
