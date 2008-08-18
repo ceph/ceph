@@ -444,12 +444,12 @@ void PG::generate_backlog()
   assert(!log.backlog);
   log.backlog = true;
 
-  list<pobject_t> olist;
+  vector<pobject_t> olist;
   osd->store->collection_list(info.pgid.to_coll(), olist);
   
   int local = 0;
   map<eversion_t,Log::Entry> add;
-  for (list<pobject_t>::iterator it = olist.begin();
+  for (vector<pobject_t>::iterator it = olist.begin();
        it != olist.end();
        it++) {
     local++;

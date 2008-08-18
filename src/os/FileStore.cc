@@ -1431,7 +1431,7 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
 // --------------------------
 // collections
 
-int FileStore::list_collections(list<coll_t>& ls) 
+int FileStore::list_collections(vector<coll_t>& ls) 
 {
   if (fake_collections) return collections.list_collections(ls);
 
@@ -1549,7 +1549,7 @@ int FileStore::collection_remove(coll_t c, pobject_t o,
   return r < 0 ? -errno:r;
 }
 
-int FileStore::collection_list(coll_t c, list<pobject_t>& ls) 
+int FileStore::collection_list(coll_t c, vector<pobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 

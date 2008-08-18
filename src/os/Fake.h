@@ -34,7 +34,7 @@ class FakeCollections {
   FakeCollections(ObjectStore *s) : store(s) {}
 
   // faked collections
-  int list_collections(list<coll_t>& ls) {
+  int list_collections(vector<coll_t>& ls) {
     faker_lock.Lock();
     int r = 0;
     for (hash_map< coll_t, set<pobject_t> >::iterator p = fakecollections.begin();
@@ -99,7 +99,7 @@ class FakeCollections {
     return 0;
   }
 
-  int collection_list(coll_t c, list<pobject_t>& o) {
+  int collection_list(coll_t c, vector<pobject_t>& o) {
     faker_lock.Lock();
     int r = 0;
     for (set<pobject_t>::iterator p = fakecollections[c].begin();

@@ -457,14 +457,14 @@ bool ReplicatedPG::snap_trimmer()
 	 is_active()) {
     snapid_t sn = *info.removed_snaps.begin();
     coll_t c = info.pgid.to_snap_coll(sn);
-    list<pobject_t> ls;
+    vector<pobject_t> ls;
     osd->store->collection_list(c, ls);
 
     dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
 
     ObjectStore::Transaction t;
 
-    for (list<pobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
+    for (vector<pobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
       pobject_t coid = *p;
 
       bufferlist bl;
@@ -2099,11 +2099,11 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     // FIXME: sloppy pobject vs object conversions abound!  ***
     
     // be thorough.
-    list<pobject_t> ls;
+    vector<pobject_t> ls;
     osd->store->collection_list(info.pgid.to_coll(), ls);
     set<object_t> s;
     
-    for (list<pobject_t>::iterator i = ls.begin();
+    for (vector<pobject_t>::iterator i = ls.begin();
          i != ls.end();
          i++) 
       s.insert(i->oid); 

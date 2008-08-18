@@ -29,12 +29,12 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
   hash_map<pobject_t, coll_t> did_object;
 
   // collections
-  list<coll_t> collections;
+  vector<coll_t> collections;
   src->list_collections(collections);
   int num = collections.size();
   cout << num << " collections" << std::endl;
   int i = 1;
-  for (list<coll_t>::iterator p = collections.begin();
+  for (vector<coll_t>::iterator p = collections.begin();
        p != collections.end();
        ++p) {
     cout << "collection " << i++ << "/" << num << " " << hex << *p << dec << std::endl;
@@ -43,11 +43,11 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
     src->collection_getattrs(*p, attrs);
     dst->collection_setattrs(*p, attrs);
 
-    list<pobject_t> o;
+    vector<pobject_t> o;
     src->collection_list(*p, o);
     int numo = o.size();
     int j = 1;
-    for (list<pobject_t>::iterator q = o.begin(); q != o.end(); q++) {
+    for (vector<pobject_t>::iterator q = o.begin(); q != o.end(); q++) {
       if (did_object.count(*q))
 	dst->collection_add(*p, did_object[*q], *q, 0);
       else {

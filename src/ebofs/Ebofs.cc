@@ -3398,7 +3398,7 @@ int Ebofs::listattr(coll_t cid, pobject_t oid, vector<string>& attrs)
 
 /***************** collections ******************/
 
-int Ebofs::list_collections(list<coll_t>& ls)
+int Ebofs::list_collections(vector<coll_t>& ls)
 {
   ebofs_lock.Lock();
   dout(9) << "list_collections " << dendl;
@@ -3466,9 +3466,9 @@ int Ebofs::_destroy_collection(coll_t cid)
   assert(cn);
 
   // hose mappings
-  list<pobject_t> objects;
+  vector<pobject_t> objects;
   collection_list(cid, objects);
-  for (list<pobject_t>::iterator i = objects.begin(); 
+  for (vector<pobject_t>::iterator i = objects.begin(); 
        i != objects.end();
        i++) {
     co_tab->remove(coll_pobject_t(cid,*i));
@@ -3619,7 +3619,7 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
   return 0;
 }
 
-int Ebofs::collection_list(coll_t cid, list<pobject_t>& ls)
+int Ebofs::collection_list(coll_t cid, vector<pobject_t>& ls)
 {
   ebofs_lock.Lock();
   dout(9) << "collection_list " << hex << cid << dec << dendl;

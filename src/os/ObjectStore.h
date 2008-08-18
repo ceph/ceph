@@ -597,13 +597,13 @@ public:
   //virtual int listattr(pobject_t oid, char *attrs, size_t size) {return 0;} //= 0;
   
   // collections
-  virtual int list_collections(list<coll_t>& ls) = 0;
+  virtual int list_collections(vector<coll_t>& ls) = 0;
   virtual int create_collection(coll_t c, Context *onsafe=0) = 0;
   virtual int destroy_collection(coll_t c, Context *onsafe=0) = 0;
   virtual bool collection_exists(coll_t c) = 0;
   virtual int collection_add(coll_t c, coll_t ocid, pobject_t o, Context *onsafe=0) = 0;
   virtual int collection_remove(coll_t c, pobject_t o, Context *onsafe=0) = 0;
-  virtual int collection_list(coll_t c, list<pobject_t>& o) = 0;
+  virtual int collection_list(coll_t c, vector<pobject_t>& o) = 0;
   virtual int collection_setattr(coll_t cid, const char *name,
                                  const void *value, size_t size,
                                  Context *onsafe=0) = 0;

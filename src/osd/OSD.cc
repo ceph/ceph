@@ -598,12 +598,12 @@ void OSD::_remove_unlock_pg(PG *pg)
   dout(10) << "_remove_unlock_pg " << pgid << dendl;
 
   // remove from store
-  list<pobject_t> olist;
+  vector<pobject_t> olist;
   store->collection_list(pgid.to_coll(), olist);
   
   ObjectStore::Transaction t;
   {
-    for (list<pobject_t>::iterator p = olist.begin();
+    for (vector<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(pgid.to_coll(), *p);
@@ -628,10 +628,10 @@ void OSD::load_pgs()
   dout(10) << "load_pgs" << dendl;
   assert(pg_map.empty());
 
-  list<coll_t> ls;
+  vector<coll_t> ls;
   store->list_collections(ls);
 
-  for (list<coll_t>::iterator it = ls.begin();
+  for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        it++) {
     if (*it == 0)
@@ -2134,13 +2134,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   dout(10) << "split_pg " << *parent << dendl;
   pg_t parentid = parent->info.pgid;
 
-  list<pobject_t> olist;
+  vector<pobject_t> olist;
   store->collection_list(parent->info.pgid.to_coll(), olist);  
 
-  while (!olist.empty()) {
-    pobject_t poid = olist.front();
-    olist.pop_front();
-    
+  for (vector<pobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
+    pobject_t poid = *p;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), parentid.size(),
 						      parentid.pool(), parentid.preferred());
     if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {

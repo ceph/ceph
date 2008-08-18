@@ -127,14 +127,14 @@ class FileStore : public JournalingObjectStore {
   int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
 
   // collections
-  int list_collections(list<coll_t>& ls);
+  int list_collections(vector<coll_t>& ls);
   int create_collection(coll_t c, Context *onsafe=0);
   int destroy_collection(coll_t c, Context *onsafe=0);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   int collection_add(coll_t c, coll_t ocid, pobject_t o, Context *onsafe=0);
   int collection_remove(coll_t c, pobject_t o, Context *onsafe=0);
-  int collection_list(coll_t c, list<pobject_t>& o);
+  int collection_list(coll_t c, vector<pobject_t>& o);
 
   int pick_object_revision_lt(coll_t cid, pobject_t& oid) { return -1; }
   void trim_from_cache(coll_t cid, pobject_t oid, __u64 offset, size_t len) {}

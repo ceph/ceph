@@ -281,7 +281,7 @@ protected:
   int get_object_collections(coll_t cid, pobject_t oid, set<coll_t>& ls);
 
   // collections
-  int list_collections(list<coll_t>& ls);
+  int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
 
   int create_collection(coll_t c, Context *onsafe);
@@ -289,7 +289,7 @@ protected:
   int collection_add(coll_t c, coll_t cid, pobject_t o, Context *onsafe);
   int collection_remove(coll_t c, pobject_t o, Context *onsafe);
 
-  int collection_list(coll_t c, list<pobject_t>& o);
+  int collection_list(coll_t c, vector<pobject_t>& o);
   
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
   int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
