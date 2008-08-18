@@ -708,7 +708,11 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
 
     if (snapset.head_exists &&           // head exists
 	snapc.snaps.size() &&            // there are snaps
-	snapc.snaps[0] > snapset.seq) {  // existing object is old
+	snapc.snaps[0] > snapset.seq &&  // existing object is old
+	(op == CEPH_OSD_OP_WRITE ||      // is a (non-lock) modification
+	 op == CEPH_OSD_OP_ZERO ||
+	 op == CEPH_OSD_OP_TRUNCATE ||
+	 op == CEPH_OSD_OP_DELETE)) {
       // clone
       pobject_t coid = poid;
       coid.oid.snap = snapc.seq;
