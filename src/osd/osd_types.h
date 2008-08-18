@@ -280,7 +280,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_REPLAY     32  // crashed, waiting for replay
 #define PG_STATE_STRAY      64  // i must notify the primary i exist.
 #define PG_STATE_SPLITTING 128  // i am splitting
-#define PG_STATE_SNAPTRIM  256  // i am trimming snapshot data
+#define PG_STATE_SNAPTRIMQUEUE  256  // i am queued for snapshot trimming
+#define PG_STATE_SNAPTRIMMING   512  // i am trimming snapshot data
 
 static inline std::string pg_state_string(int state) {
   std::string st;
@@ -292,7 +293,8 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_REPLAY) st += "replay+";
   if (state & PG_STATE_STRAY) st += "stray+";
   if (state & PG_STATE_SPLITTING) st += "splitting+";
-  if (state & PG_STATE_SNAPTRIM) st += "trimmingsnap+";
+  if (state & PG_STATE_SNAPTRIMQUEUE) st += "snaptrimqueue+";
+  if (state & PG_STATE_SNAPTRIMMING) st += "snaptrimming+";
   if (!st.length()) 
     st = "inactive";
   else 

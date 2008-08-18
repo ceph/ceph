@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "osd_types.h"
 #include "include/buffer.h"
+#include "include/xlist.h"
 
 #include "OSDMap.h"
 #include "os/ObjectStore.h"
@@ -517,6 +518,8 @@ protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   int         state;   // see bit defns above
 
+  xlist<PG*>::item pending_snap_removal_item;
+
   // primary state
  public:
   vector<int> acting;
@@ -632,6 +635,7 @@ public:
     info(p),
     role(0),
     state(0),
+    pending_snap_removal_item(this),
     have_master_log(true),
     must_notify_mon(false),
     stat_num_bytes(0), stat_num_blocks(0),
@@ -687,6 +691,7 @@ public:
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
   // pg on-disk state
+  void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction &t, 
                   const PG::Log::Entry &logentry, 
@@ -694,6 +699,7 @@ public:
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
+  void queue_snap_trim();
 
   bool is_dup(osd_reqid_t rid) {
     return log.logged_req(rid);
@@ -706,6 +712,7 @@ public:
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
+  virtual bool snap_trimmer() = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;

@@ -252,7 +252,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   stat_oprate(5.0),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
-  iat_averager(g_conf.osd_flash_crowd_iat_alpha)
+  iat_averager(g_conf.osd_flash_crowd_iat_alpha),
+  snap_trimmer_thread(this)
 {
   messenger = m;
   monmap = mm;
@@ -1850,6 +1851,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     if (pg->is_active()) {
       // update started counter
       pg->info.history.last_epoch_started = osdmap->get_epoch();
+      if (!pg->info.removed_snaps.empty())
+	pg->queue_snap_trim();
     }
     else if (pg->is_primary() && !pg->is_active()) {
       // i am (inactive) primary
@@ -3108,3 +3111,39 @@ void OSD::wait_for_no_ops()
 
 
 
+void OSD::wake_snap_trimmer()
+{
+  osd_lock.Lock();
+  if (!snap_trimmer_thread.is_started()) {
+    dout(10) << "wake_snap_trimmer - creating thread" << dendl;
+    snap_trimmer_thread.create();
+  } else {
+    dout(10) << "wake_snap_trimmer - kicking thread" << dendl;
+    snap_trimmer_cond.Signal();
+  }
+  osd_lock.Unlock();  
+}
+
+void OSD::snap_trimmer()
+{
+  osd_lock.Lock();
+  while (1) {
+    snap_trimmer_lock.Lock();
+    if (pgs_pending_snap_removal.empty()) {
+      snap_trimmer_lock.Unlock();
+      dout(10) << "snap_trimmer - no pgs pending trim, sleeping" << dendl;
+      snap_trimmer_cond.Wait(osd_lock);
+      continue;
+    }
+    
+    PG *pg = pgs_pending_snap_removal.front();
+    pgs_pending_snap_removal.pop_front();
+    snap_trimmer_lock.Unlock();
+    osd_lock.Unlock();
+
+    pg->snap_trimmer();
+
+    osd_lock.Lock();
+  }
+  osd_lock.Unlock();
+}

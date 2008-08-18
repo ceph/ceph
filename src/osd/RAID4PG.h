@@ -47,6 +47,7 @@ protected:
   void cancel_recovery();
   bool do_recovery();
 
+  bool snap_trimmer() { return true; }
   
 public:
   RAID4PG(OSD *o, pg_t p) : PG(o,p) { }

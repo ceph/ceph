@@ -962,12 +962,8 @@ void PG::activate(ObjectStore::Transaction& t,
 
   assert(info.last_complete >= log.bottom || log.backlog);
 
-  // write pg info
-  bufferlist bl;
-  ::encode(info, bl);
-  t.collection_setattr(info.pgid.to_coll(), "info", bl);
-  
-  // write log
+  // write pg info, log
+  write_info(t);
   write_log(t);
 
   // clean up stray objects
@@ -1122,6 +1118,17 @@ void PG::activate(ObjectStore::Transaction& t,
   osd->take_waiters(waiting_for_active);
 }
 
+void PG::queue_snap_trim()
+{
+  state_set(PG_STATE_SNAPTRIMQUEUE);
+
+  osd->snap_trimmer_lock.Lock();
+  osd->pgs_pending_snap_removal.push_back(&pending_snap_removal_item);
+  osd->snap_trimmer_lock.Unlock();
+
+  osd->wake_snap_trimmer();     // FIXME: we probably want to wait until at least peering completes?
+}
+
 
 struct C_PG_FinishRecovery : public Context {
   PG *pg;
@@ -1143,9 +1150,7 @@ void PG::finish_recovery()
   finish_sync_event = new C_PG_FinishRecovery(this);
 
   ObjectStore::Transaction t;
-  bufferlist bl;
-  ::encode(info, bl);
-  t.collection_setattr(info.pgid.to_coll(), "info", bl);
+  write_info(t);
   osd->store->apply_transaction(t, finish_sync_event);
 }
 
@@ -1156,6 +1161,10 @@ void PG::_finish_recovery(Context *c)
     finish_sync_event = 0;
     dout(10) << "_finish_recovery" << dendl;
     purge_strays();
+
+    if (!info.removed_snaps.empty())
+      queue_snap_trim();
+
     update_stats();
   }
   unlock();
@@ -1220,6 +1229,14 @@ void PG::clear_stats()
 }
 
 
+void PG::write_info(ObjectStore::Transaction& t)
+{
+  // write pg info
+  bufferlist infobl;
+  ::encode(info, infobl);
+  t.collection_setattr(info.pgid.to_coll(), "info", infobl);
+}
+
 void PG::write_log(ObjectStore::Transaction& t)
 {
   dout(10) << "write_log" << dendl;
@@ -1251,9 +1268,7 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  bufferlist infobl;
-  ::encode(info, infobl);
-  t.collection_setattr(info.pgid.to_coll(), "info", infobl);
+  write_info(t);
 
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }

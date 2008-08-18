@@ -444,6 +444,126 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 }
 
 
+bool ReplicatedPG::snap_trimmer()
+{
+  lock();
+  dout(10) << "snap_trimmer" << dendl;
+  
+  state_clear(PG_STATE_SNAPTRIMQUEUE);
+  state_set(PG_STATE_SNAPTRIMMING);
+  update_stats();
+
+  while (info.removed_snaps.size() &&
+	 is_active()) {
+    snapid_t sn = *info.removed_snaps.begin();
+    coll_t c = info.pgid.to_snap_coll(sn);
+    list<pobject_t> ls;
+    osd->store->collection_list(c, ls);
+
+    dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
+
+    ObjectStore::Transaction t;
+
+    for (list<pobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
+      pobject_t coid = *p;
+
+      bufferlist bl;
+      osd->store->getattr(info.pgid.to_coll(), coid, "snaps", bl);
+      bufferlist::iterator blp = bl.begin();
+      vector<snapid_t> snaps;
+      ::decode(snaps, blp);
+      vector<snapid_t> newsnaps;
+      for (unsigned i=0; i<snaps.size(); i++)
+	if (!osd->osdmap->is_removed_snap(snaps[i]))
+	  newsnaps.push_back(i);
+
+      if (newsnaps.empty()) {
+	// remove
+	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
+	t.remove(info.pgid.to_coll(), coid);
+	t.collection_remove(info.pgid.to_snap_coll(snaps[0]), coid);
+	if (snaps.size() > 1)
+	  t.collection_remove(info.pgid.to_snap_coll(snaps[snaps.size()-1]), coid);
+	
+	// adjust head snapset	
+	pobject_t head = coid;
+	head.oid.snap = CEPH_NOSNAP;
+	bufferlist bl;
+	osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+	bufferlist::iterator blp = bl.begin();
+	SnapSet snapset;
+	::decode(snapset, blp);
+	dout(10) << coid << " old head " << head << " snapset " << snapset << dendl;
+
+	snapid_t last = coid.oid.snap;
+	vector<snapid_t>::iterator p;
+	for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
+	  if (*p == last)
+	    break;
+	if (p == snapset.clones.begin()) {
+	  // newest clone.
+	  snapset.head_diffs.union_of(snapset.clone_diffs[last]);
+	} else  {
+	  // older clone
+	  vector<snapid_t>::iterator n = p;
+	  n++;
+	  if (n != snapset.clones.end())
+	    // not oldest clone.
+	    snapset.clone_diffs[*n].union_of(snapset.clone_diffs[*p]);
+	}
+	snapset.clones.erase(p);
+	snapset.clone_diffs.erase(last);
+
+	dout(10) << coid << " new head " << head << " snapset " << snapset << dendl;
+
+	if (snapset.clones.empty() && !snapset.head_exists) {
+	  dout(10) << coid << " removing head " << head << dendl;
+	  t.remove(info.pgid.to_coll(), head);
+	} else {
+	  bl.clear();
+	  ::encode(snapset, bl);
+	  t.setattr(info.pgid.to_coll(), head, "snapset", bl);
+	}
+      } else {
+	// save adjusted snaps for this object
+	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
+	bl.clear();
+	::encode(newsnaps, bl);
+	t.setattr(info.pgid.to_coll(), coid, "snaps", bl);
+
+	if (snaps[0] != newsnaps[0]) {
+	  t.collection_remove(info.pgid.to_snap_coll(snaps[0]), coid);
+	  t.collection_add(info.pgid.to_snap_coll(newsnaps[0]), info.pgid.to_coll(), coid);
+	}
+	if (snaps.size() > 1 && snaps[snaps.size()-1] != newsnaps[newsnaps.size()-1]) {
+	  t.collection_remove(info.pgid.to_snap_coll(snaps[snaps.size()-1]), coid);
+	  if (newsnaps.size() > 1)
+	    t.collection_add(info.pgid.to_snap_coll(newsnaps[newsnaps.size()-1]), info.pgid.to_coll(), coid);
+	}	      
+      }
+      
+      osd->store->apply_transaction(t);
+
+      // give other threads a chance at this pg
+      unlock();
+      lock();
+    }
+    
+    info.removed_snaps.erase(sn);
+  }  
+
+  // done
+  dout(10) << "snap_trimmer done" << dendl;
+  state_clear(PG_STATE_SNAPTRIMMING);
+  update_stats();
+
+  ObjectStore::Transaction t;
+  write_info(t);
+  osd->store->apply_transaction(t);
+  unlock();
+  return true;
+}
+
 
 // ========================================================================
 // READS
@@ -874,10 +994,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   assert(at_version > info.last_update);
   info.last_update = at_version;
   
-  // write pg info
-  bufferlist infobl;
-  ::encode(info, infobl);
-  t.collection_setattr(info.pgid.to_coll(), "info", infobl);
+  write_info(t);
 
   // prepare log append
   append_log(t, logentry, trim_to);
@@ -1670,9 +1787,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   
   
   // apply to disk!
-  bufferlist bl;
-  ::encode(info, bl);
-  t.collection_setattr(info.pgid.to_coll(), "info", bl);
+  write_info(t);
   unsigned r = osd->store->apply_transaction(t);
   assert(r == 0);
 

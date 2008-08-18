@@ -275,6 +275,7 @@ private:
   // -- placement groups --
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
+  xlist<PG*> pgs_pending_snap_removal;
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
@@ -288,6 +289,21 @@ private:
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);
+
+  Mutex snap_trimmer_lock;
+  Cond snap_trimmer_cond;
+
+  void wake_snap_trimmer();
+  void snap_trimmer();       // thread entry
+
+  struct SnapTrimmer : public Thread {
+    OSD *osd;
+    SnapTrimmer(OSD *o) : osd(o) {}
+    void *entry() {
+      osd->snap_trimmer();
+      return NULL;
+    }
+  } snap_trimmer_thread;
 
   void wake_pg_waiters(pg_t pgid) {
     if (waiting_for_pg.count(pgid)) {

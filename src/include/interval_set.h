@@ -88,7 +88,7 @@ class interval_set {
     return m == other.m;
   }
 
-  int size() {
+  int size() const {
     return _size;
   }
 
