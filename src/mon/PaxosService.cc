@@ -71,7 +71,7 @@ void PaxosService::dispatch(Message *m)
       } else {
 	// delay a bit
 	if (!proposal_timer) {
-	  dout(10) << " setting propose timer with dealy of " << delay << dendl;
+	  dout(10) << " setting propose timer with delay of " << delay << dendl;
 	  proposal_timer = new C_Propose(this);
 	  mon->timer.add_event_after(delay, proposal_timer);
 	} else { 
