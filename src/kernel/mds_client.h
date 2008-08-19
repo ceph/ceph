@@ -146,6 +146,12 @@ struct ceph_mds_client {
 
 extern const char *ceph_mds_op_name(int op);
 
+extern struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc, int mds);
+	extern void ceph_put_mds_session(struct ceph_mds_session *s);
+
+extern void ceph_send_msg_mds(struct ceph_mds_client *mdsc,
+			      struct ceph_msg *msg, int mds);
+
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
 extern void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc);
@@ -160,8 +166,6 @@ extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc,
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 				     struct ceph_msg *msg);
 
-extern void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
-				  struct ceph_msg *msg);
 extern void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 				  struct ceph_msg *msg);
 

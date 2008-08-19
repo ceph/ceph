@@ -25,6 +25,7 @@ extern int ceph_debug_addr;
 extern int ceph_debug_inode;
 extern int ceph_debug_snap;
 extern int ceph_debug_ioctl;
+extern int ceph_debug_caps;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
@@ -529,6 +530,10 @@ extern struct inode *ceph_get_snapdir(struct inode *parent);
 extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_info_in *iinfo,
 			   struct ceph_mds_reply_dirfrag *dirinfo);
+extern void ceph_fill_file_bits(struct inode *inode, int issued,
+				u64 time_warp_seq,
+				u64 size, struct timespec *ctime,
+				struct timespec *mtime, struct timespec *atime);
 extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_request *req,
 			   struct ceph_mds_session *session);
@@ -537,39 +542,6 @@ extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 extern int ceph_inode_lease_valid(struct inode *inode, int mask);
 extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
-extern int ceph_add_cap(struct inode *inode,
-			struct ceph_mds_session *session,
-			int fmode, unsigned issued,
-			unsigned cap, unsigned seq,
-			void *snapblob, int snapblob_len);
-extern int __ceph_remove_cap(struct ceph_inode_cap *cap);
-extern void ceph_remove_cap(struct ceph_inode_cap *cap);
-extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
-extern int ceph_get_cap_mds(struct inode *inode);
-extern int ceph_handle_cap_grant(struct inode *inode,
-				 struct ceph_mds_caps *grant,
-				 struct ceph_mds_session *session);
-extern void ceph_handle_cap_trunc(struct inode *inode,
-				  struct ceph_mds_caps *trunc,
-				  struct ceph_mds_session *session);
-extern void ceph_handle_cap_released(struct inode *inode,
-				  struct ceph_mds_caps *trunc,
-				  struct ceph_mds_session *session);
-extern void ceph_handle_cap_flushedsnap(struct inode *inode,
-				  struct ceph_mds_caps *trunc,
-				  struct ceph_mds_session *session);
-extern void ceph_handle_cap_export(struct inode *inode,
-				   struct ceph_mds_caps *ex,
-				   struct ceph_mds_session *session);
-extern void ceph_handle_cap_import(struct inode *inode,
-				   struct ceph_mds_caps *im,
-				   struct ceph_mds_session *session,
-				   void *snaptrace, int snaptrace_len);
-extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
-extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
-extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
-extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int flush);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
@@ -583,6 +555,28 @@ extern int ceph_setxattr(struct dentry *, const char *,const void *,size_t,int);
 extern ssize_t ceph_getxattr(struct dentry *, const char *, void *, size_t);
 extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
 extern int ceph_removexattr(struct dentry *, const char *);
+
+/* caps.c */
+extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
+			     struct ceph_msg *msg);
+extern int ceph_add_cap(struct inode *inode,
+			struct ceph_mds_session *session,
+			int fmode, unsigned issued,
+			unsigned cap, unsigned seq,
+			void *snapblob, int snapblob_len);
+extern int __ceph_remove_cap(struct ceph_inode_cap *cap);
+extern void ceph_remove_cap(struct ceph_inode_cap *cap);
+extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
+extern int ceph_get_cap_mds(struct inode *inode);
+extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
+extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
+extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
+extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
+extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int flush);
+extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
+extern void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
+				  struct ceph_mds_session *session,
+				  int purge);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

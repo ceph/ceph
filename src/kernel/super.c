@@ -351,6 +351,9 @@ enum {
 	Opt_debug_osdc,
 	Opt_debug_addr,
 	Opt_debug_inode,
+	Opt_debug_snap,
+	Opt_debug_ioctl,
+	Opt_debug_caps,
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
@@ -374,6 +377,9 @@ static match_table_t arg_tokens = {
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_debug_addr, "debug_addr=%d"},
 	{Opt_debug_inode, "debug_inode=%d"},
+	{Opt_debug_snap, "debug_snap=%d"},
+	{Opt_debug_ioctl, "debug_ioctl=%d"},
+	{Opt_debug_caps, "debug_caps=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
@@ -531,6 +537,15 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_debug_inode:
 			ceph_debug_inode = intval;
+			break;
+		case Opt_debug_snap:
+			ceph_debug_snap = intval;
+			break;
+		case Opt_debug_ioctl:
+			ceph_debug_ioctl = intval;
+			break;
+		case Opt_debug_caps:
+			ceph_debug_caps = intval;
 			break;
 		case Opt_debug_console:
 			ceph_debug_console = 1;
@@ -806,7 +821,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		ceph_mdsc_handle_forward(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_CAPS:
-		ceph_mdsc_handle_caps(&client->mdsc, msg);
+		ceph_handle_caps(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_SNAP:
 		ceph_mdsc_handle_snap(&client->mdsc, msg);
