@@ -129,7 +129,11 @@ struct ceph_mds_client {
 	struct ceph_mds_session **sessions;    /* NULL if no session */
 	int                     max_sessions;  /* len of s_mds_sessions */
 
-	struct mutex            snap_mutex;    /* all snaprealms */
+	/* 
+	 * snap_rwsem will cover cap linkage into snaprealms, and realm
+	 * snap contexts.  (later, we can do per-realm snap contexts locks..)
+	 */
+	struct rw_semaphore     snap_rwsem;
 	struct radix_tree_root  snaprealms;
 
 	__u64                   last_tid;      /* most recent mds request */

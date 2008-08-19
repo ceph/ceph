@@ -1138,7 +1138,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	BUG_ON(req->r_reply);
 	if (req->r_expects_cap)
-		mutex_lock(&mdsc->snap_mutex);
+		down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&req->r_session->s_mutex);
@@ -1190,7 +1190,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 done:
 	if (req->r_expects_cap)
-		mutex_unlock(&mdsc->snap_mutex);
+		up_write(&mdsc->snap_rwsem);
 	mutex_unlock(&req->r_session->s_mutex);
 	mutex_lock(&mdsc->mutex);
 	if (err) {
@@ -1538,7 +1538,7 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 	mutex_lock(&mdsc->mutex);
 	session = __get_session(mdsc, mds);
 	if (session)
-		mutex_lock(&mdsc->snap_mutex);
+		down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got cap but no session for mds%d\n", mds);
@@ -1560,7 +1560,7 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 
 	switch (op) {
 	case CEPH_CAP_OP_GRANT:
-		mutex_unlock(&mdsc->snap_mutex);
+		up_write(&mdsc->snap_rwsem);
 		if (ceph_handle_cap_grant(inode, h, session) == 1) {
 			dout(10, "sending reply back to mds%d\n", mds);
 			ceph_msg_get(msg);
@@ -1569,24 +1569,24 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		break;
 
 	case CEPH_CAP_OP_TRUNC:
-		mutex_unlock(&mdsc->snap_mutex);
+		up_write(&mdsc->snap_rwsem);
 		ceph_handle_cap_trunc(inode, h, session);
 		break;
 
 	case CEPH_CAP_OP_EXPORT:
 		ceph_handle_cap_export(inode, h, session);
-		mutex_unlock(&mdsc->snap_mutex);
+		up_write(&mdsc->snap_rwsem);
 		break;
 
 	case CEPH_CAP_OP_IMPORT:
 		ceph_handle_cap_import(inode, h, session,
 				       msg->front.iov_base + sizeof(*h),
 				       le32_to_cpu(h->snap_trace_len));
-		mutex_unlock(&mdsc->snap_mutex);
+		up_write(&mdsc->snap_rwsem);
 		break;
 
 	default:
-		mutex_unlock(&mdsc->snap_mutex);
+		up_write(&mdsc->snap_rwsem);
 		derr(10, "unknown cap op %d %s\n", op, ceph_cap_op_name(op));
 	}
 
@@ -1615,7 +1615,7 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 
 /*
  * called with i_lock, then drops it.
- * caller should hold snap_mutex, s_mutex.
+ * caller should hold snap_rwsem, s_mutex.
  *
  * returns true if we removed the last cap on this inode.
  */
@@ -1788,7 +1788,7 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 	mutex_lock(&mdsc->mutex);
 	session = __get_session(mdsc, mds);
 	if (session)
-		mutex_lock(&mdsc->snap_mutex);
+		down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got snap but no session for mds%d\n", mds);
@@ -1894,7 +1894,7 @@ void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
 	}
 
 	ceph_put_snaprealm(realm);
-	mutex_unlock(&mdsc->snap_mutex);
+	up_write(&mdsc->snap_rwsem);
 	return;
 
 bad:
@@ -2167,7 +2167,7 @@ static void delayed_work(struct work_struct *work)
 void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 {
 	mutex_init(&mdsc->mutex);
-	mutex_init(&mdsc->snap_mutex);
+	init_rwsem(&mdsc->snap_rwsem);
 	mdsc->client = client;
 	mdsc->mdsmap = 0;            /* none yet */
 	mdsc->sessions = 0;
@@ -2239,7 +2239,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	spin_unlock(&mdsc->cap_delay_lock);
 
 	mutex_lock(&mdsc->mutex);
-	mutex_lock(&mdsc->snap_mutex);
+	down_write(&mdsc->snap_rwsem);
 
 	/* close sessions, caps */
 	while (1) {
@@ -2265,7 +2265,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 
 	WARN_ON(!list_empty(&mdsc->cap_delay_list));
 
-	mutex_unlock(&mdsc->snap_mutex);
+	up_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 	dout(10, "stopped\n");
 }

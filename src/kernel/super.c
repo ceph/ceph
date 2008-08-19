@@ -2,6 +2,7 @@
 #include <linux/parser.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
+#include <linux/rwsem.h>
 #include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/string.h>
