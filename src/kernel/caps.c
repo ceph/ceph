@@ -788,6 +788,9 @@ static void handle_cap_trunc(struct inode *inode,
 			   &ci->i_vmtruncate_work);
 }
 
+/*
+ * caller holds s_mutex, snap_rwsem
+ */
 static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 			      struct ceph_mds_session *session)
 {
@@ -830,6 +833,9 @@ out:
 		iput(inode);
 }
 
+/*
+ * caller holds s_mutex, snap_rwsem
+ */
 static void handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
 			      struct ceph_mds_session *session,
 			      void *snaptrace, int snaptrace_len)
@@ -872,6 +878,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	u32 seq;
 	struct ceph_vino vino;
 	u64 size, max_size;
+	int check_caps = 0;
 
 	dout(10, "handle_caps from mds%d\n", mds);
 
@@ -946,6 +953,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 				  msg->front.iov_base + sizeof(*h),
 				  le32_to_cpu(h->snap_trace_len));
 		up_write(&mdsc->snap_rwsem);
+		check_caps = 1; /* we may have sent a RELEASE to the old auth */
 		break;
 
 	default:
@@ -953,10 +961,14 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 		derr(10, " unknown cap op %d %s\n", op, ceph_cap_op_name(op));
 	}
 
-	iput(inode);
 no_inode:
 	mutex_unlock(&session->s_mutex);
 	ceph_put_mds_session(session);
+
+	if (check_caps)
+		ceph_check_caps(ceph_inode(inode), 1, 0);
+	if (inode)
+		iput(inode);
 	return;
 
 bad:
