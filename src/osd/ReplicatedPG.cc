@@ -502,17 +502,17 @@ bool ReplicatedPG::snap_trimmer()
 	    break;
 	if (p == snapset.clones.begin()) {
 	  // newest clone.
-	  snapset.head_diffs.union_of(snapset.clone_diffs[last]);
+	  snapset.head_overlap.intersection_of(snapset.clone_overlap[last]);
 	} else  {
 	  // older clone
 	  vector<snapid_t>::iterator n = p;
 	  n++;
 	  if (n != snapset.clones.end())
 	    // not oldest clone.
-	    snapset.clone_diffs[*n].union_of(snapset.clone_diffs[*p]);
+	    snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
 	}
 	snapset.clones.erase(p);
-	snapset.clone_diffs.erase(last);
+	snapset.clone_overlap.erase(last);
 
 	dout(10) << coid << " new head " << head << " snapset " << snapset << dendl;
 
@@ -869,7 +869,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       }
 
       snapset.clones.push_back(coid.oid.snap);
-      snapset.clone_diffs[coid.oid.snap].swap(snapset.head_diffs);
+      snapset.clone_overlap[coid.oid.snap].swap(snapset.head_overlap);
       
       at_version.version++;
     }
@@ -940,7 +940,8 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       snapset.head_exists = true;
       interval_set<__u64> ch;
       ch.insert(offset, length);
-      snapset.head_diffs.union_of(ch);
+      ch.union_of(snapset.head_overlap);
+      snapset.head_overlap.subtract(ch);
     }
     break;
     
@@ -950,7 +951,8 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       interval_set<__u64> ch;
       ch.insert(offset, length);
-      snapset.head_diffs.union_of(ch);
+      ch.union_of(snapset.head_overlap);
+      snapset.head_overlap.subtract(ch);
     }
     break;
 
@@ -960,14 +962,14 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       interval_set<__u64> keep;
       keep.insert(0, length);
-      snapset.head_diffs.intersection_of(keep);
+      snapset.head_overlap.union_of(keep);
     }
     break;
     
   case CEPH_OSD_OP_DELETE:
     { // delete
       t.remove(info.pgid.to_coll(), poid);
-      snapset.head_diffs.clear();
+      snapset.head_overlap.clear();
     }
     break;
     
