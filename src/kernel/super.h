@@ -552,6 +552,12 @@ extern int ceph_handle_cap_grant(struct inode *inode,
 extern void ceph_handle_cap_trunc(struct inode *inode,
 				  struct ceph_mds_caps *trunc,
 				  struct ceph_mds_session *session);
+extern void ceph_handle_cap_released(struct inode *inode,
+				  struct ceph_mds_caps *trunc,
+				  struct ceph_mds_session *session);
+extern void ceph_handle_cap_flushedsnap(struct inode *inode,
+				  struct ceph_mds_caps *trunc,
+				  struct ceph_mds_session *session);
 extern void ceph_handle_cap_export(struct inode *inode,
 				   struct ceph_mds_caps *ex,
 				   struct ceph_mds_session *session);

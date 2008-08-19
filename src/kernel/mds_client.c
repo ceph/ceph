@@ -1490,7 +1490,7 @@ static void send_cap_ack(struct ceph_mds_client *mdsc, __u64 ino, int op,
 
 	memset(fc, 0, sizeof(*fc));
 
-	fc->op = cpu_to_le32(CEPH_CAP_OP_ACK);  /* misnomer */
+	fc->op = cpu_to_le32(op);
 	fc->seq = cpu_to_le64(seq);
 	fc->migrate_seq = cpu_to_le64(mseq);
 	fc->caps = cpu_to_le32(caps);
@@ -1573,6 +1573,16 @@ void ceph_mdsc_handle_caps(struct ceph_mds_client *mdsc,
 		ceph_handle_cap_trunc(inode, h, session);
 		break;
 
+	case CEPH_CAP_OP_RELEASED:
+		ceph_handle_cap_released(inode, h, session);
+		up_write(&mdsc->snap_rwsem);
+		break;
+
+	case CEPH_CAP_OP_FLUSHEDSNAP:
+		ceph_handle_cap_flushedsnap(inode, h, session);
+		up_write(&mdsc->snap_rwsem);
+		break;
+
 	case CEPH_CAP_OP_EXPORT:
 		ceph_handle_cap_export(inode, h, session);
 		up_write(&mdsc->snap_rwsem);
@@ -1601,18 +1611,6 @@ bad:
 	return;
 }
 
-static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
-			       struct ceph_inode_info *ci)
-{
-	dout(10, "__cap_delay_cancel %p\n", &ci->vfs_inode);
-	if (list_empty(&ci->i_cap_delay_list))
-		return;
-	spin_lock(&mdsc->cap_delay_lock);
-	list_del_init(&ci->i_cap_delay_list);
-	spin_unlock(&mdsc->cap_delay_lock);
-	iput(&ci->vfs_inode);
-}
-
 /*
  * called with i_lock, then drops it.
  * caller should hold snap_rwsem, s_mutex.
@@ -1623,7 +1621,7 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session,
 			 struct ceph_inode_cap *cap,
 			 int used, int wanted,
-			 int cancel_work, int flush_snap)
+			 int flush_snap)
 {
 	struct ceph_inode_info *ci = cap->ci;
 	struct inode *inode = &ci->vfs_inode;
@@ -1633,7 +1631,6 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	u64 seq, mseq, time_warp_seq, follows;
 	u64 size, max_size;
 	struct timespec mtime, atime;
-	int removed_last = 0;
 	int wake = 0;
 	int op = CEPH_CAP_OP_ACK;
 
@@ -1662,11 +1659,6 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 	atime = inode->i_atime;
 	time_warp_seq = ci->i_time_warp_seq;
 	follows = ci->i_snaprealm->cached_context->seq;
-	if (wanted == 0 && !flush_snap) {
-		removed_last = __ceph_remove_cap(cap);
-		if (removed_last && cancel_work)
-			__cap_delay_cancel(mdsc, ci);
-	}
 	if (flush_snap)
 		cap->flushed_snap = follows; /* so we only flush it once */
 	spin_unlock(&inode->i_lock);
@@ -1687,10 +1679,8 @@ int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
-	if (removed_last)
-		iput(inode);  /* removed cap */
 
-	return removed_last;
+	return 0;
 }
 
 static void check_delayed_caps(struct ceph_mds_client *mdsc)
@@ -1744,7 +1734,7 @@ static void flush_write_caps(struct ceph_mds_client *mdsc,
 			used = wanted = 0;
 		}
 
-		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 1, 0);
+		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 0);
 	}
 }
 

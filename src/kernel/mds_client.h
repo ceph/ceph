@@ -185,7 +185,7 @@ extern int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
 				struct ceph_mds_session *session,
 				struct ceph_inode_cap *cap,
 				int used, int wanted,
-				int cancel_work, int flush_snap);
+				int flush_snap);
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 #endif

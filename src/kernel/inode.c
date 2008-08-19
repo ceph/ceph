@@ -1339,7 +1339,6 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int flush_snap)
 	int wanted, used;
 	struct ceph_mds_session *session = 0;  /* if non-NULL, i hold s_mutex */
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
-	int removed_last;
 
 retry:
 	spin_lock(&inode->i_lock);
@@ -1432,19 +1431,15 @@ ack:
 		}
 
 		/* send_cap drops i_lock */
-		removed_last = __ceph_mdsc_send_cap(mdsc, session, cap,
-						    used, wanted, !is_delayed,
-						    flush_snap);
-		if (removed_last)
-			goto out;
-		/* retake i_lock and restart our cap scan. */
-		goto retry;
+		__ceph_mdsc_send_cap(mdsc, session, cap,
+				     used, wanted, flush_snap);
+
+		goto retry; /* retake i_lock and restart our cap scan. */
 	}
 
 	/* okay */
 	spin_unlock(&inode->i_lock);
 
-out:
 	if (session)
 		mutex_unlock(&session->s_mutex);
 	if (took_snap_rwsem)
@@ -1679,6 +1674,61 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 }
 
 /*
+ * caller hold s_mutex, snap_rwsem.
+ */
+static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
+			       struct ceph_inode_info *ci)
+{
+	dout(10, "__cap_delay_cancel %p\n", &ci->vfs_inode);
+	if (list_empty(&ci->i_cap_delay_list))
+		return;
+	spin_lock(&mdsc->cap_delay_lock);
+	list_del_init(&ci->i_cap_delay_list);
+	spin_unlock(&mdsc->cap_delay_lock);
+	iput(&ci->vfs_inode);
+}
+
+void ceph_handle_cap_released(struct inode *inode,
+			      struct ceph_mds_caps *m,
+			      struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int seq = le32_to_cpu(m->seq);
+	int removed_last;
+	struct ceph_inode_cap *cap;
+
+	dout(10, "handle_cap_released inode %p ci %p mds%d seq %d\n", inode, ci,
+	     session->s_mds, seq);
+
+	spin_lock(&inode->i_lock);
+	cap = __get_cap_for_mds(inode, session->s_mds);
+	BUG_ON(!cap);
+	removed_last = __ceph_remove_cap(cap);
+	if (removed_last)
+		__cap_delay_cancel(&ceph_inode_to_client(inode)->mdsc, ci);
+	spin_unlock(&inode->i_lock);
+	if (removed_last)
+		iput(inode);
+}
+
+/*
+ * caller hold s_mutex, snap_rwsem.
+ */
+void ceph_handle_cap_flushedsnap(struct inode *inode,
+				 struct ceph_mds_caps *m,
+				 struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int seq = le32_to_cpu(m->seq);
+
+	dout(10, "handle_cap_flushednsap inode %p ci %p mds%d seq %d\n", inode,
+	     ci, session->s_mds, seq);
+
+	/* **** WRITE ME **** */
+}
+
+
+/*
  * caller hold s_mutex, NOT snap_rwsem.
  */
 void ceph_handle_cap_trunc(struct inode *inode,
@@ -1758,7 +1808,8 @@ void ceph_handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 		ci->i_cap_exporting_mseq = mseq;
 		ci->i_cap_exporting_issued = cap->issued;
 		was_last = __ceph_remove_cap(cap);
-	}
+	} else
+		WARN_ON(!cap);
 
 out:
 	spin_unlock(&inode->i_lock);
