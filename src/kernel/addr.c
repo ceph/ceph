@@ -553,6 +553,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
+	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct page *page;
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
 	loff_t page_off = pos & PAGE_MASK;
@@ -573,6 +574,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	/* check snap context */
 	BUG_ON(!ci->i_snaprealm);
 	BUG_ON(!ci->i_snaprealm->cached_context);
+	down_read(&mdsc->snap_rwsem);
 	if (page->private &&
 	    (void *)page->private != ci->i_snaprealm->cached_context) {
 		/* force early writeback of snapped page */
@@ -623,6 +625,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 
 fail:
 	unlock_page(page);
+	up_read(&mdsc->snap_rwsem);
 	return r;
 }
 
@@ -635,6 +638,7 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  struct page *page, void *fsdata)
 {
 	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	unsigned from = pos & (PAGE_CACHE_SIZE - 1);
 
 	dout(10, "write_end file %p inode %p page %p %d~%d (%d)\n", file,
@@ -659,6 +663,7 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	set_page_dirty(page);
 
 	unlock_page(page);
+	up_read(&mdsc->snap_rwsem);
 	page_cache_release(page);
 
 	return copied;
