@@ -170,16 +170,16 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
  */
 
 struct ceph_inode_cap {
-	int mds;    /* -1 if not used */
+	struct ceph_inode_info *ci;
+	struct rb_node ci_node;         /* per-ci cap tree */
+	struct ceph_mds_session *session;
+	struct list_head session_caps;  /* per-session caplist */
+	int mds;          /* must be -1 if not in use */
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemneted (for tracking revocation) */
 	u32 seq, mseq, gen;
 	int flags;  /* stale, etc.? */
 	u64 flushed_snap;
-	struct ceph_inode_info *ci;
-	struct list_head ci_caps;       /* per-ci caplist */
-	struct ceph_mds_session *session;
-	struct list_head session_caps;  /* per-session caplist */
 };
 
 #define MAX_DIRFRAG_REP 4
@@ -233,7 +233,7 @@ struct ceph_inode_info {
 	int i_xattr_len;
 	char *i_xattr_data;
 
-	struct list_head i_caps;
+	struct rb_root i_caps;
 	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;
 	unsigned long i_hold_caps_until; /* jiffies */

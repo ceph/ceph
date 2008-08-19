@@ -167,7 +167,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattr_len = 0;
 	ci->i_xattr_data = 0;
 
-	INIT_LIST_HEAD(&ci->i_caps);
+	ci->i_caps = RB_ROOT;
 	for (i = 0; i < STATIC_CAPS; i++)
 		ci->i_static_caps[i].mds = -1;
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)

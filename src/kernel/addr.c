@@ -25,12 +25,12 @@ static int ceph_set_page_dirty(struct page *page)
 		return !TestSetPageDirty(page);
 
 	if (TestSetPageDirty(page)) {
-		dout(20, "%p set_page_dirty %p -- already dirty\n", 
+		dout(20, "%p set_page_dirty %p -- already dirty\n",
 		     mapping->host, page);
 		return 0;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	spin_lock_irq(&mapping->tree_lock);
 #else
 	write_lock_irq(&mapping->tree_lock);
@@ -58,7 +58,7 @@ static int ceph_set_page_dirty(struct page *page)
 		snapc = ceph_get_snap_context(ci->i_snaprealm->cached_context);
 		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
-		dout(20, "%p set_page_dirty %p %d -> %d (?)\n", 
+		dout(20, "%p set_page_dirty %p %d -> %d (?)\n",
 		     mapping->host, page,
 		     atomic_read(&ci->i_wrbuffer_ref)-1,
 		     atomic_read(&ci->i_wrbuffer_ref));
@@ -66,7 +66,7 @@ static int ceph_set_page_dirty(struct page *page)
 		     mapping->host, page, snapc, snapc->seq, snapc->num_snaps);
 	} else
 		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	spin_unlock_irq(&mapping->tree_lock);
 #else
 	write_unlock_irq(&mapping->tree_lock);
@@ -95,13 +95,13 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	}
 	ci = ceph_inode(page->mapping->host);
 	if (offset == 0) {
-		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n", 
+		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n",
 		     &ci->vfs_inode, page, page->index, offset);
 		atomic_dec(&ci->i_wrbuffer_ref);
 		ceph_put_snap_context((void *)page->private);
 		ClearPagePrivate(page);
 	} else
-		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n", 
+		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n",
 		     &ci->vfs_inode, page, page->index);
 }
 
@@ -435,7 +435,7 @@ get_more_pages:
 
 			dout(20, "%p locked+cleaned page %p idx %lu\n",
 			     inode, page, page->index);
-			
+
 			if (pages)
 				pages[locked_pages] = page;
 			else if (locked_pages == 0)
@@ -494,7 +494,7 @@ get_more_pages:
 				if (i < wrote)
 					SetPageUptodate(page);
 				else {
-					dout(20, "%p redirtying page %p\n", 
+					dout(20, "%p redirtying page %p\n",
 					     inode, page);
 					wbc->pages_skipped++;
 					ceph_set_page_dirty(page);
