@@ -841,6 +841,12 @@ protected:
 
   void handle_snap(class MClientSnap *m);
   void handle_caps(class MClientCaps *m);
+  void handle_cap_import(Inode *in, class MClientCaps *m);
+  void handle_cap_export(Inode *in, class MClientCaps *m);
+  void handle_cap_trunc(Inode *in, class MClientCaps *m);
+  void handle_cap_released(Inode *in, class MClientCaps *m);
+  void handle_cap_flushedsnap(Inode *in, class MClientCaps *m);
+  void handle_cap_grant(Inode *in, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void check_caps(Inode *in, bool is_delayed, bool flush_snap=false);
   void put_cap_ref(Inode *in, int cap);

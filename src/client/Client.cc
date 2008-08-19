@@ -1484,10 +1484,6 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
     in->requested_max_size = in->wanted_max_size;
     m->set_snap_follows(in->snaprealm->get_snap_context().seq);
     messenger->send_message(m, mdsmap->get_inst(mds));
-    if (wanted == 0 && !flush_snap) {
-      mds_sessions[mds].num_caps--;
-      remove_cap(in, mds);
-    }
   }
 }
 
@@ -1868,125 +1864,148 @@ void Client::handle_caps(MClientCaps *m)
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
   if (inode_map.count(vino)) in = inode_map[vino];
   if (!in) {
-    /*
-     * this can happen if we release caps, and then trim the inode from our cache,
-     * but are racing with, e.g., an mds callback.
-     */
-    dout(5) << "handle_file_caps don't have vino " << vino << dendl;
+    dout(5) << "handle_caps don't have vino " << vino << dendl;
+    assert(0); // shouldn't happen
     delete m;
     return;
   }
+
+  switch (m->get_op()) {
+  case CEPH_CAP_OP_IMPORT: return handle_cap_import(in, m);
+  case CEPH_CAP_OP_EXPORT: return handle_cap_export(in, m);
+  case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
+  case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, m);
+  case CEPH_CAP_OP_RELEASED: return handle_cap_released(in, m);
+  case CEPH_CAP_OP_FLUSHEDSNAP: return handle_cap_flushedsnap(in, m);
+  default:
+    delete m;
+  }
+}
+
+void Client::handle_cap_import(Inode *in, MClientCaps *m)
+{
+  int mds = m->get_source().num();
+
+  // add/update it
+  add_update_cap(in, mds, 
+		 m->snapbl,
+		 m->get_caps(), m->get_seq(), m->get_mseq());
   
-  if (m->get_op() == CEPH_CAP_OP_IMPORT) {
-    // add/update it
-    add_update_cap(in, mds, 
-		   m->snapbl,
-		   m->get_caps(), m->get_seq(), m->get_mseq());
-
-    if (m->get_mseq() > in->exporting_mseq) {
-      dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
-	      << " IMPORT from mds" << mds
-	      << ", clearing exporting_issued " << cap_string(in->exporting_issued) 
-	      << " mseq " << in->exporting_mseq << dendl;
-      in->exporting_issued = 0;
-      in->exporting_mseq = 0;
-      in->exporting_mds = -1;
-    } else {
-      dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq()
-	      << " IMPORT from mds" << mds 
-	      << ", keeping exporting_issued " << cap_string(in->exporting_issued) 
-	      << " mseq " << in->exporting_mseq << " by mds" << in->exporting_mds << dendl;
-    }
-    delete m;
-    return;
+  if (m->get_mseq() > in->exporting_mseq) {
+    dout(5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
+	    << " IMPORT from mds" << mds
+	    << ", clearing exporting_issued " << cap_string(in->exporting_issued) 
+	    << " mseq " << in->exporting_mseq << dendl;
+    in->exporting_issued = 0;
+    in->exporting_mseq = 0;
+    in->exporting_mds = -1;
+  } else {
+    dout(5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
+	    << " IMPORT from mds" << mds 
+	    << ", keeping exporting_issued " << cap_string(in->exporting_issued) 
+	    << " mseq " << in->exporting_mseq << " by mds" << in->exporting_mds << dendl;
   }
+  delete m;
+}
 
-  if (m->get_op() == CEPH_CAP_OP_EXPORT) {
-    // note?
-    bool found_higher_mseq = false;
-    InodeCap *cap = 0;
-    for (map<int,InodeCap*>::iterator p = in->caps.begin();
-	 p != in->caps.end();
-	 p++) {
-      if (p->first == mds) {
-	cap = p->second;
-	continue;
-      }
-      if (p->second->mseq > m->get_mseq()) {
-	found_higher_mseq = true;
-	dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
-		<< " EXPORT from mds" << mds
-		<< ", but mds" << p->first << " has higher mseq " << p->second->mseq << dendl;
-	break;
-      }
-    }
-    if (cap) {
-      if (!found_higher_mseq) {
-	dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
-		<< " EXPORT from mds" << mds
-		<< ", setting exporting_issued " << cap_string(cap->issued) << dendl;
-	in->exporting_issued = cap->issued;
-	in->exporting_mseq = m->get_mseq();
-	in->exporting_mds = mds;
-      } else 
-	dout(5) << "handle_file_caps ino " << m->get_ino() << " mseq " << m->get_mseq() 
-		<< " EXPORT from mds" << mds
-		<< ", just removing old cap" << dendl;
-      remove_cap(in, mds);
-    }
-
-    delete m;
-    return;
-  }
-
-
-
-  // don't have cap?   
-  //   (it may be that we've reopened the file locally,
-  //    and thus want caps, but don't have a cap yet.
-  //    we should never reply to a cap out of turn.)
-  if (in->caps.count(mds) == 0) {
-    // silently drop.
-    dout(5) << "handle_file_caps on ino " << m->get_ino() 
-            << " seq " << m->get_seq() 
-            << " " << cap_string(m->get_caps()) 
-            << ", don't have this cap, silently dropping." << dendl;
-    delete m;
-    return;
-  }
-  
-  // ok!
+void Client::handle_cap_export(Inode *in, MClientCaps *m)
+{
+  int mds = m->get_source().num();
+  assert(in->caps[mds]);
   InodeCap *cap = in->caps[mds];
 
-
-  // truncate?
-  if (m->get_op() == CEPH_CAP_OP_TRUNC) {
-    dout(10) << "handle_file_caps TRUNC on ino " << in->ino()
-	     << " size " << in->inode.size << " -> " << m->get_size()
-	     << dendl;
-    // trim filecache?
-    if (g_conf.client_oc &&
-	m->get_size() < in->inode.size) {
-      // map range to objects
-      list<ObjectExtent> ls;
-      filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP,
-			     m->get_size(), in->inode.size - m->get_size(),
-			     ls);
-      objectcacher->truncate_set(in->inode.ino, ls);
+  // note?
+  bool found_higher_mseq = false;
+  for (map<int,InodeCap*>::iterator p = in->caps.begin();
+       p != in->caps.end();
+       p++) {
+    if (p->second->mseq > m->get_mseq()) {
+      found_higher_mseq = true;
+      dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
+	      << " EXPORT from mds" << mds
+	      << ", but mds" << p->first << " has higher mseq " << p->second->mseq << dendl;
+      break;
     }
-
-    in->reported_size = in->inode.size = m->get_size(); 
-    delete m;
-    return;
   }
 
+  if (!found_higher_mseq) {
+    dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
+	    << " EXPORT from mds" << mds
+	    << ", setting exporting_issued " << cap_string(cap->issued) << dendl;
+    in->exporting_issued = cap->issued;
+    in->exporting_mseq = m->get_mseq();
+    in->exporting_mds = mds;
+  } else 
+    dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
+	    << " EXPORT from mds" << mds
+	    << ", just removing old cap" << dendl;
+
+  remove_cap(in, mds);
+
+  delete m;
+}
+
+void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
+{
+  int mds = m->get_source().num();
+  assert(in->caps[mds]);
+
+  dout(10) << "handle_cap_trunc on ino " << *in
+	   << " size " << in->inode.size << " -> " << m->get_size()
+	   << dendl;
+  // trim filecache?
+  if (g_conf.client_oc &&
+      m->get_size() < in->inode.size) {
+    // map range to objects
+    list<ObjectExtent> ls;
+    filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP,
+			   m->get_size(), in->inode.size - m->get_size(),
+			   ls);
+    objectcacher->truncate_set(in->inode.ino, ls);
+  }
+  
+  in->reported_size = in->inode.size = m->get_size(); 
+  delete m;
+}
+
+void Client::handle_cap_released(Inode *in, MClientCaps *m)
+{
+  int mds = m->get_source().num();
+  assert(in->caps[mds]);
+
+  dout(5) << "handle_cap_released mds" << mds << " released cap on " << *in << dendl;
+  remove_cap(in, mds);
+  delete m;
+}
+
+
+void Client::handle_cap_flushedsnap(Inode *in, MClientCaps *m)
+{
+  int mds = m->get_source().num();
+  assert(in->caps[mds]);
+
+  dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << m->get_snap_follows()
+	  << " on " << *in << dendl;
+
+  // *****
+
+  delete m;
+}
+
+
+void Client::handle_cap_grant(Inode *in, MClientCaps *m)
+{
+  int mds = m->get_source().num();
+  assert(in->caps[mds]);
+  InodeCap *cap = in->caps[mds];
+  
   cap->seq = m->get_seq();
   in->inode.layout = m->get_layout();
 
   // don't want it?
   int wanted = in->caps_wanted();
   if (wanted == 0) {
-    dout(5) << "handle_file_caps on ino " << m->get_ino() 
+    dout(5) << "handle_cap_grant on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
             << " " << cap_string(m->get_caps()) 
             << ", which we don't want caps for, releasing." << dendl;
@@ -2002,7 +2021,7 @@ void Client::handle_caps(MClientCaps *m)
   // update per-mds caps
   const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
-  dout(5) << "handle_file_caps on in " << m->get_ino() 
+  dout(5) << "handle_cap_grant on in " << m->get_ino() 
           << " mds" << mds << " seq " << m->get_seq() 
           << " caps now " << cap_string(new_caps) 
           << " was " << cap_string(old_caps) << dendl;
