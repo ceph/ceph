@@ -1766,7 +1766,23 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   t.remove(info.pgid.to_coll(), poid);  // in case old version exists
   t.write(info.pgid.to_coll(), poid, 0, op->length, op->get_data());
   t.setattrs(info.pgid.to_coll(), poid, op->attrset);
-  //t.collection_add(info.pgid.to_coll(), poid);
+  if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP &&
+      op->attrset.count("snaps")) {
+    bufferlist bl;
+    bl.push_back(op->attrset["snaps"]);
+    vector<snapid_t> snaps;
+    bufferlist::iterator p = bl.begin();
+    ::decode(snaps, p);
+    if (snaps.size()) {
+      t.create_collection(info.pgid.to_snap_coll(snaps[0]));
+      t.collection_add(info.pgid.to_snap_coll(snaps[0]), info.pgid.to_coll(), poid);
+      if (snaps.size() > 1) {
+	t.create_collection(info.pgid.to_snap_coll(snaps[snaps.size()-1]));
+	t.collection_add(info.pgid.to_snap_coll(snaps[snaps.size()-1]), info.pgid.to_coll(), poid);
+      }
+    }
+  }
+
 
   // close out pull op?
   if (pulling.count(poid.oid))
