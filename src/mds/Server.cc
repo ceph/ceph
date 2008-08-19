@@ -187,7 +187,11 @@ void Server::handle_client_session(MClientSession *m)
 	       << ", dropping" << dendl;
       return;
     }
-    assert(m->seq == session->get_push_seq());
+    if (m->seq != session->get_push_seq()) {
+      dout(10) << "old push seq " << m->seq << " != " << session->get_push_seq() 
+	       << ", BUGGY!" << dendl;
+      assert(0);
+    }
     mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv),
