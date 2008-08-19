@@ -897,12 +897,13 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	mutex_lock(&session->s_mutex);
 	session->s_seq++;
+	dout(20, " mds%d seq %lld\n", session->s_mds, session->s_seq);
 
 	/* lookup ino */
 	inode = ceph_find_inode(sb, vino);
-	dout(20, "op %d ino %llx inode %p\n", op, vino.ino, inode);
+	dout(20, " op %d ino %llx inode %p\n", op, vino.ino, inode);
 	if (!inode) {
-		dout(10, "i don't have ino %llx, sending release\n", vino.ino);
+		dout(10, " i don't have ino %llx, sending release\n", vino.ino);
 		send_cap(mdsc, vino.ino, CEPH_CAP_OP_RELEASE, 0, 0, seq,
 			 size, 0, 0, 0, 0, 0, 0, mds);
 		goto no_inode;
@@ -912,7 +913,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	case CEPH_CAP_OP_GRANT:
 		up_write(&mdsc->snap_rwsem);
 		if (handle_cap_grant(inode, h, session) == 1) {
-			dout(10, "sending reply back to mds%d\n", mds);
+			dout(10, " sending reply back to mds%d\n", mds);
 			ceph_msg_get(msg);
 			ceph_send_msg_mds(mdsc, msg, mds);
 		}
@@ -947,7 +948,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	default:
 		up_write(&mdsc->snap_rwsem);
-		derr(10, "unknown cap op %d %s\n", op, ceph_cap_op_name(op));
+		derr(10, " unknown cap op %d %s\n", op, ceph_cap_op_name(op));
 	}
 
 	iput(inode);

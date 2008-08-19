@@ -1978,8 +1978,10 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 
 		dout(10, "waiting for sessions to close\n");
 		mutex_unlock(&mdsc->mutex);
+		up_write(&mdsc->snap_rwsem);
 		wait_for_completion(&mdsc->session_close_waiters);
 		mutex_lock(&mdsc->mutex);
+		down_write(&mdsc->snap_rwsem);
 	}
 
 	WARN_ON(!list_empty(&mdsc->cap_delay_list));
