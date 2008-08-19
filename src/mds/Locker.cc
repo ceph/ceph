@@ -472,16 +472,18 @@ struct C_Locker_FileUpdate_finish : public Context {
   CInode *in;
   Mutation *mut;
   bool share;
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false) : 
-    locker(l), in(i), mut(m), share(e) {
+  int client;
+  MClientCaps *ack;
+  C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, int c=-1, MClientCaps *ac = 0) : 
+    locker(l), in(i), mut(m), share(e), client(c), ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
-    locker->file_update_finish(in, mut, share);
+    locker->file_update_finish(in, mut, share, client, ack);
   }
 };
 
-void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
+void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int client, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
@@ -494,6 +496,9 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share)
   
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
+
+  if (ack)
+    mds->send_message_client(ack, client);
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -985,7 +990,10 @@ void Locker::handle_client_caps(MClientCaps *m)
     } else {
       dout(10) << "  flushsnap NOT releasing live cap" << dendl;
     }
-    _do_cap_update(in, has|had, in->get_caps_wanted(), follows, m);
+
+    MClientCaps *ack = new MClientCaps(CEPH_CAP_OP_FLUSHEDSNAP, in->inode, 0, 0, 0, 0, 0);
+    ack->set_snap_follows(follows);
+    _do_cap_update(in, has|had, in->get_caps_wanted(), follows, m, ack);
   } else {
 
     // for this and all subsequent versions of this inode,
@@ -1000,6 +1008,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	       << ", has " << cap_string(has)
 	       << " on " << *in << dendl;
       
+      MClientCaps *ack = 0;
+
       if (m->get_seq() < cap->get_last_open()) {
 	/* client may be trying to release caps (i.e. inode closed, etc.)
 	 * by setting reducing wanted set.  but it may also be opening the
@@ -1015,13 +1025,14 @@ void Locker::handle_client_caps(MClientCaps *m)
 	in->remove_client_cap(client);
 	if (!in->is_auth())
 	  request_inode_file_caps(in);
+	ack = new MClientCaps(CEPH_CAP_OP_RELEASED, in->inode, 0, 0, 0, 0, 0);
       } else if (wanted != cap->wanted()) {
 	dout(10) << " wanted " << cap_string(cap->wanted())
 		 << " -> " << cap_string(wanted) << dendl;
 	cap->set_wanted(wanted);
       }
 
-      _do_cap_update(in, has|had, in->get_caps_wanted() | wanted, follows, m);      
+      _do_cap_update(in, has|had, in->get_caps_wanted() | wanted, follows, m, ack);      
       
       // done?
       if (in->last == CEPH_NOSNAP)
@@ -1038,7 +1049,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 }
 
 
-void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m)
+void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
+			    MClientCaps *ack)
 {
   dout(10) << "_do_cap_update had " << cap_string(had) << " on " << *in << dendl;
 
@@ -1142,7 +1154,12 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
     mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max));
+    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
+								m->get_source().num(), ack));
+  } else {
+    // no update, ack now.
+    if (ack)
+      mds->send_message_client(ack, m->get_source().num());
   }
 
   // reevaluate, waiters

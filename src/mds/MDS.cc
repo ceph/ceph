@@ -323,9 +323,13 @@ void MDS::forward_message_mds(Message *m, int mds)
 
 void MDS::send_message_client(Message *m, int client)
 {
-  version_t seq = sessionmap.inc_push_seq(client);
-  dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-  messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
+  if (sessionmap.have_session(entity_name_t::CLIENT(client))) {
+    version_t seq = sessionmap.inc_push_seq(client);
+    dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
+    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
+  } else {
+    dout(10) << "send_message_client no session for client" << client << " " << *m << dendl;
+  }
 }
 
 void MDS::send_message_client(Message *m, entity_inst_t clientinst)

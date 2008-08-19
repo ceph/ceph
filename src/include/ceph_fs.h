@@ -794,10 +794,12 @@ enum {
 	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify (invalidate size+mtime) */
 	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
+	CEPH_CAP_OP_RELEASED,    /* mds->client close out cap */
+	CEPH_CAP_OP_FLUSHEDSNAP, /* mds->client flushed snap */
 	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was a recall) */
 	CEPH_CAP_OP_REQUEST,   /* client->mds request (update wanted bits) */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
-	CEPH_CAP_OP_RELEASE,   /* client->mds released cap entirely */
+	CEPH_CAP_OP_RELEASE,   /* client->mds request release cap */
 };
 
 inline static const char* ceph_cap_op_name(int op) {
@@ -806,6 +808,8 @@ inline static const char* ceph_cap_op_name(int op) {
 	case CEPH_CAP_OP_TRUNC: return "trunc";
 	case CEPH_CAP_OP_EXPORT: return "export";
 	case CEPH_CAP_OP_IMPORT: return "import";
+	case CEPH_CAP_OP_RELEASED: return "released";
+	case CEPH_CAP_OP_FLUSHEDSNAP: return "flushedsnap";
 	case CEPH_CAP_OP_ACK: return "ack";
 	case CEPH_CAP_OP_REQUEST: return "request";
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";

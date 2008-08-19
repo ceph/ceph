@@ -204,13 +204,13 @@ protected:
 
  protected:
   void handle_client_caps(class MClientCaps *m);
-  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientCaps *m);
+  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientCaps *m, MClientCaps *ack=0);
 
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, Mutation *mut, bool share);
+  void file_update_finish(CInode *in, Mutation *mut, bool share, int client, MClientCaps *ack);
 public:
   bool check_inode_max_size(CInode *in, bool forceupdate=false, __u64 newsize=0);
 private:
