@@ -17,6 +17,17 @@ big items
 - libuuid?
 
 
+snaps on kclient
+- we need a rw snap mutex, so that pending io blocks while we update snap contexts
+  - we can push down to a per-realm rw mutex later
+- need to do PICKYSNAP flag to get sync write retry and delayed flushsnap for sync writes
+- snap-ordered writeout for buffered writes
+  - so, may as well go for the delayed FLUSHSNAP there too, since we want it eventually anyway
+
+snaps on uclient
+- delay FLUSHSNAP until after (buffered) flush
+- do pickysnap(?) flag thing
+
 snaps on mds
 - cap release probably needs ack by mds.  or, mds needs to possibly initiate recovery on import?  no, release should pbly just be acked by mds... like it was way back when... bah!
 
@@ -271,43 +282,16 @@ osd
 screw "snap writeback":
  - if client is buffering, it has exclusive access to the object.  therefore, it can flush older
    snaps before newer ones.  done.
+   -> yeah... but it's difficult to implement in the kclient...
  - if multiple clients are writing synchronously, then the client doesn't care if the osd pushes a write "forward" in time to the next snapshot, since it hasn't completed yet.
+   -> actually, it does, since the client is reporting a size+mtime back to the mds with the cap flush snap
+    > set a PICKYSNAP flag, that makes the osd return something like -EAGAIN, that is passed bck by osdc
+    > delay FLUSHSNAP.  in ceph_write
+     > block before submitting new writes
+     > wait before resubmitting retry ios
+     > send FLUSHSNAP once nothing in flight
+    > 
 
-
-write [10]
-                  NOSNAP follows=10
-write [20,10]
-                  NOSNAP follows=20,10
-                      20 [20,10]
-write [45,42,20,10]
-                  NOSNAP follows=45,42,20,10
-                      45 [45,42]
-                      20 [20,10]                  
-write [42,20,10]
-                  NOSNAP follows=45,42,20,10
-                      45 [45,42]
-                      20 [20,10]
-delete [45,42,20,10]
-                  NOSNAP follows=45,42,20,10   (empty)
-                      45 [45,42]
-                      20 [20,10]
-write [42,20]
-                  NOSNAP follows=45,42,20,10    * just write to head.
-                      45 [45,42]
-                      20 [20,10]
-delete [45,...]
-                  NOSNAP follows=45,42,20,10   (empty)
-                      45 [45,42]
-                      20 [20,10]
-write [60,45,..]
-                  NOSNAP follows=60,45,42,20,10
-                      45 [45,42]
-                      20 [20,10]
-write [70,60,..]
-                  NOSNAP follows=60,45,42,20,10
-		      70 [70]
-                      45 [45,42]
-                      20 [20,10]
 
 issues:
 - how to log and replication all this cloning...
@@ -315,20 +299,3 @@ issues:
 - snap trimming in general needs to be fast.. and probably a background process..
   -> logically put per-pg snap removal as a discrete pg log event?
   - need to index snap_first/last on a per-pg basis... 128-bit collections?  or ditch ebofs?
-
-
-btrfs rev de-duping
-- i.e. when sub_op_push gets an object
-- query checksums
-  - userland will read+verify ranges are actually a match?
-  - or, in pull, do FIEMAP against prior, and next object?  how do we know what those are?
-- punch hole (?)
-- clone file range (not entire file)
-
-
-
-
-interface
-$ ls -al .snapshot      # list snaps.  show both symbolic names, and timestamp names?  (symbolic -> timestamp symlinks, maybe)
-$ mkdir .snapshot/blah  # create snap
-$ rmdir .snapshot/blah  # remove it
