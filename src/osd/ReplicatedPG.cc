@@ -940,7 +940,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       snapset.head_exists = true;
       interval_set<__u64> ch;
       ch.insert(offset, length);
-      ch.union_of(snapset.head_overlap);
+      ch.intersection_of(snapset.head_overlap);
       snapset.head_overlap.subtract(ch);
     }
     break;
@@ -951,7 +951,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       interval_set<__u64> ch;
       ch.insert(offset, length);
-      ch.union_of(snapset.head_overlap);
+      ch.intersection_of(snapset.head_overlap);
       snapset.head_overlap.subtract(ch);
     }
     break;
@@ -962,14 +962,14 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       interval_set<__u64> keep;
       keep.insert(0, length);
-      snapset.head_overlap.union_of(keep);
+      snapset.head_overlap.intersection_of(keep);
     }
     break;
     
   case CEPH_OSD_OP_DELETE:
     { // delete
       t.remove(info.pgid.to_coll(), poid);
-      snapset.head_overlap.clear();
+      snapset.head_overlap.clear();  // ok, redundant.
     }
     break;
     
