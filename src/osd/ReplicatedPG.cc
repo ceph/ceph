@@ -1320,6 +1320,12 @@ public:
   }
 };
 
+void ReplicatedPG::reply_op_error(MOSDOp *op, int err)
+{
+  MOSDOpReply *reply = new MOSDOpReply(op, err, osd->osdmap->get_epoch(), true);
+  osd->messenger->send_message(reply, op->get_orig_source_inst());
+  delete op;
+}
 
 void ReplicatedPG::op_modify(MOSDOp *op)
 {
@@ -1352,9 +1358,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
-      MOSDOpReply *reply = new MOSDOpReply(op, -EINCLOCKED, osd->osdmap->get_epoch(), true);
-      osd->messenger->send_message(reply, op->get_orig_source_inst());
-      delete op;
+      reply_op_error(op, -EINCLOCKED);
       return;
     }
   }
@@ -1433,6 +1437,15 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 	   << " snapc " << snapc
 	   << " snapset " << snapset
            << dendl;  
+
+  // verify snap ordering
+  if ((op->get_flags() & CEPH_OSD_OP_ORDERSNAP) &&
+      snapc.seq < snapset.seq) {
+    dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << snapset.seq
+	     << " on " << poid << dendl;
+    reply_op_error(op, -EBADF);
+    return;
+  }
 
   // are any peers missing this?
   for (unsigned i=1; i<acting.size(); i++) {
