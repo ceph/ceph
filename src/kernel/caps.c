@@ -251,11 +251,13 @@ void __ceph_cap_delay_requeue(struct ceph_mds_client *mdsc,
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
 	     ci->i_hold_caps_until);
 	spin_lock(&mdsc->cap_delay_lock);
-	if (list_empty(&ci->i_cap_delay_list))
-		igrab(&ci->vfs_inode);
-	else
-		list_del_init(&ci->i_cap_delay_list);
-	list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
+	if (!mdsc->stopping) {
+		if (list_empty(&ci->i_cap_delay_list))
+			igrab(&ci->vfs_inode);
+		else
+			list_del_init(&ci->i_cap_delay_list);
+		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
+	}
 	spin_unlock(&mdsc->cap_delay_lock);
 }
 

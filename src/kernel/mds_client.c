@@ -1623,12 +1623,25 @@ out:
 }
 
 
+static int request_close_session(struct ceph_mds_client *mdsc,
+				 struct ceph_mds_session *session)
+{
+	struct ceph_msg *msg;
+	int err = 0;
+
+	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
+				 session->s_seq);
+	if (IS_ERR(msg))
+		err = PTR_ERR(msg);
+	else
+		ceph_send_msg_mds(mdsc, msg, session->s_mds);
+	return err;
+}
 
 static int close_session(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session)
 {
 	int mds = session->s_mds;
-	struct ceph_msg *msg;
 	int err = 0;
 
 	dout(10, "close_session mds%d\n", mds);
@@ -1640,13 +1653,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 	ceph_flush_write_caps(mdsc, session, 1);
 
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
-	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
-				 session->s_seq);
-	if (IS_ERR(msg)) {
-		err = PTR_ERR(msg);
-		goto done;
-	}
-	ceph_send_msg_mds(mdsc, msg, mds);
+	err = request_close_session(mdsc, session);
 
 done:
 	mutex_unlock(&session->s_mutex);
@@ -1854,6 +1861,12 @@ static void delayed_work(struct work_struct *work)
 		struct ceph_mds_session *session = __ceph_get_mds_session(mdsc, i);
 		if (session == 0)
 			continue;
+		if (session->s_state == CEPH_MDS_SESSION_CLOSING) {
+			dout(10, "resending session close request for mds%d\n",
+			     session->s_mds);
+			request_close_session(mdsc, session);
+			continue;
+		}
 		if (session->s_ttl && time_after(jiffies, session->s_ttl)) {
 			derr(1, "mds%d session probably timed out, "
 			     "requesting mds map\n", session->s_mds);
@@ -1892,6 +1905,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->sessions = 0;
 	mdsc->max_sessions = 0;
 	mdsc->last_tid = 0;
+	mdsc->stopping = 0;
 	INIT_RADIX_TREE(&mdsc->snaprealms, GFP_NOFS);
 	INIT_RADIX_TREE(&mdsc->request_tree, GFP_NOFS);
 	init_completion(&mdsc->map_waiters);
@@ -1941,9 +1955,9 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	int n;
 
 	dout(10, "close_sessions\n");
+	mdsc->stopping = 1;
 
-	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
-
+	/* clean out cap delay list */
 	spin_lock(&mdsc->cap_delay_lock);
 	while (!list_empty(&mdsc->cap_delay_list)) {
 		struct ceph_inode_info *ci;
@@ -1988,6 +2002,9 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 
 	up_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
+
+	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
+
 	dout(10, "stopped\n");
 }
 

@@ -128,6 +128,7 @@ struct ceph_mds_client {
 
 	struct ceph_mds_session **sessions;    /* NULL if no session */
 	int                     max_sessions;  /* len of s_mds_sessions */
+	int                     stopping;      /* true if shutting down */
 
 	/* 
 	 * snap_rwsem will cover cap linkage into snaprealms, and realm
