@@ -86,7 +86,7 @@ int ceph_add_cap(struct inode *inode,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_inode_cap *cap, *new_cap = 0;
 	int i;
-	int is_new = 0;
+	int is_first = 0;
 	struct ceph_snaprealm *realm = 0;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 
@@ -119,12 +119,12 @@ retry:
 			}
 		}
 
-		is_new = 1;    /* grab inode later */
 		cap->issued = cap->implemented = 0;
 		cap->mds = mds;
 		cap->flags = 0;
 		cap->flushed_snap = 0;
 
+		is_first = RB_EMPTY_ROOT(&ci->i_caps);  /* grab inode later */
 		cap->ci = ci;
 		__insert_cap_node(ci, cap);
 
@@ -156,7 +156,7 @@ retry:
 	if (fmode >= 0)
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
-	if (is_new)
+	if (is_first)
 		igrab(inode);
 	if (new_cap)
 		kfree(new_cap);
