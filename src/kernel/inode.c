@@ -1115,7 +1115,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, 0, 0);
+		ceph_check_caps(ci, 0);
 	} else
 		spin_unlock(&inode->i_lock);
 }
@@ -1132,7 +1132,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last && ci->i_vino.snap == CEPH_NOSNAP)
-		ceph_check_caps(ci, 0, 0);
+		ceph_check_caps(ci, 0);
 }
 
 
@@ -1160,7 +1160,7 @@ static int apply_truncate(struct inode *inode, loff_t size)
 		spin_unlock(&inode->i_lock);
 	}
 	if (atomic_read(&ci->i_wrbuffer_ref) == 0)
-		ceph_check_caps(ci, 0, 0);
+		ceph_check_caps(ci, 0);
 	return rc;
 }
 
@@ -1193,7 +1193,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
 		vmtruncate(inode, to);
 		if (atomic_read(&ci->i_wrbuffer_ref) == 0)
-			ceph_check_caps(ci, 0, 0);
+			ceph_check_caps(ci, 0);
 	} else
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 }

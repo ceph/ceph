@@ -174,6 +174,8 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 	INIT_LIST_HEAD(&ci->i_cap_snaps);
+	ci->i_cap_snap_pending = 0;
+	ci->i_snap_caps = 0;
 
 	ci->i_wanted_max_size = 0;
 	ci->i_requested_max_size = 0;
@@ -181,7 +183,6 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_cap_exporting_mds = 0;
 	ci->i_cap_exporting_mseq = 0;
 	ci->i_cap_exporting_issued = 0;
-	ci->i_snap_caps = 0;
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = 0;

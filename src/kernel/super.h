@@ -188,10 +188,10 @@ struct ceph_cap {
  */
 struct ceph_cap_snap {
 	struct list_head ci_item;
-	int mds;
 	u64 follows;
 	u64 size;
-	struct timespec mtime, atime;
+	struct timespec mtime, atime, ctime;
+	int flushing;
 };
 
 /*
@@ -253,8 +253,9 @@ struct ceph_inode_info {
 	unsigned i_cap_exporting_mseq;
 	unsigned i_cap_exporting_issued;
 	struct list_head i_cap_snaps;
+	u64 i_cap_snap_pending;
 	unsigned i_snap_caps;         /* cap bits for snap i/o */
-
+	
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
 	loff_t i_max_size;            /* size authorized by mds */
 	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
@@ -573,12 +574,14 @@ extern int ceph_add_cap(struct inode *inode,
 extern int __ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
+extern int __ceph_get_cap_mds(struct ceph_inode_info *ci, u32 *mseq);
 extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
-extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int flush);
+extern void __ceph_flush_snaps(struct ceph_inode_info *ci);
+extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
 extern void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 				  struct ceph_mds_session *session,

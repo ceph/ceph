@@ -186,6 +186,54 @@ static int dup_array(u64 **dst, u64 *src, int num)
 	return 0;
 }
 
+
+static void queue_cap_snap(struct ceph_inode_info *ci, u64 seq)
+{
+	struct inode *inode = &ci->vfs_inode;
+	int used;
+	struct ceph_cap_snap *capsnap;
+
+	capsnap = kmalloc(sizeof(*capsnap), GFP_NOFS);
+	if (!capsnap) {
+		derr(10, "ENOMEM allocating ceph_cap_snap on %p\n", inode);
+		return;
+	}
+
+	spin_lock(&inode->i_lock);
+
+	used = __ceph_caps_used(ci);
+	if (ci->i_cap_snap_pending) {
+		dout(10, "queue_cap_snap %p seq %llu used %d already pending\n",
+		     inode, seq, used);
+		kfree(capsnap);
+	} else if (used & CEPH_CAP_WR) {
+		dout(10, "queue_cap_snap %p seq %llu used WR, now pending\n",
+		     inode, seq);
+		ci->i_cap_snap_pending = seq;
+		kfree(capsnap);
+	} else {
+		igrab(inode);
+		capsnap->follows = seq;
+		capsnap->size = inode->i_size;
+		capsnap->mtime = inode->i_mtime;
+		capsnap->atime = inode->i_atime;
+		capsnap->ctime = inode->i_ctime;
+		if (used & CEPH_CAP_WRBUFFER) {
+			dout(10, "queue_cap_snap %p seq %llu used WRBUFFER,"
+			     " delaying\n", inode, seq);
+			capsnap->flushing = 1;
+		} else {
+			capsnap->flushing = 0;
+			__ceph_flush_snaps(ci);
+		}
+		list_add(&capsnap->ci_item, &ci->i_snap_caps);
+	}
+
+out:
+	spin_unlock(&inode->i_lock);
+}
+
+
 struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 					      void *p, void *e, int must_flush)
 {
@@ -225,7 +273,7 @@ more:
 			struct ceph_inode_info *ci =
 				list_entry(p, struct ceph_inode_info,
 					   i_snap_realm_item);
-			ceph_check_caps(ci, 0, 1);
+			queue_cap_snap(ci, realm->cached_context->seq);
 		}
 		dout(20, "update_snap_trace cap flush done\n");
 
@@ -369,7 +417,8 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			list_del_init(&ci->i_snap_realm_item);
 			spin_unlock(&inode->i_lock);
 
-			ceph_check_caps(ci, 0, 1);
+			queue_cap_snap(ci,
+				       ci->i_snap_realm->cached_context->seq);
 
 			iput(inode);
 			continue;
