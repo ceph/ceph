@@ -1262,7 +1262,7 @@ void CDir::_fetched(bufferlist &bl)
       }
     }
   }
-  //assert(off == len);  FIXME  no, directories may shrink.  add this back in when we properly truncate objects on write.
+  assert(p.end());
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
   //hack_num_accessed = 0;
@@ -1470,13 +1470,12 @@ void CDir::_commit(version_t want)
 
   // write it.
   SnapContext snapc;
-  cache->mds->objecter->write( get_ondisk_object(),
-			       0, finalbl.length(),
-			       cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
-										    g_default_mds_dir_layout ),
-			       snapc,
-			       finalbl, 0,
-			       NULL, new C_Dir_Committed(this, get_version()) );
+  cache->mds->objecter->write_full( get_ondisk_object(),
+				    cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
+											 g_default_mds_dir_layout ),
+				    snapc,
+				    finalbl, 0,
+				    NULL, new C_Dir_Committed(this, get_version()) );
 }
 
 
