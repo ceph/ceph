@@ -1387,8 +1387,17 @@ bool Inode::put_cap_ref(int cap)
 void Client::put_cap_ref(Inode *in, int cap)
 {
   if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
-    check_caps(in, false);
-    signal_cond_list(in->waitfor_commit);
+    if ((cap & CEPH_CAP_WR) && in->cap_snap_pending) {
+      snapid_t seq = in->cap_snap_pending;
+      dout(10) << "put_cap_ref doing cap_snap_pending " << seq << " on " << *in << dendl;
+      in->cap_snap_pending = 0;
+      in->queue_cap_snap(in, seq);
+      signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
+    }
+    if (cap & CEPH_CAP_WRBUFFER) {
+      check_caps(in, false);
+      signal_cond_list(in->waitfor_commit);
+    }
   }
 }
 
@@ -1401,7 +1410,7 @@ void Client::cap_delay_requeue(Inode *in)
   delayed_caps.push_back(&in->cap_delay_item);
 }
 
-void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
+void Client::check_caps(Inode *in, bool is_delayed)
 {
   int wanted = in->caps_wanted();
   int used = in->caps_used();
@@ -1410,13 +1419,15 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
 	   << " wanted " << cap_string(wanted)
 	   << " used " << cap_string(used)
 	   << " is_delayed=" << is_delayed
-	   << " flush_snap=" << flush_snap
 	   << dendl;
 
   assert(in->snapid == CEPH_NOSNAP);
   
   if (in->caps.empty())
     return;   // guard if at end of func
+
+  if (in->cap_snaps.size())
+    flush_snaps(in);
   
   if (!is_delayed)
     cap_delay_requeue(in);
@@ -1451,10 +1462,6 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
       goto ack;
     }
 
-    if (flush_snap &&
-	(cap->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)))
-      goto ack;
-
     if ((cap->issued & ~wanted) == 0)
       continue;     /* nothing extra, all good */
 
@@ -1464,11 +1471,11 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
     }
     
   ack:
-    int op = CEPH_CAP_OP_ACK;
-    if (flush_snap)
-      op = CEPH_CAP_OP_FLUSHSNAP;
-    else if (wanted == 0)
+    int op;
+    if (wanted == 0)
       op = CEPH_CAP_OP_RELEASE;
+    else
+      op = CEPH_CAP_OP_ACK;
     MClientCaps *m = new MClientCaps(op,
 				     in->inode,
 				     0,
@@ -1480,6 +1487,61 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
     m->set_snap_follows(in->snaprealm->get_snap_context().seq);
+    messenger->send_message(m, mdsmap->get_inst(mds));
+  }
+}
+
+void Client::queue_cap_snap(Inode *in, snapid_t seq)
+{
+  int used = in->caps_used();
+
+  if (!seq)
+    seq = in->snaprealm->cached_snap_context.seq;
+
+  if (in->cap_snap_pending) {
+    dout(10) << "queue_cap_snap already cap_snap_pending on " << *in << dendl;
+  } else if (used & CEPH_CAP_WR) {
+    dout(10) << "queue_cap_snap WR used, marking cap_snap_pending on " << *in << dendl;
+    in->cap_snap_pending = seq;
+  } else {
+    if (used & CEPH_CAP_WRBUFFER) {
+      dout(10) << "queue_cap_snap took cap_snap, WRBUFFER used, flushing data" << dendl;
+      in->take_cap_snap(1, seq);
+      if (g_conf.client_oc)
+	_flush(in);
+    } else {
+      dout(10) << "queue_cap_snap took cap_snap, no WR|WRBUFFER used, flushing cap snap" << dendl;
+      in->take_cap_snap(0, seq);
+      flush_snaps(in);
+    }
+  }
+}
+
+void Client::flush_snaps(Inode *in)
+{
+  dout(10) << "flush_snaps on " << *in << dendl;
+  assert(in->cap_snaps.size());
+
+  // pick auth mds
+  int mds = -1;
+  for (map<int,InodeCap*>::iterator p = in->caps.begin(); p != in->caps.end(); p++) {
+    if (p->second->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL)) {
+      mds = p->first;
+      break;
+    }
+  }
+  assert(mds >= 0);
+
+  for (map<snapid_t,SnapCap>::iterator p = in->cap_snaps.begin(); p != in->cap_snaps.end(); p++) {
+    dout(10) << "flush_snaps mds" << mds
+	     << " follows " << p->first
+	     << " size " << p->second.size
+	     << " mtime " << p->second.mtime
+	     << " on " << *in << dendl;
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino());
+    m->head.snap_follows = p->first;
+    m->head.size = p->second.size;
+    p->second.mtime.encode_timeval(&m->head.mtime);
     messenger->send_message(m, mdsmap->get_inst(mds));
   }
 }
@@ -1719,9 +1781,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	  while (!p.end()) {
 	    Inode *in = *p;
 	    ++p;
-	    check_caps(in, false, true); // force writeback of write caps
-	    if (g_conf.client_oc)
-	      _flush(in);
+	    queue_cap_snap(in);
 	  }
 	  
 	  for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
@@ -1795,9 +1855,9 @@ void Client::handle_snap(MClientSnap *m)
 	}
 	dout(10) << " moving " << *in << " from " << *in->snaprealm << dendl;
 
-	// first, writeback in _old_ realm context
-	// ???
-	check_caps(in, false, true);
+	// queue for snap writeback
+	queue_cap_snap(in);
+
 	if (g_conf.client_oc)
 	  _flush(in);
 
@@ -1972,12 +2032,13 @@ void Client::handle_cap_flushedsnap(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
   assert(in->caps[mds]);
+  snapid_t follows = m->get_snap_follows();
 
-  dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << m->get_snap_follows()
+  dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << follows
 	  << " on " << *in << dendl;
-
-  // *****
-
+  assert(in->cap_snaps.count(follows));
+  in->cap_snaps.erase(follows);
+  
   delete m;
 }
 
@@ -3696,6 +3757,12 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     dout(7) << "missing wr|lazy cap OR endoff " << endoff
 	    << " > max_size " << in->inode.max_size 
 	    << ", waiting" << dendl;
+    wait_on_list(in->waitfor_caps);
+  }
+
+  // wait for cap snap?
+  while (in->cap_snap_pending) {
+    dout(7) << "waiting for cap_snap_pending " << in->cap_snap_pending << dendl;
     wait_on_list(in->waitfor_caps);
   }
 

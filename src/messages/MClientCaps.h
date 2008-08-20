@@ -19,44 +19,43 @@
 
 
 class MClientCaps : public Message {
- private:
-  struct ceph_mds_caps h;
  public:
+  struct ceph_mds_caps head;
   bufferlist snapbl;
 
-  int      get_caps() { return h.caps; }
-  int      get_wanted() { return h.wanted; }
-  capseq_t get_seq() { return h.seq; }
-  capseq_t get_mseq() { return h.migrate_seq; }
+  int      get_caps() { return head.caps; }
+  int      get_wanted() { return head.wanted; }
+  capseq_t get_seq() { return head.seq; }
+  capseq_t get_mseq() { return head.migrate_seq; }
 
-  inodeno_t get_ino() { return inodeno_t(h.ino); }
+  inodeno_t get_ino() { return inodeno_t(head.ino); }
 
-  __u64 get_size() { return h.size;  }
-  __u64 get_max_size() { return h.max_size;  }
-  utime_t get_ctime() { return utime_t(h.ctime); }
-  utime_t get_mtime() { return utime_t(h.mtime); }
-  utime_t get_atime() { return utime_t(h.atime); }
-  __u64 get_time_warp_seq() { return h.time_warp_seq; }
+  __u64 get_size() { return head.size;  }
+  __u64 get_max_size() { return head.max_size;  }
+  utime_t get_ctime() { return utime_t(head.ctime); }
+  utime_t get_mtime() { return utime_t(head.mtime); }
+  utime_t get_atime() { return utime_t(head.atime); }
+  __u64 get_time_warp_seq() { return head.time_warp_seq; }
 
-  ceph_file_layout& get_layout() { return h.layout; }
+  ceph_file_layout& get_layout() { return head.layout; }
 
-  int       get_migrate_seq() { return h.migrate_seq; }
-  int       get_op() { return h.op; }
+  int       get_migrate_seq() { return head.migrate_seq; }
+  int       get_op() { return head.op; }
 
-  snapid_t get_snap_follows() { return snapid_t(h.snap_follows); }
-  void set_snap_follows(snapid_t s) { h.snap_follows = s; }
+  snapid_t get_snap_follows() { return snapid_t(head.snap_follows); }
+  void set_snap_follows(snapid_t s) { head.snap_follows = s; }
 
-  void set_caps(int c) { h.caps = c; }
-  void set_wanted(int w) { h.wanted = w; }
+  void set_caps(int c) { head.caps = c; }
+  void set_wanted(int w) { head.wanted = w; }
 
-  void set_max_size(__u64 ms) { h.max_size = ms; }
+  void set_max_size(__u64 ms) { head.max_size = ms; }
 
-  void set_migrate_seq(unsigned m) { h.migrate_seq = m; }
-  void set_op(int o) { h.op = o; }
+  void set_migrate_seq(unsigned m) { head.migrate_seq = m; }
+  void set_op(int o) { head.op = o; }
 
-  void set_size(loff_t s) { h.size = s; }
-  void set_mtime(const utime_t &t) { t.encode_timeval(&h.mtime); }
-  void set_atime(const utime_t &t) { t.encode_timeval(&h.atime); }
+  void set_size(loff_t s) { head.size = s; }
+  void set_mtime(const utime_t &t) { t.encode_timeval(&head.mtime); }
+  void set_atime(const utime_t &t) { t.encode_timeval(&head.atime); }
 
   MClientCaps() {}
   MClientCaps(int op,
@@ -67,46 +66,53 @@ class MClientCaps : public Message {
 	      int wanted,
 	      int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
-    memset(&h, 0, sizeof(h));
-    h.op = op;
-    h.ino = inode.ino;
-    h.seq = seq;
-    h.caps = caps;
-    h.wanted = wanted;
-    h.layout = inode.layout;
-    h.size = inode.size;
-    h.max_size = inode.max_size;
-    h.migrate_seq = mseq;
-    inode.mtime.encode_timeval(&h.mtime);
-    inode.atime.encode_timeval(&h.atime);
-    inode.ctime.encode_timeval(&h.ctime);
-    h.time_warp_seq = inode.time_warp_seq;
+    memset(&head, 0, sizeof(head));
+    head.op = op;
+    head.ino = inode.ino;
+    head.seq = seq;
+    head.caps = caps;
+    head.wanted = wanted;
+    head.layout = inode.layout;
+    head.size = inode.size;
+    head.max_size = inode.max_size;
+    head.migrate_seq = mseq;
+    inode.mtime.encode_timeval(&head.mtime);
+    inode.atime.encode_timeval(&head.atime);
+    inode.ctime.encode_timeval(&head.ctime);
+    head.time_warp_seq = inode.time_warp_seq;
+  }
+  MClientCaps(int op,
+	      inodeno_t ino) :
+    Message(CEPH_MSG_CLIENT_CAPS) {
+    memset(&head, 0, sizeof(head));
+    head.op = op;
+    head.ino = ino;
   }
 
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
-    out << "client_caps(" << ceph_cap_op_name(h.op)
-	<< " ino " << inodeno_t(h.ino)
-	<< " seq " << h.seq 
-	<< " caps " << cap_string(h.caps)
-	<< " wanted" << cap_string(h.wanted)
-	<< " size " << h.size << "/" << h.max_size
-	<< " mtime " << utime_t(h.mtime)
-	<< " tws " << h.time_warp_seq
-	<< " follows " << snapid_t(h.snap_follows);
-    if (h.migrate_seq)
-      out << " mseq " << h.migrate_seq;
+    out << "client_caps(" << ceph_cap_op_name(head.op)
+	<< " ino " << inodeno_t(head.ino)
+	<< " seq " << head.seq 
+	<< " caps " << cap_string(head.caps)
+	<< " wanted" << cap_string(head.wanted)
+	<< " size " << head.size << "/" << head.max_size
+	<< " mtime " << utime_t(head.mtime)
+	<< " tws " << head.time_warp_seq
+	<< " follows " << snapid_t(head.snap_follows);
+    if (head.migrate_seq)
+      out << " mseq " << head.migrate_seq;
     out << ")";
   }
   
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(h, p);
-    ::decode_nohead(h.snap_trace_len, snapbl, p);
+    ::decode(head, p);
+    ::decode_nohead(head.snap_trace_len, snapbl, p);
   }
   void encode_payload() {
-    h.snap_trace_len = snapbl.length();
-    ::encode(h, payload);
+    head.snap_trace_len = snapbl.length();
+    ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
   }
 };

@@ -426,13 +426,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	inode_t fake_inode;
 	memset(&fake_inode, 0, sizeof(fake_inode));
 	fake_inode.ino = p->first;
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT,
-						     fake_inode,
-						     0,
-						     0,
-						     0,                // doesn't matter.
-						     p->second.capinfo.wanted, // doesn't matter.
-						     0);  // FIXME get proper mseq here?  hmm.
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first);
+	//stale->head.migrate_seq = 0; // FIXME ******
 	mds->send_message_client(stale, m->get_source_inst());
 
 	// add to cap export list.
