@@ -637,7 +637,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   if (in->encode_inodestat(bl, snapid))
     lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   else {
-    lmask = 0;
+    lmask = CEPH_STAT_MASK_INODE; // immutable bits
     encode_null_lease(bl);
   }
   dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
