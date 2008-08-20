@@ -852,8 +852,9 @@ protected:
   void put_cap_ref(Inode *in, int cap);
 
   void _release(Inode *in, bool checkafter=true);
-  void _flush(Inode *in, bool checkafter=true);
-  void _flushed(Inode *in, bool checkafter);
+  void _flush(Inode *in, Context *onfinish=NULL);
+  void _flushed(Inode *in);
+  void flush_set_callback(inodeno_t ino);
 
   void close_release(Inode *in);
   void close_safe(Inode *in);

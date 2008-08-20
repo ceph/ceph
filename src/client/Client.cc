@@ -91,6 +91,12 @@ ostream& operator<<(ostream &out, Inode &in)
 }
 
 
+void client_flush_set_callback(void *p, inodeno_t ino)
+{
+  Client *client = (Client*)p;
+  client->flush_set_callback(ino);
+}
+
 
 // cons/des
 
@@ -129,7 +135,7 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
   osdmap = new OSDMap();     // initially blank.. see mount()
   objecter = new Objecter(messenger, monmap, osdmap, client_lock);
   objecter->set_client_incarnation(0);  // client always 0, for now.
-  objectcacher = new ObjectCacher(objecter, client_lock);
+  objectcacher = new ObjectCacher(objecter, client_lock, client_flush_set_callback, (void*)this);
   filer = new Filer(objecter);
 }
 
@@ -1417,15 +1423,6 @@ void Client::check_caps(Inode *in, bool is_delayed, bool flush_snap)
   else
     in->hold_caps_until = utime_t();
 
-#if 0
-  else {
-    // delayed.  induce flush?
-    if ((in->caps_file_wanted() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0 &&
-	(in->caps_used() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)))
-      _flush(in, true);
-  }
-#endif
-
   utime_t now = g_clock.now();
 
   map<int,InodeCap*>::iterator it = in->caps.begin();
@@ -1518,45 +1515,37 @@ void Client::_release(Inode *in, bool checkafter)
   }
 }
 
-struct C_Flush : public Context {
-  Client *client;
-  Inode *in;
-  bool checkafter;
-  C_Flush(Client *c, Inode *i, bool ch) : client(c), in(i), checkafter(ch) {}
-  void finish(int r) {
-    client->_flushed(in, checkafter);
-  }
-};
 
-void Client::_flush(Inode *in, bool checkafter)
+void Client::_flush(Inode *in, Context *onfinish)
 {
   dout(10) << "_flush " << *in << dendl;
-  if (in->cap_refs[CEPH_CAP_WRBUFFER] == 1) {
-    in->get_cap_ref(CEPH_CAP_WRBUFFER);  // for the (one!) waiter
-
-    Context *c = new C_Flush(this,  in, checkafter);
-    bool safe = objectcacher->commit_set(in->inode.ino, c);
-    if (safe) {
-      c->finish(0);
-      delete c;
-    }
+  if (!onfinish)
+    onfinish = new C_NoopContext;
+  bool safe = objectcacher->commit_set(in->inode.ino, onfinish);
+  if (safe && onfinish) {
+    onfinish->finish(0);
+    delete onfinish;
   }
 }
 
-void Client::_flushed(Inode *in, bool checkafter)
+void Client::flush_set_callback(inodeno_t ino)
+{
+  Mutex::Locker l(client_lock);
+  Inode *in = inode_map[vinodeno_t(ino,CEPH_NOSNAP)];
+  assert(in);
+  _flushed(in);
+}
+
+void Client::_flushed(Inode *in)
 {
   dout(10) << "_flushed " << *in << dendl;
-  assert(in->cap_refs[CEPH_CAP_WRBUFFER] == 2);
+  assert(in->cap_refs[CEPH_CAP_WRBUFFER] == 1);
 
   // release clean pages too, if we dont hold RDCACHE reference
   if (in->cap_refs[CEPH_CAP_RDCACHE] == 0)
     objectcacher->release_set(in->inode.ino);
 
   put_cap_ref(in, CEPH_CAP_WRBUFFER);
-  if (checkafter)
-    put_cap_ref(in, CEPH_CAP_WRBUFFER);
-  else
-    in->put_cap_ref(CEPH_CAP_WRBUFFER);
 }
 
 
@@ -2053,7 +2042,7 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
       _release(in, false);
 
     if ((used & ~new_caps) & CEPH_CAP_WRBUFFER)
-      _flush(in, false);
+      _flush(in);
     else {
       ack = true;
       cap->implemented = new_caps;
@@ -3326,7 +3315,7 @@ int Client::_release(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       if (in->caps_used() & (CEPH_CAP_WRBUFFER|CEPH_CAP_WR))
-	_flush(in, true);
+	_flush(in);
       check_caps(in, false);
     }
   } else {
