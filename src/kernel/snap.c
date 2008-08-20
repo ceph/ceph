@@ -10,36 +10,30 @@ int ceph_debug_snap = -1;
 #include "decode.h"
 
 
-struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_mds_client *mdsc, u64 ino)
+struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc, u64 ino)
 {
-	struct ceph_snaprealm *realm;
+	struct ceph_snap_realm *realm;
 
-	realm = radix_tree_lookup(&mdsc->snaprealms, ino);
+	realm = radix_tree_lookup(&mdsc->snap_realms, ino);
 	if (!realm) {
 		realm = kzalloc(sizeof(*realm), GFP_NOFS);
-		radix_tree_insert(&mdsc->snaprealms, ino, realm);
+		radix_tree_insert(&mdsc->snap_realms, ino, realm);
 		realm->nref = 1;    /* in tree */
 		realm->ino = ino;
 		INIT_LIST_HEAD(&realm->children);
 		INIT_LIST_HEAD(&realm->child_item);
 		INIT_LIST_HEAD(&realm->inodes_with_caps);
-		dout(20, "get_snaprealm created %llx %p\n", realm->ino, realm);
+		dout(20, "get_snap_realm created %llx %p\n", realm->ino, realm);
 	}
-	dout(20, "get_snaprealm %llx %p %d -> %d\n", realm->ino, realm,
+	dout(20, "get_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
 	     realm->nref, realm->nref+1);
 	realm->nref++;
 	return realm;
 }
 
-struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_mds_client *mdsc,
-					   u64 ino)
+void ceph_put_snap_realm(struct ceph_snap_realm *realm)
 {
-	return radix_tree_lookup(&mdsc->snaprealms, ino);
-}
-
-void ceph_put_snaprealm(struct ceph_snaprealm *realm)
-{
-	dout(20, "put_snaprealm %llx %p %d -> %d\n", realm->ino, realm,
+	dout(20, "put_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
 	     realm->nref, realm->nref-1);
 	realm->nref--;
 	if (realm->nref == 0) {
@@ -50,23 +44,24 @@ void ceph_put_snaprealm(struct ceph_snaprealm *realm)
 	}
 }
 
-int ceph_adjust_snaprealm_parent(struct ceph_mds_client *mdsc,
-				 struct ceph_snaprealm *realm, u64 parentino)
+static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
+					struct ceph_snap_realm *realm,
+					u64 parentino)
 {
-	struct ceph_snaprealm *parent;
+	struct ceph_snap_realm *parent;
 
 	if (realm->parent_ino == parentino)
 		return 0;
 
-	parent = ceph_get_snaprealm(mdsc, parentino);
+	parent = ceph_get_snap_realm(mdsc, parentino);
 	if (!parent)
 		return -ENOMEM;
-	dout(20, "adjust_snaprealm_parent %llx %p: %llx %p -> %llx %p\n",
+	dout(20, "adjust_snap_realm_parent %llx %p: %llx %p -> %llx %p\n",
 	     realm->ino, realm, realm->parent_ino, realm->parent,
 	     parentino, parent);
 	if (realm->parent) {
 		list_del_init(&realm->child_item);
-		ceph_put_snaprealm(realm->parent);
+		ceph_put_snap_realm(realm->parent);
 	}
 	realm->parent_ino = parentino;
 	realm->parent = parent;
@@ -84,9 +79,9 @@ static int cmpu64_rev(const void *a, const void *b)
 	return 0;
 }
 
-int ceph_build_snap_context(struct ceph_snaprealm *realm)
+static int build_snap_context(struct ceph_snap_realm *realm)
 {
-	struct ceph_snaprealm *parent = realm->parent;
+	struct ceph_snap_realm *parent = realm->parent;
 	struct ceph_snap_context *sc;
 	int err = 0;
 	int i;
@@ -94,7 +89,7 @@ int ceph_build_snap_context(struct ceph_snaprealm *realm)
 
 	if (parent) {
 		if (!parent->cached_context) {
-			err = ceph_build_snap_context(parent);
+			err = build_snap_context(parent);
 			if (err)
 				goto fail;
 		}
@@ -159,17 +154,17 @@ fail:
 	return err;
 }
 
-void ceph_rebuild_snaprealms(struct ceph_snaprealm *realm)
+static void rebuild_snap_realms(struct ceph_snap_realm *realm)
 {
 	struct list_head *p;
-	struct ceph_snaprealm *child;
+	struct ceph_snap_realm *child;
 
-	dout(10, "rebuild_snaprealms %llx %p\n", realm->ino, realm);
-	ceph_build_snap_context(realm);
+	dout(10, "rebuild_snap_realms %llx %p\n", realm->ino, realm);
+	build_snap_context(realm);
 
 	list_for_each(p, &realm->children) {
-		child = list_entry(p, struct ceph_snaprealm, child_item);
-		ceph_rebuild_snaprealms(child);
+		child = list_entry(p, struct ceph_snap_realm, child_item);
+		rebuild_snap_realms(child);
 	}
 }
 
@@ -191,14 +186,14 @@ static int dup_array(u64 **dst, u64 *src, int num)
 	return 0;
 }
 
-struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
+struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 					      void *p, void *e, int must_flush)
 {
 	struct ceph_mds_snap_realm *ri;
 	int err = -ENOMEM;
 	u64 *snaps;
 	u64 *prior_parent_snaps;
-	struct ceph_snaprealm *realm, *first = 0;
+	struct ceph_snap_realm *realm, *first = 0;
 	int invalidate = 0;
 
 	dout(10, "update_snap_trace must_flush=%d\n", must_flush);
@@ -213,7 +208,7 @@ more:
 	prior_parent_snaps = p;
 	p += sizeof(u64) * le32_to_cpu(ri->num_prior_parent_snaps);
 
-	realm = ceph_get_snaprealm(mdsc, le64_to_cpu(ri->ino));
+	realm = ceph_get_snap_realm(mdsc, le64_to_cpu(ri->ino));
 	if (!realm)
 		goto fail;
 	if (!first) {
@@ -229,7 +224,7 @@ more:
 		list_for_each(p, &realm->inodes_with_caps) {
 			struct ceph_inode_info *ci =
 				list_entry(p, struct ceph_inode_info,
-					   i_snaprealm_item);
+					   i_snap_realm_item);
 			ceph_check_caps(ci, 0, 1);
 		}
 		dout(20, "update_snap_trace cap flush done\n");
@@ -238,8 +233,8 @@ more:
 		dout(10, "update_snap_trace %llx %p seq %lld unchanged\n",
 		     realm->ino, realm, realm->seq);
 
-	invalidate += ceph_adjust_snaprealm_parent(mdsc, realm,
-						   le64_to_cpu(ri->parent));
+	invalidate += adjust_snap_realm_parent(mdsc, realm,
+					      le64_to_cpu(ri->parent));
 	
 	if (le64_to_cpu(ri->seq) > realm->seq) {
 		realm->seq = le64_to_cpu(ri->seq);
@@ -263,9 +258,9 @@ more:
 	     realm, invalidate, p, e);
 
 	if (p >= e && invalidate)
-		ceph_rebuild_snaprealms(realm);
+		rebuild_snap_realms(realm);
 
-	ceph_put_snaprealm(realm);
+	ceph_put_snap_realm(realm);
 	if (p < e)
 		goto more;
 
@@ -276,6 +271,162 @@ bad:
 fail:
 	derr(10, "update_snap_trace error %d\n", err);
 	return ERR_PTR(err);	
+}
+
+
+
+/*
+ * snap
+ */
+
+void ceph_handle_snap(struct ceph_mds_client *mdsc,
+		      struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->client->sb;
+	struct ceph_mds_session *session;
+	int mds = le32_to_cpu(msg->hdr.src.name.num);
+	u64 split;
+	int op;
+	int trace_len;
+	struct ceph_snap_realm *realm = 0;
+	void *p = msg->front.iov_base;
+	void *e = p + msg->front.iov_len;
+	struct ceph_mds_snap_head *h;
+	int num_split_inos, num_split_realms;
+	__le64 *split_inos = 0, *split_realms = 0;
+	int i;
+
+	/* decode */
+	if (msg->front.iov_len < sizeof(*h))
+		goto bad;
+	h = p;
+	op = le32_to_cpu(h->op);
+	split = le64_to_cpu(h->split);
+	trace_len = le32_to_cpu(h->trace_len);
+	num_split_inos = le32_to_cpu(h->num_split_inos);
+	num_split_realms = le32_to_cpu(h->num_split_realms);
+	p += sizeof(*h);
+
+	dout(10, "handle_snap from mds%d op %s split %llx tracelen %d\n", mds,
+	     ceph_snap_op_name(op), split, trace_len);
+
+	/* find session */
+	mutex_lock(&mdsc->mutex);
+	session = __ceph_get_mds_session(mdsc, mds);
+	if (session)
+		down_write(&mdsc->snap_rwsem);
+	mutex_unlock(&mdsc->mutex);
+	if (!session) {
+		dout(10, "WTF, got snap but no session for mds%d\n", mds);
+		return;
+	}
+
+	mutex_lock(&session->s_mutex);
+	session->s_seq++;
+	mutex_unlock(&session->s_mutex);
+
+	if (op == CEPH_SNAP_OP_SPLIT) {
+		struct ceph_mds_snap_realm *ri;
+
+		split_inos = p;
+		p += sizeof(u64) * num_split_inos;
+		split_realms = p;
+		p += sizeof(u64) * num_split_realms;
+		ceph_decode_need(&p, e, sizeof(*ri), bad);
+		ri = p;
+
+		realm = ceph_get_snap_realm(mdsc, split);
+		if (IS_ERR(realm))
+			goto out;
+		dout(10, "splitting snap_realm %llx %p\n", realm->ino, realm);
+
+		for (i = 0; i < num_split_inos; i++) {
+			struct ceph_vino vino = {
+				.ino = le64_to_cpu(split_inos[i]),
+				.snap = CEPH_NOSNAP,
+			};
+			struct inode *inode = ceph_find_inode(sb, vino);
+			struct ceph_inode_info *ci;
+			if (!inode)
+				continue;
+			ci = ceph_inode(inode);
+			spin_lock(&inode->i_lock);
+			if (!ci->i_snap_realm)
+				goto skip_inode;
+			if (ci->i_snap_realm->created > le64_to_cpu(ri->created)) {
+				dout(15, " leaving %p in newer realm %llx %p\n",
+				     inode, ci->i_snap_realm->ino,
+				     ci->i_snap_realm);
+				goto skip_inode;
+			}
+			dout(15, " will move %p to split realm %llx %p\n",
+			     inode, realm->ino, realm);
+			/*
+			 * remove from list, but don't re-add yet.  we
+			 * don't want the caps to be flushed (again) by
+			 * ceph_update_snap_trace below.
+			 */
+			list_del_init(&ci->i_snap_realm_item);
+			spin_unlock(&inode->i_lock);
+
+			ceph_check_caps(ci, 0, 1);
+
+			iput(inode);
+			continue;
+
+		skip_inode:
+			spin_unlock(&inode->i_lock);
+			iput(inode);
+		}
+
+		for (i = 0; i < num_split_realms; i++) {
+			struct ceph_snap_realm *child =
+				ceph_get_snap_realm(mdsc,
+					   le64_to_cpu(split_realms[i]));
+			if (!child)
+				continue;
+			adjust_snap_realm_parent(mdsc, child, realm->ino);
+			ceph_put_snap_realm(child);
+		}
+
+		ceph_put_snap_realm(realm);
+	}
+
+	realm = ceph_update_snap_trace(mdsc, p, e,
+				       op != CEPH_SNAP_OP_DESTROY);
+	if (IS_ERR(realm))
+		goto bad;
+
+	if (op == CEPH_SNAP_OP_SPLIT) {
+		for (i = 0; i < num_split_inos; i++) {
+			struct ceph_vino vino = {
+				.ino = le64_to_cpu(split_inos[i]),
+				.snap = CEPH_NOSNAP,
+			};
+			struct inode *inode = ceph_find_inode(sb, vino);
+			struct ceph_inode_info *ci;
+			if (!inode)
+				continue;
+			ci = ceph_inode(inode);
+			spin_lock(&inode->i_lock);
+			/* _now_ add to newly split realm */
+			ceph_put_snap_realm(ci->i_snap_realm);
+			list_add(&ci->i_snap_realm_item,
+				 &realm->inodes_with_caps);
+			ci->i_snap_realm = realm;
+			realm->nref++;
+			spin_unlock(&inode->i_lock);
+		}
+	}
+
+	ceph_put_snap_realm(realm);
+	up_write(&mdsc->snap_rwsem);
+	return;
+
+bad:
+	derr(10, "corrupt snap message from mds%d\n", mds);
+out:
+	return;
 }
 
 

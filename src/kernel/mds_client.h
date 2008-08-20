@@ -135,7 +135,7 @@ struct ceph_mds_client {
 	 * snap contexts.  (later, we can do per-realm snap contexts locks..)
 	 */
 	struct rw_semaphore     snap_rwsem;
-	struct radix_tree_root  snaprealms;
+	struct radix_tree_root  snap_realms;
 
 	__u64                   last_tid;      /* most recent mds request */
 	struct radix_tree_root  request_tree;  /* pending mds requests */
@@ -166,9 +166,6 @@ extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 				     struct ceph_msg *msg);
-
-extern void ceph_mdsc_handle_snap(struct ceph_mds_client *mdsc,
-				  struct ceph_msg *msg);
 
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);

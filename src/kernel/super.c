@@ -189,7 +189,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_hold_caps_until = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
-	ci->i_snaprealm = 0;
+	ci->i_snap_realm = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
 
@@ -825,7 +825,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		ceph_handle_caps(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_SNAP:
-		ceph_mdsc_handle_snap(&client->mdsc, msg);
+		ceph_handle_snap(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_LEASE:
 		ceph_mdsc_handle_lease(&client->mdsc, msg);

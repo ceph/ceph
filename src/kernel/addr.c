@@ -55,7 +55,7 @@ static int ceph_set_page_dirty(struct page *page)
 		 * on truncate for dirty page accounting for mmap.
 		 */
 		ceph_put_snap_context((void *)page->private);
-		snapc = ceph_get_snap_context(ci->i_snaprealm->cached_context);
+		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
 		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
 		dout(20, "%p set_page_dirty %p %d -> %d (?)\n",
@@ -572,11 +572,11 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	     inode, page, (int)pos, (int)len);
 
 	/* check snap context */
-	BUG_ON(!ci->i_snaprealm);
-	BUG_ON(!ci->i_snaprealm->cached_context);
+	BUG_ON(!ci->i_snap_realm);
+	BUG_ON(!ci->i_snap_realm->cached_context);
 	down_read(&mdsc->snap_rwsem);
 	if (page->private &&
-	    (void *)page->private != ci->i_snaprealm->cached_context) {
+	    (void *)page->private != ci->i_snap_realm->cached_context) {
 		/* force early writeback of snapped page */
 		r = writepage_nounlock(page, 0);
 		if (r < 0)

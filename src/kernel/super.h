@@ -266,8 +266,8 @@ struct ceph_inode_info {
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	atomic_t i_wrbuffer_ref;
 
-	struct ceph_snaprealm *i_snaprealm;
-	struct list_head i_snaprealm_item;
+	struct ceph_snap_realm *i_snap_realm;
+	struct list_head i_snap_realm_item;
 
 	struct work_struct i_wb_work;  /* writeback work */
 
@@ -483,7 +483,7 @@ static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
 	}
 }
 
-struct ceph_snaprealm {
+struct ceph_snap_realm {
 	u64 ino;
 	int nref;
 	u64 created, seq;
@@ -495,7 +495,7 @@ struct ceph_snaprealm {
 	u64 *snaps;
 	int num_snaps;
 	
-	struct ceph_snaprealm *parent;
+	struct ceph_snap_realm *parent;
 	struct list_head child_item;
 	struct list_head children;
 
@@ -505,18 +505,12 @@ struct ceph_snaprealm {
 };
 
 /* snap.c */
-extern struct ceph_snaprealm *ceph_get_snaprealm(struct ceph_mds_client *mdsc,
-						 u64 ino);
-extern struct ceph_snaprealm *ceph_find_snaprealm(struct ceph_mds_client *mdsc,
-						  u64 ino);
-extern void ceph_put_snaprealm(struct ceph_snaprealm *realm);
-extern int ceph_adjust_snaprealm_parent(struct ceph_mds_client *mdsc,
-					struct ceph_snaprealm *realm, u64 p);
-extern struct ceph_snaprealm *ceph_update_snap_trace(struct ceph_mds_client *mc,
-						     void *p, void *e,
-						     int must_flush);
-extern int ceph_build_snap_context(struct ceph_snaprealm *realm);
-extern void ceph_invalidate_snaprealm(struct ceph_snaprealm *realm);
+extern void ceph_put_snap_realm(struct ceph_snap_realm *realm);
+extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
+						      void *p, void *e,
+						      int must_flush);
+extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
+			     struct ceph_msg *msg);
 
 
 /*

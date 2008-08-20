@@ -87,7 +87,7 @@ int ceph_add_cap(struct inode *inode,
 	struct ceph_cap *cap, *new_cap = 0;
 	int i;
 	int is_first = 0;
-	struct ceph_snaprealm *realm = 0;
+	struct ceph_snap_realm *realm = 0;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 
 	if (snapblob_len)
@@ -140,11 +140,11 @@ retry:
 			ci->i_cap_exporting_mds = -1;
 		}
 	}
-	if (!ci->i_snaprealm) {
-		ci->i_snaprealm = realm;
-		list_add(&ci->i_snaprealm_item, &realm->inodes_with_caps);
+	if (!ci->i_snap_realm) {
+		ci->i_snap_realm = realm;
+		list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
 	} else
-		ceph_put_snaprealm(realm);
+		ceph_put_snap_realm(realm);
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %xh now %xh seq %d mds%d\n",
 	     inode, ceph_vinop(inode), issued, issued|cap->issued, seq, mds);
@@ -219,7 +219,7 @@ int __ceph_remove_cap(struct ceph_cap *cap)
 		kfree(cap);
 
 	if (RB_EMPTY_ROOT(&ci->i_caps)) {
-		list_del_init(&ci->i_snaprealm_item);
+		list_del_init(&ci->i_snap_realm_item);
 		return 1;
 	}
 	return 0;
@@ -321,11 +321,11 @@ retry:
 		if (flush_snap &&
 		    (cap->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))) {
 			if (cap->flushed_snap >=
-			    ci->i_snaprealm->cached_context->seq) {
+			    ci->i_snap_realm->cached_context->seq) {
 				dout(10, "flushed_snap %llu >= seq %lld, "
 				     "not flushing mds%d\n",
 				     cap->flushed_snap,
-				     ci->i_snaprealm->cached_context->seq,
+				     ci->i_snap_realm->cached_context->seq,
 				     cap->session->s_mds);
 				continue;  /* already flushed for this snap */
 			}
@@ -649,7 +649,7 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
 			grant->time_warp_seq = cpu_to_le64(ci->i_time_warp_seq);
 			grant->snap_follows =
-			     cpu_to_le64(ci->i_snaprealm->cached_context->seq);
+			     cpu_to_le64(ci->i_snap_realm->cached_context->seq);
 			reply = 1;
 			wake = 1;
 		}
@@ -1023,7 +1023,7 @@ int __ceph_send_cap(struct ceph_mds_client *mdsc,
 	mtime = inode->i_mtime;
 	atime = inode->i_atime;
 	time_warp_seq = ci->i_time_warp_seq;
-	follows = ci->i_snaprealm->cached_context->seq;
+	follows = ci->i_snap_realm->cached_context->seq;
 	if (flush_snap)
 		cap->flushed_snap = follows; /* so we only flush it once */
 	spin_unlock(&inode->i_lock);

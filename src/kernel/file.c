@@ -243,7 +243,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 
 	ret = ceph_osdc_sync_write(&client->osdc, ceph_vino(inode),
 				   &ci->i_layout,
-				   ci->i_snaprealm->cached_context,
+				   ci->i_snap_realm->cached_context,
 				   pos, count, data);
 	if (ret > 0) {
 		pos += ret;
