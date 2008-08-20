@@ -1505,9 +1505,6 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
 {
   int used = in->caps_used();
 
-  if (!seq)
-    seq = in->snaprealm->cached_snap_context.seq;
-
   if (in->cap_snap_pending) {
     dout(10) << "queue_cap_snap already cap_snap_pending on " << *in << dendl;
   } else if (used & CEPH_CAP_WR) {
@@ -1814,7 +1811,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	  while (!p.end()) {
 	    Inode *in = *p;
 	    ++p;
-	    queue_cap_snap(in);
+	    queue_cap_snap(in, realm->cached_snap_context.seq);
 	  }
 	  
 	  for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
@@ -1889,13 +1886,11 @@ void Client::handle_snap(MClientSnap *m)
 	dout(10) << " moving " << *in << " from " << *in->snaprealm << dendl;
 
 	// queue for snap writeback
-	queue_cap_snap(in);
+	queue_cap_snap(in, in->snaprealm->cached_snap_context.seq);
 
-	if (in->snaprealm) {
-	  put_snap_realm(in->snaprealm);
-	  in->snaprealm_item.remove_myself();
-	  to_move.push_back(in);
-	}
+	put_snap_realm(in->snaprealm);
+	in->snaprealm_item.remove_myself();
+	to_move.push_back(in);
       }
     }
 
