@@ -248,7 +248,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 	  assert(wr->waitfor_commit.count(tid));
 	  
 	  if (wr->tid_version.count(tid)) {
-	    if (wr->op == CEPH_OSD_OP_WRITE &&
+	    if ((wr->op == CEPH_OSD_OP_WRITE || wr->op == CEPH_OSD_OP_WRITEFULL) &&
 		!g_conf.objecter_buffer_uncommitted) {
 	      dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << dendl;
 	      assert(0);  // crap. fixme.
@@ -329,6 +329,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     
   case CEPH_OSD_OP_WRNOOP:
   case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_WRITEFULL:
   case CEPH_OSD_OP_ZERO:
   case CEPH_OSD_OP_DELETE:
   case CEPH_OSD_OP_WRUNLOCK:
@@ -857,6 +858,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     // what type of op?
     switch (wr->op) {
     case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
       {
 	// map buffer segments into this extent
 	// (may be fragmented bc of striping)
@@ -968,7 +970,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
       
       // buffer uncommitted?
       if (!g_conf.objecter_buffer_uncommitted &&
-	  wr->op == CEPH_OSD_OP_WRITE) {
+	  (wr->op == CEPH_OSD_OP_WRITE || wr->op == CEPH_OSD_OP_WRITEFULL)) {
 	// discard buffer!
 	((OSDWrite*)wr)->bl.clear();
       }
