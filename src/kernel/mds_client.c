@@ -606,7 +606,7 @@ static int open_session(struct ceph_mds_client *mdsc,
  */
 static void remove_session_caps(struct ceph_mds_session *session)
 {
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	struct ceph_inode_info *ci;
 
 	/*
@@ -615,7 +615,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
 	 */
 	dout(10, "remove_session_caps on %p\n", session);
 	while (session->s_nr_caps > 0) {
-		cap = list_entry(session->s_caps.next, struct ceph_inode_cap,
+		cap = list_entry(session->s_caps.next, struct ceph_cap,
 				 session_caps);
 		ci = cap->ci;
 		dout(10, "removing cap %p, ci is %p, inode is %p\n",
@@ -752,11 +752,11 @@ static void remove_session_leases(struct ceph_mds_session *session)
 static void wake_up_session_caps(struct ceph_mds_session *session)
 {
 	struct list_head *p;
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 
 	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
 	list_for_each(p, &session->s_caps) {
-		cap = list_entry(p, struct ceph_inode_cap, session_caps);
+		cap = list_entry(p, struct ceph_cap, session_caps);
 		dout(20, "waking up waiters on %p\n", &cap->ci->vfs_inode);
 		wake_up(&cap->ci->i_cap_wq);
 	}
@@ -1285,7 +1285,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	int newlen, len = 4 + 1;
 	void *p, *end;
 	struct list_head *cp;
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	char *path;
 	int pathlen, err;
 	u64 pathbase;
@@ -1340,7 +1340,7 @@ retry:
 	ceph_encode_32(&p, session->s_nr_caps);
 	count = 0;
 	list_for_each(cp, &session->s_caps) {
-		cap = list_entry(cp, struct ceph_inode_cap, session_caps);
+		cap = list_entry(cp, struct ceph_cap, session_caps);
 		ci = cap->ci;
 		ceph_decode_need(&p, end, sizeof(u64) +
 				 sizeof(struct ceph_mds_cap_reconnect),

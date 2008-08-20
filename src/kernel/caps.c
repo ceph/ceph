@@ -12,14 +12,14 @@ int ceph_debug_caps = -1;
 #include "messenger.h"
 
 
-static struct ceph_inode_cap *__get_cap_for_mds(struct inode *inode, int mds)
+static struct ceph_cap *__get_cap_for_mds(struct inode *inode, int mds)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	struct rb_node *n = ci->i_caps.rb_node;
 
 	while (n) {
-		cap = rb_entry(n, struct ceph_inode_cap, ci_node);
+		cap = rb_entry(n, struct ceph_cap, ci_node);
 		if (mds < cap->mds)
 			n = n->rb_left;
 		else if (mds > cap->mds)
@@ -31,15 +31,15 @@ static struct ceph_inode_cap *__get_cap_for_mds(struct inode *inode, int mds)
 }
 
 static void __insert_cap_node(struct ceph_inode_info *ci,
-			      struct ceph_inode_cap *new)
+			      struct ceph_cap *new)
 {
 	struct rb_node **p = &ci->i_caps.rb_node;
 	struct rb_node *parent = NULL;
-	struct ceph_inode_cap *cap = 0;
+	struct ceph_cap *cap = 0;
 
 	while (*p) {
 		parent = *p;
-		cap = rb_entry(parent, struct ceph_inode_cap, ci_node);
+		cap = rb_entry(parent, struct ceph_cap, ci_node);
 		if (new->mds < cap->mds)
 			p = &(*p)->rb_left;
 		else if (new->mds > cap->mds)
@@ -55,7 +55,7 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 int ceph_get_cap_mds(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	int mds = -1;
 
 	/*
@@ -63,7 +63,7 @@ int ceph_get_cap_mds(struct inode *inode)
 	 */
 	spin_lock(&inode->i_lock);
 	if (!RB_EMPTY_ROOT(&ci->i_caps)) {
-		cap = rb_entry(ci->i_caps.rb_node, struct ceph_inode_cap,
+		cap = rb_entry(ci->i_caps.rb_node, struct ceph_cap,
 			       ci_node);
 		mds = cap->mds;
 	}
@@ -84,7 +84,7 @@ int ceph_add_cap(struct inode *inode,
 {
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_inode_cap *cap, *new_cap = 0;
+	struct ceph_cap *cap, *new_cap = 0;
 	int i;
 	int is_first = 0;
 	struct ceph_snaprealm *realm = 0;
@@ -166,13 +166,13 @@ retry:
 int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 {
 	int have = ci->i_snap_caps;
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	u32 gen;
 	unsigned long ttl;
 	struct rb_node *p;
 
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
-		cap = rb_entry(p, struct ceph_inode_cap, ci_node);
+		cap = rb_entry(p, struct ceph_cap, ci_node);
 
 		spin_lock(&cap->session->s_cap_lock);
 		gen = cap->session->s_cap_gen;
@@ -198,7 +198,7 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
  * caller should hold i_lock, snap_rwsem, and session s_mutex.
  * returns true if this is the last cap.  if so, caller should iput.
  */
-int __ceph_remove_cap(struct ceph_inode_cap *cap)
+int __ceph_remove_cap(struct ceph_cap *cap)
 {
 	struct ceph_mds_session *session = cap->session;
 	struct ceph_inode_info *ci = cap->ci;
@@ -228,7 +228,7 @@ int __ceph_remove_cap(struct ceph_inode_cap *cap)
 /*
  * caller should hold snap_rwsem and session s_mutex.
  */
-void ceph_remove_cap(struct ceph_inode_cap *cap)
+void ceph_remove_cap(struct ceph_cap *cap)
 {
 	struct inode *inode = &cap->ci->vfs_inode;
 	int was_last;
@@ -272,7 +272,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int flush_snap)
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = &ci->vfs_inode;
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	int wanted, used;
 	struct ceph_mds_session *session = 0;  /* if non-NULL, i hold s_mutex */
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
@@ -291,7 +291,7 @@ retry:
 		__ceph_cap_delay_requeue(mdsc, ci);
 	
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
-		cap = rb_entry(p, struct ceph_inode_cap, ci_node);
+		cap = rb_entry(p, struct ceph_cap, ci_node);
 		if (mds >= cap->mds)
 			continue;
 
@@ -374,8 +374,8 @@ ack:
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
 		/* send_cap drops i_lock */
-		__ceph_mdsc_send_cap(mdsc, session, cap,
-				     used, wanted, flush_snap);
+		__ceph_send_cap(mdsc, session, cap,
+				used, wanted, flush_snap);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
@@ -561,7 +561,7 @@ static void send_cap(struct ceph_mds_client *mdsc, __u64 ino, int op,
 static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			    struct ceph_mds_session *session)
 {
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(grant->seq);
@@ -707,7 +707,7 @@ static void handle_cap_released(struct inode *inode,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int seq = le32_to_cpu(m->seq);
 	int removed_last;
-	struct ceph_inode_cap *cap;
+	struct ceph_cap *cap;
 
 	dout(10, "handle_cap_released inode %p ci %p mds%d seq %d\n", inode, ci,
 	     session->s_mds, seq);
@@ -797,7 +797,7 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	unsigned mseq = le32_to_cpu(ex->migrate_seq);
-	struct ceph_inode_cap *cap = 0, *t;
+	struct ceph_cap *cap = 0, *t;
 	struct rb_node *p;
 	int was_last = 0;
 
@@ -808,7 +808,7 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 
 	/* make sure we haven't seen a higher mseq */
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
-		t = rb_entry(p, struct ceph_inode_cap, ci_node);
+		t = rb_entry(p, struct ceph_cap, ci_node);
 		if (t->mseq > mseq) {
 			dout(10, " higher mseq on cap from mds%d\n",
 			     t->session->s_mds);
@@ -982,11 +982,11 @@ bad:
  *
  * returns true if we removed the last cap on this inode.
  */
-int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
-			 struct ceph_mds_session *session,
-			 struct ceph_inode_cap *cap,
-			 int used, int wanted,
-			 int flush_snap)
+int __ceph_send_cap(struct ceph_mds_client *mdsc,
+		    struct ceph_mds_session *session,
+		    struct ceph_cap *cap,
+		    int used, int wanted,
+		    int flush_snap)
 {
 	struct ceph_inode_info *ci = cap->ci;
 	struct inode *inode = &ci->vfs_inode;
@@ -1078,8 +1078,8 @@ void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 	struct list_head *p, *n;
 
 	list_for_each_safe (p, n, &session->s_caps) {
-		struct ceph_inode_cap *cap =
-			list_entry(p, struct ceph_inode_cap, session_caps);
+		struct ceph_cap *cap =
+			list_entry(p, struct ceph_cap, session_caps);
 		struct inode *inode = &cap->ci->vfs_inode;
 		int used, wanted;
 
@@ -1099,7 +1099,7 @@ void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 			used = wanted = 0;
 		}
 
-		__ceph_mdsc_send_cap(mdsc, session, cap, used, wanted, 0);
+		__ceph_send_cap(mdsc, session, cap, used, wanted, 0);
 	}
 }
 

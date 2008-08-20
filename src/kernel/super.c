@@ -173,6 +173,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
+	INIT_LIST_HEAD(&ci->i_cap_snaps);
 
 	ci->i_wanted_max_size = 0;
 	ci->i_requested_max_size = 0;

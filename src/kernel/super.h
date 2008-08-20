@@ -166,10 +166,11 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
 }
 
 /*
- * CEPH file system in-core inode info
+ * file i/o capability
  */
+#define STATIC_CAPS 1
 
-struct ceph_inode_cap {
+struct ceph_cap {
 	struct ceph_inode_info *ci;
 	struct rb_node ci_node;         /* per-ci cap tree */
 	struct ceph_mds_session *session;
@@ -182,12 +183,23 @@ struct ceph_inode_cap {
 	u64 flushed_snap;
 };
 
-#define MAX_DIRFRAG_REP 4
+/*
+ * snapped cap state, pending flush to mds
+ */
+struct ceph_cap_snap {
+	struct list_head ci_item;
+	int mds;
+	u64 follows;
+	u64 size;
+	struct timespec mtime, atime;
+};
 
 /*
  * a _leaf_ frag will be present in the i_fragtree IFF there is
  * delegation info.  that is, if mds >= 0 || ndist > 0.
  */
+#define MAX_DIRFRAG_REP 4
+
 struct ceph_inode_frag {
 	struct rb_node node;
 
@@ -201,7 +213,6 @@ struct ceph_inode_frag {
 	int dist[MAX_DIRFRAG_REP];
 };
 
-#define STATIC_CAPS 1
 
 struct ceph_dir_info {
 	u64 nfiles, nsubdirs;
@@ -234,19 +245,20 @@ struct ceph_inode_info {
 	char *i_xattr_data;
 
 	struct rb_root i_caps;
-	struct ceph_inode_cap i_static_caps[STATIC_CAPS];
+	struct ceph_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;
 	unsigned long i_hold_caps_until; /* jiffies */
 	struct list_head i_cap_delay_list;
 	int i_cap_exporting_mds;
 	unsigned i_cap_exporting_mseq;
 	unsigned i_cap_exporting_issued;
-	unsigned i_snap_caps;
+	struct list_head i_cap_snaps;
+	unsigned i_snap_caps;         /* cap bits for snap i/o */
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
-	loff_t i_max_size;      /* size authorized by mds */
+	loff_t i_max_size;            /* size authorized by mds */
 	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
-	loff_t i_wanted_max_size;  /* offset we'd like to write too */
+	loff_t i_wanted_max_size;     /* offset we'd like to write too */
 	loff_t i_requested_max_size;  /* max_size we've requested */
 	struct timespec i_old_atime;
 
@@ -564,8 +576,8 @@ extern int ceph_add_cap(struct inode *inode,
 			int fmode, unsigned issued,
 			unsigned cap, unsigned seq,
 			void *snapblob, int snapblob_len);
-extern int __ceph_remove_cap(struct ceph_inode_cap *cap);
-extern void ceph_remove_cap(struct ceph_inode_cap *cap);
+extern int __ceph_remove_cap(struct ceph_cap *cap);
+extern void ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
@@ -577,6 +589,11 @@ extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
 extern void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 				  struct ceph_mds_session *session,
 				  int purge);
+extern int __ceph_send_cap(struct ceph_mds_client *mdsc,
+			   struct ceph_mds_session *session,
+			   struct ceph_cap *cap,
+			   int used, int wanted,
+			   int flush_snap);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

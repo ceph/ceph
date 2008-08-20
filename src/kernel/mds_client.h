@@ -12,7 +12,7 @@
 #include "mdsmap.h"
 
 struct ceph_client;
-struct ceph_inode_cap;
+struct ceph_cap;
 
 /*
  * for mds reply parsing
@@ -186,11 +186,6 @@ extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
-extern int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
-				struct ceph_mds_session *session,
-				struct ceph_inode_cap *cap,
-				int used, int wanted,
-				int flush_snap);
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 #endif
