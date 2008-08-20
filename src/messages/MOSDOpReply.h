@@ -88,7 +88,7 @@ public:
   
   void print(ostream& out) {
     out << "osd_op_reply(" << get_tid()
-	<< " " << MOSDOp::get_opname(get_op())
+	<< " " << ceph_osd_op_name(get_op())
 	<< " " << head.oid;
     if (get_length()) out << " " << get_offset() << "~" << get_length();
     if (get_op() >= 10) {

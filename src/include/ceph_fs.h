@@ -97,7 +97,7 @@ struct ceph_timespec {
  * to feed encoded frags as values into frag_contains_value.
  */
 static inline __u32 frag_make(__u32 b, __u32 v) {
-	return (b << 24) | 
+	return (b << 24) |
 		(v & (0xffffffu << (24-b)) & 0xffffffu);
 }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
@@ -534,7 +534,7 @@ struct ceph_mds_session_head {
 
 /* client_request */
 /*
- * mds ops.  
+ * mds ops.
  *  & 0x1000  -> write op
  *  & 0x10000 -> follow symlink (e.g. stat(), not lstat()).
  &  & 0x100000 -> use weird ino/path trace
@@ -552,7 +552,7 @@ enum {
 	CEPH_MDS_OP_LSETXATTR = 0x01104,
 	CEPH_MDS_OP_LRMXATTR  = 0x01105,
 	CEPH_MDS_OP_LSETLAYOUT= 0x01106,
-	
+
 	CEPH_MDS_OP_STAT      = 0x10100,
 	CEPH_MDS_OP_UTIME     = 0x11101,
 	CEPH_MDS_OP_CHMOD     = 0x11102,
@@ -914,16 +914,19 @@ struct ceph_mds_snap_realm {
  * osd ops
  */
 enum {
+	/* read */
 	CEPH_OSD_OP_READ       = 1,
 	CEPH_OSD_OP_STAT       = 2,
-	CEPH_OSD_OP_REPLICATE  = 3,
-	CEPH_OSD_OP_UNREPLICATE = 4,
-	CEPH_OSD_OP_WRNOOP     = 10,
-	CEPH_OSD_OP_WRITE      = 11,
-	CEPH_OSD_OP_DELETE     = 12,
-	CEPH_OSD_OP_TRUNCATE   = 13,
-	CEPH_OSD_OP_ZERO       = 14,
 
+	/* modify */
+	CEPH_OSD_OP_WRNOOP     = 10, /* write no-op (i.e. sync) */
+	CEPH_OSD_OP_WRITE      = 11, /* write extent */
+	CEPH_OSD_OP_DELETE     = 12, /* delete object */
+	CEPH_OSD_OP_TRUNCATE   = 13,
+	CEPH_OSD_OP_ZERO       = 14, /* zero extent */
+	CEPH_OSD_OP_WRITEFULL  = 15, /* write complete object */
+
+	/* lock */
 	CEPH_OSD_OP_WRLOCK     = 20,
 	CEPH_OSD_OP_WRUNLOCK   = 21,
 	CEPH_OSD_OP_RDLOCK     = 22,
@@ -931,12 +934,60 @@ enum {
 	CEPH_OSD_OP_UPLOCK     = 24,
 	CEPH_OSD_OP_DNLOCK     = 25,
 
+	/* subop */
 	CEPH_OSD_OP_PULL       = 30,
 	CEPH_OSD_OP_PUSH       = 31,
 
-	CEPH_OSD_OP_BALANCEREADS   = 101,
-	CEPH_OSD_OP_UNBALANCEREADS = 102
+	CEPH_OSD_OP_BALANCEREADS   = 40,
+	CEPH_OSD_OP_UNBALANCEREADS = 41
 };
+
+static inline int ceph_osd_op_is_read(int op)
+{
+	return op < 10;
+}
+static inline int ceph_osd_op_is_modify(int op)
+{
+	return op >= 10 && op < 20;
+}
+static inline int ceph_osd_op_is_lock(int op)
+{
+	return op >= 20 && op < 30;
+}
+static inline int ceph_osd_op_is_subop(int op)
+{
+	return op >= 30 && op < 40;
+}
+
+static inline const char* ceph_osd_op_name(int op)
+{
+	switch (op) {
+	case CEPH_OSD_OP_READ: return "read";
+	case CEPH_OSD_OP_STAT: return "stat";
+
+	case CEPH_OSD_OP_WRNOOP: return "wrnoop";
+	case CEPH_OSD_OP_WRITE: return "write";
+	case CEPH_OSD_OP_DELETE: return "delete";
+	case CEPH_OSD_OP_TRUNCATE: return "truncate";
+	case CEPH_OSD_OP_ZERO: return "zero";
+	case CEPH_OSD_OP_WRITEFULL: return "writefull";
+
+	case CEPH_OSD_OP_WRLOCK: return "wrlock";
+	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";
+	case CEPH_OSD_OP_RDLOCK: return "rdlock";
+	case CEPH_OSD_OP_RDUNLOCK: return "rdunlock";
+	case CEPH_OSD_OP_UPLOCK: return "uplock";
+	case CEPH_OSD_OP_DNLOCK: return "dnlock";
+
+	case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
+	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
+
+	case CEPH_OSD_OP_PULL: return "pull";
+	case CEPH_OSD_OP_PUSH: return "push";
+	default: return "";
+	}
+}
+
 
 /*
  * osd op flags

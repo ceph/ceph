@@ -126,7 +126,7 @@ public:
   
   void print(ostream& out) {
     out << "osd_sub_op_reply(" << reqid
-	<< " " << MOSDOp::get_opname(op)
+	<< " " << ceph_osd_op_name(op)
 	<< " " << poid;
     if (length) out << " " << offset << "~" << length;
     if (op >= 10) {

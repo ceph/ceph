@@ -30,34 +30,6 @@
 #define EINCLOCKED 100
 
 class MOSDOp : public Message {
-public:
-  static const char* get_opname(int op) {
-    switch (op) {
-    case CEPH_OSD_OP_READ: return "read";
-    case CEPH_OSD_OP_STAT: return "stat";
-
-    case CEPH_OSD_OP_WRNOOP: return "wrnoop"; 
-    case CEPH_OSD_OP_WRITE: return "write"; 
-    case CEPH_OSD_OP_ZERO: return "zero"; 
-    case CEPH_OSD_OP_DELETE: return "delete"; 
-    case CEPH_OSD_OP_TRUNCATE: return "truncate"; 
-    case CEPH_OSD_OP_WRLOCK: return "wrlock"; 
-    case CEPH_OSD_OP_WRUNLOCK: return "wrunlock"; 
-    case CEPH_OSD_OP_RDLOCK: return "rdlock"; 
-    case CEPH_OSD_OP_RDUNLOCK: return "rdunlock"; 
-    case CEPH_OSD_OP_UPLOCK: return "uplock"; 
-    case CEPH_OSD_OP_DNLOCK: return "dnlock"; 
-
-    case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
-    case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
-
-    case CEPH_OSD_OP_PULL: return "pull";
-    case CEPH_OSD_OP_PUSH: return "push";
-    default: assert(0);
-    }
-    return 0;
-  }
-
 private:
   ceph_osd_request_head head;
   vector<snapid_t> snaps;
@@ -84,9 +56,7 @@ public:
   
   const int    get_op() { return head.op; }
   void set_op(int o) { head.op = o; }
-  bool is_read() { 
-    return get_op() < 10;
-  }
+  bool is_read() { return ceph_osd_op_is_read(get_op()); }
 
   loff_t get_length() const { return head.length; }
   loff_t get_offset() const { return head.offset; }
@@ -161,7 +131,7 @@ public:
   const char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << get_reqid()
-	<< " " << get_opname(get_op())
+	<< " " << ceph_osd_op_name(get_op())
 	<< " " << head.oid;
     if (get_length()) out << " " << get_offset() << "~" << get_length();
     out << " " << pg_t(head.layout.ol_pgid);

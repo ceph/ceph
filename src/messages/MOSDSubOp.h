@@ -116,7 +116,7 @@ public:
   const char *get_type_name() { return "osd_sub_op"; }
   void print(ostream& out) {
     out << "osd_sub_op(" << reqid
-	<< " " << MOSDOp::get_opname(op)
+	<< " " << ceph_osd_op_name(op)
 	<< " " << poid
 	<< " v " << version
 	<< " snapset=" << snapset << " snapc=" << snapc;    

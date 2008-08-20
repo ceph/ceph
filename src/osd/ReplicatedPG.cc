@@ -363,34 +363,10 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   osd->logger->inc("op");
 
-  switch (op->get_op()) {
-    
-    // reads
-  case CEPH_OSD_OP_READ:
-  case CEPH_OSD_OP_STAT:
+  if (ceph_osd_op_is_read(op->get_op()))
     op_read(op);
-    break;
-    
-    // writes
-  case CEPH_OSD_OP_WRNOOP:
-  case CEPH_OSD_OP_WRITE:
-  case CEPH_OSD_OP_ZERO:
-  case CEPH_OSD_OP_DELETE:
-  case CEPH_OSD_OP_TRUNCATE:
-  case CEPH_OSD_OP_WRLOCK:
-  case CEPH_OSD_OP_WRUNLOCK:
-  case CEPH_OSD_OP_RDLOCK:
-  case CEPH_OSD_OP_RDUNLOCK:
-  case CEPH_OSD_OP_UPLOCK:
-  case CEPH_OSD_OP_DNLOCK:
-  case CEPH_OSD_OP_BALANCEREADS:
-  case CEPH_OSD_OP_UNBALANCEREADS:
+  else
     op_modify(op);
-    break;
-    
-  default:
-    assert(0);
-  }
 }
 
 
@@ -401,7 +377,6 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
   osd->logger->inc("subop");
 
   switch (op->op) {
-    
     // rep stuff
   case CEPH_OSD_OP_PULL:
     sub_op_pull(op);
@@ -409,26 +384,13 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
   case CEPH_OSD_OP_PUSH:
     sub_op_push(op);
     break;
-    
-    // writes
-  case CEPH_OSD_OP_WRNOOP:
-  case CEPH_OSD_OP_WRITE:
-  case CEPH_OSD_OP_ZERO:
-  case CEPH_OSD_OP_DELETE:
-  case CEPH_OSD_OP_TRUNCATE:
-  case CEPH_OSD_OP_WRLOCK:
-  case CEPH_OSD_OP_WRUNLOCK:
-  case CEPH_OSD_OP_RDLOCK:
-  case CEPH_OSD_OP_RDUNLOCK:
-  case CEPH_OSD_OP_UPLOCK:
-  case CEPH_OSD_OP_DNLOCK:
-  case CEPH_OSD_OP_BALANCEREADS:
-  case CEPH_OSD_OP_UNBALANCEREADS:
-    sub_op_modify(op);
-    break;
-    
+
   default:
-    assert(0);
+    if (ceph_osd_op_is_modify(op->op) ||
+	ceph_osd_op_is_lock(op->op))
+      sub_op_modify(op);
+    else
+      assert(0);
   }
 
 }
@@ -648,7 +610,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   object_t oid = op->get_oid();
   pobject_t poid(info.pgid.pool(), 0, oid);
 
-  dout(10) << "op_read " << MOSDOp::get_opname(op->get_op())
+  dout(10) << "op_read " << ceph_osd_op_name(op->get_op())
 	   << " " << oid 
            << " " << op->get_offset() << "~" << op->get_length() 
            << dendl;
@@ -829,10 +791,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     if (snapset.head_exists &&           // head exists
 	snapc.snaps.size() &&            // there are snaps
 	snapc.snaps[0] > snapset.seq &&  // existing object is old
-	(op == CEPH_OSD_OP_WRITE ||      // is a (non-lock) modification
-	 op == CEPH_OSD_OP_ZERO ||
-	 op == CEPH_OSD_OP_TRUNCATE ||
-	 op == CEPH_OSD_OP_DELETE)) {
+	ceph_osd_op_is_modify(op)) {     // is a (non-lock) modification
       // clone
       pobject_t coid = poid;
       coid.oid.snap = snapc.seq;
@@ -936,7 +895,6 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       bufferlist nbl;
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
       t.write(info.pgid.to_coll(), poid, offset, length, nbl);
-      if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       snapset.head_exists = true;
       interval_set<__u64> ch;
       ch.insert(offset, length);
@@ -945,10 +903,21 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     }
     break;
     
+  case CEPH_OSD_OP_WRITEFULL:
+    { // write full object
+      assert(bl.length() == length);
+      bufferlist nbl;
+      nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
+      t.truncate(info.pgid.to_coll(), poid, 0);
+      t.write(info.pgid.to_coll(), poid, offset, length, nbl);
+      snapset.head_exists = true;
+      snapset.head_overlap.clear();
+    }
+    break;
+    
   case CEPH_OSD_OP_ZERO:
     { // zero
       t.zero(info.pgid.to_coll(), poid, offset, length);
-      if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       interval_set<__u64> ch;
       ch.insert(offset, length);
       ch.intersection_of(snapset.head_overlap);
@@ -959,7 +928,6 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
       t.truncate(info.pgid.to_coll(), poid, length);
-      if (inc_lock) t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
       interval_set<__u64> keep;
       keep.insert(0, length);
       snapset.head_overlap.intersection_of(keep);
@@ -979,7 +947,9 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   
   // object collection, version
   if (op != CEPH_OSD_OP_DELETE) {
-    // object version
+    if (inc_lock && ceph_osd_op_is_modify(op)) 
+      t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+
     t.setattr(info.pgid.to_coll(), poid, "version", &at_version, sizeof(at_version));
 
     bufferlist snapsetbl;
@@ -1332,10 +1302,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   int whoami = osd->get_nodeid();
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
-  const char *opname = MOSDOp::get_opname(op->get_op());
+  const char *opname = ceph_osd_op_name(op->get_op());
 
   // make sure it looks ok
-  if (op->get_op() == CEPH_OSD_OP_WRITE &&
+  if ((op->get_op() == CEPH_OSD_OP_WRITE ||
+       op->get_op() == CEPH_OSD_OP_WRITEFULL) &&
       op->get_length() != op->get_data().length()) {
     dout(0) << "op_modify got bad write, claimed length " << op->get_length() 
 	    << " != payload length " << op->get_data().length()
@@ -1396,7 +1367,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     dout(3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << dendl;
     op->set_op(CEPH_OSD_OP_WRNOOP);
-    opname = MOSDOp::get_opname(op->get_op());
+    opname = ceph_osd_op_name(op->get_op());
   }
 
 
@@ -1458,7 +1429,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     }
   }
 
-  if (op->get_op() == CEPH_OSD_OP_WRITE) {
+  if (op->get_op() == CEPH_OSD_OP_WRITE ||
+      op->get_op() == CEPH_OSD_OP_WRITEFULL) {
     osd->logger->inc("c_wr");
     osd->logger->inc("c_wrb", op->get_length());
   }
@@ -1499,7 +1471,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 {
   pobject_t poid = op->poid;
-  const char *opname = MOSDOp::get_opname(op->op);
+  const char *opname = ceph_osd_op_name(op->op);
   
   dout(10) << "sub_op_modify " << opname 
            << " " << poid 
