@@ -131,11 +131,14 @@ class Objecter {
   class OSDWrite : public OSDModify {
   public:
     bufferlist bl;
-    OSDWrite(const SnapContext& sc, bufferlist &b, int f) : OSDModify(sc, CEPH_OSD_OP_WRITE, f), bl(b) {}
+    OSDWrite(int op, const SnapContext& sc, bufferlist &b, int f) : OSDModify(sc, op, f), bl(b) {}
   };
 
   OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, int f) { 
-    return new OSDWrite(sc, b, f); 
+    return new OSDWrite(CEPH_OSD_OP_WRITE, sc, b, f); 
+  }
+  OSDWrite *prepare_write_full(const SnapContext& sc, bufferlist &b, int f) { 
+    return new OSDWrite(CEPH_OSD_OP_WRITEFULL, sc, b, f); 
   }
 
   
@@ -238,6 +241,8 @@ class Objecter {
   tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish);
 
   tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
+              Context *onack, Context *oncommit);
+  tid_t write_full(object_t oid, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
               Context *onack, Context *oncommit);
   tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags,
              Context *onack, Context *oncommit);

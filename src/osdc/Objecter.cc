@@ -721,7 +721,9 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
+tid_t Objecter::write(object_t oid, __u64 off, size_t len,
+		      ceph_object_layout ol, const SnapContext& snapc, 
+		      bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
   OSDWrite *wr = prepare_write(snapc, bl, flags);
@@ -732,10 +734,25 @@ tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol
   return last_tid;
 }
 
+tid_t Objecter::write_full(object_t oid, 
+			   ceph_object_layout ol, const SnapContext& snapc,
+			   bufferlist &bl, int flags,
+			   Context *onack, Context *oncommit)
+{
+  OSDWrite *wr = prepare_write_full(snapc, bl, flags);
+  wr->extents.push_back(ObjectExtent(oid, 0, bl.length()));
+  wr->extents.front().layout = ol;
+  wr->extents.front().buffer_extents[0] = bl.length();
+  modifyx(wr, onack, oncommit);
+  return last_tid;
+}
+
 
 // zero
 
-tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags, 
+tid_t Objecter::zero(object_t oid, __u64 off, size_t len, 
+		     ceph_object_layout ol, const SnapContext& snapc,
+		     int flags, 
                      Context *onack, Context *oncommit)
 {
   OSDModify *z = prepare_modify(snapc, CEPH_OSD_OP_ZERO, flags);
@@ -748,7 +765,8 @@ tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol,
+tid_t Objecter::lock(int op, object_t oid, int flags,
+		     ceph_object_layout ol,
                      Context *onack, Context *oncommit)
 {
   SnapContext snapc; // null is fine
@@ -812,7 +830,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   pg.last = g_clock.now();
 
   // send?
-  dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
+  dout(10) << "modifyx_submit " << ceph_osd_op_name(wr->op) << " tid " << tid
            << "  oid " << ex.oid
            << " " << ex.start << "~" << ex.length 
            << " " << ex.layout 
