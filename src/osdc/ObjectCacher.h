@@ -18,6 +18,8 @@ class Objecter;
 class ObjectCacher {
  public:
 
+  typedef void (*flush_set_callback_t) (void *p, inodeno_t ino);
+
   class Object;
 
   // ******* BufferHead *********
@@ -204,8 +206,12 @@ class ObjectCacher {
  private:
   Mutex& lock;
   
+  flush_set_callback_t flush_set_callback;
+  void *flush_set_callback_arg;
+
   hash_map<object_t, Object*> objects;
   hash_map<inodeno_t, set<Object*> > objects_by_ino;
+  hash_map<inodeno_t, int> dirty_tx_by_ino;
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
@@ -252,8 +258,14 @@ class ObjectCacher {
     switch (bh->get_state()) {
     case BufferHead::STATE_MISSING: stat_missing += bh->length(); break;
     case BufferHead::STATE_CLEAN: stat_clean += bh->length(); break;
-    case BufferHead::STATE_DIRTY: stat_dirty += bh->length(); break;
-    case BufferHead::STATE_TX: stat_tx += bh->length(); break;
+    case BufferHead::STATE_DIRTY: 
+      stat_dirty += bh->length(); 
+      dirty_tx_by_ino[bh->ob->get_ino()] += bh->length();
+      break;
+    case BufferHead::STATE_TX: 
+      stat_tx += bh->length(); 
+      dirty_tx_by_ino[bh->ob->get_ino()] += bh->length();
+      break;
     case BufferHead::STATE_RX: stat_rx += bh->length(); break;
     }
     if (stat_waiter) stat_cond.Signal();
@@ -262,8 +274,14 @@ class ObjectCacher {
     switch (bh->get_state()) {
     case BufferHead::STATE_MISSING: stat_missing -= bh->length(); break;
     case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); break;
-    case BufferHead::STATE_DIRTY: stat_dirty -= bh->length(); break;
-    case BufferHead::STATE_TX: stat_tx -= bh->length(); break;
+    case BufferHead::STATE_DIRTY: 
+      stat_dirty -= bh->length(); 
+      dirty_tx_by_ino[bh->ob->get_ino()] -= bh->length();
+      break;
+    case BufferHead::STATE_TX: 
+      stat_tx -= bh->length(); 
+      dirty_tx_by_ino[bh->ob->get_ino()] -= bh->length();
+      break;
     case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
     }
   }
@@ -410,8 +428,9 @@ class ObjectCacher {
 
 
  public:
-  ObjectCacher(Objecter *o, Mutex& l) : 
+  ObjectCacher(Objecter *o, Mutex& l, flush_set_callback_t callback = 0, void *callback_arg = 0) : 
     objecter(o), filer(o), lock(l),
+    flush_set_callback(callback), flush_set_callback_arg(callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {

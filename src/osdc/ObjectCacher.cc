@@ -617,6 +617,11 @@ void ObjectCacher::bh_write_ack(object_t oid, off_t start, size_t length, tid_t 
     // update object last_ack.
     assert(ob->last_ack_tid < tid);
     ob->last_ack_tid = tid;
+
+    // is the entire object set now clean?
+    if (flush_set_callback && 
+	dirty_tx_by_ino[ob->get_ino()] == 0)
+      flush_set_callback(flush_set_callback_arg, ob->get_ino());      
     
     // waiters?
     if (ob->waitfor_ack.count(tid)) {
