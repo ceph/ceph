@@ -82,11 +82,13 @@ class MClientCaps : public Message {
     head.time_warp_seq = inode.time_warp_seq;
   }
   MClientCaps(int op,
-	      inodeno_t ino) :
+	      inodeno_t ino,
+	      int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
+    head.migrate_seq = mseq;
   }
 
   const char *get_type_name() { return "Cfcap";}

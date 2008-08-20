@@ -978,9 +978,6 @@ void Locker::handle_client_caps(MClientCaps *m)
   if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
     dout(7) << " flushsnap follows " << follows
 	    << " client" << client << " on " << *in << dendl;
-    int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
-    int has = cap->confirmed();
-
     // this cap now follows a later snap (i.e. the one initiating this flush, or later)
     cap->client_follows = follows+1;
 
@@ -993,7 +990,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 
     MClientCaps *ack = new MClientCaps(CEPH_CAP_OP_FLUSHEDSNAP, in->inode, 0, 0, 0, 0, 0);
     ack->set_snap_follows(follows);
-    _do_cap_update(in, has|had, in->get_caps_wanted(), follows, m, ack);
+    _do_cap_update(in, m->get_caps(), in->get_caps_wanted(), follows, m, ack);
   } else {
 
     // for this and all subsequent versions of this inode,
