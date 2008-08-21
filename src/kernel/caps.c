@@ -527,16 +527,23 @@ void ceph_take_cap_refs(struct ceph_inode_info *ci, int got)
 int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff)
 {
+	struct inode *inode = &ci->vfs_inode;
 	int ret = 0;
 	int have, implemented;
 
-	dout(30, "get_cap_refs on %p need %d want %d\n", &ci->vfs_inode,
-	     need, want);
-	spin_lock(&ci->vfs_inode.i_lock);
-	if (endoff >= 0 && endoff > (loff_t)ci->i_max_size) {
-		dout(20, "get_cap_refs endoff %llu > max_size %llu\n",
-		     endoff, ci->i_max_size);
-		goto sorry;
+	dout(30, "get_cap_refs %p need %d want %d\n", inode, need, want);
+	spin_lock(&inode->i_lock);
+	if (need & CEPH_CAP_WR) {
+		if (endoff >= 0 && endoff > (loff_t)ci->i_max_size) {
+			dout(20, "get_cap_refs %p endoff %llu > maxsize %llu\n",
+			     inode, endoff, ci->i_max_size);
+			goto sorry;
+		}
+		if (ci->i_cap_snap_pending) {
+			dout(20, "get_cap_refs %p cap_snap_pending %lld\n",
+			     inode, ci->i_cap_snap_pending);
+			goto sorry;
+		}
 	}
 	have = __ceph_caps_issued(ci, &implemented);
 	if ((have & need) == need) {
@@ -548,27 +555,30 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		 */
 		int not = want & ~(have & need);
 		int revoking = implemented & ~have;
-		dout(30, "get_cap_refs have %d but not %d (revoking %d)\n",
-		     have, not, revoking);
+		dout(30, "get_cap_refs %p have %d but not %d (revoking %d)\n",
+		     inode, have, not, revoking);
 		if ((revoking & not) == 0) {
 			*got = need | (have & want);
 			__take_cap_refs(ci, *got);
 			ret = 1;
 		}
 	} else
-		dout(30, "get_cap_refs have %d needed %d\n", have, need);
+		dout(30, "get_cap_refs %p have %d needed %d\n", inode,
+		     have, need);
 sorry:
-	spin_unlock(&ci->vfs_inode.i_lock);
-	dout(30, "get_cap_refs on %p ret %d got %d\n", &ci->vfs_inode,
+	spin_unlock(&inode->i_lock);
+	dout(30, "get_cap_refs %p ret %d got %d\n", inode,
 	     ret, *got);
 	return ret;
 }
 
 void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 {
-	int last = 0;
+	struct inode *inode = &ci->vfs_inode;
+	int last = 0, wake = 0;
+	u64 seq;
 
-	spin_lock(&ci->vfs_inode.i_lock);
+	spin_lock(&inode->i_lock);
 	if (had & CEPH_CAP_RD)
 		if (--ci->i_rd_ref == 0)
 			last++;
@@ -576,22 +586,32 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		if (--ci->i_rdcache_ref == 0)
 			last++;
 	if (had & CEPH_CAP_WR)
-		if (--ci->i_wr_ref == 0)
+		if (--ci->i_wr_ref == 0) {
 			last++;
+			if (ci->i_cap_snap_pending) {
+				dout(30, "put_cap_refs %p cap_snap_pending\n",
+				     inode);
+				seq = ci->i_cap_snap_pending;
+				ci->i_cap_snap_pending = 0;
+				ceph_queue_cap_snap(ci, seq);
+				wake = 1;
+			}
+		}
 	if (had & CEPH_CAP_WRBUFFER) {
 		if (atomic_dec_and_test(&ci->i_wrbuffer_ref))
 			last++;
 		dout(30, "put_cap_refs %p wrbuffer %d -> %d (?)\n",
-		     &ci->vfs_inode, atomic_read(&ci->i_wrbuffer_ref)+1,
+		     inode, atomic_read(&ci->i_wrbuffer_ref)+1,
 		     atomic_read(&ci->i_wrbuffer_ref));
 	}
-	spin_unlock(&ci->vfs_inode.i_lock);
+	spin_unlock(&inode->i_lock);
 
-	dout(30, "put_cap_refs on %p had %d %s\n", &ci->vfs_inode, had,
-	     last ? "last":"");
+	dout(30, "put_cap_refs %p had %d %s\n", inode, had, last ? "last":"");
 
 	if (last)
 		ceph_check_caps(ci, 0);
+	if (wake)
+		wake_up(&ci->i_cap_wq);
 }
 
 void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr)

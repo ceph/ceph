@@ -512,6 +512,7 @@ extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
 						      int must_flush);
 extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
+extern void ceph_queue_cap_snap(struct ceph_inode_info *ci, u64 seq);
 
 
 /*
