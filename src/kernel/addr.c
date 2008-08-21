@@ -25,6 +25,7 @@ static int ceph_set_page_dirty(struct page *page,
 	struct address_space *mapping = page->mapping;
 	struct inode *inode;
 	struct ceph_inode_info *ci;
+	int undo = 0;
 
 	if (unlikely(!mapping))
 		return !TestSetPageDirty(page);
@@ -35,6 +36,47 @@ static int ceph_set_page_dirty(struct page *page,
 		return 0;
 	}
 
+	/*
+	 * optimistically adjust accounting, on the assumption that
+	 * we won't race with invalidate.
+	 */
+	inode = mapping->host;
+	ci = ceph_inode(inode);
+
+	spin_lock(&inode->i_lock);
+	++ci->i_wrbuffer_ref;
+	if (!snapc || snapc == ci->i_snap_realm->cached_context) {
+		/* dirty the head */
+		++ci->i_wrbuffer_ref_head;
+		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
+		dout(20, "%p set_page_dirty %p head %d/%d -> %d/%d "
+		     "snapc %p seq %lld (%d snaps)\n",
+		     mapping->host, page,
+		     ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref_head-1,
+		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
+		     snapc, snapc->seq, snapc->num_snaps);
+	} else {
+		struct list_head *p;
+		struct ceph_cap_snap *capsnap = 0;
+		list_for_each(p, &ci->i_cap_snaps) {
+			capsnap = list_entry(p, struct ceph_cap_snap,
+					     ci_item);
+			if (capsnap->context == snapc) {
+				capsnap->dirty++;
+				break;
+			}
+		}
+		BUG_ON(!capsnap);
+		dout(20, "%p set_page_dirty %p snap %lld %d/%d -> %d/%d"
+		     " snapc %p seq %lld (%d snaps)\n",
+		     mapping->host, page, capsnap->follows,
+		     ci->i_wrbuffer_ref-1, capsnap->dirty-1,
+		     ci->i_wrbuffer_ref, capsnap->dirty,
+		     snapc, snapc->seq, snapc->num_snaps);
+	}
+	spin_unlock(&inode->i_lock);
+
+	/* now adjust page */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	spin_lock_irq(&mapping->tree_lock);
 #else
@@ -52,42 +94,6 @@ static int ceph_set_page_dirty(struct page *page,
 		radix_tree_tag_set(&mapping->page_tree,
 				page_index(page), PAGECACHE_TAG_DIRTY);
 
-		inode = mapping->host;
-		ci = ceph_inode(inode);
-
-		spin_lock(&inode->i_lock);
-		++ci->i_wrbuffer_ref;
-		if (!snapc || snapc == ci->i_snap_realm->cached_context) {
-			/* dirty the head */
-			++ci->i_wrbuffer_ref_head;
-			snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
-			dout(20, "%p set_page_dirty %p head %d/%d -> %d/%d "
-			     "snapc %p seq %lld (%d snaps)\n",
-			     mapping->host, page,
-			     ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref_head-1,
-			     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
-			     snapc, snapc->seq, snapc->num_snaps);
-		} else {
-			struct list_head *p;
-			struct ceph_cap_snap *capsnap = 0;
-			list_for_each(p, &ci->i_cap_snaps) {
-				capsnap = list_entry(p, struct ceph_cap_snap,
-						     ci_item);
-				if (capsnap->context == snapc) {
-					capsnap->dirty++;
-					break;
-				}
-			}
-			BUG_ON(!capsnap);
-			dout(20, "%p set_page_dirty %p snap %lld %d/%d -> %d/%d"
-			     " snapc %p seq %lld (%d snaps)\n",
-			     mapping->host, page, capsnap->follows,
-			     ci->i_wrbuffer_ref-1, capsnap->dirty-1,
-			     ci->i_wrbuffer_ref, capsnap->dirty,
-			     snapc, snapc->seq, snapc->num_snaps);
-		}
-		spin_unlock(&inode->i_lock);
-
 		/*
 		 * reference snap context in page->private.  also set
 		 * PagePrivate so that we get invalidatepage callback
@@ -96,14 +102,20 @@ static int ceph_set_page_dirty(struct page *page,
 		ceph_put_snap_context((void *)page->private);
 		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
-
-	} else
+	} else {
 		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
+		undo = 1;
+	}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	spin_unlock_irq(&mapping->tree_lock);
 #else
 	write_unlock_irq(&mapping->tree_lock);
 #endif
+
+	if (undo)
+		ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
+
 	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
 
 	return 1;
