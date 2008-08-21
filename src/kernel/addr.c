@@ -352,6 +352,8 @@ static int ceph_writepages(struct address_space *mapping,
 	int done = 0;
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
+	struct list_head *p;
+	struct ceph_cap_snap *capsnap = 0;
 
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
@@ -364,12 +366,9 @@ static int ceph_writepages(struct address_space *mapping,
 
 	/* larger page vector? */
 	max_pages = wsize >> PAGE_CACHE_SHIFT;
-	if (max_pages > PAGEVEC_SIZE) {
-		pages = kmalloc(max_pages * sizeof(*pages), GFP_NOFS);
-		if (!pages)
-			return generic_writepages(mapping, wbc);
-	} else
-		pages = 0;
+	pages = kmalloc(max_pages * sizeof(*pages), GFP_NOFS);
+	if (!pages)
+		return generic_writepages(mapping, wbc);
 	pagevec_init(&pvec, 0);
 
 	/* ?? from cifs. */
@@ -396,50 +395,73 @@ static int ceph_writepages(struct address_space *mapping,
 
 
 retry:
+	/* find oldest snap context with dirty data */
+	ceph_put_snap_context(snapc);
+	snapc = 0;
+
+	spin_lock(&inode->i_lock);
+	list_for_each(p, &ci->i_cap_snaps) {
+		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
+		dout(20, " cap_snap %p has %d dirty\n", capsnap,
+		     capsnap->dirty);
+		if (capsnap->dirty)
+			break;
+	}
+	if (capsnap && capsnap->dirty) {
+		snapc = ceph_get_snap_context(capsnap->context);
+	} else if (ci->i_snap_realm) {
+		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
+		dout(20, " %d head wrbuffer refs\n", ci->i_wrbuffer_ref_head);
+	}
+	spin_unlock(&inode->i_lock);
+
+	if (!snapc) {
+		/* hmm, why does writepages get called when there
+		   is no dirty data? */
+		dout(20, " no snap context with dirty data?\n");
+		goto out;
+	}
+	dout(20, " snapc is %p seq %lld (%d snaps)\n",
+	     snapc, snapc->seq, snapc->num_snaps);
+
 	while (!done && index <= end) {
 		unsigned i;
+		int first;
 		pgoff_t next;
-		struct page *page, **pagep;
 		int pvec_pages, locked_pages;
+		struct page *page;
 		int want;
 		int cleaned;
+		loff_t offset, len;
+		unsigned wrote;
 
-		pagep = pages;
 		next = 0;
 		locked_pages = 0;
 		cleaned = 0;
 
 get_more_pages:
+		first = -1;
 		want = min(end - index,
 			   min((pgoff_t)PAGEVEC_SIZE,
 			       max_pages - (pgoff_t)locked_pages) - 1) + 1;
 		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
-		dout(20, "got %d\n", pvec_pages);
+		dout(20, "pagevec_lookup_tag got %d\n", pvec_pages);
+		if (!pvec_pages)
+			break;
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
 			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-			else if (!trylock_page(page)) {
+			else if (!trylock_page(page))
 #else
-			else if (TestSetPageLocked(page)) {
+			else if (TestSetPageLocked(page))
 #endif
+			{
 				dout(20, "couldn't lock page %p\n", page);
-				break;
-			}
-
-			/* only if matching snap context */
-			if (!snapc) {
-				snapc = (void *)page->private;
-				ceph_get_snap_context(snapc);
-				dout(20, " snapc is %p seq %lld (%d snaps)\n",
-				     snapc, snapc->seq, snapc->num_snaps);
-			} else if (snapc != (void *)page->private) {
-				dout(20, "snapc %p != %p\n",
-				     (void *)page->private, snapc);
 				break;
 			}
 
@@ -479,6 +501,17 @@ get_more_pages:
 				unlock_page(page);
 				break;
 			}
+
+			/* only if matching snap context */
+			if (snapc != (void *)page->private) {
+				dout(20, "page snapc %p != oldest %p\n",
+				     (void *)page->private, snapc);
+				unlock_page(page);
+				if (!locked_pages)
+					continue; /* keep looking for snap */
+				break;
+			}
+
 			if (!clear_page_dirty_for_io(page)) {
 				dout(20, "%p !clear_page_dirty_for_io\n", page);
 				unlock_page(page);
@@ -486,6 +519,8 @@ get_more_pages:
 			}
 
 			/* ok */
+			if (first < 0)
+				first = i;
 			set_page_writeback(page);
 			cleaned++;
 			ceph_put_snap_context((void *)page->private);
@@ -494,17 +529,18 @@ get_more_pages:
 			dout(20, "%p locked+cleaned page %p idx %lu\n",
 			     inode, page, page->index);
 
-			if (pages)
-				pages[locked_pages] = page;
-			else if (locked_pages == 0)
-				pagep = pvec.pages + i;
+			pages[locked_pages] = page;
 			locked_pages++;
 			next = page->index + 1;
 		}
 
-		if (pages && i) {
+		/* did we get anything? */
+		if (!locked_pages)
+			goto release_pages;
+
+		if (i) {
 			int j;
-			BUG_ON(!locked_pages);
+			BUG_ON(!locked_pages || first < 0);
 
 			if (pvec_pages && i == pvec_pages &&
 			    locked_pages < max_pages) {
@@ -518,69 +554,67 @@ get_more_pages:
 			for (j = i; j < pvec_pages; j++) {
 				dout(50, " pvec leftover page %p\n",
 				     pvec.pages[j]);
-				pvec.pages[j-i] = pvec.pages[j];
+				pvec.pages[j-i+first] = pvec.pages[j];
 			}
-			pvec.nr -= i;
+			pvec.nr -= i-first;
 		}
 
-		/* did we get anything? */
-		if (locked_pages > 0) {
-			loff_t offset = pagep[0]->index << PAGE_CACHE_SHIFT;
-			loff_t len = min(i_size_read(inode) - offset,
+		/* write it */
+		offset = pages[0]->index << PAGE_CACHE_SHIFT;
+		len = min(i_size_read(inode) - offset,
 				 (loff_t)locked_pages << PAGE_CACHE_SHIFT);
-			unsigned wrote;
-			dout(10, "writepages got %d pages at %llu~%llu\n",
-			     locked_pages, offset, len);
-			rc = ceph_osdc_writepages(&client->osdc,
-						  ceph_vino(inode),
-						  &ci->i_layout,
-						  snapc,
-						  offset, len,
-						  pagep,
-						  locked_pages);
-			if (rc >= 0)
-				wrote = (rc + (offset & ~PAGE_CACHE_MASK)
-					 + ~PAGE_CACHE_MASK)
-					>> PAGE_CACHE_SHIFT;
-			else
-				wrote = 0;
-			dout(20, "writepages rc %d wrote %d\n", rc, wrote);
+		dout(10, "writepages got %d pages at %llu~%llu\n",
+		     locked_pages, offset, len);
+		rc = ceph_osdc_writepages(&client->osdc,
+					  ceph_vino(inode),
+					  &ci->i_layout,
+					  snapc,
+					  offset, len,
+					  pages,
+					  locked_pages);
+		if (rc >= 0)
+			wrote = (rc + (offset & ~PAGE_CACHE_MASK)
+				 + ~PAGE_CACHE_MASK)
+				>> PAGE_CACHE_SHIFT;
+		else
+			wrote = 0;
+		dout(20, "writepages rc %d wrote %d\n", rc, wrote);
 
-			/* unmap+unlock pages */
-			for (i = 0; i < locked_pages; i++) {
-				page = pagep[i];
-				if (i < wrote)
-					SetPageUptodate(page);
-				else {
-					dout(20, "%p redirtying page %p\n",
-					     inode, page);
-					wbc->pages_skipped++;
-					ceph_set_page_dirty(page, snapc);
-				}
-				dout(50, "unlocking %d %p\n", i, page);
-				end_page_writeback(page);
-				unlock_page(page);
+		/* unmap+unlock pages */
+		for (i = 0; i < locked_pages; i++) {
+			page = pages[i];
+			if (i < wrote)
+				SetPageUptodate(page);
+			else {
+				dout(20, "%p redirtying page %p\n",
+				     inode, page);
+				wbc->pages_skipped++;
+				ceph_set_page_dirty(page, snapc);
 			}
-			dout(20, "%p cleaned %d pages\n", inode, cleaned);
-			ceph_put_wrbuffer_cap_refs(ci, cleaned, snapc);
-
-			/* continue? */
-			index = next;
-			wbc->nr_to_write -= locked_pages;
-			if (wbc->nr_to_write <= 0)
-				done = 1;
+			dout(50, "unlocking %d %p\n", i, page);
+			end_page_writeback(page);
+			unlock_page(page);
 		}
+		dout(20, "%p cleaned %d pages\n", inode, cleaned);
+		ceph_put_wrbuffer_cap_refs(ci, cleaned, snapc);
 
-		if (pages) {
-			/* hmm, pagevec_release also does lru_add_drain()...? */
-			dout(50, "release_pages on %d\n", locked_pages);
-			ceph_release_pages(pages, locked_pages);
-		}
-		dout(50, "pagevec_release on %d pages\n", (int)pvec.nr);
+		/* continue? */
+		index = next;
+		wbc->nr_to_write -= locked_pages;
+		if (wbc->nr_to_write <= 0)
+			done = 1;
+
+	release_pages:
+		/* hmm, pagevec_release also does lru_add_drain()...? */
+		dout(50, "release_pages on %d\n", locked_pages);
+		ceph_release_pages(pages, locked_pages);
+
+		dout(50, "pagevec_release on %d pages (%p)\n", (int)pvec.nr,
+		     pvec.nr ? pvec.pages[0] : 0);
 		pagevec_release(&pvec);
 
-		if (locked_pages == 0)
-			break;
+		if (locked_pages && !done)
+			goto retry;
 	}
 
 	if (should_loop && !done) {
@@ -590,9 +624,11 @@ get_more_pages:
 		index = 0;
 		goto retry;
 	}
+
 	if (wbc->range_cyclic || (range_whole && wbc->nr_to_write > 0))
 		mapping->writeback_index = index;
 
+out:
 	kfree(pages);
 	if (rc > 0)
 		rc = 0;  /* vfs expects us to return 0 */

@@ -186,6 +186,26 @@ static int dup_array(u64 **dst, u64 *src, int num)
 	return 0;
 }
 
+void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
+			    struct ceph_cap_snap *capsnap,
+			    int used)
+{
+	struct inode *inode = &ci->vfs_inode;
+
+	capsnap->size = inode->i_size;
+	capsnap->mtime = inode->i_mtime;
+	capsnap->atime = inode->i_atime;
+	capsnap->ctime = inode->i_ctime;
+	if (used & CEPH_CAP_WRBUFFER) {
+		dout(10, "queue_cap_snap %p snapc %p %llu used %d,"
+		     " WRBUFFER, delaying\n", inode, capsnap->context,
+		     capsnap->context->seq, used);
+	} else {
+		BUG_ON(ci->i_wrbuffer_ref_head);
+		capsnap->dirty = 0;
+		__ceph_flush_snaps(ci);
+	}
+}
 
 void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 			 struct ceph_snap_context *snapc)
@@ -194,7 +214,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 	int used;
 	struct ceph_cap_snap *capsnap;
 
-	capsnap = kmalloc(sizeof(*capsnap), GFP_NOFS);
+	capsnap = kzalloc(sizeof(*capsnap), GFP_NOFS);
 	if (!capsnap) {
 		derr(10, "ENOMEM allocating ceph_cap_snap on %p\n", inode);
 		return;
@@ -202,36 +222,28 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 
 	spin_lock(&inode->i_lock);
 	used = __ceph_caps_used(ci);
-	if (ci->i_cap_snap_pending) {
+	if (!list_empty(&ci->i_cap_snaps) &&
+	    list_entry(ci->i_cap_snaps.next, struct ceph_cap_snap,
+		       ci_item)->writing) {
 		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
 		     " already pending\n", inode, snapc, snapc->seq, used);
-		kfree(capsnap);
-	} else if (used & CEPH_CAP_WR) {
-		dout(10, "queue_cap_snap %p snapc %p seq %llu used WR,"
-		     " now pending\n", inode, snapc, snapc->seq);
-		ci->i_cap_snap_pending = ceph_get_snap_context(snapc);
 		kfree(capsnap);
 	} else {
 		igrab(inode);
 		capsnap->follows = snapc->seq;
 		capsnap->context = ceph_get_snap_context(snapc);
-		capsnap->size = inode->i_size;
-		capsnap->mtime = inode->i_mtime;
-		capsnap->atime = inode->i_atime;
-		capsnap->ctime = inode->i_ctime;
 		capsnap->issued = __ceph_caps_issued(ci, 0);
-		if (used & CEPH_CAP_WRBUFFER) {
-			dout(10, "queue_cap_snap %p snapc %p %llu used %d,"
-			     " WRBUFFER, delaying\n", inode, snapc,
-			     snapc->seq, used);
-			capsnap->dirty = ci->i_wrbuffer_ref_head;
-			ci->i_wrbuffer_ref_head = 0;
-		} else {
-			BUG_ON(ci->i_wrbuffer_ref_head);
-			capsnap->dirty = 0;
-			__ceph_flush_snaps(ci);
-		}
+		capsnap->dirty = ci->i_wrbuffer_ref_head;
+		ci->i_wrbuffer_ref_head = 0;
 		list_add(&capsnap->ci_item, &ci->i_cap_snaps);
+
+		if (used & CEPH_CAP_WR) {
+			dout(10, "queue_cap_snap %p snapc %p seq %llu used WR,"
+			     " now pending\n", inode, snapc, snapc->seq);
+			capsnap->writing = 1;
+		} else {
+			__ceph_finish_cap_snap(ci, capsnap, used);
+		}
 	}
 
 	spin_unlock(&inode->i_lock);

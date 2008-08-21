@@ -193,6 +193,7 @@ struct ceph_cap_snap {
 	u64 size;
 	struct timespec mtime, atime, ctime;
 	struct ceph_snap_context *context;
+	int writing;
 	int dirty;
 };
 
@@ -255,7 +256,6 @@ struct ceph_inode_info {
 	unsigned i_cap_exporting_mseq;
 	unsigned i_cap_exporting_issued;
 	struct list_head i_cap_snaps;
-	struct ceph_snap_context *i_cap_snap_pending;
 	unsigned i_snap_caps;         /* cap bits for snap i/o */
 	
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
@@ -516,6 +516,9 @@ extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 				struct ceph_snap_context *snapc);
+extern void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
+				   struct ceph_cap_snap *capsnap,
+				   int used);
 
 
 /*

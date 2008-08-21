@@ -333,7 +333,7 @@ retry:
 		snapcap = list_entry(p, struct ceph_cap_snap, ci_item);
 		if (snapcap->follows <= follows)
 			continue;
-		if (snapcap->dirty)
+		if (snapcap->dirty || snapcap->writing)
 			continue;
 
 		/* pick mds, take s_mutex */
@@ -545,10 +545,10 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 			     inode, endoff, ci->i_max_size);
 			goto sorry;
 		}
-		if (ci->i_cap_snap_pending) {
-			dout(20, "get_cap_refs %p cap_snap_pending %p %lld\n",
-			     inode, ci->i_cap_snap_pending,
-			     ci->i_cap_snap_pending->seq);
+		if (!list_empty(&ci->i_cap_snaps) &&
+		    list_entry(ci->i_cap_snaps.next, struct ceph_cap_snap,
+			       ci_item)->writing) {
+			dout(20, "get_cap_refs %p cap_snap_pending\n", inode);
 			goto sorry;
 		}
 	}
@@ -583,7 +583,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int last = 0, wake = 0;
-	struct ceph_snap_context *snapc;
+	struct ceph_cap_snap *capsnap;
 
 	spin_lock(&inode->i_lock);
 	if (had & CEPH_CAP_RD)
@@ -592,24 +592,27 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	if (had & CEPH_CAP_RDCACHE)
 		if (--ci->i_rdcache_ref == 0)
 			last++;
-	if (had & CEPH_CAP_WR)
-		if (--ci->i_wr_ref == 0) {
-			last++;
-			if (ci->i_cap_snap_pending) {
-				snapc = ci->i_cap_snap_pending;
-				ci->i_cap_snap_pending = 0;
-				dout(30, "put_cap_refs %p cap_snap_pending %p\n",
-				     inode, snapc);
-				ceph_queue_cap_snap(ci, snapc);
-				wake = 1;
-			}
-		}
 	if (had & CEPH_CAP_WRBUFFER) {
 		if (--ci->i_wrbuffer_ref == 0)
 			last++;
 		dout(30, "put_cap_refs %p wrbuffer %d -> %d (?)\n",
 		     inode, ci->i_wrbuffer_ref+1, ci->i_wrbuffer_ref);
 	}
+	if (had & CEPH_CAP_WR)
+		if (--ci->i_wr_ref == 0) {
+			last++;
+			if (!list_empty(&ci->i_cap_snaps)) {
+				capsnap = list_entry(ci->i_cap_snaps.next,
+						     struct ceph_cap_snap,
+						     ci_item);
+				if (capsnap->writing) {
+					capsnap->writing = 0;
+					__ceph_finish_cap_snap(ci, capsnap,
+						       __ceph_caps_used(ci));
+					wake = 1;
+				}
+			}
+		}
 	spin_unlock(&inode->i_lock);
 
 	dout(30, "put_cap_refs %p had %d %s\n", inode, had, last ? "last":"");
@@ -636,7 +639,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 		     inode, 
 		     ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
 		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
-		     !last ? " LAST":"");
+		     last ? " LAST":"");
 	} else {
 		struct list_head *p;
 		struct ceph_cap_snap *capsnap = 0;
@@ -653,8 +656,8 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 		     " %s/%s\n", inode, capsnap->context->seq,
 		     ci->i_wrbuffer_ref+nr, capsnap->dirty + nr,
 		     ci->i_wrbuffer_ref, capsnap->dirty,
-		     !last ? " wrbuffer last,":"",
-		     !last_snap ? " snap_cap last":"");
+		     last ? " wrbuffer last,":"",
+		     last_snap ? " capsnap last":"");
 	}
 	spin_unlock(&inode->i_lock);
 
