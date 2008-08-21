@@ -187,7 +187,8 @@ static int dup_array(u64 **dst, u64 *src, int num)
 }
 
 
-void ceph_queue_cap_snap(struct ceph_inode_info *ci, u64 seq)
+void ceph_queue_cap_snap(struct ceph_inode_info *ci,
+			 struct ceph_snap_context *snapc)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int used;
@@ -203,28 +204,32 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci, u64 seq)
 
 	used = __ceph_caps_used(ci);
 	if (ci->i_cap_snap_pending) {
-		dout(10, "queue_cap_snap %p seq %llu used %d already pending\n",
-		     inode, seq, used);
+		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
+		     " already pending\n", inode, snapc, snapc->seq, used);
 		kfree(capsnap);
 	} else if (used & CEPH_CAP_WR) {
-		dout(10, "queue_cap_snap %p seq %llu used WR, now pending\n",
-		     inode, seq);
-		ci->i_cap_snap_pending = seq;
+		dout(10, "queue_cap_snap %p snapc %p seq %llu used WR,"
+		     " now pending\n", inode, snapc, snapc->seq);
+		ci->i_cap_snap_pending = ceph_get_snap_context(snapc);
 		kfree(capsnap);
 	} else {
 		igrab(inode);
-		capsnap->follows = seq;
+		capsnap->follows = snapc->seq;
+		capsnap->context = ceph_get_snap_context(snapc);
 		capsnap->size = inode->i_size;
 		capsnap->mtime = inode->i_mtime;
 		capsnap->atime = inode->i_atime;
 		capsnap->ctime = inode->i_ctime;
 		/* FIXME disabled for now, until snap-ordered writeback works */
 		if (false && (used & CEPH_CAP_WRBUFFER)) {
-			dout(10, "queue_cap_snap %p seq %llu used WRBUFFER,"
-			     " delaying\n", inode, seq);
-			capsnap->flushing = 1;
+			dout(10, "queue_cap_snap %p snapc %p %llu used %d,"
+			     " WRBUFFER, delaying\n", inode, snapc,
+			     snapc->seq, used);
+			capsnap->dirty = ci->i_wrbuffer_ref_head;
+			ci->i_wrbuffer_ref_head = 0;
 		} else {
-			capsnap->flushing = 0;
+			BUG_ON(ci->i_wrbuffer_ref_head);
+			capsnap->dirty = 0;
 			__ceph_flush_snaps(ci);
 		}
 		list_add(&capsnap->ci_item, &ci->i_cap_snaps);
@@ -273,7 +278,7 @@ more:
 			struct ceph_inode_info *ci =
 				list_entry(p, struct ceph_inode_info,
 					   i_snap_realm_item);
-			ceph_queue_cap_snap(ci, realm->cached_context->seq);
+			ceph_queue_cap_snap(ci, realm->cached_context);
 		}
 		dout(20, "update_snap_trace cap flush done\n");
 
@@ -418,7 +423,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			spin_unlock(&inode->i_lock);
 
 			ceph_queue_cap_snap(ci,
-				       ci->i_snap_realm->cached_context->seq);
+					    ci->i_snap_realm->cached_context);
 
 			iput(inode);
 			continue;

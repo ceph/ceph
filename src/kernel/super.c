@@ -186,7 +186,8 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = 0;
-	atomic_set(&ci->i_wrbuffer_ref, 0);
+	ci->i_wrbuffer_ref = 0;
+	ci->i_wrbuffer_ref_head = 0;
 	ci->i_hold_caps_until = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 

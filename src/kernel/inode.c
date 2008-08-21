@@ -1152,14 +1152,16 @@ static int apply_truncate(struct inode *inode, loff_t size)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int rc;
+	int check = 0;
 
 	rc = vmtruncate(inode, size);
-	if (rc == 0) {
-		spin_lock(&inode->i_lock);
+	spin_lock(&inode->i_lock);
+	if (rc == 0)
 		ci->i_reported_size = size;
-		spin_unlock(&inode->i_lock);
-	}
-	if (atomic_read(&ci->i_wrbuffer_ref) == 0)
+	if (ci->i_wrbuffer_ref == 0)
+		check = 1;
+	spin_unlock(&inode->i_lock);
+	if (check)
 		ceph_check_caps(ci, 0);
 	return rc;
 }
@@ -1183,16 +1185,18 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	loff_t to;
+	int wrbuffer_refs;
 
 	spin_lock(&inode->i_lock);
 	to = ci->i_vmtruncate_to;
 	ci->i_vmtruncate_to = -1;
+	wrbuffer_refs = ci->i_wrbuffer_ref;
 	spin_unlock(&inode->i_lock);
 
 	if (to >= 0) {
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
 		vmtruncate(inode, to);
-		if (atomic_read(&ci->i_wrbuffer_ref) == 0)
+		if (wrbuffer_refs == 0)
 			ceph_check_caps(ci, 0);
 	} else
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);

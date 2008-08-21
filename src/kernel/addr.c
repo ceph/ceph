@@ -14,12 +14,17 @@ int ceph_debug_addr = -1;
 
 #include "osd_client.h"
 
-
-static int ceph_set_page_dirty(struct page *page)
+/*
+ * if snapc is NULL, we are dirtying within the most recent (head) snap.
+ * if snapc is non-NULL, we are redirtying a page withing a past snap,
+ * and need to adjust the count on the appropriate ceph_cap_snap.
+ */
+static int ceph_set_page_dirty(struct page *page,
+			       struct ceph_snap_context *snapc)
 {
 	struct address_space *mapping = page->mapping;
+	struct inode *inode;
 	struct ceph_inode_info *ci;
-	struct ceph_snap_context *snapc;
 
 	if (unlikely(!mapping))
 		return !TestSetPageDirty(page);
@@ -47,23 +52,51 @@ static int ceph_set_page_dirty(struct page *page)
 		radix_tree_tag_set(&mapping->page_tree,
 				page_index(page), PAGECACHE_TAG_DIRTY);
 
-		ci = ceph_inode(mapping->host);
-		atomic_inc(&ci->i_wrbuffer_ref);
+		inode = mapping->host;
+		ci = ceph_inode(inode);
+
+		spin_lock(&inode->i_lock);
+		++ci->i_wrbuffer_ref;
+		if (!snapc || snapc == ci->i_snap_realm->cached_context) {
+			/* dirty the head */
+			++ci->i_wrbuffer_ref_head;
+			snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
+			dout(20, "%p set_page_dirty %p head %d/%d -> %d/%d "
+			     "snapc %p seq %lld (%d snaps)\n",
+			     mapping->host, page,
+			     ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref_head-1,
+			     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
+			     snapc, snapc->seq, snapc->num_snaps);
+		} else {
+			struct list_head *p;
+			struct ceph_cap_snap *capsnap = 0;
+			list_for_each(p, &ci->i_cap_snaps) {
+				capsnap = list_entry(p, struct ceph_cap_snap,
+						     ci_item);
+				if (capsnap->context == snapc) {
+					capsnap->dirty++;
+					break;
+				}
+			}
+			BUG_ON(!capsnap);
+			dout(20, "%p set_page_dirty %p snap %lld %d/%d -> %d/%d"
+			     " snapc %p seq %lld (%d snaps)\n",
+			     mapping->host, page, capsnap->follows,
+			     ci->i_wrbuffer_ref-1, capsnap->dirty-1,
+			     ci->i_wrbuffer_ref, capsnap->dirty,
+			     snapc, snapc->seq, snapc->num_snaps);
+		}
+		spin_unlock(&inode->i_lock);
+
 		/*
 		 * reference snap context in page->private.  also set
 		 * PagePrivate so that we get invalidatepage callback
 		 * on truncate for dirty page accounting for mmap.
 		 */
 		ceph_put_snap_context((void *)page->private);
-		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
 		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
-		dout(20, "%p set_page_dirty %p %d -> %d (?)\n",
-		     mapping->host, page,
-		     atomic_read(&ci->i_wrbuffer_ref)-1,
-		     atomic_read(&ci->i_wrbuffer_ref));
-		dout(20, "%p  page %p snapc is %p seq %lld (%d snaps)\n",
-		     mapping->host, page, snapc, snapc->seq, snapc->num_snaps);
+
 	} else
 		dout(20, "ANON set_page_dirty %p (raced truncate?)\n", page);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
@@ -76,8 +109,14 @@ static int ceph_set_page_dirty(struct page *page)
 	return 1;
 }
 
+static int ceph_set_page_dirty_vfs(struct page *page)
+{
+	return ceph_set_page_dirty(page, 0);
+}
+
 static void ceph_invalidatepage(struct page *page, unsigned long offset)
 {
+	struct inode *inode;
 	struct ceph_inode_info *ci;
 
 	BUG_ON(!PageLocked(page));
@@ -93,11 +132,16 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 		ClearPagePrivate(page);
 		return;
 	}
-	ci = ceph_inode(page->mapping->host);
+	inode = page->mapping->host;
+	ci = ceph_inode(inode);
 	if (offset == 0) {
 		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n",
 		     &ci->vfs_inode, page, page->index, offset);
-		atomic_dec(&ci->i_wrbuffer_ref);
+		spin_lock(&inode->i_lock);
+		ci->i_wrbuffer_ref--;
+		if ((void *)page->private == ci->i_snap_realm->cached_context)
+			ci->i_wrbuffer_ref_head--;
+		spin_unlock(&inode->i_lock);
 		ceph_put_snap_context((void *)page->private);
 		ClearPagePrivate(page);
 	} else
@@ -212,6 +256,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	loff_t i_size;
 	int err = 0;
 	int was_dirty;
+	struct ceph_snap_context *snapc;
 
 	if (!page->mapping || !page->mapping->host)
 		return -EFAULT;
@@ -229,6 +274,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 
 	page_cache_get(page);
 	was_dirty = PageDirty(page);
+	snapc = (void *)page->private;
 	set_page_writeback(page);
 	err = ceph_osdc_writepages(osdc, ceph_vino(inode), &ci->i_layout,
 				   (void *)page->private,
@@ -236,14 +282,14 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	if (err >= 0) {
 		if (was_dirty) {
 			dout(20, "cleaned page %p\n", page);
-			ceph_put_wrbuffer_cap_refs(ci, 1);
+			ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
 		}
 		SetPageUptodate(page);
 		err = 0;  /* vfs expects us to return 0 */
 	} else {
 		if (wbc)
 			wbc->pages_skipped++;
-		ceph_set_page_dirty(page);
+		ceph_set_page_dirty(page, snapc);
 	}
 	end_page_writeback(page);
 	page_cache_release(page);
@@ -497,14 +543,14 @@ get_more_pages:
 					dout(20, "%p redirtying page %p\n",
 					     inode, page);
 					wbc->pages_skipped++;
-					ceph_set_page_dirty(page);
+					ceph_set_page_dirty(page, snapc);
 				}
 				dout(50, "unlocking %d %p\n", i, page);
 				end_page_writeback(page);
 				unlock_page(page);
 			}
 			dout(20, "%p cleaned %d pages\n", inode, cleaned);
-			ceph_put_wrbuffer_cap_refs(ci, cleaned);
+			ceph_put_wrbuffer_cap_refs(ci, cleaned, snapc);
 
 			/* continue? */
 			index = next;
@@ -678,7 +724,7 @@ const struct address_space_operations ceph_aops = {
 	.writepages = ceph_writepages,
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
-	.set_page_dirty = ceph_set_page_dirty,
+	.set_page_dirty = ceph_set_page_dirty_vfs,
 	.invalidatepage = ceph_invalidatepage,
 	.releasepage = ceph_releasepage,
 };

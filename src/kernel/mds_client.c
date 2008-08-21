@@ -853,7 +853,8 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	was_stale = session->s_cap_ttl == 0 ||
 		time_after_eq(jiffies, session->s_cap_ttl);
 
-	dout(2, "handle_session %p op %d seq %llu %s\n", session, op, seq,
+	dout(2, "handle_session %s %p seq %llu (i was %s)\n",
+	     ceph_session_op_name(op), session, seq,
 	     was_stale ? "stale":"not stale");
 	switch (op) {
 	case CEPH_SESSION_OPEN:

@@ -191,7 +191,8 @@ struct ceph_cap_snap {
 	u64 follows;
 	u64 size;
 	struct timespec mtime, atime, ctime;
-	int flushing;
+	struct ceph_snap_context *context;
+	int dirty;
 };
 
 /*
@@ -253,7 +254,7 @@ struct ceph_inode_info {
 	unsigned i_cap_exporting_mseq;
 	unsigned i_cap_exporting_issued;
 	struct list_head i_cap_snaps;
-	u64 i_cap_snap_pending;
+	struct ceph_snap_context *i_cap_snap_pending;
 	unsigned i_snap_caps;         /* cap bits for snap i/o */
 	
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
@@ -265,7 +266,7 @@ struct ceph_inode_info {
 
 	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
-	atomic_t i_wrbuffer_ref;
+	int i_wrbuffer_ref, i_wrbuffer_ref_head;
 
 	struct ceph_snap_realm *i_snap_realm;
 	struct list_head i_snap_realm_item;
@@ -398,7 +399,7 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 		used |= CEPH_CAP_RDCACHE;
 	if (ci->i_wr_ref)
 		used |= CEPH_CAP_WR;
-	if (atomic_read(&ci->i_wrbuffer_ref))
+	if (ci->i_wrbuffer_ref)
 		used |= CEPH_CAP_WRBUFFER;
 	return used;
 }
@@ -512,7 +513,8 @@ extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
 						      int must_flush);
 extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
-extern void ceph_queue_cap_snap(struct ceph_inode_info *ci, u64 seq);
+extern void ceph_queue_cap_snap(struct ceph_inode_info *ci,
+				struct ceph_snap_context *snapc);
 
 
 /*
@@ -580,7 +582,8 @@ extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
-extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr);
+extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
+				       struct ceph_snap_context *snapc);
 extern void __ceph_flush_snaps(struct ceph_inode_info *ci);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
