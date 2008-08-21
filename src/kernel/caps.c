@@ -454,7 +454,7 @@ ack:
 				dout(10, "inverting snap/in locks on %p\n",
 				     inode);
 				spin_unlock(&inode->i_lock);
-				down_write(&mdsc->snap_rwsem);
+				down_read(&mdsc->snap_rwsem);
 				took_snap_rwsem = 1;
 				goto retry;
 			}
@@ -492,7 +492,7 @@ ack:
 	if (session)
 		mutex_unlock(&session->s_mutex);
 	if (took_snap_rwsem)
-		up_write(&mdsc->snap_rwsem);
+		up_read(&mdsc->snap_rwsem);
 }
 
 
