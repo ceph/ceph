@@ -189,6 +189,7 @@ struct ceph_cap {
 struct ceph_cap_snap {
 	struct list_head ci_item;
 	u64 follows;
+	int issued;
 	u64 size;
 	struct timespec mtime, atime, ctime;
 	struct ceph_snap_context *context;

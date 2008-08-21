@@ -320,6 +320,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 	u64 follows = 0;
 	struct list_head *p;
 	struct ceph_cap_snap *snapcap;
+	int issued;
 	u64 size;
 	struct timespec mtime, atime, ctime;
 	u32 mseq;
@@ -330,7 +331,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 retry:
 	list_for_each(p, &ci->i_cap_snaps) {
 		snapcap = list_entry(p, struct ceph_cap_snap, ci_item);
-		if (snapcap->follows < follows)
+		if (snapcap->follows <= follows)
 			continue;
 		if (snapcap->dirty)
 			continue;
@@ -340,6 +341,7 @@ retry:
 		if (session && session->s_mds != mds) {
 			dout(30, "oops, wrong session %p mutex\n", session);
 			mutex_unlock(&session->s_mutex);
+			ceph_put_mds_session(session);
 			session = 0;
 		}
 		if (!session) {
@@ -361,16 +363,21 @@ retry:
 		atime = snapcap->atime;
 		mtime = snapcap->mtime;
 		ctime = snapcap->ctime;
-
+		issued = snapcap->issued;
 		spin_unlock(&inode->i_lock);
 
 		send_cap(mdsc, ceph_vino(inode).ino,
-			 CEPH_CAP_OP_FLUSHSNAP, 0, 0, 0, mseq,
+			 CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
 			 size, 0, &mtime, &atime, 0,
 			 follows, mds);
 
 		spin_lock(&inode->i_lock);
 		goto retry;
+	}
+
+	if (session) {
+		mutex_unlock(&session->s_mutex);
+		ceph_put_mds_session(session);
 	}
 }
 

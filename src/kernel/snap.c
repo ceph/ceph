@@ -201,7 +201,6 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 	}
 
 	spin_lock(&inode->i_lock);
-
 	used = __ceph_caps_used(ci);
 	if (ci->i_cap_snap_pending) {
 		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
@@ -220,8 +219,8 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		capsnap->mtime = inode->i_mtime;
 		capsnap->atime = inode->i_atime;
 		capsnap->ctime = inode->i_ctime;
-		/* FIXME disabled for now, until snap-ordered writeback works */
-		if (false && (used & CEPH_CAP_WRBUFFER)) {
+		capsnap->issued = __ceph_caps_issued(ci, 0);
+		if (used & CEPH_CAP_WRBUFFER) {
 			dout(10, "queue_cap_snap %p snapc %p %llu used %d,"
 			     " WRBUFFER, delaying\n", inode, snapc,
 			     snapc->seq, used);
