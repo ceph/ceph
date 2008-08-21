@@ -450,7 +450,7 @@ first:
 ack:
 		/* take snap_rwsem before session mutex */
 		if (!took_snap_rwsem) {
-			if (down_write_trylock(&mdsc->snap_rwsem) == 0) {
+			if (down_read_trylock(&mdsc->snap_rwsem) == 0) {
 				dout(10, "inverting snap/in locks on %p\n",
 				     inode);
 				spin_unlock(&inode->i_lock);
