@@ -314,6 +314,7 @@ noinst_HEADERS = \
         include/xlist.h\
         kernel/Makefile\
 	kernel/addr.c\
+	kernel/caps.c\
         kernel/crush/crush.c\
         kernel/crush/crush.h\
         kernel/crush/hash.h\
