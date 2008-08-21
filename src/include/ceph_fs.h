@@ -526,6 +526,20 @@ enum {
 	CEPH_SESSION_STALE,
 };
 
+static inline const char *ceph_session_op_name(int op)
+{
+	switch (op) {
+	case CEPH_SESSION_REQUEST_OPEN: return "request_open";
+	case CEPH_SESSION_OPEN: return "open";
+	case CEPH_SESSION_REQUEST_CLOSE: return "request_close";
+	case CEPH_SESSION_CLOSE: return "close";
+	case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
+	case CEPH_SESSION_RENEWCAPS: return "renewcaps";
+	case CEPH_SESSION_STALE: return "stale";
+	default: return "???";
+	}
+}
+
 struct ceph_mds_session_head {
 	__le32 op;
 	__le64 seq;
@@ -611,7 +625,7 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
-	default: return "unknown";
+	default: return "???";
 	}
 }
 
@@ -814,7 +828,7 @@ inline static const char* ceph_cap_op_name(int op) {
 	case CEPH_CAP_OP_REQUEST: return "request";
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
 	case CEPH_CAP_OP_RELEASE: return "release";
-	default: return 0;
+	default: return "???";
 	}
 }
 
@@ -984,7 +998,7 @@ static inline const char* ceph_osd_op_name(int op)
 
 	case CEPH_OSD_OP_PULL: return "pull";
 	case CEPH_OSD_OP_PUSH: return "push";
-	default: return "";
+	default: return "???";
 	}
 }
 

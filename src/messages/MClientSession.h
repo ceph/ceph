@@ -19,18 +19,6 @@
 
 class MClientSession : public Message {
 public:
-  static const char *get_opname(int o) {
-    switch (o) {
-    case CEPH_SESSION_REQUEST_OPEN: return "request_open";
-    case CEPH_SESSION_OPEN: return "open";
-    case CEPH_SESSION_REQUEST_CLOSE: return "request_close";
-    case CEPH_SESSION_CLOSE: return "close";
-    case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
-    case CEPH_SESSION_RENEWCAPS: return "renewcaps";
-    case CEPH_SESSION_STALE: return "stale";
-    default: assert(0); return 0;
-    }
-  }
 
   int32_t op;
   version_t seq;  // used when requesting close, declaring stale
@@ -46,7 +34,7 @@ public:
 
   const char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
-    out << "client_session(" << get_opname(op);
+    out << "client_session(" << ceph_session_op_name(op);
     if (seq) out << " seq " << seq;
     out << ")";
   }
