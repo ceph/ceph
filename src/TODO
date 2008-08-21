@@ -18,6 +18,13 @@ big items
 
 
 snaps on kclient
+- snap-ordered writeout
+  - switch i_wrbuffer_ref to int, protected by i_lock
+  - split out i_wrbuffer_ref_head
+    - on queue_cap_snap, _head count to new snap and reset
+  - in writepages, take i_lock and 
+    - lock for oldest cap_snap with flushing > 0, 
+    - and make sure our page is for that snapc.  once we have a page, the snapc has to match.
 /- we need a rw snap mutex, so that pending io blocks while we update snap contexts
   - we can push down to a per-realm rw mutex later
 /- need to do ORDERSNAP flag
