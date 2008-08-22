@@ -71,11 +71,9 @@ static struct ceph_osd_request *alloc_request(int nr_pages,
 	req = kmalloc(sizeof(*req) + nr_pages*sizeof(void *), GFP_NOFS);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
-	req->r_aborted = 0;
 	req->r_request = msg;
 	req->r_nr_pages = nr_pages;
 	atomic_set(&req->r_ref, 1);
-	memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
 	return req;
 }
 
@@ -800,20 +798,22 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 	/* copy data into a set of pages */
 	left = len;
 	po = off & ~PAGE_MASK;
-	rc = -EFAULT;
 	for (i = 0; i < nr_pages; i++) {
 		int bad;
 		req->r_pages[i] = alloc_page(GFP_NOFS);
 		if (req->r_pages[i] == NULL) {
 			req->r_nr_pages = i+1;
-			put_request(req);
-			return -ENOMEM;
+			rc = -ENOMEM;
+			goto out;
 		}
 		l = min_t(int, PAGE_SIZE-po, left);
 		bad = copy_from_user(page_address(req->r_pages[i]) + po, data,
 				     l);
-		if (bad == l)
+		if (bad == l) {
+			req->r_nr_pages = i+1;
+			rc = -EFAULT;
 			goto out;
+		}
 		data += l - bad;
 		left -= l - bad;
 		if (po) {
@@ -829,6 +829,8 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, ceph_ino_t ino,
 
 	rc = do_request(osdc, req);
 out:
+	for (i = 0; i < req->r_nr_pages; i++)
+		__free_pages(req->r_pages[i], 0);
 	put_request(req);
 	if (rc == 0)
 		rc = len;
