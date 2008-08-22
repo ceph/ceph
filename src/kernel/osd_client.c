@@ -798,7 +798,8 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	if (IS_ERR(reqm))
 		return PTR_ERR(reqm);
 	reqhead = reqm->front.iov_base;
-	reqhead->flags = CEPH_OSD_OP_ACK;  /* just ack.. FIXME */
+	reqhead->flags = CEPH_OSD_OP_ACK | /* just ack for now... FIXME */
+		CEPH_OSD_OP_ORDERSNAP;     /* get EOLDSNAPC if out of order */
 
 	/* how many pages? */
 	num_pages = calc_pages_for(off, len);

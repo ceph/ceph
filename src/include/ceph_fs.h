@@ -1013,8 +1013,10 @@ enum {
 	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
 	CEPH_OSD_OP_BALANCE_READS = 16,
 	CEPH_OSD_OP_ACKNVRAM = 32,    /* ACK when stable in NVRAM, not RAM */
-	CEPH_OSD_OP_ORDERSNAP = 64,   /* fail (EBADF) if snap ordering is incorrect */
+	CEPH_OSD_OP_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 };
+
+#define EOLDSNAPC 44 /* ORDERSNAP specified and writer has old snap context*/
 
 struct ceph_osd_peer_stat {
 	struct ceph_timespec stamp;

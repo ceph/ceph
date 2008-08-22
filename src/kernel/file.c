@@ -251,6 +251,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 		if (pos > i_size_read(inode))
 			ceph_inode_set_size(inode, pos);
 	}
+
 	return ret;
 }
 
@@ -335,6 +336,7 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
+retry_snap:
 	__ceph_do_pending_vmtruncate(inode);
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
@@ -361,6 +363,13 @@ out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
 	ceph_put_cap_refs(ci, got);
+
+	if (ret == -EOLDSNAPC) {
+		dout(10, "aio_write %p %llu~%u got EOLDSNAPC, retrying\n",
+		     inode, pos, (unsigned)iov->iov_len);
+		goto retry_snap;
+	}
+
 	return ret;
 }
 
