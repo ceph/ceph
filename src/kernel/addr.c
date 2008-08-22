@@ -357,12 +357,10 @@ static int ceph_writepages(struct address_space *mapping,
 
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
+	if (wsize < PAGE_CACHE_SIZE)
+		wsize = PAGE_CACHE_SIZE;
 
 	dout(10, "writepages on %p, wsize %u\n", inode, wsize);
-
-	/* if wsize is small, write 1 page at a time */
-	if (wsize < PAGE_CACHE_SIZE)
-		return generic_writepages(mapping, wbc);
 
 	/* larger page vector? */
 	max_pages = wsize >> PAGE_CACHE_SHIFT;
