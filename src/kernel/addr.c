@@ -128,7 +128,7 @@ static void ceph_redirty_page(struct address_space *mapping, struct page *page)
 	if (TestSetPageDirty(page)) {
 		dout(20, "%p redirty_page %p -- already dirty\n",
 		     mapping->host, page);
-		return 0;
+		return;
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
@@ -185,6 +185,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 		     &ci->vfs_inode, page, page->index, offset);
 		ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
 		ceph_put_snap_context(snapc);
+		page->private = 0;
 		ClearPagePrivate(page);
 	} else
 		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n",
@@ -196,8 +197,8 @@ static int ceph_releasepage(struct page *page, gfp_t g)
 	struct inode *inode = page->mapping ? page->mapping->host:0;
 	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
 	WARN_ON(PageDirty(page));
-	ceph_put_snap_context((void *)page->private);
-	ClearPagePrivate(page);
+	WARN_ON(page->private);
+	WARN_ON(PagePrivate(page));
 	return 0;
 }
 
@@ -609,6 +610,7 @@ get_more_pages:
 			WARN_ON(!PageUptodate(page));
 			if (i < wrote) {
 				dout(20, "%p cleaning %p\n", inode, page);
+				page->private = 0;
 				ClearPagePrivate(page);
 				ceph_put_snap_context(snapc);
 			} else {
