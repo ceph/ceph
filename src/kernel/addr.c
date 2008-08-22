@@ -287,7 +287,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
  * ceph_writepage:
  *  clear dirty page, and set the writeback flag in the radix tree.
  *  to actually write data to the remote OSDs.
- * leave pages locked.
+ * leave page locked.
  */
 static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 {
@@ -298,11 +298,14 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	int len = PAGE_CACHE_SIZE;
 	loff_t i_size;
 	int err = 0;
-	int was_dirty;
 	struct ceph_snap_context *snapc;
 
-	if (!page->mapping || !page->mapping->host)
+	dout(10, "writepage %p idx %lu\n", page, page->index);
+
+	if (!page->mapping || !page->mapping->host) {
+		dout(10, "writepage %p - no mapping\n", page);
 		return -EFAULT;
+	}
 	inode = page->mapping->host;
 	ci = ceph_inode(inode);
 	osdc = &ceph_inode_to_client(inode)->osdc;
@@ -311,31 +314,32 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	i_size = i_size_read(inode);
 	if (i_size < page_off + len)
 		len = i_size - page_off;
-
-	dout(10, "ceph_writepage inode %p page %p index %lu on %llu~%u\n",
+	snapc = (void *)page->private;
+	dout(10, "writepage inode %p page %p index %lu on %llu~%u\n",
 	     inode, page, page->index, page_off, len);
 
-	page_cache_get(page);
-	was_dirty = PageDirty(page);
-	snapc = (void *)page->private;
 	set_page_writeback(page);
-	err = ceph_osdc_writepages(osdc, ceph_vino(inode), &ci->i_layout,
-				   (void *)page->private,
-				   page_off, len, &page, 1);
-	if (err >= 0) {
-		if (was_dirty) {
-			dout(20, "cleaned page %p\n", page);
+	if (snapc) {
+		err = ceph_osdc_writepages(osdc, ceph_vino(inode),
+					   &ci->i_layout, snapc,
+					   page_off, len, &page, 1);
+		if (err >= 0) {
+			dout(20, "writepage cleaned page %p\n", page);
+			page->private = 0;
+			ClearPagePrivate(page);
 			ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
+			ceph_put_snap_context(snapc);
+			err = 0;  /* vfs expects us to return 0 */
+		} else {
+			dout(20, "writepage redirtying page %p\n", page);
+			ceph_redirty_page(page->mapping, page);
+			if (wbc)
+				wbc->pages_skipped++;
 		}
-		SetPageUptodate(page);
-		err = 0;  /* vfs expects us to return 0 */
 	} else {
-		if (wbc)
-			wbc->pages_skipped++;
-		ceph_set_page_dirty(page, snapc);
+		dout(20, "writepage %p noop (no snapc)\n", page);
 	}
 	end_page_writeback(page);
-	page_cache_release(page);
 	return err;
 }
 

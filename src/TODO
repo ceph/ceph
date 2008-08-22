@@ -18,8 +18,10 @@ big items
 
 
 snaps on kclient
-/- we need a rw snap mutex, so that pending io blocks while we update snap contexts
-  - we can push down to a per-realm rw mutex later
+
+- short reads not allowed..
+- short writes ...?
+
 - need to do ORDERSNAP flag
 - to get sync write retry and delayed flushsnap for sync writes
 
