@@ -124,6 +124,13 @@ static int ceph_set_page_dirty(struct page *page,
 static void ceph_redirty_page(struct address_space *mapping, struct page *page)
 {
 	BUG_ON(!PageLocked(page));
+
+	if (TestSetPageDirty(page)) {
+		dout(20, "%p redirty_page %p -- already dirty\n",
+		     mapping->host, page);
+		return 0;
+	}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	spin_lock_irq(&mapping->tree_lock);
 #else
