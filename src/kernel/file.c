@@ -352,7 +352,8 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		/* fixme, this isn't actually async! */
-		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len, &pos);
+		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
+				      &iocb->ki_pos);
 	else
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 	
