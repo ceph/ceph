@@ -602,6 +602,7 @@ extern int __ceph_send_cap(struct ceph_mds_client *mdsc,
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;
+extern int ceph_mmap(struct file *file, struct vm_area_struct *vma);
 
 /* file.c */
 extern const struct file_operations ceph_file_fops;

@@ -390,10 +390,12 @@ const struct file_operations ceph_file_fops = {
 	.write = do_sync_write,
 	.aio_read = ceph_aio_read,
 	.aio_write = ceph_aio_write,
+	//.mmap = ceph_mmap,
 	.mmap = generic_file_mmap,
 	.fsync = ceph_fsync,
 	.splice_read = generic_file_splice_read,
 	.splice_write = generic_file_splice_write,
 	.unlocked_ioctl = ceph_ioctl,
 };
+
 

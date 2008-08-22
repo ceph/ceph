@@ -776,3 +776,51 @@ const struct address_space_operations ceph_aops = {
 	.invalidatepage = ceph_invalidatepage,
 	.releasepage = ceph_releasepage,
 };
+
+
+/*
+ * vm ops 
+ */
+
+static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
+{
+	struct inode *inode = vma->vm_file->f_dentry->d_inode;
+	loff_t size;
+	int ret;
+	u64 page_start;
+
+	lock_page(page);
+	wait_on_page_writeback(page);
+	size = i_size_read(inode);
+	page_start = (u64)page->index << PAGE_CACHE_SHIFT;
+
+	if ((page->mapping != inode->i_mapping) ||
+	    (page_start > size)) {
+		/* page got truncated out from underneath us */
+		goto out_unlock;
+	}
+
+	/* dirty the page */
+	ret = 0;
+
+out_unlock:
+	unlock_page(page);
+	return ret;
+}
+
+static struct vm_operations_struct ceph_vmops = {
+	.fault		= filemap_fault,
+	.page_mkwrite	= ceph_page_mkwrite,
+};
+
+int ceph_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct address_space *mapping = file->f_mapping;
+
+	if (!mapping->a_ops->readpage)
+		return -ENOEXEC;
+	file_accessed(file);
+	vma->vm_ops = &ceph_vmops;
+	vma->vm_flags |= VM_CAN_NONLINEAR;
+	return 0;
+}
