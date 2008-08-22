@@ -4461,19 +4461,11 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 class C_MDS_truncate_purged : public Context {
   MDS *mds;
   MDRequest *mdr;
-  CInode *in;
-  version_t pv;
-  loff_t size;
-  utime_t ctime;
 public:
-  C_MDS_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, loff_t sz, utime_t ct) :
-    mds(m), mdr(r), in(i), 
-    pv(pdv),
-    size(sz), ctime(ct) { }
+  C_MDS_truncate_purged(MDS *m, MDRequest *r) :
+    mds(m), mdr(r) {}
   void finish(int r) {
     assert(r == 0);
-
-    // reply
     mds->server->reply_request(mdr, 0);
   }
 };
@@ -4482,21 +4474,14 @@ class C_MDS_truncate_logged : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
-  version_t pv;
-  uint64_t size;
-  utime_t ctime;
 public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, uint64_t sz, utime_t ct) :
-    mds(m), mdr(r), in(i), 
-    pv(pdv),
-    size(sz), ctime(ct) { }
+  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i) :
+    mds(m), mdr(r), in(i) {}
   void finish(int r) {
     assert(r == 0);
 
     // apply to cache
-    in->inode.size = size;
-    in->inode.ctime = ctime;
-    in->inode.mtime = ctime;
+    __u64 old_size = in->inode.size;
     in->pop_and_dirty_projected_inode(mdr->ls);
 
     mdr->apply();
@@ -4505,9 +4490,9 @@ public:
     mds->locker->issue_truncate(in);
 
     // purge
-    mds->mdcache->purge_inode(in, size, in->inode.size, mdr->ls);
-    mds->mdcache->wait_for_purge(in, size, 
-				 new C_MDS_truncate_purged(mds, mdr, in, pv, size, ctime));
+    mds->mdcache->purge_inode(in, in->inode.size, old_size, mdr->ls);
+    mds->mdcache->wait_for_purge(in, in->inode.size, 
+				 new C_MDS_truncate_purged(mds, mdr));
   }
 };
 
@@ -4550,8 +4535,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   // prepare
   version_t pdv = cur->pre_dirty();
   utime_t ctime = g_clock.real_now();
-  Context *fin = new C_MDS_truncate_logged(mds, mdr, cur, 
-					   pdv, req->head.args.truncate.length, ctime);
+  Context *fin = new C_MDS_truncate_logged(mds, mdr, cur);
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
