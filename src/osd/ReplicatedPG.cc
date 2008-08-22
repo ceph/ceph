@@ -929,7 +929,8 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     { // truncate
       t.truncate(info.pgid.to_coll(), poid, length);
       interval_set<__u64> keep;
-      keep.insert(0, length);
+      if (length)
+	keep.insert(0, length);
       snapset.head_overlap.intersection_of(keep);
     }
     break;
@@ -1414,7 +1415,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       snapc.seq < snapset.seq) {
     dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << snapset.seq
 	     << " on " << poid << dendl;
-    reply_op_error(op, -EBADF);
+    reply_op_error(op, -EOLDSNAPC);
     return;
   }
 
