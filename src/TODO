@@ -18,8 +18,9 @@ big items
 
 
 snaps on kclient
-- short reads not allowed..
-- short writes ...?
+- test short reads not allowed..
+- test short writes ...?
+- test write_begin wait on snapc writeable
 
 snaps on uclient
 - delay FLUSHSNAP until after (buffered) flush
