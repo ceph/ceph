@@ -61,12 +61,12 @@ static int ceph_set_page_dirty(struct page *page,
 		list_for_each(p, &ci->i_cap_snaps) {
 			capsnap = list_entry(p, struct ceph_cap_snap,
 					     ci_item);
-			if (capsnap->context == snapc) {
-				capsnap->dirty++;
+			if (capsnap->context == snapc)
 				break;
-			}
 		}
 		BUG_ON(!capsnap);
+		BUG_ON(capsnap->context != snapc);
+		capsnap->dirty++;
 		dout(20, "%p set_page_dirty %p snap %lld %d/%d -> %d/%d"
 		     " snapc %p seq %lld (%d snaps)\n",
 		     mapping->host, page, capsnap->follows,
@@ -294,7 +294,6 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 	struct list_head *p;
 	struct ceph_cap_snap *capsnap = 0;
 
-	spin_lock(&inode->i_lock);
 	list_for_each(p, &ci->i_cap_snaps) {
 		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
 		dout(20, " cap_snap %p has %d dirty pages\n", capsnap,
@@ -308,11 +307,25 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
 		dout(20, " head has %d dirty pages\n", ci->i_wrbuffer_ref_head);
 	}
-	spin_unlock(&inode->i_lock);
 
 	return snapc;
 }
 
+
+static struct ceph_snap_context *get_oldest_context(struct inode *inode)
+{
+	struct ceph_snap_context *snapc = 0;
+	spin_lock(&inode->i_lock);
+	snapc = __get_oldest_context(inode);
+	spin_unlock(&inode->i_lock);
+	return snapc;
+}
+
+static int context_is_writeable(struct inode *inode,
+				struct ceph_snap_context *snapc)
+{
+	return snapc == get_oldest_context(inode);
+}
 
 /*
  * ceph_writepage:
@@ -348,20 +361,15 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	dout(10, "writepage %p page %p index %lu on %llu~%u\n",
 	     inode, page, page->index, page_off, len);
 
-	/* verify this is current snapc */
-	snapc = __get_oldest_context(inode);
-	if (!snapc) {
-		dout(20, "writepage %p page %p no snapc with dirty data?\n",
-		     inode, page);
-		goto out;
-	}
-	if ((void *)page->private == 0) {
+	/* verify this is a writeable snap context */
+	snapc = (void *)page->private;
+	if (snapc == 0) {
 		dout(20, "writepage %p page %p not dirty?\n", inode, page);
 		goto out;
 	}
-	if ((void *)page->private != snapc) {
-		dout(10, "writepage %p page %p snapc %p newer than %p - noop\n",
-		     inode, page, (void *)page->private, snapc);
+	if (!context_is_writeable(inode, snapc)) {
+		dout(10, "writepage %p page %p snapc %p not writeable - noop\n",
+		     inode, page, (void *)page->private);
 		goto out;
 	}
 
@@ -476,8 +484,7 @@ static int ceph_writepages(struct address_space *mapping,
 retry:
 	/* find oldest snap context with dirty data */
 	ceph_put_snap_context(snapc);
-
-	snapc = __get_oldest_context(inode);
+	snapc = get_oldest_context(inode);
 	if (!snapc) {
 		/* hmm, why does writepages get called when there
 		   is no dirty data? */
@@ -715,9 +722,11 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	int pos_in_page = pos & ~PAGE_MASK;
 	int end_in_page = pos_in_page + len;
 	loff_t i_size;
+	struct ceph_snap_context *snapc;
 	int r;
 
 	/* get a page*/
+retry:
 	page = __grab_cache_page(mapping, index);
 	if (!page)
 		return -ENOMEM;
@@ -735,10 +744,28 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	BUG_ON(!ci->i_snap_realm->cached_context);
 	if (page->private &&
 	    (void *)page->private != ci->i_snap_realm->cached_context) {
-		/* force early writeback of snapped page */
-		r = writepage_nounlock(page, 0);
-		if (r < 0)
-			goto fail;
+		snapc = get_oldest_context(inode);
+		if (snapc == (void *)page->private) {
+			/* yay, writeable, do it now */
+			dout(10, " page %p snapc %p not current, but oldest\n",
+			     page, snapc);
+			r = writepage_nounlock(page, 0);
+			if (r < 0)
+				goto fail;
+		} else {
+			dout(10, " page %p snapc %p not current or oldest\n",
+			     page, (void *)page->private);
+			/* queue for writeback, and wait */
+			snapc = ceph_get_snap_context((void *)page->private);
+			unlock_page(page);
+			ceph_queue_writeback(inode);
+			r = wait_event_interruptible(ci->i_cap_wq,
+				       context_is_writeable(inode, snapc));
+			ceph_put_snap_context(snapc);
+			if (r < 0)
+				return r; /* FIXME? */
+			goto retry;
+		}
 	}
 
 	if (PageUptodate(page))

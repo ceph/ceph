@@ -319,12 +319,6 @@ static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
 	return (struct ceph_dentry_info *)dentry->d_fsdata;
 }
 
-static inline void ceph_queue_writeback(struct ceph_client *cl,
-					struct ceph_inode_info *ci)
-{
-	queue_work(cl->wb_wq, &ci->i_wb_work);
-}
-
 
 /*
  * ino_t is <64 bits on many architectures, blech.
@@ -438,6 +432,15 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
 {
 	return (struct ceph_client *)sb->s_fs_info;
 }
+
+
+static inline void ceph_queue_writeback(struct inode *inode)
+{
+	queue_work(ceph_inode_to_client(inode)->wb_wq,
+		   &ceph_inode(inode)->i_wb_work);
+}
+
+
 /*
  * keep readdir buffers attached to file->private_data
  */

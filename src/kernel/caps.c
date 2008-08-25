@@ -667,6 +667,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 		spin_lock(&inode->i_lock);
 		__ceph_flush_snaps(ci);
 		spin_unlock(&inode->i_lock);
+		wake_up(&ci->i_cap_wq);
 	}
 }
 
@@ -800,7 +801,7 @@ out:
 		 * context.
 		 */
 		dout(10, "queueing %p for writeback\n", inode);
-		ceph_queue_writeback(ceph_client(inode->i_sb), ci);
+		ceph_queue_writeback(inode);
 	}
 	if (invalidate)
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
