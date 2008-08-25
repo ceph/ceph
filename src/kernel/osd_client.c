@@ -591,9 +591,9 @@ static __u64 calc_layout(struct ceph_osd_client *osdc,
 /*
  * synchronous read direct to user buffer.
  *
- * FIXME: if read spans object boundary, just do two two separate
- * reads.  for a correct atomic read, we should take read locks on
- * all objects.
+ * FIXME: if read spans object boundary, just do two separate reads.
+ * for a correct atomic read, we should take read locks on all
+ * objects.
  */
 int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			struct ceph_file_layout *layout,
@@ -793,6 +793,10 @@ out:
 
 /*
  * synchronous write.  from userspace.
+ *
+ * FIXME: if write spans object boundary, just do two separate write.
+ * for a correct atomic write, we should take write locks on all
+ * objects, rollback on failure, etc.
  */
 int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct ceph_file_layout *layout,
@@ -804,10 +808,13 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	struct ceph_osd_request *req;
 	int num_pages, i, po, l, left;
 	__s32 rc;
+	u64 rlen;
+	int finalrc = 0;
 
 	dout(10, "sync_write on ino %llx.%llx at %llu~%llu\n", vino.ino,
 	     vino.snap, off, len);
 
+more:
 	/* request msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_WRITE, snapc);
 	if (IS_ERR(reqm))
@@ -824,12 +831,12 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 		return PTR_ERR(req);
 	}
 
-	len = calc_layout(osdc, vino, layout, off, len, req);
-	num_pages = calc_pages_for(off, len);  /* recalc */
-	dout(10, "sync_write %llu~%llu -> %d pages\n", off, len, num_pages);
+	rlen = calc_layout(osdc, vino, layout, off, len, req);
+	num_pages = calc_pages_for(off, rlen);  /* recalc */
+	dout(10, "sync_write %llu~%llu -> %d pages\n", off, rlen, num_pages);
 
 	/* copy data into a set of pages */
-	left = len;
+	left = rlen;
 	po = off & ~PAGE_MASK;
 	for (i = 0; i < num_pages; i++) {
 		int bad;
@@ -857,7 +864,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	}
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = num_pages;
-	reqm->hdr.data_len = cpu_to_le32(len);
+	reqm->hdr.data_len = cpu_to_le32(rlen);
 	reqm->hdr.data_off = cpu_to_le32(off);
 
 	rc = do_request(osdc, req);
@@ -865,10 +872,16 @@ out:
 	for (i = 0; i < req->r_num_pages; i++)
 		__free_pages(req->r_pages[i], 0);
 	put_request(req);
-	if (rc == 0)
-		rc = len;
-	dout(10, "sync_write result %d\n", rc);
-	return rc;
+	if (rc == 0) {
+		finalrc += rlen;
+		off += rlen;
+		len -= rlen;
+		if (len > 0)
+			goto more;
+	} else
+		finalrc = rc;
+	dout(10, "sync_write result %d\n", finalrc);
+	return finalrc;
 }
 
 /*
