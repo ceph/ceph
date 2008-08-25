@@ -589,7 +589,11 @@ static __u64 calc_layout(struct ceph_osd_client *osdc,
 }
 
 /*
- * synchronous read direct to user buffer
+ * synchronous read direct to user buffer.
+ *
+ * FIXME: if read spans object boundary, just do two two separate
+ * reads.  for a correct atomic read, we should take read locks on
+ * all objects.
  */
 int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			struct ceph_file_layout *layout,
@@ -600,10 +604,13 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	struct ceph_osd_request *req;
 	int num_pages, i, po, left, l;
 	__s32 rc;
+	int finalrc = 0;
+	u64 rlen;
 
 	dout(10, "sync_read on vino %llx.%llx at %llu~%llu\n", vino.ino,
 	     vino.snap, off, len);
 
+more:
 	/* request msg */
 	reqm = new_request_msg(osdc, CEPH_OSD_OP_READ, 0);
 	if (IS_ERR(reqm))
@@ -614,9 +621,9 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	len = calc_layout(osdc, vino, layout, off, len, req);
-	num_pages = calc_pages_for(off, len);  /* recalc */
-	dout(10, "sync_read %llu~%llu -> %d pages\n", off, len, num_pages);
+	rlen = calc_layout(osdc, vino, layout, off, len, req);
+	num_pages = calc_pages_for(off, rlen);  /* recalc */
+	dout(10, "sync_read %llu~%llu -> %d pages\n", off, rlen, num_pages);
 
 	/* allocate temp pages to hold data */
 	for (i = 0; i < num_pages; i++) {
@@ -629,7 +636,7 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	}
 	reqm->nr_pages = num_pages;
 	reqm->pages = req->r_pages;
-	reqm->hdr.data_len = cpu_to_le32(len);
+	reqm->hdr.data_len = cpu_to_le32(rlen);
 	reqm->hdr.data_off = cpu_to_le32(off);
 
 	rc = do_request(osdc, req);
@@ -662,8 +669,16 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	}
 out:
 	put_request(req);
-	dout(10, "sync_read result %d\n", rc);
-	return rc;
+	if (rc > 0) {
+		finalrc += rc;
+		off += rc;
+		len -= rc;
+		if (len > 0)
+			goto more;
+	} else
+		finalrc = rc;
+	dout(10, "sync_read result %d\n", finalrc);
+	return finalrc;
 }
 
 /*

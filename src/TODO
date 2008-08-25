@@ -18,15 +18,8 @@ big items
 
 
 snaps on kclient
-
 - short reads not allowed..
 - short writes ...?
-
-- need to do ORDERSNAP flag
-- to get sync write retry and delayed flushsnap for sync writes
-
-- vfs writepage should noop if page isn't writeable (i.e. not oldest snap)
-- make the begin_write wait on writeback respect ordering.. i.e., wait for all older snap pages to write
 
 snaps on uclient
 - delay FLUSHSNAP until after (buffered) flush
