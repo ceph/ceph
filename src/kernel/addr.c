@@ -16,7 +16,7 @@ int ceph_debug_addr = -1;
 
 /*
  * if snapc is NULL, we are dirtying within the most recent (head) snap.
- * if snapc is non-NULL, we are redirtying a page withing a past snap,
+ * if snapc is non-NULL, we are redirtying a page within a past snap,
  * and need to adjust the count on the appropriate ceph_cap_snap.
  */
 static int ceph_set_page_dirty(struct page *page,
@@ -284,6 +284,37 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 }
 
 /*
+ * get oldest snapc for inode with dirty data.. i.e., the only snap context
+ * we can actually write back.
+ */
+static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_snap_context *snapc = 0;
+	struct list_head *p;
+	struct ceph_cap_snap *capsnap = 0;
+
+	spin_lock(&inode->i_lock);
+	list_for_each(p, &ci->i_cap_snaps) {
+		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
+		dout(20, " cap_snap %p has %d dirty pages\n", capsnap,
+		     capsnap->dirty);
+		if (capsnap->dirty)
+			break;
+	}
+	if (capsnap && capsnap->dirty) {
+		snapc = ceph_get_snap_context(capsnap->context);
+	} else if (ci->i_snap_realm) {
+		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
+		dout(20, " head has %d dirty pages\n", ci->i_wrbuffer_ref_head);
+	}
+	spin_unlock(&inode->i_lock);
+
+	return snapc;
+}
+
+
+/*
  * ceph_writepage:
  *  clear dirty page, and set the writeback flag in the radix tree.
  *  to actually write data to the remote OSDs.
@@ -314,9 +345,25 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	i_size = i_size_read(inode);
 	if (i_size < page_off + len)
 		len = i_size - page_off;
-	snapc = (void *)page->private;
-	dout(10, "writepage inode %p page %p index %lu on %llu~%u\n",
+	dout(10, "writepage %p page %p index %lu on %llu~%u\n",
 	     inode, page, page->index, page_off, len);
+
+	/* verify this is current snapc */
+	snapc = __get_oldest_context(inode);
+	if (!snapc) {
+		dout(20, "writepage %p page %p no snapc with dirty data?\n",
+		     inode, page);
+		goto out;
+	}
+	if ((void *)page->private == 0) {
+		dout(20, "writepage %p page %p not dirty?\n", inode, page);
+		goto out;
+	}
+	if ((void *)page->private != snapc) {
+		dout(10, "writepage %p page %p snapc %p newer than %p - noop\n",
+		     inode, page, (void *)page->private, snapc);
+		goto out;
+	}
 
 	set_page_writeback(page);
 	if (snapc) {
@@ -340,6 +387,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 		dout(20, "writepage %p noop (no snapc)\n", page);
 	}
 	end_page_writeback(page);
+out:
 	return err;
 }
 
@@ -387,8 +435,6 @@ static int ceph_writepages(struct address_space *mapping,
 	int done = 0;
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
-	struct list_head *p;
-	struct ceph_cap_snap *capsnap = 0;
 
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
@@ -430,24 +476,8 @@ static int ceph_writepages(struct address_space *mapping,
 retry:
 	/* find oldest snap context with dirty data */
 	ceph_put_snap_context(snapc);
-	snapc = 0;
 
-	spin_lock(&inode->i_lock);
-	list_for_each(p, &ci->i_cap_snaps) {
-		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
-		dout(20, " cap_snap %p has %d dirty\n", capsnap,
-		     capsnap->dirty);
-		if (capsnap->dirty)
-			break;
-	}
-	if (capsnap && capsnap->dirty) {
-		snapc = ceph_get_snap_context(capsnap->context);
-	} else if (ci->i_snap_realm) {
-		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
-		dout(20, " %d head wrbuffer refs\n", ci->i_wrbuffer_ref_head);
-	}
-	spin_unlock(&inode->i_lock);
-
+	snapc = __get_oldest_context(inode);
 	if (!snapc) {
 		/* hmm, why does writepages get called when there
 		   is no dirty data? */
@@ -701,8 +731,8 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 
 	/* check snap context */
 	BUG_ON(!ci->i_snap_realm);
-	BUG_ON(!ci->i_snap_realm->cached_context);
 	down_read(&mdsc->snap_rwsem);
+	BUG_ON(!ci->i_snap_realm->cached_context);
 	if (page->private &&
 	    (void *)page->private != ci->i_snap_realm->cached_context) {
 		/* force early writeback of snapped page */
