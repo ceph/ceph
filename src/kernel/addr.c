@@ -438,12 +438,12 @@ static int ceph_writepages(struct address_space *mapping,
 	struct inode *inode = mapping->host;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_inode_to_client(inode);
-	pgoff_t index, end;
+	pgoff_t index, start, end;
 	int range_whole = 0;
 	int should_loop = 1;
 	struct page **pages;
 	pgoff_t max_pages = 0;
-	struct ceph_snap_context *snapc = 0;
+	struct ceph_snap_context *snapc = 0, *last_snapc = 0;
 	struct pagevec pvec;
 	int done = 0;
 	int rc = 0;
@@ -471,20 +471,19 @@ static int ceph_writepages(struct address_space *mapping,
 	}
 	*/
 
-	/* where to start? */
+	/* where to start/end? */
 	if (wbc->range_cyclic) {
-		index = mapping->writeback_index; /* Start from prev offset */
+		start = mapping->writeback_index; /* Start from prev offset */
 		end = -1;
-		dout(10, "cyclic, start at %lu\n", index);
+		dout(10, "cyclic, start at %lu\n", start);
 	} else {
-		index = wbc->range_start >> PAGE_CACHE_SHIFT;
+		start = wbc->range_start >> PAGE_CACHE_SHIFT;
 		end = wbc->range_end >> PAGE_CACHE_SHIFT;
 		if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
 			range_whole = 1;
 		should_loop = 0;
-		dout(10, "not cyclic, %lu to %lu\n", index, end);
+		dout(10, "not cyclic, %lu to %lu\n", start, end);
 	}
-
 
 retry:
 	/* find oldest snap context with dirty data */
@@ -498,6 +497,12 @@ retry:
 	}
 	dout(20, " oldest snapc is %p seq %lld (%d snaps)\n",
 	     snapc, snapc->seq, snapc->num_snaps);
+	if (snapc != last_snapc) {
+		dout(20, "  snapc differs from last pass, restarting at %lu\n",
+		     index);
+		index = start;
+	}
+	last_snapc = snapc;
 
 	while (!done && index <= end) {
 		unsigned i;
