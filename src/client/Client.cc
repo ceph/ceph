@@ -318,14 +318,20 @@ void Client::trim_cache()
 
 
 void Client::update_inode_file_bits(Inode *in,
-				    __u64 size,
-				    utime_t ctime,
+				    __u64 truncate_seq, __u64 size,
+				    __u64 time_warp_seq, utime_t ctime,
 				    utime_t mtime,
 				    utime_t atime,
-				    int issued,
-				    __u64 time_warp_seq)
+				    int issued)
 {
   bool warn = false;
+
+  if (truncate_seq > in->inode.truncate_seq ||
+      (truncate_seq == in->inode.truncate_seq && size > in->inode.size)) {
+    dout(10) << "size " << in->inode.size << " -> " << size << dendl;
+    in->inode.size = size;
+    in->reported_size = size;
+  }
 
   // be careful with size, mtime, atime
   if (issued & CEPH_CAP_EXCL) {
@@ -335,10 +341,6 @@ void Client::update_inode_file_bits(Inode *in,
       dout(0) << "WARNING: " << *in << " mds time_warp_seq "
 	      << time_warp_seq << " > " << in->inode.time_warp_seq << dendl;
   } else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
-    if (size > in->inode.size) {
-      in->inode.size = size;
-      in->reported_size = size;
-    }
     if (time_warp_seq > in->inode.time_warp_seq) {
       in->inode.ctime = ctime;
       in->inode.mtime = mtime;
@@ -354,8 +356,6 @@ void Client::update_inode_file_bits(Inode *in,
     } else
       warn = true;
   } else {
-    in->inode.size = size;
-    in->reported_size = size;
     if (time_warp_seq >= in->inode.time_warp_seq) {
       in->inode.ctime = ctime;
       in->inode.mtime = mtime;
@@ -400,7 +400,9 @@ void Client::update_inode(Inode *in, InodeStat *st, LeaseStat *lease, utime_t fr
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
 
-    update_inode_file_bits(in, st->size, st->ctime, st->mtime, st->atime, in->caps_issued(), st->time_warp_seq);
+    update_inode_file_bits(in, st->truncate_seq, st->size,
+			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
+			   in->caps_issued());
   }
 
   if (lease->mask && 
@@ -2108,7 +2110,8 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
           << " was " << cap_string(old_caps) << dendl;
   
   // size/ctime/mtime/atime
-  update_inode_file_bits(in, m->get_size(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps, m->get_time_warp_seq());
+  update_inode_file_bits(in, m->get_truncate_seq(), m->get_size(),
+			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps);
 
   // max_size
   bool kick_writers = false;

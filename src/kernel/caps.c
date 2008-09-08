@@ -736,8 +736,10 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	ceph_decode_timespec(&mtime, &grant->mtime);
 	ceph_decode_timespec(&atime, &grant->atime);
 	ceph_decode_timespec(&ctime, &grant->ctime);
-	ceph_fill_file_bits(inode, issued, le64_to_cpu(grant->time_warp_seq),
-			    size, &ctime, &mtime, &atime);
+	ceph_fill_file_bits(inode, issued,
+			    le64_to_cpu(grant->truncate_seq), size,
+			    le64_to_cpu(grant->time_warp_seq), &ctime, &mtime,
+			    &atime);
 
 	/* max size increase? */
 	if (max_size != ci->i_max_size) {

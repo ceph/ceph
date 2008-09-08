@@ -280,6 +280,7 @@ struct inode_t {
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
+  uint64_t   truncate_seq;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
@@ -312,6 +313,7 @@ struct inode_t {
     ::encode(layout, bl);
     ::encode(size, bl);
     ::encode(max_size, bl);
+    ::encode(truncate_seq, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
     ::encode(time_warp_seq, bl);
@@ -338,6 +340,7 @@ struct inode_t {
     ::decode(layout, p);
     ::decode(size, p);
     ::decode(max_size, p);
+    ::decode(truncate_seq, p);
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);

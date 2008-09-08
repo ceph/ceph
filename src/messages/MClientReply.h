@@ -93,9 +93,10 @@ struct InodeStat {
   vinodeno_t vino;
   version_t version;
   ceph_file_layout layout;
-  utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
+  version_t truncate_seq;
+  utime_t ctime, mtime, atime;
   version_t time_warp_seq;
 
   frag_info_t dirstat;
@@ -118,6 +119,9 @@ struct InodeStat {
     vino.snapid = snapid_t(e.snapid);
     version = e.version;
     layout = e.layout;
+    size = e.size;
+    max_size = e.max_size;
+    truncate_seq = e.truncate_seq;
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
@@ -126,8 +130,6 @@ struct InodeStat {
     uid = e.uid;
     gid = e.gid;
     nlink = e.nlink;
-    size = e.size;
-    max_size = e.max_size;
     rdev = e.rdev;
 
     memset(&dirstat, 0, sizeof(dirstat));

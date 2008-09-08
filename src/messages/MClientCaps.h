@@ -32,6 +32,7 @@ class MClientCaps : public Message {
 
   __u64 get_size() { return head.size;  }
   __u64 get_max_size() { return head.max_size;  }
+  __u64 get_truncate_seq() { return head.truncate_seq; }
   utime_t get_ctime() { return utime_t(head.ctime); }
   utime_t get_mtime() { return utime_t(head.mtime); }
   utime_t get_atime() { return utime_t(head.atime); }
@@ -75,6 +76,7 @@ class MClientCaps : public Message {
     head.layout = inode.layout;
     head.size = inode.size;
     head.max_size = inode.max_size;
+    head.truncate_seq = inode.truncate_seq;
     head.migrate_seq = mseq;
     inode.mtime.encode_timeval(&head.mtime);
     inode.atime.encode_timeval(&head.atime);
@@ -99,6 +101,7 @@ class MClientCaps : public Message {
 	<< " caps " << cap_string(head.caps)
 	<< " wanted" << cap_string(head.wanted)
 	<< " size " << head.size << "/" << head.max_size
+	<< " ts" << head.truncate_seq
 	<< " mtime " << utime_t(head.mtime)
 	<< " tws " << head.time_warp_seq
 	<< " follows " << snapid_t(head.snap_follows);

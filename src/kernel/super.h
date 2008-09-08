@@ -226,7 +226,7 @@ struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */
 
 	u64 i_version;
-	u64 i_time_warp_seq;
+	u64 i_truncate_seq, i_time_warp_seq;
 
 	struct ceph_file_layout i_layout;
 	char *i_symlink;
@@ -548,8 +548,8 @@ extern int ceph_fill_inode(struct inode *inode,
 			   struct ceph_mds_reply_info_in *iinfo,
 			   struct ceph_mds_reply_dirfrag *dirinfo);
 extern void ceph_fill_file_bits(struct inode *inode, int issued,
-				u64 time_warp_seq,
-				u64 size, struct timespec *ctime,
+				u64 truncate_seq, u64 size,
+				u64 time_warp_seq, struct timespec *ctime,
 				struct timespec *mtime, struct timespec *atime);
 extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_request *req,

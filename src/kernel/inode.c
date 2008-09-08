@@ -238,13 +238,22 @@ out:
  * depending on which capabilities/were help, and on the time_warp_seq
  * (which we increment on utimes()).
  */
-void ceph_fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
-			 u64 size, struct timespec *ctime,
+void ceph_fill_file_bits(struct inode *inode, int issued,
+			 u64 truncate_seq, u64 size,
+			 u64 time_warp_seq, struct timespec *ctime,
 			 struct timespec *mtime, struct timespec *atime)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	u64 blocks = (size + (1<<9) - 1) >> 9;
 	int warn = 0;
+
+	if (truncate_seq > ci->i_truncate_seq ||
+	    (truncate_seq == ci->i_truncate_seq && size > inode->i_size)) {
+		dout(10, "size %lld -> %llu\n", inode->i_size, size);
+		inode->i_size = size;
+		inode->i_blocks = (size + (1<<9) - 1) >> 9;
+		ci->i_reported_size = size;
+		ci->i_truncate_seq = truncate_seq;
+	}
 
 	if (issued & CEPH_CAP_EXCL) {
 		if (timespec_compare(ctime, &inode->i_ctime) > 0)
@@ -253,12 +262,6 @@ void ceph_fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 			derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
 			     inode, time_warp_seq, ci->i_time_warp_seq);
 	} else if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
-		if (size > inode->i_size) {
-			dout(10, "size %lld -> %llu\n", inode->i_size, size);
-			inode->i_size = size;
-			inode->i_blocks = blocks;
-			ci->i_reported_size = size;
-		}
 		if (time_warp_seq > ci->i_time_warp_seq) {
 			inode->i_ctime = *ctime;
 			inode->i_mtime = *mtime;
@@ -274,9 +277,6 @@ void ceph_fill_file_bits(struct inode *inode, int issued, u64 time_warp_seq,
 		} else
 			warn = 1;
 	} else {
-		inode->i_size = size;
-		inode->i_blocks = blocks;
-		ci->i_reported_size = size;
 		if (time_warp_seq >= ci->i_time_warp_seq) {
 			inode->i_ctime = *ctime;
 			inode->i_mtime = *mtime;
@@ -335,8 +335,10 @@ int ceph_fill_inode(struct inode *inode,
 	ceph_decode_timespec(&ctime, &info->ctime);
 	issued = __ceph_caps_issued(ci, 0);
 
-	ceph_fill_file_bits(inode, issued, le64_to_cpu(info->time_warp_seq),
-			    size, &ctime, &mtime, &atime);
+	ceph_fill_file_bits(inode, issued,
+			    le64_to_cpu(info->truncate_seq), size,
+			    le64_to_cpu(info->time_warp_seq),
+			    &ctime, &mtime, &atime);
 
 	inode->i_blkbits = blkbits;
 

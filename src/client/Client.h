@@ -885,8 +885,10 @@ protected:
   void update_dir_dist(Inode *in, DirStat *st);
 
   Inode* insert_trace(MClientReply *reply, utime_t ttl);
-  void update_inode_file_bits(Inode *in, __u64 size, utime_t ctime, utime_t mtime, utime_t atime,
-			      int issued, __u64 time_warp_seq);
+  void update_inode_file_bits(Inode *in,
+			      __u64 truncat_seq,__u64 size,
+			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
+			      int issued);
   void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
   Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			     InodeStat *ist, LeaseStat *ilease, 

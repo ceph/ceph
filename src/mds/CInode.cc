@@ -1304,6 +1304,9 @@ bool CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
   e.snapid = snapid ? (__u64)snapid:CEPH_NOSNAP;  // 0 -> NOSNAP
   e.version = i->version;
   e.layout = i->layout;
+  e.size = i->size;
+  e.max_size = i->max_size;
+  e.truncate_seq = i->truncate_seq;
   i->ctime.encode_timeval(&e.ctime);
   i->mtime.encode_timeval(&e.mtime);
   i->atime.encode_timeval(&e.atime);
@@ -1312,8 +1315,6 @@ bool CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
   e.uid = i->uid;
   e.gid = i->gid;
   e.nlink = i->nlink;
-  e.size = i->size;
-  e.max_size = i->max_size;
   
   e.files = i->dirstat.nfiles;
   e.subdirs = i->dirstat.nsubdirs;

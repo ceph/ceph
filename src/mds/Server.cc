@@ -4547,6 +4547,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = le64_to_cpu(req->head.args.truncate.length);
+  pi->truncate_seq++;
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
@@ -4776,6 +4777,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
+  pi->truncate_seq++;
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
