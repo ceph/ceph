@@ -69,6 +69,9 @@
 #define SYNCLIENT_MODE_RANDOMSLEEP  61
 #define SYNCLIENT_MODE_SLEEP        62
 
+#define SYNCLIENT_MODE_DUMP 63
+
+
 #define SYNCLIENT_MODE_TRUNCATE     200
 
 #define SYNCLIENT_MODE_FOO        100
@@ -212,6 +215,9 @@ class SyntheticClient {
 
   int full_walk(string& fromdir);
   int random_walk(int n);
+
+  int dump_placement(string& fn);
+
 
   int make_dirs(const char *basedir, int dirs, int files, int depth);
   int stat_dirs(const char *basedir, int dirs, int files, int depth);

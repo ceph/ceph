@@ -111,7 +111,9 @@ void parse_syn_options(vector<const char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_READFILE );
         syn_iargs.push_back( a );
         syn_iargs.push_back( b );
-
+      } else if (strcmp(args[i],"dumpplacement") == 0) {
+	syn_modes.push_back( SYNCLIENT_MODE_DUMP );
+	syn_sargs.push_back( args[++i] );   
       } else if (strcmp(args[i],"makedirs") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -429,6 +431,19 @@ int SyntheticClient::run()
 	did_run_me();
       }
       break;
+
+
+    case SYNCLIENT_MODE_DUMP:
+      {
+	string sarg1 = get_sarg(0);
+	if (run_me()) {
+	  dout(2) << "placement dump " << sarg1 << dendl;
+	  dump_placement(sarg1);
+	}
+	did_run_me();
+      }
+      break;
+
 
     case SYNCLIENT_MODE_MAKEDIRMESS:
       {
@@ -1555,6 +1570,54 @@ int SyntheticClient::full_walk(string& basedir)
 
   return 0;
 }
+
+
+
+int SyntheticClient::dump_placement(string& fn) {
+
+  // open file
+  int fd = client->open(fn.c_str(), O_RDONLY);
+  dout(5) << "reading from " << fn << " fd " << fd << dendl;
+  if (fd < 0) return fd;
+
+
+  // How big is it?
+  struct stat stbuf;
+  int lstat_result = client->lstat(fn.c_str(), &stbuf);
+  if (lstat_result < 0) {
+    derr(0) << "lstat error for file " << fn << dendl;
+    return lstat_result;
+  }
+    
+  off_t filesize = stbuf.st_size;
+ 
+  // grab the placement info
+  list<ObjectExtent> extents;
+  off_t offset = 0;
+  client->enumerate_layout(fd, extents, filesize, offset);
+  client->close(fd);
+
+
+  // run through all the object extents
+  dout(0) << "file size is " << filesize << dendl;
+  dout(0) << "(osd, start, length) tuples for file " << fn << dendl;
+  for (list<ObjectExtent>::iterator i = extents.begin(); 
+       i != extents.end(); ++i) {
+    
+    int osd = client->osdmap->get_pg_primary(pg_t(i->layout.ol_pgid.v));
+
+    // run through all the buffer extents
+    for (map<size_t, size_t>::iterator j = i ->buffer_extents.begin();
+	 j != i->buffer_extents.end(); ++j) {
+      
+      dout(0) << "OSD " << osd << ", offset " << (*j).first <<
+	", length " << (*j).second << dendl;    
+    }
+  }
+  return 0;
+}
+
+
 
 int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int depth)
 {
