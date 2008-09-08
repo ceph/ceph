@@ -553,6 +553,10 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		}
 	}
 	have = __ceph_caps_issued(ci, &implemented);
+	/* HACK: force sync writes...
+        have &= ~CEPH_CAP_WRBUFFER;
+	implemented &= ~CEPH_CAP_WRBUFFER;
+	*/
 	if ((have & need) == need) {
 		/*
 		 * look at (implemented & ~have & not) so that we keep waiting
