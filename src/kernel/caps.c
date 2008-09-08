@@ -319,7 +319,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 	int mds;
 	u64 follows = 0;
 	struct list_head *p;
-	struct ceph_cap_snap *snapcap;
+	struct ceph_cap_snap *capsnap;
 	int issued;
 	u64 size;
 	struct timespec mtime, atime, ctime;
@@ -330,10 +330,10 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 	dout(10, "__flush_snaps %p\n", inode);
 retry:
 	list_for_each(p, &ci->i_cap_snaps) {
-		snapcap = list_entry(p, struct ceph_cap_snap, ci_item);
-		if (snapcap->follows <= follows)
+		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
+		if (capsnap->follows <= follows)
 			continue;
-		if (snapcap->dirty || snapcap->writing)
+		if (capsnap->dirty || capsnap->writing)
 			continue;
 
 		/* pick mds, take s_mutex */
@@ -358,13 +358,16 @@ retry:
 			goto retry;
 		}
 
-		follows = snapcap->follows;
-		size = snapcap->size;
-		atime = snapcap->atime;
-		mtime = snapcap->mtime;
-		ctime = snapcap->ctime;
-		issued = snapcap->issued;
+		follows = capsnap->follows;
+		size = capsnap->size;
+		atime = capsnap->atime;
+		mtime = capsnap->mtime;
+		ctime = capsnap->ctime;
+		issued = capsnap->issued;
 		spin_unlock(&inode->i_lock);
+
+		dout(10, "flush_snaps cap_snap %p follows %lld size %llu\n",
+		     capsnap, follows, size);
 
 		send_cap(mdsc, ceph_vino(inode).ino,
 			 CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
@@ -656,12 +659,13 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 			}
 		}
 		BUG_ON(!capsnap);
-		dout(30, "put_wrbuffer_cap_refs on %p snap %lld %d/%d -> %d/%d"
-		     " %s/%s\n", inode, capsnap->context->seq,
+		dout(30, "put_wrbuffer_cap_refs on %p cap_snap %p "
+		     " snap %lld %d/%d -> %d/%d %s%s\n",
+		     inode, capsnap, capsnap->context->seq,
 		     ci->i_wrbuffer_ref+nr, capsnap->dirty + nr,
 		     ci->i_wrbuffer_ref, capsnap->dirty,
-		     last ? " wrbuffer last,":"",
-		     last_snap ? " capsnap last":"");
+		     last ? " (wrbuffer last)":"",
+		     last_snap ? " (capsnap last)":"");
 	}
 	spin_unlock(&inode->i_lock);
 
@@ -864,7 +868,7 @@ static void handle_cap_flushedsnap(struct inode *inode,
 	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
 
-	dout(10, "handle_cap_flushednsap inode %p ci %p mds%d follows %lld\n",
+	dout(10, "handle_cap_flushedsnap inode %p ci %p mds%d follows %lld\n",
 	     inode, ci, session->s_mds, follows);
 
 	spin_lock(&inode->i_lock);
@@ -872,7 +876,7 @@ static void handle_cap_flushedsnap(struct inode *inode,
 		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
 		if (capsnap->follows == follows) {
 			WARN_ON(capsnap->dirty);
-			dout(10, " removing capsnap %p follows %lld\n",
+			dout(10, " removing cap_snap %p follows %lld\n",
 			     capsnap, follows);
 			ceph_put_snap_context(capsnap->context);
 			list_del(&capsnap->ci_item);

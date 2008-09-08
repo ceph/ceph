@@ -203,7 +203,7 @@ static int ceph_releasepage(struct page *page, gfp_t g)
 }
 
 
-static int ceph_readpage(struct file *filp, struct page *page)
+static int readpage_nounlock(struct file *filp, struct page *page)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -216,7 +216,6 @@ static int ceph_readpage(struct file *filp, struct page *page)
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
 	if (unlikely(err < 0))
 		goto out;
-
 	if (unlikely(err < PAGE_CACHE_SIZE)) {
 		void *kaddr = kmap_atomic(page, KM_USER0);
 		dout(10, "readpage zeroing tail %d bytes of page %p\n",
@@ -227,8 +226,14 @@ static int ceph_readpage(struct file *filp, struct page *page)
 	SetPageUptodate(page);
 
 out:
-	unlock_page(page);
 	return err;
+}
+
+static int ceph_readpage(struct file *filp, struct page *page)
+{
+	int r = readpage_nounlock(filp, page);
+	unlock_page(page);
+	return r;
 }
 
 static int ceph_readpages(struct file *file, struct address_space *mapping,
@@ -296,8 +301,8 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 
 	list_for_each(p, &ci->i_cap_snaps) {
 		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
-		dout(20, " cap_snap %p has %d dirty pages\n", capsnap,
-		     capsnap->dirty);
+		dout(20, " cap_snap %p snapc %p has %d dirty pages\n", capsnap,
+		     capsnap->context, capsnap->dirty);
 		if (capsnap->dirty)
 			break;
 	}
@@ -305,9 +310,9 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 		snapc = ceph_get_snap_context(capsnap->context);
 	} else if (ci->i_snap_realm) {
 		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
-		dout(20, " head has %d dirty pages\n", ci->i_wrbuffer_ref_head);
+		dout(20, " head snapc %p has %d dirty pages\n",
+		     snapc, ci->i_wrbuffer_ref_head);
 	}
-
 	return snapc;
 }
 
@@ -491,7 +496,7 @@ retry:
 		dout(20, " no snap context with dirty data?\n");
 		goto out;
 	}
-	dout(20, " snapc is %p seq %lld (%d snaps)\n",
+	dout(20, " oldest snapc is %p seq %lld (%d snaps)\n",
 	     snapc, snapc->seq, snapc->num_snaps);
 
 	while (!done && index <= end) {
@@ -714,7 +719,6 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct page *page;
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
@@ -735,6 +739,7 @@ retry:
 	dout(10, "write_begin file %p inode %p page %p %d~%d\n", file,
 	     inode, page, (int)pos, (int)len);
 
+retry_locked:
 	/* writepages currently holds page lock, but if we change that later, */
 	wait_on_page_writeback(page);
 
@@ -745,14 +750,8 @@ retry:
 	if (page->private &&
 	    (void *)page->private != ci->i_snap_realm->cached_context) {
 		snapc = get_oldest_context(inode);
-		if (snapc == (void *)page->private) {
-			/* yay, writeable, do it now */
-			dout(10, " page %p snapc %p not current, but oldest\n",
-			     page, snapc);
-			r = writepage_nounlock(page, 0);
-			if (r < 0)
-				goto fail;
-		} else {
+		up_read(&mdsc->snap_rwsem);
+		if (snapc != (void *)page->private) {
 			dout(10, " page %p snapc %p not current or oldest\n",
 			     page, (void *)page->private);
 			/* queue for writeback, and wait */
@@ -763,9 +762,19 @@ retry:
 				       context_is_writeable(inode, snapc));
 			ceph_put_snap_context(snapc);
 			if (r < 0)
-				return r; /* FIXME? */
+				goto fail_nosnap;
 			goto retry;
 		}
+
+		/* yay, writeable, do it now */
+		dout(10, " page %p snapc %p not current, but oldest\n",
+		     page, snapc);
+		if (!clear_page_dirty_for_io(page))
+			goto retry_locked;
+		r = writepage_nounlock(page, 0);
+		if (r < 0)
+			goto fail_nosnap;
+		goto retry_locked;
 	}
 
 	if (PageUptodate(page))
@@ -784,33 +793,16 @@ retry:
 	}
 
 	/* we need to read it. */
-	/* or, do sub-page granularity dirty accounting? */
-	/* try to read the full page */
-	r = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
-			       page_off, PAGE_SIZE, page);
+	up_read(&mdsc->snap_rwsem);
+	r = readpage_nounlock(file, page);
 	if (r < 0)
 		goto fail;
-	if (r < pos_in_page) {
-		void *kaddr = kmap_atomic(page, KM_USER1);
-		dout(20, "write_begin zeroing pre %d~%d\n", r, pos_in_page-r);
-		memset(kaddr+r, 0, pos_in_page-r);
-		flush_dcache_page(page);
-		kunmap_atomic(kaddr, KM_USER1);
-	}
-	end_in_page = pos_in_page + len;
-	if (end_in_page < PAGE_SIZE && r < PAGE_SIZE) {
-		void *kaddr = kmap_atomic(page, KM_USER1);
-		dout(20, "write_begin zeroing post %d~%d\n", end_in_page,
-		     (int)PAGE_SIZE - end_in_page);
-		memset(kaddr+end_in_page, 0, PAGE_SIZE-end_in_page);
-		flush_dcache_page(page);
-		kunmap_atomic(kaddr, KM_USER1);
-	}
-	return 0;
+	goto retry_locked;
 
 fail:
-	unlock_page(page);
 	up_read(&mdsc->snap_rwsem);
+fail_nosnap:
+	unlock_page(page);
 	return r;
 }
 

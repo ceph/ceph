@@ -178,7 +178,7 @@ static int dup_array(u64 **dst, u64 *src, int num)
 	if (num) {
 		*dst = kmalloc(sizeof(u64) * num, GFP_NOFS);
 		if (!*dst)
-			return -1;
+			return -ENOMEM;
 		for (i = 0; i < num; i++)
 			(*dst)[i] = le64_to_cpu(src[i]);
 	} else
@@ -197,8 +197,8 @@ void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	capsnap->atime = inode->i_atime;
 	capsnap->ctime = inode->i_ctime;
 	if (used & CEPH_CAP_WRBUFFER) {
-		dout(10, "queue_cap_snap %p snapc %p %llu used %d,"
-		     " WRBUFFER, delaying\n", inode, capsnap->context,
+		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu used %d,"
+		     " WRBUFFER, delaying\n", inode, capsnap, capsnap->context,
 		     capsnap->context->seq, used);
 	} else {
 		BUG_ON(ci->i_wrbuffer_ref_head);
@@ -238,8 +238,9 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		list_add(&capsnap->ci_item, &ci->i_cap_snaps);
 
 		if (used & CEPH_CAP_WR) {
-			dout(10, "queue_cap_snap %p snapc %p seq %llu used WR,"
-			     " now pending\n", inode, snapc, snapc->seq);
+			dout(10, "queue_cap_snap %p cap_snap %p snapc %p"
+			     " seq %llu used WR, now pending\n", inode, 
+			     capsnap, snapc, snapc->seq);
 			capsnap->writing = 1;
 		} else {
 			__ceph_finish_cap_snap(ci, capsnap, used);
