@@ -77,7 +77,7 @@ static int ceph_set_page_dirty(struct page *page,
 	spin_unlock(&inode->i_lock);
 
 	/* now adjust page */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 	spin_lock_irq(&mapping->tree_lock);
 #else
 	write_lock_irq(&mapping->tree_lock);
@@ -107,7 +107,7 @@ static int ceph_set_page_dirty(struct page *page,
 		undo = 1;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 	spin_unlock_irq(&mapping->tree_lock);
 #else
 	write_unlock_irq(&mapping->tree_lock);
@@ -131,7 +131,7 @@ static void ceph_redirty_page(struct address_space *mapping, struct page *page)
 		return;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 	spin_lock_irq(&mapping->tree_lock);
 #else
 	write_lock_irq(&mapping->tree_lock);
@@ -148,7 +148,7 @@ static void ceph_redirty_page(struct address_space *mapping, struct page *page)
 				   page_index(page),
 				   PAGECACHE_TAG_DIRTY);
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 	spin_unlock_irq(&mapping->tree_lock);
 #else
 	write_unlock_irq(&mapping->tree_lock);
@@ -528,7 +528,7 @@ get_more_pages:
 			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 			else if (!trylock_page(page))
 #else
 			else if (TestSetPageLocked(page))
@@ -563,7 +563,8 @@ get_more_pages:
 			}
 
 			if (page_offset(page) >= i_size_read(inode)) {
-				dout(20, "past eof %p\n", page);
+				dout(20, "%p past eof %llu\n", page,
+				     i_size_read(inode));
 				done = 1;
 				unlock_page(page);
 				break;
@@ -760,9 +761,8 @@ retry_locked:
 			ceph_queue_writeback(inode);
 			r = wait_event_interruptible(ci->i_cap_wq,
 				       context_is_writeable(inode, snapc));
+			/* FIXME: check r? */
 			ceph_put_snap_context(snapc);
-			if (r < 0)
-				goto fail_nosnap;
 			goto retry;
 		}
 
