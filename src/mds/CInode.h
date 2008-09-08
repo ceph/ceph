@@ -516,6 +516,7 @@ public:
     assert(client_caps.count(client) == 0);
     Capability *cap = client_caps[client] = new Capability;
     cap->set_inode(this);
+    cap->client_follows = first-1;
    
     containing_realm->add_cap(client, cap);
     

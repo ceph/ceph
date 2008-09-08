@@ -37,19 +37,23 @@ public:
     int32_t wanted;
     int32_t issued;
     int32_t pending;
+    snapid_t client_follows;
     capseq_t mseq;
     Export() {}
-    Export(int w, int i, int p, capseq_t s) : wanted(w), issued(i), pending(p), mseq(s) {}
+    Export(int w, int i, int p, snapid_t cf, capseq_t s) : 
+      wanted(w), issued(i), pending(p), client_follows(cf), mseq(s) {}
     void encode(bufferlist &bl) const {
       ::encode(wanted, bl);
       ::encode(issued, bl);
       ::encode(pending, bl);
+      ::encode(client_follows, bl);
       ::encode(mseq, bl);
     }
     void decode(bufferlist::iterator &p) {
       ::decode(wanted, p);
       ::decode(issued, p);
       ::decode(pending, p);
+      ::decode(client_follows, p);
       ::decode(mseq, p);
     }
   };
@@ -169,7 +173,7 @@ public:
   capseq_t get_last_seq() { return last_sent; }
 
   Export make_export() {
-    return Export(wanted_caps, issued(), pending(), mseq+1);
+    return Export(wanted_caps, issued(), pending(), client_follows, mseq+1);
   }
   void merge(Export& other) {
     // issued + pending
@@ -177,6 +181,8 @@ public:
     if (other.issued & ~newpending)
       issue(other.issued | newpending);
     issue(newpending);
+
+    client_follows = other.client_follows;
 
     // wanted
     wanted_caps = wanted_caps | other.wanted;

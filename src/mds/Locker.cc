@@ -999,7 +999,6 @@ void Locker::handle_client_caps(MClientCaps *m)
       int wanted = m->get_wanted() & head_in->filelock.caps_allowed_ever();
       int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
       int has = cap->confirmed();
-      cap->client_follows = follows;
       dout(10) << " follows " << follows
 	       << ", had " << cap_string(had) 
 	       << ", has " << cap_string(has)
