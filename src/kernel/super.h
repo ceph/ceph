@@ -192,6 +192,7 @@ struct ceph_cap_snap {
 	int issued;
 	u64 size;
 	struct timespec mtime, atime, ctime;
+	u64 time_warp_seq;
 	struct ceph_snap_context *context;
 	int writing;
 	int dirty;

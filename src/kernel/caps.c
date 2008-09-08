@@ -323,6 +323,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 	int issued;
 	u64 size;
 	struct timespec mtime, atime, ctime;
+	u64 time_warp_seq;
 	u32 mseq;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct ceph_mds_session *session = 0;
@@ -363,6 +364,7 @@ retry:
 		atime = capsnap->atime;
 		mtime = capsnap->mtime;
 		ctime = capsnap->ctime;
+		time_warp_seq = capsnap->time_warp_seq;
 		issued = capsnap->issued;
 		spin_unlock(&inode->i_lock);
 
@@ -371,7 +373,8 @@ retry:
 
 		send_cap(mdsc, ceph_vino(inode).ino,
 			 CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
-			 size, 0, &mtime, &atime, 0,
+			 size, 0,
+			 &mtime, &atime, time_warp_seq,
 			 follows, mds);
 
 		spin_lock(&inode->i_lock);

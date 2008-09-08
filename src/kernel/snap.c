@@ -196,13 +196,14 @@ void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	capsnap->mtime = inode->i_mtime;
 	capsnap->atime = inode->i_atime;
 	capsnap->ctime = inode->i_ctime;
+	capsnap->time_warp_seq = ci->i_time_warp_seq;
 	if (used & CEPH_CAP_WRBUFFER) {
 		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu used %d,"
 		     " WRBUFFER, delaying\n", inode, capsnap, capsnap->context,
 		     capsnap->context->seq, used);
 	} else {
 		BUG_ON(ci->i_wrbuffer_ref_head);
-		capsnap->dirty = 0;
+		BUG_ON(capsnap->dirty);
 		__ceph_flush_snaps(ci);
 	}
 }
