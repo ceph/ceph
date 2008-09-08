@@ -169,10 +169,13 @@ struct InodeCap {
 
 struct CapSnap {
   //snapid_t follows;  // map key
+  SnapContext context;
+  int issued;
   __u64 size;
-  utime_t mtime;
-  bool flushing;
-  CapSnap() : flushing(false) {}
+  utime_t ctime, mtime, atime;
+  version_t time_warp_seq;
+  bool writing, dirty;
+  CapSnap() : issued(0), size(0), time_warp_seq(0), writing(false), dirty(false) {}
 };
 
 
@@ -201,7 +204,6 @@ class Inode {
   xlist<Inode*>::item snaprealm_item;
   Inode *snapdir_parent;  // only if we are a snapdir inode
   map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
-  snapid_t cap_snap_pending;
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -329,13 +331,6 @@ class Inode {
     if (want & CEPH_CAP_WRBUFFER)
       want |= CEPH_CAP_EXCL;
     return want;
-  }
-
-  void take_cap_snap(bool flushing, snapid_t seq) {
-    assert(snaprealm);
-    cap_snaps[seq].size = inode.size;
-    cap_snaps[seq].mtime = inode.mtime;
-    cap_snaps[seq].flushing = flushing;
   }
 
   int get_effective_lease_mask(utime_t now) {
@@ -868,6 +863,7 @@ protected:
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
   void queue_cap_snap(Inode *in, snapid_t seq=0);
+  void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
   void _release(Inode *in, bool checkafter=true);
