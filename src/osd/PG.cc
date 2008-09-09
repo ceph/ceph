@@ -1134,7 +1134,9 @@ void PG::queue_snap_trim()
 
 struct C_PG_FinishRecovery : public Context {
   PG *pg;
-  C_PG_FinishRecovery(PG *p) : pg(p) {}
+  C_PG_FinishRecovery(PG *p) : pg(p) {
+    pg->get();
+  }
   void finish(int r) {
     pg->_finish_recovery(this);
   }
@@ -1158,6 +1160,7 @@ void PG::finish_recovery()
 
 void PG::_finish_recovery(Context *c)
 {
+  osd->osd_lock.Lock();  // avoid race with advance_map, etc..
   lock();
   if (c == finish_sync_event) {
     finish_sync_event = 0;
@@ -1169,7 +1172,8 @@ void PG::_finish_recovery(Context *c)
 
     update_stats();
   }
-  unlock();
+  osd->osd_lock.Unlock();
+  put_unlock();
 }
 
 
