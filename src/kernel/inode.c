@@ -1183,6 +1183,9 @@ void ceph_vmtruncate_work(struct work_struct *work)
 	mutex_unlock(&inode->i_mutex);
 }
 
+/*
+ * called with i_mutex held
+ */
 void __ceph_do_pending_vmtruncate(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -1197,7 +1200,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 
 	if (to >= 0) {
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
-		vmtruncate(inode, to);
+		truncate_inode_pages(inode->i_mapping, to);
 		if (wrbuffer_refs == 0)
 			ceph_check_caps(ci, 0);
 	} else

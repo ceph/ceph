@@ -172,10 +172,14 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 		ClearPageChecked(page);
 	if (!PageDirty(page)) {
 		BUG_ON(snapc);
+		dout(20, "invalidatepage %p idx %lu clean\n", page,
+		     page->index);
 		return;
 	}
 	if (!page->mapping) {
 		BUG_ON(snapc);
+		dout(20, "invalidatepage %p idx %lu unmapped\n", page,
+		     page->index);
 		return;
 	}
 	inode = page->mapping->host;
