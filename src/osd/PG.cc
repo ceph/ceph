@@ -704,6 +704,8 @@ void PG::clear_primary_state()
   peer_summary_requested.clear();
   peer_info.clear();
   peer_missing.clear();
+
+  finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
   
   stat_object_temp_rd.clear();
 }
