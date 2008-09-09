@@ -308,10 +308,20 @@ int ceph_fill_inode(struct inode *inode,
 	u32 su = le32_to_cpu(info->layout.fl_stripe_unit);
 	int blkbits = fls(su) - 1;
 	u32 nsplits;
+	void *xattr_data = 0;
+	int err = 0;
 
 	dout(30, "fill_inode %p ino %llx by %d.%d sz=%llu mode 0%o nlink %d\n",
 	     inode, info->ino, inode->i_uid, inode->i_gid,
 	     inode->i_size, inode->i_mode, inode->i_nlink);
+
+	/* prealloc xattr data, if it looks like we'll need it */
+	if (iinfo->xattr_len && iinfo->xattr_len != ci->i_xattr_len) {
+		xattr_data = kmalloc(iinfo->xattr_len, GFP_NOFS);
+		if (!xattr_data)
+			derr(10, "ENOMEM on xattr blob %d bytes\n",
+			     ci->i_xattr_len);
+	}
 
 	spin_lock(&inode->i_lock);
 	dout(30, " su %d, blkbits %d.  v %llu, had %llu\n",
@@ -353,12 +363,8 @@ int ceph_fill_inode(struct inode *inode,
 		if (ci->i_xattr_len != iinfo->xattr_len) {
 			kfree(ci->i_xattr_data);
 			ci->i_xattr_len = iinfo->xattr_len;
-			ci->i_xattr_data = kmalloc(ci->i_xattr_len, GFP_NOFS);
-			if (!ci->i_xattr_data) {
-				derr(10, "ENOMEM on xattr blob %d bytes\n",
-				     ci->i_xattr_len);
-				ci->i_xattr_len = 0;  /* hrmpf */
-			}
+			ci->i_xattr_data = xattr_data;
+			xattr_data = 0;
 		}
 		if (ci->i_xattr_len)
 			memcpy(ci->i_xattr_data, iinfo->xattr_data,
@@ -409,9 +415,10 @@ no_change:
 		inode->i_op = &ceph_symlink_iops;
 		symlen = iinfo->symlink_len;
 		BUG_ON(symlen != ci->vfs_inode.i_size);
+		err = -ENOMEM;
 		ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
 		if (ci->i_symlink == NULL)
-			return -ENOMEM;
+			goto out;
 		memcpy(ci->i_symlink, iinfo->symlink, symlen);
 		ci->i_symlink[symlen] = 0;
 		break;
@@ -433,10 +440,14 @@ no_change:
 	default:
 		derr(0, "BAD mode 0x%x S_IFMT 0x%x\n",
 		     inode->i_mode, inode->i_mode & S_IFMT);
-		return -EINVAL;
+		err = -EINVAL;
+		goto out;
 	}
+	err = 0;
 
-	return 0;
+out:
+	kfree(xattr_data);
+	return err;
 }
 
 /*
