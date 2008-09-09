@@ -17,11 +17,6 @@ big items
 - libuuid?
 
 
-snaps on kclient
-- test short reads not allowed..
-- test short writes ...?
-- test write_begin wait on snapc writeable
-
 snaps on uclient
 - delay FLUSHSNAP until after (buffered) flush
 - do pickysnap(?) flag thing
@@ -55,7 +50,6 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
-- snap ordered writeout?
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
