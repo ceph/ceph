@@ -62,10 +62,13 @@ void SessionMap::load(Context *onload)
 	waiting_for_load.push_back(onload);
   
   C_SM_Load *c = new C_SM_Load(this);
-  mds->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP,
-                   0, ceph_file_layout_su(inode.layout),
-                   &c->bl, 0,
-                   c);
+  object_t oid(inode.ino, 0);
+  mds->objecter->read(oid,
+		      0, 0, // whole object
+		      mds->objecter->osdmap->file_to_object_layout(oid,
+								   g_default_mds_dir_layout),
+		      &c->bl, 0,
+		      c);
 
 }
 
@@ -113,10 +116,13 @@ void SessionMap::save(Context *onsave, version_t needv)
   encode(bl);
   committing = version;
   SnapContext snapc;
-  mds->filer->write(inode.ino, &inode.layout, snapc,
-                    0, bl.length(), bl,
-                    0,
-		    0, new C_SM_Save(this, version));
+  object_t oid(inode.ino, 0);
+  mds->objecter->write_full(oid, 
+			    mds->objecter->osdmap->file_to_object_layout(oid,
+									 g_default_mds_dir_layout),
+			    snapc,
+			    bl, 0,
+			    NULL, new C_SM_Save(this, version));
 }
 
 void SessionMap::_save_finish(version_t v)
