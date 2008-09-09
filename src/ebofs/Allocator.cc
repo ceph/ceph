@@ -373,7 +373,9 @@ int Allocator::alloc_inc(extent_t ex)
 	return 0;
       }
     }
-    
+    dout(10) << "alloc_inc at " << cursor.current().key
+	     << "~" << cursor.current().value.first
+	     << " ref " << cursor.current().value.second << dendl;
     if (cursor.current().key > ex.start) {
       // gap.
       //    oooooo
@@ -496,6 +498,10 @@ int Allocator::alloc_dec(extent_t ex)
     if (cursor.current().key < ex.start &&
 	cursor.current().key + cursor.current().value.first <= ex.start) {
       // no overlap.
+      dout(10) << "alloc_dec no overlap " << cursor.current().key
+	       << "~" << cursor.current().value.first
+	       << " " << cursor.current().value.second
+	       << " with " << ex << dendl;
       dump_freelist();
       assert(0);
     }
@@ -592,7 +598,7 @@ int Allocator::alloc_dec(extent_t ex)
 
 	  ex.start += cursor.current().value.first;
 	  ex.length -= cursor.current().value.first;
-	  cursor.remove();
+	  fs->alloc_tab->remove(cursor.current().key);
 
 	  if (ex.length == 0) break;
 	  fs->alloc_tab->find( ex.start, cursor );
@@ -612,8 +618,8 @@ int Allocator::alloc_dec(extent_t ex)
 		   << " " << ref << " -> " << ref-1
 		   << dendl;
 	} else {
+	  fs->alloc_tab->remove(cursor.current().key);
 	  _release_into_limbo(ex);
-	  cursor.remove();
 	}
 	
 	dout(10) << "alloc_dec s " << ex.end() << "~" << l

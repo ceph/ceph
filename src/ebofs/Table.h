@@ -21,7 +21,7 @@
 
 /** table **/
 
-#define dbtout if (25 <= g_conf.debug_ebofs) cout << "ebofs.table(" << this << ")."
+#define dbtout if (25 <= g_conf.debug_ebofs) *_dout << dbeginl << "ebofs.table(" << this << ")."
 
 
 template<class K, class V>
@@ -38,7 +38,7 @@ class Table {
         struct ebofs_table& bts) : 
     pool(p),
     root(bts.root), nkeys(bts.num_keys), depth(bts.depth) {
-    dbtout << "cons" << std::endl;
+    dbtout << "cons" << dendl;
   }
   
   const ebofs_node_ptr &get_root() { return root; }
@@ -139,7 +139,7 @@ class Table {
           leaf_item(i) = leaf_item(i+1);
       }
       set_size(size() - 1);
-      dbtout << "remove_at_pos done, size now " << size() << " " << (node->is_index() ? "index":"leaf") << std::endl;
+      dbtout << "remove_at_pos done, size now " << size() << " " << (node->is_index() ? "index":"leaf") << dendl;
     }
     void insert_at_leaf_pos(int p, K key, V value) {
       assert(is_leaf());
@@ -275,7 +275,7 @@ class Table {
     void dirty() {
       for (int l=level; l>=0; l--) {
         if (open[l].node->is_dirty()) {
-	  dbtout << "dirty " << open[l].node->get_id() << " already dirty (thus parents are too)" << std::endl;
+	  dbtout << "dirty " << open[l].node->get_id() << " already dirty (thus parents are too)" << dendl;
 	  break;  // already dirty!  (and thus parents are too)
 	}
         
@@ -341,7 +341,7 @@ class Table {
         parent.index_item(pos[level-1]-1).node = left.get_id();
       }
       
-      dbtout << "rotating item " << here.key(0) << " left from " << here.get_id() << " to " << left.get_id() << std::endl;
+      dbtout << "rotating item " << here.key(0) << " left from " << here.get_id() << " to " << left.get_id() << dendl;
       
       /* add */
       if (here.node->is_leaf())
@@ -383,7 +383,7 @@ class Table {
       if (pos[level] == here.size()) {
         /* let's just move the cursor over! */
         //if (sizeof(K) == 8)
-          dbtout << "shifting cursor right from " << here.get_id() << " to less-full node " << right.get_id() << std::endl;
+          dbtout << "shifting cursor right from " << here.get_id() << " to less-full node " << right.get_id() << dendl;
         open[level] = right;
         pos[level] = 0;
         pos[level-1]++;
@@ -392,7 +392,7 @@ class Table {
 
       //if (sizeof(K) == 8)
       dbtout << "rotating item " << hex << here.key(here.size()-1) << dec << " right from "
-             << here.get_id() << " to " << right.get_id() << std::endl;
+             << here.get_id() << " to " << right.get_id() << dendl;
       
       /* add */
       if (here.is_index())
@@ -423,7 +423,7 @@ class Table {
   }
   
   int find(K key, Cursor& cursor) {
-    dbtout << "find " << key << std::endl;
+    dbtout << "find " << key << " depth " << depth << dendl;
     verify("find");
 
     if (depth == 0)
@@ -464,19 +464,23 @@ class Table {
         if (curnode.index_item(j+1).key > key) break;
       }
       if (i != j) {
-        dbtout << "btree binary search failed" << std::endl;
+        dbtout << "btree binary search failed" << dendl;
         i = j;
       }
 #endif
 
       cursor.pos[cursor.level] = i;   
-      
+      dbtout << "find index level " << cursor.level << " node " << curnode.get_id() << " pos " << i
+	     << " key " << cursor.open[cursor.level].index_item(i).key
+	     << " value " << cursor.open[cursor.level].index_item(i).node << dendl;
       /* get child node */
       curnode.open(pool, cursor.open[cursor.level].index_item(i).node );
       cursor.open[cursor.level+1] = curnode;
     }
 
     /* search leaf */
+    dbtout << "find leaf " << curnode.get_id() << " size " << curnode.size() << dendl;
+
     /*  if key=5, we want 2 3 4 [6] 7, or 3 4 [5] 5 6   (err to the right) */
     int left = 0;                      /* i >= left */
     int right = curnode.size();        /* i < right */
@@ -492,6 +496,7 @@ class Table {
       }
     }
     int i = left;
+
     
 #ifdef EBOFS_DEBUG_BTREE
     int j;
@@ -499,7 +504,7 @@ class Table {
       if (curnode.leaf_item(j).key >= key) break; 
     }
     if (i != j) {
-      dbtout << "btree binary search failed" << std::endl;
+      dbtout << "btree binary search failed" << dendl;
       i = j;
     }
 #endif
@@ -508,16 +513,19 @@ class Table {
 
     if (curnode.size() >= i+1) {
       if (curnode.leaf_item(i).key == key) {
-        return Cursor::MATCH;   /* it's the actual key */
+	dbtout << "find pos " << i << " match " << curnode.leaf_item(i).key << dendl;
+	return Cursor::MATCH;   /* it's the actual key */
       } else {
+	dbtout << "find pos " << i << " insert " << curnode.leaf_item(i).key << dendl;
         return Cursor::INSERT;   /* it's an insertion point */
       }
     }
+    dbtout << "find pos " << i << " OOB (end of btree)" << dendl;
     return Cursor::OOB;  /* it's the end of the btree (also a valid insertion point) */
   }
 
   int lookup(K key) {
-    dbtout << "lookup" << std::endl;
+    dbtout << "lookup" << dendl;
     Cursor cursor(this);
     if (find(key, cursor) == Cursor::MATCH) 
       return 0;
@@ -525,7 +533,7 @@ class Table {
   }
 
   int lookup(K key, V& value) {
-    dbtout << "lookup" << std::endl;
+    dbtout << "lookup" << dendl;
     Cursor cursor(this);
     if (find(key, cursor) == Cursor::MATCH) {
       value = cursor.current().value;
@@ -536,7 +544,7 @@ class Table {
 
   int insert(K key, V value) {
     verify("pre-insert"); 
-    dbtout << "insert " << key << " -> " << value << std::endl;
+    dbtout << "insert " << key << " -> " << value << dendl;
     if (almost_full()) return -1;
     
     // empty?
@@ -597,9 +605,9 @@ class Table {
       /** split node **/
 
       if (cursor.level == depth-1) {
-        dbtout << "splitting leaf " << cursor.open[cursor.level].get_id() << std::endl;
+        dbtout << "splitting leaf " << cursor.open[cursor.level].get_id() << dendl;
       } else {
-        dbtout << "splitting index " << cursor.open[cursor.level].get_id() << std::endl;
+        dbtout << "splitting index " << cursor.open[cursor.level].get_id() << dendl;
       }
       
       cursor.dirty();
@@ -632,7 +640,7 @@ class Table {
       /* are we at the root? */
       if (cursor.level == 0) {
         /* split root. */
-        dbtout << "that split was the root " << root.nodeid << std::endl;
+        dbtout << "that split was the root " << root.nodeid << dendl;
         Nodeptr newroot( pool.new_node(Node::TYPE_INDEX) );
         
         /* new root node */
@@ -660,7 +668,7 @@ class Table {
 
   int remove(K key) {
     verify("pre-remove"); 
-    dbtout << "remove " << key << std::endl;
+    dbtout << "remove " << key << dendl;
 
     if (almost_full()) {
       cout << "table almost full, failing" << std::endl;
@@ -680,8 +688,12 @@ class Table {
 
 
     while (1) {
+      dbtout << "preremove level " << cursor.level << " size " << cursor.open[cursor.level].size()
+	     << " ? min " << cursor.open[cursor.level].min_items() << dendl;
       cursor.remove();
       verify("post-remove"); 
+      dbtout << "postremove level " << cursor.level << " size " << cursor.open[cursor.level].size()
+	     << " ? min " << cursor.open[cursor.level].min_items() << dendl;
 
       // balance + adjust
       
@@ -709,6 +721,8 @@ class Table {
       
       if (cursor.open[cursor.level].size() > cursor.open[cursor.level].min_items()) {
         verify("remove 2");
+	dbtout << "remove size " << cursor.open[cursor.level].size()
+	       << " > min " << cursor.open[cursor.level].min_items() << dendl;
         return 0;
       }
       
@@ -760,7 +774,7 @@ class Table {
        * (this makes it so our next delete will be in the index 
        * interior, which is less scary.)
        */
-      dbtout << "combining nodes " << left.get_id() << " and " << right.get_id() << std::endl;
+      dbtout << "combining nodes " << left.get_id() << " and " << right.get_id() << dendl;
 
       left.merge(right);
       
@@ -779,7 +793,7 @@ class Table {
   }
 
   void clear(Cursor& cursor, int node_loc, int level) {
-    dbtout << "clear" << std::endl;
+    dbtout << "clear" << dendl;
 
     Nodeptr node(pool, node_loc);
     cursor.open[level] = node;
@@ -825,20 +839,20 @@ class Table {
     if (1) {
       if (root.nodeid == node_loc) {
         dbtout << s << "root " << node_loc << ": "
-               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << dendl;
       } else if (level == depth-1) {
         dbtout << s << "leaf " << node_loc << ": "
-               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << dendl;
       } else {
         dbtout << s << "indx " << node_loc << ": "
-               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << dendl;
       }
       if (1) {
         for (int i=0; i<node.size(); i++) {
           if (level < depth-1) {          // index
-            dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << std::endl;
+            dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << dendl;
           } else {          // leaf
-            dbtout << s << "   " << hex << node.key(i) << " -> " << node.leaf_item(i).value << dec << std::endl;
+            dbtout << s << "   " << hex << node.key(i) << " -> " << node.leaf_item(i).value << dec << dendl;
           }
         }
       }
@@ -847,7 +861,7 @@ class Table {
     for (int i=0; i<node.size(); i++) {
       if (i && node.key(i) <= last) {
         dbtout << ":: key " << i << " " << hex << node.key(i) << dec << " in node " << node_loc 
-               << " is out of order, last is " << hex << last << dec << std::endl;
+               << " is out of order, last is " << hex << last << dec << dendl;
         err++;
       }
       if (node.key(i) > max)
@@ -870,7 +884,7 @@ class Table {
         dbtout << ":: key in index node " << cursor.open[level-1].get_id()
                << " != min in child " << node_loc 
                << "(key is " << hex << cursor.open[level-1].index_item(cursor.pos[level-1]).key
-               << ", min is " << min << ")" << dec << std::endl;
+               << ", min is " << min << ")" << dec << dendl;
         err++;
       }
       if (cursor.pos[level-1] < cursor.open[level-1].size()-1) {
@@ -878,7 +892,7 @@ class Table {
           dbtout << ":: next key in index node " << cursor.open[level-1].get_id()
                  << " < max in child " << node_loc 
                  << "(key is " << hex << cursor.open[level-1].index_item(1+cursor.pos[level-1]).key
-                 << ", max is " << max << ")" << dec << std::endl;
+                 << ", max is " << max << ")" << dec << dendl;
           err++;
         }
       }
@@ -894,21 +908,21 @@ class Table {
     if (1) {
       if (root.nodeid == node_loc) {
         dbtout << s << "root " << node_loc << ": "
-               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << dendl;
       } else if (level == depth-1) {
         dbtout << s << "leaf " << node_loc << ": "
-               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << dendl;
       } else {
         dbtout << s << "indx " << node_loc << ": "
-               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << std::endl;
+               << node.size() << " / " << node.max_items() << " keys, " << hex << min << "-" << max << dec << dendl;
       }
 
       if (1) {
         for (int i=0; i<node.size(); i++) {
           if (level < depth-1) {          // index
-            dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << std::endl;
+            dbtout << s << "   " << hex << node.key(i) << " [" << node.index_item(i).node << "]" << dec << dendl;
           } else {          // leaf
-            dbtout << s << "   " << hex << node.key(i) << " -> " << node.leaf_item(i).value << dec << std::endl;
+            dbtout << s << "   " << hex << node.key(i) << " -> " << node.leaf_item(i).value << dec << dendl;
           }
         }
       }
@@ -930,7 +944,7 @@ class Table {
     K last;
     
     int before = g_conf.debug_ebofs;
-    //g_conf.debug_ebofs = 0;
+    g_conf.debug_ebofs = 0;
 
     int err = verify_sub(cursor, root.nodeid, 0, count, last, on);
     if (count != nkeys) {
