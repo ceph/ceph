@@ -117,6 +117,10 @@ int main(int argc, const char **argv)
       cerr << me << ": can't read monmap from " << monmapfn << ": " << strerror(r) << std::endl;
       exit(1);
     }
+    if (num_osd < 1) {
+      cerr << me << ": osd count must be > 0" << std::endl;
+      exit(1);
+    }
     osdmap.build_simple(0, monmap.fsid, num_osd, pg_bits, 0);
     modified = true;
   }
