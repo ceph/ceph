@@ -218,7 +218,7 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27) 
 static void init_once(void *foo)
 #else
 static void init_once(struct kmem_cache *cachep, void *foo)
