@@ -229,7 +229,7 @@ class SyntheticClient {
   int open_shared(int num, int count);
 
   int rm_file(string& fn);
-  int write_file(string& fn, int mb, int chunk);
+  int write_file(string& fn, int mb, loff_t chunk);
   int write_fd(int fd, int size, int wrsize);
 
   int write_batch(int nfile, int mb, int chunk);

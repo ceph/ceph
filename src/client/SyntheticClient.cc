@@ -1895,12 +1895,12 @@ int SyntheticClient::rm_file(string& fn)
   return client->unlink(fn.c_str());
 }
 
-int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
+int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size is in MB, wrsize in bytes
 {
   //uint64_t wrsize = 1024*256;
   char *buf = new char[wrsize+100];   // 1 MB
   memset(buf, 7, wrsize);
-  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
+  int64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
 
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
@@ -1911,7 +1911,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   __u64 bytes = 0, total = 0;
 
 
-  for (unsigned i=0; i<chunks; i++) {
+  for (loff_t i=0; i<chunks; i++) {
     if (time_to_stop()) {
       dout(0) << "stopping" << dendl;
       break;
