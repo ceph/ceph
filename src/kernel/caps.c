@@ -418,8 +418,8 @@ retry:
 first:
 	wanted = __ceph_caps_wanted(ci);
 	used = __ceph_caps_used(ci);
-	dout(10, "check_caps %p wanted %d used %d issued %d\n", inode,
-	     wanted, used, __ceph_caps_issued(ci, 0));
+	dout(10, "check_caps %p wanted %d used %d issued %d\n",
+	     inode, wanted, used, __ceph_caps_issued(ci, 0));
 
 	if (!is_delayed)
 		__ceph_cap_delay_requeue(mdsc, ci);
@@ -431,6 +431,8 @@ first:
 
 		/* note: no side-effects allowed, until we take s_mutex */
 		revoking = cap->implemented & ~cap->issued;
+		if (revoking)
+			dout(10, "mds%d revoking %d\n", cap->mds, revoking);
 
 		if (ci->i_wanted_max_size > ci->i_max_size &&
 		    ci->i_wanted_max_size > ci->i_requested_max_size)
@@ -799,7 +801,9 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 		dout(10, "caps unchanged: %d -> %d\n", cap->issued, newcaps);
 	} else {
 		dout(10, "grant: %d -> %d\n", cap->issued, newcaps);
-		cap->implemented = cap->issued = newcaps;
+		cap->issued = newcaps;
+		/* add bits only, to avoid stepping on a pending revocation */
+		cap->implemented |= newcaps;
 		wake = 1;
 	}
 
@@ -1062,7 +1066,8 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	/* lookup ino */
 	inode = ceph_find_inode(sb, vino);
-	dout(20, " op %d ino %llx inode %p\n", op, vino.ino, inode);
+	dout(20, " op %s ino %llx inode %p\n", ceph_cap_op_name(op), vino.ino,
+	     inode);
 	if (!inode) {
 		dout(10, " i don't have ino %llx, sending release\n", vino.ino);
 		send_cap(mdsc, vino.ino, CEPH_CAP_OP_RELEASE, 0, 0, seq,
