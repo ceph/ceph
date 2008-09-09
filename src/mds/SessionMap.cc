@@ -62,7 +62,7 @@ void SessionMap::load(Context *onload)
 	waiting_for_load.push_back(onload);
   
   C_SM_Load *c = new C_SM_Load(this);
-  mds->filer->read(inode.ino, &inode.layout, 0,
+  mds->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP,
                    0, ceph_file_layout_su(inode.layout),
                    &c->bl, 0,
                    c);

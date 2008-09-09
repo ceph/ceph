@@ -112,7 +112,7 @@ void MDSTable::load(Context *onfinish)
   state = STATE_OPENING;
 
   C_MT_Load *c = new C_MT_Load(this, onfinish);
-  mds->filer->read(ino, &layout, 0,
+  mds->filer->read(ino, &layout, CEPH_NOSNAP,
                    0, ceph_file_layout_su(layout),
                    &c->bl, 0,
                    c);
