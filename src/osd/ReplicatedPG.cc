@@ -1394,7 +1394,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       bufferlist::iterator p = bl.begin();
       ::decode(snapset, p);
     } else {
-      dout(10) << " no \"snapset\" attr, r = " << r << " " << strerror(r) << dendl;
+      dout(10) << " no \"snapset\" attr, r = " << r << " " << strerror(-r) << dendl;
     }
   } else 
     assert(poid.oid.snap == 0);   // no snapshotting.
