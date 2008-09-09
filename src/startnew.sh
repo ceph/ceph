@@ -10,6 +10,7 @@ rm out/*
 HOSTNAME=`hostname`
 IP=`host $HOSTNAME | cut -d ' ' -f 4`
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
+[ "$CEPH_PORT" == "" ] && CEPH_PORT=12345
 
 echo hostname $HOSTNAME
 echo "ip $IP"
@@ -23,7 +24,7 @@ then
 fi
 
 # build a fresh fs monmap, mon fs
-$CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --print .ceph_monmap
+$CEPH_BIN/monmaptool --create --clobber --add $IP:$CEPH_PORT --print .ceph_monmap
 $CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 
 # shared args
@@ -40,7 +41,7 @@ $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 for osd in 0 #1 2 3 
 do
  $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
- $CEPH_BIN/cosd $ARGS dev/osd$osd #--debug_osd 40
+ $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 40
 done
 
 # mds
