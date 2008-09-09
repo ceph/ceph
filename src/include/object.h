@@ -152,7 +152,7 @@ inline bool operator==(const coll_t& l, const coll_t& r) {
   return l.high == r.high && l.low == r.low;
 }
 inline bool operator!=(const coll_t& l, const coll_t& r) {
-  return l.high == r.high && l.low == r.low;
+  return l.high != r.high || l.low != r.low;
 }
 inline bool operator>(const coll_t& l, const coll_t& r) {
   return l.high > r.high || (l.high == r.high && l.low > r.low);
