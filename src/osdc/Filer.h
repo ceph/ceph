@@ -99,6 +99,7 @@ class Filer {
            bufferlist *bl,   // ptr to data
 	   int flags,
            Context *onfinish) {
+    assert(snapid);  // (until there is a non-NOSNAP write)
     Objecter::OSDRead *rd = prepare_read(ino, layout, snapid, offset, len, bl, flags);
     return objecter->readx(rd, onfinish) > 0 ? 0:-1;
   }

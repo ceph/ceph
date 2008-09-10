@@ -57,6 +57,8 @@ int Filer::probe(inodeno_t ino,
 	   << " starting from " << start_from
 	   << dendl;
 
+  assert(snapid);  // (until there is a non-NOSNAP write)
+
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))

@@ -82,7 +82,7 @@ void Journaler::recover(Context *onread)
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
   vector<snapid_t> snaps;
-  filer.read(ino, &layout, 0,
+  filer.read(ino, &layout, CEPH_NOSNAP,
 	     0, sizeof(Header), &fin->bl, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
@@ -114,7 +114,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   // probe the log
   state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
-  filer.probe(ino, &layout, 0,
+  filer.probe(ino, &layout, CEPH_NOSNAP,
 	      h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
 }
 
@@ -533,7 +533,7 @@ void Journaler::_issue_read(__s64 len)
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << (requested_pos+len)
 	   << dendl;
   
-  filer.read(ino, &layout, 0,
+  filer.read(ino, &layout, CEPH_NOSNAP,
 	     requested_pos, len, &reading_buf, CEPH_OSD_OP_INCLOCK_FAIL,
 	     new C_Read(this));
   requested_pos += len;
