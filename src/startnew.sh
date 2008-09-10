@@ -1,10 +1,12 @@
 #!/bin/sh
 
-./stop.sh
-rm core*
+test -d dev/osd0 && SUDO="sudo"
+
+$SUDO ./stop.sh
+$SUDO rm core*
 
 test -d out || mkdir out
-rm out/*
+$SUDO rm out/*
 
 # figure machine's ip
 HOSTNAME=`hostname`
@@ -40,8 +42,8 @@ $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 
 for osd in 0 #1 2 3 
 do
- $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
- $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 40
+ $SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd  # initialize empty object store
+ $SUDO $CEPH_BIN/cosd $ARGS dev/osd$osd --debug_osd 40
 done
 
 # mds
