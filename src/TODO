@@ -47,6 +47,10 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
+- add i_frag_mutex to protect the frag tree..
+  - get rid of ugly i_lock vs kmalloc juggling  in get_or_create_frag
+- fsync on dir?
+- virtual xattr for exposing dirstat/rstat info (instead of 'cat dirname')
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
