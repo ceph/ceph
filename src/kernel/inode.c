@@ -82,9 +82,9 @@ const struct inode_operations ceph_special_iops = {
 
 
 /*
- * find (or create) a frag in the tree
+ * find/create a frag in the tree
  */
-struct ceph_inode_frag *__ceph_get_frag(struct ceph_inode_info *ci, u32 f)
+struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci, u32 f)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -212,7 +212,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 
 
 	/* find/add this frag to store mds delegation info */
-	frag = __ceph_get_frag(ci, id);
+	frag = __get_or_create_frag(ci, id);
 	if (IS_ERR(frag)) {
 		derr(0, "fill_dirfrag ENOMEM on mds ref %llx.%llx frag %x\n",
 		     ceph_vinop(inode), le32_to_cpu(dirinfo->frag));
@@ -381,7 +381,7 @@ no_change:
 	nsplits = le32_to_cpu(info->fragtree.nsplits);
 	for (i = 0; i < nsplits; i++) {
 		u32 id = le32_to_cpu(info->fragtree.splits[i].frag);
-		struct ceph_inode_frag *frag = __ceph_get_frag(ci, id);
+		struct ceph_inode_frag *frag = __get_or_create_frag(ci,id);
 		if (IS_ERR(frag)) {
 			derr(0,"ENOMEM on ino %llx.%llx frag %x\n",
 			     ceph_vinop(inode), id);
