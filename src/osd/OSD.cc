@@ -1704,8 +1704,8 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
 	   p != removed_snaps.m.end();
 	   p++)
 	for (snapid_t t = 0; t < p->second; ++t)
-	  pg->info.removed_snaps.insert(p->first + t);
-      dout(10) << *pg << " removed_snaps now " << pg->info.removed_snaps << dendl;
+	  pg->info.dead_snaps.insert(p->first + t);
+      dout(10) << *pg << " dead_snaps now " << pg->info.dead_snaps << dendl;
       bufferlist bl;
       ::encode(pg->info, bl);
       t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
@@ -1850,7 +1850,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     if (pg->is_active()) {
       // update started counter
       pg->info.history.last_epoch_started = osdmap->get_epoch();
-      if (!pg->info.removed_snaps.empty())
+      if (!pg->info.dead_snaps.empty())
 	pg->queue_snap_trim();
     }
     else if (pg->is_primary() && !pg->is_active()) {

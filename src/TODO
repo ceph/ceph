@@ -1,4 +1,8 @@
 v0.4
+- btrfs latency.  update howto.
+- snap garbage collection
+
+v0.5
 - ENOSPC
 - finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
 - make kclient use ->sendpage?

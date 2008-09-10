@@ -968,8 +968,11 @@ void PG::activate(ObjectStore::Transaction& t,
   write_info(t);
   write_log(t);
 
-  // clean up stray objects
+  // clean up stray objects, snaps
   clean_up_local(t); 
+
+  if (!info.dead_snaps.empty())
+    queue_snap_trim();
 
   // init complete pointer
   if (missing.num_missing() == 0 &&
@@ -1122,6 +1125,11 @@ void PG::activate(ObjectStore::Transaction& t,
 
 void PG::queue_snap_trim()
 {
+  if (state_test(PG_STATE_SNAPTRIMMING)) {
+    dout(10) << "queue_snap_trim -- already trimming" << dendl;
+    return;
+  }
+
   state_set(PG_STATE_SNAPTRIMQUEUE);
 
   osd->snap_trimmer_lock.Lock();
@@ -1166,10 +1174,6 @@ void PG::_finish_recovery(Context *c)
     finish_sync_event = 0;
     dout(10) << "_finish_recovery" << dendl;
     purge_strays();
-
-    if (!info.removed_snaps.empty())
-      queue_snap_trim();
-
     update_stats();
   }
   osd->osd_lock.Unlock();

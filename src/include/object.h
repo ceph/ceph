@@ -139,7 +139,7 @@ struct coll_t {
 WRITE_CLASS_ENCODER(coll_t)
 
 inline ostream& operator<<(ostream& out, const coll_t& c) {
-  return out << c.high << '.' << c.low;
+  return out << hex << c.high << '.' << c.low << dec;
 }
 
 inline bool operator<(const coll_t& l, const coll_t& r) {
