@@ -230,7 +230,7 @@ int FileStore::mkfs()
   dout(1) << "mkfs in " << basedir << dendl;
 
   // wipe
-  sprintf(cmd, "test -d %s && rm -r %s ; mkdir -p %s",
+  sprintf(cmd, "test -d %s && rm -r %s/* ; mkdir -p %s",
 	  basedir.c_str(), basedir.c_str(), basedir.c_str());
   
   dout(5) << "wipe: " << cmd << dendl;
