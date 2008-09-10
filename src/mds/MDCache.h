@@ -512,8 +512,10 @@ public:
   // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
   CInode *cow_inode(CInode *in, snapid_t last);
-  void journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP);
-  void journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  void journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP,
+			  CInode **pcow_inode=0);
+  void journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP,
+			  CInode **pcow_inode=0);
   inode_t *journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   void project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
@@ -694,6 +696,8 @@ public:
   set<CInode*> file_recovering;
 
   void queue_file_recover(CInode *in);
+  void _queued_file_recover_cow(CInode *in, Mutation *mut);
+  void _queue_file_recover(CInode *in);
   void identify_files_to_recover();
   void do_file_recover();
   void _recovered(CInode *in, int r);

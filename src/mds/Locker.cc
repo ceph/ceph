@@ -880,11 +880,15 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
   }
 
   EOpen *le = new EOpen(mds->mdlog);
-  if (forceupdate)  // FIXME if/when we do max_size nested accounting
+  if (forceupdate) {  // FIXME if/when we do max_size nested accounting
     mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  else
+    // no cow, here!
+    CDentry *parent = in->get_projected_parent_dn();
+    le->metablob.add_primary_dentry(parent, true, in, in->get_projected_inode());
+  } else {
     le->metablob.add_dir_context(in->get_parent_dir());
-  mdcache->journal_dirty_inode(mut, &le->metablob, in);
+    mdcache->journal_dirty_inode(mut, &le->metablob, in);
+  }
   le->add_ino(in->ino());
   mut->ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));

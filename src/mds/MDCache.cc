@@ -985,6 +985,7 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   return in;
 }
 
+
 /*
  * note: i'm currently cheating wrt dirty and inode.version on cow
  * items.  instead of doing a full dir predirty, i just take the
@@ -1026,8 +1027,10 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   }
   if (oldin->is_any_caps())
     oldin->filelock.set_state(LOCK_LOCK);
-  else
-    oldin->inode.max_size = 0;
+  else {
+    dout(10) << "cow_inode WARNING max_size " << oldin->inode.max_size << " > 0 on " << *oldin << dendl;
+    //oldin->inode.max_size = 0;
+  }
 
   // clone leases?
   if (in->last != CEPH_NOSNAP) {
@@ -1047,8 +1050,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   return oldin;
 }
 
-
-void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows)
+void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
+				 CInode **pcow_inode)
 {
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
@@ -1100,6 +1103,8 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       assert(oldfirst == dn->inode->first);
       CInode *oldin = cow_inode(dn->inode, follows);
       mut->add_cow_inode(oldin);
+      if (pcow_inode)
+	*pcow_inode = oldin;
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_primary_dentry(olddn, true);
@@ -1116,11 +1121,12 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 }
 
 
-void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
+void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows,
+				CInode **pcow_inode)
 {
   dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
   CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(mut, metablob, dn, follows);
+  journal_cow_dentry(mut, metablob, dn, follows, pcow_inode);
 }
 
 inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
@@ -3849,11 +3855,66 @@ void MDCache::rejoin_send_acks()
 
 // ===============================================================================
 
-
+struct C_MDC_QueuedCow : public Context {
+  MDCache *mdcache;
+  CInode *in;
+  Mutation *mut;
+  C_MDC_QueuedCow(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
+  void finish(int r) {
+    mdcache->_queued_file_recover_cow(in, mut);
+  }
+};
 
 void MDCache::queue_file_recover(CInode *in)
 {
   dout(10) << "queue_file_recover " << *in << dendl;
+
+  // cow?
+  SnapRealm *realm = in->find_snaprealm();
+  set<snapid_t> s = realm->get_snaps();
+  while (!s.empty() && *s.begin() < in->first)
+    s.erase(s.begin());
+  while (!s.empty() && *s.rbegin() > in->last)
+    s.erase(*s.rbegin());
+  dout(10) << " snaps in [" << in->first << "," << in->last << "] are " << s << dendl;
+  if (s.size() > 1) {
+    inode_t *pi = in->project_inode();
+    pi->version = in->pre_dirty();
+
+    Mutation *mut = new Mutation;
+    mut->ls = mds->mdlog->get_current_segment();
+    EUpdate *le = new EUpdate(mds->mdlog, "queue_file_recover cow");
+    predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+
+    s.erase(*s.begin());
+    while (s.size()) {
+      snapid_t snapid = *s.begin();
+      CInode *cow_inode = 0;
+      journal_cow_inode(mut, &le->metablob, in, snapid-1, &cow_inode);
+      assert(cow_inode);
+      _queue_file_recover(cow_inode);
+      s.erase(*s.begin());
+    }
+    
+    in->parent->first = in->first;
+    le->metablob.add_primary_dentry(in->parent, true, in, in->get_projected_inode());
+    mds->mdlog->submit_entry(le, new C_MDC_QueuedCow(this, in, mut));
+  }
+
+  _queue_file_recover(in);
+}
+
+void MDCache::_queued_file_recover_cow(CInode *in, Mutation *mut)
+{
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+}
+
+void MDCache::_queue_file_recover(CInode *in)
+{
+  dout(15) << "_queue_file_recover " << *in << dendl;
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   in->state_set(CInode::STATE_RECOVERING);
   in->auth_pin(this);
@@ -3874,6 +3935,7 @@ void MDCache::identify_files_to_recover()
   */
 
   dout(10) << "identify_files_to_recover" << dendl;
+  vector<CInode*> q;  // put inodes in list first: queue_file_discover modifies inode_map
   for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
@@ -3882,9 +3944,11 @@ void MDCache::identify_files_to_recover()
       continue;
     if (in->inode.max_size > in->inode.size) {
       in->filelock.set_state(LOCK_LOCK);
-      queue_file_recover(in);
+      q.push_back(in);
     }
   }
+  for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
+    queue_file_recover(*p);
 }
 
 struct C_MDC_Recover : public Context {

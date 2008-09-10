@@ -22,8 +22,6 @@ snaps on uclient
 - do pickysnap(?) flag thing
 
 snaps on mds
-- file size recovery needs to probe possibly a _range_ snaps.
-
 - mds server ops
   - link rollback
   - rename rollback
@@ -38,7 +36,6 @@ snaps on osd
 - efficient recovery of clones using the clone diff info
 
 userspace client
-- fix wait_on_list.. Cond* needs to be stable if a signal wakes us up
 - handle session STALE
 - time out caps, wake up waiters on renewal
   - link caps with mds session
