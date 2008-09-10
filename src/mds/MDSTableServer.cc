@@ -28,10 +28,10 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
 {
   assert(req->op >= 0);
   switch (req->op) {
-  case TABLE_OP_QUERY: return handle_query(req);
-  case TABLE_OP_PREPARE: return handle_prepare(req);
-  case TABLE_OP_COMMIT: return handle_commit(req);
-  case TABLE_OP_ROLLBACK: return handle_rollback(req);
+  case TABLESERVER_OP_QUERY: return handle_query(req);
+  case TABLESERVER_OP_PREPARE: return handle_prepare(req);
+  case TABLESERVER_OP_COMMIT: return handle_commit(req);
+  case TABLESERVER_OP_ROLLBACK: return handle_rollback(req);
   default: assert(0);
   }
 }
@@ -42,21 +42,22 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
 {
   dout(7) << "handle_prepare " << *req << dendl;
   int from = req->get_source().num();
-  
+  bufferlist bl = req->bl;
+
   _prepare(req->bl, req->reqid, from);
   pending_for_mds[version].mds = from;
   pending_for_mds[version].reqid = req->reqid;
   pending_for_mds[version].tid = version;
 
-  ETableServer *le = new ETableServer(table, TABLE_OP_PREPARE, req->reqid, from, version, version);
-  le->mutation = req->bl;
+  ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
+  le->mutation = bl;  // original request, NOT modified return value coming out of _prepare!
   mds->mdlog->submit_entry(le, new C_Prepare(this, req, version));
 }
 
 void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 {
   dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
-  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_AGREE, req->reqid, tid);
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
   mds->send_message_mds(reply, req->get_source().num());
   delete req;
@@ -74,7 +75,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
   if (pending_for_mds.count(tid)) {
     _commit(tid);
     pending_for_mds.erase(tid);
-    mds->mdlog->submit_entry(new ETableServer(table, TABLE_OP_COMMIT, 0, -1, tid, version));
+    mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, tid, version));
     mds->mdlog->wait_for_sync(new C_Commit(this, req));
   }
   else if (tid <= version) {
@@ -93,7 +94,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
-  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_ACK, req->reqid, req->tid);
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->tid);
   mds->send_message_mds(reply, req->get_source().num());
   delete req;
 }
@@ -127,7 +128,7 @@ void MDSTableServer::handle_mds_recovery(int who)
        p++) {
     if (who >= 0 && p->second.mds != who)
       continue;
-    MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_AGREE, p->second.reqid, p->second.tid);
+    MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
     mds->send_message_mds(reply, p->second.mds);
   }
 }

@@ -44,7 +44,7 @@ struct ETableClient : public LogEvent {
   }
 
   void print(ostream& out) {
-    out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstable_opname(op);
+    out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstableserver_opname(op);
     if (tid) out << " tid " << tid;
   }  
 

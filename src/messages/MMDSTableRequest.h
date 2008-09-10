@@ -35,7 +35,7 @@ class MMDSTableRequest : public Message {
   virtual const char *get_type_name() { return "mds_table_request"; }
   void print(ostream& o) {
     o << "mds_table_request(" << get_mdstable_name(table)
-      << " " << get_mdstable_opname(op);
+      << " " << get_mdstableserver_opname(op);
     if (reqid) o << " " << reqid;
     if (tid) o << " tid " << tid;
     if (bl.length()) o << " " << bl.length() << " bytes";

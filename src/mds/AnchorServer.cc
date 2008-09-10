@@ -250,7 +250,7 @@ void AnchorServer::handle_query(MMDSTableRequest *req)
   }
 
   // reply
-  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_QUERY_REPLY, req->reqid, version);
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
   ::encode(ino, reply->bl);
   ::encode(trace, reply->bl);
   mds->send_message_mds(reply, req->get_source().num());

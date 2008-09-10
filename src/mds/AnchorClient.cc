@@ -72,7 +72,7 @@ void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinis
 
 void AnchorClient::_lookup(inodeno_t ino)
 {
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_QUERY, 0, 0);
+  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_QUERY, 0, 0);
   ::encode(ino, req->bl);
   mds->send_message_mds(req, mds->mdsmap->get_tableserver());
 }

@@ -56,11 +56,13 @@ struct ETableServer : public LogEvent {
   }
 
   void print(ostream& out) {
-    out << "ETableServer " << get_mdstable_name(table) << " " << get_mdstable_opname(op);
+    out << "ETableServer " << get_mdstable_name(table) 
+	<< " " << get_mdstableserver_opname(op);
     if (reqid) out << " reqid " << reqid;
     if (bymds >= 0) out << " mds" << bymds;
     if (tid) out << " tid " << tid;
     if (version) out << " version " << version;
+    if (mutation.length()) out << " mutation=" << mutation.length() << " bytes";
   }  
 
   void update_segment();

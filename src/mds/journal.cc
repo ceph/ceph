@@ -598,20 +598,23 @@ void ETableServer::replay(MDS *mds)
 {
   MDSTableServer *server = mds->get_table_server(table);
   if (server->get_version() >= version) {
-    dout(10) << "ETableServer.replay " << get_mdstable_name(table) << " event " << version
+    dout(10) << "ETableServer.replay " << get_mdstable_name(table)
+	     << " " << get_mdstableserver_opname(op)
+	     << " event " << version
 	     << " <= table " << server->get_version() << dendl;
     return;
   }
   
-  dout(10) << " ETableServer.replay " << get_mdstable_name(table) << " event " << version
-	   << " - 1 == table " << server->get_version() << dendl;
+  dout(10) << " ETableServer.replay " << get_mdstable_name(table)
+	   << " " << get_mdstableserver_opname(op)
+	   << " event " << version << " - 1 == table " << server->get_version() << dendl;
   assert(version-1 == server->get_version());
   
   switch (op) {
-  case TABLE_OP_PREPARE:
+  case TABLESERVER_OP_PREPARE:
     server->_prepare(mutation, reqid, bymds);
     break;
-  case TABLE_OP_COMMIT:
+  case TABLESERVER_OP_COMMIT:
     server->_commit(tid);
     break;
   default:
@@ -625,11 +628,11 @@ void ETableServer::replay(MDS *mds)
 void ETableClient::replay(MDS *mds)
 {
   dout(10) << " ETableClient.replay " << get_mdstable_name(table)
-	   << " op " << get_mdstable_opname(op)
+	   << " op " << get_mdstableserver_opname(op)
 	   << " tid " << tid << dendl;
     
   MDSTableClient *client = mds->get_table_client(table);
-  assert(op == TABLE_OP_ACK);
+  assert(op == TABLESERVER_OP_ACK);
   client->got_journaled_ack(tid);
 }
 

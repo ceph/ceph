@@ -31,13 +31,26 @@ inline const char *get_mdstable_name(int t) {
 }
 
 enum {
-  TABLE_OP_QUERY        =  1,
-  TABLE_OP_QUERY_REPLY  = -2,
-  TABLE_OP_PREPARE      =  3,
-  TABLE_OP_AGREE        = -4,
-  TABLE_OP_COMMIT       =  5,
-  TABLE_OP_ACK          = -6,
-  TABLE_OP_ROLLBACK     =  7,
+  TABLESERVER_OP_QUERY        =  1,
+  TABLESERVER_OP_QUERY_REPLY  = -2,
+  TABLESERVER_OP_PREPARE      =  3,
+  TABLESERVER_OP_AGREE        = -4,
+  TABLESERVER_OP_COMMIT       =  5,
+  TABLESERVER_OP_ACK          = -6,
+  TABLESERVER_OP_ROLLBACK     =  7,
+};
+
+inline const char *get_mdstableserver_opname(int op) {
+  switch (op) {
+  case TABLESERVER_OP_QUERY: return "query";
+  case TABLESERVER_OP_QUERY_REPLY: return "query_reply";
+  case TABLESERVER_OP_PREPARE: return "prepare";
+  case TABLESERVER_OP_AGREE: return "agree";
+  case TABLESERVER_OP_COMMIT: return "commit";
+  case TABLESERVER_OP_ACK: return "ack";
+  case TABLESERVER_OP_ROLLBACK: return "rollback";
+  default: assert(0); return 0;
+  }
 };
 
 enum {
@@ -48,15 +61,10 @@ enum {
 
 inline const char *get_mdstable_opname(int op) {
   switch (op) {
-  case TABLE_OP_QUERY: return "query";
-  case TABLE_OP_QUERY_REPLY: return "query_reply";
-  case TABLE_OP_PREPARE: return "prepare";
-  case TABLE_OP_AGREE: return "agree";
-  case TABLE_OP_COMMIT: return "commit";
-  case TABLE_OP_ACK: return "ack";
-  case TABLE_OP_ROLLBACK: return "rollback";
+  case TABLE_OP_CREATE: return "create";
+  case TABLE_OP_UPDATE: return "update";
+  case TABLE_OP_DESTROY: return "destroy";
   default: assert(0); return 0;
-
   }
 };
 

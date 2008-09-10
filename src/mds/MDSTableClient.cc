@@ -45,11 +45,11 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   __u64 reqid = m->reqid;
 
   switch (m->op) {
-  case TABLE_OP_QUERY_REPLY:
+  case TABLESERVER_OP_QUERY_REPLY:
     handle_query_result(m);
     break;
     
-  case TABLE_OP_AGREE:
+  case TABLESERVER_OP_AGREE:
     if (pending_prepare.count(reqid)) {
       dout(10) << "got agree on " << reqid << " atid " << tid << dendl;
       Context *onfinish = pending_prepare[reqid].onfinish;
@@ -67,7 +67,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 	       << " tid " << tid
 	       << ", already committing, resending COMMIT"
 	       << dendl;      
-      MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_COMMIT, 0, tid);
+      MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);
       mds->send_message_mds(req, mds->mdsmap->get_tableserver());
     }
     else {
@@ -75,12 +75,12 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 	       << " tid " << tid
 	       << ", sending ROLLBACK"
 	       << dendl;      
-      MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_ROLLBACK, 0, tid);
+      MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_ROLLBACK, 0, tid);
       mds->send_message_mds(req, mds->mdsmap->get_tableserver());
     }
     break;
 
-  case TABLE_OP_ACK:
+  case TABLESERVER_OP_ACK:
     dout(10) << "got ack on tid " << tid << ", logging" << dendl;
 
     // remove from committing list
@@ -88,7 +88,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
     
     // log ACK.
-    mds->mdlog->submit_entry(new ETableClient(table, TABLE_OP_ACK, tid),
+    mds->mdlog->submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
 			     new C_LoggedAck(this, tid));
     break;
 
@@ -125,7 +125,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
   dout(10) << "_prepare " << reqid << dendl;
 
   // send message
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_PREPARE, reqid);
+  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_PREPARE, reqid);
   req->bl = mutation;
 
   pending_prepare[reqid].mutation = mutation;
@@ -145,7 +145,7 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
   ls->pending_commit_tids[table].insert(tid);
 
   // send message
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_COMMIT, 0, tid);
+  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);
   mds->send_message_mds(req, mds->mdsmap->get_tableserver());
 }
 
@@ -166,7 +166,7 @@ void MDSTableClient::resend_commits()
        p != pending_commit.end();
        ++p) {
     dout(10) << "resending commit on " << p->first << dendl;
-    MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_COMMIT, 0, p->first);
+    MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, p->first);
     mds->send_message_mds(req, mds->mdsmap->get_tableserver());
   }
 }
@@ -185,7 +185,7 @@ void MDSTableClient::handle_mds_recovery(int who)
        p != pending_prepare.end();
        p++) {
     dout(10) << "resending " << p->first << dendl;
-    MMDSTableRequest *req = new MMDSTableRequest(table, TABLE_OP_PREPARE, p->first);
+    MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_PREPARE, p->first);
     req->bl = p->second.mutation;
     mds->send_message_mds(req, mds->mdsmap->get_tableserver());
   } 
