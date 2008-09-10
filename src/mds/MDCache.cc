@@ -6298,13 +6298,17 @@ void MDCache::eval_stray(CDentry *dn)
 
   // purge?
   if (in->inode.nlink == 0) {
-    // past snaprealm parents imply snapped dentry remote links
-    if (in->snaprealm && in->snaprealm->has_past_parents()) {
-      if (!in->snaprealm->have_past_parents_open() &&
-	  !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn)))
-	return;
-      in->snaprealm->prune_past_parents();
-      if (in->snaprealm->has_past_parents()) return;  // not until some snaps are deleted.
+    if (in->is_dir()) {
+      // past snaprealm parents imply snapped dentry remote links.
+      // only important for directories.  normal file data snaps are handled
+      // by the object store.
+      if (in->snaprealm && in->snaprealm->has_past_parents()) {
+	if (!in->snaprealm->have_past_parents_open() &&
+	    !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn)))
+	  return;
+	in->snaprealm->prune_past_parents();
+	if (in->snaprealm->has_past_parents()) return;  // not until some snaps are deleted.
+      }
     }
     if (dn->is_replicated() || in->is_any_caps()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
