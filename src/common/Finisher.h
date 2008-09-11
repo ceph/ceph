@@ -23,7 +23,7 @@ class Finisher {
   Mutex          finisher_lock;
   Cond           finisher_cond;
   bool           finisher_stop;
-  list<Context*> finisher_queue;
+  vector<Context*> finisher_queue;
   
   void *finisher_thread_entry();
 
@@ -40,11 +40,19 @@ class Finisher {
     finisher_cond.Signal();
     finisher_lock.Unlock();
   }
-  void queue(list<Context*>& ls) {
+  void queue(vector<Context*>& ls) {
     finisher_lock.Lock();
-    finisher_queue.splice(finisher_queue.end(), ls);
+    finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
     finisher_cond.Signal();
     finisher_lock.Unlock();
+    ls.clear();
+  }
+  void queue(deque<Context*>& ls) {
+    finisher_lock.Lock();
+    finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
+    finisher_cond.Signal();
+    finisher_lock.Unlock();
+    ls.clear();
   }
   
   void start();

@@ -23,7 +23,7 @@ protected:
   epoch_t super_epoch;
   Journal *journal;
   Finisher finisher;
-  map<version_t, list<Context*> > commit_waiters;
+  map<version_t, vector<Context*> > commit_waiters;
 
   void journal_start() {
     finisher.start();

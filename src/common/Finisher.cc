@@ -23,7 +23,7 @@ void *Finisher::finisher_thread_entry()
 
   while (!finisher_stop) {
     while (!finisher_queue.empty()) {
-      list<Context*> ls;
+      vector<Context*> ls;
       ls.swap(finisher_queue);
 
       finisher_lock.Unlock();

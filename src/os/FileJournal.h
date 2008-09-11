@@ -107,10 +107,10 @@ private:
 
   // to be journaled
   list<pair<epoch_t,bufferlist> > writeq;
-  list<Context*> commitq;
+  deque<Context*> commitq;
 
   // being journaled
-  list<Context*> writingq;
+  deque<Context*> writingq;
   
   // write thread
   Mutex write_lock;

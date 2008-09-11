@@ -56,7 +56,7 @@ protected:
   Cond         sync_cond;
   uint64_t     super_fsid;
 
-  map<version_t, list<Context*> > commit_waiters;
+  map<version_t, vector<Context*> > commit_waiters;
 
   void prepare_super(version_t epoch, bufferptr& bp);
   void write_super(version_t epoch, bufferptr& bp);
