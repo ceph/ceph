@@ -29,7 +29,7 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 
 	/* count */
 	for (i = 0; i < m->m_max_mds; i++)
-		if (m->m_state > 0)
+		if (m->m_state[i] > 0)
 			n++;
 	if (n == 0)
 		return -1;
