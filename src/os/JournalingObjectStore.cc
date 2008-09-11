@@ -23,7 +23,7 @@ int JournalingObjectStore::journal_replay()
   int count = 0;
   while (1) {
     bufferlist bl;
-    epoch_t e;
+    __u64 e;
     if (!journal->read_entry(bl, e)) {
       dout(3) << "journal_replay: end of journal, done." << dendl;
       break;

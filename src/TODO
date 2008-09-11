@@ -1,6 +1,7 @@
 v0.4
-- btrfs latency.  update howto.
-- snap garbage collection
+/- btrfs latency.  update howto.
+/- snap garbage collection
+- journal
 
 v0.5
 - ENOSPC
@@ -51,10 +52,12 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 kernel client
+- statfs fsid should xor the ceph_fsid hi/low words
+- async writepages?
+  - we want to saturate network with writeback on a single file
 - add i_frag_mutex to protect the frag tree..
   - get rid of ugly i_lock vs kmalloc juggling  in get_or_create_frag
-- fsync on dir?
-- virtual xattr for exposing dirstat/rstat info (instead of 'cat dirname')
+- fsync on dir?  what is that supposed to do?
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...

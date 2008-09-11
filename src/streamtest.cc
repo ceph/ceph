@@ -96,8 +96,8 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename
        << ", " << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
-  //ObjectStore *fs = new Ebofs(filename, journal);
-  ObjectStore *fs = new FileStore(filename);
+  ObjectStore *fs = new Ebofs(filename, journal);
+  //ObjectStore *fs = new FileStore(filename);
 
   if (g_conf.mkfs && 
       fs->mkfs() < 0) {

@@ -102,6 +102,16 @@ inline ostream& operator<<(ostream& out, const vector<A>& v) {
   out << "]";
   return out;
 }
+template<class A>
+inline ostream& operator<<(ostream& out, const deque<A>& v) {
+  out << "<";
+  for (typename deque<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+    if (p != v.begin()) out << ",";
+    out << *p;
+  }
+  out << ">";
+  return out;
+}
 
 template<class A>
 inline ostream& operator<<(ostream& out, const list<A>& ilist) {

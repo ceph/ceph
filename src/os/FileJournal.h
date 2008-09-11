@@ -16,6 +16,8 @@
 #ifndef __EBOFS_FILEJOURNAL_H
 #define __EBOFS_FILEJOURNAL_H
 
+#include <deque>
+using std::deque;
 
 #include "Journal.h"
 #include "common/Cond.h"
@@ -24,72 +26,39 @@
 
 class FileJournal : public Journal {
 public:
-  /** log header
-   * we allow 4 pointers:
-   *  top/initial,
-   *  one for an epoch boundary (if any),
-   *  one for a wrap in the ring buffer/journal file,
-   *  one for a second epoch boundary (if any).
-   * the epoch boundary one is useful only for speedier recovery in certain cases
-   * (i.e. when ebofs committed, but the journal didn't rollover ... very small window!)
+  /*
+   * journal header
    */
   struct header_t {
     __u64 fsid;
-    __s64 num;
     __u32 block_size;
     __u32 alignment;
-    __s64 max_size;
-    __s64 wrap;
-    __u32 epoch[4];
-    __s64 offset[4];
+    __s64 max_size;   // max size of journal ring buffer
+    __s64 wrap;       // wrap byte pos (if any)
+    __s64 start;      // offset of first entry
 
-    header_t() : fsid(0), num(0), block_size(0), alignment(0), max_size(0), wrap(0) {}
+    header_t() : fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
 
     void clear() {
-      num = 0;
       wrap = 0;
-    }
-    void pop() {
-      if (num >= 2 && offset[0] > offset[1]) 
-	wrap = 0;  // we're eliminating a wrap
-      num--;
-      for (int i=0; i<num; i++) {
-	epoch[i] = epoch[i+1];
-	offset[i] = offset[i+1];
-      }
-    }
-    void push(epoch_t e, off64_t o) {
-      assert(num < 4);
-      if (num > 2 && 
-	  epoch[num-1] == e &&
-	  epoch[num-2] == (e-1)) 
-	num--;  // tail was an epoch boundary; replace it.
-      epoch[num] = e;
-      offset[num] = o;
-      num++;
-    }
-    epoch_t last_epoch() {
-      if (num)
-	return epoch[num-1];
-      else
-	return 0;
+      start = block_size;
     }
   } header;
 
   struct entry_header_t {
-    uint64_t epoch;
+    uint64_t seq;  // fs op seq #
     uint64_t len;
     uint64_t magic1;
     uint64_t magic2;
     
     void make_magic(off64_t pos, uint64_t fsid) {
       magic1 = pos;
-      magic2 = fsid ^ epoch ^ len;
+      magic2 = fsid ^ seq ^ len;
     }
     bool check_magic(off64_t pos, uint64_t fsid) {
       return
 	magic1 == (uint64_t)pos &&
-	magic2 == (fsid ^ epoch ^ len);
+	magic2 == (fsid ^ seq ^ len);
     }
   };
 
@@ -99,18 +68,33 @@ private:
   off64_t max_size;
   size_t block_size;
   bool directio;
-  bool full, writing, must_write_header;
-  off64_t write_pos;      // byte where next entry written goes
+  bool writing, must_write_header;
+  off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
+
+  __u64 seq;
+
+  __u64 full_commit_seq;  // don't write, wait for this seq to commit
+  __u64 full_restart_seq; // start writing again with this seq
 
   int fd;
 
-  // to be journaled
-  list<pair<epoch_t,bufferlist> > writeq;
-  deque<Context*> commitq;
+  // in journal
+  deque<pair<__u64, off64_t> > journalq;  // track seq offsets, so we can trim later.
 
-  // being journaled
-  deque<Context*> writingq;
+  // currently being journaled and awaiting callback.
+  //  or, awaiting callback bc journal was full.
+  deque<__u64> writing_seq;
+  deque<Context*> writing_fin;
+
+  // waiting to be journaled
+  struct write_item {
+    __u64 seq;
+    bufferlist bl;
+    Context *fin;
+    write_item(__u64 s, bufferlist& b, Context *f) : seq(s), fin(f) { bl.claim(b); }
+  };
+  deque<write_item> writeq;
   
   // write thread
   Mutex write_lock;
@@ -125,7 +109,7 @@ private:
   void stop_writer();
   void write_thread_entry();
 
-  void check_for_wrap(epoch_t epoch, off64_t pos, off64_t size);
+  bool check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can_wrap);
   bool prepare_single_dio_write(bufferlist& bl);
   void prepare_multi_write(bufferlist& bl);
   void do_write(bufferlist& bl);
@@ -152,14 +136,16 @@ private:
     Journal(fsid, fin), fn(f),
     max_size(0), block_size(0),
     directio(dio),
-    full(false), writing(false), must_write_header(false),
+    writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
+    seq(0), 
+    full_commit_seq(0), full_restart_seq(0),
     fd(-1),
     write_stop(false), write_thread(this) { }
   ~FileJournal() {}
 
   int create();
-  int open(epoch_t epoch);
+  int open(__u64 last_seq);
   void close();
 
   bool is_writeable() {
@@ -168,15 +154,12 @@ private:
   void make_writeable();
 
   // writes
-  void submit_entry(epoch_t epoch, bufferlist& e, Context *oncommit);  // submit an item
-  void commit_epoch_start(epoch_t);   // mark epoch boundary
-  void commit_epoch_finish(epoch_t);  // mark prior epoch as committed (we can expire)
-
-  bool read_entry(bufferlist& bl, epoch_t& e);
-
+  void submit_entry(__u64 seq, bufferlist& bl, Context *oncommit);  // submit an item
+  void committed_thru(__u64 seq);
   bool is_full();
 
   // reads
+  bool read_entry(bufferlist& bl, __u64& seq);
 };
 
 #endif

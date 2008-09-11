@@ -450,7 +450,7 @@ md_config_t g_conf = {
   // journal
   journal_dio: false,
   journal_max_write_bytes: 0,
-  journal_max_write_entries: 10,
+  journal_max_write_entries: 100,
 
   // --- block device ---
   bdev_lock: true,

@@ -137,7 +137,7 @@ int Ebofs::mount()
       
       while (1) {
 	bufferlist bl;
-	epoch_t e;
+	__u64 e;
 	if (!journal->read_entry(bl, e)) {
 	  dout(3) << "mount replay: end of journal, done." << dendl;
 	  break;
@@ -503,8 +503,6 @@ int Ebofs::commit_thread_entry()
       while (1) {
 	// --- queue up commit writes ---
 	bc.poison_commit = false;
-	if (journal) 
-	  journal->commit_epoch_start(super_epoch);  // FIXME: make loopable
 	commit_inodes_start();      // do this first; it currently involves inode reallocation
 	allocator.commit_limbo();   // limbo -> limbo_tab
 	nodepool.commit_start(dev, super_epoch);
@@ -557,8 +555,8 @@ int Ebofs::commit_thread_entry()
         alloc_more_node_space();
       }
       
-      // signal journal
-      if (journal) journal->commit_epoch_finish(super_epoch);
+      // trim journal
+      if (journal) journal->committed_thru(super_epoch-1);
 
       // kick waiters
       dout(10) << "commit_thread queueing commit + kicking sync waiters" << dendl;
@@ -2447,6 +2445,10 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
   ebofs_lock.Lock();
   dout(7) << "apply_transaction start (" << t.get_num_ops() << " ops)" << dendl;
 
+  bufferlist bl;
+  if (journal)
+    t.encode(bl);
+
   unsigned r = _apply_transaction(t);
 
   // journal, wait for commit
@@ -2455,8 +2457,6 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     onsafe = 0;
   }
   if (journal) {
-    bufferlist bl;
-    t.encode(bl);
     journal->submit_entry(super_epoch, bl, onsafe);
   } else
     queue_commit_waiter(onsafe);

@@ -17,6 +17,7 @@
 
 #include "ObjectStore.h"
 #include "Journal.h"
+#include "common/RWLock.h"
 
 class JournalingObjectStore : public ObjectStore {
 protected:
@@ -24,6 +25,7 @@ protected:
   Journal *journal;
   Finisher finisher;
   map<version_t, vector<Context*> > commit_waiters;
+  RWLock op_lock;
 
   void journal_start() {
     finisher.start();
@@ -38,15 +40,22 @@ protected:
   }
   int journal_replay();
 
+  void op_start() {
+    op_lock.get_read();
+  }
+  void op_finish() {
+    op_lock.put_read();    
+  }
+
   void commit_start() {
+    op_lock.get_write();
     super_epoch++;
-    if (journal)
-      journal->commit_epoch_start(super_epoch);
+    op_lock.put_write();
   }
   void commit_finish() {
-    finisher.queue(commit_waiters[super_epoch-1]);
     if (journal)
-      journal->commit_epoch_finish(super_epoch);
+      journal->committed_thru(super_epoch-1);
+    finisher.queue(commit_waiters[super_epoch-1]);
   }
 
   void queue_commit_waiter(Context *oncommit) {

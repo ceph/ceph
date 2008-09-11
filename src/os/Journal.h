@@ -30,17 +30,15 @@ public:
   virtual ~Journal() { }
 
   virtual int create() = 0;
-  virtual int open(epoch_t epoch) = 0;
+  virtual int open(__u64 last_seq) = 0;
   virtual void close() = 0;
 
   // writes
   virtual bool is_writeable() = 0;
   virtual void make_writeable() = 0;
-  virtual void submit_entry(epoch_t epoch, bufferlist& e, Context *oncommit) = 0;
-  virtual void commit_epoch_start(epoch_t) = 0;  // mark epoch boundary
-  virtual void commit_epoch_finish(epoch_t) = 0; // mark prior epoch as committed (we can expire)
-  virtual bool read_entry(bufferlist& bl, epoch_t &e) = 0;
-  virtual bool is_full() = 0;
+  virtual void submit_entry(__u64 seq, bufferlist& e, Context *oncommit) = 0;
+  virtual void committed_thru(__u64 seq) = 0;
+  virtual bool read_entry(bufferlist& bl, __u64 &seq) = 0;
 
   // reads/recovery
   

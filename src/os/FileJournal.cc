@@ -74,6 +74,7 @@ int FileJournal::create()
     header.alignment = block_size;
   else
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
+  header.start = get_top();
   print_header();
 
   buffer::ptr bp = prepare_header();
@@ -89,9 +90,9 @@ int FileJournal::create()
   return 0;
 }
 
-int FileJournal::open(epoch_t epoch)
+int FileJournal::open(__u64 next_seq)
 {
-  dout(2) << "open " << fn << dendl;
+  dout(2) << "open " << fn << " next_seq " << next_seq << dendl;
 
   int err = _open(false);
   if (err < 0) return err;
@@ -102,11 +103,11 @@ int FileJournal::open(epoch_t epoch)
 
   // read header?
   read_header();
-  dout(10) << "open journal header.fsid = " << header.fsid 
+  dout(10) << "open header.fsid = " << header.fsid 
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
   if (header.fsid != fsid) {
-    dout(2) << "open journal fsid doesn't match, invalid (someone else's?) journal" << dendl;
+    dout(2) << "open fsid doesn't match, invalid (someone else's?) journal" << dendl;
     err = -EINVAL;
   } 
   if (header.max_size > max_size) {
@@ -127,40 +128,27 @@ int FileJournal::open(epoch_t epoch)
 
   // looks like a valid header.
   write_pos = 0;  // not writeable yet
-  read_pos = 0;
 
-  if (header.num > 0) {
-    // pick an offset
-    for (int i=0; i<header.num; i++) {
-      if (header.epoch[i] == epoch) {
-	dout(2) << "using read_pos header pointer "
-		<< header.epoch[i] << " at " << header.offset[i]
-		<< dendl;
-	read_pos = header.offset[i];
-	write_pos = 0;
-	break;
-      }      
-      else if (header.epoch[i] < epoch) {
-	dout(2) << "super_epoch is " << epoch 
-		<< ", skipping old " << header.epoch[i] << " at " << header.offset[i]
-		<< dendl;
-      }
-      else if (header.epoch[i] > epoch) {
-	dout(2) << "super_epoch is " << epoch 
-		<< ", but wtf, journal is later " << header.epoch[i] << " at " << header.offset[i]
-		<< dendl;
-	break;
-      }
+  // find next entry
+  read_pos = header.start;
+  while (1) {
+    bufferlist bl;
+    __u64 seq;
+    off64_t old_pos = read_pos;
+    if (!read_entry(bl, seq)) {
+      dout(10) << "open reached end of journal." << dendl;
+      break;
     }
-
-    if (read_pos == 0) {
-      dout(0) << "no valid journal segments" << dendl;
-      return 0; //hrm return -EINVAL; 
+    if (seq > next_seq) {
+      dout(10) << "open entry " << seq << " len " << bl.length() << " > next_seq " << next_seq << dendl;
+      read_pos = -1;
+      return 0;
     }
-
-  } else {
-    dout(0) << "journal was empty" << dendl;
-    read_pos = -1;
+    if (seq == next_seq) {
+      dout(10) << "open reached seq " << seq << dendl;
+      read_pos = old_pos;
+      break;
+    }
   }
 
   return 0;
@@ -175,7 +163,6 @@ void FileJournal::close()
 
   // close
   assert(writeq.empty());
-  assert(commitq.empty());
   assert(fd > 0);
   ::close(fd);
   fd = -1;
@@ -199,16 +186,15 @@ void FileJournal::stop_writer()
 }
 
 
+
 void FileJournal::print_header()
 {
-  for (int i=0; i<header.num; i++) {
-    if (i && header.offset[i] < header.offset[i-1]) {
-      assert(header.wrap);
-      dout(10) << "header: wrap at " << header.wrap << dendl;
-    }
-    dout(10) << "header: epoch " << header.epoch[i] << " at " << header.offset[i] << dendl;
-  }
-  //if (header.wrap) dout(10) << "header: wrap at " << header.wrap << dendl;
+  dout(10) << "header: block_size " << header.block_size
+	   << " alignment " << header.alignment
+	   << " max_size " << header.max_size
+	   << dendl;
+  dout(10) << "header: start " << header.start << " wrap " << header.wrap << dendl;
+  dout(10) << " write_pos " << write_pos << dendl;
 }
 
 void FileJournal::read_header()
@@ -246,48 +232,62 @@ bufferptr FileJournal::prepare_header()
 
 
 
-void FileJournal::check_for_wrap(epoch_t epoch, off64_t pos, off64_t size)
+bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can_wrap)
 {
-  // epoch boundary?
-  dout(10) << "check_for_wrap epoch " << epoch << " last " << header.last_epoch() << " of " << header.num << dendl;
-  if (epoch > header.last_epoch()) {
-    dout(10) << "saw an epoch boundary " << header.last_epoch() << " -> " << epoch << dendl;
-    header.push(epoch, pos);
-    must_write_header = true;
-  }
+  dout(20) << "check_for_wrap seq " << seq
+	   << " pos " << *pos << " size " << size
+	   << " max_size " << header.max_size
+	   << " wrap " << header.wrap
+	   << dendl;
+  
+  // already full?
+  if (full_commit_seq || full_restart_seq)
+    return false;
 
   // does it fit?
   if (header.wrap) {
     // we're wrapped.  don't overwrite ourselves.
-    if (pos + size >= header.offset[0]) {
-      dout(10) << "JOURNAL FULL (and wrapped), " << pos << "+" << size
-	       << " >= " << header.offset[0]
-	       << dendl;
-      full = true;
-      writeq.clear();
-      print_header();
-    }
+
+    if (*pos + size < header.start)
+      return true; // fits
+
+    dout(10) << "JOURNAL FULL (and wrapped), " << *pos << "+" << size
+	     << " >= " << header.start
+	     << dendl;
   } else {
     // we haven't wrapped.  
-    if (pos + size >= header.max_size) {
-      // is there room if we wrap?
-      if (get_top() + size < header.offset[0]) {
-	// yes!
-	dout(10) << "wrapped from " << pos << " to " << get_top() << dendl;
-	header.wrap = pos;
-	pos = get_top();
-	header.push(epoch, pos);
-	must_write_header = true;
-      } else {
-	// no room.
-	dout(10) << "submit_entry JOURNAL FULL (and can't wrap), " << pos << "+" << size
-		 << " >= " << header.max_size
-		 << dendl;
-	full = true;
-	writeq.clear();
-      }
+
+    if (*pos + size < header.max_size)
+      return true; // fits
+
+    if (!can_wrap)
+      return false;  // can't wrap just now..
+
+    // is there room if we wrap?
+    if (get_top() + size < header.start) {
+      // yes!
+      dout(10) << " wrapping from " << *pos << " to " << get_top() << dendl;
+      header.wrap = *pos;
+      *pos = get_top();
+      must_write_header = true;
+      return true;
     }
+
+    // no room.
+    dout(10) << "submit_entry JOURNAL FULL (and can't wrap), " << *pos << "+" << size
+	     << " >= " << header.max_size
+	     << dendl;
   }
+
+  full_commit_seq = seq;
+  full_restart_seq = seq+1;
+  while (!writeq.empty()) {
+    writing_seq.push_back(writeq.front().seq);
+    writing_fin.push_back(writeq.front().fin);
+    writeq.pop_front();
+  }  
+  print_header();
+  return false;
 }
 
 
@@ -299,79 +299,109 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
   int eleft = g_conf.journal_max_write_entries;
   int bleft = g_conf.journal_max_write_bytes;
 
+  if (full_commit_seq || full_restart_seq)
+    return;
+
   while (!writeq.empty()) {
     // grab next item
-    epoch_t epoch = writeq.front().first;
-    bufferlist &ebl = writeq.front().second;
+    __u64 seq = writeq.front().seq;
+    bufferlist &ebl = writeq.front().bl;
     off64_t size = 2*sizeof(entry_header_t) + ebl.length();
 
-    if (bl.length() > 0 && bleft > 0 && bleft < size) break;
-    
-    check_for_wrap(epoch, queue_pos, size);
-    if (full) break;
-    if (bl.length() && must_write_header) 
+    bool can_wrap = !bl.length();  // only wrap if this is a new thinger
+    if (!check_for_wrap(seq, &queue_pos, size, can_wrap))
       break;
+
+    // set write_pos?  (check_for_wrap may have moved it)
+    if (!bl.length())
+      write_pos = queue_pos;
     
     // add to write buffer
-    dout(15) << "prepare_multi_write will write " << queue_pos << " : " 
-	     << ebl.length() << " epoch " << epoch << " -> " << size << dendl;
+    dout(15) << "prepare_multi_write will write " << queue_pos << " : seq " << seq
+	     << " len " << ebl.length() << " -> " << size
+	     << " (left " << eleft << "/" << bleft << ")"
+	     << dendl;
     
     // add it this entry
     entry_header_t h;
-    h.epoch = epoch;
+    h.seq = seq;
     h.len = ebl.length();
     h.make_magic(queue_pos, header.fsid);
     bl.append((const char*)&h, sizeof(h));
     bl.claim_append(ebl);
     bl.append((const char*)&h, sizeof(h));
     
-    Context *oncommit = commitq.front();
-    if (oncommit)
-      writingq.push_back(oncommit);
-    
+    if (writeq.front().fin) {
+      writing_seq.push_back(seq);
+      writing_fin.push_back(writeq.front().fin);
+    }
+
     // pop from writeq
     writeq.pop_front();
-    commitq.pop_front();
+    journalq.push_back(pair<__u64,off64_t>(seq, queue_pos));
 
     queue_pos += size;
-    if (--eleft == 0) break;
-    bleft -= size;
-    if (bleft == 0) break;
+
+    // pad...
+    if (queue_pos % header.alignment) {
+      int pad = header.alignment - (queue_pos % header.alignment);
+      bufferptr bp(pad);
+      bl.push_back(bp);
+      queue_pos += pad;
+      //dout(20) << "   padding with " << pad << " bytes, queue_pos now " << queue_pos << dendl;
+    }
+
+    if (eleft) {
+      if (--eleft == 0) {
+	dout(20) << "    hit max events per write " << g_conf.journal_max_write_entries << dendl;
+	break;
+      }
+    }
+    if (bleft) {
+      bleft -= size;
+      if (bleft == 0) {
+	dout(20) << "    hit max write size " << g_conf.journal_max_write_bytes << dendl;
+	break;
+      }
+    }
   }
 }
 
 bool FileJournal::prepare_single_dio_write(bufferlist& bl)
 {
   // grab next item
-  epoch_t epoch = writeq.front().first;
-  bufferlist &ebl = writeq.front().second;
+  __u64 seq = writeq.front().seq;
+  bufferlist &ebl = writeq.front().bl;
     
   off64_t size = 2*sizeof(entry_header_t) + ebl.length();
   size = ROUND_UP_TO(size, header.alignment);
   
-  check_for_wrap(epoch, write_pos, size);
-  if (full) return false;
+  if (!check_for_wrap(seq, &write_pos, size, true))
+    return false;
+  if (full_commit_seq || full_restart_seq) return false;
 
   // build it
-  dout(15) << "prepare_single_dio_write will write " << write_pos << " : " 
-	   << ebl.length() << " epoch " << epoch << " -> " << size << dendl;
+  dout(15) << "prepare_single_dio_write will write " << write_pos << " : seq " << seq
+	   << " len " << ebl.length() << " -> " << size << dendl;
 
   bufferptr bp = buffer::create_page_aligned(size);
   entry_header_t *h = (entry_header_t*)bp.c_str();
-  h->epoch = epoch;
+  h->seq = seq;
   h->len = ebl.length();
   h->make_magic(write_pos, header.fsid);
   ebl.copy(0, ebl.length(), bp.c_str()+sizeof(*h));
   memcpy(bp.c_str() + sizeof(*h) + ebl.length(), h, sizeof(*h));
   bl.push_back(bp);
   
-  Context *oncommit = commitq.front();
-  if (oncommit)
-    writingq.push_back(oncommit);
+  if (writeq.front().fin) {
+    writing_seq.push_back(seq);
+    writing_fin.push_back(writeq.front().fin);
+  }
   
   // pop from writeq
   writeq.pop_front();
-  commitq.pop_front();
+  journalq.push_back(pair<__u64,off64_t>(seq, write_pos));
+
   return true;
 }
 
@@ -382,8 +412,10 @@ void FileJournal::do_write(bufferlist& bl)
     return;
 
   buffer::ptr hbp;
-  if (must_write_header) 
+  if (must_write_header) {
+    must_write_header = false;
     hbp = prepare_header();
+  }
 
   writing = true;
 
@@ -392,7 +424,7 @@ void FileJournal::do_write(bufferlist& bl)
   write_lock.Unlock();
 
   dout(15) << "do_write writing " << write_pos << "~" << bl.length() 
-	   << (must_write_header ? " + header":"")
+	   << (hbp.length() ? " + header":"")
 	   << dendl;
   
   // header
@@ -430,14 +462,19 @@ void FileJournal::do_write(bufferlist& bl)
   write_lock.Lock();    
 
   writing = false;
-  if (memcmp(&old_header, &header, sizeof(header)) == 0) {
-    write_pos += bl.length();
-    write_pos = ROUND_UP_TO(write_pos, header.alignment);
-    finisher->queue(writingq);
+
+  write_pos += bl.length();
+  write_pos = ROUND_UP_TO(write_pos, header.alignment);
+
+  // kick finisher?  
+  //  only if we haven't filled up recently!
+  if (full_commit_seq || full_restart_seq) {
+    dout(10) << "do_write NOT queueing finisher seq " << writing_seq.front()
+	     << ", full_commit_seq|full_restart_seq" << dendl;
   } else {
-    dout(10) << "do_write finished write but header changed?  not moving write_pos." << dendl;
-    derr(0) << "do_write finished write but header changed?  not moving write_pos." << dendl;
-    assert(writingq.empty());
+    dout(20) << "do_write doing finisher queue " << writing_fin << dendl;
+    writing_seq.clear();
+    finisher->queue(writing_fin);
   }
 }
 
@@ -457,7 +494,6 @@ void FileJournal::write_thread_entry()
     }
     
     bufferlist bl;
-    must_write_header = false;
     if (directio)
       prepare_single_dio_write(bl);
     else
@@ -470,92 +506,83 @@ void FileJournal::write_thread_entry()
 }
 
 
-bool FileJournal::is_full()
-{
-  Mutex::Locker locker(write_lock);
-  return full;
-}
-
-void FileJournal::submit_entry(epoch_t epoch, bufferlist& e, Context *oncommit)
+void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
   // dump on queue
-  dout(10) << "submit_entry " << e.length()
-	   << " epoch " << epoch
-	   << " " << oncommit << dendl;
-  commitq.push_back(oncommit);
-  if (!full) {
-    writeq.push_back(pair<epoch_t,bufferlist>(epoch, e));
+  dout(10) << "submit_entry seq " << seq
+	   << " len " << e.length()
+	   << " (" << oncommit << ")" << dendl;
+  
+  if (!full_commit_seq && full_restart_seq && 
+      seq >= full_restart_seq) {
+    dout(10) << " seq " << seq << " >= full_restart_seq " << full_restart_seq 
+	     << ", restarting journal" << dendl;
+    full_restart_seq = 0;
+  }
+  if (!full_commit_seq && !full_restart_seq) {
+    writeq.push_back(write_item(seq, e, oncommit));
     write_cond.Signal(); // kick writer thread
+  } else {
+    // not journaling this.  restart writing no sooner than seq + 1.
+    full_restart_seq = seq+1;
+    dout(10) << " journal is/was full, will restart no sooner than seq " << full_restart_seq << dendl;
+    writing_seq.push_back(seq);
+    writing_fin.push_back(oncommit);
   }
 }
 
 
-void FileJournal::commit_epoch_start(epoch_t new_epoch)
+void FileJournal::committed_thru(__u64 seq)
 {
-  dout(10) << "commit_epoch_start on " << new_epoch-1 
-	   << " -- new epoch " << new_epoch
-	   << dendl;
+  dout(10) << "committed_thru " << seq << dendl;
 
   Mutex::Locker locker(write_lock);
 
-  // was full -> empty -> now usable?
-  if (full) {
-    if (header.num != 0) {
-      dout(1) << " journal FULL, ignoring this epoch" << dendl;
-      return;
+  // was full?
+  if (full_commit_seq && seq >= full_commit_seq) {
+    dout(1) << " seq " << seq << " >= full_commit_seq " << full_commit_seq 
+	    << ", prior journal contents are now fully committed.  resetting journal." << dendl;
+    full_commit_seq = 0;
+  }
+
+  // adjust start pointer
+  while (!journalq.empty() && journalq.front().first <= seq) {
+    if (journalq.front().second == get_top()) {
+      dout(10) << " committed event at " << journalq.front().second << ", clearing wrap marker" << dendl;
+      header.wrap = 0;  // clear wrap marker
     }
-
-    dout(1) << " clearing FULL flag, journal now usable" << dendl;
-    full = false;
-  } 
-}
-
-void FileJournal::commit_epoch_finish(epoch_t new_epoch)
-{
-  dout(10) << "commit_epoch_finish committed " << (new_epoch-1) << dendl;
-
-  Mutex::Locker locker(write_lock);
-  
-  if (full) {
-    // full journal damage control.
-    dout(15) << " journal was FULL, contents now committed, clearing header.  journal still not usable until next epoch." << dendl;
-    header.clear();
-    write_pos = get_top();
+    journalq.pop_front();
+  }
+  if (!journalq.empty()) {
+    header.start = journalq.front().second;
   } else {
-    // update header -- trim/discard old (committed) epochs
-    print_header();
-    while (header.num && header.epoch[0] < new_epoch) {
-      dout(10) << " popping epoch " << header.epoch[0] << " < " << new_epoch << dendl;
-      header.pop();
-    }
-    if (header.num == 0) {
-      dout(10) << " starting fresh" << dendl;
-      write_pos = get_top();
-      header.push(new_epoch, write_pos);
-    }
+    header.start = write_pos;
   }
   must_write_header = true;
+  print_header();
   
-  // discard any unwritten items in previous epoch
-  while (!writeq.empty() && writeq.front().first < new_epoch) {
-    dout(15) << " dropping unwritten and committed " 
-	     << write_pos << " : " << writeq.front().second.length()
-	     << " epoch " << writeq.front().first 
-	     << dendl;
-    // finisher?
-    Context *oncommit = commitq.front();
-    if (oncommit) writingq.push_back(oncommit);
-    
-    // discard.
-    writeq.pop_front();  
-    commitq.pop_front();
+  // committed but writing
+  while (!writing_seq.empty() && writing_seq.front() < seq) {
+    dout(15) << " finishing committed but writing|waiting seq " << writing_seq.front() << dendl;
+    finisher->queue(writing_fin.front());
+    writing_seq.pop_front();
+    writing_fin.pop_front();
   }
   
-  // queue the finishers
-  finisher->queue(writingq);
-  dout(10) << "commit_epoch_finish done" << dendl;
+  // committed but unjournaled items
+  while (!writeq.empty() && writeq.front().seq < seq) {
+    dout(15) << " dropping committed but unwritten seq " << writeq.front().seq 
+	     << " len " << writeq.front().bl.length()
+	     << " (" << writeq.front().fin << ")"
+	     << dendl;
+    if (writeq.front().fin)
+      finisher->queue(writeq.front().fin);
+    writeq.pop_front();  
+  }
+  
+  dout(10) << "committed_thru done" << dendl;
 }
 
 
@@ -574,23 +601,14 @@ void FileJournal::make_writeable()
 }
 
 
-bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
+bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
 {
   if (!read_pos) {
     dout(2) << "read_entry -- not readable" << dendl;
     return false;
   }
-
   if (read_pos == header.wrap) {
-    // find wrap point
-    for (int i=1; i<header.num; i++) {
-      if (header.offset[i] < read_pos) {
-	assert(header.offset[i-1] < read_pos);
-	read_pos = header.offset[i];
-	break;
-      }
-    }
-    assert(read_pos != header.wrap);
+    read_pos = get_top();
     dout(10) << "read_entry wrapped from " << header.wrap << " to " << read_pos << dendl;
   }
 
@@ -615,7 +633,7 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
   entry_header_t f;
   ::read(fd, &f, sizeof(h));
   if (!f.check_magic(read_pos, header.fsid) ||
-      h.epoch != f.epoch ||
+      h.seq != f.seq ||
       h.len != f.len) {
     dout(2) << "read_entry " << read_pos << " : bad footer magic, partial entry, end of journal" << dendl;
     return false;
@@ -623,16 +641,17 @@ bool FileJournal::read_entry(bufferlist& bl, epoch_t& epoch)
 
 
   // yay!
-  dout(1) << "read_entry " << read_pos << " : " 
+  dout(1) << "read_entry " << read_pos << " : seq " << h.seq
 	  << " " << h.len << " bytes"
-	  << " epoch " << h.epoch 
 	  << dendl;
-  
+  bl.clear();
   bl.push_back(bp);
-  epoch = h.epoch;
+  seq = h.seq;
+
+  journalq.push_back(pair<__u64,off64_t>(h.seq, read_pos));
 
   read_pos += 2*sizeof(entry_header_t) + h.len;
   read_pos = ROUND_UP_TO(read_pos, header.alignment);
-
+  
   return true;
 }
