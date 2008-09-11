@@ -91,7 +91,8 @@ int Ebofs::mount()
   else
     sb = sb2;
   super_epoch = sb->epoch;
-  dout(3) << "mount epoch " << super_epoch << dendl;
+  op_seq = sb->op_seq;
+  dout(3) << "mount epoch " << super_epoch << " op_seq " << op_seq << dendl;
 
   super_fsid = sb->fsid;
 
@@ -121,7 +122,7 @@ int Ebofs::mount()
   // open journal
   if (journalfn) {
     journal = new FileJournal(sb->fsid, &finisher, journalfn, g_conf.journal_dio);
-    int err = journal->open(super_epoch);
+    int err = journal->open(op_seq+1);
     if (err < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
       delete journal;
@@ -137,23 +138,20 @@ int Ebofs::mount()
       
       while (1) {
 	bufferlist bl;
-	__u64 e;
-	if (!journal->read_entry(bl, e)) {
+	__u64 seq;
+	if (!journal->read_entry(bl, seq)) {
 	  dout(3) << "mount replay: end of journal, done." << dendl;
 	  break;
 	}
 	
-	if (e < super_epoch) {
-	  dout(3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << dendl;
+	if (seq <= op_seq) {
+	  dout(3) << "mount replay: skipping old op seq " << seq << " <= " << op_seq << dendl;
 	  continue;
 	}
-	if (e == super_epoch+1) {
-	  super_epoch++;
-	  dout(3) << "mount replay: jumped to next epoch " << super_epoch << dendl;
-	}
-	assert(e == super_epoch);
+	op_seq++;
+	assert(seq == op_seq);
 	
-	dout(3) << "mount replay: applying transaction in epoch " << e << dendl;
+	dout(3) << "mount replay: applying op seq " << seq << dendl;
 	Transaction t(bl);
 	_apply_transaction(t);
       }
@@ -372,6 +370,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb->s_magic = EBOFS_MAGIC;
   sb->fsid = super_fsid;
   sb->epoch = epoch;
+  sb->op_seq = op_seq;
   sb->num_blocks = dev.get_num_blocks();
 
   sb->free_blocks = free_blocks;
@@ -472,11 +471,12 @@ int Ebofs::commit_thread_entry()
       commit_starting = false;
 
       // --- get ready for a new epoch ---
+      __u64 last_op = op_seq;
       super_epoch++;
       dirty = false;
 
-      derr(10) << "commit_thread commit start, new epoch " << super_epoch << dendl;
-      dout(10) << "commit_thread commit start, new epoch " << super_epoch << dendl;
+      derr(10) << "commit_thread commit start, new epoch " << super_epoch << " last_op " << last_op << dendl;
+      dout(10) << "commit_thread commit start, new epoch " << super_epoch << " last_op " << last_op << dendl;
       dout(2) << "commit_thread   data: " 
               << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
               << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
@@ -556,7 +556,7 @@ int Ebofs::commit_thread_entry()
       }
       
       // trim journal
-      if (journal) journal->committed_thru(super_epoch-1);
+      if (journal) journal->committed_thru(last_op);
 
       // kick waiters
       dout(10) << "commit_thread queueing commit + kicking sync waiters" << dendl;
@@ -1409,7 +1409,7 @@ void Ebofs::sync(Context *onsafe)
       Transaction t;
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   }
@@ -2457,7 +2457,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     onsafe = 0;
   }
   if (journal) {
-    journal->submit_entry(super_epoch, bl, onsafe);
+    journal->submit_entry(++op_seq, bl, onsafe);
   } else
     queue_commit_waiter(onsafe);
 
@@ -2834,7 +2834,7 @@ int Ebofs::write(coll_t cid, pobject_t oid,
       t.write(cid, oid, off, len, bl);
       bufferlist tbl;
       t.encode(tbl);
-      journal->submit_entry(super_epoch, tbl, onsafe);
+      journal->submit_entry(++op_seq, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -2860,7 +2860,7 @@ int Ebofs::zero(coll_t cid, pobject_t oid, __u64 off, size_t len, Context *onsaf
       t.zero(cid, oid, off, len);
       bufferlist tbl;
       t.encode(tbl);
-      journal->submit_entry(super_epoch, tbl, onsafe);
+      journal->submit_entry(++op_seq, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -2901,7 +2901,7 @@ int Ebofs::remove(coll_t cid, pobject_t oid, Context *onsafe)
       t.remove(cid, oid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -2984,7 +2984,7 @@ int Ebofs::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
       t.truncate(cid, oid, size);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3010,7 +3010,7 @@ int Ebofs::clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe)
       t.clone(cid, from, to);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3191,7 +3191,7 @@ int Ebofs::setattr(coll_t cid, pobject_t oid, const char *name, const void *valu
       t.setattr(cid, oid, name, value, size);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3227,7 +3227,7 @@ int Ebofs::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, C
       t.setattrs(cid, oid, attrset);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3362,7 +3362,7 @@ int Ebofs::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe)
       t.rmattr(cid, oid, name);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3445,7 +3445,7 @@ int Ebofs::create_collection(coll_t cid, Context *onsafe)
       t.create_collection(cid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3499,7 +3499,7 @@ int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
       t.remove_collection(cid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3561,7 +3561,7 @@ int Ebofs::collection_add(coll_t cid, coll_t ocid, pobject_t oid, Context *onsaf
       t.collection_add(cid, ocid, oid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3609,7 +3609,7 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
       t.collection_remove(cid, oid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3679,7 +3679,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, s
       t.collection_setattr(cid, name, value, size);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3809,7 +3809,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
       t.collection_rmattr(cid, name);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {

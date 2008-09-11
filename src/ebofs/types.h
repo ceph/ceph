@@ -150,6 +150,7 @@ struct ebofs_super {
   __u64 fsid;   /* _ebofs_ fsid, mind you, not ceph_fsid_t. */
 
   epoch_t epoch;             // version of this superblock.
+  __u64 op_seq;              // seq # of last operation we _did_ apply+commit to the store.
 
   uint64_t num_blocks;        /* # blocks in filesystem */
 
