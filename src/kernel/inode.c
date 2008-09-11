@@ -1613,7 +1613,7 @@ static size_t _ceph_vir_xattrcb_rctime(struct ceph_inode_info *ci, char *val, si
                                 (long)ci->i_rctime.tv_nsec);
 }
 
-static struct _ceph_vir_xattr_cb _ceph_vir_xattr_recs[] = { 
+static struct _ceph_vir_xattr_cb _ceph_vir_xattr_recs[] = {
 				{ "user.ceph.dir.entries", _ceph_vir_xattrcb_entries},
 				{ "user.ceph.dir.files", _ceph_vir_xattrcb_files},
 				{ "user.ceph.dir.subdirs", _ceph_vir_xattrcb_subdirs},
