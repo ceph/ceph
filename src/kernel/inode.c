@@ -1567,6 +1567,77 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	return err;
 }
 
+struct _ceph_vir_xattr_cb {
+	char *name;
+	size_t (*getxattr_cb)(struct ceph_inode_info *ci, char *val, size_t size);
+};
+
+static size_t _ceph_vir_xattrcb_entries(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_files + ci->i_subdirs);
+}
+
+static size_t _ceph_vir_xattrcb_files(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_files);
+}
+
+static size_t _ceph_vir_xattrcb_subdirs(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_subdirs);
+}
+
+static size_t _ceph_vir_xattrcb_rentries(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_rfiles + ci->i_rsubdirs);
+}
+
+static size_t _ceph_vir_xattrcb_rfiles(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_rfiles);
+}
+
+static size_t _ceph_vir_xattrcb_rsubdirs(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_subdirs);
+}
+
+static size_t _ceph_vir_xattrcb_rbytes(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%lld", ci->i_rbytes);
+}
+
+static size_t _ceph_vir_xattrcb_rctime(struct ceph_inode_info *ci, char *val, size_t size)
+{
+	return snprintf(val, size, "%ld.%ld", (long)ci->i_rctime.tv_sec,
+                                (long)ci->i_rctime.tv_nsec);
+}
+
+static struct _ceph_vir_xattr_cb _ceph_vir_xattr_recs[] = { 
+				{ "user.ceph.dir.entries", _ceph_vir_xattrcb_entries},
+				{ "user.ceph.dir.files", _ceph_vir_xattrcb_files},
+				{ "user.ceph.dir.subdirs", _ceph_vir_xattrcb_subdirs},
+				{ "user.ceph.dir.rentries", _ceph_vir_xattrcb_rentries},
+				{ "user.ceph.dir.rfiles", _ceph_vir_xattrcb_rfiles},
+				{ "user.ceph.dir.rsubdirs", _ceph_vir_xattrcb_rsubdirs},
+				{ "user.ceph.dir.rbytes", _ceph_vir_xattrcb_rbytes},
+				{ "user.ceph.dir.rctime", _ceph_vir_xattrcb_rctime},
+				{ NULL, NULL }
+};
+
+static struct _ceph_vir_xattr_cb *_ceph_match_vir_xattr(const char *name)
+{
+	struct _ceph_vir_xattr_cb *xattr_rec = _ceph_vir_xattr_recs;
+
+	do {
+		if (strcmp(xattr_rec->name, name) == 0)
+			return xattr_rec;
+		xattr_rec++;
+	} while (xattr_rec->name);
+
+	return NULL;
+}
+
 ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 		      size_t size)
 {
@@ -1576,6 +1647,14 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	u32 numattr;
 	int err;
 	void *p, *end;
+	struct _ceph_vir_xattr_cb *vir_xattr;
+
+	/* let's see if a virtual xattr was requested */
+	vir_xattr = _ceph_match_vir_xattr(name);
+	if (vir_xattr) {
+		err = (vir_xattr->getxattr_cb)(ci, value, size);
+		return err;
+	}
 
 	err = ceph_do_getattr(dentry, CEPH_STAT_MASK_XATTR);
 	if (err)
@@ -1631,6 +1710,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	u32 numattr = 0;
 	void *p, *end;
 	int err;
+	u32 len;
 
 	err = ceph_do_getattr(dentry, CEPH_STAT_MASK_XATTR);
 	if (err)
@@ -1652,7 +1732,15 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 			p += len;
 		}
 	} else
-		namelen = 1; /* for \0 */
+		namelen = 0;
+
+	if ((inode->i_mode & S_IFMT) == S_IFDIR) {
+		int i;
+
+		for (i=0;  _ceph_vir_xattr_recs[i].name; i++) {
+			namelen += strlen(_ceph_vir_xattr_recs[i].name) + 1;
+		}
+	}
 
 	err = -ERANGE;
 	if (size && namelen > size)
@@ -1666,7 +1754,6 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 		p = ci->i_xattr_data;
 		ceph_decode_32(&p, numattr);
 		while (numattr--) {
-			u32 len;
 			ceph_decode_32(&p, len);
 			memcpy(names, p, len);
 			names[len] = '\0';
@@ -1677,6 +1764,20 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 		}
 	} else
 		names[0] = 0;
+
+	/* now do all the virtual xattr stuff */
+
+        if (!(ceph_client(inode->i_sb)->mount_args.flags & CEPH_MOUNT_DIRSTAT))
+                goto out;
+
+	if ((inode->i_mode & S_IFMT) == S_IFDIR) {
+		int i;
+
+		for (i=0;  _ceph_vir_xattr_recs[i].name; i++) {
+			len = sprintf(names, _ceph_vir_xattr_recs[i].name);
+			names += len + 1;
+		}
+	}
 
 out:
 	spin_unlock(&inode->i_lock);
