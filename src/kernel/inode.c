@@ -1767,9 +1767,6 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	/* now do all the virtual xattr stuff */
 
-        if (!(ceph_client(inode->i_sb)->mount_args.flags & CEPH_MOUNT_DIRSTAT))
-                goto out;
-
 	if ((inode->i_mode & S_IFMT) == S_IFDIR) {
 		int i;
 
