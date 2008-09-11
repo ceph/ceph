@@ -1810,6 +1810,9 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (strncmp(name, "user.", 5) != 0)
 		return -EOPNOTSUPP;
 
+	if (_ceph_match_vir_xattr(name) != NULL)
+		return -EOPNOTSUPP;
+
 	/* copy value into some pages */
 	nr_pages = calc_pages_for(0, size);
 	if (nr_pages) {
