@@ -1882,6 +1882,9 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (strncmp(name, "user.", 5) != 0)
 		return -EOPNOTSUPP;
 
+	if (_ceph_match_vir_xattr(name) != NULL)
+		return -EOPNOTSUPP;
+
 	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
