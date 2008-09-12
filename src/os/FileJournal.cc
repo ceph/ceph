@@ -544,7 +544,7 @@ void FileJournal::committed_thru(__u64 seq)
 {
   Mutex::Locker locker(write_lock);
 
-  if (seq > last_committed_seq) {
+  if (seq < last_committed_seq) {
     dout(10) << "committed_thru " << seq << " < last_committed_seq " << last_committed_seq << dendl;
     assert(seq >= last_committed_seq);
     return;
