@@ -401,9 +401,9 @@ int FileStore::mount()
   // get epoch
   sprintf(fn, "%s/commit_epoch", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
-  ::read(fd, &super_epoch, sizeof(super_epoch));
+  ::read(fd, &op_seq, sizeof(op_seq));
   ::close(fd);
-  dout(5) << "mount epoch is " << super_epoch << dendl;
+  dout(5) << "mount op_seq is " << op_seq << dendl;
 
   // journal
   sprintf(fn, "%s.journal", basedir.c_str());
@@ -528,8 +528,18 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 
   // no btrfs transaction support?
   // or, use trans start/end ioctls?
-  if (!btrfs || btrfs_trans_start_end)
-    return ObjectStore::apply_transaction(t, onsafe);
+  if (!btrfs || btrfs_trans_start_end) {
+    bufferlist tbl;
+    t.encode(tbl);  // apply_transaction modifies t; encode first
+    op_start();
+    int r = ObjectStore::apply_transaction(t);
+    if (r >= 0)
+      journal_transaction(tbl, onsafe);
+    else
+      delete onsafe;
+    op_finish();
+    return r;
+  }
 
   // create transaction
   int len = t.get_btrfs_len();
@@ -951,11 +961,13 @@ int FileStore::remove(coll_t cid, pobject_t oid, Context *onsafe)
   dout(20) << "remove " << cid << " " << oid << dendl;
   char fn[200];
   get_coname(cid, oid, fn);
+  op_start();
   int r = ::unlink(fn);
   if (r == 0) 
     journal_remove(cid, oid, onsafe);
   else
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -965,8 +977,10 @@ int FileStore::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
 
   char fn[200];
   get_coname(cid, oid, fn);
+  op_start();
   int r = ::truncate(fn, size);
   if (r >= 0) journal_truncate(cid, oid, size, onsafe);
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -983,7 +997,6 @@ int FileStore::read(coll_t cid, pobject_t oid,
     dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << dendl;
     return -errno;
   }
-  ::flock(fd, LOCK_EX);    // lock for safety
   
   __u64 actual = lseek(fd, offset, SEEK_SET);
   size_t got = 0;
@@ -1000,7 +1013,6 @@ int FileStore::read(coll_t cid, pobject_t oid,
     bptr.set_length(got);   // properly size the buffer
     if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
   }
-  ::flock(fd, LOCK_UN);
   ::close(fd);
   return got;
 }
@@ -1022,8 +1034,9 @@ int FileStore::write(coll_t cid, pobject_t oid,
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
     return -errno;
   }
-  ::flock(fd, LOCK_EX);    // lock for safety
   
+  op_start();
+
   // seek
   __u64 actual = ::lseek(fd, offset, SEEK_SET);
   int did = 0;
@@ -1045,7 +1058,6 @@ int FileStore::write(coll_t cid, pobject_t oid,
     derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
   }
 
-  ::flock(fd, LOCK_UN);
 
   // schedule sync
   if (did >= 0)
@@ -1054,6 +1066,8 @@ int FileStore::write(coll_t cid, pobject_t oid,
     delete onsafe;
 
   ::close(fd);
+
+  op_finish();
   
   return did;
 }
@@ -1072,6 +1086,9 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (n < 0)
       return -errno;
+
+  op_start();
+  
   int r = 0;
 #ifndef DARWIN
   if (btrfs)
@@ -1117,6 +1134,9 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
     }
 #endif
   }
+
+  op_finish();
+
   if (r < 0)
     return -errno;
 
@@ -1136,7 +1156,7 @@ void FileStore::sync_entry()
     sync_cond.WaitInterval(lock, interval);
     lock.Unlock();
 
-    dout(20) << "sync_entry committing " << super_epoch << " " << interval << dendl;
+    dout(20) << "sync_entry committing " << op_seq << " " << interval << dendl;
     commit_start();
 
     // induce an fs sync.
@@ -1144,14 +1164,17 @@ void FileStore::sync_entry()
     char fn[100];
     sprintf(fn, "%s/commit_epoch", basedir.c_str());
     int fd = ::open(fn, O_CREAT|O_WRONLY, 0644);
-    ::write(fd, &super_epoch, sizeof(super_epoch));
+    ::write(fd, &op_seq, sizeof(op_seq));
+
+    commit_started();
+
     ::fsync(fd);  // this should cause the fs's journal to commit.  (on btrfs too.)
     ::close(fd);
 
     commit_finish();
 
     lock.Lock();
-    dout(20) << "sync_entry committed " << super_epoch << dendl;
+    dout(20) << "sync_entry committed to op_seq " << op_seq << dendl;
   }
   lock.Unlock();
 }
@@ -1179,6 +1202,7 @@ int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
 		       Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_attrs) 
     r = attrs.setattr(cid, oid, name, value, size, onsafe);
   else {
@@ -1193,12 +1217,14 @@ int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
     journal_setattr(cid, oid, name, value, size, onsafe);
   else
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
 int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset, Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_attrs) 
     r = attrs.setattrs(cid, oid, aset);
   else {
@@ -1221,6 +1247,7 @@ int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset, 
     journal_setattrs(cid, oid, aset, onsafe);
   else
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1293,6 +1320,7 @@ int FileStore::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset)
 int FileStore::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_attrs) 
     r = attrs.rmattr(cid, oid, name, onsafe);
   else {
@@ -1306,6 +1334,7 @@ int FileStore::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsa
     journal_rmattr(cid, oid, name, onsafe);
   else
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1317,6 +1346,7 @@ int FileStore::collection_setattr(coll_t c, const char *name,
 				  Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_attrs) 
     r = attrs.collection_setattr(c, name, value, size, onsafe);
   else {
@@ -1328,6 +1358,7 @@ int FileStore::collection_setattr(coll_t c, const char *name,
     journal_collection_setattr(c, name, value, size, onsafe);
   else 
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1335,6 +1366,7 @@ int FileStore::collection_rmattr(coll_t c, const char *name,
 				 Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_attrs) 
     r = attrs.collection_rmattr(c, name, onsafe);
   else {
@@ -1342,6 +1374,7 @@ int FileStore::collection_rmattr(coll_t c, const char *name,
     get_cdir(c, fn);
     r = do_removexattr(fn, name);
   }
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1379,6 +1412,7 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
 int FileStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
   int r;
+  op_start();
   if (fake_attrs) 
     r = attrs.collection_setattrs(cid, aset);
   else {
@@ -1394,6 +1428,7 @@ int FileStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   }
   if (r >= 0)
     journal_collection_setattrs(cid, aset, 0);
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1461,6 +1496,8 @@ int FileStore::create_collection(coll_t c,
 {
   if (fake_collections) return collections.create_collection(c, onsafe);
   
+  op_start();
+
   char fn[200];
   get_cdir(c, fn);
 
@@ -1470,6 +1507,7 @@ int FileStore::create_collection(coll_t c,
     journal_create_collection(c, onsafe);
   else 
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1477,6 +1515,8 @@ int FileStore::destroy_collection(coll_t c,
 				  Context *onsafe) 
 {
   if (fake_collections) return collections.destroy_collection(c, onsafe);
+
+  op_start();
 
   char fn[200];
   get_cdir(c, fn);
@@ -1489,6 +1529,8 @@ int FileStore::destroy_collection(coll_t c,
     journal_destroy_collection(c, onsafe);
   else 
     delete onsafe;
+
+  op_finish();
   return 0;
 }
 
@@ -1515,6 +1557,7 @@ int FileStore::collection_add(coll_t c, coll_t cid, pobject_t o,
 			      Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_collections) 
     r = collections.collection_add(c, o, onsafe);
   else {
@@ -1528,6 +1571,7 @@ int FileStore::collection_add(coll_t c, coll_t cid, pobject_t o,
     journal_collection_add(c, cid, o, onsafe);
   else 
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 
@@ -1535,6 +1579,7 @@ int FileStore::collection_remove(coll_t c, pobject_t o,
 				 Context *onsafe) 
 {
   int r;
+  op_start();
   if (fake_collections) 
     r = collections.collection_remove(c, o, onsafe);
   else {
@@ -1546,6 +1591,7 @@ int FileStore::collection_remove(coll_t c, pobject_t o,
     journal_collection_remove(c, o, onsafe);
   else
     delete onsafe;
+  op_finish();
   return r < 0 ? -errno:r;
 }
 

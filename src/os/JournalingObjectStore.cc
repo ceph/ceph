@@ -11,7 +11,7 @@ int JournalingObjectStore::journal_replay()
   if (!journal)
     return 0;
 
-  int err = journal->open(super_epoch);
+  int err = journal->open(op_seq);
   if (err < 0) {
     dout(3) << "journal_replay open failed with" << err
 	    << " " << strerror(err) << dendl;
@@ -23,26 +23,23 @@ int JournalingObjectStore::journal_replay()
   int count = 0;
   while (1) {
     bufferlist bl;
-    __u64 e;
-    if (!journal->read_entry(bl, e)) {
+    __u64 seq;
+    if (!journal->read_entry(bl, seq)) {
       dout(3) << "journal_replay: end of journal, done." << dendl;
       break;
     }
-    
-    if (e < super_epoch) {
-      dout(3) << "journal_replay: skipping old entry in epoch " << e << " < " << super_epoch << dendl;
+
+    if (seq <= op_seq) {
+      dout(3) << "journal_replay: skipping old op seq " << seq << " <= " << op_seq << dendl;
       continue;
     }
-    if (e == super_epoch+1) {
-      super_epoch++;
-      dout(3) << "journal_replay: jumped to next epoch " << super_epoch << dendl;
-    }
-    assert(e == super_epoch);
+    assert(op_seq == seq-1);
     
-    dout(3) << "journal_replay: applying transaction in epoch " << e << dendl;
+    dout(3) << "journal_replay: applying op seq " << seq << dendl;
     Transaction t(bl);
     apply_transaction(t);
-    count++;
+
+    assert(op_seq == seq);
   }
 
   // done reading, make writeable.
