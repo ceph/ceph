@@ -1293,7 +1293,10 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct dentry *dentry;
 	struct ceph_inode_info *ci;
 	struct ceph_mds_cap_reconnect *rec;
-	int count;
+	int num_caps, num_realms = 0;
+	int got;
+	u64 next_snap_ino = 0;
+	u32 *pnum_realms;
 
 	dout(1, "reconnect to recovering mds%d\n", mds);
 
@@ -1314,8 +1317,8 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		     mds);
 	}
 
-	mutex_unlock(&mdsc->mutex);  /* drop lock for duration */
-
+	down_read(&mdsc->snap_rwsem);
+	mutex_unlock(&mdsc->mutex);    /* drop lock for duration */
 	if (session)
 		mutex_lock(&session->s_mutex);
 
@@ -1339,29 +1342,20 @@ retry:
 	/* traverse this session's caps */
 	ceph_encode_8(&p, 0);
 	ceph_encode_32(&p, session->s_nr_caps);
-	count = 0;
+	num_caps = 0;
 	list_for_each(cp, &session->s_caps) {
+		struct inode *inode;
+
 		cap = list_entry(cp, struct ceph_cap, session_caps);
 		ci = cap->ci;
-		ceph_decode_need(&p, end, sizeof(u64) +
-				 sizeof(struct ceph_mds_cap_reconnect),
-				 needmore);
-		dout(10, " adding cap %p on ino %llx.%llx inode %p\n", cap,
-		     ceph_vinop(&ci->vfs_inode), &ci->vfs_inode);
-		ceph_encode_64(&p, ceph_ino(&ci->vfs_inode));
-		rec = p;
-		p += sizeof(*rec);
-		BUG_ON(p > end);
-		spin_lock(&ci->vfs_inode.i_lock);
-		cap->seq = 0;  /* reset cap seq */
-		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
-		rec->issued = cpu_to_le32(__ceph_caps_issued(ci, 0));
-		rec->size = cpu_to_le64(ci->vfs_inode.i_size);
-		ceph_encode_timespec(&rec->mtime, &ci->vfs_inode.i_mtime);
-		ceph_encode_timespec(&rec->atime, &ci->vfs_inode.i_atime);
-		spin_unlock(&ci->vfs_inode.i_lock);
+		inode = &ci->vfs_inode;
 
-		dentry = d_find_alias(&ci->vfs_inode);
+		dout(10, " adding cap %p on ino %llx.%llx inode %p\n", cap,
+		     ceph_vinop(inode), inode);
+		ceph_decode_need(&p, end, sizeof(u64), needmore);
+		ceph_encode_64(&p, ceph_ino(inode));
+
+		dentry = d_find_alias(inode);
 		if (dentry) {
 			path = ceph_build_dentry_path(dentry, &pathlen,
 						      &pathbase, 9999);
@@ -1375,10 +1369,52 @@ retry:
 		}
 		ceph_decode_need(&p, end, pathlen+4, needmore);
 		ceph_encode_string(&p, end, path, pathlen);
+
+		ceph_decode_need(&p, end, sizeof(*rec), needmore);
+		rec = p;
+		p += sizeof(*rec);
+		BUG_ON(p > end);
+		spin_lock(&inode->i_lock);
+		cap->seq = 0;  /* reset cap seq */
+		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
+		rec->issued = cpu_to_le32(__ceph_caps_issued(ci, 0));
+		rec->size = cpu_to_le64(inode->i_size);
+		ceph_encode_timespec(&rec->mtime, &inode->i_mtime);
+		ceph_encode_timespec(&rec->atime, &inode->i_atime);
+		rec->snaprealm = cpu_to_le64(ci->i_snap_realm->ino);
+		spin_unlock(&inode->i_lock);
+
 		kfree(path);
 		dput(dentry);
-		count++;
+		num_caps++;
 	}
+
+	/* snaprealms */
+	next_snap_ino = 0;
+	pnum_realms = p;
+	ceph_decode_need(&p, end, sizeof(pnum_realms), needmore);
+	p += sizeof(*pnum_realms);
+	num_realms = 0;
+	while (1) {
+		struct ceph_snap_realm *realm;
+		struct ceph_mds_snaprealm_reconnect *rec;
+		got = radix_tree_gang_lookup(&mdsc->snap_realms,
+					     (void **)&realm, next_snap_ino, 1);
+		if (!got)
+			break;
+
+		dout(10, " adding snap realm %llx seq %lld parent %llx\n",
+		     realm->ino, realm->seq, realm->parent_ino);
+		ceph_decode_need(&p, end, sizeof(*rec), needmore);
+		rec = p;
+		rec->ino = cpu_to_le64(realm->ino);
+		rec->seq = cpu_to_le64(realm->seq);
+		rec->parent = cpu_to_le64(realm->parent_ino);
+		p += sizeof(*rec);
+		num_realms++;
+		next_snap_ino = realm->ino + 1;
+	}
+	*pnum_realms = cpu_to_le32(num_realms);
 
 send:
 	reply->front.iov_len = p - reply->front.iov_base;
@@ -1401,14 +1437,18 @@ out:
 		mutex_unlock(&session->s_mutex);
 		ceph_put_mds_session(session);
 	}
+	up_read(&mdsc->snap_rwsem);
 	mutex_lock(&mdsc->mutex);
 	return;
 
 needmore:
+	/* bleh, this doesn't very accurately factor in snap realms,
+	   but it's safe. */
+	num_caps += num_realms;
 	newlen = len * (session->s_nr_caps+1);
-	do_div(newlen, (count+1));
+	do_div(newlen, (num_caps+1));
 	dout(30, "i guessed %d, and did %d of %d, retrying with %d\n",
-	     len, count, session->s_nr_caps, newlen);
+	     len, num_caps, session->s_nr_caps, newlen);
 	len = newlen;
 	ceph_msg_put(reply);
 	goto retry;

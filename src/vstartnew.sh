@@ -41,17 +41,18 @@ $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 for osd in 0 #1 #2 3 #4 5 6 7 8 9 10 11 12 13 14 15
 do
  echo mkfs osd$osd
- $SUDO $CEPH_BIN/cosd --debug_journal 20 --mkfs_for_osd $osd dev/osd$osd  --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20 # initialize empty object store
-# echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
+ $SUDO $CEPH_BIN/cosd --debug_journal 20 --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20 
  echo start osd$osd
  $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd -d --debug_ms 1 --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+# echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 done
 
 # mds
 ARGS="--mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20"
+#valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 $CEPH_BIN/cmds -d $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-$CEPH_BIN/cmonctl mds set_max_mds 2
+#$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+#$CEPH_BIN/cmonctl mds set_max_mds 2
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

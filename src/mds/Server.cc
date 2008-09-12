@@ -380,23 +380,23 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   } else {
     
     // snaprealms
-    for (map<inodeno_t, ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
+    for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
 	 p != m->realms.end();
 	 p++) {
-      CInode *in = mdcache->get_inode(p->first);
+      CInode *in = mdcache->get_inode(inodeno_t(p->ino));
       if (in) {
 	assert(in->snaprealm);
 	if (in->snaprealm->have_past_parents_open()) {
 	  dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
-	  mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->second.seq));
+	  mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
 	} else {
 	  dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
-	  mdcache->add_reconnected_snaprealm(from, p->first, snapid_t(p->second.seq));
+	  mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
 	}
       } else {
-	dout(15) << "open snaprealm (w/o inode) on " << p->first
-		 << " seq " << p->second.seq << dendl;
-	mdcache->add_reconnected_snaprealm(from, p->first, snapid_t(p->second.seq));
+	dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
+		 << " seq " << p->seq << dendl;
+	mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
       }
     }
 

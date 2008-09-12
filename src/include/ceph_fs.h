@@ -872,6 +872,7 @@ struct ceph_mds_cap_reconnect {
 /* followed by encoded string */
 
 struct ceph_mds_snaprealm_reconnect {
+	__le64 ino;
 	__le64 seq;
 	__le64 parent;  /* parent realm */
 } __attribute__ ((packed));
