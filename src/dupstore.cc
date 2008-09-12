@@ -38,28 +38,34 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
        p != collections.end();
        ++p) {
     cout << "collection " << i++ << "/" << num << " " << hex << *p << dec << std::endl;
-    dst->create_collection(*p, 0);
-    map<string,bufferptr> attrs;
-    src->collection_getattrs(*p, attrs);
-    dst->collection_setattrs(*p, attrs);
+    {
+      ObjectStore::Transaction t;
+      t.create_collection(*p);
+      map<string,bufferptr> attrs;
+      src->collection_getattrs(*p, attrs);
+      t.collection_setattrs(*p, attrs);
+      dst->apply_transaction(t);
+    }
 
     vector<pobject_t> o;
     src->collection_list(*p, o);
     int numo = o.size();
     int j = 1;
     for (vector<pobject_t>::iterator q = o.begin(); q != o.end(); q++) {
+      ObjectStore::Transaction t;
       if (did_object.count(*q))
-	dst->collection_add(*p, did_object[*q], *q, 0);
+	t.collection_add(*p, did_object[*q], *q);
       else {
 	bufferlist bl;
 	src->read(*p, *q, 0, 0, bl);
 	cout << "object " << j++ << "/" << numo << " " << *q << " = " << bl.length() << " bytes" << std::endl;
-	dst->write(*p, *q, 0, bl.length(), bl, 0);
+	t.write(*p, *q, 0, bl.length(), bl);
 	map<string,bufferptr> attrs;
 	src->getattrs(*p, *q, attrs);
-	dst->setattrs(*p, *q, attrs);
+	t.setattrs(*p, *q, attrs);
 	did_object[*q] = *p;
       }
+      dst->apply_transaction(t);
     }
   }
   

@@ -151,8 +151,6 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   sb.fsid = fsid;
   sb.whoami = whoami;
 
-  store->create_collection(0, 0);
-
   // age?
   if (g_conf.osd_age_time != 0) {
     cout << "aging..." << std::endl;
@@ -175,14 +173,19 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
     bl.push_back(bp);
     cout << "testing disk bandwidth..." << std::endl;
     utime_t start = g_clock.now();
-    for (int i=0; i<1000; i++) 
-      store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
+    for (int i=0; i<1000; i++) {
+      ObjectStore::Transaction t;
+      t.write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl);
+      store->apply_transaction(t);
+    }
     store->sync();
     utime_t end = g_clock.now();
     end -= start;
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
+    ObjectStore::Transaction tr;
     for (int i=0; i<1000; i++) 
-      store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
+      tr.remove(0, pobject_t(0, 0, object_t(999,i)));
+    store->apply_transaction(tr);
     
     // set osd weight
     sb.weight = (1000.0 / (double)end);
@@ -190,7 +193,12 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
 
   bufferlist bl;
   ::encode(sb, bl);
-  store->write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
+
+  ObjectStore::Transaction t;
+  t.create_collection(0);
+  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  store->apply_transaction(t);
+
   store->umount();
   delete store;
   return 0;
@@ -1489,7 +1497,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    store->write(0, poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    ObjectStore::Transaction ft;
+    ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    store->apply_transaction(ft);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1513,7 +1523,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    store->write(0, poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    ObjectStore::Transaction ft;
+    ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    store->apply_transaction(ft);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1553,7 +1565,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       // archive the full map
       bl.clear();
       osdmap->encode(bl);
-      store->write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl, 0);
+      ObjectStore::Transaction ft;
+      ft.write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
+      store->apply_transaction(ft);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();

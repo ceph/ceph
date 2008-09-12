@@ -3,15 +3,15 @@
 
 #include "config.h"
 
-#define dout(x) if (x <= g_conf.debug) *_dout << dbeginl << g_clock.now() << " journal "
-#define derr(x) if (x <= g_conf.debug) *_derr << dbeginl << g_clock.now() << " journal "
+#define dout(x) if (x <= g_conf.debug_journal) *_dout << dbeginl << g_clock.now() << " journal "
+#define derr(x) if (x <= g_conf.debug_journal) *_derr << dbeginl << g_clock.now() << " journal "
 
 int JournalingObjectStore::journal_replay()
 {
   if (!journal)
     return 0;
 
-  int err = journal->open(op_seq);
+  int err = journal->open(op_seq+1);
   if (err < 0) {
     dout(3) << "journal_replay open failed with" << err
 	    << " " << strerror(err) << dendl;
@@ -35,10 +35,11 @@ int JournalingObjectStore::journal_replay()
     }
     assert(op_seq == seq-1);
     
-    dout(3) << "journal_replay: applying op seq " << seq << dendl;
+    dout(3) << "journal_replay: applying op seq " << seq << " (op_seq " << op_seq << ")" << dendl;
     Transaction t(bl);
-    apply_transaction(t);
+    int r = apply_transaction(t);
 
+    dout(3) << "journal_replay: r = " << r << ", op now seq " << op_seq << dendl;
     assert(op_seq == seq);
   }
 

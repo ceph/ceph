@@ -27,6 +27,7 @@ protected:
   Finisher finisher;
   map<version_t, vector<Context*> > commit_waiters;
   RWLock op_lock;
+  Mutex journal_lock;
 
   void journal_start() {
     finisher.start();
@@ -44,7 +45,11 @@ protected:
   void op_start() {
     op_lock.get_read();
   }
+  void op_journal_start() {
+    journal_lock.Lock();
+  }
   void op_finish() {
+    journal_lock.Unlock();
     op_lock.put_read();    
   }
 

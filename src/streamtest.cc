@@ -109,7 +109,9 @@ int main(int argc, const char **argv)
     return -1;
   }
 
-  fs->create_collection(0);
+  ObjectStore::Transaction ft;
+  ft.create_collection(0);
+  fs->apply_transaction(ft);
 
   utime_t now = g_clock.now();
   utime_t end = now;

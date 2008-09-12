@@ -84,6 +84,11 @@ int FileJournal::create()
     return -errno;
   }
 
+  // zero first little bit, too.
+  char z[block_size];
+  memset(z, 0, block_size);
+  ::pwrite(fd, z, block_size, get_top());
+
   ::close(fd);
   fd = -1;
   dout(2) << "create done" << dendl;
