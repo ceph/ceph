@@ -76,7 +76,9 @@ static void ceph_put_super(struct super_block *s)
 static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct ceph_client *client = ceph_inode_to_client(dentry->d_inode);
+	struct ceph_monmap *monmap = client->monc.monmap;
 	struct ceph_statfs st;
+	__le64 fsid;
 	int err;
 
 	dout(30, "ceph_statfs\n");
@@ -92,9 +94,12 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_bavail = st.f_avail >> (CEPH_BLOCK_SHIFT-10);
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
-	/* fsid? */
 	buf->f_namelen = PATH_MAX;
 	buf->f_frsize = 4096;
+
+	fsid = monmap->fsid.major ^ monmap->fsid.minor;
+	buf->f_fsid.val[0] = fsid & 0xffffffff;
+	buf->f_fsid.val[1] = fsid >> 32;
 
 	return 0;
 }
