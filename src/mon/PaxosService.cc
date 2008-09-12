@@ -133,6 +133,14 @@ void PaxosService::propose_pending()
 
 
 
+void PaxosService::election_starting()
+{
+  dout(10) << "election_starting" << dendl;
+  if (proposal_timer) {
+    mon->timer.cancel_event(proposal_timer);
+    proposal_timer = 0;
+  }
+}
 
 void PaxosService::election_finished()
 {
