@@ -484,7 +484,8 @@ void FileJournal::write_thread_entry()
   dout(10) << "write_thread_entry start" << dendl;
   write_lock.Lock();
   
-  while (!write_stop) {
+  while (!write_stop || 
+	 !writeq.empty()) {  // ensure we fully flush the writeq before stopping
     if (writeq.empty()) {
       // sleep
       dout(20) << "write_thread_entry going to sleep" << dendl;
@@ -536,9 +537,20 @@ void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
 
 void FileJournal::committed_thru(__u64 seq)
 {
-  dout(10) << "committed_thru " << seq << dendl;
-
   Mutex::Locker locker(write_lock);
+
+  if (seq > last_committed_seq) {
+    dout(10) << "committed_thru " << seq << " < last_committed_seq " << last_committed_seq << dendl;
+    assert(seq >= last_committed_seq);
+    return;
+  }
+  if (seq == last_committed_seq) {
+    dout(10) << "committed_thru " << seq << " == last_committed_seq " << last_committed_seq << dendl;
+    return;
+  }
+
+  dout(10) << "committed_thru " << seq << " (last_committed_seq " << last_committed_seq << ")" << dendl;
+  last_committed_seq = seq;
 
   // was full?
   if (full_commit_seq && seq >= full_commit_seq) {
@@ -644,10 +656,18 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
   dout(1) << "read_entry " << read_pos << " : seq " << h.seq
 	  << " " << h.len << " bytes"
 	  << dendl;
+
+  if (h.seq < last_committed_seq) {
+    dout(0) << "read_entry seq " << seq << " < last_committed_seq " << last_committed_seq << dendl;
+    assert(h.seq >= last_committed_seq);
+    return false;
+  }
+  last_committed_seq = h.seq;
+
+  // ok!
   bl.clear();
   bl.push_back(bp);
   seq = h.seq;
-
   journalq.push_back(pair<__u64,off64_t>(h.seq, read_pos));
 
   read_pos += 2*sizeof(entry_header_t) + h.len;

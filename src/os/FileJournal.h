@@ -72,7 +72,7 @@ private:
   off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
 
-  __u64 seq;
+  __u64 last_committed_seq;
 
   __u64 full_commit_seq;  // don't write, wait for this seq to commit
   __u64 full_restart_seq; // start writing again with this seq
@@ -138,7 +138,7 @@ private:
     directio(dio),
     writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
-    seq(0), 
+    last_committed_seq(0), 
     full_commit_seq(0), full_restart_seq(0),
     fd(-1),
     write_stop(false), write_thread(this) { }
