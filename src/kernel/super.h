@@ -243,6 +243,7 @@ struct ceph_inode_info {
 	struct list_head i_lease_item; /* mds session list */
 
 	struct rb_root i_fragtree;
+	struct mutex i_fragtree_mutex;
 
 	int i_xattr_len;
 	char *i_xattr_data;

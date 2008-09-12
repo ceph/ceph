@@ -106,9 +106,7 @@ retry:
 	}
 
 	if (!newfrag) {
-		spin_unlock(&ci->vfs_inode.i_lock);
 		newfrag = kmalloc(sizeof(*frag), GFP_NOFS);
-		spin_lock(&ci->vfs_inode.i_lock);
 		if (!newfrag)
 			return ERR_PTR(-ENOMEM);
 		goto retry;
@@ -140,7 +138,7 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 	unsigned nway, i;
 	u32 n;
 
-	spin_lock(&ci->vfs_inode.i_lock);
+	mutex_lock(&ci->i_fragtree_mutex);
 	while (1) {
 		WARN_ON(!frag_contains_value(t, v));
 		frag = __ceph_find_frag(ci, t);
@@ -168,7 +166,7 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 	}
 	dout(30, "choose_frag(%x) = %x\n", v, t);
 
-	spin_unlock(&ci->vfs_inode.i_lock);
+	mutex_unlock(&ci->i_fragtree_mutex);
 	return t;
 }
 
@@ -188,7 +186,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	int i;
 	int err = 0;
 
-	spin_lock(&inode->i_lock);
+	mutex_lock(&ci->i_fragtree_mutex);
 	if (mds < 0 && ndist == 0) {
 		/* no delegation info needed. */
 		frag = __ceph_find_frag(ci, id);
@@ -228,7 +226,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	     ceph_vinop(inode), frag->frag, frag->mds, frag->ndist);
 
 out:
-	spin_unlock(&inode->i_lock);
+	mutex_unlock(&ci->i_fragtree_mutex);
 	return err;
 }
 

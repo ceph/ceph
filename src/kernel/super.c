@@ -164,6 +164,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ci->i_lease_item);
 
 	ci->i_fragtree = RB_ROOT;
+	mutex_init(&ci->i_fragtree_mutex);
 
 	ci->i_xattr_len = 0;
 	ci->i_xattr_data = 0;
