@@ -1406,7 +1406,8 @@ void FileStore::sync()
 
 void FileStore::sync(Context *onsafe)
 {
-  journal_sync(onsafe);
+  ObjectStore::Transaction t;
+  apply_transaction(t);
   sync();
 }
 
