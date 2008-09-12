@@ -1441,7 +1441,7 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 	dout(20, "check_new_map new %u old %u\n",
 	     newmap->m_epoch, oldmap->m_epoch);
 
-	for (i = 0; i < oldmap->m_max_mds; i++) {
+	for (i = 0; i < oldmap->m_max_mds && i < mdsc->max_sessions; i++) {
 		if (mdsc->sessions[i] == 0)
 			continue;
 		session = mdsc->sessions[i];
