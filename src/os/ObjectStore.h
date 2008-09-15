@@ -31,8 +31,8 @@
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif /* DARWIN */
 
-#include <list>
-using std::list;
+#include <vector>
+using std::vector;
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -76,16 +76,17 @@ public:
    */
   class Transaction {
   public:
-    static const int OP_WRITE =        10;  // oid, offset, len, bl
-    static const int OP_ZERO =         11;  // oid, offset, len
-    static const int OP_TRUNCATE =     12;  // oid, len
-    static const int OP_REMOVE =       13;  // oid
-    static const int OP_SETATTR =      14;  // oid, attrname, bl
-    static const int OP_SETATTRS =     15;  // oid, attrset
-    static const int OP_RMATTR =       16;  // oid, attrname
-    static const int OP_CLONE =        17;  // oid, newoid
+    static const int OP_WRITE =        10;  // cid, oid, offset, len, bl
+    static const int OP_ZERO =         11;  // cid, oid, offset, len
+    static const int OP_TRUNCATE =     12;  // cid, oid, len
+    static const int OP_REMOVE =       13;  // cid, oid
+    static const int OP_SETATTR =      14;  // cid, oid, attrname, bl
+    static const int OP_SETATTRS =     15;  // cid, oid, attrset
+    static const int OP_RMATTR =       16;  // cid, oid, attrname
+    static const int OP_CLONE =        17;  // cid, oid, newoid
+    static const int OP_CLONERANGE =   18;  // cid, oid, newoid, offset, len
 
-    static const int OP_TRIMCACHE =    18;  // oid, offset, len
+    static const int OP_TRIMCACHE =    19;  // cid, oid, offset, len
 
     static const int OP_MKCOLL =       20;  // cid
     static const int OP_RMCOLL =       21;  // cid
@@ -98,55 +99,49 @@ public:
   private:
     int len;
     int blen;  // for btrfs transactions
-    list<int8_t> ops;
-    list<bufferlist> bls;
-    list<pobject_t> oids;
-    list<coll_t> cids;
-    list<int64_t> lengths;
+    vector<int8_t> ops;
+    vector<bufferlist> bls;
+    vector<pobject_t> oids;
+    vector<coll_t> cids;
+    vector<int64_t> lengths;
 
     // for these guys, just use a pointer.
     // but, decode to a full value, and create pointers to that.
-    list<const char*> attrnames;
-    list<string> attrnames2;
-    list<map<string,bufferptr> *> attrsets;
-    list<map<string,bufferptr> > attrsets2;
+    vector<const char*> attrnames;
+    vector<string> attrnames2;
+    vector<map<string,bufferptr> *> attrsets;
+    vector<map<string,bufferptr> > attrsets2;
+
+    unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
     int get_len() { return len ? len : ops.size(); }
     int get_btrfs_len() { return blen; }
 
     bool have_op() {
-      return !ops.empty();
+      return opp < ops.size();
     }
     int get_num_ops() { return ops.size(); }
     int get_op() {
-      int op = ops.front();
-      ops.pop_front();
-      return op;
+      return ops[opp++];
     }
     void get_bl(bufferlist& bl) {
-      bl.claim(bls.front());
-      bls.pop_front();
+      bl = bls[blp++];
     }
     void get_oid(pobject_t& oid) {
-      oid = oids.front();
-      oids.pop_front();
+      oid = oids[oidp++];
     }
     void get_cid(coll_t& cid) {
-      cid = cids.front();
-      cids.pop_front();
+      cid = cids[cidp++];
     }
     void get_length(__u64& len) {
-      len = lengths.front();
-      lengths.pop_front();
+      len = lengths[lengthp++];
     }
     void get_attrname(const char * &p) {
-      p = attrnames.front();
-      attrnames.pop_front();
+      p = attrnames[attrnamep++];
     }
     void get_pattrset(map<string,bufferptr>* &ps) {
-      ps = attrsets.front();
-      attrsets.pop_front();
+      ps = attrsets[attrsetp++];
     }
 
     void write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl) {
@@ -238,6 +233,17 @@ public:
       len++;
       blen += 5;
     }
+    void clone_range(coll_t cid, pobject_t oid, pobject_t noid, __u64 off, __u64 len) {
+      int op = OP_CLONERANGE;
+      ops.push_back(op);
+      cids.push_back(cid);
+      oids.push_back(oid);
+      oids.push_back(noid);
+      lengths.push_back(off);
+      lengths.push_back(len);
+      len++;
+      blen += 5;
+    }
     void create_collection(coll_t cid) {
       int op = OP_MKCOLL;
       ops.push_back(op);
@@ -303,9 +309,16 @@ public:
 
 
     // etc.
-    Transaction() : len(0) {}
-    Transaction(bufferlist::iterator &p) : len(0) { decode(p); }
-    Transaction(bufferlist &bl) : len(0) { 
+    Transaction() :
+      len(0),
+      opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {}
+    Transaction(bufferlist::iterator &p) : 
+      len(0),
+      opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0)
+    { decode(p); }
+    Transaction(bufferlist &bl) : 
+      len(0),
+      opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { 
       bufferlist::iterator p = bl.begin();
       decode(p); 
     }
@@ -326,12 +339,12 @@ public:
       ::decode(cids, bl);
       ::decode(lengths, bl);
       ::decode(attrnames2, bl);
-      for (list<string>::iterator p = attrnames2.begin();
+      for (vector<string>::iterator p = attrnames2.begin();
 	   p != attrnames2.end();
 	   ++p)
 	attrnames.push_back((*p).c_str());
       ::decode(attrsets2, bl);
-      for (list<map<string,bufferptr> >::iterator p = attrsets2.begin();
+      for (vector<map<string,bufferptr> >::iterator p = attrsets2.begin();
 	   p != attrsets2.end();
 	   ++p)
 	attrsets.push_back(&(*p));
