@@ -788,7 +788,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		have_lease = have_icontent ||
 			(rinfo->trace_dlease[d]->mask & CEPH_LOCK_DN);
 		if (!have_lease)
-			dout(0, "fill_trace  no icontent|dentry lease\n");
+			dout(10, "fill_trace  no icontent|dentry lease\n");
 
 		dout(10, "fill_trace  took %p i_mutex\n", parent->d_inode);
 
