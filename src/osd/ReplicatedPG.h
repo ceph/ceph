@@ -97,6 +97,7 @@ protected:
 
 
   void push(pobject_t oid, int dest);
+  void push(pobject_t oid, int dest, interval_set<__u64>& blocks);
   void pull(pobject_t oid);
 
   // modify

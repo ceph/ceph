@@ -1625,30 +1625,53 @@ void ReplicatedPG::pull(pobject_t poid)
  */
 void ReplicatedPG::push(pobject_t poid, int peer)
 {
+  interval_set<__u64> subset;
+  push(poid, peer, subset);
+}
+
+void ReplicatedPG::push(pobject_t poid, int peer, interval_set<__u64> &subset)
+{
   // read data+attrs
   bufferlist bl;
   eversion_t v;
-  size_t vlen = sizeof(v);
   map<string,bufferptr> attrset;
-  
-  osd->store->read(info.pgid.to_coll(), poid, 0, 0, bl);
-  osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, vlen);
+  __u64 size;
+
+  if (!subset.size()) {
+    struct stat st;
+    osd->store->stat(info.pgid.to_coll(), poid, &st);
+    size = st.st_size;
+
+    for (map<__u64,__u64>::iterator p = subset.m.begin();
+	 p != subset.m.end();
+	 p++) {
+      bufferlist bit;
+      osd->store->read(info.pgid.to_coll(), poid, p->first, p->second, bit);
+      bl.claim_append(bit);
+    }
+  } else {
+    osd->store->read(info.pgid.to_coll(), poid, 0, 0, bl);
+    size = bl.length();
+  }
+  osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
   osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
 
   // ok
   dout(7) << "push " << poid << " v " << v 
-          << " size " << bl.length()
+	  << " size " << size
+	  << " subset " << subset
+          << " data " << bl.length()
           << " to osd" << peer
           << dendl;
-  assert(vlen == sizeof(v));
 
   osd->logger->inc("r_push");
   osd->logger->inc("r_pushb", bl.length());
   
   // send
   osd_reqid_t rid;  // useless?
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, bl.length(),
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, size,
 				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
+  subop->data_subset = subset;
   subop->set_data(bl);   // note: claims bl, set length above here!
   subop->attrset.swap(attrset);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
@@ -1711,7 +1734,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   assert(!is_primary());  // we should be a replica or stray.
 
   // push it back!
-  push(poid, op->get_source().num());
+  push(poid, op->get_source().num(), op->data_subset);
 }
 
 
@@ -1726,8 +1749,13 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   dout(7) << "op_push " 
           << poid 
           << " v " << v 
-          << " size " << op->length << " " << op->get_data().length()
+	  << " len " << op->length
+	  << " subset " << op->data_subset
+	  << " data " << op->get_data().length()
           << dendl;
+
+  interval_set<__u64> data_subset;
+  map<pobject_t, interval_set<__u64> > clone_subsets;
 
   if (is_replica()) {
     // replica should only accept pushes from the current primary.
@@ -1743,8 +1771,17 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       delete op;
       return;
     }
+    data_subset = op->data_subset;
+    if (data_subset.empty() && op->length && op->length == op->get_data().length())
+      data_subset.insert(0, op->length);
+    clone_subsets = op->clone_subsets;
   } else {
     // primary will accept pushes anytime.
+
+    // *** write me ***
+    data_subset = op->data_subset;
+    if (data_subset.empty() && op->length && op->length == op->get_data().length())
+      data_subset.insert(0, op->length);
   }
 
   // are we missing (this specific version)?
@@ -1756,12 +1793,33 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     return;
   }
   
-  assert(op->get_data().length() == op->length);
+  //assert(op->get_data().length() == op->length);
   
+  dout(15) << " data_subset " << data_subset
+	   << " clone_subsets " << clone_subsets
+	   << dendl;
+
   // write object and add it to the PG
   ObjectStore::Transaction t;
   t.remove(info.pgid.to_coll(), poid);  // in case old version exists
-  t.write(info.pgid.to_coll(), poid, 0, op->length, op->get_data());
+
+  __u64 boff = 0;
+  for (map<__u64,__u64>::iterator p = data_subset.m.begin();
+       p != data_subset.m.end(); 
+       p++) {
+    bufferlist bit;
+    bit.substr_of(op->get_data(), boff, p->second);
+    t.write(info.pgid.to_coll(), poid, p->first, p->second, bit);
+    boff += p->second;
+  }
+  for (map<pobject_t, interval_set<__u64> >::iterator p = clone_subsets.begin();
+       p != clone_subsets.end();
+       p++)
+    for (map<__u64,__u64>::iterator q = p->second.m.begin();
+	 q != p->second.m.end(); 
+	 q++)
+      t.clone_range(info.pgid.to_coll(), poid, p->first, q->first, q->second);
+
   t.setattrs(info.pgid.to_coll(), poid, op->attrset);
   if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP &&
       op->attrset.count("snaps")) {

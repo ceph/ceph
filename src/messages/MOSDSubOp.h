@@ -50,6 +50,9 @@ public:
 
   map<string,bufferptr> attrset;
 
+  interval_set<__u64> data_subset;
+  map<pobject_t, interval_set<__u64> > clone_subsets;
+
  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
@@ -67,6 +70,8 @@ public:
     ::decode(pg_trim_to, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
+    ::decode(data_subset, p);
+    ::decode(clone_subsets, p);
   }
 
   virtual void encode_payload() {
@@ -85,6 +90,8 @@ public:
     ::encode(pg_trim_to, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
+    ::encode(data_subset, payload);
+    ::encode(clone_subsets, payload);
     env.data_off = offset;
   }
 
@@ -121,6 +128,7 @@ public:
 	<< " v " << version
 	<< " snapset=" << snapset << " snapc=" << snapc;    
     if (length) out << " " << offset << "~" << length;
+    if (!data_subset.empty()) out << " subset " << data_subset;
     out << ")";
   }
 };

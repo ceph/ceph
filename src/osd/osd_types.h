@@ -441,7 +441,7 @@ struct SnapSet {
   bool head_exists;
   vector<snapid_t> snaps;
   vector<snapid_t> clones;
-  interval_set<__u64> head_overlap;                     // subset of data that is "shared"
+  interval_set<__u64> head_overlap;                   // subset of data that is "shared"
   map<snapid_t, interval_set<__u64> > clone_overlap;  // overlap w/ previous
 
   SnapSet() : head_exists(false) {}

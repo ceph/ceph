@@ -1,7 +1,7 @@
 v0.4
 /- btrfs latency.  update howto.
 /- snap garbage collection
-- journal
+/- journal
 
 v0.5
 - ENOSPC
@@ -14,6 +14,7 @@ bugs
 
 big items
 - ENOSPC
+- repair
 - enforceable quotas?
 - mds security enforcement
 - client, user authentication
@@ -38,6 +39,7 @@ snaps on mds
 
 snaps on osd
 - garbage collection
+  - don't start collection on replica until clean?
 - efficient recovery of clones using the clone diff info
 
 userspace client
