@@ -94,7 +94,7 @@ protected:
   // push/pull
   map<object_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
   map<object_t, set<int> > pushing;
-
+  set<object_t> waiting_for_head;
 
   void push(pobject_t oid, int dest);
   void push(pobject_t oid, int dest, interval_set<__u64>& blocks);

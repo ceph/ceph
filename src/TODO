@@ -41,6 +41,10 @@ snaps on osd
 - garbage collection
   - don't start collection on replica until clean?
 - efficient recovery of clones using the clone diff info
+  - recovery on primary
+    -
+  - primary pushes to replicas
+    - clone/rename, + push of new head
 
 userspace client
 - handle session STALE

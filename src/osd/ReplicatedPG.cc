@@ -1608,29 +1608,28 @@ void ReplicatedPG::pull(pobject_t poid)
   interval_set<__u64> data_exclude;
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
-  if (poid.snap && poid.snap < CEPH_NOSNAP) {
-    pobject_t head = latest->oid;
-    head.snap = CEPH_NOSNAP;
+  if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
+    pobject_t head = poid;
+    head.oid.snap = CEPH_NOSNAP;
     
     // do we have the head?
-    if (missing.is_missing(head)) {
-      if (pulling.count(head)) {
+    if (missing.is_missing(head.oid)) {
+      if (pulling.count(head.oid)) {
 	dout(10) << " missing but already pulling head " << head << dendl;
       } else {
 	pull(head);
       }
-      waiting_for_head.insert(poid);
+      waiting_for_head.insert(poid.oid);
       return;
     }
 
     // check snapset
     bufferlist bl;
-    pobject_t head = poid;
-    head.snap = CEPH_NOSNAP;
     int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
     assert(r >= 0);
     SnapSet snapset;
-    ::decode(snapset, bl);
+    bufferlist::iterator blp = bl.begin();
+    ::decode(snapset, blp);
     dout(10) << " snapset " << snapset << dendl;
     
     /*
@@ -2087,7 +2086,7 @@ bool ReplicatedPG::do_recovery()
   // look at log!
   Log::Entry *latest = 0;
 
-  list<Entry>::iterator p = log.requested_to;
+  list<Log::Entry>::iterator p = log.requested_to;
 
   while (p != log.log.end()) {
     assert(log.objects.count(p->oid));
