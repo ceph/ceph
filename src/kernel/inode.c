@@ -1007,13 +1007,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	}
 
 	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
-	if (req->r_old_dentry)
-		dput(req->r_old_dentry);
 	if (req->r_last_dentry)
 		dput(req->r_last_dentry);
+	req->r_last_dentry = dn;
 	if (req->r_last_inode)
 		iput(req->r_last_inode);
-	req->r_last_dentry = dn;
 	req->r_last_inode = in;
 	if (in)
 		igrab(in);
