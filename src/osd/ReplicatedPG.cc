@@ -1605,6 +1605,42 @@ void ReplicatedPG::pull(pobject_t poid)
           << " from osd" << fromosd
           << dendl;
 
+  interval_set<__u64> data_exclude;
+
+  // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
+  if (poid.snap && poid.snap < CEPH_NOSNAP) {
+    pobject_t head = latest->oid;
+    head.snap = CEPH_NOSNAP;
+    
+    // do we have the head?
+    if (missing.is_missing(head)) {
+      if (pulling.count(head)) {
+	dout(10) << " missing but already pulling head " << head << dendl;
+      } else {
+	pull(head);
+      }
+      waiting_for_head.insert(poid);
+      return;
+    }
+
+    // check snapset
+    bufferlist bl;
+    pobject_t head = poid;
+    head.snap = CEPH_NOSNAP;
+    int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+    assert(r >= 0);
+    SnapSet snapset;
+    ::decode(snapset, bl);
+    dout(10) << " snapset " << snapset << dendl;
+    
+    /*
+    if (!snapset.clone_overlap[poid.snap].empty()) {
+      // there is overlap with next.  get that one first?
+      if (missing
+    }
+    */
+  }
+
   // send op
   osd_reqid_t rid;
   tid_t tid = osd->get_tid();
@@ -2051,27 +2087,33 @@ bool ReplicatedPG::do_recovery()
   // look at log!
   Log::Entry *latest = 0;
 
-  while (log.requested_to != log.log.end()) {
-    assert(log.objects.count(log.requested_to->oid));
-    latest = log.objects[log.requested_to->oid];
+  list<Entry>::iterator p = log.requested_to;
+
+  while (p != log.log.end()) {
+    assert(log.objects.count(p->oid));
+    latest = log.objects[p->oid];
     assert(latest);
 
     dout(10) << "do_recovery "
-             << *log.requested_to
+             << *p
 	     << (latest->is_update() ? " (update)":"")
-             << (pulling.count(latest->oid) ? " (pulling)":"")
 	     << (missing.is_missing(latest->oid) ? " (missing)":"")
+             << (pulling.count(latest->oid) ? " (pulling)":"")
+	     << (waiting_for_head.count(latest->oid) ? " (waiting for head)":"")
              << dendl;
 
     if (latest->is_update() &&
         !pulling.count(latest->oid) &&
+	!waiting_for_head.count(latest->oid) &&
         missing.is_missing(latest->oid)) {
       pobject_t poid(info.pgid.pool(), 0, latest->oid);
       pull(poid);
       return true;
     }
     
+    //if (p == log.requested_to)
     log.requested_to++;
+    p++;
   }
 
   if (!pulling.empty()) {

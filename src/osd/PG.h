@@ -285,7 +285,8 @@ public:
     // recovery pointers
     list<Entry>::iterator requested_to; // not inclusive of referenced item
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
-    
+    set<pobject_t> waiting_for_head;
+
     /****/
     IndexedLog() {}
 
