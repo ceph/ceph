@@ -379,6 +379,8 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	if (!context_is_writeable(inode, snapc)) {
 		dout(10, "writepage %p page %p snapc %p not writeable - noop\n",
 		     inode, page, (void *)page->private);
+		/* we should only noop if called by kswapd */
+		WARN_ON((current->flags & PF_MEMALLOC) == 0);
 		goto out;
 	}
 
