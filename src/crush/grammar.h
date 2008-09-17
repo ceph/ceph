@@ -101,9 +101,10 @@ struct crush_grammar : public grammar<crush_grammar>
       
       // rules
       step_take = str_p("take") >> str_p("root");
-      step_choose = str_p("choose") >> ( str_p("indep") | str_p("firstn") )
-				    >> integer
-				    >> str_p("type") >> name;
+      step_choose = (str_p("choose") | str_p("chooseleaf"))
+	>> ( str_p("indep") | str_p("firstn") )
+	>> integer
+	>> str_p("type") >> name;
       step_emit = str_p("emit");
       step = str_p("step") >> ( step_take | 
 				step_choose | 

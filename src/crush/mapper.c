@@ -164,7 +164,9 @@ static int is_out(struct crush_map *map, int item, int x)
 static int crush_choose(struct crush_map *map,
 			struct crush_bucket *bucket,
 			int x, int numrep, int type,
-			int *out, int outpos, int firstn)
+			int *out, int outpos, 
+			int firstn, int recurse_to_leaf,
+			int *out2)
 {
 	int rep;
 	int ftotal, flocal;
@@ -251,6 +253,11 @@ static int crush_choose(struct crush_map *map,
 					reject = is_out(map, item, x);
 				else 
 					reject = 0;
+				if (recurse_to_leaf &&
+				    !crush_choose(map, bucket, x, 1, 0,
+						  out2+outpos, 0,
+						  firstn, 0, 0))
+					reject = 1;
 				
 				if (reject || collide) {
 					ftotal++;
@@ -285,6 +292,8 @@ int crush_do_rule(struct crush_map *map,
 	int force_pos = -1;
 	int a[CRUSH_MAX_SET];
 	int b[CRUSH_MAX_SET];
+	int c[CRUSH_MAX_SET];
+	int recurse_to_leaf;
 	int *w;
 	int wsize = 0;
 	int *o;
@@ -335,11 +344,15 @@ int crush_do_rule(struct crush_map *map,
 			
 		case CRUSH_RULE_CHOOSE_FIRSTN:
 		case CRUSH_RULE_CHOOSE_INDEP:
+		case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
+		case CRUSH_RULE_CHOOSE_LEAF_INDEP:
 			BUG_ON(wsize == 0);
 			
 			/* reset output */
 			osize = 0;
 			
+			recurse_to_leaf = rule->steps[step].op >=
+				CRUSH_RULE_CHOOSE_LEAF_FIRSTN;
 			for (i = 0; i < wsize; i++) {
 				/*
 				 * see CRUSH_N, CRUSH_N_MINUS macros.
@@ -361,9 +374,14 @@ int crush_do_rule(struct crush_map *map,
 				osize += crush_choose(map,
 						      map->buckets[-1-w[i]],
 						      x, numrep, rule->steps[step].arg2,
-						      o+osize, j, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN);
+						      o+osize, j, rule->steps[step].op == CRUSH_RULE_CHOOSE_FIRSTN,
+						      recurse_to_leaf, c+osize);
 			}
-			
+
+			if (recurse_to_leaf)
+				/* copy final _leaf_ values to output set */
+				memcpy(o, c, osize*sizeof(*o));
+
 			/* swap t and w arrays */
 			tmp = o;
 			o = w;

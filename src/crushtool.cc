@@ -298,13 +298,21 @@ void parse_rule(iter_t const& i, CrushWrapper &crush)
 	  cerr << "in rule '" << rname << "' type '" << type << "' not defined" << std::endl;
 	  exit(1);
 	}
+	string choose = string_node(s->children[0]);
 	string mode = string_node(s->children[1]);
-	if (mode == "firstn")
-	  crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	else if (mode == "indep")
-	  crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	else 
-	  assert(0);
+	if (choose == "choose") {
+	  if (mode == "firstn")
+	    crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else if (mode == "indep")
+	    crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else assert(0);
+	} else if (choose == "chooseleaf") {
+	  if (mode == "firstn") 
+	    crush.set_rule_step_choose_leaf_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else if (mode == "indep")
+	    crush.set_rule_step_choose_leaf_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else assert(0);
+	} else assert(0);
       }
       break;
 
