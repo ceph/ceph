@@ -87,6 +87,8 @@ osdmon
 - monitor needs to monitor some osds...
 
 crush
+- chooseleaf
+  - fix it up for forcefeeding!
 - more efficient failure when all/too many osds are down
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 - "knob" bucket
@@ -173,7 +175,6 @@ osd/rados
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-- report crashed pgs?
 
 messenger
 - fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
@@ -185,10 +186,6 @@ objectcacher
 - merge clean bh's
 - ocacher caps transitions vs locks
 - test read locks
-
-reliability
-- heartbeat vs ping?
-- osdmonitor, filter
 
 ebofs
 - btrees
