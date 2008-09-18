@@ -20,17 +20,20 @@
 
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
-			  int num_osd, int pg_bits, int mds_local_osd)
+			  int num_osd, int pg_bits, int lpg_bits,
+			  int mds_local_osd)
 {
   dout(10) << "build_simple on " << num_osd
-	   << " osds with " << pg_bits << " pg bits per osd" << dendl;
+	   << " osds with " << pg_bits << " pg bits per osd, "
+	   << lpg_bits << " lpg bits" << dendl;
   epoch = e;
   set_fsid(fsid);
   ctime = g_clock.now();
 
   set_max_osd(num_osd);
   pg_num = pgp_num = num_osd << pg_bits;
-
+  lpg_num = lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+  
   // crush map
   build_simple_crush_map(crush, num_osd);
 

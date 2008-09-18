@@ -60,6 +60,7 @@ int main(int argc, const char **argv)
   const char *monmapfn = 0;
   int num_osd = 0;
   int pg_bits = g_conf.osd_pg_bits;
+  int lpg_bits = g_conf.osd_lpg_bits;
   bool clobber = false;
   bool modified = false;
   const char *export_crush = 0;
@@ -75,8 +76,10 @@ int main(int argc, const char **argv)
       num_osd = atoi(args[++i]);
     } else if (strcmp(args[i], "--clobber") == 0) 
       clobber = true;
-    else if (strcmp(args[i], "--pgbits") == 0)
+    else if (strcmp(args[i], "--pg_bits") == 0)
       pg_bits = atoi(args[++i]);
+    else if (strcmp(args[i], "--lpg_bits") == 0)
+      lpg_bits = atoi(args[++i]);
     else if (strcmp(args[i], "--export-crush") == 0)
       export_crush = args[++i];
     else if (strcmp(args[i], "--import-crush") == 0)
@@ -121,7 +124,7 @@ int main(int argc, const char **argv)
       cerr << me << ": osd count must be > 0" << std::endl;
       exit(1);
     }
-    osdmap.build_simple(0, monmap.fsid, num_osd, pg_bits, 0);
+    osdmap.build_simple(0, monmap.fsid, num_osd, pg_bits, lpg_bits, 0);
     modified = true;
   }
 
