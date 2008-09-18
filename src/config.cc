@@ -44,6 +44,7 @@ int buffer::list::read_file(const char *fn)
   ::fstat(fd, &st);
   int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
+  bp.set_length(st.st_size);
   append(bp);
   ::read(fd, (void*)c_str(), length());
   ::close(fd);
