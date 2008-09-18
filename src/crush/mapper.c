@@ -54,8 +54,8 @@ crush_bucket_list_choose(struct crush_bucket_list *bucket, int x, int r)
 	for (i=0; i<bucket->h.size; i++) {
 		w = crush_hash32_4(x, bucket->h.items[i], r, bucket->h.id);
 		w &= 0xffff;
-		/*printf("%d item %d weight %d sum_weight %d r %lld", 
-		  i, bucket->h.items[i], bucket->item_weights[i], bucket->sum_weights[i], w);*/
+		/*printf("%d x %d item %d weight %d sum_weight %d r %lld", 
+		  i, x, bucket->h.items[i], bucket->item_weights[i], bucket->sum_weights[i], w);*/
 		w *= bucket->sum_weights[i];
 		w = w >> 16;
 		/*printf(" scaled %lld\n", w);*/
@@ -253,8 +253,10 @@ static int crush_choose(struct crush_map *map,
 					reject = is_out(map, item, x);
 				else 
 					reject = 0;
+
 				if (recurse_to_leaf &&
-				    !crush_choose(map, bucket, x, 1, 0,
+				    !crush_choose(map, map->buckets[-1-item],
+						  x, 1, 0,
 						  out2+outpos, 0,
 						  firstn, 0, 0))
 					reject = 1;
@@ -285,10 +287,10 @@ static int crush_choose(struct crush_map *map,
 
 int crush_do_rule(struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
-		  int forcefeed)    /* -1 for none */
+		  int force)    /* -1 for none */
 {
 	int result_len;
-	int force_stack[CRUSH_MAX_DEPTH];
+	int force_context[CRUSH_MAX_DEPTH];
 	int force_pos = -1;
 	int a[CRUSH_MAX_SET];
 	int b[CRUSH_MAX_SET];
@@ -309,35 +311,39 @@ int crush_do_rule(struct crush_map *map,
 	result_len = 0;
 	w = a;
 	o = b;
-	
-	/* determine hierarchical context of forcefeed, if any */
-	if (forcefeed >= 0 && forcefeed < map->max_devices) {
-		if (map->device_parents[forcefeed] == 0) {
+
+	/*
+	 * determine hierarchical context of force, if any.  note
+	 * that this may or may not correspond to the specific types
+	 * referenced by the crush rule.
+	 */
+	if (force >= 0) {
+		if (force >= map->max_devices ||
+		    map->device_parents[force] == 0) {
 			/*printf("CRUSH: forcefed device dne\n");*/
 			return -1;  /* force fed device dne */
 		}
-		if (!is_out(map, forcefeed, x)) {
+		if (!is_out(map, force, x)) {
 			while (1) {
-				force_stack[++force_pos] = forcefeed;
-				/*printf("force_stack[%d] = %d\n", force_pos, forcefeed);*/
-				if (forcefeed >= 0)
-					forcefeed = map->device_parents[forcefeed];
+				force_context[++force_pos] = force;
+				/*printf("force_context[%d] = %d\n", force_pos, force);*/
+				if (force >= 0)
+					force = map->device_parents[force];
 				else
-					forcefeed = map->bucket_parents[-1-forcefeed];
-				if (forcefeed == 0) break;
+					force = map->bucket_parents[-1-force];
+				if (force == 0)
+					break;
 			}
 		}
 	}
-	
+       
 	for (step = 0; step < rule->len; step++) {
 		switch (rule->steps[step].op) {
 		case CRUSH_RULE_TAKE:
+			w[0] = rule->steps[step].arg1;
 			if (force_pos >= 0) {
-				w[0] = force_stack[force_pos];
+				BUG_ON(force_context[force_pos] != w[0]);
 				force_pos--;
-				BUG_ON(w[0] != rule->steps[step].arg1);
-			} else {
-				w[0] = rule->steps[step].arg1;
 			}
 			wsize = 1;
 			break;
@@ -367,7 +373,15 @@ int crush_do_rule(struct crush_map *map,
 				}
 				j = 0;
 				if (osize == 0 && force_pos >= 0) {
-					o[osize] = force_stack[force_pos];
+					/* skip any intermediate types */
+					while (force_pos &&
+					       force_context[force_pos] < 0 &&
+					       rule->steps[step].arg2 !=
+					       map->buckets[-1-force_context[force_pos]]->type)
+						force_pos--;
+					o[osize] = force_context[force_pos];
+					if (recurse_to_leaf)
+						c[osize] = force_context[0];
 					j++;
 					force_pos--;
 				}
