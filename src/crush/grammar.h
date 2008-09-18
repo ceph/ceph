@@ -38,6 +38,7 @@ struct crush_grammar : public grammar<crush_grammar>
 
   static const int _step_take = 18;
   static const int _step_choose = 19;
+  static const int _step_chooseleaf = 20;
   static const int _step_emit = 21;
   static const int _step = 22;
   static const int _crushrule = 23;
@@ -63,6 +64,7 @@ struct crush_grammar : public grammar<crush_grammar>
 
     rule<ScannerT, parser_context<>, parser_tag<_step_take> >      step_take;
     rule<ScannerT, parser_context<>, parser_tag<_step_choose> >      step_choose;
+    rule<ScannerT, parser_context<>, parser_tag<_step_chooseleaf> >      step_chooseleaf;
     rule<ScannerT, parser_context<>, parser_tag<_step_emit> >      step_emit;
     rule<ScannerT, parser_context<>, parser_tag<_step> >      step;
     rule<ScannerT, parser_context<>, parser_tag<_crushrule> >      crushrule;
@@ -101,13 +103,18 @@ struct crush_grammar : public grammar<crush_grammar>
       
       // rules
       step_take = str_p("take") >> str_p("root");
-      step_choose = (str_p("choose") | str_p("chooseleaf"))
+      step_choose = str_p("choose")
+	>> ( str_p("indep") | str_p("firstn") )
+	>> integer
+	>> str_p("type") >> name;
+      step_chooseleaf = str_p("chooseleaf")
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
 	>> str_p("type") >> name;
       step_emit = str_p("emit");
       step = str_p("step") >> ( step_take | 
 				step_choose | 
+				step_chooseleaf | 
 				step_emit );
       crushrule = str_p("rule") >> !name >> '{' 
 			   >> str_p("pool") >> posint
