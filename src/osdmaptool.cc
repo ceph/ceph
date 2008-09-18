@@ -134,10 +134,16 @@ int main(int argc, const char **argv)
     }
     // validate
     CrushWrapper cw;
-    //cw._decode(cbl,    FIXME
     bufferlist::iterator p = cbl.begin();
-    osdmap.crush.decode(p);
-    cout << me << ": imported crush map from " << import_crush << std::endl;
+    cw.decode(p);
+    
+    // apply
+    OSDMap::Incremental inc;
+    inc.fsid = osdmap.get_fsid();
+    inc.epoch = osdmap.get_epoch()+1;
+    inc.crush = cbl;
+    osdmap.apply_incremental(inc);
+    cout << me << ": imported " << cbl.length() << " byte crush map from " << import_crush << std::endl;
     modified = true;
   }
 
@@ -156,6 +162,7 @@ int main(int argc, const char **argv)
     cerr << me << ": no action specified?" << std::endl;
     usage(me);
   }
+
   if (modified)
     osdmap.inc_epoch();
 
@@ -163,6 +170,7 @@ int main(int argc, const char **argv)
     printmap(me, &osdmap);
 
   if (modified) {
+    bl.clear();
     osdmap.encode(bl);
 
     // write it out
