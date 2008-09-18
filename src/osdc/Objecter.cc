@@ -248,7 +248,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 	  assert(wr->waitfor_commit.count(tid));
 	  
 	  if (wr->tid_version.count(tid)) {
-	    if (wr->op == CEPH_OSD_OP_WRITE &&
+	    if ((wr->op == CEPH_OSD_OP_WRITE || wr->op == CEPH_OSD_OP_WRITEFULL) &&
 		!g_conf.objecter_buffer_uncommitted) {
 	      dout(0) << "kick_requests missing commit, cannot replay: objecter_buffer_uncommitted == FALSE" << dendl;
 	      assert(0);  // crap. fixme.
@@ -329,6 +329,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     
   case CEPH_OSD_OP_WRNOOP:
   case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_WRITEFULL:
   case CEPH_OSD_OP_ZERO:
   case CEPH_OSD_OP_DELETE:
   case CEPH_OSD_OP_WRUNLOCK:
@@ -721,10 +722,12 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
 // write ------------------------------------
 
-tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
+tid_t Objecter::write(object_t oid, __u64 off, size_t len,
+		      ceph_object_layout ol, const SnapContext& snapc, 
+		      bufferlist &bl, int flags,
                       Context *onack, Context *oncommit)
 {
-  OSDWrite *wr = prepare_write(bl, flags);
+  OSDWrite *wr = prepare_write(snapc, bl, flags);
   wr->extents.push_back(ObjectExtent(oid, off, len));
   wr->extents.front().layout = ol;
   wr->extents.front().buffer_extents[0] = len;
@@ -732,13 +735,28 @@ tid_t Objecter::write(object_t oid, __u64 off, size_t len, ceph_object_layout ol
   return last_tid;
 }
 
+tid_t Objecter::write_full(object_t oid, 
+			   ceph_object_layout ol, const SnapContext& snapc,
+			   bufferlist &bl, int flags,
+			   Context *onack, Context *oncommit)
+{
+  OSDWrite *wr = prepare_write_full(snapc, bl, flags);
+  wr->extents.push_back(ObjectExtent(oid, 0, bl.length()));
+  wr->extents.front().layout = ol;
+  wr->extents.front().buffer_extents[0] = bl.length();
+  modifyx(wr, onack, oncommit);
+  return last_tid;
+}
+
 
 // zero
 
-tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, int flags, 
+tid_t Objecter::zero(object_t oid, __u64 off, size_t len, 
+		     ceph_object_layout ol, const SnapContext& snapc,
+		     int flags, 
                      Context *onack, Context *oncommit)
 {
-  OSDModify *z = prepare_modify(CEPH_OSD_OP_ZERO, flags);
+  OSDModify *z = prepare_modify(snapc, CEPH_OSD_OP_ZERO, flags);
   z->extents.push_back(ObjectExtent(oid, off, len));
   z->extents.front().layout = ol;
   modifyx(z, onack, oncommit);
@@ -748,10 +766,12 @@ tid_t Objecter::zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol,
 
 // lock ops
 
-tid_t Objecter::lock(int op, object_t oid, int flags, ceph_object_layout ol, 
+tid_t Objecter::lock(int op, object_t oid, int flags,
+		     ceph_object_layout ol,
                      Context *onack, Context *oncommit)
 {
-  OSDModify *l = prepare_modify(op, flags);
+  SnapContext snapc; // null is fine
+  OSDModify *l = prepare_modify(snapc, op, flags);
   l->extents.push_back(ObjectExtent(oid, 0, 0));
   l->extents.front().layout = ol;
   modifyx(l, onack, oncommit);
@@ -811,7 +831,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   pg.last = g_clock.now();
 
   // send?
-  dout(10) << "modifyx_submit " << MOSDOp::get_opname(wr->op) << " tid " << tid
+  dout(10) << "modifyx_submit " << ceph_osd_op_name(wr->op) << " tid " << tid
            << "  oid " << ex.oid
            << " " << ex.start << "~" << ex.length 
            << " " << ex.layout 
@@ -821,6 +841,8 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     MOSDOp *m = new MOSDOp(client_inc, tid,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   wr->op, flags);
+    m->set_snap_seq(wr->snapc.seq);
+    m->get_snaps() = wr->snapc.snaps;
     if (inc_lock > 0) {
       wr->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -836,6 +858,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     // what type of op?
     switch (wr->op) {
     case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
       {
 	// map buffer segments into this extent
 	// (may be fragmented bc of striping)
@@ -947,7 +970,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
       
       // buffer uncommitted?
       if (!g_conf.objecter_buffer_uncommitted &&
-	  wr->op == CEPH_OSD_OP_WRITE) {
+	  (wr->op == CEPH_OSD_OP_WRITE || wr->op == CEPH_OSD_OP_WRITEFULL)) {
 	// discard buffer!
 	((OSDWrite*)wr)->bl.clear();
       }

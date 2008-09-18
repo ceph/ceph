@@ -36,9 +36,8 @@
 
 #include "events/EPurgeFinish.h"
 
-#include "events/EAnchor.h"
-#include "events/EAnchorClient.h"
-
+#include "events/ETableClient.h"
+#include "events/ETableServer.h"
 
 
 LogEvent *LogEvent::decode(bufferlist& bl)
@@ -74,8 +73,9 @@ LogEvent *LogEvent::decode(bufferlist& bl)
 
   case EVENT_PURGEFINISH: le = new EPurgeFinish; break;
 
-  case EVENT_ANCHOR: le = new EAnchor; break;
-  case EVENT_ANCHORCLIENT: le = new EAnchorClient; break;
+  case EVENT_TABLECLIENT: le = new ETableClient; break;
+  case EVENT_TABLESERVER: le = new ETableServer; break;
+
   default:
     generic_dout(1) << "uh oh, unknown log event type " << type << dendl;
     assert(0);

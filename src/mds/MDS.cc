@@ -31,11 +31,14 @@
 #include "MDCache.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
-#include "IdAllocator.h"
 #include "Migrator.h"
 
-#include "AnchorTable.h"
+#include "AnchorServer.h"
 #include "AnchorClient.h"
+#include "SnapServer.h"
+#include "SnapClient.h"
+
+#include "InoTable.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -55,7 +58,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 
-#include "messages/MAnchor.h"
+#include "messages/MMDSTableRequest.h"
 
 #include "config.h"
 
@@ -88,10 +91,11 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
 
+  inotable = new InoTable(this);
+  snapserver = new SnapServer(this);
+  snapclient = new SnapClient(this);
+  anchorserver = new AnchorServer(this);
   anchorclient = new AnchorClient(this);
-  idalloc = new IdAllocator(this);
-
-  anchortable = new AnchorTable(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -123,8 +127,10 @@ MDS::~MDS() {
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
-  if (idalloc) { delete idalloc; idalloc = NULL; }
-  if (anchortable) { delete anchortable; anchortable = NULL; }
+  if (inotable) { delete inotable; inotable = NULL; }
+  if (anchorserver) { delete anchorserver; anchorserver = NULL; }
+  if (snapserver) { delete snapserver; snapserver = NULL; }
+  if (snapclient) { delete snapclient; snapclient = NULL; }
   if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
@@ -233,6 +239,36 @@ void MDS::reopen_logger(utime_t start)
   server->reopen_logger(start, append);
 }
 
+
+
+
+MDSTableClient *MDS::get_table_client(int t)
+{
+  switch (t) {
+  case TABLE_ANCHOR: return anchorclient;
+  case TABLE_SNAP: return snapclient;
+  default: assert(0);
+  }
+}
+
+MDSTableServer *MDS::get_table_server(int t)
+{
+  switch (t) {
+  case TABLE_ANCHOR: return anchorserver;
+  case TABLE_SNAP: return snapserver;
+  default: assert(0);
+  }
+}
+
+
+
+
+
+
+
+
+
+
 void MDS::send_message_mds(Message *m, int mds)
 {
   // send mdsmap first?
@@ -287,9 +323,13 @@ void MDS::forward_message_mds(Message *m, int mds)
 
 void MDS::send_message_client(Message *m, int client)
 {
-  version_t seq = sessionmap.inc_push_seq(client);
-  dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-  messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
+  if (sessionmap.have_session(entity_name_t::CLIENT(client))) {
+    version_t seq = sessionmap.inc_push_seq(client);
+    dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
+    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
+  } else {
+    dout(10) << "send_message_client no session for client" << client << " " << *m << dendl;
+  }
 }
 
 void MDS::send_message_client(Message *m, entity_inst_t clientinst)
@@ -363,6 +403,8 @@ void MDS::tick()
 
   if (is_active()) {
     balancer->tick();
+    if (snapserver)
+      snapserver->check_osd_map(false);
   }
 }
 
@@ -429,7 +471,7 @@ void MDS::reset_beacon_killer()
   utime_t when = beacon_last_acked_stamp;
   when += g_conf.mds_beacon_grace;
   
-  dout(15) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
+  dout(25) << "reset_beacon_killer last_acked_stamp at " << beacon_last_acked_stamp
 	   << ", will die at " << when << dendl;
   
   if (beacon_killer) timer.cancel_event(beacon_killer);
@@ -619,8 +661,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 	handle_mds_recovery(*p);
   }
 
-  // did someone fail or stop?
-  if (is_active() || is_stopping()) {
+  // did someone fail?
+  if (true) {
     // new failed?
     set<int> oldfailed, failed;
     oldmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
@@ -628,7 +670,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
       if (oldfailed.count(*p) == 0)
 	mdcache->handle_mds_failure(*p);
-
+    
     // or down then up?
     //  did their addr/inst change?
     set<int> up;
@@ -637,7 +679,8 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (oldmap->have_inst(*p) &&
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
 	mdcache->handle_mds_failure(*p);
-
+  }
+  if (is_active() || is_stopping()) {
     // did anyone stop?
     set<int> oldstopped, stopped;
     oldmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);
@@ -727,19 +770,23 @@ void MDS::boot_create()
   straydir->mark_dirty(straydir->pre_dirty(), mdlog->get_current_segment());
   straydir->commit(0, fin->new_sub());
  
-  // fixme: fake out idalloc (reset, pretend loaded)
-  dout(10) << "boot_create creating fresh idalloc table" << dendl;
-  idalloc->reset();
-  idalloc->save(fin->new_sub());
+  // fixme: fake out inotable (reset, pretend loaded)
+  dout(10) << "boot_create creating fresh inotable table" << dendl;
+  inotable->reset();
+  inotable->save(fin->new_sub());
 
   // write empty sessionmap
   sessionmap.save(fin->new_sub());
   
-  // fixme: fake out anchortable
-  if (mdsmap->get_anchortable() == whoami) {
+  // initialize tables
+  if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << dendl;
-    anchortable->create_fresh();
-    anchortable->save(fin->new_sub());
+    anchorserver->reset();
+    anchorserver->save(fin->new_sub());
+
+    dout(10) << "boot_create creating fresh snaptable" << dendl;
+    snapserver->reset();
+    snapserver->save(fin->new_sub());
   }
 }
 
@@ -773,15 +820,18 @@ void MDS::boot_start(int step, int r)
   case 1:
     {
       C_Gather *gather = new C_Gather(new C_MDS_BootStart(this, 2));
-      dout(2) << "boot_start " << step << ": opening idalloc" << dendl;
-      idalloc->load(gather->new_sub());
+      dout(2) << "boot_start " << step << ": opening inotable" << dendl;
+      inotable->load(gather->new_sub());
 
       dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
       sessionmap.load(gather->new_sub());
 
-      if (mdsmap->get_anchortable() == whoami) {
+      if (mdsmap->get_tableserver() == whoami) {
 	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
-	anchortable->load(gather->new_sub());
+	anchorserver->load(gather->new_sub());
+
+	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
+	snapserver->load(gather->new_sub());
       }
       
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;
@@ -854,7 +904,9 @@ void MDS::replay_start()
 
 void MDS::replay_done()
 {
-  dout(1) << "replay_done" << dendl;
+  dout(1) << "replay_done in=" << mdsmap->get_num_in_mds()
+	  << " failed=" << mdsmap->get_num_mds(MDSMap::STATE_FAILED)
+	  << dendl;
 
   if (mdsmap->get_num_in_mds() == 1 &&
       mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
@@ -934,11 +986,14 @@ void MDS::recovery_done()
   assert(is_active());
   
   // kick anchortable (resent AGREEs)
-  if (mdsmap->get_anchortable() == whoami) 
-    anchortable->finish_recovery();
+  if (mdsmap->get_tableserver() == whoami) {
+    anchorserver->finish_recovery();
+    snapserver->finish_recovery();
+  }
   
   // kick anchorclient (resent COMMITs)
   anchorclient->finish_recovery();
+  snapclient->finish_recovery();
   
   mdcache->start_recovered_purges();
   mdcache->do_file_recover();
@@ -955,9 +1010,12 @@ void MDS::handle_mds_recovery(int who)
   
   mdcache->handle_mds_recovery(who);
 
-  if (anchortable)
-    anchortable->handle_mds_recovery(who);
+  if (anchorserver) {
+    anchorserver->handle_mds_recovery(who);
+    snapserver->handle_mds_recovery(who);
+  }
   anchorclient->handle_mds_recovery(who);
+  snapclient->handle_mds_recovery(who);
   
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);
@@ -1080,12 +1138,17 @@ void MDS::_dispatch(Message *m)
       balancer->proc_message(m);
       break;
 
-      // anchor
-    case MSG_MDS_ANCHOR:
-      if (((MAnchor*)m)->get_op() < 0)
-	anchorclient->dispatch(m);
-      else
-	anchortable->dispatch(m);
+    case MSG_MDS_TABLE_REQUEST:
+      {
+	MMDSTableRequest *req = (MMDSTableRequest*)m;
+	if (req->op < 0) {
+	  MDSTableClient *client = get_table_client(req->table);
+	  client->handle_request(req);
+	} else {
+	  MDSTableServer *server = get_table_server(req->table);
+	  server->handle_request(req);
+	}
+      }
       break;
 
       // OSD
@@ -1094,6 +1157,8 @@ void MDS::_dispatch(Message *m)
       break;
     case CEPH_MSG_OSD_MAP:
       objecter->handle_osd_map((MOSDMap*)m);
+      if (snapserver)
+	snapserver->check_osd_map(true);
       break;
       
       // MDS

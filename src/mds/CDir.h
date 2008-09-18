@@ -42,8 +42,6 @@ class CDentry;
 class MDCache;
 class MDCluster;
 class Context;
-class CDirDiscover;
-
 
 ostream& operator<<(ostream& out, class CDir& dir);
 
@@ -129,15 +127,15 @@ class CDir : public MDSCacheObject {
 
 
   // -- wait masks --
-  static const int WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
-  static const int WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const int WAIT_FROZEN       = (1<<2);  // auth pins removed
+  static const __u64 WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
+  static const __u64 WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
+  static const __u64 WAIT_FROZEN       = (1<<2);  // auth pins removed
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const int WAIT_ANY_MASK  = (0xffffffff);
-  static const int WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
-  static const int WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
+  static const __u64 WAIT_ANY_MASK  = (0xffffffff);
+  static const __u64 WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
+  static const __u64 WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
 
 
@@ -154,6 +152,8 @@ class CDir : public MDSCacheObject {
   }
 
   fnode_t fnode;
+  snapid_t first;
+  map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
 protected:
   version_t projected_version;
@@ -189,17 +189,21 @@ public:
     }
   }
   void mark_dirty(version_t pv, LogSegment *ls);
+  void log_mark_dirty();
   void mark_clean();
 
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  typedef map<const char *, CDentry*, ltstr> map_t;
+  //typedef map<const char *, CDentry*, ltstr> map_t;
+  typedef map<dentry_key_t, CDentry*> map_t;
 protected:
 
   // contents
   map_t items;       // non-null AND null
-  unsigned nitems;             // # non-null
-  unsigned nnull;              // # null
+  unsigned num_head_items;
+  unsigned num_head_null;
+  unsigned num_snap_items;
+  unsigned num_snap_null;
 
   int num_dirty;
 
@@ -220,8 +224,8 @@ protected:
   int nested_anchors;
 
   // cache control  (defined for authority; hints for replicas)
-  int      dir_rep;
-  set<int> dir_rep_by;      // if dir_rep == REP_LIST
+  __s32      dir_rep;
+  set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -264,11 +268,12 @@ protected:
 
   map_t::iterator begin() { return items.begin(); }
   map_t::iterator end() { return items.end(); }
-  unsigned get_size() { 
-    return nitems; 
-  }
-  unsigned get_nitems() { return nitems; }
-  unsigned get_nnull() { return nnull; }
+
+  unsigned get_num_head_items() { return num_head_items; }
+  unsigned get_num_head_null() { return num_head_null; }
+  unsigned get_num_snap_items() { return num_snap_items; }
+  unsigned get_num_snap_null() { return num_snap_null; }
+  unsigned get_num_any() { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
   
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 
@@ -282,21 +287,20 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup(const string& s) {
-    nstring ns(s);
-    return lookup(ns);
+  CDentry* lookup(const string& n, snapid_t snap=CEPH_NOSNAP) {
+    return lookup(n.c_str(), snap);
   }
-  CDentry* lookup(const nstring& ns) {
-    map_t::iterator iter = items.find(ns.c_str());
-    if (iter == items.end()) 
-      return 0;
-    else
-      return iter->second;
+  CDentry* lookup(const nstring& ns, snapid_t snap=CEPH_NOSNAP) {
+    return lookup(ns.c_str(), snap);
   }
+  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
-  CDentry* add_null_dentry(const nstring& dname);
-  CDentry* add_primary_dentry(const nstring& dname, CInode *in);
-  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type);
+  CDentry* add_null_dentry(const nstring& dname, 
+			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
+  CDentry* add_primary_dentry(const nstring& dname, CInode *in, 
+			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
+  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type, 
+			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
@@ -307,6 +311,7 @@ private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
   void remove_null_dentries();
+  void purge_stale_snap_data(const set<snapid_t>& snaps);
 
 public:
   void split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay);
@@ -359,8 +364,39 @@ private:
 	ls.insert(auth);
     }
   }
+  void encode_dirstat(bufferlist& bl, int whoami) {
+    /*
+     * note: encoding matches struct ceph_client_reply_dirfrag
+     */
+    frag_t frag = get_frag();
+    __s32 auth;
+    set<__s32> dist;
+    
+    auth = dir_auth.first;
+    if (is_auth()) 
+      get_dist_spec(dist, whoami);
 
-  CDirDiscover *replicate_to(int mds);
+    ::encode(frag, bl);
+    ::encode(auth, bl);
+    ::encode(dist, bl);
+  }
+
+  void encode_replica(int who, bufferlist& bl) {
+    __u32 nonce = add_replica(who);
+    ::encode(nonce, bl);
+    ::encode(first, bl);
+    ::encode(dir_rep, bl);
+    ::encode(dir_rep_by, bl);
+  }
+  void decode_replica(bufferlist::iterator& p) {
+    __u32 nonce;
+    ::decode(nonce, p);
+    replica_nonce = nonce;
+    ::decode(first, p);
+    ::decode(dir_rep, p);
+    ::decode(dir_rep_by, p);
+  }
+
 
 
   // -- state --
@@ -413,15 +449,15 @@ private:
     
   // -- waiters --
 protected:
-  hash_map< nstring, list<Context*> > waiting_on_dentry;
-  hash_map< inodeno_t, list<Context*> > waiting_on_ino;
+  map< string_snap_t, list<Context*> > waiting_on_dentry;
+  map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
-  bool is_waiting_for_dentry(const string& dn) {
-    return waiting_on_dentry.count(dn);
+  bool is_waiting_for_dentry(const char *dname, snapid_t snap) {
+    return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const nstring& dentry, Context *c);
-  void take_dentry_waiting(const nstring& dentry, list<Context*>& ls);
+  void add_dentry_waiter(const nstring& dentry, snapid_t snap, Context *c);
+  void take_dentry_waiting(const nstring& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
 
   bool is_waiting_for_ino(inodeno_t ino) {
     return waiting_on_ino.count(ino);
@@ -431,9 +467,9 @@ public:
 
   void take_sub_waiting(list<Context*>& ls);  // dentry or ino
 
-  void add_waiter(int mask, Context *c);
-  void take_waiting(int mask, list<Context*>& ls);  // may include dentry waiters
-  void finish_waiting(int mask, int result = 0);    // ditto
+  void add_waiter(__u64 mask, Context *c);
+  void take_waiting(__u64 mask, list<Context*>& ls);  // may include dentry waiters
+  void finish_waiting(__u64 mask, int result = 0);    // ditto
   
 
   // -- import/export --
@@ -524,61 +560,8 @@ public:
   CDir *get_frozen_tree_root();
 
 
-
   ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
 };
-
-
-
-// -- encoded state --
-
-// discover
-
-class CDirDiscover {
-  dirfrag_t dirfrag;
-  __s32     nonce;
-  __s32     dir_rep;
-  set<__s32> rep_by;
-
- public:
-  CDirDiscover() {}
-  CDirDiscover(CDir *dir, int nonce) {
-    dirfrag = dir->dirfrag();
-    this->nonce = nonce;
-    dir_rep = dir->dir_rep;
-    rep_by = dir->dir_rep_by;
-  }
-  CDirDiscover(bufferlist::iterator &p) { decode(p); }
-
-  void update_dir(CDir *dir) {
-    assert(dir->dirfrag() == dirfrag);
-    assert(!dir->is_auth());
-
-    dir->replica_nonce = nonce;
-    dir->dir_rep = dir_rep;
-    dir->dir_rep_by = rep_by;
-  }
-
-  dirfrag_t get_dirfrag() { return dirfrag; }
-
-  void encode(bufferlist& bl) const {
-    ::encode(dirfrag, bl);
-    ::encode(nonce, bl);
-    ::encode(dir_rep, bl);
-    ::encode(rep_by, bl);
-  }
-
-  void decode(bufferlist::iterator &bl) {
-    ::decode(dirfrag, bl);
-    ::decode(nonce, bl);
-    ::decode(dir_rep, bl);
-    ::decode(rep_by, bl);
-  }
-
-};
-WRITE_CLASS_ENCODER(CDirDiscover)
-
-
 
 #endif

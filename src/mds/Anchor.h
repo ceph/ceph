@@ -22,44 +22,6 @@ using std::string;
 #include "mdstypes.h"
 #include "include/buffer.h"
 
-// anchor ops
-#define ANCHOR_OP_LOOKUP          1
-#define ANCHOR_OP_LOOKUP_REPLY    -2
-
-#define ANCHOR_OP_CREATE_PREPARE  11
-#define ANCHOR_OP_CREATE_AGREE    -12
-
-#define ANCHOR_OP_DESTROY_PREPARE 21
-#define ANCHOR_OP_DESTROY_AGREE   -22
-
-#define ANCHOR_OP_UPDATE_PREPARE  31
-#define ANCHOR_OP_UPDATE_AGREE    -32
-
-#define ANCHOR_OP_COMMIT   41
-#define ANCHOR_OP_ACK      -42
-#define ANCHOR_OP_ROLLBACK 43
-
-
-
-inline const char* get_anchor_opname(int o) {
-  switch (o) {
-  case ANCHOR_OP_LOOKUP: return "lookup";
-  case ANCHOR_OP_LOOKUP_REPLY: return "lookup_reply";
-
-  case ANCHOR_OP_CREATE_PREPARE: return "create_prepare";
-  case ANCHOR_OP_CREATE_AGREE: return "create_agree";
-  case ANCHOR_OP_DESTROY_PREPARE: return "destroy_prepare";
-  case ANCHOR_OP_DESTROY_AGREE: return "destroy_agree";
-  case ANCHOR_OP_UPDATE_PREPARE: return "update_prepare";
-  case ANCHOR_OP_UPDATE_AGREE: return "update_agree";
-
-  case ANCHOR_OP_COMMIT: return "commit";
-  case ANCHOR_OP_ACK: return "ack";
-  case ANCHOR_OP_ROLLBACK: return "rollback";
-  default: assert(0); return 0;
-  }
-}
-
 
 // identifies a anchor table mutation
 

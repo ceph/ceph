@@ -12,46 +12,43 @@
  * 
  */
 
-
-#ifndef __IDALLOCATOR_H
-#define __IDALLOCATOR_H
+#ifndef __MDSTABLE_H
+#define __MDSTABLE_H
 
 #include "mdstypes.h"
-#include "include/interval_set.h"
+#include "mds_table_types.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 
 class MDS;
 
-class IdAllocator {
+class MDSTable {
+ protected:
   MDS *mds;
-  inode_t inode;
 
+  const char *table_name;
+  inodeno_t ino;
+  ceph_file_layout layout;
+  
   static const int STATE_UNDEF   = 0;
   static const int STATE_OPENING = 1;
   static const int STATE_ACTIVE  = 2;
   //static const int STATE_COMMITTING = 3;
   int state;
-
+  
   version_t version, committing_version, committed_version;
-
-  interval_set<inodeno_t> free;   // unused ids
   
   map<version_t, list<Context*> > waitfor_save;
-
- public:
-  IdAllocator(MDS *m) :
-    mds(m),
+  
+public:
+  MDSTable(MDS *m, const char *n) :
+    mds(m), table_name(n),
+    ino(0),
     state(STATE_UNDEF),
     version(0), committing_version(0), committed_version(0)
   {
   }
-  
-  void init_inode();
-
-  // alloc or reclaim ids
-  inodeno_t alloc_id();
-  void reclaim_id(inodeno_t ino);
+  virtual ~MDSTable() {}
 
   version_t get_version() { return version; }
   version_t get_committed_version() { return committed_version; }
@@ -73,6 +70,11 @@ class IdAllocator {
   void load(Context *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);
 
+  // child must overload these
+  virtual void init_inode() = 0;  
+  virtual void reset_state() = 0;
+  virtual void decode_state(bufferlist::iterator& p) = 0;
+  virtual void encode_state(bufferlist& bl) = 0;
 };
 
 #endif

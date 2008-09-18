@@ -105,7 +105,7 @@ class MDSMap {
   utime_t created;
 
   int32_t max_mds;
-  int32_t anchortable;   // which MDS has anchortable (fixme someday)
+  int32_t tableserver;   // which MDS has anchortable, snaptable
   int32_t root;          // which MDS has root directory
 
   __u32 session_timeout;
@@ -123,7 +123,7 @@ class MDSMap {
   friend class MDSMonitor;
 
  public:
-  MDSMap() : epoch(0), client_epoch(0), last_failure(0), anchortable(0), root(0) {
+  MDSMap() : epoch(0), client_epoch(0), last_failure(0), tableserver(0), root(0) {
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
@@ -144,7 +144,7 @@ class MDSMap {
   int get_max_mds() const { return max_mds; }
   void set_max_mds(int m) { max_mds = m; }
 
-  int get_anchortable() const { return anchortable; }
+  int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
   // counts
@@ -352,7 +352,7 @@ class MDSMap {
     ::encode(client_epoch, bl);
     ::encode(last_failure, bl);
     ::encode(created, bl);
-    ::encode(anchortable, bl);
+    ::encode(tableserver, bl);
     ::encode(root, bl);
     ::encode(session_timeout, bl);
     ::encode(session_autoclose, bl);
@@ -372,7 +372,7 @@ class MDSMap {
     ::decode(client_epoch, p);
     ::decode(last_failure, p);
     ::decode(created, p);
-    ::decode(anchortable, p);
+    ::decode(tableserver, p);
     ::decode(root, p);
     ::decode(session_timeout, p);
     ::decode(session_autoclose, p);

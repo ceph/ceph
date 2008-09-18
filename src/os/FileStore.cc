@@ -158,18 +158,22 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
   char *t = s + strlen(s);
 #ifdef __LP64__
   sprintf(t, "/%04x.%04x.%016lx.%08x.%lx", 
-	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.rev);
+	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.snap);
 #else
   sprintf(t, "/%04x.%04x.%016llx.%08x.%llx", 
-	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.rev);
+	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.snap);
 #endif
   //parse_object(t+1);
 }
 
-pobject_t FileStore::parse_object(char *s)
+bool FileStore::parse_object(char *s, pobject_t& o)
 {
-  pobject_t o;
   //assert(sizeof(o) == 28);
+  if (s[4] != '.' ||
+      s[9] != '.' ||
+      s[26] != '.' ||
+      s[35] != '.')
+    return false;
   dout(0) << "  got object " << s << dendl;
   o.volume = strtoll(s, 0, 16);
   assert(s[4] == '.');
@@ -179,23 +183,29 @@ pobject_t FileStore::parse_object(char *s)
   assert(s[26] == '.');
   o.oid.bno = strtoll(s+27, 0, 16);
   assert(s[35] == '.');
-  o.oid.rev = strtoll(s+36, 0, 16);
+  o.oid.snap = strtoll(s+36, 0, 16);
   dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
-  return o;
+  return true;
 }
 
-coll_t FileStore::parse_coll(char *s)
+bool FileStore::parse_coll(char *s, coll_t& c)
 {
-  return strtoll(s, 0, 16);
+  if (s[16] == '.' && strlen(s) == 33) {
+    s[16] = 0;
+    c.high = strtoll(s, 0, 16);
+    c.low = strtoll(s+17, 0, 16);
+    return true;
+  } else 
+    return false;
 }
 
 void FileStore::get_cdir(coll_t cid, char *s) 
 {
-  assert(sizeof(cid) == 8);
+  assert(sizeof(cid) == 16);
 #ifdef __LP64__
-  sprintf(s, "%s/%016lx", basedir.c_str(), cid);
+  sprintf(s, "%s/%016lx.%016lx", basedir.c_str(), cid.high, cid.low);
 #else
-  sprintf(s, "%s/%016llx", basedir.c_str(), cid);
+  sprintf(s, "%s/%016llx.%016llx", basedir.c_str(), cid.high, cid.low);
 #endif
 }
 
@@ -220,13 +230,14 @@ int FileStore::mkfs()
   dout(1) << "mkfs in " << basedir << dendl;
 
   // wipe
-  sprintf(cmd, "test -d %s && rm -r %s ; mkdir -p %s",
+  sprintf(cmd, "test -d %s && rm -r %s/* ; mkdir -p %s",
 	  basedir.c_str(), basedir.c_str(), basedir.c_str());
   
   dout(5) << "wipe: " << cmd << dendl;
   system(cmd);
 
   // fsid
+  srand(time(0) + getpid());
   fsid = rand();
   char fn[100];
   sprintf(fn, "%s/fsid", basedir.c_str());
@@ -358,18 +369,6 @@ int FileStore::mount()
 
   dout(10) << "mount fsid is " << fsid << dendl;
 
-  // is this btrfs?
-  Transaction empty;
-  btrfs = true;
-  btrfs_trans_start_end = true;  // trans start/end interface
-  r = apply_transaction(empty, 0);
-  if (r == 0) {
-    dout(0) << "mount detected btrfs" << dendl;
-  } else {
-    dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
-    btrfs = false;
-  }
-
   // install signal handler for SIGINT, SIGTERM
   sig_lock.Lock();
   if (!sig_installed) {
@@ -389,11 +388,11 @@ int FileStore::mount()
   sig_lock.Unlock();
 
   // get epoch
-  sprintf(fn, "%s/commit_epoch", basedir.c_str());
+  sprintf(fn, "%s/commit_op_seq", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
-  ::read(fd, &super_epoch, sizeof(super_epoch));
+  ::read(fd, &op_seq, sizeof(op_seq));
   ::close(fd);
-  dout(5) << "mount epoch is " << super_epoch << dendl;
+  dout(5) << "mount op_seq is " << op_seq << dendl;
 
   // journal
   sprintf(fn, "%s.journal", basedir.c_str());
@@ -410,6 +409,20 @@ int FileStore::mount()
   }
   journal_start();
   sync_thread.create();
+
+
+  // is this btrfs?
+  Transaction empty;
+  btrfs = true;
+  btrfs_trans_start_end = true;  // trans start/end interface
+  r = apply_transaction(empty, 0);
+  if (r == 0) {
+    dout(0) << "mount detected btrfs" << dendl;
+  } else {
+    dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
+    btrfs = false;
+  }
+
 
   // all okay.
   return 0;
@@ -441,9 +454,39 @@ int FileStore::umount()
   return 0;
 }
 
+
+
+
+unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
+{
+  bufferlist tbl;
+  t.encode(tbl);  // apply_transaction modifies t; encode first
+
+  op_start();
+  int r = _apply_transaction(t);
+
+  op_journal_start();
+  dout(10) << "op_seq is " << op_seq << dendl;
+  if (r >= 0) {
+    journal_transaction(tbl, onsafe);
+
+    char fn[100];
+    sprintf(fn, "%s/commit_op_seq", basedir.c_str());
+    int fd = ::open(fn, O_CREAT|O_WRONLY, 0644);
+    ::write(fd, &op_seq, sizeof(op_seq));
+    ::close(fd);
+
+  } else
+    delete onsafe;
+
+  op_finish();
+  return r;
+}
+
+
 // btrfs transaction start/end interface
 
-int FileStore::transaction_start(int len)
+int FileStore::_transaction_start(int len)
 {
 #ifdef DARWIN
   return 0;
@@ -484,7 +527,7 @@ int FileStore::transaction_start(int len)
 #endif /* DARWIN */
 }
 
-void FileStore::transaction_end(int fd)
+void FileStore::_transaction_finish(int fd)
 {
 #ifdef DARWIN
   return;
@@ -497,19 +540,217 @@ void FileStore::transaction_end(int fd)
   sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
   ::unlink(fn);
   
-  dout(10) << "transaction_end " << fd << dendl;
+  dout(10) << "transaction_finish " << fd << dendl;
   ::close(fd);
 
   sig_lock.Lock();
   trans_running--;
   if (trans_running == 0 && sig_pending) {
-    dout(-10) << "transaction_end signal " << sig_pending << " pending" << dendl;
+    dout(-10) << "transaction_finish signal " << sig_pending << " pending" << dendl;
     _handle_signal(sig_pending);
   }
   sig_lock.Unlock();
 #endif /* DARWIN */
 }
 
+unsigned FileStore::_apply_transaction(Transaction& t)
+{
+  // non-atomic implementation
+  int id = _transaction_start(t.get_len());
+  if (id < 0) return id;
+  
+  while (t.have_op()) {
+    int op = t.get_op();
+    switch (op) {
+    case Transaction::OP_WRITE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	__u64 offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+	bufferlist bl;
+	t.get_bl(bl);
+	_write(cid, oid, offset, len, bl);
+      }
+      break;
+      
+    case Transaction::OP_ZERO:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	__u64 offset, len;
+	t.get_length(offset);
+	t.get_length(len);
+	_zero(cid, oid, offset, len);
+      }
+      break;
+      
+    case Transaction::OP_TRIMCACHE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	__u64 offset, len;
+	t.get_length(offset);
+	  t.get_length(len);
+          trim_from_cache(cid, oid, offset, len);
+        }
+        break;
+
+      case Transaction::OP_TRUNCATE:
+        {
+  	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          __u64 len;
+	  t.get_length(len);
+          _truncate(cid, oid, len);
+        }
+        break;
+
+      case Transaction::OP_REMOVE:
+        {
+ 	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          _remove(cid, oid);
+        }
+        break;
+
+      case Transaction::OP_SETATTR:
+        {
+ 	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          const char *attrname;
+	  t.get_attrname(attrname);
+          bufferlist bl;
+	  t.get_bl(bl);
+          _setattr(cid, oid, attrname, bl.c_str(), bl.length());
+        }
+        break;
+      case Transaction::OP_SETATTRS:
+        {
+	  coll_t cid;
+	  t.get_cid(cid);
+          pobject_t oid;
+	  t.get_oid(oid);
+          map<string,bufferptr> *pattrset;
+	  t.get_pattrset(pattrset);
+          _setattrs(cid, oid, *pattrset);
+        }
+        break;
+
+      case Transaction::OP_RMATTR:
+        {
+  	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          const char *attrname;
+	  t.get_attrname(attrname);
+          _rmattr(cid, oid, attrname);
+        }
+        break;
+
+      case Transaction::OP_CLONE:
+	{
+  	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          pobject_t noid;
+	  t.get_oid(noid);
+	  _clone(cid, oid, noid);
+	}
+	break;
+
+      case Transaction::OP_MKCOLL:
+        {
+          coll_t cid;
+	  t.get_cid(cid);
+          _create_collection(cid);
+        }
+        break;
+
+      case Transaction::OP_RMCOLL:
+        {
+          coll_t cid;
+	  t.get_cid(cid);
+          _destroy_collection(cid);
+        }
+        break;
+
+      case Transaction::OP_COLL_ADD:
+        {
+          coll_t cid, ocid;
+	  t.get_cid(cid);
+	  t.get_cid(ocid);
+          pobject_t oid;
+	  t.get_oid(oid);
+          _collection_add(cid, ocid, oid);
+        }
+        break;
+
+      case Transaction::OP_COLL_REMOVE:
+        {
+          coll_t cid;
+	  t.get_cid(cid);
+          pobject_t oid;
+	  t.get_oid(oid);
+          _collection_remove(cid, oid);
+        }
+        break;
+
+      case Transaction::OP_COLL_SETATTR:
+        {
+          coll_t cid;
+	  t.get_cid(cid);
+          const char *attrname;
+	  t.get_attrname(attrname);
+          bufferlist bl;
+	  t.get_bl(bl);
+          _collection_setattr(cid, attrname, bl.c_str(), bl.length());
+        }
+        break;
+
+      case Transaction::OP_COLL_RMATTR:
+        {
+          coll_t cid;
+	  t.get_cid(cid);
+          const char *attrname;
+	  t.get_attrname(attrname);
+          _collection_rmattr(cid, attrname);
+        }
+        break;
+
+
+      default:
+        cerr << "bad op " << op << std::endl;
+        assert(0);
+      }
+    }
+    _transaction_finish(id);
+
+    return 0;  // FIXME count errors
+  }
+
+  /*********************************************/
+
+
+#if 0
+/*
+ * compound btrfs usertrans thinger version
+ */
 unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 {
 #ifdef DARWIN
@@ -518,8 +759,19 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 
   // no btrfs transaction support?
   // or, use trans start/end ioctls?
-  if (!btrfs || btrfs_trans_start_end)
-    return ObjectStore::apply_transaction(t, onsafe);
+  if (!btrfs || btrfs_trans_start_end) {
+    bufferlist tbl;
+    t.encode(tbl);  // apply_transaction modifies t; encode first
+    op_start();
+    int r = ObjectStore::apply_transaction(t);
+    dout(10) << "op_seq is " << op_seq << dendl;
+    if (r >= 0)
+      journal_transaction(tbl, onsafe);
+    else
+      delete onsafe;
+    op_finish();
+    return r;
+  }
 
   // create transaction
   int len = t.get_btrfs_len();
@@ -746,7 +998,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	t.get_oid(oid);
 	pobject_t noid;
 	t.get_oid(noid);
-	//clone(cid, oid, noid);
+	clone(cid, oid, noid);
 	
 	dout(10) << "clone " << cid << " " << oid << dendl;
 	char *ofn = new char[80];
@@ -911,6 +1163,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 #endif /* DARWIN */
 }
 
+#endif 
 
 
 // --------------------
@@ -935,36 +1188,11 @@ int FileStore::stat(coll_t cid, pobject_t oid, struct stat *st)
   return r < 0 ? -errno:r;
 }
 
- 
-int FileStore::remove(coll_t cid, pobject_t oid, Context *onsafe) 
-{
-  dout(20) << "remove " << cid << " " << oid << dendl;
-  char fn[200];
-  get_coname(cid, oid, fn);
-  int r = ::unlink(fn);
-  if (r == 0) 
-    journal_remove(cid, oid, onsafe);
-  else
-    delete onsafe;
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
-{
-  dout(20) << "truncate " << cid << " " << oid << " size " << size << dendl;
-
-  char fn[200];
-  get_coname(cid, oid, fn);
-  int r = ::truncate(fn, size);
-  if (r >= 0) journal_truncate(cid, oid, size, onsafe);
-  return r < 0 ? -errno:r;
-}
-
 int FileStore::read(coll_t cid, pobject_t oid, 
                     __u64 offset, size_t len,
                     bufferlist& bl) {
   dout(20) << "read " << cid << " " << oid << " len " << len << " off " << offset << dendl;
-
+  
   char fn[200];
   get_coname(cid, oid, fn);
   
@@ -973,7 +1201,6 @@ int FileStore::read(coll_t cid, pobject_t oid,
     dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << dendl;
     return -errno;
   }
-  ::flock(fd, LOCK_EX);    // lock for safety
   
   __u64 actual = lseek(fd, offset, SEEK_SET);
   size_t got = 0;
@@ -990,16 +1217,35 @@ int FileStore::read(coll_t cid, pobject_t oid,
     bptr.set_length(got);   // properly size the buffer
     if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
   }
-  ::flock(fd, LOCK_UN);
   ::close(fd);
   return got;
 }
 
 
-int FileStore::write(coll_t cid, pobject_t oid, 
+
+int FileStore::_remove(coll_t cid, pobject_t oid) 
+{
+  dout(20) << "remove " << cid << " " << oid << dendl;
+  char fn[200];
+  get_coname(cid, oid, fn);
+  int r = ::unlink(fn);
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::_truncate(coll_t cid, pobject_t oid, __u64 size)
+{
+  dout(20) << "truncate " << cid << " " << oid << " size " << size << dendl;
+
+  char fn[200];
+  get_coname(cid, oid, fn);
+  int r = ::truncate(fn, size);
+  return r < 0 ? -errno:r;
+}
+
+
+int FileStore::_write(coll_t cid, pobject_t oid, 
                      __u64 offset, size_t len,
-                     const bufferlist& bl, 
-                     Context *onsafe)
+                     const bufferlist& bl)
 {
   char fn[200];
   get_coname(cid, oid, fn);
@@ -1012,7 +1258,6 @@ int FileStore::write(coll_t cid, pobject_t oid,
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
     return -errno;
   }
-  ::flock(fd, LOCK_EX);    // lock for safety
   
   // seek
   __u64 actual = ::lseek(fd, offset, SEEK_SET);
@@ -1035,20 +1280,21 @@ int FileStore::write(coll_t cid, pobject_t oid,
     derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
   }
 
-  ::flock(fd, LOCK_UN);
-
-  // schedule sync
-  if (did >= 0)
-    journal_write(cid, oid, offset, len, bl, onsafe);
-  else
-    delete onsafe;
-
   ::close(fd);
-  
+
   return did;
 }
 
-int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
+int FileStore::_zero(coll_t cid, pobject_t oid, __u64 offset, size_t len)
+{
+  // write zeros.. yuck!
+  bufferptr bp(len);
+  bufferlist bl;
+  bl.push_back(bp);
+  return _write(cid, oid, offset, len, bl);
+}
+
+int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
 {
   char ofn[200], nfn[200];
   get_coname(cid, oldoid, ofn);
@@ -1062,6 +1308,7 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (n < 0)
       return -errno;
+
   int r = 0;
 #ifndef DARWIN
   if (btrfs)
@@ -1073,13 +1320,22 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
     struct stat st;
     ::fstat(o, &st);
 
-#ifdef SPLICE_F_MOVE
+#if 0 //der, this doesn't work on non-pipes? #ifdef SPLICE_F_MOVE
+    dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE size " << st.st_size << dendl;
+
     loff_t op = 0, np = 0;
-    while (op < st.st_size && r >= 0)
-      r = ::splice(o, &op, n, &np, st.st_size-op, 0);
+    while (op < st.st_size && r >= 0) {
+      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE op " << op << " np " << np << dendl;
+      r = ::splice(o, &op, n, &np, st.st_size-op, SPLICE_F_MOVE);
+      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE r= " << r << dendl;
+      if (r < 0)
+	dout(0) << "clone " << ofn << " -> " << nfn << " error " << strerror(errno) << dendl;
+    }
 #else
+    dout(20) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
+
     loff_t pos = 0;
-    int buflen = 4096*10;
+    int buflen = 4096*32;
     char buf[buflen];
     while (pos < st.st_size) {
       int l = MIN(st.st_size-pos, buflen);
@@ -1098,6 +1354,7 @@ int FileStore::clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
     }
 #endif
   }
+
   if (r < 0)
     return -errno;
 
@@ -1117,22 +1374,26 @@ void FileStore::sync_entry()
     sync_cond.WaitInterval(lock, interval);
     lock.Unlock();
 
-    dout(20) << "sync_entry committing " << super_epoch << " " << interval << dendl;
+    dout(20) << "sync_entry committing " << op_seq << " " << interval << dendl;
     commit_start();
+
+    __u64 cp = op_seq;
 
     // induce an fs sync.
     // we assume data=ordered or similar semantics
     char fn[100];
-    sprintf(fn, "%s/commit_epoch", basedir.c_str());
-    int fd = ::open(fn, O_CREAT|O_WRONLY, 0644);
-    ::write(fd, &super_epoch, sizeof(super_epoch));
+    sprintf(fn, "%s/commit_op_seq", basedir.c_str());
+    int fd = ::open(fn, O_RDWR, 0644);
+
+    commit_started();
+
     ::fsync(fd);  // this should cause the fs's journal to commit.  (on btrfs too.)
     ::close(fd);
 
     commit_finish();
 
     lock.Lock();
-    dout(20) << "sync_entry committed " << super_epoch << dendl;
+    dout(20) << "sync_entry committed to op_seq " << cp << dendl;
   }
   lock.Unlock();
 }
@@ -1145,7 +1406,8 @@ void FileStore::sync()
 
 void FileStore::sync(Context *onsafe)
 {
-  journal_sync(onsafe);
+  ObjectStore::Transaction t;
+  apply_transaction(t);
   sync();
 }
 
@@ -1154,54 +1416,6 @@ void FileStore::sync(Context *onsafe)
 // attributes
 
 // objects
-
-int FileStore::setattr(coll_t cid, pobject_t oid, const char *name,
-		       const void *value, size_t size,
-		       Context *onsafe) 
-{
-  int r;
-  if (fake_attrs) 
-    r = attrs.setattr(cid, oid, name, value, size, onsafe);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    char n[40];
-    get_attrname(name, n);
-    r = do_setxattr(fn, n, value, size);
-    dout(10) << "setattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
- }
-  if (r >= 0)
-    journal_setattr(cid, oid, name, value, size, onsafe);
-  else
-    delete onsafe;
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
-{
-  int r;
-  if (fake_attrs) 
-    r = attrs.setattrs(cid, oid, aset);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    r = 0;
-    for (map<string,bufferptr>::iterator p = aset.begin();
-	 p != aset.end();
-	 ++p) {
-      char n[40];
-      get_attrname(p->first.c_str(), n);
-      r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
-      if (r < 0) {
-	cerr << "error setxattr " << strerror(errno) << std::endl;
-	break;
-      }
-    }
-  }
-  if (r >= 0)
-    journal_setattrs(cid, oid, aset, 0);
-  return r < 0 ? -errno:r;
-}
 
 int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
 		       void *value, size_t size) 
@@ -1216,6 +1430,27 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
     get_attrname(name, n);
     r = do_getxattr(fn, n, value, size);
     dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
+  }
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp)
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.getattr(cid, oid, name, bp);
+  else {
+    char fn[100];
+    get_coname(cid, oid, fn);
+    char n[40];
+    get_attrname(name, n);
+    r = do_getxattr(fn, n, 0, 0);
+    if (r > 0) {
+      bp = buffer::create(r);
+      r = do_getxattr(fn, n, bp.c_str(), r);
+      if (r > 0) bp.set_length(r);
+    }
+    dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << bp.length() << " = " << r << dendl;
   }
   return r < 0 ? -errno:r;
 }
@@ -1248,11 +1483,54 @@ int FileStore::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset)
   return r < 0 ? -errno:r;
 }
 
-int FileStore::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe) 
+
+int FileStore::_setattr(coll_t cid, pobject_t oid, const char *name,
+			const void *value, size_t size) 
 {
   int r;
   if (fake_attrs) 
-    r = attrs.rmattr(cid, oid, name, onsafe);
+    r = attrs.setattr(cid, oid, name, value, size);
+  else {
+    char fn[100];
+    get_coname(cid, oid, fn);
+    char n[40];
+    get_attrname(name, n);
+    r = do_setxattr(fn, n, value, size);
+    dout(10) << "setattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
+ }
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::_setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.setattrs(cid, oid, aset);
+  else {
+    char fn[100];
+    get_coname(cid, oid, fn);
+    r = 0;
+    for (map<string,bufferptr>::iterator p = aset.begin();
+	 p != aset.end();
+	 ++p) {
+      char n[40];
+      get_attrname(p->first.c_str(), n);
+      r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
+      if (r < 0) {
+	cerr << "error setxattr " << strerror(errno) << std::endl;
+	break;
+      }
+    }
+  }
+  return r < 0 ? -errno:r;
+}
+
+
+int FileStore::_rmattr(coll_t cid, pobject_t oid, const char *name) 
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.rmattr(cid, oid, name);
   else {
     char fn[100];
     get_coname(cid, oid, fn);
@@ -1260,48 +1538,12 @@ int FileStore::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsa
     get_attrname(name, n);
     r = do_removexattr(fn, n);
   }
-  if (r >= 0)
-    journal_rmattr(cid, oid, name, onsafe);
-  else
-    delete onsafe;
   return r < 0 ? -errno:r;
 }
 
 
 
 // collections
-int FileStore::collection_setattr(coll_t c, const char *name,
-				  const void *value, size_t size,
-				  Context *onsafe) 
-{
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_setattr(c, name, value, size, onsafe);
-  else {
-    char fn[200];
-    get_cdir(c, fn);
-    r = do_setxattr(fn, name, value, size);
-  }
-  if (r >= 0)
-    journal_collection_setattr(c, name, value, size, onsafe);
-  else 
-    delete onsafe;
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::collection_rmattr(coll_t c, const char *name,
-				 Context *onsafe) 
-{
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_rmattr(c, name, onsafe);
-  else {
-    char fn[200];
-    get_cdir(c, fn);
-    r = do_removexattr(fn, name);
-  }
-  return r < 0 ? -errno:r;
-}
 
 int FileStore::collection_getattr(coll_t c, const char *name,
 				  void *value, size_t size) 
@@ -1331,27 +1573,6 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
       r = do_getxattr(fn, name, bl.c_str(), r);
     }
   }
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
-{
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_setattrs(cid, aset);
-  else {
-    char fn[100];
-    get_cdir(cid, fn);
-    int r = 0;
-    for (map<string,bufferptr>::iterator p = aset.begin();
-	 p != aset.end();
-       ++p) {
-      r = do_setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length());
-      if (r < 0) break;
-    }
-  }
-  if (r >= 0)
-    journal_collection_setattrs(cid, aset, 0);
   return r < 0 ? -errno:r;
 }
 
@@ -1385,11 +1606,59 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
 }
 
 
+int FileStore::_collection_setattr(coll_t c, const char *name,
+				  const void *value, size_t size) 
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_setattr(c, name, value, size);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = do_setxattr(fn, name, value, size);
+  }
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::_collection_rmattr(coll_t c, const char *name) 
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_rmattr(c, name);
+  else {
+    char fn[200];
+    get_cdir(c, fn);
+    r = do_removexattr(fn, name);
+  }
+  return r < 0 ? -errno:r;
+}
+
+
+int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
+{
+  int r;
+  if (fake_attrs) 
+    r = attrs.collection_setattrs(cid, aset);
+  else {
+    char fn[100];
+    get_cdir(cid, fn);
+    int r = 0;
+    for (map<string,bufferptr>::iterator p = aset.begin();
+	 p != aset.end();
+       ++p) {
+      r = do_setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length());
+      if (r < 0) break;
+    }
+  }
+  return r < 0 ? -errno:r;
+}
+
+
 
 // --------------------------
 // collections
 
-int FileStore::list_collections(list<coll_t>& ls) 
+int FileStore::list_collections(vector<coll_t>& ls) 
 {
   if (fake_collections) return collections.list_collections(ls);
 
@@ -1405,47 +1674,12 @@ int FileStore::list_collections(list<coll_t>& ls)
     if (strlen(de->d_name) != 16)
       continue;
     errno = 0;
-    coll_t c = parse_coll(de->d_name);
-    if (c) ls.push_back(c);
+    coll_t c;
+    if (parse_coll(de->d_name, c))
+      ls.push_back(c);
   }
   
   ::closedir(dir);
-  return 0;
-}
-
-int FileStore::create_collection(coll_t c,
-				 Context *onsafe) 
-{
-  if (fake_collections) return collections.create_collection(c, onsafe);
-  
-  char fn[200];
-  get_cdir(c, fn);
-
-  int r = ::mkdir(fn, 0755);
-
-  if (r >= 0)
-    journal_create_collection(c, onsafe);
-  else 
-    delete onsafe;
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::destroy_collection(coll_t c,
-				  Context *onsafe) 
-{
-  if (fake_collections) return collections.destroy_collection(c, onsafe);
-
-  char fn[200];
-  get_cdir(c, fn);
-  char cmd[200];
-  sprintf(cmd, "test -d %s && rm -r %s", fn, fn);
-  system(cmd);
-  int r = 0; // fixme
-
-  if (r >= 0)
-    journal_destroy_collection(c, onsafe);
-  else 
-    delete onsafe;
   return 0;
 }
 
@@ -1467,46 +1701,7 @@ bool FileStore::collection_exists(coll_t c)
   return collection_stat(c, &st) == 0;
 }
 
-
-int FileStore::collection_add(coll_t c, coll_t cid, pobject_t o,
-			      Context *onsafe) 
-{
-  int r;
-  if (fake_collections) 
-    r = collections.collection_add(c, o, onsafe);
-  else {
-    char cof[200];
-    get_coname(c, o, cof);
-    char of[200];
-    get_coname(cid, o, of);
-    r = ::link(of, cof);
-  }
-  if (r >= 0)
-    journal_collection_add(c, cid, o, onsafe);
-  else 
-    delete onsafe;
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::collection_remove(coll_t c, pobject_t o,
-				 Context *onsafe) 
-{
-  int r;
-  if (fake_collections) 
-    r = collections.collection_remove(c, o, onsafe);
-  else {
-    char cof[200];
-    get_coname(c, o, cof);
-    r = ::unlink(cof);
-  }
-  if (r >= 0)
-    journal_collection_remove(c, o, onsafe);
-  else
-    delete onsafe;
-  return r < 0 ? -errno:r;
-}
-
-int FileStore::collection_list(coll_t c, list<pobject_t>& ls) 
+int FileStore::collection_list(coll_t c, vector<pobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
@@ -1521,13 +1716,68 @@ int FileStore::collection_list(coll_t c, list<pobject_t>& ls)
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
-    pobject_t o = parse_object(de->d_name);
-    if (errno) continue;
-    ls.push_back(o);
+    pobject_t o;
+    if (parse_object(de->d_name, o))
+      ls.push_back(o);
   }
   
   ::closedir(dir);
   return 0;
 }
+
+
+int FileStore::_create_collection(coll_t c) 
+{
+  if (fake_collections) return collections.create_collection(c);
+  
+  char fn[200];
+  get_cdir(c, fn);
+
+  int r = ::mkdir(fn, 0755);
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::_destroy_collection(coll_t c) 
+{
+  if (fake_collections) return collections.destroy_collection(c);
+
+  char fn[200];
+  get_cdir(c, fn);
+  char cmd[200];
+  sprintf(cmd, "test -d %s && rm -r %s", fn, fn);
+  system(cmd);
+  return 0;
+}
+
+
+int FileStore::_collection_add(coll_t c, coll_t cid, pobject_t o) 
+{
+  int r;
+  if (fake_collections) 
+    r = collections.collection_add(c, o);
+  else {
+    char cof[200];
+    get_coname(c, o, cof);
+    char of[200];
+    get_coname(cid, o, of);
+    r = ::link(of, cof);
+  }
+  return r < 0 ? -errno:r;
+}
+
+int FileStore::_collection_remove(coll_t c, pobject_t o) 
+{
+  int r;
+  if (fake_collections) 
+    r = collections.collection_remove(c, o);
+  else {
+    char cof[200];
+    get_coname(c, o, cof);
+    r = ::unlink(cof);
+  }
+  return r < 0 ? -errno:r;
+}
+
+
 
 // eof.

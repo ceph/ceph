@@ -170,6 +170,8 @@ static struct crush_map *crush_decode(void **p, void *end)
 		case CRUSH_BUCKET_STRAW:
 			size = sizeof(struct crush_bucket_straw);
 			break;
+		default:
+			goto bad;
 		}
 		BUG_ON(size == 0);
 		b = c->buckets[i] = kzalloc(size, GFP_NOFS);
@@ -375,6 +377,11 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		}
 	}
 
+	/* ignore max_snap, removed_snaps */
+	*p += sizeof(u64);
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * 2 * sizeof(u64);
+
 	/* crush */
 	ceph_decode_32_safe(p, end, len, bad);
 	dout(30, "osdmap_decode crush len %d from off %x\n",
@@ -517,7 +524,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 			map->crush->device_offload[osd] = off;
 	}
 
-	/* skip new_alive_thru */
+	/* skip new_up_thru */
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * sizeof(u32);
 
@@ -527,8 +534,13 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * sizeof(__u64);
 
+	/* skip new_max_snap, removed_snaps */
+	*p += sizeof(__u64);
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * 2 * sizeof(__u64);	
+
 	if (*p != end) {
-		dout(10, "trailing gunk\n");
+		dout(10, "osdmap incremental has trailing gunk?\n");
 		goto bad;
 	}
 	return map;

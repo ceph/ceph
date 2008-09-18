@@ -96,8 +96,8 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename
        << ", " << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
-  //ObjectStore *fs = new Ebofs(filename, journal);
-  ObjectStore *fs = new FileStore(filename);
+  ObjectStore *fs = new Ebofs(filename, journal);
+  //ObjectStore *fs = new FileStore(filename);
 
   if (g_conf.mkfs && 
       fs->mkfs() < 0) {
@@ -109,7 +109,9 @@ int main(int argc, const char **argv)
     return -1;
   }
 
-  fs->create_collection(0);
+  ObjectStore::Transaction ft;
+  ft.create_collection(0);
+  fs->apply_transaction(ft);
 
   utime_t now = g_clock.now();
   utime_t end = now;

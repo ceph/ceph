@@ -46,6 +46,15 @@ ostream& operator<<(ostream& out, CDentry& dn)
   
   out << "[dentry " << path;
   
+  if (true || dn.first != 0 || dn.last != CEPH_NOSNAP) {
+    out << " [" << dn.first << ",";
+    if (dn.last == CEPH_NOSNAP) 
+      out << "head";
+    else
+      out << dn.last;
+    out << ']';
+  }
+
   if (dn.is_auth()) {
     out << " auth";
     if (dn.is_replicated()) 
@@ -94,9 +103,11 @@ ostream& operator<<(ostream& out, CDentry& dn)
 
 bool operator<(const CDentry& l, const CDentry& r)
 {
-  if (l.get_dir()->ino() < r.get_dir()->ino()) return true;
-  if (l.get_dir()->ino() == r.get_dir()->ino() &&
-      l.get_name() < r.get_name()) return true;
+  if ((l.get_dir()->ino() < r.get_dir()->ino()) ||
+      (l.get_dir()->ino() == r.get_dir()->ino() &&
+       (l.get_name() < r.get_name() ||
+	(l.get_name() == r.get_name() && l.last < r.last))))
+    return true;
   return false;
 }
 
@@ -121,7 +132,7 @@ pair<int,int> CDentry::authority()
 }
 
 
-void CDentry::add_waiter(int tag, Context *c)
+void CDentry::add_waiter(__u64 tag, Context *c)
 {
   // wait on the directory?
   if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
@@ -265,13 +276,6 @@ void CDentry::unlink_remote()
 }
 
 
-CDentryDiscover *CDentry::replicate_to(int who)
-{
-  int nonce = add_replica(who);
-  return new CDentryDiscover(this, nonce);
-}
-
-
 // ----------------------------
 // auth pins
 
@@ -344,6 +348,34 @@ void CDentry::adjust_nested_anchors(int by)
   dir->adjust_nested_anchors(by);
 }
 
+
+void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
+{
+  __u32 nonce;
+  ::decode(nonce, p);
+  replica_nonce = nonce;
+  
+  ::decode(first, p);
+
+  inodeno_t rino;
+  unsigned char rdtype;
+  ::decode(rino, p);
+  ::decode(rdtype, p);
+  if (rino) {
+    if (is_null())
+      dir->link_remote_inode(this, rino, rdtype);
+    else
+      assert(is_remote() && remote_ino == rino);
+  }
+  
+  __s32 ls;
+  ::decode(ls, p);
+  if (is_new)
+    lock.set_state(ls);
+}
+
+
+
 // ----------------------------
 // locking
 
@@ -351,10 +383,13 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 {
   info.dirfrag = dir->dirfrag();
   info.dname = name;
+  info.snapid = last;
 }
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
+  ::encode(first, bl);
+
   // null, ino, or remote_ino?
   char c;
   if (is_primary()) {
@@ -375,7 +410,18 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
 {  
-  if (bl.length() == 0) {
+  bufferlist::iterator p = bl.begin();
+
+  snapid_t newfirst;
+  ::decode(newfirst, p);
+
+  if (!is_auth() && newfirst != first) {
+    dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
+    assert(newfirst > first);
+    first = newfirst;
+  }
+
+  if (p.end()) {
     // null
     assert(is_null());
     return;
@@ -383,8 +429,6 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 
   char c;
   inodeno_t ino;
-
-  bufferlist::iterator p = bl.begin();
   ::decode(c, p);
 
   switch (c) {

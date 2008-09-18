@@ -444,12 +444,12 @@ void PG::generate_backlog()
   assert(!log.backlog);
   log.backlog = true;
 
-  list<pobject_t> olist;
-  osd->store->collection_list(info.pgid, olist);
+  vector<pobject_t> olist;
+  osd->store->collection_list(info.pgid.to_coll(), olist);
   
   int local = 0;
   map<eversion_t,Log::Entry> add;
-  for (list<pobject_t>::iterator it = olist.begin();
+  for (vector<pobject_t>::iterator it = olist.begin();
        it != olist.end();
        it++) {
     local++;
@@ -461,7 +461,7 @@ void PG::generate_backlog()
     Log::Entry e;
     e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
     e.oid = oid;
-    osd->store->getattr(info.pgid, pobject_t(0,0,oid), 
+    osd->store->getattr(info.pgid.to_coll(), pobject_t(0,0,oid), 
                         "version",
                         &e.version, sizeof(e.version));
     add[e.version] = e;
@@ -704,6 +704,8 @@ void PG::clear_primary_state()
   peer_summary_requested.clear();
   peer_info.clear();
   peer_missing.clear();
+
+  finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
   
   stat_object_temp_rd.clear();
 }
@@ -962,16 +964,15 @@ void PG::activate(ObjectStore::Transaction& t,
 
   assert(info.last_complete >= log.bottom || log.backlog);
 
-  // write pg info
-  bufferlist bl;
-  ::encode(info, bl);
-  t.collection_setattr(info.pgid, "info", bl);
-  
-  // write log
+  // write pg info, log
+  write_info(t);
   write_log(t);
 
-  // clean up stray objects
+  // clean up stray objects, snaps
   clean_up_local(t); 
+
+  if (!info.dead_snaps.empty())
+    queue_snap_trim();
 
   // init complete pointer
   if (missing.num_missing() == 0 &&
@@ -1122,6 +1123,32 @@ void PG::activate(ObjectStore::Transaction& t,
   osd->take_waiters(waiting_for_active);
 }
 
+void PG::queue_snap_trim()
+{
+  if (state_test(PG_STATE_SNAPTRIMMING)) {
+    dout(10) << "queue_snap_trim -- already trimming" << dendl;
+    return;
+  }
+
+  state_set(PG_STATE_SNAPTRIMQUEUE);
+
+  osd->snap_trimmer_lock.Lock();
+  osd->pgs_pending_snap_removal.push_back(&pending_snap_removal_item);
+  osd->snap_trimmer_lock.Unlock();
+
+  osd->wake_snap_trimmer();     // FIXME: we probably want to wait until at least peering completes?
+}
+
+
+struct C_PG_FinishRecovery : public Context {
+  PG *pg;
+  C_PG_FinishRecovery(PG *p) : pg(p) {
+    pg->get();
+  }
+  void finish(int r) {
+    pg->_finish_recovery(this);
+  }
+};
 
 void PG::finish_recovery()
 {
@@ -1129,15 +1156,28 @@ void PG::finish_recovery()
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
-  ObjectStore::Transaction t;
-  bufferlist bl;
-  ::encode(info, bl);
-  t.collection_setattr(info.pgid, "info", bl);
-  osd->store->apply_transaction(t);
-  osd->store->sync();
+  /*
+   * sync all this before purging strays.  but don't block!
+   */
+  finish_sync_event = new C_PG_FinishRecovery(this);
 
-  purge_strays();
-  update_stats();
+  ObjectStore::Transaction t;
+  write_info(t);
+  osd->store->apply_transaction(t, finish_sync_event);
+}
+
+void PG::_finish_recovery(Context *c)
+{
+  osd->osd_lock.Lock();  // avoid race with advance_map, etc..
+  lock();
+  if (c == finish_sync_event) {
+    finish_sync_event = 0;
+    dout(10) << "_finish_recovery" << dendl;
+    purge_strays();
+    update_stats();
+  }
+  osd->osd_lock.Unlock();
+  put_unlock();
 }
 
 
@@ -1199,6 +1239,14 @@ void PG::clear_stats()
 }
 
 
+void PG::write_info(ObjectStore::Transaction& t)
+{
+  // write pg info
+  bufferlist infobl;
+  ::encode(info, infobl);
+  t.collection_setattr(info.pgid.to_coll(), "info", infobl);
+}
+
 void PG::write_log(ObjectStore::Transaction& t)
 {
   dout(10) << "write_log" << dendl;
@@ -1225,14 +1273,12 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove(info.pgid, info.pgid.to_pobject() );
-  t.write(info.pgid, info.pgid.to_pobject() , 0, bl.length(), bl);
-  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.remove(info.pgid.to_coll(), info.pgid.to_pobject() );
+  t.write(info.pgid.to_coll(), info.pgid.to_pobject() , 0, bl.length(), bl);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  bufferlist infobl;
-  ::encode(info, infobl);
-  t.collection_setattr(info.pgid, "info", infobl);
+  write_info(t);
 
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }
@@ -1266,9 +1312,9 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   while (p != ondisklog.block_map.begin()) 
     ondisklog.block_map.erase(ondisklog.block_map.begin());
   
-  t.collection_setattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(info.pgid, info.pgid.to_pobject(), 0, ondisklog.bottom);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.zero(info.pgid.to_coll(), info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1286,14 +1332,14 @@ void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry,
     bl.push_back(bp);
   }
   */
-  t.write(info.pgid,  info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
+  t.write(info.pgid.to_coll(),  info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
     ondisklog.block_map[ondisklog.top] = logentry.version;
   
   ondisklog.top += bl.length();
-  t.collection_setattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   // trim?
   if (trim_to > log.bottom) {
@@ -1311,9 +1357,9 @@ void PG::read_log(ObjectStore *store)
   int r;
   // load bounds
   ondisklog.bottom = ondisklog.top = 0;
-  r = store->collection_getattr(info.pgid, "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
+  r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   assert(r == sizeof(ondisklog.bottom));
-  r = store->collection_getattr(info.pgid, "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   assert(r == sizeof(ondisklog.top));
 
   dout(10) << "read_log [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
@@ -1324,7 +1370,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(info.pgid, info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(info.pgid.to_coll(), info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log data doesn't match attrs" << dendl;
       assert(0);
@@ -1370,7 +1416,7 @@ void PG::read_log(ObjectStore *store)
 
     eversion_t v;
     pobject_t poid(info.pgid.pool(), 0, i->oid);
-    int r = osd->store->getattr(info.pgid, poid, "version", &v, sizeof(v));
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
     if (r < 0 || v < i->version) 
       missing.add_event(*i);
   }
@@ -1391,7 +1437,7 @@ bool PG::block_if_wrlocked(MOSDOp* op)
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
   entity_name_t source;
-  int len = osd->store->getattr(info.pgid, poid, "wrlock", &source, sizeof(entity_name_t));
+  int len = osd->store->getattr(info.pgid.to_coll(), poid, "wrlock", &source, sizeof(entity_name_t));
   //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
   if (len == sizeof(source) &&
@@ -1403,68 +1449,6 @@ bool PG::block_if_wrlocked(MOSDOp* op)
   
   return false; //the object wasn't locked, so the operation can be handled right away
 }
-
-
-
-
-// =======================
-// revisions
-
-
-/*
-int OSD::list_missing_revs(object_t oid, set<object_t>& revs, PG *pg)
-{
-  int c = 0;
-  oid.rev = 0;
-  
-  map<object_t,eversion_t>::iterator p = pg->missing.missing.lower_bound(oid);
-  if (p == pg->missing.missing.end()) 
-    return 0;  // clearly not
-
-  while (p->first.ino == oid.ino &&
-	 p->first.bno == oid.bno) {
-    revs.insert(p->first);
-    c++;
-  }
-  return c;
-}*/
-
-bool PG::pick_missing_object_rev(object_t& oid)
-{
-  map<object_t,eversion_t>::iterator p = missing.missing.upper_bound(oid);
-  if (p == missing.missing.end()) 
-    return false;  // clearly no candidate
-
-  if (p->first.ino == oid.ino && p->first.bno == oid.bno) {
-    oid = p->first;  // yes!  it's an upper bound revision for me.
-    return true;
-  }
-  return false;
-}
-
-bool PG::pick_object_rev(object_t& oid)
-{
-  pobject_t t(info.pgid.pool(), 0, oid);
-
-  if (!osd->store->pick_object_revision_lt(info.pgid, t))
-    return false; // we have no revisions of this object!
-  
-  objectrev_t crev;
-  int r = osd->store->getattr(info.pgid, t, "crev", &crev, sizeof(crev));
-  assert(r >= 0);
-  if (crev <= oid.rev) {
-    dout(10) << "pick_object_rev choosing " << t << " crev " << crev << " for " << oid << dendl;
-    oid = t.oid;
-    return true;
-  }
-
-  return false;  
-}
-
-
-
-
-
 
 
 

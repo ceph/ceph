@@ -84,6 +84,85 @@ namespace __gnu_cxx {
 }
 
 
+
+// -- io helpers --
+
+template<class A, class B>
+inline ostream& operator<<(ostream& out, const pair<A,B> v) {
+  return out << v.first << "," << v.second;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const vector<A>& v) {
+  out << "[";
+  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+    if (p != v.begin()) out << ",";
+    out << *p;
+  }
+  out << "]";
+  return out;
+}
+template<class A>
+inline ostream& operator<<(ostream& out, const deque<A>& v) {
+  out << "<";
+  for (typename deque<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+    if (p != v.begin()) out << ",";
+    out << *p;
+  }
+  out << ">";
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const list<A>& ilist) {
+  for (typename list<A>::const_iterator it = ilist.begin();
+       it != ilist.end();
+       it++) {
+    if (it != ilist.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const set<A>& iset) {
+  for (typename set<A>::const_iterator it = iset.begin();
+       it != iset.end();
+       it++) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A>
+inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
+  for (typename multiset<A>::const_iterator it = iset.begin();
+       it != iset.end();
+       it++) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A,class B>
+inline ostream& operator<<(ostream& out, const map<A,B>& m) 
+{
+  out << "{";
+  for (typename map<A,B>::const_iterator it = m.begin();
+       it != m.end();
+       it++) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  out << "}";
+  return out;
+}
+
+
+
+
 /*
  * comparators for stl containers
  */
@@ -113,13 +192,16 @@ struct ltstr
 WRITE_RAW_ENCODER(ceph_fsid)
 WRITE_RAW_ENCODER(ceph_file_layout)
 WRITE_RAW_ENCODER(ceph_mds_request_head)
-WRITE_RAW_ENCODER(ceph_mds_file_caps)
+WRITE_RAW_ENCODER(ceph_mds_caps)
 WRITE_RAW_ENCODER(ceph_mds_lease)
+WRITE_RAW_ENCODER(ceph_mds_snap_head)
+WRITE_RAW_ENCODER(ceph_mds_snap_realm)
 WRITE_RAW_ENCODER(ceph_mds_reply_head)
 WRITE_RAW_ENCODER(ceph_mds_reply_inode)
+WRITE_RAW_ENCODER(ceph_mds_cap_reconnect)
+WRITE_RAW_ENCODER(ceph_mds_snaprealm_reconnect)
 WRITE_RAW_ENCODER(ceph_frag_tree_split)
 WRITE_RAW_ENCODER(ceph_inopath_item)
-
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
 
@@ -136,7 +218,6 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 #define O_LAZY 01000000
 
-typedef __u64 coll_t;
 
 
 // --------------------------------------
@@ -187,82 +268,103 @@ inline unsigned char MODE_TO_DT(int mode) {
 
 
 
+// snaps
+struct snapid_t {
+  __u64 val;
+  snapid_t(__u64 v=0) : val(v) {}
+  snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
+  snapid_t operator++() { ++val; return *this; }
+  operator __u64() const { return val; }  
+};
+
+inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
+inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+
+inline ostream& operator<<(ostream& out, snapid_t s) {
+  if (s == CEPH_NOSNAP)
+    return out << "head";
+  else if (s == CEPH_SNAPDIR)
+    return out << "snapdir";
+  else
+    return out << s.val;
+}
+
+
+
+struct SnapRealmInfo {
+  mutable ceph_mds_snap_realm h;
+  vector<snapid_t> my_snaps;
+  vector<snapid_t> prior_parent_snaps;  // before parent_since
+
+  SnapRealmInfo() {
+    memset(&h, 0, sizeof(h));
+  }
+  SnapRealmInfo(inodeno_t ino, snapid_t created, snapid_t seq, snapid_t current_parent_since) {
+    memset(&h, 0, sizeof(h));
+    h.ino = ino;
+    h.created = created;
+    h.seq = seq;
+    h.parent_since = current_parent_since;
+  }
+  
+  inodeno_t ino() { return inodeno_t(h.ino); }
+  inodeno_t parent() { return inodeno_t(h.parent); }
+  snapid_t seq() { return snapid_t(h.seq); }
+  snapid_t parent_since() { return snapid_t(h.parent_since); }
+  snapid_t created() { return snapid_t(h.created); }
+
+  void encode(bufferlist& bl) const {
+    h.num_snaps = my_snaps.size();
+    h.num_prior_parent_snaps = prior_parent_snaps.size();
+    ::encode(h, bl);
+    ::encode_nohead(my_snaps, bl);
+    ::encode_nohead(prior_parent_snaps, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(h, bl);
+    ::decode_nohead(h.num_snaps, my_snaps, bl);
+    ::decode_nohead(h.num_prior_parent_snaps, prior_parent_snaps, bl);
+  }
+};
+WRITE_CLASS_ENCODER(SnapRealmInfo)
+
+
+struct SnapContext {
+  snapid_t seq;
+  vector<snapid_t> snaps;
+
+  void clear() {
+    seq = 0;
+    snaps.clear();
+  }
+  bool empty() { return seq == 0; }
+
+  void encode(bufferlist& bl) const {
+    ::encode(seq, bl);
+    ::encode(snaps, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(seq, bl);
+    ::decode(snaps, bl);
+  }
+};
+WRITE_CLASS_ENCODER(SnapContext)
+
+inline ostream& operator<<(ostream& out, const SnapContext& snapc) {
+  return out << snapc.seq << "=" << snapc.snaps;
+}
+
 // dentries
 #define MAX_DENTRY_LEN 255
 
 
 // --
 
-inline ostream& operator<<(ostream& out, ceph_fsid& f) {
+inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
   return out << hex << f.major << '.' << f.minor << dec;
 }
 
 
-
-// -- io helpers --
-
-template<class A, class B>
-inline ostream& operator<<(ostream& out, pair<A,B> v) {
-  return out << v.first << "," << v.second;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, vector<A>& v) {
-  out << "[";
-  for (unsigned i=0; i<v.size(); i++) {
-    if (i) out << ",";
-    out << v[i];
-  }
-  out << "]";
-  return out;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const list<A>& ilist) {
-  for (typename list<A>::const_iterator it = ilist.begin();
-       it != ilist.end();
-       it++) {
-    if (it != ilist.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const set<A>& iset) {
-  for (typename set<A>::const_iterator it = iset.begin();
-       it != iset.end();
-       it++) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A>
-inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
-  for (typename multiset<A>::const_iterator it = iset.begin();
-       it != iset.end();
-       it++) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A,class B>
-inline ostream& operator<<(ostream& out, const map<A,B>& m) 
-{
-  out << "{";
-  for (typename map<A,B>::const_iterator it = m.begin();
-       it != m.end();
-       it++) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  out << "}";
-  return out;
-}
 
 
 

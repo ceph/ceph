@@ -20,8 +20,10 @@
 #include "Locker.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
-#include "AnchorClient.h"
 #include "Migrator.h"
+
+#include "AnchorClient.h"
+#include "SnapClient.h"
 
 #include "MDSMap.h"
 
@@ -65,14 +67,15 @@
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
+#include "messages/MClientSnap.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
 #include "messages/MMDSFragmentNotify.h"
 
 
-#include "IdAllocator.h"
+#include "InoTable.h"
 
 #include "common/Timer.h"
 
@@ -133,7 +136,7 @@ void MDCache::log_stat(Logger *logger)
 bool MDCache::shutdown()
 {
   if (lru.lru_get_size() > 0) {
-    dout(7) << "WARNING: mdcache shutodwn with non-empty cache" << dendl;
+    dout(7) << "WARNING: mdcache shutdown with non-empty cache" << dendl;
     //show_cache();
     show_subtrees();
     //dump();
@@ -150,7 +153,7 @@ CInode *MDCache::create_inode()
   CInode *in = new CInode(this);
 
   // assign ino
-  in->inode.ino = mds->idalloc->alloc_id();
+  in->inode.ino = mds->inotable->alloc_id();
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
 
@@ -164,8 +167,8 @@ CInode *MDCache::create_inode()
 void MDCache::add_inode(CInode *in) 
 {
   // add to lru, inode map
-  assert(inode_map.count(in->ino()) == 0);  // should be no dup inos!
-  inode_map[ in->ino() ] = in;
+  assert(inode_map.count(in->vino()) == 0);  // should be no dup inos!
+  inode_map[ in->vino() ] = in;
 
   if (in->ino() < MDS_INO_BASE) {
     base_inodes.insert(in);
@@ -188,7 +191,7 @@ void MDCache::remove_inode(CInode *o)
   }
 
   // remove from inode map
-  inode_map.erase(o->ino());    
+  inode_map.erase(o->vino());    
 
   if (o->ino() < MDS_INO_BASE) {
     assert(base_inodes.count(o));
@@ -221,7 +224,10 @@ CInode *MDCache::create_root_inode()
   
   root->inode_auth = pair<int,int>(0, CDIR_AUTH_UNKNOWN);
 
-  add_inode( root );
+  root->open_snaprealm();  // empty snaprealm
+  root->snaprealm->seq = 1;
+  
+  add_inode(root);
 
   return root;
 }
@@ -269,6 +275,8 @@ CInode *MDCache::create_stray_inode(int whose)
   in->inode.nlink = 1;
   in->inode.layout = g_default_mds_dir_layout;
   
+  in->open_snaprealm();
+
   add_inode( in );
 
   return in;
@@ -315,14 +323,14 @@ MDSCacheObject *MDCache::get_object(MDSCacheObjectInfo &info)
 {
   // inode?
   if (info.ino) 
-    return get_inode(info.ino);
+    return get_inode(info.ino, info.snapid);
 
   // dir or dentry.
   CDir *dir = get_dirfrag(info.dirfrag);
   if (!dir) return 0;
     
   if (info.dname.length()) 
-    return dir->lookup(info.dname);
+    return dir->lookup(info.dname, info.snapid);
   else
     return dir;
 }
@@ -436,11 +444,11 @@ void MDCache::try_subtree_merge(CDir *dir)
 class C_MDC_SubtreeMergeWB : public Context {
   MDCache *mdcache;
   CInode *in;
-  LogSegment *ls;
+  Mutation *mut;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, LogSegment *s) : mdcache(mdc), in(i), ls(s) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
   void finish(int r) { 
-    mdcache->subtree_merge_writebehind_finish(in, ls);
+    mdcache->subtree_merge_writebehind_finish(in, mut);
   }
 };
 
@@ -500,23 +508,29 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       inode_t *pi = in->project_inode();
       pi->version = in->pre_dirty();
       
+      Mutation *mut = new Mutation;
+      mut->ls = mds->mdlog->get_current_segment();
       EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      le->metablob.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+      journal_dirty_inode(mut, &le->metablob, in);
       
       mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, 
-							 mds->mdlog->get_current_segment()));
+      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, mut));
     }
   } 
 
   show_subtrees(15);
 }
 
-void MDCache::subtree_merge_writebehind_finish(CInode *in, LogSegment *ls)
+void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
-  in->pop_and_dirty_projected_inode(ls);
+  in->pop_and_dirty_projected_inode(mut->ls);
+
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+
   in->auth_unpin(this);
 }
 
@@ -524,14 +538,23 @@ void MDCache::eval_subtree_root(CDir *dir)
 {
   // evaluate subtree inode dirlock?
   //  (we should scatter the dirlock on subtree bounds)
-  if (dir->inode->is_auth() &&
-      dir->inode->dirlock.is_stable()) {
-    // force the issue a bit
-    if (!dir->inode->is_frozen())
-      mds->locker->scatter_eval(&dir->inode->dirlock);
-    else
-      mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+  if (dir->inode->is_auth()) {
+    if (dir->inode->dirlock.is_stable()) {
+      // force the issue a bit
+      if (!dir->inode->is_frozen())
+	mds->locker->scatter_eval(&dir->inode->dirlock);
+      else
+	mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+    }
+    if (dir->inode->nestlock.is_stable()) {
+      // force the issue a bit
+      if (!dir->inode->is_frozen())
+	mds->locker->scatter_eval(&dir->inode->nestlock);
+      else
+	mds->locker->try_scatter_eval(&dir->inode->nestlock);  // ** may or may not be auth_pinned **
+    }
   }
+  
   
 }
 
@@ -649,7 +672,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
 }
 
 
-void MDCache::adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bound_dfs, pair<int,int> auth)
+void MDCache::adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bound_dfs, pair<int,int> auth)
 {
   dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir 
@@ -658,7 +681,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, list<dirfrag_t>& bound_dfs,
   
   // make bounds list
   set<CDir*> bounds;
-  for (list<dirfrag_t>::iterator p = bound_dfs.begin();
+  for (vector<dirfrag_t>::iterator p = bound_dfs.begin();
        p != bound_dfs.end();
        ++p) {
     CDir *bd = get_dirfrag(*p);
@@ -805,6 +828,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir)
 
   //show_subtrees();
 
+  // adjust subtree
   list<CDir*> dfls;
   diri->get_dirfrags(dfls);
   for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
@@ -924,6 +948,624 @@ int MDCache::num_subtrees_fullnonauth()
   }
   return n;
 }
+
+
+
+// ===================================
+// journal and snap/cow helpers
+
+
+/*
+ * find first inode in cache that follows given snapid.  otherwise, return current.
+ */
+CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
+{
+  if (follows == 0)
+    return in;
+
+  dout(10) << "pick_inode_snap follows " << follows << " on " << *in << dendl;
+
+  SnapRealm *realm = in->find_snaprealm();
+  const set<snapid_t>& snaps = realm->get_snaps();
+  dout(10) << " realm " << *realm << " " << *realm->inode << dendl;
+  dout(10) << " snaps " << snaps << dendl;
+
+  if (snaps.empty())
+    return in;
+
+  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);
+       p != snaps.end();
+       p++) {
+    CInode *t = get_inode(in->ino(), *p);
+    if (t) {
+      in = t;
+      dout(10) << "pick_inode_snap snap " << *p << " found " << *in << dendl;
+    }
+  }
+  return in;
+}
+
+
+/*
+ * note: i'm currently cheating wrt dirty and inode.version on cow
+ * items.  instead of doing a full dir predirty, i just take the
+ * original item's version, and set the dirty flag (via
+ * mutation::add_cow_{inode,dentry}() and mutation::apply().  that
+ * means a special case in the dir commit clean sweep assertions.
+ * bah.
+ */
+CInode *MDCache::cow_inode(CInode *in, snapid_t last)
+{
+  assert(last >= in->first);
+
+  CInode *oldin = new CInode(this, true, in->first, last);
+  oldin->inode = *in->get_previous_projected_inode();
+  oldin->symlink = in->symlink;
+  oldin->xattrs = in->xattrs;
+
+  in->first = last+1;
+
+  dout(10) << "cow_inode to " << *oldin << dendl;
+  add_inode(oldin);
+  
+  // clone caps?
+  for (map<int,Capability*>::iterator p = in->client_caps.begin();
+      p != in->client_caps.end();
+      p++) {
+    Capability *cap = p->second;
+    if ((cap->issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	cap->client_follows < last) {
+      // clone to oldin
+      int client = p->first;
+      Capability *newcap = oldin->add_client_cap(client, in->containing_realm);
+      newcap->issue(cap->issued());
+      newcap->client_follows = cap->client_follows;
+      dout(10) << " cloning client" << client << " wr cap " << cap
+	       << " to " << newcap << " on cloned inode" << dendl;
+      cap->client_follows = last;
+    }
+  }
+  if (oldin->is_any_caps())
+    oldin->filelock.set_state(LOCK_LOCK);
+  else {
+    dout(10) << "cow_inode WARNING max_size " << oldin->inode.max_size << " > 0 on " << *oldin << dendl;
+    //oldin->inode.max_size = 0;
+  }
+
+  // clone leases?
+  if (in->last != CEPH_NOSNAP) {
+    // only if we are not the head, and our lease may cover an
+    // instance in either the old or new inodes valid interval.
+    for (hash_map<int,ClientLease*>::iterator p = in->client_lease_map.begin();
+	 p != in->client_lease_map.end();
+	 p++) {
+      dout(10) << " cloning client" << p->first << " lease on " << p->second->mask << " to cloned inode" << dendl;
+      ClientLease *l = oldin->add_client_lease(p->first, p->second->mask);
+      l->ttl = p->second->ttl;
+      p->second->session_lease_item.get_xlist()->push_back(&l->session_lease_item);
+      p->second->lease_item.get_xlist()->push_back(&l->lease_item);
+    }
+  }
+
+  return oldin;
+}
+
+void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
+				 CInode **pcow_inode)
+{
+  dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
+
+  // nothing to cow on a null dentry, fix caller
+  assert(!dn->is_null());
+
+  if (dn->is_primary() && dn->inode->is_multiversion()) {
+    // multiversion inode.
+    CInode *in = dn->inode;
+
+    if (follows == CEPH_NOSNAP || follows == 0)
+      follows = in->find_snaprealm()->get_newest_snap();
+
+    // already cloned?
+    if (follows < in->first) {
+      dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *in << dendl;
+      return;
+    }
+
+    in->cow_old_inode(follows, in->get_previous_projected_inode());
+
+    if (in->get_projected_parent_dn() != dn) {
+      snapid_t oldfirst = dn->first;
+      dn->first = follows+1;
+      CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
+						  oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+      metablob->add_remote_dentry(olddn, true);
+      mut->add_cow_dentry(olddn);
+
+      // FIXME: adjust link count here?  hmm.
+    }
+  } else {
+    if (follows == CEPH_NOSNAP)
+      follows = dn->dir->inode->find_snaprealm()->get_newest_snap();
+    
+    // already cloned?
+    if (follows < dn->first) {
+      dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *dn << dendl;
+      return;
+    }
+       
+    // update dn.first before adding old dentry to cdir's map
+    snapid_t oldfirst = dn->first;
+    dn->first = follows+1;
+    
+    dout(10) << "    dn " << *dn << dendl;
+    if (dn->is_primary()) {
+      assert(oldfirst == dn->inode->first);
+      CInode *oldin = cow_inode(dn->inode, follows);
+      mut->add_cow_inode(oldin);
+      if (pcow_inode)
+	*pcow_inode = oldin;
+      CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+      metablob->add_primary_dentry(olddn, true);
+      mut->add_cow_dentry(olddn);
+    } else {
+      assert(dn->is_remote());
+      CDentry *olddn = dn->dir->add_remote_dentry(dn->name, dn->remote_ino, dn->remote_d_type,
+						  oldfirst, follows);
+      dout(10) << " olddn " << *olddn << dendl;
+      metablob->add_remote_dentry(olddn, true);
+      mut->add_cow_dentry(olddn);
+    }
+  }
+}
+
+
+void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows,
+				CInode **pcow_inode)
+{
+  dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
+  CDentry *dn = in->get_projected_parent_dn();
+  journal_cow_dentry(mut, metablob, dn, follows, pcow_inode);
+}
+
+inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
+{
+  CDentry *dn = in->get_projected_parent_dn();
+  journal_cow_dentry(mut, metablob, dn, follows);
+  return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
+}
+
+
+
+// nested ---------------------------------------------------------------
+
+
+void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
+					  CDir *parent, int linkunlink)
+{
+  dout(10) << "project_rstat_inode_to_frag [" << ofirst << "," << last << "]" << dendl;
+  dout(10) << "  inode           rstat " << inode.rstat << dendl;
+  dout(10) << "  inode accounted_rstat " << inode.accounted_rstat << dendl;
+  nest_info_t delta;
+  if (linkunlink == 0) {
+    delta.add(inode.rstat);
+    delta.sub(inode.accounted_rstat);
+  } else if (linkunlink < 0) {
+    delta.sub(inode.accounted_rstat);
+  } else {
+    delta.add(inode.rstat);
+  }
+  dout(10) << "                  delta " << delta << dendl;
+
+  inode.accounted_rstat = inode.rstat;
+
+  while (last >= ofirst) {
+    /*
+     * pick fnode version to update.  at each iteration, we want to
+     * pick a segment ending in 'last' to update.  split as necessary
+     * to make that work.  then, adjust first up so that we only
+     * update one segment at a time.  then loop to cover the whole
+     * [ofirst,last] interval.
+     */    
+    nest_info_t *prstat;
+    snapid_t first;
+    fnode_t *pf = parent->get_projected_fnode();
+    if (last == CEPH_NOSNAP) {
+      first = MAX(ofirst, parent->first);
+      prstat = &pf->rstat;
+      dout(10) << " projecting to head [" << first << "," << last << "] " << *prstat << dendl;
+
+      if (first > parent->first &&
+	  !(pf->rstat == pf->accounted_rstat)) {
+	dout(10) << "  target snapped and not fully accounted, cow to dirty_old_rstat ["
+		 << parent->first << "," << (first-1) << "] "
+		 << " " << *prstat << "/" << pf->accounted_rstat
+		 << dendl;
+	parent->dirty_old_rstat[first-1].first = parent->first;
+	parent->dirty_old_rstat[first-1].rstat = pf->rstat;
+	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
+      }
+      parent->first = first;
+    } else if (last >= parent->first) {
+      first = parent->first;
+      parent->dirty_old_rstat[last].first = first;
+      parent->dirty_old_rstat[last].rstat = pf->rstat;
+      parent->dirty_old_rstat[last].accounted_rstat = pf->accounted_rstat;
+      prstat = &parent->dirty_old_rstat[last].rstat;
+      dout(10) << " projecting to newly split dirty_old_fnode [" << first << "," << last << "] "
+	       << " " << *prstat << "/" << pf->accounted_rstat << dendl;
+    } else {
+      // be careful, dirty_old_rstat is a _sparse_ map.
+      // sorry, this is ugly.
+      first = ofirst;
+
+      // find any intersection with last
+      map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.lower_bound(last);
+      if (p == parent->dirty_old_rstat.end()) {
+	dout(20) << "  no dirty_old_rstat with last >= last " << last << dendl;
+	if (!parent->dirty_old_rstat.empty() && parent->dirty_old_rstat.rbegin()->first >= first) {
+	  dout(20) << "  last dirty_old_rstat ends at " << parent->dirty_old_rstat.rbegin()->first << dendl;
+	  first = parent->dirty_old_rstat.rbegin()->first+1;
+	}
+      } else {
+	// *p last is >= last
+	if (p->second.first <= last) {
+	  // *p intersects [first,last]
+	  if (p->second.first < first) {
+	    dout(10) << " splitting off left bit [" << p->second.first << "," << first-1 << "]" << dendl;
+	    parent->dirty_old_rstat[first-1] = p->second;
+	    p->second.first = first;
+	  }
+	  if (p->second.first > first)
+	    first = p->second.first;
+	  if (last < p->first) {
+	    dout(10) << " splitting off right bit [" << last+1 << "," << p->first << "]" << dendl;
+	    parent->dirty_old_rstat[last] = p->second;
+	    p->second.first = last+1;
+	  }
+	} else {
+	  // *p is to the _right_ of [first,last]
+	  p = parent->dirty_old_rstat.lower_bound(first);
+	  // new *p last is >= first
+	  if (p->second.first <= last &&  // new *p isn't also to the right, and
+	      p->first >= first) {        // it intersects our first bit,
+	    dout(10) << " staying to the right of [" << p->second.first << "," << p->first << "]..." << dendl;
+	    first = p->first+1;
+	  }
+	  dout(10) << " projecting to new dirty_old_rstat [" << first << "," << last << "]" << dendl;
+	}
+      }
+      dout(10) << " projecting to dirty_old_rstat [" << first << "," << last << "]" << dendl;
+      parent->dirty_old_rstat[last].first = first;
+      prstat = &parent->dirty_old_rstat[last].rstat;
+    }
+    
+    // apply
+    dout(10) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
+    assert(last >= first);
+    prstat->add(delta);
+    inode.accounted_rstat = inode.rstat;
+    dout(10) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
+
+    last = first-1;
+  }
+}
+
+void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
+					  snapid_t ofirst, snapid_t last, 
+					  CInode *pin, bool cow_head)
+{
+  dout(10) << "project_rstat_frag_to_inode [" << ofirst << "," << last << "]" << dendl;
+  dout(10) << "  frag           rstat " << rstat << dendl;
+  dout(10) << "  frag accounted_rstat " << accounted_rstat << dendl;
+  nest_info_t delta = rstat;
+  delta.sub(accounted_rstat);
+  dout(10) << "                 delta " << delta << dendl;
+
+  accounted_rstat = rstat;
+
+  inode_t *pi_to_cow = cow_head ? pin->get_projected_inode() : pin->get_previous_projected_inode();
+
+  while (last >= ofirst) {
+    inode_t *pi;
+    snapid_t first;
+    if (last == pin->last) {
+      pi = pin->get_projected_inode();
+      first = MAX(ofirst, pin->first);
+      if (first > pin->first) {
+	old_inode_t& old = pin->cow_old_inode(first-1, pi_to_cow);
+	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
+      }
+    } else {
+      if (last >= pin->first) {
+	first = pin->first;
+	pin->cow_old_inode(last, pi_to_cow);
+      } else {
+	// our life is easier here because old_inodes is not sparse
+	// (although it may not begin at snapid 1)
+	map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
+	if (p == pin->old_inodes.end()) {
+	  dout(10) << " no old_inode <= " << last << ", done." << dendl;
+	  break;
+	}
+	first = p->second.first;
+	if (first > last) {
+	  dout(10) << " oldest old_inode is [" << first << "," << p->first << "], done." << dendl;
+	  assert(p == pin->old_inodes.begin());
+	  break;
+	}
+	if (p->first > last) {
+	  dout(10) << " splitting right old_inode [" << first << "," << p->first << "] to ["
+		   << (last+1) << "," << p->first << "]" << dendl;
+	  pin->old_inodes[last] = p->second;
+	  p->second.first = last+1;
+	  pin->dirty_old_rstats.insert(p->first);
+	}
+      }
+      if (first < ofirst) {
+	dout(10) << " splitting left old_inode [" << first << "," << last << "] to ["
+		 << first << "," << ofirst-1 << "]" << dendl;
+	pin->old_inodes[ofirst-1] = pin->old_inodes[last];
+	pin->dirty_old_rstats.insert(ofirst-1);
+	pin->old_inodes[last].first = first = ofirst;
+      }
+      pi = &pin->old_inodes[last].inode;
+      pin->dirty_old_rstats.insert(last);
+    }
+    dout(10) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
+    pi->rstat.add(delta);
+    dout(15) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
+    
+    last = first-1;
+  }
+}
+
+
+/*
+ * NOTE: we _have_ to delay the scatter if we are called during a
+ * rejoin, because we can't twiddle locks between when the
+ * rejoin_(weak|strong) is received and when we send the rejoin_ack.
+ * normally, this isn't a problem: a recover mds doesn't twiddle locks
+ * (no requests), and a survivor acks immediately.  _except_ that
+ * during rejoin_(weak|strong) processing, we may complete a lock
+ * gather, and do a scatter_writebehind.. and we _can't_ twiddle the
+ * scatterlock state in that case or the lock states will get out of
+ * sync between the auth and replica.
+ *
+ * the simple solution is to never do the scatter here.  instead, put
+ * the scatterlock on a list if it isn't already wrlockable.  this is
+ * probably the best plan anyway, since we avoid too many
+ * scatters/locks under normal usage.
+ */
+/*
+ * some notes on dirlock/nestlock scatterlock semantics:
+ *
+ * the fragstat (dirlock) will never be updated without
+ * dirlock+nestlock wrlock held by the caller.
+ *
+ * the rstat (nestlock) _may_ get updated without a wrlock when nested
+ * data is pushed up the tree.  this could be changed with some
+ * restructuring here, but in its current form we ensure that the
+ * fragstat+rstat _always_ reflect an accurrate summation over the dir
+ * frag, which is nice.  and, we only need to track frags that need to
+ * be nudged (and not inodes with pending rstat changes that need to
+ * be pushed into the frag).  a consequence of this is that the
+ * accounted_rstat on scatterlock sync may not match our current
+ * rstat.  this is normal and expected.
+ */
+void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
+				       CInode *in, CDir *parent,
+				       int flags, int linkunlink,
+				       snapid_t cfollows)
+{
+  bool primary_dn = flags & PREDIRTY_PRIMARY;
+  bool do_parent_mtime = flags & PREDIRTY_DIR;
+  bool shallow = flags & PREDIRTY_SHALLOW;
+
+  // declare now?
+  if (mut->now == utime_t())
+    mut->now = g_clock.real_now();
+
+  dout(10) << "predirty_journal_parents"
+	   << (do_parent_mtime ? " do_parent_mtime":"")
+	   << " linkunlink=" <<  linkunlink
+	   << (primary_dn ? " primary_dn":" remote_dn")
+	   << (shallow ? " SHALLOW":"")
+	   << " follows " << cfollows
+	   << " " << *in << dendl;
+
+  if (!parent) {
+    assert(primary_dn);
+    parent = in->get_projected_parent_dn()->get_dir();
+  }
+
+  if (flags == 0 && linkunlink == 0) {
+    dout(10) << " no flags/linkunlink, just adding dir context to blob(s)" << dendl;
+    blob->add_dir_context(parent);
+    return;
+  }
+
+  inode_t *curi = in->get_projected_inode();
+
+  // build list of inodes to wrlock, dirty, and update
+  list<CInode*> lsi;
+  CInode *cur = in;
+  CDentry *parentdn = cur->get_projected_parent_dn();
+  while (parent) {
+    //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
+    assert(parent->is_auth());
+    
+    // opportunistically adjust parent dirfrag
+    CInode *pin = parent->get_inode();
+
+    // inode -> dirfrag
+    mut->auth_pin(parent);
+    mut->add_projected_fnode(parent);
+
+    fnode_t *pf = parent->project_fnode();
+    pf->version = parent->pre_dirty();
+
+    if (do_parent_mtime || linkunlink) {
+      assert(mut->wrlocks.count(&pin->dirlock) ||
+	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
+      assert(cfollows == CEPH_NOSNAP);
+      
+      if (do_parent_mtime) {
+	pf->fragstat.mtime = mut->now;
+	if (mut->now > pf->rstat.rctime) {
+	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
+	  pf->rstat.rctime = mut->now;
+	} else {
+	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
+	}
+      }
+      if (linkunlink) {
+	dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
+	if (in->is_dir()) {
+	  pf->fragstat.nsubdirs += linkunlink;
+	  pf->rstat.rsubdirs += linkunlink;
+	} else {
+ 	  pf->fragstat.nfiles += linkunlink;
+ 	  pf->rstat.rfiles += linkunlink;
+	}
+      }
+    }
+
+    
+    // rstat
+    if (primary_dn) { 
+      SnapRealm *prealm = parent->inode->find_snaprealm();
+      snapid_t latest = prealm->get_newest_snap();
+      
+      snapid_t follows = cfollows;
+      if (follows == CEPH_NOSNAP || follows == 0)
+	follows = latest;
+      
+      snapid_t first = follows+1;
+      if (cur->first > first)
+	first = cur->first;
+
+      dout(10) << "    frag head is [" << parent->first << ",head] " << dendl;
+      dout(10) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+
+      /*
+       * FIXME.  this incompletely propagates rstats to _old_ parents
+       * (i.e. shortly after a directory rename).  but we need full
+       * blow hard link backpointers to make this work properly...
+       */
+      snapid_t floor = parentdn->first;
+      dout(10) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
+
+      if (cur->last >= floor)
+	project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
+      
+      for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+	   p != cur->dirty_old_rstats.end();
+	   p++) {
+	old_inode_t& old = cur->old_inodes[*p];
+	if (*p >= floor)
+	  project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
+      }
+      cur->dirty_old_rstats.clear();
+    }
+
+    // stop?
+    if (pin->is_base())
+      break;
+
+    bool stop = false;
+    if (!pin->is_auth() || pin->is_ambiguous_auth()) {
+      dout(10) << "predirty_journal_parents !auth or ambig on " << *pin << dendl;
+      stop = true;
+    }
+    if (!stop &&
+	mut->wrlocks.count(&pin->nestlock) == 0 &&
+	(!pin->can_auth_pin() ||
+	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
+	 //true
+	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
+	 )) {  // ** do not initiate.. see above comment **
+      dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
+	       << " on " << *pin << dendl;
+      stop = true;
+    }
+    if (stop) {
+      dout(10) << "predirty_journal_parents stop.  marking nestlock on " << *pin << dendl;
+      mds->locker->mark_updated_scatterlock(&pin->nestlock);
+      mut->ls->dirty_dirfrag_nest.push_back(&pin->xlist_dirty_dirfrag_nest);
+      mut->add_updated_scatterlock(&pin->nestlock);
+      break;
+    }
+    mds->locker->local_wrlock_grab(&pin->versionlock, mut);
+
+    assert(mut->wrlocks.count(&pin->nestlock) ||
+	   mut->is_slave());
+
+    // dirfrag -> diri
+    mut->auth_pin(pin);
+    mut->add_projected_inode(pin);
+    lsi.push_front(pin);
+
+    pin->pre_cow_old_inode();  // avoid cow mayhem!
+
+    inode_t *pi = pin->project_inode();
+    pi->version = pin->pre_dirty();
+
+    // dirstat
+    if (do_parent_mtime || linkunlink) {
+      dout(15) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
+      dout(15) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
+      bool touched_mtime = false;
+      pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      if (touched_mtime)
+	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+    }
+
+    /* 
+     * the rule here is to follow the _oldest_ parent with dirty rstat
+     * data.  if we don't propagate all data, we add ourselves to the
+     * nudge list.  that way all rstat data will (eventually) get
+     * pushed up the tree.
+     *
+     * actually, no.  for now, silently drop rstats for old parents.  we need 
+     * hard link backpointers to do the above properly.
+     */
+    parentdn = pin->get_projected_parent_dn();
+
+    // rstat
+    if (primary_dn) {
+      for (map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
+	   p != parent->dirty_old_rstat.end();
+	   p++)
+	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
+      parent->dirty_old_rstat.clear();
+      project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+    }
+
+    // next parent!
+    cur = pin;
+    curi = pi;
+    parent = parentdn->get_dir();
+    linkunlink = 0;
+    do_parent_mtime = false;
+    primary_dn = true;
+  }
+
+  // now, stick it in the blob
+  assert(parent->is_auth());
+  blob->add_dir_context(parent);
+  blob->add_dir(parent, true);
+  for (list<CInode*>::iterator p = lsi.begin();
+       p != lsi.end();
+       p++) {
+    CInode *cur = *p;
+    journal_dirty_inode(mut, blob, cur);
+  }
+ 
+}
+
 
 
 
@@ -1127,7 +1769,7 @@ void MDCache::send_resolve_now(int who)
       assert(migrator->get_import_state(dir->dirfrag()) >= Migrator::IMPORT_LOGGINGSTART);
       set<CDir*> bounds;
       get_subtree_bounds(dir, bounds);
-      list<dirfrag_t> dfls;
+      vector<dirfrag_t> dfls;
       for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
 	dfls.push_back((*p)->dirfrag());
       m->add_ambiguous_import(dir->dirfrag(), dfls);
@@ -1146,7 +1788,7 @@ void MDCache::send_resolve_now(int who)
   }
 
   // ambiguous
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
        p != my_ambiguous_imports.end();
        ++p) 
     m->add_ambiguous_import(p->first, p->second);
@@ -1334,7 +1976,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
     MMDSResolveAck *ack = new MMDSResolveAck;
-    for (list<metareqid_t>::iterator p = m->slave_requests.begin();
+    for (vector<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
 	 ++p) {
       if (uncommitted_masters.count(*p)) {  //mds->sessionmap.have_completed_request(*p)) {
@@ -1354,9 +1996,9 @@ void MDCache::handle_resolve(MMDSResolve *m)
   // am i a surviving ambiguous importer?
   if (mds->is_active() || mds->is_stopping()) {
     // check for any import success/failure (from this node)
-    map<dirfrag_t, list<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
+    map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
-      map<dirfrag_t, list<dirfrag_t> >::iterator next = p;
+      map<dirfrag_t, vector<dirfrag_t> >::iterator next = p;
       next++;
       CDir *dir = get_dirfrag(p->first);
       assert(dir);
@@ -1367,7 +2009,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	
 	// check if sender claims the subtree
 	bool claimed_by_sender = false;
-	for (map<dirfrag_t, list<dirfrag_t> >::iterator q = m->subtrees.begin();
+	for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = m->subtrees.begin();
 	     q != m->subtrees.end();
 	     ++q) {
 	  CDir *base = get_dirfrag(q->first);
@@ -1375,7 +2017,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
 
 	  bool inside = true;
-	  for (list<dirfrag_t>::iterator r = q->second.begin();
+	  for (vector<dirfrag_t>::iterator r = q->second.begin();
 	       r != q->second.end();
 	       ++r) {
 	    CDir *bound = get_dirfrag(*r);
@@ -1402,7 +2044,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   }    
 
   // update my dir_auth values
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->subtrees.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
        ++pi) {
     CInode *diri = get_inode(pi->first.ino);
@@ -1425,7 +2067,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
 
   // note ambiguous imports too
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
        pi != m->ambiguous_imports.end();
        ++pi) {
     dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
@@ -1471,7 +2113,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
   dout(10) << "handle_resolve_ack " << *ack << " from " << ack->get_source() << dendl;
   int from = ack->get_source().num();
 
-  for (list<metareqid_t>::iterator p = ack->commit.begin();
+  for (vector<metareqid_t>::iterator p = ack->commit.begin();
        p != ack->commit.end();
        ++p) {
     dout(10) << " commit on slave " << *p << dendl;
@@ -1496,7 +2138,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     }
   }
 
-  for (list<metareqid_t>::iterator p = ack->abort.begin();
+  for (vector<metareqid_t>::iterator p = ack->abort.begin();
        p != ack->abort.end();
        ++p) {
     dout(10) << " abort on slave " << *p << dendl;
@@ -1548,13 +2190,13 @@ void MDCache::disambiguate_imports()
   dout(10) << "disambiguate_imports" << dendl;
 
   // other nodes' ambiguous imports
-  for (map<int, map<dirfrag_t, list<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
+  for (map<int, map<dirfrag_t, vector<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
        p != other_ambiguous_imports.end();
        ++p) {
     int who = p->first;
     dout(10) << "ambiguous imports for mds" << who << dendl;
 
-    for (map<dirfrag_t, list<dirfrag_t> >::iterator q = p->second.begin();
+    for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
       dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
@@ -1575,7 +2217,7 @@ void MDCache::disambiguate_imports()
 
   // my ambiguous imports
   while (!my_ambiguous_imports.empty()) {
-    map<dirfrag_t, list<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
+    map<dirfrag_t, vector<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
 
     CDir *dir = get_dirfrag(q->first);
     if (!dir) continue;
@@ -1610,7 +2252,7 @@ void MDCache::disambiguate_imports()
 }
 
 
-void MDCache::add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds) 
+void MDCache::add_ambiguous_import(dirfrag_t base, vector<dirfrag_t>& bounds) 
 {
   assert(my_ambiguous_imports.count(base) == 0);
   my_ambiguous_imports[base].swap( bounds );
@@ -1620,7 +2262,7 @@ void MDCache::add_ambiguous_import(dirfrag_t base, list<dirfrag_t>& bounds)
 void MDCache::add_ambiguous_import(CDir *base, const set<CDir*>& bounds)
 {
   // make a list
-  list<dirfrag_t> binos;
+  vector<dirfrag_t> binos;
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) 
@@ -1645,7 +2287,7 @@ void MDCache::cancel_ambiguous_import(dirfrag_t df)
 void MDCache::finish_ambiguous_import(dirfrag_t df)
 {
   assert(my_ambiguous_imports.count(df));
-  list<dirfrag_t> bounds;
+  vector<dirfrag_t> bounds;
   bounds.swap(my_ambiguous_imports[df]);
   my_ambiguous_imports.erase(df);
   
@@ -1668,6 +2310,12 @@ void MDCache::finish_ambiguous_import(dirfrag_t df)
 void MDCache::recalc_auth_bits()
 {
   dout(7) << "recalc_auth_bits" << dendl;
+
+  set<CInode*> subtree_inodes;
+  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       ++p)
+    subtree_inodes.insert(p->first->inode);      
 
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -1716,6 +2364,12 @@ void MDCache::recalc_auth_bits()
 	    dn->inode->state_clear(CInode::STATE_AUTH);
 	    if (dn->inode->is_dirty())
 	      dn->inode->mark_clean();
+	    // avoid touching scatterlocks for our subtree roots!
+	    if (subtree_inodes.count(dn->inode) == 0) {
+	      dn->inode->dirlock.clear_updated();
+	      dn->inode->nestlock.clear_updated();
+	      dn->inode->dirfragtreelock.clear_updated();
+	    }
 	  }
 
 	  // recurse?
@@ -1734,6 +2388,38 @@ void MDCache::recalc_auth_bits()
 
 // ===========================================================================
 // REJOIN
+
+/*
+ * notes on scatterlock recovery:
+ *
+ * - recovering inode replica sends scatterlock data for any subtree
+ *   roots (the only ones that are possibly dirty).
+ *
+ * - surviving auth incorporates any provided scatterlock data.  any
+ *   pending gathers are then finished, as with the other lock types.
+ *
+ * that takes care of surviving auth + (recovering replica)*.
+ *
+ * - surviving replica sends strong_inode, which includes current
+ *   scatterlock state, AND any dirty scatterlock data.  this
+ *   provides the recovering auth with everything it might need.
+ * 
+ * - recovering auth must pick initial scatterlock state based on
+ *   (weak|strong) rejoins.
+ *   - always assimilate scatterlock data (it can't hurt)
+ *   - any surviving replica in SCATTER state -> SCATTER.  otherwise, SYNC.
+ *   - include base inode in ack for all inodes that saw scatterlock content
+ *
+ * also, for scatter gather,
+ *
+ * - auth increments {frag,r}stat.version on completion of any gather.
+ *
+ * - auth incorporates changes in a gather _only_ if the version
+ *   matches.
+ *
+ * - replica discards changes any time the scatterlock syncs, and
+ *   after recovery.
+ */
 
 
 /*
@@ -1786,21 +2472,21 @@ void MDCache::rejoin_send_rejoins()
     assert(dir->is_subtree_root());
     assert(!dir->is_ambiguous_dir_auth());
 
-    int auth = dir->get_dir_auth().first;
-    assert(auth >= 0);
-    
-    if (mds->is_rejoin() && auth == mds->get_nodeid()) {
-      // include dirfrag stat?
+    // my subtree?
+    if (dir->is_auth()) {
+      // include scatterlock state with parent inode's subtree?
       int inauth = dir->inode->authority().first;
       if (rejoins.count(inauth)) {
-	dout(10) << " sending dirfrag stat to mds" << inauth << " for " << *dir << dendl;
-	rejoins[inauth]->add_dirfrag_stat(dir->dirfrag(),
-					  dir->fnode.fragstat,
-					  dir->fnode.accounted_fragstat);
+	dout(10) << " sending scatterlock state to mds" << inauth << " for " << *dir << dendl;
+	rejoins[inauth]->add_scatterlock_state(dir->inode);
       }
       continue;  // skip my own regions!
     }
-    if (rejoins.count(auth) == 0) continue;   // don't care about this node's regions
+
+    int auth = dir->get_dir_auth().first;
+    assert(auth >= 0);
+    if (rejoins.count(auth) == 0)
+      continue;   // don't care about this node's subtrees
 
     rejoin_walk(dir, rejoins[auth]);
   }
@@ -1812,30 +2498,25 @@ void MDCache::rejoin_send_rejoins()
     if (mds->is_rejoin()) {
       // weak
       if (p->first == 0 && root) 
-	p->second->add_weak_inode(root->ino());
-      if (get_inode(MDS_INO_STRAY(p->first))) 
-	p->second->add_weak_inode(MDS_INO_STRAY(p->first));
+	p->second->add_weak_inode(root->vino());
+      CInode *s = get_inode(MDS_INO_STRAY(p->first)); 
+      if (s)
+	p->second->add_weak_inode(s->vino());
     } else {
       // strong
       if (p->first == 0 && root) {
-	p->second->add_weak_inode(root->ino());
-	p->second->add_strong_inode(root->ino(), root->get_replica_nonce(),
+	p->second->add_weak_inode(root->vino());
+	p->second->add_strong_inode(root->vino(),
 				    root->get_caps_wanted(),
-				    root->authlock.get_state(),
-				    root->linklock.get_state(),
-				    root->dirfragtreelock.get_state(),
-				    root->filelock.get_state(),
-				    root->dirlock.get_state());
+				    root->dirlock.get_state(),
+				    root->nestlock.get_state());
       }
       if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
-    	p->second->add_weak_inode(in->ino());
-  	p->second->add_strong_inode(in->ino(), in->get_replica_nonce(),
+    	p->second->add_weak_inode(in->vino());
+  	p->second->add_strong_inode(in->vino(),
 				    in->get_caps_wanted(),
-				    in->authlock.get_state(),
-				    in->linklock.get_state(),
-				    in->dirfragtreelock.get_state(),
-				    in->filelock.get_state(),
-				    in->dirlock.get_state());
+				    in->dirlock.get_state(),
+				    in->nestlock.get_state());
       }
     }
   }  
@@ -1859,9 +2540,9 @@ void MDCache::rejoin_send_rejoins()
 	  MDSCacheObjectInfo i;
 	  (*q)->set_object_info(i);
 	  if (i.ino)
-	    rejoin->add_inode_authpin(i.ino, p->second->reqid);
+	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), p->second->reqid);
 	  else
-	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, p->second->reqid);
+	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, p->second->reqid);
 	}
       }
       // xlocks
@@ -1877,9 +2558,9 @@ void MDCache::rejoin_send_rejoins()
 	  MDSCacheObjectInfo i;
 	  (*q)->get_parent()->set_object_info(i);
 	  if (i.ino)
-	    rejoin->add_inode_xlock(i.ino, (*q)->get_type(), p->second->reqid);
+	    rejoin->add_inode_xlock(vinodeno_t(i.ino, i.snapid), (*q)->get_type(), p->second->reqid);
 	  else
-	    rejoin->add_dentry_xlock(i.dirfrag, i.dname, p->second->reqid);
+	    rejoin->add_dentry_xlock(i.dirfrag, i.dname, i.snapid, p->second->reqid);
 	}
       }
     }
@@ -1937,7 +2618,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       assert(dn->is_primary());
       assert(dn->inode->is_dir());
-      rejoin->add_weak_primary_dentry(dir->dirfrag(), p->first, dn->get_inode()->ino());
+      rejoin->add_weak_primary_dentry(dir->dirfrag(), dn->name.c_str(), dn->first, dn->last, dn->get_inode()->ino());
       dn->get_inode()->get_nested_dirfrags(nested);
     }
   } else {
@@ -1950,7 +2631,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 ++p) {
       CDentry *dn = p->second;
       dout(15) << " add_strong_dentry " << *dn << dendl;
-      rejoin->add_strong_dentry(dir->dirfrag(), p->first, 
+      rejoin->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 				dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 				dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 				dn->is_remote() ? dn->get_remote_d_type():0, 
@@ -1959,13 +2640,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       if (dn->is_primary()) {
 	CInode *in = dn->get_inode();
 	dout(15) << " add_strong_inode " << *in << dendl;
-	rejoin->add_strong_inode(in->ino(), in->get_replica_nonce(),
+	rejoin->add_strong_inode(in->vino(),
 				 in->get_caps_wanted(),
-				 in->authlock.get_state(),
-				 in->linklock.get_state(),
-				 in->dirfragtreelock.get_state(),
-				 in->filelock.get_state(),
-				 in->dirlock.get_state());
+				 in->dirlock.get_state(),
+				 in->nestlock.get_state());
 	in->get_nested_dirfrags(nested);
       }
     }
@@ -2045,12 +2723,12 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
 
     // check cap exports
-    for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
+    for (map<inodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
       if (!in || !in->is_auth()) continue;
-      for (map<int,inode_caps_reconnect_t>::iterator q = p->second.begin();
+      for (map<int,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
 	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << dendl;
@@ -2061,20 +2739,21 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     assert(mds->is_rejoin());
 
     // check cap exports.
-    for (map<inodeno_t,map<int,inode_caps_reconnect_t> >::iterator p = weak->cap_exports.begin();
+    for (map<inodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
       if (in && !in->is_auth()) continue;
+      string& path = weak->cap_export_paths[p->first];
       if (!in) {
-	if (!path_is_mine(weak->cap_export_paths[p->first]))
+	if (!path_is_mine(path))
 	  continue;
-	cap_import_paths[p->first] = weak->cap_export_paths[p->first];
-	dout(10) << " noting cap import " << p->first << " path " << weak->cap_export_paths[p->first] << dendl;
+	cap_import_paths[p->first] = path;
+	dout(10) << " noting cap import " << p->first << " path " << path << dendl;
       }
       
       // note
-      for (map<int,inode_caps_reconnect_t>::iterator q = p->second.begin();
+      for (map<int,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
 	dout(10) << " claiming cap import " << p->first << " client" << q->first << dendl;
@@ -2083,31 +2762,20 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
 
-  if (!mds->is_rejoin()) {
-    // dirfrag stat?  we only care if we are a survivor, and possibly
-    // doing a gather on the scatterlock in which we _need_ the
-    // replica's data.
-    for (map<dirfrag_t,pair<frag_info_t, frag_info_t> >::iterator p = weak->dirfrag_stat.begin();
-	 p != weak->dirfrag_stat.end();
-	 p++) {
-      CDir *dir = get_dirfrag(p->first);
-      assert(dir);
-      dout(10) << " got fragstat " << p->second.first << " " << p->second.second
-	       << " for " << p->first << " on " << *dir << dendl;
-      dir->fnode.fragstat = p->second.first;
-      dir->fnode.accounted_fragstat = p->second.second;
-      dir->inode->dirlock.set_updated();
-      if (dir->inode->dirlock.must_gather()) {
-	dout(10) << " completing must_gather gather on " << dir->inode->dirlock
-		 << " on " << *dir->inode << dendl;
-	dir->inode->dirlock.remove_gather(from);
-      	mds->locker->scatter_eval_gather(&dir->inode->dirlock);
-      }
-    }
+  // assimilate any potentially dirty scatterlock state
+  for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
+       p != weak->inode_scatterlocks.end();
+       p++) {
+    CInode *in = get_inode(p->first);
+    assert(in);
+    in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
+    in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
+    if (!survivor)
+      rejoin_potential_updated_scatterlocks.insert(in);
   }
   
   // walk weak map
-  for (map<dirfrag_t, map<nstring, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
+  for (map<dirfrag_t, map<string_snap_t, MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
        p != weak->weak.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
@@ -2120,10 +2788,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       ack->add_strong_dirfrag(p->first, nonce, dir->dir_rep);
     
     // weak dentries
-    for (map<nstring,MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
+    for (map<string_snap_t,MMDSCacheRejoin::dn_weak>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
-      CDentry *dn = dir->lookup(q->first);
+      CDentry *dn = dir->lookup(q->first.name, q->first.snapid);
       assert(dn);
       assert(dn->is_primary());
       
@@ -2132,7 +2800,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       int dnonce = dn->add_replica(from);
       dout(10) << " have " << *dn << dendl;
       if (ack) 
-	ack->add_strong_dentry(p->first, q->first,
+	ack->add_strong_dentry(p->first, dn->name, dn->first, dn->last,
 			       dn->get_inode()->ino(), inodeno_t(0), 0, 
 			       dnonce, dn->lock.get_replica_state());
 
@@ -2141,7 +2809,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       assert(in);
 
       if (survivor && in->is_replica(from)) 
-	inode_remove_replica(in, from, true);  // this induces a lock gather completion... usually!
+	inode_remove_replica(in, from);
       int inonce = in->add_replica(from);
       dout(10) << " have " << *in << dendl;
 
@@ -2150,21 +2818,14 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	in->dirlock.set_state(LOCK_SCATTER);
 
       if (ack) {
-	ack->add_full_inode(in->inode, in->symlink, in->dirfragtree);
-	ack->add_strong_inode(in->ino(), 
-			      inonce,
-			      0,
-			      in->authlock.get_replica_state(), 
-			      in->linklock.get_replica_state(), 
-			      in->dirfragtreelock.get_replica_state(), 
-			      in->filelock.get_replica_state(),
-			      in->dirlock.get_replica_state());
+	ack->add_inode_base(in);
+	ack->add_inode_locks(in, inonce);
       }
     }
   }
   
   // weak base inodes?  (root, stray, etc.)
-  for (set<inodeno_t>::iterator p = weak->weak_inodes.begin();
+  for (set<vinodeno_t>::iterator p = weak->weak_inodes.begin();
        p != weak->weak_inodes.end();
        ++p) {
     CInode *in = get_inode(*p);
@@ -2174,19 +2835,22 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     int inonce = in->add_replica(from);
     dout(10) << " have base " << *in << dendl;
     
-    if (ack) 
-      ack->add_strong_inode(in->ino(), 
-			    inonce,
-			    0,
-			    in->authlock.get_replica_state(), 
-			    in->linklock.get_replica_state(), 
-			    in->dirfragtreelock.get_replica_state(), 
-			    in->filelock.get_replica_state(),
-			    in->dirlock.get_replica_state());
+    if (ack) {
+      ack->add_inode_base(in);
+      ack->add_inode_locks(in, inonce);
+    }
   }
 
   if (survivor) {
     // survivor.  do everything now.
+    for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
+	 p != weak->inode_scatterlocks.end();
+	 p++) {
+      CInode *in = get_inode(p->first);
+      dout(10) << " including base inode (due to potential scatterlock update) " << *in << dendl;
+      ack->add_inode_base(in);
+    }
+
     rejoin_scour_survivor_replicas(from, ack);
     mds->send_message_mds(ack, from);
   } else {
@@ -2267,7 +2931,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 
   // FIXME: what about root and stray inodes.
   
-  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -2275,7 +2939,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
     // inode?
     if (in->is_auth() &&
 	in->is_replica(from) &&
-	ack->strong_inodes.count(p->second->ino()) == 0) {
+	ack->strong_inodes.count(p->second->vino()) == 0) {
       inode_remove_replica(in, from);
       dout(10) << " rem " << *in << dendl;
     }
@@ -2304,7 +2968,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 	
 	if (dn->is_replica(from) &&
 	    (ack->strong_dentries.count(dir->dirfrag()) == 0 ||
-	     ack->strong_dentries[dir->dirfrag()].count(dn->get_name()) == 0)) {
+	     ack->strong_dentries[dir->dirfrag()].count(string_snap_t(dn->name, dn->last)) == 0)) {
 	  dentry_remove_replica(dn, from);
 	  dout(10) << " rem " << *dn << dendl;
 	}
@@ -2314,9 +2978,9 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
 }
 
 
-CInode *MDCache::rejoin_invent_inode(inodeno_t ino)
+CInode *MDCache::rejoin_invent_inode(inodeno_t ino, snapid_t last)
 {
-  CInode *in = new CInode(this);
+  CInode *in = new CInode(this, true, 1, last);
   in->inode.ino = ino;
   in->state_set(CInode::STATE_REJOINUNDEF);
   add_inode(in);
@@ -2335,6 +2999,17 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 
   MMDSCacheRejoin *missing = 0;  // if i'm missing something..
   
+  // assimilate any potentially dirty scatterlock state
+  for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = strong->inode_scatterlocks.begin();
+       p != strong->inode_scatterlocks.end();
+       p++) {
+    CInode *in = get_inode(p->first);
+    assert(in);
+    in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
+    in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
+    rejoin_potential_updated_scatterlocks.insert(in);
+  }
+
   // strong dirfrags/dentries.
   //  also process auth_pins, xlocks.
   for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = strong->strong_dirfrags.begin();
@@ -2343,7 +3018,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     CDir *dir = get_dirfrag(p->first);
     if (!dir) {
       CInode *in = get_inode(p->first.ino);
-      if (!in) in = rejoin_invent_inode(p->first.ino);
+      if (!in) in = rejoin_invent_inode(p->first.ino, CEPH_NOSNAP);
       if (!in->is_dir()) {
 	assert(in->state_test(CInode::STATE_REJOINUNDEF));
 	in->inode.mode = S_IFDIR;
@@ -2355,23 +3030,23 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     dir->add_replica(from);
     dir->dir_rep = p->second.dir_rep;
 
-    for (map<nstring,MMDSCacheRejoin::dn_strong>::iterator q = strong->strong_dentries[p->first].begin();
+    for (map<string_snap_t,MMDSCacheRejoin::dn_strong>::iterator q = strong->strong_dentries[p->first].begin();
 	 q != strong->strong_dentries[p->first].end();
 	 ++q) {
-      CDentry *dn = dir->lookup(q->first);
+      CDentry *dn = dir->lookup(q->first.name, q->first.snapid);
       if (!dn) {
 	if (q->second.is_remote()) {
-	  dn = dir->add_remote_dentry(q->first, q->second.remote_ino, q->second.remote_d_type);
+	  dn = dir->add_remote_dentry(q->first.name, q->second.remote_ino, q->second.remote_d_type, q->second.first, q->first.snapid);
 	} else if (q->second.is_null()) {
-	  dn = dir->add_null_dentry(q->first);
+	  dn = dir->add_null_dentry(q->first.name, q->second.first, q->first.snapid);
 	} else {
-	  CInode *in = get_inode(q->second.ino);
-	  if (!in) in = rejoin_invent_inode(q->second.ino);
-	  dn = dir->add_primary_dentry(q->first, in);
+	  CInode *in = get_inode(q->second.ino, q->first.snapid);
+	  if (!in) in = rejoin_invent_inode(q->second.ino, q->first.snapid);
+	  dn = dir->add_primary_dentry(q->first.name, in, q->second.first, q->first.snapid);
 
-	  dout(10) << " missing " << q->second.ino << dendl;
+	  dout(10) << " missing " << q->second.ino << "." << q->first.snapid << dendl;
 	  if (!missing) missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
-	  missing->add_weak_inode(q->second.ino);  // we want it back!
+	  missing->add_weak_inode(vinodeno_t(q->second.ino, q->first.snapid));  // we want it back!
 	}
 	dout(10) << " invented " << *dn << dendl;
       }
@@ -2412,8 +3087,8 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	CInode *in = dn->get_inode();
 	assert(in);
 
-	if (strong->strong_inodes.count(in->ino())) {
-	  MMDSCacheRejoin::inode_strong &is = strong->strong_inodes[in->ino()];
+	if (strong->strong_inodes.count(in->vino())) {
+	  MMDSCacheRejoin::inode_strong &is = strong->strong_inodes[in->vino()];
 
 	  // caps_wanted
 	  if (is.caps_wanted) {
@@ -2428,8 +3103,8 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	    in->dirlock.set_state(LOCK_SCATTER);
 	  
 	  // auth pin?
-	  if (strong->authpinned_inodes.count(in->ino())) {
-	    metareqid_t ri = strong->authpinned_inodes[in->ino()];
+	  if (strong->authpinned_inodes.count(in->vino())) {
+	    metareqid_t ri = strong->authpinned_inodes[in->vino()];
 	    dout(10) << " inode authpin by " << ri << " on " << *in << dendl;
 	    
 	    // get/create slave mdrequest
@@ -2442,9 +3117,9 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  }
 	  
 	  // xlock(s)?
-	  if (strong->xlocked_inodes.count(in->ino())) {
-	    for (map<int,metareqid_t>::iterator r = strong->xlocked_inodes[in->ino()].begin();
-		 r != strong->xlocked_inodes[in->ino()].end();
+	  if (strong->xlocked_inodes.count(in->vino())) {
+	    for (map<int,metareqid_t>::iterator r = strong->xlocked_inodes[in->vino()].begin();
+		 r != strong->xlocked_inodes[in->vino()].end();
 		 ++r) {
 	      SimpleLock *lock = in->get_lock(r->first);
 	      dout(10) << " inode xlock by " << r->second << " on " << *lock << " on " << *in << dendl;
@@ -2467,7 +3142,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   }
 
   // base inodes?  (root, stray, etc.)
-  for (set<inodeno_t>::iterator p = strong->weak_inodes.begin();
+  for (set<vinodeno_t>::iterator p = strong->weak_inodes.begin();
        p != strong->weak_inodes.end();
        ++p) {
     CInode *in = get_inode(*p);
@@ -2511,11 +3186,17 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     dout(10) << " got " << *dir << dendl;
 
     // dentries
-    for (map<nstring,MMDSCacheRejoin::dn_strong>::iterator q = ack->strong_dentries[p->first].begin();
+    for (map<string_snap_t,MMDSCacheRejoin::dn_strong>::iterator q = ack->strong_dentries[p->first].begin();
 	 q != ack->strong_dentries[p->first].end();
 	 ++q) {
-      CDentry *dn = dir->lookup(q->first);
+      CDentry *dn = dir->lookup(q->first.name, q->first.snapid);
       if (!dn) continue;  // must have trimmed?
+
+      assert(dn->last == q->first.snapid);
+      if (dn->first != q->second.first) {
+	dout(10) << " adjust dn.first " << dn->first << " -> " << q->second.first << " on " << *dn << dendl;
+	dn->first = q->second.first;
+      }
 
       // hmm, did we have the proper linkage here?
       if (dn->is_null() &&
@@ -2524,13 +3205,13 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	if (q->second.is_remote()) {
 	  dn->dir->link_remote_inode(dn, q->second.remote_ino, q->second.remote_d_type);
 	} else {
-	  CInode *in = get_inode(q->second.ino);
+	  CInode *in = get_inode(q->second.ino, q->first.snapid);
 	  assert(in == 0);  // a rename would have been caught be the resolve stage.
 	  // barebones inode; the full inode loop below will clean up.
-	  in = new CInode(this, false);
+	  in = new CInode(this, false, q->second.first, q->first.snapid);
 	  in->inode.ino = q->second.ino;
 	  add_inode(in);
-	  dn->dir->link_primary_inode(dn, in); 
+	  dn->dir->link_primary_inode(dn, in);
 	}
       }
       else if (!dn->is_null() &&
@@ -2545,40 +3226,49 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	assert(0);  // uh oh.	
       }
       dn->set_replica_nonce(q->second.nonce);
-      mds->locker->rejoin_set_state(&dn->lock, q->second.lock, waiters);
+      dn->lock.set_state_rejoin(q->second.lock, waiters);
       dn->state_clear(CDentry::STATE_REJOINING);
       dout(10) << " got " << *dn << dendl;
     }
   }
 
   // full inodes
-  for (list<MMDSCacheRejoin::inode_full>::iterator p = ack->full_inodes.begin();
-       p != ack->full_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->inode.ino);
+  bufferlist::iterator p = ack->inode_base.begin();
+  while (!p.end()) {
+    inodeno_t ino;
+    snapid_t last;
+    bufferlist basebl;
+    ::decode(ino, p);
+    ::decode(last, p);
+    ::decode(basebl, p);
+    CInode *in = get_inode(ino, last);
     if (!in) continue;
-    if (in->parent && in->inode.anchored != p->inode.anchored)
-      in->parent->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-    in->inode = p->inode;
-    in->symlink = p->symlink;
-    in->dirfragtree = p->dirfragtree;
-    dout(10) << " got inode content " << *in << dendl;
+    bufferlist::iterator q = basebl.begin();
+    in->_decode_base(q);
+    dout(10) << " got inode base " << *in << dendl;
   }
 
   // inodes
-  for (map<inodeno_t, MMDSCacheRejoin::inode_strong>::iterator p = ack->strong_inodes.begin();
-       p != ack->strong_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->first);
+  p = ack->inode_locks.begin();
+  dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
+  while (!p.end()) {
+    dout(10) << " p pos is " << p.get_off() << dendl;
+    inodeno_t ino;
+    snapid_t last;
+    __u32 nonce;
+    bufferlist lockbl;
+    ::decode(ino, p);
+    ::decode(last, p);
+    ::decode(nonce, p);
+    ::decode(lockbl, p);
+    
+    CInode *in = get_inode(ino, last);
     if (!in) continue;
-    in->set_replica_nonce(p->second.nonce);
-    mds->locker->rejoin_set_state(&in->authlock, p->second.authlock, waiters);
-    mds->locker->rejoin_set_state(&in->linklock, p->second.linklock, waiters);
-    mds->locker->rejoin_set_state(&in->dirfragtreelock, p->second.dirfragtreelock, waiters);
-    mds->locker->rejoin_set_state(&in->filelock, p->second.filelock, waiters);
-    mds->locker->rejoin_set_state(&in->dirlock, p->second.dirlock, waiters);
+    in->set_replica_nonce(nonce);
+    bufferlist::iterator q = lockbl.begin();
+    in->_decode_locks_rejoin(q, waiters);
     in->state_clear(CInode::STATE_REJOINING);
-    dout(10) << " got " << *in << dendl;
+    dout(10) << " got inode locks " << *in << dendl;
   }
 
   // done?
@@ -2604,7 +3294,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
   MMDSCacheRejoin *full = new MMDSCacheRejoin(MMDSCacheRejoin::OP_FULL);
   
   // inodes
-  for (set<inodeno_t>::iterator p = missing->weak_inodes.begin();
+  for (set<vinodeno_t>::iterator p = missing->weak_inodes.begin();
        p != missing->weak_inodes.end();
        ++p) {
     CInode *in = get_inode(*p);
@@ -2614,7 +3304,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
     }
     
     dout(10) << " sending " << *in << dendl;
-    full->add_full_inode(in->inode, in->symlink, in->dirfragtree);
+    full->add_inode_base(in);
   }
 
   mds->send_message_mds(full, missing->get_source().num());
@@ -2626,20 +3316,23 @@ void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
   int from = full->get_source().num();
   
   // integrate full inodes
-  for (list<MMDSCacheRejoin::inode_full>::iterator p = full->full_inodes.begin();
-       p != full->full_inodes.end();
-       ++p) {
-    CInode *in = get_inode(p->inode.ino);
+  bufferlist::iterator p = full->inode_base.begin();
+  while (!p.end()) {
+    inodeno_t ino;
+    snapid_t last;
+    bufferlist basebl;
+    ::decode(ino, p);
+    ::decode(last, p);
+    ::decode(basebl, p);
+
+    CInode *in = get_inode(ino);
     assert(in);
+    bufferlist::iterator pp = basebl.begin();
+    in->_decode_base(pp);
 
     set<CInode*>::iterator q = rejoin_undef_inodes.find(in);
     if (q != rejoin_undef_inodes.end()) {
       CInode *in = *q;
-      if (in->parent && in->inode.anchored != p->inode.anchored)
-	in->parent->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-      in->inode = p->inode;
-      in->symlink = p->symlink;
-      in->dirfragtree = p->dirfragtree;
       in->state_clear(CInode::STATE_REJOINUNDEF);
       dout(10) << " got full " << *in << dendl;
       rejoin_undef_inodes.erase(q);
@@ -2747,34 +3440,159 @@ void MDCache::rejoin_gather_finish()
   
   // process cap imports
   //  ino -> client -> frommds -> capex
-  for (map<inodeno_t,map<int, map<int,inode_caps_reconnect_t> > >::iterator p = cap_imports.begin();
+  for (map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
        p != cap_imports.end();
        ++p) {
     CInode *in = get_inode(p->first);
     assert(in);
-    mds->server->add_reconnected_cap_inode(in);
-    for (map<int, map<int,inode_caps_reconnect_t> >::iterator q = p->second.begin();
+    for (map<int, map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) 
-      for (map<int,inode_caps_reconnect_t>::iterator r = q->second.begin();
+      for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
-	   ++r) 
+	   ++r) {
+	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
 	if (r->first >= 0)
 	  rejoin_import_cap(in, q->first, r->second, r->first);
+      }
   }
   
-  mds->server->process_reconnected_caps();
+  process_reconnected_caps();
   identify_files_to_recover();
 
   rejoin_send_acks();
 
   // did we already get our acks too?
   // this happens when the rejoin_gather has to wait on a MISSING/FULL exchange.
-  if (rejoin_ack_gather.empty())
+  if (rejoin_ack_gather.empty()) {
     mds->rejoin_done();
+
+    // finally, kickstart past snap parent opens
+    open_snap_parents();
+  }
 }
 
-void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& icr, int frommds)
+/*
+ * choose lock states based on reconnected caps
+ */
+void MDCache::process_reconnected_caps()
+{
+  dout(10) << "process_reconnected_caps" << dendl;
+
+  map<int,MClientSnap*> splits;
+
+  // adjust filelock state appropriately
+  map<CInode*,map<int,inodeno_t> >::iterator p = reconnected_caps.begin();
+  while (p != reconnected_caps.end()) {
+    CInode *in = p->first;
+    p++;
+    int issued = in->get_caps_issued();
+    if (in->is_auth()) {
+      // wr?
+      if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
+	  in->filelock.set_state(LOCK_LONER);
+	} else {
+	  in->filelock.set_state(LOCK_MIXED);
+	}
+      }
+    } else {
+      // note that client should perform stale/reap cleanup during reconnect.
+      assert((issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0);   // ????
+      if (in->filelock.is_xlocked())
+	in->filelock.set_state(LOCK_LOCK);
+      else
+	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
+    }
+    dout(15) << " issued " << cap_string(issued)
+	     << " chose " << in->filelock
+	     << " on " << *in << dendl;
+
+    SnapRealm *realm = in->find_snaprealm();
+
+    // are this realm's parents fully open?
+    if (realm->have_past_parents_open()) {
+      dout(10) << " have past snap parents for realm " << *realm 
+	       << " on " << *realm->inode << dendl;
+    } else {
+      if (!missing_snap_parents.count(realm->inode)) {
+	dout(10) << " MISSING past snap parents for realm " << *realm
+		 << " on " << *realm->inode << dendl;
+	realm->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
+	missing_snap_parents[realm->inode].size();   // just to get it into the map!
+      } else {
+	dout(10) << " (already) MISSING past snap parents for realm " << *realm 
+		 << " on " << *realm->inode << dendl;
+      }
+    }
+
+    // also, make sure client's cap is in the correct snaprealm.
+    for (map<int,inodeno_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      if (q->second == realm->inode->ino()) {
+	dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
+      } else {
+	dout(15) << "  client" << q->first << " has wrong realm " << q->second
+		 << " != " << realm->inode->ino() << dendl;
+	if (realm->have_past_parents_open()) {
+	  // ok, include in a split message _now_.
+	  prepare_realm_split(realm, q->first, in->ino(), splits);
+	} else {
+	  // send the split later.
+	  missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	}
+      }
+    }
+  }    
+  reconnected_caps.clear();
+
+  send_snaps(splits);
+}
+
+void MDCache::prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
+				  map<int,MClientSnap*>& splits)
+{
+  MClientSnap *snap;
+  if (splits.count(client) == 0) {
+    splits[client] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
+    snap->head.split = realm->inode->ino();
+    realm->build_snap_trace(snap->bl);
+
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      snap->split_realms.push_back((*p)->inode->ino());
+    
+  } else 
+    snap = splits[client]; 
+  snap->split_inos.push_back(ino);	
+}
+
+void MDCache::send_snaps(map<int,MClientSnap*>& splits)
+{
+  dout(10) << "send_snaps" << dendl;
+  
+  for (map<int,MClientSnap*>::iterator p = splits.begin();
+       p != splits.end();
+       p++) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first));
+    if (session) {
+      dout(10) << " client" << p->first
+	       << " split " << p->second->head.split
+	       << " inos " << p->second->split_inos
+	       << dendl;
+      mds->send_message_client(p->second, session->inst);
+    } else {
+      dout(10) << " no session for client" << p->first << dendl;
+      delete p->second;
+    }
+  }
+  splits.clear();
+}
+
+
+void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds)
 {
   dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
 	   << " on " << *in << dendl;
@@ -2785,16 +3603,151 @@ void MDCache::rejoin_import_cap(CInode *in, int client, inode_caps_reconnect_t& 
   // add cap
   Capability *cap = in->reconnect_cap(client, icr);
   session->touch_cap(cap);
-  
-  // send IMPORT
-  MClientFileCaps *reap = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
-					      in->inode,
-					      cap->get_last_seq(),
-					      cap->pending(),
-					      cap->wanted(),
-					      cap->get_mseq());
-  mds->messenger->send_message(reap, session->inst);
+
+  do_cap_import(session, in, cap);
 }
+
+
+// -------
+// cap imports and delayed snap parent opens
+
+void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
+{
+  int client = session->inst.name.num();
+  SnapRealm *realm = in->find_snaprealm();
+  if (realm->have_past_parents_open()) {
+    dout(10) << "do_cap_import " << session->inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
+    MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
+						in->inode,
+						realm->inode->ino(),
+						cap->get_last_seq(),
+						cap->pending(),
+						cap->wanted(),
+						cap->get_mseq());
+    realm->build_snap_trace(reap->snapbl);
+    mds->send_message_client(reap, session->inst);
+  } else {
+    dout(10) << "do_cap_import missing past snap parents, delaying " << session->inst.name << " mseq "
+	     << cap->get_mseq() << " on " << *in << dendl;
+    in->auth_pin(this);
+    cap->inc_suppress();
+    delayed_imported_caps[client].insert(in);
+    missing_snap_parents[in].size();
+  }
+}
+
+void MDCache::do_delayed_cap_imports()
+{
+  dout(10) << "do_delayed_cap_imports" << dendl;
+
+  map<int,set<CInode*> > d;
+  d.swap(delayed_imported_caps);
+
+  for (map<int,set<CInode*> >::iterator p = d.begin();
+       p != d.end();
+       p++) {
+    for (set<CInode*>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      CInode *in = *q;
+      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first));
+      if (session) {
+	Capability *cap = in->get_client_cap(p->first);
+	if (cap) {
+	  do_cap_import(session, in, cap);  // note: this may fail and requeue!
+	  cap->dec_suppress();
+	}
+      }
+      in->auth_unpin(this);
+    }
+  }    
+}
+
+struct C_MDC_OpenSnapParents : public Context {
+  MDCache *mdcache;
+  C_MDC_OpenSnapParents(MDCache *c) : mdcache(c) {}
+  void finish(int r) {
+    mdcache->open_snap_parents();
+  }
+};
+
+void MDCache::open_snap_parents()
+{
+  dout(10) << "open_snap_parents" << dendl;
+  
+  map<int,MClientSnap*> splits;
+  C_Gather *gather = new C_Gather;
+
+  map<CInode*,map<int,set<inodeno_t> > >::iterator p = missing_snap_parents.begin();
+  while (p != missing_snap_parents.end()) {
+    CInode *in = p->first;
+    assert(in->snaprealm);
+    if (in->snaprealm->open_parents(gather->new_sub())) {
+      dout(10) << " past parents now open on " << *in << dendl;
+      
+      // include in a (now safe) snap split?
+      for (map<int,set<inodeno_t> >::iterator q = p->second.begin();
+	   q != p->second.end();
+	   q++)
+	for (set<inodeno_t>::iterator r = q->second.begin();
+	     r != q->second.end();
+	     r++)
+	  prepare_realm_split(in->snaprealm, q->first, *r, splits);
+
+      missing_snap_parents.erase(p++);
+
+      in->put(CInode::PIN_OPENINGSNAPPARENTS);
+
+      // finish off client snaprealm reconnects?
+      map<inodeno_t,map<int,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
+      if (q != reconnected_snaprealms.end()) {
+	for (map<int,snapid_t>::iterator r = q->second.begin();
+	     r != q->second.end();
+	     r++)
+	  finish_snaprealm_reconnect(r->first, in->snaprealm, r->second);
+      	reconnected_snaprealms.erase(q);
+      }
+    } else {
+      dout(10) << " opening past parents on " << *in << dendl;
+      p++;
+    }
+  }
+
+  send_snaps(splits);
+
+  if (gather->get_num()) {
+    dout(10) << "open_snap_parents - waiting for " << gather->get_num() << dendl;
+    gather->set_finisher(new C_MDC_OpenSnapParents(this));
+  } else {
+    assert(missing_snap_parents.empty());
+    assert(reconnected_snaprealms.empty());
+    dout(10) << "open_snap_parents - all open" << dendl;
+    do_delayed_cap_imports();
+  }
+}
+
+void MDCache::finish_snaprealm_reconnect(int client, SnapRealm *realm, snapid_t seq)
+{
+  if (seq < realm->get_newest_seq()) {
+    dout(10) << "finish_snaprealm_reconnect client" << client << " has old seq " << seq << " < " 
+	     << realm->get_newest_seq()
+    	     << " on " << *realm << dendl;
+    // send an update
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
+    if (session) {
+      MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
+      realm->build_snap_trace(snap->bl);
+      mds->send_message_client(snap, session->inst);
+    } else {
+      dout(10) << " ...or not, no session for this client!" << dendl;
+    }
+  } else {
+    dout(10) << "finish_snaprealm_reconnect client" << client << " up to date"
+	     << " on " << *realm << dendl;
+  }
+}
+
+
 
 void MDCache::rejoin_send_acks()
 {
@@ -2838,7 +3791,7 @@ void MDCache::rejoin_send_acks()
 	for (map<int,int>::iterator r = dn->replicas_begin();
 	     r != dn->replicas_end();
 	     ++r) 
-	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, 
+	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 					   dn->is_primary() ? dn->get_inode()->ino():inodeno_t(0),
 					   dn->is_remote() ? dn->get_remote_ino():inodeno_t(0),
 					   dn->is_remote() ? dn->get_remote_d_type():0,
@@ -2853,13 +3806,8 @@ void MDCache::rejoin_send_acks()
 	for (map<int,int>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_full_inode(in->inode, in->symlink, in->dirfragtree);
-	  ack[r->first]->add_strong_inode(in->ino(), r->second, 0,
-					  in->authlock.get_replica_state(),
-					  in->linklock.get_replica_state(),
-					  in->dirfragtreelock.get_replica_state(),
-					  in->filelock.get_replica_state(),
-					  in->dirlock.get_replica_state());
+	  ack[r->first]->add_inode_base(in);
+	  ack[r->first]->add_inode_locks(in, r->second);
 	}
 	
 	// subdirs in this subtree?
@@ -2868,31 +3816,32 @@ void MDCache::rejoin_send_acks()
     }
   }
 
-  // root inodes too
-  if (root) 
+  // base inodes too
+  if (root && root->is_auth()) 
     for (map<int,int>::iterator r = root->replicas_begin();
 	 r != root->replicas_end();
 	 ++r) {
-      ack[r->first]->add_full_inode(root->inode, root->symlink, root->dirfragtree);
-      ack[r->first]->add_strong_inode(root->ino(), r->second, 0,
-				      root->authlock.get_replica_state(),
-				      root->linklock.get_replica_state(),
-				      root->dirfragtreelock.get_replica_state(),
-				      root->filelock.get_replica_state(),
-				      root->dirlock.get_replica_state());
+      ack[r->first]->add_inode_base(root);
+      ack[r->first]->add_inode_locks(root, r->second);
     }
   if (stray)
     for (map<int,int>::iterator r = stray->replicas_begin();
 	 r != stray->replicas_end();
 	 ++r) {
-      ack[r->first]->add_full_inode(stray->inode, stray->symlink, stray->dirfragtree);
-      ack[r->first]->add_strong_inode(stray->ino(), r->second, 0,
-				      stray->authlock.get_replica_state(),
-				      stray->linklock.get_replica_state(),
-				      stray->dirfragtreelock.get_replica_state(),
-				      stray->filelock.get_replica_state(),
-				      stray->dirlock.get_replica_state());
+      ack[r->first]->add_inode_base(stray);
+      ack[r->first]->add_inode_locks(stray, r->second);
     }
+
+  // include inode base for any inodes whose scatterlocks may have updated
+  for (set<CInode*>::iterator p = rejoin_potential_updated_scatterlocks.begin();
+       p != rejoin_potential_updated_scatterlocks.end();
+       p++) {
+    CInode *in = *p;
+    for (map<int,int>::iterator r = in->replicas_begin();
+	 r != in->replicas_end();
+	 ++r)
+      ack[r->first]->add_inode_base(in);
+  }
 
   // send acks
   for (map<int,MMDSCacheRejoin*>::iterator p = ack.begin();
@@ -2906,11 +3855,66 @@ void MDCache::rejoin_send_acks()
 
 // ===============================================================================
 
-
+struct C_MDC_QueuedCow : public Context {
+  MDCache *mdcache;
+  CInode *in;
+  Mutation *mut;
+  C_MDC_QueuedCow(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
+  void finish(int r) {
+    mdcache->_queued_file_recover_cow(in, mut);
+  }
+};
 
 void MDCache::queue_file_recover(CInode *in)
 {
   dout(10) << "queue_file_recover " << *in << dendl;
+
+  // cow?
+  SnapRealm *realm = in->find_snaprealm();
+  set<snapid_t> s = realm->get_snaps();
+  while (!s.empty() && *s.begin() < in->first)
+    s.erase(s.begin());
+  while (!s.empty() && *s.rbegin() > in->last)
+    s.erase(*s.rbegin());
+  dout(10) << " snaps in [" << in->first << "," << in->last << "] are " << s << dendl;
+  if (s.size() > 1) {
+    inode_t *pi = in->project_inode();
+    pi->version = in->pre_dirty();
+
+    Mutation *mut = new Mutation;
+    mut->ls = mds->mdlog->get_current_segment();
+    EUpdate *le = new EUpdate(mds->mdlog, "queue_file_recover cow");
+    predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+
+    s.erase(*s.begin());
+    while (s.size()) {
+      snapid_t snapid = *s.begin();
+      CInode *cow_inode = 0;
+      journal_cow_inode(mut, &le->metablob, in, snapid-1, &cow_inode);
+      assert(cow_inode);
+      _queue_file_recover(cow_inode);
+      s.erase(*s.begin());
+    }
+    
+    in->parent->first = in->first;
+    le->metablob.add_primary_dentry(in->parent, true, in, in->get_projected_inode());
+    mds->mdlog->submit_entry(le, new C_MDC_QueuedCow(this, in, mut));
+  }
+
+  _queue_file_recover(in);
+}
+
+void MDCache::_queued_file_recover_cow(CInode *in, Mutation *mut)
+{
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+}
+
+void MDCache::_queue_file_recover(CInode *in)
+{
+  dout(15) << "_queue_file_recover " << *in << dendl;
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   in->state_set(CInode::STATE_RECOVERING);
   in->auth_pin(this);
@@ -2931,7 +3935,8 @@ void MDCache::identify_files_to_recover()
   */
 
   dout(10) << "identify_files_to_recover" << dendl;
-  for (hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+  vector<CInode*> q;  // put inodes in list first: queue_file_discover modifies inode_map
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -2939,9 +3944,11 @@ void MDCache::identify_files_to_recover()
       continue;
     if (in->inode.max_size > in->inode.size) {
       in->filelock.set_state(LOCK_LOCK);
-      queue_file_recover(in);
+      q.push_back(in);
     }
   }
+  for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
+    queue_file_recover(*p);
 }
 
 struct C_MDC_Recover : public Context {
@@ -2967,7 +3974,8 @@ void MDCache::do_file_recover()
       dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
 	       << " " << *in << dendl;
       file_recovering.insert(in);
-      mds->filer->probe(in->inode.ino, &in->inode.layout, in->inode.max_size, &in->inode.size, false,
+      mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
+			in->inode.max_size, &in->inode.size, false,
 			0, new C_MDC_Recover(this, in));    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
@@ -3063,7 +4071,12 @@ void MDCache::_do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize)
 
   // remove
   if (newsize < oldsize) {
-    mds->filer->remove(in->inode.ino, &in->inode.layout, newsize, oldsize-newsize, 0,
+    SnapRealm *realm = in->find_snaprealm();
+    dout(10) << "_do_purge_inode realm " << *realm << dendl;
+    const SnapContext& snapc = realm->get_snap_context();
+    dout(10) << "_do_purge_inode snapc " << snapc << " on " << *in << dendl;
+    mds->filer->remove(in->inode.ino, &in->inode.layout, snapc,
+		       newsize, oldsize-newsize, 0,
 		       0, new C_MDC_PurgeFinish(this, in, newsize, oldsize));
   } else {
     // no need, empty file, just log it
@@ -3244,7 +4257,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->get_replica_nonce());
+      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->name, dn->last, dn->get_replica_nonce());
     }
   }
 
@@ -3274,7 +4287,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   dir->remove_dentry(dn);
   
   // reexport?
-  if (dir->get_size() == 0 && dir->is_subtree_root())
+  if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
     migrator->export_empty_import(dir);
   
   if (mds->logger) mds->logger->inc("cex");
@@ -3361,7 +4374,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_inode(df, in->ino(), in->get_replica_nonce());
+      expiremap[a]->add_inode(df, in->vino(), in->get_replica_nonce());
     }
   }
 
@@ -3421,7 +4434,7 @@ void MDCache::trim_non_auth()
     if (dn->is_auth()) {
       // add back into lru (at the top)
       lru.lru_insert_top(dn);
-      
+
       if (!first_auth) {
 	first_auth = dn;
       } else {
@@ -3463,9 +4476,9 @@ void MDCache::trim_non_auth()
 
   if (lru.lru_get_size() == 0) {
     // root, stray, etc.?
-    hash_map<inodeno_t,CInode*>::iterator p = inode_map.begin();
+    hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
     while (p != inode_map.end()) {
-      hash_map<inodeno_t,CInode*>::iterator next = p;
+      hash_map<vinodeno_t,CInode*>::iterator next = p;
       ++next;
       CInode *in = p->second;
       if (!in->is_auth()) {
@@ -3541,7 +4554,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
 
     // INODES
-    for (map<inodeno_t,int>::iterator it = p->second.inodes.begin();
+    for (map<vinodeno_t,int>::iterator it = p->second.inodes.begin();
 	 it != p->second.inodes.end();
 	 it++) {
       CInode *in = get_inode(it->first);
@@ -3602,7 +4615,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
     
     // DENTRIES
-    for (map<dirfrag_t, map<nstring,int> >::iterator pd = p->second.dentries.begin();
+    for (map<dirfrag_t, map<pair<nstring,snapid_t>,int> >::iterator pd = p->second.dentries.begin();
 	 pd != p->second.dentries.end();
 	 ++pd) {
       dout(10) << " dn expires in dir " << pd->first << dendl;
@@ -3617,23 +4630,23 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	assert(dir->is_auth());
       }
       
-      for (map<nstring,int>::iterator p = pd->second.begin();
+      for (map<pair<nstring,snapid_t>,int>::iterator p = pd->second.begin();
 	   p != pd->second.end();
 	   ++p) {
 	int nonce = p->second;
 	CDentry *dn;
 	
 	if (dir) {
-	  dn = dir->lookup(p->first);
+	  dn = dir->lookup(p->first.first, p->first.second);
 	} else {
 	  // which dirfrag for this dentry?
-	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first));
+	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first.first));
 	  assert(dir->is_auth());
-	  dn = dir->lookup(p->first);
+	  dn = dir->lookup(p->first.first, p->first.second);
 	} 
 
 	if (!dn) 
-	  dout(0) << "  missing dentry for " << p->first << " in " << *dir << dendl;
+	  dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << " in " << *dir << dendl;
 	assert(dn);
 	
 	if (nonce == dn->get_replica_nonce(from)) {
@@ -3675,7 +4688,7 @@ void MDCache::discard_delayed_expire(CDir *dir)
   delayed_expire.erase(dir);  
 }
 
-void MDCache::inode_remove_replica(CInode *in, int from, bool will_readd)
+void MDCache::inode_remove_replica(CInode *in, int from)
 {
   in->remove_replica(from);
   in->mds_caps_wanted.erase(from);
@@ -3686,22 +4699,11 @@ void MDCache::inode_remove_replica(CInode *in, int from, bool will_readd)
   if (in->linklock.remove_replica(from)) mds->locker->simple_eval_gather(&in->linklock);
   if (in->dirfragtreelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirfragtreelock);
   if (in->filelock.remove_replica(from)) mds->locker->file_eval_gather(&in->filelock);
+  if (in->snaplock.remove_replica(from)) mds->locker->simple_eval_gather(&in->snaplock);
+  if (in->xattrlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->xattrlock);
 
-  // don't complete gather if we will re-add (i.e. we are rejoining)
-  // and dirlock must_gather actual data...
-  if ((!will_readd || !in->dirlock.must_gather()) &&
-      in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
-  
-  // alone now?
-  /*
-  if (!in->is_replicated()) {
-    mds->locker->simple_eval_gather(&in->authlock);
-    mds->locker->simple_eval_gather(&in->linklock);
-    mds->locker->simple_eval_gather(&in->dirfragtreelock);
-    mds->locker->file_eval_gather(&in->filelock);
-    mds->locker->scatter_eval_gather(&in->dirlock);
-  }
-  */
+  if (in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
+  if (in->nestlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->nestlock);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)
@@ -4083,6 +5085,7 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   filepath& origpath,               // what
                            vector<CDentry*>& trace,          // result
+			   snapid_t *psnapid, CInode **psnapdiri,
                            bool follow_trailing_symlink,     // how
                            int onfail)
 {
@@ -4093,6 +5096,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   // keep a list of symlinks we touch to avoid loops
   set< pair<CInode*, string> > symlinks_resolved; 
+
+  snapid_t snapid = CEPH_NOSNAP;
+  if (psnapdiri)
+    *psnapdiri = 0;
 
   // root
   CInode *cur = get_inode(origpath.get_ino());
@@ -4119,11 +5126,32 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   unsigned depth = 0;
   while (depth < path.depth()) {
-    dout(12) << "traverse: path seg depth " << depth << " = " << path[depth] << dendl;
+    dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
+	     << "' snapid " << snapid << dendl;
     
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << dendl;
       return -ENOTDIR;
+    }
+
+    // snapdir?
+    if (path[depth].length() == 0) {
+      dout(10) << "traverse: snapdir" << dendl;
+      snapid = CEPH_SNAPDIR;
+      depth++;
+      if (!psnapdiri)
+	return -EINVAL;
+      *psnapdiri = cur;
+      continue;
+    }
+    if (snapid == CEPH_SNAPDIR) {
+      SnapRealm *realm = cur->find_snaprealm();
+      snapid = realm->resolve_snapname(path[depth], cur->ino());
+      dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
+      if (!snapid)
+	return -ENOENT;
+      depth++;
+      continue;
     }
 
     // open dir
@@ -4141,7 +5169,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       } else {
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
-	discover_path(cur, path.postfixpath(depth), _get_waiter(mdr, req),
+	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 	if (mds->logger) mds->logger->inc("tdis");
         return 1;
@@ -4187,8 +5215,14 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     }
 
 
+    // make sure snaprealm parents are open...
+    if (cur->snaprealm && !cur->snaprealm->open && mdr &&
+	!cur->snaprealm->open_parents(new C_MDS_RetryRequest(this, mdr)))
+      return 1;
+
+
     // dentry
-    CDentry *dn = curdir->lookup(path[depth]);
+    CDentry *dn = curdir->lookup(path[depth], snapid);
 
     // null and last_bit and xlocked by me?
     if (dn && dn->is_null() && null_okay) {
@@ -4217,7 +5251,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         } else {
           dout(7) << "remote link to " << dn->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dn->get_remote_ino(), mdr, _get_waiter(mdr, req));
+          open_remote_ino(dn->get_remote_ino(), _get_waiter(mdr, req));
 	  if (mds->logger) mds->logger->inc("trino");
           return 1;
         }        
@@ -4284,9 +5318,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
 	    MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
 	    reply->mark_unsolicited();
-	    reply->add_dentry( dn->replicate_to( from ) );
+	    reply->starts_with = MDiscoverReply::DENTRY;
+	    replicate_dentry(dn, from, reply->trace);
 	    if (dn->is_primary())
-	      reply->add_inode( dn->inode->replicate_to( from ) );
+	      replicate_inode(dn->inode, from, reply->trace);
 	    mds->send_message_mds(reply, req->get_source().num());
 	  }
 	}
@@ -4300,9 +5335,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       continue;
     }
     
+
     // MISS.  dentry doesn't exist.
     dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << dendl;
-    
+
     if (curdir->is_auth()) {
       // dentry is mine.
       if (curdir->is_complete()) {
@@ -4323,7 +5359,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if ((onfail == MDS_TRAVERSE_DISCOVER ||
            onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
-	discover_path(curdir, path.postfixpath(depth), _get_waiter(mdr, req),
+	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
 	if (mds->logger) mds->logger->inc("tdis");
         return 1;
@@ -4365,6 +5401,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   }
   
   // success.
+  if (psnapid)
+    *psnapid = snapid;
   if (mds->logger) mds->logger->inc("thit");
   return 0;
 }
@@ -4373,9 +5411,9 @@ bool MDCache::path_is_mine(filepath& path)
 {
   dout(15) << "path_is_mine " << path << dendl;
   
-  // start at root.  FIXME.
-  CInode *cur = root;
-  assert(cur);
+  CInode *cur = get_inode(path.get_ino());
+  if (!cur)
+    return false;  // who knows!
 
   for (unsigned i=0; i<path.depth(); i++) {
     dout(15) << "path_is_mine seg " << i << ": " << path[i] << " under " << *cur << dendl;
@@ -4468,12 +5506,15 @@ int MDCache::inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item> &inopath
  *
  * @path - path to traverse (as far as we can)
  *
- * assumes we _don't_ have the full path.  (if we do, we return NULL.)
+ * assumes we _don't_ have the full path.  (if we do, we throw an assertion.)
+ * assumes that we are path for the path (we open dirfrags willy-nilly).
  */
 CDir *MDCache::path_traverse_to_dir(filepath& path)
 {
-  CInode *cur = root;
-  assert(cur);
+  CInode *cur = get_inode(path.get_ino());
+  if (!cur)
+    return 0;   // useless!
+
   for (unsigned i=0; i<path.depth(); i++) {
     dout(20) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << dendl;
     frag_t fg = cur->pick_dirfrag(path[i]);
@@ -4483,8 +5524,8 @@ CDir *MDCache::path_traverse_to_dir(filepath& path)
     assert(dn->is_primary());
     cur = dn->get_inode();
   }
-
-  return NULL; // oh, we have the full path.
+  assert(0);
+  //return NULL; // oh, we have the full path.
 }
 
 
@@ -4537,7 +5578,7 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr)
     return in;
   } else {
     dout(10) << "get_dentry_inode on remote dn, opening inode for " << *dn << dendl;
-    open_remote_ino(dn->get_remote_ino(), mdr, new C_MDS_RetryRequest(this, mdr));
+    open_remote_ino(dn->get_remote_ino(), new C_MDS_RetryRequest(this, mdr));
     return 0;
   }
 }
@@ -4545,13 +5586,12 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr)
 class C_MDC_RetryOpenRemoteIno : public Context {
   MDCache *mdcache;
   inodeno_t ino;
-  MDRequest *mdr;
   Context *onfinish;
 public:
-  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, MDRequest *r, Context *c) :
-    mdcache(mdc), ino(i), mdr(r), onfinish(c) {}
+  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c) :
+    mdcache(mdc), ino(i), onfinish(c) {}
   void finish(int r) {
-    mdcache->open_remote_ino(ino, mdr, onfinish);
+    mdcache->open_remote_ino(ino, onfinish);
   }
 };
 
@@ -4559,21 +5599,20 @@ public:
 class C_MDC_OpenRemoteIno : public Context {
   MDCache *mdcache;
   inodeno_t ino;
-  MDRequest *mdr;
   Context *onfinish;
 public:
   vector<Anchor> anchortrace;
 
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, MDRequest *r, Context *c) :
-    mdcache(mdc), ino(i), mdr(r), onfinish(c) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c) :
+    mdcache(mdc), ino(i), onfinish(c) {}
   C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, vector<Anchor>& at,
-		      MDRequest *r, Context *c) :
-    mdcache(mdc), ino(i), mdr(r), onfinish(c), anchortrace(at) {}
+		      Context *c) :
+    mdcache(mdc), ino(i), onfinish(c), anchortrace(at) {}
 
   void finish(int r) {
     assert(r == 0);
     if (r == 0)
-      mdcache->open_remote_ino_2(ino, mdr, anchortrace, onfinish);
+      mdcache->open_remote_ino_2(ino, anchortrace, onfinish);
     else {
       onfinish->finish(r);
       delete onfinish;
@@ -4581,18 +5620,15 @@ public:
   }
 };
 
-void MDCache::open_remote_ino(inodeno_t ino,
-                              MDRequest *mdr,
-                              Context *onfinish)
+void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish)
 {
   dout(7) << "open_remote_ino on " << ino << dendl;
   
-  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, mdr, onfinish);
+  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, onfinish);
   mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
 void MDCache::open_remote_ino_2(inodeno_t ino,
-                                MDRequest *mdr,
                                 vector<Anchor>& anchortrace,
                                 Context *onfinish)
 {
@@ -4641,7 +5677,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
   if (!in->dirfragtree.contains(frag)) {
     dout(10) << "frag " << frag << " not valid, requerying anchortable" << dendl;
-    open_remote_ino(ino, mdr, onfinish);
+    open_remote_ino(ino, onfinish);
     return;
   }
 
@@ -4651,20 +5687,20 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     dout(10) << "opening remote dirfrag " << frag << " under " << *in << dendl;
     /* we re-query the anchortable just to avoid a fragtree update race */
     open_remote_dirfrag(in, frag,
-			new C_MDC_RetryOpenRemoteIno(this, ino, mdr, onfinish));
+			new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
     return;
   }
 
   if (!dir && in->is_auth()) {
-    if (dir->is_frozen_dir()) {
-      dout(7) << "traverse: " << *dir << " is frozen_dir, waiting" << dendl;
-      dir->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, 0));
+    if (in->is_frozen_dir()) {
+      dout(7) << "traverse: " << *in << " is frozen_dir, waiting" << dendl;
+      in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE, onfinish);
       return;
     }
     dir = in->get_or_open_dirfrag(this, frag);
   }
-  
   assert(dir);
+
   if (dir->is_auth()) {
     if (dir->is_complete()) {
       // hrm.  requery anchor table.
@@ -4672,19 +5708,19 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 	       << " in complete dir " << *dir
 	       << ", requerying anchortable"
 	       << dendl;
-      open_remote_ino(ino, mdr, onfinish);
+      open_remote_ino(ino, onfinish);
     } else {
       dout(10) << "need ino " << anchortrace[i].ino
 	       << ", fetching incomplete dir " << *dir
 	       << dendl;
-      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, anchortrace, mdr, onfinish));
+      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, anchortrace, onfinish));
     }
   } else {
     // hmm, discover.
     dout(10) << "have remote dirfrag " << *dir << ", discovering " 
 	     << anchortrace[i].ino << dendl;
     discover_ino(dir, anchortrace[i].ino, 
-		 new C_MDC_OpenRemoteIno(this, ino, anchortrace, mdr, onfinish));
+		 new C_MDC_OpenRemoteIno(this, ino, anchortrace, onfinish));
   }
 }
 
@@ -4868,11 +5904,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
     (*p)->put_stickydirs();
 
   // drop cache pins
-  for (set<MDSCacheObject*>::iterator it = mdr->pins.begin();
-       it != mdr->pins.end();
-       it++) 
-    (*it)->put(MDSCacheObject::PIN_REQUEST);
-  mdr->pins.clear();
+  mdr->drop_pins();
 
   // remove from map
   active_requests.erase(mdr->reqid);
@@ -4935,6 +5967,7 @@ public:
 void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
+  dout(10) << "anchor_create " << *in << dendl;
 
   // auth pin
   if (!in->can_auth_pin() &&
@@ -5046,11 +6079,11 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   inode_t *pi = in->project_inode();
   if (add) {
     pi->anchored = true;
-    pi->dirstat.ranchors++;
+    pi->rstat.ranchors++;
     in->parent->adjust_nested_anchors(1);
   } else {
     pi->anchored = false;
-    pi->dirstat.ranchors--;
+    pi->rstat.ranchors--;
     in->parent->adjust_nested_anchors(-1);
   }
   pi->version = in->pre_dirty();
@@ -5058,9 +6091,9 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
-  mds->locker->predirty_nested(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  le->metablob.add_primary_dentry(in->parent, true, 0, pi);
-  le->metablob.add_anchor_transaction(atid);
+  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  journal_dirty_inode(mut, &le->metablob, in);
+  le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
 }
 
@@ -5082,7 +6115,10 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   // tell the anchortable we've committed
   mds->anchorclient->commit(atid, mut->ls);
 
+  // drop locks and finish
   mds->locker->drop_locks(mut);
+  mut->cleanup();
+  delete mut;
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED, 0);
@@ -5090,7 +6126,165 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 
 
 // -------------------------------------------------------------------------------
+// SNAPREALMS
+
+struct C_MDC_snaprealm_create_finish : public Context {
+  MDCache *cache;
+  MDRequest *mdr;
+  Mutation *mut;
+  CInode *in;
+  C_MDC_snaprealm_create_finish(MDCache *c, MDRequest *m, Mutation *mu, CInode *i) : 
+    cache(c), mdr(m), mut(mu), in(i) {}
+  void finish(int r) {
+    cache->_snaprealm_create_finish(mdr, mut, in);
+  }
+};
+
+void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
+{
+  dout(10) << "snaprealm_create " << *in << dendl;
+  assert(!in->snaprealm);
+
+  if (!in->inode.anchored) {
+    mds->mdcache->anchor_create(mdr, in, new C_MDS_RetryRequest(mds->mdcache, mdr));
+    return;
+  }
+
+  // allocate an id..
+  if (!mdr->more()->stid) {
+    mds->snapclient->prepare_create_realm(in->ino(), &mdr->more()->stid, &mdr->more()->snapidbl,
+					  new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
+  le->metablob.add_table_transaction(TABLE_SNAP, mdr->more()->stid);
+
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  pi->rstat.rsnaprealms++;
+
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);
+
+  SnapRealm t(this, in);
+  t.created = seq;
+  bufferlist snapbl;
+  ::encode(t, snapbl);
+  
+  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  journal_cow_inode(mut, &le->metablob, in);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
+
+  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
+}
+
+
+void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
+{
+  dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
+
+  vector<inodeno_t> split_inos;
+  vector<inodeno_t> split_realms;
+
+  if (snapop == CEPH_SNAP_OP_SPLIT) {
+    // notify clients of update|split
+    for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
+      split_inos.push_back((*p)->ino());
+    
+    for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
+	 p != in->snaprealm->open_children.end();
+	 p++)
+      split_realms.push_back((*p)->inode->ino());
+  }
+
+  bufferlist snapbl;
+  in->snaprealm->build_snap_trace(snapbl);
+
+  map<int, MClientSnap*> updates;
+  list<SnapRealm*> q;
+  q.push_back(in->snaprealm);
+  while (!q.empty()) {
+    SnapRealm *realm = q.front();
+    q.pop_front();
+
+    dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
+    realm->invalidate_cached_snaps();
+
+    for (map<int, xlist<Capability*> >::iterator p = realm->client_caps.begin();
+	 p != realm->client_caps.end();
+	 p++) {
+      assert(!p->second.empty());
+      if (updates.count(p->first) == 0) {
+	MClientSnap *update = new MClientSnap(snapop);
+	update->head.split = in->ino();
+	update->split_inos = split_inos;
+	update->split_realms = split_realms;
+	update->bl = snapbl;
+	updates[p->first] = update;
+      }
+    }
+
+    // notify for active children, too.
+    dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 p++)
+      q.push_back(*p);
+  }
+
+  send_snaps(updates);
+}
+
+void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)
+{
+  dout(10) << "_snaprealm_create_finish " << *in << dendl;
+
+  // apply
+  in->pop_and_dirty_projected_inode(mut->ls);
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+
+  // tell table we've committed
+  mds->snapclient->commit(mdr->more()->stid, mut->ls);
+
+  // create
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);
+
+  in->open_snaprealm();
+  in->snaprealm->seq = in->snaprealm->created = seq;
+
+  do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
+
+  /*
+  static int count = 5;
+  if (--count == 0)
+    assert(0);  // hack test test **********
+  */
+
+  // done.
+  mdr->more()->stid = 0;  // caller will likely need to reuse this
+  dispatch_request(mdr);
+}
+
+
+// -------------------------------------------------------------------------------
 // STRAYS
+
+struct C_MDC_EvalStray : public Context {
+  MDCache *mdcache;
+  CDentry *dn;
+  C_MDC_EvalStray(MDCache *c, CDentry *d) : mdcache(c), dn(d) {}
+  void finish(int r) {
+    mdcache->eval_stray(dn);
+  }
+};
 
 void MDCache::eval_stray(CDentry *dn)
 {
@@ -5104,6 +6298,18 @@ void MDCache::eval_stray(CDentry *dn)
 
   // purge?
   if (in->inode.nlink == 0) {
+    if (in->is_dir()) {
+      // past snaprealm parents imply snapped dentry remote links.
+      // only important for directories.  normal file data snaps are handled
+      // by the object store.
+      if (in->snaprealm && in->snaprealm->has_past_parents()) {
+	if (!in->snaprealm->have_past_parents_open() &&
+	    !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn)))
+	  return;
+	in->snaprealm->prune_past_parents();
+	if (in->snaprealm->has_past_parents()) return;  // not until some snaps are deleted.
+      }
+    }
     if (dn->is_replicated() || in->is_any_caps()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
     _purge_stray(dn);
@@ -5255,6 +6461,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
     filepath want_path;
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   want_ino,
+				   CEPH_NOSNAP,
 				   want_path,
 				   false);
     mds->send_message_mds(dis, from);
@@ -5278,6 +6485,7 @@ void MDCache::discover_dir_frag(CInode *base,
     filepath want_path;
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
+				   CEPH_NOSNAP,
 				   want_path,
 				   true);  // need the base dir open
     dis->set_base_dir_frag(approx_fg);
@@ -5291,6 +6499,7 @@ void MDCache::discover_dir_frag(CInode *base,
 }
 
 void MDCache::discover_path(CInode *base,
+			    snapid_t snap,
 			    filepath want_path,
 			    Context *onfinish,
 			    bool want_xlocked,
@@ -5298,7 +6507,7 @@ void MDCache::discover_path(CInode *base,
 {
   if (from < 0) from = base->authority().first;
 
-  dout(7) << "discover_path " << base->ino() << " " << want_path << " from mds" << from
+  dout(7) << "discover_path " << base->ino() << " " << want_path << " snap " << snap << " from mds" << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
 
@@ -5311,6 +6520,7 @@ void MDCache::discover_path(CInode *base,
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
+				   snap,
 				   want_path,
 				   true,        // we want the base dir; we are relative to ino.
 				   want_xlocked);
@@ -5323,13 +6533,14 @@ void MDCache::discover_path(CInode *base,
 }
 
 void MDCache::discover_path(CDir *base,
+			    snapid_t snap,
 			    filepath want_path,
 			    Context *onfinish,
 			    bool want_xlocked)
 {
   int from = base->authority().first;
 
-  dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " from mds" << from
+  dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " snap " << snap << " from mds" << from
 	  << (want_xlocked ? " want_xlocked":"")
 	  << dendl;
 
@@ -5339,9 +6550,10 @@ void MDCache::discover_path(CDir *base,
     return;
   }
 
-  if (!base->is_waiting_for_dentry(want_path[0]) || !onfinish) {
+  if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->ino(),
+				   snap,
 				   want_path,
 				   false,   // no base dir; we are relative to dir
 				   want_xlocked);
@@ -5349,7 +6561,7 @@ void MDCache::discover_path(CDir *base,
   }
 
   // register + wait
-  if (onfinish) base->add_dentry_waiter(want_path[0], onfinish);
+  if (onfinish) base->add_dentry_waiter(want_path[0], snap, onfinish);
   discover_dir_sub[from][base->dirfrag()]++;
 }
 
@@ -5373,6 +6585,7 @@ void MDCache::discover_ino(CDir *base,
   if (!base->is_waiting_for_ino(want_ino)) {
     MDiscover *dis = new MDiscover(mds->get_nodeid(),
 				   base->dirfrag(),
+				   CEPH_NOSNAP,
 				   want_ino,
 				   want_xlocked);
     mds->send_message_mds(dis, from);
@@ -5428,29 +6641,32 @@ void MDCache::handle_discover(MDiscover *dis)
 
   assert(dis->get_asker() != whoami);
 
-  /*
   if (mds->get_state() < MDSMap::STATE_ACTIVE) {
-    dout(-7) << "discover_reply NOT ACTIVE YET" << dendl;
-    delete dis;
+    dout(-7) << "discover_reply not yet active, delaying" << dendl;
+    mds->wait_for_active(new C_MDS_RetryMessage(mds, dis));
     return;
   }
-  */
 
 
   CInode *cur = 0;
   MDiscoverReply *reply = new MDiscoverReply(dis);
 
+  snapid_t snapid = dis->get_snapid();
+
   // get started.
   if (dis->get_base_ino() == MDS_INO_ROOT) {
     // wants root
     dout(7) << "handle_discover from mds" << dis->get_asker()
-	    << " wants root + " << dis->get_want().get_path() << dendl;
+	    << " wants root + " << dis->get_want().get_path()
+	    << " snap " << snapid
+	    << dendl;
 
     assert(mds->get_nodeid() == 0);
     assert(root->is_auth());
 
     // add root
-    reply->add_inode( root->replicate_to( dis->get_asker() ) );
+    reply->starts_with = MDiscoverReply::INODE;
+    replicate_inode(root, dis->get_asker(), reply->trace);
     dout(10) << "added root " << *root << dendl;
 
     cur = root;
@@ -5458,25 +6674,25 @@ void MDCache::handle_discover(MDiscover *dis)
   else if (dis->get_base_ino() == MDS_INO_STRAY(whoami)) {
     // wants root
     dout(7) << "handle_discover from mds" << dis->get_asker()
-	    << " wants stray + " << dis->get_want().get_path() << dendl;
-    
-    reply->add_inode( stray->replicate_to( dis->get_asker() ) );
+	    << " wants stray + " << dis->get_want().get_path()
+	    << " snap " << snapid
+	    << dendl;
+    reply->starts_with = MDiscoverReply::INODE;
+    replicate_inode(stray, dis->get_asker(), reply->trace);
     dout(10) << "added stray " << *stray << dendl;
 
     cur = stray;
   }
   else {
     // there's a base inode
-    cur = get_inode(dis->get_base_ino());
+    cur = get_inode(dis->get_base_ino(), snapid);
     
     if (!cur) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
-	      << " don't have base ino " << dis->get_base_ino() 
+	      << " don't have base ino " << dis->get_base_ino() << "." << snapid
 	      << dendl;
       reply->set_flag_error_dir();
-    }
-
-    if (dis->wants_base_dir()) {
+    } else if (dis->wants_base_dir()) {
       dout(7) << "handle_discover mds" << dis->get_asker() 
 	      << " wants basedir+" << dis->get_want().get_path() 
 	      << " has " << *cur 
@@ -5576,7 +6792,9 @@ void MDCache::handle_discover(MDiscover *dis)
       dout(7) << "handle_discover not adding unwanted base dir " << *curdir << dendl;
     } else {
       assert(!curdir->is_ambiguous_auth()); // would be frozen.
-      reply->add_dir( curdir->replicate_to(dis->get_asker()) );
+      if (!reply->trace.length())
+	reply->starts_with = MDiscoverReply::DIR;
+      replicate_dir(curdir, dis->get_asker(), reply->trace);
       dout(7) << "handle_discover added dir " << *curdir << dendl;
     }
 
@@ -5584,12 +6802,12 @@ void MDCache::handle_discover(MDiscover *dis)
     CDentry *dn = 0;
     if (dis->get_want_ino()) {
       // lookup by ino
-      CInode *in = get_inode(dis->get_want_ino());
+      CInode *in = get_inode(dis->get_want_ino(), snapid);
       if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir)
 	dn = in->get_parent_dn();
     } else if (dis->get_want().depth() > 0) {
       // lookup dentry
-      dn = curdir->lookup( dis->get_dentry(i) );
+      dn = curdir->lookup(dis->get_dentry(i), snapid);
     } else 
       break; // done!
           
@@ -5657,7 +6875,9 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // add dentry
-    reply->add_dentry( dn->replicate_to( dis->get_asker() ) );
+    if (!reply->trace.length())
+      reply->starts_with = MDiscoverReply::DENTRY;
+    replicate_dentry(dn, dis->get_asker(), reply->trace);
     dout(7) << "handle_discover added dentry " << *dn << dendl;
     
     if (!dn->is_primary()) break;  // stop on null or remote link.
@@ -5666,7 +6886,7 @@ void MDCache::handle_discover(MDiscover *dis)
     CInode *next = dn->inode;
     assert(next->is_auth());
     
-    reply->add_inode( next->replicate_to( dis->get_asker() ) );
+    replicate_inode(next, dis->get_asker(), reply->trace);
     dout(7) << "handle_discover added inode " << *next << dendl;
     
     // descend, keep going.
@@ -5692,22 +6912,24 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     return;
   }
   */
+  dout(7) << "discover_reply " << *m << dendl;
 
   list<Context*> finished, error;
   int from = m->get_source().num();
 
   // starting point
   CInode *cur = get_inode(m->get_base_ino());
+  bufferlist::iterator p = m->trace.begin();
 
-  if (m->has_base_inode()) {
-    assert(m->get_base_ino() < MDS_INO_BASE);
-    assert(!m->has_base_dentry());
-    assert(!m->has_base_dir());
+  int next = m->starts_with;
 
+  if (!p.end() && next == MDiscoverReply::INODE) {
     // add base inode
-    cur = add_replica_inode(m->get_inode(0), NULL, finished);
-
+    cur = add_replica_inode(p, NULL, finished);
     dout(7) << "discover_reply got base inode " << *cur << dendl;
+    assert(cur->is_base());
+
+    next = MDiscoverReply::DIR;
     
     // take waiters
     finished.swap(waiting_for_base_ino[from][cur->ino()]);
@@ -5715,10 +6937,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
   assert(cur);
 
-  dout(7) << "discover_reply " << *cur
-	  << " + " << m->get_num_dentries() << " dn, "
-	  << m->get_num_inodes() << " inodes"
-	  << dendl;
   
   // fyi
   if (m->is_flag_error_dir()) 
@@ -5728,13 +6946,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   if (m->is_flag_error_ino()) 
     dout(7) << " flag error, ino = " << m->get_wanted_ino() << dendl;
 
-  dout(10) << "depth = " << m->get_depth()
-	   << ", has base_dir/base_dn/root = " 
-	   << m->has_base_dir() << " / " << m->has_base_dentry() << " / " << m->has_base_inode()
-	   << ", num dirs/dentries/inodes = " 
-	   << m->get_num_dirs() << " / " << m->get_num_dentries() << " / " << m->get_num_inodes()
-	   << dendl;
-  
   // decrement discover counters
   if (!m->is_unsolicited()) {
     if (m->get_wanted_base_dir()) {
@@ -5753,58 +6964,60 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   // loop over discover results.
   // indexes follow each ([[dir] dentry] inode) 
   // can start, end with any type.
-  for (int i=m->has_base_inode(); i<m->get_depth(); i++) {
-    dout(10) << "discover_reply i=" << i << " cur " << *cur << dendl;
-
+  while (!p.end()) {
     // dir
     frag_t fg;
     CDir *curdir = 0;
-    if (i > 0 || m->has_base_dir()) {
-      assert(m->get_dir(i).get_dirfrag().ino == cur->ino());
-      fg = m->get_dir(i).get_dirfrag().frag;
-      curdir = add_replica_dir(cur, fg, m->get_dir(i), 
-			       m->get_source().num(),
-			       finished);
+    if (next == MDiscoverReply::DIR)
+      curdir = add_replica_dir(p, cur, m->get_source().num(), finished);
+    else {
+      // note: this can only happen our first way around this loop.
+      if (p.end() && m->is_flag_error_dn()) {
+	fg = cur->pick_dirfrag(m->get_error_dentry());
+	curdir = cur->get_dirfrag(fg);
+      } else
+	curdir = cur->get_dirfrag(m->get_base_dir_frag());
     }
-    if (!curdir) {
-      fg = cur->pick_dirfrag(m->get_dentry(i).get_dname());
-      curdir = cur->get_dirfrag(fg);
-    }
-    
+
     // dentry error?
-    if (i == m->get_depth()-1 && (m->is_flag_error_dn() || m->is_flag_error_ino())) {
+    if (p.end() && (m->is_flag_error_dn() || m->is_flag_error_ino())) {
       // error!
       assert(cur->is_dir());
       if (curdir) {
 	if (m->get_error_dentry().length()) {
 	  dout(7) << " flag_error on dentry " << m->get_error_dentry()
 		  << ", triggering dentry" << dendl;
-	  curdir->take_dentry_waiting(m->get_error_dentry(), error);
+	  curdir->take_dentry_waiting(m->get_error_dentry(), 
+				      m->get_wanted_snapid(), m->get_wanted_snapid(), error);
 	} else {
 	  dout(7) << " flag_error on ino " << m->get_wanted_ino()
 		  << ", triggering ino" << dendl;
 	  curdir->take_ino_waiting(m->get_wanted_ino(), error);
 	}
       } else {
-        dout(7) << " flag_error on dentry " << m->get_error_dentry() 
+	dout(7) << " flag_error on dentry " << m->get_error_dentry() 
 		<< ", triggering dir?" << dendl;
-        cur->take_waiting(CInode::WAIT_DIR, error);
+	cur->take_waiting(CInode::WAIT_DIR, error);
       }
       break;
     }
-
     assert(curdir);
 
+    if (p.end())
+      break;
+    
     // dentry
-    CDentry *dn = 0;
-    if (i >= m->get_last_dentry()) break;
-    if (i > 0 || m->has_base_dentry()) 
-      dn = add_replica_dentry(curdir, m->get_dentry(i), finished);
+    CDentry *dn = add_replica_dentry(p, curdir, finished);
+    
+    if (p.end())
+      break;
 
     // inode
-    if (i >= m->get_last_inode()) break;
-    cur = add_replica_inode(m->get_inode(i), dn, finished);
+    cur = add_replica_inode(p, dn, finished);
+
+    next = MDiscoverReply::DIR;
   }
+
 
   // dir error?
   // or dir_auth hint?
@@ -5827,14 +7040,14 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       if (dir) {
 	// don't actaully need the hint, now
 	if (dir->lookup(m->get_error_dentry()) == 0 &&
-	    dir->is_waiting_for_dentry(m->get_error_dentry())) 
-	  discover_path(dir, m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
+	    dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) 
+	  discover_path(dir, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
 	else 
 	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
 		  << m->get_error_dentry() << dendl;
       } else {
 	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
-	  discover_path(cur, m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
+	  discover_path(cur, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
 	else
 	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
       }
@@ -5861,28 +7074,32 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 // ----------------------------
 // REPLICAS
 
-CDir *MDCache::add_replica_dir(CInode *diri, 
-			       frag_t fg, CDirDiscover &dis, int from,
+CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, int from,
 			       list<Context*>& finished)
 {
+  dirfrag_t df;
+  ::decode(df, p);
+
+  assert(diri->ino() == df.ino);
+
   // add it (_replica_)
-  CDir *dir = diri->get_dirfrag(fg);
+  CDir *dir = diri->get_dirfrag(df.frag);
 
   if (dir) {
     // had replica. update w/ new nonce.
-    dis.update_dir(dir);
+    dir->decode_replica(p);
     dout(7) << "add_replica_dir had " << *dir << " nonce " << dir->replica_nonce << dendl;
   } else {
     // force frag to leaf in the diri tree
-    if (!diri->dirfragtree.is_leaf(fg)) {
-      dout(7) << "add_replica_dir forcing frag " << fg << " to leaf in the fragtree "
+    if (!diri->dirfragtree.is_leaf(df.frag)) {
+      dout(7) << "add_replica_dir forcing frag " << df.frag << " to leaf in the fragtree "
 	      << diri->dirfragtree << dendl;
-      diri->dirfragtree.force_to_leaf(fg);
+      diri->dirfragtree.force_to_leaf(df.frag);
     }
 
     // add replica.
-    dir = diri->add_dirfrag( new CDir(diri, fg, this, false) );
-    dis.update_dir(dir);
+    dir = diri->add_dirfrag( new CDir(diri, df.frag, this, false) );
+    dir->decode_replica(p);
 
     // is this a dir_auth delegation boundary?
     if (from != diri->authority().first ||
@@ -5913,43 +7130,41 @@ CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
 
   return dir;
 }
-		
-CDentry *MDCache::add_replica_dentry(CDir *dir, CDentryDiscover &dis, list<Context*>& finished)
+
+CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished)
 {
-  CDentry *dn = dir->lookup( dis.get_dname() );
+  nstring name;
+  snapid_t last;
+  ::decode(name, p);
+  ::decode(last, p);
+
+  CDentry *dn = dir->lookup(name, last);
   
   // have it?
   if (dn) {
-    dis.update_dentry(dn);
+    dn->decode_replica(p, false);
     dout(7) << "add_replica_dentry had " << *dn << dendl;
   } else {
-    dn = dir->add_null_dentry(dis.get_dname());
-    dis.update_dentry(dn);
-    dis.init_dentry_lock(dn);
+    dn = dir->add_null_dentry(name, 1 /* this will get updated below */, last);
+    dn->decode_replica(p, true);
     dout(7) << "add_replica_dentry added " << *dn << dendl;
   }
-  
-  // remote_ino linkage?
-  if (dis.get_remote_ino()) {
-    if (dn->is_null()) 
-      dir->link_remote_inode(dn, dis.get_remote_ino(), dis.get_remote_d_type());
-    
-    // hrm.  yeah.
-    assert(dn->is_remote() && dn->get_remote_ino() == dis.get_remote_ino());
-  }
 
-  dir->take_dentry_waiting(dis.get_dname(), finished);
+  dir->take_dentry_waiting(name, dn->first, dn->last, finished);
 
   return dn;
 }
 
-CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Context*>& finished)
+CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished)
 {
-  CInode *in = get_inode(dis.get_ino());
+  inodeno_t ino;
+  snapid_t last;
+  ::decode(ino, p);
+  ::decode(last, p);
+  CInode *in = get_inode(ino, last);
   if (!in) {
-    in = new CInode(this, false);
-    dis.update_inode(in);
-    dis.init_inode_locks(in);
+    in = new CInode(this, false, 1, last);
+    in->decode_replica(p, true);
     add_inode(in);
     if (in->is_base()) {
       if (in->ino() == MDS_INO_ROOT)
@@ -5960,11 +7175,14 @@ CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Contex
 	assert(0);
     }
     dout(10) << "add_replica_inode added " << *in << dendl;
-    if (dn && dn->is_null()) 
+    if (dn) {
+      assert(dn->is_null());
       dn->dir->link_primary_inode(dn, in);
+    }
   } else {
-    dis.update_inode(in);
+    in->decode_replica(p, false);
     dout(10) << "add_replica_inode had " << *in << dendl;
+    assert(!dn || dn->inode == in);
   }
 
   if (dn) {
@@ -5978,31 +7196,19 @@ CInode *MDCache::add_replica_inode(CInodeDiscover& dis, CDentry *dn, list<Contex
 }
 
     
-CDentry *MDCache::add_replica_stray(bufferlist &bl, CInode *in, int from)
+CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
 {
   list<Context*> finished;
   bufferlist::iterator p = bl.begin();
-  
-  // inode
-  CInodeDiscover indis(p);
-  CInode *strayin = add_replica_inode(indis, NULL, finished);
+
+  CInode *strayin = add_replica_inode(p, NULL, finished);
   dout(15) << "strayin " << *strayin << dendl;
-  
-  // dir
-  CDirDiscover dirdis(p);
-  CDir *straydir = add_replica_dir(strayin, dirdis.get_dirfrag().frag, dirdis,
-					    from, finished);
+  CDir *straydir = add_replica_dir(p, strayin, from, finished);
   dout(15) << "straydir " << *straydir << dendl;
-  
-  // dentry
-  CDentryDiscover dndis(p);
-  
-  string straydname;
-  in->name_stray_dentry(straydname);
-  CDentry *straydn = add_replica_dentry(straydir, dndis, finished);
+  CDentry *straydn = add_replica_dentry(p, straydir, finished);
+  dout(15) << "straydn " << *straydn << dendl;
 
   mds->queue_waiters(finished);
-
   return straydn;
 }
 
@@ -6114,8 +7320,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       dout(5) << "trying discover on dir_update for " << path << dendl;
 
       int r = path_traverse(0, m,
-			    path, trace, true,
-                            MDS_TRAVERSE_DISCOVER);
+			    path, trace, NULL, NULL,
+                            true, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
       assert(r == 0);
@@ -6161,16 +7367,13 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     } else {
       dout(7) << "handle_dentry_unlink on " << *dn << dendl;
       
-      // move to stray?
-      CDentry *straydn = 0;
-      if (m->strayin) {
-	list<Context*> finished;
-	CInode *in = add_replica_inode(*m->strayin, NULL, finished);
-	CDir *dir = add_replica_dir(in, m->straydir->get_dirfrag().frag, *m->straydir,
-				    m->get_source().num(), finished);
-	straydn = add_replica_dentry(dir, *m->straydn, finished);
-	if (!finished.empty()) mds->queue_waiters(finished);
-      }
+      // straydn
+      bufferlist::iterator p = m->straybl.begin();
+      list<Context*> finished;
+      CInode *strayin = add_replica_inode(p, NULL, finished);
+      CDir *straydir = add_replica_dir(p, strayin, m->get_source().num(), finished);
+      CDentry *straydn = add_replica_dentry(p, straydir, finished);
+      if (!finished.empty()) mds->queue_waiters(finished);
 
       // open inode?
       if (dn->is_primary()) {
@@ -6521,6 +7724,11 @@ void MDCache::fragment_stored(MDRequest *mdr)
   mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
   mdr->add_updated_scatterlock(&diri->dirlock);
 
+  // dirlock
+  mds->locker->mark_updated_scatterlock(&diri->nestlock);
+  mdr->ls->dirty_dirfrag_nest.push_back(&diri->xlist_dirty_dirfrag_nest);
+  mdr->add_updated_scatterlock(&diri->nestlock);
+
   // journal new dirfrag fragstats for each new fragment.
   for (list<CDir*>::iterator p = resultfrags.begin();
        p != resultfrags.end();
@@ -6553,9 +7761,7 @@ void MDCache::fragment_logged(MDRequest *mdr)
     if (bits < 0) {
       // freshly replicate new basedir to peer on merge
       CDir *base = resultfrags.front();
-      CDirDiscover *basedis = base->replicate_to(p->first);
-      basedis->encode(notify->basebl);
-      delete basedis;
+      replicate_dir(base, p->first, notify->basebl);
     }
     mds->send_message_mds(notify, p->first);
   } 
@@ -6602,9 +7808,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     //  (adjust_dir_fragments expects base to already exist, if non-auth)
     if (notify->get_bits() < 0) {
       bufferlist::iterator p = notify->basebl.begin();
-      CDirDiscover basedis(p);
-      add_replica_dir(diri, notify->get_basefrag(), basedis,
-		      notify->get_source().num(), waiters);
+      add_replica_dir(p, diri, notify->get_source().num(), waiters);
     }
 
     // refragment
@@ -6760,7 +7964,7 @@ void MDCache::show_cache()
 {
   dout(7) << "show_cache" << dendl;
   
-  for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
     // unlinked?
@@ -6799,7 +8003,7 @@ void MDCache::dump_cache()
   ofstream myfile;
   myfile.open(fn);
   
-  for (hash_map<inodeno_t,CInode*>::iterator it = inode_map.begin();
+  for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
     list<CDir*> dfs;

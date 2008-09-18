@@ -20,14 +20,9 @@
 #include "MClientRequest.h"
 
 #include "msg/Message.h"
-#include "mds/CInode.h"
-#include "mds/CDir.h"
-#include "mds/CDentry.h"
 
 #include <vector>
 using namespace std;
-
-class CInode;
 
 /***
  *
@@ -65,51 +60,47 @@ struct LeaseStat {
 };
 WRITE_CLASS_ENCODER(LeaseStat)
 
+inline ostream& operator<<(ostream& out, const LeaseStat& l) {
+  return out << "lease(mask " << l.mask << " dur " << l.duration_ms << ")";
+}
+
 struct DirStat {
   // mds distribution hints
   frag_t frag;
   __s32 auth;
   set<__s32> dist;
   
-  DirStat() {}
+  DirStat() : auth(CDIR_AUTH_PARENT) {}
   DirStat(bufferlist::iterator& p) {
     decode(p);
   }
 
+  void encode(bufferlist& bl) {
+    ::encode(frag, bl);
+    ::encode(auth, bl);
+    ::encode(dist, bl);
+  }
   void decode(bufferlist::iterator& p) {
     ::decode(frag, p);
     ::decode(auth, p);
     ::decode(dist, p);
   }
 
-  static void encode(bufferlist& bl, CDir *dir, int whoami) {
-    /*
-     * note: encoding matches struct ceph_client_reply_dirfrag
-     */
-    frag_t frag = dir->get_frag();
-    __s32 auth;
-    set<__s32> dist;
-    
-    auth = dir->get_dir_auth().first;
-    if (dir->is_auth()) 
-      dir->get_dist_spec(dist, whoami);
-
-    ::encode(frag, bl);
-    ::encode(auth, bl);
-    ::encode(dist, bl);
-  }  
+  // see CDir::encode_dirstat for encoder.
 };
 
 struct InodeStat {
-  inodeno_t ino;
+  vinodeno_t vino;
   version_t version;
   ceph_file_layout layout;
-  utime_t ctime, mtime, atime;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
+  version_t truncate_seq;
+  utime_t ctime, mtime, atime;
   version_t time_warp_seq;
 
   frag_info_t dirstat;
+  nest_info_t rstat;
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
@@ -124,9 +115,13 @@ struct InodeStat {
   void decode(bufferlist::iterator &p) {
     struct ceph_mds_reply_inode e;
     ::decode(e, p);
-    ino = inodeno_t(e.ino);
+    vino.ino = inodeno_t(e.ino);
+    vino.snapid = snapid_t(e.snapid);
     version = e.version;
     layout = e.layout;
+    size = e.size;
+    max_size = e.max_size;
+    truncate_seq = e.truncate_seq;
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
@@ -135,17 +130,16 @@ struct InodeStat {
     uid = e.uid;
     gid = e.gid;
     nlink = e.nlink;
-    size = e.size;
-    max_size = e.max_size;
     rdev = e.rdev;
 
     memset(&dirstat, 0, sizeof(dirstat));
     dirstat.nfiles = e.files;
     dirstat.nsubdirs = e.subdirs;
-    dirstat.rctime.decode_timeval(&e.rctime);
-    dirstat.rbytes = e.rbytes;
-    dirstat.rfiles = e.rfiles;
-    dirstat.rsubdirs = e.rsubdirs;
+
+    rstat.rctime.decode_timeval(&e.rctime);
+    rstat.rbytes = e.rbytes;
+    rstat.rfiles = e.rfiles;
+    rstat.rsubdirs = e.rsubdirs;
 
     int n = e.fragtree.nsplits;
     while (n) {
@@ -163,51 +157,8 @@ struct InodeStat {
       ::decode(xattrs, q);
     }
   }
-
-  static void encode(bufferlist &bl, CInode *in) {
-    /*
-     * note: encoding matches struct ceph_client_reply_inode
-     */
-    struct ceph_mds_reply_inode e;
-    memset(&e, 0, sizeof(e));
-    e.ino = in->inode.ino;
-    e.version = in->inode.version;
-    e.layout = in->inode.layout;
-    in->inode.ctime.encode_timeval(&e.ctime);
-    in->inode.mtime.encode_timeval(&e.mtime);
-    in->inode.atime.encode_timeval(&e.atime);
-    e.time_warp_seq = in->inode.time_warp_seq;
-    e.mode = in->inode.mode;
-    e.uid = in->inode.uid;
-    e.gid = in->inode.gid;
-    e.nlink = in->inode.nlink;
-    e.size = in->inode.size;
-    e.max_size = in->inode.max_size;
-
-    e.files = in->inode.dirstat.nfiles;
-    e.subdirs = in->inode.dirstat.nsubdirs;
-    in->inode.dirstat.rctime.encode_timeval(&e.rctime);
-    e.rbytes = in->inode.dirstat.rbytes;
-    e.rfiles = in->inode.dirstat.rfiles;
-    e.rsubdirs = in->inode.dirstat.rsubdirs;
-
-    e.rdev = in->inode.rdev;
-    e.fragtree.nsplits = in->dirfragtree._splits.size();
-    ::encode(e, bl);
-    for (map<frag_t,int32_t>::iterator p = in->dirfragtree._splits.begin();
-	 p != in->dirfragtree._splits.end();
-	 p++) {
-      ::encode(p->first, bl);
-      ::encode(p->second, bl);
-    }
-    ::encode(in->symlink, bl);
-
-    bufferlist xbl;
-    if (!in->xattrs.empty())
-      ::encode(in->xattrs, xbl);
-    ::encode(xbl, bl);
-  }
   
+  // see CInode::encode_inodestat for encoder.
 };
 
 
@@ -216,6 +167,8 @@ class MClientReply : public Message {
   struct ceph_mds_reply_head st;
   bufferlist trace_bl;
   bufferlist dir_bl;
+public:
+  bufferlist snapbl;
 
  public:
   long get_tid() { return st.tid; }
@@ -260,12 +213,14 @@ class MClientReply : public Message {
     ::decode(st, p);
     ::decode(trace_bl, p);
     ::decode(dir_bl, p);
+    ::decode(snapbl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
     ::encode(st, payload);
     ::encode(trace_bl, payload);
     ::encode(dir_bl, payload);
+    ::encode(snapbl, payload);
   }
 
 

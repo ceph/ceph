@@ -81,6 +81,7 @@ public:
   
   // i implement and you ignore
   void dispatch(Message *m);
+  void election_starting();
   void election_finished();
   void shutdown();
 

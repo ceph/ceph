@@ -29,7 +29,7 @@
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
-
+#include "snap.h"
 
 #include <cassert>
 #include <list>
@@ -44,9 +44,9 @@ class CDentry;
 class CDir;
 class Message;
 class CInode;
-class CInodeDiscover;
 class MDCache;
 class LogSegment;
+class SnapRealm;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -69,6 +69,8 @@ class CInode : public MDSCacheObject {
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
   static const int PIN_IMPORTINGCAPS =    15;
+  static const int PIN_PASTSNAPPARENT =  -16;
+  static const int PIN_OPENINGSNAPPARENTS = 17;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -86,6 +88,8 @@ class CInode : public MDSCacheObject {
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
     case PIN_IMPORTINGCAPS: return "importingcaps";
+    case PIN_PASTSNAPPARENT: return "pastsnapparent";
+    case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
     default: return generic_pin_name(p);
     }
   }
@@ -104,10 +108,10 @@ class CInode : public MDSCacheObject {
   static const int STATE_RECOVERING = (1<<11);
 
   // -- waiters --
-  static const int WAIT_DIR         = (1<<0);
-  static const int WAIT_ANCHORED    = (1<<1);
-  static const int WAIT_UNANCHORED  = (1<<2);
-  static const int WAIT_FROZEN      = (1<<3);
+  static const __u64 WAIT_DIR         = (1<<0);
+  static const __u64 WAIT_ANCHORED    = (1<<1);
+  static const __u64 WAIT_UNANCHORED  = (1<<2);
+  static const __u64 WAIT_FROZEN      = (1<<3);
   
   static const int WAIT_AUTHLOCK_OFFSET        = 4;
   static const int WAIT_LINKLOCK_OFFSET        = 4 +   SimpleLock::WAIT_BITS;
@@ -116,8 +120,10 @@ class CInode : public MDSCacheObject {
   static const int WAIT_DIRLOCK_OFFSET         = 4 + 3*SimpleLock::WAIT_BITS; // same
   static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
+  static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
+  static const int WAIT_NESTLOCK_OFFSET        = 4 + 7*SimpleLock::WAIT_BITS;
 
-  static const int WAIT_ANY_MASK	= (0xffffffff);
+  static const __u64 WAIT_ANY_MASK	= (__u64)(-1);
 
   // misc
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
@@ -132,6 +138,15 @@ class CInode : public MDSCacheObject {
   string           symlink;      // symlink dest, if symlink
   map<string, bufferptr> xattrs;
   fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
+  SnapRealm        *snaprealm;
+
+  SnapRealm        *containing_realm;
+  snapid_t          first, last;
+  map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
+  set<snapid_t> dirty_old_rstats;
+
+  bool is_multiversion() { return snaprealm || inode.is_dir(); }
+  snapid_t get_oldest_snap();
 
   loff_t last_journaled;       // log offset for the last time i was journaled
   loff_t last_open_journaled;  // log offset for the last journaled EOpen
@@ -170,6 +185,12 @@ class CInode : public MDSCacheObject {
     else
       return &inode;
   }
+
+  map<snapid_t,old_inode_t>::iterator pick_dirty_old_inode(snapid_t last);
+
+  old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
+  void pre_cow_old_inode();
+  void purge_stale_snap_data(const set<snapid_t>& snaps);
 
   // -- cache infrastructure --
 private:
@@ -211,7 +232,7 @@ public:
   // -- distributed state --
 protected:
   // file capabilities
-  map<int, Capability*>  client_caps;         // client -> caps
+  map<int, Capability*> client_caps;         // client -> caps
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
@@ -220,8 +241,10 @@ protected:
   // LogSegment xlists i (may) belong to
   xlist<CInode*>::item xlist_dirty;
 public:
+  xlist<CInode*>::item xlist_caps;
   xlist<CInode*>::item xlist_open_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
+  xlist<CInode*>::item xlist_dirty_dirfrag_nest;
   xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
   xlist<CInode*>::item xlist_purging_inode;
 
@@ -248,20 +271,22 @@ private:
   friend class MDCache;
   friend class CDir;
   friend class CInodeExport;
-  friend class CInodeDiscover;
 
  public:
   // ---------------------------
-  CInode(MDCache *c, bool auth=true) : 
+  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
     mdcache(c),
+    snaprealm(0), containing_realm(0),
+    first(f), last(l),
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
     parent(0), projected_parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    xlist_dirty(this), xlist_open_file(this), 
+    xlist_dirty(this), xlist_caps(this), xlist_open_file(this), 
     xlist_dirty_dirfrag_dir(this), 
+    xlist_dirty_dirfrag_nest(this), 
     xlist_dirty_dirfrag_dirfragtree(this), 
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
@@ -272,7 +297,9 @@ private:
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET)
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
+    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
+    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET)
   {
     memset(&inode, 0, sizeof(inode));
     state = 0;  
@@ -280,6 +307,7 @@ private:
   };
   ~CInode() {
     close_dirfrags();
+    close_snaprealm();
   }
   
 
@@ -304,6 +332,9 @@ private:
 
 
   inodeno_t ino() const { return inode.ino; }
+  vinodeno_t vino() const { return vinodeno_t(inode.ino, last); }
+  int d_type() const { return MODE_TO_DT(inode.mode); }
+
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }
@@ -311,7 +342,9 @@ private:
   CInode *get_parent_inode();
   
   bool is_lt(const MDSCacheObject *r) const {
-    return ino() < ((CInode*)r)->ino();
+    CInode *o = (CInode*)r;
+    return ino() < o->ino() ||
+      (ino() == o->ino() && last < o->last);
   }
 
   int64_t get_layout_size_increment() {
@@ -336,11 +369,41 @@ private:
   void mark_clean();
 
 
-  CInodeDiscover* replicate_to(int rep);
+  void encode_replica(int rep, bufferlist& bl) {
+    assert(is_auth());
+    
+    // relax locks?
+    if (!is_replicated())
+      replicate_relax_locks();
+    
+    __u32 nonce = add_replica(rep);
+    ::encode(nonce, bl);
+    
+    _encode_base(bl);
+    _encode_locks_state_for_replica(bl);
+  }
+  void decode_replica(bufferlist::iterator& p, bool is_new) {
+    __u32 nonce;
+    ::decode(nonce, p);
+    replica_nonce = nonce;
+    
+    _decode_base(p);
+    _decode_locks_state(p, is_new);  
+  }
 
 
   // -- waiting --
-  void add_waiter(int tag, Context *c);
+  void add_waiter(__u64 tag, Context *c);
+
+
+  // -- encode/decode helpers --
+  void _encode_base(bufferlist& bl);
+  void _decode_base(bufferlist::iterator& p);
+  void _encode_locks_full(bufferlist& bl);
+  void _decode_locks_full(bufferlist::iterator& p);
+  void _encode_locks_state_for_replica(bufferlist& bl);
+  void _decode_locks_state(bufferlist::iterator& p, bool is_new);
+  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
 
 
   // -- import/export --
@@ -352,6 +415,10 @@ private:
   void decode_import(bufferlist::iterator& p, LogSegment *ls);
   
 
+  // for giving to clients
+  bool encode_inodestat(bufferlist& bl, snapid_t snapid=CEPH_NOSNAP);
+
+
   // -- locks --
 public:
   LocalLock  versionlock;
@@ -361,6 +428,8 @@ public:
   FileLock   filelock;
   ScatterLock dirlock;
   SimpleLock xattrlock;
+  SimpleLock snaplock;
+  ScatterLock nestlock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -370,6 +439,8 @@ public:
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
     case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
+    case CEPH_LOCK_ISNAP: return &snaplock;
+    case CEPH_LOCK_INEST: return &nestlock;
     }
     return 0;
   }
@@ -380,6 +451,24 @@ public:
 
   void clear_dirty_scattered(int type);
   void finish_scatter_gather_update(int type);
+
+
+  // -- snap --
+  void open_snaprealm(bool no_split=false);
+  void close_snaprealm(bool no_join=false);
+  SnapRealm *find_snaprealm();
+  void encode_snap_blob(bufferlist &bl);
+  void decode_snap_blob(bufferlist &bl);
+  void encode_snap(bufferlist& bl) {
+    bufferlist snapbl;
+    encode_snap_blob(snapbl);
+    ::encode(snapbl, bl);
+  }    
+  void decode_snap(bufferlist::iterator& p) {
+    bufferlist snapbl;
+    ::decode(snapbl, p);
+    decode_snap_blob(snapbl);
+  }
 
   // -- caps -- (new)
   // client caps
@@ -414,33 +503,63 @@ public:
     if (c) return c->pending();
     return 0;
   }
-  Capability *add_client_cap(int client, CInode *in) {
-    if (client_caps.empty())
+  Capability *add_client_cap(int client, SnapRealm *conrealm=0) {
+    if (client_caps.empty()) {
       get(PIN_CAPS);
+      if (conrealm)
+	containing_realm = conrealm;
+      else
+	containing_realm = find_snaprealm();
+      containing_realm->inodes_with_caps.push_back(&xlist_caps);
+    }
+
     assert(client_caps.count(client) == 0);
     Capability *cap = client_caps[client] = new Capability;
-    cap->set_inode(in);
+    cap->set_inode(this);
+    cap->client_follows = first-1;
+   
+    containing_realm->add_cap(client, cap);
+    
     return cap;
   }
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
+
+    containing_realm->remove_cap(client, client_caps[client]);
+
     delete client_caps[client];
     client_caps.erase(client);
-    if (client_caps.empty())
+    if (client_caps.empty()) {
       put(PIN_CAPS);
+      xlist_caps.remove_myself();
+      containing_realm = NULL;
+      xlist_open_file.remove_myself();  // unpin logsegment
+    }
   }
-  Capability *reconnect_cap(int client, inode_caps_reconnect_t& icr) {
+  void move_to_containing_realm(SnapRealm *realm) {
+    for (map<int,Capability*>::iterator q = client_caps.begin();
+	 q != client_caps.end();
+	 q++) {
+      containing_realm->remove_cap(q->first, q->second);
+      realm->add_cap(q->first, q->second);
+    }
+    xlist_caps.remove_myself();
+    realm->inodes_with_caps.push_back(&xlist_caps);
+    containing_realm = realm;
+  }
+
+  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      cap = add_client_cap(client, this);
+      cap = add_client_cap(client);
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }
     inode.size = MAX(inode.size, icr.size);
-    inode.mtime = MAX(inode.mtime, icr.mtime);
-    inode.atime = MAX(inode.atime, icr.atime);
+    inode.mtime = MAX(inode.mtime, utime_t(icr.mtime));
+    inode.atime = MAX(inode.atime, utime_t(icr.atime));
     return cap;
   }
   void clear_client_caps() {
@@ -497,6 +616,8 @@ public:
 
     dirlock.replicate_relax();
     xattrlock.replicate_relax();
+    snaplock.replicate_relax();
+    nestlock.replicate_relax();
   }
 
 
@@ -572,116 +693,8 @@ public:
     return remote_parents.size(); 
   }
 
-
-  /*
-  // for giving to clients
-  void get_dist_spec(set<int>& ls, int auth, timepair_t& now) {
-    if (( is_dir() && popularity[MDS_POP_CURDOM].get(now) > g_conf.mds_bal_replicate_threshold) ||
-        (!is_dir() && popularity[MDS_POP_JUSTME].get(now) > g_conf.mds_bal_replicate_threshold)) {
-      //if (!cached_by.empty() && inode.ino > 1) dout(1) << "distributed spec for " << *this << dendl;
-      ls = cached_by;
-    }
-  }
-  */
-
   void print(ostream& out);
 
 };
-
-
-
-
-// -- encoded state
-
-// discover
-
-class CInodeDiscover {
-  
-  inode_t    inode;
-  string     symlink;
-  fragtree_t dirfragtree;
-  map<string, bufferptr> xattrs;
-  __s32        replica_nonce;
-  
-  __u32      authlock_state;
-  __u32      linklock_state;
-  __u32      dirfragtreelock_state;
-  __u32      filelock_state;
-  __u32      dirlock_state;
-  __u32      xattrlock_state;
-
- public:
-  CInodeDiscover() {}
-  CInodeDiscover(CInode *in, int nonce) {
-    inode = in->inode;
-    symlink = in->symlink;
-    dirfragtree = in->dirfragtree;
-    xattrs = in->xattrs;
-
-    replica_nonce = nonce;
-
-    authlock_state = in->authlock.get_replica_state();
-    linklock_state = in->linklock.get_replica_state();
-    dirfragtreelock_state = in->dirfragtreelock.get_replica_state();
-    filelock_state = in->filelock.get_replica_state();
-    dirlock_state = in->dirlock.get_replica_state();
-    xattrlock_state = in->xattrlock.get_replica_state();
-  }
-  CInodeDiscover(bufferlist::iterator &p) {
-    decode(p);
-  }
-
-  inodeno_t get_ino() { return inode.ino; }
-  int get_replica_nonce() { return replica_nonce; }
-
-  void update_inode(CInode *in) {
-    if (in->parent && inode.anchored != in->inode.anchored)
-      in->parent->adjust_nested_anchors((int)inode.anchored - (int)in->inode.anchored);
-    in->inode = inode;
-    in->symlink = symlink;
-    in->dirfragtree = dirfragtree;
-    in->xattrs = xattrs;
-    in->replica_nonce = replica_nonce;
-  }
-  void init_inode_locks(CInode *in) {
-    in->authlock.set_state(authlock_state);
-    in->linklock.set_state(linklock_state);
-    in->dirfragtreelock.set_state(dirfragtreelock_state);
-    in->filelock.set_state(filelock_state);
-    in->dirlock.set_state(dirlock_state);
-    in->xattrlock.set_state(xattrlock_state);
-  }
-  
-  void encode(bufferlist &bl) const {
-    ::encode(inode, bl);
-    ::encode(symlink, bl);
-    ::encode(dirfragtree, bl);
-    ::encode(xattrs, bl);
-    ::encode(replica_nonce, bl);
-    ::encode(authlock_state, bl);
-    ::encode(linklock_state, bl);
-    ::encode(dirfragtreelock_state, bl);
-    ::encode(filelock_state, bl);
-    ::encode(dirlock_state, bl);
-    ::encode(xattrlock_state, bl);
-  }
-
-  void decode(bufferlist::iterator &p) {
-    ::decode(inode, p);
-    ::decode(symlink, p);
-    ::decode(dirfragtree, p);
-    ::decode(xattrs, p);
-    ::decode(replica_nonce, p);
-    ::decode(authlock_state, p);
-    ::decode(linklock_state, p);
-    ::decode(dirfragtreelock_state, p);
-    ::decode(filelock_state, p);
-    ::decode(dirlock_state, p);
-    ::decode(xattrlock_state, p);
-  }  
-
-};
-WRITE_CLASS_ENCODER(CInodeDiscover)
-
 
 #endif

@@ -84,7 +84,7 @@ class Objecter {
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
     int flags;
 
-    OSDRead(bufferlist *b, int f) : bl(b), onfinish(0), flags(f) {
+    OSDRead(bufferlist *b, int f) : OSDOp(), bl(b), onfinish(0), flags(f) {
       if (bl)
 	bl->clear();
     }
@@ -100,7 +100,7 @@ class Objecter {
     __u64 *size;  // where the size goes.
     int flags;
     Context *onfinish;
-    OSDStat(__u64 *s, int f) : tid(0), size(s), flags(f), onfinish(0) { }
+    OSDStat(__u64 *s, int f) : OSDOp(), tid(0), size(s), flags(f), onfinish(0) { }
   };
 
   OSDStat *prepare_stat(__u64 *s, int f) {
@@ -110,6 +110,7 @@ class Objecter {
   // generic modify
   class OSDModify : public OSDOp {
   public:
+    SnapContext snapc;
     int op;
     list<ObjectExtent> extents;
     int flags;
@@ -119,22 +120,25 @@ class Objecter {
     map<tid_t, eversion_t>   tid_version;
     map<tid_t, ObjectExtent> waitfor_commit;
 
-    OSDModify(int o, int f) : op(o), flags(f), onack(0), oncommit(0) {}
+    OSDModify(const SnapContext& sc, int o, int f) : OSDOp(), snapc(sc), op(o), flags(f), onack(0), oncommit(0) {}
   };
 
-  OSDModify *prepare_modify(int o, int f) { 
-    return new OSDModify(o, f); 
+  OSDModify *prepare_modify(const SnapContext& sc, int o, int f) { 
+    return new OSDModify(sc, o, f); 
   }
   
   // write (includes the bufferlist)
   class OSDWrite : public OSDModify {
   public:
     bufferlist bl;
-    OSDWrite(bufferlist &b, int f) : OSDModify(CEPH_OSD_OP_WRITE, f), bl(b) {}
+    OSDWrite(int op, const SnapContext& sc, bufferlist &b, int f) : OSDModify(sc, op, f), bl(b) {}
   };
 
-  OSDWrite *prepare_write(bufferlist &b, int f) { 
-    return new OSDWrite(b, f); 
+  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, int f) { 
+    return new OSDWrite(CEPH_OSD_OP_WRITE, sc, b, f); 
+  }
+  OSDWrite *prepare_write_full(const SnapContext& sc, bufferlist &b, int f) { 
+    return new OSDWrite(CEPH_OSD_OP_WRITEFULL, sc, b, f); 
   }
 
   
@@ -234,12 +238,16 @@ class Objecter {
   // even lazier
   tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags,
              Context *onfinish);
-  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist &bl, int flags,
-              Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, int flags,
-             Context *onack, Context *oncommit);
   tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish);
-  
+
+  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
+              Context *onack, Context *oncommit);
+  tid_t write_full(object_t oid, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
+              Context *onack, Context *oncommit);
+  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags,
+             Context *onack, Context *oncommit);
+
+  // no snapc for lock ops
   tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
 
 

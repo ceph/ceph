@@ -28,7 +28,9 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_ILINK: return "ilink";
   case CEPH_LOCK_IDFT: return "idft";
   case CEPH_LOCK_IDIR: return "idir";
+  case CEPH_LOCK_INEST: return "inest";
   case CEPH_LOCK_IXATTR: return "ixattr";
+  case CEPH_LOCK_ISNAP: return "isnap";
   case CEPH_LOCK_INO: return "ino";
   default: assert(0); return 0;
   }
@@ -76,13 +78,13 @@ class Mutation;
 
 class SimpleLock {
 public:
-  static const int WAIT_RD          = (1<<0);  // to read
-  static const int WAIT_WR          = (1<<1);  // to write
-  static const int WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
-  static const int WAIT_STABLE      = (1<<2);  // for a stable state
-  static const int WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
+  static const __u64 WAIT_RD          = (1<<0);  // to read
+  static const __u64 WAIT_WR          = (1<<1);  // to write
+  static const __u64 WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
+  static const __u64 WAIT_STABLE      = (1<<2);  // for a stable state
+  static const __u64 WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
   static const int WAIT_BITS        = 4;
-  static const int WAIT_ALL         = ((1<<WAIT_BITS)-1);
+  static const __u64 WAIT_ALL         = ((1<<WAIT_BITS)-1);
 
 protected:
   // parent (what i lock)
@@ -133,16 +135,16 @@ public:
   void encode_locked_state(bufferlist& bl) {
     parent->encode_lock_state(type, bl);
   }
-  void finish_waiters(int mask, int r=0) {
+  void finish_waiters(__u64 mask, int r=0) {
     parent->finish_waiting(mask << wait_offset, r);
   }
-  void take_waiting(int mask, list<Context*>& ls) {
+  void take_waiting(__u64 mask, list<Context*>& ls) {
     parent->take_waiting(mask << wait_offset, ls);
   }
-  void add_waiter(int mask, Context *c) {
+  void add_waiter(__u64 mask, Context *c) {
     parent->add_waiter(mask << wait_offset, c);
   }
-  bool is_waiter_for(int mask) {
+  bool is_waiter_for(__u64 mask) {
     return parent->is_waiter_for(mask << wait_offset);
   }
   
@@ -154,7 +156,17 @@ public:
     state = s; 
     assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
-  };
+  }
+  void set_state_rejoin(int s, list<Context*>& waiters) {
+    if (!is_stable()) {
+      state = s;
+      get_parent()->auth_unpin(this);
+    } else {
+      state = s;
+    }
+    take_waiting(SimpleLock::WAIT_ALL, waiters);
+  }
+
   bool is_stable() {
     return state >= 0;
   }
@@ -233,10 +245,28 @@ public:
     ::decode(state, p);
     ::decode(gather_set, p);
   }
+  void encode_state_for_replica(bufferlist& bl) const {
+    __u32 s = get_replica_state();
+    ::encode(s, bl);
+  }
+  void decode_state(bufferlist::iterator& p, bool is_new=true) {
+    if (is_new)
+      ::decode(state, p);
+    else {
+      __s32 blah;
+      ::decode(blah, p);
+    }
+  }
+  void decode_state_rejoin(bufferlist::iterator& p, list<Context*>& waiters) {
+    __s32 s;
+    ::decode(s, p);
+    set_state_rejoin(s, waiters);
+  }
+
 
   
   // simplelock specifics
-  int get_replica_state() {
+  virtual int get_replica_state() const {
     switch (state) {
     case LOCK_LOCK:
     case LOCK_GLOCKR: 

@@ -22,8 +22,8 @@
 
 class MMDSResolveAck : public Message {
  public:
-  list<metareqid_t> commit;
-  list<metareqid_t> abort;
+  vector<metareqid_t> commit;
+  vector<metareqid_t> abort;
 
   MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
 

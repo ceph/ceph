@@ -153,6 +153,9 @@ public:
     
   // sessions
   bool empty() { return session_map.empty(); }
+  bool have_session(entity_name_t w) {
+    return session_map.count(w);
+  }
   Session* get_session(entity_name_t w) {
     if (session_map.count(w))
       return session_map[w];

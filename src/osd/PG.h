@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "osd_types.h"
 #include "include/buffer.h"
+#include "include/xlist.h"
 
 #include "OSDMap.h"
 #include "os/ObjectStore.h"
@@ -65,6 +66,8 @@ public:
 
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
+
+    set<snapid_t> dead_snaps; // snaps we need to trim
 
     struct History {
       epoch_t epoch_created;       // epoch in which PG was created
@@ -115,6 +118,7 @@ public:
       ::encode(log_bottom, bl);
       ::encode(log_backlog, bl);
       history.encode(bl);
+      ::encode(dead_snaps, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(pgid, bl);
@@ -123,6 +127,7 @@ public:
       ::decode(log_bottom, bl);
       ::decode(log_backlog, bl);
       history.decode(bl);
+      ::decode(dead_snaps, bl);
     }
   };
   WRITE_CLASS_ENCODER(Info::History)
@@ -178,7 +183,7 @@ public:
    */
   class Log {
   public:
-    /** top, bottom
+    /*
      *    top - newest entry (update|delete)
      * bottom - entry previous to oldest (update|delete) for which we have
      *          complete negative information.  
@@ -187,14 +192,14 @@ public:
     eversion_t top;       // newest entry (update|delete)
     eversion_t bottom;    // version prior to oldest (update|delete) 
 
-    /** backlog - true if log is a complete summary of pg contents.  
-     * updated will include all items in pg, but deleted will not include
-     * negative entries for items deleted prior to 'bottom'.
+    /*
+     * backlog - true if log is a complete summary of pg contents.
+     * updated will include all items in pg, but deleted will not
+     * include negative entries for items deleted prior to 'bottom'.
      */
     bool      backlog;
     
     /** Entry
-     * mapped from the eversion_t, so don't include that.
      */
     class Entry {
     public:
@@ -513,6 +518,8 @@ protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   int         state;   // see bit defns above
 
+  xlist<PG*>::item pending_snap_removal_item;
+
   // primary state
  public:
   vector<int> acting;
@@ -609,7 +616,11 @@ public:
 
   void purge_strays();
 
+
+  Context *finish_sync_event;
+
   void finish_recovery();
+  void _finish_recovery(Context *c);
 
   loff_t get_log_write_pos() {
     return 0;
@@ -624,10 +635,12 @@ public:
     info(p),
     role(0),
     state(0),
+    pending_snap_removal_item(this),
     have_master_log(true),
     must_notify_mon(false),
     stat_num_bytes(0), stat_num_blocks(0),
-    pg_stats_valid(false)
+    pg_stats_valid(false),
+    finish_sync_event(NULL)
   { }
   virtual ~PG() { }
   
@@ -678,6 +691,7 @@ public:
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
   // pg on-disk state
+  void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction &t, 
                   const PG::Log::Entry &logentry, 
@@ -685,14 +699,11 @@ public:
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
+  void queue_snap_trim();
 
   bool is_dup(osd_reqid_t rid) {
     return log.logged_req(rid);
   }
-
-
-  bool pick_missing_object_rev(object_t& oid);
-  bool pick_object_rev(object_t& oid);
 
 
 
@@ -701,6 +712,7 @@ public:
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
+  virtual bool snap_trimmer() = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;
@@ -805,6 +817,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
   if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
+  if (pg.info.dead_snaps.size())
+    out << " dead=" << pg.info.dead_snaps;
   out << "]";
 
 

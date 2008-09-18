@@ -54,11 +54,6 @@ class ScatterLock;
 class LocalLock;
 class MDCache;
 
-// flags for predirty_nested()
-static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
-static const int PREDIRTY_DIR = 2;     // update parent dir mtime/size
-static const int PREDIRTY_SHALLOW = 4; // only go to immediate parrent (for easier rollback)
-
 class Locker {
 private:
   MDS *mds;
@@ -79,6 +74,8 @@ protected:
 
   // -- locks --
 public:
+  void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
+
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
@@ -96,9 +93,6 @@ public:
 protected:
   bool wrlock_start(SimpleLock *lock, MDRequest *mut);
   void wrlock_finish(SimpleLock *lock, Mutation *mut);
-
-public:
-  void rejoin_set_state(SimpleLock *lock, int s, list<Context*>& waiters);
 
   // simple
 public:
@@ -167,12 +161,10 @@ protected:
   xlist<ScatterLock*> updated_scatterlocks;
 public:
   void mark_updated_scatterlock(ScatterLock *lock);
-  void predirty_nested(Mutation *mut, EMetaBlob *blob, CInode *in, CDir *dir,
-		       int flags, int linkunlink=0);
 
   // local
-protected:
   void local_wrlock_grab(LocalLock *lock, Mutation *mut);
+protected:
   bool local_wrlock_start(LocalLock *lock, MDRequest *mut);
   void local_wrlock_finish(LocalLock *lock, Mutation *mut);
   bool local_xlock_start(LocalLock *lock, MDRequest *mut);
@@ -203,7 +195,7 @@ protected:
   // -- file i/o --
  public:
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session);
+  Capability* issue_new_caps(CInode *in, int mode, Session *session, bool& is_new);
   bool issue_caps(CInode *in);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
@@ -211,12 +203,14 @@ protected:
   void remove_stale_leases(Session *session);
 
  protected:
-  void handle_client_file_caps(class MClientFileCaps *m);
+  void handle_client_caps(class MClientCaps *m);
+  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientCaps *m, MClientCaps *ack=0);
+
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, Mutation *mut, bool share);
+  void file_update_finish(CInode *in, Mutation *mut, bool share, int client, MClientCaps *ack);
 public:
   bool check_inode_max_size(CInode *in, bool forceupdate=false, __u64 newsize=0);
 private:

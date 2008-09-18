@@ -42,16 +42,21 @@ public:
     bool sent_ack, sent_commit;
     
     set<int>         osds;
-    eversion_t       new_version;
+    eversion_t       at_version;
+
+    SnapSet snapset;
+    SnapContext snapc;
 
     eversion_t       pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(MOSDOp *o, tid_t rt, eversion_t nv, eversion_t lc) :
+    RepGather(MOSDOp *o, tid_t rt, eversion_t av, eversion_t lc,
+	      SnapSet& ss, SnapContext& sc) :
       op(o), rep_tid(rt),
       applied(false),
       sent_ack(false), sent_commit(false),
-      new_version(nv), 
+      at_version(av), 
+      snapset(ss), snapc(sc),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
@@ -80,7 +85,8 @@ protected:
   void apply_repop(RepGather *repop);
   void put_rep_gather(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv);
+  RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
+			    SnapSet& snapset, SnapContext& snapc);
   void repop_ack(RepGather *repop,
                  int result, bool commit,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
@@ -94,19 +100,15 @@ protected:
   void pull(pobject_t oid);
 
   // modify
-  objectrev_t assign_version(MOSDOp *op);
   void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
   void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
-  void prepare_log_transaction(ObjectStore::Transaction& t, 
-			       osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
-			       objectrev_t crev, objectrev_t rev,
-			       eversion_t trim_to);
-  void prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
-			      pg_t pgid, int op, pobject_t poid, 
-			      off_t offset, off_t length, bufferlist& bl,
-			      eversion_t& version, __u32 inc_lock, objectrev_t crev, objectrev_t rev);
-
+  void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
+			   pobject_t poid, int op, eversion_t at_version,
+			   off_t offset, off_t length, bufferlist& bl,
+			   SnapSet& snapset, SnapContext& snapc,
+			   __u32 inc_lock, eversion_t trim_to);
+  
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
 
@@ -118,7 +120,9 @@ protected:
   bool do_recovery();
   void do_peer_recovery();
 
+  void reply_op_error(MOSDOp *op, int r);
 
+  bool pick_read_snap(pobject_t& poid);
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 
@@ -139,7 +143,8 @@ public:
   void do_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
-
+  bool snap_trimmer();
+  
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);

@@ -73,7 +73,7 @@ namespace __gnu_cxx {
     size_t operator()(const pobject_t &r) const { 
       static rjhash<uint64_t> H;
       static rjhash<uint32_t> I;
-      return I(r.volume) ^ I(r.rank) ^ H(r.oid.ino) ^ I(r.oid.bno) ^ I(r.oid.rev);
+      return I(r.volume) ^ I(r.rank) ^ H(r.oid.ino) ^ I(r.oid.bno) ^ H(r.oid.snap);
     }
   };
 }

@@ -101,6 +101,12 @@ public:
   operator double() {
     return (double)sec() + ((double)usec() / 1000000.0L);
   }
+  operator ceph_timespec() {
+    ceph_timespec ts;
+    ts.tv_sec = sec();
+    ts.tv_nsec = nsec();
+    return ts;
+  }
 };
 WRITE_CLASS_ENCODER(utime_t)
 
@@ -151,6 +157,10 @@ inline bool operator>(const utime_t& a, const utime_t& b)
 inline bool operator<(const utime_t& a, const utime_t& b)
 {
   return (a.sec() < b.sec()) || (a.sec() == b.sec() && a.usec() < b.usec());
+}
+inline bool operator==(const utime_t& a, const utime_t& b)
+{
+  return a.sec() == b.sec() && a.usec() == b.usec();
 }
 
 // ostream

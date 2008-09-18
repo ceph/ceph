@@ -91,7 +91,8 @@ int Ebofs::mount()
   else
     sb = sb2;
   super_epoch = sb->epoch;
-  dout(3) << "mount epoch " << super_epoch << dendl;
+  op_seq = sb->op_seq;
+  dout(3) << "mount epoch " << super_epoch << " op_seq " << op_seq << dendl;
 
   super_fsid = sb->fsid;
 
@@ -121,7 +122,7 @@ int Ebofs::mount()
   // open journal
   if (journalfn) {
     journal = new FileJournal(sb->fsid, &finisher, journalfn, g_conf.journal_dio);
-    int err = journal->open(super_epoch);
+    int err = journal->open(op_seq+1);
     if (err < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
       delete journal;
@@ -137,23 +138,20 @@ int Ebofs::mount()
       
       while (1) {
 	bufferlist bl;
-	epoch_t e;
-	if (!journal->read_entry(bl, e)) {
+	__u64 seq;
+	if (!journal->read_entry(bl, seq)) {
 	  dout(3) << "mount replay: end of journal, done." << dendl;
 	  break;
 	}
 	
-	if (e < super_epoch) {
-	  dout(3) << "mount replay: skipping old entry in epoch " << e << " < " << super_epoch << dendl;
+	if (seq <= op_seq) {
+	  dout(3) << "mount replay: skipping old op seq " << seq << " <= " << op_seq << dendl;
 	  continue;
 	}
-	if (e == super_epoch+1) {
-	  super_epoch++;
-	  dout(3) << "mount replay: jumped to next epoch " << super_epoch << dendl;
-	}
-	assert(e == super_epoch);
+	op_seq++;
+	assert(seq == op_seq);
 	
-	dout(3) << "mount replay: applying transaction in epoch " << e << dendl;
+	dout(3) << "mount replay: applying op seq " << seq << dendl;
 	Transaction t(bl);
 	_apply_transaction(t);
       }
@@ -372,6 +370,7 @@ void Ebofs::prepare_super(version_t epoch, bufferptr& bp)
   sb->s_magic = EBOFS_MAGIC;
   sb->fsid = super_fsid;
   sb->epoch = epoch;
+  sb->op_seq = op_seq;
   sb->num_blocks = dev.get_num_blocks();
 
   sb->free_blocks = free_blocks;
@@ -457,7 +456,8 @@ int Ebofs::commit_thread_entry()
     }
     
     if (!dirty && !limbo_blocks) {
-      dout(10) << "commit_thread not dirty" << dendl;
+      dout(10) << "commit_thread not dirty - kicking waiters" << dendl;
+      finisher.queue(commit_waiters[super_epoch]);
     }
     else {
       // --- wait for partials to finish ---
@@ -471,11 +471,12 @@ int Ebofs::commit_thread_entry()
       commit_starting = false;
 
       // --- get ready for a new epoch ---
+      __u64 last_op = op_seq;
       super_epoch++;
       dirty = false;
 
-      derr(10) << "commit_thread commit start, new epoch " << super_epoch << dendl;
-      dout(10) << "commit_thread commit start, new epoch " << super_epoch << dendl;
+      derr(10) << "commit_thread commit start, new epoch " << super_epoch << " last_op " << last_op << dendl;
+      dout(10) << "commit_thread commit start, new epoch " << super_epoch << " last_op " << last_op << dendl;
       dout(2) << "commit_thread   data: " 
               << 100*(dev.get_num_blocks()-get_free_blocks())/dev.get_num_blocks() << "% used, "
               << get_free_blocks() << " (" << 100*get_free_blocks()/dev.get_num_blocks() 
@@ -502,8 +503,6 @@ int Ebofs::commit_thread_entry()
       while (1) {
 	// --- queue up commit writes ---
 	bc.poison_commit = false;
-	if (journal) 
-	  journal->commit_epoch_start(super_epoch);  // FIXME: make loopable
 	commit_inodes_start();      // do this first; it currently involves inode reallocation
 	allocator.commit_limbo();   // limbo -> limbo_tab
 	nodepool.commit_start(dev, super_epoch);
@@ -556,8 +555,8 @@ int Ebofs::commit_thread_entry()
         alloc_more_node_space();
       }
       
-      // signal journal
-      if (journal) journal->commit_epoch_finish(super_epoch);
+      // trim journal
+      if (journal) journal->committed_thru(last_op);
 
       // kick waiters
       dout(10) << "commit_thread queueing commit + kicking sync waiters" << dendl;
@@ -1410,7 +1409,7 @@ void Ebofs::sync(Context *onsafe)
       Transaction t;
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   }
@@ -2446,6 +2445,10 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
   ebofs_lock.Lock();
   dout(7) << "apply_transaction start (" << t.get_num_ops() << " ops)" << dendl;
 
+  bufferlist bl;
+  if (journal)
+    t.encode(bl);
+
   unsigned r = _apply_transaction(t);
 
   // journal, wait for commit
@@ -2454,9 +2457,7 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
     onsafe = 0;
   }
   if (journal) {
-    bufferlist bl;
-    t.encode(bl);
-    journal->submit_entry(super_epoch, bl, onsafe);
+    journal->submit_entry(++op_seq, bl, onsafe);
   } else
     queue_commit_waiter(onsafe);
 
@@ -2833,7 +2834,7 @@ int Ebofs::write(coll_t cid, pobject_t oid,
       t.write(cid, oid, off, len, bl);
       bufferlist tbl;
       t.encode(tbl);
-      journal->submit_entry(super_epoch, tbl, onsafe);
+      journal->submit_entry(++op_seq, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -2859,7 +2860,7 @@ int Ebofs::zero(coll_t cid, pobject_t oid, __u64 off, size_t len, Context *onsaf
       t.zero(cid, oid, off, len);
       bufferlist tbl;
       t.encode(tbl);
-      journal->submit_entry(super_epoch, tbl, onsafe);
+      journal->submit_entry(++op_seq, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -2900,7 +2901,7 @@ int Ebofs::remove(coll_t cid, pobject_t oid, Context *onsafe)
       t.remove(cid, oid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -2983,7 +2984,7 @@ int Ebofs::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
       t.truncate(cid, oid, size);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3009,7 +3010,7 @@ int Ebofs::clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe)
       t.clone(cid, from, to);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3024,7 +3025,8 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
 {
   dout(7) << "_clone " << from << " -> " << to << dendl;
 
-  if (!g_conf.ebofs_cloneable) 
+  assert(g_conf.ebofs_cloneable);
+  if (!g_conf.ebofs_cloneable)
     return -1;  // no!
 
   Onode *fon = get_onode(from);
@@ -3082,14 +3084,14 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
  */
 int Ebofs::pick_object_revision_lt(coll_t cid, pobject_t& oid)
 {
-  assert(oid.oid.rev > 0);   // this is only useful for non-zero oid.rev
+  assert(oid.oid.snap > 0);   // this is only useful for non-zero oid.rev
 
   int r = -EEXIST;             // return code
   ebofs_lock.Lock();
   {
     pobject_t orig = oid;
     pobject_t live = oid;
-    live.oid.rev = 0;
+    live.oid.snap = 0;
     
     if (object_tab->get_num_keys() > 0) {
       Table<pobject_t, ebofs_inode_ptr>::Cursor cursor(object_tab);
@@ -3102,12 +3104,12 @@ int Ebofs::pick_object_revision_lt(coll_t cid, pobject_t& oid)
 	  if (t.oid.ino != oid.oid.ino || 
 	      t.oid.bno != oid.oid.bno)                 // passed to previous object
 	    break;
-	  if (oid.oid.rev < t.oid.rev) {                // rev < desired.  possible match.
+	  if (oid.oid.snap < t.oid.snap) {                // rev < desired.  possible match.
 	    r = 0;
 	    oid = t;
 	    break;
 	  }
-	  if (firstpass && oid.oid.rev >= t.oid.rev) {  // there is no old rev < desired.  try live.
+	  if (firstpass && oid.oid.snap >= t.oid.snap) {  // there is no old rev < desired.  try live.
 	    r = 0;
 	    oid = live;
 	    break;
@@ -3166,10 +3168,6 @@ int Ebofs::_setattr(pobject_t oid, const char *name, const void *value, size_t s
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
-  if (on->readonly) {
-    put_onode(on);
-    return -EACCES;
-  }
 
   string n(name);
   on->attr[n] = buffer::copy((char*)value, size);
@@ -3193,7 +3191,7 @@ int Ebofs::setattr(coll_t cid, pobject_t oid, const char *name, const void *valu
       t.setattr(cid, oid, name, value, size);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3210,10 +3208,6 @@ int Ebofs::_setattrs(pobject_t oid, map<string,bufferptr>& attrset)
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
-  if (on->readonly) {
-    put_onode(on);
-    return -EACCES;
-  }
 
   on->attr = attrset;
   dirty_onode(on);
@@ -3233,7 +3227,7 @@ int Ebofs::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, C
       t.setattrs(cid, oid, attrset);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3271,6 +3265,13 @@ int Ebofs::getattr(coll_t cid, pobject_t oid, const char *name, void *value, siz
   ebofs_lock.Unlock();
   return r;
 }
+int Ebofs::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp)
+{
+  ebofs_lock.Lock();
+  int r = _getattr(oid, name, bp);
+  ebofs_lock.Unlock();
+  return r;
+}
 
 int Ebofs::_getattr(pobject_t oid, const char *name, void *value, size_t size)
 {
@@ -3283,11 +3284,31 @@ int Ebofs::_getattr(pobject_t oid, const char *name, void *value, size_t size)
   int r = 0;
   if (on->attr.count(n) == 0) {
     dout(10) << "_getattr " << oid << " '" << name << "' dne" << dendl;
-    r = -1;
+    r = -ENODATA;
   } else {
     r = MIN( on->attr[n].length(), size );
     dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << dendl;
     memcpy(value, on->attr[n].c_str(), r );
+  }
+  put_onode(on);
+  return r;
+}
+int Ebofs::_getattr(pobject_t oid, const char *name, bufferptr& bp)
+{
+  dout(8) << "_getattr " << oid << " '" << name << "'" << dendl;
+
+  Onode *on = get_onode(oid);
+  if (!on) return -ENOENT;
+
+  string n(name);
+  int r = 0;
+  if (on->attr.count(n) == 0) {
+    dout(10) << "_getattr " << oid << " '" << name << "' dne" << dendl;
+    r = -ENODATA;
+  } else {
+    bp = on->attr[n];
+    r = bp.length();
+    dout(10) << "_getattr " << oid << " '" << name << "' got len " << r << dendl;
   }
   put_onode(on);
   return r;
@@ -3320,10 +3341,6 @@ int Ebofs::_rmattr(pobject_t oid, const char *name)
 
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
-  if (on->readonly) {
-    put_onode(on);
-    return -EACCES;
-  }
 
   string n(name);
   on->attr.erase(n);
@@ -3345,7 +3362,7 @@ int Ebofs::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe)
       t.rmattr(cid, oid, name);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3382,7 +3399,7 @@ int Ebofs::listattr(coll_t cid, pobject_t oid, vector<string>& attrs)
 
 /***************** collections ******************/
 
-int Ebofs::list_collections(list<coll_t>& ls)
+int Ebofs::list_collections(vector<coll_t>& ls)
 {
   ebofs_lock.Lock();
   dout(9) << "list_collections " << dendl;
@@ -3428,7 +3445,7 @@ int Ebofs::create_collection(coll_t cid, Context *onsafe)
       t.create_collection(cid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3450,9 +3467,9 @@ int Ebofs::_destroy_collection(coll_t cid)
   assert(cn);
 
   // hose mappings
-  list<pobject_t> objects;
+  vector<pobject_t> objects;
   collection_list(cid, objects);
-  for (list<pobject_t>::iterator i = objects.begin(); 
+  for (vector<pobject_t>::iterator i = objects.begin(); 
        i != objects.end();
        i++) {
     co_tab->remove(coll_pobject_t(cid,*i));
@@ -3482,7 +3499,7 @@ int Ebofs::destroy_collection(coll_t cid, Context *onsafe)
       t.remove_collection(cid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3544,7 +3561,7 @@ int Ebofs::collection_add(coll_t cid, coll_t ocid, pobject_t oid, Context *onsaf
       t.collection_add(cid, ocid, oid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3592,7 +3609,7 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
       t.collection_remove(cid, oid);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3603,7 +3620,7 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
   return 0;
 }
 
-int Ebofs::collection_list(coll_t cid, list<pobject_t>& ls)
+int Ebofs::collection_list(coll_t cid, vector<pobject_t>& ls)
 {
   ebofs_lock.Lock();
   dout(9) << "collection_list " << hex << cid << dec << dendl;
@@ -3662,7 +3679,7 @@ int Ebofs::collection_setattr(coll_t cid, const char *name, const void *value, s
       t.collection_setattr(cid, name, value, size);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {
@@ -3792,7 +3809,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
       t.collection_rmattr(cid, name);
       bufferlist bl;
       t.encode(bl);
-      journal->submit_entry(super_epoch, bl, onsafe);
+      journal->submit_entry(++op_seq, bl, onsafe);
     } else
       queue_commit_waiter(onsafe);
   } else {

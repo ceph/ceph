@@ -21,9 +21,9 @@
 
 class MMDSResolve : public Message {
  public:
-  map<dirfrag_t, list<dirfrag_t> > subtrees;
-  map<dirfrag_t, list<dirfrag_t> > ambiguous_imports;
-  list<metareqid_t> slave_requests;
+  map<dirfrag_t, vector<dirfrag_t> > subtrees;
+  map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
+  vector<metareqid_t> slave_requests;
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 
@@ -42,7 +42,7 @@ class MMDSResolve : public Message {
     subtrees[im].push_back(ex);
   }
 
-  void add_ambiguous_import(dirfrag_t im, const list<dirfrag_t>& m) {
+  void add_ambiguous_import(dirfrag_t im, const vector<dirfrag_t>& m) {
     ambiguous_imports[im] = m;
   }
 

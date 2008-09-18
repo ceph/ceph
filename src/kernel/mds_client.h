@@ -1,16 +1,18 @@
 #ifndef _FS_CEPH_MDS_CLIENT_H
 #define _FS_CEPH_MDS_CLIENT_H
 
-#include <linux/radix-tree.h>
-#include <linux/list.h>
 #include <linux/completion.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/radix-tree.h>
 #include <linux/spinlock.h>
 
+#include "types.h"
 #include "messenger.h"
 #include "mdsmap.h"
 
 struct ceph_client;
-struct ceph_inode_cap;
+struct ceph_cap;
 
 /*
  * for mds reply parsing
@@ -26,7 +28,7 @@ struct ceph_mds_reply_info_in {
 struct ceph_mds_reply_info {
 	struct ceph_mds_reply_head    *head;
 
-	int trace_numi, trace_numd;
+	int trace_numi, trace_numd, trace_snapdirpos;
 	struct ceph_mds_reply_info_in *trace_in;
 	struct ceph_mds_reply_lease   **trace_ilease;
 	struct ceph_mds_reply_dirfrag **trace_dir;
@@ -41,6 +43,9 @@ struct ceph_mds_reply_info {
 	__u32                         *dir_dname_len;
 	struct ceph_mds_reply_lease   **dir_dlease;
 	struct ceph_mds_reply_info_in *dir_in;
+
+	void *snapblob;
+	int snapblob_len;
 };
 
 /*
@@ -115,14 +120,25 @@ struct ceph_mds_request {
  * mds client state
  */
 struct ceph_mds_client {
-	spinlock_t              lock;          /* all nested structures */
 	struct ceph_client      *client;
+	struct mutex            mutex;         /* all nested structures */
+
 	struct ceph_mdsmap      *mdsmap;
+	struct completion       map_waiters, session_close_waiters;
+
 	struct ceph_mds_session **sessions;    /* NULL if no session */
 	int                     max_sessions;  /* len of s_mds_sessions */
+	int                     stopping;      /* true if shutting down */
+
+	/* 
+	 * snap_rwsem will cover cap linkage into snaprealms, and realm
+	 * snap contexts.  (later, we can do per-realm snap contexts locks..)
+	 */
+	struct rw_semaphore     snap_rwsem;
+	struct radix_tree_root  snap_realms;
+
 	__u64                   last_tid;      /* most recent mds request */
 	struct radix_tree_root  request_tree;  /* pending mds requests */
-	struct completion       map_waiters, session_close_waiters;
 	struct delayed_work     delayed_work;  /* delayed work */
 	unsigned long last_renew_caps;
 	struct list_head cap_delay_list;
@@ -131,8 +147,15 @@ struct ceph_mds_client {
 
 extern const char *ceph_mds_op_name(int op);
 
+extern struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc, int mds);
+extern void ceph_put_mds_session(struct ceph_mds_session *s);
+
+extern void ceph_send_msg_mds(struct ceph_mds_client *mdsc,
+			      struct ceph_msg *msg, int mds);
+
 extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 			   struct ceph_client *client);
+extern void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc);
 extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
@@ -144,9 +167,6 @@ extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc,
 extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 				     struct ceph_msg *msg);
 
-extern void ceph_mdsc_handle_filecaps(struct ceph_mds_client *mdsc,
-				      struct ceph_msg *msg);
-
 extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
 				   struct ceph_msg *msg);
 
@@ -156,17 +176,13 @@ extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc,
 
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
-			 ceph_ino_t ino1, const char *path1,
-			 ceph_ino_t ino2, const char *path2,
+			 u64 ino1, const char *path1,
+			 u64 ino2, const char *path2,
 			 struct dentry *ref, int want_auth);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
-extern int __ceph_mdsc_send_cap(struct ceph_mds_client *mdsc,
-				struct ceph_mds_session *session,
-				struct ceph_inode_cap *cap,
-				int used, int wanted, int cancel_work);
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 #endif

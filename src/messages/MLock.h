@@ -61,7 +61,7 @@ class MLock : public Message {
   int32_t     asker;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
 
-  char      lock_type;  // lock object type
+  __u16      lock_type;  // lock object type
   MDSCacheObjectInfo object_info;  
   
   bufferlist lockdata;  // and possibly some data

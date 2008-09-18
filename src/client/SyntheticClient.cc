@@ -57,7 +57,16 @@ void parse_syn_options(vector<const char*>& args)
     if (strcmp(args[i],"--syn") == 0) {
       ++i;
 
-      if (strcmp(args[i],"rmfile") == 0) {
+      if (strcmp(args[i], "mksnap") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_MKSNAP);
+	syn_sargs.push_back(args[++i]); // path
+	syn_sargs.push_back(args[++i]); // name
+      }
+      else if (strcmp(args[i], "rmsnap") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_RMSNAP);
+	syn_sargs.push_back(args[++i]); // path
+	syn_sargs.push_back(args[++i]); // name
+      } else if (strcmp(args[i],"rmfile") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_RMFILE );
       } else if (strcmp(args[i],"writefile") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_WRITEFILE );
@@ -102,7 +111,9 @@ void parse_syn_options(vector<const char*>& args)
         syn_modes.push_back( SYNCLIENT_MODE_READFILE );
         syn_iargs.push_back( a );
         syn_iargs.push_back( b );
-
+      } else if (strcmp(args[i],"dumpplacement") == 0) {
+	syn_modes.push_back( SYNCLIENT_MODE_DUMP );
+	syn_sargs.push_back( args[++i] );   
       } else if (strcmp(args[i],"makedirs") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -420,6 +431,19 @@ int SyntheticClient::run()
 	did_run_me();
       }
       break;
+
+
+    case SYNCLIENT_MODE_DUMP:
+      {
+	string sarg1 = get_sarg(0);
+	if (run_me()) {
+	  dout(2) << "placement dump " << sarg1 << dendl;
+	  dump_placement(sarg1);
+	}
+	did_run_me();
+      }
+      break;
+
 
     case SYNCLIENT_MODE_MAKEDIRMESS:
       {
@@ -814,6 +838,25 @@ int SyntheticClient::run()
       }
       break;
       
+    case SYNCLIENT_MODE_MKSNAP:
+      {
+	string base = get_sarg(0);
+	string name = get_sarg(0);
+	if (run_me())
+	  mksnap(base.c_str(), name.c_str());
+	did_run_me();
+      }
+      break;
+    case SYNCLIENT_MODE_RMSNAP:
+      {
+	string base = get_sarg(0);
+	string name = get_sarg(0);
+	if (run_me())
+	  rmsnap(base.c_str(), name.c_str());
+	did_run_me();
+      }
+      break;
+
     default:
       assert(0);
     }
@@ -912,7 +955,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   if (prefix.length()) {
     client->mkdir(prefix.c_str(), 0755);
     struct stat attr;
-    if (client->ll_lookup(1, prefix.c_str(), &attr) == 0) {
+    if (client->ll_lookup(vinodeno_t(1, CEPH_NOSNAP), prefix.c_str(), &attr) == 0) {
       ll_inos[1] = attr.st_ino;
       dout(5) << "'root' ino is " << inodeno_t(attr.st_ino) << dendl;
     } else {
@@ -1112,19 +1155,19 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t r = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_lookup(ll_inos[i], name, &attr) == 0)
+	  client->ll_lookup(vinodeno_t(ll_inos[i],CEPH_NOSNAP), name, &attr) == 0)
 	ll_inos[r] = attr.st_ino;
     } else if (strcmp(op, "ll_forget") == 0) {
       int64_t i = t.get_int();
       int64_t n = t.get_int();
       if (ll_inos.count(i) && 
-	  client->ll_forget(ll_inos[i], n))
+	  client->ll_forget(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n))
 	ll_inos.erase(i);
     } else if (strcmp(op, "ll_getattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
       if (ll_inos.count(i))
-	client->ll_getattr(ll_inos[i], &attr);
+	client->ll_getattr(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &attr);
     } else if (strcmp(op, "ll_setattr") == 0) {
       int64_t i = t.get_int();
       struct stat attr;
@@ -1137,12 +1180,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       attr.st_atime = t.get_int();
       int mask = t.get_int();
       if (ll_inos.count(i))
-	client->ll_setattr(ll_inos[i], &attr, mask);
+	client->ll_setattr(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &attr, mask);
     } else if (strcmp(op, "ll_readlink") == 0) {
       int64_t i = t.get_int();
       const char *value;
       if (ll_inos.count(i))
-	client->ll_readlink(ll_inos[i], &value);
+	client->ll_readlink(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &value);
     } else if (strcmp(op, "ll_mknod") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -1151,7 +1194,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_mknod(ll_inos[i], n, m, r, &attr) == 0)
+	  client->ll_mknod(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, m, r, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_mkdir") == 0) {
       int64_t i = t.get_int();
@@ -1160,7 +1203,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_mkdir(ll_inos[i], n, m, &attr) == 0)
+	  client->ll_mkdir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, m, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_symlink") == 0) {
       int64_t i = t.get_int();
@@ -1169,18 +1212,18 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ri = t.get_int();
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_symlink(ll_inos[i], n, v, &attr) == 0)
+	  client->ll_symlink(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, v, &attr) == 0)
 	ll_inos[ri] = attr.st_ino;
     } else if (strcmp(op, "ll_unlink") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
       if (ll_inos.count(i))
-	client->ll_unlink(ll_inos[i], n);
+	client->ll_unlink(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n);
     } else if (strcmp(op, "ll_rmdir") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
       if (ll_inos.count(i))
-	client->ll_rmdir(ll_inos[i], n);
+	client->ll_rmdir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n);
     } else if (strcmp(op, "ll_rename") == 0) {
       int64_t i = t.get_int();
       const char *n = t.get_string(buf, p);
@@ -1188,7 +1231,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *nn = t.get_string(buf2, p);
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni))
-	client->ll_rename(ll_inos[i], n, ll_inos[ni], nn);
+	client->ll_rename(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, 
+			  vinodeno_t(ll_inos[ni],CEPH_NOSNAP), nn);
     } else if (strcmp(op, "ll_link") == 0) {
       int64_t i = t.get_int();
       int64_t ni = t.get_int();
@@ -1196,13 +1240,14 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni))
-      client->ll_link(ll_inos[i], ll_inos[ni], nn, &attr);
+      client->ll_link(vinodeno_t(ll_inos[i],CEPH_NOSNAP),
+		      vinodeno_t(ll_inos[ni],CEPH_NOSNAP), nn, &attr);
     } else if (strcmp(op, "ll_opendir") == 0) {
       int64_t i = t.get_int();
       int64_t r = t.get_int();
       void *dirp;
       if (ll_inos.count(i) &&
-	  client->ll_opendir(ll_inos[i], &dirp) == 0)
+	  client->ll_opendir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &dirp) == 0)
 	ll_dirs[r] = dirp;
     } else if (strcmp(op, "ll_releasedir") == 0) {
       int64_t f = t.get_int();
@@ -1216,7 +1261,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t r = t.get_int();
       Fh *fhp;
       if (ll_inos.count(i) &&
-	  client->ll_open(ll_inos[i], f, &fhp) == 0)
+	  client->ll_open(vinodeno_t(ll_inos[i],CEPH_NOSNAP), f, &fhp) == 0)
 	ll_files[r] = fhp;
     } else if (strcmp(op, "ll_create") == 0) {
       int64_t i = t.get_int();
@@ -1228,7 +1273,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       Fh *fhp;
       struct stat attr;
       if (ll_inos.count(i) &&
-	  client->ll_create(ll_inos[i], n, m, f, &attr, &fhp) == 0) {
+	  client->ll_create(vinodeno_t(ll_inos[i],CEPH_NOSNAP), n, m, f, &attr, &fhp) == 0) {
 	ll_inos[ri] = attr.st_ino;
 	ll_files[r] = fhp;
       }
@@ -1275,7 +1320,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_statfs") == 0) {
       int64_t i = t.get_int();
       if (ll_inos.count(i))
-	{} //client->ll_statfs(ll_inos[i]);
+	{} //client->ll_statfs(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
     } 
 
 
@@ -1316,7 +1361,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
-      client->objecter->write(oid, off, len, layout, bl, 0,
+      SnapContext snapc;
+      client->objecter->write(oid, off, len, layout, snapc, bl, 0,
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg->new_sub());
       while (!ack) cond.Wait(lock);
@@ -1330,7 +1376,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_t oid(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
-      client->objecter->zero(oid, off, len, layout, 0,
+      SnapContext snapc;
+      client->objecter->zero(oid, off, len, layout, snapc, 0,
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg->new_sub());
       while (!ack) cond.Wait(lock);
@@ -1523,6 +1570,54 @@ int SyntheticClient::full_walk(string& basedir)
 
   return 0;
 }
+
+
+
+int SyntheticClient::dump_placement(string& fn) {
+
+  // open file
+  int fd = client->open(fn.c_str(), O_RDONLY);
+  dout(5) << "reading from " << fn << " fd " << fd << dendl;
+  if (fd < 0) return fd;
+
+
+  // How big is it?
+  struct stat stbuf;
+  int lstat_result = client->lstat(fn.c_str(), &stbuf);
+  if (lstat_result < 0) {
+    derr(0) << "lstat error for file " << fn << dendl;
+    return lstat_result;
+  }
+    
+  off_t filesize = stbuf.st_size;
+ 
+  // grab the placement info
+  list<ObjectExtent> extents;
+  off_t offset = 0;
+  client->enumerate_layout(fd, extents, filesize, offset);
+  client->close(fd);
+
+
+  // run through all the object extents
+  dout(0) << "file size is " << filesize << dendl;
+  dout(0) << "(osd, start, length) tuples for file " << fn << dendl;
+  for (list<ObjectExtent>::iterator i = extents.begin(); 
+       i != extents.end(); ++i) {
+    
+    int osd = client->osdmap->get_pg_primary(pg_t(i->layout.ol_pgid.v));
+
+    // run through all the buffer extents
+    for (map<size_t, size_t>::iterator j = i ->buffer_extents.begin();
+	 j != i->buffer_extents.end(); ++j) {
+      
+      dout(0) << "OSD " << osd << ", offset " << (*j).first <<
+	", length " << (*j).second << dendl;    
+    }
+  }
+  return 0;
+}
+
+
 
 int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int depth)
 {
@@ -1800,12 +1895,12 @@ int SyntheticClient::rm_file(string& fn)
   return client->unlink(fn.c_str());
 }
 
-int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is in MB, wrsize in bytes
+int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size is in MB, wrsize in bytes
 {
   //uint64_t wrsize = 1024*256;
   char *buf = new char[wrsize+100];   // 1 MB
   memset(buf, 7, wrsize);
-  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
+  int64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
 
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
@@ -1816,7 +1911,7 @@ int SyntheticClient::write_file(string& fn, int size, int wrsize)   // size is i
   __u64 bytes = 0, total = 0;
 
 
-  for (unsigned i=0; i<chunks; i++) {
+  for (loff_t i=0; i<chunks; i++) {
     if (time_to_stop()) {
       dout(0) << "stopping" << dendl;
       break;
@@ -2041,6 +2136,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     object_t oid(0x1000, i);
     ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 
 								   g_default_file_layout.fl_pg_size, 0);
+    SnapContext snapc;
     
     if (i % inflight == 0) {
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
@@ -2049,7 +2145,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     
     starts.push_back(g_clock.now());
     client->client_lock.Lock();
-    client->objecter->write(oid, 0, osize, layout, bl, 0,
+    client->objecter->write(oid, 0, osize, layout, snapc, bl, 0,
 			    new C_Ref(lock, cond, &unack),
 			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();
@@ -2144,12 +2240,13 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
     ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 
 								   g_default_file_layout.fl_pg_size, 0);
+    SnapContext snapc;
     
     client->client_lock.Lock();
     utime_t start = g_clock.now();
     if (write) {
       dout(10) << "write to " << oid << dendl;
-      client->objecter->write(oid, 0, osize, layout, bl, 0,
+      client->objecter->write(oid, 0, osize, layout, snapc, bl, 0,
 			      new C_Ref(lock, cond, &unack),
 			      new C_Ref(lock, cond, &unsafe));
     } else {
@@ -3198,7 +3295,7 @@ int SyntheticClient::chunk_file(string &filename)
     
     lock.Lock();
     Context *onfinish = new C_SafeCond(&lock, &cond, &done);
-    filer->read(inode.ino, &inode.layout, pos, get, &bl, 0, onfinish);
+    filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0, onfinish);
     while (!done)
       cond.Wait(lock);
     lock.Unlock();
@@ -3223,4 +3320,16 @@ int SyntheticClient::chunk_file(string &filename)
 
   client->close(fd);
   return 0;
+}
+
+
+
+void SyntheticClient::mksnap(const char *base, const char *name)
+{
+  client->mksnap(base, name);
+}
+
+void SyntheticClient::rmsnap(const char *base, const char *name)
+{
+  client->rmsnap(base, name);
 }

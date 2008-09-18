@@ -56,8 +56,8 @@ class FileStore : public JournalingObjectStore {
   //void get_oname(pobject_t oid, char *s);
   void get_cdir(coll_t cid, char *s);
   void get_coname(coll_t cid, pobject_t oid, char *s);
-  pobject_t parse_object(char *s);
-  coll_t parse_coll(char *s);
+  bool parse_object(char *s, pobject_t& o);
+  bool parse_coll(char *s, coll_t& c);
 
   // sync thread
   Mutex lock;
@@ -90,9 +90,10 @@ class FileStore : public JournalingObjectStore {
 
   int statfs(struct statfs *buf);
 
-  int transaction_start(int len);
-  void transaction_end(int id);
   unsigned apply_transaction(Transaction& t, Context *onsafe=0);
+  int _transaction_start(int len);
+  void _transaction_finish(int id);
+  unsigned _apply_transaction(Transaction& t);
 
   // ------------------
   // objects
@@ -101,45 +102,48 @@ class FileStore : public JournalingObjectStore {
   }
   bool exists(coll_t cid, pobject_t oid);
   int stat(coll_t cid, pobject_t oid, struct stat *st);
-  int remove(coll_t cid, pobject_t oid, Context *onsafe);
-  int truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe);
   int read(coll_t cid, pobject_t oid, __u64 offset, size_t len, bufferlist& bl);
-  int write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl, Context *onsafe);
-  int clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
+
+  int _remove(coll_t cid, pobject_t oid);
+  int _truncate(coll_t cid, pobject_t oid, __u64 size);
+  int _write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl);
+  int _zero(coll_t cid, pobject_t oid, __u64 offset, size_t len);
+  int _clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
 
   void sync();
   void sync(Context *onsafe);
 
   // attrs
-  int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
   int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp);
   int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
-  int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
 
-  int collection_setattr(coll_t c, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int collection_rmattr(coll_t c, const char *name, Context *onsafe=0);
+  int _setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size);
+  int _setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
+  int _rmattr(coll_t cid, pobject_t oid, const char *name);
+
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   int collection_getattr(coll_t c, const char *name, bufferlist& bl);
-  //int collection_listattr(coll_t c, char *attrs, size_t size);
   int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
-  int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
+
+  int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
+  int _collection_rmattr(coll_t c, const char *name);
+  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
 
   // collections
-  int list_collections(list<coll_t>& ls);
-  int create_collection(coll_t c, Context *onsafe=0);
-  int destroy_collection(coll_t c, Context *onsafe=0);
+  int list_collections(vector<coll_t>& ls);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
-  int collection_add(coll_t c, coll_t ocid, pobject_t o, Context *onsafe=0);
-  int collection_remove(coll_t c, pobject_t o, Context *onsafe=0);
-  int collection_list(coll_t c, list<pobject_t>& o);
+  int collection_list(coll_t c, vector<pobject_t>& o);
+
+  int _create_collection(coll_t c);
+  int _destroy_collection(coll_t c);
+  int _collection_add(coll_t c, coll_t ocid, pobject_t o);
+  int _collection_remove(coll_t c, pobject_t o);
 
   int pick_object_revision_lt(coll_t cid, pobject_t& oid) { return -1; }
   void trim_from_cache(coll_t cid, pobject_t oid, __u64 offset, size_t len) {}
   int is_cached(coll_t cid, pobject_t oid, __u64 offset, size_t len) { return -1; }
-
-
 };
 
 #endif

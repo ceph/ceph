@@ -23,7 +23,7 @@ class MExportDir : public Message {
  public:  
   dirfrag_t dirfrag;
   bufferlist export_data;
-  list<dirfrag_t> bounds;
+  vector<dirfrag_t> bounds;
   bufferlist client_map;
 
   MExportDir() {}

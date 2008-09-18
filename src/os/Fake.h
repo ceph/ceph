@@ -34,7 +34,7 @@ class FakeCollections {
   FakeCollections(ObjectStore *s) : store(s) {}
 
   // faked collections
-  int list_collections(list<coll_t>& ls) {
+  int list_collections(vector<coll_t>& ls) {
     faker_lock.Lock();
     int r = 0;
     for (hash_map< coll_t, set<pobject_t> >::iterator p = fakecollections.begin();
@@ -99,7 +99,7 @@ class FakeCollections {
     return 0;
   }
 
-  int collection_list(coll_t c, list<pobject_t>& o) {
+  int collection_list(coll_t c, vector<pobject_t>& o) {
     faker_lock.Lock();
     int r = 0;
     for (set<pobject_t>::iterator p = fakecollections[c].begin();
@@ -130,7 +130,15 @@ class FakeAttrs {
         bl.copy(0, l, (char*)value);
         return l;
       }
-      return -1;
+      return -ENODATA;
+    }
+    int getattr(const char *name, bufferptr &bp) {
+      string n = name;
+      if (attrs.count(n)) {
+	bp = attrs[n];
+	return bp.length();
+      }
+      return -ENODATA;
     }
     int getattr(const char *name, bufferlist& bl) {
       string n = name;
@@ -197,6 +205,12 @@ class FakeAttrs {
               void *value, size_t size) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].getattr(name, value, size);
+    faker_lock.Unlock();
+    return r;
+  }
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp) {
+    faker_lock.Lock();
+    int r = fakeoattrs[oid].getattr(name, bp);
     faker_lock.Unlock();
     return r;
   }

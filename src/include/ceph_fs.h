@@ -14,10 +14,12 @@
 # include <linux/types.h>
 # include <asm/fcntl.h>
 #else
-# define _LINUX_TYPES_H   /* we don't want linux/types.h's __u32, __le32, etc. */
 # include <netinet/in.h>
-# include "inttypes.h"
-# include "byteorder.h"
+# ifndef _LINUX_TYPES_H
+#  define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
+#  include "inttypes.h"
+#  include "byteorder.h"
+# endif
 # include <fcntl.h>
 #endif
 
@@ -57,13 +59,18 @@ static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_f
  */
 typedef __le64 ceph_ino_t;
 
+typedef __le64 ceph_snapid_t;
+#define CEPH_MAXSNAP ((1ull << 56)-1)  /* 56 bits; see ceph_pg */
+#define CEPH_SNAPDIR ((__u64)(-1))
+#define CEPH_NOSNAP  ((__u64)(-2))
+
 struct ceph_object {
 	union {
 		__u8 raw[20];        /* fits a sha1 hash */
 		struct {
 			__le64 ino;  /* inode "file" identifier */
 			__le32 bno;  /* "block" (object) in that "file" */
-			__le64 rev;  /* revision.  normally ctime (as epoch). */
+			__le64 snap; /* snapshot id.  usually NOSNAP. */
 		} __attribute__ ((packed));
 	};
 } __attribute__ ((packed));
@@ -90,7 +97,7 @@ struct ceph_timespec {
  * to feed encoded frags as values into frag_contains_value.
  */
 static inline __u32 frag_make(__u32 b, __u32 v) {
-	return (b << 24) | 
+	return (b << 24) |
 		(v & (0xffffffu << (24-b)) & 0xffffffu);
 }
 static inline __u32 frag_bits(__u32 f) { return f >> 24; }
@@ -102,10 +109,10 @@ static inline __u32 frag_mask_shift(__u32 f) {
 	return 24 - frag_bits(f);
 }
 
-static inline bool frag_contains_value(__u32 f, __u32 v) {
+static inline int frag_contains_value(__u32 f, __u32 v) {
 	return (v & frag_mask(f)) == frag_value(f);
 }
-static inline bool frag_contains_frag(__u32 f, __u32 sub) {
+static inline int frag_contains_frag(__u32 f, __u32 sub) {
 	/* as specific as us, and contained by us */
 	return frag_bits(sub) >= frag_bits(f) &&
 		(frag_value(sub) & frag_mask(f)) == frag_value(f);
@@ -115,11 +122,11 @@ static inline __u32 frag_parent(__u32 f) {
 	return frag_make(frag_bits(f) - 1,
 			 frag_value(f) & (frag_mask(f) << 1));
 }
-static inline bool frag_is_left_child(__u32 f) {
+static inline int frag_is_left_child(__u32 f) {
 	return frag_bits(f) > 0 &&
 		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 0;
 }
-static inline bool frag_is_right_child(__u32 f) {
+static inline int frag_is_right_child(__u32 f) {
 	return frag_bits(f) > 0 &&
 		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 1;
 }
@@ -139,10 +146,10 @@ static inline __u32 frag_make_child(__u32 f, int by, int i) {
 	return frag_make(newbits,
 			 frag_value(f) | (i << (24 - newbits)));
 }
-static inline bool frag_is_leftmost(__u32 f) {
+static inline int frag_is_leftmost(__u32 f) {
 	return frag_value(f) == 0;
 }
-static inline bool frag_is_rightmost(__u32 f) {
+static inline int frag_is_rightmost(__u32 f) {
 	return frag_value(f) == frag_mask(f);
 }
 static inline __u32 frag_next(__u32 f) {
@@ -219,17 +226,19 @@ struct ceph_file_layout {
  * placement group.
  * we encode this into one __le64.
  */
-#define CEPH_PG_TYPE_REP   1
-#define CEPH_PG_TYPE_RAID4 2
+#define CEPH_PG_TYPE_REP     1
+#define CEPH_PG_TYPE_RAID4   2
+#define CEPH_PG_TYPE_SNAP_LB 3
+#define CEPH_PG_TYPE_SNAP_UB 4
 union ceph_pg {
 	__u64 pg64;
 	struct {
 		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
+		__u8 __pad;
+		__u8 size;
 		__u8 pool;       /* implies crush ruleset */
 		__u8 type;
-		__u8 size;
-		__u8 __pad;
 	} pg;
 } __attribute__ ((packed));
 
@@ -412,8 +421,9 @@ struct ceph_msg_footer {
 #define CEPH_MSG_CLIENT_REQUEST         24
 #define CEPH_MSG_CLIENT_REQUEST_FORWARD 25
 #define CEPH_MSG_CLIENT_REPLY           26
-#define CEPH_MSG_CLIENT_FILECAPS        0x310
+#define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
+#define CEPH_MSG_CLIENT_SNAP            0x312
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -471,14 +481,16 @@ struct ceph_mds_getmap {
  *  - a few of these are internal to the mds
  */
 #define CEPH_LOCK_DN          1
-#define CEPH_LOCK_IVERSION    2     /* mds internal */
-#define CEPH_LOCK_IFILE       4     /* mds internal */
-#define CEPH_LOCK_IAUTH       8
-#define CEPH_LOCK_ILINK       16
-#define CEPH_LOCK_IDFT        32    /* dir frag tree */
-#define CEPH_LOCK_IDIR        64    /* mds internal */
-#define CEPH_LOCK_IXATTR      128
-#define CEPH_LOCK_INO         2048   /* immutable inode bits; not actually a lock */
+#define CEPH_LOCK_ISNAP       2
+#define CEPH_LOCK_IVERSION    4     /* mds internal */
+#define CEPH_LOCK_IFILE       8     /* mds internal */
+#define CEPH_LOCK_IDIR        16    /* mds internal */
+#define CEPH_LOCK_IAUTH       32
+#define CEPH_LOCK_ILINK       64
+#define CEPH_LOCK_IDFT        128   /* dir frag tree */
+#define CEPH_LOCK_INEST       256   /* mds internal */
+#define CEPH_LOCK_IXATTR      512
+#define CEPH_LOCK_INO         2048  /* immutable inode bits; not actually a lock */
 
 #define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)  /* alias for either filelock or dirlock */
 
@@ -488,11 +500,11 @@ struct ceph_mds_getmap {
 #define CEPH_STAT_MASK_INODE    CEPH_LOCK_INO
 #define CEPH_STAT_MASK_TYPE     CEPH_LOCK_INO  /* mode >> 12 */
 #define CEPH_STAT_MASK_SYMLINK  CEPH_LOCK_INO
-#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_INO
 #define CEPH_STAT_MASK_UID      CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_GID      CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_MODE     CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_NLINK    CEPH_LOCK_ILINK
+#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_MTIME    CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
@@ -514,6 +526,20 @@ enum {
 	CEPH_SESSION_STALE,
 };
 
+static inline const char *ceph_session_op_name(int op)
+{
+	switch (op) {
+	case CEPH_SESSION_REQUEST_OPEN: return "request_open";
+	case CEPH_SESSION_OPEN: return "open";
+	case CEPH_SESSION_REQUEST_CLOSE: return "request_close";
+	case CEPH_SESSION_CLOSE: return "close";
+	case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
+	case CEPH_SESSION_RENEWCAPS: return "renewcaps";
+	case CEPH_SESSION_STALE: return "stale";
+	default: return "???";
+	}
+}
+
 struct ceph_mds_session_head {
 	__le32 op;
 	__le64 seq;
@@ -522,14 +548,14 @@ struct ceph_mds_session_head {
 
 /* client_request */
 /*
- * mds ops.  
+ * mds ops.
  *  & 0x1000  -> write op
  *  & 0x10000 -> follow symlink (e.g. stat(), not lstat()).
  &  & 0x100000 -> use weird ino/path trace
  */
-#define CEPH_MDS_OP_WRITE        0x01000
-#define CEPH_MDS_OP_FOLLOW_LINK  0x10000
-#define CEPH_MDS_OP_INO_PATH  0x100000
+#define CEPH_MDS_OP_WRITE       0x001000
+#define CEPH_MDS_OP_FOLLOW_LINK 0x010000
+#define CEPH_MDS_OP_INO_PATH    0x100000
 enum {
 	CEPH_MDS_OP_FINDINODE = 0x100100,
 
@@ -539,7 +565,8 @@ enum {
 	CEPH_MDS_OP_LCHOWN    = 0x01103,
 	CEPH_MDS_OP_LSETXATTR = 0x01104,
 	CEPH_MDS_OP_LRMXATTR  = 0x01105,
-	
+	CEPH_MDS_OP_LSETLAYOUT= 0x01106,
+
 	CEPH_MDS_OP_STAT      = 0x10100,
 	CEPH_MDS_OP_UTIME     = 0x11101,
 	CEPH_MDS_OP_CHMOD     = 0x11102,
@@ -560,6 +587,10 @@ enum {
 	CEPH_MDS_OP_LTRUNCATE = 0x01303,
 	CEPH_MDS_OP_FSYNC     = 0x00304,
 	CEPH_MDS_OP_READDIR   = 0x00305,
+
+	CEPH_MDS_OP_MKSNAP    = 0x01400,
+	CEPH_MDS_OP_RMSNAP    = 0x01401,
+	CEPH_MDS_OP_LSSNAP    = 0x00402,
 };
 
 static inline const char *ceph_mds_op_name(int op)
@@ -574,6 +605,7 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LCHMOD: return "lchmod";
 	case CEPH_MDS_OP_CHOWN: return "chown";
 	case CEPH_MDS_OP_LCHOWN: return "lchown";
+	case CEPH_MDS_OP_LSETLAYOUT: return "lsetlayout";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
@@ -590,7 +622,10 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_TRUNCATE: return "truncate";
 	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
 	case CEPH_MDS_OP_FSYNC: return "fsync";
-	default: return "unknown";
+	case CEPH_MDS_OP_LSSNAP: return "lssnap";
+	case CEPH_MDS_OP_MKSNAP: return "mksnap";
+	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
+	default: return "???";
 	}
 }
 
@@ -643,6 +678,9 @@ struct ceph_mds_request_head {
 		struct {
 			__le32 flags;
 		} __attribute__ ((packed)) setxattr;
+		struct {
+			struct ceph_file_layout layout;
+		} __attribute__ ((packed)) setlayout;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
 
@@ -672,18 +710,19 @@ struct ceph_frag_tree_split {
 
 struct ceph_frag_tree_head {
 	__le32 nsplits;
-	struct ceph_frag_tree_split splits[0];
+	struct ceph_frag_tree_split splits[];
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
 	ceph_ino_t ino;
+	__le64 snapid;
 	__le64 version;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
 	__le64 time_warp_seq;
 	__le32 mode, uid, gid;
 	__le32 nlink;
-	__le64 size, max_size;
+	__le64 size, max_size, truncate_seq;
 	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
 	struct ceph_timespec rctime;
 	__le32 rdev;
@@ -714,8 +753,10 @@ struct ceph_mds_reply_dirfrag {
 
 static inline int ceph_flags_to_mode(int flags)
 {
+#ifdef O_DIRECTORY  /* fixme */
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)
 		return CEPH_FILE_MODE_PIN;
+#endif
 #ifdef O_LAZY
 	if (flags & O_LAZY)
 		return CEPH_FILE_MODE_LAZY;
@@ -763,23 +804,47 @@ static inline int ceph_caps_for_mode(int mode)
 }
 
 enum {
-	CEPH_CAP_OP_GRANT,   /* mds->client grant */
-	CEPH_CAP_OP_ACK,     /* client->mds ack (if prior grant was a recall) */
-	CEPH_CAP_OP_REQUEST, /* client->mds request (update wanted bits) */
-	CEPH_CAP_OP_TRUNC,   /* mds->client trunc notify (invalidate size+mtime) */
-	CEPH_CAP_OP_EXPORT,  /* mds has exported the cap */
-	CEPH_CAP_OP_IMPORT   /* mds has imported the cap from specified mds */
+	CEPH_CAP_OP_GRANT,     /* mds->client grant */
+	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify (invalidate size+mtime) */
+	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
+	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
+	CEPH_CAP_OP_RELEASED,    /* mds->client close out cap */
+	CEPH_CAP_OP_FLUSHEDSNAP, /* mds->client flushed snap */
+	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was a recall) */
+	CEPH_CAP_OP_REQUEST,   /* client->mds request (update wanted bits) */
+	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
+	CEPH_CAP_OP_RELEASE,   /* client->mds request release cap */
 };
 
-struct ceph_mds_file_caps {
+inline static const char* ceph_cap_op_name(int op) {
+	switch (op) {
+	case CEPH_CAP_OP_GRANT: return "grant";
+	case CEPH_CAP_OP_TRUNC: return "trunc";
+	case CEPH_CAP_OP_EXPORT: return "export";
+	case CEPH_CAP_OP_IMPORT: return "import";
+	case CEPH_CAP_OP_RELEASED: return "released";
+	case CEPH_CAP_OP_FLUSHEDSNAP: return "flushedsnap";
+	case CEPH_CAP_OP_ACK: return "ack";
+	case CEPH_CAP_OP_REQUEST: return "request";
+	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
+	case CEPH_CAP_OP_RELEASE: return "release";
+	default: return "???";
+	}
+}
+
+struct ceph_mds_caps {
 	__le32 op;
+	__le64 ino;
 	__le32 seq;
 	__le32 caps, wanted;
-	__le64 ino;
 	__le64 size, max_size;
+	__le64 truncate_seq;
 	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
+	struct ceph_file_layout layout;
 	__le64 time_warp_seq;
+	__le64 snap_follows;
+	__le32 snap_trace_len;
 } __attribute__ ((packed));
 
 
@@ -791,8 +856,10 @@ struct ceph_mds_lease {
 	__u8 action;
 	__le16 mask;
 	__le64 ino;
+	__le64 first, last;
 } __attribute__ ((packed));
 /* followed by a __le32+string for dname */
+
 
 /* client reconnect */
 struct ceph_mds_cap_reconnect {
@@ -800,9 +867,58 @@ struct ceph_mds_cap_reconnect {
 	__le32 issued;
 	__le64 size;
 	struct ceph_timespec mtime, atime;
+	__le64 snaprealm;
 } __attribute__ ((packed));
 /* followed by encoded string */
 
+struct ceph_mds_snaprealm_reconnect {
+	__le64 ino;
+	__le64 seq;
+	__le64 parent;  /* parent realm */
+} __attribute__ ((packed));
+
+/*
+ * snaps
+ */
+enum {
+	CEPH_SNAP_OP_UPDATE,  /* CREATE or DESTROY */
+	CEPH_SNAP_OP_CREATE,
+	CEPH_SNAP_OP_DESTROY,
+	CEPH_SNAP_OP_SPLIT,
+};
+
+static inline const char *ceph_snap_op_name(int o) {
+	switch (o) {
+	case CEPH_SNAP_OP_UPDATE: return "update";
+	case CEPH_SNAP_OP_CREATE: return "create";
+	case CEPH_SNAP_OP_DESTROY: return "destroy";
+	case CEPH_SNAP_OP_SPLIT: return "split";
+	default: return "???";
+	}
+}
+
+struct ceph_mds_snap_head {
+	__le32 op;
+	__le64 split;
+	__le32 num_split_inos;
+	__le32 num_split_realms;
+	__le32 trace_len;
+} __attribute__ ((packed));
+/* followed by split inos, then split realms, then the trace blob */
+
+/*
+ * encode info about a snaprealm, as viewed by a client
+ */
+struct ceph_mds_snap_realm {
+	__le64 ino;           /* ino */
+	__le64 created;       /* snap: when created */
+	__le64 parent;        /* ino: parent realm */
+	__le64 parent_since;  /* snap: same parent since */
+	__le64 seq;           /* snap: version */
+	__le32 num_snaps;
+	__le32 num_prior_parent_snaps;
+} __attribute__ ((packed));
+/* followed by my snaps, then prior parent snaps */
 
 /*
  * osd map
@@ -814,16 +930,19 @@ struct ceph_mds_cap_reconnect {
  * osd ops
  */
 enum {
+	/* read */
 	CEPH_OSD_OP_READ       = 1,
 	CEPH_OSD_OP_STAT       = 2,
-	CEPH_OSD_OP_REPLICATE  = 3,
-	CEPH_OSD_OP_UNREPLICATE = 4,
-	CEPH_OSD_OP_WRNOOP     = 10,
-	CEPH_OSD_OP_WRITE      = 11,
-	CEPH_OSD_OP_DELETE     = 12,
-	CEPH_OSD_OP_TRUNCATE   = 13,
-	CEPH_OSD_OP_ZERO       = 14,
 
+	/* modify */
+	CEPH_OSD_OP_WRNOOP     = 10, /* write no-op (i.e. sync) */
+	CEPH_OSD_OP_WRITE      = 11, /* write extent */
+	CEPH_OSD_OP_DELETE     = 12, /* delete object */
+	CEPH_OSD_OP_TRUNCATE   = 13,
+	CEPH_OSD_OP_ZERO       = 14, /* zero extent */
+	CEPH_OSD_OP_WRITEFULL  = 15, /* write complete object */
+
+	/* lock */
 	CEPH_OSD_OP_WRLOCK     = 20,
 	CEPH_OSD_OP_WRUNLOCK   = 21,
 	CEPH_OSD_OP_RDLOCK     = 22,
@@ -831,12 +950,60 @@ enum {
 	CEPH_OSD_OP_UPLOCK     = 24,
 	CEPH_OSD_OP_DNLOCK     = 25,
 
+	/* subop */
 	CEPH_OSD_OP_PULL       = 30,
 	CEPH_OSD_OP_PUSH       = 31,
 
-	CEPH_OSD_OP_BALANCEREADS   = 101,
-	CEPH_OSD_OP_UNBALANCEREADS = 102
+	CEPH_OSD_OP_BALANCEREADS   = 40,
+	CEPH_OSD_OP_UNBALANCEREADS = 41
 };
+
+static inline int ceph_osd_op_is_read(int op)
+{
+	return op < 10;
+}
+static inline int ceph_osd_op_is_modify(int op)
+{
+	return op >= 10 && op < 20;
+}
+static inline int ceph_osd_op_is_lock(int op)
+{
+	return op >= 20 && op < 30;
+}
+static inline int ceph_osd_op_is_subop(int op)
+{
+	return op >= 30 && op < 40;
+}
+
+static inline const char* ceph_osd_op_name(int op)
+{
+	switch (op) {
+	case CEPH_OSD_OP_READ: return "read";
+	case CEPH_OSD_OP_STAT: return "stat";
+
+	case CEPH_OSD_OP_WRNOOP: return "wrnoop";
+	case CEPH_OSD_OP_WRITE: return "write";
+	case CEPH_OSD_OP_DELETE: return "delete";
+	case CEPH_OSD_OP_TRUNCATE: return "truncate";
+	case CEPH_OSD_OP_ZERO: return "zero";
+	case CEPH_OSD_OP_WRITEFULL: return "writefull";
+
+	case CEPH_OSD_OP_WRLOCK: return "wrlock";
+	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";
+	case CEPH_OSD_OP_RDLOCK: return "rdlock";
+	case CEPH_OSD_OP_RDUNLOCK: return "rdunlock";
+	case CEPH_OSD_OP_UPLOCK: return "uplock";
+	case CEPH_OSD_OP_DNLOCK: return "dnlock";
+
+	case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
+	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
+
+	case CEPH_OSD_OP_PULL: return "pull";
+	case CEPH_OSD_OP_PUSH: return "push";
+	default: return "???";
+	}
+}
+
 
 /*
  * osd op flags
@@ -848,7 +1015,10 @@ enum {
 	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
 	CEPH_OSD_OP_BALANCE_READS = 16,
 	CEPH_OSD_OP_ACKNVRAM = 32,    /* ACK when stable in NVRAM, not RAM */
+	CEPH_OSD_OP_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 };
+
+#define EOLDSNAPC 44 /* ORDERSNAP specified and writer has old snap context*/
 
 struct ceph_osd_peer_stat {
 	struct ceph_timespec stamp;
@@ -878,6 +1048,10 @@ struct ceph_osd_request_head {
 	/* semi-hack, fix me */
 	__le32                    shed_count;
 	struct ceph_osd_peer_stat peer_stat;
+
+	__le64 snap_seq;
+	__le32 num_snaps;
+	__le64 snaps[];
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

@@ -50,13 +50,14 @@ protected:
   bool         mounted, unmounting, dirty;
   bool         readonly;
   version_t    super_epoch;
+  __u64        op_seq;
   bool         commit_starting;
   bool         commit_thread_started;
   Cond         commit_cond;   // to wake up the commit thread
   Cond         sync_cond;
   uint64_t     super_fsid;
 
-  map<version_t, list<Context*> > commit_waiters;
+  map<version_t, vector<Context*> > commit_waiters;
 
   void prepare_super(version_t epoch, bufferptr& bp);
   void write_super(version_t epoch, bufferptr& bp);
@@ -142,7 +143,7 @@ protected:
   void write_onode(Onode *on);
 
   // ** cnodes **
-  hash_map<coll_t, Cnode*, rjhash<coll_t> >    cnode_map;
+  hash_map<coll_t, Cnode*>    cnode_map;
   LRU                         cnode_lru;
   set<Cnode*>                 dirty_cnodes;
   map<coll_t, list<Cond*> >   waitfor_cnode;
@@ -216,7 +217,8 @@ protected:
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 
-    super_epoch(0), commit_starting(false), commit_thread_started(false),
+    super_epoch(0), op_seq(0), 
+    commit_starting(false), commit_thread_started(false),
     commit_thread(this),
     journal(0),
     free_blocks(0), limbo_blocks(0),
@@ -273,6 +275,7 @@ protected:
   int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
   int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
   int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
+  int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp);
   int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr> &aset);
   int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
   int listattr(coll_t cid, pobject_t oid, vector<string>& attrs);
@@ -280,7 +283,7 @@ protected:
   int get_object_collections(coll_t cid, pobject_t oid, set<coll_t>& ls);
 
   // collections
-  int list_collections(list<coll_t>& ls);
+  int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
 
   int create_collection(coll_t c, Context *onsafe);
@@ -288,7 +291,7 @@ protected:
   int collection_add(coll_t c, coll_t cid, pobject_t o, Context *onsafe);
   int collection_remove(coll_t c, pobject_t o, Context *onsafe);
 
-  int collection_list(coll_t c, list<pobject_t>& o);
+  int collection_list(coll_t c, vector<pobject_t>& o);
   
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
   int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
@@ -324,6 +327,7 @@ private:
   int _is_cached(pobject_t oid, __u64 off, size_t len);
   int _stat(pobject_t oid, struct stat *st);
   int _getattr(pobject_t oid, const char *name, void *value, size_t size);
+  int _getattr(pobject_t oid, const char *name, bufferptr& bp);
   int _getattrs(pobject_t oid, map<string,bufferptr> &aset);
   int _get_object_collections(pobject_t oid, set<coll_t>& ls);
 

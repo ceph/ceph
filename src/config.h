@@ -158,6 +158,7 @@ struct md_config_t {
   loff_t client_readahead_min;
   loff_t client_readahead_max_bytes;
   loff_t client_readahead_max_periods;
+  const char *client_snapdir;
   int fuse_direct_io;
   bool fuse_ll;
 
@@ -308,8 +309,8 @@ struct md_config_t {
   
   // journal
   bool journal_dio;
-  bool journal_max_write_bytes;
-  bool journal_max_write_entries;
+  int journal_max_write_bytes;
+  int journal_max_write_entries;
 
   // block device
   bool  bdev_lock;

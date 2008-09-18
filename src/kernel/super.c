@@ -2,6 +2,7 @@
 #include <linux/parser.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
+#include <linux/rwsem.h>
 #include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -46,8 +47,8 @@ static int ceph_write_inode(struct inode *inode, int unused)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
 	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
-		dout(30, "ceph_write_inode %llx .. atime updated\n",
-		     ceph_ino(inode));
+		dout(30, "ceph_write_inode %llx.%llx .. atime updated\n",
+		     ceph_vinop(inode));
 		/* eventually push this async to mds ... */
 	}
 	return 0;
@@ -60,7 +61,7 @@ static void ceph_put_super(struct super_block *s)
 	int seconds = 15;
 
 	dout(30, "put_super\n");
-	ceph_mdsc_stop(&cl->mdsc);
+	ceph_mdsc_close_sessions(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
 
 	rc = wait_event_timeout(cl->mount_wq,
@@ -75,7 +76,9 @@ static void ceph_put_super(struct super_block *s)
 static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct ceph_client *client = ceph_inode_to_client(dentry->d_inode);
+	struct ceph_monmap *monmap = client->monc.monmap;
 	struct ceph_statfs st;
+	__le64 fsid;
 	int err;
 
 	dout(30, "ceph_statfs\n");
@@ -91,9 +94,12 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_bavail = st.f_avail >> (CEPH_BLOCK_SHIFT-10);
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
-	/* fsid? */
 	buf->f_namelen = PATH_MAX;
 	buf->f_frsize = 4096;
+
+	fsid = monmap->fsid.major ^ monmap->fsid.minor;
+	buf->f_fsid.val[0] = fsid & 0xffffffff;
+	buf->f_fsid.val[1] = fsid >> 32;
 
 	return 0;
 }
@@ -153,6 +159,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	dout(10, "alloc_inode %p vfsi %p\n", ci, &ci->vfs_inode);
 
 	ci->i_version = 0;
+	ci->i_truncate_seq = 0;
 	ci->i_time_warp_seq = 0;
 	ci->i_symlink = 0;
 
@@ -162,27 +169,35 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ci->i_lease_item);
 
 	ci->i_fragtree = RB_ROOT;
+	mutex_init(&ci->i_fragtree_mutex);
 
 	ci->i_xattr_len = 0;
 	ci->i_xattr_data = 0;
 
-	INIT_LIST_HEAD(&ci->i_caps);
+	ci->i_caps = RB_ROOT;
 	for (i = 0; i < STATIC_CAPS; i++)
 		ci->i_static_caps[i].mds = -1;
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
+	INIT_LIST_HEAD(&ci->i_cap_snaps);
+	ci->i_snap_caps = 0;
 
 	ci->i_wanted_max_size = 0;
 	ci->i_requested_max_size = 0;
 
+	ci->i_cap_exporting_mds = 0;
+	ci->i_cap_exporting_mseq = 0;
+	ci->i_cap_exporting_issued = 0;
+
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = 0;
-	atomic_set(&ci->i_wrbuffer_ref, 0);
+	ci->i_wrbuffer_ref = 0;
+	ci->i_wrbuffer_ref_head = 0;
 	ci->i_hold_caps_until = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
-	ci->i_hashval = 0;
+	ci->i_snap_realm = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
 
@@ -198,7 +213,7 @@ static void ceph_destroy_inode(struct inode *inode)
 	struct ceph_inode_frag *frag;
 	struct rb_node *n;
 	
-	dout(30, "destroy_inode %p ino %llx\n", inode, ceph_ino(inode));
+	dout(30, "destroy_inode %p ino %llx.%llx\n", inode, ceph_vinop(inode));
 	kfree(ci->i_symlink);
 	while ((n = rb_first(&ci->i_fragtree)) != 0) {
 		frag = rb_entry(n, struct ceph_inode_frag, node);
@@ -209,7 +224,11 @@ static void ceph_destroy_inode(struct inode *inode)
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27) 
+static void init_once(void *foo)
+#else
 static void init_once(struct kmem_cache *cachep, void *foo)
+#endif
 {
 	struct ceph_inode_info *ci = foo;
 	dout(10, "init_once on %p\n", &ci->vfs_inode);
@@ -304,7 +323,8 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_CLIENT_REQUEST: return "client_request";
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD: return "client_request_forward";
 	case CEPH_MSG_CLIENT_REPLY: return "client_reply";
-	case CEPH_MSG_CLIENT_FILECAPS: return "client_filecaps";
+	case CEPH_MSG_CLIENT_CAPS: return "client_caps";
+	case CEPH_MSG_CLIENT_SNAP: return "client_snap";
 	case CEPH_MSG_CLIENT_LEASE: return "client_lease";
 	case CEPH_MSG_OSD_GETMAP: return "osd_getmap";
 	case CEPH_MSG_OSD_MAP: return "osd_map";
@@ -340,6 +360,9 @@ enum {
 	Opt_debug_osdc,
 	Opt_debug_addr,
 	Opt_debug_inode,
+	Opt_debug_snap,
+	Opt_debug_ioctl,
+	Opt_debug_caps,
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
@@ -363,6 +386,9 @@ static match_table_t arg_tokens = {
 	{Opt_debug_osdc, "debug_osdc=%d"},
 	{Opt_debug_addr, "debug_addr=%d"},
 	{Opt_debug_inode, "debug_inode=%d"},
+	{Opt_debug_snap, "debug_snap=%d"},
+	{Opt_debug_ioctl, "debug_ioctl=%d"},
+	{Opt_debug_caps, "debug_caps=%d"},
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
@@ -432,6 +458,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->flags = CEPH_MOUNT_DEFAULT;
 	args->osd_timeout = 5;  /* seconds */
 	args->mount_attempts = 2;  /* 2 attempts */
+	args->snapdir_name = ".snap";
 
 	/* ip1[,ip2...]:/server/path */
 	c = strchr(dev_name, ':');
@@ -519,6 +546,15 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_debug_inode:
 			ceph_debug_inode = intval;
+			break;
+		case Opt_debug_snap:
+			ceph_debug_snap = intval;
+			break;
+		case Opt_debug_ioctl:
+			ceph_debug_ioctl = intval;
+			break;
+		case Opt_debug_caps:
+			ceph_debug_caps = intval;
 			break;
 		case Opt_debug_console:
 			ceph_debug_console = 1;
@@ -609,6 +645,7 @@ void ceph_destroy_client(struct ceph_client *client)
 	/* unmount */
 	/* ... */
 
+	ceph_mdsc_stop(&client->mdsc);
 	ceph_monc_stop(&client->monc);
 	ceph_osdc_stop(&client->osdc);
 
@@ -792,8 +829,11 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
 		ceph_mdsc_handle_forward(&client->mdsc, msg);
 		break;
-	case CEPH_MSG_CLIENT_FILECAPS:
-		ceph_mdsc_handle_filecaps(&client->mdsc, msg);
+	case CEPH_MSG_CLIENT_CAPS:
+		ceph_handle_caps(&client->mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_SNAP:
+		ceph_handle_snap(&client->mdsc, msg);
 		break;
 	case CEPH_MSG_CLIENT_LEASE:
 		ceph_mdsc_handle_lease(&client->mdsc, msg);
@@ -927,7 +967,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
-	dout(22, "root ino %llx\n", ceph_ino(mnt->mnt_root->d_inode));
+	dout(22, "root ino %llx.%llx\n", ceph_vinop(mnt->mnt_root->d_inode));
 	return 0;
 
 out_splat:

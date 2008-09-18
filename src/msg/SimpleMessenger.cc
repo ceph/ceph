@@ -840,7 +840,7 @@ int Rank::Pipe::accept()
 
       if (peer_cseq < existing->connect_seq) {
 	if (peer_cseq == 0) {
-	  dout(10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
+	  dout(-10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
@@ -1423,7 +1423,10 @@ void Rank::Pipe::reader()
       }
       in_seq++;
 
-      if (in_seq != m->get_seq()) {
+      if (in_seq == 1) 
+	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
+
+      if (!policy.is_lossy() && in_seq != m->get_seq()) {
 	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
@@ -1433,9 +1436,6 @@ void Rank::Pipe::reader()
 	delete m;
 	continue;
       }
-
-      if (in_seq == 1) 
-	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
 
       cond.Signal();  // wake up writer, to ack this
       lock.Unlock();

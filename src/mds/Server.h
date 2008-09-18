@@ -19,14 +19,12 @@
 
 class Logger;
 class LogEvent;
-class C_MDS_rename_finish;
 class MDRequest;
 class Mutation;
 class EMetaBlob;
 class EUpdate;
-class PVList;
 class MMDSSlaveRequest;
-
+struct SnapInfo;
 
 
 
@@ -60,7 +58,6 @@ public:
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
-  set<CInode*> reconnected_caps;
 
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, bool open, version_t pv);
@@ -71,10 +68,6 @@ public:
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
-  void add_reconnected_cap_inode(CInode *in) {
-    reconnected_caps.insert(in);
-  }
-  void process_reconnected_caps();
   void reconnect_gather_finish();
   void reconnect_tick();
   
@@ -84,8 +77,12 @@ public:
   void dispatch_client_request(MDRequest *mdr);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
-  void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn);
+  void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
+		      snapid_t snapid, CInode *snapdiri);
 
+  void encode_empty_dirstat(bufferlist& bl);
+  void encode_infinite_lease(bufferlist& bl);
+  void encode_null_lease(bufferlist& bl);
 
   void handle_slave_request(MMDSSlaveRequest *m);
   void dispatch_slave_request(MDRequest *mdr);
@@ -110,6 +107,7 @@ public:
   void handle_client_utime(MDRequest *mdr);
   void handle_client_chmod(MDRequest *mdr);
   void handle_client_chown(MDRequest *mdr);
+  void handle_client_setlayout(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
   void handle_client_truncate(MDRequest *mdr);
   void handle_client_setxattr(MDRequest *mdr);
@@ -158,6 +156,12 @@ public:
   void handle_client_rename(MDRequest *mdr);
   void _rename_finish(MDRequest *mdr,
 		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+
+  void handle_client_lssnap(MDRequest *mdr);
+  void handle_client_mksnap(MDRequest *mdr);
+  void _mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info);
+  void handle_client_rmsnap(MDRequest *mdr);
+  void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
 
   // helpers
   void _rename_prepare_witness(MDRequest *mdr, int who,

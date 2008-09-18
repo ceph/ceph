@@ -18,6 +18,7 @@
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/pobject.h"
+#include "include/interval_set.h"
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
@@ -123,6 +124,15 @@ public:
 		     0,
 		     object_t(u.pg64, 0));
   }
+
+  coll_t to_coll() const {
+    return coll_t(u.pg64, 0); 
+  }
+  coll_t to_snap_coll(snapid_t sn) const {
+    return coll_t(u.pg64, sn);
+  }
+
+
 } __attribute__ ((packed));
 
 inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.u.pg64, bl); }
@@ -270,6 +280,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_REPLAY     32  // crashed, waiting for replay
 #define PG_STATE_STRAY      64  // i must notify the primary i exist.
 #define PG_STATE_SPLITTING 128  // i am splitting
+#define PG_STATE_SNAPTRIMQUEUE  256  // i am queued for snapshot trimming
+#define PG_STATE_SNAPTRIMMING   512  // i am trimming snapshot data
 
 static inline std::string pg_state_string(int state) {
   std::string st;
@@ -281,6 +293,8 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_REPLAY) st += "replay+";
   if (state & PG_STATE_STRAY) st += "stray+";
   if (state & PG_STATE_SPLITTING) st += "splitting+";
+  if (state & PG_STATE_SNAPTRIMQUEUE) st += "snaptrimqueue+";
+  if (state & PG_STATE_SNAPTRIMMING) st += "snaptrimming+";
   if (!st.length()) 
     st = "inactive";
   else 
@@ -412,5 +426,49 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
              << "])";
 }
 
+
+// -------
+
+WRITE_CLASS_ENCODER(interval_set<__u64>)
+
+
+/*
+ * attached to object head.  describes most recent snap context, and
+ * set of existing clones.
+ */
+struct SnapSet {
+  snapid_t seq;
+  bool head_exists;
+  vector<snapid_t> snaps;
+  vector<snapid_t> clones;
+  interval_set<__u64> head_overlap;                     // subset of data that is "shared"
+  map<snapid_t, interval_set<__u64> > clone_overlap;  // overlap w/ previous
+
+  SnapSet() : head_exists(false) {}
+
+  void encode(bufferlist& bl) const {
+    ::encode(seq, bl);
+    ::encode(head_exists, bl);
+    ::encode(snaps, bl);
+    ::encode(clones, bl);
+    ::encode(head_overlap, bl);
+    ::encode(clone_overlap, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(seq, bl);
+    ::decode(head_exists, bl);
+    ::decode(snaps, bl);
+    ::decode(clones, bl);
+    ::decode(head_overlap, bl);
+    ::decode(clone_overlap, bl);
+  }
+};
+WRITE_CLASS_ENCODER(SnapSet)
+
+inline ostream& operator<<(ostream& out, const SnapSet& cs) {
+  return out << cs.seq << "=" << cs.snaps << ":"
+	     << cs.clones
+	     << (cs.head_exists ? "+head":"");
+}
 
 #endif

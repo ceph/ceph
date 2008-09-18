@@ -26,10 +26,11 @@ using namespace std;
 
 
 class MDiscover : public Message {
-  __s32             asker;
+  __s32           asker;
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
 
+  snapid_t        snapid;
   filepath        want;   // ... [/]need/this/stuff
   inodeno_t       want_ino;
 
@@ -40,6 +41,7 @@ class MDiscover : public Message {
   int       get_asker() { return asker; }
   inodeno_t get_base_ino() { return base_ino; }
   frag_t    get_base_dir_frag() { return base_dir_frag; }
+  snapid_t  get_snapid() { return snapid; }
 
   filepath& get_want() { return want; }
   inodeno_t get_want_ino() { return want_ino; }
@@ -53,24 +55,28 @@ class MDiscover : public Message {
   MDiscover() { }
   MDiscover(int asker_, 
             inodeno_t base_ino_,
+	    snapid_t s,
             filepath& want_,
             bool want_base_dir_ = true,
 	    bool discover_xlocks_ = false) :
     Message(MSG_MDS_DISCOVER),
     asker(asker_),
     base_ino(base_ino_),
+    snapid(s),
     want(want_),
     want_ino(0),
     want_base_dir(want_base_dir_),
     want_xlocked(discover_xlocks_) { }
   MDiscover(int asker_, 
             dirfrag_t base_dirfrag,
+	    snapid_t s,
             inodeno_t want_ino_,
             bool want_base_dir_ = true) :
     Message(MSG_MDS_DISCOVER),
     asker(asker_),
     base_ino(base_dirfrag.ino),
     base_dir_frag(base_dirfrag.frag),
+    snapid(s),
     want_ino(want_ino_),
     want_base_dir(want_base_dir_),
     want_xlocked(false) { }
@@ -88,6 +94,7 @@ class MDiscover : public Message {
     ::decode(asker, p);
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
+    ::decode(snapid, p);
     ::decode(want, p);
     ::decode(want_ino, p);
     ::decode(want_base_dir, p);
@@ -97,6 +104,7 @@ class MDiscover : public Message {
     ::encode(asker, payload);
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
+    ::encode(snapid, payload);
     ::encode(want, payload);
     ::encode(want_ino, payload);
     ::encode(want_base_dir, payload);

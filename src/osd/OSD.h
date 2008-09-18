@@ -260,7 +260,7 @@ private:
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   
-  void advance_map(ObjectStore::Transaction& t);
+  void advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps);
   void activate_map(ObjectStore::Transaction& t);
 
   void get_map(epoch_t e, OSDMap &m);
@@ -275,6 +275,7 @@ private:
   // -- placement groups --
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
+  xlist<PG*> pgs_pending_snap_removal;
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
@@ -288,6 +289,21 @@ private:
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
   void activate_pg(pg_t pgid, epoch_t epoch);
+
+  Mutex snap_trimmer_lock;
+  Cond snap_trimmer_cond;
+
+  void wake_snap_trimmer();
+  void snap_trimmer();       // thread entry
+
+  struct SnapTrimmer : public Thread {
+    OSD *osd;
+    SnapTrimmer(OSD *o) : osd(o) {}
+    void *entry() {
+      osd->snap_trimmer();
+      return NULL;
+    }
+  } snap_trimmer_thread;
 
   void wake_pg_waiters(pg_t pgid) {
     if (waiting_for_pg.count(pgid)) {
@@ -396,7 +412,7 @@ private:
   // -- generic pg recovery --
   int num_pulling;
 
-  void do_notifies(map< int, list<PG::Info> >& notify_list);
+  void do_notifies(map< int, vector<PG::Info> >& notify_list);
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
   void do_infos(map<int, MOSDPGInfo*>& info_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);

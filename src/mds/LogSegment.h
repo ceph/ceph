@@ -42,6 +42,7 @@ class LogSegment {
 
   xlist<CInode*>  open_files;
   xlist<CInode*>  dirty_dirfrag_dir;
+  xlist<CInode*>  dirty_dirfrag_nest;
   xlist<CInode*>  dirty_dirfrag_dirfragtree;
 
   xlist<MDSlaveUpdate*> slave_updates;
@@ -49,24 +50,23 @@ class LogSegment {
   //xlist<CInode*>  purging_inodes;
   map<CInode*, map<loff_t,loff_t> > purging_inodes;
 
-  // committed anchor transactions
-  hash_set<version_t> pending_commit_atids;
+  map<int, hash_set<version_t> > pending_commit_tids;  // mdstable
   set<metareqid_t> uncommitted_masters;
 
   // client request ids
   map<int, tid_t> last_client_tids;
 
   // table version
-  version_t allocv;
+  version_t inotablev;
   version_t sessionmapv;
-  version_t anchortablev;
+  map<int,version_t> tablev;
 
   // try to expire
   C_Gather *try_to_expire(MDS *mds);
 
   // cons
   LogSegment(loff_t off) : offset(off), end(off), num_events(0), trimmable_at(0),
-			  allocv(0), sessionmapv(0), anchortablev(0) 
+			   inotablev(0), sessionmapv(0)
   { }
 };
 

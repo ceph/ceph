@@ -34,6 +34,7 @@ using namespace std;
 #define MDS_INO_ROOT              1
 #define MDS_INO_PGTABLE           2
 #define MDS_INO_ANCHORTABLE       3
+#define MDS_INO_SNAPTABLE         4
 
 #define MDS_INO_LOG_OFFSET        (1*MAX_MDS)
 #define MDS_INO_IDS_OFFSET        (2*MAX_MDS)
@@ -52,6 +53,25 @@ using namespace std;
 
 
 
+// CAPS
+
+typedef __u32 capseq_t;
+
+inline string cap_string(int cap)
+{
+  string s;
+  s = "[";
+  if (cap & CEPH_CAP_PIN) s += " pin";
+  if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
+  if (cap & CEPH_CAP_RD) s += " rd";
+  if (cap & CEPH_CAP_WR) s += " wr";
+  if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
+  if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
+  if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
+  if (cap & CEPH_CAP_EXCL) s += " excl";
+  s += " ]";
+  return s;
+}
 
 
 struct frag_info_t {
@@ -61,33 +81,23 @@ struct frag_info_t {
   utime_t mtime;
   __s64 nfiles;        // files
   __s64 nsubdirs;      // subdirs
-  __s64 size() const { return nfiles + nsubdirs; }
 
-  // this frag + children
-  utime_t rctime;
-  __s64 rbytes;
-  __s64 rfiles;
-  __s64 rsubdirs;
-  __s64 rsize() const { return rfiles + rsubdirs; }
-  __s64 ranchors;  // for dirstat, includes inode's anchored flag.
+  frag_info_t() : version(0), nfiles(0), nsubdirs(0) {}
+
+  __s64 size() const { return nfiles + nsubdirs; }
 
   void zero() {
     memset(this, 0, sizeof(*this));
   }
+
+  // *this += cur - acc; acc = cur
   void take_diff(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
-    if (cur.mtime > mtime) {
-      rctime = mtime = cur.mtime;
+    if (!(cur.mtime == acc.mtime)) {
+      mtime = cur.mtime;
       touched_mtime = true;
     }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
-
-    if (cur.rctime > rctime)
-      rctime = cur.rctime;
-    rbytes += cur.rbytes - acc.rbytes;
-    rfiles += cur.rfiles - acc.rfiles;
-    rsubdirs += cur.rsubdirs - acc.rsubdirs;
-    ranchors += cur.ranchors - acc.ranchors;
     acc = cur;
     acc.version = version;
   }
@@ -97,22 +107,12 @@ struct frag_info_t {
     ::encode(mtime, bl);
     ::encode(nfiles, bl);
     ::encode(nsubdirs, bl);
-    ::encode(rbytes, bl);
-    ::encode(rfiles, bl);
-    ::encode(rsubdirs, bl);
-    ::encode(ranchors, bl);
-    ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
     ::decode(mtime, bl);
     ::decode(nfiles, bl);
     ::decode(nsubdirs, bl);
-    ::decode(rbytes, bl);
-    ::decode(rfiles, bl);
-    ::decode(rsubdirs, bl);
-    ::decode(ranchors, bl);
-    ::decode(rctime, bl);
  }
 };
 WRITE_CLASS_ENCODER(frag_info_t)
@@ -125,17 +125,143 @@ inline ostream& operator<<(ostream &out, const frag_info_t &f) {
   return out << "f(v" << f.version
 	     << " m" << f.mtime
 	     << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs
-	     << " rc" << f.rctime
-	     << " b" << f.rbytes
-	     << " a" << f.ranchors
-	     << " " << f.rsize() << "=" << f.rfiles << "+" << f.rsubdirs
 	     << ")";    
 }
+
+struct nest_info_t {
+  version_t version;
+
+  // this frag + children
+  utime_t rctime;
+  __s64 rbytes;
+  __s64 rfiles;
+  __s64 rsubdirs;
+  __s64 rsize() const { return rfiles + rsubdirs; }
+
+  __s64 ranchors;  // for dirstat, includes inode's anchored flag.
+  __s64 rsnaprealms;
+
+  nest_info_t() : version(0),
+		  rbytes(0), rfiles(0), rsubdirs(0),
+		  ranchors(0), rsnaprealms(0) {}
+
+  void zero() {
+    memset(this, 0, sizeof(*this));
+  }
+
+  void sub(const nest_info_t &other) {
+    add(other, -1);
+  }
+  void add(const nest_info_t &other, int fac=1) {
+    if (other.rctime > rctime)
+      rctime = other.rctime;
+    rbytes += fac*other.rbytes;
+    rfiles += fac*other.rfiles;
+    rsubdirs += fac*other.rsubdirs;
+    ranchors += fac*other.ranchors;
+    rsnaprealms += fac*other.rsnaprealms;
+  }
+
+  // *this += cur - acc; acc = cur
+  void take_diff(const nest_info_t &cur, nest_info_t &acc) {
+    if (cur.rctime > rctime)
+      rctime = cur.rctime;
+    rbytes += cur.rbytes - acc.rbytes;
+    rfiles += cur.rfiles - acc.rfiles;
+    rsubdirs += cur.rsubdirs - acc.rsubdirs;
+    ranchors += cur.ranchors - acc.ranchors;
+    rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
+    acc = cur;
+    acc.version = version;
+  }
+
+  void encode(bufferlist &bl) const {
+    ::encode(version, bl);
+    ::encode(rbytes, bl);
+    ::encode(rfiles, bl);
+    ::encode(rsubdirs, bl);
+    ::encode(ranchors, bl);
+    ::encode(rsnaprealms, bl);
+    ::encode(rctime, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
+    ::decode(rbytes, bl);
+    ::decode(rfiles, bl);
+    ::decode(rsubdirs, bl);
+    ::decode(ranchors, bl);
+    ::decode(rsnaprealms, bl);
+    ::decode(rctime, bl);
+ }
+};
+WRITE_CLASS_ENCODER(nest_info_t)
+
+inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+inline ostream& operator<<(ostream &out, const nest_info_t &n) {
+  return out << "n(v" << n.version
+	     << " rc" << n.rctime
+	     << " b" << n.rbytes
+	     << " a" << n.ranchors
+	     << " sr" << n.rsnaprealms
+	     << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs
+	     << ")";    
+}
+
+struct vinodeno_t {
+  inodeno_t ino;
+  snapid_t snapid;
+  vinodeno_t() {}
+  vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
+
+  void encode(bufferlist& bl) const {
+    ::encode(ino, bl);
+    ::encode(snapid, bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    ::decode(ino, p);
+    ::decode(snapid, p);
+  }
+};
+WRITE_CLASS_ENCODER(vinodeno_t)
+
+inline bool operator==(const vinodeno_t &l, const vinodeno_t &r) {
+  return l.ino == r.ino && l.snapid == r.snapid;
+}
+inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
+  return 
+    l.ino < r.ino ||
+    (l.ino == r.ino && l.snapid < r.snapid);
+}
+
+namespace __gnu_cxx {
+  template<> struct hash<vinodeno_t> {
+    size_t operator()(const vinodeno_t &vino) const { 
+      hash<inodeno_t> H;
+      hash<uint64_t> I;
+      return H(vino.ino) ^ I(vino.snapid);
+    }
+  };
+}
+
+
+
+
+inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
+  out << vino.ino;
+  if (vino.snapid == CEPH_NOSNAP)
+    out << ".head";
+  else if (vino.snapid)
+    out << '.' << vino.snapid;
+  return out;
+}
+
 
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
-  ceph_file_layout layout;  // ?immutable?
   uint32_t   rdev;    // if special file
 
   // affected by any inode change...
@@ -151,15 +277,17 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
+  ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
+  uint64_t   truncate_seq;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
   // dirfrag, recursive accounting
-  frag_info_t dirstat;             
-  frag_info_t accounted_dirstat;   // what dirfrag has seen
+  frag_info_t dirstat;
+  nest_info_t rstat, accounted_rstat;
  
   // special stuff
   version_t version;           // auth only
@@ -172,7 +300,6 @@ struct inode_t {
 
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
-    ::encode(layout, bl);
     ::encode(rdev, bl);
     ::encode(ctime, bl);
 
@@ -183,21 +310,23 @@ struct inode_t {
     ::encode(nlink, bl);
     ::encode(anchored, bl);
 
+    ::encode(layout, bl);
     ::encode(size, bl);
     ::encode(max_size, bl);
+    ::encode(truncate_seq, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
     ::encode(time_warp_seq, bl);
 
     ::encode(dirstat, bl);
-    ::encode(accounted_dirstat, bl);
+    ::encode(rstat, bl);
+    ::encode(accounted_rstat, bl);
 
     ::encode(version, bl);
     ::encode(file_data_version, bl);
   }
   void decode(bufferlist::iterator &p) {
     ::decode(ino, p);
-    ::decode(layout, p);
     ::decode(rdev, p);
     ::decode(ctime, p);
 
@@ -208,14 +337,17 @@ struct inode_t {
     ::decode(nlink, p);
     ::decode(anchored, p);
 
+    ::decode(layout, p);
     ::decode(size, p);
     ::decode(max_size, p);
+    ::decode(truncate_seq, p);
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);
     
     ::decode(dirstat, p);
-    ::decode(accounted_dirstat, p);
+    ::decode(rstat, p);
+    ::decode(accounted_rstat, p);
 
     ::decode(version, p);
     ::decode(file_data_version, p);
@@ -223,30 +355,139 @@ struct inode_t {
 };
 WRITE_CLASS_ENCODER(inode_t)
 
+
+struct old_inode_t {
+  snapid_t first;
+  inode_t inode;
+  map<string,bufferptr> xattrs;
+
+  void encode(bufferlist& bl) const {
+    ::encode(first, bl);
+    ::encode(inode, bl);
+    ::encode(xattrs, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(first, bl);
+    ::decode(inode, bl);
+    ::decode(xattrs, bl);
+  }
+};
+WRITE_CLASS_ENCODER(old_inode_t)
+
+
 /*
  * like an inode, but for a dir frag 
  */
 struct fnode_t {
   version_t version;
+  snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
+  nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
+    ::encode(snap_purged_thru, bl);
     ::encode(fragstat, bl);
     ::encode(accounted_fragstat, bl);
+    ::encode(rstat, bl);
+    ::encode(accounted_rstat, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
+    ::decode(snap_purged_thru, bl);
     ::decode(fragstat, bl);
     ::decode(accounted_fragstat, bl);
+    ::decode(rstat, bl);
+    ::decode(accounted_rstat, bl);
   }
 };
 WRITE_CLASS_ENCODER(fnode_t)
 
 
+struct old_rstat_t {
+  snapid_t first;
+  nest_info_t rstat, accounted_rstat;
+
+  void encode(bufferlist& bl) const {
+    ::encode(first, bl);
+    ::encode(rstat, bl);
+    ::encode(accounted_rstat, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(first, bl);
+    ::decode(rstat, bl);
+    ::decode(accounted_rstat, bl);    
+  }
+};
+WRITE_CLASS_ENCODER(old_rstat_t)
+
+inline ostream& operator<<(ostream& out, const old_rstat_t& o) {
+  return out << "old_rstat(first " << o.first << " " << o.rstat << " " << o.accounted_rstat << ")";
+}
+
+
+
+// =======
+// dentries
+
+struct dentry_key_t {
+  snapid_t snapid;
+  const char *name;
+  dentry_key_t() : snapid(0), name(0) {}
+  dentry_key_t(snapid_t s, const char *n) : snapid(s), name(n) {}
+};
+
+inline ostream& operator<<(ostream& out, const dentry_key_t &k)
+{
+  return out << "(" << k.name << "," << k.snapid << ")";
+}
+
+inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
+{
+  /*
+   * order by name, then snap
+   */
+  int c = strcmp(k1.name, k2.name);
+  return 
+    c < 0 || (c == 0 && k1.snapid < k2.snapid);
+}
+
+
+/*
+ * string_snap_t is a simple (nstring, snapid_t) pair
+ */
+struct string_snap_t {
+  nstring name;
+  snapid_t snapid;
+  string_snap_t() {}
+  string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(const nstring& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+    ::encode(snapid, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+    ::decode(snapid, bl);
+  }
+};
+WRITE_CLASS_ENCODER(string_snap_t)
+
+inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
+  int c = strcmp(l.name.c_str(), r.name.c_str());
+  return c < 0 || (c == 0 && l.snapid < r.snapid);
+}
+
+inline ostream& operator<<(ostream& out, const string_snap_t &k)
+{
+  return out << "(" << k.name << "," << k.snapid << ")";
+}
+
+
 
 // =========
-// reqeusts
+// requests
 
 struct metareqid_t {
   entity_name_t name;
@@ -297,36 +538,33 @@ namespace __gnu_cxx {
 }
 
 
-// inode caps info for client reconnect
-struct inode_caps_reconnect_t {
-  int32_t wanted;
-  int32_t issued;
-  uint64_t size;
-  utime_t mtime, atime;
+// cap info for client reconnect
+struct cap_reconnect_t {
+  string path;
+  ceph_mds_cap_reconnect capinfo;
 
-  inode_caps_reconnect_t() {}
-  inode_caps_reconnect_t(int w, int i) : 
-    wanted(w), issued(i), size(0) {}
-  inode_caps_reconnect_t(int w, int i, uint64_t sz, utime_t mt, utime_t at) : 
-    wanted(w), issued(i), size(sz), mtime(mt), atime(at) {}
+  cap_reconnect_t() {}
+  cap_reconnect_t(const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at, inodeno_t sr) : 
+    path(p) {
+    capinfo.wanted = w;
+    capinfo.issued = i;
+    capinfo.size = sz;
+    capinfo.mtime = mt;
+    capinfo.atime = at;
+    capinfo.snaprealm = sr;
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(path, bl);
+    ::encode(capinfo, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(path, bl);
+    ::decode(capinfo, bl);
+  }
 };
+WRITE_CLASS_ENCODER(cap_reconnect_t)
 
-static inline void encode(const inode_caps_reconnect_t &ic, bufferlist &bl)
-{
-  ::encode(ic.wanted, bl);
-  ::encode(ic.issued, bl);
-  ::encode(ic.size, bl);
-  ::encode(ic.mtime, bl);
-  ::encode(ic.atime, bl);
-}
-static inline void decode(inode_caps_reconnect_t &ic, bufferlist::iterator &p)
-{
-  ::decode(ic.wanted, p);
-  ::decode(ic.issued, p);
-  ::decode(ic.size, p);
-  ::decode(ic.mtime, p);
-  ::decode(ic.atime, p);
-}
 
 
 // ================================================================
@@ -648,6 +886,7 @@ public:
   inodeno_t ino;
   dirfrag_t dirfrag;
   nstring dname;
+  snapid_t snapid;
 
   MDSCacheObjectInfo() : ino(0) {}
 
@@ -655,11 +894,13 @@ public:
     ::encode(ino, bl);
     ::encode(dirfrag, bl);
     ::encode(dname, bl);
+    ::encode(snapid, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(ino, p);
     ::decode(dirfrag, p);
     ::decode(dname, p);
+    ::decode(snapid, p);
   }
 };
 
@@ -702,8 +943,8 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
 
   // -- wait --
-  const static int WAIT_SINGLEAUTH  = (1<<30);
-  const static int WAIT_UNFREEZE    = (1<<29); // pka AUTHPINNABLE
+  const static __u64 WAIT_SINGLEAUTH  = (1ull<<60);
+  const static __u64 WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
 
 
   // ============================================
@@ -724,7 +965,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // state
  protected:
-  unsigned state;     // state bits
+  __u32 state;     // state bits
 
  public:
   unsigned get_state() const { return state; }
@@ -909,25 +1150,25 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  multimap<int, Context*>  waiting;
+  multimap<__u64, Context*>  waiting;
 
  public:
-  bool is_waiter_for(int mask) {
+  bool is_waiter_for(__u64 mask) {
     return waiting.count(mask) > 0;    // FIXME: not quite right.
   }
-  virtual void add_waiter(int mask, Context *c) {
+  virtual void add_waiter(__u64 mask, Context *c) {
     if (waiting.empty())
       get(PIN_WAITER);
-    waiting.insert(pair<int,Context*>(mask, c));
+    waiting.insert(pair<__u64,Context*>(mask, c));
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
 			       << dendl;
     
   }
-  virtual void take_waiting(int mask, list<Context*>& ls) {
+  virtual void take_waiting(__u64 mask, list<Context*>& ls) {
     if (waiting.empty()) return;
-    multimap<int,Context*>::iterator it = waiting.begin();
+    multimap<__u64,Context*>::iterator it = waiting.begin();
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
@@ -948,7 +1189,7 @@ protected:
     if (waiting.empty())
       put(PIN_WAITER);
   }
-  void finish_waiting(int mask, int result = 0) {
+  void finish_waiting(__u64 mask, int result = 0) {
     list<Context*> finished;
     take_waiting(mask, finished);
     finish_contexts(finished, result);
@@ -962,9 +1203,9 @@ protected:
   virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void finish_lock_waiters(int type, int mask, int r=0) { assert(0); }
-  virtual void add_lock_waiter(int type, int mask, Context *c) { assert(0); }
-  virtual bool is_lock_waiting(int type, int mask) { assert(0); return false; }
+  virtual void finish_lock_waiters(int type, __u64 mask, int r=0) { assert(0); }
+  virtual void add_lock_waiter(int type, __u64 mask, Context *c) { assert(0); }
+  virtual bool is_lock_waiting(int type, __u64 mask) { assert(0); return false; }
 
   virtual void clear_dirty_scattered(int type) { assert(0); }
   virtual void finish_scatter_gather_update(int type) { }
@@ -986,8 +1227,9 @@ inline ostream& operator<<(ostream& out, MDSCacheObject &o) {
 }
 
 inline ostream& operator<<(ostream& out, const MDSCacheObjectInfo &info) {
-  if (info.ino) return out << info.ino;
-  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname;
+  if (info.ino) return out << info.ino << "." << info.snapid;
+  if (info.dname.length()) return out << info.dirfrag << "/" << info.dname
+				      << " snap " << info.snapid;
   return out << info.dirfrag;
 }
 

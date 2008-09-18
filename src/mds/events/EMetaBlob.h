@@ -51,40 +51,55 @@ public:
    */
   struct fullbit {
     nstring  dn;         // dentry
+    snapid_t dnfirst, dnlast;
     version_t dnv;
     inode_t inode;      // if it's not
     fragtree_t dirfragtree;
     map<string,bufferptr> xattrs;
     string symlink;
+    bufferlist snapbl;
     bool dirty;
 
-    fullbit(const nstring& d, version_t v, inode_t& i, fragtree_t &dft, map<string,bufferptr> &xa, const string& sym, bool dr) :
-      dn(d), dnv(v), inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), dirty(dr) { }
+    fullbit(const nstring& d, snapid_t df, snapid_t dl, 
+	    version_t v, inode_t& i, fragtree_t &dft, 
+	    map<string,bufferptr> &xa, const string& sym, bufferlist &sbl, bool dr) :
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), 
+      inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) { }
     fullbit(bufferlist::iterator &p) { decode(p); }
     fullbit() {}
 
     void encode(bufferlist& bl) const {
       ::encode(dn, bl);
+      ::encode(dnfirst, bl);
+      ::encode(dnlast, bl);
       ::encode(dnv, bl);
       ::encode(inode, bl);
-      ::encode(dirfragtree, bl);
       ::encode(xattrs, bl);
       if (inode.is_symlink())
 	::encode(symlink, bl);
+      if (inode.is_dir()) {
+	::encode(dirfragtree, bl);
+	::encode(snapbl, bl);
+      }
       ::encode(dirty, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
+      ::decode(dnfirst, bl);
+      ::decode(dnlast, bl);
       ::decode(dnv, bl);
       ::decode(inode, bl);
-      ::decode(dirfragtree, bl);
       ::decode(xattrs, bl);
       if (inode.is_symlink())
 	::decode(symlink, bl);
+      if (inode.is_dir()) {
+	::decode(dirfragtree, bl);
+	::decode(snapbl, bl);
+      }
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " fullbit dn " << dn << " dnv " << dnv
+      out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode.ino
 	  << " dirty=" << dirty << std::endl;
     }
@@ -95,18 +110,21 @@ public:
    */
   struct remotebit {
     nstring dn;
+    snapid_t dnfirst, dnlast;
     version_t dnv;
     inodeno_t ino;
     unsigned char d_type;
     bool dirty;
 
-    remotebit(const nstring& d, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
-      dn(d), dnv(v), ino(i), d_type(dt), dirty(dr) { }
+    remotebit(const nstring& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit() {}
 
     void encode(bufferlist& bl) const {
       ::encode(dn, bl);
+      ::encode(dnfirst, bl);
+      ::encode(dnlast, bl);
       ::encode(dnv, bl);
       ::encode(ino, bl);
       ::encode(d_type, bl);
@@ -114,13 +132,15 @@ public:
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
+      ::decode(dnfirst, bl);
+      ::decode(dnlast, bl);
       ::decode(dnv, bl);
       ::decode(ino, bl);
       ::decode(d_type, bl);
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " remotebit dn " << dn << " dnv " << dnv
+      out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
 	  << " dirty=" << dirty << std::endl;
     }
@@ -132,25 +152,31 @@ public:
    */
   struct nullbit {
     nstring dn;
+    snapid_t dnfirst, dnlast;
     version_t dnv;
     bool dirty;
 
-    nullbit(const nstring& d, version_t v, bool dr) : dn(d), dnv(v), dirty(dr) { }
+    nullbit(const nstring& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
     nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit() {}
 
     void encode(bufferlist& bl) const {
       ::encode(dn, bl);
+      ::encode(dnfirst, bl);
+      ::encode(dnlast, bl);
       ::encode(dnv, bl);
       ::encode(dirty, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(dn, bl);
+      ::decode(dnfirst, bl);
+      ::decode(dnlast, bl);
       ::decode(dnv, bl);
       ::decode(dirty, bl);
     }
     void print(ostream& out) {
-      out << " nullbit dn " << dn << " dnv " << dnv
+      out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
     }
   };
@@ -242,12 +268,11 @@ private:
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
 
-  // anchor transactions included in this update.
-  list<version_t>         atids;
+  list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
   // ino's i've allocated
   list<inodeno_t> allocated_inos;
-  version_t alloc_tablev;
+  version_t inotablev;
 
   // inodes i've destroyed.
   list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
@@ -259,26 +284,26 @@ private:
   void encode(bufferlist& bl) const {
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
-    ::encode(atids, bl);
+    ::encode(table_tids, bl);
     ::encode(allocated_inos, bl);
     if (!allocated_inos.empty())
-      ::encode(alloc_tablev, bl);
+      ::encode(inotablev, bl);
     ::encode(truncated_inodes, bl);
     ::encode(client_reqs, bl);
   } 
   void decode(bufferlist::iterator &bl) {
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
-    ::decode(atids, bl);
+    ::decode(table_tids, bl);
     ::decode(allocated_inos, bl);
     if (!allocated_inos.empty())
-      ::decode(alloc_tablev, bl);
+      ::decode(inotablev, bl);
     ::decode(truncated_inodes, bl);
     ::decode(client_reqs, bl);
   }
 
 
-  // soft state
+  // soft stateadd
   off_t last_subtree_map;
   off_t my_offset;
 
@@ -300,13 +325,13 @@ private:
     client_reqs.push_back(r);
   }
 
-  void add_anchor_transaction(version_t atid) {
-    atids.push_back(atid);
+  void add_table_transaction(int table, version_t tid) {
+    table_tids.push_back(pair<__u8, version_t>(table, tid));
   }  
 
   void add_allocated_ino(inodeno_t ino, version_t tablev) {
     allocated_inos.push_back(ino);
-    alloc_tablev = tablev;
+    inotablev = tablev;
   }
 
   void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
@@ -321,10 +346,12 @@ private:
     lump.nnull++;
     if (dirty)
       lump.get_dnull().push_front(nullbit(dn->get_name(), 
+					  dn->first, dn->last,
 					  dn->get_projected_version(), 
 					  dirty));
     else
       lump.get_dnull().push_back(nullbit(dn->get_name(), 
+					 dn->first, dn->last,
 					 dn->get_projected_version(), 
 					 dirty));
   }
@@ -344,11 +371,13 @@ private:
     lump.nremote++;
     if (dirty)
       lump.get_dremote().push_front(remotebit(dn->get_name(), 
+					      dn->first, dn->last,
 					      dn->get_projected_version(), 
 					      rino, rdt,
 					      dirty));
     else
       lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					     dn->first, dn->last,
 					     dn->get_projected_version(), 
 					     rino, rdt,
 					     dirty));
@@ -356,12 +385,12 @@ private:
 
   // return remote pointer to to-be-journaled inode
   inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
     return add_primary_dentry(add_dir(dn->get_dir(), false),
-			      dn, dirty, in, pi, pdft);
+			      dn, dirty, in, pi, pdft, psnapbl);
   }
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0) {
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
     if (!in) 
       in = dn->get_inode();
 
@@ -369,18 +398,26 @@ private:
     in->last_journaled = my_offset;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
+    bufferlist snapbl;
+    if (psnapbl)
+      snapbl = *psnapbl;
+    else
+      in->encode_snap_blob(snapbl);
+
     lump.nfull++;
     if (dirty) {
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
+					  dn->first, dn->last,
 					  dn->get_projected_version(), 
-					  in->inode, in->dirfragtree, in->xattrs, in->symlink, 
+					  in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
 					  dirty));
       if (pi) lump.get_dfull().front().inode = *pi;
       return &lump.get_dfull().front().inode;
     } else {
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
+					 dn->first, dn->last,
 					 dn->get_projected_version(),
-					 in->inode, in->dirfragtree, in->xattrs, in->symlink, 
+					 in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
 					 dirty));
       if (pi) lump.get_dfull().back().inode = *pi;
       return &lump.get_dfull().back().inode;
@@ -471,10 +508,10 @@ private:
     out << "[metablob";
     if (!lump_order.empty()) 
       out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
-    if (!atids.empty())
-      out << " atids=" << atids;
+    if (!table_tids.empty())
+      out << " table_tids=" << table_tids;
     if (!allocated_inos.empty())
-      out << " inos=" << allocated_inos << " v" << alloc_tablev;
+      out << " inos=" << allocated_inos << " v" << inotablev;
     out << "]";
   }
 

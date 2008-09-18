@@ -42,7 +42,6 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
-#include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
@@ -152,8 +151,6 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   sb.fsid = fsid;
   sb.whoami = whoami;
 
-  store->create_collection(0, 0);
-
   // age?
   if (g_conf.osd_age_time != 0) {
     cout << "aging..." << std::endl;
@@ -176,14 +173,19 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
     bl.push_back(bp);
     cout << "testing disk bandwidth..." << std::endl;
     utime_t start = g_clock.now();
-    for (int i=0; i<1000; i++) 
-      store->write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl, 0);
+    for (int i=0; i<1000; i++) {
+      ObjectStore::Transaction t;
+      t.write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl);
+      store->apply_transaction(t);
+    }
     store->sync();
     utime_t end = g_clock.now();
     end -= start;
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
+    ObjectStore::Transaction tr;
     for (int i=0; i<1000; i++) 
-      store->remove(0, pobject_t(0, 0, object_t(999,i)), 0);
+      tr.remove(0, pobject_t(0, 0, object_t(999,i)));
+    store->apply_transaction(tr);
     
     // set osd weight
     sb.weight = (1000.0 / (double)end);
@@ -191,7 +193,12 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
 
   bufferlist bl;
   ::encode(sb, bl);
-  store->write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl, 0);
+
+  ObjectStore::Transaction t;
+  t.create_collection(0);
+  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  store->apply_transaction(t);
+
   store->umount();
   delete store;
   return 0;
@@ -252,7 +259,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   stat_oprate(5.0),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
-  iat_averager(g_conf.osd_flash_crowd_iat_alpha)
+  iat_averager(g_conf.osd_flash_crowd_iat_alpha),
+  snap_trimmer_thread(this)
 {
   messenger = m;
   monmap = mm;
@@ -539,8 +547,8 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   PG *pg = _open_lock_pg(pgid);
 
   // create collection
-  assert(!store->collection_exists(pgid));
-  t.create_collection(pgid);
+  assert(!store->collection_exists(pgid.to_coll()));
+  t.create_collection(pgid.to_coll());
 
   pg->write_log(t);
 
@@ -556,8 +564,8 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
 
   PG *pg = _open_lock_pg(pgid);
 
-  assert(!store->collection_exists(pgid));
-  t.create_collection(pgid);
+  assert(!store->collection_exists(pgid.to_coll()));
+  t.create_collection(pgid.to_coll());
 
   pg->set_role(0);
   pg->acting.swap(acting);
@@ -597,17 +605,17 @@ void OSD::_remove_unlock_pg(PG *pg)
   dout(10) << "_remove_unlock_pg " << pgid << dendl;
 
   // remove from store
-  list<pobject_t> olist;
-  store->collection_list(pgid, olist);
+  vector<pobject_t> olist;
+  store->collection_list(pgid.to_coll(), olist);
   
   ObjectStore::Transaction t;
   {
-    for (list<pobject_t>::iterator p = olist.begin();
+    for (vector<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
-      t.remove(pgid, *p);
-    t.remove(pgid, pgid.to_pobject());  // log too
-    t.remove_collection(pgid);
+      t.remove(pgid.to_coll(), *p);
+    t.remove(pgid.to_coll(), pgid.to_pobject());  // log too
+    t.remove_collection(pgid.to_coll());
   }
   store->apply_transaction(t);
 
@@ -627,20 +635,22 @@ void OSD::load_pgs()
   dout(10) << "load_pgs" << dendl;
   assert(pg_map.empty());
 
-  list<coll_t> ls;
+  vector<coll_t> ls;
   store->list_collections(ls);
 
-  for (list<coll_t>::iterator it = ls.begin();
+  for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        it++) {
     if (*it == 0)
       continue;
-    pg_t pgid = *it;
+    if (it->low != 0)
+      continue;
+    pg_t pgid = it->high;
     PG *pg = _open_lock_pg(pgid);
 
     // read pg info
     bufferlist bl;
-    store->collection_getattr(pgid, "info", bl);
+    store->collection_getattr(pgid.to_coll(), "info", bl);
     bufferlist::iterator p = bl.begin();
     ::decode(pg->info, p);
     
@@ -1487,7 +1497,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    store->write(0, poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    ObjectStore::Transaction ft;
+    ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    store->apply_transaction(ft);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1511,7 +1523,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    store->write(0, poid, 0, p->second.length(), p->second, 0);  // store _outside_ transaction; activate_map reads it.
+    ObjectStore::Transaction ft;
+    ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    store->apply_transaction(ft);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1529,6 +1543,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   while (cur < superblock.newest_map) {
     dout(10) << "cur " << cur << " < newest " << superblock.newest_map << dendl;
 
+    OSDMap::Incremental inc;
+
     if (m->incremental_maps.count(cur+1) ||
         store->exists(0, get_inc_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
@@ -1542,13 +1558,16 @@ void OSD::handle_osd_map(MOSDMap *m)
         get_inc_map_bl(cur+1, bl);
       }
 
-      OSDMap::Incremental inc(bl);
+      bufferlist::iterator p = bl.begin();
+      inc.decode(p);
       osdmap->apply_incremental(inc);
 
       // archive the full map
       bl.clear();
       osdmap->encode(bl);
-      store->write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl, 0);
+      ObjectStore::Transaction ft;
+      ft.write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
+      store->apply_transaction(ft);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
@@ -1577,6 +1596,10 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap *newmap = new OSDMap;
       newmap->decode(bl);
 
+      // fake inc->removed_snaps
+      inc.removed_snaps = newmap->get_removed_snaps();
+      inc.removed_snaps.subtract(osdmap->get_removed_snaps());
+
       // kill connections to newly down osds
       set<int> old;
       osdmap->get_all_osds(old);
@@ -1596,7 +1619,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     cur++;
     superblock.current_epoch = cur;
-    advance_map(t);
+    advance_map(t, inc.removed_snaps);
     advanced = true;
   }
 
@@ -1620,7 +1643,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = i->second;
     bufferlist bl;
     ::encode(pg->info, bl);
-    t.collection_setattr( pgid, "info", bl );
+    t.collection_setattr( pgid.to_coll(), "info", bl );
   }
 
   // superblock and commit
@@ -1645,12 +1668,13 @@ void OSD::handle_osd_map(MOSDMap *m)
  * scan placement groups, initiate any replication
  * activities.
  */
-void OSD::advance_map(ObjectStore::Transaction& t)
+void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps)
 {
   assert(osd_lock.is_locked());
 
   dout(7) << "advance_map epoch " << osdmap->get_epoch() 
           << "  " << pg_map.size() << " pgs"
+	  << " removed_snaps " << removed_snaps
           << dendl;
   
   // scan pg creations
@@ -1681,11 +1705,26 @@ void OSD::advance_map(ObjectStore::Transaction& t)
        it++) {
     pg_t pgid = it->first;
     PG *pg = it->second;
-    
+
     // get new acting set
     vector<int> tacting;
     int nrep = osdmap->pg_to_acting_osds(pgid, tacting);
     int role = osdmap->calc_pg_role(whoami, tacting, nrep);
+
+    // adjust removed_snaps?
+    if (!removed_snaps.empty()) {
+      pg->lock();
+      for (map<snapid_t,snapid_t>::iterator p = removed_snaps.m.begin();
+	   p != removed_snaps.m.end();
+	   p++)
+	for (snapid_t t = 0; t < p->second; ++t)
+	  pg->info.dead_snaps.insert(p->first + t);
+      dout(10) << *pg << " dead_snaps now " << pg->info.dead_snaps << dendl;
+      bufferlist bl;
+      ::encode(pg->info, bl);
+      t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
+      pg->unlock();
+    }   
     
     // no change?
     if (tacting == pg->acting) 
@@ -1812,7 +1851,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  map< int, list<PG::Info> >  notify_list;  // primary -> list
+  map< int, vector<PG::Info> >  notify_list;  // primary -> list
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
@@ -1825,6 +1864,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     if (pg->is_active()) {
       // update started counter
       pg->info.history.last_epoch_started = osdmap->get_epoch();
+      if (!pg->info.dead_snaps.empty())
+	pg->queue_snap_trim();
     }
     else if (pg->is_primary() && !pg->is_active()) {
       // i am (inactive) primary
@@ -2078,7 +2119,7 @@ void OSD::kick_pg_split_queue()
       pg->info.last_complete = pg->info.last_update;
       bufferlist bl;
       ::encode(pg->info, bl);
-      t.collection_setattr(pg->info.pgid, "info", bl);
+      t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
       pg->write_log(t);
 
       wake_pg_waiters(pg->info.pgid);
@@ -2106,13 +2147,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   dout(10) << "split_pg " << *parent << dendl;
   pg_t parentid = parent->info.pgid;
 
-  list<pobject_t> olist;
-  store->collection_list(parent->info.pgid, olist);  
+  vector<pobject_t> olist;
+  store->collection_list(parent->info.pgid.to_coll(), olist);  
 
-  while (!olist.empty()) {
-    pobject_t poid = olist.front();
-    olist.pop_front();
-    
+  for (vector<pobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
+    pobject_t poid = *p;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), parentid.size(),
 						      parentid.pool(), parentid.preferred());
     if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {
@@ -2121,15 +2160,15 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       PG *child = children[pgid];
       assert(child);
       eversion_t v;
-      store->getattr(parentid, poid, "version", &v, sizeof(v));
+      store->getattr(parentid.to_coll(), poid, "version", &v, sizeof(v));
       if (v > child->info.last_update) {
 	child->info.last_update = v;
 	dout(25) << "        tagging pg with v " << v << "  > " << child->info.last_update << dendl;
       } else {
 	dout(25) << "    not tagging pg with v " << v << " <= " << child->info.last_update << dendl;
       }
-      t.collection_add(pgid, parentid, poid);
-      t.collection_remove(parentid, poid);
+      t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
+      t.collection_remove(parentid.to_coll(), poid);
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
     }
@@ -2245,9 +2284,9 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
  * content for, and they are primary for.
  */
 
-void OSD::do_notifies(map< int, list<PG::Info> >& notify_list) 
+void OSD::do_notifies(map< int, vector<PG::Info> >& notify_list) 
 {
-  for (map< int, list<PG::Info> >::iterator it = notify_list.begin();
+  for (map< int, vector<PG::Info> >::iterator it = notify_list.begin();
        it != notify_list.end();
        it++) {
     if (it->first == whoami) {
@@ -2309,7 +2348,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   map<int, MOSDPGInfo*> info_map;
   int created = 0;
 
-  for (list<PG::Info>::iterator it = m->get_pg_list().begin();
+  for (vector<PG::Info>::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        it++) {
     pg_t pgid = it->pgid;
@@ -2550,7 +2589,7 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   map<int,MOSDPGInfo*> info_map;
   int created = 0;
 
-  for (list<PG::Info>::iterator p = m->pg_info.begin();
+  for (vector<PG::Info>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) 
     _process_pg_info(m->get_epoch(), from, *p, empty_log, empty_missing, &info_map, created);
@@ -2577,7 +2616,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   int created = 0;
-  map< int, list<PG::Info> > notify_list;
+  map< int, vector<PG::Info> > notify_list;
   
   for (map<pg_t,PG::Query>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
@@ -2800,38 +2839,22 @@ void OSD::handle_op(MOSDOp *op)
 	delete op;
 	return;
       }
-
-      /*
-    if (read && op->get_oid().rev > 0) {
-    // versioned read.  hrm.
-      // are we missing a revision that we might need?
-      object_t moid = op->get_oid();
-      if (pick_missing_object_rev(moid, pg)) {
-	// is there a local revision we might use instead?
-	object_t loid = op->get_oid();
-	if (store->pick_object_revision_lt(loid) &&
-	    moid <= loid) {
-	  // we need moid.  pull it.
-	  dout(10) << "handle_op read on " << op->get_oid()
-		   << ", have " << loid
-		   << ", but need missing " << moid
-		   << ", pulling" << dendl;
-	  pull(pg, moid);
-	  pg->waiting_for_missing_object[moid].push_back(op);
-	  return;
-	} 
-	  
-	dout(10) << "handle_op read on " << op->get_oid()
-		 << ", have " << loid
-		 << ", don't need missing " << moid 
-		 << dendl;
+      
+      if (op->get_oid().snap > 0) {
+	// snap read.  hrm.
+	// are we missing a revision that we might need?
+	// let's get them all.
+	for (unsigned i=0; i<op->get_snaps().size(); i++) {
+	  object_t oid = op->get_oid();
+	  oid.snap = op->get_snaps()[i];
+	  if (pg->is_missing_object(oid)) {
+	    dout(10) << "handle_op _may_ need missing rev " << oid << ", pulling" << dendl;
+	    pg->wait_for_missing_object(op->get_oid(), op);
+	    pg->unlock();
+	    return;
+	  }
+	}
       }
-    } else {
-      // live revision.  easy.
-      if (op->get_op() != OSD_OP_PUSH &&
-	  waitfor_missing_object(op, pg)) return;
-    }
-      */
 
     } else {
       // modify
@@ -2937,8 +2960,8 @@ void OSD::handle_op(MOSDOp *op)
 
 void OSD::handle_sub_op(MOSDSubOp *op)
 {
-  dout(10) << "handle_sub_op " << *op << " epoch " << op->get_map_epoch() << dendl;
-  if (op->get_map_epoch() < boot_epoch) {
+  dout(10) << "handle_sub_op " << *op << " epoch " << op->map_epoch << dendl;
+  if (op->map_epoch < boot_epoch) {
     dout(3) << "replica op from before boot" << dendl;
     delete op;
     return;
@@ -2948,13 +2971,13 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   assert(op->get_source().is_osd());
   
   // make sure we have the pg
-  const pg_t pgid = op->get_pg();
+  const pg_t pgid = op->pgid;
 
   // require same or newer map
-  if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
+  if (!require_same_or_newer_map(op, op->map_epoch)) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
+  _share_map_incoming(op->get_source_inst(), op->map_epoch);
 
   if (!_have_pg(pgid)) {
     // hmm.
@@ -3099,3 +3122,39 @@ void OSD::wait_for_no_ops()
 
 
 
+void OSD::wake_snap_trimmer()
+{
+  osd_lock.Lock();
+  if (!snap_trimmer_thread.is_started()) {
+    dout(10) << "wake_snap_trimmer - creating thread" << dendl;
+    snap_trimmer_thread.create();
+  } else {
+    dout(10) << "wake_snap_trimmer - kicking thread" << dendl;
+    snap_trimmer_cond.Signal();
+  }
+  osd_lock.Unlock();  
+}
+
+void OSD::snap_trimmer()
+{
+  osd_lock.Lock();
+  while (1) {
+    snap_trimmer_lock.Lock();
+    if (pgs_pending_snap_removal.empty()) {
+      snap_trimmer_lock.Unlock();
+      dout(10) << "snap_trimmer - no pgs pending trim, sleeping" << dendl;
+      snap_trimmer_cond.Wait(osd_lock);
+      continue;
+    }
+    
+    PG *pg = pgs_pending_snap_removal.front();
+    pgs_pending_snap_removal.pop_front();
+    snap_trimmer_lock.Unlock();
+    osd_lock.Unlock();
+
+    pg->snap_trimmer();
+
+    osd_lock.Lock();
+  }
+  osd_lock.Unlock();
+}

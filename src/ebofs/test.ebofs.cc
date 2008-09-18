@@ -51,7 +51,7 @@ public:
       switch (rand() % 5) {//10) {
       case 0:
         {
-	  oid.oid.rev = rand() % 10;
+	  oid.oid.snap = rand() % 10;
           cout << t << " read " << hex << oid << dec << " at " << off << " len " << len << std::endl;
           bufferlist bl;
           fs.read(0, oid, off, len, bl);
@@ -137,7 +137,7 @@ public:
       case 10:
 	{
 	  pobject_t newoid = oid;
-	  newoid.oid.rev = rand() % 10;
+	  newoid.oid.snap = rand() % 10;
 	  cout << t << " clone " << oid << " to " << newoid << std::endl;
 	  fs.clone(0, oid, newoid, 0);
 	}
@@ -190,7 +190,7 @@ int main(int argc, const char **argv)
     // clone it
     pobject_t oid2;
     oid2 = oid;
-    oid2.oid.rev = 1;
+    oid2.oid.snap = 1;
     fs.clone(0, oid, oid2, 0);
 
     // ... 

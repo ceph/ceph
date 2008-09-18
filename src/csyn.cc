@@ -36,8 +36,8 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int main(int argc, const char **argv, char *envp[]) {
-
+int main(int argc, const char **argv, char *envp[]) 
+{
   //cerr << "csyn starting" << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);

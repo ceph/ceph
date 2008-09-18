@@ -28,7 +28,6 @@ using namespace __gnu_cxx;
 
 #include "encoding.h"
 
-typedef uint64_t objectrev_t;
 
 struct object_t {
   union {
@@ -36,31 +35,31 @@ struct object_t {
     struct {
       uint64_t ino;    // "file" identifier
       uint32_t bno;    // "block" in that "file"
-      objectrev_t rev; // revision.  normally ctime (as epoch).
+      uint64_t snap;   // snap revision.
     } __attribute__ ((packed));
   } __attribute__ ((packed));
 
-  object_t() : ino(0), bno(0), rev(0) {}
-  object_t(uint64_t i, uint32_t b) : ino(i), bno(b), rev(0) {}
-  object_t(uint64_t i, uint32_t b, uint64_t r) : ino(i), bno(b), rev(r) {}
+  object_t() : ino(0), bno(0), snap(0) {}
+  object_t(uint64_t i, uint32_t b) : ino(i), bno(b), snap(0) {}
+  object_t(uint64_t i, uint32_t b, uint64_t r) : ino(i), bno(b), snap(r) {}
 
   // IMPORTANT: make this match struct ceph_object ****
   object_t(const ceph_object& co) {
     ino = co.ino;
     bno = co.bno;
-    rev = co.rev;
+    snap = co.snap;
   }  
   operator ceph_object() {
     ceph_object oid;
     oid.ino = ino;
     oid.bno = bno;
-    oid.rev = rev;
+    oid.snap = snap;
     return oid;
   }
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
     ::encode(bno, bl);
-    ::encode(rev, bl);
+    ::encode(snap, bl);
   }
   void decode(bufferlist::iterator &bl) {
     __u64 i, r;
@@ -70,7 +69,7 @@ struct object_t {
     ::decode(r, bl);
     ino = i;
     bno = b;
-    rev = r;
+    snap = r;
   }
 } __attribute__ ((packed));
 WRITE_CLASS_ENCODER(object_t)
@@ -99,8 +98,12 @@ inline ostream& operator<<(ostream& out, const object_t o) {
   out.fill('0');
   out << setw(8) << o.bno << dec;
   out.unsetf(ios::right);
-  if (o.rev) 
-    out << '.' << o.rev;
+  if (o.snap) {
+    if (o.snap == CEPH_NOSNAP)
+      out << ".head";
+    else
+      out << '.' << o.snap;
+  }
   return out;
 }
 
@@ -109,9 +112,64 @@ namespace __gnu_cxx {
     size_t operator()(const object_t &r) const { 
       static rjhash<uint64_t> H;
       static rjhash<uint32_t> I;
-      return H(r.ino) ^ I(r.bno) ^ H(r.rev);
+      return H(r.ino) ^ I(r.bno) ^ H(r.snap);
     }
   };
-
 }
+
+
+struct coll_t {
+  __u64 high;
+  __u64 low;
+
+  coll_t(__u64 h=0, __u64 l=0) : high(h), low(l) {}
+  
+  void encode(bufferlist& bl) const {
+    ::encode(high, bl);
+    ::encode(low, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u64 h, l;
+    ::decode(h, bl);
+    ::decode(l, bl);
+    high = h;
+    low = l;
+  }
+} __attribute__ ((packed));
+WRITE_CLASS_ENCODER(coll_t)
+
+inline ostream& operator<<(ostream& out, const coll_t& c) {
+  return out << hex << c.high << '.' << c.low << dec;
+}
+
+inline bool operator<(const coll_t& l, const coll_t& r) {
+  return l.high < r.high || (l.high == r.high && l.low < r.low);
+}
+inline bool operator<=(const coll_t& l, const coll_t& r) {
+  return l.high < r.high || (l.high == r.high && l.low <= r.low);
+}
+inline bool operator==(const coll_t& l, const coll_t& r) {
+  return l.high == r.high && l.low == r.low;
+}
+inline bool operator!=(const coll_t& l, const coll_t& r) {
+  return l.high != r.high || l.low != r.low;
+}
+inline bool operator>(const coll_t& l, const coll_t& r) {
+  return l.high > r.high || (l.high == r.high && l.low > r.low);
+}
+inline bool operator>=(const coll_t& l, const coll_t& r) {
+  return l.high > r.high || (l.high == r.high && l.low >= r.low);
+}
+
+
+namespace __gnu_cxx {
+  template<> struct hash<coll_t> {
+    size_t operator()(const coll_t &c) const { 
+      static rjhash<uint64_t> H;
+      return H(c.high) ^ H(c.low);
+    }
+  };
+}
+
+
 #endif

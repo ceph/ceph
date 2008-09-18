@@ -66,7 +66,6 @@ extern class LogType client_logtype;
 extern class Logger  *client_logger;
 
 
-
 // ============================================
 // types for my local metadata cache
 /* basic structure:
@@ -102,21 +101,11 @@ class Dentry : public LRUObject {
   }
   
   Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
-
-  /*Dentry() : name(0), dir(0), inode(0), ref(0) { }
-  Dentry(string& n) : name(0), dir(0), inode(0), ref(0) { 
-    name = new char[n.length()+1];
-    strcpy((char*)name, n.c_str());
-  }
-  ~Dentry() {
-    delete[] name;
-    }*/
 };
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
-  //hash_map<const char*, Dentry*, hash<const char*>, eqstr> dentries;
   hash_map<nstring, Dentry*> dentries;
 
   Dir(Inode* in) { parent_inode = in; }
@@ -125,8 +114,51 @@ class Dir {
 };
 
 
-class InodeCap {
- public:
+struct InodeCap;
+
+struct SnapRealm {
+  inodeno_t ino;
+  int nref;
+  snapid_t created;
+  snapid_t seq;
+  
+  inodeno_t parent;
+  snapid_t parent_since;
+  vector<snapid_t> prior_parent_snaps;  // snaps prior to parent_since
+  vector<snapid_t> my_snaps;
+
+  SnapRealm *pparent;
+  set<SnapRealm*> pchildren;
+
+  SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps
+
+  xlist<Inode*> inodes_with_caps;
+
+  SnapRealm(inodeno_t i) : 
+    ino(i), nref(0), created(0), seq(0),
+    pparent(NULL) { }
+
+  void build_snap_context();
+  void invalidate_cache() {
+    cached_snap_context.clear();
+  }
+
+  const SnapContext& get_snap_context() {
+    if (cached_snap_context.seq == 0)
+      build_snap_context();
+    return cached_snap_context;
+  }
+};
+
+inline ostream& operator<<(ostream& out, const SnapRealm& r) {
+  return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
+	     << " parent=" << r.parent
+	     << " my_snaps=" << r.my_snaps
+	     << " cached_snapc=" << r.cached_snap_context
+	     << ")";
+}
+
+struct InodeCap {
   unsigned issued;
   unsigned implemented;
   __u64 seq;
@@ -135,10 +167,22 @@ class InodeCap {
   InodeCap() : issued(0), implemented(0), seq(0), mseq(0) {}
 };
 
+struct CapSnap {
+  //snapid_t follows;  // map key
+  SnapContext context;
+  int issued;
+  __u64 size;
+  utime_t ctime, mtime, atime;
+  version_t time_warp_seq;
+  bool writing, dirty;
+  CapSnap() : issued(0), size(0), time_warp_seq(0), writing(false), dirty(false) {}
+};
+
 
 class Inode {
  public:
   inode_t   inode;    // the actual inode
+  snapid_t  snapid;
   int       lease_mask, lease_mds;
   utime_t   lease_ttl;
 
@@ -148,10 +192,18 @@ class Inode {
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
-  map<int,InodeCap> caps;            // mds -> InodeCap
+  map<int,InodeCap*> caps;            // mds -> InodeCap
+  int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
   capseq_t exporting_mseq;
+  utime_t hold_caps_until;
+  xlist<Inode*>::item cap_delay_item;
+
+  SnapRealm *snaprealm;
+  xlist<Inode*>::item snaprealm_item;
+  Inode *snapdir_parent;  // only if we are a snapdir inode
+  map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   map<int,int> open_by_mode;
@@ -180,6 +232,10 @@ class Inode {
       assert(dn->dir && dn->dir->parent_inode);
       dn->dir->parent_inode->make_path(p);
       p.push_dentry(dn->name);
+    } else if (snapdir_parent) {
+      snapdir_parent->make_path(p);
+      string empty;
+      p.push_dentry(empty);
     } else
       p = filepath(inode.ino);
   }
@@ -201,11 +257,15 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(inodeno_t ino, ceph_file_layout *layout) : 
+  Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     //inode(_inode),
+    snapid(vino.snapid),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
+    cap_delay_item(this),
+    snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0), symlink(0),
@@ -213,13 +273,14 @@ class Inode {
   {
     memset(&inode, 0, sizeof(inode));
     //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
-    inode.ino = ino;
+    inode.ino = vino.ino;
   }
   ~Inode() {
     if (symlink) { delete symlink; symlink = 0; }
   }
 
   inodeno_t ino() { return inode.ino; }
+  vinodeno_t vino() { return vinodeno_t(inode.ino, snapid); }
 
   bool is_dir() { return inode.is_dir(); }
 
@@ -239,11 +300,11 @@ class Inode {
   bool put_cap_ref(int cap);
 
   int caps_issued() {
-    int c = exporting_issued;
-    for (map<int,InodeCap>::iterator it = caps.begin();
+    int c = exporting_issued | snap_caps;
+    for (map<int,InodeCap*>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second.issued;
+      c |= it->second->issued;
     return c;
   }
 
@@ -563,9 +624,40 @@ protected:
   Objecter              *objecter;     // (non-blocking) osd interface
   
   // cache
-  hash_map<inodeno_t, Inode*> inode_map;
+  hash_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
+
+  xlist<Inode*> delayed_caps;
+  hash_map<inodeno_t,SnapRealm*> snap_realms;
+
+  SnapRealm *get_snap_realm(inodeno_t r) {
+    SnapRealm *realm = snap_realms[r];
+    if (!realm)
+      snap_realms[r] = realm = new SnapRealm(r);
+    realm->nref++;
+    return realm;
+  }
+  SnapRealm *get_snap_realm_maybe(inodeno_t r) {
+    if (snap_realms.count(r) == 0)
+      return NULL;
+    SnapRealm *realm = snap_realms[r];
+    realm->nref++;
+    return realm;
+  }
+  void put_snap_realm(SnapRealm *realm) {
+    if (realm->nref-- == 0) {
+      snap_realms.erase(realm->ino);
+      delete realm;
+    }
+  }
+  bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
+  inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
+  inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
+  void invalidate_snaprealm_and_children(SnapRealm *realm);
+
+  Inode *open_snapdir(Inode *diri);
+
 
   // file handles, etc.
   filepath cwd;
@@ -608,7 +700,9 @@ protected:
     in->put(n);
     if (in->ref == 0) {
       //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
-      inode_map.erase(in->inode.ino);
+      if (in->snapdir_parent)
+	put_inode(in->snapdir_parent);
+      inode_map.erase(in->vino());
       if (in == root) root = 0;
       delete in;
     }
@@ -713,9 +807,9 @@ protected:
   void dump_cache();  // debug
   
   // find dentry based on filepath
-  Dentry *lookup(const filepath& path);
+  Dentry *lookup(const filepath& path, snapid_t snap=CEPH_NOSNAP);
 
-  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0);
+  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
 
   
   // trace generation
@@ -747,15 +841,35 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
-  void add_update_inode_cap(Inode *in, int mds, unsigned issued, unsigned seq, unsigned mseq);
+  void add_update_cap(Inode *in, int mds,
+		      bufferlist& snapbl,
+		      unsigned issued, unsigned seq, unsigned mseq);
   void remove_cap(Inode *in, int mds);
-  void handle_file_caps(class MClientFileCaps *m);
-  void check_caps(Inode *in);
+  void remove_all_caps(Inode *in);
+
+  void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
+			      vector<snapid_t>& snaps);
+
+  void handle_snap(class MClientSnap *m);
+  void handle_caps(class MClientCaps *m);
+  void handle_cap_import(Inode *in, class MClientCaps *m);
+  void handle_cap_export(Inode *in, class MClientCaps *m);
+  void handle_cap_trunc(Inode *in, class MClientCaps *m);
+  void handle_cap_released(Inode *in, class MClientCaps *m);
+  void handle_cap_flushedsnap(Inode *in, class MClientCaps *m);
+  void handle_cap_grant(Inode *in, class MClientCaps *m);
+  void cap_delay_requeue(Inode *in);
+  void check_caps(Inode *in, bool is_delayed);
   void put_cap_ref(Inode *in, int cap);
+  void flush_snaps(Inode *in);
+  void queue_cap_snap(Inode *in, snapid_t seq=0);
+  void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
+  void _flushed_cap_snap(Inode *in, snapid_t seq);
 
   void _release(Inode *in, bool checkafter=true);
-  void _flush(Inode *in, bool checkafter=true);
-  void _flushed(Inode *in, bool checkafter);
+  void _flush(Inode *in, Context *onfinish=NULL);
+  void _flushed(Inode *in);
+  void flush_set_callback(inodeno_t ino);
 
   void close_release(Inode *in);
   void close_safe(Inode *in);
@@ -767,8 +881,10 @@ protected:
   void update_dir_dist(Inode *in, DirStat *st);
 
   Inode* insert_trace(MClientReply *reply, utime_t ttl);
-  void update_inode_file_bits(Inode *in, __u64 size, utime_t ctime, utime_t mtime, utime_t atime,
-			      int issued, __u64 time_warp_seq);
+  void update_inode_file_bits(Inode *in,
+			      __u64 truncat_seq,__u64 size,
+			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
+			      int issued);
   void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
   Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			     InodeStat *ist, LeaseStat *ilease, 
@@ -832,6 +948,9 @@ private:
   int _ftruncate(Fh *fh, loff_t length);
   int _fsync(Fh *fh, bool syncdataonly);
   int _statfs(struct statvfs *stbuf);
+
+  int _mksnap(const filepath &path, const char *name, int uid=-1, int gid=-1);
+  int _rmsnap(const filepath &path, const char *name, int uid=-1, int gid=-1);
 
 
 public:
@@ -906,34 +1025,37 @@ public:
   int enumerate_layout(int fd, list<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 
+  int mksnap(const char *path, const char *name);
+  int rmsnap(const char *path, const char *name);
+
   // low-level interface
-  int ll_lookup(inodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
-  bool ll_forget(inodeno_t ino, int count);
-  Inode *_ll_get_inode(inodeno_t ino);
-  int ll_getattr(inodeno_t ino, struct stat *st, int uid = -1, int gid = -1);
-  int ll_setattr(inodeno_t ino, struct stat *st, int mask, int uid = -1, int gid = -1);
-  int ll_getxattr(inodeno_t ino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
-  int ll_setxattr(inodeno_t ino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
-  int ll_removexattr(inodeno_t ino, const char *name, int uid=-1, int gid=-1);
-  int ll_listxattr(inodeno_t ino, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(inodeno_t ino, void **dirpp, int uid = -1, int gid = -1);
+  int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
+  bool ll_forget(vinodeno_t vino, int count);
+  Inode *_ll_get_inode(vinodeno_t vino);
+  int ll_getattr(vinodeno_t vino, struct stat *st, int uid = -1, int gid = -1);
+  int ll_setattr(vinodeno_t vino, struct stat *st, int mask, int uid = -1, int gid = -1);
+  int ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
+  int ll_setxattr(vinodeno_t vino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(vinodeno_t vino, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(vinodeno_t vino, char *list, size_t size, int uid=-1, int gid=-1);
+  int ll_opendir(vinodeno_t vino, void **dirpp, int uid = -1, int gid = -1);
   void ll_releasedir(void *dirp);
-  int ll_readlink(inodeno_t ino, const char **value, int uid = -1, int gid = -1);
-  int ll_mknod(inodeno_t ino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_mkdir(inodeno_t ino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_symlink(inodeno_t ino, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_unlink(inodeno_t ino, const char *name, int uid = -1, int gid = -1);
-  int ll_rmdir(inodeno_t ino, const char *name, int uid = -1, int gid = -1);
-  int ll_rename(inodeno_t parent, const char *name, inodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
-  int ll_link(inodeno_t ino, inodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_open(inodeno_t ino, int flags, Fh **fh, int uid = -1, int gid = -1);
-  int ll_create(inodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
+  int ll_readlink(vinodeno_t vino, const char **value, int uid = -1, int gid = -1);
+  int ll_mknod(vinodeno_t vino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_mkdir(vinodeno_t vino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_symlink(vinodeno_t vino, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_unlink(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
+  int ll_rmdir(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
+  int ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
+  int ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_open(vinodeno_t vino, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
-  int ll_statfs(inodeno_t, struct statvfs *stbuf);
+  int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
 
   // failure
   void ms_handle_failure(Message*, const entity_inst_t& inst);

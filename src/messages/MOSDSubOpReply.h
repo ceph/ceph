@@ -109,13 +109,13 @@ public:
   MOSDSubOpReply(MOSDSubOp *req, int result_, epoch_t e, bool commit_) :
     Message(MSG_OSD_SUBOPREPLY),
     map_epoch(e),
-    reqid(req->get_reqid()),
-    pgid(req->get_pg()),
-    rep_tid(req->get_rep_tid()),
-    op(req->get_op()),
-    poid(req->get_poid()),
-    length(req->get_length()),
-    offset(req->get_offset()),
+    reqid(req->reqid),
+    pgid(req->pgid),
+    rep_tid(req->rep_tid),
+    op(req->op),
+    poid(req->poid),
+    length(req->length),
+    offset(req->offset),
     commit(commit_),
     result(result_) {
     memset(&peer_stat, 0, sizeof(peer_stat));
@@ -126,7 +126,7 @@ public:
   
   void print(ostream& out) {
     out << "osd_sub_op_reply(" << reqid
-	<< " " << MOSDOp::get_opname(op)
+	<< " " << ceph_osd_op_name(op)
 	<< " " << poid;
     if (length) out << " " << offset << "~" << length;
     if (op >= 10) {

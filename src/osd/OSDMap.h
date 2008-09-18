@@ -94,6 +94,9 @@ public:
     map<int32_t,epoch_t> new_up_thru;
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
+
+    snapid_t new_max_snap;
+    interval_set<snapid_t> removed_snaps;
     
     void encode(bufferlist& bl) {
       ::encode(fsid, bl);
@@ -113,6 +116,8 @@ public:
       ::encode(new_up_thru, bl);
       ::encode(new_pg_swap_primary, bl);
       ::encode(old_pg_swap_primary, bl);
+      ::encode(new_max_snap, bl);
+      ::encode(removed_snaps.m, bl);
     }
     void decode(bufferlist::iterator &p) {
       ::decode(fsid, p);
@@ -132,6 +137,8 @@ public:
       ::decode(new_up_thru, p);
       ::decode(new_pg_swap_primary, p);
       ::decode(old_pg_swap_primary, p);
+      ::decode(new_max_snap, p);
+      ::decode(removed_snaps.m, p);
     }
 
     Incremental(epoch_t e=0) : epoch(e), new_flags(-1), new_max_osd(-1), 
@@ -185,7 +192,9 @@ private:
   vector<epoch_t> osd_up_from;  // when it went up
   vector<epoch_t> osd_up_thru;      // lower bound on _actual_ osd death.  bumped by osd before activating pgs with no replicas.
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
-  
+  snapid_t max_snap;
+  interval_set<snapid_t> removed_snaps;
+
  public:
   CrushWrapper     crush;       // hierarchical map
 
@@ -197,7 +206,7 @@ private:
 	     pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
 	     last_pg_change(0),
 	     flags(0),
-	     max_osd(0) { 
+	     max_osd(0), max_snap(0) { 
     fsid.major = fsid.minor = 0;
     calc_pg_masks();
   }
@@ -235,6 +244,14 @@ private:
   epoch_t get_last_pg_change() const {
     return last_pg_change;
   }
+
+  snapid_t get_max_snap() { return max_snap; }
+  bool is_removed_snap(snapid_t sn) { 
+    if (sn > max_snap)
+      return false;
+    return removed_snaps.contains(sn); 
+  }
+  interval_set<snapid_t>& get_removed_snaps() { return removed_snaps; }
 
   /***** cluster state *****/
   /* osds */
@@ -339,6 +356,7 @@ private:
     return -1;
   }
 
+
   void apply_incremental(Incremental &inc) {
     if (inc.epoch == 1)
       fsid = inc.fsid;
@@ -417,6 +435,10 @@ private:
 	 i++)
       pg_swap_primary.erase(*i);
 
+    if (inc.new_max_snap > 0)
+      max_snap = inc.new_max_snap;
+    removed_snaps.union_of(inc.removed_snaps);
+
     // do new crush map last (after up/down stuff)
     if (inc.crush.length()) {
       bufferlist::iterator blp = inc.crush.begin();
@@ -443,6 +465,9 @@ private:
     ::encode(osd_up_from, blist);
     ::encode(osd_up_thru, blist);
     ::encode(pg_swap_primary, blist);
+
+    ::encode(max_snap, blist);
+    ::encode(removed_snaps.m, blist);
     
     bufferlist cbl;
     crush.encode(cbl);
@@ -470,6 +495,9 @@ private:
     ::decode(osd_up_thru, p);
     ::decode(pg_swap_primary, p);
     
+    ::decode(max_snap, p);
+    ::decode(removed_snaps.m, p);
+
     bufferlist cbl;
     ::decode(cbl, p);
     bufferlist::iterator cblp = cbl.begin();

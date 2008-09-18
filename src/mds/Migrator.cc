@@ -36,7 +36,7 @@
 
 #include "msg/Messenger.h"
 
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
@@ -143,7 +143,7 @@ void Migrator::export_empty_import(CDir *dir)
     dout(7) << " freezing or frozen" << dendl;
     return;
   }
-  if (dir->get_size() > 0) {
+  if (dir->get_num_head_items() > 0) {
     dout(7) << " not actually empty" << dendl;
     return;
   }
@@ -659,17 +659,20 @@ void Migrator::export_frozen(CDir *dir)
     }
   }
 
-  /* include spanning tree for all nested exports.
+  // include base dirfrag
+  cache->replicate_dir(dir, dest, prep->basedir);
+  
+  /*
+   * include spanning tree for all nested exports.
    * these need to be on the destination _before_ the final export so that
    * dir_auth updates on any nested exports are properly absorbed.
    * this includes inodes and dirfrags included in the subtree, but
    * only the inodes at the bounds.
+   *
+   * each trace is: df dentry inode (dir dentry inode)*
    */
   set<inodeno_t> inodes_added;
 
-  // include base dirfrag
-  prep->add_dirfrag( new CDirDiscover(dir, dir->add_replica(dest)) );
-  
   // check bounds
   for (set<CDir*>::iterator it = bounds.begin();
        it != bounds.end();
@@ -681,46 +684,41 @@ void Migrator::export_frozen(CDir *dir)
     bound->state_set(CDir::STATE_EXPORTBOUND);
     
     dout(7) << "  export bound " << *bound << dendl;
+    prep->add_bound( bound->dirfrag() );
 
-    prep->add_export( bound->dirfrag() );
-
-    /* first assemble each trace, in trace order, and put in message */
-    list<CInode*> inode_trace;  
-
-    // trace to dir
+    // trace to bound
+    bufferlist tracebl;
     CDir *cur = bound;
-    while (cur != dir) {
+    
+    while (1) {
+      // prepend dentry + inode
+      assert(cur->inode->is_auth());
+      bufferlist bl;
+      cache->replicate_dentry(cur->inode->parent, dest, bl);
+      dout(7) << "  added " << *cur->inode->parent << dendl;
+      cache->replicate_inode(cur->inode, dest, bl);
+      dout(7) << "  added " << *cur->inode << dendl;
+      bl.claim_append(tracebl);
+      tracebl.claim(bl);
+
+      cur = cur->get_parent_dir();
+
       // don't repeat ourselves
-      if (inodes_added.count(cur->ino())) break;   // did already!
+      if (inodes_added.count(cur->ino()) ||
+	  cur == dir) break;   // did already!
       inodes_added.insert(cur->ino());
 
-      // inode
-      assert(cur->inode->is_auth());
-      inode_trace.push_front(cur->inode);
-      dout(7) << "  will add " << *cur->inode << dendl;
-      
-      // include the dirfrag?  only if it's not the bounding subtree root.
-      if (cur != bound) {
-	assert(cur->is_auth());
-        prep->add_dirfrag( cur->replicate_to(dest) );  // yay!
-        dout(7) << "  added " << *cur << dendl;
-      }
-      
-      cur = cur->get_parent_dir();
+      // prepend dir
+      cache->replicate_dir(cur, dest, bl);
+      dout(7) << "  added " << *cur << dendl;
+      bl.claim_append(tracebl);
+      tracebl.claim(bl);
     }
-
-    for (list<CInode*>::iterator it = inode_trace.begin();
-         it != inode_trace.end();
-         it++) {
-      CInode *in = *it;
-      dout(7) << "  added " << *in->parent << dendl;
-      dout(7) << "  added " << *in << dendl;
-      prep->add_inode( in->parent->get_dir()->dirfrag(),
-		       in->parent->get_name(),
-                       in->parent->replicate_to(dest),
-                       in->replicate_to(dest) );
-    }
-
+    bufferlist final;
+    dirfrag_t df = cur->dirfrag();
+    ::encode(df, final);
+    final.claim_append(tracebl);
+    prep->add_trace(final);
   }
 
   // send.
@@ -862,6 +860,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
   assert(!in->is_replica(mds->get_nodeid()));
 
   ::encode(in->inode.ino, enc_state);
+  ::encode(in->last, enc_state);
   in->encode_export(enc_state);
 
   // caps 
@@ -896,8 +895,9 @@ void Migrator::finish_export_inode_caps(CInode *in)
     Capability *cap = it->second;
     dout(7) << "finish_export_inode telling client" << it->first
 	    << " exported caps on " << *in << dendl;
-    MClientFileCaps *m = new MClientFileCaps(CEPH_CAP_OP_EXPORT,
-					     in->inode, 
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
+					     in->inode,
+					     in->find_snaprealm()->inode->ino(),
                                              cap->get_last_seq(), 
                                              cap->pending(),
                                              cap->wanted(),
@@ -955,7 +955,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
 {
   int num_exported = 0;
 
-  dout(7) << "encode_export_dir " << *dir << " " << dir->nitems << " items" << dendl;
+  dout(7) << "encode_export_dir " << *dir << " " << dir->get_num_head_items() << " head items" << dendl;
   
   assert(dir->get_projected_version() == dir->get_version());
 
@@ -985,7 +985,8 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
     // dn name
-    ::encode(it->first, exportbl);
+    ::encode(dn->name, exportbl);
+    ::encode(dn->last, exportbl);
     
     // state
     dn->encode_export(exportbl);
@@ -1401,7 +1402,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     // must discover it!
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
-    int r = cache->path_traverse(0, m, fpath, trace, true, MDS_TRAVERSE_DISCOVER);
+    int r = cache->path_traverse(0, m, fpath, trace, NULL, NULL, true, MDS_TRAVERSE_DISCOVER);
     if (r > 0) return; // wait
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
@@ -1468,9 +1469,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   CDir *dir;
 
   if (!m->did_assim()) {
-    dir = cache->add_replica_dir(diri, 
-				 m->get_dirfrag().frag, *m->get_dirfrag_discover(m->get_dirfrag()), 
-				 oldauth, finished);
+    bufferlist::iterator p = m->basedir.begin();
+    dir = cache->add_replica_dir(p, diri, oldauth, finished);
     dout(7) << "handle_export_prep on " << *dir << " (first pass)" << dendl;
   } else {
     dir = cache->get_dirfrag(m->get_dirfrag());
@@ -1509,36 +1509,25 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     dout(7) << "bystanders are " << import_bystanders[dir] << dendl;
 
     // assimilate traces to exports
-    for (list<CInodeDiscover*>::iterator it = m->get_inodes().begin();
-         it != m->get_inodes().end();
-         it++) {
-      // inode
-      CInode *in = cache->get_inode( (*it)->get_ino() );
-      if (in) {
-        (*it)->update_inode(in);
-        dout(7) << " updated " << *in << dendl;
-      } else {
-        in = new CInode(mds->mdcache, false);
-        (*it)->update_inode(in);
-        
-        // link to the containing dir
-	CDir *condir = cache->get_dirfrag( m->get_containing_dirfrag(in->ino()) );
-	assert(condir);
-	cache->add_inode( in );
-        condir->add_primary_dentry( m->get_dentry(in->ino()), in );
-        
-        dout(7) << "   added " << *in << dendl;
-      }
-      
-      assert( in->get_parent_dir()->dirfrag() == m->get_containing_dirfrag(in->ino()) );
-      
-      // dirs
-      for (list<frag_t>::iterator pf = m->get_inode_dirfrags(in->ino()).begin();
-	   pf != m->get_inode_dirfrags(in->ino()).end();
-	   ++pf) {
-	// add/update
-	cache->add_replica_dir(in, *pf, *m->get_dirfrag_discover(dirfrag_t(in->ino(), *pf)),
-			       oldauth, finished);
+    // each trace is: df dentry inode (dir dentry inode)*
+    for (list<bufferlist>::iterator p = m->traces.begin();
+	 p != m->traces.end();
+	 p++) {
+      bufferlist::iterator q = p->begin();
+      dirfrag_t df;
+      ::decode(df, q);
+      dout(10) << " trace from " << df << dendl;
+      CDir *cur = cache->get_dirfrag(df);
+      assert(cur);
+      dout(10) << "  had " << *cur << dendl;
+      while (1) {
+	CDentry *dn = cache->add_replica_dentry(q, cur, finished);
+	dout(10) << "  added " << *dn << dendl;
+	CInode *in = cache->add_replica_inode(q, dn, finished);
+	dout(10) << "  added " << *in << dendl;
+	if (q.end()) break;
+	cur = cache->add_replica_dir(q, in, oldauth, finished);
+	dout(10) << "  added " << *cur << dendl;
       }
     }
 
@@ -1959,7 +1948,7 @@ void Migrator::import_finish(CDir *dir)
   mds->mdcache->maybe_send_pending_resolves();
 
   // is it empty?
-  if (dir->get_size() == 0 &&
+  if (dir->get_num_head_items() == 0 &&
       !dir->inode->is_auth()) {
     // reexport!
     export_empty_import(dir);
@@ -1975,12 +1964,14 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   dout(15) << "decode_import_inode on " << *dn << dendl;
 
   inodeno_t ino;
+  snapid_t last;
   ::decode(ino, blp);
-  
+  ::decode(last, blp);
+
   bool added = false;
-  CInode *in = cache->get_inode(ino);
+  CInode *in = cache->get_inode(ino, last);
   if (!in) {
-    in = new CInode(mds->mdcache);
+    in = new CInode(mds->mdcache, true, 1, last);
     added = true;
   } else {
     in->state_set(CInode::STATE_AUTH);
@@ -2047,18 +2038,12 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 
     Capability *cap = in->get_client_cap(it->first);
     if (!cap) {
-      cap = in->add_client_cap(it->first, in);
+      cap = in->add_client_cap(it->first);
       session->touch_cap(cap);
     }
     cap->merge(it->second);
 
-    MClientFileCaps *caps = new MClientFileCaps(CEPH_CAP_OP_IMPORT,
-						in->inode,
-						cap->get_last_seq(),
-						cap->pending(),
-						cap->wanted(),
-						cap->get_mseq());
-    mds->send_message_client(caps, session->inst);
+    mds->mdcache->do_cap_import(session, in, cap);
   }
 
   in->put(CInode::PIN_IMPORTINGCAPS);
@@ -2126,11 +2111,13 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     // dentry
     string dname;
+    snapid_t last;
     ::decode(dname, blp);
+    ::decode(last, blp);
     
-    CDentry *dn = dir->lookup(dname);
+    CDentry *dn = dir->lookup(dname, last);
     if (!dn)
-      dn = dir->add_null_dentry(dname);
+      dn = dir->add_null_dentry(dname, 1, last);
     
     dn->decode_import(blp, ls);
 

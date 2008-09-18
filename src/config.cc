@@ -292,6 +292,7 @@ md_config_t g_conf = {
   client_readahead_min: 128*1024,  // readahead at _least_ this much.
   client_readahead_max_bytes: 0,//8 * 1024*1024,
   client_readahead_max_periods: 4,  // as multiple of file layout period (object size * num stripes)
+  client_snapdir: ".snap",
   fuse_direct_io: 0,
   fuse_ll: true,
   
@@ -335,7 +336,7 @@ md_config_t g_conf = {
 
   mds_tick_interval: 5,
 
-  mds_scatter_nudge_interval: 15,  // how quickly dirstat changes propagate up the hierarchy
+  mds_scatter_nudge_interval: 5,  // how quickly dirstat changes propagate up the hierarchy
 
   mds_log: true,
   mds_log_max_events: -1,
@@ -435,7 +436,7 @@ md_config_t g_conf = {
 
   // --- ebofs ---
   ebofs: false,
-  ebofs_cloneable: false,
+  ebofs_cloneable: true,
   ebofs_verify: false,
   ebofs_commit_ms:      200,       // 0 = no forced commit timeout (for debugging/tracing)
   ebofs_oc_size:        10000,      // onode cache
@@ -449,7 +450,7 @@ md_config_t g_conf = {
   // journal
   journal_dio: false,
   journal_max_write_bytes: 0,
-  journal_max_write_entries: 10,
+  journal_max_write_entries: 100,
 
   // --- block device ---
   bdev_lock: true,

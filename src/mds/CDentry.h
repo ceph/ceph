@@ -37,7 +37,6 @@ class CDir;
 class MDRequest;
 
 class Message;
-class CDentryDiscover;
 class Anchor;
 
 class CDentry;
@@ -68,7 +67,7 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // -- wait --
   static const int WAIT_LOCK_OFFSET = 8;
 
-  void add_waiter(int tag, Context *c);
+  void add_waiter(__u64 tag, Context *c);
 
   static const int EXPORT_NONCE = 1;
 
@@ -76,9 +75,15 @@ class CDentry : public MDSCacheObject, public LRUObject {
     return *this < *(CDentry*)r;
   }
 
- protected:
+public:
   nstring name;
+  snapid_t first, last;
 
+  dentry_key_t key() { 
+    return dentry_key_t(last, name.c_str()); 
+  }
+
+protected:
   inodeno_t remote_ino;      // if remote dentry
   unsigned char remote_d_type;
 
@@ -89,8 +94,6 @@ class CDentry : public MDSCacheObject, public LRUObject {
   version_t projected_version;  // what it will be when i unlock/commit.
 
   xlist<CDentry*>::item xlist_dirty;
-
-  loff_t dir_offset;   
 
   int auth_pins, nested_auth_pins;
 #ifdef MDS_AUTHPIN_SET
@@ -113,33 +116,26 @@ public:
   SimpleLock lock;
 
 
-
  public:
   // cons
-  CDentry() :
+  CDentry(const nstring& n, 
+	  snapid_t f, snapid_t l) :
+    name(n),
+    first(f), last(l),
     remote_ino(0), remote_d_type(0),
     inode(0), dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
-    dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const nstring& n, CInode *in) :
+  CDentry(const nstring& n, inodeno_t ino, unsigned char dt,
+	  snapid_t f, snapid_t l) :
     name(n),
-    remote_ino(0), remote_d_type(0),
-    inode(in), dir(0),
-    version(0), projected_version(0),
-    xlist_dirty(this),
-    dir_offset(0),
-    auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
-  CDentry(const nstring& n, inodeno_t ino, unsigned char dt, CInode *in=0) :
-    name(n),
+    first(f), last(l),
     remote_ino(ino), remote_d_type(dt),
-    inode(in), dir(0),
+    inode(0), dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
-    dir_offset(0),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
 
@@ -147,10 +143,6 @@ public:
   CDir *get_dir() const { return dir; }
   const nstring& get_name() const { return name; }
   inodeno_t get_ino();
-
-  loff_t get_dir_offset() { return dir_offset; }
-  void set_dir_offset(loff_t o) { dir_offset = o; }
-  void clear_dir_offset() { dir_offset = 0; }
 
   inodeno_t get_remote_ino() { return remote_ino; }
   unsigned char get_remote_d_type() { return remote_d_type; }
@@ -212,13 +204,22 @@ public:
   bool is_new() { return state_test(STATE_NEW); }
   
   // -- replication
-  CDentryDiscover *replicate_to(int rep);
-
+  void encode_replica(int mds, bufferlist& bl) {
+    __u32 nonce = add_replica(mds);
+    ::encode(nonce, bl);
+    ::encode(first, bl);
+    ::encode(remote_ino, bl);
+    ::encode(remote_d_type, bl);
+    __s32 ls = lock.get_replica_state();
+    ::encode(ls, bl);
+  }
+  void decode_replica(bufferlist::iterator& p, bool is_new);
 
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export(bufferlist& bl) {
+    ::encode(first, bl);
     ::encode(state, bl);
     ::encode(version, bl);
     ::encode(projected_version, bl);
@@ -239,7 +240,8 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
-    int nstate;
+    ::decode(first, blp);
+    __u32 nstate;
     ::decode(nstate, blp);
     ::decode(version, blp);
     ::decode(projected_version, blp);
@@ -272,59 +274,6 @@ public:
 };
 
 ostream& operator<<(ostream& out, CDentry& dn);
-
-
-
-class CDentryDiscover {
-  nstring dname;
-  __s32  replica_nonce;
-  __s32  lockstate;
-  __s64  dir_offset;
-  inodeno_t remote_ino;
-  unsigned char remote_d_type;
-
-public:
-  CDentryDiscover() {}
-  CDentryDiscover(CDentry *dn, int nonce) :
-    dname(dn->get_name()), replica_nonce(nonce),
-    lockstate(dn->lock.get_replica_state()),
-    dir_offset(dn->get_dir_offset()),
-    remote_ino(dn->get_remote_ino()), remote_d_type(dn->get_remote_d_type()) { }
-  CDentryDiscover(bufferlist::iterator &p) { decode(p); }
-
-  nstring& get_dname() { return dname; }
-  int get_nonce() { return replica_nonce; }
-  bool is_remote() { return remote_ino ? true:false; }
-  inodeno_t get_remote_ino() { return remote_ino; }
-  unsigned char get_remote_d_type() { return remote_d_type; }
-
-  void update_dentry(CDentry *dn) {
-    dn->set_dir_offset(dir_offset);
-    dn->set_replica_nonce(replica_nonce);
-  }
-  void init_dentry_lock(CDentry *dn) {
-    dn->lock.set_state( lockstate );
-  }
-
-  void encode(bufferlist &bl) const {
-    ::encode(dname, bl);
-    ::encode(dir_offset, bl);
-    ::encode(remote_ino, bl);
-    ::encode(remote_d_type, bl);
-    ::encode(replica_nonce, bl);
-    ::encode(lockstate, bl);
-  }
-  
-  void decode(bufferlist::iterator &bl) {
-    ::decode(dname, bl);
-    ::decode(dir_offset, bl);
-    ::decode(remote_ino, bl);
-    ::decode(remote_d_type, bl);
-    ::decode(replica_nonce, bl);
-    ::decode(lockstate, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CDentryDiscover)
 
 
 #endif

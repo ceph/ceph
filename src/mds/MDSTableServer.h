@@ -1,0 +1,103 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+#ifndef __MDSTABLESERVER_H
+#define __MDSTABLESERVER_H
+
+#include "MDSTable.h"
+
+class MMDSTableRequest;
+
+class MDSTableServer : public MDSTable {
+public:
+  int table;
+
+  /* mds's requesting any pending ops.  child needs to encodig the corresponding
+   * pending mutation state in the table.
+   */
+  struct _pending {
+    __u64 reqid;
+    __s32 mds;
+    version_t tid;
+    void encode(bufferlist& bl) const {
+      ::encode(reqid, bl);
+      ::encode(mds, bl);
+      ::encode(tid, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(reqid, bl);
+      ::decode(mds, bl);
+      ::decode(tid, bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(_pending)
+  map<version_t,_pending> pending_for_mds;  // ** child should encode this! **
+
+
+private:
+  void handle_prepare(MMDSTableRequest *m);
+  void _prepare_logged(MMDSTableRequest *m, version_t tid);
+  struct C_Prepare : public Context {
+    MDSTableServer *server;
+    MMDSTableRequest *req;
+    version_t tid;
+    C_Prepare(MDSTableServer *s, MMDSTableRequest *r, version_t v) : server(s), req(r), tid(v) {}
+    void finish(int r) {
+      server->_prepare_logged(req, tid);
+    }
+  };
+
+  void handle_commit(MMDSTableRequest *m);
+  void _commit_logged(MMDSTableRequest *m);
+  struct C_Commit : public Context {
+    MDSTableServer *server;
+    MMDSTableRequest *req;
+    C_Commit(MDSTableServer *s, MMDSTableRequest *r) : server(s), req(r) {}
+    void finish(int r) {
+      server->_commit_logged(req);
+    }
+  };
+
+  void handle_rollback(MMDSTableRequest *m);
+
+ public:
+  virtual void handle_query(MMDSTableRequest *m) = 0;
+  virtual void _prepare(bufferlist &bl, __u64 reqid, int bymds) = 0;
+  virtual void _commit(version_t tid) = 0;
+  virtual void _rollback(version_t tid) = 0;
+
+  MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab)), table(tab) {}
+  virtual ~MDSTableServer() {}
+
+  void handle_request(MMDSTableRequest *m);
+
+  virtual void encode_server_state(bufferlist& bl) = 0;
+  virtual void decode_server_state(bufferlist::iterator& bl) = 0;
+
+  void encode_state(bufferlist& bl) {
+    encode_server_state(bl);
+    ::encode(pending_for_mds, bl);
+  }
+  void decode_state(bufferlist::iterator& bl) {
+    decode_server_state(bl);
+    ::decode(pending_for_mds, bl);
+  }
+
+  // recovery
+  void finish_recovery();
+  void handle_mds_recovery(int who);
+};
+WRITE_CLASS_ENCODER(MDSTableServer::_pending)
+
+#endif

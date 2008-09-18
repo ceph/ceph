@@ -32,8 +32,9 @@
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
 
-#include "events/EAnchor.h"
-#include "events/EAnchorClient.h"
+#include "events/ETableClient.h"
+#include "events/ETableServer.h"
+
 
 #include "LogSegment.h"
 
@@ -42,9 +43,11 @@
 #include "MDCache.h"
 #include "Server.h"
 #include "Migrator.h"
-#include "AnchorTable.h"
-#include "AnchorClient.h"
-#include "IdAllocator.h"
+
+#include "InoTable.h"
+#include "MDSTableClient.h"
+#include "MDSTableServer.h"
+
 #include "Locker.h"
 
 
@@ -137,6 +140,12 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     if (!gather) gather = new C_Gather;
     mds->locker->scatter_nudge(&in->dirfragtreelock, gather->new_sub());
   }
+  for (xlist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->locker->scatter_nudge(&in->nestlock, gather->new_sub());
+  }
 
   // open files
   if (!open_files.empty()) {
@@ -167,13 +176,13 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // idalloc
-  if (allocv > mds->idalloc->get_committed_version()) {
-    dout(10) << "try_to_expire saving idalloc table, need " << allocv
-	      << ", committed is " << mds->idalloc->get_committed_version()
-	      << " (" << mds->idalloc->get_committing_version() << ")"
+  if (inotablev > mds->inotable->get_committed_version()) {
+    dout(10) << "try_to_expire saving inotable table, need " << inotablev
+	      << ", committed is " << mds->inotable->get_committed_version()
+	      << " (" << mds->inotable->get_committing_version() << ")"
 	      << dendl;
     if (!gather) gather = new C_Gather;
-    mds->idalloc->save(gather->new_sub(), allocv);
+    mds->inotable->save(gather->new_sub(), inotablev);
   }
 
   // sessionmap
@@ -187,21 +196,32 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // pending commit atids
-  for (hash_set<version_t>::iterator p = pending_commit_atids.begin();
-       p != pending_commit_atids.end();
+  for (map<int, hash_set<version_t> >::iterator p = pending_commit_tids.begin();
+       p != pending_commit_tids.end();
        ++p) {
-    if (!gather) gather = new C_Gather;
-    assert(!mds->anchorclient->has_committed(*p));
-    dout(10) << "try_to_expire anchor transaction " << *p 
-	     << " pending commit (not yet acked), waiting" << dendl;
-    mds->anchorclient->wait_for_ack(*p, gather->new_sub());
+    MDSTableClient *client = mds->get_table_client(p->first);
+    for (hash_set<version_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      if (!gather) gather = new C_Gather;
+      assert(!client->has_committed(*q));
+      dout(10) << "try_to_expire " << get_mdstable_name(p->first) << " transaction " << *q 
+	       << " pending commit (not yet acked), waiting" << dendl;
+      client->wait_for_ack(*q, gather->new_sub());
+    }
   }
   
-  // anchortable
-  if (anchortablev > mds->anchortable->get_committed_version()) {
-    dout(10) << "try_to_expire waiting for anchor table to save, need " << anchortablev << dendl;
-    if (!gather) gather = new C_Gather;
-    mds->anchortable->save(gather->new_sub());
+  // table servers
+  for (map<int, version_t>::iterator p = tablev.begin();
+       p != tablev.end();
+       p++) {
+    MDSTableServer *server = mds->get_table_server(p->first);
+    if (p->second > server->get_committed_version()) {
+      dout(10) << "try_to_expire waiting for " << get_mdstable_name(p->first) 
+	       << " to save, need " << p->second << dendl;
+      if (!gather) gather = new C_Gather;
+      server->save(gather->new_sub());
+    }
   }
 
   // FIXME client requests...?
@@ -271,7 +291,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
   // alloc table update?
   if (!allocated_inos.empty())
-    ls->allocv = alloc_tablev;
+    ls->inotablev = inotablev;
 
   // truncated inodes
   // -> handled directly by Server.cc
@@ -338,24 +358,34 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<fullbit>::iterator p = lump.get_dfull().begin();
 	 p != lump.get_dfull().end();
 	 p++) {
-      CDentry *dn = dir->lookup(p->dn);
+      CDentry *dn = dir->lookup(p->dn, p->dnlast);
       if (!dn) {
-	dn = dir->add_null_dentry(p->dn);
+	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
+	dn->first = p->dnfirst;
+	assert(dn->last == p->dnlast);
       }
 
-      CInode *in = mds->mdcache->get_inode(p->inode.ino);
+      CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
-	in = new CInode(mds->mdcache);
+	in = new CInode(mds->mdcache, true, p->dnfirst, p->dnlast);
 	in->inode = p->inode;
-	in->dirfragtree = p->dirfragtree;
 	in->xattrs = p->xattrs;
+	if (in->inode.is_dir()) {
+	  in->dirfragtree = p->dirfragtree;
+	  /*
+	   * we can do this before linking hte inode bc the split_at would
+	   * be a no-op.. we have no children (namely open snaprealms) to
+	   * divy up 
+	   */
+	  in->decode_snap_blob(p->snapbl);  
+	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
 	if (!dn->is_null()) {
@@ -378,8 +408,11 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
 	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
 	in->inode = p->inode;
-	in->dirfragtree = p->dirfragtree;
 	in->xattrs = p->xattrs;
+	if (in->inode.is_dir()) {
+	  in->dirfragtree = p->dirfragtree;
+	  in->decode_snap_blob(p->snapbl);
+	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_inode() != in) {
@@ -388,8 +421,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
 	} else {
-	  dout(10) << "EMetaBlob.replay had " << *in << dendl;
+	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
+   	in->first = p->dnfirst;
       }
     }
 
@@ -397,9 +431,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<remotebit>::iterator p = lump.get_dremote().begin();
 	 p != lump.get_dremote().end();
 	 p++) {
-      CDentry *dn = dir->lookup(p->dn);
+      CDentry *dn = dir->lookup(p->dn, p->dnlast);
       if (!dn) {
-	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type);
+	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
@@ -411,7 +445,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
+	dn->first = p->dnfirst;
+	assert(dn->last == p->dnlast);
       }
     }
 
@@ -419,13 +455,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<nullbit>::iterator p = lump.get_dnull().begin();
 	 p != lump.get_dnull().end();
 	 p++) {
-      CDentry *dn = dir->lookup(p->dn);
+      CDentry *dn = dir->lookup(p->dn, p->dnfirst);
       if (!dn) {
-	dn = dir->add_null_dentry(p->dn);
+	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
+	dn->first = p->dnfirst;
 	if (!dn->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
@@ -433,35 +470,39 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay had " << *dn << dendl;
+	assert(dn->last == p->dnlast);
       }
     }
   }
 
-  // anchor transactions
-  for (list<version_t>::iterator p = atids.begin();
-       p != atids.end();
+  // table client transactions
+  for (list<pair<__u8,version_t> >::iterator p = table_tids.begin();
+       p != table_tids.end();
        ++p) {
-    dout(10) << "EMetaBlob.replay noting anchor transaction " << *p << dendl;
-    mds->anchorclient->got_journaled_agree(*p, logseg);
+    dout(10) << "EMetaBlob.replay noting " << get_mdstable_name(p->first)
+	     << " transaction " << p->second << dendl;
+    MDSTableClient *client = mds->get_table_client(p->first);
+    client->got_journaled_agree(p->second, logseg);
+    logseg->pending_commit_tids[p->first].insert(p->second);
   }
 
   // allocated_inos
   if (!allocated_inos.empty()) {
-    if (mds->idalloc->get_version() >= alloc_tablev) {
-      dout(10) << "EMetaBlob.replay idalloc tablev " << alloc_tablev
-	       << " <= table " << mds->idalloc->get_version() << dendl;
+    if (mds->inotable->get_version() >= inotablev) {
+      dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
+	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
       for (list<inodeno_t>::iterator p = allocated_inos.begin();
 	   p != allocated_inos.end();
 	   ++p) {
-	dout(10) << " EMetaBlob.replay idalloc " << *p << " tablev " << alloc_tablev
-		 << " - 1 == table " << mds->idalloc->get_version() << dendl;
-	assert(alloc_tablev-1 == mds->idalloc->get_version());
+	dout(10) << " EMetaBlob.replay inotable " << *p << " tablev " << inotablev
+		 << " - 1 == table " << mds->inotable->get_version() << dendl;
+	assert(inotablev-1 == mds->inotable->get_version());
 	
-	inodeno_t ino = mds->idalloc->alloc_id();
+	inodeno_t ino = mds->inotable->alloc_id();
 	assert(ino == *p);       // this should match.
       }	
-      assert(alloc_tablev == mds->idalloc->get_version());
+      assert(inotablev == mds->inotable->get_version());
     }
   }
 
@@ -547,64 +588,87 @@ void ESessions::replay(MDS *mds)
 
 
 
-// -----------------------
-// EAnchor
 
-void EAnchor::update_segment()
+void ETableServer::update_segment()
 {
-  _segment->anchortablev = version;
+  _segment->tablev[table] = version;
 }
 
-void EAnchor::replay(MDS *mds)
+void ETableServer::replay(MDS *mds)
 {
-  if (mds->anchortable->get_version() >= version) {
-    dout(10) << "EAnchor.replay event " << version
-	     << " <= table " << mds->anchortable->get_version() << dendl;
-  } else {
-    dout(10) << " EAnchor.replay event " << version
-	     << " - 1 == table " << mds->anchortable->get_version() << dendl;
-    assert(version-1 == mds->anchortable->get_version());
-    
-    switch (op) {
-      // anchortable
-    case ANCHOR_OP_CREATE_PREPARE:
-      mds->anchortable->create_prepare(ino, trace, reqmds);
-      break;
-    case ANCHOR_OP_DESTROY_PREPARE:
-      mds->anchortable->destroy_prepare(ino, reqmds);
-      break;
-    case ANCHOR_OP_UPDATE_PREPARE:
-      mds->anchortable->update_prepare(ino, trace, reqmds);
-      break;
-    case ANCHOR_OP_COMMIT:
-      mds->anchortable->commit(atid);
-      break;
-
-    default:
-      assert(0);
-    }
-    
-    assert(version == mds->anchortable->get_version());
+  MDSTableServer *server = mds->get_table_server(table);
+  if (server->get_version() >= version) {
+    dout(10) << "ETableServer.replay " << get_mdstable_name(table)
+	     << " " << get_mdstableserver_opname(op)
+	     << " event " << version
+	     << " <= table " << server->get_version() << dendl;
+    return;
   }
-}
-
-
-// EAnchorClient
-
-void EAnchorClient::replay(MDS *mds)
-{
-  dout(10) << " EAnchorClient.replay op " << op << " atid " << atid << dendl;
-    
+  
+  dout(10) << " ETableServer.replay " << get_mdstable_name(table)
+	   << " " << get_mdstableserver_opname(op)
+	   << " event " << version << " - 1 == table " << server->get_version() << dendl;
+  assert(version-1 == server->get_version());
+  
   switch (op) {
-    // anchorclient
-  case ANCHOR_OP_ACK:
-    mds->anchorclient->got_journaled_ack(atid);
+  case TABLESERVER_OP_PREPARE:
+    server->_prepare(mutation, reqid, bymds);
     break;
-    
+  case TABLESERVER_OP_COMMIT:
+    server->_commit(tid);
+    break;
   default:
     assert(0);
   }
+  
+  assert(version == server->get_version());
 }
+
+
+void ETableClient::replay(MDS *mds)
+{
+  dout(10) << " ETableClient.replay " << get_mdstable_name(table)
+	   << " op " << get_mdstableserver_opname(op)
+	   << " tid " << tid << dendl;
+    
+  MDSTableClient *client = mds->get_table_client(table);
+  assert(op == TABLESERVER_OP_ACK);
+  client->got_journaled_ack(tid);
+}
+
+
+// -----------------------
+// ESnap
+/*
+void ESnap::update_segment()
+{
+  _segment->tablev[TABLE_SNAP] = version;
+}
+
+void ESnap::replay(MDS *mds)
+{
+  if (mds->snaptable->get_version() >= version) {
+    dout(10) << "ESnap.replay event " << version
+	     << " <= table " << mds->snaptable->get_version() << dendl;
+    return;
+  } 
+  
+  dout(10) << " ESnap.replay event " << version
+	   << " - 1 == table " << mds->snaptable->get_version() << dendl;
+  assert(version-1 == mds->snaptable->get_version());
+
+  if (create) {
+    version_t v;
+    snapid_t s = mds->snaptable->create(snap.dirino, snap.name, snap.stamp, &v);
+    assert(s == snap.snapid);
+  } else {
+    mds->snaptable->remove(snap.snapid);
+  }
+
+  assert(version == mds->snaptable->get_version());
+}
+*/
+
 
 
 // -----------------------
@@ -739,7 +803,7 @@ void ESubtreeMap::replay(MDS *mds)
   metablob.replay(mds, _segment);
   
   // restore import/export maps
-  for (map<dirfrag_t, list<dirfrag_t> >::iterator p = subtrees.begin();
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
@@ -822,6 +886,11 @@ void EExport::replay(MDS *mds)
 // -----------------------
 // EImportStart
 
+void EImportStart::update_segment()
+{
+  _segment->sessionmapv = cmapv;
+}
+
 void EImportStart::replay(MDS *mds)
 {
   dout(10) << "EImportStart.replay " << base << dendl;
@@ -845,6 +914,7 @@ void EImportStart::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;
   }
+  _segment->sessionmapv = cmapv;
 }
 
 // -----------------------

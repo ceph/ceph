@@ -25,17 +25,17 @@
 
 class MOSDPGNotify : public Message {
   epoch_t      epoch;
-  list<PG::Info> pg_list;   // pgid -> version
+  vector<PG::Info> pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() { return epoch; }
-  list<PG::Info>& get_pg_list() { return pg_list; }
+  vector<PG::Info>& get_pg_list() { return pg_list; }
 
   MOSDPGNotify() {}
-  MOSDPGNotify(epoch_t e, list<PG::Info>& l) :
+  MOSDPGNotify(epoch_t e, vector<PG::Info>& l) :
     Message(MSG_OSD_PG_NOTIFY) {
     this->epoch = e;
-    pg_list.splice(pg_list.begin(),l);
+    pg_list.swap(l);
   }
   
   const char *get_type_name() { return "PGnot"; }

@@ -274,6 +274,20 @@ inline void decode(std::vector<T>& v, bufferlist::iterator& p)
     decode(v[i], p);
 }
 
+template<class T>
+inline void encode_nohead(const std::vector<T>& v, bufferlist& bl)
+{
+  for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
+{
+  v.resize(len);
+  for (__u32 i=0; i<v.size(); i++) 
+    decode(v[i], p);
+}
+
 // map (pointers)
 template<class T, class U>
 inline void encode(const std::map<T,U*>& m, bufferlist& bl)
@@ -319,6 +333,33 @@ inline void decode(std::map<T,U>& m, bufferlist::iterator& p)
     T k;
     decode(k, p);
     decode(m[k], p);
+  }
+}
+
+// multimap
+template<class T, class U>
+inline void encode(const std::multimap<T,U>& m, bufferlist& bl)
+{
+  __u32 n = m.size();
+  encode(n, bl);
+  for (typename std::multimap<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl);
+    encode(p->second, bl);
+  }
+}
+template<class T, class U>
+inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    typename std::multimap<T,U>::iterator it;
+    U u;
+    it = m.insert(std::pair<T,U>(k, u));
+    decode(it->second, p);
   }
 }
 
@@ -415,6 +456,16 @@ inline void decode(bufferlist& s, bufferlist::iterator& p)
 {
   __u32 len;
   decode(len, p);
+  s.clear();
+  p.copy(len, s);
+}
+
+inline void encode_nohead(const bufferlist& s, bufferlist& bl) 
+{
+  bl.append(s);
+}
+inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
+{
   s.clear();
   p.copy(len, s);
 }

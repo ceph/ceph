@@ -30,6 +30,44 @@
 
 static Client *client;
 
+Mutex stag_lock;
+int last_stag = 0;
+hash_map<__u64,int> snap_stag_map;
+hash_map<int,__u64> stag_snap_map;
+
+#define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
+#define FINO_STAG(x) ((x) >> 48)
+#define MAKE_FINO(i,s) ((i) | ((s) << 48))
+
+static __u64 fino_snap(__u64 fino)
+{
+  Mutex::Locker l(stag_lock);
+  __u64 stag = FINO_STAG(fino);
+  assert(stag_snap_map.count(stag));
+  return stag_snap_map[stag];
+}
+static vinodeno_t fino_vino(inodeno_t fino)
+{
+  vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
+  //cout << "fino_vino " << fino << " -> " << vino << std::endl;
+  return vino;
+}
+
+
+static __u64 make_fake_ino(inodeno_t ino, snapid_t snapid)
+{
+  Mutex::Locker l(stag_lock);
+  __u64 stag;
+  if (snap_stag_map.count(snapid) == 0) {
+    stag = ++last_stag;
+    snap_stag_map[snapid] = stag;
+    stag_snap_map[stag] = snapid;
+  } else 
+    stag = snap_stag_map[snapid];
+  inodeno_t fino = MAKE_FINO(ino, stag);
+  //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;
+  return fino;
+}
 
 static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
@@ -38,9 +76,9 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   int stmask;
 
   memset(&fe, 0, sizeof(fe));
-  stmask = client->ll_lookup(parent, name, &fe.attr, ctx->uid, ctx->gid);
+  stmask = client->ll_lookup(fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
   if (stmask >= 0) {
-    fe.ino = fe.attr.st_ino;
+    fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, ENOENT);
@@ -49,7 +87,7 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 static void ceph_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 {
-  client->ll_forget(ino, nlookup);
+  client->ll_forget(fino_vino(ino), nlookup);
   fuse_reply_none(req);
 }
 
@@ -61,9 +99,10 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   
   (void) fi;
 
-  if (client->ll_getattr(ino, &stbuf, ctx->uid, ctx->gid) == 0) 
+  if (client->ll_getattr(fino_vino(ino), &stbuf, ctx->uid, ctx->gid) == 0) {
+    stbuf.st_ino = make_fake_ino(stbuf.st_ino, stbuf.st_dev);
     fuse_reply_attr(req, &stbuf, 0);
-  else
+  } else
     fuse_reply_err(req, ENOENT);
 }
 
@@ -71,7 +110,7 @@ static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 			    int to_set, struct fuse_file_info *fi)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_setattr(ino, attr, to_set, ctx->uid, ctx->gid);
+  int r = client->ll_setattr(fino_vino(ino), attr, to_set, ctx->uid, ctx->gid);
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
   else
@@ -84,7 +123,7 @@ static void ceph_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 			     const char *value, size_t size, int flags)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_setxattr(ino, name, value, size, flags, ctx->uid, ctx->gid);
+  int r = client->ll_setxattr(fino_vino(ino), name, value, size, flags, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
@@ -92,7 +131,7 @@ static void ceph_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char buf[size];
-  int r = client->ll_listxattr(ino, buf, size, ctx->uid, ctx->gid);
+  int r = client->ll_listxattr(fino_vino(ino), buf, size, ctx->uid, ctx->gid);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0) 
@@ -106,7 +145,7 @@ static void ceph_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char buf[size];
-  int r = client->ll_getxattr(ino, name, buf, size, ctx->uid, ctx->gid);
+  int r = client->ll_getxattr(fino_vino(ino), name, buf, size, ctx->uid, ctx->gid);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0)
@@ -118,7 +157,7 @@ static void ceph_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 static void ceph_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_removexattr(ino, name, ctx->uid, ctx->gid);
+  int r = client->ll_removexattr(fino_vino(ino), name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
@@ -128,7 +167,7 @@ static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   void *dirp;
-  int r = client->ll_opendir(ino, &dirp, ctx->uid, ctx->gid);
+  int r = client->ll_opendir(fino_vino(ino), &dirp, ctx->uid, ctx->gid);
   if (r >= 0) {
     fi->fh = (long)dirp;
     fuse_reply_open(req, fi);
@@ -141,7 +180,7 @@ static void ceph_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   const char *value;
-  int r = client->ll_readlink(ino, &value, ctx->uid, ctx->gid);
+  int r = client->ll_readlink(fino_vino(ino), &value, ctx->uid, ctx->gid);
   if (r == 0) 
     fuse_reply_readlink(req, value);
   else
@@ -155,9 +194,9 @@ static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_mknod(parent, name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
+  int r = client->ll_mknod(fino_vino(parent), name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
-    fe.ino = fe.attr.st_ino;
+    fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -171,9 +210,9 @@ static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_mkdir(parent, name, mode, &fe.attr, ctx->uid, ctx->gid);
+  int r = client->ll_mkdir(fino_vino(parent), name, mode, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
-    fe.ino = fe.attr.st_ino;
+    fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -183,14 +222,14 @@ static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void ceph_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_unlink(parent, name, ctx->uid, ctx->gid);
+  int r = client->ll_unlink(fino_vino(parent), name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
 static void ceph_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_rmdir(parent, name, ctx->uid, ctx->gid);
+  int r = client->ll_rmdir(fino_vino(parent), name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
@@ -200,9 +239,9 @@ static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t par
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
-  int r = client->ll_symlink(parent, name, existing, &fe.attr, ctx->uid, ctx->gid);
+  int r = client->ll_symlink(fino_vino(parent), name, existing, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
-    fe.ino = fe.attr.st_ino;
+    fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -213,7 +252,7 @@ static void ceph_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   fuse_ino_t newparent, const char *newname)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_rename(parent, name, newparent, newname, ctx->uid, ctx->gid);
+  int r = client->ll_rename(fino_vino(parent), name, fino_vino(newparent), newname, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
 
@@ -224,9 +263,9 @@ static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
   
-  int r = client->ll_link(ino, newparent, newname, &fe.attr, ctx->uid, ctx->gid);
+  int r = client->ll_link(fino_vino(ino), fino_vino(newparent), newname, &fe.attr, ctx->uid, ctx->gid);
   if (r == 0) {
-    fe.ino = fe.attr.st_ino;
+    fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
@@ -237,7 +276,7 @@ static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Fh *fh;
-  int r = client->ll_open(ino, fi->flags, &fh, ctx->uid, ctx->gid);
+  int r = client->ll_open(fino_vino(ino), fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
     fuse_reply_open(req, fi);
@@ -312,10 +351,12 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   struct stat st;
   memset(&st, 0, sizeof(st));
 
+  __u64 snap = fino_snap(ino);
+
   while (1) {
     int r = client->readdir_r(dirp, &de);
     if (r < 0) break;
-    st.st_ino = de.d_ino;
+    st.st_ino = make_fake_ino(de.d_ino, snap);
     st.st_mode = DT_TO_MODE(de.d_type);
 
     off_t off = client->telldir(dirp);
@@ -353,10 +394,10 @@ static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
   Fh *fh;
-  int r = client->ll_create(parent, name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
+  int r = client->ll_create(fino_vino(parent), name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
-    fe.ino = fe.attr.st_ino;
+    fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_create(req, &fe, fi);
   } else {
     fuse_reply_err(req, -r);
@@ -366,7 +407,7 @@ static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
   struct statvfs stbuf;
-  int r = client->ll_statfs(ino, &stbuf);
+  int r = client->ll_statfs(fino_vino(ino), &stbuf);
   if (r == 0)
     fuse_reply_statfs(req, &stbuf);
   else
@@ -416,6 +457,9 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
 
   client = c;
 
+  snap_stag_map[CEPH_NOSNAP] = 0;
+  stag_snap_map[0] = CEPH_NOSNAP;
+  
   // set up fuse argc/argv
   int newargc = 0;
   const char **newargv = (const char **) malloc((argc + 10) * sizeof(char *));
@@ -424,6 +468,8 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
 
   newargv[newargc++] = "-o";
   newargv[newargc++] = "allow_other";
+
+  newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++) newargv[newargc++] = argv[argctr];
 

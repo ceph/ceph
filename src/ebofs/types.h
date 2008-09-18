@@ -64,8 +64,6 @@ inline ostream& operator<<(ostream& out, const extent_t& ex)
 
 // objects
 
-typedef uint64_t coll_t;
-
 struct ebofs_onode {
   csum_t onode_csum;  // from after onode_csum to base + onode_bytes
   __u32 onode_bytes;    
@@ -152,6 +150,7 @@ struct ebofs_super {
   __u64 fsid;   /* _ebofs_ fsid, mind you, not ceph_fsid_t. */
 
   epoch_t epoch;             // version of this superblock.
+  __u64 op_seq;              // seq # of last operation we _did_ apply+commit to the store.
 
   uint64_t num_blocks;        /* # blocks in filesystem */
 

@@ -1794,9 +1794,10 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 		     IPQUADPORT(con->peer_addr.ipaddr), con);
 		set_bit(CLOSED, &con->state);  /* in case there's queued work */
 		__remove_connection(msgr, con);
-		put_connection(con);
 	}
 	spin_unlock(&msgr->con_lock);
+	if (con)
+		put_connection(con);
 }
 
 

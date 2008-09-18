@@ -44,13 +44,35 @@ inline void finish_contexts(std::list<Context*>& finished,
   using std::cout;
   using std::endl;
   
-  list<Context*> ls;
   if (finished.empty()) return;
 
+  list<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
   generic_dout(10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
+       it != ls.end(); 
+       it++) {
+    Context *c = *it;
+    generic_dout(10) << "---- " << c << dendl;
+    c->finish(result);
+    delete c;
+  }
+}
+
+inline void finish_contexts(std::vector<Context*>& finished, 
+                            int result = 0)
+{
+  using std::cout;
+  using std::endl;
+  
+  if (finished.empty()) return;
+
+  vector<Context*> ls;
+  ls.swap(finished); // swap out of place to avoid weird loops
+
+  generic_dout(10) << ls.size() << " contexts to finish with " << result << dendl;
+  for (std::vector<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
@@ -112,8 +134,14 @@ public:
   public:
     C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
     void finish(int r) {
-      if (gather->sub_finish(num))
+      if (gather->sub_finish(num)) {
 	delete gather;   // last one!
+	gather = 0;
+      }
+    }
+    ~C_GatherSub() {
+      if (gather)
+	gather->rm_sub(num);
     }
   };
 
@@ -139,6 +167,10 @@ public:
     num++;
     waitfor.insert(num);
     return new C_GatherSub(this, num);
+  }
+  void rm_sub(int n) {
+    num--;
+    waitfor.erase(n);
   }
 
   bool empty() { return num == 0; }

@@ -151,7 +151,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       bool b;
       // *** FIXME *** this may block, and we're in the fast path! ***
       if (g_conf.osd_balance_reads &&
-	  osd->store->getattr(info.pgid, poid, "balance-reads", &b, 1) >= 0)
+	  osd->store->getattr(info.pgid.to_coll(), poid, "balance-reads", &b, 1) >= 0)
 	is_balanced = true;
       
       if (!is_balanced && should_balance &&
@@ -328,13 +328,13 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   // -- fastpath read?
   // if this is a read and the data is in the cache, do an immediate read.. 
   if ( g_conf.osd_immediate_read_from_cache ) {
-    if (osd->store->is_cached( info.pgid, poid,
-			       op->get_offset(), 
-			       op->get_length() ) == 0) {
+    if (osd->store->is_cached(info.pgid.to_coll(), poid,
+			      op->get_offset(), 
+			      op->get_length()) == 0) {
       if (!is_primary() && !op->get_source().is_osd()) {
 	// am i allowed?
 	bool v;
-	if (osd->store->getattr(info.pgid, poid, "balance-reads", &v, 1) < 0) {
+	if (osd->store->getattr(info.pgid.to_coll(), poid, "balance-reads", &v, 1) < 0) {
 	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
 	  osd->messenger->forward_message(op, osd->osdmap->get_inst(get_primary()));
@@ -363,34 +363,10 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   osd->logger->inc("op");
 
-  switch (op->get_op()) {
-    
-    // reads
-  case CEPH_OSD_OP_READ:
-  case CEPH_OSD_OP_STAT:
+  if (ceph_osd_op_is_read(op->get_op()))
     op_read(op);
-    break;
-    
-    // writes
-  case CEPH_OSD_OP_WRNOOP:
-  case CEPH_OSD_OP_WRITE:
-  case CEPH_OSD_OP_ZERO:
-  case CEPH_OSD_OP_DELETE:
-  case CEPH_OSD_OP_TRUNCATE:
-  case CEPH_OSD_OP_WRLOCK:
-  case CEPH_OSD_OP_WRUNLOCK:
-  case CEPH_OSD_OP_RDLOCK:
-  case CEPH_OSD_OP_RDUNLOCK:
-  case CEPH_OSD_OP_UPLOCK:
-  case CEPH_OSD_OP_DNLOCK:
-  case CEPH_OSD_OP_BALANCEREADS:
-  case CEPH_OSD_OP_UNBALANCEREADS:
+  else
     op_modify(op);
-    break;
-    
-  default:
-    assert(0);
-  }
 }
 
 
@@ -400,8 +376,7 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
 
   osd->logger->inc("subop");
 
-  switch (op->get_op()) {
-    
+  switch (op->op) {
     // rep stuff
   case CEPH_OSD_OP_PULL:
     sub_op_pull(op);
@@ -409,26 +384,13 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
   case CEPH_OSD_OP_PUSH:
     sub_op_push(op);
     break;
-    
-    // writes
-  case CEPH_OSD_OP_WRNOOP:
-  case CEPH_OSD_OP_WRITE:
-  case CEPH_OSD_OP_ZERO:
-  case CEPH_OSD_OP_DELETE:
-  case CEPH_OSD_OP_TRUNCATE:
-  case CEPH_OSD_OP_WRLOCK:
-  case CEPH_OSD_OP_WRUNLOCK:
-  case CEPH_OSD_OP_RDLOCK:
-  case CEPH_OSD_OP_RDUNLOCK:
-  case CEPH_OSD_OP_UPLOCK:
-  case CEPH_OSD_OP_DNLOCK:
-  case CEPH_OSD_OP_BALANCEREADS:
-  case CEPH_OSD_OP_UNBALANCEREADS:
-    sub_op_modify(op);
-    break;
-    
+
   default:
-    assert(0);
+    if (ceph_osd_op_is_modify(op->op) ||
+	ceph_osd_op_is_lock(op->op))
+      sub_op_modify(op);
+    else
+      assert(0);
   }
 
 }
@@ -444,16 +406,220 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 }
 
 
+bool ReplicatedPG::snap_trimmer()
+{
+  lock();
+  dout(10) << "snap_trimmer start" << dendl;
+  
+  state_clear(PG_STATE_SNAPTRIMQUEUE);
+  state_set(PG_STATE_SNAPTRIMMING);
+  update_stats();
+
+  while (info.dead_snaps.size() &&
+	 is_active()) {
+    snapid_t sn = *info.dead_snaps.begin();
+    coll_t c = info.pgid.to_snap_coll(sn);
+    vector<pobject_t> ls;
+    osd->store->collection_list(c, ls);
+
+    dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
+
+    ObjectStore::Transaction t;
+
+    for (vector<pobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
+      pobject_t coid = *p;
+
+      // load clone snap list
+      bufferlist bl;
+      osd->store->getattr(info.pgid.to_coll(), coid, "snaps", bl);
+      bufferlist::iterator blp = bl.begin();
+      vector<snapid_t> snaps;
+      ::decode(snaps, blp);
+
+      // load head snapset	
+      pobject_t head = coid;
+      head.oid.snap = CEPH_NOSNAP;
+      bl.clear();
+      osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+      blp = bl.begin();
+      SnapSet snapset;
+      ::decode(snapset, blp);
+      dout(10) << coid << " old head " << head << " snapset " << snapset << dendl;
+
+      // remove snaps
+      vector<snapid_t> newsnaps;
+      for (unsigned i=0; i<snaps.size(); i++)
+	if (!osd->osdmap->is_removed_snap(snaps[i]))
+	  newsnaps.push_back(snaps[i]);
+	else {
+	  vector<snapid_t>::iterator q = snapset.snaps.begin();
+	  while (*q != snaps[i]) q++;  // it should be in there
+	  snapset.snaps.erase(q);
+	}
+      if (newsnaps.empty()) {
+	// remove clone
+	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
+	t.remove(info.pgid.to_coll(), coid);
+	t.collection_remove(info.pgid.to_snap_coll(snaps[0]), coid);
+	if (snaps.size() > 1)
+	  t.collection_remove(info.pgid.to_snap_coll(snaps[snaps.size()-1]), coid);
+	
+	// ...from snapset
+	snapid_t last = coid.oid.snap;
+	vector<snapid_t>::iterator p;
+	for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
+	  if (*p == last)
+	    break;
+	if (p == snapset.clones.begin()) {
+	  // newest clone.
+	  snapset.head_overlap.intersection_of(snapset.clone_overlap[last]);
+	} else  {
+	  // older clone
+	  vector<snapid_t>::iterator n = p;
+	  n++;
+	  if (n != snapset.clones.end())
+	    // not oldest clone.
+	    snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
+	}
+	snapset.clones.erase(p);
+	snapset.clone_overlap.erase(last);
+      } else {
+	// save adjusted snaps for this object
+	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
+	bl.clear();
+	::encode(newsnaps, bl);
+	t.setattr(info.pgid.to_coll(), coid, "snaps", bl);
+
+	if (snaps[0] != newsnaps[0]) {
+	  t.collection_remove(info.pgid.to_snap_coll(snaps[0]), coid);
+	  t.collection_add(info.pgid.to_snap_coll(newsnaps[0]), info.pgid.to_coll(), coid);
+	}
+	if (snaps.size() > 1 && snaps[snaps.size()-1] != newsnaps[newsnaps.size()-1]) {
+	  t.collection_remove(info.pgid.to_snap_coll(snaps[snaps.size()-1]), coid);
+	  if (newsnaps.size() > 1)
+	    t.collection_add(info.pgid.to_snap_coll(newsnaps[newsnaps.size()-1]), info.pgid.to_coll(), coid);
+	}	      
+      }
+
+      // save head snapset
+      dout(10) << coid << " new head " << head << " snapset " << snapset << dendl;
+      
+      if (snapset.clones.empty() && !snapset.head_exists) {
+	dout(10) << coid << " removing head " << head << dendl;
+	t.remove(info.pgid.to_coll(), head);
+      } else {
+	bl.clear();
+	::encode(snapset, bl);
+	t.setattr(info.pgid.to_coll(), head, "snapset", bl);
+      }
+
+      osd->store->apply_transaction(t);
+
+      // give other threads a chance at this pg
+      unlock();
+      lock();
+    }
+    
+    info.dead_snaps.erase(sn);
+  }  
+
+  // done
+  dout(10) << "snap_trimmer done" << dendl;
+  state_clear(PG_STATE_SNAPTRIMMING);
+  update_stats();
+
+  ObjectStore::Transaction t;
+  write_info(t);
+  osd->store->apply_transaction(t);
+  unlock();
+  return true;
+}
+
 
 // ========================================================================
 // READS
+
+
+/*
+ * return false if object doesn't (logically) exist
+ */
+bool ReplicatedPG::pick_read_snap(pobject_t& poid)
+{
+  pobject_t head = poid;
+  head.oid.snap = CEPH_NOSNAP;
+
+  SnapSet snapset;
+  {
+    bufferlist bl;
+    int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+    if (r < 0)
+      return false;  // if head doesn't exist, no snapped version will either.
+    bufferlist::iterator p = bl.begin();
+    ::decode(snapset, p);
+  }
+
+  dout(10) << "pick_read_snap " << poid << " snapset " << snapset << dendl;
+  snapid_t want = poid.oid.snap;
+
+  // head?
+  if (want > snapset.seq) {
+    if (snapset.head_exists) {
+      dout(10) << "pick_read_snap  " << head
+	       << " want " << want << " > snapset seq " << snapset.seq
+	       << " -- HIT" << dendl;
+      poid = head;
+      return true;
+    } else {
+      dout(10) << "pick_read_snap  " << head
+	       << " want " << want << " > snapset seq " << snapset.seq
+	       << " but head_exists = false -- DNE" << dendl;
+      return false;
+    }
+  }
+
+  // which clone would it be?
+  unsigned k = 0;
+  while (k<snapset.clones.size() && snapset.clones[k] < want)
+    k++;
+  if (k == snapset.clones.size()) {
+    dout(10) << "pick_read_snap  no clones with last >= want " << want << " -- DNE" << dendl;
+    return false;
+  }
+  
+  // check clone
+  poid.oid.snap = snapset.clones[k];
+  vector<snapid_t> snaps;
+  {
+    bufferlist bl;
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "snaps", bl);
+    if (r < 0) {
+      dout(20) << "pick_read_snap  " << poid << " dne" << dendl;
+      assert(0);
+      return false;
+    }
+    bufferlist::iterator p = bl.begin();
+    ::decode(snaps, p);
+  }
+  dout(20) << "pick_read_snap  " << poid << " snaps " << snaps << dendl;
+  snapid_t first = snaps[snaps.size()-1];
+  snapid_t last = snaps[0];
+  assert(last == poid.oid.snap);
+  if (first <= want) {
+    dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] contains " << want << " -- HIT" << dendl;
+    return true;
+  }
+
+  dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] does not contain " << want << " -- DNE" << dendl;
+  return false;
+} 
+
 
 void ReplicatedPG::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
   pobject_t poid(info.pgid.pool(), 0, oid);
 
-  dout(10) << "op_read " << MOSDOp::get_opname(op->get_op())
+  dout(10) << "op_read " << ceph_osd_op_name(op->get_op())
 	   << " " << oid 
            << " " << op->get_offset() << "~" << op->get_length() 
            << dendl;
@@ -494,8 +660,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
     } else {
       // make sure i exist and am balanced, otherwise fw back to acker.
       bool b;
-      if (!osd->store->exists(info.pgid, poid) || 
-	  osd->store->getattr(info.pgid, poid, "balance-reads", &b, 1) < 0) {
+      if (!osd->store->exists(info.pgid.to_coll(), poid) || 
+	  osd->store->getattr(info.pgid.to_coll(), poid, "balance-reads", &b, 1) < 0) {
 	dout(-10) << "read on replica, object " << poid 
 		  << " dne or no balance-reads, fw back to primary" << dendl;
 	osd->messenger->forward_message(op, osd->osdmap->get_inst(get_acker()));
@@ -510,16 +676,16 @@ void ReplicatedPG::op_read(MOSDOp *op)
   long r = 0;
 
   // do it.
-  if (oid.rev && !pick_object_rev(oid)) {
+  if (poid.oid.snap && !pick_read_snap(poid)) {
     // we have no revision for this request.
-    r = -EEXIST;
+    r = -ENOENT;
     goto done;
   } 
   
   // check inc_lock?
   if (op->get_inc_lock() > 0) {
     __u32 cur = 0;
-    osd->store->getattr(info.pgid, poid, "inc_lock", &cur, sizeof(cur));
+    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", &cur, sizeof(cur));
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
@@ -533,7 +699,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     {
       // read into a buffer
       bufferlist bl;
-      r = osd->store->read(info.pgid, poid, 
+      r = osd->store->read(info.pgid.to_coll(), poid, 
 			   op->get_offset(), op->get_length(),
 			   bl);
       reply->set_data(bl);
@@ -551,7 +717,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     {
       struct stat st;
       memset(&st, sizeof(st), 0);
-      r = osd->store->stat(info.pgid, poid, &st);
+      r = osd->store->stat(info.pgid.to_coll(), poid, &st);
       if (r >= 0)
 	reply->set_length(st.st_size);
     }
@@ -596,112 +762,136 @@ void ReplicatedPG::op_read(MOSDOp *op)
 // ========================================================================
 // MODIFY
 
-void ReplicatedPG::prepare_log_transaction(ObjectStore::Transaction& t, 
-					   osd_reqid_t reqid, pobject_t poid, int op, eversion_t version,
-					   objectrev_t crev, objectrev_t rev,
-					   eversion_t trim_to)
+void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
+				       pobject_t poid, int op, eversion_t at_version,
+				       off_t offset, off_t length, bufferlist& bl,
+				       SnapSet& snapset, SnapContext& snapc,
+				       __u32 inc_lock, eversion_t trim_to)
 {
-  // clone entry?
-  if (crev && rev && rev > crev) {
-    eversion_t cv = version;
-    cv.version--;
-    Log::Entry cloneentry(PG::Log::Entry::CLONE, poid.oid, cv, reqid);
-    log.add(cloneentry);
-
-    dout(10) << "prepare_log_transaction " << op
-	     << " " << cloneentry
-	     << dendl;
-  }
-
-  // actual op
-  int opcode = Log::Entry::MODIFY;
-  if (op == CEPH_OSD_OP_DELETE) opcode = Log::Entry::DELETE;
-  Log::Entry logentry(opcode, poid.oid, version, reqid);
-
-  dout(10) << "prepare_log_transaction " << op
-           << " " << logentry
-           << dendl;
-
-  // append to log
-  assert(version > log.top);
-  log.add(logentry);
-  assert(log.top == version);
-  dout(10) << "prepare_log_transaction appended" << dendl;
-
-  // write to pg log on disk
-  append_log(t, logentry, trim_to);
-}
-
-
-/** prepare_op_transaction
- * apply an op to the store wrapped in a transaction.
- */
-void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd_reqid_t& reqid,
-					  pg_t pgid, int op, pobject_t poid, 
-					  off_t offset, off_t length, bufferlist& bl,
-					  eversion_t& version, __u32 inc_lock, objectrev_t crev, objectrev_t rev)
-{
-  bool did_clone = false;
-
-  dout(10) << "prepare_op_transaction " << MOSDOp::get_opname( op )
-           << " " << poid 
-           << " v " << version
-	   << " crev " << crev
-	   << " rev " << rev
-           << dendl;
-  
   // WRNOOP does nothing.
   if (op == CEPH_OSD_OP_WRNOOP) 
     return;
 
-  // raise last_complete?
-  if (info.last_complete == info.last_update)
-    info.last_complete = version;
-  
-  // raise last_update.
-  assert(version > info.last_update);
-  info.last_update = version;
-  
-  // write pg info
-  bufferlist infobl;
-  ::encode(info, infobl);
-  t.collection_setattr(pgid, "info", infobl);
+  // munge zero into remove?
+  if (op == CEPH_OSD_OP_ZERO) {
+    struct stat st;
+    int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
+    if (r >= 0) {
+      if (offset == 0 && offset + length >= (loff_t)st.st_size) {
+	dout(10) << " munging ZERO " << offset << "~" << length
+		 << " -> DELETE (size is " << st.st_size << ")" << dendl;
+	op = CEPH_OSD_OP_DELETE;
+      }
+    }
+  }
 
   // clone?
-  if (crev && rev && rev > crev) {
-    assert(0);
-    pobject_t noid = poid;  // FIXME ****
-    noid.oid.rev = rev;
-    dout(10) << "prepare_op_transaction cloning " << poid << " crev " << crev << " to " << noid << dendl;
-    t.clone(info.pgid, poid, noid);
-    did_clone = true;
-  }  
+  if (poid.oid.snap) {
+    assert(poid.oid.snap == CEPH_NOSNAP);
+    dout(20) << "snapset=" << snapset << "  snapc=" << snapc << dendl;;
 
-  // apply the op
+    // use newer snapc?
+    if (snapset.seq > snapc.seq) {
+      snapc.seq = snapset.seq;
+      snapc.snaps = snapset.snaps;
+      dout(10) << " using newer snapc " << snapc << dendl;
+    }
+
+    if (snapset.head_exists &&           // head exists
+	snapc.snaps.size() &&            // there are snaps
+	snapc.snaps[0] > snapset.seq &&  // existing object is old
+	ceph_osd_op_is_modify(op)) {     // is a (non-lock) modification
+      // clone
+      pobject_t coid = poid;
+      coid.oid.snap = snapc.seq;
+      
+      unsigned l;
+      for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > snapset.seq; l++) ;
+
+      vector<snapid_t> snaps(l);
+      for (unsigned i=0; i<l; i++)
+	snaps[i] = snapc.snaps[i];
+
+      // log clone
+      dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
+      Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, reqid);
+      dout(10) << "prepare_transaction " << cloneentry << dendl;
+      log.add(cloneentry);
+      assert(log.top == at_version);
+
+      // prepare clone
+      t.clone(info.pgid.to_coll(), poid, coid);
+      bufferlist snapsbl;
+      ::encode(snaps, snapsbl);
+      t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
+      t.setattr(info.pgid.to_coll(), coid, "version", &at_version, sizeof(at_version));
+      
+      // add to snap bound collections
+      coll_t fc = info.pgid.to_snap_coll(snaps[0]);
+      t.create_collection(fc);
+      t.collection_add(fc, info.pgid.to_coll(), coid);
+      if (snaps.size() > 1) {
+	coll_t lc = info.pgid.to_snap_coll(snaps[snaps.size()-1]);
+	t.create_collection(lc);
+	t.collection_add(lc, info.pgid.to_coll(), coid);
+      }
+
+      snapset.clones.push_back(coid.oid.snap);
+      snapset.clone_overlap[coid.oid.snap].swap(snapset.head_overlap);
+      
+      at_version.version++;
+    }
+
+    // update snapset with latest snap context
+    snapset.seq = snapc.seq;
+    snapset.snaps = snapc.snaps;
+
+    // munge delete into a truncate?
+    if (op == CEPH_OSD_OP_DELETE &&
+	snapset.clones.size()) {
+      dout(10) << " munging DELETE -> TRUNCATE(0) bc of clones " << snapset.clones << dendl;
+      op = CEPH_OSD_OP_TRUNCATE;
+      length = 0;
+      snapset.head_exists = false;
+    }
+  }
+
+  
+  // log op
+  int opcode = Log::Entry::MODIFY;
+  if (op == CEPH_OSD_OP_DELETE) opcode = Log::Entry::DELETE;
+  Log::Entry logentry(opcode, poid.oid, at_version, reqid);
+  dout(10) << "prepare_transaction " << logentry << dendl;
+
+  assert(at_version > log.top);
+  log.add(logentry);
+  assert(log.top == at_version);
+
+  // prepare op
   switch (op) {
 
     // -- locking --
 
   case CEPH_OSD_OP_WRLOCK:
     { // lock object
-      t.setattr(info.pgid, poid, "wrlock", &reqid.name, sizeof(entity_name_t));
+      t.setattr(info.pgid.to_coll(), poid, "wrlock", &reqid.name, sizeof(entity_name_t));
     }
     break;  
   case CEPH_OSD_OP_WRUNLOCK:
     { // unlock objects
-      t.rmattr(info.pgid, poid, "wrlock");
+      t.rmattr(info.pgid.to_coll(), poid, "wrlock");
     }
     break;
 
   case CEPH_OSD_OP_BALANCEREADS:
     {
       bool bal = true;
-      t.setattr(info.pgid, poid, "balance-reads", &bal, sizeof(bal));
+      t.setattr(info.pgid.to_coll(), poid, "balance-reads", &bal, sizeof(bal));
     }
     break;
   case CEPH_OSD_OP_UNBALANCEREADS:
     {
-      t.rmattr(info.pgid, poid, "balance-reads");
+      t.rmattr(info.pgid.to_coll(), poid, "balance-reads");
     }
     break;
 
@@ -713,40 +903,51 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
       assert(bl.length() == length);
       bufferlist nbl;
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
-      t.write(info.pgid, poid, offset, length, nbl);
-      if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      t.write(info.pgid.to_coll(), poid, offset, length, nbl);
+      snapset.head_exists = true;
+      interval_set<__u64> ch;
+      ch.insert(offset, length);
+      ch.intersection_of(snapset.head_overlap);
+      snapset.head_overlap.subtract(ch);
+    }
+    break;
+    
+  case CEPH_OSD_OP_WRITEFULL:
+    { // write full object
+      assert(bl.length() == length);
+      bufferlist nbl;
+      nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
+      t.truncate(info.pgid.to_coll(), poid, 0);
+      t.write(info.pgid.to_coll(), poid, offset, length, nbl);
+      snapset.head_exists = true;
+      snapset.head_overlap.clear();
     }
     break;
     
   case CEPH_OSD_OP_ZERO:
-    {
-      // zero, remove, or truncate?
-      struct stat st;
-      int r = osd->store->stat(info.pgid, poid, &st);
-      if (r >= 0) {
-	if (offset == 0 && offset + length >= (loff_t)st.st_size) 
-	  t.remove(info.pgid, poid);
-	else {
-	  t.zero(info.pgid, poid, offset, length);
-	  if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
-	}
-      } else {
-	// noop?
-	dout(10) << "apply_transaction zero on " << poid << ", but dne?  stat returns " << r << dendl;
-      }
+    { // zero
+      t.zero(info.pgid.to_coll(), poid, offset, length);
+      interval_set<__u64> ch;
+      ch.insert(offset, length);
+      ch.intersection_of(snapset.head_overlap);
+      snapset.head_overlap.subtract(ch);
     }
     break;
 
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
-      t.truncate(info.pgid, poid, length);
-      if (inc_lock) t.setattr(info.pgid, poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+      t.truncate(info.pgid.to_coll(), poid, length);
+      interval_set<__u64> keep;
+      if (length)
+	keep.insert(0, length);
+      snapset.head_overlap.intersection_of(keep);
     }
     break;
     
   case CEPH_OSD_OP_DELETE:
     { // delete
-      t.remove(info.pgid, poid);
+      t.remove(info.pgid.to_coll(), poid);
+      snapset.head_overlap.clear();  // ok, redundant.
     }
     break;
     
@@ -755,21 +956,30 @@ void ReplicatedPG::prepare_op_transaction(ObjectStore::Transaction& t, const osd
   }
   
   // object collection, version
-  if (op == CEPH_OSD_OP_DELETE) {
-    // remove object from c
-    //t.collection_remove(pgid, poid);
-  } else {
-    // add object to c
-    //t.collection_add(pgid, poid);
-    
-    // object version
-    t.setattr(info.pgid, poid, "version", &version, sizeof(version));
+  if (op != CEPH_OSD_OP_DELETE) {
+    if (inc_lock && ceph_osd_op_is_modify(op)) 
+      t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
 
-    // set object crev
-    if (crev == 0 ||   // new object
-	did_clone)     // we cloned
-      t.setattr(info.pgid, poid, "crev", &rev, sizeof(rev));
+    t.setattr(info.pgid.to_coll(), poid, "version", &at_version, sizeof(at_version));
+
+    bufferlist snapsetbl;
+    ::encode(snapset, snapsetbl);
+    t.setattr(info.pgid.to_coll(), poid, "snapset", snapsetbl);
   }
+
+  // update pg info:
+  // raise last_complete only if we were previously up to date
+  if (info.last_complete == info.last_update)
+    info.last_complete = at_version;
+  
+  // raise last_update.
+  assert(at_version > info.last_update);
+  info.last_update = at_version;
+  
+  write_info(t);
+
+  // prepare log append
+  append_log(t, logentry, trim_to);
 }
 
 
@@ -929,17 +1139,21 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->op->get_op(), 
 				repop->op->get_offset(), repop->op->get_length(), 
 				osd->osdmap->get_epoch(), 
-				repop->rep_tid, repop->op->get_inc_lock(), repop->new_version);
+				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
+  wr->snapset = repop->snapset;
+  wr->snapc = repop->snapc;
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
-  wr->set_pg_trim_to(peers_complete_thru);
-  wr->set_peer_stat(osd->get_my_stat_for(now, dest));
+  wr->pg_trim_to = peers_complete_thru;
+  wr->peer_stat = osd->get_my_stat_for(now, dest);
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv)
+ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
+						      SnapSet& snapset, SnapContext& snapc)
 {
   dout(10) << "new_rep_gather rep_tid " << rep_tid << " on " << *op << dendl;
-  RepGather *repop = new RepGather(op, rep_tid, nv, info.last_complete);
+  RepGather *repop = new RepGather(op, rep_tid, nv, info.last_complete,
+				   snapset, snapc);
   
   // osds. commits all come to me.
   for (unsigned i=0; i<acting.size(); i++) {
@@ -953,7 +1167,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid,
     int osd = acting[i];
     repop->waitfor_ack.insert(osd);
   }
-  
+
   repop->start = g_clock.now();
 
   rep_gather[repop->rep_tid] = repop;
@@ -1040,51 +1254,6 @@ void ReplicatedPG::op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru)
 
 
 
-objectrev_t ReplicatedPG::assign_version(MOSDOp *op)
-{
-  pobject_t poid(info.pgid.pool(), 0, op->get_oid());
-
-  // check crev
-  objectrev_t crev = 0;
-  osd->store->getattr(info.pgid, poid, "crev", (char*)&crev, sizeof(crev));
-
-  // assign version
-  eversion_t clone_version;
-  eversion_t nv = log.top;
-  if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
-    nv.epoch = osd->osdmap->get_epoch();
-    nv.version++;
-    assert(nv > info.last_update);
-    assert(nv > log.top);
-
-    // will clone?
-    if (crev && poid.oid.rev && poid.oid.rev > crev) {
-      clone_version = nv;
-      nv.version++;
-    }
-
-    if (op->get_version().version) {
-      // replay!
-      if (nv.version < op->get_version().version) {
-        nv.version = op->get_version().version; 
-
-	// clone?
-	if (crev && op->get_oid().rev && op->get_oid().rev > crev) {
-	  // backstep clone
-	  clone_version = nv;
-	  clone_version.version--;
-	}
-      }
-    }
-  }
-
-  // set version in op, for benefit of client and our eventual reply
-  op->set_version(nv);
-
-  return crev;
-}
-
-
 // commit (to disk) callback
 class C_OSD_RepModifyCommit : public Context {
 public:
@@ -1131,16 +1300,23 @@ public:
   }
 };
 
+void ReplicatedPG::reply_op_error(MOSDOp *op, int err)
+{
+  MOSDOpReply *reply = new MOSDOpReply(op, err, osd->osdmap->get_epoch(), true);
+  osd->messenger->send_message(reply, op->get_orig_source_inst());
+  delete op;
+}
 
 void ReplicatedPG::op_modify(MOSDOp *op)
 {
   int whoami = osd->get_nodeid();
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
-  const char *opname = MOSDOp::get_opname(op->get_op());
+  const char *opname = ceph_osd_op_name(op->get_op());
 
   // make sure it looks ok
-  if (op->get_op() == CEPH_OSD_OP_WRITE &&
+  if ((op->get_op() == CEPH_OSD_OP_WRITE ||
+       op->get_op() == CEPH_OSD_OP_WRITEFULL) &&
       op->get_length() != op->get_data().length()) {
     dout(0) << "op_modify got bad write, claimed length " << op->get_length() 
 	    << " != payload length " << op->get_data().length()
@@ -1159,13 +1335,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // check inc_lock?
   if (op->get_inc_lock() > 0) {
     __u32 cur = 0;
-    osd->store->getattr(info.pgid, poid, "inc_lock", &cur, sizeof(cur));
+    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", &cur, sizeof(cur));
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
-      MOSDOpReply *reply = new MOSDOpReply(op, -EINCLOCKED, osd->osdmap->get_epoch(), true);
-      osd->messenger->send_message(reply, op->get_orig_source_inst());
-      delete op;
+      reply_op_error(op, -EINCLOCKED);
       return;
     }
   }
@@ -1173,7 +1347,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // balance-reads set?
   char v;
   if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&
-      (osd->store->getattr(info.pgid, poid, "balance-reads", &v, 1) >= 0 ||
+      (osd->store->getattr(info.pgid.to_coll(), poid, "balance-reads", &v, 1) >= 0 ||
        balancing_reads.count(poid.oid))) {
     
     if (!unbalancing_reads.count(poid.oid)) {
@@ -1198,18 +1372,61 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     return;
   }
 
-
   // dup op?
   if (is_dup(op->get_reqid())) {
     dout(3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << dendl;
     op->set_op(CEPH_OSD_OP_WRNOOP);
-    opname = MOSDOp::get_opname(op->get_op());
+    opname = ceph_osd_op_name(op->get_op());
   }
 
-  // assign the op a version
-  objectrev_t crev = assign_version(op);
-  eversion_t nv = op->get_version();
+
+  // version
+  eversion_t av = log.top;
+  if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
+    av.epoch = osd->osdmap->get_epoch();
+    av.version++;
+    assert(av > info.last_update);
+    assert(av > log.top);
+  }
+
+  // snap
+  SnapContext snapc;
+  snapc.seq = op->get_snap_seq();
+  snapc.snaps = op->get_snaps();
+
+  SnapSet snapset;
+  if (poid.oid.snap == CEPH_NOSNAP) {
+    bufferlist bl;
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
+    if (r >= 0) {
+      bufferlist::iterator p = bl.begin();
+      ::decode(snapset, p);
+    } else {
+      dout(10) << " no \"snapset\" attr, r = " << r << " " << strerror(-r) << dendl;
+    }
+  } else 
+    assert(poid.oid.snap == 0);   // no snapshotting.
+
+  // set version in op, for benefit of client and our eventual reply
+  op->set_version(av);
+
+  dout(10) << "op_modify " << opname 
+           << " " << poid.oid 
+           << " " << op->get_offset() << "~" << op->get_length()
+           << " av " << av 
+	   << " snapc " << snapc
+	   << " snapset " << snapset
+           << dendl;  
+
+  // verify snap ordering
+  if ((op->get_flags() & CEPH_OSD_OP_ORDERSNAP) &&
+      snapc.seq < snapset.seq) {
+    dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << snapset.seq
+	     << " on " << poid << dendl;
+    reply_op_error(op, -EOLDSNAPC);
+    return;
+  }
 
   // are any peers missing this?
   for (unsigned i=1; i<acting.size(); i++) {
@@ -1222,15 +1439,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     }
   }
 
-  dout(10) << "op_modify " << opname 
-           << " " << poid.oid 
-           << " v " << nv 
-    //<< " crev " << crev
-	   << " rev " << poid.oid.rev
-           << " " << op->get_offset() << "~" << op->get_length()
-           << dendl;  
-
-  if (op->get_op() == CEPH_OSD_OP_WRITE) {
+  if (op->get_op() == CEPH_OSD_OP_WRITE ||
+      op->get_op() == CEPH_OSD_OP_WRITEFULL) {
     osd->logger->inc("c_wr");
     osd->logger->inc("c_wrb", op->get_length());
   }
@@ -1240,19 +1450,18 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_rep_gather(op, rep_tid, nv);
+  RepGather *repop = new_rep_gather(op, rep_tid, av, snapset, snapc);
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
 
   // we are acker.
   if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
     // log and update later.
-    prepare_log_transaction(repop->t, op->get_reqid(), poid, op->get_op(), nv,
-			    crev, poid.oid.rev, peers_complete_thru);
-    prepare_op_transaction(repop->t, op->get_reqid(),
-			   info.pgid, op->get_op(), poid, 
-			   op->get_offset(), op->get_length(), op->get_data(),
-			   nv, op->get_inc_lock(), crev, poid.oid.rev);
+    prepare_transaction(repop->t, op->get_reqid(),
+			poid, op->get_op(), av,
+			op->get_offset(), op->get_length(), op->get_data(),
+			snapset, snapc,
+			op->get_inc_lock(), peers_complete_thru);
   }
   
   // (logical) local ack.
@@ -1271,25 +1480,19 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
 void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 {
-  pobject_t poid = op->get_poid();
-  eversion_t nv = op->get_version();
-
-  const char *opname = MOSDOp::get_opname(op->get_op());
-
-  // check crev
-  objectrev_t crev = 0;
-  osd->store->getattr(info.pgid, poid, "crev", (char*)&crev, sizeof(crev));
-
+  pobject_t poid = op->poid;
+  const char *opname = ceph_osd_op_name(op->op);
+  
   dout(10) << "sub_op_modify " << opname 
            << " " << poid 
-           << " v " << nv 
-           << " " << op->get_offset() << "~" << op->get_length()
-           << dendl;  
+           << " v " << op->version
+	   << " " << op->offset << "~" << op->length
+	   << dendl;  
 
   // sanity checks
-  if (op->get_map_epoch() < info.history.same_primary_since) {
+  if (op->map_epoch < info.history.same_primary_since) {
     dout(10) << "sub_op_modify discarding old sub_op from "
-	     << op->get_map_epoch() << " < " << info.history.same_primary_since << dendl;
+	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
     delete op;
     return;
   }
@@ -1302,7 +1505,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   
   // note peer's stat
   int fromosd = op->get_source().num();
-  osd->take_peer_stat(fromosd, op->get_peer_stat());
+  osd->take_peer_stat(fromosd, op->peer_stat);
 
   // we better not be missing this.
   assert(!missing.is_missing(poid.oid));
@@ -1313,15 +1516,14 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   // do op
   int ackerosd = acting[0];
   osd->logger->inc("r_wr");
-  osd->logger->inc("r_wrb", op->get_length());
+  osd->logger->inc("r_wrb", op->length);
   
-  if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
-    prepare_log_transaction(t, op->get_reqid(), op->get_poid(), op->get_op(), op->get_version(),
-			    crev, 0, op->get_pg_trim_to());
-    prepare_op_transaction(t, op->get_reqid(), 
-			   info.pgid, op->get_op(), poid, 
-			   op->get_offset(), op->get_length(), op->get_data(), 
-			   nv, op->get_inc_lock(), crev, 0);
+  if (op->op != CEPH_OSD_OP_WRNOOP) {
+    prepare_transaction(t, op->reqid,
+			op->poid, op->op, op->version,
+			op->offset, op->length, op->get_data(), 
+			op->snapset, op->snapc,
+			op->inc_lock, op->pg_trim_to);
   }
   
   C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
@@ -1406,6 +1608,7 @@ void ReplicatedPG::pull(pobject_t poid)
   // send op
   osd_reqid_t rid;
   tid_t tid = osd->get_tid();
+  
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PULL,
 				   0, 0, 
 				   osd->osdmap->get_epoch(), tid, 0, v);
@@ -1428,9 +1631,9 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   size_t vlen = sizeof(v);
   map<string,bufferptr> attrset;
   
-  osd->store->read(info.pgid, poid, 0, 0, bl);
-  osd->store->getattr(info.pgid, poid, "version", &v, vlen);
-  osd->store->getattrs(info.pgid, poid, attrset);
+  osd->store->read(info.pgid.to_coll(), poid, 0, 0, bl);
+  osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, vlen);
+  osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
 
   // ok
   dout(7) << "push " << poid << " v " << v 
@@ -1447,7 +1650,7 @@ void ReplicatedPG::push(pobject_t poid, int peer)
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, CEPH_OSD_OP_PUSH, 0, bl.length(),
 				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
   subop->set_data(bl);   // note: claims bl, set length above here!
-  subop->set_attrset(attrset);
+  subop->attrset.swap(attrset);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
   
   if (is_primary()) {
@@ -1491,16 +1694,16 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
  */
 void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 {
-  const pobject_t poid = op->get_poid();
-  const eversion_t v = op->get_version();
+  const pobject_t poid = op->poid;
+  const eversion_t v = op->version;
 
-  dout(7) << "op_pull " << poid << " v " << op->get_version()
+  dout(7) << "op_pull " << poid << " v " << op->version
           << " from " << op->get_source()
           << dendl;
 
-  if (op->get_map_epoch() < info.history.same_primary_since) {
+  if (op->map_epoch < info.history.same_primary_since) {
     dout(10) << "sub_op_pull discarding old sub_op from "
-	     << op->get_map_epoch() << " < " << info.history.same_primary_since << dendl;
+	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
     delete op;
     return;
   }
@@ -1517,20 +1720,20 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
  */
 void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 {
-  pobject_t poid = op->get_poid();
-  eversion_t v = op->get_version();
+  pobject_t poid = op->poid;
+  eversion_t v = op->version;
 
   dout(7) << "op_push " 
           << poid 
           << " v " << v 
-          << " size " << op->get_length() << " " << op->get_data().length()
+          << " size " << op->length << " " << op->get_data().length()
           << dendl;
 
   if (is_replica()) {
     // replica should only accept pushes from the current primary.
-    if (op->get_map_epoch() < info.history.same_primary_since) {
+    if (op->map_epoch < info.history.same_primary_since) {
       dout(10) << "sub_op_push discarding old sub_op from "
-	       << op->get_map_epoch() << " < " << info.history.same_primary_since << dendl;
+	       << op->map_epoch << " < " << info.history.same_primary_since << dendl;
       delete op;
       return;
     }
@@ -1553,14 +1756,30 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     return;
   }
   
-  assert(op->get_data().length() == op->get_length());
+  assert(op->get_data().length() == op->length);
   
   // write object and add it to the PG
   ObjectStore::Transaction t;
-  t.remove(info.pgid, poid);  // in case old version exists
-  t.write(info.pgid, poid, 0, op->get_length(), op->get_data());
-  t.setattrs(info.pgid, poid, op->get_attrset());
-  //t.collection_add(info.pgid, poid);
+  t.remove(info.pgid.to_coll(), poid);  // in case old version exists
+  t.write(info.pgid.to_coll(), poid, 0, op->length, op->get_data());
+  t.setattrs(info.pgid.to_coll(), poid, op->attrset);
+  if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP &&
+      op->attrset.count("snaps")) {
+    bufferlist bl;
+    bl.push_back(op->attrset["snaps"]);
+    vector<snapid_t> snaps;
+    bufferlist::iterator p = bl.begin();
+    ::decode(snaps, p);
+    if (snaps.size()) {
+      t.create_collection(info.pgid.to_snap_coll(snaps[0]));
+      t.collection_add(info.pgid.to_snap_coll(snaps[0]), info.pgid.to_coll(), poid);
+      if (snaps.size() > 1) {
+	t.create_collection(info.pgid.to_snap_coll(snaps[snaps.size()-1]));
+	t.collection_add(info.pgid.to_snap_coll(snaps[snaps.size()-1]), info.pgid.to_coll(), poid);
+      }
+    }
+  }
+
 
   // close out pull op?
   if (pulling.count(poid.oid))
@@ -1581,9 +1800,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   
   
   // apply to disk!
-  bufferlist bl;
-  ::encode(info, bl);
-  t.collection_setattr(info.pgid, "info", bl);
+  write_info(t);
   unsigned r = osd->store->apply_transaction(t);
   assert(r == 0);
 
@@ -1828,7 +2045,7 @@ bool ReplicatedPG::do_recovery()
   } else {
     // tell primary
     dout(7) << "do_recovery complete, telling primary" << dendl;
-    list<PG::Info> ls;
+    vector<PG::Info> ls;
     ls.push_back(info);
     osd->messenger->send_message(new MOSDPGNotify(osd->osdmap->get_epoch(),
                                                   ls),
@@ -1895,11 +2112,11 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     // FIXME: sloppy pobject vs object conversions abound!  ***
     
     // be thorough.
-    list<pobject_t> ls;
-    osd->store->collection_list(info.pgid, ls);
+    vector<pobject_t> ls;
+    osd->store->collection_list(info.pgid.to_coll(), ls);
     set<object_t> s;
     
-    for (list<pobject_t>::iterator i = ls.begin();
+    for (vector<pobject_t>::iterator i = ls.begin();
          i != ls.end();
          i++) 
       s.insert(i->oid); 
@@ -1916,7 +2133,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 	  pobject_t poid(info.pgid.pool(), 0, p->oid);
           dout(10) << " deleting " << poid
                    << " when " << p->version << dendl;
-          t.remove(info.pgid, poid);
+          t.remove(info.pgid.to_coll(), poid);
         }
         s.erase(p->oid);
       } else {
@@ -1930,7 +2147,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
          i++) {
       pobject_t poid(info.pgid.pool(), 0, *i);
       dout(10) << " deleting stray " << poid << dendl;
-      t.remove(info.pgid, poid);
+      t.remove(info.pgid.to_coll(), poid);
     }
 
   } else {
@@ -1946,7 +2163,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 	pobject_t poid(info.pgid.pool(), 0, p->oid);
         dout(10) << " deleting " << poid
                  << " when " << p->version << dendl;
-        t.remove(info.pgid, poid);
+        t.remove(info.pgid.to_coll(), poid);
       } else {
         // keep old(+missing) objects, just for kicks.
       }

@@ -9,6 +9,10 @@ typedef tstring nstring;
 typedef cstring nstring;
 #endif
 
+static inline bool operator==(const nstring &l, const char *s) {
+  return strcmp(l.c_str(), s) == 0;
+}
+
 static inline bool operator==(const nstring &l, const nstring &r) {
   return l.length() == r.length() && memcmp(l.data(), r.data(), l.length()) == 0;
 }

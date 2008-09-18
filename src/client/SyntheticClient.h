@@ -69,6 +69,9 @@
 #define SYNCLIENT_MODE_RANDOMSLEEP  61
 #define SYNCLIENT_MODE_SLEEP        62
 
+#define SYNCLIENT_MODE_DUMP 63
+
+
 #define SYNCLIENT_MODE_TRUNCATE     200
 
 #define SYNCLIENT_MODE_FOO        100
@@ -78,6 +81,8 @@
 
 #define SYNCLIENT_MODE_CHUNK    400
 
+#define SYNCLIENT_MODE_MKSNAP 1000
+#define SYNCLIENT_MODE_RMSNAP 1001
 
 
 void parse_syn_options(vector<const char*>& args);
@@ -211,6 +216,9 @@ class SyntheticClient {
   int full_walk(string& fromdir);
   int random_walk(int n);
 
+  int dump_placement(string& fn);
+
+
   int make_dirs(const char *basedir, int dirs, int files, int depth);
   int stat_dirs(const char *basedir, int dirs, int files, int depth);
   int read_dirs(const char *basedir, int dirs, int files, int depth);
@@ -221,7 +229,7 @@ class SyntheticClient {
   int open_shared(int num, int count);
 
   int rm_file(string& fn);
-  int write_file(string& fn, int mb, int chunk);
+  int write_file(string& fn, int mb, loff_t chunk);
   int write_fd(int fd, int size, int wrsize);
 
   int write_batch(int nfile, int mb, int chunk);
@@ -249,6 +257,9 @@ class SyntheticClient {
   void import_find(const char *basedir, const char *find, bool writedata);
 
   int chunk_file(string &filename);
+
+  void mksnap(const char *base, const char *name);
+  void rmsnap(const char *base, const char *name);
 };
 
 #endif

@@ -28,23 +28,6 @@ using namespace std;
 // heuristics
 //#define CEPH_CAP_DELAYFLUSH  32
 
-inline string cap_string(int cap)
-{
-  string s;
-  s = "[";
-  if (cap & CEPH_CAP_PIN) s += " pin";
-  if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
-  if (cap & CEPH_CAP_RD) s += " rd";
-  if (cap & CEPH_CAP_WR) s += " wr";
-  if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
-  if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
-  if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
-  if (cap & CEPH_CAP_EXCL) s += " excl";
-  s += " ]";
-  return s;
-}
-
-typedef __u32 capseq_t;
 
 class CInode;
 
@@ -54,19 +37,23 @@ public:
     int32_t wanted;
     int32_t issued;
     int32_t pending;
+    snapid_t client_follows;
     capseq_t mseq;
     Export() {}
-    Export(int w, int i, int p, capseq_t s) : wanted(w), issued(i), pending(p), mseq(s) {}
+    Export(int w, int i, int p, snapid_t cf, capseq_t s) : 
+      wanted(w), issued(i), pending(p), client_follows(cf), mseq(s) {}
     void encode(bufferlist &bl) const {
       ::encode(wanted, bl);
       ::encode(issued, bl);
       ::encode(pending, bl);
+      ::encode(client_follows, bl);
       ::encode(mseq, bl);
     }
     void decode(bufferlist::iterator &p) {
       ::decode(wanted, p);
       ::decode(issued, p);
       ::decode(pending, p);
+      ::decode(client_follows, p);
       ::decode(mseq, p);
     }
   };
@@ -74,16 +61,20 @@ public:
 private:
   CInode *inode;
   __u32 wanted_caps;     // what the client wants (ideally)
-  
+
   map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
   capseq_t last_open;
   capseq_t mseq;
-  
-  bool suppress;
+
+  int suppress;
   bool stale;
 public:
+  snapid_t client_follows;
+  
   xlist<Capability*>::item session_caps_item;
+
+  xlist<Capability*>::item snaprealm_caps_item;
 
   Capability(CInode *i=0, int want=0, capseq_t s=0) :
     inode(i),
@@ -92,17 +83,18 @@ public:
     last_recv(s),
     last_open(0),
     mseq(0),
-    suppress(false), stale(false),
-    session_caps_item(this) { 
-  }
+    suppress(0), stale(false),
+    client_follows(0),
+    session_caps_item(this), snaprealm_caps_item(this) { }
   
   capseq_t get_mseq() { return mseq; }
 
   capseq_t get_last_open() { return last_open; }
   void set_last_open() { last_open = last_sent; }
 
-  bool is_suppress() { return suppress; }
-  void set_suppress(bool b) { suppress = b; }
+  bool is_suppress() { return suppress > 0; }
+  void inc_suppress() { suppress++; }
+  void dec_suppress() { suppress--; }
 
   bool is_stale() { return stale; }
   void set_stale(bool b) { stale = b; }
@@ -181,7 +173,7 @@ public:
   capseq_t get_last_seq() { return last_sent; }
 
   Export make_export() {
-    return Export(wanted_caps, issued(), pending(), mseq+1);
+    return Export(wanted_caps, issued(), pending(), client_follows, mseq+1);
   }
   void merge(Export& other) {
     // issued + pending
@@ -189,6 +181,8 @@ public:
     if (other.issued & ~newpending)
       issue(other.issued | newpending);
     issue(newpending);
+
+    client_follows = other.client_follows;
 
     // wanted
     wanted_caps = wanted_caps | other.wanted;

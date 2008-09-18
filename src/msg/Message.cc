@@ -46,6 +46,8 @@ using namespace std;
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 
+#include "messages/MRemoveSnaps.h"
+
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 
@@ -56,8 +58,9 @@ using namespace std;
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
-#include "messages/MClientFileCaps.h"
+#include "messages/MClientCaps.h"
 #include "messages/MClientLease.h"
+#include "messages/MClientSnap.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -95,7 +98,7 @@ using namespace std;
 
 #include "messages/MHeartbeat.h"
 
-#include "messages/MAnchor.h"
+#include "messages/MMDSTableRequest.h"
 
 //#include "messages/MInodeUpdate.h"
 #include "messages/MCacheExpire.h"
@@ -223,6 +226,10 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     m = new MOSDPGCreate;
     break;
 
+  case MSG_REMOVE_SNAPS:
+    m = new MRemoveSnaps;
+    break;
+
 
     // clients
   case CEPH_MSG_CLIENT_MOUNT:
@@ -246,11 +253,14 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
   case CEPH_MSG_CLIENT_REPLY:
     m = new MClientReply;
     break;
-  case CEPH_MSG_CLIENT_FILECAPS:
-    m = new MClientFileCaps;
+  case CEPH_MSG_CLIENT_CAPS:
+    m = new MClientCaps;
     break;
   case CEPH_MSG_CLIENT_LEASE:
     m = new MClientLease;
+    break;
+  case CEPH_MSG_CLIENT_SNAP:
+    m = new MClientSnap;
     break;
 
     // mds
@@ -361,8 +371,8 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
     m = new MCacheExpire();
     break;
 
-  case MSG_MDS_ANCHOR:
-    m = new MAnchor();
+  case MSG_MDS_TABLE_REQUEST:
+    m = new MMDSTableRequest;
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:

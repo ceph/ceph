@@ -12,43 +12,44 @@
  * 
  */
 
-#ifndef __MDS_EANCHORCLIENT_H
-#define __MDS_EANCHORCLIENT_H
+#ifndef __MDS_ETABLECLIENT_H
+#define __MDS_ETABLECLIENT_H
 
 #include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
+#include "../mds_table_types.h"
 #include "../LogEvent.h"
-#include "../Anchor.h"
 
-class EAnchorClient : public LogEvent {
-protected:
-  __u32 op;
-  version_t atid; 
+struct ETableClient : public LogEvent {
+  __u16 table;
+  __s16 op;
+  version_t tid;
 
- public:
-  EAnchorClient() : LogEvent(EVENT_ANCHORCLIENT) { }
-  EAnchorClient(int o, version_t at) :
-    LogEvent(EVENT_ANCHORCLIENT),
-    op(o), atid(at) { }
+  ETableClient() : LogEvent(EVENT_TABLECLIENT) { }
+  ETableClient(int t, int o, version_t ti) :
+    LogEvent(EVENT_TABLECLIENT),
+    table(t), op(o), tid(ti) { }
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist& bl) const {
+    ::encode(table, bl);
     ::encode(op, bl);
-    ::encode(atid, bl);
+    ::encode(tid, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    ::decode(table, bl);
     ::decode(op, bl);
-    ::decode(atid, bl);
+    ::decode(tid, bl);
   }
 
   void print(ostream& out) {
-    out << "EAnchorClient " << get_anchor_opname(op);
-    if (atid) out << " atid " << atid;
+    out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstableserver_opname(op);
+    if (tid) out << " tid " << tid;
   }  
 
-  void replay(MDS *mds);
-  
+  //void update_segment();
+  void replay(MDS *mds);  
 };
 
 #endif

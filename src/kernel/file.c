@@ -60,7 +60,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 
 	cf = kzalloc(sizeof(*cf), GFP_NOFS);
 	if (cf == NULL) {
-		ceph_put_fmode(ceph_inode(inode), fmode);  /* clean up */
+		ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
 		return -ENOMEM;
 	}
 	cf->mode = fmode;
@@ -84,8 +84,11 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (S_ISDIR(inode->i_mode))
 		flags = O_DIRECTORY;
 
-	dout(5, "open inode %p ino %llx file %p flags %d (%d)\n", inode,
-	     ceph_ino(inode), file, flags, file->f_flags);
+	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
+		return -EROFS;
+
+	dout(5, "open inode %p ino %llx.%llx file %p flags %d (%d)\n", inode,
+	     ceph_vinop(inode), file, flags, file->f_flags);
 	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
@@ -119,7 +122,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	if (err == 0)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
-	dout(5, "open result=%d on %llx\n", err, ceph_ino(inode));
+	dout(5, "open result=%d on %llx.%llx\n", err, ceph_vinop(inode));
 out:
 	dput(dentry);
 	return err;
@@ -212,7 +215,7 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	dout(10, "sync_read on file %p %lld~%u\n", file, *offset,
 	     (unsigned)count);
 
-	ret = ceph_osdc_sync_read(&client->osdc, ceph_ino(inode),
+	ret = ceph_osdc_sync_read(&client->osdc, ceph_vino(inode),
 				  &ci->i_layout,
 				  pos, count, data);
 	if (ret > 0)
@@ -229,14 +232,18 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	int ret = 0;
 	off_t pos = *offset;
 
+	if (ceph_snap(file->f_dentry->d_inode) != CEPH_NOSNAP)
+		return -EROFS;
+
 	dout(10, "sync_write on file %p %lld~%u\n", file, *offset,
 	     (unsigned)count);
 
 	if (file->f_flags & O_APPEND)
 		pos = i_size_read(inode);
 
-	ret = ceph_osdc_sync_write(&client->osdc, ceph_ino(inode),
+	ret = ceph_osdc_sync_write(&client->osdc, ceph_vino(inode),
 				   &ci->i_layout,
+				   ci->i_snap_realm->cached_context,
 				   pos, count, data);
 	if (ret > 0) {
 		pos += ret;
@@ -244,6 +251,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 		if (pos > i_size_read(inode))
 			ceph_inode_set_size(inode, pos);
 	}
+
 	return ret;
 }
 
@@ -265,16 +273,16 @@ ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 
 	__ceph_do_pending_vmtruncate(inode);
 
-	dout(10, "aio_read %llx %llu~%u trying to get caps on %p\n",
-	     ceph_ino(inode), pos, (unsigned)len, inode);
+	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
+	     ceph_vinop(inode), pos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
 							 CEPH_CAP_RDCACHE,
 							 &got, -1));
 	if (ret < 0)
 		goto out;
-	dout(10, "aio_read %llx %llu~%u got cap refs %d\n",
-	     ceph_ino(inode), pos, (unsigned)len, got);
+	dout(10, "aio_read %llx.%llx %llu~%u got cap refs %d\n",
+	     ceph_vinop(inode), pos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_RDCACHE) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
@@ -284,8 +292,8 @@ ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		ret = generic_file_aio_read(iocb, iov, nr_segs, pos);
 
 out:
-	dout(10, "aio_read %llx dropping cap refs on %d\n", ceph_ino(inode),
-	     got);
+	dout(10, "aio_read %llx.%llx dropping cap refs on %d\n",
+	     ceph_vinop(inode), got);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
@@ -325,6 +333,10 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	int got = 0;
 	int ret;
 
+	if (ceph_snap(inode) != CEPH_NOSNAP)
+		return -EROFS;
+
+retry_snap:
 	__ceph_do_pending_vmtruncate(inode);
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
@@ -351,6 +363,13 @@ out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
 	ceph_put_cap_refs(ci, got);
+
+	if (ret == -EOLDSNAPC) {
+		dout(10, "aio_write %p %llu~%u got EOLDSNAPC, retrying\n",
+		     inode, pos, (unsigned)iov->iov_len);
+		goto retry_snap;
+	}
+
 	return ret;
 }
 
@@ -373,11 +392,6 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	return 0;
 }
 
-static long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	return -EINVAL;
-}
-
 const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
@@ -386,9 +400,11 @@ const struct file_operations ceph_file_fops = {
 	.write = do_sync_write,
 	.aio_read = ceph_aio_read,
 	.aio_write = ceph_aio_write,
-	.mmap = generic_file_mmap,
+	.mmap = ceph_mmap,
 	.fsync = ceph_fsync,
 	.splice_read = generic_file_splice_read,
 	.splice_write = generic_file_splice_write,
 	.unlocked_ioctl = ceph_ioctl,
 };
+
+
