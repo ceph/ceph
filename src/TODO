@@ -9,9 +9,6 @@ v0.5
 - make kclient use ->sendpage?
 - rip out io interruption?
 
-bugs
-- journal assert(header.wrap) in print_header()
-
 big items
 - ENOSPC
 - repair
@@ -23,24 +20,54 @@ big items
 - libuuid?
 
 
-snaps on uclient
-- delay FLUSHSNAP until after (buffered) flush
-- do pickysnap(?) flag thing
-
-snaps on mds
-- mds server ops
-  - link rollback
-  - rename rollback
-
-- hard link backpointers
-  - anchor source dir
-  - build snaprealm for any hardlinked file
-  - include snaps for all (primary+remote) parents
+repair
+- are we concerned about
+  - scrubbing
+  - reconstruction after loss of subset of cdirs
+  - reconstruction after loss of md log
+- data object 
+  - path backpointers?
+  - parent dir pointer?
+- cdir objects
+  - parent dir pointer
+    - update on rename?  or on cdir store?
+      on cdir store is sufficient if mdlog survives...
+  - or what the hell, full trace?
+- mds scrubbing
+- rados scrubbing
 
 snaps on osd
 - garbage collection
   - don't start collection on replica until clean?
 - efficient recovery of clones using the clone diff info
+
+kernel client
+- async writepages?
+  - we want to saturate network with writeback on a single file
+- switch writepages to wait for commit, verify throughput
+- make writepages maybe skip pages with errors?
+  - EIO, or ENOSPC?
+  - ... writeback vs ENOSPC vs flush vs close()... hrm...
+- set mapping bits for ENOSPC, EIO?
+- flush caps on sync, fsync, etc.
+  - do we need to block?
+- timeout root inode open on mount
+- timeout session close on umount
+- forced unmount?
+- deal with CAP_RDCACHE properly: are we invalidating cache pages correctly?
+- procfs/debugfs
+  - adjust granular debug levels too
+    - should we be using debugfs?
+  - a dir for each client instance (client###)?
+  - hooks to get mds, osd, monmap epoch #s
+- fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
+
+vfs issues
+- real_lookup() race:
+  1- hash lookup find no dentry
+  2- real_lookup() takes dir i_mutex, but then finds a dentry
+  3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
+- vfs_rename_dir()
 
 userspace client
 - handle session STALE
@@ -53,58 +80,12 @@ userspace client
 - stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
-kernel client
-- async writepages?
-  - we want to saturate network with writeback on a single file
-- make writepages maybe skip pages with errors?
-  - EIO, or ENOSPC?
-  - ... writeback vs ENOSPC vs flush vs close()... hrm...
-- set mapping bits for ENOSPC, EIO?
-- flush caps on sync, fsync, etc.
-  - do we need to block?
-- timeout mds session close on umount
-- deal with CAP_RDCACHE properly: invalidate cache pages?
-- procfs/debugfs
-  - adjust granular debug levels too
-    - should we be using debugfs?
-  - a dir for each client instance (client###)?
-  - hooks to get mds, osd, monmap epoch #s
-- io / osd client
-  - osd ack vs commit handling.  hmm!
-- fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
-
-vfs issues
-- real_lookup() race:
-  1- hash lookup find no dentry
-  2- real_lookup() takes dir i_mutex, but then finds a dentry
-  3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
-- vfs_rename_dir()
-
-client
-- clean up client mds session vs mdsmap behavior?
-
-osdmon
-- monitor needs to monitor some osds...
-
-crush
-- chooseleaf
-  - fix it up for forcefeeding!
-- more efficient failure when all/too many osds are down
-- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
-- "knob" bucket
-
-pgmon
-- include osd vector with pg state
-  - check for orphan pgs
-- monitor pg states, notify on out?
-- watch osd utilization; adjust overload in cluster map
-
-mon
-- paxos need to clean up old states.
-- some sort of tester for PaxosService...
-- osdmon needs to lower-bound old osdmap versions it keeps around?
-
 mds
+- hard link backpointers
+  - anchor source dir
+  - build snaprealm for any hardlinked file
+  - include snaps for all (primary+remote) parents
+
 - whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
 
 - proper handling of cache expire messages during rejoin phase?
@@ -149,10 +130,25 @@ journaler
 - need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
 
 
-fsck
-- fsck.ebofs
-- online mds fsck?
-- object backpointer attrs to hint catastrophic reconstruction?
+osdmon
+- monitor needs to monitor some osds...
+
+crush
+- more efficient failure when all/too many osds are down
+- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
+- "knob" bucket
+
+pgmon
+- include osd vector with pg state
+  - check for orphan pgs
+- monitor pg states, notify on out?
+- watch osd utilization; adjust overload in cluster map
+
+mon
+- paxos need to clean up old states.
+- some sort of tester for PaxosService...
+- osdmon needs to lower-bound old osdmap versions it keeps around?
+
 
 objecter
 - fix failure handler...
@@ -175,9 +171,6 @@ osd/rados
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
-
-messenger
-- fix messenger shutdown.. we shouldn't delete messenger, since the caller may be referencing it, etc.
 
 simplemessenger
 - close idle connections
@@ -232,64 +225,7 @@ ebofs
   - map stream.
     - allow blob values.
 
-  - 
-
-
 
 remaining hard problems
 - how to cope with file size changes and read/write sharing
 
-
-snapshot notes --
-
-
-osd
-- pass snap lineage with osd op/capability
-- tag each non-live object with the set of snaps it is defined over
-  - osdmap has sparse map of extant snapids.  incrementals are simple rmsnapid, and max_snapid increase
-  - put each object in first_snap, last_snap collections.
-  - use background thread to trim old snaps.
-  - for each object in first_snap|last_snap collections,
-    - get snap list,
-    - filter against extant snaps
-    - adjust collections, or delete
-
-- adjust coll_t namespace to allow first_snap/last_snap collections..
-  - pg.u.type = CEPH_PG_TYPE_SNAP_LB/UB?
-
-- read: 
-   oid.snap=NOSNAP op.snaps=[3,2,1]  // read latest
-   oid.snap=3      op.snaps=[3,2,1]  // read old snap 3
-- write:
-  - oid.snap=NOSNAP op.snaps=[3,2,1]  // write to latest
-      clone NOSNAP to oid.snaps[0] if oid:snaps[0] != snaps[0]
-        set snap_first based on snaps array.
-    - write(oid.snap=NOSNAP snaps=[3,2,1])  oid.snap=NOSNAP oid:prior=3,2,1
-        -> do nothing, write to existing
-    - write(oid.snap=NOSNAP snaps=[300,2,1])  oid.snap=NOSNAP oid:prior=2,1
-        -> clone to oid.snap=300, snaps=300
-    - write(oid.snap=NOSNAP snaps=[2,1])  oid.snap=NOSNAP oid:prior=3,2,1
-        -> slow request, but who cares.  use snaps=3,2,1, write to existing as above.
-    - write(oid.snap=NOSNAP snaps=[3,2,1])  oid.snap=NOSNAP oid:prior=1
-        -> clone to oid.snap=3, snaps=3,2
-
-screw "snap writeback":
- - if client is buffering, it has exclusive access to the object.  therefore, it can flush older
-   snaps before newer ones.  done.
-   -> yeah... but it's difficult to implement in the kclient...
- - if multiple clients are writing synchronously, then the client doesn't care if the osd pushes a write "forward" in time to the next snapshot, since it hasn't completed yet.
-   -> actually, it does, since the client is reporting a size+mtime back to the mds with the cap flush snap
-    > set a PICKYSNAP flag, that makes the osd return something like -EAGAIN, that is passed bck by osdc
-    > delay FLUSHSNAP.  in ceph_write
-     > block before submitting new writes
-     > wait before resubmitting retry ios
-     > send FLUSHSNAP once nothing in flight
-    > 
-
-
-issues:
-- how to log and replication all this cloning...
-  - snap trimming is async from replicated writes
-- snap trimming in general needs to be fast.. and probably a background process..
-  -> logically put per-pg snap removal as a discrete pg log event?
-  - need to index snap_first/last on a per-pg basis... 128-bit collections?  or ditch ebofs?
