@@ -28,7 +28,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 	   << lpg_bits << " lpg bits" << dendl;
   epoch = e;
   set_fsid(fsid);
-  ctime = g_clock.now();
+  mtime = ctime = g_clock.now();
 
   set_max_osd(num_osd);
   pg_num = pgp_num = num_osd << pg_bits;
