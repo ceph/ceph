@@ -35,15 +35,40 @@ void usage(const char *me)
   exit(1);
 }
 
-void printmap(const char *me, OSDMap *m)
+void printmap(const char *me, OSDMap *m, ostream& out)
 {
-  cout << me << ": osdmap: epoch " << m->get_epoch() << std::endl
-       << me << ": osdmap: fsid " << m->get_fsid() << std::endl;
-  /*for (unsigned i=0; i<m->mon_inst.size(); i++)
-    cout << me << ": osdmap:  " //<< "mon" << i << " " 
-	 << m->mon_inst[i] << std::endl;
-  */
-}
+  out << "epoch " << m->get_epoch() << "\n"
+      << "fsid " << m->get_fsid() << "\n"
+      << "ctime " << m->get_ctime() << "\n"
+      << "mtime " << m->get_mtime() << "\n"
+      << std::endl;
+  out << "pg_num " << m->get_pg_num() << "\n"
+      << "pgp_num " << m->get_pgp_num() << "\n"
+      << "lpg_num " << m->get_lpg_num() << "\n"
+      << "lpgp_num " << m->get_lpgp_num() << "\n"
+      << "last_pg_change " << m->get_last_pg_change() << "\n"
+      << std::endl;
+  out << "max_osd " << m->get_max_osd() << "\n";
+  for (int i=0; i<m->get_max_osd(); i++) {
+    if (m->exists(i)) {
+      out << "osd" << i
+	  << (m->is_in(i) ? " in":" out")
+	  << (m->is_up(i) ? " up":" down");
+      if (m->is_up(i))
+	out << " " << m->get_addr(i);
+      out << " up_from " << m->get_up_from(i)
+	  << " up_thru " << m->get_up_thru(i)
+	  << "\n";
+    }
+  }
+  out << std::endl;
+  
+  // ignore pg_swap_primary
+  
+  out << "max_snap " << m->get_max_snap() << "\n"
+      << "removed_snaps " << m->get_removed_snaps() << "\n"
+      << std::endl;
+ }
 
 
 int main(int argc, const char **argv)
@@ -170,7 +195,7 @@ int main(int argc, const char **argv)
     osdmap.inc_epoch();
 
   if (print) 
-    printmap(me, &osdmap);
+    printmap(me, &osdmap, cout);
 
   if (modified) {
     bl.clear();

@@ -30,7 +30,7 @@ fi
 ./cmon -d mondata/mon0 --debug_mon 20 --debug_ms 1
 
 # build and inject an initial osd map
-./osdmaptool --clobber --createsimple .ceph_monmap 16 --print .ceph_osdmap # --pgbits 2
+./osdmaptool --clobber --createsimple .ceph_monmap 16 .ceph_osdmap # --pgbits 2
 ./cmonctl osd setmap -i .ceph_osdmap
 
 #ARGS="-m $IP:12345"
