@@ -763,7 +763,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 // MODIFY
 
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
-				       pobject_t poid, int op, eversion_t at_version,
+				       pobject_t poid, int op,
+				       eversion_t old_version, eversion_t at_version,
 				       off_t offset, off_t length, bufferlist& bl,
 				       SnapSet& snapset, SnapContext& snapc,
 				       __u32 inc_lock, eversion_t trim_to)
@@ -814,7 +815,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
 
       // log clone
       dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
-      Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, reqid);
+      Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, old_version, at_version, reqid);
       dout(10) << "prepare_transaction " << cloneentry << dendl;
       log.add(cloneentry);
       assert(log.top == at_version);
@@ -860,7 +861,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   // log op
   int opcode = Log::Entry::MODIFY;
   if (op == CEPH_OSD_OP_DELETE) opcode = Log::Entry::DELETE;
-  Log::Entry logentry(opcode, poid.oid, at_version, reqid);
+  Log::Entry logentry(opcode, poid.oid, old_version, at_version, reqid);
   dout(10) << "prepare_transaction " << logentry << dendl;
 
   assert(at_version > log.top);
@@ -1140,6 +1141,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->op->get_offset(), repop->op->get_length(), 
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
+  wr->old_version = repop->old_version;
   wr->snapset = repop->snapset;
   wr->snapc = repop->snapc;
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
@@ -1396,8 +1398,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   snapc.snaps = op->get_snaps();
 
   SnapSet snapset;
+  eversion_t old_version;
   if (poid.oid.snap == CEPH_NOSNAP) {
     bufferlist bl;
+    osd->store->getattr(info.pgid.to_coll(), poid, "version",
+			&old_version, sizeof(old_version));
     int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
     if (r >= 0) {
       bufferlist::iterator p = bl.begin();
@@ -1414,7 +1419,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   dout(10) << "op_modify " << opname 
            << " " << poid.oid 
            << " " << op->get_offset() << "~" << op->get_length()
-           << " av " << av 
+           << " ov " << old_version << " av " << av 
 	   << " snapc " << snapc
 	   << " snapset " << snapset
            << dendl;  
@@ -1457,8 +1462,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // we are acker.
   if (op->get_op() != CEPH_OSD_OP_WRNOOP) {
     // log and update later.
-    prepare_transaction(repop->t, op->get_reqid(),
-			poid, op->get_op(), av,
+    prepare_transaction(repop->t, op->get_reqid(), poid, op->get_op(),
+			old_version, av,
 			op->get_offset(), op->get_length(), op->get_data(),
 			snapset, snapc,
 			op->get_inc_lock(), peers_complete_thru);
@@ -1520,7 +1525,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   
   if (op->op != CEPH_OSD_OP_WRNOOP) {
     prepare_transaction(t, op->reqid,
-			op->poid, op->op, op->version,
+			op->poid, op->op, op->old_version, op->version,
 			op->offset, op->length, op->get_data(), 
 			op->snapset, op->snapc,
 			op->inc_lock, op->pg_trim_to);

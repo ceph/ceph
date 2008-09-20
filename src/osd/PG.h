@@ -212,15 +212,15 @@ public:
       object_t   oid;
       eversion_t version;
 
-      //eversion_t prior_version;     
+      eversion_t prior_version;     
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v,
-	    //const eversion_t& pv,
+	    const eversion_t& pv,
 	    const osd_reqid_t& rid) :
         op(_op), oid(_oid), version(v),
-	//prior_version(pv), 
+	prior_version(pv), 
 	reqid(rid) {}
       
       bool is_delete() const { return op == DELETE; }
@@ -232,14 +232,14 @@ public:
 	::encode(op, bl);
 	::encode(oid, bl);
 	::encode(version, bl);
-	//::encode(prior_version, bl);
+	::encode(prior_version, bl);
 	::encode(reqid, bl);
       }
       void decode(bufferlist::iterator &bl) {
 	::decode(op, bl);
 	::decode(oid, bl);
 	::decode(version, bl);
-	//::decode(prior_version, bl);
+	::decode(prior_version, bl);
 	::decode(reqid, bl);
       }
     };

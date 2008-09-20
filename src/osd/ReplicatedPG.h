@@ -42,7 +42,7 @@ public:
     bool sent_ack, sent_commit;
     
     set<int>         osds;
-    eversion_t       at_version;
+    eversion_t       old_version, at_version;
 
     SnapSet snapset;
     SnapContext snapc;
@@ -105,7 +105,8 @@ protected:
   void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
-			   pobject_t poid, int op, eversion_t at_version,
+			   pobject_t poid, int op,
+			   eversion_t old_version, eversion_t at_version,
 			   off_t offset, off_t length, bufferlist& bl,
 			   SnapSet& snapset, SnapContext& snapc,
 			   __u32 inc_lock, eversion_t trim_to);
