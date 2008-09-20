@@ -42,9 +42,13 @@ snaps on osd
   - don't start collection on replica until clean?
 - efficient recovery of clones using the clone diff info
   - recovery on primary
-    -
+    - log order vs recovery/clone order?
+    - rep_op_push on primary needs to be smart
+    - IndexLog could somehow aggregate data_subsets?
   - primary pushes to replicas
     - clone/rename, + push of new head
+    - hmm, needs to know what (old) version of each missing object (if any) is on the replica....
+
 
 userspace client
 - handle session STALE
