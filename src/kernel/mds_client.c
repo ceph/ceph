@@ -386,6 +386,8 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req = kzalloc(sizeof(*req), GFP_NOFS);
 	req->r_request = msg;
 	req->r_reply = 0;
+	req->r_timeout = 0;
+	req->r_started = jiffies;
 	req->r_err = 0;
 	req->r_direct_dentry = 0;
 	req->r_direct_mode = USE_ANY_MDS;
@@ -549,30 +551,44 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 	return msg;
 }
 
-static void wait_for_new_map(struct ceph_mds_client *mdsc)
+static int wait_for_new_map(struct ceph_mds_client *mdsc,
+			     unsigned long timeout)
 {
 	__u32 have;
+	int err = 0;
+
 	dout(30, "wait_for_new_map enter\n");
 	have = mdsc->mdsmap->m_epoch;
 	mutex_unlock(&mdsc->mutex);
 	ceph_monc_request_mdsmap(&mdsc->client->monc, have+1);
-	wait_for_completion(&mdsc->map_waiters);
+	if (timeout) {
+		err = wait_for_completion_timeout(&mdsc->map_waiters, timeout);
+		if (err > 0)
+			err = 0;
+		else if (err == 0)
+			err = -EIO;
+	} else
+		wait_for_completion(&mdsc->map_waiters);
 	mutex_lock(&mdsc->mutex);
-	dout(30, "wait_for_new_map exit\n");
+	dout(30, "wait_for_new_map err %d\n", err);
+	return err;
 }
 
 static int open_session(struct ceph_mds_client *mdsc,
-			struct ceph_mds_session *session)
+			struct ceph_mds_session *session, unsigned long timeout)
 {
 	struct ceph_msg *msg;
 	int mstate;
 	int mds = session->s_mds;
+	int err = 0;
 
 	/* mds active? */
 	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
 	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
 	if (mstate < CEPH_MDS_STATE_ACTIVE) {
-		wait_for_new_map(mdsc);
+		err = wait_for_new_map(mdsc, timeout);
+		if (err)
+			return err;
 		mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
 		if (mstate < CEPH_MDS_STATE_ACTIVE) {
 			dout(30, "open_session mds%d now %d still not active\n",
@@ -593,12 +609,20 @@ static int open_session(struct ceph_mds_client *mdsc,
 
 	/* wait for session to open (or fail, or close) */
 	dout(30, "open_session waiting on session %p\n", session);
-	wait_for_completion(&session->s_completion);
+	if (timeout) {
+		err = wait_for_completion_timeout(&session->s_completion,
+						  timeout);
+		if (err > 0)
+			err = 0;
+		else if (err == 0)
+			err = -EIO;
+	} else
+		wait_for_completion(&session->s_completion);
 	dout(30, "open_session done waiting on session %p, state %d\n",
 	     session, session->s_state);
 
 	mutex_lock(&mdsc->mutex);
-	return 0;
+	return err;
 }
 
 /*
@@ -1026,10 +1050,19 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	mutex_lock(&mdsc->mutex);
 	__register_request(mdsc, req);
 retry:
+	if (req->r_timeout &&
+	    time_after_eq(jiffies, req->r_started + req->r_timeout)) {
+		dout(10, "do_request timed out\n");
+		err = -EIO;
+		goto finish;
+	}
+
 	mds = choose_mds(mdsc, req);
 	if (mds < 0) {
 		dout(30, "do_request waiting for new mdsmap\n");
-		wait_for_new_map(mdsc);
+		err = wait_for_new_map(mdsc, req->r_timeout);
+		if (err)
+			return err;
 		goto retry;
 	}
 
@@ -1044,9 +1077,8 @@ retry:
 	err = 0;
 	if (session->s_state == CEPH_MDS_SESSION_NEW ||
 	    session->s_state == CEPH_MDS_SESSION_CLOSING) {
-		err = open_session(mdsc, session);
+		err = open_session(mdsc, session, req->r_timeout);
 		dout(30, "do_request open_session err=%d\n", err);
-		BUG_ON(err && err != -EAGAIN);
 	}
 	if (session->s_state != CEPH_MDS_SESSION_OPEN ||
 		err == -EAGAIN) {
@@ -1073,29 +1105,37 @@ retry:
 	req->r_request = ceph_msg_maybe_dup(req->r_request);
 	ceph_msg_get(req->r_request);
 	ceph_send_msg_mds(mdsc, req->r_request, mds);
-	wait_for_completion(&req->r_completion);
+	if (req->r_timeout) {
+		err = wait_for_completion_timeout(&req->r_completion,
+						  req->r_timeout);
+		if (err > 0)
+			err = 0;
+		else if (err == 0)
+			err = -EIO;
+	} else {
+		err = 0;
+		wait_for_completion(&req->r_completion);
+	}
 	mutex_lock(&mdsc->mutex);
-	if (req->r_reply == NULL) {
+	if (req->r_reply == NULL && !err) {
 		put_request_sessions(req);
 		goto retry;
 	}
-
-	/* clean up request, parse reply */
-	__unregister_request(mdsc, req);
-	mutex_unlock(&mdsc->mutex);
-
 	if (IS_ERR(req->r_reply)) {
 		err = PTR_ERR(req->r_reply);
 		req->r_reply = 0;
-		dout(10, "do_request returning err %d from reply handler\n",
-		     err);
-		return err;
 	}
+	if (!err)
+		err = le32_to_cpu(req->r_reply_info.head->result);
+
+	/* clean up request, parse reply */
+finish:
+	__unregister_request(mdsc, req);
+	mutex_unlock(&mdsc->mutex);
 
 	ceph_msg_put(req->r_request);
 	req->r_request = 0;
 
-	err = le32_to_cpu(req->r_reply_info.head->result);
 	dout(30, "do_request done on %p result %d\n", req, err);
 	return err;
 }

@@ -91,6 +91,8 @@ struct ceph_mds_request {
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info r_reply_info;
 	int r_err;
+	unsigned long r_timeout;  /* optional.  jiffies */
+	unsigned long r_started;  /* this must be set if r_timeout */
 
 	/* to direct request */
 	struct dentry *r_direct_dentry;

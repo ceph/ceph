@@ -101,7 +101,7 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 struct ceph_mount_args {
 	int sb_flags;
 	int flags;
-	int mount_attempts;
+	int mount_timeout;
 	struct ceph_fsid fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
