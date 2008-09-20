@@ -711,7 +711,7 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	u64 max_size = le64_to_cpu(grant->max_size);
 	struct timespec mtime, atime, ctime;
 	int wake = 0;
-	int writeback_now = 0;
+	int writeback = 0;
 	int invalidate = 0;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n",
@@ -778,9 +778,10 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 		if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
 			invalidate = 1;
 		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER)
-			writeback_now = 1; /* will delay ack */
+			writeback = 1; /* will delay ack */
 		else {
 			cap->implemented = newcaps;
+
 			/* ack now.  re-use incoming message. */
 			grant->size = le64_to_cpu(inode->i_size);
 			grant->max_size = 0;  /* don't re-request */
@@ -802,26 +803,28 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	} else {
 		dout(10, "grant: %d -> %d\n", cap->issued, newcaps);
 		cap->issued = newcaps;
-		/* add bits only, to avoid stepping on a pending revocation */
-		cap->implemented |= newcaps;
+		cap->implemented |= newcaps;    /* add bits only, to
+						 * avoid stepping on a
+						 * pending
+						 * revocation */
 		wake = 1;
 	}
 
 out:
 	spin_unlock(&inode->i_lock);
-	if (wake)
-		wake_up(&ci->i_cap_wq);
-	if (writeback_now) {
+	if (writeback) {
 		/*
-		 * queue inode for writeback; we can't actually call
-		 * write_inode_now, writepages, etc. from this
+		 * queue inode for writeback: we can't actually call
+		 * filemap_write_and_wait, etc. from message handler
 		 * context.
 		 */
 		dout(10, "queueing %p for writeback\n", inode);
 		ceph_queue_writeback(inode);
 	}
-	if (invalidate)
+	if (invalidate) /* do what we can */
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
+	if (wake)
+		wake_up(&ci->i_cap_wq);
 	return reply;
 }
 
@@ -1186,12 +1189,9 @@ int __ceph_send_cap(struct ceph_mds_client *mdsc,
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_RDCACHE) {
-		/*
-		 * FIXME: this will block if there is a locked page..
-		 */
+		/* invalidate what we can */
 		dout(20, "invalidating pages on %p\n", inode);
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
-		dout(20, "done invalidating pages on %p\n", inode);
 	}
 
 	send_cap(mdsc, ceph_vino(inode).ino,

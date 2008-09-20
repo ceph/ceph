@@ -1149,8 +1149,10 @@ void ceph_inode_writeback(struct work_struct *work)
 {
 	struct ceph_inode_info *ci = container_of(work, struct ceph_inode_info,
 						  i_wb_work);
-	dout(10, "writeback %p\n", &ci->vfs_inode);
-	write_inode_now(&ci->vfs_inode, 0);
+	struct inode *inode = &ci->vfs_inode;
+
+	dout(10, "writeback %p\n", inode);
+	filemap_write_and_wait(&inode->i_data);
 }
 
 
