@@ -744,7 +744,8 @@ private:
    * handy helpers to build simple maps...
    */
   void build_simple(epoch_t e, ceph_fsid &fsid,
-		    int num_osd, int pg_bits, int mds_local_osd);
+		    int num_osd, int pg_bits, int lpg_bits,
+		    int mds_local_osd);
   static void build_simple_crush_map(CrushWrapper& crush, int num_osd);
 
 };

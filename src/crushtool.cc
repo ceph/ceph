@@ -292,19 +292,28 @@ void parse_rule(iter_t const& i, CrushWrapper &crush)
       break;
 
     case crush_grammar::_step_choose:
+    case crush_grammar::_step_chooseleaf:
       {
 	string type = string_node(s->children[4]);
 	if (!type_id.count(type)) {
 	  cerr << "in rule '" << rname << "' type '" << type << "' not defined" << std::endl;
 	  exit(1);
 	}
+	string choose = string_node(s->children[0]);
 	string mode = string_node(s->children[1]);
-	if (mode == "firstn")
-	  crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	else if (mode == "indep")
-	  crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
-	else 
-	  assert(0);
+	if (choose == "choose") {
+	  if (mode == "firstn")
+	    crush.set_rule_step_choose_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else if (mode == "indep")
+	    crush.set_rule_step_choose_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else assert(0);
+	} else if (choose == "chooseleaf") {
+	  if (mode == "firstn") 
+	    crush.set_rule_step_choose_leaf_firstn(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else if (mode == "indep")
+	    crush.set_rule_step_choose_leaf_indep(ruleno, step++, int_node(s->children[2]), type_id[type]);
+	  else assert(0);
+	} else assert(0);
       }
       break;
 
@@ -606,6 +615,20 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
 	break;
       case CRUSH_RULE_CHOOSE_INDEP:
 	out << "\tstep choose indep "
+	    << crush.get_rule_arg1(i, j) 
+	    << " type ";
+	print_type_name(out, crush.get_rule_arg2(i, j), crush);
+	out << "\n";
+	break;
+      case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
+	out << "\tstep chooseleaf firstn "
+	    << crush.get_rule_arg1(i, j) 
+	    << " type ";
+	print_type_name(out, crush.get_rule_arg2(i, j), crush);
+	out << "\n";
+	break;
+      case CRUSH_RULE_CHOOSE_LEAF_INDEP:
+	out << "\tstep chooseleaf indep "
 	    << crush.get_rule_arg1(i, j) 
 	    << " type ";
 	print_type_name(out, crush.get_rule_arg2(i, j), crush);

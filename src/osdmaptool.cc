@@ -35,15 +35,40 @@ void usage(const char *me)
   exit(1);
 }
 
-void printmap(const char *me, OSDMap *m)
+void printmap(const char *me, OSDMap *m, ostream& out)
 {
-  cout << me << ": osdmap: epoch " << m->get_epoch() << std::endl
-       << me << ": osdmap: fsid " << m->get_fsid() << std::endl;
-  /*for (unsigned i=0; i<m->mon_inst.size(); i++)
-    cout << me << ": osdmap:  " //<< "mon" << i << " " 
-	 << m->mon_inst[i] << std::endl;
-  */
-}
+  out << "epoch " << m->get_epoch() << "\n"
+      << "fsid " << m->get_fsid() << "\n"
+      << "ctime " << m->get_ctime() << "\n"
+      << "mtime " << m->get_mtime() << "\n"
+      << std::endl;
+  out << "pg_num " << m->get_pg_num() << "\n"
+      << "pgp_num " << m->get_pgp_num() << "\n"
+      << "lpg_num " << m->get_lpg_num() << "\n"
+      << "lpgp_num " << m->get_lpgp_num() << "\n"
+      << "last_pg_change " << m->get_last_pg_change() << "\n"
+      << std::endl;
+  out << "max_osd " << m->get_max_osd() << "\n";
+  for (int i=0; i<m->get_max_osd(); i++) {
+    if (m->exists(i)) {
+      out << "osd" << i
+	  << (m->is_in(i) ? " in":" out")
+	  << (m->is_up(i) ? " up":" down");
+      if (m->is_up(i))
+	out << " " << m->get_addr(i);
+      out << " up_from " << m->get_up_from(i)
+	  << " up_thru " << m->get_up_thru(i)
+	  << "\n";
+    }
+  }
+  out << std::endl;
+  
+  // ignore pg_swap_primary
+  
+  out << "max_snap " << m->get_max_snap() << "\n"
+      << "removed_snaps " << m->get_removed_snaps() << "\n"
+      << std::endl;
+ }
 
 
 int main(int argc, const char **argv)
@@ -60,6 +85,7 @@ int main(int argc, const char **argv)
   const char *monmapfn = 0;
   int num_osd = 0;
   int pg_bits = g_conf.osd_pg_bits;
+  int lpg_bits = g_conf.osd_lpg_bits;
   bool clobber = false;
   bool modified = false;
   const char *export_crush = 0;
@@ -75,8 +101,10 @@ int main(int argc, const char **argv)
       num_osd = atoi(args[++i]);
     } else if (strcmp(args[i], "--clobber") == 0) 
       clobber = true;
-    else if (strcmp(args[i], "--pgbits") == 0)
+    else if (strcmp(args[i], "--pg_bits") == 0)
       pg_bits = atoi(args[++i]);
+    else if (strcmp(args[i], "--lpg_bits") == 0)
+      lpg_bits = atoi(args[++i]);
     else if (strcmp(args[i], "--export-crush") == 0)
       export_crush = args[++i];
     else if (strcmp(args[i], "--import-crush") == 0)
@@ -121,7 +149,7 @@ int main(int argc, const char **argv)
       cerr << me << ": osd count must be > 0" << std::endl;
       exit(1);
     }
-    osdmap.build_simple(0, monmap.fsid, num_osd, pg_bits, 0);
+    osdmap.build_simple(0, monmap.fsid, num_osd, pg_bits, lpg_bits, 0);
     modified = true;
   }
 
@@ -134,10 +162,16 @@ int main(int argc, const char **argv)
     }
     // validate
     CrushWrapper cw;
-    //cw._decode(cbl,    FIXME
     bufferlist::iterator p = cbl.begin();
-    osdmap.crush.decode(p);
-    cout << me << ": imported crush map from " << import_crush << std::endl;
+    cw.decode(p);
+    
+    // apply
+    OSDMap::Incremental inc;
+    inc.fsid = osdmap.get_fsid();
+    inc.epoch = osdmap.get_epoch()+1;
+    inc.crush = cbl;
+    osdmap.apply_incremental(inc);
+    cout << me << ": imported " << cbl.length() << " byte crush map from " << import_crush << std::endl;
     modified = true;
   }
 
@@ -156,13 +190,15 @@ int main(int argc, const char **argv)
     cerr << me << ": no action specified?" << std::endl;
     usage(me);
   }
+
   if (modified)
     osdmap.inc_epoch();
 
   if (print) 
-    printmap(me, &osdmap);
+    printmap(me, &osdmap, cout);
 
   if (modified) {
+    bl.clear();
     osdmap.encode(bl);
 
     // write it out

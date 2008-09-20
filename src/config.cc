@@ -44,6 +44,7 @@ int buffer::list::read_file(const char *fn)
   ::fstat(fd, &st);
   int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
+  bp.set_length(st.st_size);
   append(bp);
   ::read(fd, (void*)c_str(), length());
   ::close(fd);
@@ -404,6 +405,7 @@ md_config_t g_conf = {
   osd_min_pg_size_without_alive: 2,  // smallest pg we allow to activate without telling the monitor
 
   osd_pg_bits: 6,  // bits per osd
+  osd_lpg_bits: 1,  // bits per osd
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_min_rep: 2,

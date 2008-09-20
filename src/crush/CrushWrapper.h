@@ -241,6 +241,12 @@ public:
   int set_rule_step_choose_indep(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_INDEP, val, type);
   }
+  int set_rule_step_choose_leaf_firstn(unsigned ruleno, unsigned step, int val, int type) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, val, type);
+  }
+  int set_rule_step_choose_leaf_indep(unsigned ruleno, unsigned step, int val, int type) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_LEAF_INDEP, val, type);
+  }
   int set_rule_step_emit(unsigned ruleno, unsigned step) {
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }

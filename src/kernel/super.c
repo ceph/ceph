@@ -367,10 +367,11 @@ enum {
 	Opt_port,
 	Opt_wsize,
 	Opt_osdtimeout,
-	Opt_mount_attempts,
+	Opt_mount_timeout,
 	/* int args above */
 	Opt_ip,
-	Opt_unsafewrites,
+	Opt_unsafewriteback,
+	Opt_safewriteback,
 	Opt_dirstat,
 	Opt_nodirstat,
 	Opt_rbytes,
@@ -393,11 +394,12 @@ static match_table_t arg_tokens = {
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
-	{Opt_mount_attempts, "mount_attempts=%d"},
+	{Opt_mount_timeout, "mount_timeout=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
-	{Opt_unsafewrites, "unsafewrites"},
+	{Opt_unsafewriteback, "unsafewriteback"},
+	{Opt_safewriteback, "safewriteback"},
 	{Opt_dirstat, "dirstat"},
 	{Opt_nodirstat, "nodirstat"},
 	{Opt_rbytes, "rbytes"},
@@ -456,8 +458,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* defaults */
 	args->sb_flags = flags;
 	args->flags = CEPH_MOUNT_DEFAULT;
-	args->osd_timeout = 5;  /* seconds */
-	args->mount_attempts = 2;  /* 2 attempts */
+	args->osd_timeout = 5;    /* seconds */
+	args->mount_timeout = 30; /* seconds */
 	args->snapdir_name = ".snap";
 
 	/* ip1[,ip2...]:/server/path */
@@ -567,11 +569,15 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_osdtimeout:
 			args->osd_timeout = intval;
 			break;
-		case Opt_mount_attempts:
-			args->mount_attempts = intval;
+		case Opt_mount_timeout:
+			args->mount_timeout = intval;
 			break;
-		case Opt_unsafewrites:
-			args->flags |= CEPH_MOUNT_UNSAFE_WRITES;
+
+		case Opt_unsafewriteback:
+			args->flags |= CEPH_MOUNT_UNSAFE_WRITEBACK;
+			break;
+		case Opt_safewriteback:
+			args->flags &= ~CEPH_MOUNT_UNSAFE_WRITEBACK;
 			break;
 
 		case Opt_dirstat:
@@ -671,7 +677,8 @@ static int have_all_maps(struct ceph_client *client)
 }
 
 static struct dentry *open_root_dentry(struct ceph_client *client,
-				       const char *path)
+				       const char *path,
+				       unsigned long started)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req = 0;
@@ -686,6 +693,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 				       NULL, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
+	req->r_started = started;
+	req->r_timeout = client->mount_args.mount_timeout * HZ;
 	req->r_expects_cap = 1;
 	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
@@ -711,7 +720,8 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	struct ceph_msg *mount_msg;
 	struct dentry *root;
 	int err;
-	int attempts = client->mount_args.mount_attempts;
+	unsigned long timeout = client->mount_args.mount_timeout * HZ;
+	unsigned long started = jiffies;
 	int which;
 	char r;
 
@@ -736,10 +746,9 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	
 	while (!have_all_maps(client)) {
 		err = -EIO;
-		if (attempts == 0)
+		if (timeout && time_after_eq(jiffies, started + timeout))
 			goto out;
-		dout(10, "mount sending mount request, %d attempts left\n",
-		     attempts--);
+		dout(10, "mount sending mount request\n");
 		get_random_bytes(&r, 1);
 		which = r % client->mount_args.num_mon;
 		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
@@ -753,21 +762,20 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		mount_msg->hdr.dst.addr = client->mount_args.mon_addr[which];
 
 		ceph_msg_send(client->msgr, mount_msg, 0);
-		dout(10, "mount from mon%d, %d attempts left\n",
-		     which, attempts);
+		dout(10, "mount from mon%d\n", which);
 
 		/* wait */
 		dout(10, "mount sent mount request, waiting for maps\n");
 		err = wait_event_interruptible_timeout(client->mount_wq,
 						       have_all_maps(client),
-						       6*HZ);
+						       5*HZ);
 		dout(10, "mount wait got %d\n", err);
 		if (err == -EINTR)
 			goto out;
 	}
 
 	dout(30, "mount opening base mountpoint\n");
-	root = open_root_dentry(client, path);
+	root = open_root_dentry(client, path, started);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
 		goto out;
