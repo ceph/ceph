@@ -391,7 +391,23 @@ public:
    */
   class Missing {
   public:
-    map<object_t, eversion_t> missing;   // oid -> v
+    struct item {
+      eversion_t need, have;
+      item() {}
+      item(eversion_t n) : need(n) {}  // have no old version
+      item(eversion_t n, eversion_t h) : need(n), have(h) {}
+      void encode(bufferlist& bl) const {
+	::encode(need, bl);
+	::encode(have, bl);
+      }
+      void decode(bufferlist::iterator& bl) {
+	::decode(need, bl);
+	::decode(have, bl);
+      }
+    }; 
+    WRITE_CLASS_ENCODER(item)
+
+    map<object_t, item> missing;         // oid -> (need v, have v)
     map<eversion_t, object_t> rmissing;  // v -> oid
 
     map<object_t, int>       loc;       // where i think i can get them.
@@ -403,46 +419,41 @@ public:
       return missing.count(oid);
     }
     bool is_missing(object_t oid, eversion_t v) {
-      return missing.count(oid) && missing[oid] <= v;
-    }
-    void add(object_t oid) {
-      eversion_t z;
-      add(oid,z);
+      return missing.count(oid) && missing[oid].need <= v;
     }
     
     void add_event(Log::Entry& e) {
       if (e.is_update())
-	add(e.oid, e.version);
+	add(e.oid, e.version, e.old_version);
       else
 	rm(e.oid, e.version);
     }
 
-    void add(object_t oid, eversion_t v) {
+    void add(object_t oid, eversion_t need) {
+      eversion_t have;
+      add(oid, need, have);
+    }
+    void add(object_t oid, eversion_t need, eversion_t have) {
       if (missing.count(oid)) {
-        if (missing[oid] > v) return;   // already missing newer.
-        rmissing.erase(missing[oid]);
-      }
-      missing[oid] = v;
-      rmissing[v] = oid;
+        if (missing[oid].need > need) return;   // already missing newer.
+        rmissing.erase(missing[oid].need);
+	missing[oid].need = need;  // don't have .have
+      } else 
+	missing[oid] = item(need, have);
+      rmissing[need] = oid;
     }
     void rm(object_t oid, eversion_t when) {
-      if (missing.count(oid) && missing[oid] < when) {
-        rmissing.erase(missing[oid]);
+      if (missing.count(oid) && missing[oid].need < when) {
+        rmissing.erase(missing[oid].need);
         missing.erase(oid);
         loc.erase(oid);
       }        
     }
     void got(object_t oid, eversion_t v) {
       assert(missing.count(oid));
-      assert(missing[oid] <= v);
+      assert(missing[oid].need <= v);
       loc.erase(oid);
-      rmissing.erase(missing[oid]);
-      missing.erase(oid);
-    }
-    void got(object_t oid) {
-      assert(missing.count(oid));
-      loc.erase(oid);
-      rmissing.erase(missing[oid]);
+      rmissing.erase(missing[oid].need);
       missing.erase(oid);
     }
 
@@ -454,10 +465,10 @@ public:
       ::decode(missing, bl);
       ::decode(loc, bl);
 
-      for (map<object_t,eversion_t>::iterator it = missing.begin();
+      for (map<object_t,item>::iterator it = missing.begin();
            it != missing.end();
            it++) 
-        rmissing[it->second] = it->first;
+        rmissing[it->second.need] = it->first;
     }
   };
   WRITE_CLASS_ENCODER(Missing)
@@ -602,7 +613,7 @@ public:
 
   void proc_replica_log(Log &olog, Missing& omissing, int from);
   void merge_log(Log &olog, Missing& omissing, int from);
-  void proc_missing(Log &olog, Missing &omissing, int fromosd);
+  void proc_replica_missing(Log &olog, Missing &omissing, int fromosd);
   
   void generate_backlog();
   void drop_backlog();
@@ -736,6 +747,7 @@ public:
 WRITE_CLASS_ENCODER(PG::Info::History)
 WRITE_CLASS_ENCODER(PG::Info)
 WRITE_CLASS_ENCODER(PG::Query)
+WRITE_CLASS_ENCODER(PG::Missing::item)
 WRITE_CLASS_ENCODER(PG::Missing)
 WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
@@ -782,10 +794,18 @@ inline ostream& operator<<(ostream& out, const PG::Log& log)
   return out;
 }
 
+inline ostream& operator<<(ostream& out, const PG::Missing::item& i) 
+{
+  out << i.need;
+  if (i.have != eversion_t())
+    out << "(" << i.have << ")";
+  return out;
+}
+
 inline ostream& operator<<(ostream& out, const PG::Missing& missing) 
 {
   out << "missing(" << missing.num_missing();
-  if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
+  //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
   out << ")";
   return out;
 }
@@ -821,8 +841,10 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   out << " " << pg_state_string(pg.get_state());
 
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
-  if (pg.missing.num_missing()) out << " m=" << pg.missing.num_missing();
-  if (pg.missing.num_lost()) out << " l=" << pg.missing.num_lost();
+  if (pg.missing.num_missing())
+    out << " m=" << pg.missing.num_missing();
+  if (pg.is_primary() && pg.missing.num_lost())
+    out << " l=" << pg.missing.num_lost();
   if (pg.info.dead_snaps.size())
     out << " dead=" << pg.info.dead_snaps;
   out << "]";

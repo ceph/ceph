@@ -46,7 +46,6 @@ snaps on osd
     - IndexLog could somehow aggregate data_subsets?
   - primary pushes to replicas
     - clone/rename, + push of new head
-    - hmm, needs to know what (old) version of each missing object (if any) is on the replica....
 
 
 kernel client

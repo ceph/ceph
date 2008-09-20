@@ -2546,7 +2546,6 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       
       // merge log
       pg->merge_log(log, missing, from);
-      pg->proc_missing(log, missing, from);
       
       // ok activate!
       pg->activate(t, info_map);

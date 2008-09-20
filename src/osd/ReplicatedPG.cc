@@ -76,7 +76,7 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, Message *m)
   pobject_t poid(info.pgid.pool(), 0, oid);
 
   // we don't have it (yet).
-  eversion_t v = missing.missing[oid];
+  eversion_t v = missing.missing[oid].need;
   if (pulling.count(oid)) {
     dout(7) << "missing "
 	    << poid 
@@ -1602,7 +1602,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 void ReplicatedPG::pull(pobject_t poid)
 {
   assert(missing.loc.count(poid.oid));
-  eversion_t v = missing.missing[poid.oid];
+  eversion_t v = missing.missing[poid.oid].need;
   int fromosd = missing.loc[poid.oid];
   
   dout(7) << "pull " << poid
@@ -1717,7 +1717,7 @@ void ReplicatedPG::push(pobject_t poid, int peer, interval_set<__u64> &subset)
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
   
   if (is_primary()) {
-    peer_missing[peer].got(poid.oid);
+    peer_missing[peer].got(poid.oid, v);
     pushing[poid.oid].insert(peer);
   }
 }

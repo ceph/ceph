@@ -167,7 +167,7 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
     
     // merge log into our own log
     merge_log(olog, omissing, from);
-    proc_missing(olog, omissing, from);
+    proc_replica_missing(olog, omissing, from);
   } else {
     // i'm just building missing lists.
     peer_missing[from] = omissing;
@@ -226,7 +226,7 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
       }
     }
 
-    proc_missing(olog, peer_missing[from], from);
+    proc_replica_missing(olog, peer_missing[from], from);
   }
 }
 
@@ -405,29 +405,28 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 
 }
 
-void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
+/*
+ * process replica's missing map to determine if they have
+ * any objects that i need
+ */
+void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
 {
   // found items?
-  for (map<object_t,eversion_t>::iterator p = missing.missing.begin();
+  for (map<object_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
        p++) {
+    eversion_t need = p->second.need;
+    eversion_t have = p->second.have;
     if (omissing.is_missing(p->first)) {
-      assert(omissing.is_missing(p->first, p->second));
-      if (omissing.loc.count(p->first)) {
-        dout(10) << "proc_missing " << p->first << " " << p->second
-                 << " is on osd" << omissing.loc[p->first] << dendl;
-        missing.loc[p->first] = omissing.loc[p->first];
-      } else {
-        dout(10) << "proc_missing " << p->first << " " << p->second
-                 << " also missing on osd" << fromosd << dendl;
-      }
+      dout(10) << "proc_missing " << p->first << " " << need
+	       << " also missing on osd" << fromosd << dendl;
     } 
-    else if (p->second <= olog.top) {
-      dout(10) << "proc_missing " << p->first << " " << p->second
+    else if (need <= olog.top) {
+      dout(10) << "proc_missing " << p->first << " " << need
                << " is on osd" << fromosd << dendl;
       missing.loc[p->first] = fromosd;
     } else {
-      dout(10) << "proc_missing " << p->first << " " << p->second
+      dout(10) << "proc_missing " << p->first << " " << need
                << " > olog.top " << olog.top << ", also missing on osd" << fromosd
                << dendl;
     }
