@@ -1879,6 +1879,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	struct ceph_mds_session *session;
 	int i;
 	int n;
+	unsigned long started, timeout = 30 * HZ;
 
 	dout(10, "close_sessions\n");
 	mdsc->stopping = 1;
@@ -1900,8 +1901,14 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	mutex_lock(&mdsc->mutex);
 	down_write(&mdsc->snap_rwsem);
 
-	/* close sessions, caps */
-	while (1) {
+	/* close sessions, caps.
+	 *
+	 * WARNING the session close timeout (and forced unmount in
+	 * general) is somewhat broken.. we'll leaved inodes pinned
+	 * and other nastyness.
+	 */
+	started = jiffies;
+	while (time_before(jiffies, started + timeout)) {
 		dout(10, "closing sessions\n");
 		n = 0;
 		for (i = 0; i < mdsc->max_sessions; i++) {
@@ -1919,7 +1926,8 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 		dout(10, "waiting for sessions to close\n");
 		mutex_unlock(&mdsc->mutex);
 		up_write(&mdsc->snap_rwsem);
-		wait_for_completion(&mdsc->session_close_waiters);
+		wait_for_completion_timeout(&mdsc->session_close_waiters,
+					    timeout);
 		mutex_lock(&mdsc->mutex);
 		down_write(&mdsc->snap_rwsem);
 	}

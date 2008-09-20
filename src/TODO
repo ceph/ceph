@@ -51,7 +51,6 @@ kernel client
 - set mapping bits for ENOSPC, EIO?
 - flush caps on sync, fsync, etc.
   - do we need to block?
-- timeout session close on umount
 - forced unmount?
 - deal with CAP_RDCACHE properly: are we invalidating cache pages correctly?
 - procfs/debugfs
