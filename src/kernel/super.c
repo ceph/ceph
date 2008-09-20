@@ -370,7 +370,8 @@ enum {
 	Opt_mount_timeout,
 	/* int args above */
 	Opt_ip,
-	Opt_unsafewrites,
+	Opt_unsafewriteback,
+	Opt_safewriteback,
 	Opt_dirstat,
 	Opt_nodirstat,
 	Opt_rbytes,
@@ -397,7 +398,8 @@ static match_table_t arg_tokens = {
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
-	{Opt_unsafewrites, "unsafewrites"},
+	{Opt_unsafewriteback, "unsafewriteback"},
+	{Opt_safewriteback, "safewriteback"},
 	{Opt_dirstat, "dirstat"},
 	{Opt_nodirstat, "nodirstat"},
 	{Opt_rbytes, "rbytes"},
@@ -570,8 +572,12 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_mount_timeout:
 			args->mount_timeout = intval;
 			break;
-		case Opt_unsafewrites:
-			args->flags |= CEPH_MOUNT_UNSAFE_WRITES;
+
+		case Opt_unsafewriteback:
+			args->flags |= CEPH_MOUNT_UNSAFE_WRITEBACK;
+			break;
+		case Opt_safewriteback:
+			args->flags &= ~CEPH_MOUNT_UNSAFE_WRITEBACK;
 			break;
 
 		case Opt_dirstat:

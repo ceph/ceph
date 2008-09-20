@@ -91,12 +91,12 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_FSID          (1<<0)
 #define CEPH_MOUNT_NOSHARE       (1<<1) /* don't share client with other sbs */
 #define CEPH_MOUNT_MYIP          (1<<2) /* specified my ip */
-#define CEPH_MOUNT_UNSAFE_WRITES (1<<3)
+#define CEPH_MOUNT_UNSAFE_WRITEBACK (1<<3)
 #define CEPH_MOUNT_DIRSTAT       (1<<4)
 #define CEPH_MOUNT_RBYTES        (1<<5)
 
 #define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_RBYTES |		\
-			    CEPH_MOUNT_UNSAFE_WRITES)
+			    CEPH_MOUNT_UNSAFE_WRITEBACK) /* just for now */
 
 struct ceph_mount_args {
 	int sb_flags;

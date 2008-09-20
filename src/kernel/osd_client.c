@@ -911,7 +911,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	}
 
 	reqhead = reqm->front.iov_base;
-	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITES)
+	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
 		reqhead->flags = CEPH_OSD_OP_ACK;
 	else
 		reqhead->flags = CEPH_OSD_OP_SAFE;
