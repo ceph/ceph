@@ -470,16 +470,10 @@ bool ReplicatedPG::snap_trimmer()
 	for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
 	  if (*p == last)
 	    break;
-	if (p == snapset.clones.begin()) {
-	  // newest clone.
-	  snapset.head_overlap.intersection_of(snapset.clone_overlap[last]);
-	} else  {
-	  // older clone
-	  vector<snapid_t>::iterator n = p;
-	  n++;
-	  if (n != snapset.clones.end())
-	    // not oldest clone.
-	    snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
+	if (p != snapset.clones.begin()) {
+	  // not the oldest... merge overlap into next older clone
+	  vector<snapid_t>::iterator n = p - 1;
+ 	  snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
 	}
 	snapset.clones.erase(p);
 	snapset.clone_overlap.erase(last);
@@ -848,7 +842,6 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       }
 
       snapset.clones.push_back(coid.oid.snap);
-      snapset.clone_overlap[coid.oid.snap].swap(snapset.head_overlap);
       
       at_version.version++;
     }
@@ -916,10 +909,13 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       nbl.claim(bl);    // give buffers to store; we keep *op in memory for a long time!
       t.write(info.pgid.to_coll(), poid, offset, length, nbl);
       snapset.head_exists = true;
-      interval_set<__u64> ch;
-      ch.insert(offset, length);
-      ch.intersection_of(snapset.head_overlap);
-      snapset.head_overlap.subtract(ch);
+      if (snapset.clones.size()) {
+	snapid_t newest = *snapset.clones.rbegin();
+	interval_set<__u64> ch;
+	ch.insert(offset, length);
+	ch.intersection_of(snapset.clone_overlap[newest]);
+	snapset.clone_overlap[newest].subtract(ch);
+      }
     }
     break;
     
@@ -931,34 +927,46 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       t.truncate(info.pgid.to_coll(), poid, 0);
       t.write(info.pgid.to_coll(), poid, offset, length, nbl);
       snapset.head_exists = true;
-      snapset.head_overlap.clear();
+      if (snapset.clones.size()) {
+	snapid_t newest = *snapset.clones.rbegin();
+	snapset.clone_overlap.erase(newest);
+      }
     }
     break;
     
   case CEPH_OSD_OP_ZERO:
     { // zero
       t.zero(info.pgid.to_coll(), poid, offset, length);
-      interval_set<__u64> ch;
-      ch.insert(offset, length);
-      ch.intersection_of(snapset.head_overlap);
-      snapset.head_overlap.subtract(ch);
+      if (snapset.clones.size()) {
+	snapid_t newest = *snapset.clones.rbegin();
+	interval_set<__u64> ch;
+	ch.insert(offset, length);
+	ch.intersection_of(snapset.clone_overlap[newest]);
+	snapset.clone_overlap[newest].subtract(ch);
+      }
     }
     break;
 
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
       t.truncate(info.pgid.to_coll(), poid, length);
-      interval_set<__u64> keep;
-      if (length)
-	keep.insert(0, length);
-      snapset.head_overlap.intersection_of(keep);
+      if (snapset.clones.size()) {
+	snapid_t newest = *snapset.clones.rbegin();
+	interval_set<__u64> keep;
+	if (length)
+	  keep.insert(0, length);
+	snapset.clone_overlap[newest].intersection_of(keep);
+      }
     }
     break;
     
   case CEPH_OSD_OP_DELETE:
     { // delete
       t.remove(info.pgid.to_coll(), poid);
-      snapset.head_overlap.clear();  // ok, redundant.
+      if (snapset.clones.size()) {
+	snapid_t newest = *snapset.clones.rbegin();
+	snapset.clone_overlap.erase(newest);  // ok, redundant.
+      }
     }
     break;
     

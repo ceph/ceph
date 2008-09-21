@@ -439,10 +439,9 @@ WRITE_CLASS_ENCODER(interval_set<__u64>)
 struct SnapSet {
   snapid_t seq;
   bool head_exists;
-  vector<snapid_t> snaps;
-  vector<snapid_t> clones;
-  interval_set<__u64> head_overlap;                   // subset of data that is "shared"
-  map<snapid_t, interval_set<__u64> > clone_overlap;  // overlap w/ previous
+  vector<snapid_t> snaps;    // ascending
+  vector<snapid_t> clones;   // ascending
+  map<snapid_t, interval_set<__u64> > clone_overlap;  // overlap w/ next newest
 
   SnapSet() : head_exists(false) {}
 
@@ -451,7 +450,6 @@ struct SnapSet {
     ::encode(head_exists, bl);
     ::encode(snaps, bl);
     ::encode(clones, bl);
-    ::encode(head_overlap, bl);
     ::encode(clone_overlap, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -459,7 +457,6 @@ struct SnapSet {
     ::decode(head_exists, bl);
     ::decode(snaps, bl);
     ::decode(clones, bl);
-    ::decode(head_overlap, bl);
     ::decode(clone_overlap, bl);
   }
 };
