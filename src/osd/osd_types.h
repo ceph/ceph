@@ -442,6 +442,7 @@ struct SnapSet {
   vector<snapid_t> snaps;    // ascending
   vector<snapid_t> clones;   // ascending
   map<snapid_t, interval_set<__u64> > clone_overlap;  // overlap w/ next newest
+  map<snapid_t, __u64> clone_size;
 
   SnapSet() : head_exists(false) {}
 
@@ -451,6 +452,7 @@ struct SnapSet {
     ::encode(snaps, bl);
     ::encode(clones, bl);
     ::encode(clone_overlap, bl);
+    ::encode(clone_size, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(seq, bl);
@@ -458,6 +460,7 @@ struct SnapSet {
     ::decode(snaps, bl);
     ::decode(clones, bl);
     ::decode(clone_overlap, bl);
+    ::decode(clone_size, bl);
   }
 };
 WRITE_CLASS_ENCODER(SnapSet)

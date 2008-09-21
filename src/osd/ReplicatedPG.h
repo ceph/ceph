@@ -96,9 +96,17 @@ protected:
   map<object_t, set<int> > pushing;
   set<object_t> waiting_for_head;
 
+  void calc_head_subsets(SnapSet& snapset, pobject_t head,
+			 Missing& missing,
+			 interval_set<__u64>& data_subset,
+			 map<pobject_t, interval_set<__u64> >& clone_subsets);
+  void calc_clone_subsets(SnapSet& snapset, pobject_t poid, Missing& missing,
+			  interval_set<__u64>& data_subset,
+			  map<pobject_t, interval_set<__u64> >& clone_subsets);
   void push_to_replica(pobject_t oid, int dest);
   void push(pobject_t oid, int dest);
-  void push(pobject_t oid, int dest, interval_set<__u64>& blocks);
+  void push(pobject_t oid, int dest, interval_set<__u64>& data_subset, 
+	    map<pobject_t, interval_set<__u64> >& clone_subsets);
   void pull(pobject_t oid);
 
   // modify
