@@ -2522,3 +2522,100 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     }
   }
 }
+
+
+
+void ReplicatedPG::scrub()
+{
+  lock();
+  dout(10) << "scrub start" << dendl;
+
+  coll_t c = info.pgid.to_coll();
+  vector<pobject_t> ls;
+  osd->store->collection_list(c, ls);
+  dout(10) << "scrub " << ls.size() << " objects" << dendl;
+
+  sort(ls.begin(), ls.end());
+  dout(10) << "scrub sorted object lists" << dendl;
+
+  // traverse in reverse order.
+  pobject_t head;
+  SnapSet snapset;
+  unsigned curclone;
+  int r;
+
+  bufferlist last_data;
+
+  for (vector<pobject_t>::reverse_iterator p = ls.rbegin(); 
+       p != ls.rend(); 
+       p++) {
+    pobject_t poid = *p;
+
+    // basic checks.
+    eversion_t v;
+    r = osd->store->getattr(c, poid, "version", &v, sizeof(v));
+    assert(r == sizeof(v));
+    struct stat st;
+    r = osd->store->stat(c, poid, &st);
+    dout(20) << "scrub  " << poid << " v " << v
+	     << " size " << st.st_size << dendl;
+  
+    bufferlist data;
+    osd->store->read(c, poid, 0, 0, data);
+    assert(data.length() == st.st_size);
+
+    // new head?
+    if (poid.oid.snap == CEPH_NOSNAP) {
+      // it's a head.
+      if (head != pobject_t()) {
+	derr(0) << " missing clone(s) for " << head << dendl;
+	assert(head == pobject_t());  // we had better be done
+      }
+
+      bufferlist bl;
+      r = osd->store->getattr(c, poid, "snapset", bl);
+      assert(r > 0);
+      bufferlist::iterator blp = bl.begin();
+      ::decode(snapset, blp);
+      dout(20) << "scrub  " << poid << " snapset " << snapset << dendl;
+      if (!snapset.head_exists)
+	assert(st.st_size == 0); // make sure object is 0-sized.
+
+      // what will be next?
+      if (snapset.clones.empty())
+	head = pobject_t();  // no clones.
+      else
+	curclone = snapset.clones.size()-1;
+    } else if (poid.oid.snap) {
+      // it's a clone
+      assert(head != pobject_t());
+      
+      assert(poid.oid.snap == snapset.clones[curclone]);
+      bufferlist bl;
+      r = osd->store->getattr(c, poid, "snaps", bl);
+      assert(r > 0);
+      bufferlist::iterator blp = bl.begin();
+      vector<snapid_t> snaps;
+      ::decode(snaps, blp);
+      
+      eversion_t from;
+      r = osd->store->getattr(c, poid, "from_version", &from, sizeof(from));
+
+      assert((__u64)st.st_size == snapset.clone_size[curclone]);
+
+      // verify overlap?
+      // ...
+
+      // what's next?
+      curclone++;
+      if (curclone == snapset.clones.size())
+	head = pobject_t();
+
+    } else {
+      // it's unversioned.
+    }
+  }  
+  
+  dout(10) << "scrub finish" << dendl;
+  unlock();
+}
