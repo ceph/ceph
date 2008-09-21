@@ -214,6 +214,7 @@ public:
 
       eversion_t prior_version;     
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
+      vector<snapid_t> snaps;  // only for clone entries
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v,
@@ -234,6 +235,8 @@ public:
 	::encode(version, bl);
 	::encode(prior_version, bl);
 	::encode(reqid, bl);
+	if (op == CLONE)
+	  ::encode(snaps, bl);
       }
       void decode(bufferlist::iterator &bl) {
 	::decode(op, bl);
@@ -241,6 +244,8 @@ public:
 	::decode(version, bl);
 	::decode(prior_version, bl);
 	::decode(reqid, bl);
+	if (op == CLONE)
+	  ::decode(snaps, bl);
       }
     };
     WRITE_CLASS_ENCODER(Entry)
@@ -421,10 +426,13 @@ public:
     bool is_missing(object_t oid, eversion_t v) {
       return missing.count(oid) && missing[oid].need <= v;
     }
+    eversion_t have_old(object_t oid) {
+      return missing.count(oid) ? missing[oid].have : eversion_t();
+    }
     
     void add_event(Log::Entry& e) {
       if (e.is_update())
-	add(e.oid, e.version, e.old_version);
+	add(e.oid, e.version, e.prior_version);
       else
 	rm(e.oid, e.version);
     }

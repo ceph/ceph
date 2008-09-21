@@ -762,6 +762,17 @@ void ReplicatedPG::op_read(MOSDOp *op)
 // ========================================================================
 // MODIFY
 
+void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
+			       pobject_t head, pobject_t coid,
+			       eversion_t v, const vector<snapid_t>& snaps)
+{
+  t.clone(info.pgid.to_coll(), head, coid);
+  bufferlist snapsbl;
+  ::encode(snaps, snapsbl);
+  t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
+  t.setattr(info.pgid.to_coll(), coid, "version", &v, sizeof(v));
+}
+
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 				       pobject_t poid, int op,
 				       eversion_t old_version, eversion_t at_version,
@@ -816,16 +827,13 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       // log clone
       dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
       Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, old_version, at_version, reqid);
+      cloneentry.snaps = snaps;
       dout(10) << "prepare_transaction " << cloneentry << dendl;
       log.add(cloneentry);
       assert(log.top == at_version);
 
       // prepare clone
-      t.clone(info.pgid.to_coll(), poid, coid);
-      bufferlist snapsbl;
-      ::encode(snaps, snapsbl);
-      t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
-      t.setattr(info.pgid.to_coll(), coid, "version", &at_version, sizeof(at_version));
+      _make_clone(t, poid, coid, at_version, snaps);
       
       // add to snap bound collections
       coll_t fc = info.pgid.to_snap_coll(snaps[0]);
@@ -1440,7 +1448,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
         peer_missing[peer].is_missing(poid.oid)) {
       // push it before this update. 
       // FIXME, this is probably extra much work (eg if we're about to overwrite)
-      push(poid, peer);
+      push_to_replica(poid, peer);
     }
   }
 
@@ -1663,6 +1671,12 @@ void ReplicatedPG::pull(pobject_t poid)
 
 /** push - send object to a peer
  */
+void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
+{
+  // be smart _here_
+  push(poid, peer);
+}
+
 void ReplicatedPG::push(pobject_t poid, int peer)
 {
   interval_set<__u64> subset;
@@ -1915,7 +1929,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	int peer = acting[i];
 	assert(peer_missing.count(peer));
 	if (peer_missing[peer].is_missing(poid.oid)) 
-	  push(poid, peer);  // ok, push it, and they (will) have it now.
+	  push_to_replica(poid, peer);  // ok, push it, and they (will) have it now.
       }
 
       do_recovery();      // continue recovery
@@ -2111,6 +2125,24 @@ bool ReplicatedPG::do_recovery()
 	!waiting_for_head.count(latest->oid) &&
         missing.is_missing(latest->oid)) {
       pobject_t poid(info.pgid.pool(), 0, latest->oid);
+
+      // is this a clone operation that we can do locally?
+      if (latest->op == Log::Entry::CLONE) {
+	pobject_t head = poid;
+	head.oid.snap = CEPH_NOSNAP;
+	if (missing.is_missing(head.oid) &&
+	    missing.have_old(head.oid) == latest->prior_version) {
+	  dout(10) << "do_recovery cloning " << head << " to " << poid
+		   << " v" << latest->version
+		   << " snaps " << latest->snaps << dendl;
+	  ObjectStore::Transaction t;
+	  _make_clone(t, head, poid, latest->version, latest->snaps);
+	  osd->store->apply_transaction(t);
+	  missing.got(latest->oid, latest->version);
+	  continue;
+	}
+      }
+
       pull(poid);
       return true;
     }
@@ -2176,14 +2208,14 @@ void ReplicatedPG::do_peer_recovery()
     pobject_t poid(info.pgid.pool(), 0, oid);
     eversion_t v = peer_missing[peer].rmissing.begin()->first;
 
-    push(poid, peer);
+    push_to_replica(poid, peer);
 
     // do other peers need it too?
     for (i++; i<acting.size(); i++) {
       int peer = acting[i];
       if (peer_missing.count(peer) &&
           peer_missing[peer].is_missing(oid)) 
-	push(poid, peer);
+	push_to_replica(poid, peer);
     }
 
     return;

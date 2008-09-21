@@ -96,6 +96,7 @@ protected:
   map<object_t, set<int> > pushing;
   set<object_t> waiting_for_head;
 
+  void push_to_replica(pobject_t oid, int dest);
   void push(pobject_t oid, int dest);
   void push(pobject_t oid, int dest, interval_set<__u64>& blocks);
   void pull(pobject_t oid);
@@ -104,6 +105,9 @@ protected:
   void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
   void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
+  void _make_clone(ObjectStore::Transaction& t,
+		   pobject_t head, pobject_t coid,
+		   eversion_t v, const vector<snapid_t>& snaps);
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, int op,
 			   eversion_t old_version, eversion_t at_version,
