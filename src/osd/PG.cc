@@ -452,16 +452,22 @@ void PG::generate_backlog()
        it != olist.end();
        it++) {
     local++;
-    object_t oid = it->oid;
+    pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
 
-    if (log.logged_object(oid)) continue; // already have it logged.
+    if (log.logged_object(poid.oid)) continue; // already have it logged.
     
     // add entry
     Log::Entry e;
-    e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
-    e.oid = oid;
-    osd->store->getattr(info.pgid.to_coll(), pobject_t(0,0,oid), 
-                        "version",
+    e.oid = poid.oid;
+    if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
+      e.op = Log::Entry::CLONE;
+      osd->store->getattr(info.pgid.to_coll(), poid, "snaps", e.snaps);
+      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", 
+			  &e.prior_version, sizeof(e.prior_version));
+    } else {
+      e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
+    }
+    osd->store->getattr(info.pgid.to_coll(), poid, "version",
                         &e.version, sizeof(e.version));
     add[e.version] = e;
     dout(10) << "generate_backlog found " << e << dendl;
