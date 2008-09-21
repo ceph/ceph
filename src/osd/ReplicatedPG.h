@@ -107,7 +107,7 @@ protected:
 
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
-		   eversion_t v, const vector<snapid_t>& snaps);
+		   eversion_t ov, eversion_t v, bufferlist& snaps);
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, int op,
 			   eversion_t old_version, eversion_t at_version,

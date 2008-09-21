@@ -214,7 +214,7 @@ public:
 
       eversion_t prior_version;     
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
-      vector<snapid_t> snaps;  // only for clone entries
+      bufferlist snaps;   // only for clone entries
       
       Entry() : op(0) {}
       Entry(int _op, object_t _oid, const eversion_t& v,

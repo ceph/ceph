@@ -764,13 +764,12 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       pobject_t head, pobject_t coid,
-			       eversion_t v, const vector<snapid_t>& snaps)
+			       eversion_t ov, eversion_t v, bufferlist& snapsbl)
 {
   t.clone(info.pgid.to_coll(), head, coid);
-  bufferlist snapsbl;
-  ::encode(snaps, snapsbl);
   t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
   t.setattr(info.pgid.to_coll(), coid, "version", &v, sizeof(v));
+  t.setattr(info.pgid.to_coll(), coid, "from_version", &ov, sizeof(v));
 }
 
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
@@ -824,16 +823,19 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       for (unsigned i=0; i<l; i++)
 	snaps[i] = snapc.snaps[i];
 
+      bufferlist snapsbl;
+      ::encode(snaps, snapsbl);
+
       // log clone
       dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
       Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, old_version, at_version, reqid);
-      cloneentry.snaps = snaps;
+      cloneentry.snaps = snapsbl;
       dout(10) << "prepare_transaction " << cloneentry << dendl;
       log.add(cloneentry);
       assert(log.top == at_version);
 
       // prepare clone
-      _make_clone(t, poid, coid, at_version, snaps);
+      _make_clone(t, poid, coid, old_version, at_version, snapsbl);
       
       // add to snap bound collections
       coll_t fc = info.pgid.to_snap_coll(snaps[0]);
@@ -1669,14 +1671,23 @@ void ReplicatedPG::pull(pobject_t poid)
 }
 
 
-/** push - send object to a peer
+/*
+ * intelligently push an object to a replica.  make use of existing
+ * clones/heads and dup data ranges where possible.
  */
 void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
 {
+  // first, get the SnapSet.
+  
   // be smart _here_
+
+
   push(poid, peer);
 }
 
+/*
+ * push - send object to a peer
+ */
 void ReplicatedPG::push(pobject_t poid, int peer)
 {
   interval_set<__u64> subset;
@@ -2136,7 +2147,8 @@ bool ReplicatedPG::do_recovery()
 		   << " v" << latest->version
 		   << " snaps " << latest->snaps << dendl;
 	  ObjectStore::Transaction t;
-	  _make_clone(t, head, poid, latest->version, latest->snaps);
+	  _make_clone(t, head, poid, latest->prior_version, latest->version,
+		      latest->snaps);
 	  osd->store->apply_transaction(t);
 	  missing.got(latest->oid, latest->version);
 	  continue;
