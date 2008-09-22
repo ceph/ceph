@@ -585,7 +585,7 @@ void FileJournal::committed_thru(__u64 seq)
   print_header();
   
   // committed but writing
-  while (!writing_seq.empty() && writing_seq.front() < seq) {
+  while (!writing_seq.empty() && writing_seq.front() <= seq) {
     dout(15) << " finishing committed but writing|waiting seq " << writing_seq.front() << dendl;
     finisher->queue(writing_fin.front());
     writing_seq.pop_front();
@@ -593,7 +593,7 @@ void FileJournal::committed_thru(__u64 seq)
   }
   
   // committed but unjournaled items
-  while (!writeq.empty() && writeq.front().seq < seq) {
+  while (!writeq.empty() && writeq.front().seq <= seq) {
     dout(15) << " dropping committed but unwritten seq " << writeq.front().seq 
 	     << " len " << writeq.front().bl.length()
 	     << " (" << writeq.front().fin << ")"
