@@ -210,15 +210,13 @@ public:
 
       __s32      op;   // write, zero, trunc, remove
       object_t   oid;
-      eversion_t version;
-
-      eversion_t prior_version;     
+      eversion_t version, prior_version;
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       bufferlist snaps;   // only for clone entries
       
       Entry() : op(0) {}
-      Entry(int _op, object_t _oid, const eversion_t& v,
-	    const eversion_t& pv,
+      Entry(int _op, object_t _oid,
+	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid) :
         op(_op), oid(_oid), version(v),
 	prior_version(pv), 

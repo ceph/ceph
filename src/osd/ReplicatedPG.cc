@@ -826,7 +826,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
 
       // log clone
       dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
-      Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, old_version, at_version, reqid);
+      Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, old_version, reqid);
       cloneentry.snaps = snapsbl;
       dout(10) << "prepare_transaction " << cloneentry << dendl;
       log.add(cloneentry);
@@ -869,7 +869,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   // log op
   int opcode = Log::Entry::MODIFY;
   if (op == CEPH_OSD_OP_DELETE) opcode = Log::Entry::DELETE;
-  Log::Entry logentry(opcode, poid.oid, old_version, at_version, reqid);
+  Log::Entry logentry(opcode, poid.oid, at_version, old_version, reqid);
   dout(10) << "prepare_transaction " << logentry << dendl;
 
   assert(at_version > log.top);
