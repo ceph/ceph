@@ -287,8 +287,10 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
   full_commit_seq = seq;
   full_restart_seq = seq+1;
   while (!writeq.empty()) {
-    writing_seq.push_back(writeq.front().seq);
-    writing_fin.push_back(writeq.front().fin);
+    if (writeq.front().fin) {
+      writing_seq.push_back(writeq.front().seq);
+      writing_fin.push_back(writeq.front().fin);
+    }
     writeq.pop_front();
   }  
   print_header();
@@ -534,8 +536,10 @@ void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
     // not journaling this.  restart writing no sooner than seq + 1.
     full_restart_seq = seq+1;
     dout(10) << " journal is/was full, will restart no sooner than seq " << full_restart_seq << dendl;
-    writing_seq.push_back(seq);
-    writing_fin.push_back(oncommit);
+    if (oncommit) {
+      writing_seq.push_back(seq);
+      writing_fin.push_back(oncommit);
+    }
   }
 }
 
