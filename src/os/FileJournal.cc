@@ -287,8 +287,10 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
   full_commit_seq = seq;
   full_restart_seq = seq+1;
   while (!writeq.empty()) {
-    writing_seq.push_back(writeq.front().seq);
-    writing_fin.push_back(writeq.front().fin);
+    if (writeq.front().fin) {
+      writing_seq.push_back(writeq.front().seq);
+      writing_fin.push_back(writeq.front().fin);
+    }
     writeq.pop_front();
   }  
   print_header();
@@ -534,8 +536,10 @@ void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
     // not journaling this.  restart writing no sooner than seq + 1.
     full_restart_seq = seq+1;
     dout(10) << " journal is/was full, will restart no sooner than seq " << full_restart_seq << dendl;
-    writing_seq.push_back(seq);
-    writing_fin.push_back(oncommit);
+    if (oncommit) {
+      writing_seq.push_back(seq);
+      writing_fin.push_back(oncommit);
+    }
   }
 }
 
@@ -581,7 +585,7 @@ void FileJournal::committed_thru(__u64 seq)
   print_header();
   
   // committed but writing
-  while (!writing_seq.empty() && writing_seq.front() < seq) {
+  while (!writing_seq.empty() && writing_seq.front() <= seq) {
     dout(15) << " finishing committed but writing|waiting seq " << writing_seq.front() << dendl;
     finisher->queue(writing_fin.front());
     writing_seq.pop_front();
@@ -589,7 +593,7 @@ void FileJournal::committed_thru(__u64 seq)
   }
   
   // committed but unjournaled items
-  while (!writeq.empty() && writeq.front().seq < seq) {
+  while (!writeq.empty() && writeq.front().seq <= seq) {
     dout(15) << " dropping committed but unwritten seq " << writeq.front().seq 
 	     << " len " << writeq.front().bl.length()
 	     << " (" << writeq.front().fin << ")"
