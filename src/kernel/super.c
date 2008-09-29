@@ -18,6 +18,7 @@
  * debug level.
  */
 int ceph_debug = 1;
+int ceph_debug_mask = 0xffffffff;
 
 /*
  * if true, send output to KERN_INFO (console) instead of KERN_DEBUG.
@@ -27,6 +28,9 @@ int ceph_debug_console;
 /* for this file */
 int ceph_debug_super = -1;
 
+#include "ceph_debug.h"
+
+#define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
 #define DOUT_PREFIX "super: "
 #include "super.h"

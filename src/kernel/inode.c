@@ -9,8 +9,10 @@
 #include <linux/writeback.h>
 
 #include "ceph_fs.h"
+#include "ceph_debug.h"
 
 int ceph_debug_inode = -1;
+#define DOUT_MASK DOUT_MASK_INODE
 #define DOUT_VAR ceph_debug_inode
 #define DOUT_PREFIX "inode: "
 #include "super.h"

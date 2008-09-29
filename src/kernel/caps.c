@@ -3,7 +3,10 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 
+#include "ceph_debug.h"
+
 int ceph_debug_caps = -1;
+#define DOUT_MASK DOUT_MASK_CAPS
 #define DOUT_VAR ceph_debug_caps
 #define DOUT_PREFIX "caps: "
 #include "super.h"

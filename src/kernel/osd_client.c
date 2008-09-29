@@ -5,7 +5,10 @@
 #include <linux/highmem.h>	/* kmap, kunmap */
 #include <linux/pagemap.h>	/* read_cache_pages */
 
+#include "ceph_debug.h"
+
 int ceph_debug_osdc = -1;
+#define DOUT_MASK DOUT_MASK_OSDC
 #define DOUT_VAR ceph_debug_osdc
 #define DOUT_PREFIX "osdc: "
 #include "super.h"

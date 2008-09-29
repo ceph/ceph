@@ -1,7 +1,10 @@
 
 #include <asm/div64.h>
 
+#include "ceph_debug.h"
+
 int ceph_debug_osdmap = -1;
+#define DOUT_MASK DOUT_MASK_OSDMAP
 #define DOUT_VAR ceph_debug_osdmap
 #define DOUT_PREFIX "osdmap: "
 #include "super.h"

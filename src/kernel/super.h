@@ -8,6 +8,7 @@
 #include <linux/exportfs.h>
 #include <linux/sysfs.h>
 
+#include "ceph_debug.h"
 #include "ceph_fs.h"
 #include "types.h"
 #include "messenger.h"
@@ -27,11 +28,14 @@ extern int ceph_debug_snap;
 extern int ceph_debug_ioctl;
 extern int ceph_debug_caps;
 
+extern int ceph_debug_mask;
+
 #define CEPH_DUMP_ERROR_ALWAYS
 
 #define dout(x, args...) do {						\
-		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
-		    (DOUT_VAR < 0 && x <= ceph_debug)) {		\
+		if ((ceph_debug_mask & DOUT_MASK) &&				\
+			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
+			(DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
 				printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
 			else						\

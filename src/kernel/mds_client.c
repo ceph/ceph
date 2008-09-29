@@ -4,10 +4,12 @@
 #include "mds_client.h"
 #include "mon_client.h"
 
+#include "ceph_debug.h"
 #include "ceph_fs.h"
 
 int ceph_debug_mdsc = -1;
 #define DOUT_VAR ceph_debug_mdsc
+#define DOUT_MASK DOUT_MASK_MDSC
 #define DOUT_PREFIX "mds: "
 #include "super.h"
 #include "messenger.h"

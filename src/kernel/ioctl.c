@@ -1,5 +1,7 @@
+#include "ceph_debug.h"
 
 int ceph_debug_ioctl = -1;
+#define DOUT_MASK DOUT_MASK_IOCTL
 #define DOUT_VAR ceph_debug_ioctl
 #define DOUT_PREFIX "ioctl: "
 #include "super.h"

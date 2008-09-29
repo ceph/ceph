@@ -2,7 +2,10 @@
 #include <linux/radix-tree.h>
 #include <linux/sort.h>
 
+#include "ceph_debug.h"
+
 int ceph_debug_snap = -1;
+#define DOUT_MASK DOUT_MASK_SNAP
 #define DOUT_VAR ceph_debug_snap
 #define DOUT_PREFIX "snap: "
 

@@ -7,7 +7,9 @@
 #include <linux/pagevec.h>
 #include <linux/task_io_accounting_ops.h>
 
+#include "ceph_debug.h"
 int ceph_debug_addr = -1;
+#define DOUT_MASK DOUT_MASK_ADDR
 #define DOUT_VAR ceph_debug_addr
 #define DOUT_PREFIX "addr: "
 #include "super.h"
