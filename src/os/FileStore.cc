@@ -674,6 +674,21 @@ unsigned FileStore::_apply_transaction(Transaction& t)
 	}
 	break;
 
+      case Transaction::OP_CLONERANGE:
+	{
+  	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          pobject_t noid;
+	  t.get_oid(noid);
+	  __u64 off, len;
+	  t.get_length(off);
+	  t.get_length(len);
+	  _clone_range(cid, oid, noid, off, len);
+	}
+	break;
+
       case Transaction::OP_MKCOLL:
         {
           coll_t cid;
@@ -1353,6 +1368,63 @@ int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
       pos += r;
     }
 #endif
+  }
+
+  if (r < 0)
+    return -errno;
+
+  ::close(n);
+  ::close(o);
+  return 0;
+}
+
+int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len)
+{
+  char ofn[200], nfn[200];
+  get_coname(cid, oldoid, ofn);
+  get_coname(cid, newoid, nfn);
+
+  dout(20) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << dendl;
+
+  int o = ::open(ofn, O_RDONLY);
+  if (o < 0)
+    return -errno;
+  int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (n < 0)
+    return -errno;
+
+  int r = 0;
+#ifndef DARWIN
+  if (false && btrfs) {
+    r = -EINVAL; //::ioctl(n, BTRFS_IOC_CLONERANGE, o);
+  } else {
+#else 
+    {
+#endif /* DARWIN */
+    struct stat st;
+    ::fstat(o, &st);
+
+    dout(20) << "clone_range " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
+
+    loff_t pos = off;
+    loff_t end = off + len;
+    int buflen = 4096*32;
+    char buf[buflen];
+    while (pos < end) {
+      int l = MIN(end-pos, buflen);
+      r = ::read(o, buf, l);
+      if (r < 0)
+	break;
+      int op = 0;
+      while (op < l) {
+	int r2 = ::write(n, buf+op, l-op);
+	
+	if (r2 < 0) { r = r2; break; }
+	op += r2;	  
+      }
+      if (r < 0) break;
+      pos += r;
+    }
   }
 
   if (r < 0)
