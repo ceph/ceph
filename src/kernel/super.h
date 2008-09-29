@@ -101,8 +101,7 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_DIRSTAT       (1<<4)
 #define CEPH_MOUNT_RBYTES        (1<<5)
 
-#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_RBYTES |		\
-			    CEPH_MOUNT_UNSAFE_WRITEBACK) /* just for now */
+#define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
 
 struct ceph_mount_args {
 	int sb_flags;
