@@ -73,7 +73,7 @@ extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_file_layout *layout,
 				      struct ceph_vino vino,
-				      __u64 offset, __u64 len, int op,
+				      __u64 offset, __u64 *len, int op,
 				      struct ceph_snap_context *snapc);
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 

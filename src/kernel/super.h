@@ -478,7 +478,8 @@ static inline struct ceph_snap_context *ceph_get_snap_context(struct ceph_snap_c
 	printk("get_snap_context %p %d -> %d\n", sc, atomic_read(&sc->nref),
 	       atomic_read(&sc->nref)+1);
 	*/
-	atomic_inc(&sc->nref);
+	if (sc)
+		atomic_inc(&sc->nref);
 	return sc;
 }
 

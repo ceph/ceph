@@ -573,7 +573,7 @@ retry:
 		int pvec_pages, locked_pages;
 		struct page *page;
 		int want;
-		loff_t offset, len;
+		u64 offset, len;
 		struct ceph_osd_request *req;
 
 		req = 0;
@@ -597,14 +597,15 @@ get_more_pages:
 			page = pvec.pages[i];
 			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0) {
+				offset = page->index << PAGE_CACHE_SHIFT;
+				len = wsize;
 				lock_page(page);
 
 				/* alloc request */
-				offset = page->index << PAGE_CACHE_SHIFT;
 				req = ceph_osdc_new_request(&client->osdc,
 							    &ci->i_layout,
 							    ceph_vino(inode),
-							    offset, wsize,
+							    offset, &len,
 							    CEPH_OSD_OP_WRITE,
 							    snapc);
 				max_pages = req->r_num_pages;
@@ -718,7 +719,7 @@ get_more_pages:
 		/* write it */
 		offset = pages[0]->index << PAGE_CACHE_SHIFT;
 		len = min(i_size_read(inode) - offset,
-				 (loff_t)locked_pages << PAGE_CACHE_SHIFT);
+				 (u64)locked_pages << PAGE_CACHE_SHIFT);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
 		     locked_pages, offset, len);
 		rc = ceph_osdc_writepages_start(&client->osdc, req,
