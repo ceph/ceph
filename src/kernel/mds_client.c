@@ -1018,7 +1018,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			dout(10, "create_request path2 %llx/%s\n",
 			     ino2, path2);
 	}
-	dout(10, "create_request op %d=%s -> %p\n", op,
+	dout_flag(10, DOUT_MASK_PROTOCOL, "create_request op %d=%s -> %p\n", op,
 	     ceph_mds_op_name(op), req);
 
 	BUG_ON(p != end);

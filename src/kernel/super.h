@@ -32,8 +32,8 @@ extern int ceph_debug_mask;
 
 #define CEPH_DUMP_ERROR_ALWAYS
 
-#define dout(x, args...) do {						\
-		if ((ceph_debug_mask & DOUT_MASK) &&				\
+#define dout_flag(x, mask, args...) do {						\
+		if ((ceph_debug_mask & mask) &&				\
 			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
 			(DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
@@ -42,6 +42,8 @@ extern int ceph_debug_mask;
 				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
 		}							\
 	} while (0)
+
+#define dout(x, args...) dout_flag(x, DOUT_MASK, args)
 
 #ifdef CEPH_DUMP_ERROR_ALWAYS
 #define derr(x, args...) do {						\
