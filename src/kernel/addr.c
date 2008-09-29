@@ -472,6 +472,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	/* clean or redirty pages */
 	for (i = 0; i < req->r_num_pages; i++) {
 		page = req->r_pages[i];
+		BUG_ON(!page);
 		WARN_ON(!PageUptodate(page));
 		if (i < wrote) {
 			dout(20, "%p cleaning %p\n", inode, page);

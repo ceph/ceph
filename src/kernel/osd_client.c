@@ -91,7 +91,7 @@ struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op,
 {
 	struct ceph_msg *req;
 	struct ceph_osd_request_head *head;
-	size_t size = sizeof(struct ceph_osd_request_head);
+	size_t size = sizeof(*head);
 
 	if (snapc)
 		size += sizeof(u64) * snapc->num_snaps;
@@ -629,7 +629,6 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			__u64 off, __u64 len,
 			char __user *data)
 {
-	struct ceph_msg *reqm;
 	struct ceph_osd_request *req;
 	int i, po, left, l;
 	__s32 rc;
@@ -643,7 +642,6 @@ more:
 				    CEPH_OSD_OP_READ, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqm = req->r_request;
 
 	dout(10, "sync_read %llu~%llu -> %d pages\n", off, len,
 	     req->r_num_pages);
@@ -657,10 +655,6 @@ more:
 			return -ENOMEM;
 		}
 	}
-	reqm->nr_pages = req->r_num_pages;
-	reqm->pages = req->r_pages;
-	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le32(off);
 
 	rc = do_sync_request(osdc, req);
 	if (rc > 0) {
@@ -712,8 +706,6 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 		       loff_t off, loff_t len,
 		       struct page *page)
 {
-	struct ceph_msg *reqm;
-	struct ceph_osd_request_head *reqhead;
 	struct ceph_osd_request *req;
 	__s32 rc;
 
@@ -726,8 +718,6 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	BUG_ON(len != PAGE_CACHE_SIZE);
-	reqm = req->r_request;
-	reqhead = reqm->front.iov_base;
 	req->r_pages[0] = page;
 
 	rc = do_sync_request(osdc, req);
@@ -748,7 +738,6 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			__u64 off, __u64 len,
 			struct list_head *page_list, int num_pages)
 {
-	struct ceph_msg *reqm;
 	struct ceph_osd_request *req;
 	struct page *page;
 	pgoff_t next_index;
@@ -769,7 +758,6 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 				    CEPH_OSD_OP_READ, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqm = req->r_request;
 
 	/* find adjacent pages */
 	next_index = list_entry(page_list->prev, struct page, lru)->index;
