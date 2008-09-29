@@ -431,9 +431,11 @@ void MDS::beacon_send()
 	   << " (currently " << MDSMap::get_state_name(state) << ")"
 	   << dendl;
 
+  // pick new random mon if we have any outstanding beacons...
+  int mon = monmap->pick_mon(beacon_seq_stamp.size());
+
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
-  int mon = monmap->pick_mon();
   messenger->send_message(new MMDSBeacon(monmap->fsid, mdsmap->get_epoch(), 
 					 want_state, beacon_last_seq, want_rank),
 			  monmap->get_inst(mon));
@@ -449,7 +451,10 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   dout(10) << "handle_mds_beacon " << MDSMap::get_state_name(m->get_state())
 	   << " seq " << m->get_seq() << dendl;
   version_t seq = m->get_seq();
-  
+
+  // make note of which mon 
+  monmap->last_mon = m->get_source().num();
+
   // update lab
   if (beacon_seq_stamp.count(seq)) {
     assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);
