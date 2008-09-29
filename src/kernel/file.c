@@ -332,6 +332,7 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_osd_client *osdc = &ceph_client(inode->i_sb)->osdc;
 	loff_t endoff = pos + iov->iov_len;
 	int got = 0;
 	int ret;
@@ -340,6 +341,8 @@ ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		return -EROFS;
 
 retry_snap:
+	if (ceph_osdc_flag(osdc, CEPH_OSDMAP_FULL))
+		return -ENOSPC;
 	__ceph_do_pending_vmtruncate(inode);
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
@@ -355,6 +358,7 @@ retry_snap:
 	     inode, pos, (unsigned)iov->iov_len, got);
 
 	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
+	    ceph_osdc_flag(osdc, CEPH_OSDMAP_NEARFULL) ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		/* fixme, this isn't actually async! */
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,

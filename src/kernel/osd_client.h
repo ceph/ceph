@@ -60,6 +60,11 @@ struct ceph_osd_client {
 	struct delayed_work    timeout_work;
 };
 
+static inline bool ceph_osdc_flag(struct ceph_osd_client *osdc, int flag)
+{
+	return osdc->osdmap && (osdc->osdmap->flags & flag);
+}
+
 extern void ceph_osdc_init(struct ceph_osd_client *osdc,
 			   struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
