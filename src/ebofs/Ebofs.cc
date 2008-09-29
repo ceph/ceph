@@ -2611,6 +2611,24 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       }
       break;
 
+    case Transaction::OP_CLONERANGE:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+        pobject_t oid;
+	t.get_oid(oid);
+        pobject_t noid;
+	t.get_oid(noid);
+	__u64 off, len;
+	t.get_length(off);
+	t.get_length(len);
+	if (_clone_range(oid, noid, off, len) < 0) {
+	  dout(7) << "apply_transaction fail on _clone_range" << dendl;
+	  r &= bit;
+	}
+      }
+      break;
+
     case Transaction::OP_MKCOLL:
       {
         coll_t cid;
@@ -3075,6 +3093,18 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
 }
 
 
+int Ebofs::_clone_range(pobject_t from, pobject_t to, __u64 off, __u64 len)
+{
+  dout(7) << "_clone_range " << from << " -> " << to << " " << off << "~" << len << dendl;
+
+  // bah.
+  bufferlist bl;
+  int r = _read(from, off, len, bl);
+  if (r < 0)
+    return r;
+  r = _write(to, off, len, bl);
+  return r;
+}  
 
 
 /*

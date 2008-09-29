@@ -338,6 +338,7 @@ private:
   int _zero(pobject_t oid, __u64 offset, size_t length);
   int _remove(pobject_t oid);
   int _clone(pobject_t from, pobject_t to);
+  int _clone_range(pobject_t from, pobject_t to, __u64 off, __u64 len);
   int _setattr(pobject_t oid, const char *name, const void *value, size_t size);
   int _setattrs(pobject_t oid, map<string,bufferptr>& attrset);
   int _rmattr(pobject_t oid, const char *name);
