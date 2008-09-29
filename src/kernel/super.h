@@ -33,7 +33,7 @@ extern int ceph_debug_mask;
 #define CEPH_DUMP_ERROR_ALWAYS
 
 #define dout_flag(x, mask, args...) do {						\
-		if ((ceph_debug_mask & mask) &&				\
+		if (((ceph_debug_mask | DOUT_UNMASKABLE) & mask) &&				\
 			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
 			(DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
