@@ -1217,7 +1217,7 @@ int FileStore::read(coll_t cid, pobject_t oid,
     return -errno;
   }
   
-  __u64 actual = lseek(fd, offset, SEEK_SET);
+  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
   size_t got = 0;
 
   if (len == 0) {
@@ -1275,7 +1275,7 @@ int FileStore::_write(coll_t cid, pobject_t oid,
   }
   
   // seek
-  __u64 actual = ::lseek(fd, offset, SEEK_SET);
+  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
   int did = 0;
   assert(actual == offset);
 
@@ -1334,40 +1334,8 @@ int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
 #endif /* DARWIN */
     struct stat st;
     ::fstat(o, &st);
-
-#if 0 //der, this doesn't work on non-pipes? #ifdef SPLICE_F_MOVE
-    dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE size " << st.st_size << dendl;
-
-    loff_t op = 0, np = 0;
-    while (op < st.st_size && r >= 0) {
-      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE op " << op << " np " << np << dendl;
-      r = ::splice(o, &op, n, &np, st.st_size-op, SPLICE_F_MOVE);
-      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE r= " << r << dendl;
-      if (r < 0)
-	dout(0) << "clone " << ofn << " -> " << nfn << " error " << strerror(errno) << dendl;
-    }
-#else
     dout(20) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
-
-    loff_t pos = 0;
-    int buflen = 4096*32;
-    char buf[buflen];
-    while (pos < st.st_size) {
-      int l = MIN(st.st_size-pos, buflen);
-      r = ::read(o, buf, l);
-      if (r < 0)
-	break;
-      int op = 0;
-      while (op < l) {
-	int r2 = ::write(n, buf+op, l-op);
-	
-	if (r2 < 0) { r = r2; break; }
-	op += r2;	  
-      }
-      if (r < 0) break;
-      pos += r;
-    }
-#endif
+    r = _do_clone_range(o, n, 0, st.st_size);
   }
 
   if (r < 0)
@@ -1378,6 +1346,33 @@ int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   return 0;
 }
 
+int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
+{
+  dout(20) << "_do_clone_range " << off << "~" << len << dendl;
+  int r = 0;
+  loff_t pos = off;
+  loff_t end = off + len;
+  int buflen = 4096*32;
+  char buf[buflen];
+  while (pos < end) {
+    int l = MIN(end-pos, buflen);
+    r = ::read(from, buf, l);
+    if (r < 0)
+      break;
+    int op = 0;
+    while (op < l) {
+      int r2 = ::write(to, buf+op, l-op);
+      
+      if (r2 < 0) { r = r2; break; }
+      op += r2;	  
+    }
+    if (r < 0) break;
+    pos += r;
+  }
+
+  return r;
+}
+
 int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len)
 {
   char ofn[200], nfn[200];
@@ -1386,53 +1381,20 @@ int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u6
 
   dout(20) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << dendl;
 
+  int r;
   int o = ::open(ofn, O_RDONLY);
   if (o < 0)
     return -errno;
   int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
-  if (n < 0)
-    return -errno;
-
-  int r = 0;
-#ifndef DARWIN
-  if (false && btrfs) {
-    r = -EINVAL; //::ioctl(n, BTRFS_IOC_CLONERANGE, o);
-  } else {
-#else 
-    {
-#endif /* DARWIN */
-    struct stat st;
-    ::fstat(o, &st);
-
-    dout(20) << "clone_range " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
-
-    loff_t pos = off;
-    loff_t end = off + len;
-    int buflen = 4096*32;
-    char buf[buflen];
-    while (pos < end) {
-      int l = MIN(end-pos, buflen);
-      r = ::read(o, buf, l);
-      if (r < 0)
-	break;
-      int op = 0;
-      while (op < l) {
-	int r2 = ::write(n, buf+op, l-op);
-	
-	if (r2 < 0) { r = r2; break; }
-	op += r2;	  
-      }
-      if (r < 0) break;
-      pos += r;
-    }
+  if (n < 0) {
+    r = -errno;
+    goto out;
   }
-
-  if (r < 0)
-    return -errno;
-
+  r = _do_clone_range(o, n, off, len);
   ::close(n);
+ out:
   ::close(o);
-  return 0;
+  return r;
 }
 
 
