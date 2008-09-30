@@ -512,7 +512,8 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	}
 	dout(10, "prepare_pages tid %llu have %d pages, want %d\n",
 	     tid, req->r_num_pages, want);
-	if (likely(req->r_num_pages >= want)) {
+	if (likely(req->r_num_pages >= want &&
+		   req->r_reply == 0)) {
 		m->pages = req->r_pages;
 		m->nr_pages = req->r_num_pages;
 		ceph_msg_get(m);
