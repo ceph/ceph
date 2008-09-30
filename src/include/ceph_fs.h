@@ -921,10 +921,11 @@ struct ceph_mds_snap_realm {
 /* followed by my snaps, then prior parent snaps */
 
 /*
- * osd map
+ * osd map flag bits
  */
 
-#define CEPH_OSDMAP_DATAFULL 1  /* no data writes (ENOSPC) */
+#define CEPH_OSDMAP_NEARFULL (1<<0)  /* sync writes (near ENOSPC) */
+#define CEPH_OSDMAP_FULL     (1<<1)  /* no data writes (ENOSPC) */
 
 /*
  * osd ops

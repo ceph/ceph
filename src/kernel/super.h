@@ -8,6 +8,7 @@
 #include <linux/exportfs.h>
 #include <linux/sysfs.h>
 
+#include "ceph_debug.h"
 #include "ceph_fs.h"
 #include "types.h"
 #include "messenger.h"
@@ -27,17 +28,22 @@ extern int ceph_debug_snap;
 extern int ceph_debug_ioctl;
 extern int ceph_debug_caps;
 
+extern int ceph_debug_mask;
+
 #define CEPH_DUMP_ERROR_ALWAYS
 
-#define dout(x, args...) do {						\
-		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
-		    (DOUT_VAR < 0 && x <= ceph_debug)) {		\
+#define dout_flag(x, mask, args...) do {						\
+		if ((ceph_debug_mask & mask) &&				\
+			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
+			(DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
 				printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
 			else						\
 				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
 		}							\
 	} while (0)
+
+#define dout(x, args...) dout_flag(x, DOUT_MASK, args)
 
 #ifdef CEPH_DUMP_ERROR_ALWAYS
 #define derr(x, args...) do {						\
@@ -95,8 +101,7 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_DIRSTAT       (1<<4)
 #define CEPH_MOUNT_RBYTES        (1<<5)
 
-#define CEPH_MOUNT_DEFAULT (CEPH_MOUNT_RBYTES |		\
-			    CEPH_MOUNT_UNSAFE_WRITEBACK) /* just for now */
+#define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
 
 struct ceph_mount_args {
 	int sb_flags;
@@ -472,7 +477,8 @@ static inline struct ceph_snap_context *ceph_get_snap_context(struct ceph_snap_c
 	printk("get_snap_context %p %d -> %d\n", sc, atomic_read(&sc->nref),
 	       atomic_read(&sc->nref)+1);
 	*/
-	atomic_inc(&sc->nref);
+	if (sc)
+		atomic_inc(&sc->nref);
 	return sc;
 }
 

@@ -31,6 +31,32 @@ static int ceph_debug_level_read(char *page, char **start, off_t off,
 	return len;
 }
 
+static int ceph_debug_mask_read(char *page, char **start, off_t off,
+		       int count, int *eof, void *data)
+{
+	int len;
+	int *debug = data;
+
+	len = sprintf(page, "0x%x\n", *debug);
+
+	if ((len < 0) || (len <= off)) {
+		*start = page;
+		*eof = 1;
+		return 0;
+	}
+
+	len -= off;
+
+	*start = page + off;
+
+	if (len > count)
+		len = count;
+	else
+		*eof = 1;
+
+	return len;
+}
+
 static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 				unsigned long count, void *data)
 {
@@ -80,6 +106,12 @@ int ceph_proc_init(void)
 	pde = create_proc_read_entry("debug_console", 0,
 				     proc_fs_ceph, ceph_debug_level_read,
 				     &ceph_debug_console);
+	if (pde)
+		pde->write_proc = ceph_debug_level_write;
+
+	pde = create_proc_read_entry("debug_mask", 0,
+				     proc_fs_ceph, ceph_debug_mask_read,
+				     &ceph_debug_mask);
 	if (pde)
 		pde->write_proc = ceph_debug_level_write;
 

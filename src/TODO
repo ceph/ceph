@@ -49,9 +49,6 @@ snaps on osd
 
 
 kernel client
-- async writepages?
-  - we want to saturate network with writeback on a single file
-- switch writepages to wait for commit, verify throughput
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...

@@ -1,4 +1,7 @@
+#include "ceph_debug.h"
+
 int ceph_debug_dir = -1;
+#define DOUT_MASK DOUT_MASK_DIR
 #define DOUT_VAR ceph_debug_dir
 #define DOUT_PREFIX "dir: "
 #include "super.h"

@@ -22,18 +22,26 @@ enum {
 	REQUEST_DONE   /* read/stat/whatever completed */
 };
 
+struct ceph_osd_request;
+
+typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
+
 struct ceph_osd_request {
 	__u64             r_tid;
 	int               r_aborted;
 	int               r_flags;
+	struct ceph_snap_context *r_snapc;
+	struct inode *r_inode;
+	struct writeback_control *r_wbc;
 	struct ceph_msg  *r_request;
 	struct ceph_entity_addr r_last_osd;  /* last osd we sent request to */
 	union ceph_pg     r_pgid;
 	struct ceph_msg  *r_reply;
 	int               r_result;
 	atomic_t          r_ref;
+	ceph_osdc_callback_t r_callback;
 	struct completion r_completion;      /* on ack or commit or read? */
-	unsigned          r_num_pages;        /* size of page array (follows) */
+	unsigned          r_num_pages;       /* size of page array (follows) */
 	struct page      *r_pages[0];        /* pages for data payload */
 };
 
@@ -52,6 +60,11 @@ struct ceph_osd_client {
 	struct delayed_work    timeout_work;
 };
 
+static inline bool ceph_osdc_flag(struct ceph_osd_client *osdc, int flag)
+{
+	return osdc->osdmap && (osdc->osdmap->flags & flag);
+}
+
 extern void ceph_osdc_init(struct ceph_osd_client *osdc,
 			   struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
@@ -61,6 +74,13 @@ extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc,
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc,
 				 struct ceph_msg *msg);
 extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
+
+extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
+				      struct ceph_file_layout *layout,
+				      struct ceph_vino vino,
+				      __u64 offset, __u64 *len, int op,
+				      struct ceph_snap_context *snapc);
+extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
 extern int ceph_osdc_readpage(struct ceph_osd_client *osdc,
 			      struct ceph_vino vino,
@@ -80,6 +100,10 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_snap_context *sc,
 				loff_t off, loff_t len,
 				struct page **pagevec, int nr_pages);
+extern int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
+				      struct ceph_osd_request *req,
+				      __u64 len,
+				      int nr_pages);
 
 extern int ceph_osdc_sync_read(struct ceph_osd_client *osdc,
 			       struct ceph_vino vino,

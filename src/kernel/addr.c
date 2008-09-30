@@ -7,7 +7,9 @@
 #include <linux/pagevec.h>
 #include <linux/task_io_accounting_ops.h>
 
+#include "ceph_debug.h"
 int ceph_debug_addr = -1;
+#define DOUT_MASK DOUT_MASK_ADDR
 #define DOUT_VAR ceph_debug_addr
 #define DOUT_PREFIX "addr: "
 #include "super.h"
@@ -434,21 +436,80 @@ void ceph_release_pages(struct page **pages, int num)
 	pagevec_release(&pvec);
 }
 
+
 /*
- * ceph_writepages:
- *  do write jobs for several pages
+ * writeback completion handler.
  */
-static int ceph_writepages(struct address_space *mapping,
-			   struct writeback_control *wbc)
+static void writepages_finish(struct ceph_osd_request *req)
+{
+	struct inode *inode = req->r_inode;
+	struct ceph_osd_reply_head *replyhead;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	unsigned wrote;
+	loff_t offset = req->r_pages[0]->index << PAGE_CACHE_SHIFT;
+	struct page *page;
+	int i;
+	struct ceph_snap_context *snapc = req->r_snapc;
+	struct address_space *mapping = inode->i_mapping;
+	struct writeback_control *wbc = req->r_wbc;
+	__s32 rc = -EIO;
+	__u64 bytes = 0;
+
+	/* parse reply */
+	if (req->r_reply) {
+		replyhead = req->r_reply->front.iov_base;
+		rc = le32_to_cpu(replyhead->result);
+		bytes = le32_to_cpu(replyhead->length);
+	}
+	if (rc >= 0)
+		wrote = (bytes + (offset & ~PAGE_CACHE_MASK) + ~PAGE_CACHE_MASK)
+			>> PAGE_CACHE_SHIFT;
+	else
+		wrote = 0;
+	dout(10, "writepages_finish rc %d bytes %llu wrote %d (pages)\n", rc,
+	     bytes, wrote);
+
+	/* clean or redirty pages */
+	for (i = 0; i < req->r_num_pages; i++) {
+		page = req->r_pages[i];
+		BUG_ON(!page);
+		WARN_ON(!PageUptodate(page));
+		if (i < wrote) {
+			dout(20, "%p cleaning %p\n", inode, page);
+			page->private = 0;
+			ClearPagePrivate(page);
+			ceph_put_snap_context(snapc);
+		} else {
+			dout(20, "%p redirtying %p\n", inode, page);
+			ceph_redirty_page(mapping, page);
+			wbc->pages_skipped++;
+		}
+		dout(50, "unlocking %d %p\n", i, page);
+		end_page_writeback(page);
+		unlock_page(page);
+	}
+	dout(20, "%p wrote+cleaned %d pages\n", inode, wrote);
+	ceph_put_wrbuffer_cap_refs(ci, wrote, snapc);
+
+	ceph_release_pages(req->r_pages, req->r_num_pages);
+	ceph_osdc_put_request(req);
+}
+
+/*
+ * initiate async writeback
+ */
+static int ceph_writepages_start(struct address_space *mapping,
+				 struct writeback_control *wbc)
 {
 	struct inode *inode = mapping->host;
+	struct backing_dev_info *bdi = mapping->backing_dev_info;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_inode_to_client(inode);
 	pgoff_t index, start, end;
 	int range_whole = 0;
 	int should_loop = 1;
-	struct page **pages;
-	pgoff_t max_pages = 0;
+	struct page **pages = 0;
+	pgoff_t max_pages = 0, max_pages_ever = 0;
 	struct ceph_snap_context *snapc = 0, *last_snapc = 0;
 	struct pagevec pvec;
 	int done = 0;
@@ -463,19 +524,15 @@ static int ceph_writepages(struct address_space *mapping,
 	dout(10, "writepages on %p, wsize %u\n", inode, wsize);
 
 	/* larger page vector? */
-	max_pages = wsize >> PAGE_CACHE_SHIFT;
-	pages = kmalloc(max_pages * sizeof(*pages), GFP_NOFS);
-	if (!pages)
-		return generic_writepages(mapping, wbc);
+	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 	pagevec_init(&pvec, 0);
 
-	/* ?? from cifs. */
-	/*
+	/* ?? */
 	if (wbc->nonblocking && bdi_write_congested(bdi)) {
-		wbc->encountered_congestions = 1;
+		dout(10, "writepages congested\n");
+		wbc->encountered_congestion = 1;
 		return 0;
 	}
-	*/
 
 	/* where to start/end? */
 	if (wbc->range_cyclic) {
@@ -517,17 +574,20 @@ retry:
 		int pvec_pages, locked_pages;
 		struct page *page;
 		int want;
-		loff_t offset, len;
-		unsigned wrote;
+		u64 offset, len;
+		struct ceph_osd_request *req;
 
+		req = 0;
 		next = 0;
 		locked_pages = 0;
+		max_pages = max_pages_ever;
 
 get_more_pages:
 		first = -1;
 		want = min(end - index,
 			   min((pgoff_t)PAGEVEC_SIZE,
-			       max_pages - (pgoff_t)locked_pages) - 1) + 1;
+			       max_pages - (pgoff_t)locked_pages) - 1)
+			+ 1;
 		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
@@ -537,8 +597,24 @@ get_more_pages:
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
 			dout(20, "? %p idx %lu\n", page, page->index);
-			if (locked_pages == 0)
+			if (locked_pages == 0) {
+				offset = page->index << PAGE_CACHE_SHIFT;
+				len = wsize;
 				lock_page(page);
+
+				/* alloc request */
+				req = ceph_osdc_new_request(&client->osdc,
+							    &ci->i_layout,
+							    ceph_vino(inode),
+							    offset, &len,
+							    CEPH_OSD_OP_WRITE,
+							    snapc);
+				max_pages = req->r_num_pages;
+				pages = req->r_pages;
+				req->r_callback = writepages_finish;
+				req->r_inode = inode;
+				req->r_wbc = wbc;
+			}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 			else if (!trylock_page(page))
 #else
@@ -644,44 +720,11 @@ get_more_pages:
 		/* write it */
 		offset = pages[0]->index << PAGE_CACHE_SHIFT;
 		len = min(i_size_read(inode) - offset,
-				 (loff_t)locked_pages << PAGE_CACHE_SHIFT);
+				 (u64)locked_pages << PAGE_CACHE_SHIFT);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
 		     locked_pages, offset, len);
-		rc = ceph_osdc_writepages(&client->osdc,
-					  ceph_vino(inode),
-					  &ci->i_layout,
-					  snapc,
-					  offset, len,
-					  pages,
-					  locked_pages);
-		if (rc >= 0)
-			wrote = (rc + (offset & ~PAGE_CACHE_MASK)
-				 + ~PAGE_CACHE_MASK)
-				>> PAGE_CACHE_SHIFT;
-		else
-			wrote = 0;
-		dout(20, "writepages rc %d wrote %d\n", rc, wrote);
-
-		/* clean or redirty pages */
-		for (i = 0; i < locked_pages; i++) {
-			page = pages[i];
-			WARN_ON(!PageUptodate(page));
-			if (i < wrote) {
-				dout(20, "%p cleaning %p\n", inode, page);
-				page->private = 0;
-				ClearPagePrivate(page);
-				ceph_put_snap_context(snapc);
-			} else {
-				dout(20, "%p redirtying %p\n", inode, page);
-				ceph_redirty_page(mapping, page);
-				wbc->pages_skipped++;
-			}
-			dout(50, "unlocking %d %p\n", i, page);
-			end_page_writeback(page);
-			unlock_page(page);
-		}
-		dout(20, "%p wrote+cleaned %d pages\n", inode, wrote);
-		ceph_put_wrbuffer_cap_refs(ci, wrote, snapc);
+		rc = ceph_osdc_writepages_start(&client->osdc, req,
+						len, locked_pages);
 
 		/* continue? */
 		index = next;
@@ -690,10 +733,6 @@ get_more_pages:
 			done = 1;
 
 	release_pages:
-		/* hmm, pagevec_release also does lru_add_drain()...? */
-		dout(50, "release_pages on %d\n", locked_pages);
-		ceph_release_pages(pages, locked_pages);
-
 		dout(50, "pagevec_release on %d pages (%p)\n", (int)pvec.nr,
 		     pvec.nr ? pvec.pages[0] : 0);
 		pagevec_release(&pvec);
@@ -714,7 +753,6 @@ get_more_pages:
 		mapping->writeback_index = index;
 
 out:
-	kfree(pages);
 	if (rc > 0)
 		rc = 0;  /* vfs expects us to return 0 */
 	ceph_put_snap_context(snapc);
@@ -863,7 +901,7 @@ const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
 	.readpages = ceph_readpages,
 	.writepage = ceph_writepage,
-	.writepages = ceph_writepages,
+	.writepages = ceph_writepages_start,
 	.write_begin = ceph_write_begin,
 	.write_end = ceph_write_end,
 	.set_page_dirty = ceph_set_page_dirty_vfs,
@@ -873,7 +911,7 @@ const struct address_space_operations ceph_aops = {
 
 
 /*
- * vm ops 
+ * vm ops
  */
 
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)

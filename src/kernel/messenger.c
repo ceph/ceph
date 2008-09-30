@@ -5,10 +5,13 @@
 #include <linux/highmem.h>
 #include <net/tcp.h>
 
+#include "ceph_debug.h"
+
 #include "ceph_fs.h"
 #include "messenger.h"
 
 int ceph_debug_msgr;
+#define DOUT_MASK DOUT_MASK_MSGR
 #define DOUT_VAR ceph_debug_msgr
 #define DOUT_PREFIX "msgr: "
 #include "super.h"
@@ -1003,7 +1006,8 @@ static int read_message_partial(struct ceph_connection *con)
 	/* header */
 	while (con->in_base_pos < sizeof(m->hdr)) {
 		left = sizeof(m->hdr) - con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock, &m->hdr + con->in_base_pos,
+		ret = ceph_tcp_recvmsg(con->sock,
+				       (char *)&m->hdr + con->in_base_pos,
 				       left);
 		if (ret <= 0)
 			return ret;
@@ -1083,7 +1087,7 @@ static int read_message_partial(struct ceph_connection *con)
 	/* footer */
 	while (con->in_base_pos < sizeof(m->hdr) + sizeof(m->footer)) {
 		left = sizeof(m->hdr) + sizeof(m->footer) - con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock, &m->footer +
+		ret = ceph_tcp_recvmsg(con->sock, (char *)&m->footer +
 				       (con->in_base_pos - sizeof(m->hdr)),
 				       left);
 		if (ret <= 0)
