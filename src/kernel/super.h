@@ -103,6 +103,8 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 
 #define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
 
+#define MAX_MON_MOUNT_ADDR	5
+
 struct ceph_mount_args {
 	int sb_flags;
 	int flags;
@@ -110,7 +112,7 @@ struct ceph_mount_args {
 	struct ceph_fsid fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
-	struct ceph_entity_addr mon_addr[5];
+	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
 	int wsize;
 	int osd_timeout;
 	char *snapdir_name;

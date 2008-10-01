@@ -171,6 +171,9 @@ struct socket *ceph_tcp_connect(struct ceph_connection *con)
 
 	set_sock_callbacks(sock, con);
 
+	dout (20, "connect %u.%u.%u.%u:%u\n", 
+                     IPQUADPORT(*(struct sockaddr_in *)paddr));
+
 	ret = sock->ops->connect(sock, paddr,
 				 sizeof(struct sockaddr_in), O_NONBLOCK);
 	if (ret == -EINPROGRESS) {
@@ -398,6 +401,7 @@ static struct ceph_connection *__get_connection(struct ceph_messenger *msgr,
 		if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0)
 			goto yes;
 	}
+
 	return NULL;
 
 yes:

@@ -411,37 +411,55 @@ static match_table_t arg_tokens = {
 	{-1, NULL}
 };
 
+#define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
+
 /*
  * FIXME: add error checking to ip parsing
  */
-static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
+static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr, int max_count, int *count)
 {
 	int i;
 	int v;
+	int mon_count;
 	unsigned ip = 0;
 	const char *p = c;
 
 	dout(15, "parse_ip on '%s' len %d\n", c, len);
-	for (i = 0; *p && i < 4; i++) {
-		v = 0;
-		while (*p && *p != '.' && p < c+len) {
-			if (*p < '0' || *p > '9')
-				goto bad;
-			v = (v * 10) + (*p - '0');
-			p++;
+	for (mon_count = 0; mon_count < max_count; mon_count++) {
+		for (i = 0; !ADDR_DELIM(*p) && i < 4; i++) {
+			v = 0;
+			while (!ADDR_DELIM(*p) && *p != '.' && p < c+len) {
+				if (*p < '0' || *p > '9')
+					goto bad;
+				v = (v * 10) + (*p - '0');
+				p++;
+			}
+			ip = (ip << 8) + v;
+
+			if (*p == '.')
+				p++;
 		}
-		ip = (ip << 8) + v;
-		if (!*p)
+
+		if (i != 4)
+			goto bad;
+
+		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = htonl(ip);
+		dout(15, "parse_ip got %u.%u.%u.%u\n",
+	     		ip >> 24, (ip >> 16) & 0xff,
+	     		(ip >> 8) & 0xff, ip & 0xff);
+
+		if (*p != ',')
 			break;
+
 		p++;
 	}
+
 	if (p < c+len)
 		goto bad;
 
-	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
-	dout(15, "parse_ip got %u.%u.%u.%u\n",
-	     ip >> 24, (ip >> 16) & 0xff,
-	     (ip >> 8) & 0xff, ip & 0xff);
+	if (count)
+		*count = mon_count + 1;
+
 	return 0;
 
 bad:
@@ -455,6 +473,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	char *c;
 	int len, err;
 	substring_t argstr[MAX_OPT_ARGS];
+	int i;
 
 	dout(15, "parse_mount_args dev_name '%s'\n", dev_name);
 	memset(args, 0, sizeof(*args));
@@ -474,14 +493,16 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* get mon ip */
 	/* er, just one for now. later, comma-separate... */
 	len = c - dev_name;
-	err = parse_ip(dev_name, len, &args->mon_addr[0]);
+	err = parse_ip(dev_name, len, args->mon_addr, MAX_MON_MOUNT_ADDR, &args->num_mon);
 	if (err < 0)
 		return err;
-	args->mon_addr[0].ipaddr.sin_family = AF_INET;
-	args->mon_addr[0].ipaddr.sin_port = htons(CEPH_MON_PORT);
-	args->mon_addr[0].erank = 0;
-	args->mon_addr[0].nonce = 0;
-	args->num_mon = 1;
+
+	for (i=0; i<args->num_mon; i++) {
+		args->mon_addr[i].ipaddr.sin_family = AF_INET;
+		args->mon_addr[i].ipaddr.sin_port = htons(CEPH_MON_PORT);
+		args->mon_addr[i].erank = 0;
+		args->mon_addr[i].nonce = 0;
+	}
 
 	/* path on server */
 	c++;
@@ -527,8 +548,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_ip:
 			err = parse_ip(argstr[0].from,
-				       argstr[0].to-argstr[0].from,
-				       &args->my_addr);
+					argstr[0].to-argstr[0].from,
+					&args->my_addr,
+					1, NULL);
 			if (err < 0)
 				return err;
 			args->flags |= CEPH_MOUNT_MYIP;
@@ -727,7 +749,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
 	unsigned long started = jiffies;
 	int which;
-	char r;
+	unsigned char r;
 
 	dout(10, "mount start\n");
 	mutex_lock(&client->mount_mutex);
