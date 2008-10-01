@@ -1,10 +1,7 @@
-v0.4
-/- btrfs latency.  update howto.
-/- snap garbage collection
-/- journal
-
 v0.5
 - ENOSPC
+- efficient snap recovery
+- throttle osd recovery?
 - finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
 - make kclient use ->sendpage?
 - rip out io interruption?
@@ -82,6 +79,8 @@ mds
   - include snaps for all (primary+remote) parents
 
 - whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
+
+- what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
 
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
