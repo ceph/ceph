@@ -171,7 +171,7 @@ struct socket *ceph_tcp_connect(struct ceph_connection *con)
 
 	set_sock_callbacks(sock, con);
 
-	dout (20, "connect %u.%u.%u.%u:%u\n", 
+	dout (20, "connect %u.%u.%u.%u:%u\n",
                      IPQUADPORT(*(struct sockaddr_in *)paddr));
 
 	ret = sock->ops->connect(sock, paddr,
