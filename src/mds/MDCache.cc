@@ -3980,6 +3980,9 @@ void MDCache::do_file_recover()
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
 	       << " " << *in << dendl;
+      in->state_clear(CInode::STATE_NEEDSRECOVER);
+      in->auth_unpin(this);
+      mds->locker->file_eval_gather(&in->filelock);
     }
   }
 }
