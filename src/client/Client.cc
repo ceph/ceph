@@ -1391,10 +1391,10 @@ void Client::put_cap_ref(Inode *in, int cap)
   if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
     if ((cap & CEPH_CAP_WR) &&
 	in->cap_snaps.size() &&
-	in->cap_snaps.begin()->second.writing) {
+	in->cap_snaps.rbegin()->second.writing) {
       dout(10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
-      in->cap_snaps.begin()->second.writing = 0;
-      finish_cap_snap(in, &in->cap_snaps.begin()->second, in->caps_used());
+      in->cap_snaps.rbegin()->second.writing = 0;
+      finish_cap_snap(in, &in->cap_snaps.rbegin()->second, in->caps_used());
       signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
     }
     if (cap & CEPH_CAP_WRBUFFER) {
@@ -1514,7 +1514,7 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
   dout(10) << "queue_cap_snap " << *in << " seq " << seq << " used " << cap_string(used) << dendl;
 
   if (in->cap_snaps.size() &&
-      in->cap_snaps.begin()->second.writing) {
+      in->cap_snaps.rbegin()->second.writing) {
     dout(10) << "queue_cap_snap already have pending cap_snap on " << *in << dendl;
     return;
   }
@@ -3806,7 +3806,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   // wait for caps, max_size
   while ((lazy && (in->caps_issued() & CEPH_CAP_LAZYIO) == 0) ||
 	 (!lazy && (in->caps_issued() & CEPH_CAP_WR) == 0 &&
-	  (in->cap_snaps.empty() || !in->cap_snaps.begin()->second.writing)) ||
+	  (in->cap_snaps.empty() || !in->cap_snaps.rbegin()->second.writing)) ||
 	 endoff > in->inode.max_size) {
     dout(7) << "missing wr|lazy cap OR endoff " << endoff
 	    << " > max_size " << in->inode.max_size 
