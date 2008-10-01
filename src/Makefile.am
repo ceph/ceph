@@ -315,6 +315,7 @@ noinst_HEADERS = \
         kernel/Makefile\
 	kernel/addr.c\
 	kernel/caps.c\
+	kernel/ceph_debug.h\
         kernel/crush/crush.c\
         kernel/crush/crush.h\
         kernel/crush/hash.h\
