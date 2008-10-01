@@ -530,6 +530,14 @@ extern void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 				   struct ceph_cap_snap *capsnap,
 				   int used);
 
+inline static bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
+{
+	return !list_empty(&ci->i_cap_snaps) &&
+		list_entry(ci->i_cap_snaps.prev, struct ceph_cap_snap,
+			   ci_item)->writing;
+}
+
+
 
 /*
  * calculate the number of pages a given length and offset map onto,
