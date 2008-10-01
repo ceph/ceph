@@ -104,13 +104,11 @@ struct ceph_connection {
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
 	__u32 connect_seq, global_seq;
-	__le32 in_connect_seq, out_connect_seq;
-	__le32 in_global_seq, out_global_seq;
+	char in_banner[CEPH_BANNER_MAX_LEN];
+	struct ceph_msg_connect out_connect, in_connect;
+	struct ceph_entity_addr actual_peer_addr;
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
-
-	/* connect state */
-	struct ceph_entity_addr actual_peer_addr;
 
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
