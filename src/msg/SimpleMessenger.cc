@@ -783,7 +783,7 @@ int Rank::Pipe::accept()
   char banner[strlen(CEPH_BANNER)];
   rc = tcp_read(sd, banner, strlen(CEPH_BANNER));
   if (rc < 0) {
-    dout(10) << "accept couldn't read peer_addr" << dendl;
+    dout(10) << "accept couldn't read banner" << dendl;
     state = STATE_CLOSED;
     return -1;
   }
@@ -798,6 +798,7 @@ int Rank::Pipe::accept()
     state = STATE_CLOSED;
     return -1;
   }
+  dout(10) << "accept peer addr is " << peer_addr << dendl;
   if (peer_addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     entity_addr_t old_addr = peer_addr;
@@ -824,7 +825,9 @@ int Rank::Pipe::accept()
       dout(10) << "accept couldn't read connect" << dendl;
       goto fail;
     }
-    dout(20) << "accept got peer_connect_seq " << connect.connect_seq << dendl;
+    dout(20) << "accept got peer connect_seq " << connect.connect_seq
+	     << " global_seq " << connect.global_seq
+	     << dendl;
     
     rank.lock.Lock();
 
@@ -1054,7 +1057,7 @@ int Rank::Pipe::connect()
 
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = banner;
-  msgvec[0].iov_len = strlen(banner);
+  msgvec[0].iov_len = strlen(CEPH_BANNER);
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
@@ -1082,7 +1085,7 @@ int Rank::Pipe::connect()
     }
   }
   
-  // identify myself, and send initial cseq
+  // identify myself
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = (char*)&rank.rank_addr;
   msgvec[0].iov_len = sizeof(rank.rank_addr);
@@ -1093,6 +1096,7 @@ int Rank::Pipe::connect()
     dout(2) << "connect couldn't write my addr, " << strerror(errno) << dendl;
     goto fail;
   }
+  dout(10) << "connect sent my addr " << rank.rank_addr << dendl;
 
   while (1) {
     ceph_msg_connect connect;
@@ -1105,7 +1109,7 @@ int Rank::Pipe::connect()
     msg.msg_iovlen = 1;
     msglen = msgvec[0].iov_len;
 
-    dout(10) << "connect sending gseq " << gseq << " cseq " << cseq << dendl;
+    dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq << dendl;
     if (do_sendmsg(newsd, &msg, msglen)) {
       dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
       goto fail;
