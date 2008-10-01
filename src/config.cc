@@ -334,6 +334,7 @@ md_config_t g_conf = {
   mds_session_autoclose: 300, // autoclose idle session 
   mds_client_lease: 120,      // (assuming session stays alive)
   mds_reconnect_timeout: 30,  // seconds to wait for clients during mds restart
+                              //  make it (mds_session_timeout - mds_beacon_grace)
 
   mds_tick_interval: 5,
 
