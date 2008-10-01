@@ -344,7 +344,11 @@ void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
 
 	dout(30, "ceph_peer_reset peer_name = %s%d\n", ENTITY_NAME(*peer_name));
 
-	/* write me */
+	/* we only care about mds disconnects */
+	if (le32_to_cpu(peer_name->type) != CEPH_ENTITY_TYPE_MDS)
+		return;
+
+	ceph_mdsc_handle_reset(&client->mdsc, le32_to_cpu(peer_name->num));
 }
 
 

@@ -53,6 +53,7 @@ kernel client
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
+- reconnect after being disconnected from the mds
 
 vfs issues
 - real_lookup() race:
