@@ -1510,6 +1510,7 @@ static int process_accept(struct ceph_connection *con)
 			}
 		} else if (peer_cseq == existing->connect_seq &&
 			   (test_bit(CONNECTING, &existing->state) ||
+			    test_bit(STANDBY, &existing->state) ||
 			    test_bit(WAIT, &existing->state))) {
 			/* connection race */
 			dout(20, "process_accept connection race state = %lu\n",
