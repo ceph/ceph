@@ -220,8 +220,10 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	     inode, filp, page, page->index);
 	err = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
-	if (unlikely(err < 0))
+	if (unlikely(err < 0)) {
+		SetPageError(page);
 		goto out;
+	}
 	if (unlikely(err < PAGE_CACHE_SIZE)) {
 		void *kaddr = kmap_atomic(page, KM_USER0);
 		dout(10, "readpage zeroing tail %d bytes of page %p\n",
