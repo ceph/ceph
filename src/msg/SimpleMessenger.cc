@@ -886,6 +886,7 @@ int Rank::Pipe::accept()
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", replacing my attempt" << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
+		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
 	  goto replace;
 	} else {
