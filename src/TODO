@@ -67,6 +67,14 @@ kclient items to review
   - cap changes are serialized by i_lock, but (thorough) cache invalidation may block..
 
 
+kclient items to review
+- fill_trace locking
+- async trunc
+- async writeback
+- cache invalidation race, locking problems
+  - cap changes are serialized by i_lock, but (thorough) cache invalidation may block..
+
+
 vfs issues
 - real_lookup() race:
   1- hash lookup find no dentry
