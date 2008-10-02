@@ -1002,6 +1002,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } 
+    }
+    else if (m->cmd[1] == "reweight" && m->cmd.size() > 3) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      float w = strtof(m->cmd[3].c_str(), 0);
+      long ww = CEPH_OSD_OUT - (int)((float)CEPH_OSD_OUT*w);
+      if (osdmap.exists(osd)) {
+	pending_inc.new_offload[osd] = ww;
+	ss << "reweighted osd" << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } 
     } else {
       ss << "unknown command " << m->cmd[1];
     }

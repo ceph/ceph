@@ -305,8 +305,19 @@ private:
     assert(o < max_osd);
     osd_state[o] = s;
   }
+  void set_weight(int o, float w) {
+    unsigned off = CEPH_OSD_OUT - (int)((float)CEPH_OSD_OUT * w);
+    set_offload(o, off);
+  }
   void set_offload(int o, unsigned off) {
     crush.set_offload(o, off);
+  }
+  float get_weight(int o) {
+    float off = crush.get_offload(o);
+    return (CEPH_OSD_OUT - off) / CEPH_OSD_OUT;
+  }
+  unsigned get_offload(int o) {
+    return crush.get_offload(o);
   }
 
   bool exists(int osd) { return osd < max_osd/* && osd_state[osd] & CEPH_OSD_EXISTS*/; }
