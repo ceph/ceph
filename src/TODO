@@ -44,16 +44,28 @@ kernel client
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
 - set mapping bits for ENOSPC, EIO?
 - flush caps on sync, fsync, etc.
-  - do we need to block?
+  - do we need to block?  how do we track that?
 - forced unmount?
-- deal with CAP_RDCACHE properly: are we invalidating cache pages correctly?
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
   - a dir for each client instance (client###)?
   - hooks to get mds, osd, monmap epoch #s
+- populate sysfs?
+  - things that would be useful to see
+    - fsid
+    - map versions on client
+    - outstanding mds, osd, mon requests?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
+
+kclient items to review
+- fill_trace locking
+- async trunc
+- async writeback
+- cache invalidation race, locking problems
+  - cap changes are serialized by i_lock, but (thorough) cache invalidation may block..
+
 
 vfs issues
 - real_lookup() race:
