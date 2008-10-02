@@ -470,7 +470,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 		BUG_ON(wrote != req->r_num_pages);
 	} else {
 		wrote = 0;
-		set_bit(AS_EIO, &mapping->flags);
+		mapping_set_error(mapping, rc);
 	}
 	dout(10, "writepages_finish rc %d bytes %llu wrote %d (pages)\n", rc,
 	     bytes, wrote);
