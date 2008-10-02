@@ -59,6 +59,8 @@
 
 #include "messages/MOSDAlive.h"
 
+#include "messages/MMonCommand.h"
+
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
 
@@ -1290,7 +1292,11 @@ void OSD::dispatch(Message *m)
   case MSG_PGSTATSACK:
     handle_pgstats_ack((MPGStatsAck*)m);
     break;
-    
+
+  case MSG_MON_COMMAND:
+    parse_config_option_string(((MMonCommand*)m)->cmd[0]);
+    delete m;
+    break;    
     
 
     // -- need OSDMap --

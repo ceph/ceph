@@ -572,7 +572,24 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
 
 
 
-void parse_config_options(std::vector<const char*>& args)
+void parse_config_option_string(string& s)
+{
+  char b[s.length()+1];
+  strcpy(b, s.c_str());
+  vector<const char*> nargs;
+  char *p = b;
+  while (*p) {
+    nargs.push_back(p);
+    while (*p && *p != ' ') p++;
+    if (!*p)
+      break;
+    *p++ = 0;
+    while (*p && *p == ' ') p++;
+  }
+  parse_config_options(nargs, false);
+}
+
+void parse_config_options(std::vector<const char*>& args, bool open)
 {
   std::vector<const char*> nargs;
 
@@ -1129,7 +1146,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.dout_dir = 0;
   }
   */
-  if (g_conf.dout_dir && g_conf.daemonize) {
+  if (g_conf.dout_dir && g_conf.daemonize && open) {
     char fn[80];
     char hostname[80];
     gethostname(hostname, 79);
