@@ -1289,33 +1289,6 @@ void MDS::_dispatch(Message *m)
 }
 
 
-void MDS::proc_message(Message *m)
-{
-  switch (m->get_type()) {
-
-    // OSD
-  case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply((class MOSDOpReply*)m);
-    return;
-  case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map((MOSDMap*)m);
-    return;
-
-
-    // MDS
-  case CEPH_MSG_MDS_MAP:
-    handle_mds_map((MMDSMap*)m);
-    return;
-  case MSG_MDS_BEACON:
-    handle_mds_beacon((MMDSBeacon*)m);
-    return;
-
-  default:
-    assert(0);
-  }
-
-}
-
 
 
 void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
