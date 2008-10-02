@@ -352,7 +352,9 @@ more_locked:
 	next_tid = req->r_tid + 1;
 	osd = pick_osd(osdc, req);
 	if (osd < 0) {
-		ret = 1;  /* request a newer map */
+		dout(20, "tid %llu maps to no osd\n",
+		     req->r_tid);
+		ret++;  /* request a newer map */
 		memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
 	} else if (!ceph_entity_addr_equal(&req->r_last_osd,
 					   &osdc->osdmap->osd_addr[osd])) {
@@ -372,7 +374,8 @@ more_locked:
 done:
 	spin_unlock(&osdc->request_lock);
 	if (ret)
-		dout(10, "%d requests still pending on down osds\n", ret);
+		dout(10, "%d requests pending on down osds, need new map\n",
+		     ret);
 	return ret;
 }
 

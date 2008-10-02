@@ -522,7 +522,9 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		ceph_decode_need(p, end, sizeof(__u32)*2, bad);
 		ceph_decode_32(p, osd);
 		ceph_decode_32(p, off);
-		dout(1, "osd%d offload %x\n", osd, off);
+		dout(1, "osd%d offload 0x%x %s\n", osd, off,
+		     off == CEPH_OSD_IN ? "(in)":
+		     (off == CEPH_OSD_OUT ? "(out)":""));
 		if (osd < map->max_osd)
 			map->crush->device_offload[osd] = off;
 	}

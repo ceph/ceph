@@ -192,7 +192,7 @@ int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 got)
 
 	mutex_lock(&monc->req_mutex);
 	if (got <= monc->have_osdmap) {
-		dout(5, "got_osdmap got %u <= had %u, will retry\n",
+		dout(5, "got_osdmap got %u <= had %u\n",
 		     got, monc->have_osdmap);
 		ret = -EAGAIN;
 	} else {
