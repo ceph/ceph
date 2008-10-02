@@ -417,7 +417,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
 	struct ceph_fsid fsid;
-	__u32 epoch;
+	__u32 epoch = 0;
 	struct ceph_timespec ctime;
 	__u32 len, x;
 	__s32 new_flags, max;
@@ -531,7 +531,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 
 	/* skip new_up_thru */
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * sizeof(u32);
+	*p += len * 2 * sizeof(u32);
 
 	/* skip old/new pg_swap stuff */
 	ceph_decode_32_safe(p, end, len, bad);
@@ -545,13 +545,14 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	*p += len * 2 * sizeof(__u64);	
 
 	if (*p != end) {
-		dout(10, "osdmap incremental has trailing gunk?\n");
+		derr(10, "osdmap incremental has trailing gunk?\n");
 		goto bad;
 	}
 	return map;
 
 bad:
-	derr(10, "corrupt incremental osdmap at %p (%p-%p)\n", *p, start, end);
+	derr(10, "corrupt incremental osdmap epoch %d off %d (%p of %p-%p)\n",
+	     epoch, (int)(*p - start), *p, start, end);
 	if (newcrush)
 		crush_destroy(newcrush);
 	return ERR_PTR(err);
