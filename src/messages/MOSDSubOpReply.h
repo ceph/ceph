@@ -81,7 +81,7 @@ class MOSDSubOpReply : public Message {
     ::encode(pg_complete_thru, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
-    env.data_off = offset;
+    header.data_off = offset;
   }
 
   epoch_t get_map_epoch() { return map_epoch; }

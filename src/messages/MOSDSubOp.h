@@ -92,7 +92,7 @@ public:
     ::encode(attrset, payload);
     ::encode(data_subset, payload);
     ::encode(clone_subsets, payload);
-    env.data_off = offset;
+    header.data_off = offset;
   }
 
   bool wants_reply() {

@@ -122,7 +122,6 @@ struct ceph_connection {
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
 	int out_more;        /* there is more data after this kvec */
-	struct ceph_msg_footer out_footer;
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
 
@@ -132,7 +131,7 @@ struct ceph_connection {
 	__u32 in_partial_ack;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
-	u32 in_env_crc, in_front_crc, in_data_crc;
+	u32 in_front_crc, in_data_crc;
 
 	struct delayed_work work;	    /* send|recv work */
 	unsigned long       delay;          /* delay interval */

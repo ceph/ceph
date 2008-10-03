@@ -116,7 +116,7 @@ public:
     ::encode(head, payload);
     for (unsigned i=0; i<snaps.size(); i++)
       ::encode(snaps[i], payload);
-    env.data_off = get_offset();
+    header.data_off = get_offset();
   }
 
   virtual void decode_payload() {

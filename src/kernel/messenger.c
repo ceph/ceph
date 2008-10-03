@@ -696,8 +696,8 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
 		if (!con->out_msg_pos.did_page_crc) {
-			con->out_footer.data_crc =
-				crc32c_le(con->out_footer.data_crc,
+			con->out_msg->footer.data_crc =
+				crc32c_le(con->out_msg->footer.data_crc,
 					  kv.iov_base, kv.iov_len);
 			con->out_msg_pos.did_page_crc = 1;
 		}
@@ -716,12 +716,13 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		}
 	}
 
-	/* done */
+	/* done with data pages */
 	dout(30, "write_partial_msg_pages wrote all pages on %p\n", con);
 
-	con->out_kvec[0].iov_base = &con->out_footer;
+	/* queue up footer, too */
+	con->out_kvec[0].iov_base = &con->out_msg->footer;
 	con->out_kvec_bytes = con->out_kvec[0].iov_len =
-		sizeof(con->out_footer);
+		sizeof(con->out_msg->footer);
 	con->out_kvec_left = 1;
 	con->out_kvec_cur = con->out_kvec;
 	con->out_msg = 0;
@@ -784,11 +785,13 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_msg_pos.data_pos = 0;
 	con->out_msg_pos.did_page_crc = 0;
 
-	/* initial csum */
-	con->out_footer.aborted = 0;
-	con->out_footer.front_crc = crc32c_le(0, m->front.iov_base,
-					      m->front.iov_len);
-	con->out_footer.data_crc = 0;
+	/* fill in crc (except data pages), footer */
+	con->out_msg->hdr.crc = crc32c_le(0, (void *)&m->hdr,
+					  sizeof(m->hdr) - sizeof(m->hdr.crc));
+	con->out_msg->footer.aborted = 0;
+	con->out_msg->footer.front_crc = crc32c_le(0, m->front.iov_base,
+						   m->front.iov_len);
+	con->out_msg->footer.data_crc = 0;
 
 	set_bit(WRITE_PENDING, &con->state);
 }
@@ -1038,6 +1041,16 @@ static int read_message_partial(struct ceph_connection *con)
 		if (ret <= 0)
 			return ret;
 		con->in_base_pos += ret;
+		if (con->in_base_pos == sizeof(m->hdr)) {
+			u32 crc = crc32c_le(0, (void *)&m->hdr,
+				    sizeof(m->hdr) - sizeof(m->hdr.crc));
+			if (crc != m->hdr.crc) {
+				derr(0, "read_message_partial %p bad hdr crc"
+				     " %u != expected %u\n",
+				     m, crc, m->hdr.crc);
+				return -EIO;
+			}
+		}
 	}
 
 	/* front */
@@ -1136,13 +1149,13 @@ no_data:
 		derr(0, "read_message_partial %p front crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_front_crc, con->in_msg->footer.front_crc);
-		/*** fault ***/
+		return -EIO;
 	}
 	if (con->in_data_crc != con->in_msg->footer.data_crc) {
 		derr(0, "read_message_partial %p data crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_data_crc, con->in_msg->footer.data_crc);
-		/*** fault ***/
+		return -EIO;
 	}
 
 	/* did i learn my ip? */
@@ -1662,6 +1675,10 @@ more:
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
 		ret = read_message_partial(con);
+		if (ret == -EIO) {
+			con->error_msg = "bad crc";
+			goto out;
+		}
 		if (ret <= 0)
 			goto done;
 		if (con->in_tag == CEPH_MSGR_TAG_READY)

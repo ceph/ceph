@@ -43,7 +43,7 @@ do
  echo mkfs osd$osd
  $SUDO $CEPH_BIN/cosd --debug_journal 20 --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20 
  echo start osd$osd
- $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd -d --debug_ms 1 --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+ $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd -d --debug_ms 1 --debug_journal 20 --debug_osd 20 # --debug_filestore 20 --debug_ebofs 20
 # echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 done
 

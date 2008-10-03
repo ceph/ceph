@@ -1641,7 +1641,7 @@ void Rank::Pipe::writer()
 	bufferlist payload, data;
 	payload.claim(m->get_payload());
 	data.claim(m->get_data());
-	ceph_msg_header hdr = m->get_env();
+	ceph_msg_header hdr = m->get_header();
 
 	lock.Lock();
 	sent.push_back(m); // move to sent list
@@ -1694,28 +1694,37 @@ Message *Rank::Pipe::read_message()
   // envelope
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
-  ceph_msg_header env; 
+  ceph_msg_header header; 
   ceph_msg_footer footer;
 
-  if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
+  if (tcp_read( sd, (char*)&header, sizeof(header) ) < 0)
     return 0;
   
-  dout(20) << "reader got envelope type=" << env.type
-           << " src " << env.src << " dst " << env.dst
-           << " front=" << env.front_len
-	   << " data=" << env.data_len
-	   << " off " << env.data_off
+  dout(20) << "reader got envelope type=" << header.type
+           << " src " << header.src << " dst " << header.dst
+           << " front=" << header.front_len
+	   << " data=" << header.data_len
+	   << " off " << header.data_off
            << dendl;
-  
-  if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-    dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
-    env.orig_src.addr.ipaddr = env.src.addr.ipaddr = peer_addr.ipaddr;
+
+  // verify header crc
+  __u32 header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
+  if (header_crc != header.crc) {
+    dout(0) << "reader got bad header crc " << header_crc << " != " << header_crc << dendl;
+    return 0;
+  }
+
+  // ok, now it's safe to change the header..
+  // munge source address?
+  if (header.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    dout(10) << "reader munging src addr " << header.src << " to be " << peer_addr << dendl;
+    header.orig_src.addr.ipaddr = header.src.addr.ipaddr = peer_addr.ipaddr;
   }
 
   // read front
   bufferlist front;
   bufferptr bp;
-  int front_len = env.front_len;
+  int front_len = header.front_len;
   if (front_len) {
     bp = buffer::create(front_len);
     if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
@@ -1726,8 +1735,8 @@ Message *Rank::Pipe::read_message()
 
   // read data
   bufferlist data;
-  unsigned data_len = le32_to_cpu(env.data_len);
-  unsigned data_off = le32_to_cpu(env.data_off);
+  unsigned data_len = le32_to_cpu(header.data_len);
+  unsigned data_off = le32_to_cpu(header.data_off);
   if (data_len) {
     int left = data_len;
     if (data_off & ~PAGE_MASK) {
@@ -1769,17 +1778,17 @@ Message *Rank::Pipe::read_message()
   dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
   if (le32_to_cpu(footer.aborted)) {
     dout(0) << "reader got " << front.length() << " + " << data.length()
-	    << " byte message from " << env.src << ".. ABORTED" << dendl;
+	    << " byte message from " << header.src << ".. ABORTED" << dendl;
     // MEH FIXME 
     Message *m = new MGenericMessage(CEPH_MSG_PING);
-    env.type = CEPH_MSG_PING;
-    m->set_env(env);
+    header.type = CEPH_MSG_PING;
+    m->set_header(header);
     return m;
   }
 
   dout(20) << "reader got " << front.length() << " + " << data.length()
-	   << " byte message from " << env.src << dendl;
-  return decode_message(env, footer, front, data);
+	   << " byte message from " << header.src << dendl;
+  return decode_message(header, footer, front, data);
 }
 
 
@@ -1854,15 +1863,18 @@ int Rank::Pipe::write_ack(unsigned seq)
 }
 
 
-int Rank::Pipe::write_message(Message *m, ceph_msg_header *env, 
+int Rank::Pipe::write_message(Message *m, ceph_msg_header *header, 
 			      bufferlist &payload, bufferlist &data)
 {
-  // get envelope, buffers
-  env->front_len = payload.length();
-  env->data_len = data.length();
-
   struct ceph_msg_footer f;
   memset(&f, 0, sizeof(f));
+
+  // get envelope, buffers
+  header->front_len = payload.length();
+  header->data_len = data.length();
+
+  // calculate header, footer crc
+  header->crc = crc32c_le(0, (unsigned char*)header, sizeof(*header) - sizeof(header->crc));
   f.front_crc = payload.crc32c(0);
   f.data_crc = data.crc32c(0);
 
@@ -1870,7 +1882,7 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
   blist.claim(payload);
   blist.append(data);
   
-  dout(20)  << "write_message " << m << " to " << env->dst << dendl;
+  dout(20)  << "write_message " << m << " to " << header->dst << dendl;
   
   // set up msghdr and iovecs
   struct msghdr msg;
@@ -1887,9 +1899,9 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
   msg.msg_iovlen++;
 
   // send envelope
-  msgvec[msg.msg_iovlen].iov_base = (char*)env;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(*env);
-  msglen += sizeof(*env);
+  msgvec[msg.msg_iovlen].iov_base = (char*)header;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(*header);
+  msglen += sizeof(*header);
   msg.msg_iovlen++;
 
   // payload (front+data)
