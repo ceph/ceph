@@ -1027,7 +1027,7 @@ static int read_message_partial(struct ceph_connection *con)
 	struct ceph_msg *m = con->in_msg;
 	void *p;
 	int ret;
-	int want, left;
+	int to, want, left;
 	unsigned front_len, data_len, data_off;
 
 	dout(20, "read_message_partial con %p msg %p\n", con, m);
@@ -1132,8 +1132,9 @@ static int read_message_partial(struct ceph_connection *con)
 
 no_data:
 	/* footer */
-	while (con->in_base_pos < sizeof(m->hdr) + sizeof(m->footer)) {
-		left = sizeof(m->hdr) + sizeof(m->footer) - con->in_base_pos;
+	to = sizeof(m->hdr) + sizeof(m->footer);
+	while (con->in_base_pos < to) {
+		left = to - con->in_base_pos;
 		ret = ceph_tcp_recvmsg(con->sock, (char *)&m->footer +
 				       (con->in_base_pos - sizeof(m->hdr)),
 				       left);
@@ -1141,20 +1142,19 @@ no_data:
 			return ret;
 		con->in_base_pos += ret;
 	}
-
 	dout(20, "read_message_partial got msg %p\n", m);
 
 	/* crc ok? */
-	if (con->in_front_crc != con->in_msg->footer.front_crc) {
+	if (con->in_front_crc != m->footer.front_crc) {
 		derr(0, "read_message_partial %p front crc %u != expected %u\n",
 		     con->in_msg,
-		     con->in_front_crc, con->in_msg->footer.front_crc);
+		     con->in_front_crc, m->footer.front_crc);
 		return -EIO;
 	}
-	if (con->in_data_crc != con->in_msg->footer.data_crc) {
+	if (con->in_data_crc != m->footer.data_crc) {
 		derr(0, "read_message_partial %p data crc %u != expected %u\n",
 		     con->in_msg,
-		     con->in_data_crc, con->in_msg->footer.data_crc);
+		     con->in_data_crc, m->footer.data_crc);
 		return -EIO;
 	}
 
