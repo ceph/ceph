@@ -194,6 +194,7 @@ md_config_t g_conf = {
 
   mon_host: 0,
   daemonize: false,
+  file_logs: false,
 
   // profiling and debugging
   log: true,
@@ -609,8 +610,14 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 	     strcmp(args[i], "-m") == 0)
       g_conf.mon_host = args[++i];    
     else if (strcmp(args[i], "--daemonize") == 0 ||
-	     strcmp(args[i], "-d") == 0)
-      g_conf.daemonize = true;	     
+	     strcmp(args[i], "-d") == 0) {
+      g_conf.daemonize = true;
+      g_conf.file_logs = true;
+    } else if (strcmp(args[i], "--foreground") == 0 ||
+	     strcmp(args[i], "-f") == 0) {
+      g_conf.daemonize = false;
+      g_conf.file_logs = true;
+    }
 
     else if (strcmp(args[i], "--ms_hosts") == 0)
       g_conf.ms_hosts = args[++i];
@@ -1146,7 +1153,7 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.dout_dir = 0;
   }
   */
-  if (g_conf.dout_dir && g_conf.daemonize && open) {
+  if (g_conf.dout_dir && g_conf.file_logs && open) {
     char fn[80];
     char hostname[80];
     gethostname(hostname, 79);

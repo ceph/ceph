@@ -50,6 +50,7 @@ struct md_config_t {
   
   const char *mon_host;
   bool daemonize;
+  bool file_logs;
 
   // profiling
   bool  log;
