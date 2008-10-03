@@ -316,6 +316,9 @@ void CDir::remove_dentry(CDentry *dn)
 {
   dout(12) << "remove_dentry " << *dn << dendl;
 
+  // there should be no client leases at this point!
+  assert(dn->client_lease_map.empty());
+
   if (dn->inode) {
     // detach inode and dentry
     unlink_inode_work(dn);
