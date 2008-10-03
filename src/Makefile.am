@@ -39,9 +39,11 @@ streamtest_LDADD = libebofs.a libcommon.a libos.a
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
 
+# run
+crun_SOURCES = crun
 
 bin_PROGRAMS = \
-	cmon cmds cosd csyn \
+	cmon cmds cosd csyn crun \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal
