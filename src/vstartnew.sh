@@ -69,7 +69,7 @@ for f in `seq 0 $((CEPH_NUM_MON-1))`
 do
 #  $CEPH_BIN/monmaptool --add $IP:$(($CEPH_PORT+$f)) --print .ceph_monmap
  $CEPH_BIN/mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap
- $CEPH_BIN/crun $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
+ $CEPH_BIN/cmon -d $ARGS $CMON_ARGS mondata/mon$f
 done
 
 # build and inject an initial osd map
