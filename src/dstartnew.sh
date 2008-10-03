@@ -54,7 +54,7 @@ do
        ssh root@cosd$host cd $HOME/ceph/src \; umount $devm \; $HOME/src/btrfs/progs/mkfs.btrfs $dev \; mount $dev $devm )
 
    ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
-   ssh root@cosd$host cd $HOME/ceph/src \; ./cosd $devm -d --debug_ms 1 --debug_osd 10 # --debug_filestore 10 --debug_ebofs 30 --osd_heartbeat_grace 300
+   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./cosd $devm -d --debug_ms 1 --debug_osd 10 # --debug_filestore 10 --debug_ebofs 30 --osd_heartbeat_grace 300
 
 #   ssh cosd$host cd ceph/src \; valgrind --leak-check-full --show-reachable-yes ./cosd $dev --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd \&
  done
