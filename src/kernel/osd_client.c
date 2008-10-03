@@ -743,6 +743,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct list_head *page_list, int num_pages)
 {
 	struct ceph_osd_request *req;
+	struct ceph_osd_request_head *reqhead;
 	struct page *page;
 	pgoff_t next_index;
 	int contig_pages;
@@ -779,8 +780,9 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 		goto out;
 	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
 		  len);
-	dout(10, "readpages contig page extent is %llu~%llu\n", off, len);
-
+	req->r_num_pages = contig_pages;
+	reqhead = req->r_request->front.iov_base;
+	reqhead->length = cpu_to_le64(len);
 	dout(10, "readpages final extent is %llu~%llu -> %d pages\n",
 	     off, len, req->r_num_pages);
 	rc = do_sync_request(osdc, req);
