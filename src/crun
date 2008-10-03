@@ -1,5 +1,18 @@
 #!/bin/sh
 
+let daemon=0
+orig_args=$*
+
+while [ $# -ge 1 ]; do
+	case $1 in
+		-d | --daemon )
+		daemon=1
+	esac
+	shift
+done
+
+
 while [ true ]; do
-   $*
+	$orig_args
+	[ $daemon -eq 1 ] && exit
 done
