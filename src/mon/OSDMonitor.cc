@@ -972,6 +972,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "marked down osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	
+	// send them the new map when it updates, so they know it
+	waiting_for_map[osdmap.get_inst(osd)] = osdmap.get_epoch();
+
 	return true;
       }
     }
