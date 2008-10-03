@@ -39,14 +39,13 @@ streamtest_LDADD = libebofs.a libcommon.a libos.a
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
 
-# run
-crun_SOURCES = crun
-
 bin_PROGRAMS = \
-	cmon cmds cosd csyn crun \
+	cmon cmds cosd csyn \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal
+
+bin_SCRIPTS = crun
 
 # fuse targets?
 if WITH_FUSE
@@ -155,7 +154,7 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh
+EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh vstartnew.sh stop.sh crun
 
 # cleaning
 clean-local:
