@@ -1068,7 +1068,7 @@ retry:
 		dout(30, "do_request waiting for new mdsmap\n");
 		err = wait_for_new_map(mdsc, req->r_timeout);
 		if (err)
-			return err;
+			goto finish;
 		goto retry;
 	}
 
