@@ -168,6 +168,7 @@ libcommon_a_SOURCES = \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
+	common/crc32c.cc\
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \

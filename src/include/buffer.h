@@ -47,6 +47,7 @@ void	*valloc(size_t);
 
 #include "atomic.h"
 #include "page.h"
+#include "crc32c.h"
 
 // <hack>
 //  these are in config.o
@@ -957,7 +958,13 @@ public:
 
     int read_file(const char *fn);
     int write_file(const char *fn);
-    __u32 crc32c(__u32 seed);
+    __u32 crc32c(__u32 crc) {
+      for (std::list<ptr>::const_iterator it = _buffers.begin(); 
+	   it != _buffers.end(); 
+	   it++)
+	crc = crc32c_le(crc, (unsigned char*)it->c_str(), it->length());
+      return crc;
+    }
 
   };
 };
