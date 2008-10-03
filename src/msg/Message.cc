@@ -114,12 +114,18 @@ using namespace std;
 
 
 
-
-
-
 Message *
-decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
+decode_message(ceph_msg_header& env, ceph_msg_footer& footer, bufferlist& front, bufferlist& data)
 {
+  __u32 front_crc = front.crc32c(0);
+  __u32 data_crc = data.crc32c(0);
+
+  if (front_crc != footer.front_crc ||
+      data_crc != footer.data_crc) {
+    dout(0) << "bad crc in front|data " << front_crc << "/" << footer.front_crc << " " << data_crc << "/" << footer.data_crc << dendl;
+    assert(0);
+  }
+
   // make message
   Message *m = 0;
   int type = env.type;
@@ -401,10 +407,14 @@ decode_message(ceph_msg_header& env, bufferlist& front, bufferlist& data)
   }
   
   m->set_env(env);
+  m->set_footer(footer);
   m->set_payload(front);
   m->set_data(data);
 
   m->decode_payload();
+
+  m->front_crc = front_crc;
+  m->data_crc = data_crc;
 
   // done!
   return m;

@@ -30,7 +30,7 @@
 /*
  * protocol versions.  increment each time one of these changes.
  */
-#define CEPH_BANNER "ceph\n1\n"  /* second line is a protocol version.
+#define CEPH_BANNER "ceph\n2\n"  /* second line is a protocol version.
 				    adjust whenever the wire protocol
 				    changes. */
 #define CEPH_BANNER_MAX_LEN 30
@@ -409,11 +409,13 @@ struct ceph_msg_header {
 	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
 	struct ceph_entity_inst src, orig_src, dst;
+	__le32 header_crc;
 } __attribute__ ((packed));
 
 struct ceph_msg_footer {
 	__le32 aborted;
-	__le32 csum;
+	__le32 front_crc;
+	__le32 data_crc;
 } __attribute__ ((packed));
 
 /*

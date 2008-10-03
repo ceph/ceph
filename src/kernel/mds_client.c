@@ -943,7 +943,7 @@ bad:
 
 void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds)
 {
-	derr(1, "mds%d gave us the boot.  IMPLEMENT RECONNECT.\n");
+	derr(1, "mds%d gave us the boot.  IMPLEMENT RECONNECT.\n", mds);
 }
 
 

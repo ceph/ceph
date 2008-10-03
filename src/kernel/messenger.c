@@ -1,3 +1,4 @@
+#include <linux/crc32c.h>
 #include <linux/kthread.h>
 #include <linux/socket.h>
 #include <linux/net.h>
@@ -172,7 +173,7 @@ struct socket *ceph_tcp_connect(struct ceph_connection *con)
 	set_sock_callbacks(sock, con);
 
 	dout (20, "connect %u.%u.%u.%u:%u\n",
-                     IPQUADPORT(*(struct sockaddr_in *)paddr));
+	             IPQUADPORT(*(struct sockaddr_in *)paddr));
 
 	ret = sock->ops->connect(sock, paddr,
 				 sizeof(struct sockaddr_in), O_NONBLOCK);
@@ -694,6 +695,12 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
+		if (!con->out_msg_pos.did_page_crc) {
+			con->out_footer.data_crc =
+				crc32c_le(con->out_footer.data_crc,
+					  kv.iov_base, kv.iov_len);
+			con->out_msg_pos.did_page_crc = 1;
+		}
 		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
 		if (msg->pages)
 			kunmap(page);
@@ -705,13 +712,13 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		if (ret == kv.iov_len) {
 			con->out_msg_pos.page_pos = 0;
 			con->out_msg_pos.page++;
+			con->out_msg_pos.did_page_crc = 0;
 		}
 	}
 
 	/* done */
 	dout(30, "write_partial_msg_pages wrote all pages on %p\n", con);
 
-	con->out_footer.aborted = cpu_to_le32(con->out_msg->pages == 0);
 	con->out_kvec[0].iov_base = &con->out_footer;
 	con->out_kvec_bytes = con->out_kvec[0].iov_len =
 		sizeof(con->out_footer);
@@ -769,12 +776,19 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_kvec_left = v;
 	con->out_kvec_bytes += 1 + sizeof(m->hdr) + m->front.iov_len;
 	con->out_kvec_cur = con->out_kvec;
-	con->out_more = le32_to_cpu(m->hdr.data_len);  /* data? */
+	con->out_more = 1;  /* data? */
 
 	/* pages */
 	con->out_msg_pos.page = 0;
 	con->out_msg_pos.page_pos = le32_to_cpu(m->hdr.data_off) & ~PAGE_MASK;
 	con->out_msg_pos.data_pos = 0;
+	con->out_msg_pos.did_page_crc = 0;
+
+	/* initial csum */
+	con->out_footer.aborted = 0;
+	con->out_footer.front_crc = crc32c_le(0, m->front.iov_base,
+					      m->front.iov_len);
+	con->out_footer.data_crc = 0;
 
 	set_bit(WRITE_PENDING, &con->state);
 }
@@ -945,7 +959,7 @@ more_kvec:
 	}
 
 	/* msg pages? */
-	if (con->out_msg && con->out_msg->nr_pages) {
+	if (con->out_msg) {
 		ret = write_partial_msg_pages(con, con->out_msg);
 		if (ret == 1)
 			goto more_kvec;
@@ -998,6 +1012,7 @@ static int prepare_read_message(struct ceph_connection *con)
 		derr(1, "kmalloc failure on incoming message %d\n", err);
 		return err;
 	}
+	con->in_front_crc = con->in_data_crc = 0;
 	return 0;
 }
 
@@ -1039,6 +1054,9 @@ static int read_message_partial(struct ceph_connection *con)
 		if (ret <= 0)
 			return ret;
 		m->front.iov_len += ret;
+		if (m->front.iov_len == front_len)
+			con->in_front_crc = crc32c_le(0, m->front.iov_base,
+						      m->front.iov_len);
 	}
 
 	/* (page) data */
@@ -1083,6 +1101,10 @@ static int read_message_partial(struct ceph_connection *con)
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
+		if (ret > 0)
+			con->in_data_crc =
+				crc32c_le(con->in_data_crc,
+					  p + con->in_msg_pos.page_pos, ret);
 		kunmap(m->pages[con->in_msg_pos.page]);
 		mutex_unlock(&m->page_mutex);
 		if (ret <= 0)
@@ -1095,6 +1117,7 @@ static int read_message_partial(struct ceph_connection *con)
 		}
 	}
 
+no_data:
 	/* footer */
 	while (con->in_base_pos < sizeof(m->hdr) + sizeof(m->footer)) {
 		left = sizeof(m->hdr) + sizeof(m->footer) - con->in_base_pos;
@@ -1106,8 +1129,21 @@ static int read_message_partial(struct ceph_connection *con)
 		con->in_base_pos += ret;
 	}
 
-no_data:
 	dout(20, "read_message_partial got msg %p\n", m);
+
+	/* crc ok? */
+	if (con->in_front_crc != con->in_msg->footer.front_crc) {
+		derr(0, "read_message_partial %p front crc %u != expected %u\n",
+		     con->in_msg,
+		     con->in_front_crc, con->in_msg->footer.front_crc);
+		/*** fault ***/
+	}
+	if (con->in_data_crc != con->in_msg->footer.data_crc) {
+		derr(0, "read_message_partial %p data crc %u != expected %u\n",
+		     con->in_msg,
+		     con->in_data_crc, con->in_msg->footer.data_crc);
+		/*** fault ***/
+	}
 
 	/* did i learn my ip? */
 	if (con->msgr->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
@@ -1135,13 +1171,14 @@ static void process_message(struct ceph_connection *con)
 	con->in_seq++;
 	spin_unlock(&con->out_queue_lock);
 
-	dout(1, "===== %p %u from %s%d %d=%s len %d+%d =====\n",
+	dout(1, "===== %p %u from %s%d %d=%s len %d+%d (%u %u) =====\n",
 	     con->in_msg, le32_to_cpu(con->in_msg->hdr.seq),
 	     ENTITY_NAME(con->in_msg->hdr.src.name),
 	     le32_to_cpu(con->in_msg->hdr.type),
 	     ceph_msg_type_name(le32_to_cpu(con->in_msg->hdr.type)),
 	     le32_to_cpu(con->in_msg->hdr.front_len),
-	     le32_to_cpu(con->in_msg->hdr.data_len));
+	     le32_to_cpu(con->in_msg->hdr.data_len),
+	     con->in_front_crc, con->in_data_crc);
 	con->msgr->dispatch(con->msgr->parent, con->in_msg);
 	con->in_msg = 0;
 	con->in_tag = CEPH_MSGR_TAG_READY;
@@ -1882,6 +1919,7 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	/* revoke old message's pages */
 	mutex_lock(&old->page_mutex);
 	old->pages = 0;
+	old->footer.aborted = 1;
 	mutex_unlock(&old->page_mutex);
 
 	ceph_msg_put(old);
@@ -1994,6 +2032,8 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->hdr.front_len = cpu_to_le32(front_len);
 	m->hdr.data_len = cpu_to_le32(page_len);
 	m->hdr.data_off = cpu_to_le32(page_off);
+	m->footer.front_crc = 0;
+	m->footer.data_crc = 0;
 
 	/* front */
 	if (front_len) {

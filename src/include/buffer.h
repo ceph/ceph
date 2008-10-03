@@ -957,6 +957,7 @@ public:
 
     int read_file(const char *fn);
     int write_file(const char *fn);
+    __u32 crc32c(__u32 seed);
 
   };
 };

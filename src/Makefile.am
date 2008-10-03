@@ -289,6 +289,7 @@ noinst_HEADERS = \
         include/buffer.h\
         include/byteorder.h\
         include/ceph_fs.h\
+	include/crc32c.h\
         include/cstring.h\
         include/encoding.h\
         include/err.h\

@@ -117,6 +117,7 @@ using std::list;
 class Message {
 protected:
   ceph_msg_header  env;      // envelope
+  ceph_msg_footer  footer;
   bufferlist       payload;  // "front" unaligned blob
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
   
@@ -125,6 +126,8 @@ protected:
   friend class Messenger;
 
 public:
+  __u32 front_crc, data_crc;
+
   Message() { };
   Message(int t) {
     env.type = t;
@@ -134,6 +137,8 @@ public:
 
   ceph_msg_header &get_env() { return env; }
   void set_env(const ceph_msg_header &e) { env = e; }
+  void set_footer(const ceph_msg_footer &e) { footer = e; }
+  ceph_msg_footer &get_footer() { return footer; }
 
   void clear_payload() { payload.clear(); }
   bool empty_payload() { return payload.length() == 0; }
@@ -183,7 +188,7 @@ public:
   
 };
 
-extern Message *decode_message(ceph_msg_header &env, bufferlist& front, bufferlist& data);
+extern Message *decode_message(ceph_msg_header &env, ceph_msg_footer& footer, bufferlist& front, bufferlist& data);
 inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   return out;

@@ -69,6 +69,7 @@ struct ceph_msg {
 struct ceph_msg_pos {
 	int page, page_pos;        /* which page; -3=tag, -2=hdr, -1=front */
 	int data_pos;
+	int did_page_crc;
 };
 
 /* ceph connection fault delay defaults */
@@ -131,6 +132,7 @@ struct ceph_connection {
 	__u32 in_partial_ack;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
+	u32 in_env_crc, in_front_crc, in_data_crc;
 
 	struct delayed_work work;	    /* send|recv work */
 	unsigned long       delay;          /* delay interval */

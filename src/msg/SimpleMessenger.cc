@@ -592,7 +592,9 @@ void Rank::EntityMessenger::dispatch_entry()
 	    dout(1) << m->get_dest() 
 		    << " <== " << m->get_source_inst()
 		    << " ==== " << *m
-		    << " ==== " << m 
+		    << " ==== " << m->get_payload().length() << "+" << m->get_data().length()
+		    << " (" << m->front_crc << " " << m->data_crc << ")"
+		    << " " << m 
 		    << dendl;
 	    dispatch(m);
 	    dout(20) << "done calling dispatch on " << m << dendl;
@@ -1693,6 +1695,8 @@ Message *Rank::Pipe::read_message()
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
   ceph_msg_header env; 
+  ceph_msg_footer footer;
+
   if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
     return 0;
   
@@ -1756,27 +1760,26 @@ Message *Rank::Pipe::read_message()
       data.push_back(bp);
       dout(20) << "reader got data tail " << left << dendl;
     }
+  }
 
-    // footer
-    ceph_msg_footer footer;
-    if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
-      return 0;
-
-    dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
-    if (le32_to_cpu(footer.aborted)) {
-      dout(0) << "reader got " << front.length() << " + " << data.length()
-	      << " byte message from " << env.src << ".. ABORTED" << dendl;
-      // MEH FIXME 
-      Message *m = new MGenericMessage(CEPH_MSG_PING);
-      env.type = CEPH_MSG_PING;
-      m->set_env(env);
-      return m;
-    }
+  // footer
+  if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
+    return 0;
+  
+  dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
+  if (le32_to_cpu(footer.aborted)) {
+    dout(0) << "reader got " << front.length() << " + " << data.length()
+	    << " byte message from " << env.src << ".. ABORTED" << dendl;
+    // MEH FIXME 
+    Message *m = new MGenericMessage(CEPH_MSG_PING);
+    env.type = CEPH_MSG_PING;
+    m->set_env(env);
+    return m;
   }
 
   dout(20) << "reader got " << front.length() << " + " << data.length()
 	   << " byte message from " << env.src << dendl;
-  return decode_message(env, front, data);
+  return decode_message(env, footer, front, data);
 }
 
 
@@ -1858,6 +1861,11 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
   env->front_len = payload.length();
   env->data_len = data.length();
 
+  struct ceph_msg_footer f;
+  memset(&f, 0, sizeof(f));
+  f.front_crc = payload.crc32c(0);
+  f.data_crc = data.crc32c(0);
+
   bufferlist blist;
   blist.claim(payload);
   blist.append(data);
@@ -1929,15 +1937,11 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
   }
   assert(left == 0);
 
-  if (data.length()) {
-    // send data footer
-    struct ceph_msg_footer f;
-    memset(&f, 0, sizeof(f));
-    msgvec[msg.msg_iovlen].iov_base = (void*)&f;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(f);
-    msglen += sizeof(f);
-    msg.msg_iovlen++;
-  }
+  // send data footer
+  msgvec[msg.msg_iovlen].iov_base = (void*)&f;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(f);
+  msglen += sizeof(f);
+  msg.msg_iovlen++;
 
   // send
   if (do_sendmsg(sd, &msg, msglen)) 

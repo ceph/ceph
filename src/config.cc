@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "include/crc32c.h"
+
 // for tstring stringtable
 #include "include/tstring.h"
 stringtable g_stab;
@@ -76,6 +78,16 @@ int buffer::list::write_file(const char *fn)
   ::close(fd);
   return 0;
 }
+
+__u32 buffer::list::crc32c(__u32 crc)
+{
+  for (std::list<ptr>::const_iterator it = _buffers.begin(); 
+       it != _buffers.end(); 
+       it++)
+    crc = crc32c_le(crc, (unsigned char*)it->c_str(), it->length());
+  return crc;
+}
+
 
 
 
