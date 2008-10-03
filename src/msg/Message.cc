@@ -418,9 +418,6 @@ decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   m->decode_payload();
 
-  m->front_crc = front_crc;
-  m->data_crc = data_crc;
-
   // done!
   return m;
 }

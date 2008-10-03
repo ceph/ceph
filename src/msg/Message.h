@@ -126,8 +126,6 @@ protected:
   friend class Messenger;
 
 public:
-  __u32 front_crc, data_crc;
-
   Message() { };
   Message(int t) {
     header.type = t;
@@ -154,7 +152,16 @@ public:
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   utime_t get_recv_stamp() { return recv_stamp; }
 
-  // HEADERELOPE ----
+  void calc_header_crc() {
+    header.crc = crc32c_le(0, (unsigned char*)&header,
+			   sizeof(header) - sizeof(header.crc));
+  }
+  void calc_front_crc() {
+    footer.front_crc = payload.crc32c(0);
+  }
+  void calc_data_crc() {
+    footer.data_crc = data.crc32c(0);
+  }
 
   // type
   int get_type() { return header.type; }

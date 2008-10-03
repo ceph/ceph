@@ -593,7 +593,7 @@ void Rank::EntityMessenger::dispatch_entry()
 		    << " <== " << m->get_source_inst()
 		    << " ==== " << *m
 		    << " ==== " << m->get_payload().length() << "+" << m->get_data().length()
-		    << " (" << m->front_crc << " " << m->data_crc << ")"
+		    << " (" << m->get_footer().front_crc << " " << m->get_footer().data_crc << ")"
 		    << " " << m 
 		    << dendl;
 	    dispatch(m);
@@ -665,12 +665,15 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
+  m->calc_data_crc();
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
-	  << " -- " << m
-          << dendl;
+    	  << " -- ?+" << m->get_data().length()
+	  << " (? " << m->get_footer().data_crc << ")"
+	  << " " << m 
+	  << dendl;
 
   rank.submit_message(m, dest.addr);
 
@@ -682,11 +685,14 @@ int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
   // set envelope
   m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
+  m->calc_data_crc();
  
   dout(1) << m->get_source()
           << " **> " << dest.name << " " << dest.addr
           << " -- " << *m
-	  << " -- " << m
+    	  << " -- ?+" << m->get_data().length()
+	  << " (? " << m->get_footer().data_crc << ")"
+	  << " " << m 
           << dendl;
 
   rank.submit_message(m, dest.addr);
@@ -702,11 +708,14 @@ int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
+  m->calc_data_crc();
  
   dout(1) << "lazy " << m->get_source()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
-	  << " -- " << m
+    	  << " -- ?+" << m->get_data().length()
+	  << " (? " << m->get_footer().data_crc << ")"
+	  << " " << m 
           << dendl;
 
   rank.submit_message(m, dest.addr, true);
@@ -1638,21 +1647,18 @@ void Rank::Pipe::writer()
 	// encode and copy out of *m
         if (m->empty_payload()) 
 	  m->encode_payload();
-	bufferlist payload, data;
-	payload.claim(m->get_payload());
-	data.claim(m->get_data());
-	ceph_msg_header hdr = m->get_header();
+	m->calc_front_crc();
 
 	lock.Lock();
 	sent.push_back(m); // move to sent list
 	lock.Unlock();
 
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
-	int rc = write_message(m, &hdr, payload, data);
+	int rc = write_message(m);
 	lock.Lock();
 	
 	if (rc < 0) {
-          derr(1) << "writer error sending " << m << " to " << hdr.dst << ", "
+          derr(1) << "writer error sending " << m << " to " << m->get_header().dst << ", "
 		  << errno << ": " << strerror(errno) << dendl;
 	  fault();
         }
@@ -1710,7 +1716,7 @@ Message *Rank::Pipe::read_message()
   // verify header crc
   __u32 header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
   if (header_crc != header.crc) {
-    dout(0) << "reader got bad header crc " << header_crc << " != " << header_crc << dendl;
+    dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
     return 0;
   }
 
@@ -1863,25 +1869,21 @@ int Rank::Pipe::write_ack(unsigned seq)
 }
 
 
-int Rank::Pipe::write_message(Message *m, ceph_msg_header *header, 
-			      bufferlist &payload, bufferlist &data)
+int Rank::Pipe::write_message(Message *m)
 {
-  struct ceph_msg_footer f;
-  memset(&f, 0, sizeof(f));
+  ceph_msg_header& header = m->get_header();
+  ceph_msg_footer& footer = m->get_footer();
 
   // get envelope, buffers
-  header->front_len = payload.length();
-  header->data_len = data.length();
+  header.front_len = m->get_payload().length();
+  header.data_len = m->get_data().length();
+  footer.aborted = 0;
+  m->calc_header_crc();
 
-  // calculate header, footer crc
-  header->crc = crc32c_le(0, (unsigned char*)header, sizeof(*header) - sizeof(header->crc));
-  f.front_crc = payload.crc32c(0);
-  f.data_crc = data.crc32c(0);
-
-  bufferlist blist = payload;
-  blist.append(data);
+  bufferlist blist = m->get_payload();
+  blist.append(m->get_data());
   
-  dout(20)  << "write_message " << m << " to " << header->dst << dendl;
+  dout(20)  << "write_message " << m << " to " << header.dst << dendl;
   
   // set up msghdr and iovecs
   struct msghdr msg;
@@ -1898,9 +1900,9 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *header,
   msg.msg_iovlen++;
 
   // send envelope
-  msgvec[msg.msg_iovlen].iov_base = (char*)header;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(*header);
-  msglen += sizeof(*header);
+  msgvec[msg.msg_iovlen].iov_base = (char*)&header;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(header);
+  msglen += sizeof(header);
   msg.msg_iovlen++;
 
   // payload (front+data)
@@ -1948,10 +1950,10 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *header,
   }
   assert(left == 0);
 
-  // send data footer
-  msgvec[msg.msg_iovlen].iov_base = (void*)&f;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(f);
-  msglen += sizeof(f);
+  // send footer
+  msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
+  msglen += sizeof(footer);
   msg.msg_iovlen++;
 
   // send
