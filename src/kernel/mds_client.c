@@ -1751,6 +1751,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	lease->action = CEPH_MDS_LEASE_RELEASE;
 	lease->mask = mask;
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
+	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
 	if (dentry)
 		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
