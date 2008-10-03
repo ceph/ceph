@@ -1878,8 +1878,7 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *header,
   f.front_crc = payload.crc32c(0);
   f.data_crc = data.crc32c(0);
 
-  bufferlist blist;
-  blist.claim(payload);
+  bufferlist blist = payload;
   blist.append(data);
   
   dout(20)  << "write_message " << m << " to " << header->dst << dendl;
