@@ -695,18 +695,7 @@ protected:
   // -- metadata cache stuff
 
   // decrease inode ref.  delete if dangling.
-  void put_inode(Inode *in, int n=1) {
-    //cout << "put_inode on " << in << " " << in->inode.ino << endl;
-    in->put(n);
-    if (in->ref == 0) {
-      //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
-      if (in->snapdir_parent)
-	put_inode(in->snapdir_parent);
-      inode_map.erase(in->vino());
-      if (in == root) root = 0;
-      delete in;
-    }
-  }
+  void put_inode(Inode *in, int n=1);
 
   void close_dir(Dir *dir) {
     assert(dir->is_empty());
