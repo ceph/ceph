@@ -251,6 +251,8 @@ struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == 0)
 		return NULL;
 	session = mdsc->sessions[mds];
+	dout(30, "get_mds_session %p %d -> %d\n", session,
+	     atomic_read(&session->s_ref), atomic_read(&session->s_ref)+1);
 	atomic_inc(&session->s_ref);
 	return session;
 }
@@ -1675,6 +1677,7 @@ release:
 	ceph_msg_get(msg);
 	ceph_send_msg_mds(mdsc, msg, mds);
 	mutex_unlock(&session->s_mutex);
+	ceph_put_mds_session(session);
 	return;
 
 bad:
@@ -1857,12 +1860,12 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 
 	mutex_lock(&mdsc->mutex);
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *session = __ceph_get_mds_session(mdsc, i);
+		struct ceph_mds_session *session =
+			__ceph_get_mds_session(mdsc, i);
 		if (!session)
 			continue;
-		//mutex_unlock(&mdsc->mutex);
 		remove_session_leases(session);
-		//mutex_lock(&mdsc->mutex);
+		ceph_put_mds_session(session);
 	}
 	mutex_unlock(&mdsc->mutex);
 }
@@ -1921,9 +1924,8 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 			session = __ceph_get_mds_session(mdsc, i);
 			if (!session)
 				continue;
-			//mutex_unlock(&mdsc->mutex);
 			close_session(mdsc, session);
-			//mutex_lock(&mdsc->mutex);
+			ceph_put_mds_session(session);
 			n++;
 		}
 		if (n == 0)
