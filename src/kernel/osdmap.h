@@ -51,9 +51,10 @@ extern void osdmap_destroy(struct ceph_osdmap *map);
 extern struct ceph_osdmap *osdmap_decode(void **p, void *end);
 
 extern void calc_file_object_mapping(struct ceph_file_layout *layout,
-				     loff_t *off, loff_t *len,
+				     __u64 off, __u64 *plen,
 				     struct ceph_object *oid,
 				     __u64 *oxoff, __u64 *oxlen);
+
 extern void calc_object_layout(struct ceph_object_layout *ol,
 			       struct ceph_object *oid,
 			       struct ceph_file_layout *fl,

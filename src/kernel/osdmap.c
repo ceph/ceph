@@ -559,27 +559,29 @@ bad:
 }
 
 
+
+
 /*
  * calculate file layout from given offset, length.
- * fill in correct oid and off,len within object.
- * update file offset,length to end of extent, or
- * the next file extent not included in current mapping.
+ * fill in correct oid, logical length, and object extent
+ * offset, length.
+ *
+ * for now, we write only a single su, until we can
+ * pass a stride back to the caller.
  */
 void calc_file_object_mapping(struct ceph_file_layout *layout,
-			      loff_t *off, loff_t *len,
+			      __u64 off, __u64 *plen,
 			      struct ceph_object *oid,
 			      __u64 *oxoff, __u64 *oxlen)
 {
 	u32 osize = le32_to_cpu(layout->fl_object_size);
 	u32 su = le32_to_cpu(layout->fl_stripe_unit);
 	u32 sc = le32_to_cpu(layout->fl_stripe_count);
-	u32 stripe_len = layout->fl_stripe_count * layout->fl_stripe_unit;
 	u32 bl, stripeno, stripepos, objsetno;
 	u32 su_per_object;
-	u32 first_oxlen;
 	u64 t;
 
-	dout(80, "mapping %llu~%llu  osize %u fl_su %u\n", *off, *len,
+	dout(80, "mapping %llu~%llu  osize %u fl_su %u\n", off, *plen,
 	     osize, su);
 	su_per_object = osize / layout->fl_stripe_unit;
 	dout(80, "osize %u / su %u = su_per_object %u\n", osize, su,
@@ -587,10 +589,10 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 
 	BUG_ON((su & ~PAGE_MASK) != 0);
 	/* bl = *off / su; */
-	t = *off;
+	t = off;
 	do_div(t, su);
 	bl = t;
-	dout(80, "off %llu / su %u = bl %u\n", *off, su, bl);
+	dout(80, "off %llu / su %u = bl %u\n", off, su, bl);
 	
 	stripeno = bl / sc;
 	stripepos = bl % sc;
@@ -599,21 +601,12 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	oid->bno = objsetno * sc + stripepos;
 	dout(80, "objset %u * sc %u = bno %u\n", objsetno, sc, oid->bno);
 	/* *oxoff = *off / layout->fl_stripe_unit; */
-	t = *off;
-	*oxoff = do_div(t, le32_to_cpu(layout->fl_stripe_unit));
-	first_oxlen = min_t(loff_t, *len, le32_to_cpu(layout->fl_stripe_unit));
-	*oxlen = first_oxlen;
+	t = off;
+	*oxoff = do_div(t, su);
+	*oxlen = min_t(__u64, *plen, su - *oxoff);
+	*plen = *oxlen;
 
-	/* multiple stripe units across this object? */
-	t = *len;
-	while (t > stripe_len && *oxoff + *oxlen < osize) {
-		*oxlen += min_t(loff_t, su, t);
-		t -= stripe_len;
-	}
-
-	*off += first_oxlen;
-	*len -= *oxlen;
-	dout(80, " obj extent %llu~%llu\n", *off, *len);
+	dout(80, " obj extent %llu~%llu\n", *oxoff, *oxlen);
 }
 
 /*

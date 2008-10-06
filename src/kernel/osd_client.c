@@ -39,26 +39,27 @@ static void calc_layout(struct ceph_osd_client *osdc,
 			struct ceph_osd_request *req)
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
-	__u64 toff = off, tlen = *plen;
+	__u64 orig_len = *plen;
+	__u64 objoff, objlen;
 
 	reqhead->oid.ino = vino.ino;
 	reqhead->oid.snap = vino.snap;
 
-	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
-				 &off, plen);
-	if (tlen != 0)
+	calc_file_object_mapping(layout, off, plen, &reqhead->oid,
+				 &objoff, &objlen);
+	if (*plen < orig_len)
 		dout(10, " skipping last %llu, writing  %llu~%llu\n",
-		     tlen, off, *plen);
-	reqhead->offset = cpu_to_le64(off);
-	reqhead->length = cpu_to_le64(*plen);
+		     orig_len - *plen, off, *plen);
+	reqhead->offset = cpu_to_le64(objoff);
+	reqhead->length = cpu_to_le64(objlen);
 
 	calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
 			   osdc->osdmap);
 	req->r_num_pages = calc_pages_for(off, *plen);
 
-	dout(10, "calc_layout bno %u on %llu~%llu pgid %llx (%d pages)\n",
-	     le32_to_cpu(reqhead->oid.bno), off, *plen,
-	     le64_to_cpu(reqhead->layout.ol_pgid),
+	dout(10, "calc_layout %08llx.%08x %llu~%llu pgid %llx (%d pages)\n",
+	     le64_to_cpu(reqhead->oid.ino), le32_to_cpu(reqhead->oid.bno),
+	     objoff, objlen, le64_to_cpu(reqhead->layout.ol_pgid),
 	     req->r_num_pages);
 }
 
