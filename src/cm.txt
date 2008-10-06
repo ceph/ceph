@@ -27,30 +27,30 @@ type 2 pool
 domain dom0 {
 	id -1		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
-	item device1 weight 1.000 pos 1
-	item device2 weight 1.000 pos 2
-	item device3 weight 1.000 pos 3
+	item device1 weight 1.000 pos 0
+	item device2 weight 1.000 pos 1
+	item device3 weight 1.000 pos 2
 }
 domain dom1 {
 	id -2		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
-	item device5 weight 1.000 pos 1
-	item device6 weight 1.000 pos 2
-	item device7 weight 1.000 pos 3
+	item device5 weight 1.000 pos 0
+	item device6 weight 1.000 pos 1
+	item device7 weight 1.000 pos 2
 }
 domain dom2 {
 	id -3		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
-	item device9 weight 1.000 pos 1
-	item device10 weight 1.000 pos 2
-	item device11 weight 1.000 pos 3
+	item device9 weight 1.000 pos 0
+	item device10 weight 1.000 pos 1
+	item device11 weight 1.000 pos 2
 }
 domain dom3 {
 	id -4		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
-	item device13 weight 1.000 pos 1
-	item device14 weight 1.000 pos 2
-	item device15 weight 1.000 pos 3
+	item device13 weight 1.000 pos 0
+	item device14 weight 1.000 pos 1
+	item device15 weight 1.000 pos 2
 }
 pool root {
 	id -5		# do not change unnecessarily

@@ -211,6 +211,10 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 	else
 	  assert(0);
       }
+      if (pos >= size) {
+	cerr << "item '" << iname << "' in bucket '" << name << "' has pos " << pos << " >= size " << size << std::endl;
+	exit(1);
+      }
       if (pos < 0) {
 	while (used_items.count(curpos)) curpos++;
 	pos = curpos++;
