@@ -170,6 +170,10 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 	string tag = string_node(sub->children[q++]);
 	if (tag == "pos") {
 	  int pos = int_node(sub->children[q]);
+	  if (used_items.count(pos)) {
+	    cerr << "item '" << string_node(sub->children[1]) << "' in bucket '" << name << "' has explicit pos " << pos << ", which is occupied" << std::endl;
+	    exit(1);
+	  }
 	  used_items.insert(pos);
 	}
       }
