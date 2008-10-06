@@ -374,6 +374,7 @@ enum {
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
+	Opt_rsize,
 	Opt_osdtimeout,
 	Opt_mount_timeout,
 	/* int args above */
@@ -401,6 +402,7 @@ static match_table_t arg_tokens = {
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
+	{Opt_rsize, "rsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
 	{Opt_mount_timeout, "mount_timeout=%d"},
 	/* int args above */
@@ -595,6 +597,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			/* misc */
 		case Opt_wsize:
 			args->wsize = intval;
+			break;
+		case Opt_rsize:
+			args->rsize = intval;
 			break;
 		case Opt_osdtimeout:
 			args->osd_timeout = intval;
@@ -964,6 +969,25 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	return 1;
 }
 
+static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
+{
+	int err;
+
+	if (client->mount_args.rsize)
+		client->backing_dev_info.ra_pages = (client->mount_args.rsize + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+	if (client->backing_dev_info.ra_pages < PAGE_CACHE_SIZE)
+		client->backing_dev_info.ra_pages = PAGE_CACHE_SIZE;
+
+	err = bdi_init(&client->backing_dev_info);
+
+	if (err < 0)
+		return err;
+
+	return bdi_register_dev(&client->backing_dev_info, sb->s_dev);
+
+}
+
 static int ceph_get_sb(struct file_system_type *fs_type,
 		       int flags, const char *dev_name, void *data,
 		       struct vfsmount *mnt)
@@ -995,12 +1019,17 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		err = PTR_ERR(sb);
 		goto out;
 	}
+
 	if (ceph_client(sb) != client) {
 		ceph_destroy_client(client);
 		client = ceph_client(sb);
 		dout(20, "get_sb got existing client %p\n", client);
 	} else
 		dout(20, "get_sb using new client %p\n", client);
+
+	err = ceph_init_bdi(sb, client);
+	if (err < 0)
+		goto out_splat;
 
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
@@ -1024,7 +1053,9 @@ static void ceph_kill_sb(struct super_block *s)
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
 	ceph_mdsc_pre_umount(&client->mdsc);
+	bdi_unregister(&client->backing_dev_info);
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
+	bdi_destroy(&client->backing_dev_info);
 	ceph_destroy_client(client);
 }
 

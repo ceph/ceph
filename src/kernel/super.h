@@ -7,6 +7,8 @@
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
 #include <linux/sysfs.h>
+#include <linux/sysfs.h>
+#include <linux/backing-dev.h>
 
 #include "ceph_debug.h"
 #include "ceph_fs.h"
@@ -114,6 +116,7 @@ struct ceph_mount_args {
 	int num_mon;
 	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
 	int wsize;
+	int rsize;
 	int osd_timeout;
 	char *snapdir_name;
 };
@@ -156,6 +159,8 @@ struct ceph_client {
 	struct workqueue_struct *trunc_wq;
 
 	struct kobject *client_kobj;
+
+	struct backing_dev_info backing_dev_info;
 
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;
