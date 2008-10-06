@@ -974,10 +974,12 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 	int err;
 
 	if (client->mount_args.rsize)
-		client->backing_dev_info.ra_pages = (client->mount_args.rsize + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		client->backing_dev_info.ra_pages = (client->mount_args.rsize + PAGE_CACHE_SIZE - 1) >> PAGE_SHIFT;
 
-	if (client->backing_dev_info.ra_pages < PAGE_CACHE_SIZE)
+	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
 		client->backing_dev_info.ra_pages = PAGE_CACHE_SIZE >> PAGE_SHIFT;
+
+	dout(1, "ra_pages=%d\n", client->backing_dev_info.ra_pages);
 
 	err = bdi_init(&client->backing_dev_info);
 
