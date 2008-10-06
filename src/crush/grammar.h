@@ -102,7 +102,7 @@ struct crush_grammar : public grammar<crush_grammar>
       bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_item >> '}';
       
       // rules
-      step_take = str_p("take") >> str_p("root");
+      step_take = str_p("take") >> name;
       step_choose = str_p("choose")
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
