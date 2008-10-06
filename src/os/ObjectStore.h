@@ -118,6 +118,15 @@ public:
     int get_len() { return len ? len : ops.size(); }
     int get_btrfs_len() { return blen; }
 
+    __u64 disk_space_required() {
+      // be conservative!
+      __u64 s = 16384 +
+	(ops.size() + oids.size() + cids.size() + lengths.size()) * 4096;
+      for (vector<bufferlist>::iterator p = bls.begin(); p != bls.end(); p++)
+	s += bls.size() + 4096;
+      return s;      
+    }
+
     bool have_op() {
       return opp < ops.size();
     }
