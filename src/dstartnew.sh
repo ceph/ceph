@@ -30,7 +30,12 @@ fi
 ./cmon -d mondata/mon0 --debug_mon 20 --debug_ms 1
 
 # build and inject an initial osd map
-./osdmaptool --clobber --createsimple .ceph_monmap 16 .ceph_osdmap # --pgbits 2
+./osdmaptool --clobber --createsimple .ceph_monmap 16 --num_dom 4 .ceph_osdmap
+
+# use custom crush map to separate data from metadata
+./crushtool -c cm.txt -o cm
+./osdmaptool --clobber --import-crush cm .ceph_osdmap
+
 ./cmonctl osd setmap -i .ceph_osdmap
 
 #ARGS="-m $IP:12345"
