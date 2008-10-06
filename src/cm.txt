@@ -65,9 +65,9 @@ pool metaroot {
 	id -6
 	alg list
 	item device0 weight 1.000 pos 0
-	item device4 weight 1.000 pos 0
-	item device8 weight 1.000 pos 0
-	item device12 weight 1.000 pos 0
+	item device4 weight 1.000 pos 1
+	item device8 weight 1.000 pos 2
+	item device12 weight 1.000 pos 3
 }
 
 
