@@ -414,10 +414,13 @@ struct ceph_msg_header {
 } __attribute__ ((packed));
 
 struct ceph_msg_footer {
-	__le32 aborted;
+	__le32 flags;
 	__le32 front_crc;
 	__le32 data_crc;
 } __attribute__ ((packed));
+
+#define CEPH_MSG_FOOTER_ABORTED   (1<<0)
+#define CEPH_MSG_FOOTER_NOCRC     (1<<1)
 
 /*
  * message types

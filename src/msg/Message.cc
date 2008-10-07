@@ -126,7 +126,8 @@ decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     dout(0) << "bad crc in front " << front_crc << " != " << footer.front_crc << dendl;
     return 0;
   }
-  if (data_crc != footer.data_crc) {
+  if (data_crc != footer.data_crc &&
+      !(footer.flags & CEPH_MSG_FOOTER_NOCRC)) {
     dout(0) << "bad crc in data " << data_crc << " != " << footer.data_crc << dendl;
     return 0;
   }

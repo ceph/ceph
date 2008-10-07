@@ -385,6 +385,7 @@ enum {
 	Opt_nodirstat,
 	Opt_rbytes,
 	Opt_norbytes,
+	Opt_nocrc,
 };
 
 static match_table_t arg_tokens = {
@@ -414,6 +415,7 @@ static match_table_t arg_tokens = {
 	{Opt_nodirstat, "nodirstat"},
 	{Opt_rbytes, "rbytes"},
 	{Opt_norbytes, "norbytes"},
+	{Opt_nocrc, "nocrc"},
 	{-1, NULL}
 };
 
@@ -626,6 +628,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_norbytes:
 			args->flags &= ~CEPH_MOUNT_RBYTES;
+			break;
+		case Opt_nocrc:
+			args->flags |= CEPH_MOUNT_NOCRC;
 			break;
 
 		default:
