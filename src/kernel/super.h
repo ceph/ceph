@@ -105,6 +105,8 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 
 #define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
 
+#define CEPH_DEFAULT_READ_SIZE	(128*1024)
+
 #define MAX_MON_MOUNT_ADDR	5
 
 struct ceph_mount_args {
