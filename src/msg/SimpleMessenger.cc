@@ -1781,8 +1781,9 @@ Message *Rank::Pipe::read_message()
   if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
     return 0;
   
-  dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
-  if (le32_to_cpu(footer.aborted)) {
+  int aborted = (le32_to_cpu(footer.flags) & CEPH_MSG_FOOTER_ABORTED);
+  dout(10) << "aborted = " << aborted << dendl;
+  if (aborted) {
     dout(0) << "reader got " << front.length() << " + " << data.length()
 	    << " byte message from " << header.src << ".. ABORTED" << dendl;
     // MEH FIXME 
@@ -1877,7 +1878,7 @@ int Rank::Pipe::write_message(Message *m)
   // get envelope, buffers
   header.front_len = m->get_payload().length();
   header.data_len = m->get_data().length();
-  footer.aborted = 0;
+  footer.flags = 0;
   m->calc_header_crc();
 
   bufferlist blist = m->get_payload();

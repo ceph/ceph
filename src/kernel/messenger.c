@@ -18,8 +18,6 @@ int ceph_debug_msgr;
 #include "super.h"
 
 
-#define CEPH_USE_SENDPAGE
-
 /* static tag bytes */
 static char tag_ready = CEPH_MSGR_TAG_READY;
 static char tag_reset = CEPH_MSGR_TAG_RESETSESSION;
@@ -676,9 +674,11 @@ out:
 static int write_partial_msg_pages(struct ceph_connection *con,
 				   struct ceph_msg *msg)
 {
-	struct kvec kv;
 	int ret;
 	unsigned data_len = le32_to_cpu(msg->hdr.data_len);
+	struct ceph_client *client = con->msgr->parent;
+	int crc = !(client->mount_args.flags & CEPH_MOUNT_NOCRC);
+	size_t len;
 
 	dout(30, "write_partial_msg_pages con %p msg %p on %d/%d offset %d\n",
 	     con, con->out_msg, con->out_msg_pos.page, con->out_msg->nr_pages,
@@ -691,31 +691,36 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		mutex_lock(&msg->page_mutex);
 		if (msg->pages) {
 			page = msg->pages[con->out_msg_pos.page];
-			kaddr = kmap(page);
+			if (crc)
+				kaddr = kmap(page);
 		} else {
 			/*dout(60, "using zero page\n");*/
-			kaddr = page_address(con->msgr->zero_page);
+			if (crc)
+				kaddr = page_address(con->msgr->zero_page);
 		}
-		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
-		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
-				 (int)(data_len - con->out_msg_pos.data_pos));
-		if (!con->out_msg_pos.did_page_crc) {
+		len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
+			  (int)(data_len - con->out_msg_pos.data_pos));
+		if (crc && !con->out_msg_pos.did_page_crc) {
+			void *base = kaddr + con->out_msg_pos.page_pos;
+
 			con->out_msg->footer.data_crc =
 				crc32c_le(con->out_msg->footer.data_crc,
-					  kv.iov_base, kv.iov_len);
+					  base, len);
 			con->out_msg_pos.did_page_crc = 1;
 		}
 
-#ifndef CEPH_USE_SENDPAGE
-		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
-#else
 		if (msg->pages)
-			ret = kernel_sendpage(con->sock, page, con->out_msg_pos.page_pos, kv.iov_len, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_MORE);
+			ret = kernel_sendpage(con->sock, page,
+					      con->out_msg_pos.page_pos, len,
+					      MSG_DONTWAIT | MSG_NOSIGNAL |
+					      MSG_MORE);
 		else
-			ret = kernel_sendpage(con->sock, con->msgr->zero_page, con->out_msg_pos.page_pos, kv.iov_len, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_MORE);
-#endif
+			ret = kernel_sendpage(con->sock, con->msgr->zero_page,
+					      con->out_msg_pos.page_pos, len,
+					      MSG_DONTWAIT | MSG_NOSIGNAL |
+					      MSG_MORE);
 
-		if (msg->pages)
+		if (crc && msg->pages)
 			kunmap(page);
 
 		mutex_unlock(&msg->page_mutex);
@@ -724,7 +729,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 		con->out_msg_pos.data_pos += ret;
 		con->out_msg_pos.page_pos += ret;
 
-		if (ret == kv.iov_len) {
+		if (ret == len) {
 			con->out_msg_pos.page_pos = 0;
 			con->out_msg_pos.page++;
 			con->out_msg_pos.did_page_crc = 0;
@@ -735,6 +740,8 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	dout(30, "write_partial_msg_pages wrote all pages on %p\n", con);
 
 	/* queue up footer, too */
+	if (!crc)
+		con->out_msg->footer.flags |= CEPH_MSG_FOOTER_NOCRC;
 	con->out_kvec[0].iov_base = &con->out_msg->footer;
 	con->out_kvec_bytes = con->out_kvec[0].iov_len =
 		sizeof(con->out_msg->footer);
@@ -803,7 +810,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	/* fill in crc (except data pages), footer */
 	con->out_msg->hdr.crc = crc32c_le(0, (void *)&m->hdr,
 					  sizeof(m->hdr) - sizeof(m->hdr.crc));
-	con->out_msg->footer.aborted = 0;
+	con->out_msg->footer.flags = 0;
 	con->out_msg->footer.front_crc = crc32c_le(0, m->front.iov_base,
 						   m->front.iov_len);
 	con->out_msg->footer.data_crc = 0;
@@ -1951,7 +1958,7 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	/* revoke old message's pages */
 	mutex_lock(&old->page_mutex);
 	old->pages = 0;
-	old->footer.aborted = 1;
+	old->footer.flags |= CEPH_MSG_FOOTER_ABORTED;
 	mutex_unlock(&old->page_mutex);
 
 	ceph_msg_put(old);
