@@ -722,13 +722,16 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 
 		con->out_msg_pos.did_page_crc = 0;
 #endif
-		if (msg->pages)
+
 #ifndef CEPH_USE_SENDPAGE
-			ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
-#endif
+		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
+#else
+		if (msg->pages)
 			ret = kernel_sendpage(con->sock, page, con->out_msg_pos.page_pos, len, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_MORE);
 		else
 			ret = kernel_sendpage(con->sock, con->msgr->zero_page, con->out_msg_pos.page_pos, len, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_MORE);
+#endif
+
 #ifndef CEPH_USE_SENDPAGE
 		if (msg->pages)
 			kunmap(page);
