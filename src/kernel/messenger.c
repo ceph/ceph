@@ -17,6 +17,9 @@ int ceph_debug_msgr;
 #define DOUT_PREFIX "msgr: "
 #include "super.h"
 
+
+#define CEPH_USE_SENDPAGE
+
 /* static tag bytes */
 static char tag_ready = CEPH_MSGR_TAG_READY;
 static char tag_reset = CEPH_MSGR_TAG_RESETSESSION;
@@ -334,6 +337,7 @@ int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov,
 
 	/*printk(KERN_DEBUG "before sendmsg %d\n", len);*/
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
+
 	/*printk(KERN_DEBUG "after sendmsg %d\n", rlen);*/
 	return(rlen);
 }
@@ -672,7 +676,11 @@ out:
 static int write_partial_msg_pages(struct ceph_connection *con,
 				   struct ceph_msg *msg)
 {
+#ifndef CEPH_USE_SENDPAGE
 	struct kvec kv;
+#else
+	int len;
+#endif
 	int ret;
 	unsigned data_len = le32_to_cpu(msg->hdr.data_len);
 
@@ -681,17 +689,24 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 	     con->out_msg_pos.page_pos);
 
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
-		struct page *page;
+		struct page *page = NULL;
+#ifndef CEPH_USE_SENDPAGE
 		void *kaddr;
+#endif
 
 		mutex_lock(&msg->page_mutex);
 		if (msg->pages) {
 			page = msg->pages[con->out_msg_pos.page];
+#ifndef CEPH_USE_SENDPAGE
 			kaddr = kmap(page);
+#endif
 		} else {
+#ifndef CEPH_USE_SENDPAGE
 			/*dout(60, "using zero page\n");*/
 			kaddr = page_address(con->msgr->zero_page);
+#endif
 		}
+#ifndef CEPH_USE_SENDPAGE
 		kv.iov_base = kaddr + con->out_msg_pos.page_pos;
 		kv.iov_len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
 				 (int)(data_len - con->out_msg_pos.data_pos));
@@ -701,15 +716,33 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 					  kv.iov_base, kv.iov_len);
 			con->out_msg_pos.did_page_crc = 1;
 		}
-		ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
+#else
+		len = min((int)(PAGE_SIZE - con->out_msg_pos.page_pos),
+				(int)(data_len - con->out_msg_pos.data_pos));
+
+		con->out_msg_pos.did_page_crc = 0;
+#endif
+		if (msg->pages)
+#ifndef CEPH_USE_SENDPAGE
+			ret = ceph_tcp_sendmsg(con->sock, &kv, 1, kv.iov_len, 1);
+#endif
+			ret = kernel_sendpage(con->sock, page, con->out_msg_pos.page_pos, len, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_MORE);
+		else
+			ret = kernel_sendpage(con->sock, con->msgr->zero_page, con->out_msg_pos.page_pos, len, MSG_DONTWAIT | MSG_NOSIGNAL | MSG_MORE);
+#ifndef CEPH_USE_SENDPAGE
 		if (msg->pages)
 			kunmap(page);
+#endif
 		mutex_unlock(&msg->page_mutex);
 		if (ret <= 0)
 			goto out;
 		con->out_msg_pos.data_pos += ret;
 		con->out_msg_pos.page_pos += ret;
+#ifndef CEPH_USE_SENDPAGE
 		if (ret == kv.iov_len) {
+#else
+		if (ret == len) {
+#endif
 			con->out_msg_pos.page_pos = 0;
 			con->out_msg_pos.page++;
 			con->out_msg_pos.did_page_crc = 0;
