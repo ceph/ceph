@@ -18,7 +18,7 @@ int ceph_debug_msgr;
 #include "super.h"
 
 
-#define CEPH_USE_SENDPAGE
+#undef CEPH_USE_SENDPAGE
 
 /* static tag bytes */
 static char tag_ready = CEPH_MSGR_TAG_READY;
