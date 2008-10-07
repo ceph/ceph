@@ -1880,9 +1880,10 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   map<string,bufferptr> attrset;
   __u64 size;
 
-  if (!data_subset.size()) {
+  if (data_subset.size()) {
     struct stat st;
-    osd->store->stat(info.pgid.to_coll(), poid, &st);
+    int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
+    assert(r == 0);
     size = st.st_size;
 
     for (map<__u64,__u64>::iterator p = data_subset.m.begin();

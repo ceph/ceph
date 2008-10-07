@@ -251,6 +251,8 @@ struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == 0)
 		return NULL;
 	session = mdsc->sessions[mds];
+	dout(30, "get_mds_session %p %d -> %d\n", session,
+	     atomic_read(&session->s_ref), atomic_read(&session->s_ref)+1);
 	atomic_inc(&session->s_ref);
 	return session;
 }
@@ -941,6 +943,10 @@ bad:
 	return;
 }
 
+void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds)
+{
+	derr(1, "mds%d gave us the boot.  IMPLEMENT RECONNECT.\n", mds);
+}
 
 
 /* exported functions */
@@ -1064,7 +1070,7 @@ retry:
 		dout(30, "do_request waiting for new mdsmap\n");
 		err = wait_for_new_map(mdsc, req->r_timeout);
 		if (err)
-			return err;
+			goto finish;
 		goto retry;
 	}
 
@@ -1671,6 +1677,7 @@ release:
 	ceph_msg_get(msg);
 	ceph_send_msg_mds(mdsc, msg, mds);
 	mutex_unlock(&session->s_mutex);
+	ceph_put_mds_session(session);
 	return;
 
 bad:
@@ -1744,6 +1751,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	lease->action = CEPH_MDS_LEASE_RELEASE;
 	lease->mask = mask;
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
+	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
 	if (dentry)
 		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
@@ -1853,12 +1861,12 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 
 	mutex_lock(&mdsc->mutex);
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *session = __ceph_get_mds_session(mdsc, i);
+		struct ceph_mds_session *session =
+			__ceph_get_mds_session(mdsc, i);
 		if (!session)
 			continue;
-		//mutex_unlock(&mdsc->mutex);
 		remove_session_leases(session);
-		//mutex_lock(&mdsc->mutex);
+		ceph_put_mds_session(session);
 	}
 	mutex_unlock(&mdsc->mutex);
 }
@@ -1917,9 +1925,8 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 			session = __ceph_get_mds_session(mdsc, i);
 			if (!session)
 				continue;
-			//mutex_unlock(&mdsc->mutex);
 			close_session(mdsc, session);
-			//mutex_lock(&mdsc->mutex);
+			ceph_put_mds_session(session);
 			n++;
 		}
 		if (n == 0)

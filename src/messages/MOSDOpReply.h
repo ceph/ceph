@@ -81,7 +81,7 @@ public:
   }
   virtual void encode_payload() {
     ::encode(head, payload);
-    env.data_off = get_offset();
+    header.data_off = get_offset();
   }
 
   const char *get_type_name() { return "osd_op_reply"; }

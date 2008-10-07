@@ -194,6 +194,7 @@ md_config_t g_conf = {
 
   mon_host: 0,
   daemonize: false,
+  file_logs: false,
 
   // profiling and debugging
   log: true,
@@ -334,6 +335,7 @@ md_config_t g_conf = {
   mds_session_autoclose: 300, // autoclose idle session 
   mds_client_lease: 120,      // (assuming session stays alive)
   mds_reconnect_timeout: 30,  // seconds to wait for clients during mds restart
+                              //  make it (mds_session_timeout - mds_beacon_grace)
 
   mds_tick_interval: 5,
 
@@ -419,7 +421,7 @@ md_config_t g_conf = {
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
-  osd_heartbeat_grace: 30,
+  osd_heartbeat_grace: 60,
   osd_mon_report_interval:  5,  // pg stats, failures, up_thru, boot.
   osd_replay_window: 45,
   osd_max_pull: 2,
@@ -571,7 +573,24 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
 
 
 
-void parse_config_options(std::vector<const char*>& args)
+void parse_config_option_string(string& s)
+{
+  char b[s.length()+1];
+  strcpy(b, s.c_str());
+  vector<const char*> nargs;
+  char *p = b;
+  while (*p) {
+    nargs.push_back(p);
+    while (*p && *p != ' ') p++;
+    if (!*p)
+      break;
+    *p++ = 0;
+    while (*p && *p == ' ') p++;
+  }
+  parse_config_options(nargs, false);
+}
+
+void parse_config_options(std::vector<const char*>& args, bool open)
 {
   std::vector<const char*> nargs;
 
@@ -591,8 +610,14 @@ void parse_config_options(std::vector<const char*>& args)
 	     strcmp(args[i], "-m") == 0)
       g_conf.mon_host = args[++i];    
     else if (strcmp(args[i], "--daemonize") == 0 ||
-	     strcmp(args[i], "-d") == 0)
-      g_conf.daemonize = true;	     
+	     strcmp(args[i], "-d") == 0) {
+      g_conf.daemonize = true;
+      g_conf.file_logs = true;
+    } else if (strcmp(args[i], "--foreground") == 0 ||
+	     strcmp(args[i], "-f") == 0) {
+      g_conf.daemonize = false;
+      g_conf.file_logs = true;
+    }
 
     else if (strcmp(args[i], "--ms_hosts") == 0)
       g_conf.ms_hosts = args[++i];
@@ -1128,7 +1153,7 @@ void parse_config_options(std::vector<const char*>& args)
       g_conf.dout_dir = 0;
   }
   */
-  if (g_conf.dout_dir && g_conf.daemonize) {
+  if (g_conf.dout_dir && g_conf.file_logs && open) {
     char fn[80];
     char hostname[80];
     gethostname(hostname, 79);

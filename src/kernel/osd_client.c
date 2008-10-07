@@ -39,26 +39,27 @@ static void calc_layout(struct ceph_osd_client *osdc,
 			struct ceph_osd_request *req)
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
-	__u64 toff = off, tlen = *plen;
+	__u64 orig_len = *plen;
+	__u64 objoff, objlen;
 
 	reqhead->oid.ino = vino.ino;
 	reqhead->oid.snap = vino.snap;
 
-	calc_file_object_mapping(layout, &toff, &tlen, &reqhead->oid,
-				 &off, plen);
-	if (tlen != 0)
+	calc_file_object_mapping(layout, off, plen, &reqhead->oid,
+				 &objoff, &objlen);
+	if (*plen < orig_len)
 		dout(10, " skipping last %llu, writing  %llu~%llu\n",
-		     tlen, off, *plen);
-	reqhead->offset = cpu_to_le64(off);
-	reqhead->length = cpu_to_le64(*plen);
+		     orig_len - *plen, off, *plen);
+	reqhead->offset = cpu_to_le64(objoff);
+	reqhead->length = cpu_to_le64(objlen);
 
 	calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
 			   osdc->osdmap);
 	req->r_num_pages = calc_pages_for(off, *plen);
 
-	dout(10, "calc_layout bno %u on %llu~%llu pgid %llx (%d pages)\n",
-	     le32_to_cpu(reqhead->oid.bno), off, *plen,
-	     le64_to_cpu(reqhead->layout.ol_pgid),
+	dout(10, "calc_layout %08llx.%08x %llu~%llu pgid %llx (%d pages)\n",
+	     le64_to_cpu(reqhead->oid.ino), le32_to_cpu(reqhead->oid.bno),
+	     objoff, objlen, le64_to_cpu(reqhead->layout.ol_pgid),
 	     req->r_num_pages);
 }
 
@@ -352,7 +353,9 @@ more_locked:
 	next_tid = req->r_tid + 1;
 	osd = pick_osd(osdc, req);
 	if (osd < 0) {
-		ret = 1;  /* request a newer map */
+		dout(20, "tid %llu maps to no osd\n",
+		     req->r_tid);
+		ret++;  /* request a newer map */
 		memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
 	} else if (!ceph_entity_addr_equal(&req->r_last_osd,
 					   &osdc->osdmap->osd_addr[osd])) {
@@ -372,7 +375,8 @@ more_locked:
 done:
 	spin_unlock(&osdc->request_lock);
 	if (ret)
-		dout(10, "%d requests still pending on down osds\n", ret);
+		dout(10, "%d requests pending on down osds, need new map\n",
+		     ret);
 	return ret;
 }
 
@@ -740,6 +744,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct list_head *page_list, int num_pages)
 {
 	struct ceph_osd_request *req;
+	struct ceph_osd_request_head *reqhead;
 	struct page *page;
 	pgoff_t next_index;
 	int contig_pages;
@@ -776,8 +781,9 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 		goto out;
 	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
 		  len);
-	dout(10, "readpages contig page extent is %llu~%llu\n", off, len);
-
+	req->r_num_pages = contig_pages;
+	reqhead = req->r_request->front.iov_base;
+	reqhead->length = cpu_to_le64(len);
 	dout(10, "readpages final extent is %llu~%llu -> %d pages\n",
 	     off, len, req->r_num_pages);
 	rc = do_sync_request(osdc, req);

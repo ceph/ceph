@@ -50,6 +50,7 @@ struct md_config_t {
   
   const char *mon_host;
   bool daemonize;
+  bool file_logs;
 
   // profiling
   bool  log;
@@ -350,7 +351,8 @@ void argv_to_vec(int argc, const char **argv,
 void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
 
-void parse_config_options(std::vector<const char*>& args);
+void parse_config_options(std::vector<const char*>& args, bool open=true);
+void parse_config_option_string(string& s);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr);
 

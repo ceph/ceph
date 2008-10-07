@@ -2467,6 +2467,13 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
 
 unsigned Ebofs::_apply_transaction(Transaction& t)
 {
+  // verify we have enough space
+  if (t.disk_space_required() > get_free_blocks()*EBOFS_BLOCK_SIZE) {
+    derr(0) << "apply_transaction needs " << t.disk_space_required() << " bytes > "
+	    << (get_free_blocks()*EBOFS_BLOCK_SIZE) << " free" << dendl;
+    return -ENOSPC;
+  }
+
   // do ops
   unsigned r = 0;  // bit fields indicate which ops failed.
   int bit = 1;

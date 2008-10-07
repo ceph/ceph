@@ -523,6 +523,24 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       ss << "got mdsmap epoch " << mdsmap.get_epoch();
       r = 0;
     }
+    else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
+      if (m->cmd[2] == "*") {
+	for (int i=0; i<mdsmap.get_max_mds(); i++)
+	  if (mdsmap.is_active(i))
+	    mon->inject_args(mdsmap.get_inst(i), m->cmd[3]);
+	r = 0;
+	ss << "ok bcast";
+      } else {
+	errno = 0;
+	int who = strtol(m->cmd[2].c_str(), 0, 10);
+	if (!errno && who >= 0 && mdsmap.is_active(who)) {
+	  mon->inject_args(mdsmap.get_inst(who), m->cmd[3]);
+	  r = 0;
+	  ss << "ok";
+	} else 
+	  ss << "specify mds number or *";
+      }
+    }
   }
 
   if (r != -1) {

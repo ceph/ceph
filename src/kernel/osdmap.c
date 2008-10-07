@@ -417,7 +417,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = 0;
 	struct ceph_fsid fsid;
-	__u32 epoch;
+	__u32 epoch = 0;
 	struct ceph_timespec ctime;
 	__u32 len, x;
 	__s32 new_flags, max;
@@ -522,14 +522,16 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		ceph_decode_need(p, end, sizeof(__u32)*2, bad);
 		ceph_decode_32(p, osd);
 		ceph_decode_32(p, off);
-		dout(1, "osd%d offload %x\n", osd, off);
+		dout(1, "osd%d offload 0x%x %s\n", osd, off,
+		     off == CEPH_OSD_IN ? "(in)":
+		     (off == CEPH_OSD_OUT ? "(out)":""));
 		if (osd < map->max_osd)
 			map->crush->device_offload[osd] = off;
 	}
 
 	/* skip new_up_thru */
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * sizeof(u32);
+	*p += len * 2 * sizeof(u32);
 
 	/* skip old/new pg_swap stuff */
 	ceph_decode_32_safe(p, end, len, bad);
@@ -543,40 +545,43 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	*p += len * 2 * sizeof(__u64);	
 
 	if (*p != end) {
-		dout(10, "osdmap incremental has trailing gunk?\n");
+		derr(10, "osdmap incremental has trailing gunk?\n");
 		goto bad;
 	}
 	return map;
 
 bad:
-	derr(10, "corrupt incremental osdmap at %p (%p-%p)\n", *p, start, end);
+	derr(10, "corrupt incremental osdmap epoch %d off %d (%p of %p-%p)\n",
+	     epoch, (int)(*p - start), *p, start, end);
 	if (newcrush)
 		crush_destroy(newcrush);
 	return ERR_PTR(err);
 }
 
 
+
+
 /*
  * calculate file layout from given offset, length.
- * fill in correct oid and off,len within object.
- * update file offset,length to end of extent, or
- * the next file extent not included in current mapping.
+ * fill in correct oid, logical length, and object extent
+ * offset, length.
+ *
+ * for now, we write only a single su, until we can
+ * pass a stride back to the caller.
  */
 void calc_file_object_mapping(struct ceph_file_layout *layout,
-			      loff_t *off, loff_t *len,
+			      __u64 off, __u64 *plen,
 			      struct ceph_object *oid,
 			      __u64 *oxoff, __u64 *oxlen)
 {
 	u32 osize = le32_to_cpu(layout->fl_object_size);
 	u32 su = le32_to_cpu(layout->fl_stripe_unit);
 	u32 sc = le32_to_cpu(layout->fl_stripe_count);
-	u32 stripe_len = layout->fl_stripe_count * layout->fl_stripe_unit;
 	u32 bl, stripeno, stripepos, objsetno;
 	u32 su_per_object;
-	u32 first_oxlen;
 	u64 t;
 
-	dout(80, "mapping %llu~%llu  osize %u fl_su %u\n", *off, *len,
+	dout(80, "mapping %llu~%llu  osize %u fl_su %u\n", off, *plen,
 	     osize, su);
 	su_per_object = osize / layout->fl_stripe_unit;
 	dout(80, "osize %u / su %u = su_per_object %u\n", osize, su,
@@ -584,10 +589,10 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 
 	BUG_ON((su & ~PAGE_MASK) != 0);
 	/* bl = *off / su; */
-	t = *off;
+	t = off;
 	do_div(t, su);
 	bl = t;
-	dout(80, "off %llu / su %u = bl %u\n", *off, su, bl);
+	dout(80, "off %llu / su %u = bl %u\n", off, su, bl);
 	
 	stripeno = bl / sc;
 	stripepos = bl % sc;
@@ -596,21 +601,12 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	oid->bno = objsetno * sc + stripepos;
 	dout(80, "objset %u * sc %u = bno %u\n", objsetno, sc, oid->bno);
 	/* *oxoff = *off / layout->fl_stripe_unit; */
-	t = *off;
-	*oxoff = do_div(t, le32_to_cpu(layout->fl_stripe_unit));
-	first_oxlen = min_t(loff_t, *len, le32_to_cpu(layout->fl_stripe_unit));
-	*oxlen = first_oxlen;
+	t = off;
+	*oxoff = do_div(t, su);
+	*oxlen = min_t(__u64, *plen, su - *oxoff);
+	*plen = *oxlen;
 
-	/* multiple stripe units across this object? */
-	t = *len;
-	while (t > stripe_len && *oxoff + *oxlen < osize) {
-		*oxlen += min_t(loff_t, su, t);
-		t -= stripe_len;
-	}
-
-	*off += first_oxlen;
-	*len -= *oxlen;
-	dout(80, " obj extent %llu~%llu\n", *off, *len);
+	dout(80, " obj extent %llu~%llu\n", *oxoff, *oxlen);
 }
 
 /*

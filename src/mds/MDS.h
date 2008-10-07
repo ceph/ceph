@@ -266,10 +266,9 @@ class MDS : public Dispatcher {
   void reset_beacon_killer();
 
   // messages
-  void proc_message(Message *m);
   virtual void dispatch(Message *m);
   void _dispatch(Message *m);
-
+  
   void ms_handle_failure(Message *m, const entity_inst_t& inst);
   void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
   void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);

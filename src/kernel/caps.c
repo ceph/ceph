@@ -349,13 +349,13 @@ retry:
 			session = 0;
 		}
 		if (!session) {
-			dout(10, "inverting session/ino locks on %p\n",
-			     session);
 			spin_unlock(&inode->i_lock);
 			mutex_lock(&mdsc->mutex);
 			session = __ceph_get_mds_session(mdsc, mds);
 			mutex_unlock(&mdsc->mutex);
 			if (session) {
+				dout(10, "inverting session/ino locks on %p\n",
+				     session);
 				mutex_lock(&session->s_mutex);
 				spin_lock(&inode->i_lock);
 			}
@@ -371,8 +371,8 @@ retry:
 		issued = capsnap->issued;
 		spin_unlock(&inode->i_lock);
 
-		dout(10, "flush_snaps cap_snap %p follows %lld size %llu\n",
-		     capsnap, follows, size);
+		dout(10, "flush_snaps %p cap_snap %p follows %lld size %llu\n",
+		     inode, capsnap, follows, size);
 
 		send_cap(mdsc, ceph_vino(inode).ino,
 			 CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
@@ -556,9 +556,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 			     inode, endoff, ci->i_max_size);
 			goto sorry;
 		}
-		if (!list_empty(&ci->i_cap_snaps) &&
-		    list_entry(ci->i_cap_snaps.next, struct ceph_cap_snap,
-			       ci_item)->writing) {
+		if (__ceph_have_pending_cap_snap(ci)) {
 			dout(20, "get_cap_refs %p cap_snap_pending\n", inode);
 			goto sorry;
 		}

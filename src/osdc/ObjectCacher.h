@@ -206,12 +206,13 @@ class ObjectCacher {
  private:
   Mutex& lock;
   
-  flush_set_callback_t flush_set_callback;
+  flush_set_callback_t flush_set_callback, commit_set_callback;
   void *flush_set_callback_arg;
 
   hash_map<object_t, Object*> objects;
   hash_map<inodeno_t, set<Object*> > objects_by_ino;
   hash_map<inodeno_t, int> dirty_tx_by_ino;
+  hash_map<inodeno_t, tid_t> last_write_by_ino;
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
@@ -428,22 +429,25 @@ class ObjectCacher {
 
 
  public:
-  ObjectCacher(Objecter *o, Mutex& l, flush_set_callback_t callback = 0, void *callback_arg = 0) : 
+  ObjectCacher(Objecter *o, Mutex& l,
+	       flush_set_callback_t flush_callback,
+	       flush_set_callback_t commit_callback,
+	       void *callback_arg) : 
     objecter(o), filer(o), lock(l),
-    flush_set_callback(callback), flush_set_callback_arg(callback_arg),
+    flush_set_callback(flush_callback), commit_set_callback(commit_callback), flush_set_callback_arg(callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
     flusher_thread.create();
   }
   ~ObjectCacher() {
-	// we should be empty.
-	assert(objects.empty());
-	assert(lru_rest.lru_get_size() == 0);
-	assert(lru_dirty.lru_get_size() == 0);
-	assert(dirty_bh.empty());
-
-	assert(flusher_thread.is_started());
+    // we should be empty.
+    assert(objects.empty());
+    assert(lru_rest.lru_get_size() == 0);
+    assert(lru_dirty.lru_get_size() == 0);
+    assert(dirty_bh.empty());
+    
+    assert(flusher_thread.is_started());
     lock.Lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
     flusher_cond.Signal();

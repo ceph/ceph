@@ -305,8 +305,19 @@ private:
     assert(o < max_osd);
     osd_state[o] = s;
   }
+  void set_weight(int o, float w) {
+    unsigned off = CEPH_OSD_OUT - (int)((float)CEPH_OSD_OUT * w);
+    set_offload(o, off);
+  }
   void set_offload(int o, unsigned off) {
     crush.set_offload(o, off);
+  }
+  float get_weight(int o) {
+    float off = crush.get_offload(o);
+    return (CEPH_OSD_OUT - off) / CEPH_OSD_OUT;
+  }
+  unsigned get_offload(int o) {
+    return crush.get_offload(o);
   }
 
   bool exists(int osd) { return osd < max_osd/* && osd_state[osd] & CEPH_OSD_EXISTS*/; }
@@ -744,9 +755,10 @@ private:
    * handy helpers to build simple maps...
    */
   void build_simple(epoch_t e, ceph_fsid &fsid,
-		    int num_osd, int pg_bits, int lpg_bits,
+		    int num_osd, int num_dom,
+		    int pg_bits, int lpg_bits,
 		    int mds_local_osd);
-  static void build_simple_crush_map(CrushWrapper& crush, int num_osd);
+  static void build_simple_crush_map(CrushWrapper& crush, int num_osd, int num_dom=0);
 
 };
 

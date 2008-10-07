@@ -69,6 +69,7 @@ struct ceph_msg {
 struct ceph_msg_pos {
 	int page, page_pos;        /* which page; -3=tag, -2=hdr, -1=front */
 	int data_pos;
+	int did_page_crc;
 };
 
 /* ceph connection fault delay defaults */
@@ -104,13 +105,11 @@ struct ceph_connection {
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
 	__u32 connect_seq, global_seq;
-	__le32 in_connect_seq, out_connect_seq;
-	__le32 in_global_seq, out_global_seq;
+	char in_banner[CEPH_BANNER_MAX_LEN];
+	struct ceph_msg_connect out_connect, in_connect;
+	struct ceph_entity_addr actual_peer_addr;
 	__u32 out_seq;		     /* last message queued for send */
 	__u32 in_seq, in_seq_acked;  /* last message received, acked */
-
-	/* connect state */
-	struct ceph_entity_addr actual_peer_addr;
 
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
@@ -123,7 +122,6 @@ struct ceph_connection {
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
 	int out_more;        /* there is more data after this kvec */
-	struct ceph_msg_footer out_footer;
 	struct ceph_msg *out_msg;
 	struct ceph_msg_pos out_msg_pos;
 
@@ -133,6 +131,7 @@ struct ceph_connection {
 	__u32 in_partial_ack;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
+	u32 in_front_crc, in_data_crc;
 
 	struct delayed_work work;	    /* send|recv work */
 	unsigned long       delay;          /* delay interval */

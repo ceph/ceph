@@ -1,5 +1,33 @@
 #!/bin/sh
 
+[ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
+[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=1
+[ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
+
+let debug=0
+
+while [ $# -ge 1 ]; do
+        case $1 in
+                -d | --debug )
+                debug=1
+        esac
+        shift
+done
+
+ARGS="-f"
+
+if [ $debug -eq 0 ]; then
+	CMON_ARGS="--debug_mon 10 --debug_ms 1"
+	COSD_ARGS=""
+	CMDS_ARGS=""
+else
+	echo "** going verbose **"
+	CMON_ARGS="--debug_mon 20 --debug_ms 1 --debug_paxos 20"
+	COSD_ARGS="--debug_journal 20 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+	CMDS_ARGS="--mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
+fi
+
+
 # sudo if btrfs
 test -d dev/osd0 && SUDO="sudo"
 
@@ -27,32 +55,45 @@ then
 fi
 
 # build a fresh fs monmap, mon fs
-$CEPH_BIN/monmaptool --create --clobber --add $IP:$CEPH_PORT --add $IP:$((CEPH_PORT+1)) --add $IP:$((CEPH_PORT+2)) --print .ceph_monmap
-for f in 0 1 2
+# $CEPH_BIN/monmaptool --create --clobber --print .ceph_monmap
+str="$CEPH_BIN/monmaptool --create --clobber"
+for f in `seq 0 $((CEPH_NUM_MON-1))`
 do
+ str=$str" --add $IP:$(($CEPH_PORT+$f))"
+done
+str=$str" --print .ceph_monmap"
+echo $str
+$str
+
+for f in `seq 0 $((CEPH_NUM_MON-1))`
+do
+#  $CEPH_BIN/monmaptool --add $IP:$(($CEPH_PORT+$f)) --print .ceph_monmap
  $CEPH_BIN/mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap
- $CEPH_BIN/cmon -d mondata/mon$f --debug_mon 20 --debug_ms 1 --debug_paxos 20
+ $CEPH_BIN/cmon $ARGS -d $CMON_ARGS mondata/mon$f
 done
 
 # build and inject an initial osd map
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
 $CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
 
-for osd in 0 #1 #2 3 #4 5 6 7 8 9 10 11 12 13 14 15
+for osd in `seq 0 $((CEPH_NUM_OSD-1))`
 do
  echo mkfs osd$osd
- $SUDO $CEPH_BIN/cosd --debug_journal 20 --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20 
+ $SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
  echo start osd$osd
- $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd -d --debug_ms 1 --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+ $CEPH_BIN/crun $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
 # echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 done
 
 # mds
-ARGS="--mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20"
+for mds in `seq 0 $((CEPH_NUM_MDS-1))`
+do
+  $CEPH_BIN/crun $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
+
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
-$CEPH_BIN/cmds -d $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_BIN/cmonctl mds set_max_mds 2
+done
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

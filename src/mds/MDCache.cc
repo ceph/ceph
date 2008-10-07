@@ -3980,6 +3980,9 @@ void MDCache::do_file_recover()
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
 	       << " " << *in << dendl;
+      in->state_clear(CInode::STATE_NEEDSRECOVER);
+      in->auth_unpin(this);
+      mds->locker->file_eval_gather(&in->filelock);
     }
   }
 }
@@ -4072,6 +4075,7 @@ void MDCache::_do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize)
   // remove
   if (newsize < oldsize) {
     SnapRealm *realm = in->find_snaprealm();
+    assert(realm);
     dout(10) << "_do_purge_inode realm " << *realm << dendl;
     const SnapContext& snapc = realm->get_snap_context();
     dout(10) << "_do_purge_inode snapc " << snapc << " on " << *in << dendl;

@@ -60,6 +60,8 @@
 
 #include "messages/MMDSTableRequest.h"
 
+#include "messages/MMonCommand.h"
+
 #include "config.h"
 
 #define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << whoami << " "
@@ -1174,6 +1176,12 @@ void MDS::_dispatch(Message *m)
       handle_mds_beacon((MMDSBeacon*)m);
       break;
       
+      // misc
+    case MSG_MON_COMMAND:
+      parse_config_option_string(((MMonCommand*)m)->cmd[0]);
+      delete m;
+      break;    
+
     default:
       dout(1) << "MDS unknown messge " << m->get_type() << dendl;
       assert(0);
@@ -1280,33 +1288,6 @@ void MDS::_dispatch(Message *m)
 
 }
 
-
-void MDS::proc_message(Message *m)
-{
-  switch (m->get_type()) {
-
-    // OSD
-  case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply((class MOSDOpReply*)m);
-    return;
-  case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map((MOSDMap*)m);
-    return;
-
-
-    // MDS
-  case CEPH_MSG_MDS_MAP:
-    handle_mds_map((MMDSMap*)m);
-    return;
-  case MSG_MDS_BEACON:
-    handle_mds_beacon((MMDSBeacon*)m);
-    return;
-
-  default:
-    assert(0);
-  }
-
-}
 
 
 

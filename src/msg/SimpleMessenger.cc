@@ -592,7 +592,9 @@ void Rank::EntityMessenger::dispatch_entry()
 	    dout(1) << m->get_dest() 
 		    << " <== " << m->get_source_inst()
 		    << " ==== " << *m
-		    << " ==== " << m 
+		    << " ==== " << m->get_payload().length() << "+" << m->get_data().length()
+		    << " (" << m->get_footer().front_crc << " " << m->get_footer().data_crc << ")"
+		    << " " << m 
 		    << dendl;
 	    dispatch(m);
 	    dout(20) << "done calling dispatch on " << m << dendl;
@@ -663,12 +665,15 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
+  m->calc_data_crc();
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
-	  << " -- " << m
-          << dendl;
+    	  << " -- ?+" << m->get_data().length()
+	  << " (? " << m->get_footer().data_crc << ")"
+	  << " " << m 
+	  << dendl;
 
   rank.submit_message(m, dest.addr);
 
@@ -680,11 +685,14 @@ int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
   // set envelope
   m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
+  m->calc_data_crc();
  
   dout(1) << m->get_source()
           << " **> " << dest.name << " " << dest.addr
           << " -- " << *m
-	  << " -- " << m
+    	  << " -- ?+" << m->get_data().length()
+	  << " (? " << m->get_footer().data_crc << ")"
+	  << " " << m 
           << dendl;
 
   rank.submit_message(m, dest.addr);
@@ -700,11 +708,14 @@ int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
+  m->calc_data_crc();
  
   dout(1) << "lazy " << m->get_source()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
-	  << " -- " << m
+    	  << " -- ?+" << m->get_data().length()
+	  << " (? " << m->get_footer().data_crc << ")"
+	  << " " << m 
           << dendl;
 
   rank.submit_message(m, dest.addr, true);
@@ -763,7 +774,15 @@ int Rank::Pipe::accept()
   assert(state == STATE_ACCEPTING);
   
   // announce myself.
-  int rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
+  int rc = tcp_write(sd, CEPH_BANNER, strlen(CEPH_BANNER));
+  if (rc < 0) {
+    dout(10) << "accept couldn't write banner" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+
+  // and my addr
+  rc = tcp_write(sd, (char*)&rank.rank_addr, sizeof(rank.rank_addr));
   if (rc < 0) {
     dout(10) << "accept couldn't write my addr" << dendl;
     state = STATE_CLOSED;
@@ -772,12 +791,25 @@ int Rank::Pipe::accept()
   dout(10) << "accept sd=" << sd << dendl;
   
   // identify peer
-  rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
+  char banner[strlen(CEPH_BANNER)];
+  rc = tcp_read(sd, banner, strlen(CEPH_BANNER));
   if (rc < 0) {
-    dout(10) << "accept couldn't read peer addr" << dendl;
+    dout(10) << "accept couldn't read banner" << dendl;
     state = STATE_CLOSED;
     return -1;
   }
+  if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
+    dout(10) << "accept peer sent bad banner" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+  rc = tcp_read(sd, (char*)&peer_addr, sizeof(peer_addr));
+  if (rc < 0) {
+    dout(10) << "accept couldn't read peer_addr" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+  dout(10) << "accept peer addr is " << peer_addr << dendl;
   if (peer_addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     entity_addr_t old_addr = peer_addr;
@@ -792,24 +824,21 @@ int Rank::Pipe::accept()
     dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
   }
   
-  __u32 peer_gseq, peer_cseq;
+  ceph_msg_connect connect;
   Pipe *existing = 0;
   
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
 
   while (1) {
-    rc = tcp_read(sd, (char*)&peer_gseq, sizeof(peer_gseq));
+    rc = tcp_read(sd, (char*)&connect, sizeof(connect));
     if (rc < 0) {
-      dout(10) << "accept couldn't read connect peer_gseq" << dendl;
+      dout(10) << "accept couldn't read connect" << dendl;
       goto fail;
     }
-    rc = tcp_read(sd, (char*)&peer_cseq, sizeof(peer_cseq));
-    if (rc < 0) {
-      dout(10) << "accept couldn't read connect peer_seq" << dendl;
-      goto fail;
-    }
-    dout(20) << "accept got peer_connect_seq " << peer_cseq << dendl;
+    dout(20) << "accept got peer connect_seq " << connect.connect_seq
+	     << " global_seq " << connect.global_seq
+	     << dendl;
     
     rank.lock.Lock();
 
@@ -818,10 +847,11 @@ int Rank::Pipe::accept()
       existing = rank.rank_pipe[peer_addr];
       existing->lock.Lock();
 
-      if (peer_gseq < existing->peer_global_seq) {
+      if (connect.global_seq < existing->peer_global_seq) {
 	dout(10) << "accept existing " << existing << ".gseq " << existing->peer_global_seq
-		 << " > " << peer_gseq << ", RETRY_GLOBAL" << dendl;
-	__u32 gseq = existing->peer_global_seq;  // so we can send it below..
+		 << " > " << connect.global_seq << ", RETRY_GLOBAL" << dendl;
+	__le32 gseq;
+	gseq = existing->peer_global_seq;  // so we can send it below..
 	existing->lock.Unlock();
 	rank.lock.Unlock();
 	char tag = CEPH_MSGR_TAG_RETRY_GLOBAL;
@@ -838,16 +868,17 @@ int Rank::Pipe::accept()
 	goto replace;
       }
 
-      if (peer_cseq < existing->connect_seq) {
-	if (peer_cseq == 0) {
+      if (connect.connect_seq < existing->connect_seq) {
+	if (connect.connect_seq == 0) {
 	  dout(-10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
 	  // old attempt, or we sent READY but they didn't get it.
 	  dout(10) << "accept existing " << existing << ".cseq " << existing->connect_seq
-		   << " > " << peer_cseq << ", RETRY_SESSION" << dendl;
-	  __u32 cseq = existing->connect_seq;  // so we can send it below..
+		   << " > " << connect.connect_seq << ", RETRY_SESSION" << dendl;
+	  __le32 cseq;
+	  cseq = existing->connect_seq;  // so we can send it below..
 	  existing->lock.Unlock();
 	  rank.lock.Unlock();
 	  char tag = CEPH_MSGR_TAG_RETRY_SESSION;
@@ -859,19 +890,20 @@ int Rank::Pipe::accept()
 	}
       }
 
-      if (peer_cseq == existing->connect_seq) {
+      if (connect.connect_seq == existing->connect_seq) {
 	// connection race
 	if (peer_addr < rank.rank_addr) {
 	  // incoming wins
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << peer_cseq << ", replacing my attempt" << dendl;
+		   << " == " << connect.connect_seq << ", replacing my attempt" << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
+		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
 	  goto replace;
 	} else {
 	  // our existing outgoing wins
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << peer_cseq << ", sending WAIT" << dendl;
+		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > rank.rank_addr);
 	  assert(existing->state == STATE_CONNECTING); // this will win
 	  existing->lock.Unlock();
@@ -884,10 +916,10 @@ int Rank::Pipe::accept()
 	}
       }
 
-      assert(peer_cseq > existing->connect_seq);
-      assert(peer_gseq >= existing->peer_global_seq);
+      assert(connect.connect_seq > existing->connect_seq);
+      assert(connect.global_seq >= existing->peer_global_seq);
       if (existing->connect_seq == 0) {
-	dout(0) << "accept we reset (peer sent cseq " << peer_cseq 
+	dout(0) << "accept we reset (peer sent cseq " << connect.connect_seq 
 		 << ", " << existing << ".cseq = " << existing->connect_seq
 		 << "), sending RESETSESSION" << dendl;
 	rank.lock.Unlock();
@@ -898,15 +930,15 @@ int Rank::Pipe::accept()
 	continue;	
       } else {
 	// reconnect
-	dout(10) << "accept peer sent cseq " << peer_cseq
+	dout(10) << "accept peer sent cseq " << connect.connect_seq
 		 << " > " << existing->connect_seq << dendl;
 	goto replace;
       }
       assert(0);
     } // existing
-    else if (peer_cseq > 0) {
+    else if (connect.connect_seq > 0) {
       // we reset, and they are opening a new session
-      dout(0) << "accept we reset (peer sent cseq " << peer_cseq << "), sending RESETSESSION" << dendl;
+      dout(0) << "accept we reset (peer sent cseq " << connect.connect_seq << "), sending RESETSESSION" << dendl;
       rank.lock.Unlock();
       char tag = CEPH_MSGR_TAG_RESETSESSION;
       if (tcp_write(sd, &tag, 1) < 0)
@@ -942,8 +974,8 @@ int Rank::Pipe::accept()
   register_pipe();
   rank.lock.Unlock();
 
-  connect_seq = peer_cseq + 1;
-  peer_global_seq = peer_gseq;
+  connect_seq = connect.connect_seq + 1;
+  peer_global_seq = connect.global_seq;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
   // send READY
@@ -985,11 +1017,12 @@ int Rank::Pipe::connect()
   char tag = -1;
   int rc;
   struct sockaddr_in myAddr;
-  entity_addr_t paddr;
   struct msghdr msg;
   struct iovec msgvec[2];
   int msglen;
-  
+  char banner[strlen(CEPH_BANNER)];
+  entity_addr_t paddr;
+
   // create socket?
   newsd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (newsd < 0) {
@@ -1022,6 +1055,29 @@ int Rank::Pipe::connect()
       dout(0) << "connect couldn't set TCP_NODELAY: " << strerror(errno) << dendl;
   }
 
+  // verify banner
+  // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
+  rc = tcp_read(newsd, (char*)&banner, strlen(CEPH_BANNER));
+  if (rc < 0) {
+    dout(2) << "connect couldn't read banner, " << strerror(errno) << dendl;
+    goto fail;
+  }
+  if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
+    dout(0) << "connect protocol error (bad banner) on peer " << paddr << dendl;
+    goto fail;
+  }
+
+  memset(&msg, 0, sizeof(msg));
+  msgvec[0].iov_base = banner;
+  msgvec[0].iov_len = strlen(CEPH_BANNER);
+  msg.msg_iov = msgvec;
+  msg.msg_iovlen = 1;
+  msglen = msgvec[0].iov_len;
+  if (do_sendmsg(newsd, &msg, msglen)) {
+    dout(2) << "connect couldn't write my banner, " << strerror(errno) << dendl;
+    goto fail;
+  }
+
   // identify peer
   rc = tcp_read(newsd, (char*)&paddr, sizeof(paddr));
   if (rc < 0) {
@@ -1040,8 +1096,8 @@ int Rank::Pipe::connect()
       goto fail;
     }
   }
-
-  // identify myself, and send initial cseq
+  
+  // identify myself
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = (char*)&rank.rank_addr;
   msgvec[0].iov_len = sizeof(rank.rank_addr);
@@ -1049,21 +1105,23 @@ int Rank::Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(newsd, &msg, msglen)) {
-    dout(2) << "connect couldn't write self addr, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't write my addr, " << strerror(errno) << dendl;
     goto fail;
   }
+  dout(10) << "connect sent my addr " << rank.rank_addr << dendl;
 
   while (1) {
+    ceph_msg_connect connect;
+    connect.global_seq = gseq;
+    connect.connect_seq = cseq;
     memset(&msg, 0, sizeof(msg));
-    msgvec[0].iov_base = (char*)&gseq;
-    msgvec[0].iov_len = sizeof(gseq);
-    msgvec[1].iov_base = (char*)&cseq;
-    msgvec[1].iov_len = sizeof(cseq);
+    msgvec[0].iov_base = (char*)&connect;
+    msgvec[0].iov_len = sizeof(connect);
     msg.msg_iov = msgvec;
-    msg.msg_iovlen = 2;
-    msglen = msgvec[0].iov_len + msgvec[1].iov_len;
+    msg.msg_iovlen = 1;
+    msglen = msgvec[0].iov_len;
 
-    dout(10) << "connect sending gseq " << gseq << " cseq " << cseq << dendl;
+    dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq << dendl;
     if (do_sendmsg(newsd, &msg, msglen)) {
       dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
       goto fail;
@@ -1589,21 +1647,18 @@ void Rank::Pipe::writer()
 	// encode and copy out of *m
         if (m->empty_payload()) 
 	  m->encode_payload();
-	bufferlist payload, data;
-	payload.claim(m->get_payload());
-	data.claim(m->get_data());
-	ceph_msg_header hdr = m->get_env();
+	m->calc_front_crc();
 
 	lock.Lock();
 	sent.push_back(m); // move to sent list
 	lock.Unlock();
 
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
-	int rc = write_message(m, &hdr, payload, data);
+	int rc = write_message(m);
 	lock.Lock();
 	
 	if (rc < 0) {
-          derr(1) << "writer error sending " << m << " to " << hdr.dst << ", "
+          derr(1) << "writer error sending " << m << " to " << m->get_header().dst << ", "
 		  << errno << ": " << strerror(errno) << dendl;
 	  fault();
         }
@@ -1645,26 +1700,37 @@ Message *Rank::Pipe::read_message()
   // envelope
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
-  ceph_msg_header env; 
-  if (tcp_read( sd, (char*)&env, sizeof(env) ) < 0)
+  ceph_msg_header header; 
+  ceph_msg_footer footer;
+
+  if (tcp_read( sd, (char*)&header, sizeof(header) ) < 0)
     return 0;
   
-  dout(20) << "reader got envelope type=" << env.type
-           << " src " << env.src << " dst " << env.dst
-           << " front=" << env.front_len
-	   << " data=" << env.data_len
-	   << " off " << env.data_off
+  dout(20) << "reader got envelope type=" << header.type
+           << " src " << header.src << " dst " << header.dst
+           << " front=" << header.front_len
+	   << " data=" << header.data_len
+	   << " off " << header.data_off
            << dendl;
-  
-  if (env.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-    dout(10) << "reader munging src addr " << env.src << " to be " << peer_addr << dendl;
-    env.orig_src.addr.ipaddr = env.src.addr.ipaddr = peer_addr.ipaddr;
+
+  // verify header crc
+  __u32 header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
+  if (header_crc != header.crc) {
+    dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
+    return 0;
+  }
+
+  // ok, now it's safe to change the header..
+  // munge source address?
+  if (header.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+    dout(10) << "reader munging src addr " << header.src << " to be " << peer_addr << dendl;
+    header.orig_src.addr.ipaddr = header.src.addr.ipaddr = peer_addr.ipaddr;
   }
 
   // read front
   bufferlist front;
   bufferptr bp;
-  int front_len = env.front_len;
+  int front_len = header.front_len;
   if (front_len) {
     bp = buffer::create(front_len);
     if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
@@ -1675,8 +1741,8 @@ Message *Rank::Pipe::read_message()
 
   // read data
   bufferlist data;
-  unsigned data_len = le32_to_cpu(env.data_len);
-  unsigned data_off = le32_to_cpu(env.data_off);
+  unsigned data_len = le32_to_cpu(header.data_len);
+  unsigned data_off = le32_to_cpu(header.data_off);
   if (data_len) {
     int left = data_len;
     if (data_off & ~PAGE_MASK) {
@@ -1709,27 +1775,27 @@ Message *Rank::Pipe::read_message()
       data.push_back(bp);
       dout(20) << "reader got data tail " << left << dendl;
     }
+  }
 
-    // footer
-    ceph_msg_footer footer;
-    if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
-      return 0;
-
-    dout(10) << "aborted = " << le32_to_cpu(footer.aborted) << dendl;
-    if (le32_to_cpu(footer.aborted)) {
-      dout(0) << "reader got " << front.length() << " + " << data.length()
-	      << " byte message from " << env.src << ".. ABORTED" << dendl;
-      // MEH FIXME 
-      Message *m = new MGenericMessage(CEPH_MSG_PING);
-      env.type = CEPH_MSG_PING;
-      m->set_env(env);
-      return m;
-    }
+  // footer
+  if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
+    return 0;
+  
+  int aborted = (le32_to_cpu(footer.flags) & CEPH_MSG_FOOTER_ABORTED);
+  dout(10) << "aborted = " << aborted << dendl;
+  if (aborted) {
+    dout(0) << "reader got " << front.length() << " + " << data.length()
+	    << " byte message from " << header.src << ".. ABORTED" << dendl;
+    // MEH FIXME 
+    Message *m = new MGenericMessage(CEPH_MSG_PING);
+    header.type = CEPH_MSG_PING;
+    m->set_header(header);
+    return m;
   }
 
   dout(20) << "reader got " << front.length() << " + " << data.length()
-	   << " byte message from " << env.src << dendl;
-  return decode_message(env, front, data);
+	   << " byte message from " << header.src << dendl;
+  return decode_message(header, footer, front, data);
 }
 
 
@@ -1785,7 +1851,8 @@ int Rank::Pipe::write_ack(unsigned seq)
   dout(10) << "write_ack " << seq << dendl;
 
   char c = CEPH_MSGR_TAG_ACK;
-  __u32 s = seq;/*cpu_to_le32(seq);*/
+  __le32 s;
+  s = seq;
 
   struct msghdr msg;
   memset(&msg, 0, sizeof(msg));
@@ -1803,18 +1870,21 @@ int Rank::Pipe::write_ack(unsigned seq)
 }
 
 
-int Rank::Pipe::write_message(Message *m, ceph_msg_header *env, 
-			      bufferlist &payload, bufferlist &data)
+int Rank::Pipe::write_message(Message *m)
 {
-  // get envelope, buffers
-  env->front_len = payload.length();
-  env->data_len = data.length();
+  ceph_msg_header& header = m->get_header();
+  ceph_msg_footer& footer = m->get_footer();
 
-  bufferlist blist;
-  blist.claim(payload);
-  blist.append(data);
+  // get envelope, buffers
+  header.front_len = m->get_payload().length();
+  header.data_len = m->get_data().length();
+  footer.flags = 0;
+  m->calc_header_crc();
+
+  bufferlist blist = m->get_payload();
+  blist.append(m->get_data());
   
-  dout(20)  << "write_message " << m << " to " << env->dst << dendl;
+  dout(20)  << "write_message " << m << " to " << header.dst << dendl;
   
   // set up msghdr and iovecs
   struct msghdr msg;
@@ -1831,9 +1901,9 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
   msg.msg_iovlen++;
 
   // send envelope
-  msgvec[msg.msg_iovlen].iov_base = (char*)env;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(*env);
-  msglen += sizeof(*env);
+  msgvec[msg.msg_iovlen].iov_base = (char*)&header;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(header);
+  msglen += sizeof(header);
   msg.msg_iovlen++;
 
   // payload (front+data)
@@ -1881,15 +1951,11 @@ int Rank::Pipe::write_message(Message *m, ceph_msg_header *env,
   }
   assert(left == 0);
 
-  if (data.length()) {
-    // send data footer
-    struct ceph_msg_footer f;
-    memset(&f, 0, sizeof(f));
-    msgvec[msg.msg_iovlen].iov_base = (void*)&f;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(f);
-    msglen += sizeof(f);
-    msg.msg_iovlen++;
-  }
+  // send footer
+  msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
+  msglen += sizeof(footer);
+  msg.msg_iovlen++;
 
   // send
   if (do_sendmsg(sd, &msg, msglen)) 

@@ -1,9 +1,16 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
+#include <linux/ctype.h>
 #include <asm/uaccess.h>
+
+int ceph_debug_proc = -1;
+#define DOUT_MASK DOUT_MASK_PROC
+#define DOUT_VAR ceph_debug_proc
+#define DOUT_PREFIX "proc: "
 
 #include "ceph_fs.h"
 #include "super.h"
+
 
 static int ceph_debug_level_read(char *page, char **start, off_t off,
 		       int count, int *eof, void *data)
@@ -82,6 +89,56 @@ static int ceph_debug_level_write(struct file *file, const char __user *buffer,
 	return count;
 }
 
+static int ceph_debug_mask_write(struct file *file, const char __user *buffer,
+				unsigned long count, void *data)
+{
+	char  *mask_str, *tok;
+	int new_dl;
+	int *debug = data;
+
+#define MAX_BUF	512
+	if ((count < 1) || (count > MAX_BUF))
+		return -EINVAL;
+
+	mask_str = kmalloc(count+1, GFP_KERNEL);
+
+	if (copy_from_user(mask_str, buffer, count))
+		return -EFAULT;
+
+	mask_str[count] = 0;
+
+	do {
+		tok = strsep(&mask_str, " \t\r\n");
+
+		if (isdigit(*tok)) {
+			new_dl = simple_strtol(tok, NULL, 0);
+			*debug = new_dl;
+		} else {
+			int remove=0;
+			int mask;
+
+			if (*tok == '-') {
+				remove=1;
+				tok++;
+			} else if (*tok =='+')
+				tok++;
+
+			mask = ceph_get_debug_mask(tok);
+
+			if (remove)
+				*debug &= ~mask;
+			else
+				*debug |= mask;
+	
+		}
+	} while (mask_str);
+
+
+	kfree(mask_str);
+
+	return count;
+}
+
 static struct proc_dir_entry *proc_fs_ceph;
 
 int ceph_proc_init(void)
@@ -113,7 +170,7 @@ int ceph_proc_init(void)
 				     proc_fs_ceph, ceph_debug_mask_read,
 				     &ceph_debug_mask);
 	if (pde)
-		pde->write_proc = ceph_debug_level_write;
+		pde->write_proc = ceph_debug_mask_write;
 
 	return 0;
 }

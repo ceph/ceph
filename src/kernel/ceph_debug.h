@@ -1,6 +1,8 @@
 #ifndef _FS_CEPH_DEBUG_H
 #define _FS_CEPH_DEBUG_H
 
+#include <linux/string.h>
+
 #define DOUT_MASK_ADDR		0x00000001
 #define DOUT_MASK_CAPS		0x00000002
 #define DOUT_MASK_DIR		0x00000004
@@ -17,6 +19,48 @@
 #define DOUT_MASK_SNAP		0x00002000
 #define DOUT_MASK_SUPER		0x00004000
 #define DOUT_MASK_PROTOCOL	0x00008000
+#define DOUT_MASK_PROC		0x00010000
+
+#define DOUT_UNMASKABLE	0x80000000
+
+struct _debug_mask_name {
+	int mask;
+	char *name;
+};
+
+static struct _debug_mask_name _debug_mask_names[] = {
+		{DOUT_MASK_ADDR, "addr"},
+		{DOUT_MASK_CAPS, "caps"},
+		{DOUT_MASK_DIR, "dir"},
+		{DOUT_MASK_EXPORT, "export"},
+		{DOUT_MASK_FILE, "file"},
+		{DOUT_MASK_INODE, "inode"},
+		{DOUT_MASK_IOCTL, "ioctl"},
+		{DOUT_MASK_MDSC, "mdsc"},
+		{DOUT_MASK_MDSMAP, "mdsmap"},
+		{DOUT_MASK_MSGR, "msgr"},	
+		{DOUT_MASK_MON, "mon"},
+		{DOUT_MASK_OSDC, "osdc"},
+		{DOUT_MASK_OSDMAP, "osdmap"},
+		{DOUT_MASK_SNAP, "snap"},
+		{DOUT_MASK_SUPER, "super"},
+		{DOUT_MASK_PROTOCOL, "protocol"},
+		{DOUT_MASK_PROC, "proc"},
+		{0, 0}	
+};
+
+static inline int ceph_get_debug_mask(char *name)
+{
+	int i=0;
+
+	while (_debug_mask_names[i].name) {
+		if (strcmp(_debug_mask_names[i].name, name) == 0)
+			return _debug_mask_names[i].mask;
+		i++;
+	}
+
+	return 0;
+}
 
 #endif
 

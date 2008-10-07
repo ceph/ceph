@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/version.h>
+#include <linux/backing-dev.h>
 
 /* debug levels; defined in super.h */
 
@@ -344,7 +345,11 @@ void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
 
 	dout(30, "ceph_peer_reset peer_name = %s%d\n", ENTITY_NAME(*peer_name));
 
-	/* write me */
+	/* we only care about mds disconnects */
+	if (le32_to_cpu(peer_name->type) != CEPH_ENTITY_TYPE_MDS)
+		return;
+
+	ceph_mdsc_handle_reset(&client->mdsc, le32_to_cpu(peer_name->num));
 }
 
 
@@ -370,6 +375,7 @@ enum {
 	Opt_monport,
 	Opt_port,
 	Opt_wsize,
+	Opt_rsize,
 	Opt_osdtimeout,
 	Opt_mount_timeout,
 	/* int args above */
@@ -380,6 +386,7 @@ enum {
 	Opt_nodirstat,
 	Opt_rbytes,
 	Opt_norbytes,
+	Opt_nocrc,
 };
 
 static match_table_t arg_tokens = {
@@ -397,6 +404,7 @@ static match_table_t arg_tokens = {
 	{Opt_monport, "monport=%d"},
 	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
+	{Opt_rsize, "rsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
 	{Opt_mount_timeout, "mount_timeout=%d"},
 	/* int args above */
@@ -408,40 +416,59 @@ static match_table_t arg_tokens = {
 	{Opt_nodirstat, "nodirstat"},
 	{Opt_rbytes, "rbytes"},
 	{Opt_norbytes, "norbytes"},
+	{Opt_nocrc, "nocrc"},
 	{-1, NULL}
 };
+
+#define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
 
 /*
  * FIXME: add error checking to ip parsing
  */
-static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr)
+static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr, int max_count, int *count)
 {
 	int i;
 	int v;
+	int mon_count;
 	unsigned ip = 0;
 	const char *p = c;
 
 	dout(15, "parse_ip on '%s' len %d\n", c, len);
-	for (i = 0; *p && i < 4; i++) {
-		v = 0;
-		while (*p && *p != '.' && p < c+len) {
-			if (*p < '0' || *p > '9')
-				goto bad;
-			v = (v * 10) + (*p - '0');
-			p++;
+	for (mon_count = 0; mon_count < max_count; mon_count++) {
+		for (i = 0; !ADDR_DELIM(*p) && i < 4; i++) {
+			v = 0;
+			while (!ADDR_DELIM(*p) && *p != '.' && p < c+len) {
+				if (*p < '0' || *p > '9')
+					goto bad;
+				v = (v * 10) + (*p - '0');
+				p++;
+			}
+			ip = (ip << 8) + v;
+
+			if (*p == '.')
+				p++;
 		}
-		ip = (ip << 8) + v;
-		if (!*p)
+
+		if (i != 4)
+			goto bad;
+
+		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = htonl(ip);
+		dout(15, "parse_ip got %u.%u.%u.%u\n",
+			ip >> 24, (ip >> 16) & 0xff,
+			(ip >> 8) & 0xff, ip & 0xff);
+
+		if (*p != ',')
 			break;
+
 		p++;
 	}
+
 	if (p < c+len)
 		goto bad;
 
-	*(__be32 *)&addr->ipaddr.sin_addr.s_addr = htonl(ip);
-	dout(15, "parse_ip got %u.%u.%u.%u\n",
-	     ip >> 24, (ip >> 16) & 0xff,
-	     (ip >> 8) & 0xff, ip & 0xff);
+	if (count)
+		*count = mon_count + 1;
+
 	return 0;
 
 bad:
@@ -455,6 +482,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	char *c;
 	int len, err;
 	substring_t argstr[MAX_OPT_ARGS];
+	int i;
 
 	dout(15, "parse_mount_args dev_name '%s'\n", dev_name);
 	memset(args, 0, sizeof(*args));
@@ -474,14 +502,16 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* get mon ip */
 	/* er, just one for now. later, comma-separate... */
 	len = c - dev_name;
-	err = parse_ip(dev_name, len, &args->mon_addr[0]);
+	err = parse_ip(dev_name, len, args->mon_addr, MAX_MON_MOUNT_ADDR, &args->num_mon);
 	if (err < 0)
 		return err;
-	args->mon_addr[0].ipaddr.sin_family = AF_INET;
-	args->mon_addr[0].ipaddr.sin_port = htons(CEPH_MON_PORT);
-	args->mon_addr[0].erank = 0;
-	args->mon_addr[0].nonce = 0;
-	args->num_mon = 1;
+
+	for (i=0; i<args->num_mon; i++) {
+		args->mon_addr[i].ipaddr.sin_family = AF_INET;
+		args->mon_addr[i].ipaddr.sin_port = htons(CEPH_MON_PORT);
+		args->mon_addr[i].erank = 0;
+		args->mon_addr[i].nonce = 0;
+	}
 
 	/* path on server */
 	c++;
@@ -527,8 +557,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_ip:
 			err = parse_ip(argstr[0].from,
-				       argstr[0].to-argstr[0].from,
-				       &args->my_addr);
+					argstr[0].to-argstr[0].from,
+					&args->my_addr,
+					1, NULL);
 			if (err < 0)
 				return err;
 			args->flags |= CEPH_MOUNT_MYIP;
@@ -570,6 +601,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_wsize:
 			args->wsize = intval;
 			break;
+		case Opt_rsize:
+			args->rsize = intval;
+			break;
 		case Opt_osdtimeout:
 			args->osd_timeout = intval;
 			break;
@@ -595,6 +629,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_norbytes:
 			args->flags &= ~CEPH_MOUNT_RBYTES;
+			break;
+		case Opt_nocrc:
+			args->flags |= CEPH_MOUNT_NOCRC;
 			break;
 
 		default:
@@ -727,7 +764,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
 	unsigned long started = jiffies;
 	int which;
-	char r;
+	unsigned char r;
 
 	dout(10, "mount start\n");
 	mutex_lock(&client->mount_mutex);
@@ -938,6 +975,28 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	return 1;
 }
 
+static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
+{
+	int err;
+
+	if (client->mount_args.rsize)
+		client->backing_dev_info.ra_pages = (client->mount_args.rsize + PAGE_CACHE_SIZE - 1) >> PAGE_SHIFT;
+
+	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
+		client->backing_dev_info.ra_pages = CEPH_DEFAULT_READ_SIZE >> PAGE_SHIFT;
+
+	err = bdi_init(&client->backing_dev_info);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	if (err < 0)
+		return err;
+
+	err = bdi_register_dev(&client->backing_dev_info, sb->s_dev);
+#endif
+
+	return err;
+}
+
 static int ceph_get_sb(struct file_system_type *fs_type,
 		       int flags, const char *dev_name, void *data,
 		       struct vfsmount *mnt)
@@ -969,12 +1028,17 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		err = PTR_ERR(sb);
 		goto out;
 	}
+
 	if (ceph_client(sb) != client) {
 		ceph_destroy_client(client);
 		client = ceph_client(sb);
 		dout(20, "get_sb got existing client %p\n", client);
 	} else
 		dout(20, "get_sb using new client %p\n", client);
+
+	err = ceph_init_bdi(sb, client);
+	if (err < 0)
+		goto out_splat;
 
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
@@ -998,7 +1062,11 @@ static void ceph_kill_sb(struct super_block *s)
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
 	ceph_mdsc_pre_umount(&client->mdsc);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	bdi_unregister(&client->backing_dev_info);
+#endif
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
+	bdi_destroy(&client->backing_dev_info);
 	ceph_destroy_client(client);
 }
 

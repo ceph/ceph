@@ -66,7 +66,13 @@ protected:
   void commit_finish() {
     if (journal)
       journal->committed_thru(committing_op_seq);
-    finisher.queue(commit_waiters[committing_op_seq]);
+
+    map<version_t, vector<Context*> >::iterator p = commit_waiters.begin();
+    while (p != commit_waiters.end() &&
+	   p->first <= committing_op_seq) {
+      finisher.queue(p->second);
+      commit_waiters.erase(p++);
+    }
   }
 
   void queue_commit_waiter(Context *oncommit) {

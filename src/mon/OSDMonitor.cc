@@ -868,6 +868,24 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
       r = 0;
     }
+    else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
+      if (m->cmd[2] == "*") {
+	for (int i=0; i<osdmap.get_max_osd(); i++)
+	  if (osdmap.is_up(i))
+	    mon->inject_args(osdmap.get_inst(i), m->cmd[3]);
+	r = 0;
+	ss << "ok bcast";
+      } else {
+	errno = 0;
+	int who = strtol(m->cmd[2].c_str(), 0, 10);
+	if (!errno && who >= 0 && osdmap.is_up(who)) {
+	  mon->inject_args(osdmap.get_inst(who), m->cmd[3]);
+	  r = 0;
+	  ss << "ok";
+	} else 
+	  ss << "specify osd number or *";
+      }
+    }
   }
   if (r != -1) {
     string rs;
@@ -954,6 +972,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "marked down osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	
+	// send them the new map when it updates, so they know it
+	waiting_for_map[osdmap.get_inst(osd)] = osdmap.get_epoch();
+
 	return true;
       }
     }
@@ -980,6 +1002,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else {
 	pending_inc.new_offload[osd] = CEPH_OSD_IN;
 	ss << "marked in osd" << osd;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } 
+    }
+    else if (m->cmd[1] == "reweight" && m->cmd.size() > 3) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      float w = strtof(m->cmd[3].c_str(), 0);
+      long ww = CEPH_OSD_OUT - (int)((float)CEPH_OSD_OUT*w);
+      if (osdmap.exists(osd)) {
+	pending_inc.new_offload[osd] = ww;
+	ss << "reweighted osd" << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;

@@ -1,10 +1,10 @@
 #!/bin/sh
 
 ./dstop.sh
-rm core*
+rm -f core*
 
 test -d out || mkdir out
-rm out/*
+rm -f out/*
 
 # figure machine's ip
 HOSTNAME=`hostname`
@@ -30,21 +30,37 @@ fi
 ./cmon -d mondata/mon0 --debug_mon 20 --debug_ms 1
 
 # build and inject an initial osd map
-./osdmaptool --clobber --createsimple .ceph_monmap 16 .ceph_osdmap # --pgbits 2
+./osdmaptool --clobber --createsimple .ceph_monmap 16 --num_dom 4 .ceph_osdmap
+
+# use custom crush map to separate data from metadata
+./crushtool -c cm.txt -o cm
+./osdmaptool --clobber --import-crush cm .ceph_osdmap
+
 ./cmonctl osd setmap -i .ceph_osdmap
 
 #ARGS="-m $IP:12345"
 
 for host in `cd dev/hosts ; ls`
 do
- ssh cosd$host killall cosd
+ ssh root@cosd$host killall cosd
+
+ test -d devm && ssh root@cosd$host modprobe crc32c \; rmmod btrfs \; insmod $HOME/src/btrfs/kernel/btrfs.ko
+
  for osd in `cd dev/hosts/$host ; ls`
  do
    dev="dev/hosts/$host/$osd"
    echo "---- host $host osd $osd dev $dev ----"
-   ls -al $dev
-   ssh cosd$host cd ceph/src \; ./cosd --mkfs_for_osd $osd $dev # --osd_auto_weight 1
-   ssh cosd$host cd ceph/src \; ./cosd $dev -d --debug_ms 1 --debug_osd 10 # --debug_filestore 10 --debug_ebofs 30 --osd_heartbeat_grace 300
+   devm="$dev"
+
+   # btrfs?
+   test -d devm && devm="devm/osd$osd" && ( \
+       echo "---- dev mount $devm ----" ; \
+       test -d $devm || mkdir -p $devm ; \
+       ssh root@cosd$host cd $HOME/ceph/src \; umount $devm \; $HOME/src/btrfs/progs/mkfs.btrfs $dev \; mount $dev $devm )
+
+   ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
+   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./cosd $devm -d --debug_ms 1 --debug_osd 10 # --debug_filestore 10 --debug_ebofs 30 --osd_heartbeat_grace 300
+
 #   ssh cosd$host cd ceph/src \; valgrind --leak-check-full --show-reachable-yes ./cosd $dev --debug_ms 1 --debug_osd 20 --debug_filestore 10 1>out/o$osd \&
  done
 done

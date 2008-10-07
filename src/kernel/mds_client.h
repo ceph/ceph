@@ -187,4 +187,5 @@ extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
+extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 #endif

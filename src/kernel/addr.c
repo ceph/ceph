@@ -220,8 +220,10 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	     inode, filp, page, page->index);
 	err = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
 				 page->index << PAGE_SHIFT, PAGE_SIZE, page);
-	if (unlikely(err < 0))
+	if (unlikely(err < 0)) {
+		SetPageError(page);
 		goto out;
+	}
 	if (unlikely(err < PAGE_CACHE_SIZE)) {
 		void *kaddr = kmap_atomic(page, KM_USER0);
 		dout(10, "readpage zeroing tail %d bytes of page %p\n",
@@ -461,11 +463,15 @@ static void writepages_finish(struct ceph_osd_request *req)
 		rc = le32_to_cpu(replyhead->result);
 		bytes = le32_to_cpu(replyhead->length);
 	}
-	if (rc >= 0)
+
+	if (rc >= 0) {
 		wrote = (bytes + (offset & ~PAGE_CACHE_MASK) + ~PAGE_CACHE_MASK)
 			>> PAGE_CACHE_SHIFT;
-	else
+		BUG_ON(wrote != req->r_num_pages);
+	} else {
 		wrote = 0;
+		mapping_set_error(mapping, rc);
+	}
 	dout(10, "writepages_finish rc %d bytes %llu wrote %d (pages)\n", rc,
 	     bytes, wrote);
 
@@ -474,22 +480,20 @@ static void writepages_finish(struct ceph_osd_request *req)
 		page = req->r_pages[i];
 		BUG_ON(!page);
 		WARN_ON(!PageUptodate(page));
-		if (i < wrote) {
-			dout(20, "%p cleaning %p\n", inode, page);
-			page->private = 0;
-			ClearPagePrivate(page);
-			ceph_put_snap_context(snapc);
-		} else {
-			dout(20, "%p redirtying %p\n", inode, page);
-			ceph_redirty_page(mapping, page);
+
+		if (i >= wrote) {
+			dout(20, "inode %p skipping page %p\n", inode, page);
 			wbc->pages_skipped++;
 		}
+		page->private = 0;
+		ClearPagePrivate(page);
+		ceph_put_snap_context(snapc);
 		dout(50, "unlocking %d %p\n", i, page);
 		end_page_writeback(page);
 		unlock_page(page);
 	}
 	dout(20, "%p wrote+cleaned %d pages\n", inode, wrote);
-	ceph_put_wrbuffer_cap_refs(ci, wrote, snapc);
+	ceph_put_wrbuffer_cap_refs(ci, req->r_num_pages, snapc);
 
 	ceph_release_pages(req->r_pages, req->r_num_pages);
 	ceph_osdc_put_request(req);

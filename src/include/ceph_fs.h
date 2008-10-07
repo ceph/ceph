@@ -26,6 +26,19 @@
 #define CEPH_MON_PORT 12345
 #define CEPH_FILE_MAX_SIZE (1ULL << 40) // 1 TB
 
+
+/*
+ * protocol versions.  increment each time one of these changes.
+ */
+#define CEPH_BANNER "ceph\n2\n"  /* second line is a protocol version.
+				    adjust whenever the wire protocol
+				    changes. */
+#define CEPH_BANNER_MAX_LEN 30
+
+#define CEPH_OSD_PROTOCOL   1
+#define CEPH_MDS_PROTOCOL   1
+#define CEPH_MON_PROTOCOL   1
+
 /*
  * types in this file are defined as little-endian, and are
  * primarily intended to describe data structures that pass
@@ -378,6 +391,15 @@ struct ceph_entity_inst {
 
 
 /*
+ * connection negotiation
+ */
+struct ceph_msg_connect {
+	__le32 global_seq;
+	__le32 connect_seq;
+};
+
+
+/*
  * message header, footer
  */
 struct ceph_msg_header {
@@ -387,12 +409,18 @@ struct ceph_msg_header {
 	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
 	struct ceph_entity_inst src, orig_src, dst;
+	__le32 header_crc;
+	__le32 crc;      /* this goes at the end! */
 } __attribute__ ((packed));
 
 struct ceph_msg_footer {
-	__le32 aborted;
-	__le32 csum;
+	__le32 flags;
+	__le32 front_crc;
+	__le32 data_crc;
 } __attribute__ ((packed));
+
+#define CEPH_MSG_FOOTER_ABORTED   (1<<0)
+#define CEPH_MSG_FOOTER_NOCRC     (1<<1)
 
 /*
  * message types

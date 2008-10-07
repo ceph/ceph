@@ -20,7 +20,7 @@
 
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
-			  int num_osd, int pg_bits, int lpg_bits,
+			  int num_osd, int num_dom, int pg_bits, int lpg_bits,
 			  int mds_local_osd)
 {
   dout(10) << "build_simple on " << num_osd
@@ -35,7 +35,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
   lpg_num = lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
   
   // crush map
-  build_simple_crush_map(crush, num_osd);
+  build_simple_crush_map(crush, num_osd, num_dom);
 
   for (int i=0; i<num_osd; i++) {
     set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
@@ -53,7 +53,8 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
   }
 }
 
-void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd)
+void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
+				    int num_dom)
 {
   // new
   crush.create();
@@ -64,7 +65,9 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd)
   int npools = 3;
 
   int minrep = g_conf.osd_min_rep;
-  int ndom = MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
+  int ndom = num_dom;
+  if (!ndom)
+    MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
   if (num_osd >= ndom*3 &&
       num_osd > 8) {
     int ritems[ndom];

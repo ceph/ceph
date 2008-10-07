@@ -39,12 +39,13 @@ streamtest_LDADD = libebofs.a libcommon.a libos.a
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
 
-
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal
+
+bin_SCRIPTS = crun
 
 # fuse targets?
 if WITH_FUSE
@@ -153,7 +154,7 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh stop.sh
+EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh vstartnew.sh stop.sh crun
 
 # cleaning
 clean-local:
@@ -168,6 +169,7 @@ libcommon_a_SOURCES = \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
+	common/crc32c.cc\
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
@@ -289,6 +291,7 @@ noinst_HEADERS = \
         include/buffer.h\
         include/byteorder.h\
         include/ceph_fs.h\
+	include/crc32c.h\
         include/cstring.h\
         include/encoding.h\
         include/err.h\
@@ -315,6 +318,7 @@ noinst_HEADERS = \
         kernel/Makefile\
 	kernel/addr.c\
 	kernel/caps.c\
+	kernel/ceph_debug.h\
         kernel/crush/crush.c\
         kernel/crush/crush.h\
         kernel/crush/hash.h\

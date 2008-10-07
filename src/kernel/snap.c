@@ -226,9 +226,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 
 	spin_lock(&inode->i_lock);
 	used = __ceph_caps_used(ci);
-	if (!list_empty(&ci->i_cap_snaps) &&
-	    list_entry(ci->i_cap_snaps.next, struct ceph_cap_snap,
-		       ci_item)->writing) {
+	if (__ceph_have_pending_cap_snap(ci)) {
 		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
 		     " already pending\n", inode, snapc, snapc->seq, used);
 		kfree(capsnap);
@@ -239,7 +237,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		capsnap->issued = __ceph_caps_issued(ci, 0);
 		capsnap->dirty = ci->i_wrbuffer_ref_head;
 		ci->i_wrbuffer_ref_head = 0;
-		list_add(&capsnap->ci_item, &ci->i_cap_snaps);
+		list_add_tail(&capsnap->ci_item, &ci->i_cap_snaps);
 
 		if (used & CEPH_CAP_WR) {
 			dout(10, "queue_cap_snap %p cap_snap %p snapc %p"

@@ -116,7 +116,8 @@ using std::list;
 
 class Message {
 protected:
-  ceph_msg_header  env;      // envelope
+  ceph_msg_header  header;      // headerelope
+  ceph_msg_footer  footer;
   bufferlist       payload;  // "front" unaligned blob
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
   
@@ -127,13 +128,15 @@ protected:
 public:
   Message() { };
   Message(int t) {
-    env.type = t;
-    env.data_off = 0;
+    header.type = t;
+    header.data_off = 0;
   }
   virtual ~Message() { }
 
-  ceph_msg_header &get_env() { return env; }
-  void set_env(const ceph_msg_header &e) { env = e; }
+  ceph_msg_header &get_header() { return header; }
+  void set_header(const ceph_msg_header &e) { header = e; }
+  void set_footer(const ceph_msg_footer &e) { footer = e; }
+  ceph_msg_footer &get_footer() { return footer; }
 
   void clear_payload() { payload.clear(); }
   bool empty_payload() { return payload.length() == 0; }
@@ -149,29 +152,38 @@ public:
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   utime_t get_recv_stamp() { return recv_stamp; }
 
-  // ENVELOPE ----
+  void calc_header_crc() {
+    header.crc = crc32c_le(0, (unsigned char*)&header,
+			   sizeof(header) - sizeof(header.crc));
+  }
+  void calc_front_crc() {
+    footer.front_crc = payload.crc32c(0);
+  }
+  void calc_data_crc() {
+    footer.data_crc = data.crc32c(0);
+  }
 
   // type
-  int get_type() { return env.type; }
-  void set_type(int t) { env.type = t; }
+  int get_type() { return header.type; }
+  void set_type(int t) { header.type = t; }
 
-  unsigned get_seq() { return env.seq; }
-  void set_seq(unsigned s) { env.seq = s; }
+  unsigned get_seq() { return header.seq; }
+  void set_seq(unsigned s) { header.seq = s; }
 
   // source/dest
-  entity_inst_t get_dest_inst() { return entity_inst_t(env.dst); }
-  entity_name_t get_dest() { return entity_name_t(env.dst.name); }
-  void set_dest_inst(entity_inst_t& inst) { env.dst = inst; }
+  entity_inst_t get_dest_inst() { return entity_inst_t(header.dst); }
+  entity_name_t get_dest() { return entity_name_t(header.dst.name); }
+  void set_dest_inst(entity_inst_t& inst) { header.dst = inst; }
 
-  entity_inst_t get_source_inst() { return entity_inst_t(env.src); }
-  entity_name_t get_source() { return entity_name_t(env.src.name); }
-  entity_addr_t get_source_addr() { return entity_addr_t(env.src.addr); }
-  void set_source_inst(entity_inst_t& inst) { env.src = inst; }
+  entity_inst_t get_source_inst() { return entity_inst_t(header.src); }
+  entity_name_t get_source() { return entity_name_t(header.src.name); }
+  entity_addr_t get_source_addr() { return entity_addr_t(header.src.addr); }
+  void set_source_inst(entity_inst_t& inst) { header.src = inst; }
 
-  entity_inst_t get_orig_source_inst() { return entity_inst_t(env.orig_src); }
-  entity_name_t get_orig_source() { return entity_name_t(env.orig_src.name); }
-  entity_addr_t get_orig_source_addr() { return entity_addr_t(env.orig_src.addr); }
-  void set_orig_source_inst(entity_inst_t &i) { env.orig_src = i; }
+  entity_inst_t get_orig_source_inst() { return entity_inst_t(header.orig_src); }
+  entity_name_t get_orig_source() { return entity_name_t(header.orig_src.name); }
+  entity_addr_t get_orig_source_addr() { return entity_addr_t(header.orig_src.addr); }
+  void set_orig_source_inst(entity_inst_t &i) { header.orig_src = i; }
 
   // virtual bits
   virtual void decode_payload() = 0;
@@ -183,7 +195,8 @@ public:
   
 };
 
-extern Message *decode_message(ceph_msg_header &env, bufferlist& front, bufferlist& data);
+extern Message *decode_message(ceph_msg_header &header, ceph_msg_footer& footer,
+			       bufferlist& front, bufferlist& data);
 inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   return out;

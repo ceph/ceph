@@ -501,6 +501,8 @@ void ObjectCacher::bh_write(BufferHead *bh)
   oncommit->tid = tid;
   bh->ob->last_write_tid = tid;
   bh->last_write_tid = tid;
+  if (commit_set_callback)
+    last_write_by_ino[bh->ob->get_ino()] = tid;
 
   mark_tx(bh);
 }
@@ -620,8 +622,10 @@ void ObjectCacher::bh_write_ack(object_t oid, loff_t start, size_t length, tid_t
 
     // is the entire object set now clean?
     if (flush_set_callback && 
-	dirty_tx_by_ino[ob->get_ino()] == 0)
-      flush_set_callback(flush_set_callback_arg, ob->get_ino());      
+	dirty_tx_by_ino[ob->get_ino()] == 0) {
+      flush_set_callback(flush_set_callback_arg, ob->get_ino());
+      dirty_tx_by_ino.erase(ob->get_ino());
+    }
     
     // waiters?
     if (ob->waitfor_ack.count(tid)) {
@@ -650,6 +654,13 @@ void ObjectCacher::bh_write_commit(object_t oid, loff_t start, size_t length, ti
   } else {
     Object *ob = objects[oid];
     
+    // is the entire object set now clean and fully committed?
+    if (commit_set_callback && 
+	last_write_by_ino[ob->get_ino()] <= tid) {
+      commit_set_callback(flush_set_callback_arg, ob->get_ino());      
+      last_write_by_ino.erase(ob->get_ino());
+    }
+
     // update last_commit.
     ob->last_commit_tid = tid;
     

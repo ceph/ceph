@@ -51,14 +51,16 @@ void printmap(const char *me, OSDMap *m, ostream& out)
   out << "max_osd " << m->get_max_osd() << "\n";
   for (int i=0; i<m->get_max_osd(); i++) {
     if (m->exists(i)) {
-      out << "osd" << i
-	  << (m->is_in(i) ? " in":" out")
-	  << (m->is_up(i) ? " up":" down");
+      out << "osd" << i;
+      out << (m->is_up(i) ? " up":" down");
       if (m->is_up(i))
 	out << " " << m->get_addr(i);
       out << " up_from " << m->get_up_from(i)
-	  << " up_thru " << m->get_up_thru(i)
-	  << "\n";
+	  << " up_thru " << m->get_up_thru(i);
+      out << (m->is_in(i) ? " in":" out");
+      if (m->is_in(i))
+	out << " weight " << m->get_weight(i);
+      out << "\n";
     }
   }
   out << std::endl;
@@ -83,7 +85,7 @@ int main(int argc, const char **argv)
   bool print = false;
   bool createsimple = false;
   const char *monmapfn = 0;
-  int num_osd = 0;
+  int num_osd = 0, num_dom = 0;
   int pg_bits = g_conf.osd_pg_bits;
   int lpg_bits = g_conf.osd_lpg_bits;
   bool clobber = false;
@@ -105,6 +107,8 @@ int main(int argc, const char **argv)
       pg_bits = atoi(args[++i]);
     else if (strcmp(args[i], "--lpg_bits") == 0)
       lpg_bits = atoi(args[++i]);
+    else if (strcmp(args[i], "--num_dom") == 0)
+      num_dom = atoi(args[++i]);
     else if (strcmp(args[i], "--export-crush") == 0)
       export_crush = args[++i];
     else if (strcmp(args[i], "--import-crush") == 0)
@@ -149,7 +153,7 @@ int main(int argc, const char **argv)
       cerr << me << ": osd count must be > 0" << std::endl;
       exit(1);
     }
-    osdmap.build_simple(0, monmap.fsid, num_osd, pg_bits, lpg_bits, 0);
+    osdmap.build_simple(0, monmap.fsid, num_osd, num_dom, pg_bits, lpg_bits, 0);
     modified = true;
   }
 

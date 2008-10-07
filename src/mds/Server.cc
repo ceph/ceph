@@ -3738,7 +3738,15 @@ void Server::_rename_prepare(MDRequest *mdr,
   // target inode
   if (!linkmerge) {
     if (destdn->is_primary()) {
-      tji = metablob->add_primary_dentry(straydn, true, destdn->inode, tpi);
+      // project snaprealm, too
+      bufferlist snapbl;
+      if (!destdn->inode->snaprealm) {
+	destdn->inode->open_snaprealm(true);   // don't do a split
+	destdn->inode->snaprealm->project_past_parent(straydn->dir->inode->snaprealm, snapbl);
+	destdn->inode->close_snaprealm(true);  // or a matching join
+      } else
+	destdn->inode->snaprealm->project_past_parent(straydn->dir->inode->snaprealm, snapbl);
+      tji = metablob->add_primary_dentry(straydn, true, destdn->inode, tpi, 0, &snapbl);
     } else if (destdn->is_remote()) {
       metablob->add_dir_context(destdn->inode->get_parent_dir());
       mdcache->journal_cow_dentry(mdr, metablob, destdn->inode->parent);
@@ -3829,6 +3837,20 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       dout(10) << "straydn is " << *straydn << dendl;
       destdn->dir->unlink_inode(destdn);
       straydn->dir->link_primary_inode(straydn, oldin);
+      
+      if (straydn->is_auth()) {
+	SnapRealm *oldparent = destdn->dir->inode->find_snaprealm();
+	bool isnew = false;
+	if (!straydn->inode->snaprealm) {
+	  straydn->inode->open_snaprealm();
+	  straydn->inode->snaprealm->seq = oldparent->get_newest_seq();
+	  isnew = true;
+	}
+	straydn->inode->snaprealm->add_past_parent(oldparent);
+	if (isnew)
+	  mdcache->do_realm_invalidate_and_update_notify(straydn->inode, CEPH_SNAP_OP_SPLIT);
+      }
+
     } else {
       destdn->dir->unlink_inode(destdn);
     }

@@ -7,6 +7,8 @@
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
 #include <linux/sysfs.h>
+#include <linux/sysfs.h>
+#include <linux/backing-dev.h>
 
 #include "ceph_debug.h"
 #include "ceph_fs.h"
@@ -33,7 +35,7 @@ extern int ceph_debug_mask;
 #define CEPH_DUMP_ERROR_ALWAYS
 
 #define dout_flag(x, mask, args...) do {						\
-		if ((ceph_debug_mask & mask) &&				\
+		if (((ceph_debug_mask | DOUT_UNMASKABLE) & mask) &&				\
 			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
 			(DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
@@ -100,8 +102,13 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_UNSAFE_WRITEBACK (1<<3)
 #define CEPH_MOUNT_DIRSTAT       (1<<4)
 #define CEPH_MOUNT_RBYTES        (1<<5)
+#define CEPH_MOUNT_NOCRC         (1<<6)
 
 #define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
+
+#define CEPH_DEFAULT_READ_SIZE	(128*1024)
+
+#define MAX_MON_MOUNT_ADDR	5
 
 struct ceph_mount_args {
 	int sb_flags;
@@ -110,8 +117,9 @@ struct ceph_mount_args {
 	struct ceph_fsid fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
-	struct ceph_entity_addr mon_addr[5];
+	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
 	int wsize;
+	int rsize;
 	int osd_timeout;
 	char *snapdir_name;
 };
@@ -154,6 +162,8 @@ struct ceph_client {
 	struct workqueue_struct *trunc_wq;
 
 	struct kobject *client_kobj;
+
+	struct backing_dev_info backing_dev_info;
 
 	/* lets ignore all this until later */
 	spinlock_t sb_lock;
@@ -529,6 +539,14 @@ extern void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 extern void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 				   struct ceph_cap_snap *capsnap,
 				   int used);
+
+inline static bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
+{
+	return !list_empty(&ci->i_cap_snaps) &&
+		list_entry(ci->i_cap_snaps.prev, struct ceph_cap_snap,
+			   ci_item)->writing;
+}
+
 
 
 /*

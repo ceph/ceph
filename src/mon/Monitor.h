@@ -127,6 +127,14 @@ public:
 
   void reply_command(MMonCommand *m, int rc, const string &rs);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata);
+
+  void inject_args(const entity_inst_t& inst, string& args) {
+    vector<string> a(1);
+    a[0] = args;
+    inject_args(inst, a);
+  }
+  void inject_args(const entity_inst_t& inst, vector<string>& args);  
+
 public:
   struct C_Command : public Context {
     Monitor *mon;

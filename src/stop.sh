@@ -1,2 +1,2 @@
 #!/bin/sh
-killall cmon cmds cosd
+killall crun cmon cmds cosd

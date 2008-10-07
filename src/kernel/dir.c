@@ -280,6 +280,7 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 
 	/* snap dir? */
 	if (err == -ENOENT &&
+	    ceph_vino(parent).ino != 1 &&  /* no .snap in root dir */
 	    strcmp(dentry->d_name.name, client->mount_args.snapdir_name) == 0) {
 		struct inode *inode = ceph_get_snapdir(parent);
 		dout(10, "ENOENT on snapdir %p '%.*s', linking to snapdir %p\n",

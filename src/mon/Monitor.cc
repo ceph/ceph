@@ -210,6 +210,7 @@ void Monitor::handle_command(MMonCommand *m)
 
   dout(0) << "handle_command " << *m << dendl;
   string rs;
+  int r = -EINVAL;
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
       mdsmon->dispatch(m);
@@ -233,11 +234,39 @@ void Monitor::handle_command(MMonCommand *m)
       reply_command(m, 0, "initiating cluster shutdown");
       return;
     }
-    rs = "unrecognized subsystem";
+
+    if (m->cmd[0] == "_injectargs") {
+      parse_config_option_string(m->cmd[0]);
+      return;
+    } 
+    if (m->cmd[0] == "mon") {
+      if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
+	vector<string> args(2);
+	args[0] = "_injectargs";
+	args[1] = m->cmd[3];
+	if (m->cmd[2] == "*") {
+	  for (unsigned i=0; i<monmap->size(); i++)
+	    inject_args(monmap->get_inst(i), args);
+	  r = 0;
+	  rs = "ok bcast";
+	} else {
+	  errno = 0;
+	  int who = strtol(m->cmd[2].c_str(), 0, 10);
+	  if (!errno && who >= 0) {
+	    inject_args(monmap->get_inst(who), args);
+	    r = 0;
+	    rs = "ok";
+	  } else 
+	    rs = "specify mon number or *";
+	}
+      } else
+	rs = "unrecognized mon command";
+    } else 
+      rs = "unrecognized subsystem";
   } else 
     rs = "no command";
 
-  reply_command(m, -EINVAL, rs);
+  reply_command(m, r, rs);
 }
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs)
@@ -253,6 +282,18 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
 }
+
+
+void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args)
+{
+  dout(10) << "inject_args " << inst << " " << args << dendl;
+  MMonCommand *c = new MMonCommand(monmap->fsid);
+  c->cmd = args;
+  messenger->send_message(c, inst);
+}
+
+
+
 
 void Monitor::stop_cluster()
 {
@@ -505,5 +546,6 @@ int Monitor::mkfs()
 
   return 0;
 }
+
 
 
