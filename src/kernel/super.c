@@ -987,11 +987,14 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 
 	err = bdi_init(&client->backing_dev_info);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	if (err < 0)
 		return err;
 
-	return bdi_register_dev(&client->backing_dev_info, sb->s_dev);
+	err = bdi_register_dev(&client->backing_dev_info, sb->s_dev);
+#endif
 
+	return err;
 }
 
 static int ceph_get_sb(struct file_system_type *fs_type,
@@ -1059,7 +1062,9 @@ static void ceph_kill_sb(struct super_block *s)
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
 	ceph_mdsc_pre_umount(&client->mdsc);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	bdi_unregister(&client->backing_dev_info);
+#endif
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
 	bdi_destroy(&client->backing_dev_info);
 	ceph_destroy_client(client);

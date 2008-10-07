@@ -686,7 +686,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 
 	while (con->out_msg_pos.page < con->out_msg->nr_pages) {
 		struct page *page = NULL;
-		void *kaddr;
+		void *kaddr = 0;
 
 		mutex_lock(&msg->page_mutex);
 		if (msg->pages) {
