@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/version.h>
+#include <linux/backing-dev.h>
 
 /* debug levels; defined in super.h */
 
