@@ -67,7 +67,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
   int minrep = g_conf.osd_min_rep;
   int ndom = num_dom;
   if (!ndom)
-    MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
+    ndom = MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
   if (num_osd >= ndom*3 &&
       num_osd > 8) {
     int ritems[ndom];
