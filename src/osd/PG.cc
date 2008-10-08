@@ -1217,7 +1217,7 @@ void PG::update_stats()
     pg_stats.reported = info.last_update;
     pg_stats.state = state;
     pg_stats.num_bytes = stat_num_bytes;
-    pg_stats.num_blocks = stat_num_blocks;
+    pg_stats.num_kb = stat_num_kb;
   } else {
     pg_stats_valid = false;
   }

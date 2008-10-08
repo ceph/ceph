@@ -243,20 +243,20 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
  * aggregate stats for an osd
  */
 struct osd_stat_t {
-  int64_t num_blocks;
-  int64_t num_blocks_avail;
+  int64_t kb;
+  int64_t kb_avail;
   int64_t num_objects;
 
-  osd_stat_t() : num_blocks(0), num_blocks_avail(0), num_objects(0) {}
+  osd_stat_t() : kb(0), kb_avail(0), num_objects(0) {}
 
   void encode(bufferlist &bl) const {
-    ::encode(num_blocks, bl);
-    ::encode(num_blocks_avail, bl);
+    ::encode(kb, bl);
+    ::encode(kb_avail, bl);
     ::encode(num_objects, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(num_blocks, bl);
-    ::decode(num_blocks_avail, bl);
+    ::decode(kb, bl);
+    ::decode(kb_avail, bl);
     ::decode(num_objects, bl);
   }
 };
@@ -264,7 +264,7 @@ WRITE_CLASS_ENCODER(osd_stat_t)
 
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << (s.num_blocks-s.num_blocks_avail) << "/" << s.num_blocks << " used, " 
+  return out << "osd_stat(" << (s.kb-s.kb_avail) << "/" << s.kb << " KB used, " 
 	     << s.num_objects << " objects)";
 }
 
@@ -312,7 +312,7 @@ struct pg_stat_t {
   int32_t parent_split_bits;
   int32_t state;
   int64_t num_bytes;    // in bytes
-  int64_t num_blocks;   // in 4k blocks
+  int64_t num_kb;       // in KB
   int64_t num_objects;
   
   void encode(bufferlist &bl) const {
@@ -322,7 +322,7 @@ struct pg_stat_t {
     ::encode(parent_split_bits, bl);
     ::encode(state, bl);
     ::encode(num_bytes, bl);
-    ::encode(num_blocks, bl);
+    ::encode(num_kb, bl);
     ::encode(num_objects, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -332,10 +332,10 @@ struct pg_stat_t {
     ::decode(parent_split_bits, bl);
     ::decode(state, bl);
     ::decode(num_bytes, bl);
-    ::decode(num_blocks, bl);
+    ::decode(num_kb, bl);
     ::decode(num_objects, bl);
   }
-  pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_blocks(0), num_objects(0) {}
+  pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_kb(0), num_objects(0) {}
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 

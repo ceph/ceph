@@ -266,12 +266,15 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   }
       
   // osd stat
-  dout(10) << " got " << stats->osd_stat << dendl;
   pending_inc.osd_stat_updates[from] = stats->osd_stat;
   
   // apply to live map too (screw consistency)
-  if (pg_map.osd_stat.count(from))
+  if (pg_map.osd_stat.count(from)) {
+    dout(10) << " got " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
     pg_map.stat_osd_sub(pg_map.osd_stat[from]);
+  } else {
+    dout(10) << " got " << stats->osd_stat << " (first report)" << dendl;
+  }
   pg_map.osd_stat[from] = stats->osd_stat;
   pg_map.stat_osd_add(stats->osd_stat);
 
@@ -567,8 +570,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
 	   p != pg_map.osd_stat.end();
 	   p++)
-	ss << p->first << "\t" << p->second.num_blocks
-	   << "\t" << p->second.num_blocks_avail 
+	ss << p->first << "\t" << p->second.kb
+	   << "\t" << p->second.kb_avail 
 	   << "\t" << p->second.num_objects
 	   << std::endl;
       while (!ss.eof()) {

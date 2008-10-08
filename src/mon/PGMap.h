@@ -100,11 +100,11 @@ public:
   hash_map<int,int> num_pg_by_state;
   int64_t num_pg;
   int64_t total_pg_num_bytes;
-  int64_t total_pg_num_blocks;
+  int64_t total_pg_num_kb;
   int64_t total_pg_num_objects;
   int64_t num_osd;
-  int64_t total_osd_num_blocks;
-  int64_t total_osd_num_blocks_avail;
+  int64_t total_osd_kb;
+  int64_t total_osd_kb_avail;
   int64_t total_osd_num_objects;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
@@ -113,18 +113,18 @@ public:
     num_pg = 0;
     num_pg_by_state.clear();
     total_pg_num_bytes = 0;
-    total_pg_num_blocks = 0;
+    total_pg_num_kb = 0;
     total_pg_num_objects = 0;
     num_osd = 0;
-    total_osd_num_blocks = 0;
-    total_osd_num_blocks_avail = 0;
+    total_osd_kb = 0;
+    total_osd_kb_avail = 0;
     total_osd_num_objects = 0;
   }
   void stat_pg_add(pg_t pgid, pg_stat_t &s) {
     num_pg++;
     num_pg_by_state[s.state]++;
     total_pg_num_bytes += s.num_bytes;
-    total_pg_num_blocks += s.num_blocks;
+    total_pg_num_kb += s.num_kb;
     total_pg_num_objects += s.num_objects;
     if (s.state & PG_STATE_CREATING)
       creating_pgs.insert(pgid);
@@ -134,37 +134,37 @@ public:
     if (--num_pg_by_state[s.state] == 0)
       num_pg_by_state.erase(s.state);
     total_pg_num_bytes -= s.num_bytes;
-    total_pg_num_blocks -= s.num_blocks;
+    total_pg_num_kb -= s.num_kb;
     total_pg_num_objects -= s.num_objects;
     if (s.state & PG_STATE_CREATING)
       creating_pgs.erase(pgid);
   }
   void stat_osd_add(osd_stat_t &s) {
     num_osd++;
-    total_osd_num_blocks += s.num_blocks;
-    total_osd_num_blocks_avail += s.num_blocks_avail;
+    total_osd_kb += s.kb;
+    total_osd_kb_avail += s.kb_avail;
     total_osd_num_objects += s.num_objects;
   }
   void stat_osd_sub(osd_stat_t &s) {
     num_osd--;
-    total_osd_num_blocks -= s.num_blocks;
-    total_osd_num_blocks_avail -= s.num_blocks_avail;
+    total_osd_kb -= s.kb;
+    total_osd_kb_avail -= s.kb_avail;
     total_osd_num_objects -= s.num_objects;
   }
 
-  uint64_t total_kb() { return 4*total_osd_num_blocks; }
-  uint64_t total_avail_kb() { return 4*total_osd_num_blocks_avail; }
+  uint64_t total_kb() { return total_osd_kb; }
+  uint64_t total_avail_kb() { return total_osd_kb_avail; }
   uint64_t total_used_kb() { return total_kb() - total_avail_kb(); }
 
   PGMap() : version(0),
 	    last_osdmap_epoch(0), last_pg_scan(0),
 	    num_pg(0), 
 	    total_pg_num_bytes(0), 
-	    total_pg_num_blocks(0), 
+	    total_pg_num_kb(0), 
 	    total_pg_num_objects(0), 
 	    num_osd(0),
-	    total_osd_num_blocks(0),
-	    total_osd_num_blocks_avail(0),
+	    total_osd_kb(0),
+	    total_osd_kb_avail(0),
 	    total_osd_num_objects(0) {}
 
   void encode(bufferlist &bl) {
