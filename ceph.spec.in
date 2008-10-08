@@ -4,7 +4,7 @@
 # Get the kernel version that is running, but chop off the architecture part (e.g. 2.6.25.10-86.fc9.x86_64 goes to 2.6.25.10-86.fc9)
 %define knoarch %(uname -r | sed s/\.[^.]*$//g)
 %define mybuildroot %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-%define optflags ""
+%define optflags "-O2"
 
 Name:          ceph
 Version:       %{pkg_version}
@@ -96,6 +96,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
 %{_bindir}/csyn
+%{_bindir}/crun
 
 %files mds
 %{_bindir}/cmds
