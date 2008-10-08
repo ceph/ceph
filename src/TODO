@@ -8,6 +8,10 @@ v0.5
 
 big items
 - ENOSPC
+  - space reservation in ObjectStore, redeemed by Transactions?
+  - reserved as PG goes active; reservation canceled when pg goes inactive
+  - something similar during recovery
+  - ?
 - repair
 - enforceable quotas?
 - mds security enforcement
@@ -58,14 +62,6 @@ kernel client
     - outstanding mds, osd, mon requests?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
-
-kclient items to review
-- fill_trace locking
-- async trunc
-- async writeback
-- cache invalidation race, locking problems
-  - cap changes are serialized by i_lock, but (thorough) cache invalidation may block..
-
 
 kclient items to review
 - fill_trace locking

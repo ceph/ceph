@@ -28,13 +28,16 @@
 
 
 /*
- * protocol versions.  increment each time one of these changes.
+ * tcp connection banner.  include a protocol version. and adjust
+ * whenever the wire protocol changes.  try to keep this string the
+ * same length.
  */
-#define CEPH_BANNER "ceph\n2\n"  /* second line is a protocol version.
-				    adjust whenever the wire protocol
-				    changes. */
+#define CEPH_BANNER "ceph 003\n"  
 #define CEPH_BANNER_MAX_LEN 30
 
+/*
+ * subprotocol versions.
+ */
 #define CEPH_OSD_PROTOCOL   1
 #define CEPH_MDS_PROTOCOL   1
 #define CEPH_MON_PROTOCOL   1
@@ -404,7 +407,8 @@ struct ceph_msg_connect {
  */
 struct ceph_msg_header {
 	__le64 seq;    /* message seq# for this session */
-	__le32 type;   /* message type */
+	__le16 type;   /* message type */
+	__le16 priority;  /* priority.  higher value == higher priority */
 	__le32 front_len;
 	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
@@ -412,6 +416,11 @@ struct ceph_msg_header {
 	__le32 header_crc;
 	__le32 crc;      /* this goes at the end! */
 } __attribute__ ((packed));
+
+#define CEPH_MSG_PRIO_LOW     100
+#define CEPH_MSG_PRIO_DEFAULT 200
+#define CEPH_MSG_PRIO_HIGH    300
+#define CEPH_MSG_PRIO_HIGHEST 400
 
 struct ceph_msg_footer {
 	__le32 flags;

@@ -104,6 +104,7 @@ int main(int argc, const char **argv)
   
   // start monitor
   Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
+  m->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(whoami, &store, m, &monmap);
 
   rank.start();  // may daemonize

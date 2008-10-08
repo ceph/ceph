@@ -539,22 +539,16 @@ void Rank::EntityMessenger::dispatch_entry()
 {
   lock.Lock();
   while (!stop) {
-    if (!dispatch_queue.empty() || !prio_dispatch_queue.empty()) {
+    if (!dispatch_queue.empty()) {
       list<Message*> ls;
-      if (!prio_dispatch_queue.empty()) {
-	ls.swap(prio_dispatch_queue);
-	pqlen = 0;
-      } else {
-	if (0) {
-	  ls.swap(dispatch_queue);
-	  qlen = 0;
-	} else {
-	  // limit how much low-prio stuff we grab, to avoid starving high-prio messages!
-	  ls.push_back(dispatch_queue.front());
-	  dispatch_queue.pop_front();
-	  qlen--;
-	}
-      }
+
+      // take highest priority message off the queue
+      map<int, list<Message*> >::reverse_iterator p = dispatch_queue.rbegin();
+      ls.push_back(p->second.front());
+      p->second.pop_front();
+      if (p->second.empty())
+	dispatch_queue.erase(p->first);
+      qlen--;
 
       lock.Unlock();
       {
@@ -666,6 +660,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
   m->calc_data_crc();
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr
@@ -686,6 +681,7 @@ int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
   m->calc_data_crc();
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
           << " **> " << dest.name << " " << dest.addr
@@ -709,6 +705,7 @@ int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
   m->calc_data_crc();
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << "lazy " << m->get_source()
           << " --> " << dest.name << " " << dest.addr
@@ -963,9 +960,12 @@ int Rank::Pipe::accept()
   out_seq = existing->out_seq;
   if (!existing->sent.empty()) {
     out_seq = existing->sent.front()->get_seq()-1;
-    q.splice(q.begin(), existing->sent);
+    q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), existing->sent);
   }
-  q.splice(q.end(), existing->q);
+  for (map<int, list<Message*> >::iterator p = existing->q.begin();
+       p != existing->q.end();
+       p++)
+    q[p->first].splice(q[p->first].end(), p->second);
   
   existing->lock.Unlock();
 
@@ -1335,11 +1335,7 @@ void Rank::Pipe::was_session_reset()
     if (rank.local[i] && rank.local[i]->get_dispatcher())
       rank.local[i]->queue_remote_reset(peer_addr, last_dest_name);
 
-  // renumber outgoing seqs
   out_seq = 0;
-  for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
-    (*p)->set_seq(++out_seq);
-
   in_seq = 0;
   connect_seq = 0;
 }
@@ -1347,10 +1343,11 @@ void Rank::Pipe::was_session_reset()
 void Rank::Pipe::report_failures()
 {
   // report failures
-  q.splice(q.begin(), sent);
-  while (!q.empty()) {
-    Message *m = q.front();
-    q.pop_front();
+  q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), sent);
+  while (1) {
+    Message *m = _get_next_outgoing();
+    if (!m)
+      break;
 
     if (policy.drop_msg_callback) {
       unsigned srcrank = m->get_source_inst().addr.erank;
@@ -1636,9 +1633,8 @@ void Rank::Pipe::writer()
       }
 
       // grab outgoing message
-      if (!q.empty()) {
-	Message *m = q.front();
-	q.pop_front();
+      Message *m = _get_next_outgoing();
+      if (m) {
 	m->set_seq(++out_seq);
 	lock.Unlock();
 

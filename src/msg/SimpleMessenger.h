@@ -119,7 +119,7 @@ private:
     bool reader_running;
     bool writer_running;
 
-    list<Message*> q;
+    map<int, list<Message*> > q;  // priority queue
     list<Message*> sent;
     Cond cond;
     
@@ -201,9 +201,22 @@ private:
       lock.Unlock();
     }    
     void _send(Message *m) {
-      q.push_back(m);
+      q[m->get_priority()].push_back(m);
       last_dest_name = m->get_dest();
       cond.Signal();
+    }
+    Message *_get_next_outgoing() {
+      Message *m = 0;
+      while (!m && !q.empty()) {
+	map<int, list<Message*> >::reverse_iterator p = q.rbegin();
+	if (!p->second.empty()) {
+	  m = p->second.front();
+	  p->second.pop_front();
+	}
+	if (p->second.empty())
+	  q.erase(p->first);
+      }
+      return m;
     }
 
     void force_close() {
@@ -216,10 +229,9 @@ private:
   class EntityMessenger : public Messenger {
     Mutex lock;
     Cond cond;
-    list<Message*> dispatch_queue;
-    list<Message*> prio_dispatch_queue;
+    map<int, list<Message*> > dispatch_queue;
     bool stop;
-    int qlen, pqlen;
+    int qlen;
     int my_rank;
   public:
     bool need_addr;
@@ -244,13 +256,8 @@ private:
       m->set_recv_stamp(g_clock.now());
       
       lock.Lock();
-      if (m->get_source().is_mon()) {
-	prio_dispatch_queue.push_back(m);
-	pqlen++;
-      } else {
-	qlen++;
-	dispatch_queue.push_back(m);
-      }
+      qlen++;
+      dispatch_queue[m->get_priority()].push_back(m);
       cond.Signal();
       lock.Unlock();
     }
@@ -263,21 +270,21 @@ private:
     void queue_remote_reset(entity_addr_t a, entity_name_t n) {
       lock.Lock();
       remote_reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
-      dispatch_queue.push_back((Message*)BAD_REMOTE_RESET);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_REMOTE_RESET);
       cond.Signal();
       lock.Unlock();
     }
     void queue_reset(entity_addr_t a, entity_name_t n) {
       lock.Lock();
       reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
-      dispatch_queue.push_back((Message*)BAD_RESET);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
       cond.Signal();
       lock.Unlock();
     }
     void queue_failure(Message *m, entity_inst_t i) {
       lock.Lock();
       failed_q.push_back(pair<Message*,entity_inst_t>(m,i));
-      dispatch_queue.push_back((Message*)BAD_FAILED);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
       cond.Signal();
       lock.Unlock();
     }
@@ -286,7 +293,7 @@ private:
     EntityMessenger(entity_name_t name, int r) : 
       Messenger(name),
       stop(false),
-      qlen(0), pqlen(0),
+      qlen(0),
       my_rank(r),
       need_addr(false),
       dispatch_thread(this) { }
@@ -303,7 +310,7 @@ private:
       dispatch_thread.join();
     }
     
-    int get_dispatch_queue_len() { return qlen + pqlen; }
+    int get_dispatch_queue_len() { return qlen; }
 
     void reset_myname(entity_name_t m);
 
