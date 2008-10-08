@@ -1,12 +1,16 @@
 v0.5
-- ENOSPC
+- debug restart, cosd reformat, etc.
+- finish btrfs ioctl interface
 - efficient snap recovery
-- throttle osd recovery?
-- finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
-- make kclient use ->sendpage?
-- rip out io interruption?
+- throttle osd recovery
+- forced unmount?
+- ENOSPC?
+
+v0.6
+- cas?
 
 big items
+- finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
 - ENOSPC
   - space reservation in ObjectStore, redeemed by Transactions?
   - reserved as PG goes active; reservation canceled when pg goes inactive
