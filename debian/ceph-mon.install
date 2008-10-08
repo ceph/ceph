@@ -5,4 +5,5 @@ usr/bin/mkmonfs
 usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/csyn
+usr/bin/crun
 
