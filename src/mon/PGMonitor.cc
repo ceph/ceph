@@ -559,22 +559,28 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       ss << "version " << pg_map.version << std::endl;
       ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
       ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat" << std::endl;
+      ss << "pg_stat\tobjects\tkb\tbytes\treported\tstate" << std::endl;
       for (set<pg_t>::iterator p = pg_map.pg_set.begin();
 	   p != pg_map.pg_set.end();
 	   p++) {
 	pg_stat_t &st = pg_map.pg_stat[*p];
-	ss << *p << "\t" << pg_state_string(st.state)
-	   << "\t" << st.reported << std::endl;
+	ss << *p 
+	   << "\t" << st.num_objects
+	   << "\t" << st.num_kb
+	   << "\t" << st.num_bytes
+	   << "\t" << pg_state_string(st.state)
+	   << "\t" << st.reported
+	   << std::endl;
       }
-      ss << "osd_stat" << std::endl;
+      ss << "osdstat\tobject\tkbused\tkbavail\tkb" << std::endl;
       for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
 	   p != pg_map.osd_stat.end();
 	   p++)
-	ss << p->first << "\t" << p->second.kb
+	ss << p->first
+	   << "\t" << p->second.num_objects
 	   << "\t" << p->second.kb_used
 	   << "\t" << p->second.kb_avail 
-	   << "\t" << p->second.num_objects
+	   << "\t" << p->second.kb
 	   << std::endl;
       while (!ss.eof()) {
 	string s;
