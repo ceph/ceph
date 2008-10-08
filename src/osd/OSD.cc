@@ -957,8 +957,9 @@ void OSD::heartbeat()
        i++) {
     _share_map_outgoing( osdmap->get_inst(*i) );
     my_stat_on_peer[*i] = my_stat;
-    messenger->send_message(new MOSDPing(osdmap->get_epoch(), my_stat),
-			    osdmap->get_inst(*i));
+    Message *m = new MOSDPing(osdmap->get_epoch(), my_stat);
+    m->set_priority(CEPH_MSG_PRIO_HIGH);
+    messenger->send_message(m, osdmap->get_inst(*i));
   }
 
   // check for incoming heartbeats (move me elsewhere?)
