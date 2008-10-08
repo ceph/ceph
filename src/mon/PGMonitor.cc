@@ -45,13 +45,14 @@ struct kb_t {
 };
 ostream& operator<<(ostream& out, const kb_t& kb)
 {
-  if (kb.v > 10ull*1048ull*1024ull*1024ull*1024ULL)
+  __u64 bump_after = 100;
+  if (kb.v > bump_after << 40)
     return out << (kb.v >> 40) << " PB";    
-  if (kb.v > 10ull*1048ull*1024ull*1024ULL)
+  if (kb.v > bump_after << 30)
     return out << (kb.v >> 30) << " TB";    
-  if (kb.v > 10ull*1048ull*1024ULL)
+  if (kb.v > bump_after << 20)
     return out << (kb.v >> 20) << " GB";    
-  if (kb.v > 10ull*1048ULL)
+  if (kb.v > bump_after << 10)
     return out << (kb.v >> 10) << " MB";
   return out << kb.v << " KB";
 }
@@ -270,10 +271,10 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   
   // apply to live map too (screw consistency)
   if (pg_map.osd_stat.count(from)) {
-    dout(10) << " got " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
+    dout(10) << " got osd" << from << " " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
     pg_map.stat_osd_sub(pg_map.osd_stat[from]);
   } else {
-    dout(10) << " got " << stats->osd_stat << " (first report)" << dendl;
+    dout(10) << " got osd " << from << " " << stats->osd_stat << " (first report)" << dendl;
   }
   pg_map.osd_stat[from] = stats->osd_stat;
   pg_map.stat_osd_add(stats->osd_stat);
@@ -571,6 +572,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	   p != pg_map.osd_stat.end();
 	   p++)
 	ss << p->first << "\t" << p->second.kb
+	   << "\t" << p->second.kb_used
 	   << "\t" << p->second.kb_avail 
 	   << "\t" << p->second.num_objects
 	   << std::endl;

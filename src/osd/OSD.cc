@@ -1164,6 +1164,7 @@ void OSD::send_pg_stats()
     struct statfs stbuf;
     store->statfs(&stbuf);
     m->osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
+    m->osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
     m->osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
     m->osd_stat.num_objects = stbuf.f_files;
     dout(20) << " osd_stat " << m->osd_stat << dendl;

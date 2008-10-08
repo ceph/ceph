@@ -104,6 +104,7 @@ public:
   int64_t total_pg_num_objects;
   int64_t num_osd;
   int64_t total_osd_kb;
+  int64_t total_osd_kb_used;
   int64_t total_osd_kb_avail;
   int64_t total_osd_num_objects;
 
@@ -117,6 +118,7 @@ public:
     total_pg_num_objects = 0;
     num_osd = 0;
     total_osd_kb = 0;
+    total_osd_kb_used = 0;
     total_osd_kb_avail = 0;
     total_osd_num_objects = 0;
   }
@@ -142,19 +144,21 @@ public:
   void stat_osd_add(osd_stat_t &s) {
     num_osd++;
     total_osd_kb += s.kb;
+    total_osd_kb_used += s.kb_used;
     total_osd_kb_avail += s.kb_avail;
     total_osd_num_objects += s.num_objects;
   }
   void stat_osd_sub(osd_stat_t &s) {
     num_osd--;
     total_osd_kb -= s.kb;
+    total_osd_kb_used -= s.kb_used;
     total_osd_kb_avail -= s.kb_avail;
     total_osd_num_objects -= s.num_objects;
   }
 
   uint64_t total_kb() { return total_osd_kb; }
   uint64_t total_avail_kb() { return total_osd_kb_avail; }
-  uint64_t total_used_kb() { return total_kb() - total_avail_kb(); }
+  uint64_t total_used_kb() { return total_osd_kb_used; }
 
   PGMap() : version(0),
 	    last_osdmap_epoch(0), last_pg_scan(0),
@@ -164,6 +168,7 @@ public:
 	    total_pg_num_objects(0), 
 	    num_osd(0),
 	    total_osd_kb(0),
+	    total_osd_kb_used(0),
 	    total_osd_kb_avail(0),
 	    total_osd_num_objects(0) {}
 

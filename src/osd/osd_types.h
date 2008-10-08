@@ -244,18 +244,20 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
  */
 struct osd_stat_t {
   int64_t kb;
-  int64_t kb_avail;
+  int64_t kb_used, kb_avail;
   int64_t num_objects;
 
-  osd_stat_t() : kb(0), kb_avail(0), num_objects(0) {}
+  osd_stat_t() : kb(0), kb_used(0), kb_avail(0), num_objects(0) {}
 
   void encode(bufferlist &bl) const {
     ::encode(kb, bl);
+    ::encode(kb_used, bl);
     ::encode(kb_avail, bl);
     ::encode(num_objects, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(kb, bl);
+    ::decode(kb_used, bl);
     ::decode(kb_avail, bl);
     ::decode(num_objects, bl);
   }
@@ -264,7 +266,8 @@ WRITE_CLASS_ENCODER(osd_stat_t)
 
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << (s.kb-s.kb_avail) << "/" << s.kb << " KB used, " 
+  return out << "osd_stat(" << (s.kb_used) << "/" << s.kb << " KB used, " 
+	     << s.kb_avail << " avail, "
 	     << s.num_objects << " objects)";
 }
 
