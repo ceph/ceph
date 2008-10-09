@@ -1368,6 +1368,18 @@ int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
 {
   dout(20) << "_do_clone_range " << off << "~" << len << dendl;
   int r = 0;
+  
+  if (btrfs >= 2) {
+    btrfs_ioctl_clone_range_args a;
+    a.src_fd = from;
+    a.src_offset = off;
+    a.src_length = len;
+    a.dest_offset = off;
+    r = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
+    if (r >= 0) return r;
+    // hmm, fall back to a manual copy
+  }
+
   loff_t pos = off;
   loff_t end = off + len;
   int buflen = 4096*32;
