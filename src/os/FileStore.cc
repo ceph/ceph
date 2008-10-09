@@ -50,6 +50,15 @@
 # define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
 # define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
 # define BTRFS_IOC_CLONE        _IOW(BTRFS_IOCTL_MAGIC, 9, int)
+#define BTRFS_IOC_WAIT_FOR_SYNC _IO(BTRFS_IOCTL_MAGIC, 5)
+struct btrfs_ioctl_clone_range_args {
+  __s64 src_fd;
+  __u64 src_offset, src_length;
+  __u64 dest_offset;
+};
+
+#define BTRFS_IOC_CLONE_RANGE _IOW(BTRFS_IOCTL_MAGIC, 13, \
+				  struct btrfs_ioctl_clone_range_args)
 
 // alternate usertrans interface...
 #define BTRFS_IOC_USERTRANS_OPEN   1
@@ -413,16 +422,25 @@ int FileStore::mount()
 
   // is this btrfs?
   Transaction empty;
-  btrfs = true;
+  btrfs = 1;
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
   if (r == 0) {
     dout(0) << "mount detected btrfs" << dendl;
+
+    // do we have WAIT_FOR_SYNC and CLONE_RANGE?
+    r = ::ioctl(fd, BTRFS_IOC_CLONE_RANGE, 0);  // pass in a BAD POINTER ...
+    assert(r < 0);
+    if (errno == -EFAULT) {
+      dout(0) << "mount detected shiny new btrfs" << dendl;      
+      btrfs = 2;
+    } else {
+      dout(0) << "mount detected dingey old btrfs" << dendl;
+    }
   } else {
     dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
-    btrfs = false;
+    btrfs = 0;
   }
-
 
   // all okay.
   return 0;

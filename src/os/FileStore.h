@@ -39,7 +39,7 @@ class FileStore : public JournalingObjectStore {
   string basedir;
   __u64 fsid;
   
-  bool btrfs;
+  int btrfs;
   bool btrfs_trans_start_end;
   int lock_fd;
 
