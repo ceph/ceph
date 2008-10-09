@@ -1405,7 +1405,13 @@ void FileStore::sync_entry()
 
     commit_started();
 
-    ::fsync(fd);  // this should cause the fs's journal to commit.  (on btrfs too.)
+    if (btrfs) {
+      // do a full btrfs commit
+      ::ioctl(fd, BTRFS_IOC_SYNC);
+    } else {
+      // make the file system's journal to commit.
+      ::fsync(fd);  
+    }
     ::close(fd);
 
     commit_finish();
