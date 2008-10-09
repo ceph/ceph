@@ -4244,7 +4244,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
 	diri->dir->dentries.count(dname)) {
       Dentry *dn = diri->dir->dentries[dname];
       if ((dn->lease_mds >= 0 && dn->lease_ttl > now) ||
-	  diri->lease_mds >= 0 && diri->lease_ttl > now && (diri->lease_mask & CEPH_LOCK_ICONTENT)) {
+	  (diri->lease_mds >= 0 && diri->lease_ttl > now && (diri->lease_mask & CEPH_LOCK_ICONTENT))) {
 	touch_dn(dn);
 	in = dn->inode;
 	dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry|ICONTENT" << dendl;
