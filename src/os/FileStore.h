@@ -123,6 +123,7 @@ class FileStore : public JournalingObjectStore {
   int _rmattr(coll_t cid, pobject_t oid, const char *name);
 
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
+  int collection_getattr(coll_t c, const char *name, buffer::ptr& bp);
   int collection_getattr(coll_t c, const char *name, bufferlist& bl);
   int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
 
