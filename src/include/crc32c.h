@@ -1,6 +1,14 @@
 #ifndef __CEPH_CRC32C
 #define __CEPH_CRC32C
 
-__u32 crc32c_le(__u32 crc, unsigned char const *data, unsigned length);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+uint32_t crc32c_le(uint32_t crc, unsigned char const *data, unsigned length);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
