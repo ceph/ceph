@@ -39,30 +39,42 @@ using namespace __gnu_cxx;
 class Rank {
 public:
   struct Policy {
-    float retry_interval;               // (initial).  <0 => lossy channel, fail immediately.
-    float fail_interval;                // before we call ms_handle_failure  <0 => retry forever.
+    bool lossy_tx;                // 
+    float retry_interval;         // initial retry interval.  0 => fail immediately (lossy_tx=true)
+    float fail_interval;          // before we call ms_handle_failure (lossy_tx=true)
     bool drop_msg_callback;
     bool fail_callback;
     bool remote_reset_callback;
     Policy() : 
+      lossy_tx(false),
       retry_interval(g_conf.ms_retry_interval),
       fail_interval(g_conf.ms_fail_interval),
       drop_msg_callback(true),
       fail_callback(true),
       remote_reset_callback(true) {}
 
-    Policy(float r, float f, bool dmc, bool fc, bool rrc) :
+    Policy(bool tx, float r, float f, bool dmc, bool fc, bool rrc) :
+      lossy_tx(tx),
       retry_interval(r), fail_interval(f),
       drop_msg_callback(dmc),
       fail_callback(fc),
       remote_reset_callback(rrc) {}
 
-    bool is_lossy() {
-      return retry_interval < 0;
+    static Policy lossless() { return Policy(false,
+					     g_conf.ms_retry_interval, 0,
+					     true, true, true); }
+    static Policy lossy_fail_after(float f) {
+      return Policy(true, 
+		    MIN(g_conf.ms_retry_interval, f), f,
+		    true, true, true);
     }
+    static Policy lossy_fast_fail() { return Policy(true, -1, -1, true, true, true); }
+
+    /*
     static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
     static Policy fail_after(float f) { return Policy(MIN(g_conf.ms_retry_interval, f), f, true, true, true); }
     static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, -1, false, true, true); }
+    */
   };
 
 
@@ -107,6 +119,7 @@ private:
     entity_addr_t peer_addr;
     entity_name_t last_dest_name;
     Policy policy;
+    bool lossy_rx;
     
     Mutex lock;
     int state;
@@ -185,6 +198,8 @@ private:
     static const Pipe& Client(const entity_addr_t& pi);
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
+
+    __u32 get_out_seq() { return out_seq; }
 
     void register_pipe();
     void unregister_pipe();

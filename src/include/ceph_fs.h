@@ -399,7 +399,10 @@ struct ceph_entity_inst {
 struct ceph_msg_connect {
 	__le32 global_seq;
 	__le32 connect_seq;
-};
+	__u8  flags;
+} __attribute__ ((packed));
+
+#define CEPH_MSG_CONNECT_LOSSYTX  1  /* msg i send may be safely dropped */
 
 
 /*
@@ -467,6 +470,12 @@ struct ceph_msg_footer {
 #define CEPH_MSG_OSD_MAP          41
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43
+
+
+struct ceph_ping {
+	__le64 seq;
+	struct ceph_timespec stamp;
+};
 
 
 /* for statfs_reply.  units are KB, objects. */

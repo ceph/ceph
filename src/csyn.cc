@@ -59,10 +59,9 @@ int main(int argc, const char **argv, char *envp[])
   cout << "starting csyn at " << rank.get_rank_addr() << std::endl;
   rank.start();
 
-  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::retry_forever());
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::fast_fail());
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::retry_forever());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::retry_forever());
+  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;

@@ -71,10 +71,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   cout << "bound to " << rank.get_rank_addr() << ", mounting ceph" << std::endl;
   rank.start();
 
-  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::retry_forever());
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::fast_fail());
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::retry_forever());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::retry_forever());
+  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
 
   // start client
   Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &monmap);

@@ -448,6 +448,12 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr, bool lazy)
 	  pipe = 0;
 	} else {
 	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", have pipe." << dendl;
+
+	  // if this pipe was created by an incoming connection, but we haven't received
+	  // a message yet, then it won't have the policy set.
+	  if (pipe->get_out_seq() == 0)
+	    pipe->policy = policy_map[m->get_dest().type()];
+
 	  pipe->_send(m);
 	  pipe->lock.Unlock();
 	}
@@ -839,6 +845,9 @@ int Rank::Pipe::accept()
     
     rank.lock.Lock();
 
+    // note peer's flags
+    lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSYTX;
+
     // existing?
     if (rank.rank_pipe.count(peer_addr)) {
       existing = rank.rank_pipe[peer_addr];
@@ -859,7 +868,7 @@ int Rank::Pipe::accept()
 	continue;
       }
       
-      if (existing->policy.is_lossy()) {
+      if (existing->policy.lossy_tx) {
 	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
 	existing->was_session_reset();
 	goto replace;
@@ -978,10 +987,15 @@ int Rank::Pipe::accept()
   peer_global_seq = connect.global_seq;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
-  // send READY
+  // send READY + flags
   { 
     char tag = CEPH_MSGR_TAG_READY;
     if (tcp_write(sd, &tag, 1) < 0) 
+      goto fail;
+    __u8 flags = 0;
+    if (policy.lossy_tx)
+      flags |= CEPH_MSG_CONNECT_LOSSYTX;
+    if (tcp_write(sd, (const char *)&flags, 1) < 0) 
       goto fail;
   }
 
@@ -1198,12 +1212,21 @@ int Rank::Pipe::connect()
 	goto stop_locked;
       }
 
+      // read flags
+      __u8 flags;
+      if (tcp_read(newsd, (char *)&flags, 1) < 0) {
+	dout(2) << "connect read tag, seq, " << strerror(errno) << dendl;
+	goto fail;
+      }
+      lossy_rx = flags & CEPH_MSG_CONNECT_LOSSYTX;
+
+
       // hooray!
       state = STATE_OPEN;
       sd = newsd;
       connect_seq = cseq+1;
       first_fault = last_attempt = utime_t();
-      dout(20) << "connect success " << connect_seq << dendl;
+      dout(20) << "connect success " << connect_seq << ", lossy_rx = " << lossy_rx << dendl;
 
       if (!reader_running) {
 	dout(20) << "connect starting reader" << dendl;
@@ -1267,14 +1290,14 @@ void Rank::Pipe::fault(bool onconnect)
   sd = -1;
 
   // lossy channel?
-  if (policy.is_lossy()) {
+  if (policy.lossy_tx) {
     dout(10) << "fault on lossy channel, failing" << dendl;
     fail();
     return;
   }
 
   if (q.empty()) {
-    if (state == STATE_CLOSING || onconnect || policy.is_lossy()) {
+    if (state == STATE_CLOSING || onconnect) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
     } else {
@@ -1478,10 +1501,10 @@ void Rank::Pipe::reader()
       }
       in_seq++;
 
-      if (in_seq == 1) 
+      if (in_seq == 1)
 	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
 
-      if (!policy.is_lossy() && in_seq != m->get_seq()) {
+      if (!lossy_rx && in_seq != m->get_seq()) {
 	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq

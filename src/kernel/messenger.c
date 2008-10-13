@@ -581,8 +581,8 @@ static void ceph_fault(struct ceph_connection *con)
 	dout(10, "fault %p state %lu to peer %u.%u.%u.%u:%u\n",
 	     con, con->state, IPQUADPORT(con->peer_addr.ipaddr));
 
-	if (test_bit(LOSSY, &con->state)) {
-		dout(30, "fault on LOSSY channel\n");
+	if (test_bit(LOSSYTX, &con->state)) {
+		dout(30, "fault on LOSSYTX channel\n");
 		remove_connection(con->msgr, con);
 		return;
 	}
@@ -860,6 +860,9 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 {
 	con->out_connect.connect_seq = cpu_to_le32(con->connect_seq);
 	con->out_connect.global_seq = cpu_to_le32(con->global_seq);
+	con->out_connect.flags = 0;
+	if (test_bit(LOSSYTX, &con->state))
+		con->out_connect.flags = CEPH_MSG_CONNECT_LOSSYTX;
 
 	con->out_kvec[0].iov_base = CEPH_BANNER;
 	con->out_kvec[0].iov_len = strlen(CEPH_BANNER);
@@ -913,6 +916,23 @@ static void prepare_write_accept_reply(struct ceph_connection *con, char *ptag)
 	con->out_kvec[0].iov_len = 1;
 	con->out_kvec_left = 1;
 	con->out_kvec_bytes = 1;
+	con->out_kvec_cur = con->out_kvec;
+	con->out_more = 0;
+	set_bit(WRITE_PENDING, &con->state);
+}
+
+static void prepare_write_accept_ready(struct ceph_connection *con)
+{
+	con->out_connect.flags = 0;
+	if (test_bit(LOSSYTX, &con->state))
+		con->out_connect.flags = CEPH_MSG_CONNECT_LOSSYTX;
+
+	con->out_kvec[0].iov_base = &tag_ready;
+	con->out_kvec[0].iov_len = 1;
+	con->out_kvec[1].iov_base = &con->out_connect.flags;
+	con->out_kvec[1].iov_len = 1;
+	con->out_kvec_left = 2;
+	con->out_kvec_bytes = 2;
 	con->out_kvec_cur = con->out_kvec;
 	con->out_more = 0;
 	set_bit(WRITE_PENDING, &con->state);
@@ -1309,6 +1329,17 @@ static int read_connect_partial(struct ceph_connection *con)
 		con->in_base_pos += ret;
 	}
 
+	if (con->in_tag == CEPH_MSGR_TAG_READY) {
+		to++;
+		if (con->in_base_pos < to) {
+			ret = ceph_tcp_recvmsg(con->sock,
+					       (char *)&con->in_flags, 1);
+			if (ret <= 0)
+				goto out;
+			con->in_base_pos += ret;
+		}
+	}
+
 	if (con->in_tag == CEPH_MSGR_TAG_RETRY_SESSION) {
 		/* peer's connect_seq */
 		to += sizeof(con->in_connect.connect_seq);
@@ -1437,6 +1468,7 @@ static int process_connect(struct ceph_connection *con)
 	case CEPH_MSGR_TAG_READY:
 		dout(10, "process_connect got READY, now open\n");
 		clear_bit(CONNECTING, &con->state);
+		con->lossy_rx = con->in_flags & CEPH_MSG_CONNECT_LOSSYTX;
 		con->delay = 0;  /* reset backoffmemory */
 		break;
 	default:
@@ -1523,7 +1555,7 @@ static void __replace_connection(struct ceph_messenger *msgr,
 	put_connection(old); /* dec reference count */
 
 	clear_bit(ACCEPTING, &new->state);
-	prepare_write_accept_reply(new, &tag_ready);
+	prepare_write_accept_ready(new);
 }
 
 /*
@@ -1538,6 +1570,9 @@ static int process_accept(struct ceph_connection *con)
 
 	if (verify_hello(con) < 0)
 		return -1;
+
+	/* note flags */
+	con->lossy_rx = con->in_flags & CEPH_MSG_CONNECT_LOSSYTX;
 
 	/* connect */
 	/* do we have an existing connection for this peer? */
@@ -1557,8 +1592,8 @@ static int process_accept(struct ceph_connection *con)
 			prepare_write_accept_retry(con,
 					   &tag_retry_global,
 					   &con->out_connect.global_seq);
-		} else if (test_bit(LOSSY, &existing->state)) {
-			dout(20, "process_accept replacing existing LOSSY %p\n",
+		} else if (test_bit(LOSSYTX, &existing->state)) {
+			dout(20, "process_accept replacing existing LOSSYTX %p\n",
 			     existing);
 			reset_connection(existing);
 			__replace_connection(msgr, existing, con);
@@ -1615,7 +1650,7 @@ static int process_accept(struct ceph_connection *con)
 		__register_connection(msgr, con);
 		con->global_seq = peer_gseq;
 		con->connect_seq = peer_cseq + 1;
-		prepare_write_accept_reply(con, &tag_ready);
+		prepare_write_accept_ready(con);
 	}
 	spin_unlock(&msgr->con_lock);
 	radix_tree_preload_end();
@@ -1992,6 +2027,10 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		if (IS_ERR(newcon))
 			return PTR_ERR(con);
 
+		newcon->out_connect.flags = 0;
+		if (!timeout)
+			newcon->out_connect.flags |= CEPH_MSG_CONNECT_LOSSYTX;
+
 		ret = radix_tree_preload(GFP_NOFS);
 		if (ret < 0) {
 			derr(10, "ENOMEM in ceph_msg_send\n");
@@ -2024,8 +2063,8 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	}
 
 	if (!timeout) {
-		dout(10, "ceph_msg_send setting LOSSY\n");
-		set_bit(LOSSY, &con->state);
+		dout(10, "ceph_msg_send setting LOSSYTX\n");
+		set_bit(LOSSYTX, &con->state);
 	}
 
 	/* queue */
