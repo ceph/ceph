@@ -5036,9 +5036,6 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
             << dendl;
     messenger->send_message(m, monmap->get_inst(mon));
   }
-  else if (dest.is_osd()) {
-    objecter->ms_handle_failure(m, dest, inst);
-  } 
   else {
     dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
     delete m;
@@ -5077,4 +5074,7 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
     // or requests
     kick_requests(mds);
   }
+  else 
+    objecter->ms_handle_remote_reset(addr, last);
+
 }

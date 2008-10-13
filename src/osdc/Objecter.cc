@@ -161,6 +161,20 @@ Objecter::PG &Objecter::get_pg(pg_t pgid)
 }
 
 
+void Objecter::scan_pgs_for(set<pg_t>& pgs, int osd)
+{
+  dout(10) << "scan_pgs_for osd" << osd << dendl;
+
+  for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
+       i != pg_map.end();
+       i++) {
+    pg_t pgid = i->first;
+    PG& pg = i->second;
+    if (pg.acting.size() && pg.acting[0] == osd)
+      pgs.insert(pgid);
+  }
+}
+
 void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 {
   dout(10) << "scan_pgs" << dendl;
@@ -1038,34 +1052,27 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
 
 
-void Objecter::ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst)
+void Objecter::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t dest)
 {
-  if (dest.is_mon()) {
-    // try a new mon
-    int mon = monmap->pick_mon(true);
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", resending to mon" << mon 
-            << dendl;
-    messenger->send_message(m, monmap->get_inst(mon));
-  } 
-  else if (dest.is_osd()) {
+  entity_inst_t inst;
+  inst.name = dest;
+  inst.addr = addr;
+
+  if (dest.is_osd()) {
     if (!osdmap->have_inst(dest.num()) ||
 	(osdmap->get_inst(dest.num()) != inst)) {
-      dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-	      << ", dropping, already have newer osdmap" << dendl;
+      dout(0) << "ms_handle_remote_reset " << dest << " inst " << inst
+	      << ", ignoring, already have newer osdmap" << dendl;
     } else {
-      int mon = monmap->pick_mon();
-      dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-	      << ", dropping, reporting to mon" << mon 
-	      << dendl;
-      messenger->send_message(new MOSDFailure(monmap->fsid, inst, osdmap->get_epoch()), 
-			      monmap->get_inst(mon));
+      // kick requests
+      set<pg_t> changed_pgs;
+      dout(0) << "ms_handle_remote_reset " << dest << dendl;
+      scan_pgs_for(changed_pgs, dest.num());
+      if (!changed_pgs.empty()) {
+	dout(0) << "ms_handle_remote_reset " << dest << " kicking " << changed_pgs << dendl;
+	kick_requests(changed_pgs);
+      }
     }
-    delete m;
-  } else {
-    dout(0) << "ms_handle_failure " << dest << " inst " << inst 
-            << ", dropping" << dendl;
-    delete m;
   }
 }
 

@@ -1309,4 +1309,5 @@ void MDS::ms_handle_reset(const entity_addr_t& addr, entity_name_t last)
 void MDS::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+  objecter->ms_handle_remote_reset(addr, last);
 }
