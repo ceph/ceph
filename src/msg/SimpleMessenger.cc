@@ -448,6 +448,12 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr, bool lazy)
 	  pipe = 0;
 	} else {
 	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", have pipe." << dendl;
+
+	  // if this pipe was created by an incoming connection, but we haven't received
+	  // a message yet, then it won't have the policy set.
+	  if (pipe->get_out_seq() == 0)
+	    pipe->policy = policy_map[m->get_dest().type()];
+
 	  pipe->_send(m);
 	  pipe->lock.Unlock();
 	}
@@ -539,22 +545,16 @@ void Rank::EntityMessenger::dispatch_entry()
 {
   lock.Lock();
   while (!stop) {
-    if (!dispatch_queue.empty() || !prio_dispatch_queue.empty()) {
+    if (!dispatch_queue.empty()) {
       list<Message*> ls;
-      if (!prio_dispatch_queue.empty()) {
-	ls.swap(prio_dispatch_queue);
-	pqlen = 0;
-      } else {
-	if (0) {
-	  ls.swap(dispatch_queue);
-	  qlen = 0;
-	} else {
-	  // limit how much low-prio stuff we grab, to avoid starving high-prio messages!
-	  ls.push_back(dispatch_queue.front());
-	  dispatch_queue.pop_front();
-	  qlen--;
-	}
-      }
+
+      // take highest priority message off the queue
+      map<int, list<Message*> >::reverse_iterator p = dispatch_queue.rbegin();
+      ls.push_back(p->second.front());
+      p->second.pop_front();
+      if (p->second.empty())
+	dispatch_queue.erase(p->first);
+      qlen--;
 
       lock.Unlock();
       {
@@ -666,6 +666,7 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
   m->calc_data_crc();
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr
@@ -686,6 +687,7 @@ int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
   m->calc_data_crc();
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
           << " **> " << dest.name << " " << dest.addr
@@ -709,6 +711,7 @@ int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
   m->calc_data_crc();
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << "lazy " << m->get_source()
           << " --> " << dest.name << " " << dest.addr
@@ -842,6 +845,9 @@ int Rank::Pipe::accept()
     
     rank.lock.Lock();
 
+    // note peer's flags
+    lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSYTX;
+
     // existing?
     if (rank.rank_pipe.count(peer_addr)) {
       existing = rank.rank_pipe[peer_addr];
@@ -862,7 +868,7 @@ int Rank::Pipe::accept()
 	continue;
       }
       
-      if (existing->policy.is_lossy()) {
+      if (existing->policy.lossy_tx) {
 	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
 	existing->was_session_reset();
 	goto replace;
@@ -963,9 +969,12 @@ int Rank::Pipe::accept()
   out_seq = existing->out_seq;
   if (!existing->sent.empty()) {
     out_seq = existing->sent.front()->get_seq()-1;
-    q.splice(q.begin(), existing->sent);
+    q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), existing->sent);
   }
-  q.splice(q.end(), existing->q);
+  for (map<int, list<Message*> >::iterator p = existing->q.begin();
+       p != existing->q.end();
+       p++)
+    q[p->first].splice(q[p->first].end(), p->second);
   
   existing->lock.Unlock();
 
@@ -978,10 +987,15 @@ int Rank::Pipe::accept()
   peer_global_seq = connect.global_seq;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
-  // send READY
+  // send READY + flags
   { 
     char tag = CEPH_MSGR_TAG_READY;
     if (tcp_write(sd, &tag, 1) < 0) 
+      goto fail;
+    __u8 flags = 0;
+    if (policy.lossy_tx)
+      flags |= CEPH_MSG_CONNECT_LOSSYTX;
+    if (tcp_write(sd, (const char *)&flags, 1) < 0) 
       goto fail;
   }
 
@@ -1198,12 +1212,21 @@ int Rank::Pipe::connect()
 	goto stop_locked;
       }
 
+      // read flags
+      __u8 flags;
+      if (tcp_read(newsd, (char *)&flags, 1) < 0) {
+	dout(2) << "connect read tag, seq, " << strerror(errno) << dendl;
+	goto fail;
+      }
+      lossy_rx = flags & CEPH_MSG_CONNECT_LOSSYTX;
+
+
       // hooray!
       state = STATE_OPEN;
       sd = newsd;
       connect_seq = cseq+1;
       first_fault = last_attempt = utime_t();
-      dout(20) << "connect success " << connect_seq << dendl;
+      dout(20) << "connect success " << connect_seq << ", lossy_rx = " << lossy_rx << dendl;
 
       if (!reader_running) {
 	dout(20) << "connect starting reader" << dendl;
@@ -1267,14 +1290,14 @@ void Rank::Pipe::fault(bool onconnect)
   sd = -1;
 
   // lossy channel?
-  if (policy.is_lossy()) {
+  if (policy.lossy_tx) {
     dout(10) << "fault on lossy channel, failing" << dendl;
     fail();
     return;
   }
 
   if (q.empty()) {
-    if (state == STATE_CLOSING || onconnect || policy.is_lossy()) {
+    if (state == STATE_CLOSING || onconnect) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
     } else {
@@ -1335,11 +1358,7 @@ void Rank::Pipe::was_session_reset()
     if (rank.local[i] && rank.local[i]->get_dispatcher())
       rank.local[i]->queue_remote_reset(peer_addr, last_dest_name);
 
-  // renumber outgoing seqs
   out_seq = 0;
-  for (list<Message*>::iterator p = q.begin(); p != q.end(); p++)
-    (*p)->set_seq(++out_seq);
-
   in_seq = 0;
   connect_seq = 0;
 }
@@ -1347,10 +1366,11 @@ void Rank::Pipe::was_session_reset()
 void Rank::Pipe::report_failures()
 {
   // report failures
-  q.splice(q.begin(), sent);
-  while (!q.empty()) {
-    Message *m = q.front();
-    q.pop_front();
+  q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), sent);
+  while (1) {
+    Message *m = _get_next_outgoing();
+    if (!m)
+      break;
 
     if (policy.drop_msg_callback) {
       unsigned srcrank = m->get_source_inst().addr.erank;
@@ -1481,10 +1501,10 @@ void Rank::Pipe::reader()
       }
       in_seq++;
 
-      if (in_seq == 1) 
+      if (in_seq == 1)
 	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
 
-      if (!policy.is_lossy() && in_seq != m->get_seq()) {
+      if (!lossy_rx && in_seq != m->get_seq()) {
 	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
@@ -1636,9 +1656,8 @@ void Rank::Pipe::writer()
       }
 
       // grab outgoing message
-      if (!q.empty()) {
-	Message *m = q.front();
-	q.pop_front();
+      Message *m = _get_next_outgoing();
+      if (m) {
 	m->set_seq(++out_seq);
 	lock.Unlock();
 

@@ -119,8 +119,15 @@ int main(int argc, const char **argv)
 
   rank.start();
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::fast_fail());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::retry_forever());
+  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
+
+  // make a _reasonable_ effort to send acks/replies to requests, but
+  // don't get carried away, as the sender may go away and we won't
+  // ever hear about it.
+  // FIXME: not until objecter/osd_client have a retry of some sort...
+  //rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossy_fail_after(10.0));
+  //rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossy_fail_after(10.0));
 
   // start osd
   Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));

@@ -4,5 +4,5 @@ killall cmon cmds
 
 for host in `cd dev/hosts ; ls`
 do
- ssh root@cosd$host killall cosd \; cd $HOME/ceph/src \; for f in devm/\* \; do umount \$f \; rmmod btrfs \; done
+ ssh root@cosd$host killall cosd \; cd $HOME/ceph/src/dev/hosts/$host \; for f in \* \; do umount $HOME/ceph/src/devm/osd\$f \; done \; rmmod btrfs
 done

@@ -110,6 +110,7 @@ void MDSMonitor::create_initial()
   print_map(pending_mdsmap);
 }
 
+
 bool MDSMonitor::update_from_paxos()
 {
   assert(paxos->is_active());
@@ -135,21 +136,6 @@ bool MDSMonitor::update_from_paxos()
   if (mon->is_leader()) {
     // bcast map to mds
     bcast_latest_mds();
-
-    // make sure last_beacon is populated
-    for (map<int32_t,entity_inst_t>::iterator p = mdsmap.mds_inst.begin();
-	 p != mdsmap.mds_inst.end();
-	 ++p) 
-      if (last_beacon.count(p->second.addr) == 0 &&
-	  mdsmap.get_state(p->first) != MDSMap::STATE_DNE &&
-	  mdsmap.get_state(p->first) != MDSMap::STATE_STOPPED &&
-	  mdsmap.get_state(p->first) != MDSMap::STATE_FAILED)
-	last_beacon[p->second.addr] = g_clock.now();
-    for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
-	 p != mdsmap.standby.end();
-	 ++p )
-      if (last_beacon.count(p->first) == 0)
-	last_beacon[p->first] = g_clock.now();
   }
 
   send_to_waiting();
@@ -642,7 +628,6 @@ void MDSMonitor::send_latest(entity_inst_t dest)
     waiting_for_map.push_back(dest);
 }
 
-
 void MDSMonitor::tick()
 {
   // make sure mds's are still alive
@@ -691,7 +676,22 @@ void MDSMonitor::tick()
   // check beacon timestamps
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.mds_beacon_grace;
-    
+
+  // make sure last_beacon is populated
+  for (map<int32_t,entity_inst_t>::iterator p = mdsmap.mds_inst.begin();
+       p != mdsmap.mds_inst.end();
+       ++p) 
+    if (last_beacon.count(p->second.addr) == 0 &&
+	mdsmap.get_state(p->first) != MDSMap::STATE_DNE &&
+	mdsmap.get_state(p->first) != MDSMap::STATE_STOPPED &&
+	mdsmap.get_state(p->first) != MDSMap::STATE_FAILED)
+      last_beacon[p->second.addr] = g_clock.now();
+  for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
+       p != mdsmap.standby.end();
+       ++p )
+    if (last_beacon.count(p->first) == 0)
+      last_beacon[p->first] = g_clock.now();
+
   map<entity_addr_t, utime_t>::iterator p = last_beacon.begin();
   while (p != last_beacon.end()) {
     entity_addr_t addr = p->first;

@@ -28,6 +28,7 @@ protected:
   map<version_t, vector<Context*> > commit_waiters;
   RWLock op_lock;
   Mutex journal_lock;
+  Mutex lock;
 
   void journal_start() {
     finisher.start();
@@ -58,12 +59,16 @@ protected:
     op_lock.get_write();
   }
   void commit_started() {
+    Mutex::Locker l(lock);
+
     // allow new ops
     // (underlying fs should now be committing all prior ops)
     committing_op_seq = op_seq;
     op_lock.put_write();
   }
   void commit_finish() {
+    Mutex::Locker l(lock);
+
     if (journal)
       journal->committed_thru(committing_op_seq);
 
@@ -76,11 +81,15 @@ protected:
   }
 
   void queue_commit_waiter(Context *oncommit) {
+    Mutex::Locker l(lock);
+
     if (oncommit) 
       commit_waiters[op_seq].push_back(oncommit);
   }
 
   void journal_transaction(bufferlist& tbl, Context *onsafe) {
+    Mutex::Locker l(lock);
+
     ++op_seq;
     if (journal && journal->is_writeable()) {
       journal->submit_entry(op_seq, tbl, onsafe);

@@ -37,9 +37,10 @@ class Messenger {
 
 protected:
   entity_inst_t _myinst;
+  int default_send_priority;
 
  public:
-  Messenger(entity_name_t w) : dispatcher(0) {
+  Messenger(entity_name_t w) : dispatcher(0), default_send_priority(CEPH_MSG_PRIO_DEFAULT) {
     _myinst.name = w;
   }
   virtual ~Messenger() { }
@@ -52,6 +53,9 @@ protected:
   void _set_myname(entity_name_t m) { _myinst.name = m; }
   void _set_myaddr(entity_addr_t a) { _myinst.addr = a; }
   virtual void reset_myname(entity_name_t m) = 0;
+
+  void set_default_send_priority(int p) { default_send_priority = p; }
+  int get_default_send_priority() { return default_send_priority; }
   
   // hrmpf.
   virtual int get_dispatch_queue_len() { return 0; };

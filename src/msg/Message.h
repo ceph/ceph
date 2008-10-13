@@ -129,6 +129,7 @@ public:
   Message() { };
   Message(int t) {
     header.type = t;
+    header.priority = 0;  // undef
     header.data_off = 0;
   }
   virtual ~Message() { }
@@ -169,6 +170,9 @@ public:
 
   unsigned get_seq() { return header.seq; }
   void set_seq(unsigned s) { header.seq = s; }
+
+  unsigned get_priority() { return header.priority; }
+  void set_priority(__s16 p) { header.priority = p; }
 
   // source/dest
   entity_inst_t get_dest_inst() { return entity_inst_t(header.dst); }

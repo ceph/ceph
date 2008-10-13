@@ -39,30 +39,42 @@ using namespace __gnu_cxx;
 class Rank {
 public:
   struct Policy {
-    float retry_interval;               // (initial).  <0 => lossy channel, fail immediately.
-    float fail_interval;                // before we call ms_handle_failure  <0 => retry forever.
+    bool lossy_tx;                // 
+    float retry_interval;         // initial retry interval.  0 => fail immediately (lossy_tx=true)
+    float fail_interval;          // before we call ms_handle_failure (lossy_tx=true)
     bool drop_msg_callback;
     bool fail_callback;
     bool remote_reset_callback;
     Policy() : 
+      lossy_tx(false),
       retry_interval(g_conf.ms_retry_interval),
       fail_interval(g_conf.ms_fail_interval),
       drop_msg_callback(true),
       fail_callback(true),
       remote_reset_callback(true) {}
 
-    Policy(float r, float f, bool dmc, bool fc, bool rrc) :
+    Policy(bool tx, float r, float f, bool dmc, bool fc, bool rrc) :
+      lossy_tx(tx),
       retry_interval(r), fail_interval(f),
       drop_msg_callback(dmc),
       fail_callback(fc),
       remote_reset_callback(rrc) {}
 
-    bool is_lossy() {
-      return retry_interval < 0;
+    static Policy lossless() { return Policy(false,
+					     g_conf.ms_retry_interval, 0,
+					     true, true, true); }
+    static Policy lossy_fail_after(float f) {
+      return Policy(true, 
+		    MIN(g_conf.ms_retry_interval, f), f,
+		    true, true, true);
     }
+    static Policy lossy_fast_fail() { return Policy(true, -1, -1, true, true, true); }
+
+    /*
     static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
     static Policy fail_after(float f) { return Policy(MIN(g_conf.ms_retry_interval, f), f, true, true, true); }
     static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, -1, false, true, true); }
+    */
   };
 
 
@@ -107,6 +119,7 @@ private:
     entity_addr_t peer_addr;
     entity_name_t last_dest_name;
     Policy policy;
+    bool lossy_rx;
     
     Mutex lock;
     int state;
@@ -119,7 +132,7 @@ private:
     bool reader_running;
     bool writer_running;
 
-    list<Message*> q;
+    map<int, list<Message*> > q;  // priority queue
     list<Message*> sent;
     Cond cond;
     
@@ -186,6 +199,8 @@ private:
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
+    __u32 get_out_seq() { return out_seq; }
+
     void register_pipe();
     void unregister_pipe();
     void dirty_close();
@@ -201,9 +216,22 @@ private:
       lock.Unlock();
     }    
     void _send(Message *m) {
-      q.push_back(m);
+      q[m->get_priority()].push_back(m);
       last_dest_name = m->get_dest();
       cond.Signal();
+    }
+    Message *_get_next_outgoing() {
+      Message *m = 0;
+      while (!m && !q.empty()) {
+	map<int, list<Message*> >::reverse_iterator p = q.rbegin();
+	if (!p->second.empty()) {
+	  m = p->second.front();
+	  p->second.pop_front();
+	}
+	if (p->second.empty())
+	  q.erase(p->first);
+      }
+      return m;
     }
 
     void force_close() {
@@ -216,10 +244,9 @@ private:
   class EntityMessenger : public Messenger {
     Mutex lock;
     Cond cond;
-    list<Message*> dispatch_queue;
-    list<Message*> prio_dispatch_queue;
+    map<int, list<Message*> > dispatch_queue;
     bool stop;
-    int qlen, pqlen;
+    int qlen;
     int my_rank;
   public:
     bool need_addr;
@@ -244,13 +271,8 @@ private:
       m->set_recv_stamp(g_clock.now());
       
       lock.Lock();
-      if (m->get_source().is_mon()) {
-	prio_dispatch_queue.push_back(m);
-	pqlen++;
-      } else {
-	qlen++;
-	dispatch_queue.push_back(m);
-      }
+      qlen++;
+      dispatch_queue[m->get_priority()].push_back(m);
       cond.Signal();
       lock.Unlock();
     }
@@ -263,21 +285,21 @@ private:
     void queue_remote_reset(entity_addr_t a, entity_name_t n) {
       lock.Lock();
       remote_reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
-      dispatch_queue.push_back((Message*)BAD_REMOTE_RESET);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_REMOTE_RESET);
       cond.Signal();
       lock.Unlock();
     }
     void queue_reset(entity_addr_t a, entity_name_t n) {
       lock.Lock();
       reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
-      dispatch_queue.push_back((Message*)BAD_RESET);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
       cond.Signal();
       lock.Unlock();
     }
     void queue_failure(Message *m, entity_inst_t i) {
       lock.Lock();
       failed_q.push_back(pair<Message*,entity_inst_t>(m,i));
-      dispatch_queue.push_back((Message*)BAD_FAILED);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
       cond.Signal();
       lock.Unlock();
     }
@@ -286,7 +308,7 @@ private:
     EntityMessenger(entity_name_t name, int r) : 
       Messenger(name),
       stop(false),
-      qlen(0), pqlen(0),
+      qlen(0),
       my_rank(r),
       need_addr(false),
       dispatch_thread(this) { }
@@ -303,7 +325,7 @@ private:
       dispatch_thread.join();
     }
     
-    int get_dispatch_queue_len() { return qlen + pqlen; }
+    int get_dispatch_queue_len() { return qlen; }
 
     void reset_myname(entity_name_t m);
 

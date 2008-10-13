@@ -45,13 +45,14 @@ struct kb_t {
 };
 ostream& operator<<(ostream& out, const kb_t& kb)
 {
-  if (kb.v > 10ull*1048ull*1024ull*1024ull*1024ULL)
+  __u64 bump_after = 100;
+  if (kb.v > bump_after << 40)
     return out << (kb.v >> 40) << " PB";    
-  if (kb.v > 10ull*1048ull*1024ull*1024ULL)
+  if (kb.v > bump_after << 30)
     return out << (kb.v >> 30) << " TB";    
-  if (kb.v > 10ull*1048ull*1024ULL)
+  if (kb.v > bump_after << 20)
     return out << (kb.v >> 20) << " GB";    
-  if (kb.v > 10ull*1048ULL)
+  if (kb.v > bump_after << 10)
     return out << (kb.v >> 10) << " MB";
   return out << kb.v << " KB";
 }
@@ -266,12 +267,15 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   }
       
   // osd stat
-  dout(10) << " got " << stats->osd_stat << dendl;
   pending_inc.osd_stat_updates[from] = stats->osd_stat;
   
   // apply to live map too (screw consistency)
-  if (pg_map.osd_stat.count(from))
+  if (pg_map.osd_stat.count(from)) {
+    dout(10) << " got osd" << from << " " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
     pg_map.stat_osd_sub(pg_map.osd_stat[from]);
+  } else {
+    dout(10) << " got osd " << from << " " << stats->osd_stat << " (first report)" << dendl;
+  }
   pg_map.osd_stat[from] = stats->osd_stat;
   pg_map.stat_osd_add(stats->osd_stat);
 
@@ -555,21 +559,28 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       ss << "version " << pg_map.version << std::endl;
       ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
       ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat" << std::endl;
+      ss << "pg_stat\tobjects\tkb\tbytes\treported\tstate" << std::endl;
       for (set<pg_t>::iterator p = pg_map.pg_set.begin();
 	   p != pg_map.pg_set.end();
 	   p++) {
 	pg_stat_t &st = pg_map.pg_stat[*p];
-	ss << *p << "\t" << pg_state_string(st.state)
-	   << "\t" << st.reported << std::endl;
+	ss << *p 
+	   << "\t" << st.num_objects
+	   << "\t" << st.num_kb
+	   << "\t" << st.num_bytes
+	   << "\t" << pg_state_string(st.state)
+	   << "\t" << st.reported
+	   << std::endl;
       }
-      ss << "osd_stat" << std::endl;
+      ss << "osdstat\tobject\tkbused\tkbavail\tkb" << std::endl;
       for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
 	   p != pg_map.osd_stat.end();
 	   p++)
-	ss << p->first << "\t" << p->second.num_blocks
-	   << "\t" << p->second.num_blocks_avail 
+	ss << p->first
 	   << "\t" << p->second.num_objects
+	   << "\t" << p->second.kb_used
+	   << "\t" << p->second.kb_avail 
+	   << "\t" << p->second.kb
 	   << std::endl;
       while (!ss.eof()) {
 	string s;

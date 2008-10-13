@@ -77,18 +77,19 @@ struct ceph_msg_pos {
 #define MAX_DELAY_INTERVAL	(5 * 60 * HZ)
 
 /* ceph_connection state bit flags */
-#define LOSSY           0 /* close channel on errors */
-#define CONNECTING	1
-#define ACCEPTING	2
-#define WRITE_PENDING	3  /* we have data to send */
-#define QUEUED          4  /* there is work to be done */
-#define BUSY            5  /* work is being done */
-#define BACKOFF         6  /* backing off; will retry */
-#define STANDBY		7  /* standby, when socket state close, no messages */
-#define WAIT		8  /* wait for peer to connect */
-#define CLOSED		9  /* we've closed the connection */
-#define SOCK_CLOSED	10 /* socket state changed to closed */
-#define REGISTERED      11
+#define LOSSYTX         0 /* close channel on errors */
+#define LOSSYRX         1 /* close channel on errors */
+#define CONNECTING	2
+#define ACCEPTING	3
+#define WRITE_PENDING	4  /* we have data to send */
+#define QUEUED          5  /* there is work to be done */
+#define BUSY            6  /* work is being done */
+#define BACKOFF         7  /* backing off; will retry */
+#define STANDBY		8  /* standby, when socket state close, no messages */
+#define WAIT		9  /* wait for peer to connect */
+#define CLOSED		10  /* we've closed the connection */
+#define SOCK_CLOSED	11 /* socket state changed to closed */
+#define REGISTERED      12
 
 
 struct ceph_connection {
@@ -105,28 +106,34 @@ struct ceph_connection {
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
 	__u32 connect_seq, global_seq;
-	char in_banner[CEPH_BANNER_MAX_LEN];
-	struct ceph_msg_connect out_connect, in_connect;
-	struct ceph_entity_addr actual_peer_addr;
-	__u32 out_seq;		     /* last message queued for send */
-	__u32 in_seq, in_seq_acked;  /* last message received, acked */
+	bool lossy_rx;                     /* true if sender is lossy */
 
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending/sent but unacked */
 
+	__u32 out_seq;		     /* last message queued for send */
+	__u32 in_seq, in_seq_acked;  /* last message received, acked */
+
+	/* negotiation temps */
+	char in_banner[CEPH_BANNER_MAX_LEN];
+	struct ceph_msg_connect out_connect, in_connect;
+	struct ceph_entity_addr actual_peer_addr;
+
+	/* out */
+	struct ceph_msg *out_msg;
+	struct ceph_msg_pos out_msg_pos;
 	__le32 out32;
 	struct kvec out_kvec[6],
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left */
 	int out_kvec_bytes;  /* bytes left */
 	int out_more;        /* there is more data after this kvec */
-	struct ceph_msg *out_msg;
-	struct ceph_msg_pos out_msg_pos;
 
 	/* partially read message contents */
 	char in_tag;
+	u8 in_flags;
 	int in_base_pos;   /* for ack seq, or msg headers, or handshake */
 	__u32 in_partial_ack;
 	struct ceph_msg *in_msg;

@@ -7,11 +7,20 @@ Standards-Version: 3.7.2
 
 Package: ceph
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-mon, ceph-osd, ceph-mds, ceph-fuse, ceph-source
+Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-mon, ceph-osd, ceph-mds, ceph-fuse, ceph-source, ceph-common
 Recommends: fuse-utils
 Description: Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
+
+Package: ceph-common
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Ceph distributed file system
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.
+ .
+ This is the common package with shared dependencies.
 
 Package: ceph-mon
 Architecture: any

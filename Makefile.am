@@ -1,3 +1,3 @@
 AUTOMAKE_OPTIONS = gnu
-EXTRA_DIST = web autogen.sh
+EXTRA_DIST = debian autogen.sh
 SUBDIRS = src

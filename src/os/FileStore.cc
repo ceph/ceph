@@ -50,6 +50,15 @@
 # define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
 # define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
 # define BTRFS_IOC_CLONE        _IOW(BTRFS_IOCTL_MAGIC, 9, int)
+#define BTRFS_IOC_WAIT_FOR_SYNC _IO(BTRFS_IOCTL_MAGIC, 5)
+struct btrfs_ioctl_clone_range_args {
+  __s64 src_fd;
+  __u64 src_offset, src_length;
+  __u64 dest_offset;
+};
+
+#define BTRFS_IOC_CLONE_RANGE _IOW(BTRFS_IOCTL_MAGIC, 13, \
+				  struct btrfs_ioctl_clone_range_args)
 
 // alternate usertrans interface...
 #define BTRFS_IOC_USERTRANS_OPEN   1
@@ -413,16 +422,25 @@ int FileStore::mount()
 
   // is this btrfs?
   Transaction empty;
-  btrfs = true;
+  btrfs = 1;
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
   if (r == 0) {
     dout(0) << "mount detected btrfs" << dendl;
+
+    // do we have WAIT_FOR_SYNC and CLONE_RANGE?
+    r = ::ioctl(fd, BTRFS_IOC_CLONE_RANGE, 0);  // pass in a BAD POINTER ...
+    assert(r < 0);
+    if (errno == -EFAULT) {
+      dout(0) << "mount detected shiny new btrfs" << dendl;      
+      btrfs = 2;
+    } else {
+      dout(0) << "mount detected dingey old btrfs" << dendl;
+    }
   } else {
     dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
-    btrfs = false;
+    btrfs = 0;
   }
-
 
   // all okay.
   return 0;
@@ -1421,7 +1439,13 @@ void FileStore::sync_entry()
 
     commit_started();
 
-    ::fsync(fd);  // this should cause the fs's journal to commit.  (on btrfs too.)
+    if (btrfs) {
+      // do a full btrfs commit
+      ::ioctl(fd, BTRFS_IOC_SYNC);
+    } else {
+      // make the file system's journal to commit.
+      ::fsync(fd);  
+    }
     ::close(fd);
 
     commit_finish();
@@ -1588,7 +1612,9 @@ int FileStore::collection_getattr(coll_t c, const char *name,
   else {
     char fn[200];
     get_cdir(c, fn);
-    r = do_getxattr(fn, name, value, size);   
+    char n[200];
+    get_attrname(name, n);
+    r = do_getxattr(fn, n, value, size);   
   }
   return r < 0 ? -errno:r;
 }
@@ -1599,13 +1625,24 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
   if (fake_attrs) 
     r = attrs.collection_getattr(c, name, bl);
   else {
-    char fn[200];
-    get_cdir(c, fn);
-    r = do_getxattr(fn, name, NULL, 0);
-    if (r > 0) {
-      bl.push_back(buffer::create(r));
-      r = do_getxattr(fn, name, bl.c_str(), r);
-    }
+    buffer::ptr bp;
+    r = collection_getattr(c, name, bp);
+    bl.push_back(bp);
+  }
+  return r;
+}
+
+int FileStore::collection_getattr(coll_t c, const char *name, buffer::ptr& bp)
+{
+  int r;
+  char fn[200];
+  get_cdir(c, fn);
+  char n[200];
+  get_attrname(name, n);
+  r = do_getxattr(fn, n, NULL, 0);
+  if (r > 0) {
+    bp = buffer::create(r);
+    r = do_getxattr(fn, n, bp.c_str(), r);
   }
   return r < 0 ? -errno:r;
 }
@@ -1619,19 +1656,14 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     char fn[100];
     get_cdir(cid, fn);
     
-    char val[1000];
     char names[1000];
     int num = do_listxattr(fn, names, 1000);
     
     char *name = names;
     for (int i=0; i<num; i++) {
       dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-      int l = do_getxattr(fn, name, val, 1000);
-      dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
-      if (parse_attrname(&name)) {
-	aset[name] = buffer::create(l);
-	memcpy(aset[name].c_str(), val, l);
-      }
+      if (parse_attrname(&name))
+	collection_getattr(cid, name, aset[name]);
       name += strlen(name) + 1;
     }
     r = 0;
@@ -1649,7 +1681,9 @@ int FileStore::_collection_setattr(coll_t c, const char *name,
   else {
     char fn[200];
     get_cdir(c, fn);
-    r = do_setxattr(fn, name, value, size);
+    char n[200];
+    get_attrname(name, n);
+    r = do_setxattr(fn, n, value, size);
   }
   return r < 0 ? -errno:r;
 }
@@ -1662,7 +1696,9 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
   else {
     char fn[200];
     get_cdir(c, fn);
-    r = do_removexattr(fn, name);
+    char n[200];
+    get_attrname(name, n);
+    r = do_removexattr(fn, n);
   }
   return r < 0 ? -errno:r;
 }
@@ -1680,7 +1716,9 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
     for (map<string,bufferptr>::iterator p = aset.begin();
 	 p != aset.end();
        ++p) {
-      r = do_setxattr(fn, p->first.c_str(), p->second.c_str(), p->second.length());
+      char n[200];
+      get_attrname(p->first.c_str(), n);
+      r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
       if (r < 0) break;
     }
   }
@@ -1704,10 +1742,6 @@ int FileStore::list_collections(vector<coll_t>& ls)
 
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
-    // parse
-    if (strlen(de->d_name) != 16)
-      continue;
-    errno = 0;
     coll_t c;
     if (parse_coll(de->d_name, c))
       ls.push_back(c);
