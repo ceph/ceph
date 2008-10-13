@@ -19,6 +19,7 @@
 #include "msg/Messenger.h"
 #include "msg/Message.h"
 
+#include "messages/MPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
@@ -320,6 +321,11 @@ void Objecter::tick()
       dout(10) << "tick pg " << i->first << " is laggy: " << i->second.active_tids << dendl;
       maybe_request_map();
       //break;
+
+      // send a ping to this osd, to ensure we detect any session resets
+      // (osd reply message policy is lossy)
+      if (i->second.acting.size())
+	messenger->send_message(new MPing, osdmap->get_inst(i->second.acting[0]));
     }
   }
 
