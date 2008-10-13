@@ -337,13 +337,14 @@ bad:
 /*
  * caller should hold read sem
  */
-static int kick_requests(struct ceph_osd_client *osdc)
+static void kick_requests(struct ceph_osd_client *osdc,
+			  struct ceph_entity_addr *who)
 {
 	u64 next_tid = 0;
 	struct ceph_osd_request *req;
 	int got;
 	int osd;
-	int ret = 0;
+	int needmap = 0;
 
 more:
 	spin_lock(&osdc->request_lock);
@@ -358,10 +359,11 @@ more_locked:
 	if (osd < 0) {
 		dout(20, "tid %llu maps to no osd\n",
 		     req->r_tid);
-		ret++;  /* request a newer map */
+		needmap++;  /* request a newer map */
 		memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
 	} else if (!ceph_entity_addr_equal(&req->r_last_osd,
-					   &osdc->osdmap->osd_addr[osd])) {
+					   &osdc->osdmap->osd_addr[osd]) ||
+		   (who && ceph_entity_addr_equal(&req->r_last_osd, who))) {
 		dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
 		get_request(req);
 		spin_unlock(&osdc->request_lock);
@@ -377,10 +379,12 @@ more_locked:
 
 done:
 	spin_unlock(&osdc->request_lock);
-	if (ret)
+	if (needmap) {
 		dout(10, "%d requests pending on down osds, need new map\n",
-		     ret);
-	return ret;
+		     needmap);
+		ceph_monc_request_osdmap(&osdc->client->monc,
+					 osdc->osdmap->epoch);
+	}
 }
 
 void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
@@ -478,9 +482,8 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 done:
 	downgrade_write(&osdc->map_sem);
 	ceph_monc_got_osdmap(&osdc->client->monc, osdc->osdmap->epoch);
-	if (newmap && kick_requests(osdc))
-		ceph_monc_request_osdmap(&osdc->client->monc,
-					 osdc->osdmap->epoch);
+	if (newmap)
+		kick_requests(osdc, 0);
 	up_read(&osdc->map_sem);
 	return;
 
@@ -490,6 +493,14 @@ bad:
 	return;
 }
 
+
+void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
+			    struct ceph_entity_addr *addr)
+{
+	down_read(&osdc->map_sem);
+	kick_requests(osdc, addr);
+	up_read(&osdc->map_sem);
+}
 
 
 /*

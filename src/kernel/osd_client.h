@@ -69,6 +69,9 @@ extern void ceph_osdc_init(struct ceph_osd_client *osdc,
 			   struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
 
+extern void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
+				   struct ceph_entity_addr *addr);
+
 extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc,
 				   struct ceph_msg *msg);
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc,

@@ -16,7 +16,8 @@ struct ceph_msg;
 extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
 
 typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
-typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_name *pn);
+typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
+					struct ceph_entity_name *pn);
 typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
 					  int want);
 

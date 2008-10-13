@@ -1439,7 +1439,8 @@ static int process_connect(struct ceph_connection *con)
 		reset_connection(con);
 		prepare_write_connect_retry(con->msgr, con);
 		prepare_read_connect(con);
-		con->msgr->peer_reset(con->msgr->parent, &con->peer_name);
+		con->msgr->peer_reset(con->msgr->parent, &con->peer_addr,
+				      &con->peer_name);
 		break;
 	case CEPH_MSGR_TAG_RETRY_SESSION:
 		dout(10,
@@ -1604,6 +1605,7 @@ static int process_accept(struct ceph_connection *con)
 				/* replace connection */
 				__replace_connection(msgr, existing, con);
 				con->msgr->peer_reset(con->msgr->parent,
+						      &con->peer_addr,
 						      &con->peer_name);
 			} else {
 				/* old attempt or peer didn't get the READY */

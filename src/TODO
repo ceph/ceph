@@ -1,6 +1,3 @@
-- objecter retry
-- kclient retry
-
 v0.5
 - debug restart, cosd reformat, etc.
 - finish btrfs ioctl interface

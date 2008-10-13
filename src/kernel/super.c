@@ -40,7 +40,8 @@ int ceph_debug_super = -1;
 #include "mon_client.h"
 
 void ceph_dispatch(void *p, struct ceph_msg *msg);
-void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name);
+void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
+		     struct ceph_entity_name *peer_name);
 
 
 /*
@@ -339,17 +340,19 @@ const char *ceph_msg_type_name(int type)
 	return "unknown";
 }
 
-void ceph_peer_reset(void *p, struct ceph_entity_name *peer_name)
+void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
+		     struct ceph_entity_name *peer_name)
 {
 	struct ceph_client *client = p;
 
-	dout(30, "ceph_peer_reset peer_name = %s%d\n", ENTITY_NAME(*peer_name));
-
-	/* we only care about mds disconnects */
-	if (le32_to_cpu(peer_name->type) != CEPH_ENTITY_TYPE_MDS)
-		return;
-
-	ceph_mdsc_handle_reset(&client->mdsc, le32_to_cpu(peer_name->num));
+	dout(30, "ceph_peer_reset %s%d\n", ENTITY_NAME(*peer_name));
+	switch (le32_to_cpu(peer_name->type)) {
+	case CEPH_ENTITY_TYPE_MDS:
+		return ceph_mdsc_handle_reset(&client->mdsc,
+					      le32_to_cpu(peer_name->num));
+	case CEPH_ENTITY_TYPE_OSD:
+		return ceph_osdc_handle_reset(&client->osdc, peer_addr);
+	}
 }
 
 
