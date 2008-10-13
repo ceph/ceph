@@ -1,7 +1,4 @@
 
-#include "crush.h"
-#include "hash.h"
-
 #ifdef __KERNEL__
 # include <linux/string.h>
 # include <linux/slab.h>
@@ -9,7 +6,12 @@
 #else
 # include <string.h>
 # include <stdio.h>
+# include <assert.h>
 #endif
+
+#include "crush.h"
+#include "hash.h"
+
 
 
 int crush_find_rule(struct crush_map *map, int pool, int type, int size)

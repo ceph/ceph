@@ -31,7 +31,6 @@
 #include "Capability.h"
 #include "snap.h"
 
-#include <cassert>
 #include <list>
 #include <vector>
 #include <set>

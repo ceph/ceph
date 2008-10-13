@@ -70,7 +70,6 @@
 #include "common/ThreadPool.h"
 
 #include <iostream>
-#include <cassert>
 #include <errno.h>
 #include <sys/stat.h>
 

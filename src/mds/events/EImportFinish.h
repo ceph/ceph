@@ -15,7 +15,6 @@
 #ifndef __EIMPORTFINISH_H
 #define __EIMPORTFINISH_H
 
-#include <assert.h>
 #include "config.h"
 #include "include/types.h"
 

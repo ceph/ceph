@@ -34,7 +34,6 @@ void	*valloc(size_t);
 #include <malloc.h>
 #endif
 #include <stdint.h>
-#include <assert.h>
 #include <string.h>
 
 #ifndef __CYGWIN__
@@ -48,6 +47,7 @@ void	*valloc(size_t);
 #include "atomic.h"
 #include "page.h"
 #include "crc32c.h"
+#include "assert.h"
 
 // <hack>
 //  these are in config.o

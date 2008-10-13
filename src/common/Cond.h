@@ -24,7 +24,6 @@
 #include "include/Context.h"
 
 #include <pthread.h>
-#include <cassert>
 
 class Cond {
   // my bits

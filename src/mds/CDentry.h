@@ -17,7 +17,6 @@
 #ifndef __CDENTRY_H
 #define __CDENTRY_H
 
-#include <assert.h>
 #include <string>
 #include <set>
 using namespace std;

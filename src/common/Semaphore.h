@@ -16,8 +16,6 @@
 #ifndef _Sem_Posix_
 #define _Sem_Posix_
 
-#include <cassert>
-
 class Semaphore
 {
   Mutex m;

@@ -24,7 +24,6 @@
 #include "common/DecayCounter.h"
 
 #include <iostream>
-#include <cassert>
 
 #include <list>
 #include <set>

@@ -21,7 +21,6 @@ extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <assert.h>
 #include <fcntl.h>
 #include "statlite.h"
 }
@@ -40,7 +39,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-
+#include "assert.h"
 #include "object.h"
 #include "utime.h"
 #include "intarith.h"

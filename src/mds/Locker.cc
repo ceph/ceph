@@ -50,7 +50,6 @@
 #include "messages/MMDSSlaveRequest.h"
 
 #include <errno.h>
-#include <assert.h>
 
 #include "config.h"
 

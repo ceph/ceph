@@ -21,7 +21,6 @@
 #include "include/pobject.h"
 #include "common/Cond.h"
 
-#include <cassert>
 #include <ext/hash_map>
 #include <set>
 #include <list>

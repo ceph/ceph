@@ -28,7 +28,6 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <iostream>
-#include <cassert>
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>

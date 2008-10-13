@@ -31,8 +31,6 @@
 
 #include "osdc/Objecter.h"
 
-#include <cassert>
-
 #include "config.h"
 
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "

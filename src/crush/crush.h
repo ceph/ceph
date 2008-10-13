@@ -7,7 +7,6 @@ extern "C" {
 
 
 #ifndef __KERNEL__
-# include <assert.h>
 # define BUG_ON(x) assert(!(x))
 # include "include/inttypes.h"  /* just for int types */
 #else

@@ -14,8 +14,6 @@ using namespace std;
 #include "common/DecayCounter.h"
 #include "include/Context.h"
 
-#include <cassert>
-
 #include "include/frag.h"
 #include "include/xlist.h"
 #include "include/nstring.h"

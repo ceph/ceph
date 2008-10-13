@@ -23,7 +23,6 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <iostream>
-#include <cassert>
 #include <errno.h>
 
 #include <sys/uio.h>

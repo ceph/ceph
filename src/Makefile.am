@@ -170,6 +170,7 @@ libcommon_a_SOURCES = \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/sctp_crc32.c\
+	common/assert.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
@@ -243,7 +244,8 @@ libclient_a_SOURCES = \
 	client/SyntheticClient.cc \
 	client/Trace.cc
 
-# headers... yuck
+# headers... and everything else we want to include in a 'make dist' 
+# that autotools doesn't magically identify.
 noinst_HEADERS = \
         client/Client.h\
         client/SyntheticClient.h\
@@ -285,6 +287,7 @@ noinst_HEADERS = \
         ebofs/types.h\
         include/Context.h\
         include/Distribution.h\
+	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
         include/blobhash.h\
@@ -394,7 +397,6 @@ noinst_HEADERS = \
         mds/events/EUpdate.h\
         mds/mds_table_types.h\
         mds/mdstypes.h\
-        mds/snap.cc\
         mds/snap.h\
         messages/MCacheExpire.h\
         messages/MClientCaps.h\

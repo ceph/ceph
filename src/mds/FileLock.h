@@ -16,7 +16,6 @@
 #ifndef __FILELOCK_H
 #define __FILELOCK_H
 
-#include <assert.h>
 #include <set>
 using namespace std;
 

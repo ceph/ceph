@@ -79,7 +79,6 @@
 
 #include "common/Timer.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <iostream>
 #include <string>

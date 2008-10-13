@@ -4,6 +4,7 @@
 # define free(x) kfree(x)
 #else
 # include <stdlib.h>
+# include <assert.h>
 #endif
 
 #include "crush.h"

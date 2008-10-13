@@ -18,7 +18,6 @@
 
 #include <stdlib.h>
 
-#include <cassert>
 #include <list>
 #include <string>
 #include <fstream>

@@ -23,7 +23,6 @@
  */
 
 #include <map>
-#include <cassert>
 #include <iostream>
 using namespace std;
 

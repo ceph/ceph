@@ -15,7 +15,6 @@
 #ifndef __EEXPORT_H
 #define __EEXPORT_H
 
-#include <assert.h>
 #include "config.h"
 #include "include/types.h"
 
