@@ -515,7 +515,7 @@ uint32_t sctp_crc_tableil8_o88[256] =
 
 static uint32_t
 sctp_crc32c_sb8_64_bit(uint32_t crc,
-    unsigned char *p_buf,
+    unsigned char const *p_buf,
     uint32_t length,
     uint32_t init_bytes)
 {
@@ -587,7 +587,7 @@ sctp_crc32c_sb8_64_bit(uint32_t crc,
  */
 uint32_t
 update_crc32(uint32_t crc32c,
-    unsigned char *buffer,
+    unsigned char const *buffer,
     unsigned int length)
 {
 	uint32_t offset;
@@ -671,7 +671,7 @@ uint32_t sctp_crc_c[256] = {
 
 uint32_t
 old_update_crc32(uint32_t crc32c,
-    unsigned char *buffer,
+    unsigned char const *buffer,
     unsigned int length)
 {
 	unsigned int i;
@@ -718,9 +718,7 @@ sctp_csum_finalize(uint32_t crc32c)
 
 uint32_t crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
 {
-	crc = update_crc32(crc, data, length);
-
-	return sctp_csum_finalize(crc);
+	return update_crc32(crc, data, length);
 }
 
 
