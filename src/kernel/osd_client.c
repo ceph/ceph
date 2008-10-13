@@ -245,11 +245,12 @@ static int pick_osd(struct ceph_osd_client *osdc,
 /*
  * caller should hold map_sem (for read)
  */
-static void send_request(struct ceph_osd_client *osdc,
+static int send_request(struct ceph_osd_client *osdc,
 			 struct ceph_osd_request *req,
 			 int osd)
 {
 	struct ceph_osd_request_head *reqhead;
+	int rc;
 
 	if (osd < 0)
 		osd = pick_osd(osdc, req);
@@ -257,7 +258,7 @@ static void send_request(struct ceph_osd_client *osdc,
 		dout(10, "send_request %p no up osds in pg\n", req);
 		ceph_monc_request_osdmap(&osdc->client->monc,
 					 osdc->osdmap->epoch);
-		return;
+		return 0;
 	}
 
 	dout(10, "send_request %p tid %llu to osd%d flags %d\n",
@@ -273,7 +274,9 @@ static void send_request(struct ceph_osd_client *osdc,
 	req->r_last_osd = req->r_request->hdr.dst.addr;
 
 	ceph_msg_get(req->r_request); /* send consumes a ref */
-	ceph_msg_send(osdc->client->msgr, req->r_request, 0);
+	rc = ceph_msg_send(osdc->client->msgr, req->r_request, 0);
+
+	return rc;
 }
 
 /*
@@ -530,12 +533,20 @@ out:
 }
 
 
-void start_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
+int start_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 {
-	register_request(osdc, req);
+	int rc;
+
+	rc = register_request(osdc, req);
+
+	if (rc < 0)
+		return rc;
+
 	down_read(&osdc->map_sem);
-	send_request(osdc, req, -1);
+	rc = send_request(osdc, req, -1);
 	up_read(&osdc->map_sem);
+
+	return rc;
 }
 
 /*
@@ -547,8 +558,11 @@ int do_sync_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 	__s32 rc;
 	int bytes;
 
-	start_request(osdc, req);	/* register+send request */
-	rc = wait_for_completion_interruptible(&req->r_completion);
+	rc = start_request(osdc, req);	/* register+send request */
+
+	if (rc >= 0)
+		rc = wait_for_completion_interruptible(&req->r_completion);
+
 	if (rc < 0) {
 		struct ceph_msg *msg;
 		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid,
@@ -938,6 +952,7 @@ int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 	struct ceph_msg *reqm = req->r_request;
 	struct ceph_osd_request_head *reqhead = reqm->front.iov_base;
 	__u64 off = le64_to_cpu(reqhead->offset);
+	int rc;
 
 	dout(10, "writepages_start %llu~%llu, %d pages\n", off, len, num_pages);
 
@@ -953,7 +968,7 @@ int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 	reqm->hdr.data_len = len;
 	reqm->hdr.data_off = off;
 
-	start_request(osdc, req);
-	return 0;
+	rc = start_request(osdc, req);
+	return rc;
 }
 
