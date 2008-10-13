@@ -168,7 +168,7 @@ static int register_request(struct ceph_osd_client *osdc,
 		return rc;
 	}
 
-	spin_lock(&osdc->request_lock);
+	mutex_lock(&osdc->request_mutex);
 	req->r_tid = head->tid = ++osdc->last_tid;
 	req->r_flags = 0;
 	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
@@ -184,7 +184,7 @@ static int register_request(struct ceph_osd_client *osdc,
 		reschedule_timeout(osdc);
 	osdc->nr_requests++;
 
-	spin_unlock(&osdc->request_lock);
+	mutex_unlock(&osdc->request_mutex);
 	radix_tree_preload_end();
 
 	return rc;
@@ -294,11 +294,11 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	dout(10, "handle_reply %p tid %llu\n", msg, tid);
 
 	/* lookup */
-	spin_lock(&osdc->request_lock);
+	mutex_lock(&osdc->request_mutex);
 	req = radix_tree_lookup(&osdc->request_tree, tid);
 	if (req == NULL) {
 		dout(10, "handle_reply tid %llu dne\n", tid);
-		spin_unlock(&osdc->request_lock);
+		mutex_unlock(&osdc->request_mutex);
 		return;
 	}
 	get_request(req);
@@ -317,7 +317,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	     rhead->flags);
 	req->r_flags |= rhead->flags;
 	__unregister_request(osdc, req);
-	spin_unlock(&osdc->request_lock);
+	mutex_unlock(&osdc->request_mutex);
 
 	if (req->r_callback)
 		req->r_callback(req);
@@ -346,39 +346,37 @@ static void kick_requests(struct ceph_osd_client *osdc,
 	int osd;
 	int needmap = 0;
 
-more:
-	spin_lock(&osdc->request_lock);
-more_locked:
-	got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
-				     next_tid, 1);
-	if (got == 0)
-		goto done;
+	mutex_lock(&osdc->request_mutex);
+	while (1) {
+		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+					     next_tid, 1);
+		if (got == 0)
+			break;
 
-	next_tid = req->r_tid + 1;
-	osd = pick_osd(osdc, req);
-	if (osd < 0) {
-		dout(20, "tid %llu maps to no osd\n",
-		     req->r_tid);
-		needmap++;  /* request a newer map */
-		memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
-	} else if (!ceph_entity_addr_equal(&req->r_last_osd,
-					   &osdc->osdmap->osd_addr[osd]) ||
-		   (who && ceph_entity_addr_equal(&req->r_last_osd, who))) {
-		dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
-		get_request(req);
-		spin_unlock(&osdc->request_lock);
-		req->r_request = ceph_msg_maybe_dup(req->r_request);
-		if (!req->r_aborted) {
-			req->r_flags |= CEPH_OSD_OP_RETRY;
-			send_request(osdc, req, osd);
+		next_tid = req->r_tid + 1;
+		osd = pick_osd(osdc, req);
+		if (osd < 0) {
+			dout(20, "tid %llu maps to no osd\n",
+			     req->r_tid);
+			needmap++;  /* request a newer map */
+			memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
+			continue;
 		}
-		ceph_osdc_put_request(req);
-		goto more;
+		if (!ceph_entity_addr_equal(&req->r_last_osd,
+					    &osdc->osdmap->osd_addr[osd]) ||
+		    (who && ceph_entity_addr_equal(&req->r_last_osd, who))) {
+			dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
+			get_request(req);
+			req->r_request = ceph_msg_maybe_dup(req->r_request);
+			if (!req->r_aborted) {
+				req->r_flags |= CEPH_OSD_OP_RETRY;
+				send_request(osdc, req, osd);
+			}
+			ceph_osdc_put_request(req);
+		}
 	}
-	goto more_locked;
 
-done:
-	spin_unlock(&osdc->request_lock);
+	mutex_unlock(&osdc->request_mutex);
 	if (needmap) {
 		dout(10, "%d requests pending on down osds, need new map\n",
 		     needmap);
@@ -522,7 +520,7 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 		return -1;  /* hmm! */
 
 	tid = le64_to_cpu(rhead->tid);
-	spin_lock(&osdc->request_lock);
+	mutex_lock(&osdc->request_mutex);
 	req = radix_tree_lookup(&osdc->request_tree, tid);
 	if (!req) {
 		dout(10, "prepare_pages unknown tid %llu\n", tid);
@@ -539,7 +537,7 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 		ret = 0; /* success */
 	}
 out:
-	spin_unlock(&osdc->request_lock);
+	mutex_unlock(&osdc->request_mutex);
 	return ret;
 }
 
@@ -628,7 +626,7 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	init_completion(&osdc->map_waiters);
 	osdc->last_requested_map = 0;
 
-	spin_lock_init(&osdc->request_lock);
+	mutex_init(&osdc->request_mutex);
 	osdc->last_tid = 0;
 	osdc->nr_requests = 0;
 	INIT_RADIX_TREE(&osdc->request_tree, GFP_ATOMIC);

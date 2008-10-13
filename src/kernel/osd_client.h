@@ -53,7 +53,7 @@ struct ceph_osd_client {
 	struct completion      map_waiters;
 	__u64                  last_requested_map;
 
-	spinlock_t             request_lock;
+	struct mutex           request_mutex;
 	__u64                  last_tid;      /* tid of last request */
 	struct radix_tree_root request_tree;  /* pending requests, by tid */
 	int                    nr_requests;
