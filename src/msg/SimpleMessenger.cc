@@ -873,6 +873,19 @@ int Rank::Pipe::accept()
 	existing->was_session_reset();
 	goto replace;
       }
+      if (lossy_rx) {
+	if (existing->state == STATE_STANDBY) {
+	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless" << dendl;
+	  existing->state = STATE_CONNECTING;
+	  existing->cond.Signal();
+	} else {
+	  dout(-10) << "accept incoming lossy connection, our lossless has state " << existing->state
+		    << ", doing nothing" << dendl;
+	}
+	existing->lock.Unlock();
+	rank.lock.Unlock();
+	goto fail;
+      }
 
       if (connect.connect_seq < existing->connect_seq) {
 	if (connect.connect_seq == 0) {
