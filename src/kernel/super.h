@@ -32,8 +32,6 @@ extern int ceph_debug_caps;
 
 extern int ceph_debug_mask;
 
-#define CEPH_DUMP_ERROR_ALWAYS
-
 #define dout_flag(x, mask, args...) do {						\
 		if (((ceph_debug_mask | DOUT_UNMASKABLE) & mask) &&				\
 			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
@@ -47,20 +45,13 @@ extern int ceph_debug_mask;
 
 #define dout(x, args...) dout_flag(x, DOUT_MASK, args)
 
-#ifdef CEPH_DUMP_ERROR_ALWAYS
 #define derr(x, args...) do {						\
 		printk(KERN_ERR "ceph: " args);	\
 	} while (0)
-#else
-#define derr(x, args...) do {						\
-		if ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
-		    (DOUT_VAR < 0 && x <= ceph_debug))			\
-			printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
-	} while (0)
-#endif
 
-#define CEPH_SUPER_MAGIC 0xc364c0de  /* whatev */
-#define CEPH_BLOCK_SHIFT 20    /* 1 MB */
+#define CEPH_SUPER_MAGIC 0x00c36400
+
+#define CEPH_BLOCK_SHIFT 20    /* 1 MB blocks for purposes of statfs*/
 #define CEPH_BLOCK  (1 << CEPH_BLOCK_SHIFT)
 
 #define IPQUADPORT(n)							\
@@ -71,18 +62,20 @@ extern int ceph_debug_mask;
 		(unsigned int)(ntohs((n).sin_port))
 
 
-#define dput(dentry)				       \
+#if 0
+# define dput(dentry)				       \
 	do {					       \
 		dout(20, "dput %p %d -> %d\n", dentry, \
 		     atomic_read(&dentry->d_count),    \
 		     atomic_read(&dentry->d_count)-1); \
 		dput(dentry);			       \
 	} while (0)
-#define d_drop(dentry)				       \
+# define d_drop(dentry)				       \
 	do {					       \
 		dout(20, "d_drop %p\n", dentry);       \
 		d_drop(dentry);			       \
 	} while (0)
+#endif
 
 /*
  * subtract jiffies
@@ -100,13 +93,13 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_MOUNT_NOSHARE       (1<<1) /* don't share client with other sbs */
 #define CEPH_MOUNT_MYIP          (1<<2) /* specified my ip */
 #define CEPH_MOUNT_UNSAFE_WRITEBACK (1<<3)
-#define CEPH_MOUNT_DIRSTAT       (1<<4)
-#define CEPH_MOUNT_RBYTES        (1<<5)
-#define CEPH_MOUNT_NOCRC         (1<<6)
+#define CEPH_MOUNT_DIRSTAT       (1<<4) /* funky `cat dirname` for stats */
+#define CEPH_MOUNT_RBYTES        (1<<5) /* dir st_bytes = rbytes */
+#define CEPH_MOUNT_NOCRC         (1<<6) /* no data crc on writes */
 
 #define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
 
-#define CEPH_DEFAULT_READ_SIZE	(128*1024)
+#define CEPH_DEFAULT_READ_SIZE	(128*1024) /* readahead */
 
 #define MAX_MON_MOUNT_ADDR	5
 
@@ -119,9 +112,9 @@ struct ceph_mount_args {
 	int num_mon;
 	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
 	int wsize;
-	int rsize;
+	int rsize;            /* max readahead */
 	int osd_timeout;
-	char *snapdir_name;
+	char *snapdir_name;   /* default ".snap" */
 };
 
 enum {
@@ -165,25 +158,24 @@ struct ceph_client {
 	struct kobject *client_kobj;
 
 	struct backing_dev_info backing_dev_info;
-
-	/* lets ignore all this until later */
-	spinlock_t sb_lock;
-	int num_sb;      /* ref count (for each sb_info that points to me) */
-	struct list_head sb_list;
 };
 
-/*
- * CEPH per-mount superblock info
- */
 static inline struct ceph_client *ceph_client(struct super_block *sb)
 {
 	return sb->s_fs_info;
 }
 
 /*
- * file i/o capability
+ * File i/o capability.  This tracks shared state with the metadata
+ * server that allows us to read and write data to this file.  For any
+ * given inode, we may have multiple capabilities, one issued by each
+ * metadata server, and our cumulative access is the OR of all issued
+ * capabilities.
+ *
+ * Each cap is referenced by the inode's i_caps tree and by a per-mds
+ * session capability list.
  */
-#define STATIC_CAPS 1
+#define STATIC_CAPS 1   /* how many to embed in each inode? */
 
 struct ceph_cap {
 	struct ceph_inode_info *ci;
@@ -192,14 +184,14 @@ struct ceph_cap {
 	struct list_head session_caps;  /* per-session caplist */
 	int mds;          /* must be -1 if not in use */
 	int issued;       /* latest, from the mds */
-	int implemented;  /* what we've implemneted (for tracking revocation) */
+	int implemented;  /* what we've implemented (for tracking revocation) */
 	u32 seq, mseq, gen;
-	int flags;  /* stale, etc.? */
-	u64 flushed_snap;
 };
 
 /*
- * snapped cap state, pending flush to mds
+ * Snapped cap state that is pending flush to mds.  When a snapshot occurs,
+ * we first complete any in-process sync writes and writeback any dirty
+ * data before flushing the snapped state (tracked here) back to the MDS.
  */
 struct ceph_cap_snap {
 	struct list_head ci_item;
@@ -209,13 +201,17 @@ struct ceph_cap_snap {
 	struct timespec mtime, atime, ctime;
 	u64 time_warp_seq;
 	struct ceph_snap_context *context;
-	int writing;
-	int dirty;
+	int writing;   /* a sync write is still in progress */
+	int dirty;     /* dirty pages awaiting writeback */
 };
 
 /*
- * a _leaf_ frag will be present in the i_fragtree IFF there is
- * delegation info.  that is, if mds >= 0 || ndist > 0.
+ * The frag tree describes how a directory is fragmented, potentially across
+ * multiple metadata servers.  It is also used to indicate points where
+ * metadata authority is delegated, and whether/where metadata is replicated.
+ *
+ * A _leaf_ frag will be present in the i_fragtree IFF there is
+ * delegation info.  That is, if mds >= 0 || ndist > 0.
  */
 #define MAX_DIRFRAG_REP 4
 
@@ -224,20 +220,18 @@ struct ceph_inode_frag {
 
 	/* fragtree state */
 	u32 frag;
-	int split_by;
+	int split_by;         /* i.e. 2^(split_by) children */
 
 	/* delegation info */
-	int mds;   /* -1 if parent */
-	int ndist;
+	int mds;              /* -1 if same authority as parent */
+	int ndist;            /* >0 if replicated */
 	int dist[MAX_DIRFRAG_REP];
 };
 
 
-struct ceph_dir_info {
-	u64 nfiles, nsubdirs;
-	u64 bytes;
-};
-
+/*
+ * Ceph inode.
+ */
 struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */
 
@@ -252,46 +246,51 @@ struct ceph_inode_info {
 	u64 i_rbytes, i_rfiles, i_rsubdirs;
 	u64 i_files, i_subdirs;
 
+	/* inode lease state */
 	int i_lease_mask;
 	struct ceph_mds_session *i_lease_session;
-	long unsigned i_lease_ttl;  /* jiffies */
+	long unsigned i_lease_ttl;     /* jiffies */
 	u32 i_lease_gen;
 	struct list_head i_lease_item; /* mds session list */
 
 	struct rb_root i_fragtree;
 	struct mutex i_fragtree_mutex;
 
+	/* (still encoded) xattr blob */
 	int i_xattr_len;
 	char *i_xattr_data;
 
-	struct rb_root i_caps;
+	/* capabilities */
+	struct rb_root i_caps;           /* cap list */
 	struct ceph_cap i_static_caps[STATIC_CAPS];
-	wait_queue_head_t i_cap_wq;
+	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */
-	struct list_head i_cap_delay_list;
-	int i_cap_exporting_mds;
-	unsigned i_cap_exporting_mseq;
+	struct list_head i_cap_delay_list;  /* for delayed cap release to mds */
+	int i_cap_exporting_mds;         /* to handle cap migration between */
+	unsigned i_cap_exporting_mseq;   /*  mds's. */
 	unsigned i_cap_exporting_issued;
-	struct list_head i_cap_snaps;
-	unsigned i_snap_caps;         /* cap bits for snap i/o */
+	struct list_head i_cap_snaps;   /* snapped state pending flush to mds */
+	unsigned i_snap_caps;           /* cap bits for snapped files */
 	
-	int i_nr_by_mode[CEPH_FILE_MODE_NUM];
-	loff_t i_max_size;            /* size authorized by mds */
+	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */
+
+	loff_t i_max_size;            /* max file size authorized by mds */
 	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
 	loff_t i_wanted_max_size;     /* offset we'd like to write too */
 	loff_t i_requested_max_size;  /* max_size we've requested */
+
 	struct timespec i_old_atime;
 
 	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	int i_wrbuffer_ref, i_wrbuffer_ref_head;
 
-	struct ceph_snap_realm *i_snap_realm;
+	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
 
 	struct work_struct i_wb_work;  /* writeback work */
 
-	loff_t i_vmtruncate_to;
+	loff_t i_vmtruncate_to;        /* delayed truncate work */
 	struct work_struct i_vmtruncate_work;
 
 	struct inode vfs_inode; /* at end */
@@ -302,6 +301,7 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
 
+/* find a specific frag @f */
 static inline struct ceph_inode_frag *
 __ceph_find_frag(struct ceph_inode_info *ci, u32 f)
 {
@@ -321,10 +321,17 @@ __ceph_find_frag(struct ceph_inode_info *ci, u32 f)
 	return NULL;
 }
 
+/*
+ * choose fragment for value @v.  copy frag content to pfrag, if leaf
+ * exists
+ */
 extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 			      struct ceph_inode_frag *pfrag,
 			      int *found);
 
+/*
+ * Ceph dentry state
+ */
 struct ceph_dentry_info {
 	struct dentry *dentry;
 	struct ceph_mds_session *lease_session;
@@ -340,7 +347,8 @@ static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
 
 /*
  * ino_t is <64 bits on many architectures, blech.
- * don't include snap in hash... just for now!
+ *
+ * don't include snap in ino hash, at leaset for now.
  */
 static inline ino_t ceph_vino_to_ino(struct ceph_vino vino)
 {
@@ -362,6 +370,8 @@ static inline struct ceph_vino ceph_vino(struct inode *inode)
 {
 	return ceph_inode(inode)->i_vino;
 }
+
+/* for printf-style formatting */
 #define ceph_vinop(i) ceph_inode(i)->i_vino.ino, ceph_inode(i)->i_vino.snap
 
 static inline u64 ceph_ino(struct inode *inode)
@@ -417,6 +427,9 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 	return used;
 }
 
+/*
+ * wanted, by virtue of open file modes
+ */
 static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 {
 	int want = 0;
@@ -427,14 +440,18 @@ static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 	return want;
 }
 
+/*
+ * wanted, by virtual of open file modes AND cap refs (buffered/cached data)
+ */
 static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
 	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
 	if (w & CEPH_CAP_WRBUFFER)
-		w |= CEPH_CAP_EXCL;  /* want EXCL if we have dirty data */
+		w |= CEPH_CAP_EXCL;  /* we want EXCL if we have dirty data */
 	return w;
 }
 
+/* for counting open files by mode */
 static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode)
 {
 	ci->i_nr_by_mode[mode]++;
@@ -450,7 +467,6 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
 {
 	return (struct ceph_client *)sb->s_fs_info;
 }
-
 
 static inline void ceph_queue_writeback(struct inode *inode)
 {
@@ -476,6 +492,14 @@ struct ceph_file_info {
  * snapshots
  */
 
+/*
+ * A "snap context" is the set of existing snapshots when we
+ * write data.  It is used by the OSD to guide its COW behavior.
+ *
+ * The ceph_snap_context is refcounted, and attached to each dirty
+ * page, indicating which context the dirty data belonged when it was
+ * dirtied.
+ */
 struct ceph_snap_context {
 	atomic_t nref;
 	u64 seq;
@@ -483,7 +507,8 @@ struct ceph_snap_context {
 	u64 snaps[];
 };
 
-static inline struct ceph_snap_context *ceph_get_snap_context(struct ceph_snap_context *sc)
+static inline struct ceph_snap_context *
+ceph_get_snap_context(struct ceph_snap_context *sc)
 {
 	/*
 	printk("get_snap_context %p %d -> %d\n", sc, atomic_read(&sc->nref),
@@ -508,26 +533,50 @@ static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
 	}
 }
 
+/*
+ * A "snap realm" describes a subset of the file hierarchy sharing
+ * the same set of snapshots that apply to it.  The realms themselves
+ * are organized into a hierarchy, such that children inherit (some of)
+ * the snapshots of their parents.
+ *
+ * All inodes within the realm that have capabilities are linked into a 
+ * per-realm list.
+ */
 struct ceph_snap_realm {
 	u64 ino;
 	int nref;
 	u64 created, seq;
 	u64 parent_ino;
-	u64 parent_since;
+	u64 parent_since;   /* snapid when our current parent became so */
 
-	u64 *prior_parent_snaps;
-	int num_prior_parent_snaps;
-	u64 *snaps;
+	u64 *prior_parent_snaps;      /* snaps inherited from any parents we */
+	int num_prior_parent_snaps;   /*  had prior to parent_since */
+	u64 *snaps;                   /* snaps specific to this realm */
 	int num_snaps;
 	
 	struct ceph_snap_realm *parent;
+	struct list_head children;       /* list of child realms */
 	struct list_head child_item;
-	struct list_head children;
 
+	/* the current set of snaps for this realm */
 	struct ceph_snap_context *cached_context;
 
 	struct list_head inodes_with_caps;
 };
+
+
+
+/*
+ * calculate the number of pages a given length and offset map onto,
+ * if we align the data.
+ */
+static inline int calc_pages_for(u64 off, u64 len)
+{
+	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) -
+		(off >> PAGE_CACHE_SHIFT);
+}
+
+
 
 /* snap.c */
 extern void ceph_put_snap_realm(struct ceph_snap_realm *realm);
@@ -542,23 +591,15 @@ extern void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 				   struct ceph_cap_snap *capsnap,
 				   int used);
 
+/*
+ * a cap_snap is "pending" if it is still awaiting an in-progress
+ * sync write (that may/may not still update size, mtime, etc.).
+ */
 inline static bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
 {
 	return !list_empty(&ci->i_cap_snaps) &&
 		list_entry(ci->i_cap_snaps.prev, struct ceph_cap_snap,
 			   ci_item)->writing;
-}
-
-
-
-/*
- * calculate the number of pages a given length and offset map onto,
- * if we align the data.
- */
-static inline int calc_pages_for(u64 off, u64 len)
-{
-	return ((off+len+PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT) -
-		(off >> PAGE_CACHE_SHIFT);
 }
 
 
@@ -613,7 +654,8 @@ extern void ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
 extern int __ceph_get_cap_mds(struct ceph_inode_info *ci, u32 *mseq);
 extern int ceph_get_cap_mds(struct inode *inode);
-extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got, loff_t offset);
+extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
+			     int *got, loff_t offset);
 extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
@@ -658,6 +700,10 @@ extern struct dentry *ceph_do_lookup(struct super_block *sb,
 extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);
 
+/*
+ * our d_ops vary depending on whether the inode is live,
+ * snapshotted (read-only), or a virtual ".snap" directory.
+ */
 static inline void ceph_init_dentry(struct dentry *dentry) {
 	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
 		dentry->d_op = &ceph_dentry_ops;

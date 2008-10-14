@@ -134,8 +134,6 @@ retry:
 
 		cap->issued = cap->implemented = 0;
 		cap->mds = mds;
-		cap->flags = 0;
-		cap->flushed_snap = 0;
 
 		is_first = RB_EMPTY_ROOT(&ci->i_caps);  /* grab inode later */
 		cap->ci = ci;
@@ -1185,8 +1183,6 @@ int __ceph_send_cap(struct ceph_mds_client *mdsc,
 	atime = inode->i_atime;
 	time_warp_seq = ci->i_time_warp_seq;
 	follows = ci->i_snap_realm->cached_context->seq;
-	if (flush_snap)
-		cap->flushed_snap = follows; /* so we only flush it once */
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_RDCACHE) {

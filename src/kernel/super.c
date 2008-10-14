@@ -680,7 +680,6 @@ struct ceph_client *ceph_create_client(void)
 	mutex_init(&client->mount_mutex);
 
 	init_waitqueue_head(&client->mount_wq);
-	spin_lock_init(&client->sb_lock);
 
 	client->sb = 0;
 	client->mount_state = CEPH_MOUNT_MOUNTING;
