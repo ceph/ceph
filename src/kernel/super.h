@@ -175,14 +175,12 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
  * Each cap is referenced by the inode's i_caps tree and by a per-mds
  * session capability list.
  */
-#define STATIC_CAPS 1   /* how many to embed in each inode? */
-
 struct ceph_cap {
 	struct ceph_inode_info *ci;
 	struct rb_node ci_node;         /* per-ci cap tree */
 	struct ceph_mds_session *session;
 	struct list_head session_caps;  /* per-session caplist */
-	int mds;          /* must be -1 if not in use */
+	int mds;
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemented (for tracking revocation) */
 	u32 seq, mseq, gen;
@@ -262,7 +260,6 @@ struct ceph_inode_info {
 
 	/* capabilities */
 	struct rb_root i_caps;           /* cap list */
-	struct ceph_cap i_static_caps[STATIC_CAPS];
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */
 	struct list_head i_cap_delay_list;  /* for delayed cap release to mds */

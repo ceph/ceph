@@ -114,11 +114,6 @@ retry:
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(inode, mds);
 	if (!cap) {
-		for (i = 0; i < STATIC_CAPS; i++)
-			if (ci->i_static_caps[i].mds == -1) {
-				cap = &ci->i_static_caps[i];
-				break;
-			}
 		if (!cap) {
 			if (new_cap) {
 				cap = new_cap;
@@ -223,11 +218,8 @@ int __ceph_remove_cap(struct ceph_cap *cap)
 	/* remove from inode list */
 	rb_erase(&cap->ci_node, &ci->i_caps);
 	cap->session = 0;
-	cap->mds = -1;  /* mark unused */
 
-	if (cap < ci->i_static_caps ||
-	    cap >= ci->i_static_caps + STATIC_CAPS)
-		kfree(cap);
+	kfree(cap);
 
 	if (RB_EMPTY_ROOT(&ci->i_caps)) {
 		list_del_init(&ci->i_snap_realm_item);
