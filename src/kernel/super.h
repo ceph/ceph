@@ -322,7 +322,8 @@ __ceph_find_frag(struct ceph_inode_info *ci, u32 f)
 }
 
 extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
-			      struct ceph_inode_frag **pfrag);
+			      struct ceph_inode_frag *pfrag,
+			      int *found);
 
 struct ceph_dentry_info {
 	struct dentry *dentry;

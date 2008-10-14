@@ -153,7 +153,7 @@ nextfrag:
 		int op = ceph_snap(inode) == CEPH_SNAPDIR ?
 			CEPH_MDS_OP_LSSNAP:CEPH_MDS_OP_READDIR;
 
-		frag = ceph_choose_frag(ceph_inode(inode), frag, 0);
+		frag = ceph_choose_frag(ceph_inode(inode), frag, 0, 0);
 
 		/* query mds */
 		dout(10, "dir_readdir querying mds for ino %llx.%llx frag %x\n",

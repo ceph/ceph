@@ -486,9 +486,15 @@ static int choose_mds(struct ceph_mds_client *mdsc,
 		if (is_hash &&
 		    dentry->d_inode &&
 		    S_ISDIR(dentry->d_inode->i_mode)) {
+			int found;
 			ci = ceph_inode(dentry->d_inode);
-			ceph_choose_frag(ci, hash, &frag);
-			if (frag) {
+			frag = kmalloc(sizeof(struct ceph_inode_frag), GFP_KERNEL);
+
+			if (!frag)
+				return -ENOMEM;
+
+			ceph_choose_frag(ci, hash, frag, &found);
+			if (found) {
 				/* avoid hitting dir replicas on dir
 				 * auth delegation point.. mds will
 				 * likely forward anyway to avoid
@@ -518,6 +524,7 @@ static int choose_mds(struct ceph_mds_client *mdsc,
 					return mds;
 				}
 			}
+			kfree(frag);
 		}
 		if (IS_ROOT(dentry))
 			break;

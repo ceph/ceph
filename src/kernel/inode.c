@@ -133,12 +133,16 @@ out:
 }
 
 __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
-		       struct ceph_inode_frag **pfrag)
+		       struct ceph_inode_frag *pfrag,
+		       int *found)
 {
 	u32 t = frag_make(0, 0);
 	struct ceph_inode_frag *frag;
 	unsigned nway, i;
 	u32 n;
+
+	if (found)
+		*found = 0;
 
 	mutex_lock(&ci->i_fragtree_mutex);
 	while (1) {
@@ -148,7 +152,10 @@ __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 			break; /* t is a leaf */
 		if (frag->split_by == 0) {
 			if (pfrag)
-				*pfrag = frag;
+				memcpy(pfrag, frag, sizeof(struct ceph_inode_frag));
+
+			if (found)
+				*found = 1;
 			break;
 		}
 
