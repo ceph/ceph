@@ -23,8 +23,6 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "messages/MPing.h"
-#include "messages/MPingAck.h"
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MGenericMessage.h"
@@ -314,10 +312,6 @@ void Monitor::dispatch(Message *m)
       handle_mon_get_map((MMonGetMap*)m);
       break;
 
-    case CEPH_MSG_PING_ACK:
-      handle_ping_ack((MPingAck*)m);
-      break;
-      
     case CEPH_MSG_SHUTDOWN:
       if (m->get_source().is_osd()) 
 	osdmon->dispatch(m);
@@ -450,12 +444,6 @@ void Monitor::handle_shutdown(Message *m)
   delete m;
 }
 
-void Monitor::handle_ping_ack(MPingAck *m)
-{
-  // ...
-  
-  delete m;
-}
 
 
 

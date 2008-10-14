@@ -38,7 +38,6 @@
 
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
-#include "messages/MPingAck.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"

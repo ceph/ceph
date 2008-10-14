@@ -441,7 +441,6 @@ struct ceph_msg_footer {
 /* misc */
 #define CEPH_MSG_SHUTDOWN               1
 #define CEPH_MSG_PING                   2
-#define CEPH_MSG_PING_ACK               3
 
 /* client <-> monitor */
 #define CEPH_MSG_MON_MAP                4
@@ -470,12 +469,6 @@ struct ceph_msg_footer {
 #define CEPH_MSG_OSD_MAP          41
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43
-
-
-struct ceph_ping {
-	__le64 seq;
-	struct ceph_timespec stamp;
-};
 
 
 /* for statfs_reply.  units are KB, objects. */

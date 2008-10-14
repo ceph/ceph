@@ -23,7 +23,6 @@ using namespace std;
 #include "messages/MMonElection.h"
 
 #include "messages/MPing.h"
-#include "messages/MPingAck.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
@@ -168,9 +167,6 @@ decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case CEPH_MSG_PING:
     m = new MPing();
-    break;
-  case CEPH_MSG_PING_ACK:
-    m = new MPingAck();
     break;
     
   case CEPH_MSG_MON_MAP:

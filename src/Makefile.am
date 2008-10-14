@@ -468,7 +468,6 @@ noinst_HEADERS = \
         messages/MPGStats.h\
         messages/MPGStatsAck.h\
         messages/MPing.h\
-        messages/MPingAck.h\
         messages/MRemoveSnaps.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
