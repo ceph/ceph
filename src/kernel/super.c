@@ -336,7 +336,6 @@ const char *ceph_msg_type_name(int type)
 	switch (type) {
 	case CEPH_MSG_SHUTDOWN: return "shutdown";
 	case CEPH_MSG_PING: return "ping";
-	/* case CEPH_MSG_PING_ACK: return "ping_ack"; */
 	case CEPH_MSG_MON_MAP: return "mon_map";
 	case CEPH_MSG_MON_GET_MAP: return "mon_get_map";
 	case CEPH_MSG_CLIENT_MOUNT: return "client_mount";
