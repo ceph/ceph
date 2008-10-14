@@ -716,8 +716,18 @@ sctp_csum_finalize(uint32_t crc32c)
 	return (crc32c);
 }
 
+#if 1
+#include <string.h>
+#include <stdio.h>
+#endif /* this code should be removed, and was introduced only for debugging purposes */
+
 uint32_t crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
 {
+#if 1
+	if (memcmp(data, data, length) != 0) {
+		printf("CRCRCRCRCRCRCRC  !!!\n");		
+	}
+#endif /* this code should be removed, and was introduced only for debugging purposes */
 	return update_crc32(crc, data, length);
 }
 
