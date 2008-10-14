@@ -333,10 +333,8 @@ int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov,
 	else
 		msg.msg_flags |= MSG_EOR;  /* superfluous, but what the hell */
 
-	/*printk(KERN_DEBUG "before sendmsg %d\n", len);*/
 	rlen = kernel_sendmsg(sock, &msg, iov, kvlen, len);
 
-	/*printk(KERN_DEBUG "after sendmsg %d\n", rlen);*/
 	return(rlen);
 }
 
@@ -418,14 +416,17 @@ yes:
 /*
  * close connection socket
  */
-static void con_close_socket(struct ceph_connection *con)
+static int con_close_socket(struct ceph_connection *con)
 {
+	int rc;
 	dout(10, "con_close_socket on %p sock %p\n", con, con->sock);
 	if (!con->sock)
-		return;
-	con->sock->ops->shutdown(con->sock, SHUT_RDWR);
+		return 0;
+	rc = con->sock->ops->shutdown(con->sock, SHUT_RDWR);
 	sock_release(con->sock);
 	con->sock = 0;
+
+	return rc;
 }
 
 /*
@@ -440,7 +441,7 @@ static void put_connection(struct ceph_connection *con)
 		ceph_msg_put_list(&con->out_queue);
 		ceph_msg_put_list(&con->out_sent);
 		set_bit(CLOSED, &con->state);
-		con_close_socket(con);
+		con_close_socket(con); /* silently ignore possible errors */
 		kfree(con);
 	}
 }
@@ -448,11 +449,12 @@ static void put_connection(struct ceph_connection *con)
 /*
  * add to connections tree
  */
-static void __register_connection(struct ceph_messenger *msgr,
+static int __register_connection(struct ceph_messenger *msgr,
 				  struct ceph_connection *con)
 {
 	struct list_head *head;
 	unsigned long key = hash_addr(&con->peer_addr);
+	int rc = 0;
 
 	/* inc ref count */
 	atomic_inc(&con->nref);
@@ -474,9 +476,16 @@ static void __register_connection(struct ceph_messenger *msgr,
 		dout(20, "add_connection %p in new bucket %lu head %p\n", con,
 		     key, &con->list_bucket);
 		INIT_LIST_HEAD(&con->list_bucket); /* empty */
-		radix_tree_insert(&msgr->con_tree, key, &con->list_bucket);
+		rc = radix_tree_insert(&msgr->con_tree, key, &con->list_bucket);
+
+		if (rc < 0) {
+			list_del(&con->list_all);
+			return rc;
+		}
 	}
 	set_bit(REGISTERED, &con->state);
+
+	return 0;
 }
 
 static void add_connection_accepting(struct ceph_messenger *msgr,
