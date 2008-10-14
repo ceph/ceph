@@ -398,8 +398,11 @@ int FileStore::mount()
   // get epoch
   sprintf(fn, "%s/commit_op_seq", basedir.c_str());
   fd = ::open(fn, O_RDONLY);
-  ::read(fd, &op_seq, sizeof(op_seq));
-  ::close(fd);
+  if (fd >= 0) {
+    ::read(fd, &op_seq, sizeof(op_seq));
+    ::close(fd);
+  } else
+    op_seq = 0;
   dout(5) << "mount op_seq is " << op_seq << dendl;
 
   // journal
@@ -425,12 +428,11 @@ int FileStore::mount()
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
   if (r == 0) {
-    dout(0) << "mount detected btrfs" << dendl;
-
-    // do we have WAIT_FOR_SYNC and CLONE_RANGE?
-    r = ::ioctl(fd, BTRFS_IOC_CLONE_RANGE, 0);  // pass in a BAD POINTER ...
-    assert(r < 0);
-    if (errno == -EFAULT) {
+    // do we have the shiny new ioctls: WAIT_FOR_SYNC and CLONE_RANGE?
+    int fd = ::open(basedir.c_str(), O_RDONLY);
+    r = ::ioctl(fd, BTRFS_IOC_WAIT_FOR_SYNC);
+    ::close(fd);
+    if (r == 0) {
       dout(0) << "mount detected shiny new btrfs" << dendl;      
       btrfs = 2;
     } else {
