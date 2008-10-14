@@ -768,7 +768,7 @@ out:
 	if (rc > 0)
 		rc = 0;  /* vfs expects us to return 0 */
 	ceph_put_snap_context(snapc);
-	dout(1, "writepages done, rc = %d\n", rc);
+	dout(10, "writepages done, rc = %d\n", rc);
 	return rc;
 }
 
