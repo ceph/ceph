@@ -70,11 +70,13 @@ static void ceph_put_super(struct super_block *s)
 	ceph_mdsc_close_sessions(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
 
-	rc = wait_event_timeout(cl->mount_wq,
-				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
-				seconds*HZ);
-	if (rc == 0)
-		derr(0, "umount timed out after %d seconds\n", seconds);
+	if (cl->mount_state != CEPH_MOUNT_SHUTDOWN) {
+		rc = wait_event_timeout(cl->mount_wq,
+					(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
+					seconds*HZ);
+		if (rc == 0)
+			derr(0, "umount timed out after %d seconds\n", seconds);
+	}
 
 	return;
 }
@@ -258,6 +260,24 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(ceph_inode_cachep);
 }
 
+static void ceph_umount_begin(struct vfsmount *vfsmnt, int flags)
+{
+	struct ceph_client *client = ceph_sb_to_client(vfsmnt->mnt_sb);
+
+	dout(30, "ceph_umount_begin\n");
+
+	if (!(flags & MNT_FORCE))
+		return;
+
+	if (!client)
+		return;
+
+	client->mount_state = CEPH_MOUNT_SHUTDOWN;
+
+	return;
+}
+
+
 static const struct super_operations ceph_super_ops = {
 	.alloc_inode	= ceph_alloc_inode,
 	.destroy_inode	= ceph_destroy_inode,
@@ -266,6 +286,7 @@ static const struct super_operations ceph_super_ops = {
 	.put_super	= ceph_put_super,
 	.show_options   = ceph_show_options,
 	.statfs		= ceph_statfs,
+	.umount_begin   = ceph_umount_begin,
 };
 
 
@@ -1072,9 +1093,6 @@ static void ceph_kill_sb(struct super_block *s)
 	bdi_destroy(&client->backing_dev_info);
 	ceph_destroy_client(client);
 }
-
-
-
 
 
 /************************************/

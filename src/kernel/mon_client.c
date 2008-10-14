@@ -230,6 +230,11 @@ static void do_request_umount(struct work_struct *work)
 
 void ceph_monc_request_umount(struct ceph_mon_client *monc)
 {
+	struct ceph_client *client=monc->client;
+
+	if (client->mount_state == CEPH_MOUNT_SHUTDOWN)
+		return;
+
 	mutex_lock(&monc->req_mutex);
 	monc->umount_delay = BASE_DELAY_INTERVAL;
 	do_request_umount(&monc->umount_delayed_work.work);

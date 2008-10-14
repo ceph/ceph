@@ -520,6 +520,14 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
 
+	client = ceph_inode_to_client(inode);
+
+	dout(1, "writepage client=%p\n", client);
+	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
+		dout(1, "writepage on forced umount\n");
+		return -EIO; /* we're in a forced umount, don't write anything! */
+	}
+
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
 	if (wsize < PAGE_CACHE_SIZE)

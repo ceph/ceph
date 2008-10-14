@@ -1890,6 +1890,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	int i;
 	int n;
 	unsigned long started, timeout = 30 * HZ;
+	struct ceph_client *client = mdsc->client;
 
 	dout(10, "close_sessions\n");
 	mdsc->stopping = 1;
@@ -1932,9 +1933,13 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 		if (n == 0)
 			break;
 
+		if (client->mount_state == CEPH_MOUNT_SHUTDOWN)
+			break;
+
 		dout(10, "waiting for sessions to close\n");
 		mutex_unlock(&mdsc->mutex);
 		up_write(&mdsc->snap_rwsem);
+
 		wait_for_completion_timeout(&mdsc->session_close_waiters,
 					    timeout);
 		mutex_lock(&mdsc->mutex);
