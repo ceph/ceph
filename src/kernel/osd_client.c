@@ -271,7 +271,9 @@ static int send_request(struct ceph_osd_client *osdc,
 		cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 	req->r_request->hdr.dst.name.num = cpu_to_le32(osd);
 	req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osd];
-	req->r_last_osd = req->r_request->hdr.dst.addr;
+	req->r_last_osd = osd;
+	req->r_last_osd_addr = req->r_request->hdr.dst.addr;
+	req->r_last_stamp = jiffies;
 
 	ceph_msg_get(req->r_request); /* send consumes a ref */
 	rc = ceph_msg_send(osdc->client->msgr, req->r_request, 0);
@@ -359,7 +361,9 @@ static void kick_requests(struct ceph_osd_client *osdc,
 			dout(20, "tid %llu maps to no osd\n",
 			     req->r_tid);
 			needmap++;  /* request a newer map */
-			memset(&req->r_last_osd, 0, sizeof(req->r_last_osd));
+			req->r_last_osd = -1;
+			memset(&req->r_last_osd_addr, 0,
+			       sizeof(req->r_last_osd_addr));
 			continue;
 		}
 		if (!ceph_entity_addr_equal(&req->r_last_osd,
@@ -608,11 +612,38 @@ int do_sync_request(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
 
 void handle_timeout(struct work_struct *work)
 {
+	u64 next_tid = 0;
 	struct ceph_osd_client *osdc =
 		container_of(work, struct ceph_osd_client, timeout_work.work);
+	struct ceph_osd_request *req;
+	int got;
+	int timeout = osdc->client->mount_args.osd_timeout * HZ;
+
 	dout(10, "timeout\n");
 	down_read(&osdc->map_sem);
 	ceph_monc_request_osdmap(&osdc->client->monc, osdc->osdmap->epoch);
+
+	/*
+	 * ping any osds with pending requests to ensure the communications
+	 * channel hasn't reset
+	 */
+	mutex_lock(&osdc->request_mutex);
+	while (1) {
+		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+					     next_tid, 1);
+		if (got == 0)
+			break;
+		next_tid = req->r_tid + 1;
+		if (time_after(jiffies, req->r_last_stamp + timeout)) {
+			struct ceph_entity_name n = {
+				.type = CEPH_ENTITY_TYPE_OSD,
+				.num = req->r_last_osd
+			};
+			ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
+		}
+	}
+	mutex_unlock(&osdc->request_mutex);
+
 	up_read(&osdc->map_sem);
 }
 

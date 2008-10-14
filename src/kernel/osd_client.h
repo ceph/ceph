@@ -34,7 +34,9 @@ struct ceph_osd_request {
 	struct inode *r_inode;
 	struct writeback_control *r_wbc;
 	struct ceph_msg  *r_request;
-	struct ceph_entity_addr r_last_osd;  /* last osd we sent request to */
+	int               r_last_osd;  /* last osd we sent request to */
+	struct ceph_entity_addr r_last_osd_addr;
+	unsigned long     r_last_stamp;
 	union ceph_pg     r_pgid;
 	struct ceph_msg  *r_reply;
 	int               r_result;

@@ -2071,16 +2071,26 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 	/* queue */
 	spin_lock(&con->out_queue_lock);
-	msg->hdr.seq = cpu_to_le64(++con->out_seq);
-	dout(1, "----- %p %u to %s%d %d=%s len %d+%d -----\n", msg,
-	     (unsigned)con->out_seq,
-	     ENTITY_NAME(msg->hdr.dst.name), le32_to_cpu(msg->hdr.type),
-	     ceph_msg_type_name(le32_to_cpu(msg->hdr.type)),
-	     le32_to_cpu(msg->hdr.front_len),
-	     le32_to_cpu(msg->hdr.data_len));
-	dout(2, "ceph_msg_send queuing %p seq %llu for %s%d on %p pgs %d\n", msg,
-	     le64_to_cpu(msg->hdr.seq), ENTITY_NAME(msg->hdr.dst.name), con, msg->nr_pages);
-	list_add_tail(&msg->list_head, &con->out_queue);
+	if (unlikely(msg->hdr.type == CEPH_MSG_PING &&
+		     !list_empty(&con->out_queue) &&
+		     list_entry(con->out_queue.prev, struct ceph_msg,
+				list_head)->hdr.type == CEPH_MSG_PING)) {
+		/* don't queue multiple pings in a row */
+		dout(2, "ceph_msg_send dropping dup ping\n");
+		ceph_msg_put(msg);
+	} else {
+		msg->hdr.seq = cpu_to_le64(++con->out_seq);
+		dout(1, "----- %p %u to %s%d %d=%s len %d+%d -----\n", msg,
+		     (unsigned)con->out_seq,
+		     ENTITY_NAME(msg->hdr.dst.name), le32_to_cpu(msg->hdr.type),
+		     ceph_msg_type_name(le32_to_cpu(msg->hdr.type)),
+		     le32_to_cpu(msg->hdr.front_len),
+		     le32_to_cpu(msg->hdr.data_len));
+		dout(2, "ceph_msg_send %p seq %llu for %s%d on %p pgs %d\n",
+		     msg, le64_to_cpu(msg->hdr.seq),
+		     ENTITY_NAME(msg->hdr.dst.name), con, msg->nr_pages);
+		list_add_tail(&msg->list_head, &con->out_queue);
+	}
 	spin_unlock(&con->out_queue_lock);
 
 	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0)
@@ -2164,3 +2174,16 @@ void ceph_msg_put(struct ceph_msg *m)
 	}
 }
 
+void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
+	       struct ceph_entity_addr *addr)
+{
+	struct ceph_msg *m;
+
+	m = ceph_msg_new(CEPH_MSG_PING, 0, 0, 0, 0);
+	if (!m)
+		return;
+	memset(m->front.iov_base, 0, m->front.iov_len);
+	m->hdr.dst.name = name;
+	m->hdr.dst.addr = *addr;
+	ceph_msg_send(msgr, m, 0);
+}

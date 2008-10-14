@@ -183,4 +183,7 @@ extern struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *msg);
 extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 			 unsigned long timeout);
 
+extern void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
+		      struct ceph_entity_addr *addr);
+
 #endif
