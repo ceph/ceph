@@ -620,7 +620,7 @@ void calc_object_layout(struct ceph_object_layout *ol,
 {
 	unsigned num, num_mask;
 	union ceph_pg pgid;
-	ceph_ino_t ino = le64_to_cpu(oid->ino);
+	u64 ino = le64_to_cpu(oid->ino);
 	unsigned bno = le32_to_cpu(oid->bno);
 	s32 preferred = (s32)le32_to_cpu(fl->fl_pg_preferred);
 

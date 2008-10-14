@@ -239,20 +239,27 @@ void PGMonitor::committed()
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
+  MStatfsReply *reply;
+
   dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_orig_source() << dendl;
 
+  if (!ceph_fsid_equal(&statfs->fsid, &mon->monmap->fsid)) {
+    dout(0) << "handle_statfs on fsid " << statfs->fsid << " != " << mon->monmap->fsid << dendl;
+    goto out;
+  }
+
   // fill out stfs
-  MStatfsReply *reply = new MStatfsReply(statfs->tid);
-  memset(&reply->stfs, 0, sizeof(reply->stfs));
+  reply = new MStatfsReply(mon->monmap->fsid, statfs->tid);
 
   // these are in KB.
-  reply->stfs.f_total = pg_map.total_kb();
-  reply->stfs.f_free = pg_map.total_avail_kb();
-  reply->stfs.f_avail = pg_map.total_avail_kb();
-  reply->stfs.f_objects = pg_map.total_osd_num_objects;
+  reply->h.st.f_total = pg_map.total_kb();
+  reply->h.st.f_free = pg_map.total_avail_kb();
+  reply->h.st.f_avail = pg_map.total_avail_kb();
+  reply->h.st.f_objects = pg_map.total_osd_num_objects;
 
   // reply
   mon->messenger->send_message(reply, statfs->get_orig_source_inst());
+ out:
   delete statfs;
 }
 

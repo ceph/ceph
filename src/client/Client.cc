@@ -4057,10 +4057,10 @@ int Client::_statfs(struct statvfs *stbuf)
   memset(stbuf, 0, sizeof(*stbuf));
   stbuf->f_bsize = 4096;
   stbuf->f_frsize = 4096;
-  stbuf->f_blocks = req->reply->stfs.f_total / 4;
-  stbuf->f_bfree = req->reply->stfs.f_free / 4;
-  stbuf->f_bavail = req->reply->stfs.f_avail / 4;
-  stbuf->f_files = req->reply->stfs.f_objects;
+  stbuf->f_blocks = req->reply->h.st.f_total / 4;
+  stbuf->f_bfree = req->reply->h.st.f_free / 4;
+  stbuf->f_bavail = req->reply->h.st.f_avail / 4;
+  stbuf->f_files = req->reply->h.st.f_objects;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
@@ -4078,11 +4078,11 @@ int Client::_statfs(struct statvfs *stbuf)
 
 void Client::handle_statfs_reply(MStatfsReply *reply)
 {
-  if (statfs_requests.count(reply->tid) &&
-      statfs_requests[reply->tid]->reply == 0) {
+  if (statfs_requests.count(reply->h.tid) &&
+      statfs_requests[reply->h.tid]->reply == 0) {
     dout(10) << "handle_statfs_reply " << *reply << ", kicking waiter" << dendl;
-    statfs_requests[reply->tid]->reply = reply;
-    statfs_requests[reply->tid]->caller_cond->Signal();
+    statfs_requests[reply->h.tid]->reply = reply;
+    statfs_requests[reply->h.tid]->caller_cond->Signal();
   } else {
     dout(10) << "handle_statfs_reply " << *reply << ", dup or old, dropping" << dendl;
     delete reply;

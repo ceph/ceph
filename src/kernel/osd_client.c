@@ -366,9 +366,10 @@ static void kick_requests(struct ceph_osd_client *osdc,
 			       sizeof(req->r_last_osd_addr));
 			continue;
 		}
-		if (!ceph_entity_addr_equal(&req->r_last_osd,
+		if (!ceph_entity_addr_equal(&req->r_last_osd_addr,
 					    &osdc->osdmap->osd_addr[osd]) ||
-		    (who && ceph_entity_addr_equal(&req->r_last_osd, who))) {
+		    (who && ceph_entity_addr_equal(&req->r_last_osd_addr,
+						   who))) {
 			dout(20, "kicking tid %llu osd%d\n", req->r_tid, osd);
 			get_request(req);
 			req->r_request = ceph_msg_maybe_dup(req->r_request);

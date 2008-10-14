@@ -965,8 +965,8 @@ void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds)
  */
 struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
-			 ceph_ino_t ino1, const char *path1,
-			 ceph_ino_t ino2, const char *path2,
+			 u64 ino1, const char *path1,
+			 u64 ino2, const char *path2,
 			 struct dentry *ref, int mode)
 {
 	struct ceph_msg *msg;

@@ -1429,7 +1429,8 @@ static int process_connect(struct ceph_connection *con)
 		return -1;
 
 	/* verify peer addr */
-	if (!ceph_entity_addr_is_local(con->peer_addr, con->actual_peer_addr) &&
+	if (!ceph_entity_addr_is_local(&con->peer_addr,
+				       &con->actual_peer_addr) &&
 	    con->actual_peer_addr.ipaddr.sin_addr.s_addr != 0) {
 		derr(1, "process_connect wrong peer, want %u.%u.%u.%u:%u/%d, "
 		     "got %u.%u.%u.%u:%u/%d, wtf\n",

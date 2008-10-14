@@ -13,6 +13,7 @@
 # include <linux/in.h>
 # include <linux/types.h>
 # include <asm/fcntl.h>
+# include <linux/string.h>
 #else
 # include <netinet/in.h>
 # ifndef _LINUX_TYPES_H
@@ -21,10 +22,13 @@
 #  include "byteorder.h"
 # endif
 # include <fcntl.h>
+# include <string.h>
 #endif
 
+
+
 #define CEPH_MON_PORT 12345
-#define CEPH_FILE_MAX_SIZE (1ULL << 40) // 1 TB
+#define CEPH_FILE_MAX_SIZE (1ULL << 40) /* 1 TB */
 
 
 /*
@@ -32,15 +36,17 @@
  * whenever the wire protocol changes.  try to keep this string the
  * same length.
  */
-#define CEPH_BANNER "ceph 003\n"  
+#define CEPH_BANNER "ceph 004\n"  
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
- * subprotocol versions.
+ * subprotocol versions.  when specific messages types or high-level
+ * protocols change, bump the affected components.
  */
-#define CEPH_OSD_PROTOCOL   1
-#define CEPH_MDS_PROTOCOL   1
-#define CEPH_MON_PROTOCOL   1
+#define CEPH_OSD_PROTOCOL    1
+#define CEPH_MDS_PROTOCOL    1
+#define CEPH_MON_PROTOCOL    2
+#define CEPH_CLIENT_PROTOCOL 1
 
 /*
  * types in this file are defined as little-endian, and are
@@ -48,12 +54,11 @@
  * over the wire or that are stored on disk.
  */
 
-
 /*
  * some basics
  */
 typedef __le64 ceph_version_t;
-typedef __le64 ceph_tid_t;
+typedef __le64 ceph_tid_t;      /* transaction id */
 typedef __le32 ceph_epoch_t;
 
 
@@ -65,7 +70,8 @@ struct ceph_fsid {
 	__le64 minor;
 } __attribute__ ((packed));
 
-static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_fsid *b) {
+static inline int ceph_fsid_equal(const struct ceph_fsid *a,
+				  const struct ceph_fsid *b) {
 	return a->major == b->major && a->minor == b->minor;
 }
 
@@ -73,10 +79,10 @@ static inline int ceph_fsid_equal(const struct ceph_fsid *a, const struct ceph_f
 /*
  * ino, object, etc.
  */
-typedef __le64 ceph_ino_t;
+#define CEPH_INO_ROOT 1
 
 typedef __le64 ceph_snapid_t;
-#define CEPH_MAXSNAP ((1ull << 56)-1)  /* 56 bits; see ceph_pg */
+#define CEPH_MAXSNAP ((__u64)(-3))
 #define CEPH_SNAPDIR ((__u64)(-1))
 #define CEPH_NOSNAP  ((__u64)(-2))
 
@@ -91,8 +97,6 @@ struct ceph_object {
 	};
 } __attribute__ ((packed));
 
-#define CEPH_INO_ROOT 1
-
 struct ceph_timespec {
 	__le32 tv_sec;
 	__le32 tv_nsec;
@@ -100,7 +104,11 @@ struct ceph_timespec {
 
 
 /*
- * frag encoding:
+ * "Frags" are a way to describe a subset of a 32-bit number space,
+ * using a mask and a value to match against that mask.  Any given frag
+ * (subset of the number space) can be partitioned into 2^n sub-frags.
+ *
+ * Frags are encoded into a 32-bit word:
  *   8 upper bits = "bits"
  *  24 lower bits = "value"
  * (We could go to 5+27 bits, but who cares.)
@@ -108,7 +116,7 @@ struct ceph_timespec {
  * We use the _most_ significant bits of the 24 bit value.  This makes
  * values logically sort.
  *
- * Unfortunately, because the bits are still in the high bits, we
+ * Unfortunately, because the "bits" field is still in the high bits, we
  * can't sort encoded frags numerically.  However, it does allow you
  * to feed encoded frags as values into frag_contains_value.
  */
@@ -129,7 +137,7 @@ static inline int frag_contains_value(__u32 f, __u32 v) {
 	return (v & frag_mask(f)) == frag_value(f);
 }
 static inline int frag_contains_frag(__u32 f, __u32 sub) {
-	/* as specific as us, and contained by us */
+	/* is sub as specific as us, and contained by us? */
 	return frag_bits(sub) >= frag_bits(f) &&
 		(frag_value(sub) & frag_mask(f)) == frag_value(f);
 }
@@ -173,6 +181,10 @@ static inline __u32 frag_next(__u32 f) {
 			 frag_value(f) + (0x1000000 >> frag_bits(f)));
 }
 
+/*
+ * comparator to sort frags logically, as when traversing the
+ * number space in ascending order...
+ */
 static inline int frag_compare(__u32 a, __u32 b) {
 	unsigned va = frag_value(a);
 	unsigned vb = frag_value(b);
@@ -197,7 +209,7 @@ static inline int frag_compare(__u32 a, __u32 b) {
 #define CEPH_OBJECT_LAYOUT_HASHINO  3
 
 /*
- * pg layout -- how PGs are mapped into (sets of) OSDs
+ * pg layout -- how PGs are mapped onto (sets of) OSDs
  */
 #define CEPH_PG_LAYOUT_CRUSH  0
 #define CEPH_PG_LAYOUT_HASH   1
@@ -209,19 +221,21 @@ static inline int frag_compare(__u32 a, __u32 b) {
  */
 struct ceph_file_layout {
 	/* file -> object mapping */
-	__le32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple of page size. */
+	__le32 fl_stripe_unit;     /* stripe unit, in bytes.  must be multiple
+				      of page size. */
 	__le32 fl_stripe_count;    /* over this many objects */
-	__le32 fl_object_size;     /* until objects are this big, then move to new objects */
+	__le32 fl_object_size;     /* until objects are this big, then move to
+				      new objects */
 	__le32 fl_cas_hash;        /* 0 = none; 1 = sha256 */
 
 	/* pg -> disk layout */
 	__le32 fl_object_stripe_unit;  /* for per-object parity, if any */
 
 	/* object -> pg layout */
-	__le32 fl_pg_preferred; /* preferred primary for pg, if any (-1 = none) */
-	__u8  fl_pg_type;      /* pg type; see PG_TYPE_* */
-	__u8  fl_pg_size;      /* pg size (num replicas, raid stripe width, etc. */
-	__u8  fl_pg_pool;      /* implies crush ruleset AND object namespace */
+	__le32 fl_pg_preferred; /* preferred primary for pg (-1 for none) */
+	__u8  fl_pg_type;       /* pg type; see PG_TYPE_* */
+	__u8  fl_pg_size;       /* pg size (num replicas, etc.) */
+	__u8  fl_pg_pool;       /* implies crush ruleset AND object namespace */
 } __attribute__ ((packed));
 
 #define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
@@ -234,7 +248,7 @@ struct ceph_file_layout {
 #define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
 					  le32_to_cpu((l).fl_stripe_count))
 
-/* period = bytes before i start on a new set of objects */
+/* "period" == bytes before i start on a new set of objects */
 #define ceph_file_layout_period(l) (le32_to_cpu((l).fl_object_size) *	\
 				    le32_to_cpu((l).fl_stripe_count))
 
@@ -244,8 +258,6 @@ struct ceph_file_layout {
  */
 #define CEPH_PG_TYPE_REP     1
 #define CEPH_PG_TYPE_RAID4   2
-#define CEPH_PG_TYPE_SNAP_LB 3
-#define CEPH_PG_TYPE_SNAP_UB 4
 union ceph_pg {
 	__u64 pg64;
 	struct {
@@ -258,13 +270,17 @@ union ceph_pg {
 	} pg;
 } __attribute__ ((packed));
 
-#define ceph_pg_is_rep(pg)   (pg.pg.type == CEPH_PG_TYPE_REP)
-#define ceph_pg_is_raid4(pg) (pg.pg.type == CEPH_PG_TYPE_RAID4)
+#define ceph_pg_is_rep(pg)   ((pg).pg.type == CEPH_PG_TYPE_REP)
+#define ceph_pg_is_raid4(pg) ((pg).pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
- * stable_mod func is used to control number of placement groups
- *  b <= bmask and bmask=(2**n)-1
- *  e.g., b=12 -> bmask=15, b=123 -> bmask=127
+ * stable_mod func is used to control number of placement groups.
+ * similar to straight-up modulo, but produces a stable mapping as b
+ * increases over time.  b is the number of bins, and bmask is the
+ * containing power of 2 minus 1.
+ *
+ * b <= bmask and bmask=(2**n)-1
+ * e.g., b=12 -> bmask=15, b=123 -> bmask=127
  */
 static inline int ceph_stable_mod(int x, int b, int bmask) {
   if ((x & bmask) < b)
@@ -282,7 +298,7 @@ struct ceph_object_layout {
 } __attribute__ ((packed));
 
 /*
- * compound epoch+version, used by rados to serialize mutations
+ * compound epoch+version, used by storage layer to serialize mutations
  */
 struct ceph_eversion {
 	ceph_epoch_t epoch;
@@ -298,7 +314,7 @@ struct ceph_eversion {
 #define CEPH_OSD_UP     2
 #define CEPH_OSD_CLEAN  4  /* as in, clean shutdown */
 
-/* offload weights */
+/* offload weights.  fixed point value: 0x10000 == 1.0 */
 #define CEPH_OSD_IN  0
 #define CEPH_OSD_OUT 0x10000
 
@@ -344,7 +360,7 @@ ceph_full_name_hash(const char *name, unsigned int len)
 
 
 /*********************************************
- * message types
+ * message layer
  */
 
 /*
@@ -361,18 +377,22 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_CLIENT 4
 #define CEPH_ENTITY_TYPE_ADMIN  5
 
-#define CEPH_MSGR_TAG_READY         1  /* server -> client: ready for messages */
-#define CEPH_MSGR_TAG_RESETSESSION  2  /* server -> client: reset, try again */
-#define CEPH_MSGR_TAG_WAIT          3  /* server -> client: wait for racing incoming connection */
-#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server -> client + cseq: try again with higher cseq */
-#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server -> client + gseq: try again with higher gseq */
+/* used by message exchange protocol */
+#define CEPH_MSGR_TAG_READY         1  /* server->client: ready for messages */
+#define CEPH_MSGR_TAG_RESETSESSION  2  /* server->client: reset, try again */
+#define CEPH_MSGR_TAG_WAIT          3  /* server->client: wait for racing
+					  incoming connection */
+#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server->client + cseq: try again 
+					  with higher cseq */
+#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again 
+					  with higher gseq */
 #define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
 #define CEPH_MSGR_TAG_MSG          10  /* message */
 #define CEPH_MSGR_TAG_ACK          11  /* message ack */
 
 
 /*
- * entity_addr
+ * entity_addr -- network address
  */
 struct ceph_entity_addr {
 	__le32 erank;  /* entity's rank in process */
@@ -380,12 +400,18 @@ struct ceph_entity_addr {
 	struct sockaddr_in ipaddr;
 } __attribute ((packed));
 
-#define ceph_entity_addr_is_local(a,b)					\
-	(le32_to_cpu((a).nonce) == le32_to_cpu((b).nonce) &&		\
-	 (a).ipaddr.sin_addr.s_addr == (b).ipaddr.sin_addr.s_addr)
+static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
+					     const struct ceph_entity_addr *b)
+{
+	return le32_to_cpu(a->nonce) == le32_to_cpu(b->nonce) &&
+		a->ipaddr.sin_addr.s_addr == b->ipaddr.sin_addr.s_addr;
+}
 
-#define ceph_entity_addr_equal(a, b)		\
-	(memcmp((a), (b), sizeof(*(a))) == 0)
+static inline bool ceph_entity_addr_equal(const struct ceph_entity_addr *a,
+					  const struct ceph_entity_addr *b)
+{
+	return memcmp(a, b, sizeof(*a)) == 0;
+}
 
 struct ceph_entity_inst {
 	struct ceph_entity_name name;
@@ -402,37 +428,43 @@ struct ceph_msg_connect {
 	__u8  flags;
 } __attribute__ ((packed));
 
-#define CEPH_MSG_CONNECT_LOSSYTX  1  /* msg i send may be safely dropped */
+#define CEPH_MSG_CONNECT_LOSSYTX  1  /* messages i send may be safely dropped */
 
 
 /*
- * message header, footer
+ * message header
  */
 struct ceph_msg_header {
-	__le64 seq;    /* message seq# for this session */
-	__le16 type;   /* message type */
+	__le64 seq;       /* message seq# for this session */
+	__le16 type;      /* message type */
 	__le16 priority;  /* priority.  higher value == higher priority */
-	__le32 front_len;
-	__le32 data_off;  /* sender: include full offset; receiver: mask against ~PAGE_MASK */
+	__le16 mon_protocol, osd_protocol, mds_protocol,
+		client_protocol; /* protocol versions */
+	__le32 front_len; /* bytes in main payload */
+	__le32 data_off;  /* sender: include full offset; 
+			     receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
 	struct ceph_entity_inst src, orig_src, dst;
-	__le32 header_crc;
-	__le32 crc;      /* this goes at the end! */
+	__le32 crc;       /* header crc32c */
 } __attribute__ ((packed));
 
-#define CEPH_MSG_PRIO_LOW     100
-#define CEPH_MSG_PRIO_DEFAULT 200
-#define CEPH_MSG_PRIO_HIGH    300
-#define CEPH_MSG_PRIO_HIGHEST 400
+#define CEPH_MSG_PRIO_LOW     64
+#define CEPH_MSG_PRIO_DEFAULT 127
+#define CEPH_MSG_PRIO_HIGH    196
+#define CEPH_MSG_PRIO_HIGHEST 255
 
+/*
+ * follows data payload
+ */
 struct ceph_msg_footer {
 	__le32 flags;
 	__le32 front_crc;
 	__le32 data_crc;
 } __attribute__ ((packed));
 
-#define CEPH_MSG_FOOTER_ABORTED   (1<<0)
-#define CEPH_MSG_FOOTER_NOCRC     (1<<1)
+#define CEPH_MSG_FOOTER_ABORTED   (1<<0)   /* drop this message */
+#define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
+
 
 /*
  * message types
@@ -451,8 +483,8 @@ struct ceph_msg_footer {
 #define CEPH_MSG_STATFS_REPLY           13
 
 /* client <-> mds */
-#define CEPH_MSG_MDS_GETMAP                  20
-#define CEPH_MSG_MDS_MAP                     21
+#define CEPH_MSG_MDS_GETMAP             20
+#define CEPH_MSG_MDS_MAP                21
 
 #define CEPH_MSG_CLIENT_SESSION         22
 #define CEPH_MSG_CLIENT_RECONNECT       23
@@ -471,12 +503,22 @@ struct ceph_msg_footer {
 #define CEPH_MSG_OSD_OPREPLY      43
 
 
-/* for statfs_reply.  units are KB, objects. */
+struct ceph_mon_statfs {
+	struct ceph_fsid fsid;
+	__le64 tid;
+};
+
 struct ceph_statfs {
 	__le64 f_total;
-	__le64 f_free;  // used = total - free
+	__le64 f_free;  // used = total - free  (KB)
 	__le64 f_avail; // usable
 	__le64 f_objects;
+};
+
+struct ceph_mon_statfs_reply {
+	struct ceph_fsid fsid;
+	__le64 tid;
+	struct ceph_statfs st;
 };
 
 struct ceph_osd_getmap {
@@ -496,21 +538,23 @@ struct ceph_mds_getmap {
  *  <= 0 -> out
  */
 #define CEPH_MDS_STATE_DNE         0  /* down, does not exist. */
-#define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees. empty log. */
+#define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees.
+					 empty log. */
 #define CEPH_MDS_STATE_DESTROYING -2  /* down, existing, semi-destroyed. */
 #define CEPH_MDS_STATE_FAILED      3  /* down, needs to be recovered. */
 
-#define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement.  destiny unknown. */
-#define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment by monitor. */
-#define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance (new journal, idalloc..). */
-#define CEPH_MDS_STATE_STARTING   -7  /* up, starting prior stopped MDS instance. */
+#define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement. */
+#define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
+#define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
+#define CEPH_MDS_STATE_STARTING   -7  /* up, starting previously stopped mds. */
 
-#define CEPH_MDS_STATE_REPLAY      8  /* up, starting prior failed instance. scanning journal. */
-#define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed operations (import, rename, etc.) */
+#define CEPH_MDS_STATE_REPLAY      8  /* up, replaying journal. */
+#define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed 
+					 operations (import, rename, etc.) */
 #define CEPH_MDS_STATE_RECONNECT   10 /* up, reconnect to clients */
 #define CEPH_MDS_STATE_REJOIN      11 /* up, rejoining distributed cache */
 #define CEPH_MDS_STATE_ACTIVE      12 /* up, active */
-#define CEPH_MDS_STATE_STOPPING    13 /* up, exporting metadata */
+#define CEPH_MDS_STATE_STOPPING    13 /* up, but exporting metadata */
 
 
 /*
@@ -529,9 +573,10 @@ struct ceph_mds_getmap {
 #define CEPH_LOCK_IDFT        128   /* dir frag tree */
 #define CEPH_LOCK_INEST       256   /* mds internal */
 #define CEPH_LOCK_IXATTR      512
-#define CEPH_LOCK_INO         2048  /* immutable inode bits; not actually a lock */
+#define CEPH_LOCK_INO         2048  /* immutable inode bits; not a lock */
 
-#define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)  /* alias for either filelock or dirlock */
+/* alias for either filelock or dirlock */
+#define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)
 
 /*
  * stat masks are defined in terms of the locks that cover inode fields.
@@ -548,13 +593,15 @@ struct ceph_mds_getmap {
 #define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
 #define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
 #define CEPH_STAT_MASK_XATTR    CEPH_LOCK_IXATTR
-#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_INO)
+#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT | CEPH_LOCK_IAUTH | \
+				  CEPH_LOCK_ILINK | CEPH_LOCK_INO)
 
+/* masks for utimes() */
 #define CEPH_UTIME_ATIME		1
 #define CEPH_UTIME_MTIME		2
 #define CEPH_UTIME_CTIME		4
 
-/* client_session */
+/* client_session ops */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,
 	CEPH_SESSION_OPEN,
@@ -587,9 +634,9 @@ struct ceph_mds_session_head {
 
 /* client_request */
 /*
- * mds ops.
- *  & 0x1000  -> write op
- *  & 0x10000 -> follow symlink (e.g. stat(), not lstat()).
+ * metadata ops.
+ *  & 0x001000 -> write op
+ *  & 0x010000 -> follow symlink (e.g. stat(), not lstat()).
  &  & 0x100000 -> use weird ino/path trace
  */
 #define CEPH_MDS_OP_WRITE       0x001000
@@ -673,7 +720,7 @@ struct ceph_mds_request_head {
 	ceph_epoch_t mdsmap_epoch; /* on client */
 	__le32 num_fwd;
 	__le32 retry_attempt;
-	ceph_ino_t mds_wants_replica_in_dirino;
+	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
 
@@ -739,12 +786,10 @@ struct ceph_mds_reply_head {
 	__le32 mdsmap_epoch;
 } __attribute__ ((packed));
 
-/*
- * one for each node split
- */
+/* one for each node split */
 struct ceph_frag_tree_split {
-	__le32 frag;
-	__le32 by;
+	__le32 frag;      /* this frag splits... */
+	__le32 by;        /* ...by this many bits */
 } __attribute__ ((packed));
 
 struct ceph_frag_tree_head {
@@ -753,21 +798,21 @@ struct ceph_frag_tree_head {
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
-	ceph_ino_t ino;
+	__le64 ino;
 	__le64 snapid;
 	__le64 version;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
 	__le64 time_warp_seq;
+	__le32 rdev;
 	__le32 mode, uid, gid;
 	__le32 nlink;
 	__le64 size, max_size, truncate_seq;
 	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
 	struct ceph_timespec rctime;
-	__le32 rdev;
 	struct ceph_frag_tree_head fragtree;
 } __attribute__ ((packed));
-/* followed by frag array, then symlink string, then xattr map */
+/* followed by frag array, then symlink string, then xattr blob */
 
 /* reply_lease follows dname, and reply_inode */
 struct ceph_mds_reply_lease {
@@ -776,9 +821,9 @@ struct ceph_mds_reply_lease {
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_dirfrag {
-	__le32 frag;
-	__le32 auth;
-	__le32 ndist;
+	__le32 frag;   /* fragment */
+	__le32 auth;   /* auth mds, if this is a delegation point */
+	__le32 ndist;  /* number of mds' this is replicated on */
 	__le32 dist[];
 } __attribute__ ((packed));
 
@@ -787,7 +832,7 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_FILE_MODE_RD         1
 #define CEPH_FILE_MODE_WR         2
 #define CEPH_FILE_MODE_RDWR       3  /* RD | WR */
-#define CEPH_FILE_MODE_LAZY       4
+#define CEPH_FILE_MODE_LAZY       4  /* lazy io */
 #define CEPH_FILE_MODE_NUM        8  /* bc these are bit fields.. mostly */
 
 static inline int ceph_flags_to_mode(int flags)
@@ -817,7 +862,7 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_RD        4  /* client can read */
 #define CEPH_CAP_WR        8  /* client can write */
 #define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
-#define CEPH_CAP_WREXTEND 32  /* client can extend eof */
+#define CEPH_CAP_WREXTEND 32  /* client can extend EOF */
 #define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
 #define CEPH_CAP_EXCL    128  /* exclusive/loner access */
 
@@ -871,6 +916,9 @@ inline static const char* ceph_cap_op_name(int op) {
 	}
 }
 
+/*
+ * caps message, used for capability callbacks, acks, requests, etc.
+ */
 struct ceph_mds_caps {
 	__le32 op;
 	__le64 ino;
@@ -943,7 +991,7 @@ struct ceph_mds_snap_head {
 	__le32 num_split_realms;
 	__le32 trace_len;
 } __attribute__ ((packed));
-/* followed by split inos, then split realms, then the trace blob */
+/* followed by split ino list, then split realms, then the trace blob */
 
 /*
  * encode info about a snaprealm, as viewed by a client
@@ -957,12 +1005,11 @@ struct ceph_mds_snap_realm {
 	__le32 num_snaps;
 	__le32 num_prior_parent_snaps;
 } __attribute__ ((packed));
-/* followed by my snaps, then prior parent snaps */
+/* followed by my snap list, then prior parent snap list */
 
 /*
  * osd map flag bits
  */
-
 #define CEPH_OSDMAP_NEARFULL (1<<0)  /* sync writes (near ENOSPC) */
 #define CEPH_OSDMAP_FULL     (1<<1)  /* no data writes (ENOSPC) */
 
@@ -993,7 +1040,6 @@ enum {
 	/* subop */
 	CEPH_OSD_OP_PULL       = 30,
 	CEPH_OSD_OP_PUSH       = 31,
-
 	CEPH_OSD_OP_BALANCEREADS   = 40,
 	CEPH_OSD_OP_UNBALANCEREADS = 41
 };
@@ -1015,7 +1061,7 @@ static inline int ceph_osd_op_is_subop(int op)
 	return op >= 30 && op < 40;
 }
 
-static inline const char* ceph_osd_op_name(int op)
+static inline const char *ceph_osd_op_name(int op)
 {
 	switch (op) {
 	case CEPH_OSD_OP_READ: return "read";
@@ -1035,11 +1081,11 @@ static inline const char* ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_UPLOCK: return "uplock";
 	case CEPH_OSD_OP_DNLOCK: return "dnlock";
 
+	case CEPH_OSD_OP_PULL: return "pull";
+	case CEPH_OSD_OP_PUSH: return "push";
 	case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
 	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 
-	case CEPH_OSD_OP_PULL: return "pull";
-	case CEPH_OSD_OP_PUSH: return "push";
 	default: return "???";
 	}
 }
@@ -1058,7 +1104,7 @@ enum {
 	CEPH_OSD_OP_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 };
 
-#define EOLDSNAPC 44 /* ORDERSNAP specified and writer has old snap context*/
+#define EOLDSNAPC 44 /* ORDERSNAP flag set and writer has old snap context*/
 
 struct ceph_osd_peer_stat {
 	struct ceph_timespec stamp;
@@ -1089,6 +1135,7 @@ struct ceph_osd_request_head {
 	__le32                    shed_count;
 	struct ceph_osd_peer_stat peer_stat;
 
+	/* writer's snap context */
 	__le64 snap_seq;
 	__le32 num_snaps;
 	__le64 snaps[];

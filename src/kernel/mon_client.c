@@ -259,35 +259,30 @@ void ceph_monc_handle_umount(struct ceph_mon_client *monc,
 void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 				   struct ceph_msg *msg)
 {
-	__u64 tid;
 	struct ceph_mon_statfs_request *req;
-	void *p = msg->front.iov_base;
-	void *end = p + msg->front.iov_len;
+	struct ceph_mon_statfs_reply *reply = msg->front.iov_base;
+	__u64 tid;
 
-	ceph_decode_64_safe(&p, end, tid, bad);
+	if (msg->front.iov_len != sizeof(*reply))
+		goto bad;
+	tid = le64_to_cpu(reply->tid);
 	dout(10, "handle_statfs_reply %p tid %llu\n", msg, tid);
 
 	spin_lock(&monc->lock);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
 	if (req) {
 		radix_tree_delete(&monc->statfs_request_tree, tid);
-		req->result = -EIO;
-		ceph_decode_need(&p, end, 4*sizeof(__u64), bad_locked);
-		ceph_decode_64(&p, req->buf->f_total);
-		ceph_decode_64(&p, req->buf->f_free);
-		ceph_decode_64(&p, req->buf->f_avail);
-		ceph_decode_64(&p, req->buf->f_objects);
+		req->buf->f_total = le64_to_cpu(reply->st.f_total);
+		req->buf->f_free = le64_to_cpu(reply->st.f_free);
+		req->buf->f_avail = le64_to_cpu(reply->st.f_avail);
+		req->buf->f_objects = le64_to_cpu(reply->st.f_objects);
 		req->result = 0;
 	}
-out_locked:
 	spin_unlock(&monc->lock);
 	if (req)
 		complete(&req->completion);
 	return;
 
-bad_locked:
-	derr(10, "corrupt statfs reply, EIO\n");
-	goto out_locked;
 bad:
 	derr(10, "corrupt statfs reply, no tid\n");
 }
@@ -296,12 +291,15 @@ int send_statfs(struct ceph_mon_client *monc, u64 tid)
 {
 	struct ceph_msg *msg;
 	int mon = pick_mon(monc, -1);
+	struct ceph_mon_statfs *h;
 
 	dout(10, "send_statfs to mon%d tid %llu\n", mon, tid);
-	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(tid), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, 0);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
-	*(__le64 *)msg->front.iov_base = cpu_to_le64(tid);
+	h = msg->front.iov_base;
+	h->fsid = monc->monmap->fsid;
+	h->tid = cpu_to_le64(tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;

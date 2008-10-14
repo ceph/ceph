@@ -204,7 +204,8 @@ WRITE_RAW_ENCODER(ceph_inopath_item)
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
 
-WRITE_RAW_ENCODER(ceph_statfs)
+WRITE_RAW_ENCODER(ceph_mon_statfs)
+WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
 
 // ----------------------
 // some basic types

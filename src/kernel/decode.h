@@ -110,7 +110,7 @@
  */
 
 static __inline__ void ceph_encode_filepath(void **p, void *end,
-					    ceph_ino_t ino, const char *path)
+					    __u64 ino, const char *path)
 {
 	__u32 len = path ? strlen(path):0;
 	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
