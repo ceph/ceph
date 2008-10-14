@@ -103,7 +103,7 @@ struct ceph_mds_request {
 	struct inode     *r_last_inode;
 	struct dentry    *r_last_dentry;
 	struct dentry    *r_old_dentry;   /* for rename */
-	int			r_expects_cap;
+	struct ceph_cap  *r_expected_cap; /* preallocate cap if we expect one */
 	int                     r_fmode;  /* if expecting cap */
 	unsigned long           r_from_time;
 	struct ceph_mds_session *r_session;

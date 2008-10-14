@@ -354,6 +354,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 	dout(10, "put_request %p %d -> %d\n", req,
 	     atomic_read(&req->r_ref), atomic_read(&req->r_ref)-1);
 	if (atomic_dec_and_test(&req->r_ref)) {
+		kfree(req->r_expected_cap);
 		if (req->r_request)
 			ceph_msg_put(req->r_request);
 		if (req->r_reply) {
@@ -400,7 +401,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_last_inode = 0;
 	req->r_last_dentry = 0;
 	req->r_old_dentry = 0;
-	req->r_expects_cap = 0;
+	req->r_expected_cap = 0;
 	req->r_fmode = 0;
 	req->r_session = 0;
 	req->r_fwd_session = 0;
@@ -1116,7 +1117,7 @@ retry:
 
 	/* send and wait */
 	mutex_unlock(&mdsc->mutex);
-	dout(10, "do_request %p r_expects_cap=%d\n", req, req->r_expects_cap);
+	dout(10, "do_request %p r_expected_cap=%p\n", req, req->r_expected_cap);
 	req->r_request = ceph_msg_maybe_dup(req->r_request);
 	ceph_msg_get(req->r_request);
 	ceph_send_msg_mds(mdsc, req->r_request, mds);
@@ -1164,6 +1165,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	int err, result;
 	int mds;
 	u32 cap, capseq, mseq;
+	int took_snap_sem = 0;
 
 	/* extract tid */
 	if (msg->front.iov_len < sizeof(*head)) {
@@ -1180,7 +1182,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		mutex_unlock(&mdsc->mutex);
 		return;
 	}
-	dout(10, "handle_reply %p r_expects_cap=%d\n", req, req->r_expects_cap);
+	dout(10, "handle_reply %p expected_cap=%p\n", req, req->r_expected_cap);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
 	if (req->r_session && req->r_session->s_mds != mds) {
 		ceph_put_mds_session(req->r_session);
@@ -1193,8 +1195,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		return;
 	}
 	BUG_ON(req->r_reply);
-	if (req->r_expects_cap)
+
+	/* take the snap sem if we are adding a cap here */
+	if (req->r_expected_cap) {
+		took_snap_sem = 1;
 		down_write(&mdsc->snap_rwsem);
+	}
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&req->r_session->s_mutex);
@@ -1216,7 +1222,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		goto done;
 	if (result == 0) {
 		/* caps? */
-		if (req->r_expects_cap && req->r_last_inode) {
+		if (req->r_expected_cap && req->r_last_inode) {
 			cap = le32_to_cpu(rinfo->head->file_caps);
 			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
 			mseq = le32_to_cpu(rinfo->head->file_caps_mseq);
@@ -1226,7 +1232,9 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 						   req->r_fmode,
 						   cap, capseq, mseq,
 						   rinfo->snapblob,
-						   rinfo->snapblob_len);
+						   rinfo->snapblob_len,
+						   req->r_expected_cap);
+				req->r_expected_cap = 0;
 				if (err)
 					goto done;
 			} else {
@@ -1245,7 +1253,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 
 done:
-	if (req->r_expects_cap)
+	if (took_snap_sem)
 		up_write(&mdsc->snap_rwsem);
 	mutex_unlock(&req->r_session->s_mutex);
 	mutex_lock(&mdsc->mutex);

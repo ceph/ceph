@@ -756,7 +756,11 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 		return ERR_PTR(PTR_ERR(req));
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
-	req->r_expects_cap = 1;
+	req->r_expected_cap = kmalloc(sizeof(struct ceph_cap), GFP_NOFS);
+	if (!req->r_expected_cap) {
+		root = ERR_PTR(-ENOMEM);
+		goto out;
+	}
 	reqhead = req->r_request->front.iov_base;
 	reqhead->args.open.flags = O_DIRECTORY;
 	reqhead->args.open.mode = 0;
@@ -767,6 +771,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
 	} else
 		root = ERR_PTR(err);
+out:
 	ceph_mdsc_put_request(req);
 	return root;
 }

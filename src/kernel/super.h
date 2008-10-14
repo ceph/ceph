@@ -645,7 +645,8 @@ extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session,
 			int fmode, unsigned issued,
 			unsigned cap, unsigned seq,
-			void *snapblob, int snapblob_len);
+			void *snapblob, int snapblob_len,
+			struct ceph_cap *new_cap);
 extern int __ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_all_caps(struct ceph_inode_info *ci);

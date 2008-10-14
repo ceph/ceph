@@ -42,9 +42,13 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
 				       0, 0,
 				       dentry, want_auth);
-	req->r_expects_cap = 1;
-	req->r_fmode = ceph_flags_to_mode(flags);
 	kfree(path);
+	req->r_expected_cap = kmalloc(sizeof(struct ceph_cap), GFP_NOFS);
+	if (!req->r_expected_cap) {
+		ceph_mdsc_put_request(req);
+		return ERR_PTR(-ENOMEM);
+	}
+	req->r_fmode = ceph_flags_to_mode(flags);
 	if (!IS_ERR(req)) {
 		rhead = req->r_request->front.iov_base;
 		rhead->args.open.flags = cpu_to_le32(flags);

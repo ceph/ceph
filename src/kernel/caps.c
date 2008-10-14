@@ -93,12 +93,12 @@ int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session,
 		 int fmode, unsigned issued,
 		 unsigned seq, unsigned mseq,
-		 void *snapblob, int snapblob_len)
+		 void *snapblob, int snapblob_len,
+		 struct ceph_cap *new_cap)
 {
 	int mds = session->s_mds;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_cap *cap, *new_cap = 0;
-	int i;
+	struct ceph_cap *cap;
 	int is_first = 0;
 	struct ceph_snap_realm *realm = 0;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -1011,7 +1011,7 @@ static void handle_cap_import(struct inode *inode, struct ceph_mds_caps *im,
 	}
 
 	ceph_add_cap(inode, session, -1, issued, seq, mseq,
-		     snaptrace, snaptrace_len);
+		     snaptrace, snaptrace_len, NULL);
 }
 
 
