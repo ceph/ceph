@@ -480,6 +480,8 @@ struct ceph_file_info {
 	int mode;      /* initialized on open */
 	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	struct ceph_mds_request *last_readdir;
+
+	/* used for -o dirstat read() on directory thing */
 	char *dir_info;
 	int dir_info_len;
 };

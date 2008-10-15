@@ -19,6 +19,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
  * build a dentry's path.  allocate on heap; caller must kfree.  based
  * on build_path_from_dentry in fs/cifs/dir.c.
  *
+ * <old, ignore me>
  * stop path construction as soon as we hit a dentry we do not have a
  * valid lease over.  races aside, this ensures we describe the
  * operation relative to a base inode that is likely to be cached by
@@ -32,6 +33,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
  *
  * always include at least @min dentry(ies), or else paths for
  * namespace operations (link, rename, etc.) are meaningless.
+ * </old, ignore me>
  *
  * encode hidden .snap dirs as a double /, i.e.
  *   foo/.snap/bar -> foo//bar
@@ -50,6 +52,7 @@ retry:
 	for (temp = dentry; !IS_ROOT(temp);) {
 		struct inode *inode = temp->d_inode;
 		/*
+		 * NO, don't do this.. our model is a bit broken here
 		if (len >= min &&
 		    inode &&
 		    ceph_snap(inode) == CEPH_NOSNAP &&
