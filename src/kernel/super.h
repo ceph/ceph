@@ -406,7 +406,7 @@ static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 {
 	int issued;
 	spin_lock(&ci->vfs_inode.i_lock);
-	issued = __ceph_caps_issued(ci, 0);
+	issued = __ceph_caps_issued(ci, NULL);
 	spin_unlock(&ci->vfs_inode.i_lock);
 	return issued;
 }

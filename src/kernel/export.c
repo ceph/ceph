@@ -55,7 +55,7 @@ static int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len,
 	return type;
 }
 
-struct dentry *__fh_to_dentry(struct super_block *sb,
+static struct dentry *__fh_to_dentry(struct super_block *sb,
 			      struct ceph_inopath_item *fh, int len)
 {
 	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
@@ -75,7 +75,7 @@ struct dentry *__fh_to_dentry(struct super_block *sb,
 		
 		req = ceph_mdsc_create_request(mdsc,
 					       CEPH_MDS_OP_FINDINODE,
-					       len, (char *)fh, 0, 0,
+					       len, (char *)fh, 0, NULL,
 					       NULL, USE_ANY_MDS);
 		if (IS_ERR(req))
 			return ERR_PTR(PTR_ERR(req));
@@ -101,14 +101,14 @@ struct dentry *__fh_to_dentry(struct super_block *sb,
 
 }
 
-struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
+static struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
 	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh, fh_len/IPSZ);
 }
 
-struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
+static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;

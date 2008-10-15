@@ -13,7 +13,7 @@ int ceph_debug_snap = -1;
 #include "decode.h"
 
 
-struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc, u64 ino)
+static struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc, u64 ino)
 {
 	struct ceph_snap_realm *realm;
 
@@ -150,7 +150,7 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 fail:
 	if (realm->cached_context) {
 		ceph_put_snap_context(realm->cached_context);
-		realm->cached_context = 0;
+		realm->cached_context = NULL;
 	}
 	derr(0, "build_snap_context %llx %p fail %d\n", realm->ino,
 	     realm, err);
@@ -185,7 +185,7 @@ static int dup_array(u64 **dst, u64 *src, int num)
 		for (i = 0; i < num; i++)
 			(*dst)[i] = le64_to_cpu(src[i]);
 	} else
-		*dst = 0;
+		*dst = NULL;
 	return 0;
 }
 
@@ -234,7 +234,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		igrab(inode);
 		capsnap->follows = snapc->seq;
 		capsnap->context = ceph_get_snap_context(snapc);
-		capsnap->issued = __ceph_caps_issued(ci, 0);
+		capsnap->issued = __ceph_caps_issued(ci, NULL);
 		capsnap->dirty = ci->i_wrbuffer_ref_head;
 		ci->i_wrbuffer_ref_head = 0;
 		list_add_tail(&capsnap->ci_item, &ci->i_cap_snaps);
@@ -260,7 +260,7 @@ struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 	int err = -ENOMEM;
 	u64 *snaps;
 	u64 *prior_parent_snaps;
-	struct ceph_snap_realm *realm, *first = 0;
+	struct ceph_snap_realm *realm, *first = NULL;
 	int invalidate = 0;
 
 	dout(10, "update_snap_trace must_flush=%d\n", must_flush);
@@ -284,13 +284,13 @@ more:
 	}
 
 	if (le64_to_cpu(ri->seq) > realm->seq) {
-		struct list_head *p;
+		struct list_head *pi;
 		dout(10, "update_snap_trace updating %llx %p %lld -> %lld\n",
 		     realm->ino, realm, realm->seq, le64_to_cpu(ri->seq));
 		
-		list_for_each(p, &realm->inodes_with_caps) {
+		list_for_each(pi, &realm->inodes_with_caps) {
 			struct ceph_inode_info *ci =
-				list_entry(p, struct ceph_inode_info,
+				list_entry(pi, struct ceph_inode_info,
 					   i_snap_realm_item);
 			ceph_queue_cap_snap(ci, realm->cached_context);
 		}
@@ -355,12 +355,12 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 	u64 split;
 	int op;
 	int trace_len;
-	struct ceph_snap_realm *realm = 0;
+	struct ceph_snap_realm *realm = NULL;
 	void *p = msg->front.iov_base;
 	void *e = p + msg->front.iov_len;
 	struct ceph_mds_snap_head *h;
 	int num_split_inos, num_split_realms;
-	__le64 *split_inos = 0, *split_realms = 0;
+	__le64 *split_inos = NULL, *split_realms = NULL;
 	int i;
 
 	/* decode */

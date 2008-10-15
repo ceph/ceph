@@ -100,7 +100,7 @@ static void do_request_mdsmap(struct work_struct *work)
 
 	dout(5, "request_mdsmap from mon%d want %u\n", mon, monc->want_mdsmap);
 
-	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 	h = msg->front.iov_base;
@@ -162,7 +162,7 @@ static void do_request_osdmap(struct work_struct *work)
 	int mon = pick_mon(monc, -1);
 
 	dout(5, "request_osdmap from mon%d have %u\n", mon, monc->have_osdmap);
-	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 	h = msg->front.iov_base;
@@ -219,7 +219,7 @@ static void do_request_umount(struct work_struct *work)
 	int mon = pick_mon(monc, -1);
 
 	dout(5, "do_request_umount from mon%d\n", mon);
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, 0, 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, 0, 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
@@ -287,14 +287,14 @@ bad:
 	derr(10, "corrupt statfs reply, no tid\n");
 }
 
-int send_statfs(struct ceph_mon_client *monc, u64 tid)
+static int send_statfs(struct ceph_mon_client *monc, u64 tid)
 {
 	struct ceph_msg *msg;
 	int mon = pick_mon(monc, -1);
 	struct ceph_mon_statfs *h;
 
 	dout(10, "send_statfs to mon%d tid %llu\n", mon, tid);
-	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, 0);
+	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 	h = msg->front.iov_base;

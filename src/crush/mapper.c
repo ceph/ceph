@@ -14,7 +14,7 @@
 
 
 
-int crush_find_rule(struct crush_map *map, int pool, int type, int size)
+static int crush_find_rule(struct crush_map *map, int pool, int type, int size)
 {
 	int i;
 	for (i = 0; i < map->max_rules; i++) {
@@ -260,7 +260,7 @@ static int crush_choose(struct crush_map *map,
 				    !crush_choose(map, map->buckets[-1-item],
 						  x, 1, 0,
 						  out2+outpos, 0,
-						  firstn, 0, 0))
+						  firstn, 0, NULL))
 					reject = 1;
 				
 				if (reject || collide) {
@@ -287,7 +287,7 @@ static int crush_choose(struct crush_map *map,
 }
 
 
-int crush_do_rule(struct crush_map *map,
+static int crush_do_rule(struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
 		  int force)    /* -1 for none */
 {

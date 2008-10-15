@@ -156,7 +156,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 
 		ceph_decode_32_safe(p, end, type, bad);
 		if (type == 0) {
-			c->buckets[i] = 0;
+			c->buckets[i] = NULL;
 			continue;
 		}
 
@@ -237,7 +237,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 		if (!yes) {
 			dout(30, "crush_decode NO rule %d off %x %p to %p\n",
 			     i, (int)(*p-start), *p, end);
-			c->rules[i] = 0;
+			c->rules[i] = NULL;
 			continue;
 		}
 
@@ -392,7 +392,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	map->crush = crush_decode(p, end);
 	if (IS_ERR(map->crush)) {
 		err = PTR_ERR(map->crush);
-		map->crush = 0;
+		map->crush = NULL;
 		goto bad;
 	}
 
@@ -415,7 +415,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 				      struct ceph_messenger *msgr)
 {
 	struct ceph_osdmap *newmap = map;
-	struct crush_map *newcrush = 0;
+	struct crush_map *newcrush = NULL;
 	struct ceph_fsid fsid;
 	__u32 epoch = 0;
 	struct ceph_timespec ctime;
@@ -462,7 +462,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* new max? */
 	ceph_decode_32(p, max);
 	if (max >= 0) {
-		int err = osdmap_set_max_osd(map, max);
+		err = osdmap_set_max_osd(map, max);
 		if (err < 0)
 			goto bad;
 	}
@@ -485,7 +485,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		if (map->crush)
 			crush_destroy(map->crush);
 		map->crush = newcrush;
-		newcrush = 0;
+		newcrush = NULL;
 	}
 
 	/* new_up */

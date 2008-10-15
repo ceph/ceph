@@ -33,7 +33,7 @@ void crush_calc_parents(struct crush_map *map)
 {
 	int i, b, c;
 	for (b=0; b<map->max_buckets; b++) {
-		if (map->buckets[b] == 0) continue;
+		if (map->buckets[b] == NULL) continue;
 		for (i=0; i<map->buckets[b]->size; i++) {
 			c = map->buckets[b]->items[i];
 			BUG_ON(c >= map->max_devices);
@@ -85,7 +85,7 @@ void crush_destroy(struct crush_map *map)
 	/* buckets */
 	if (map->buckets) {
 		for (b=0; b<map->max_buckets; b++) {
-			if (map->buckets[b] == 0) continue;
+			if (map->buckets[b] == NULL) continue;
 			switch (map->buckets[b]->alg) {
 			case CRUSH_BUCKET_UNIFORM:
 				crush_destroy_bucket_uniform((struct crush_bucket_uniform*)map->buckets[b]);
@@ -107,7 +107,7 @@ void crush_destroy(struct crush_map *map)
 	/* rules */
 	if (map->rules) {
 		for (b=0; b<map->max_rules; b++) {
-			if (map->rules[b] == 0) continue;
+			if (map->rules[b] == NULL) continue;
 			free(map->rules[b]);
 		}
 		free(map->rules);
