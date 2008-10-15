@@ -1,16 +1,24 @@
 #!/bin/sh
 
 let daemon=0
+
+# explicit -n/--norestart?
+case $1 in
+	-n | --norestart )
+	daemon=1
+	shift
+esac
+
 orig_args=$*
 
+# implicit from any -d?
 while [ $# -ge 1 ]; do
-	case $1 in
-		-d | --daemon )
-		daemon=1
-	esac
-	shift
+       case $1 in
+               -d | --daemon )
+               daemon=1
+       esac
+       shift
 done
-
 
 while [ true ]; do
 	$orig_args
