@@ -44,7 +44,7 @@
  * protocols change, bump the affected components.
  */
 #define CEPH_OSD_PROTOCOL    1
-#define CEPH_MDS_PROTOCOL    1
+#define CEPH_MDS_PROTOCOL    2
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
 
@@ -596,11 +596,6 @@ struct ceph_mds_getmap {
 #define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT | CEPH_LOCK_IAUTH | \
 				  CEPH_LOCK_ILINK | CEPH_LOCK_INO)
 
-/* masks for utimes() */
-#define CEPH_UTIME_ATIME		1
-#define CEPH_UTIME_MTIME		2
-#define CEPH_UTIME_CTIME		4
-
 /* client_session ops */
 enum {
 	CEPH_SESSION_REQUEST_OPEN,
@@ -746,6 +741,7 @@ struct ceph_mds_request_head {
 		struct {
 			__le32 uid;
 			__le32 gid;
+			__le32 mask;
 		} __attribute__ ((packed)) chown;
 		struct {
 			__le32 mode;
@@ -769,6 +765,15 @@ struct ceph_mds_request_head {
 		} __attribute__ ((packed)) setlayout;
 	} __attribute__ ((packed)) args;
 } __attribute__ ((packed));
+
+/* masks for utimes() */
+#define CEPH_UTIME_ATIME		1
+#define CEPH_UTIME_MTIME		2
+#define CEPH_UTIME_CTIME		4
+
+/* masks for chown */
+#define CEPH_CHOWN_UID   1
+#define CEPH_CHOWN_GID   2
 
 struct ceph_inopath_item {
 	__le64 ino;

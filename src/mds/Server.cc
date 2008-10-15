@@ -1765,9 +1765,9 @@ void Server::handle_client_chown(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  if ((__s32)req->head.args.chown.uid != -1)
+  if (req->head.args.chown.mask & CEPH_CHOWN_UID)
     pi->uid = req->head.args.chown.uid;
-  if ((__s32)req->head.args.chown.gid != -1)
+  if (req->head.args.chown.mask & CEPH_CHOWN_GID)
     pi->gid = req->head.args.chown.gid;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();

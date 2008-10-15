@@ -1294,20 +1294,21 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *reqh;
 	int err;
+	int mask = 0;
 
 	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_CHOWN);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
-	/* FIXME */
-	if (ia_valid & ATTR_UID)
+	if (ia_valid & ATTR_UID) {
 		reqh->args.chown.uid = cpu_to_le32(attr->ia_uid);
-	else
-		reqh->args.chown.uid = cpu_to_le32(-1);
-	if (ia_valid & ATTR_GID)
+		mask |= CEPH_CHOWN_UID;
+	}
+	if (ia_valid & ATTR_GID) {
 		reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
-	else
-		reqh->args.chown.gid = cpu_to_le32(-1);
+		mask |= CEPH_CHOWN_GID;
+	}
+	reqh->args.chown.mask = cpu_to_le32(mask);
 	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_IAUTH);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
