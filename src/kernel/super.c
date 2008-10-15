@@ -96,19 +96,19 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	 * overflow on 32-bit machines.
 	 */
 	buf->f_bsize = 1 << CEPH_BLOCK_SHIFT;     /* 1 MB */
-	buf->f_blocks = st.f_total >> (CEPH_BLOCK_SHIFT-10);
-	buf->f_bfree = st.f_free >> (CEPH_BLOCK_SHIFT-10);
-	buf->f_bavail = st.f_avail >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_blocks = le64_to_cpu(st.f_total) >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_bfree = le64_to_cpu(st.f_free) >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_bavail = le64_to_cpu(st.f_avail) >> (CEPH_BLOCK_SHIFT-10);
 
-	buf->f_files = st.f_objects;
+	buf->f_files = le64_to_cpu(st.f_objects);
 	buf->f_ffree = -1;
 	buf->f_namelen = PATH_MAX;
 	buf->f_frsize = PAGE_CACHE_SIZE;
 
 	/* leave in little-endian, regardless of host endianness */
 	fsid = monmap->fsid.major ^ monmap->fsid.minor;
-	buf->f_fsid.val[0] = fsid & 0xffffffff;
-	buf->f_fsid.val[1] = fsid >> 32;
+	buf->f_fsid.val[0] = le64_to_cpu(fsid) & 0xffffffff;
+	buf->f_fsid.val[1] = le64_to_cpu(fsid) >> 32;
 
 	return 0;
 }
@@ -503,10 +503,10 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		}
 		switch (token) {
 		case Opt_fsidmajor:
-			args->fsid.major = intval;
+			args->fsid.major = cpu_to_le64(intval);
 			break;
 		case Opt_fsidminor:
-			args->fsid.minor = intval;
+			args->fsid.minor = cpu_to_le64(intval);
 			break;
 		case Opt_monport:
 			for (i = 0; i < args->num_mon; i++)
@@ -711,7 +711,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 		goto out;
 	}
 	reqhead = req->r_request->front.iov_base;
-	reqhead->args.open.flags = O_DIRECTORY;
+	reqhead->args.open.flags = cpu_to_le32(O_DIRECTORY);
 	reqhead->args.open.mode = 0;
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (err == 0) {
@@ -817,7 +817,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 {
 	struct ceph_client *client = p;
 	int had;
-	int type = le32_to_cpu(msg->hdr.type);
+	int type = le16_to_cpu(msg->hdr.type);
 
 	switch (type) {
 	case CEPH_MSG_MON_MAP:
