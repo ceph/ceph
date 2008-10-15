@@ -41,6 +41,7 @@ __FBSDID("$FreeBSD: src/sys/netinet/sctp_crc32.c,v 1.8 2007/05/08 17:01:10 rrs E
 #endif
 
 #include <stdint.h>
+#include <endian.h>
 
 
 
