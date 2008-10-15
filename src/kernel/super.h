@@ -254,7 +254,8 @@ struct ceph_inode_info {
 	struct rb_root i_fragtree;
 	struct mutex i_fragtree_mutex;
 
-	/* (still encoded) xattr blob */
+	/* (still encoded) xattr blob. we avoid the overhead of parsing
+	 * this until someone actually called getxattr, etc. */
 	int i_xattr_len;
 	char *i_xattr_data;
 
@@ -605,7 +606,7 @@ extern const char *ceph_msg_type_name(int type);
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
-extern const struct inode_operations ceph_special_iops;
+
 extern struct inode *ceph_get_inode(struct super_block *sb,
 				    struct ceph_vino vino);
 extern struct inode *ceph_get_snapdir(struct inode *parent);

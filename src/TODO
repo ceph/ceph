@@ -1,3 +1,6 @@
+kclient
+- fix chown metadata op args
+
 v0.5
 - debug restart, cosd reformat, etc.
 - finish btrfs ioctl interface
