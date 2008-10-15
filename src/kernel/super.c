@@ -11,6 +11,8 @@
 
 /* debug levels; defined in super.h */
 
+#include "ceph_debug.h"
+
 /*
  * global debug value.
  *  0 = quiet.
@@ -28,8 +30,6 @@ int ceph_debug_console;
 
 /* for this file */
 int ceph_debug_super = -1;
-
-#include "ceph_debug.h"
 
 #define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
@@ -169,9 +169,9 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_version = 0;
 	ci->i_truncate_seq = 0;
 	ci->i_time_warp_seq = 0;
-	ci->i_symlink = 0;
+	ci->i_symlink = NULL;
 
-	ci->i_lease_session = 0;
+	ci->i_lease_session = NULL;
 	ci->i_lease_mask = 0;
 	ci->i_lease_ttl = 0;
 	INIT_LIST_HEAD(&ci->i_lease_item);
@@ -180,7 +180,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	mutex_init(&ci->i_fragtree_mutex);
 
 	ci->i_xattr_len = 0;
-	ci->i_xattr_data = 0;
+	ci->i_xattr_data = NULL;
 
 	ci->i_caps = RB_ROOT;
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
@@ -203,7 +203,7 @@ static struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_hold_caps_until = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
-	ci->i_snap_realm = 0;
+	ci->i_snap_realm = NULL;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
 
@@ -221,7 +221,7 @@ static void ceph_destroy_inode(struct inode *inode)
 	
 	dout(30, "destroy_inode %p ino %llx.%llx\n", inode, ceph_vinop(inode));
 	kfree(ci->i_symlink);
-	while ((n = rb_first(&ci->i_fragtree)) != 0) {
+	while ((n = rb_first(&ci->i_fragtree)) != NULL) {
 		frag = rb_entry(n, struct ceph_inode_frag, node);
 		rb_erase(n, &ci->i_fragtree);
 		kfree(frag);
@@ -376,10 +376,12 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 	dout(30, "ceph_peer_reset %s%d\n", ENTITY_NAME(*peer_name));
 	switch (le32_to_cpu(peer_name->type)) {
 	case CEPH_ENTITY_TYPE_MDS:
-		return ceph_mdsc_handle_reset(&client->mdsc,
+		ceph_mdsc_handle_reset(&client->mdsc,
 					      le32_to_cpu(peer_name->num));
+		break;
 	case CEPH_ENTITY_TYPE_OSD:
-		return ceph_osdc_handle_reset(&client->osdc, peer_addr);
+		ceph_osdc_handle_reset(&client->osdc, peer_addr);
+		break;
 	}
 }
 
@@ -553,7 +555,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	/* parse mount options */
 	while ((c = strsep(&options, ",")) != NULL) {
-		int token, intval, ret, i;
+		int token, intval, ret;
 		if (!*c)
 			continue;
 		token = match_token(c, arg_tokens, argstr);
@@ -676,7 +678,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 /*
  * create a fresh client instance
  */
-struct ceph_client *ceph_create_client(void)
+static struct ceph_client *ceph_create_client(void)
 {
 	struct ceph_client *client;
 	int err = -ENOMEM;
@@ -689,17 +691,17 @@ struct ceph_client *ceph_create_client(void)
 
 	init_waitqueue_head(&client->mount_wq);
 
-	client->sb = 0;
+	client->sb = NULL;
 	client->mount_state = CEPH_MOUNT_MOUNTING;
 	client->whoami = -1;
 
-	client->msgr = 0;
+	client->msgr = NULL;
 
 	client->wb_wq = create_workqueue("ceph-writeback");
-	if (client->wb_wq == 0)
+	if (client->wb_wq == NULL)
 		goto fail;
 	client->trunc_wq = create_workqueue("ceph-trunc");
-	if (client->trunc_wq == 0)
+	if (client->trunc_wq == NULL)
 		goto fail;
 
 	/* subsystems */
@@ -715,7 +717,7 @@ fail:
 	return ERR_PTR(-ENOMEM);
 }
 
-void ceph_destroy_client(struct ceph_client *client)
+static void ceph_destroy_client(struct ceph_client *client)
 {
 	dout(10, "destroy_client %p\n", client);
 
@@ -752,7 +754,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 				       unsigned long started)
 {
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_mds_request *req = 0;
+	struct ceph_mds_request *req = NULL;
 	struct ceph_mds_request_head *reqhead;
 	int err;
 	struct dentry *root;
@@ -760,7 +762,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN,
-				       1, path, 0, 0,
+				       1, path, 0, NULL,
 				       NULL, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
@@ -789,10 +791,10 @@ out:
 /*
  * mount: join the ceph cluster.
  */
-int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
+static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	       const char *path)
 {
-	struct ceph_entity_addr *myaddr = 0;
+	struct ceph_entity_addr *myaddr = NULL;
 	struct ceph_msg *mount_msg;
 	struct dentry *root;
 	int err;
@@ -811,7 +813,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr = ceph_messenger_create(myaddr);
 		if (IS_ERR(client->msgr)) {
 			err = PTR_ERR(client->msgr);
-			client->msgr = 0;
+			client->msgr = NULL;
 			goto out;
 		}
 		client->msgr->parent = client;
@@ -827,7 +829,7 @@ int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		dout(10, "mount sending mount request\n");
 		get_random_bytes(&r, 1);
 		which = r % client->mount_args.num_mon;
-		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, 0);
+		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, NULL);
 		if (IS_ERR(mount_msg)) {
 			err = PTR_ERR(mount_msg);
 			goto out;
@@ -962,15 +964,15 @@ static int ceph_set_super(struct super_block *s, void *data)
 	/* set time granularity */
 	s->s_time_gran = 1000;  /* 1000 ns == 1 us */
 
-	ret = set_anon_super(s, 0);  /* what is the second arg for? */
+	ret = set_anon_super(s, NULL);  /* what is the second arg for? */
 	if (ret != 0)
 		goto bail;
 
 	return ret;
 
 bail:
-	s->s_fs_info = 0;
-	client->sb = 0;
+	s->s_fs_info = NULL;
+	client->sb = NULL;
 	return ret;
 }
 
@@ -1055,7 +1057,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		goto out;
 
 	if (client->mount_args.flags & CEPH_MOUNT_NOSHARE)
-		compare_super = 0;
+		compare_super = NULL;
 
 	/* superblock */
 	sb = sget(fs_type, compare_super, ceph_set_super, client);
