@@ -40,7 +40,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	if (IS_ERR(path))
 		return ERR_PTR(PTR_ERR(path));
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
-				       0, 0,
+				       0, NULL,
 				       dentry, want_auth);
 	kfree(path);
 	req->r_expected_cap = kmalloc(sizeof(struct ceph_cap), GFP_NOFS);
@@ -106,7 +106,7 @@ int ceph_open(struct inode *inode, struct file *file)
 
 	/* can we re-use existing caps? */
 	spin_lock(&inode->i_lock);
-	if ((__ceph_caps_issued(ci, 0) & wantcaps) == wantcaps) {
+	if ((__ceph_caps_issued(ci, NULL) & wantcaps) == wantcaps) {
 		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, wantcaps, inode);
 		__ceph_get_fmode(ci, fmode);
@@ -119,7 +119,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	dentry = d_find_alias(inode);
 	if (!dentry)
 		return -ESTALE;  /* blech */
-	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
+	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
@@ -165,7 +165,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	if (flags & O_CREAT)
-		ceph_mdsc_lease_release(mdsc, dir, 0, CEPH_LOCK_ICONTENT);
+		ceph_mdsc_lease_release(mdsc, dir, NULL, CEPH_LOCK_ICONTENT);
 	dget(dentry);                /* to match put_request below */
 	req->r_last_dentry = dentry; /* use this dentry in fill_trace */
 	req->r_locked_dir = dir;     /* caller holds dir->i_mutex */
@@ -267,7 +267,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
  * atomically grab references, so that those bits are not released
  * mid-read.
  */
-ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
+static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		      unsigned long nr_segs, loff_t pos)
 {
 	struct file *filp = iocb->ki_filp;
@@ -330,7 +330,7 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 
 /*
  */
-ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
+static ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		       unsigned long nr_segs, loff_t pos)
 {
 	struct file *file = iocb->ki_filp;

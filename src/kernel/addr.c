@@ -59,7 +59,7 @@ static int ceph_set_page_dirty(struct page *page,
 		     snapc, snapc->seq, snapc->num_snaps);
 	} else {
 		struct list_head *p;
-		struct ceph_cap_snap *capsnap = 0;
+		struct ceph_cap_snap *capsnap = NULL;
 		list_for_each(p, &ci->i_cap_snaps) {
 			capsnap = list_entry(p, struct ceph_cap_snap,
 					     ci_item);
@@ -160,7 +160,7 @@ static void ceph_redirty_page(struct address_space *mapping, struct page *page)
 
 static int ceph_set_page_dirty_vfs(struct page *page)
 {
-	return ceph_set_page_dirty(page, 0);
+	return ceph_set_page_dirty(page, NULL);
 }
 
 static void ceph_invalidatepage(struct page *page, unsigned long offset)
@@ -200,7 +200,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 
 static int ceph_releasepage(struct page *page, gfp_t g)
 {
-	struct inode *inode = page->mapping ? page->mapping->host:0;
+	struct inode *inode = page->mapping ? page->mapping->host:NULL;
 	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
 	WARN_ON(PageDirty(page));
 	WARN_ON(page->private);
@@ -303,9 +303,9 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_snap_context *snapc = 0;
+	struct ceph_snap_context *snapc = NULL;
 	struct list_head *p;
-	struct ceph_cap_snap *capsnap = 0;
+	struct ceph_cap_snap *capsnap = NULL;
 
 	list_for_each(p, &ci->i_cap_snaps) {
 		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
@@ -327,7 +327,7 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 
 static struct ceph_snap_context *get_oldest_context(struct inode *inode)
 {
-	struct ceph_snap_context *snapc = 0;
+	struct ceph_snap_context *snapc = NULL;
 	spin_lock(&inode->i_lock);
 	snapc = __get_oldest_context(inode);
 	spin_unlock(&inode->i_lock);
@@ -376,7 +376,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 
 	/* verify this is a writeable snap context */
 	snapc = (void *)page->private;
-	if (snapc == 0) {
+	if (snapc == NULL) {
 		dout(20, "writepage %p page %p not dirty?\n", inode, page);
 		goto out;
 	}
@@ -426,7 +426,7 @@ static int ceph_writepage(struct page *page, struct writeback_control *wbc)
  * lame release_pages helper.  release_pages() isn't exported to
  * modules.
  */
-void ceph_release_pages(struct page **pages, int num)
+static void ceph_release_pages(struct page **pages, int num)
 {
 	struct pagevec pvec;
 	int i;
@@ -512,9 +512,9 @@ static int ceph_writepages_start(struct address_space *mapping,
 	pgoff_t index, start, end;
 	int range_whole = 0;
 	int should_loop = 1;
-	struct page **pages = 0;
+	struct page **pages = NULL;
 	pgoff_t max_pages = 0, max_pages_ever = 0;
-	struct ceph_snap_context *snapc = 0, *last_snapc = 0;
+	struct ceph_snap_context *snapc = NULL, *last_snapc = NULL;
 	struct pagevec pvec;
 	int done = 0;
 	int rc = 0;
@@ -589,7 +589,7 @@ retry:
 		u64 offset, len;
 		struct ceph_osd_request *req;
 
-		req = 0;
+		req = NULL;
 		next = 0;
 		locked_pages = 0;
 		max_pages = max_pages_ever;
@@ -746,7 +746,7 @@ get_more_pages:
 
 	release_pages:
 		dout(50, "pagevec_release on %d pages (%p)\n", (int)pvec.nr,
-		     pvec.nr ? pvec.pages[0] : 0);
+		     pvec.nr ? pvec.pages[0] : NULL);
 		pagevec_release(&pvec);
 
 		if (locked_pages && !done)
@@ -832,7 +832,7 @@ retry_locked:
 		     page, snapc);
 		if (!clear_page_dirty_for_io(page))
 			goto retry_locked;
-		r = writepage_nounlock(page, 0);
+		r = writepage_nounlock(page, NULL);
 		if (r < 0)
 			goto fail_nosnap;
 		goto retry_locked;

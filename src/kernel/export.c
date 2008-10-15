@@ -17,7 +17,7 @@ int ceph_debug_export = -1;
 
 #define IPSZ (sizeof(struct ceph_inopath_item) / sizeof(u32))
 
-int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len, 
+static int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len, 
 		   int connectable)
 {
 	int type = 1;
