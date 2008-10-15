@@ -1006,7 +1006,7 @@ void PG::activate(ObjectStore::Transaction& t,
       // start recovery
       dout(10) << "activate - starting recovery" << dendl;    
       log.requested_to = log.complete_to;
-      do_recovery();
+      osd->queue_for_recovery(this);
     }
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
@@ -1090,7 +1090,7 @@ void PG::activate(ObjectStore::Transaction& t,
       finish_recovery();
     else {
       dout(10) << "activate not all replicas are uptodate, starting recovery" << dendl;
-      do_recovery();
+      osd->queue_for_recovery(this);
     }
   }
 
@@ -1182,6 +1182,7 @@ void PG::_finish_recovery(Context *c)
     update_stats();
   }
   osd->osd_lock.Unlock();
+  osd->finish_recovery_op(this, recovery_ops_active, true);
   put_unlock();
 }
 

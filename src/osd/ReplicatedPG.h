@@ -131,8 +131,12 @@ protected:
   void clean_up_local(ObjectStore::Transaction& t);
 
   void cancel_recovery();
-  bool do_recovery();
-  void do_peer_recovery();
+
+  void queue_for_recovery();
+  void start_recovery_op();
+  void finish_recovery_op();
+  bool recover_primary();
+  void recover_replicas();
 
   void reply_op_error(MOSDOp *op, int r);
 

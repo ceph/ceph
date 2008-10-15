@@ -45,7 +45,7 @@ protected:
 
   void clean_up_local(ObjectStore::Transaction& t);
   void cancel_recovery();
-  bool do_recovery();
+  void start_recovery_op() {}
 
   bool snap_trimmer() { return true; }
   

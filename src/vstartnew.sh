@@ -1,7 +1,7 @@
 #!/bin/sh
 
 [ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
-[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=1
+[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=4
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
 let debug=0
@@ -23,7 +23,7 @@ if [ $debug -eq 0 ]; then
 else
 	echo "** going verbose **"
 	CMON_ARGS="--debug_mon 20 --debug_ms 1 --debug_paxos 20"
-	COSD_ARGS="--debug_journal 20 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+	COSD_ARGS="--debug_osd 20 --debug_journal 20 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	CMDS_ARGS="--mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
 fi
 

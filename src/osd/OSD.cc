@@ -762,52 +762,6 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
   dout(15) << "project_pg_history end " << h << dendl;
 }
 
-/*
- * NOTE: this is called from SafeTimer, so caller holds osd_lock
- */
-void OSD::activate_pg(pg_t pgid, epoch_t epoch)
-{
-  assert(osd_lock.is_locked());
-
-  if (pg_map.count(pgid)) {
-    PG *pg = _lookup_lock_pg(pgid);
-    if (pg->is_crashed() &&
-	pg->is_replay() &&
-	pg->get_role() == 0 &&
-	pg->info.history.same_primary_since <= epoch) {
-      ObjectStore::Transaction t;
-      pg->activate(t);
-      store->apply_transaction(t);
-    }
-    pg->unlock();
-  }
-
-  // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
-  wake_all_pg_waiters();
-
-  // finishers?
-  finished_lock.Lock();
-  if (finished.empty()) {
-    finished_lock.Unlock();
-  } else {
-    list<Message*> waiting;
-    waiting.splice(waiting.begin(), finished);
-
-    finished_lock.Unlock();
-    osd_lock.Unlock();
-    
-    for (list<Message*>::iterator it = waiting.begin();
-         it != waiting.end();
-         it++) {
-      dispatch(*it);
-    }
-
-    osd_lock.Lock();
-  }
-}
-
-
-
 // -------------------------------------
 
 void OSD::_refresh_my_stat(utime_t now)
@@ -2773,6 +2727,138 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
 
 
+// =========================================================
+// RECOVERY
+
+
+/*
+ * NOTE: this is called from SafeTimer, so caller holds osd_lock
+ */
+void OSD::activate_pg(pg_t pgid, epoch_t epoch)
+{
+  assert(osd_lock.is_locked());
+
+  if (pg_map.count(pgid)) {
+    PG *pg = _lookup_lock_pg(pgid);
+    if (pg->is_crashed() &&
+	pg->is_replay() &&
+	pg->get_role() == 0 &&
+	pg->info.history.same_primary_since <= epoch) {
+      ObjectStore::Transaction t;
+      pg->activate(t);
+      store->apply_transaction(t);
+    }
+    pg->unlock();
+  }
+
+  // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
+  wake_all_pg_waiters();
+
+  // finishers?
+  finished_lock.Lock();
+  if (finished.empty()) {
+    finished_lock.Unlock();
+  } else {
+    list<Message*> waiting;
+    waiting.splice(waiting.begin(), finished);
+
+    finished_lock.Unlock();
+    osd_lock.Unlock();
+    
+    for (list<Message*>::iterator it = waiting.begin();
+         it != waiting.end();
+         it++) {
+      dispatch(*it);
+    }
+
+    osd_lock.Lock();
+  }
+}
+
+
+
+void OSD::queue_for_recovery(PG *pg)
+{
+  recovery_lock.Lock();
+  if (!pg->recovery_item.get_xlist()) {
+    recovering_pgs.push_back(&pg->recovery_item);
+    pg->get();
+    dout(10) << "queue_for_recovery " << *pg
+	     << " -- " << recovering_pgs.size() << " queued" << dendl;
+  } else {
+    dout(10) << "queue_for_recovery " << *pg << " -- already queued" << dendl;
+  }
+  
+  // delay recovery start?
+  if (g_conf.osd_recovery_delay_start > 0) {
+    defer_recovery_until = g_clock.now();
+    defer_recovery_until += g_conf.osd_recovery_delay_start;
+  }
+
+  recovery_lock.Unlock();  
+
+  if (defer_recovery_until == utime_t())
+    maybe_start_recovery();
+  else
+    timer.add_event_at(defer_recovery_until, new C_StartRecovery(this));
+}
+
+void OSD::maybe_start_recovery()
+{
+  if (g_clock.now() > defer_recovery_until &&
+      recovery_ops_active == 0) {
+    dout(10) << "maybe_start_recovery starting" << dendl;
+    do_recovery();
+  }
+}
+
+void OSD::do_recovery()
+{
+  while (1) {
+    recovery_lock.Lock();
+    if (recovering_pgs.empty()) {
+      dout(10) << "do_recovery -- no recoverying pgs, nothing to do" << dendl;
+      recovery_lock.Unlock();
+      return;
+    }
+    if (recovery_ops_active >= g_conf.osd_recovery_max_active) {
+      recovery_lock.Unlock();
+      return;
+    }
+    
+    PG *pg = recovering_pgs.front();
+    pg->get();
+    recovery_ops_active++;
+
+    dout(10) << "do_recovery " << recovery_ops_active << "/" << g_conf.osd_recovery_max_active
+	     << " " << *pg << dendl;
+
+    recovery_lock.Unlock();
+    
+    pg->lock();
+    pg->recovery_ops_active++;
+    pg->start_recovery_op();
+    pg->put_unlock();
+  }
+}
+
+void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
+{
+  dout(10) << "finish_recovery_op " << *pg << " count " << count << " dequeue=" << dequeue << dendl;
+  recovery_lock.Lock();
+
+  // adjust count
+  recovery_ops_active -= count;
+  pg->recovery_ops_active -= count;
+
+  if (dequeue)
+    pg->recovery_item.remove_myself();
+  recovery_lock.Unlock();
+
+  // continue recovery?
+  if (count && g_clock.now() > defer_recovery_until)
+    do_recovery();
+}
 
 
 

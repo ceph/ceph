@@ -1944,7 +1944,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 
     if (pushing[poid.oid].empty()) {
       dout(10) << "pushed " << poid << " to all replicas" << dendl;
-      do_peer_recovery();
+      finish_recovery_op();
     } else {
       dout(10) << "pushed " << poid << ", still waiting for push ack from " 
 	       << pushing[poid.oid] << dendl;
@@ -2148,7 +2148,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	  push_to_replica(poid, peer);  // ok, push it, and they (will) have it now.
       }
 
-      do_recovery();      // continue recovery
+      finish_recovery_op();
     }
 
   } else {
@@ -2296,25 +2296,44 @@ void ReplicatedPG::cancel_recovery()
   osd->num_pulling -= pulling.size();
   pulling.clear();
   pushing.clear();
+
+  osd->finish_recovery_op(this, recovery_ops_active, true);
 }
+
+void ReplicatedPG::start_recovery_op()
+{
+  assert(is_primary());
+  
+  if (uptodate_set.count(osd->whoami))
+    recover_replicas();
+  else
+    recover_primary();
+}
+
+void ReplicatedPG::finish_recovery_op()
+{
+  dout(10) << "finish_recovery_op" << dendl;
+  osd->finish_recovery_op(this, 1, false);
+}
+
 
 /**
  * do one recovery op.
  * return true if done, false if nothing left to do.
  */
-bool ReplicatedPG::do_recovery()
+bool ReplicatedPG::recover_primary()
 {
   assert(is_primary());
 
-  dout(-10) << "do_recovery pulling " << pulling.size() << " in pg, "
+  dout(-10) << "recover_primary pulling " << pulling.size() << " in pg, "
            << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
            << dendl;
-  dout(10) << "do_recovery " << missing << dendl;
-  dout(15) << "do_recovery " << missing.missing << dendl;
+  dout(10) << "recover_primary " << missing << dendl;
+  dout(15) << "recover_primary " << missing.missing << dendl;
 
   // can we slow down on this PG?
   if (osd->num_pulling >= g_conf.osd_max_pull && !pulling.empty()) {
-    dout(-10) << "do_recovery already pulling max, waiting" << dendl;
+    dout(-10) << "recover_primary already pulling max, waiting" << dendl;
     return true;
   }
 
@@ -2328,7 +2347,7 @@ bool ReplicatedPG::do_recovery()
     latest = log.objects[p->oid];
     assert(latest);
 
-    dout(10) << "do_recovery "
+    dout(10) << "recover_primary "
              << *p
 	     << (latest->is_update() ? " (update)":"")
 	     << (missing.is_missing(latest->oid) ? " (missing)":"")
@@ -2348,7 +2367,7 @@ bool ReplicatedPG::do_recovery()
 	head.oid.snap = CEPH_NOSNAP;
 	if (missing.is_missing(head.oid) &&
 	    missing.have_old(head.oid) == latest->prior_version) {
-	  dout(10) << "do_recovery cloning " << head << " to " << poid
+	  dout(10) << "recover_primary cloning " << head << " to " << poid
 		   << " v" << latest->version
 		   << " snaps " << latest->snaps << dendl;
 	  ObjectStore::Transaction t;
@@ -2370,7 +2389,7 @@ bool ReplicatedPG::do_recovery()
   }
 
   if (!pulling.empty()) {
-    dout(7) << "do_recovery requested everything, still waiting" << dendl;
+    dout(7) << "recover_primary requested everything, still waiting" << dendl;
     return false;
   }
 
@@ -2378,39 +2397,28 @@ bool ReplicatedPG::do_recovery()
   assert(missing.num_missing() == 0);
   
   if (info.last_complete != info.last_update) {
-    dout(7) << "do_recovery last_complete " << info.last_complete << " -> " << info.last_update << dendl;
+    dout(7) << "recover_primary last_complete " << info.last_complete << " -> " << info.last_update << dendl;
     info.last_complete = info.last_update;
   }
 
   log.complete_to == log.log.end();
   log.requested_to = log.log.end();
 
-  if (is_primary()) {
-    // i am primary
-    uptodate_set.insert(osd->whoami);
-    if (is_all_uptodate()) {
-      dout(-7) << "do_recovery complete" << dendl;
-      finish_recovery();
-    } else {
-      dout(-10) << "do_recovery primary now complete, starting peer recovery" << dendl;
-      do_peer_recovery();
-    }
+  uptodate_set.insert(osd->whoami);
+  if (is_all_uptodate()) {
+    dout(-7) << "recover_primary complete" << dendl;
+    finish_recovery();
   } else {
-    // tell primary
-    dout(7) << "do_recovery complete, telling primary" << dendl;
-    vector<PG::Info> ls;
-    ls.push_back(info);
-    osd->messenger->send_message(new MOSDPGNotify(osd->osdmap->get_epoch(),
-                                                  ls),
-                                 osd->osdmap->get_inst(get_primary()));
+    dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
+    finish_recovery_op();
   }
 
   return false;
 }
 
-void ReplicatedPG::do_peer_recovery()
+void ReplicatedPG::recover_replicas()
 {
-  dout(-10) << "do_peer_recovery" << dendl;
+  dout(-10) << "recover_replicas" << dendl;
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
   for (unsigned i=0; i<acting.size(); i++) {
@@ -2439,12 +2447,12 @@ void ReplicatedPG::do_peer_recovery()
   }
   
   // nothing to do!
-  dout(-10) << "do_peer_recovery - nothing to do!" << dendl;
+  dout(-10) << "recover_replicas - nothing to do!" << dendl;
 
   if (is_all_uptodate()) 
     finish_recovery();
   else {
-    dout(10) << "do_peer_recovery not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
+    dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
   }
 }
 

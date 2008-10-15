@@ -286,6 +286,9 @@ struct md_config_t {
   int   osd_max_pull;
   bool  osd_pad_pg_log;
 
+  float osd_recovery_delay_start;
+  int osd_recovery_max_active;
+
   bool osd_auto_weight;
 
   // filestore

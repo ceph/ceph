@@ -492,7 +492,7 @@ protected:
    * put_unlock() when done with the current pointer (_most common_).
    */  
   Mutex _lock;
-  int  ref;
+  atomic_t ref;
   bool deleted;
 
 public:
@@ -506,21 +506,21 @@ public:
   }
   void get() {
     //cout << this << " " << info.pgid << " get " << ref << endl;
-    assert(_lock.is_locked());
-    ++ref; 
+    //assert(_lock.is_locked());
+    ref.inc();
   }
   void put() { 
     //cout << this << " " << info.pgid << " put " << ref << endl;
     assert(_lock.is_locked());
-    --ref; 
-    assert(ref > 0);  // last put must be a put_unlock.
+    ref.dec();
+    assert(ref.test() > 0);  // last put must be a put_unlock.
   }
   void put_unlock() { 
     //cout << this << " " << info.pgid << " put_unlock " << ref << endl;
     assert(_lock.is_locked());
-    --ref; 
+    int last = ref.dec();
     _lock.Unlock();
-    if (ref == 0) delete this;
+    if (last == 0) delete this;
   }
 
 
@@ -536,6 +536,9 @@ public:
   IndexedLog  log;
   OndiskLog   ondisklog;
   Missing     missing;
+
+  xlist<PG*>::item recovery_item;
+  int recovery_ops_active;
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
@@ -635,7 +638,7 @@ public:
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
   virtual void cancel_recovery() = 0;
-  virtual bool do_recovery() = 0;
+  virtual void start_recovery_op() = 0;
 
   void purge_strays();
 
@@ -656,6 +659,7 @@ public:
     osd(o), 
     ref(0), deleted(false),
     info(p),
+    recovery_item(this), recovery_ops_active(0),
     role(0),
     state(0),
     pending_snap_removal_item(this),
