@@ -153,84 +153,9 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 /*
  * inode cache
  */
-static struct kmem_cache *ceph_inode_cachep;
+struct kmem_cache *ceph_inode_cachep;
 
-static struct inode *ceph_alloc_inode(struct super_block *sb)
-{
-	struct ceph_inode_info *ci;
-	int i;
-
-	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_NOFS);
-	if (!ci)
-		return NULL;
-
-	dout(10, "alloc_inode %p vfsi %p\n", ci, &ci->vfs_inode);
-
-	ci->i_version = 0;
-	ci->i_truncate_seq = 0;
-	ci->i_time_warp_seq = 0;
-	ci->i_symlink = NULL;
-
-	ci->i_lease_session = NULL;
-	ci->i_lease_mask = 0;
-	ci->i_lease_ttl = 0;
-	INIT_LIST_HEAD(&ci->i_lease_item);
-
-	ci->i_fragtree = RB_ROOT;
-	mutex_init(&ci->i_fragtree_mutex);
-
-	ci->i_xattr_len = 0;
-	ci->i_xattr_data = NULL;
-
-	ci->i_caps = RB_ROOT;
-	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
-		ci->i_nr_by_mode[i] = 0;
-	init_waitqueue_head(&ci->i_cap_wq);
-	INIT_LIST_HEAD(&ci->i_cap_snaps);
-	ci->i_snap_caps = 0;
-
-	ci->i_wanted_max_size = 0;
-	ci->i_requested_max_size = 0;
-
-	ci->i_cap_exporting_mds = 0;
-	ci->i_cap_exporting_mseq = 0;
-	ci->i_cap_exporting_issued = 0;
-
-	ci->i_rd_ref = ci->i_rdcache_ref = 0;
-	ci->i_wr_ref = 0;
-	ci->i_wrbuffer_ref = 0;
-	ci->i_wrbuffer_ref_head = 0;
-	ci->i_hold_caps_until = 0;
-	INIT_LIST_HEAD(&ci->i_cap_delay_list);
-
-	ci->i_snap_realm = NULL;
-
-	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
-
-	ci->i_vmtruncate_to = -1;
-	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
-
-	return &ci->vfs_inode;
-}
-
-static void ceph_destroy_inode(struct inode *inode)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_inode_frag *frag;
-	struct rb_node *n;
-	
-	dout(30, "destroy_inode %p ino %llx.%llx\n", inode, ceph_vinop(inode));
-	kfree(ci->i_symlink);
-	while ((n = rb_first(&ci->i_fragtree)) != NULL) {
-		frag = rb_entry(n, struct ceph_inode_frag, node);
-		rb_erase(n, &ci->i_fragtree);
-		kfree(frag);
-	}
-	kfree(ci->i_xattr_data);
-	kmem_cache_free(ceph_inode_cachep, ci);
-}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27) 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 static void init_once(void *foo)
 #else
 static void init_once(struct kmem_cache *cachep, void *foo)
@@ -331,13 +256,11 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 		client->client_kobj = kobject_create_and_add(name, ceph_kobj);
-		//client->fsid_kobj = kobject_create_and_add("fsid", 
+		//client->fsid_kobj = kobject_create_and_add("fsid",
 		//client->client_kobj);
 #endif
 	}
 }
-
-
 
 const char *ceph_msg_type_name(int type)
 {
@@ -391,7 +314,6 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 /*
  * mount options
  */
-
 enum {
 	Opt_fsidmajor,
 	Opt_fsidminor,
@@ -821,7 +743,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
 		client->msgr->peer_reset = ceph_peer_reset;
 	}
-	
+
 	while (!have_all_maps(client)) {
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))
@@ -1151,7 +1073,7 @@ static int __init init_ceph(void)
 	return 0;
 
 out_icache:
-	destroy_inodecache();	
+	destroy_inodecache();
 out_msgr:
 	ceph_msgr_exit();
 out_proc:

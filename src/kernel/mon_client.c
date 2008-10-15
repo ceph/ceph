@@ -87,7 +87,7 @@ static void delayed_work(struct delayed_work *dwork, unsigned long *delay)
 
 
 /*
- * mds map 
+ * mds map
  */
 static void do_request_mdsmap(struct work_struct *work)
 {
@@ -139,7 +139,7 @@ int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 got)
 		dout(5, "got_mdsmap got %u > wanted %u\n",
 		     got, monc->want_mdsmap);
 		monc->want_mdsmap = 0;
-		
+
 		/* we got map so take map request out of queue */
 		cancel_delayed_work_sync(&monc->mds_delayed_work);
 		monc->mds_delay = BASE_DELAY_INTERVAL;

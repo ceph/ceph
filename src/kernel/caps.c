@@ -555,7 +555,7 @@ first:
 
 	if (!is_delayed)
 		__cap_delay_requeue(mdsc, ci);
-	
+
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
 
@@ -699,7 +699,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 	}
 	have = __ceph_caps_issued(ci, &implemented);
 	/* HACK: force sync writes...
-        have &= ~CEPH_CAP_WRBUFFER;
+	have &= ~CEPH_CAP_WRBUFFER;
 	implemented &= ~CEPH_CAP_WRBUFFER;
 	*/
 	if ((have & need) == need) {
@@ -801,7 +801,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	if (snapc == ci->i_snap_realm->cached_context) {
 		ci->i_wrbuffer_ref_head -= nr;
 		dout(30, "put_wrbuffer_cap_refs on %p head %d/%d -> %d/%d %s\n",
-		     inode, 
+		     inode,
 		     ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
 		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
 		     last ? " LAST":"");

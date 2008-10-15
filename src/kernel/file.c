@@ -328,7 +328,7 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int check = 0;
-	
+
 	/* do we need to explicitly request a larger max_size? */
 	spin_lock(&inode->i_lock);
 	if ((endoff >= ci->i_max_size ||
@@ -393,7 +393,7 @@ retry_snap:
 				      &iocb->ki_pos);
 	else
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
-	
+
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);

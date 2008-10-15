@@ -37,7 +37,7 @@ static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
 }
 
 static inline struct ceph_entity_addr *
-ceph_osd_addr(struct ceph_osdmap *map, int osd) 
+ceph_osd_addr(struct ceph_osdmap *map, int osd)
 {
 	if (osd >= map->max_osd)
 		return 0;

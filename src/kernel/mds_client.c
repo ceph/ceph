@@ -2025,7 +2025,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		mdsc->mdsmap = newmap;
 		check_new_map(mdsc, newmap, oldmap);
 		ceph_mdsmap_destroy(oldmap);
-		
+
 		/* reconnect? */
 		if (from < newmap->m_max_mds) {
 			newstate = ceph_mdsmap_get_state(newmap, from);

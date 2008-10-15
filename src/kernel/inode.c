@@ -20,6 +20,7 @@ int ceph_debug_inode = -1;
 
 static const struct inode_operations ceph_symlink_iops;
 
+
 /*
  * find or create an inode, given the ceph ino number
  */
@@ -229,6 +230,86 @@ out:
 	mutex_unlock(&ci->i_fragtree_mutex);
 	return err;
 }
+
+
+/*
+ * initialize a newly allocated inode.
+ */
+struct inode *ceph_alloc_inode(struct super_block *sb)
+{
+	struct ceph_inode_info *ci;
+	int i;
+
+	ci = kmem_cache_alloc(ceph_inode_cachep, GFP_NOFS);
+	if (!ci)
+		return NULL;
+
+	dout(10, "alloc_inode %p\n", &ci->vfs_inode);
+
+	ci->i_version = 0;
+	ci->i_truncate_seq = 0;
+	ci->i_time_warp_seq = 0;
+	ci->i_symlink = NULL;
+
+	ci->i_lease_session = NULL;
+	ci->i_lease_mask = 0;
+	ci->i_lease_ttl = 0;
+	INIT_LIST_HEAD(&ci->i_lease_item);
+
+	ci->i_fragtree = RB_ROOT;
+	mutex_init(&ci->i_fragtree_mutex);
+
+	ci->i_xattr_len = 0;
+	ci->i_xattr_data = NULL;
+
+	ci->i_caps = RB_ROOT;
+	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
+		ci->i_nr_by_mode[i] = 0;
+	init_waitqueue_head(&ci->i_cap_wq);
+	INIT_LIST_HEAD(&ci->i_cap_snaps);
+	ci->i_snap_caps = 0;
+
+	ci->i_wanted_max_size = 0;
+	ci->i_requested_max_size = 0;
+
+	ci->i_cap_exporting_mds = 0;
+	ci->i_cap_exporting_mseq = 0;
+	ci->i_cap_exporting_issued = 0;
+
+	ci->i_rd_ref = ci->i_rdcache_ref = 0;
+	ci->i_wr_ref = 0;
+	ci->i_wrbuffer_ref = 0;
+	ci->i_wrbuffer_ref_head = 0;
+	ci->i_hold_caps_until = 0;
+	INIT_LIST_HEAD(&ci->i_cap_delay_list);
+
+	ci->i_snap_realm = NULL;
+
+	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
+
+	ci->i_vmtruncate_to = -1;
+	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
+
+	return &ci->vfs_inode;
+}
+
+void ceph_destroy_inode(struct inode *inode)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_inode_frag *frag;
+	struct rb_node *n;
+
+	dout(30, "destroy_inode %p ino %llx.%llx\n", inode, ceph_vinop(inode));
+	kfree(ci->i_symlink);
+	while ((n = rb_first(&ci->i_fragtree)) != NULL) {
+		frag = rb_entry(n, struct ceph_inode_frag, node);
+		rb_erase(n, &ci->i_fragtree);
+		kfree(frag);
+	}
+	kfree(ci->i_xattr_data);
+	kmem_cache_free(ceph_inode_cachep, ci);
+}
+
 
 /*
  * Helper to fill in size, ctime, mtime, and atime.  We have to be
@@ -449,6 +530,8 @@ out:
 	kfree(xattr_data);
 	return err;
 }
+
+
 
 /*
  * caller must hold session s_mutex.
@@ -1134,7 +1217,7 @@ out:
 	if (snapdir) {
 		iput(snapdir);
 		dput(parent);
-	}		
+	}
 	dout(10, "readdir_prepopulate done\n");
 	return err;
 }
@@ -1629,7 +1712,7 @@ static size_t _ceph_vir_xattrcb_rctime(struct ceph_inode_info *ci, char *val,
 				       size_t size)
 {
 	return snprintf(val, size, "%ld.%ld", (long)ci->i_rctime.tv_sec,
-                                (long)ci->i_rctime.tv_nsec);
+	                        (long)ci->i_rctime.tv_nsec);
 }
 
 static struct _ceph_vir_xattr_cb _ceph_vir_xattr_recs[] = {

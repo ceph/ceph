@@ -143,7 +143,7 @@ struct ceph_client {
 
 	struct super_block *sb;
 
-	unsigned long mount_state; 
+	unsigned long mount_state;
 	wait_queue_head_t mount_wq;
 
 	struct ceph_messenger *msgr;   /* messenger instance */
@@ -269,7 +269,7 @@ struct ceph_inode_info {
 	unsigned i_cap_exporting_issued;
 	struct list_head i_cap_snaps;   /* snapped state pending flush to mds */
 	unsigned i_snap_caps;           /* cap bits for snapped files */
-	
+
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */
 
 	loff_t i_max_size;            /* max file size authorized by mds */
@@ -539,7 +539,7 @@ static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
  * are organized into a hierarchy, such that children inherit (some of)
  * the snapshots of their parents.
  *
- * All inodes within the realm that have capabilities are linked into a 
+ * All inodes within the realm that have capabilities are linked into a
  * per-realm list.
  */
 struct ceph_snap_realm {
@@ -553,7 +553,7 @@ struct ceph_snap_realm {
 	int num_prior_parent_snaps;   /*  had prior to parent_since */
 	u64 *snaps;                   /* snaps specific to this realm */
 	int num_snaps;
-	
+
 	struct ceph_snap_realm *parent;
 	struct list_head children;       /* list of child realms */
 	struct list_head child_item;
@@ -608,6 +608,10 @@ extern const char *ceph_msg_type_name(int type);
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
+extern struct kmem_cache *ceph_inode_cachep;
+
+extern struct inode *ceph_alloc_inode(struct super_block *sb);
+extern void ceph_destroy_inode(struct inode *inode);
 
 extern struct inode *ceph_get_inode(struct super_block *sb,
 				    struct ceph_vino vino);
@@ -685,8 +689,8 @@ extern struct dentry_operations ceph_dentry_ops, ceph_snap_dentry_ops,
 	ceph_snapdir_dentry_ops;
 
 extern char *ceph_build_path(struct dentry *dn, int *len, __u64 *base, int min);
-extern struct dentry *ceph_do_lookup(struct super_block *sb, 
-				     struct dentry *dentry, 
+extern struct dentry *ceph_do_lookup(struct super_block *sb,
+				     struct dentry *dentry,
 				     int mask, int on_inode, int locked_dir);
 extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);

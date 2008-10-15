@@ -131,7 +131,7 @@ static int ceph_debug_mask_write(struct file *file, const char __user *buffer,
 				*debug &= ~mask;
 			else
 				*debug |= mask;
-	
+
 		}
 	} while (mask_str);
 

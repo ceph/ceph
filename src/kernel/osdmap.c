@@ -542,7 +542,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* skip new_max_snap, removed_snaps */
 	*p += sizeof(__u64);
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * 2 * sizeof(__u64);	
+	*p += len * 2 * sizeof(__u64);
 
 	if (*p != end) {
 		derr(10, "osdmap incremental has trailing gunk?\n");
@@ -593,7 +593,7 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	do_div(t, su);
 	bl = t;
 	dout(80, "off %llu / su %u = bl %u\n", off, su, bl);
-	
+
 	stripeno = bl / sc;
 	stripepos = bl % sc;
 	objsetno = stripeno / su_per_object;

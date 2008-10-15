@@ -105,7 +105,7 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 	     realm->cached_context->seq <= parent->cached_context->seq)) {
 		dout(10, "build_snap_context %llx %p: %p seq %lld (%d snaps)"
 		     " (unchanged)\n",
-		     realm->ino, realm, realm->cached_context, 
+		     realm->ino, realm, realm->cached_context,
 		     realm->cached_context->seq,
 		     realm->cached_context->num_snaps);
 		return 0;
@@ -241,7 +241,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 
 		if (used & CEPH_CAP_WR) {
 			dout(10, "queue_cap_snap %p cap_snap %p snapc %p"
-			     " seq %llu used WR, now pending\n", inode, 
+			     " seq %llu used WR, now pending\n", inode,
 			     capsnap, snapc, snapc->seq);
 			capsnap->writing = 1;
 		} else {
@@ -287,7 +287,7 @@ more:
 		struct list_head *pi;
 		dout(10, "update_snap_trace updating %llx %p %lld -> %lld\n",
 		     realm->ino, realm, realm->seq, le64_to_cpu(ri->seq));
-		
+
 		list_for_each(pi, &realm->inodes_with_caps) {
 			struct ceph_inode_info *ci =
 				list_entry(pi, struct ceph_inode_info,
@@ -302,7 +302,7 @@ more:
 
 	invalidate += adjust_snap_realm_parent(mdsc, realm,
 					      le64_to_cpu(ri->parent));
-	
+
 	if (le64_to_cpu(ri->seq) > realm->seq) {
 		realm->seq = le64_to_cpu(ri->seq);
 		realm->created = le64_to_cpu(ri->created);
@@ -311,7 +311,7 @@ more:
 		realm->num_snaps = le32_to_cpu(ri->num_snaps);
 		if (dup_array(&realm->snaps, snaps, realm->num_snaps) < 0)
 			goto fail;
-		
+
 		realm->num_prior_parent_snaps =
 			le32_to_cpu(ri->num_prior_parent_snaps);
 		if (dup_array(&realm->prior_parent_snaps, prior_parent_snaps,
@@ -337,7 +337,7 @@ bad:
 	err = -EINVAL;
 fail:
 	derr(10, "update_snap_trace error %d\n", err);
-	return ERR_PTR(err);	
+	return ERR_PTR(err);
 }
 
 

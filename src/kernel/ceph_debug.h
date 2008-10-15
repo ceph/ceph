@@ -61,7 +61,7 @@ static struct _debug_mask_name _debug_mask_names[] = {
 		{DOUT_MASK_IOCTL, "ioctl"},
 		{DOUT_MASK_MDSC, "mdsc"},
 		{DOUT_MASK_MDSMAP, "mdsmap"},
-		{DOUT_MASK_MSGR, "msgr"},	
+		{DOUT_MASK_MSGR, "msgr"},
 		{DOUT_MASK_MON, "mon"},
 		{DOUT_MASK_OSDC, "osdc"},
 		{DOUT_MASK_OSDMAP, "osdmap"},
@@ -69,7 +69,7 @@ static struct _debug_mask_name _debug_mask_names[] = {
 		{DOUT_MASK_SUPER, "super"},
 		{DOUT_MASK_PROTOCOL, "protocol"},
 		{DOUT_MASK_PROC, "proc"},
-		{0, NULL}	
+		{0, NULL}
 };
 
 static inline int ceph_get_debug_mask(char *name)
