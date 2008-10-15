@@ -518,12 +518,18 @@ static uint32_t
 sctp_crc32c_sb8_64_bit(uint32_t crc,
     unsigned char const *p_buf,
     uint32_t length,
-    uint32_t init_bytes)
+    uint32_t offset)
 {
 	uint32_t li;
 	uint32_t term1, term2;
 	uint32_t running_length;
 	uint32_t end_bytes;
+	uint32_t init_bytes;
+
+	init_bytes = (4-offset) & 0x3;
+
+	if (init_bytes > length)
+		init_bytes = length;
 
 	running_length = ((length - init_bytes) / 8) * 8;
 	end_bytes = length - init_bytes - running_length;
