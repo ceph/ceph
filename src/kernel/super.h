@@ -650,14 +650,10 @@ extern int ceph_add_cap(struct inode *inode,
 			unsigned cap, unsigned seq,
 			void *snapblob, int snapblob_len,
 			struct ceph_cap *new_cap);
-extern int __ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
-extern void ceph_remove_all_caps(struct ceph_inode_info *ci);
-extern int __ceph_get_cap_mds(struct ceph_inode_info *ci, u32 *mseq);
 extern int ceph_get_cap_mds(struct inode *inode);
 extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 			     int *got, loff_t offset);
-extern void ceph_take_cap_refs(struct ceph_inode_info *ci, int got);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);
@@ -667,11 +663,6 @@ extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
 extern void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 				  struct ceph_mds_session *session,
 				  int purge);
-extern int __ceph_send_cap(struct ceph_mds_client *mdsc,
-			   struct ceph_mds_session *session,
-			   struct ceph_cap *cap,
-			   int used, int wanted,
-			   int flush_snap);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

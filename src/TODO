@@ -47,6 +47,7 @@ snaps on osd
 - efficient recovery of clones using the clone diff info
 
 kernel client
+- clean up cap flush on session close
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
