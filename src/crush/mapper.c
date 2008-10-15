@@ -14,7 +14,7 @@
 
 
 
-static int crush_find_rule(struct crush_map *map, int pool, int type, int size)
+int crush_find_rule(struct crush_map *map, int pool, int type, int size)
 {
 	int i;
 	for (i = 0; i < map->max_rules; i++) {
@@ -287,7 +287,7 @@ static int crush_choose(struct crush_map *map,
 }
 
 
-static int crush_do_rule(struct crush_map *map,
+int crush_do_rule(struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
 		  int force)    /* -1 for none */
 {
