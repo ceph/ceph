@@ -917,16 +917,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			mutex_unlock(&parent->d_inode->i_mutex);
 
 	update_inode:
+		BUG_ON(dn->d_inode != in);
 		err = ceph_fill_inode(in,
 				      &rinfo->trace_in[d+1],
 				      rinfo->trace_numd <= d ?
 				      rinfo->trace_dir[d+1]:0);
 		if (err < 0) {
 			derr(30, "ceph_fill_inode badness\n");
-			iput(in);
-			in = NULL;
 			d_delete(dn);
 			dn = NULL;
+			in = NULL;
 			break;
 		}
 
@@ -935,7 +935,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* do we diverge into a snap dir at this point in the trace? */
 		if (d == rinfo->trace_numi - rinfo->trace_snapdirpos - 1) {
-			struct inode *snapdir = ceph_get_snapdir(dn->d_inode);
+			struct inode *snapdir = ceph_get_snapdir(in);
 			dput(dn);
 			dn = d_find_alias(snapdir);
 			if (!dn) {
@@ -1003,6 +1003,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (existing) {
 			if (dn)
 				dput(dn);
+			iput(in);
 			dn = existing;
 			dout(10, " using existing %p alias %p\n", in, dn);
 		} else {
@@ -1016,6 +1017,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 					dput(dn);
 				}
 				dn = d_alloc_anon(in);
+				iput(in);
 				dout(10, " d_alloc_anon new dn %p\n", dn);
 			}
 		}
