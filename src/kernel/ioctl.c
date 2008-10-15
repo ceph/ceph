@@ -43,7 +43,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 		return -EFAULT;
 
 	/* set */
-	path = ceph_build_dentry_path(file->f_dentry, &pathlen, &pathbase, 0);
+	path = ceph_build_path(file->f_dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETLAYOUT,

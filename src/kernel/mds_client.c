@@ -1420,8 +1420,8 @@ retry:
 
 		dentry = d_find_alias(inode);
 		if (dentry) {
-			path = ceph_build_dentry_path(dentry, &pathlen,
-						      &pathbase, 9999);
+			path = ceph_build_path(dentry, &pathlen,
+					       &pathbase, 9999);
 			if (IS_ERR(path)) {
 				err = PTR_ERR(path);
 				BUG_ON(err);

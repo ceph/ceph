@@ -1277,7 +1277,7 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 					       dentry, USE_CAP_MDS);
 	} else {
 		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
-		path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
+		path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
 		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0, 0,
@@ -1512,7 +1512,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
  */
 int ceph_do_getattr(struct dentry *dentry, int mask)
 {
-	int want_inode = 0;
+	int on_inode = 0;
 	struct dentry *ret;
 
 	if (ceph_snap(dentry->d_inode) == CEPH_SNAPDIR) {
@@ -1533,14 +1533,14 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 	 */
 	if (d_unhashed(dentry)) {
 		if (ceph_get_cap_mds(dentry->d_inode) >= 0)
-			want_inode = 1;
+			on_inode = 1;
 		else
 			derr(0, "WARNING: getattr on unhashed cap-less"
 			     " dentry %p %.*s\n", dentry,
 			     dentry->d_name.len, dentry->d_name.name);
 	}
 	ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
-			     want_inode, 0);
+			     on_inode, 0);
 	if (IS_ERR(ret))
 		return PTR_ERR(ret);
 	if (ret)
@@ -1844,7 +1844,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 
 	/* do request */
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
+	path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
@@ -1896,7 +1896,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (_ceph_match_vir_xattr(name) != NULL)
 		return -EOPNOTSUPP;
 
-	path = ceph_build_dentry_path(dentry, &pathlen, &pathbase, 0);
+	path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
