@@ -258,14 +258,24 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(ceph_inode_cachep);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static void ceph_umount_begin(struct vfsmount *vfsmnt, int flags)
+#else
+static void ceph_umount_begin(struct super_block *sb)
+#endif
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	struct ceph_client *client = ceph_sb_to_client(vfsmnt->mnt_sb);
+#else
+	struct ceph_client *client = ceph_sb_to_client(sb);
+#endif
 
 	dout(30, "ceph_umount_begin\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	if (!(flags & MNT_FORCE))
 		return;
+#endif
 
 	if (!client)
 		return;

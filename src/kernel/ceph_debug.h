@@ -3,6 +3,29 @@
 
 #include <linux/string.h>
 
+extern int ceph_debug;
+extern int ceph_debug_mask;
+extern int ceph_debug_console;
+
+/* different debug level for the different modules */
+extern int ceph_debug_addr;
+extern int ceph_debug_caps;
+extern int ceph_debug_dir;
+extern int ceph_debug_export;
+extern int ceph_debug_file;
+extern int ceph_debug_inode;
+extern int ceph_debug_ioctl;
+extern int ceph_debug_mdsc;
+extern int ceph_debug_mdsmap;
+extern int ceph_debug_msgr;
+extern int ceph_debug_mon;
+extern int ceph_debug_osdc;
+extern int ceph_debug_osdmap;
+extern int ceph_debug_snap;
+extern int ceph_debug_super;
+extern int ceph_debug_protocol;
+extern int ceph_debug_proc;
+
 #define DOUT_MASK_ADDR		0x00000001
 #define DOUT_MASK_CAPS		0x00000002
 #define DOUT_MASK_DIR		0x00000004
@@ -46,7 +69,7 @@ static struct _debug_mask_name _debug_mask_names[] = {
 		{DOUT_MASK_SUPER, "super"},
 		{DOUT_MASK_PROTOCOL, "protocol"},
 		{DOUT_MASK_PROC, "proc"},
-		{0, 0}	
+		{0, NULL}	
 };
 
 static inline int ceph_get_debug_mask(char *name)
