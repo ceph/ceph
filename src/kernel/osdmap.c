@@ -26,6 +26,9 @@ static int calc_bits_of(unsigned t)
 	return b;
 }
 
+/*
+ * the foo_mask is the smallest value 2^n-1 that is >= foo.
+ */
 static void calc_pg_masks(struct ceph_osdmap *map)
 {
 	map->pg_num_mask = (1 << calc_bits_of(map->pg_num-1)) - 1;
@@ -34,6 +37,9 @@ static void calc_pg_masks(struct ceph_osdmap *map)
 	map->lpgp_num_mask = (1 << calc_bits_of(map->lpgp_num-1)) - 1;
 }
 
+/*
+ * decode crush map
+ */
 static int crush_decode_uniform_bucket(void **p, void *end,
 				       struct crush_bucket_uniform *b)
 {
@@ -263,7 +269,7 @@ static struct crush_map *crush_decode(void **p, void *end)
 		}
 	}
 
-	/* ignore trailing name maps */
+	/* ignore trailing name maps. */
 
 	dout(30, "crush_decode success\n");
 	return c;
