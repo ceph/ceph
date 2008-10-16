@@ -864,7 +864,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		/* try to take dir i_mutex */
 		if (req->r_locked_dir != parent->d_inode &&
 		    mutex_trylock(&parent->d_inode->i_mutex) == 0) {
-			dout(0, "fill_trace  FAILED to take %p i_mutex\n",
+			dout(10, "fill_trace  FAILED to take %p i_mutex\n",
 			     parent->d_inode);
 			goto no_dir_mutex;
 		}
