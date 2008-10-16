@@ -17,9 +17,46 @@ int ceph_debug_addr = -1;
 #include "osd_client.h"
 
 /*
- * if snapc is NULL, we are dirtying within the most recent (head) snap.
- * if snapc is non-NULL, we are redirtying a page within a past snap,
- * and need to adjust the count on the appropriate ceph_cap_snap.
+ * There are a few funny things going on here.
+ *
+ * The page->private field is used to reference a struct
+ * ceph_snap_context for _every_ dirty page.  This indicates which
+ * snapshot the page was logically dirtied in, and thus which snap
+ * context needs to be associated with the osd write during writeback.
+ *
+ * Similarly, struct ceph_inode_info maintains a set of counters to
+ * count dirty pages on the inode.  In the absense of snapshots,
+ * i_wrbuffer_ref == i_wrbuffer_ref_head == the dirty page count.
+ *
+ * A snapshot is taken (that is, when the client receives notification
+ * that a snapshot was taken), each inode with caps and with dirty
+ * pages (dirty pages implies there is a cap) gets a new ceph_cap_snap
+ * in the i_cap_snaps (which is sorted in ascending order, new snaps
+ * go to the tail).  The i_wrbuffer_ref_head count is moved to
+ * capsnap->dirty. (Unless a sync write is currently in progress.  In
+ * that case, the capsnap is said to be "pending", new writes cannot
+ * start, and the capsnap isn't "finalized" until the write completes
+ * (or fails) and a final size/mtime for the inode for that snap can
+ * be settled upon.)  i_wrbuffer_ref_head is reset to 0.
+ *
+ * On writeback, we must submit writes to the osd IN SNAP ORDER.  So,
+ * we look for the first capsnap in i_cap_snaps and write out pages in
+ * that snap context _only_.  Then we move on to the next capsnap,
+ * eventually reachings the "live" or "head" context (i.e., pages that
+ * are not yet snapped) and are writing the most recently dirtied
+ * pages.
+ *
+ * Invalidate and so forth must take care to ensure the dirty page
+ * accounting is preserved.
+ */
+
+/*
+ * Dirty a page.  If @snapc is NULL, use the current snap context for
+ * i_snap_realm.  Otherwise, redirty a page within the context of
+ * the given *snapc.
+ *
+ * Note that the caller (e.g., write_begin) _should_ be holding
+ * a read lock on mdsc->snap_rwsem.
  */
 static int ceph_set_page_dirty(struct page *page,
 			       struct ceph_snap_context *snapc)
@@ -60,6 +97,7 @@ static int ceph_set_page_dirty(struct page *page,
 	} else {
 		struct list_head *p;
 		struct ceph_cap_snap *capsnap = NULL;
+
 		list_for_each(p, &ci->i_cap_snaps) {
 			capsnap = list_entry(p, struct ceph_cap_snap,
 					     ci_item);
@@ -97,9 +135,8 @@ static int ceph_set_page_dirty(struct page *page,
 				page_index(page), PAGECACHE_TAG_DIRTY);
 
 		/*
-		 * reference snap context in page->private.  also set
-		 * PagePrivate so that we get invalidatepage callback
-		 * on truncate for dirty page accounting for mmap.
+		 * Reference snap context in page->private.  Also set
+		 * PagePrivate so that we get invalidatepage callback.
 		 */
 		ceph_put_snap_context((void *)page->private);
 		page->private = (unsigned long)snapc;
@@ -123,46 +160,15 @@ static int ceph_set_page_dirty(struct page *page,
 	return 1;
 }
 
-static void ceph_redirty_page(struct address_space *mapping, struct page *page)
-{
-	BUG_ON(!PageLocked(page));
-
-	if (TestSetPageDirty(page)) {
-		dout(20, "%p redirty_page %p -- already dirty\n",
-		     mapping->host, page);
-		return;
-	}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-	spin_lock_irq(&mapping->tree_lock);
-#else
-	write_lock_irq(&mapping->tree_lock);
-#endif
-	if (page->mapping) {	/* Race with truncate? */
-		if (mapping_cap_account_dirty(mapping)) {
-			__inc_zone_page_state(page,
-					      NR_FILE_DIRTY);
-			__inc_bdi_stat(mapping->backing_dev_info,
-				       BDI_RECLAIMABLE);
-			task_io_account_write(PAGE_CACHE_SIZE);
-		}
-		radix_tree_tag_set(&mapping->page_tree,
-				   page_index(page),
-				   PAGECACHE_TAG_DIRTY);
-	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-	spin_unlock_irq(&mapping->tree_lock);
-#else
-	write_unlock_irq(&mapping->tree_lock);
-#endif
-}
-
-
 static int ceph_set_page_dirty_vfs(struct page *page)
 {
 	return ceph_set_page_dirty(page, NULL);
 }
 
+/*
+ * If we are truncating the full page (i.e. offset == 0), adjust the
+ * dirty page counters appropriately.
+ */
 static void ceph_invalidatepage(struct page *page, unsigned long offset)
 {
 	struct inode *inode;
@@ -198,6 +204,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 		     &ci->vfs_inode, page, page->index);
 }
 
+/* just a sanity check */
 static int ceph_releasepage(struct page *page, gfp_t g)
 {
 	struct inode *inode = page->mapping ? page->mapping->host:NULL;
@@ -208,7 +215,9 @@ static int ceph_releasepage(struct page *page, gfp_t g)
 	return 0;
 }
 
-
+/*
+ * read a single page, without unlocking it.
+ */
 static int readpage_nounlock(struct file *filp, struct page *page)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
@@ -244,6 +253,9 @@ static int ceph_readpage(struct file *filp, struct page *page)
 	return r;
 }
 
+/*
+ * Read multiple pages.  Most of the work is done in the osd_client.
+ */
 static int ceph_readpages(struct file *file, struct address_space *mapping,
 			  struct list_head *page_list, unsigned nr_pages)
 {
@@ -278,8 +290,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		page = list_entry(page_list->prev, struct page, lru);
 		list_del(&page->lru);
 
-		if (add_to_page_cache(page, mapping, page->index,
-				      GFP_NOFS)) {
+		if (add_to_page_cache(page, mapping, page->index, GFP_NOFS)) {
 			page_cache_release(page);
 			dout(20, "readpages add_to_page_cache failed on %p\n",
 			     page);
@@ -290,15 +301,17 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		SetPageUptodate(page);
 		unlock_page(page);
 		if (pagevec_add(&pvec, page) == 0)
-			pagevec_lru_add(&pvec);
+			pagevec_lru_add(&pvec);   /* add to lru */
 	}
 	pagevec_lru_add(&pvec);
 	return 0;
 }
 
 /*
- * get oldest snapc for inode with dirty data.. i.e., the only snap context
- * we can actually write back.
+ * Get ref for the oldest snapc for an inode with dirty data... that is, the
+ * only snap context we are allowed to write back.
+ *
+ * Caller holds i_lock.
  */
 static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 {
@@ -324,27 +337,23 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 	return snapc;
 }
 
-
 static struct ceph_snap_context *get_oldest_context(struct inode *inode)
 {
 	struct ceph_snap_context *snapc = NULL;
+
 	spin_lock(&inode->i_lock);
 	snapc = __get_oldest_context(inode);
 	spin_unlock(&inode->i_lock);
 	return snapc;
 }
 
-static int context_is_writeable(struct inode *inode,
-				struct ceph_snap_context *snapc)
-{
-	return snapc == get_oldest_context(inode);
-}
-
 /*
- * ceph_writepage:
- *  clear dirty page, and set the writeback flag in the radix tree.
- *  to actually write data to the remote OSDs.
- * leave page locked.
+ * Write a single page, but leave the page locked.
+ *
+ * If we get a write error, set the page error bit, but still adjust the
+ * dirty page accounting (i.e., page is no longer dirty).
+ *
+ * FIXME: Is that the right thing to do?
  */
 static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 {
@@ -380,7 +389,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 		dout(20, "writepage %p page %p not dirty?\n", inode, page);
 		goto out;
 	}
-	if (!context_is_writeable(inode, snapc)) {
+	if (snapc != get_oldest_context(inode)) {
 		dout(10, "writepage %p page %p snapc %p not writeable - noop\n",
 		     inode, page, (void *)page->private);
 		/* we should only noop if called by kswapd */
@@ -389,27 +398,23 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	}
 
 	set_page_writeback(page);
-	if (snapc) {
-		err = ceph_osdc_writepages(osdc, ceph_vino(inode),
-					   &ci->i_layout, snapc,
-					   page_off, len, &page, 1);
-		if (err >= 0) {
-			dout(20, "writepage cleaned page %p\n", page);
-			page->private = 0;
-			ClearPagePrivate(page);
-			ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
-			ceph_put_snap_context(snapc);
-			err = 0;  /* vfs expects us to return 0 */
-		} else {
-			dout(20, "writepage redirtying page %p\n", page);
-			ceph_redirty_page(page->mapping, page);
-			if (wbc)
-				wbc->pages_skipped++;
-		}
+	err = ceph_osdc_writepages(osdc, ceph_vino(inode),
+				   &ci->i_layout, snapc,
+				   page_off, len, &page, 1);
+	if (err < 0) {
+		dout(20, "writepage setting page error %p\n", page);
+		SetPageError(page);
+		if (wbc)
+			wbc->pages_skipped++;
 	} else {
-		dout(20, "writepage %p noop (no snapc)\n", page);
+		dout(20, "writepage cleaned page %p\n", page);
+		err = 0;  /* vfs expects us to return 0 */
 	}
+	page->private = 0;
+	ClearPagePrivate(page);
 	end_page_writeback(page);
+	ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
+	ceph_put_snap_context(snapc);
 out:
 	return err;
 }
@@ -440,7 +445,12 @@ static void ceph_release_pages(struct page **pages, int num)
 
 
 /*
- * writeback completion handler.
+ * async writeback completion handler.
+ *
+ * If we get an error, set the mapping error bit, but not the individual
+ * page error bits.
+ *
+ * FIXME: What should we be doing here?
  */
 static void writepages_finish(struct ceph_osd_request *req)
 {
@@ -475,7 +485,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	dout(10, "writepages_finish rc %d bytes %llu wrote %d (pages)\n", rc,
 	     bytes, wrote);
 
-	/* clean or redirty pages */
+	/* clean all pages */
 	for (i = 0; i < req->r_num_pages; i++) {
 		page = req->r_pages[i];
 		BUG_ON(!page);
@@ -519,23 +529,20 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int done = 0;
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
+	struct ceph_osd_request *req = NULL;
 
 	client = ceph_inode_to_client(inode);
-
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
 		dout(1, "writepage on forced umount\n");
-		return -EIO; /* we're in a forced umount, don't write anything! */
+		return -EIO; /* we're in a forced umount, don't write! */
 	}
-
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
 		wsize = client->mount_args.wsize;
 	if (wsize < PAGE_CACHE_SIZE)
 		wsize = PAGE_CACHE_SIZE;
-
+	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 	dout(10, "writepages on %p, wsize %u\n", inode, wsize);
 
-	/* larger page vector? */
-	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 	pagevec_init(&pvec, 0);
 
 	/* ?? */
@@ -558,6 +565,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 		should_loop = 0;
 		dout(10, "not cyclic, %lu to %lu\n", start, end);
 	}
+	index = start;
 
 retry:
 	/* find oldest snap context with dirty data */
@@ -571,7 +579,9 @@ retry:
 	}
 	dout(20, " oldest snapc is %p seq %lld (%d snaps)\n",
 	     snapc, snapc->seq, snapc->num_snaps);
-	if (snapc != last_snapc) {
+	if (last_snapc && snapc != last_snapc) {
+		/* if we switched to a newer snapc, restart our scan at the
+		 * start of the original file range. */
 		dout(20, "  snapc differs from last pass, restarting at %lu\n",
 		     index);
 		index = start;
@@ -586,9 +596,7 @@ retry:
 		struct page *page;
 		int want;
 		u64 offset, len;
-		struct ceph_osd_request *req;
 
-		req = NULL;
 		next = 0;
 		locked_pages = 0;
 		max_pages = max_pages_ever;
@@ -608,24 +616,8 @@ get_more_pages:
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
 			dout(20, "? %p idx %lu\n", page, page->index);
-			if (locked_pages == 0) {
-				offset = page->index << PAGE_CACHE_SHIFT;
-				len = wsize;
-				lock_page(page);
-
-				/* alloc request */
-				req = ceph_osdc_new_request(&client->osdc,
-							    &ci->i_layout,
-							    ceph_vino(inode),
-							    offset, &len,
-							    CEPH_OSD_OP_WRITE,
-							    snapc);
-				max_pages = req->r_num_pages;
-				pages = req->r_pages;
-				req->r_callback = writepages_finish;
-				req->r_inode = inode;
-				req->r_wbc = wbc;
-			}
+			if (locked_pages == 0)
+				lock_page(page);  /* first page */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 			else if (!trylock_page(page))
 #else
@@ -636,7 +628,7 @@ get_more_pages:
 				break;
 			}
 
-			/* only dirty pages, or wrbuffer accounting breaks! */
+			/* only dirty pages, or our accounting breaks */
 			if (unlikely(!PageDirty(page)) ||
 			    unlikely(page->mapping != mapping)) {
 				dout(20, "!dirty or !mapping %p\n", page);
@@ -650,7 +642,6 @@ get_more_pages:
 				break;
 			}
 			if (next && (page->index != next)) {
-				/* Not next consecutive page */
 				dout(20, "not consecutive %p\n", page);
 				unlock_page(page);
 				break;
@@ -659,7 +650,6 @@ get_more_pages:
 				dout(20, "waiting on writeback %p\n", page);
 				wait_on_page_writeback(page);
 			}
-
 			if (page_offset(page) >= i_size_read(inode)) {
 				dout(20, "%p past eof %llu\n", page,
 				     i_size_read(inode));
@@ -667,7 +657,6 @@ get_more_pages:
 				unlock_page(page);
 				break;
 			}
-
 			if (PageWriteback(page)) {
 				dout(20, "%p under writeback\n", page);
 				unlock_page(page);
@@ -691,13 +680,29 @@ get_more_pages:
 			}
 
 			/* ok */
+			if (locked_pages == 0) {
+				/* prepare async write request */
+				offset = page->index << PAGE_CACHE_SHIFT;
+				len = wsize;
+				req = ceph_osdc_new_request(&client->osdc,
+							    &ci->i_layout,
+							    ceph_vino(inode),
+							    offset, &len,
+							    CEPH_OSD_OP_WRITE,
+							    snapc);
+				max_pages = req->r_num_pages;
+				pages = req->r_pages;
+				req->r_callback = writepages_finish;
+				req->r_inode = inode;
+				req->r_wbc = wbc;
+			}
+
+			/* note position of first page in pvec */
 			if (first < 0)
 				first = i;
-			set_page_writeback(page);
-
-			dout(20, "%p locked page %p idx %lu\n",
+			dout(20, "%p will write page %p idx %lu\n",
 			     inode, page, page->index);
-
+			set_page_writeback(page);
 			pages[locked_pages] = page;
 			locked_pages++;
 			next = page->index + 1;
@@ -705,8 +710,7 @@ get_more_pages:
 
 		/* did we get anything? */
 		if (!locked_pages)
-			goto release_pages;
-
+			goto release_pvec_pages;
 		if (i) {
 			int j;
 			BUG_ON(!locked_pages || first < 0);
@@ -728,14 +732,19 @@ get_more_pages:
 			pvec.nr -= i-first;
 		}
 
-		/* write it */
+		/* submit the write */
 		offset = pages[0]->index << PAGE_CACHE_SHIFT;
 		len = min(i_size_read(inode) - offset,
-				 (u64)locked_pages << PAGE_CACHE_SHIFT);
+			  (u64)locked_pages << PAGE_CACHE_SHIFT);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
 		     locked_pages, offset, len);
 		rc = ceph_osdc_writepages_start(&client->osdc, req,
 						len, locked_pages);
+		req = NULL;
+		/*
+		 * FIXME: writepages_start fail (ENOMEM?) we should
+		 * really redirty all those pages and release req..
+		 */
 
 		/* continue? */
 		index = next;
@@ -743,7 +752,7 @@ get_more_pages:
 		if (wbc->nr_to_write <= 0)
 			done = 1;
 
-	release_pages:
+	release_pvec_pages:
 		dout(50, "pagevec_release on %d pages (%p)\n", (int)pvec.nr,
 		     pvec.nr ? pvec.pages[0] : NULL);
 		pagevec_release(&pvec);
@@ -764,6 +773,8 @@ get_more_pages:
 		mapping->writeback_index = index;
 
 out:
+	if (req)
+		ceph_osdc_put_request(req);
 	if (rc > 0)
 		rc = 0;  /* vfs expects us to return 0 */
 	ceph_put_snap_context(snapc);
@@ -771,8 +782,21 @@ out:
 	return rc;
 }
 
+
+
 /*
- * newer write interface
+ * See if a given @snapc is either writeable, or already written.
+ */
+static int context_is_writeable_or_written(struct inode *inode,
+					   struct ceph_snap_context *snapc)
+{
+	struct ceph_snap_context *oldest = get_oldest_context(inode);
+	return !oldest || snapc->seq <= oldest->seq;
+}
+
+/*
+ * We are only allowed to write into/dirty the page if the page is
+ * clean, or already dirty within the same snap context.
  */
 static int ceph_write_begin(struct file *file, struct address_space *mapping,
 			    loff_t pos, unsigned len, unsigned flags,
@@ -810,23 +834,26 @@ retry_locked:
 	BUG_ON(!ci->i_snap_realm->cached_context);
 	if (page->private &&
 	    (void *)page->private != ci->i_snap_realm->cached_context) {
+		/* this page is already dirty in another (older) snap
+		 * context!  is it writeable now? */
 		snapc = get_oldest_context(inode);
 		up_read(&mdsc->snap_rwsem);
+
 		if (snapc != (void *)page->private) {
 			dout(10, " page %p snapc %p not current or oldest\n",
 			     page, (void *)page->private);
-			/* queue for writeback, and wait */
+			/* queue for writeback, and wait for snapc
+			 * to be writeable or written */
 			snapc = ceph_get_snap_context((void *)page->private);
 			unlock_page(page);
 			ceph_queue_writeback(inode);
-			r = wait_event_interruptible(ci->i_cap_wq,
-				       context_is_writeable(inode, snapc));
-			/* FIXME: check r? */
+			wait_event_interruptible(ci->i_cap_wq,
+			       context_is_writeable_or_written(inode, snapc));
 			ceph_put_snap_context(snapc);
 			goto retry;
 		}
 
-		/* yay, writeable, do it now */
+		/* yay, writeable, do it now (without dropping page lock) */
 		dout(10, " page %p snapc %p not current, but oldest\n",
 		     page, snapc);
 		if (!clear_page_dirty_for_io(page))
@@ -868,7 +895,8 @@ fail_nosnap:
 
 /*
  * we don't do anything in here that simple_write_end doesn't do
- * except adjust dirty page accounting.
+ * except adjust dirty page accounting and drop read lock on
+ * mdsc->snap_rwsem.
  */
 static int ceph_write_end(struct file *file, struct address_space *mapping,
 			  loff_t pos, unsigned len, unsigned copied,
@@ -907,7 +935,6 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 }
 
 
-
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
 	.readpages = ceph_readpages,
@@ -925,6 +952,9 @@ const struct address_space_operations ceph_aops = {
  * vm ops
  */
 
+/*
+ * Reuse write_{begin,end} here for simplicity.
+ */
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 {
 	struct inode *inode = vma->vm_file->f_dentry->d_inode;

@@ -47,6 +47,8 @@ snaps on osd
 - efficient recovery of clones using the clone diff info
 
 kernel client
+- fix osd client timeout
+- make osd retry writes if failure after ack..
 - clean up cap flush on session close
 - ACLs
 - reconnect path should include pathbase, not just a string?
