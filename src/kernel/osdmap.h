@@ -6,15 +6,15 @@
 
 struct ceph_osdmap {
 	struct ceph_fsid fsid;
-	ceph_epoch_t epoch;
-	ceph_epoch_t mkfs_epoch;
+	__u32 epoch;
+	__u32 mkfs_epoch;
 	struct ceph_timespec ctime, mtime;
 
 	__u32 pg_num, pg_num_mask;
 	__u32 pgp_num, pgp_num_mask;
 	__u32 lpg_num, lpg_num_mask;
 	__u32 lpgp_num, lpgp_num_mask;
-	ceph_epoch_t last_pg_change;
+	__u32 last_pg_change;
 
 	__u32 flags;
 

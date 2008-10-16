@@ -37,6 +37,22 @@
 		(*p)++;					\
 	} while (0)
 
+#define ceph_decode_64_le(p, v)				\
+	do {						\
+		v = *(__le64*)*(p);			\
+		*(p) += sizeof(__u64);			\
+	} while (0)
+#define ceph_decode_32_le(p, v)				\
+	do {						\
+		v = *(__le32*)*(p);			\
+		*(p) += sizeof(__u32);			\
+	} while (0)
+#define ceph_decode_16_le(p, v)				\
+	do {						\
+		v = *(__le16*)*(p);			\
+		*(p) += sizeof(__u16);			\
+	} while (0)
+
 #define ceph_decode_copy(p, pv, n)			\
 	do {						\
 		memcpy(pv, *(p), n);			\
@@ -86,17 +102,17 @@
 
 #define ceph_encode_64(p, v)			  \
 	do {					  \
-		*(__u64*)*(p) = cpu_to_le64((v)); \
+		*(__le64*)*(p) = cpu_to_le64((v)); \
 		*(p) += sizeof(__u64);		  \
 	} while (0)
 #define ceph_encode_32(p, v)			  \
 	do {					  \
-		*(__u32*)*(p) = cpu_to_le32((v)); \
+		*(__le32*)*(p) = cpu_to_le32((v)); \
 		*(p) += sizeof(__u32);		  \
 	} while (0)
 #define ceph_encode_16(p, v)			  \
 	do {					  \
-		*(__u16*)*(p) = cpu_to_le16((v)); \
+		*(__le16*)*(p) = cpu_to_le16((v)); \
 		*(p) += sizeof(__u16);		  \
 	} while (0)
 #define ceph_encode_8(p, v)			  \

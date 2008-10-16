@@ -99,11 +99,7 @@ struct ceph_mds_request {
 	__u64             r_tid;      /* transaction id */
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
-<<<<<<< HEAD:src/kernel/mds_client.h
-	struct ceph_mds_reply_info r_reply_info;  /* parsed reply */
-=======
 	struct ceph_mds_reply_info_parsed r_reply_info;
->>>>>>> kclient: endianity handling fixes:src/kernel/mds_client.h
 	int r_err;
 	unsigned long r_timeout;  /* optional.  jiffies */
 

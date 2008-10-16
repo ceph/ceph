@@ -42,8 +42,8 @@ static void calc_layout(struct ceph_osd_client *osdc,
 	__u64 orig_len = *plen;
 	__u64 objoff, objlen;
 
-	reqhead->oid.ino = vino.ino;
-	reqhead->oid.snap = vino.snap;
+	reqhead->oid.ino = cpu_to_le64(vino.ino);
+	reqhead->oid.snap = cpu_to_le64(vino.snap);
 
 	calc_file_object_mapping(layout, off, plen, &reqhead->oid,
 				 &objoff, &objlen);
@@ -104,7 +104,7 @@ static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op,
 
 	/* encode head */
 	head->op = cpu_to_le32(op);
-	head->client_inc = 1; /* always, for now. */
+	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = 0;
 
 	/* snaps */
@@ -169,7 +169,8 @@ static int register_request(struct ceph_osd_client *osdc,
 	}
 
 	mutex_lock(&osdc->request_mutex);
-	req->r_tid = head->tid = ++osdc->last_tid;
+	req->r_tid = ++osdc->last_tid;
+	head->tid = cpu_to_le64(req->r_tid);
 	req->r_flags = 0;
 	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 	req->r_reply = NULL;
@@ -318,7 +319,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	}
 	dout(10, "handle_reply tid %llu flags %d |= %d\n", tid, req->r_flags,
 	     rhead->flags);
-	req->r_flags |= rhead->flags;
+	req->r_flags |= le32_to_cpu(rhead->flags);
 	__unregister_request(osdc, req);
 	mutex_unlock(&osdc->request_mutex);
 
@@ -332,7 +333,7 @@ done:
 
 bad:
 	derr(0, "got corrupt osd_op_reply got %d %d expected %d\n",
-	     (int)msg->front.iov_len, (int)msg->hdr.front_len,
+	     (int)msg->front.iov_len, le32_to_cpu(msg->hdr.front_len),
 	     (int)sizeof(*rhead));
 }
 
@@ -406,8 +407,8 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 
 	/* verify fsid */
 	ceph_decode_need(&p, end, sizeof(fsid), bad);
-	ceph_decode_64(&p, fsid.major);
-	ceph_decode_64(&p, fsid.minor);
+	ceph_decode_64_le(&p, fsid.major);
+	ceph_decode_64_le(&p, fsid.minor);
 	if (!ceph_fsid_equal(&fsid, &osdc->client->monc.monmap->fsid)) {
 		derr(0, "got map with wrong fsid, ignoring\n");
 		return;
@@ -519,7 +520,7 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	struct ceph_osd_request *req;
 	__u64 tid;
 	int ret = -1;
-	int type = le32_to_cpu(m->hdr.type);
+	int type = le16_to_cpu(m->hdr.type);
 
 	dout(10, "prepare_pages on msg %p want %d\n", m, want);
 	if (unlikely(type != CEPH_MSG_OSD_OPREPLY))
@@ -638,8 +639,8 @@ static void handle_timeout(struct work_struct *work)
 		next_tid = req->r_tid + 1;
 		if (time_after(jiffies, req->r_last_stamp + timeout)) {
 			struct ceph_entity_name n = {
-				.type = CEPH_ENTITY_TYPE_OSD,
-				.num = req->r_last_osd
+				.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD),
+				.num = cpu_to_le32(req->r_last_osd)
 			};
 			ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
 		}
@@ -882,8 +883,8 @@ more:
 		return PTR_ERR(req);
 	reqm = req->r_request;
 	reqhead = reqm->front.iov_base;
-	reqhead->flags = CEPH_OSD_OP_ACK | /* just ack for now... FIXME */
-		CEPH_OSD_OP_ORDERSNAP;     /* get EOLDSNAPC if out of order */
+	reqhead->flags = cpu_to_le32(CEPH_OSD_OP_ACK | /* just ack for now... FIXME */
+		CEPH_OSD_OP_ORDERSNAP);     /* get EOLDSNAPC if out of order */
 
 	dout(10, "sync_write %llu~%llu -> %d pages\n", off, len,
 	     req->r_num_pages);
@@ -961,9 +962,9 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	reqm = req->r_request;
 	reqhead = reqm->front.iov_base;
 	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
-		reqhead->flags = CEPH_OSD_OP_ACK;
+		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_ACK);
 	else
-		reqhead->flags = CEPH_OSD_OP_SAFE;
+		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_SAFE);
 
 	len = le64_to_cpu(reqhead->length);
 	dout(10, "writepages %llu~%llu -> %d pages\n", off, len,
@@ -973,8 +974,8 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	memcpy(req->r_pages, pages, req->r_num_pages * sizeof(struct page *));
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_num_pages;
-	reqm->hdr.data_len = len;
-	reqm->hdr.data_off = off;
+	reqm->hdr.data_len = cpu_to_le32(len);
+	reqm->hdr.data_off = cpu_to_le32(off);
 
 	rc = do_sync_request(osdc, req);
 	ceph_osdc_put_request(req);
@@ -999,16 +1000,16 @@ int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 	dout(10, "writepages_start %llu~%llu, %d pages\n", off, len, num_pages);
 
 	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
-		reqhead->flags = CEPH_OSD_OP_ACK;
+		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_ACK);
 	else
-		reqhead->flags = CEPH_OSD_OP_SAFE;
+		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_SAFE);
 	reqhead->length = cpu_to_le64(len);
 
 	/* reference pages in message */
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_num_pages = num_pages;
-	reqm->hdr.data_len = len;
-	reqm->hdr.data_off = off;
+	reqm->hdr.data_len = cpu_to_le32(len);
+	reqm->hdr.data_off = cpu_to_le32(off);
 
 	rc = start_request(osdc, req);
 	return rc;

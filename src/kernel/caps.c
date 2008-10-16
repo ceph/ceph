@@ -77,7 +77,7 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 {
 	struct rb_node **p = &ci->i_caps.rb_node;
 	struct rb_node *parent = NULL;
-	struct ceph_cap *cap = 0;
+	struct ceph_cap *cap = NULL;
 
 	while (*p) {
 		parent = *p;
@@ -269,7 +269,7 @@ void ceph_remove_cap(struct ceph_cap *cap)
  * Caller holds i_lock
  *    -> we take mdsc->cap_delay_lock
  */
-void __cap_delay_requeue(struct ceph_mds_client *mdsc,
+static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 			      struct ceph_inode_info *ci)
 {
 	ci->i_hold_caps_until = round_jiffies(jiffies + HZ * 5);
@@ -358,10 +358,10 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, __u64 ino, int op,
  * called with i_lock, then drops it.
  * caller should hold snap_rwsem, s_mutex.
  */
-void __send_cap(struct ceph_mds_client *mdsc,
+static void __send_cap(struct ceph_mds_client *mdsc,
 		struct ceph_mds_session *session,
 		struct ceph_cap *cap,
-		int used, int wanted)
+		int used, int wanted) __releases(cap->ci->vfs_inode->i_lock)
 {
 	struct ceph_inode_info *ci = cap->ci;
 	struct inode *inode = &ci->vfs_inode;

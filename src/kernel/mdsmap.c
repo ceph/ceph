@@ -70,8 +70,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
-	ceph_decode_32(p, m->m_created.tv_sec);
-	ceph_decode_32(p, m->m_created.tv_nsec);
+	ceph_decode_32_le(p, m->m_created.tv_sec);
+	ceph_decode_32_le(p, m->m_created.tv_nsec);
 	ceph_decode_32(p, m->m_anchortable);
 	ceph_decode_32(p, m->m_root);
 	ceph_decode_32(p, m->m_session_timeout);

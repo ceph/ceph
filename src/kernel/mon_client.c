@@ -26,8 +26,8 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 
 	ceph_decode_need(&p, end, 2*sizeof(__u32) + 2*sizeof(__u64), bad);
 	ceph_decode_32(&p, m->epoch);
-	ceph_decode_64(&p, m->fsid.major);
-	ceph_decode_64(&p, m->fsid.minor);
+	ceph_decode_64_le(&p, m->fsid.major);
+	ceph_decode_64_le(&p, m->fsid.minor);
 	ceph_decode_32(&p, m->num_mon);
 	ceph_decode_need(&p, end, m->num_mon*sizeof(m->mon_inst[0]), bad);
 	ceph_decode_copy(&p, m->mon_inst, m->num_mon*sizeof(m->mon_inst[0]));
@@ -272,10 +272,10 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
 	if (req) {
 		radix_tree_delete(&monc->statfs_request_tree, tid);
-		req->buf->f_total = le64_to_cpu(reply->st.f_total);
-		req->buf->f_free = le64_to_cpu(reply->st.f_free);
-		req->buf->f_avail = le64_to_cpu(reply->st.f_avail);
-		req->buf->f_objects = le64_to_cpu(reply->st.f_objects);
+		req->buf->f_total = reply->st.f_total;
+		req->buf->f_free = reply->st.f_free;
+		req->buf->f_avail = reply->st.f_avail;
+		req->buf->f_objects = reply->st.f_objects;
 		req->result = 0;
 	}
 	spin_unlock(&monc->lock);

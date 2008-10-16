@@ -1235,7 +1235,7 @@ static void process_message(struct ceph_connection *con)
 	con->in_seq++;
 	spin_unlock(&con->out_queue_lock);
 
-	dout(1, "===== %p %u from %s%d %d=%s len %d+%d (%u %u) =====\n",
+	dout(1, "===== %p %llu from %s%d %d=%s len %d+%d (%u %u) =====\n",
 	     con->in_msg, le64_to_cpu(con->in_msg->hdr.seq),
 	     ENTITY_NAME(con->in_msg->hdr.src.name),
 	     le16_to_cpu(con->in_msg->hdr.type),
@@ -2167,7 +2167,7 @@ void ceph_msg_put(struct ceph_msg *m)
 	dout(20, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
 	     atomic_read(&m->nref)-1);
 	if (atomic_read(&m->nref) <= 0) {
-		derr(0, "bad ceph_msg_put on %p %u from %s%d %d=%s len %d+%d\n",
+		derr(0, "bad ceph_msg_put on %p %llu from %s%d %d=%s len %d+%d\n",
 		     m, le64_to_cpu(m->hdr.seq),
 		     ENTITY_NAME(m->hdr.src.name),
 		     le16_to_cpu(m->hdr.type),

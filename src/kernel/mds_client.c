@@ -160,7 +160,7 @@ static int parse_reply_info_dir(void **p, void *end,
 	info->dir_dir = *p;
 	if (*p + sizeof(*info->dir_dir) > end)
 		goto bad;
-	*p += sizeof(*info->dir_dir) + sizeof(__u32)*info->dir_dir->ndist;
+	*p += sizeof(*info->dir_dir) + sizeof(__u32)*le32_to_cpu(info->dir_dir->ndist);
 	if (*p > end)
 		goto bad;
 
@@ -442,7 +442,8 @@ static void __register_request(struct ceph_mds_client *mdsc,
 			       struct ceph_mds_request *req)
 {
 	struct ceph_mds_request_head *head = req->r_request->front.iov_base;
-	req->r_tid = head->tid = ++mdsc->last_tid;
+	req->r_tid = ++mdsc->last_tid;
+	head->tid = cpu_to_le64(req->r_tid);
 	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
 	get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
@@ -1040,7 +1041,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 
 	/* encode head */
 	/* tid, oldest_client_tid set by do_request */
-	head->mdsmap_epoch = cpu_to_le64(mdsc->mdsmap->m_epoch);
+	head->mdsmap_epoch = cpu_to_le32(mdsc->mdsmap->m_epoch);
 	head->num_fwd = 0;
 	/* head->retry_attempt = 0; set by do_request */
 	head->mds_wants_replica_in_dirino = 0;
@@ -1091,7 +1092,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	int mds = -1;
 
 	dout(30, "do_request on %p\n", req);
-	BUG_ON(le32_to_cpu(req->r_request->hdr.type) !=
+	BUG_ON(le16_to_cpu(req->r_request->hdr.type) !=
 	       CEPH_MSG_CLIENT_REQUEST);
 
 	mutex_lock(&mdsc->mutex);
@@ -1390,7 +1391,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	int num_caps, num_realms = 0;
 	int got;
 	u64 next_snap_ino = 0;
-	u32 *pnum_realms;
+	__le32 *pnum_realms;
 
 	dout(1, "reconnect to recovering mds%d\n", mds);
 
@@ -1667,7 +1668,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	mask = le16_to_cpu(h->mask);
 	dname.name = (void *)h + sizeof(*h) + sizeof(u32);
 	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(u32);
-	if (dname.len != le32_to_cpu(*(u32 *)(h+1)))
+	if (dname.len != le32_to_cpu(*(__le32 *)(h+1)))
 		goto bad;
 
 	/* find session */
@@ -1795,7 +1796,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 		return;
 	lease = msg->front.iov_base;
 	lease->action = CEPH_MDS_LEASE_RELEASE;
-	lease->mask = mask;
+	lease->mask = cpu_to_le16(mask);
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
 	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
@@ -2014,7 +2015,7 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
  */
 void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
-	ceph_epoch_t epoch;
+	__u32 epoch;
 	__u32 maplen;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
@@ -2024,8 +2025,8 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_fsid fsid;
 
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(__u32), bad);
-	ceph_decode_64(&p, fsid.major);
-	ceph_decode_64(&p, fsid.minor);
+	ceph_decode_64_le(&p, fsid.major);
+	ceph_decode_64_le(&p, fsid.minor);
 	if (!ceph_fsid_equal(&fsid, &mdsc->client->monc.monmap->fsid)) {
 		derr(0, "got mdsmap with wrong fsid\n");
 		return;

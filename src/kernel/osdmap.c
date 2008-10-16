@@ -328,13 +328,13 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		return ERR_PTR(-ENOMEM);
 
 	ceph_decode_need(p, end, 2*sizeof(__u64)+11*sizeof(__u32), bad);
-	ceph_decode_64(p, map->fsid.major);
-	ceph_decode_64(p, map->fsid.minor);
+	ceph_decode_64_le(p, map->fsid.major);
+	ceph_decode_64_le(p, map->fsid.minor);
 	ceph_decode_32(p, map->epoch);
-	ceph_decode_32(p, map->ctime.tv_sec);
-	ceph_decode_32(p, map->ctime.tv_nsec);
-	ceph_decode_32(p, map->mtime.tv_sec);
-	ceph_decode_32(p, map->mtime.tv_nsec);
+	ceph_decode_32_le(p, map->ctime.tv_sec);
+	ceph_decode_32_le(p, map->ctime.tv_nsec);
+	ceph_decode_32_le(p, map->mtime.tv_sec);
+	ceph_decode_32_le(p, map->mtime.tv_nsec);
 	ceph_decode_32(p, map->pg_num);
 	ceph_decode_32(p, map->pgp_num);
 	ceph_decode_32(p, map->lpg_num);
@@ -426,12 +426,12 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 
 	ceph_decode_need(p, end, sizeof(fsid)+sizeof(ctime)+2*sizeof(__u32),
 			 bad);
-	ceph_decode_64(p, fsid.major);
-	ceph_decode_64(p, fsid.minor);
+	ceph_decode_64_le(p, fsid.major);
+	ceph_decode_64_le(p, fsid.minor);
 	ceph_decode_32(p, epoch);
 	BUG_ON(epoch != map->epoch+1);
-	ceph_decode_32(p, ctime.tv_sec);
-	ceph_decode_32(p, ctime.tv_nsec);
+	ceph_decode_32_le(p, ctime.tv_sec);
+	ceph_decode_32_le(p, ctime.tv_nsec);
 	ceph_decode_32(p, new_flags);
 
 	/* full map? */
@@ -583,7 +583,7 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 
 	dout(80, "mapping %llu~%llu  osize %u fl_su %u\n", off, *plen,
 	     osize, su);
-	su_per_object = osize / layout->fl_stripe_unit;
+	su_per_object = osize / le32_to_cpu(layout->fl_stripe_unit);
 	dout(80, "osize %u / su %u = su_per_object %u\n", osize, su,
 	     su_per_object);
 
@@ -598,7 +598,7 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	stripepos = bl % sc;
 	objsetno = stripeno / su_per_object;
 
-	oid->bno = objsetno * sc + stripepos;
+	oid->bno = cpu_to_le32(objsetno * sc + stripepos);
 	dout(80, "objset %u * sc %u = bno %u\n", objsetno, sc, oid->bno);
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = off;

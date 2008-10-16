@@ -9,7 +9,7 @@ struct ceph_client;
 struct ceph_mount_args;
 
 struct ceph_monmap {
-	ceph_epoch_t epoch;
+	__u32 epoch;
 	struct ceph_fsid fsid;
 	__u32 num_mon;
 	struct ceph_entity_inst mon_inst[0];
