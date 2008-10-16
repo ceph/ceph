@@ -22,14 +22,9 @@
  */
 int ceph_debug = 1;
 int ceph_debug_mask = 0xffffffff;
-
-/*
- * if true, send output to KERN_INFO (console) instead of KERN_DEBUG.
- */
+/* if true, send output to KERN_INFO (console) instead of KERN_DEBUG. */
 int ceph_debug_console;
-
-/* for this file */
-int ceph_debug_super = -1;
+int ceph_debug_super = -1;   /* for this file */
 
 #define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
@@ -47,7 +42,6 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 /*
  * super ops
  */
-
 static int ceph_write_inode(struct inode *inode, int unused)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -55,7 +49,7 @@ static int ceph_write_inode(struct inode *inode, int unused)
 	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
 		dout(30, "ceph_write_inode %llx.%llx .. atime updated\n",
 		     ceph_vinop(inode));
-		/* eventually push this async to mds ... */
+		/* maybe someday we will push this async to mds? */
 	}
 	return 0;
 }
@@ -72,8 +66,8 @@ static void ceph_put_super(struct super_block *s)
 
 	if (cl->mount_state != CEPH_MOUNT_SHUTDOWN) {
 		rc = wait_event_timeout(cl->mount_wq,
-					(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
-					seconds*HZ);
+				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
+				seconds*HZ);
 		if (rc == 0)
 			derr(0, "umount timed out after %d seconds\n", seconds);
 	}
@@ -89,22 +83,29 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	__le64 fsid;
 	int err;
 
-	dout(30, "ceph_statfs\n");
+	dout(30, "statfs\n");
 	err = ceph_monc_do_statfs(&client->monc, &st);
 	if (err < 0)
 		return err;
 
 	/* fill in kstatfs */
 	buf->f_type = CEPH_SUPER_MAGIC;  /* ?? */
+
+	/*
+	 * express utilization in terms of large blocks to avoid
+	 * overflow on 32-bit machines.
+	 */
 	buf->f_bsize = 1 << CEPH_BLOCK_SHIFT;     /* 1 MB */
 	buf->f_blocks = st.f_total >> (CEPH_BLOCK_SHIFT-10);
 	buf->f_bfree = st.f_free >> (CEPH_BLOCK_SHIFT-10);
 	buf->f_bavail = st.f_avail >> (CEPH_BLOCK_SHIFT-10);
+
 	buf->f_files = st.f_objects;
 	buf->f_ffree = -1;
 	buf->f_namelen = PATH_MAX;
-	buf->f_frsize = 4096;
+	buf->f_frsize = PAGE_CACHE_SIZE;
 
+	/* leave in little-endian, regardless of host endianness */
 	fsid = monmap->fsid.major ^ monmap->fsid.minor;
 	buf->f_fsid.val[0] = fsid & 0xffffffff;
 	buf->f_fsid.val[1] = fsid >> 32;
@@ -137,7 +138,8 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 			   args->fsid.major, args->fsid.minor);
 	if (args->flags & CEPH_MOUNT_NOSHARE)
 		seq_puts(m, ",noshare");
-
+	if (args->flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
+		seq_puts(m, ",unsafewriteback");
 	if (args->flags & CEPH_MOUNT_DIRSTAT)
 		seq_puts(m, ",dirstat");
 	else
@@ -146,6 +148,8 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 		seq_puts(m, ",rbytes");
 	else
 		seq_puts(m, ",norbytes");
+	if (args->flags & CEPH_MOUNT_NOCRC)
+		seq_puts(m, ",nocrc");
 	return 0;
 }
 
@@ -162,7 +166,6 @@ static void init_once(struct kmem_cache *cachep, void *foo)
 #endif
 {
 	struct ceph_inode_info *ci = foo;
-	dout(10, "init_once on %p\n", &ci->vfs_inode);
 	inode_init_once(&ci->vfs_inode);
 }
 
@@ -206,7 +209,6 @@ static void ceph_umount_begin(struct super_block *sb)
 		return;
 
 	client->mount_state = CEPH_MOUNT_SHUTDOWN;
-
 	return;
 }
 
@@ -225,14 +227,14 @@ static const struct super_operations ceph_super_ops = {
 
 
 /*
- * the monitor responds to monmap to indicate mount success.
- * (or, someday, to indicate a change in the monitor cluster?)
+ * the monitor responds with monmap to indicate mount success.
+ * (or, someday, to indicate a change in the monitor cluster)
  */
 static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 {
 	int err;
 	int first = (client->monc.monmap->epoch == 0);
-	void *new;
+	struct ceph_monmap *new, *old = client->monc.monmap;
 
 	dout(2, "handle_monmap had epoch %d\n", client->monc.monmap->epoch);
 	new = ceph_monmap_decode(msg->front.iov_base,
@@ -242,8 +244,8 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 		derr(0, "problem decoding monmap, %d\n", err);
 		return;
 	}
-	kfree(client->monc.monmap);
 	client->monc.monmap = new;
+	kfree(old);
 
 	if (first) {
 		char name[10];
@@ -287,10 +289,13 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_OSD_MAP: return "osd_map";
 	case CEPH_MSG_OSD_OP: return "osd_op";
 	case CEPH_MSG_OSD_OPREPLY: return "osd_opreply";
+	default: return "unknown";
 	}
-	return "unknown";
 }
 
+/*
+ * Called when a message socket is explicitly reset by a peer.
+ */
 void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 		     struct ceph_entity_name *peer_name)
 {
@@ -307,8 +312,6 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 		break;
 	}
 }
-
-
 
 
 /*
@@ -335,6 +338,7 @@ enum {
 	Opt_mount_timeout,
 	/* int args above */
 	Opt_ip,
+	Opt_noshare,
 	Opt_unsafewriteback,
 	Opt_safewriteback,
 	Opt_dirstat,
@@ -365,6 +369,7 @@ static match_table_t arg_tokens = {
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
+	{Opt_noshare, "noshare"},
 	{Opt_unsafewriteback, "unsafewriteback"},
 	{Opt_safewriteback, "safewriteback"},
 	{Opt_dirstat, "dirstat"},
@@ -386,18 +391,21 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr, int m
 	int v;
 	int mon_count;
 	unsigned ip = 0;
-	const char *p = c;
+	const char *p = c, *numstart;
 
 	dout(15, "parse_ip on '%s' len %d\n", c, len);
 	for (mon_count = 0; mon_count < max_count; mon_count++) {
 		for (i = 0; !ADDR_DELIM(*p) && i < 4; i++) {
 			v = 0;
+			numstart = p;
 			while (!ADDR_DELIM(*p) && *p != '.' && p < c+len) {
 				if (*p < '0' || *p > '9')
 					goto bad;
 				v = (v * 10) + (*p - '0');
 				p++;
 			}
+			if (v > 255 || numstart == p)
+				goto bad;
 			ip = (ip << 8) + v;
 
 			if (*p == '.')
@@ -449,15 +457,15 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->mount_timeout = 30; /* seconds */
 	args->snapdir_name = ".snap";
 
-	/* ip1[,ip2...]:/server/path */
+	/* ip1[,ip2...]:/subdir/in/fs */
 	c = strchr(dev_name, ':');
 	if (c == NULL)
 		return -EINVAL;
 
-	/* get mon ip */
-	/* er, just one for now. later, comma-separate... */
+	/* get mon ip(s) */
 	len = c - dev_name;
-	err = parse_ip(dev_name, len, args->mon_addr, MAX_MON_MOUNT_ADDR, &args->num_mon);
+	err = parse_ip(dev_name, len, args->mon_addr, MAX_MON_MOUNT_ADDR,
+		       &args->num_mon);
 	if (err < 0)
 		return err;
 
@@ -472,7 +480,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	c++;
 	while (*c == '/') c++;  /* remove leading '/'(s) */
 	*path = c;
-
 	dout(15, "server path '%s'\n", *path);
 
 	/* parse mount options */
@@ -502,7 +509,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			args->fsid.minor = intval;
 			break;
 		case Opt_monport:
-			dout(25, "parse_mount_args monport=%d\n", intval);
 			for (i = 0; i < args->num_mon; i++)
 				args->mon_addr[i].ipaddr.sin_port =
 					htons(intval);
@@ -566,6 +572,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			args->mount_timeout = intval;
 			break;
 
+		case Opt_noshare:
+			args->flags |= CEPH_MOUNT_NOSHARE;
+			break;
 		case Opt_unsafewriteback:
 			args->flags |= CEPH_MOUNT_UNSAFE_WRITEBACK;
 			break;
@@ -644,8 +653,6 @@ static void ceph_destroy_client(struct ceph_client *client)
 	dout(10, "destroy_client %p\n", client);
 
 	/* unmount */
-	/* ... */
-
 	ceph_mdsc_stop(&client->mdsc);
 	ceph_monc_stop(&client->monc);
 	ceph_osdc_stop(&client->osdc);
@@ -664,6 +671,10 @@ static void ceph_destroy_client(struct ceph_client *client)
 	dout(10, "destroy_client %p done\n", client);
 }
 
+/*
+ * true if we have the mon, osd, and mds maps, and are thus
+ * fully "mounted".
+ */
 static int have_all_maps(struct ceph_client *client)
 {
 	return client->osdc.osdmap && client->osdc.osdmap->epoch &&
@@ -671,6 +682,10 @@ static int have_all_maps(struct ceph_client *client)
 		client->mdsc.mdsmap && client->mdsc.mdsmap->m_epoch;
 }
 
+/*
+ * Bootstrap mount by opening the root directory.  Note the mount
+ * @started time from caller, and time out if this takes too long.
+ */
 static struct dentry *open_root_dentry(struct ceph_client *client,
 				       const char *path,
 				       unsigned long started)
@@ -714,21 +729,22 @@ out:
  * mount: join the ceph cluster.
  */
 static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
-	       const char *path)
+		      const char *path)
 {
 	struct ceph_entity_addr *myaddr = NULL;
 	struct ceph_msg *mount_msg;
 	struct dentry *root;
 	int err;
+	int request_interval = 5 * HZ;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
-	unsigned long started = jiffies;
+	unsigned long started = jiffies;  /* note the start time */
 	int which;
 	unsigned char r;
 
 	dout(10, "mount start\n");
 	mutex_lock(&client->mount_mutex);
 
-	/* messenger */
+	/* initialize the messenger */
 	if (client->msgr == NULL) {
 		if (client->mount_args.flags & CEPH_MOUNT_MYIP)
 			myaddr = &client->mount_args.my_addr;
@@ -744,6 +760,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr->peer_reset = ceph_peer_reset;
 	}
 
+	/* send mount request, and wait for mon, mds, and osd maps */
 	while (!have_all_maps(client)) {
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))
@@ -762,14 +779,12 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		mount_msg->hdr.dst.addr = client->mount_args.mon_addr[which];
 
 		ceph_msg_send(client->msgr, mount_msg, 0);
-		dout(10, "mount from mon%d\n", which);
 
 		/* wait */
-		dout(10, "mount sent mount request, waiting for maps\n");
+		dout(10, "mount sent to mon%d, waiting for maps\n", which);
 		err = wait_event_interruptible_timeout(client->mount_wq,
 						       have_all_maps(client),
-						       5*HZ);
-		dout(10, "mount wait got %d\n", err);
+						       request_interval);
 		if (err == -EINTR)
 			goto out;
 	}
@@ -793,9 +808,10 @@ out:
 
 
 /*
- * dispatch -- called with incoming messages.
+ * Process and incoming message.
  *
- * should be fast and non-blocking, as it is called with locks held.
+ * This should be relatively fast and must not do any work that waits
+ * on other messages to be received.
  */
 void ceph_dispatch(void *p, struct ceph_msg *msg)
 {
@@ -803,9 +819,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	int had;
 	int type = le32_to_cpu(msg->hdr.type);
 
-	/* deliver the message */
 	switch (type) {
-		/* me */
 	case CEPH_MSG_MON_MAP:
 		had = client->monc.monmap->epoch ? 1:0;
 		handle_monmap(client, msg);
@@ -859,7 +873,8 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		break;
 
 	default:
-		derr(0, "received unknown message type %d\n", type);
+		derr(0, "received unknown message type %d %s\n", type,
+		     ceph_msg_type_name(type));
 	}
 
 	ceph_msg_put(msg);
@@ -879,20 +894,18 @@ static int ceph_set_super(struct super_block *s, void *data)
 	s->s_fs_info = client;
 	client->sb = s;
 
-	/* fill sbinfo */
 	s->s_op = &ceph_super_ops;
 	s->s_export_op = &ceph_export_ops;
 
-	/* set time granularity */
 	s->s_time_gran = 1000;  /* 1000 ns == 1 us */
 
-	ret = set_anon_super(s, NULL);  /* what is the second arg for? */
+	ret = set_anon_super(s, NULL);  /* what is that second arg for? */
 	if (ret != 0)
-		goto bail;
+		goto fail;
 
 	return ret;
 
-bail:
+fail:
 	s->s_fs_info = NULL;
 	client->sb = NULL;
 	return ret;
@@ -934,15 +947,21 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	return 1;
 }
 
+/*
+ * construct our own bdi so we can control readahead
+ */
 static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 {
 	int err;
 
 	if (client->mount_args.rsize)
-		client->backing_dev_info.ra_pages = (client->mount_args.rsize + PAGE_CACHE_SIZE - 1) >> PAGE_SHIFT;
+		client->backing_dev_info.ra_pages =
+			(client->mount_args.rsize + PAGE_CACHE_SIZE - 1)
+			>> PAGE_SHIFT;
 
 	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
-		client->backing_dev_info.ra_pages = CEPH_DEFAULT_READ_SIZE >> PAGE_SHIFT;
+		client->backing_dev_info.ra_pages =
+			CEPH_DEFAULT_READ_SIZE >> PAGE_SHIFT;
 
 	err = bdi_init(&client->backing_dev_info);
 
@@ -981,7 +1000,6 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (client->mount_args.flags & CEPH_MOUNT_NOSHARE)
 		compare_super = NULL;
 
-	/* superblock */
 	sb = sget(fs_type, compare_super, ceph_set_super, client);
 	if (IS_ERR(sb)) {
 		err = PTR_ERR(sb);
