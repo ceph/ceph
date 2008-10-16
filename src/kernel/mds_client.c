@@ -15,6 +15,10 @@ int ceph_debug_mdsc = -1;
 #include "messenger.h"
 #include "decode.h"
 
+
+/*
+ * address and send message to a given mds
+ */
 void ceph_send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 		       int mds)
 {
@@ -27,6 +31,10 @@ void ceph_send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 
 /*
  * mds reply parsing
+ */
+
+/*
+ * parse individual inode info
  */
 static int parse_reply_info_in(void **p, void *end,
 			       struct ceph_mds_reply_info_in *info)
@@ -52,11 +60,15 @@ bad:
 	return err;
 }
 
+/*
+ * parse a full metadata trace from the mds: inode, dirinfo, dentry, inode...
+ * sequence.
+ */
 static int parse_reply_info_trace(void **p, void *end,
 				  struct ceph_mds_reply_info *info)
 {
 	__u16 numi, numd, snapdirpos;
-	int err = -EINVAL;
+	int err;
 
 	ceph_decode_need(p, end, 3*sizeof(__u16), bad);
 	ceph_decode_16(p, numi);
@@ -70,22 +82,27 @@ static int parse_reply_info_trace(void **p, void *end,
 		goto done;   /* hrm, this shouldn't actually happen, but.. */
 	}
 
-	/* alloc one big shared array */
+	/* alloc one big block of memory for all of these arrays */
 	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
 					 2*sizeof(*info->trace_ilease) +
 					 sizeof(*info->trace_dir) +
 					 sizeof(*info->trace_dname) +
 					 sizeof(*info->trace_dname_len)),
 				 GFP_NOFS);
-	if (info->trace_in == NULL)
-		goto badmem;
-
+	if (info->trace_in == NULL) {
+		err = -ENOMEM;
+		goto out_bad;
+	}
 	info->trace_ilease = (void *)(info->trace_in + numi);
 	info->trace_dir = (void *)(info->trace_ilease + numi);
 	info->trace_dname = (void *)(info->trace_dir + numd);
 	info->trace_dname_len = (void *)(info->trace_dname + numd);
 	info->trace_dlease = (void *)(info->trace_dname_len + numd);
 
+	/*
+	 * the trace starts at the deepest point, and works up toward
+	 * the root inode.
+	 */
 	if (numi == numd)
 		goto dentry;
 inode:
@@ -94,7 +111,7 @@ inode:
 	numi--;
 	err = parse_reply_info_in(p, end, &info->trace_in[numi]);
 	if (err < 0)
-		goto bad;
+		goto out_bad;
 	info->trace_ilease[numi] = *p;
 	*p += sizeof(struct ceph_mds_reply_lease);
 
@@ -109,7 +126,7 @@ dentry:
 	info->trace_dlease[numd] = *p;
 	*p += sizeof(struct ceph_mds_reply_lease);
 
-	/* dir */
+	/* dir frag info */
 	if (unlikely(*p + sizeof(struct ceph_mds_reply_dirfrag) > end))
 		goto bad;
 	info->trace_dir[numd] = *p;
@@ -121,21 +138,24 @@ dentry:
 
 done:
 	if (unlikely(*p != end))
-		return -EINVAL;
+		goto bad;
 	return 0;
 
-badmem:
-	err = -ENOMEM;
 bad:
+	err = -EINVAL;
+out_bad:
 	derr(1, "problem parsing trace %d\n", err);
 	return err;
 }
 
+/*
+ * parse readdir results
+ */
 static int parse_reply_info_dir(void **p, void *end,
 				struct ceph_mds_reply_info *info)
 {
 	__u32 num, i = 0;
-	int err = -EINVAL;
+	int err;
 
 	info->dir_dir = *p;
 	if (*p + sizeof(*info->dir_dir) > end)
@@ -156,8 +176,10 @@ static int parse_reply_info_dir(void **p, void *end,
 				      sizeof(*info->dir_dname_len) +
 				      sizeof(*info->dir_dlease)),
 			       GFP_NOFS);
-	if (info->dir_in == NULL)
-		goto badmem;
+	if (info->dir_in == NULL) {
+		err = -ENOMEM;
+		goto out_bad;
+	}
 	info->dir_ilease = (void *)(info->dir_in + num);
 	info->dir_dname = (void *)(info->dir_ilease + num);
 	info->dir_dname_len = (void *)(info->dir_dname + num);
@@ -177,7 +199,7 @@ static int parse_reply_info_dir(void **p, void *end,
 		/* inode */
 		err = parse_reply_info_in(p, end, &info->dir_in[i]);
 		if (err < 0)
-			goto bad;
+			goto out_bad;
 		info->dir_ilease[i] = *p;
 		*p += sizeof(struct ceph_mds_reply_lease);
 		i++;
@@ -187,19 +209,22 @@ static int parse_reply_info_dir(void **p, void *end,
 done:
 	return 0;
 
-badmem:
-	err = -ENOMEM;
 bad:
+	err = -EINVAL;
+out_bad:
 	derr(1, "problem parsing dir contents %d\n", err);
 	return err;
 }
 
+/*
+ * parse entire mds reply
+ */
 static int parse_reply_info(struct ceph_msg *msg,
 			    struct ceph_mds_reply_info *info)
 {
 	void *p, *end;
 	__u32 len;
-	int err = -EINVAL;
+	int err;
 
 	memset(info, 0, sizeof(*info));
 	info->head = msg->front.iov_base;
@@ -211,7 +236,7 @@ static int parse_reply_info(struct ceph_msg *msg,
 	if (len > 0) {
 		err = parse_reply_info_trace(&p, p+len, info);
 		if (err < 0)
-			goto bad;
+			goto out_bad;
 	}
 
 	/* dir content */
@@ -219,16 +244,18 @@ static int parse_reply_info(struct ceph_msg *msg,
 	if (len > 0) {
 		err = parse_reply_info_dir(&p, p+len, info);
 		if (err < 0)
-			goto bad;
+			goto out_bad;
 	}
 
 	/* snap blob */
 	ceph_decode_32_safe(&p, end, len, bad);
 	info->snapblob_len = len;
 	info->snapblob = p;
-
 	return 0;
+
 bad:
+	err = -EINVAL;
+out_bad:
 	derr(1, "parse_reply err %d\n", err);
 	return err;
 }
@@ -244,10 +271,14 @@ static void destroy_reply_info(struct ceph_mds_reply_info *info)
  * sessions
  */
 
+/*
+ * called under mdsc->mutex
+ */
 struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 						int mds)
 {
 	struct ceph_mds_session *session;
+
 	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == NULL)
 		return NULL;
 	session = mdsc->sessions[mds];
@@ -259,7 +290,6 @@ struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 
 void ceph_put_mds_session(struct ceph_mds_session *s)
 {
-	BUG_ON(s == NULL);
 	dout(30, "put_mds_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref))
@@ -268,7 +298,7 @@ void ceph_put_mds_session(struct ceph_mds_session *s)
 
 /*
  * create+register a new session for given mds.
- *  drop locks for kmalloc, check for races.
+ * called under mdsc->mutex.
  */
 static struct ceph_mds_session *
 __register_session(struct ceph_mds_client *mdsc, int mds)
@@ -277,22 +307,21 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 
 	s = kmalloc(sizeof(*s), GFP_NOFS);
 	s->s_mds = mds;
-	s->s_ttl = 0;
 	s->s_state = CEPH_MDS_SESSION_NEW;
+	s->s_ttl = 0;
 	s->s_seq = 0;
 	mutex_init(&s->s_mutex);
 	spin_lock_init(&s->s_cap_lock);
-	s->s_cap_ttl = 0;
 	s->s_cap_gen = 0;
+	s->s_cap_ttl = 0;
 	s->s_renew_requested = 0;
 	INIT_LIST_HEAD(&s->s_caps);
+	s->s_nr_caps = 0;
 	INIT_LIST_HEAD(&s->s_inode_leases);
 	INIT_LIST_HEAD(&s->s_dentry_leases);
-	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
 
-	/* register */
 	dout(10, "register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
 		int newmax = 1 << get_count_order(mds+1);
@@ -304,22 +333,20 @@ __register_session(struct ceph_mds_client *mdsc, int mds)
 			return ERR_PTR(-ENOMEM);
 		if (mdsc->sessions) {
 			memcpy(sa, mdsc->sessions,
-			       mdsc->max_sessions * sizeof(void*));
+			       mdsc->max_sessions * sizeof(void *));
 			kfree(mdsc->sessions);
 		}
 		mdsc->sessions = sa;
 		mdsc->max_sessions = newmax;
 	}
-	if (mdsc->sessions[mds]) {
-		ceph_put_mds_session(s); /* lost race */
-		return mdsc->sessions[mds];
-	} else {
-		mdsc->sessions[mds] = s;
-		atomic_inc(&s->s_ref);
-		return s;
-	}
+	mdsc->sessions[mds] = s;
+	atomic_inc(&s->s_ref);  /* one ref to sessions[], one to caller */
+	return s;
 }
 
+/*
+ * called under mdsc->mutex
+ */
 static void __unregister_session(struct ceph_mds_client *mdsc, int mds)
 {
 	dout(10, "__unregister_session mds%d %p\n", mds, mdsc->sessions[mds]);
@@ -331,12 +358,12 @@ static void __unregister_session(struct ceph_mds_client *mdsc, int mds)
 /*
  * requests
  */
-
 static void get_request(struct ceph_mds_request *req)
 {
 	atomic_inc(&req->r_ref);
 }
 
+/* drop session refs in request */
 static void put_request_sessions(struct ceph_mds_request *req)
 {
 	if (req->r_session) {
@@ -354,7 +381,6 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 	dout(10, "put_request %p %d -> %d\n", req,
 	     atomic_read(&req->r_ref), atomic_read(&req->r_ref)-1);
 	if (atomic_dec_and_test(&req->r_ref)) {
-		kfree(req->r_expected_cap);
 		if (req->r_request)
 			ceph_msg_put(req->r_request);
 		if (req->r_reply) {
@@ -369,11 +395,17 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			dput(req->r_last_dentry);
 		if (req->r_old_dentry)
 			dput(req->r_old_dentry);
+		kfree(req->r_expected_cap);
 		put_request_sessions(req);
 		kfree(req);
 	}
 }
 
+/*
+ * lookup session, bump ref if found.
+ *
+ * called under mdsc->mutex.
+ */
 static struct ceph_mds_request *__get_request(struct ceph_mds_client *mdsc,
 					     __u64 tid)
 {
@@ -384,39 +416,27 @@ static struct ceph_mds_request *__get_request(struct ceph_mds_client *mdsc,
 	return req;
 }
 
+/*
+ * allocate and initialize a new request.  mostly zeroed.
+ */
 static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
 
 	req = kzalloc(sizeof(*req), GFP_NOFS);
 	req->r_request = msg;
-	req->r_reply = NULL;
-	req->r_timeout = 0;
 	req->r_started = jiffies;
-	req->r_err = 0;
-	req->r_direct_dentry = NULL;
 	req->r_direct_mode = USE_ANY_MDS;
-	req->r_direct_hash = 0;
-	req->r_direct_is_hash = false;
-	req->r_last_inode = NULL;
-	req->r_last_dentry = NULL;
-	req->r_old_dentry = NULL;
-	req->r_expected_cap = NULL;
-	req->r_fmode = 0;
-	req->r_session = NULL;
-	req->r_fwd_session = NULL;
-	req->r_attempts = 0;
-	req->r_num_fwd = 0;
 	req->r_resend_mds = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
-
 	return req;
 }
 
 /*
- * register an in-flight request.
- * fill in tid in msg request header
+ * Register an in-flight request, and assign a tid in msg request header.
+ *
+ * Called under mdsc->mutex.
  */
 static void __register_request(struct ceph_mds_client *mdsc,
 			       struct ceph_mds_request *req)
@@ -431,12 +451,12 @@ static void __register_request(struct ceph_mds_client *mdsc,
 static void __unregister_request(struct ceph_mds_client *mdsc,
 				 struct ceph_mds_request *req)
 {
-	dout(30, "unregister_request %p tid %lld\n", req, req->r_tid);
+	dout(30, "__unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
 	ceph_mdsc_put_request(req);
 }
 
-static bool have_session(struct ceph_mds_client *mdsc, int mds)
+static bool __have_session(struct ceph_mds_client *mdsc, int mds)
 {
 	if (mds >= mdsc->max_sessions)
 		return false;
@@ -445,22 +465,28 @@ static bool have_session(struct ceph_mds_client *mdsc, int mds)
 
 
 /*
- * choose mds to send request to next
+ * Choose mds to send request to next.  If there is a hint set in
+ * the request (e.g., due to a prior forward hint from the mds), use
+ * that.
+ *
+ * Called under mdsc->mutex.
  */
-static int choose_mds(struct ceph_mds_client *mdsc,
-		      struct ceph_mds_request *req)
+static int __choose_mds(struct ceph_mds_client *mdsc,
+			struct ceph_mds_request *req)
 {
 	int mds = -1;
 	u32 hash = req->r_direct_hash;
 	bool is_hash = req->r_direct_is_hash;
 	struct dentry *dentry = req->r_direct_dentry;
 	struct ceph_inode_info *ci;
-	struct ceph_inode_frag *frag = NULL;
 	int mode = req->r_direct_mode;
 
-	/* is there a specific mds we should try? */
+	/*
+	 * is there a specific mds we should try?  ignore hint if we have
+	 * no session and the mds is not up (active or recovering).
+	 */
 	if (req->r_resend_mds >= 0 &&
-	    (!have_session(mdsc, req->r_resend_mds) ||
+	    (__have_session(mdsc, req->r_resend_mds) ||
 	     ceph_mdsmap_get_state(mdsc->mdsmap, req->r_resend_mds) > 0)) {
 		dout(20, "choose_mds using resend_mds mds%d\n",
 		     req->r_resend_mds);
@@ -487,45 +513,41 @@ static int choose_mds(struct ceph_mds_client *mdsc,
 		if (is_hash &&
 		    dentry->d_inode &&
 		    S_ISDIR(dentry->d_inode->i_mode)) {
+			struct ceph_inode_frag frag;
 			int found;
+
 			ci = ceph_inode(dentry->d_inode);
-			frag = kmalloc(sizeof(struct ceph_inode_frag), GFP_KERNEL);
-
-			if (!frag)
-				return -ENOMEM;
-
-			ceph_choose_frag(ci, hash, frag, &found);
+			ceph_choose_frag(ci, hash, &frag, &found);
 			if (found) {
 				/* avoid hitting dir replicas on dir
 				 * auth delegation point.. mds will
 				 * likely forward anyway to avoid
-				 * twiddling scatterlock */
-				if (mode == USE_ANY_MDS && frag->ndist > 0 &&
+				 * twiddling mds' scatterlock */
+				if (mode == USE_ANY_MDS && frag.ndist > 0 &&
 				    dentry != req->r_direct_dentry) {
 					u8 r;
 					get_random_bytes(&r, 1);
-					r %= frag->ndist;
-					mds = frag->dist[r];
+					r %= frag.ndist;
+					mds = frag.dist[r];
 					dout(20, "choose_mds %p %llx.%llx "
 					     "frag %u mds%d (%d/%d)\n",
 					     dentry->d_inode,
 					     ceph_vinop(&ci->vfs_inode),
-					     frag->frag, frag->mds,
-					     (int)r, frag->ndist);
+					     frag.frag, frag.mds,
+					     (int)r, frag.ndist);
 					return mds;
 				}
 				mode = USE_AUTH_MDS;
-				if (frag->mds >= 0) {
-					mds = frag->mds;
+				if (frag.mds >= 0) {
+					mds = frag.mds;
 					dout(20, "choose_mds %p %llx.%llx "
 					     "frag %u mds%d (auth)\n",
 					     dentry->d_inode,
 					     ceph_vinop(&ci->vfs_inode),
-					     frag->frag, mds);
+					     frag.frag, mds);
 					return mds;
 				}
 			}
-			kfree(frag);
 		}
 		if (IS_ROOT(dentry))
 			break;
@@ -558,11 +580,15 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 	h = msg->front.iov_base;
 	h->op = cpu_to_le32(op);
 	h->seq = cpu_to_le64(seq);
-	/*h->stamp = ....*/
-
 	return msg;
 }
 
+/*
+ * Register request with mon_client for a new mds map.  Wait until
+ * we get one (or time out).
+ *
+ * called under mdsc->mutex (dropped while we wait)
+ */
 static int wait_for_new_map(struct ceph_mds_client *mdsc,
 			     unsigned long timeout)
 {
@@ -586,6 +612,11 @@ static int wait_for_new_map(struct ceph_mds_client *mdsc,
 	return err;
 }
 
+/*
+ * open a new session with the given mds
+ *
+ * called under mdsc->mutex
+ */
 static int open_session(struct ceph_mds_client *mdsc,
 			struct ceph_mds_session *session, unsigned long timeout)
 {
@@ -594,7 +625,7 @@ static int open_session(struct ceph_mds_client *mdsc,
 	int mds = session->s_mds;
 	int err = 0;
 
-	/* mds active? */
+	/* wait for mds to go active? */
 	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
 	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
 	if (mstate < CEPH_MDS_STATE_ACTIVE) {
@@ -1073,7 +1104,7 @@ retry:
 		goto finish;
 	}
 
-	mds = choose_mds(mdsc, req);
+	mds = __choose_mds(mdsc, req);
 	if (mds < 0) {
 		dout(30, "do_request waiting for new mdsmap\n");
 		err = wait_for_new_map(mdsc, req->r_timeout);
@@ -1105,8 +1136,8 @@ retry:
 	}
 
 	/* make request? */
-	if (req->r_from_time == 0)
-		req->r_from_time = jiffies;
+	if (req->r_request_started == 0)
+		req->r_request_started = jiffies;
 	BUG_ON(req->r_session);
 	req->r_session = session; /* request now owns the session ref */
 	req->r_resend_mds = -1;  /* forget any specific mds hint */
@@ -1309,7 +1340,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		dout(10, "forward %llu to mds%d - old seq %d <= %d\n",
 		     tid, next_mds, req->r_num_fwd, fwd_seq);
 	} else if (!must_resend &&
-		   have_session(mdsc, next_mds) &&
+		   __have_session(mdsc, next_mds) &&
 		   mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
 		/* yes.  adjust mds set, but mds will do the forward. */
 		dout(10, "forward %llu to mds%d (mds fwded)\n", tid, next_mds);

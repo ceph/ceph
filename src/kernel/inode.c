@@ -841,7 +841,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			return err;
 		if (rinfo->trace_numd == 0)
 			update_inode_lease(in, rinfo->trace_ilease[0],
-					   session, req->r_from_time);
+					   session, req->r_request_started);
 		if (unlikely(sb->s_root == NULL))
 			sb->s_root = dn;
 	}
@@ -871,7 +871,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* update inode lease */
 		mask = update_inode_lease(in, rinfo->trace_ilease[d],
-					  session, req->r_from_time);
+					  session, req->r_request_started);
 		have_icontent = mask & CEPH_LOCK_ICONTENT;
 
 		/* do we have a dn lease? */
@@ -939,7 +939,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			if (have_lease && d_unhashed(dn))
 				d_rehash(dn);
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
-					    session, req->r_from_time);
+					    session, req->r_request_started);
 			goto out_dir_no_inode;
 		}
 
@@ -993,7 +993,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		if (have_lease)
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
-					    session, req->r_from_time);
+					    session, req->r_request_started);
 
 		/* done with dn update */
 		if (req->r_locked_dir != parent->d_inode)
@@ -1112,7 +1112,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	if (in)
 		update_inode_lease(dn->d_inode,
 				   rinfo->trace_ilease[d],
-				   session, req->r_from_time);
+				   session, req->r_request_started);
 
 	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
 	if (req->r_last_dentry)
@@ -1207,9 +1207,9 @@ retry_lookup:
 			continue;
 		}
 		update_dentry_lease(dn, rinfo->dir_dlease[i],
-				    req->r_session, req->r_from_time);
+				    req->r_session, req->r_request_started);
 		update_inode_lease(in, rinfo->dir_ilease[i],
-				   req->r_session, req->r_from_time);
+				   req->r_session, req->r_request_started);
 		dput(dn);
 	}
 
