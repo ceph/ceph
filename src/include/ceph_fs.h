@@ -36,7 +36,7 @@
  * whenever the wire protocol changes.  try to keep this string the
  * same length.
  */
-#define CEPH_BANNER "ceph 004\n"  
+#define CEPH_BANNER "ceph 004\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
@@ -382,9 +382,9 @@ struct ceph_entity_name {
 #define CEPH_MSGR_TAG_RESETSESSION  2  /* server->client: reset, try again */
 #define CEPH_MSGR_TAG_WAIT          3  /* server->client: wait for racing
 					  incoming connection */
-#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server->client + cseq: try again 
+#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server->client + cseq: try again
 					  with higher cseq */
-#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again 
+#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again
 					  with higher gseq */
 #define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
 #define CEPH_MSGR_TAG_MSG          10  /* message */
@@ -441,7 +441,7 @@ struct ceph_msg_header {
 	__le16 mon_protocol, osd_protocol, mds_protocol,
 		client_protocol; /* protocol versions */
 	__le32 front_len; /* bytes in main payload */
-	__le32 data_off;  /* sender: include full offset; 
+	__le32 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
 	struct ceph_entity_inst src, orig_src, dst;
@@ -549,7 +549,7 @@ struct ceph_mds_getmap {
 #define CEPH_MDS_STATE_STARTING   -7  /* up, starting previously stopped mds. */
 
 #define CEPH_MDS_STATE_REPLAY      8  /* up, replaying journal. */
-#define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed 
+#define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed
 					 operations (import, rename, etc.) */
 #define CEPH_MDS_STATE_RECONNECT   10 /* up, reconnect to clients */
 #define CEPH_MDS_STATE_REJOIN      11 /* up, rejoining distributed cache */
