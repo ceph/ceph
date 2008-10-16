@@ -742,7 +742,7 @@ get_more_pages:
 						len, locked_pages);
 		req = NULL;
 		/*
-		 * FIXME: writepages_start fail (ENOMEM?) we should
+		 * FIXME: if writepages_start fails (ENOMEM?) we should
 		 * really redirty all those pages and release req..
 		 */
 

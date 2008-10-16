@@ -1,7 +1,6 @@
 #include <linux/exportfs.h>
 
 #include "ceph_fs.h"
-
 #include "ceph_debug.h"
 
 int ceph_debug_export = -1;
@@ -13,6 +12,18 @@ int ceph_debug_export = -1;
 /*
  * fh is N tuples of
  *  <ino, parent's d_name.hash>
+ *
+ * This is only a semi-reliable strategy.  The fundamental issue is
+ * that ceph doesn't not have a way to locate an arbitrary inode by
+ * ino.  Keeping a few parents in the handle increases the probability
+ * that we'll find it in one of the MDS caches, but it is by no means
+ * a guarantee.
+ *
+ * Also, the FINDINODE request is currently directed at a single MDS.
+ * It should probably try all MDS's before giving up.  For a single MDS
+ * system that isn't a problem.
+ *
+ * In the meantime, this works reasonably well for basic usage.
  */
 
 #define IPSZ (sizeof(struct ceph_inopath_item) / sizeof(u32))
@@ -33,9 +44,9 @@ static int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len,
 		return -ENOSPC;
 
 	/*
-	 * pretty sure this is racy
+	 * pretty sure this is racy.  caller holds dentry->d_lock, but
+	 * not parents'.
 	 */
-	/* note: caller holds dentry->d_lock */
 	fh[0].ino = cpu_to_le64(ceph_vino(dentry->d_inode).ino);
 	fh[0].dname_hash = cpu_to_le32(dentry->d_name.hash);
 	len = 1;
