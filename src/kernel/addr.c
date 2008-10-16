@@ -461,7 +461,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	if (req->r_reply) {
 		replyhead = req->r_reply->front.iov_base;
 		rc = le32_to_cpu(replyhead->result);
-		bytes = le32_to_cpu(replyhead->length);
+		bytes = le64_to_cpu(replyhead->length);
 	}
 
 	if (rc >= 0) {
@@ -522,7 +522,6 @@ static int ceph_writepages_start(struct address_space *mapping,
 
 	client = ceph_inode_to_client(inode);
 
-	dout(1, "writepage client=%p\n", client);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
 		dout(1, "writepage on forced umount\n");
 		return -EIO; /* we're in a forced umount, don't write anything! */

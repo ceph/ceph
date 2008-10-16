@@ -146,7 +146,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	unsigned skew;
 	int err;
 	__u32 ftype;
-	struct ceph_mds_reply_info *rinfo;
+	struct ceph_mds_reply_info_parsed *rinfo;
 
 nextfrag:
 	dout(5, "readdir filp %p at frag %u off %u\n", filp, frag, off);
@@ -224,7 +224,7 @@ nextfrag:
 		     off, off+skew,
 		     rinfo->dir_nr, rinfo->dir_dname_len[off+skew],
 		     rinfo->dir_dname[off+skew]);
-		ftype = le32_to_cpu(rinfo->dir_in[off+skew].in->mode >> 12);
+		ftype = le32_to_cpu(rinfo->dir_in[off+skew].in->mode) >> 12;
 		if (filldir(dirent,
 			    rinfo->dir_dname[off+skew],
 			    rinfo->dir_dname_len[off+skew],

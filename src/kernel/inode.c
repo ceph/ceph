@@ -780,7 +780,7 @@ out:
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		    struct ceph_mds_session *session)
 {
-	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
+	struct ceph_mds_reply_info_parsed *rinfo = &req->r_reply_info;
 	int err = 0, mask;
 	struct qstr dname;
 	struct dentry *dn = sb->s_root;
@@ -876,7 +876,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* do we have a dn lease? */
 		have_lease = have_icontent ||
-			(rinfo->trace_dlease[d]->mask & CEPH_LOCK_DN);
+			(le16_to_cpu(rinfo->trace_dlease[d]->mask) & CEPH_LOCK_DN);
 		if (!have_lease)
 			dout(10, "fill_trace  no icontent|dentry lease\n");
 
@@ -1132,7 +1132,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 {
 	struct dentry *parent = req->r_last_dentry;
-	struct ceph_mds_reply_info *rinfo = &req->r_reply_info;
+	struct ceph_mds_reply_info_parsed *rinfo = &req->r_reply_info;
 	struct qstr dname;
 	struct dentry *dn;
 	struct inode *in;
@@ -1155,7 +1155,7 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req)
 		struct ceph_vino vino;
 
 		dname.name = rinfo->dir_dname[i];
-		dname.len = le32_to_cpu(rinfo->dir_dname_len[i]);
+		dname.len = rinfo->dir_dname_len[i];
 		dname.hash = full_name_hash(dname.name, dname.len);
 
 		vino.ino = le64_to_cpu(rinfo->dir_in[i].in->ino);
@@ -1479,9 +1479,9 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 
 	reqh->args.utime.mask = 0;
 	if (ia_valid & ATTR_ATIME)
-		reqh->args.utime.mask |= CEPH_UTIME_ATIME;
+		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_ATIME);
 	if (ia_valid & ATTR_MTIME)
-		reqh->args.utime.mask |= CEPH_UTIME_MTIME;
+		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
 
 	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);

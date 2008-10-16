@@ -18,17 +18,17 @@
 
 #define ceph_decode_64(p, v)				\
 	do {						\
-		v = le64_to_cpu(*(__u64*)*(p));		\
+		v = le64_to_cpu(*(__le64*)*(p));	\
 		*(p) += sizeof(__u64);			\
 	} while (0)
 #define ceph_decode_32(p, v)				\
 	do {						\
-		v = le32_to_cpu(*(__u32*)*(p));		\
+		v = le32_to_cpu(*(__le32*)*(p));	\
 		*(p) += sizeof(__u32);			\
 	} while (0)
 #define ceph_decode_16(p, v)				\
 	do {						\
-		v = le16_to_cpu(*(__u16*)*(p));		\
+		v = le16_to_cpu(*(__le16*)*(p));	\
 		*(p) += sizeof(__u16);			\
 	} while (0)
 #define ceph_decode_8(p, v)				\

@@ -172,7 +172,7 @@ static void rebuild_snap_realms(struct ceph_snap_realm *realm)
 }
 
 
-static int dup_array(u64 **dst, u64 *src, int num)
+static int dup_array(u64 **dst, __le64 *src, int num)
 {
 	int i;
 
@@ -258,8 +258,8 @@ struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 {
 	struct ceph_mds_snap_realm *ri;
 	int err = -ENOMEM;
-	u64 *snaps;
-	u64 *prior_parent_snaps;
+	__le64 *snaps;
+	__le64 *prior_parent_snaps;
 	struct ceph_snap_realm *realm, *first = NULL;
 	int invalidate = 0;
 

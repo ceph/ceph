@@ -376,7 +376,7 @@ static unsigned long hash_addr(struct ceph_entity_addr *addr)
 {
 	unsigned long key;
 	key = *(__u32 *)&addr->ipaddr.sin_addr.s_addr;
-	key ^= addr->ipaddr.sin_port;
+	key ^= *(__u16 *)&addr->ipaddr.sin_port;
 	return key;
 }
 
@@ -713,8 +713,8 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 			void *base = kaddr + con->out_msg_pos.page_pos;
 
 			con->out_msg->footer.data_crc =
-				crc32c_le(con->out_msg->footer.data_crc,
-					  base, len);
+				cpu_to_le32(crc32c_le(le32_to_cpu(con->out_msg->footer.data_crc),
+					  base, len));
 			con->out_msg_pos.did_page_crc = 1;
 		}
 
@@ -750,7 +750,7 @@ static int write_partial_msg_pages(struct ceph_connection *con,
 
 	/* queue up footer, too */
 	if (!crc)
-		con->out_msg->footer.flags |= CEPH_MSG_FOOTER_NOCRC;
+		con->out_msg->footer.flags |= cpu_to_le32(CEPH_MSG_FOOTER_NOCRC);
 	con->out_kvec[0].iov_base = &con->out_msg->footer;
 	con->out_kvec_bytes = con->out_kvec[0].iov_len =
 		sizeof(con->out_msg->footer);
@@ -794,7 +794,7 @@ static void prepare_write_message(struct ceph_connection *con)
 
 	/* encode header */
 	dout(20, "prepare_write_message %p seq %lld type %d len %d+%d %d pgs\n",
-	     m, le64_to_cpu(m->hdr.seq), le32_to_cpu(m->hdr.type),
+	     m, le64_to_cpu(m->hdr.seq), le16_to_cpu(m->hdr.type),
 	     le32_to_cpu(m->hdr.front_len), le32_to_cpu(m->hdr.data_len),
 	     m->nr_pages);
 	BUG_ON(le32_to_cpu(m->hdr.front_len) != m->front.iov_len);
@@ -817,11 +817,11 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_msg_pos.did_page_crc = 0;
 
 	/* fill in crc (except data pages), footer */
-	con->out_msg->hdr.crc = crc32c_le(0, (void *)&m->hdr,
-					  sizeof(m->hdr) - sizeof(m->hdr.crc));
+	con->out_msg->hdr.crc = cpu_to_le32(crc32c_le(0, (void *)&m->hdr,
+					  sizeof(m->hdr) - sizeof(m->hdr.crc)));
 	con->out_msg->footer.flags = 0;
-	con->out_msg->footer.front_crc = crc32c_le(0, m->front.iov_base,
-						   m->front.iov_len);
+	con->out_msg->footer.front_crc = cpu_to_le32(crc32c_le(0, m->front.iov_base,
+						   m->front.iov_len));
 	con->out_msg->footer.data_crc = 0;
 
 	set_bit(WRITE_PENDING, &con->state);
@@ -948,7 +948,7 @@ static void prepare_write_accept_ready(struct ceph_connection *con)
 }
 
 static void prepare_write_accept_retry(struct ceph_connection *con, char *ptag,
-				       u32 *pseq)
+				       __le32 *pseq)
 {
 	con->out_kvec[0].iov_base = ptag;
 	con->out_kvec[0].iov_len = 1;
@@ -1095,7 +1095,7 @@ static int read_message_partial(struct ceph_connection *con)
 		if (con->in_base_pos == sizeof(m->hdr)) {
 			u32 crc = crc32c_le(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
-			if (crc != m->hdr.crc) {
+			if (crc != le32_to_cpu(m->hdr.crc)) {
 				derr(0, "read_message_partial %p bad hdr crc"
 				     " %u != expected %u\n",
 				     m, crc, m->hdr.crc);
@@ -1196,13 +1196,13 @@ no_data:
 	dout(20, "read_message_partial got msg %p\n", m);
 
 	/* crc ok? */
-	if (con->in_front_crc != m->footer.front_crc) {
+	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
 		derr(0, "read_message_partial %p front crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_front_crc, m->footer.front_crc);
 		return -EIO;
 	}
-	if (con->in_data_crc != m->footer.data_crc) {
+	if (con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
 		derr(0, "read_message_partial %p data crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_data_crc, m->footer.data_crc);
@@ -1236,10 +1236,10 @@ static void process_message(struct ceph_connection *con)
 	spin_unlock(&con->out_queue_lock);
 
 	dout(1, "===== %p %u from %s%d %d=%s len %d+%d (%u %u) =====\n",
-	     con->in_msg, le32_to_cpu(con->in_msg->hdr.seq),
+	     con->in_msg, le64_to_cpu(con->in_msg->hdr.seq),
 	     ENTITY_NAME(con->in_msg->hdr.src.name),
-	     le32_to_cpu(con->in_msg->hdr.type),
-	     ceph_msg_type_name(le32_to_cpu(con->in_msg->hdr.type)),
+	     le16_to_cpu(con->in_msg->hdr.type),
+	     ceph_msg_type_name(le16_to_cpu(con->in_msg->hdr.type)),
 	     le32_to_cpu(con->in_msg->hdr.front_len),
 	     le32_to_cpu(con->in_msg->hdr.data_len),
 	     con->in_front_crc, con->in_data_crc);
@@ -1286,7 +1286,7 @@ static void process_ack(struct ceph_connection *con)
 		if (seq > ack)
 			break;
 		dout(5, "got ack for seq %llu type %d at %p\n", seq,
-		     le32_to_cpu(m->hdr.type), m);
+		     le16_to_cpu(m->hdr.type), m);
 		list_del_init(&m->list_head);
 		ceph_msg_put(m);
 	}
@@ -1993,7 +1993,7 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	if (atomic_read(&old->nref) == 1)
 		return old;  /* we have only ref, all is well */
 
-	dup = ceph_msg_new(le32_to_cpu(old->hdr.type),
+	dup = ceph_msg_new(le16_to_cpu(old->hdr.type),
 			   le32_to_cpu(old->hdr.front_len),
 			   le32_to_cpu(old->hdr.data_len),
 			   le32_to_cpu(old->hdr.data_off),
@@ -2005,7 +2005,7 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	/* revoke old message's pages */
 	mutex_lock(&old->page_mutex);
 	old->pages = NULL;
-	old->footer.flags |= CEPH_MSG_FOOTER_ABORTED;
+	old->footer.flags |= cpu_to_le32(CEPH_MSG_FOOTER_ABORTED);
 	mutex_unlock(&old->page_mutex);
 
 	ceph_msg_put(old);
@@ -2081,10 +2081,10 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 	/* queue */
 	spin_lock(&con->out_queue_lock);
-	if (unlikely(msg->hdr.type == CEPH_MSG_PING &&
+	if (unlikely(le16_to_cpu(msg->hdr.type) == CEPH_MSG_PING &&
 		     !list_empty(&con->out_queue) &&
-		     list_entry(con->out_queue.prev, struct ceph_msg,
-				list_head)->hdr.type == CEPH_MSG_PING)) {
+		     le16_to_cpu(list_entry(con->out_queue.prev, struct ceph_msg,
+				list_head)->hdr.type) == CEPH_MSG_PING)) {
 		/* don't queue multiple pings in a row */
 		dout(2, "ceph_msg_send dropping dup ping\n");
 		ceph_msg_put(msg);
@@ -2092,8 +2092,8 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		msg->hdr.seq = cpu_to_le64(++con->out_seq);
 		dout(1, "----- %p %u to %s%d %d=%s len %d+%d -----\n", msg,
 		     (unsigned)con->out_seq,
-		     ENTITY_NAME(msg->hdr.dst.name), le32_to_cpu(msg->hdr.type),
-		     ceph_msg_type_name(le32_to_cpu(msg->hdr.type)),
+		     ENTITY_NAME(msg->hdr.dst.name), le16_to_cpu(msg->hdr.type),
+		     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),
 		     le32_to_cpu(msg->hdr.front_len),
 		     le32_to_cpu(msg->hdr.data_len));
 		dout(2, "ceph_msg_send %p seq %llu for %s%d on %p pgs %d\n",
@@ -2128,7 +2128,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	mutex_init(&m->page_mutex);
 	INIT_LIST_HEAD(&m->list_head);
 
-	m->hdr.type = cpu_to_le32(type);
+	m->hdr.type = cpu_to_le16(type);
 	m->hdr.front_len = cpu_to_le32(front_len);
 	m->hdr.data_len = cpu_to_le32(page_len);
 	m->hdr.data_off = cpu_to_le32(page_off);
@@ -2168,10 +2168,10 @@ void ceph_msg_put(struct ceph_msg *m)
 	     atomic_read(&m->nref)-1);
 	if (atomic_read(&m->nref) <= 0) {
 		derr(0, "bad ceph_msg_put on %p %u from %s%d %d=%s len %d+%d\n",
-		     m, le32_to_cpu(m->hdr.seq),
+		     m, le64_to_cpu(m->hdr.seq),
 		     ENTITY_NAME(m->hdr.src.name),
-		     le32_to_cpu(m->hdr.type),
-		     ceph_msg_type_name(le32_to_cpu(m->hdr.type)),
+		     le16_to_cpu(m->hdr.type),
+		     ceph_msg_type_name(le16_to_cpu(m->hdr.type)),
 		     le32_to_cpu(m->hdr.front_len),
 		     le32_to_cpu(m->hdr.data_len));
 		WARN_ON(1);

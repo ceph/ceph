@@ -65,7 +65,7 @@ bad:
  * sequence.
  */
 static int parse_reply_info_trace(void **p, void *end,
-				  struct ceph_mds_reply_info *info)
+				  struct ceph_mds_reply_info_parsed *info)
 {
 	__u16 numi, numd, snapdirpos;
 	int err;
@@ -152,7 +152,7 @@ out_bad:
  * parse readdir results
  */
 static int parse_reply_info_dir(void **p, void *end,
-				struct ceph_mds_reply_info *info)
+				struct ceph_mds_reply_info_parsed *info)
 {
 	__u32 num, i = 0;
 	int err;
@@ -220,7 +220,7 @@ out_bad:
  * parse entire mds reply
  */
 static int parse_reply_info(struct ceph_msg *msg,
-			    struct ceph_mds_reply_info *info)
+			    struct ceph_mds_reply_info_parsed *info)
 {
 	void *p, *end;
 	__u32 len;
@@ -260,7 +260,7 @@ out_bad:
 	return err;
 }
 
-static void destroy_reply_info(struct ceph_mds_reply_info *info)
+static void destroy_reply_info(struct ceph_mds_reply_info_parsed *info)
 {
 	kfree(info->trace_in);
 	kfree(info->dir_in);
@@ -1191,7 +1191,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
 	struct ceph_mds_reply_head *head = msg->front.iov_base;
-	struct ceph_mds_reply_info *rinfo;
+	struct ceph_mds_reply_info_parsed *rinfo;
 	u64 tid;
 	int err, result;
 	int mds;

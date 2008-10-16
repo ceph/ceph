@@ -329,8 +329,8 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, __u64 ino, int op,
 	memset(fc, 0, sizeof(*fc));
 
 	fc->op = cpu_to_le32(op);
-	fc->seq = cpu_to_le64(seq);
-	fc->migrate_seq = cpu_to_le64(mseq);
+	fc->seq = cpu_to_le32(seq);
+	fc->migrate_seq = cpu_to_le32(mseq);
 	fc->caps = cpu_to_le32(caps);
 	fc->wanted = cpu_to_le32(wanted);
 	fc->ino = cpu_to_le64(ino);
@@ -939,7 +939,7 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			 */
 			cap->implemented = newcaps;
 
-			grant->size = le64_to_cpu(inode->i_size);
+			grant->size = cpu_to_le64(inode->i_size);
 			grant->max_size = 0;  /* don't re-request */
 			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
@@ -1023,7 +1023,7 @@ static void handle_cap_flushedsnap(struct inode *inode,
 				   struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	u64 follows = le32_to_cpu(m->snap_follows);
+	u64 follows = le64_to_cpu(m->snap_follows);
 	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
 

@@ -136,7 +136,7 @@ struct ceph_connection {
 	char in_tag;
 	u8 in_flags;
 	int in_base_pos;   /* for ack seq, or msg headers, or handshake */
-	__u32 in_partial_ack;
+	__le32 in_partial_ack;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 	u32 in_front_crc, in_data_crc;

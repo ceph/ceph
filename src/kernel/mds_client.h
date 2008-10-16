@@ -31,7 +31,7 @@ struct ceph_mds_reply_info_in {
  * the referenced inode, through its parents up to the root
  * directory, and directory contents (for readdir results).
  */
-struct ceph_mds_reply_info {
+struct ceph_mds_reply_info_parsed {
 	struct ceph_mds_reply_head    *head;
 
 	int trace_numi, trace_numd, trace_snapdirpos;
@@ -99,7 +99,11 @@ struct ceph_mds_request {
 	__u64             r_tid;      /* transaction id */
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
+<<<<<<< HEAD:src/kernel/mds_client.h
 	struct ceph_mds_reply_info r_reply_info;  /* parsed reply */
+=======
+	struct ceph_mds_reply_info_parsed r_reply_info;
+>>>>>>> kclient: endianity handling fixes:src/kernel/mds_client.h
 	int r_err;
 	unsigned long r_timeout;  /* optional.  jiffies */
 
