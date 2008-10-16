@@ -276,7 +276,8 @@ static int send_request(struct ceph_osd_client *osdc,
 	req->r_last_stamp = jiffies;
 
 	ceph_msg_get(req->r_request); /* send consumes a ref */
-	rc = ceph_msg_send(osdc->client->msgr, req->r_request, 0);
+	rc = ceph_msg_send(osdc->client->msgr, req->r_request,
+			   BASE_DELAY_INTERVAL);
 
 	return rc;
 }

@@ -2195,5 +2195,5 @@ void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
 	memset(m->front.iov_base, 0, m->front.iov_len);
 	m->hdr.dst.name = name;
 	m->hdr.dst.addr = *addr;
-	ceph_msg_send(msgr, m, 0);
+	ceph_msg_send(msgr, m, BASE_DELAY_INTERVAL);
 }
