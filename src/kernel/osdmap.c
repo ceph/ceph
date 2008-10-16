@@ -112,14 +112,15 @@ bad:
 	return -EINVAL;
 }
 
-static struct crush_map *crush_decode(void **p, void *end)
+static struct crush_map *crush_decode(void *pbyval, void *end)
 {
 	struct crush_map *c;
 	int err = -EINVAL;
 	int i, j;
-	void *start = *p;
+	void **p = &pbyval;
+	void *start = pbyval;
 
-	dout(30, "crush_decode %p to %p\n", *p, end);
+	dout(30, "crush_decode %p to %p len %d\n", *p, end, (int)(end - *p));
 
 	c = kzalloc(sizeof(*c), GFP_NOFS);
 	if (c == NULL)
@@ -282,6 +283,10 @@ bad:
 	return ERR_PTR(err);
 }
 
+
+/*
+ * osd map
+ */
 void osdmap_destroy(struct ceph_osdmap *map)
 {
 	dout(10, "osdmap_destroy %p\n", map);
@@ -292,6 +297,9 @@ void osdmap_destroy(struct ceph_osdmap *map)
 	kfree(map);
 }
 
+/*
+ * adjust max osd value.  reallocate arrays.
+ */
 static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 {
 	__u8 *state;
@@ -319,15 +327,17 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 	return 0;
 }
 
+/*
+ * decode a full map.
+ */
 struct ceph_osdmap *osdmap_decode(void **p, void *end)
 {
 	struct ceph_osdmap *map;
 	__u32 len, max;
-	int i;
 	int err = -EINVAL;
 	void *start = *p;
 
-	dout(30, "osdmap_decode from %p to %p\n", *p, end);
+	dout(30, "osdmap_decode %p to %p len %d\n", *p, end, (int)(end - *p));
 
 	map = kzalloc(sizeof(*map), GFP_NOFS);
 	if (map == NULL)
@@ -370,21 +380,12 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	*p += sizeof(u32) + map->max_osd * sizeof(u32); /* osd_up_from */
 	*p += sizeof(u32) + map->max_osd * sizeof(u32); /* osd_up_thru */
 
-	/* pg primary swapping */
+	/* ignore pg primary swapping */
 	ceph_decode_32_safe(p, end, len, bad);
-	if (len) {
-		map->pg_swap_primary = kmalloc(len *
-					       sizeof(*map->pg_swap_primary),
-					       GFP_NOFS);
-		if (map->pg_swap_primary == NULL)
-			goto badmem;
-		map->num_pg_swap_primary = len;
-		ceph_decode_need(p, end, sizeof(__u64)+sizeof(__u32), bad);
-		for (i = 0; i < len; i++) {
-			ceph_decode_64(p, map->pg_swap_primary[i].pg.pg64);
-			ceph_decode_32(p, map->pg_swap_primary[i].osd);
-		}
-	}
+	p += len * (sizeof(__u64) + sizeof(__u32));
+	if (len)
+		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
+		     map->epoch);
 
 	/* ignore max_snap, removed_snaps */
 	*p += sizeof(u64);
@@ -393,9 +394,11 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 	/* crush */
 	ceph_decode_32_safe(p, end, len, bad);
-	dout(30, "osdmap_decode crush len %d from off %x\n",
-	     len, (int)(*p - start));
-	map->crush = crush_decode(p, end);
+	dout(30, "osdmap_decode crush len %d from off 0x%x\n", len,
+	     (int)(*p - start));
+	ceph_decode_need(p, end, len, bad);
+	map->crush = crush_decode(*p, end);
+	*p += len;
 	if (IS_ERR(map->crush)) {
 		err = PTR_ERR(map->crush);
 		map->crush = NULL;
@@ -403,19 +406,19 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	}
 
 	dout(30, "osdmap_decode done %p %p\n", *p, end);
-	/* ignore trailing bits of crush map */
-	/* BUG_ON(*p < end); */
-
+	if (*p != end)
+		goto bad;
 	return map;
 
-badmem:
-	err = -ENOMEM;
 bad:
 	dout(30, "osdmap_decode fail\n");
 	osdmap_destroy(map);
 	return ERR_PTR(err);
 }
 
+/*
+ * decode and apply an incremental map update.
+ */
 struct ceph_osdmap *apply_incremental(void **p, void *end,
 				      struct ceph_osdmap *map,
 				      struct ceph_messenger *msgr)
@@ -454,7 +457,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	if (len > 0) {
 		dout(20, "apply_incremental new crush map len %d, %p to %p\n",
 		     len, *p, end);
-		newcrush = crush_decode(p, min(*p+len, end));
+		newcrush = crush_decode(*p, min(*p+len, end));
 		if (IS_ERR(newcrush))
 			return ERR_PTR(PTR_ERR(newcrush));
 	}
@@ -542,8 +545,14 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* skip old/new pg_swap stuff */
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * (sizeof(__u64) + sizeof(__u32));
+	if (len)
+		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
+		     epoch);
 	ceph_decode_32_safe(p, end, len, bad);
 	*p += len * sizeof(__u64);
+	if (len)
+		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
+		     epoch);
 
 	/* skip new_max_snap, removed_snaps */
 	*p += sizeof(__u64);

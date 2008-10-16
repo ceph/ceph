@@ -40,13 +40,6 @@ struct ceph_osdmap {
 	/* the CRUSH map specifies the mapping of placement groups to
 	 * the list of osds that store+replicate them. */
 	struct crush_map *crush;
-
-	/* experimental map feature, not currently supported */
-	__u32 num_pg_swap_primary;
-	struct {
-		union ceph_pg pg;
-		__u32 osd;
-	} *pg_swap_primary;
 };
 
 static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
