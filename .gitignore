@@ -7,7 +7,7 @@ web/*.html
 gmon.out
 core.*
 vgcore.*
-Makefile
+src/Makefile
 Makefile.in
 aclocal.m4
 autom4te.cache

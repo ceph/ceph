@@ -15,8 +15,7 @@ common-install-arch::
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/share/doc/ceph
 	cp debian/README.ceph $(DEB_DH_INSTALL_SOURCEDIR)/usr/share/doc/ceph/
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph
-	(cd src/kernel ; tar -cf - * ) | ( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph ; tar -xf - )
-	cp src/include/ceph_fs.h $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/ceph_fs.h
+	(cd src/kernel ; tar -hcf - * ) | ( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph ; tar -xf - )
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
 	-cp debian/* $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
 	mv $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules.modules.in $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules

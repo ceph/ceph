@@ -23,7 +23,7 @@ PWD := $(shell pwd)
 
 default: all
 
-all: ceph_fs.h 
+all:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) CONFIG_CEPH_FS=m modules
 
 modules_install:
@@ -31,8 +31,5 @@ modules_install:
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
-
-ceph_fs.h:
-	ln -s ../include/ceph_fs.h ceph_fs.h
 
 endif
