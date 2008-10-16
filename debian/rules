@@ -15,11 +15,13 @@ common-install-arch::
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/share/doc/ceph
 	cp debian/README.ceph $(DEB_DH_INSTALL_SOURCEDIR)/usr/share/doc/ceph/
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph
-	(cd src/kernel ; tar -hcf - * ) | ( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph ; tar -xf - )
+	(cd src/kernel ; tar -hvcf - * ) | ( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph ; tar -xf - )
+	touch $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/NEWS
+	touch $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/README
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
-	-cp debian/* $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
-	mv $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules.modules.in $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
-	chmod +x $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
+#	-cp debian/* $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
+#	mv $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules.modules.in $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
+#	chmod +x $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
 	( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src ; tar -cjf ceph.tar.bz2 modules )
-	rm -rf $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules
+#	rm -rf $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules
 
