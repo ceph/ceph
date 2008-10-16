@@ -5,7 +5,7 @@
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
 let debug=0
-let norestart=""
+norestart=""
 
 while [ $# -ge 1 ]; do
         case $1 in

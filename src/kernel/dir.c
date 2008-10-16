@@ -178,6 +178,7 @@ nextfrag:
 		if (IS_ERR(req))
 			return PTR_ERR(req);
 		/* hints to request -> mds selection code */
+		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_direct_hash = frag_value(frag);
 		req->r_direct_is_hash = true;
 		rhead = req->r_request->front.iov_base;

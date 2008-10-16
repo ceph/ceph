@@ -244,12 +244,6 @@ struct ceph_inode_info {
 	u64 i_rbytes, i_rfiles, i_rsubdirs;
 	u64 i_files, i_subdirs;
 
-	/* inode lease state */
-	int i_lease_mask;
-	struct ceph_mds_session *i_lease_session;
-	long unsigned i_lease_ttl;     /* jiffies */
-	u32 i_lease_gen;
-	struct list_head i_lease_item; /* mds session list */
 
 	struct rb_root i_fragtree;
 	struct mutex i_fragtree_mutex;
@@ -259,7 +253,16 @@ struct ceph_inode_info {
 	int i_xattr_len;
 	char *i_xattr_data;
 
-	/* capabilities */
+	/* inode lease.  protected _both_ by i_lock and i_lease_session's
+	 * s_mutex. */
+	int i_lease_mask;
+	struct ceph_mds_session *i_lease_session;
+	long unsigned i_lease_ttl;     /* jiffies */
+	u32 i_lease_gen;
+	struct list_head i_lease_item; /* mds session list */
+
+	/* capabilities.  protected _both_ by i_lock and cap->session's
+	 * s_mutex. */
 	struct rb_root i_caps;           /* cap list */
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */

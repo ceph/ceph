@@ -66,6 +66,7 @@ enum {
 	CEPH_MDS_SESSION_CLOSING = 4,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
+
 struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
@@ -74,7 +75,8 @@ struct ceph_mds_session {
 	struct mutex      s_mutex;    /* serialize session messages */
 	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
 	u32               s_cap_gen;  /* inc each time we get mds stale msg */
-	unsigned long     s_cap_ttl, s_renew_requested;
+	unsigned long     s_cap_ttl;  /* when session caps expire */
+	unsigned long     s_renew_requested; /* last time we sent a renew req */
 	struct list_head  s_caps;     /* all caps issued by this session */
 	int               s_nr_caps;
 	struct list_head  s_inode_leases, s_dentry_leases; /* and leases */
@@ -107,11 +109,11 @@ struct ceph_mds_request {
 	unsigned long r_request_started; /* start time for mds request only,
 					    used to measure lease durations */
 
-	/* to direct request */
+	/* for choosing which mds to send this request to */
 	struct dentry *r_direct_dentry;
 	int r_direct_mode;
-	u32 r_direct_hash;
-	bool r_direct_is_hash;
+	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
+	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
 	/* references to the trailing dentry and inode from parsing the
 	 * mds response.  also used to feed a VFS-provided dentry into
