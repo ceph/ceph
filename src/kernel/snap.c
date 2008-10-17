@@ -279,6 +279,9 @@ static int dup_array(u64 **dst, __le64 *src, int num)
  * (and a final size/mtime is known).  In this case the
  * cap_snap->writing = 1, and is said to be "pending."  When the write
  * finishes, we __ceph_finish_cap_snap().
+ *
+ * Caller must hold snap_rwsem for read (i.e., the realm topology won't
+ * change).
  */
 void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 			 struct ceph_snap_context *snapc)
@@ -332,9 +335,11 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 
 /*
  * Finalize the size, mtime for a cap_snap.. that is, settle on final values
- * to be used for a snapshot.
+ * to be used for the snapshot, to be flushed back to the mds.
  *
  * Return 1 if capsnap can now be flushed.
+ *
+ * Caller must hold i_lock.
  */
 int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 			    struct ceph_cap_snap *capsnap)
@@ -357,16 +362,22 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 }
 
 
-
+/*
+ * Parse and apply a snapblob "snap trace" from the MDS.  This specifies
+ * the snap realm parameters from a given realm and all of its ancestors,
+ * up to the root.
+ *
+ * Caller must hold snap_rwsem for write.
+ */
 struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 					      void *p, void *e, int must_flush)
 {
-	struct ceph_mds_snap_realm *ri;
-	int err = -ENOMEM;
-	__le64 *snaps;
-	__le64 *prior_parent_snaps;
+	struct ceph_mds_snap_realm *ri;    /* encoded */
+	__le64 *snaps;                     /* encoded */
+	__le64 *prior_parent_snaps;        /* encoded */
 	struct ceph_snap_realm *realm, *first = NULL;
 	int invalidate = 0;
+	int err = -ENOMEM;
 
 	dout(10, "update_snap_trace must_flush=%d\n", must_flush);
 more:
@@ -384,15 +395,20 @@ more:
 	if (!realm)
 		goto fail;
 	if (!first) {
+		/* take note if this is the first realm in the trace
+		 * (the most deeply nested)... we will return if (with
+		 * nref bumped) to the caller. */
 		first = realm;
 		realm->nref++;
 	}
 
 	if (le64_to_cpu(ri->seq) > realm->seq) {
 		struct list_head *pi;
+
 		dout(10, "update_snap_trace updating %llx %p %lld -> %lld\n",
 		     realm->ino, realm, realm->seq, le64_to_cpu(ri->seq));
-
+		/* If the realm seq has changed, queue a cap_snap for every
+		 * inode with open caps. */
 		list_for_each(pi, &realm->inodes_with_caps) {
 			struct ceph_inode_info *ci =
 				list_entry(pi, struct ceph_inode_info,
