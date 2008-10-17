@@ -19,7 +19,7 @@ int ceph_debug_osdc = -1;
 #include "decode.h"
 
 
-static void reschedule_timeout(struct ceph_osd_client *osdc);
+static void reschedule_timeout(struct ceph_osd_client *osdc, unsigned long base_time);
 
 
 
@@ -172,8 +172,10 @@ static int register_request(struct ceph_osd_client *osdc,
 		goto out;
 
 	get_request(req);
-	if (osdc->num_requests == 0)
-		reschedule_timeout(osdc);
+	if (osdc->num_requests == 0) {
+		osdc->oldest_tid = req->r_tid;
+		reschedule_timeout(osdc, 0);
+	}
 	osdc->num_requests++;
 
 out:
@@ -187,13 +189,24 @@ out:
 static void __unregister_request(struct ceph_osd_client *osdc,
 				 struct ceph_osd_request *req)
 {
+	struct ceph_osd_request *next_req;
+	int ret;
+
 	dout(30, "__unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&osdc->request_tree, req->r_tid);
 
 	osdc->num_requests--;
 	cancel_delayed_work(&osdc->timeout_work);
-	if (osdc->num_requests)
-		reschedule_timeout(osdc);
+	if (osdc->num_requests &&
+	    req->r_tid == osdc->oldest_tid) {
+		ret = radix_tree_gang_lookup(&osdc->request_tree, (void **)&next_req,
+					     req->r_tid, 1);
+
+		if (ret == 1) {
+			osdc->oldest_tid = next_req->r_tid;
+			reschedule_timeout(osdc, req->r_last_stamp);
+		}
+	}
 
 	ceph_osdc_put_request(req);
 }
@@ -632,12 +645,16 @@ static int do_sync_request(struct ceph_osd_client *osdc,
  *
  * FIXME.
  */
-static void reschedule_timeout(struct ceph_osd_client *osdc)
+static void reschedule_timeout(struct ceph_osd_client *osdc, unsigned long base_time)
 {
 	int timeout = osdc->client->mount_args.osd_timeout;
+	long jifs = 0;
 	dout(10, "reschedule timeout (%d seconds)\n", timeout);
+	if (base_time)
+		jifs = jiffies-base_time;
+
 	schedule_delayed_work(&osdc->timeout_work,
-			      round_jiffies_relative(timeout*HZ));
+			      round_jiffies_relative(timeout*HZ-jifs));
 }
 
 static void handle_timeout(struct work_struct *work)
