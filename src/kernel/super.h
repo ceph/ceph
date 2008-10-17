@@ -590,9 +590,8 @@ extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 				struct ceph_snap_context *snapc);
-extern void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
-				   struct ceph_cap_snap *capsnap,
-				   int used);
+extern int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
+				  struct ceph_cap_snap *capsnap);
 
 /*
  * a cap_snap is "pending" if it is still awaiting an in-progress

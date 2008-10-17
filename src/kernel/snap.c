@@ -322,33 +322,38 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 			capsnap->writing = 1;
 		} else {
 			/* note mtime, size NOW. */
-			__ceph_finish_cap_snap(ci, capsnap, used);
+			if (__ceph_finish_cap_snap(ci, capsnap))
+				__ceph_flush_snaps(ci);
 		}
 	}
 
 	spin_unlock(&inode->i_lock);
 }
 
-void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
-			    struct ceph_cap_snap *capsnap,
-			    int used)
+/*
+ * Finalize the size, mtime for a cap_snap.. that is, settle on final values
+ * to be used for a snapshot.
+ *
+ * Return 1 if capsnap can now be flushed.
+ */
+int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
+			    struct ceph_cap_snap *capsnap)
 {
 	struct inode *inode = &ci->vfs_inode;
 
+	BUG_ON(capsnap->writing);
 	capsnap->size = inode->i_size;
 	capsnap->mtime = inode->i_mtime;
 	capsnap->atime = inode->i_atime;
 	capsnap->ctime = inode->i_ctime;
 	capsnap->time_warp_seq = ci->i_time_warp_seq;
-	if (used & CEPH_CAP_WRBUFFER) {
-		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu used %d,"
-		     " WRBUFFER, delaying\n", inode, capsnap, capsnap->context,
-		     capsnap->context->seq, used);
-	} else {
-		BUG_ON(ci->i_wrbuffer_ref_head);
-		BUG_ON(capsnap->dirty);
-		__ceph_flush_snaps(ci);
+	if (capsnap->dirty) {
+		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu "
+		     "still has %d dirty pages\n", inode, capsnap,
+		     capsnap->context, capsnap->context->seq, capsnap->dirty);
+		return 0;
 	}
+	return 1;  /* caller should ceph_flush_snaps */
 }
 
 

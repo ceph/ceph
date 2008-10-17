@@ -517,6 +517,15 @@ retry:
 	}
 }
 
+void ceph_flush_snaps(struct ceph_inode_info *ci)
+{
+	struct inode *inode = &ci->vfs_inode;
+	
+	spin_lock(&inode->i_lock);
+	__ceph_flush_snaps(ci);
+	spin_unlock(&inode->i_lock);
+}
+
 
 /*
  * Swiss army knife function to examine currently used, wanted versus
@@ -740,7 +749,7 @@ sorry:
 void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 {
 	struct inode *inode = &ci->vfs_inode;
-	int last = 0, wake = 0;
+	int last = 0, flushsnaps = 0, wake = 0;
 	struct ceph_cap_snap *capsnap;
 
 	spin_lock(&inode->i_lock);
@@ -765,8 +774,9 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 						     ci_item);
 				if (capsnap->writing) {
 					capsnap->writing = 0;
-					__ceph_finish_cap_snap(ci, capsnap,
-						       __ceph_caps_used(ci));
+					flushsnaps =
+						__ceph_finish_cap_snap(ci,
+								       capsnap);
 					wake = 1;
 				}
 			}
@@ -775,8 +785,10 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 
 	dout(30, "put_cap_refs %p had %d %s\n", inode, had, last ? "last":"");
 
-	if (last)
+	if (last && !flushsnaps)
 		ceph_check_caps(ci, 0);
+	else if (flushsnaps)
+		ceph_flush_snaps(ci);
 	if (wake)
 		wake_up(&ci->i_cap_wq);
 }
@@ -830,9 +842,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	if (last)
 		ceph_check_caps(ci, 0);
 	else if (last_snap) {
-		spin_lock(&inode->i_lock);
-		__ceph_flush_snaps(ci);
-		spin_unlock(&inode->i_lock);
+		ceph_flush_snaps(ci);
 		wake_up(&ci->i_cap_wq);
 	}
 }
