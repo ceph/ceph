@@ -423,6 +423,8 @@ bool ReplicatedPG::snap_trimmer()
     osd->store->collection_list(c, ls);
 
     dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
+    if (ls.empty())
+      continue;
 
     ObjectStore::Transaction t;
 
