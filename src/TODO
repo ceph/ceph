@@ -169,7 +169,6 @@ mon
 - some sort of tester for PaxosService...
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
-
 objecter
 - fix failure handler...
   - generic mon client?
@@ -177,7 +176,9 @@ objecter
 - transaction prepare/commit?
 - read+floor_lockout
 
-osd/rados
+osd
+- snap_trimmers should detect, remove unused snap collections (and update snap_collections set)
+
 - how does an admin intervene when a pg needs a dead osd to repeer?
 
 - a more general fencing mechanism?  per-object granularity isn't usually a good match.
