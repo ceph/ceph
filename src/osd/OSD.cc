@@ -549,8 +549,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   // create collection
   assert(!store->collection_exists(pgid.to_coll()));
   t.create_collection(pgid.to_coll());
-
-  pg->write_log(t);
+  pg->write_state(t);
 
   return pg;
 }
@@ -606,15 +605,30 @@ void OSD::_remove_unlock_pg(PG *pg)
 
   // remove from store
   vector<pobject_t> olist;
-  store->collection_list(pgid.to_coll(), olist);
-  
+
   ObjectStore::Transaction t;
   {
+    // snap collections
+    for (set<snapid_t>::iterator p = pg->snap_collections.begin();
+	 p != pg->snap_collections.end();
+	 p++) {
+      vector<pobject_t> olist;      
+      store->collection_list(pgid.to_snap_coll(*p), olist);
+      for (vector<pobject_t>::iterator p = olist.begin();
+	   p != olist.end();
+	   p++)
+	t.remove(pgid.to_coll(), *p);
+    }
+
+    // log
+    t.remove(pgid.to_coll(), pgid.to_pobject());
+
+    // main collection
+    store->collection_list(pgid.to_coll(), olist);
     for (vector<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(pgid.to_coll(), *p);
-    t.remove(pgid.to_coll(), pgid.to_pobject());  // log too
     t.remove_collection(pgid.to_coll());
   }
   store->apply_transaction(t);
@@ -648,14 +662,8 @@ void OSD::load_pgs()
     pg_t pgid = it->high;
     PG *pg = _open_lock_pg(pgid);
 
-    // read pg info
-    bufferlist bl;
-    store->collection_getattr(pgid.to_coll(), "info", bl);
-    bufferlist::iterator p = bl.begin();
-    ::decode(pg->info, p);
-    
-    // read pg log
-    pg->read_log(store);
+    // read pg state, log
+    pg->read_state(store);
 
     // generate state for current mapping
     int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);

@@ -1424,6 +1424,50 @@ void PG::read_log(ObjectStore *store)
 
 
 
+void PG::read_state(ObjectStore *store)
+{
+  bufferlist bl;
+  bufferlist::iterator p;
+
+  // info
+  store->collection_getattr(info.pgid.to_coll(), "info", bl);
+  p = bl.begin();
+  ::decode(info, p);
+  
+  // snap_collections
+  bl.clear();
+  store->collection_getattr(info.pgid.to_coll(), "snap_collections", bl);
+  p = bl.begin();
+  ::decode(snap_collections, p);
+
+  read_log(store);
+}
+
+void PG::write_state(ObjectStore::Transaction& t)
+{
+  bufferlist bl;
+  ::encode(snap_collections, bl);
+  t.collection_setattr(info.pgid.to_coll(), "snap_collections", bl);
+
+  write_log(t);   // will write_info().
+}
+
+coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
+{
+  coll_t c = info.pgid.to_snap_coll(s);
+  if (snap_collections.count(s) == 0) {
+    snap_collections.insert(s);
+    dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
+    bufferlist bl;
+    ::encode(snap_collections, bl);
+    t.collection_setattr(info.pgid.to_coll(), "snap_collections", bl);
+    t.create_collection(c);
+  }
+  return c;
+}
+
+
+
 
 // ==============================
 // Object locking

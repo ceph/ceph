@@ -423,13 +423,11 @@ bool ReplicatedPG::snap_trimmer()
     osd->store->collection_list(c, ls);
 
     dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
-    if (ls.empty())
-      continue;
-
-    ObjectStore::Transaction t;
 
     for (vector<pobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
       pobject_t coid = *p;
+
+      ObjectStore::Transaction t;
 
       // load clone snap list
       bufferlist bl;
@@ -829,12 +827,10 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       t.setattr(info.pgid.to_coll(), coid, "version", &at_version, sizeof(at_version));
       
       // add to snap bound collections
-      coll_t fc = info.pgid.to_snap_coll(snaps[0]);
-      t.create_collection(fc);
+      coll_t fc = make_snap_collection(t, snaps[0]);
       t.collection_add(fc, info.pgid.to_coll(), coid);
       if (snaps.size() > 1) {
-	coll_t lc = info.pgid.to_snap_coll(snaps[snaps.size()-1]);
-	t.create_collection(lc);
+	coll_t lc = make_snap_collection(t, snaps[snaps.size()-1]);
 	t.collection_add(lc, info.pgid.to_coll(), coid);
       }
 
@@ -1832,11 +1828,11 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     bufferlist::iterator p = bl.begin();
     ::decode(snaps, p);
     if (snaps.size()) {
-      t.create_collection(info.pgid.to_snap_coll(snaps[0]));
-      t.collection_add(info.pgid.to_snap_coll(snaps[0]), info.pgid.to_coll(), poid);
+      coll_t lc = make_snap_collection(t, snaps[0]);
+      t.collection_add(lc, info.pgid.to_coll(), poid);
       if (snaps.size() > 1) {
-	t.create_collection(info.pgid.to_snap_coll(snaps[snaps.size()-1]));
-	t.collection_add(info.pgid.to_snap_coll(snaps[snaps.size()-1]), info.pgid.to_coll(), poid);
+	coll_t hc = make_snap_collection(t, snaps[snaps.size()-1]);
+	t.collection_add(hc, info.pgid.to_coll(), poid);
       }
     }
   }

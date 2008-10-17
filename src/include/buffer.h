@@ -414,6 +414,8 @@ public:
       unsigned p_off; // in *p
     public:
       // constructor.  position.
+      iterator() :
+	bl(0), ls(0), off(0), p_off(0) {}
       iterator(list *l, unsigned o=0) : 
 	bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
 	advance(o);
