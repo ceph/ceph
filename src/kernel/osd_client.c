@@ -173,7 +173,8 @@ static int register_request(struct ceph_osd_client *osdc,
 
 	get_request(req);
 	if (osdc->num_requests == 0) {
-		osdc->oldest_tid = req->r_tid;
+		osdc->timeout_tid = req->r_tid;
+		dout(10, "setting timeout_tid=%lld\n", osdc->timeout_tid);
 		reschedule_timeout(osdc, 0);
 	}
 	osdc->num_requests++;
@@ -183,29 +184,40 @@ out:
 	return rc;
 }
 
+
+static void __register_next_request_timeout(struct ceph_osd_client *osdc,
+				 struct ceph_osd_request *req)
+{
+	struct ceph_osd_request *next_req;
+	int ret;
+
+	ret = radix_tree_gang_lookup(&osdc->request_tree, (void **)&next_req,
+						     req->r_tid+1, 1);
+	if (!ret || (next_req->r_tid == osdc->timeout_tid))
+			ret = radix_tree_gang_lookup(&osdc->request_tree, (void **)&next_req,
+						     0, 1);
+
+	if (ret == 1) {
+		dout(10, "replacing timeout_tid: %lld-> %lld\n", osdc->timeout_tid, next_req->r_tid);
+		osdc->timeout_tid = next_req->r_tid;
+		reschedule_timeout(osdc, req->r_last_stamp);
+	}
+}
+
 /*
  * called under osdc->request_mutex
  */
 static void __unregister_request(struct ceph_osd_client *osdc,
 				 struct ceph_osd_request *req)
 {
-	struct ceph_osd_request *next_req;
-	int ret;
-
 	dout(30, "__unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&osdc->request_tree, req->r_tid);
 
 	osdc->num_requests--;
-	cancel_delayed_work(&osdc->timeout_work);
-	if (osdc->num_requests &&
-	    req->r_tid == osdc->oldest_tid) {
-		ret = radix_tree_gang_lookup(&osdc->request_tree, (void **)&next_req,
-					     req->r_tid, 1);
-
-		if (ret == 1) {
-			osdc->oldest_tid = next_req->r_tid;
-			reschedule_timeout(osdc, req->r_last_stamp);
-		}
+	if (req->r_tid == osdc->timeout_tid) {
+		cancel_delayed_work(&osdc->timeout_work);
+		if (osdc->num_requests)
+			__register_next_request_timeout(osdc, req);
 	}
 
 	ceph_osdc_put_request(req);
@@ -649,12 +661,21 @@ static void reschedule_timeout(struct ceph_osd_client *osdc, unsigned long base_
 {
 	int timeout = osdc->client->mount_args.osd_timeout;
 	long jifs = 0;
-	dout(10, "reschedule timeout (%d seconds)\n", timeout);
+
 	if (base_time)
 		jifs = jiffies-base_time;
 
+	jifs=timeout*HZ-jifs;
+
+	if (jifs < 0) {
+		jifs %= timeout*HZ;
+		jifs += timeout*HZ;
+	}
+
+	dout(10, "reschedule timeout (%ld jiffies)\n", jifs);
+
 	schedule_delayed_work(&osdc->timeout_work,
-			      round_jiffies_relative(timeout*HZ-jifs));
+			      round_jiffies_relative(jifs));
 }
 
 static void handle_timeout(struct work_struct *work)
@@ -675,9 +696,12 @@ static void handle_timeout(struct work_struct *work)
 	 * channel hasn't reset
 	 */
 	mutex_lock(&osdc->request_mutex);
+	got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+				     osdc->timeout_tid, 1);
+
+	__register_next_request_timeout(osdc, req);
+
 	while (1) {
-		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
-					     next_tid, 1);
 		if (got == 0)
 			break;
 		next_tid = req->r_tid + 1;
@@ -688,6 +712,9 @@ static void handle_timeout(struct work_struct *work)
 			};
 			ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
 		}
+
+		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+					     next_tid, 1);
 	}
 	mutex_unlock(&osdc->request_mutex);
 

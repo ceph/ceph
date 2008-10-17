@@ -51,7 +51,7 @@ struct ceph_osd_client {
 	u64                    last_requested_map;
 
 	struct mutex           request_mutex;
-	u64                    oldest_tid;    /* tid of oldest request */
+	u64                    timeout_tid;    /* tid of timeout triggering request */
 	u64                    last_tid;      /* tid of last request */
 	struct radix_tree_root request_tree;  /* pending requests, by tid */
 	int                    num_requests;
