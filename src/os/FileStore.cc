@@ -1744,7 +1744,8 @@ int FileStore::collection_list(coll_t c, vector<pobject_t>& ls)
   get_cdir(c, fn);
 
   DIR *dir = ::opendir(fn);
-  assert(dir);
+  if (!dir)
+    return -ENOENT;
   
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
