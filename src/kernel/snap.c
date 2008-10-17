@@ -13,7 +13,54 @@ int ceph_debug_snap = -1;
 #include "decode.h"
 
 
-static struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc, u64 ino)
+/*
+ * Snapshots in ceph are driven in large part by cooperation from the
+ * client.  In contrast to local file systems or file servers that
+ * implement snapshots at a single point in the system, ceph's
+ * distributed access to storage requires clients to help decide
+ * whether a write logically before or after a recently created
+ * snapshot.
+ *
+ * This provides a perfect instantanous client-wide snapshot.  Between
+ * clients, however, snapshots may appear to be applied at slightly
+ * different points in time, depending on delays in delivering the
+ * snapshot notification.
+ *
+ * Snapshots are _not_ file system-wide.  Instead, each snapshot
+ * applies to the subdirectory nested beneath some directory.  This
+ * effectively divides the hierarchy into multiple "realms," where all
+ * of the files contained by each realm share the same set of
+ * snapshots.  An individual realm's snap set contains snapshots
+ * explicitly created on that realm, as well as any snaps in its
+ * parent's snap set _after_ the point at which the parent became it's
+ * parent (due to, say, a rename).  Similarly, snaps from prior parents
+ * during the time intervals during which they were the parent are included.
+ *
+ * The client is spared most of this detail, fortunately... it must only
+ * maintains a hierarchy of realms reflecting the current parent/child
+ * realm relationship, and for each realm has an explicit list of snaps
+ * inherited from prior parents.
+ *
+ * A snap_realm struct is maintained for realms containing every inode
+ * with an open cap in the system.  (The needed snap realm information is
+ * provided by the MDS whenever a cap is issued, i.e., on open.)  A 'seq'
+ * version number is used to ensure that as realm parameters change (new
+ * snapshot, new parent, etc.) the client's realm hierarchy is updated.
+ *
+ * The realm hierarchy drives the generation of a 'snap context' for each
+ * realm, which simply lists the resulting set of snaps for the realm.  This
+ * is attached to any writes sent to OSDs.
+ */
+
+
+/*
+ * find/create the realm rooted at @ino and bump its ref count.
+ *
+ * caller must hold snap_rwsem for write.
+ */
+static
+struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
+					    u64 ino)
 {
 	struct ceph_snap_realm *realm;
 
@@ -34,6 +81,9 @@ static struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 	return realm;
 }
 
+/*
+ * caller must hold snap_rwsem for write
+ */
 void ceph_put_snap_realm(struct ceph_snap_realm *realm)
 {
 	dout(20, "put_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
@@ -47,9 +97,17 @@ void ceph_put_snap_realm(struct ceph_snap_realm *realm)
 	}
 }
 
+/*
+ * adjust the parent realm of a given @realm.  adjust child list, and parent
+ * pointers, and ref counts appropriately.
+ *
+ * return true if parent was changed, 0 if unchanged, <0 on error.
+ *
+ * caller must hold snap_rwsem for write.
+ */
 static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
-					struct ceph_snap_realm *realm,
-					u64 parentino)
+				    struct ceph_snap_realm *realm,
+				    u64 parentino)
 {
 	struct ceph_snap_realm *parent;
 
@@ -82,14 +140,22 @@ static int cmpu64_rev(const void *a, const void *b)
 	return 0;
 }
 
+/*
+ * build the snap context for a given realm.
+ */
 static int build_snap_context(struct ceph_snap_realm *realm)
 {
 	struct ceph_snap_realm *parent = realm->parent;
-	struct ceph_snap_context *sc;
+	struct ceph_snap_context *snapc;
 	int err = 0;
 	int i;
 	int num = realm->num_prior_parent_snaps + realm->num_snaps;
 
+	/*
+	 * build parent context, if it hasn't been built.
+	 * conservatively estimate that all parent snaps might be
+	 * included by us.
+	 */
 	if (parent) {
 		if (!parent->cached_context) {
 			err = build_snap_context(parent);
@@ -99,8 +165,12 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 		num += parent->cached_context->num_snaps;
 	}
 
-	/* do i need to update? */
-	if (realm->cached_context && realm->cached_context->seq <= realm->seq &&
+	/* do i actually need to update?  not if my context seq
+	   matches realm seq, and my parents' does to.  (this works
+	   because we rebuild_snap_realms() works _downward_ in
+	   hierarchy after each update.) */
+	if (realm->cached_context &&
+	    realm->cached_context->seq <= realm->seq &&
 	    (!parent ||
 	     realm->cached_context->seq <= parent->cached_context->seq)) {
 		dout(10, "build_snap_context %llx %p: %p seq %lld (%d snaps)"
@@ -111,43 +181,49 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 		return 0;
 	}
 
-	/* build new */
+	/* alloc new snap context */
 	err = -ENOMEM;
-	sc = kzalloc(sizeof(*sc) + num*sizeof(u64), GFP_NOFS);
-	if (!sc)
+	snapc = kzalloc(sizeof(*snapc) + num*sizeof(u64), GFP_NOFS);
+	if (!snapc)
 		goto fail;
-	atomic_set(&sc->nref, 1);
+	atomic_set(&snapc->nref, 1);
 
 	/* build (reverse sorted) snap vector */
 	num = 0;
-	sc->seq = realm->seq;
+	snapc->seq = realm->seq;
 	if (parent) {
+		/* include any of parent's snaps occuring _after_ my
+		   parent became my parent */
 		for (i = 0; i < parent->cached_context->num_snaps; i++)
 			if (parent->cached_context->snaps[i] >=
 			    realm->parent_since)
-				sc->snaps[num++] =
+				snapc->snaps[num++] =
 					parent->cached_context->snaps[i];
-		if (parent->cached_context->seq > sc->seq)
-			sc->seq = parent->cached_context->seq;
+		if (parent->cached_context->seq > snapc->seq)
+			snapc->seq = parent->cached_context->seq;
 	}
-	memcpy(sc->snaps + num, realm->snaps,
+	memcpy(snapc->snaps + num, realm->snaps,
 	       sizeof(u64)*realm->num_snaps);
 	num += realm->num_snaps;
-	memcpy(sc->snaps + num, realm->prior_parent_snaps,
+	memcpy(snapc->snaps + num, realm->prior_parent_snaps,
 	       sizeof(u64)*realm->num_prior_parent_snaps);
 	num += realm->num_prior_parent_snaps;
 
-	sort(sc->snaps, num, sizeof(u64), cmpu64_rev, NULL);
-	sc->num_snaps = num;
+	sort(snapc->snaps, num, sizeof(u64), cmpu64_rev, NULL);
+	snapc->num_snaps = num;
 	dout(10, "build_snap_context %llx %p: %p seq %lld (%d snaps)\n",
-	     realm->ino, realm, sc, sc->seq, sc->num_snaps);
+	     realm->ino, realm, snapc, snapc->seq, snapc->num_snaps);
 
 	if (realm->cached_context)
 		ceph_put_snap_context(realm->cached_context);
-	realm->cached_context = sc;
+	realm->cached_context = snapc;
 	return 0;
 
 fail:
+	/*
+	 * if we fail, clear old (incorrect) cached_context... hopefully
+	 * we'll have better luck building it later
+	 */
 	if (realm->cached_context) {
 		ceph_put_snap_context(realm->cached_context);
 		realm->cached_context = NULL;
@@ -157,6 +233,9 @@ fail:
 	return err;
 }
 
+/*
+ * rebuild snap context for the given realm and all of its children.
+ */
 static void rebuild_snap_realms(struct ceph_snap_realm *realm)
 {
 	struct list_head *p;
@@ -189,6 +268,67 @@ static int dup_array(u64 **dst, __le64 *src, int num)
 	return 0;
 }
 
+
+/*
+ * When a snapshot is applied, the size/mtime inode metadata is queued
+ * in a ceph_cap_snap (one for each snapshot) until writeback
+ * completes and the metadata can be flushed back to the MDS.
+ *
+ * However, if a (sync) write is currently in-progress when we apply
+ * the snapshot, we have to wait until the write succeeds or fails
+ * (and a final size/mtime is known).  In this case the
+ * cap_snap->writing = 1, and is said to be "pending."  When the write
+ * finishes, we __ceph_finish_cap_snap().
+ */
+void ceph_queue_cap_snap(struct ceph_inode_info *ci,
+			 struct ceph_snap_context *snapc)
+{
+	struct inode *inode = &ci->vfs_inode;
+	struct ceph_cap_snap *capsnap;
+	int used;
+
+	capsnap = kzalloc(sizeof(*capsnap), GFP_NOFS);
+	if (!capsnap) {
+		derr(10, "ENOMEM allocating ceph_cap_snap on %p\n", inode);
+		return;
+	}
+
+	spin_lock(&inode->i_lock);
+	used = __ceph_caps_used(ci);
+	if (__ceph_have_pending_cap_snap(ci)) {
+		/* there is no point in queuing multiple "pending" cap_snaps,
+		   as no new writes are allowed to start when pending, so any
+		   writes in progress now were started before the previous
+		   cap_snap.  lucky us. */
+		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
+		     " already pending\n", inode, snapc, snapc->seq, used);
+		kfree(capsnap);
+	} else {
+		igrab(inode);
+		capsnap->follows = snapc->seq;
+		capsnap->context = ceph_get_snap_context(snapc);
+		capsnap->issued = __ceph_caps_issued(ci, NULL);
+		/* dirty page count moved from _head to this cap_snap;
+		   all subsequent writes page dirties occur _after_ this
+		   snapshot. */
+		capsnap->dirty = ci->i_wrbuffer_ref_head;
+		ci->i_wrbuffer_ref_head = 0;
+		list_add_tail(&capsnap->ci_item, &ci->i_cap_snaps);
+
+		if (used & CEPH_CAP_WR) {
+			dout(10, "queue_cap_snap %p cap_snap %p snapc %p"
+			     " seq %llu used WR, now pending\n", inode,
+			     capsnap, snapc, snapc->seq);
+			capsnap->writing = 1;
+		} else {
+			/* note mtime, size NOW. */
+			__ceph_finish_cap_snap(ci, capsnap, used);
+		}
+	}
+
+	spin_unlock(&inode->i_lock);
+}
+
 void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 			    struct ceph_cap_snap *capsnap,
 			    int used)
@@ -211,46 +351,6 @@ void __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	}
 }
 
-void ceph_queue_cap_snap(struct ceph_inode_info *ci,
-			 struct ceph_snap_context *snapc)
-{
-	struct inode *inode = &ci->vfs_inode;
-	int used;
-	struct ceph_cap_snap *capsnap;
-
-	capsnap = kzalloc(sizeof(*capsnap), GFP_NOFS);
-	if (!capsnap) {
-		derr(10, "ENOMEM allocating ceph_cap_snap on %p\n", inode);
-		return;
-	}
-
-	spin_lock(&inode->i_lock);
-	used = __ceph_caps_used(ci);
-	if (__ceph_have_pending_cap_snap(ci)) {
-		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
-		     " already pending\n", inode, snapc, snapc->seq, used);
-		kfree(capsnap);
-	} else {
-		igrab(inode);
-		capsnap->follows = snapc->seq;
-		capsnap->context = ceph_get_snap_context(snapc);
-		capsnap->issued = __ceph_caps_issued(ci, NULL);
-		capsnap->dirty = ci->i_wrbuffer_ref_head;
-		ci->i_wrbuffer_ref_head = 0;
-		list_add_tail(&capsnap->ci_item, &ci->i_cap_snaps);
-
-		if (used & CEPH_CAP_WR) {
-			dout(10, "queue_cap_snap %p cap_snap %p snapc %p"
-			     " seq %llu used WR, now pending\n", inode,
-			     capsnap, snapc, snapc->seq);
-			capsnap->writing = 1;
-		} else {
-			__ceph_finish_cap_snap(ci, capsnap, used);
-		}
-	}
-
-	spin_unlock(&inode->i_lock);
-}
 
 
 struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *mdsc,
