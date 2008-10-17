@@ -109,6 +109,19 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 }
 
 
+
+// SERVER UPDATE
+
+void MDSTableServer::do_server_update(bufferlist& bl)
+{
+  dout(10) << "do_server_update len " << bl.length() << dendl;
+  _server_update(bl);
+  ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, -1, 0, version);
+  le->mutation = bl;
+  mds->mdlog->submit_entry(le);
+}
+
+
 // recovery
 
 void MDSTableServer::finish_recovery()
