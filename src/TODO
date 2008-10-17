@@ -178,6 +178,8 @@ objecter
 
 osd
 - snap_trimmers should detect, remove unused snap collections (and update snap_collections set)
+- cope with divergent logs (update AND removal) in merge_log...
+  (make merge_log augment omissing?)
 
 - how does an admin intervene when a pg needs a dead osd to repeer?
 
