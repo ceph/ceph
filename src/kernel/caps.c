@@ -118,7 +118,8 @@ int ceph_add_cap(struct inode *inode,
 	int mds = session->s_mds;
 	int is_first = 0;
 
-	realm = ceph_update_snap_trace(mdsc, snapblob, snapblob+snapblob_len,0);
+	realm = ceph_update_snap_trace(mdsc, snapblob, snapblob+snapblob_len,
+				       false /* not a deletion */);
 
 	dout(10, "add_cap on %p mds%d cap %d seq %d\n", inode,
 	     session->s_mds, issued, seq);

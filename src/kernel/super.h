@@ -585,7 +585,7 @@ static inline int calc_pages_for(u64 off, u64 len)
 extern void ceph_put_snap_realm(struct ceph_snap_realm *realm);
 extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
 						      void *p, void *e,
-						      int must_flush);
+						      bool deletion);
 extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern void ceph_queue_cap_snap(struct ceph_inode_info *ci,

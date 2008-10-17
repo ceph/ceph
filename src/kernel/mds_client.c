@@ -2141,7 +2141,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	ceph_monc_got_mdsmap(&mdsc->client->monc, epoch);
 	mutex_lock(&mdsc->mutex);
 	if (mdsc->mdsmap && epoch <= mdsc->mdsmap->m_epoch) {
-		dout(2, "ceph_mdsc_handle_map epoch %u < our %u\n",
+		dout(2, "handle_map epoch %u <= our %u\n",
 		     epoch, mdsc->mdsmap->m_epoch);
 		mutex_unlock(&mdsc->mutex);
 		return;
