@@ -182,5 +182,6 @@ void ceph_proc_cleanup(void)
 	remove_proc_entry("debug", proc_fs_ceph);
 	remove_proc_entry("debug_msgr", proc_fs_ceph);
 	remove_proc_entry("debug_console", proc_fs_ceph);
+	remove_proc_entry("debug_mask", proc_fs_ceph);
 	remove_proc_entry("fs/ceph", NULL);
 }

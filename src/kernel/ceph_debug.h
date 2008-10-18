@@ -25,6 +25,7 @@ extern int ceph_debug_snap;
 extern int ceph_debug_super;
 extern int ceph_debug_protocol;
 extern int ceph_debug_proc;
+extern int ceph_debug_tools;
 
 #define DOUT_MASK_ADDR		0x00000001
 #define DOUT_MASK_CAPS		0x00000002
@@ -43,6 +44,7 @@ extern int ceph_debug_proc;
 #define DOUT_MASK_SUPER		0x00004000
 #define DOUT_MASK_PROTOCOL	0x00008000
 #define DOUT_MASK_PROC		0x00010000
+#define DOUT_MASK_TOOLS		0x00020000
 
 #define DOUT_UNMASKABLE	0x80000000
 
@@ -69,6 +71,7 @@ static struct _debug_mask_name _debug_mask_names[] = {
 		{DOUT_MASK_SUPER, "super"},
 		{DOUT_MASK_PROTOCOL, "protocol"},
 		{DOUT_MASK_PROC, "proc"},
+		{DOUT_MASK_TOOLS, "tools"},
 		{0, NULL}
 };
 

@@ -71,7 +71,7 @@ static void get_request(struct ceph_osd_request *req)
 
 void ceph_osdc_put_request(struct ceph_osd_request *req)
 {
-	dout(10, "put_request %p %d -> %d\n", req, atomic_read(&req->r_ref),
+	dout(1, "put_request %p %d -> %d\n", req, atomic_read(&req->r_ref),
 	     atomic_read(&req->r_ref)-1);
 	BUG_ON(atomic_read(&req->r_ref) <= 0);
 	if (atomic_dec_and_test(&req->r_ref)) {

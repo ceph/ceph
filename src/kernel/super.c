@@ -8,6 +8,7 @@
 #include <linux/string.h>
 #include <linux/version.h>
 #include <linux/backing-dev.h>
+#include <linux/statfs.h>
 
 /* debug levels; defined in super.h */
 
@@ -31,7 +32,6 @@ int ceph_debug_super = -1;   /* for this file */
 #define DOUT_PREFIX "super: "
 #include "super.h"
 
-#include <linux/statfs.h>
 #include "mon_client.h"
 
 void ceph_dispatch(void *p, struct ceph_msg *msg);
@@ -1066,6 +1066,10 @@ static int __init init_ceph(void)
 
 	dout(1, "init_ceph\n");
 
+#ifdef CEPH_BOOKKEEPER
+	ceph_bookkeeper_init();
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	ret = -ENOMEM;
 	ceph_kobj = kobject_create_and_add("ceph", fs_kobj);
@@ -1115,6 +1119,9 @@ static void __exit exit_ceph(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_put(ceph_kobj);
 	ceph_kobj = 0;
+#endif
+#ifdef CEPH_BOOKKEEPER
+	ceph_bookkeeper_finalize();
 #endif
 }
 
