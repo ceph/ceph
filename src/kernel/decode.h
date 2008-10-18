@@ -37,6 +37,7 @@
 		(*p)++;					\
 	} while (0)
 
+/* decode into an __le## */
 #define ceph_decode_64_le(p, v)				\
 	do {						\
 		v = *(__le64*)*(p);			\
@@ -59,6 +60,7 @@
 		*(p) += n;				\
 	} while (0)
 
+/* bounds check too */
 #define ceph_decode_64_safe(p, end, v, bad)			\
 	do {							\
 		ceph_decode_need(p, end, sizeof(__u64), bad);	\
@@ -99,7 +101,6 @@
 /*
  * encoders
  */
-
 #define ceph_encode_64(p, v)			  \
 	do {					  \
 		*(__le64*)*(p) = cpu_to_le64((v)); \
@@ -124,7 +125,6 @@
 /*
  * filepath, string encoders
  */
-
 static __inline__ void ceph_encode_filepath(void **p, void *end,
 					    __u64 ino, const char *path)
 {

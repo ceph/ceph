@@ -54,13 +54,6 @@ extern int ceph_debug_mask;
 #define CEPH_BLOCK_SHIFT 20    /* 1 MB blocks for purposes of statfs*/
 #define CEPH_BLOCK  (1 << CEPH_BLOCK_SHIFT)
 
-#define IPQUADPORT(n)							\
-	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr) >> 24)) & 0xFF,			\
-		(unsigned int)((be32_to_cpu((n).sin_addr.s_addr)) >> 16) & 0xFF,	\
-		(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))>>8) & 0xFF,	\
-		(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))) & 0xFF,	\
-		(unsigned int)(ntohs((n).sin_port))
-
 
 #if 0
 # define dput(dentry)				       \
