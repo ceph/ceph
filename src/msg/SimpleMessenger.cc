@@ -794,7 +794,7 @@ int Rank::Pipe::accept()
   dout(10) << "accept sd=" << sd << dendl;
   
   // identify peer
-  char banner[strlen(CEPH_BANNER)];
+  char banner[strlen(CEPH_BANNER)+1];
   rc = tcp_read(sd, banner, strlen(CEPH_BANNER));
   if (rc < 0) {
     dout(10) << "accept couldn't read banner" << dendl;
@@ -802,7 +802,8 @@ int Rank::Pipe::accept()
     return -1;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
-    dout(10) << "accept peer sent bad banner" << dendl;
+    banner[strlen(CEPH_BANNER)] = 0;
+    dout(10) << "accept peer sent bad banner '" << banner << "'" << dendl;
     state = STATE_CLOSED;
     return -1;
   }

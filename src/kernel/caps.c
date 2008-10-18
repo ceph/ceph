@@ -521,7 +521,7 @@ retry:
 void ceph_flush_snaps(struct ceph_inode_info *ci)
 {
 	struct inode *inode = &ci->vfs_inode;
-	
+
 	spin_lock(&inode->i_lock);
 	__ceph_flush_snaps(ci);
 	spin_unlock(&inode->i_lock);
