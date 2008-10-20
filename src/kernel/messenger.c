@@ -18,7 +18,7 @@ int ceph_debug_msgr;
 #include "super.h"
 
 
-/* static tag bytes */
+/* static tag bytes (protocol control messages) */
 static char tag_ready = CEPH_MSGR_TAG_READY;
 static char tag_reset = CEPH_MSGR_TAG_RESETSESSION;
 static char tag_retry_session = CEPH_MSGR_TAG_RETRY_SESSION;
