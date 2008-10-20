@@ -9,6 +9,7 @@ test -e $cephtree/src/kernel/super.h || exit 0
 # copy into the tree
 mkdir fs/ceph
 cp $cephtree/src/kernel/*.[ch] fs/ceph
+cp $cephtree/src/kernel/Makefile fs/ceph
 git apply $cephtree/src/kernel/kbuild.patch
 
 # build the patch sequence
