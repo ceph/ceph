@@ -3,10 +3,12 @@
 # include <linux/string.h>
 # include <linux/slab.h>
 # include <asm/bug.h>
+# include <linux/kernel.h>
 #else
 # include <string.h>
 # include <stdio.h>
 # include <assert.h>
+# define BUG_ON(x) assert(!(x))
 #endif
 
 #include "crush.h"

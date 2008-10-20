@@ -3,10 +3,6 @@
 
 #include "crush.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 extern struct crush_map *crush_create();
 extern void crush_finalize(struct crush_map *map);
 
@@ -38,9 +34,5 @@ struct crush_bucket_straw *
 crush_make_straw_bucket(int type, int size,
 			int *items,
 			int *weights);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

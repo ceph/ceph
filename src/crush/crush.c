@@ -1,10 +1,11 @@
 
 #ifdef __KERNEL__
 # include <linux/slab.h>
-# define free(x) kfree(x)
 #else
 # include <stdlib.h>
 # include <assert.h>
+# define kfree(x) free(x)
+# define BUG_ON(x) assert(!(x))
 #endif
 
 #include "crush.h"
@@ -47,31 +48,31 @@ void crush_calc_parents(struct crush_map *map)
 
 void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b)
 {
-	free(b->primes);
-	free(b->h.items);
-	free(b);
+	kfree(b->primes);
+	kfree(b->h.items);
+	kfree(b);
 }
 
 void crush_destroy_bucket_list(struct crush_bucket_list *b)
 {
-	free(b->item_weights);
-	free(b->sum_weights);
-	free(b->h.items);
-	free(b);
+	kfree(b->item_weights);
+	kfree(b->sum_weights);
+	kfree(b->h.items);
+	kfree(b);
 }
 
 void crush_destroy_bucket_tree(struct crush_bucket_tree *b)
 {
-	free(b->node_weights);
-	free(b);
+	kfree(b->node_weights);
+	kfree(b);
 }
 
 void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 {
-	free(b->straws);
-	free(b->item_weights);
-	free(b->h.items);
-	free(b);
+	kfree(b->straws);
+	kfree(b->item_weights);
+	kfree(b->h.items);
+	kfree(b);
 }
 
 
@@ -101,25 +102,25 @@ void crush_destroy(struct crush_map *map)
 				break;
 			}
 		}
-		free(map->buckets);
+		kfree(map->buckets);
 	}
 	
 	/* rules */
 	if (map->rules) {
 		for (b=0; b<map->max_rules; b++) {
 			if (map->rules[b] == NULL) continue;
-			free(map->rules[b]);
+			kfree(map->rules[b]);
 		}
-		free(map->rules);
+		kfree(map->rules);
 	}
 	
 	if (map->bucket_parents)
-		free(map->bucket_parents);
+		kfree(map->bucket_parents);
 	if (map->device_parents)
-		free(map->device_parents);
+		kfree(map->device_parents);
 	if (map->device_offload)
-		free(map->device_offload);
-	free(map);
+		kfree(map->device_offload);
+	kfree(map);
 }
 
 

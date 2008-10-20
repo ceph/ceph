@@ -1,18 +1,7 @@
 #ifndef _CRUSH_CRUSH_H
 #define _CRUSH_CRUSH_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-#ifndef __KERNEL__
-# define BUG_ON(x) assert(!(x))
-# include "include/inttypes.h"  /* just for int types */
-#else
-# include <linux/types.h>
-#endif
-
+#include <linux/types.h>
 
 /*** RULES ***/
 enum {
@@ -144,10 +133,5 @@ extern void crush_destroy_bucket_list(struct crush_bucket_list *);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *);
 extern void crush_destroy_bucket_straw(struct crush_bucket_straw *);
 extern void crush_destroy(struct crush_map *map);
-
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

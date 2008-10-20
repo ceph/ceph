@@ -4,10 +4,15 @@
 #ifndef __CRUSH_WRAPPER_H
 #define __CRUSH_WRAPPER_H
 
+#define BUG_ON(x) assert(!(x))
+#include "include/inttypes.h"  /* just for int types */
+
+extern "C" {
 #include "crush.h"
 #include "hash.h"
 #include "mapper.h"
 #include "builder.h"
+}
 
 #include "include/err.h"
 #include "include/encoding.h"

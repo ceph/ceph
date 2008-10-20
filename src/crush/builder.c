@@ -8,6 +8,8 @@
 #include "builder.h"
 #include "hash.h"
 
+#define BUG_ON(x) assert(!(x))
+
 struct crush_map *crush_create()
 {
 	struct crush_map *m;
