@@ -1066,7 +1066,7 @@ static int __init init_ceph(void)
 
 	dout(1, "init_ceph\n");
 
-#ifdef CEPH_BOOKKEEPER
+#ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_init();
 #endif
 
@@ -1120,7 +1120,7 @@ static void __exit exit_ceph(void)
 	kobject_put(ceph_kobj);
 	ceph_kobj = 0;
 #endif
-#ifdef CEPH_BOOKKEEPER
+#ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_finalize();
 #endif
 }
