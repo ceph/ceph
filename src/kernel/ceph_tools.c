@@ -27,6 +27,8 @@ struct alloc_data {
 	struct list_head node;
 	size_t size;
 	void *addr;
+	char *fname;
+	int line;
 };
 
 struct stack_frame {
@@ -34,7 +36,7 @@ struct stack_frame {
 	unsigned long return_address;
 };
 
-void *ceph_kmalloc(size_t size, gfp_t flags)
+void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 {
 	struct alloc_data *p=kmalloc(size+sizeof(struct alloc_data), flags);
 
@@ -43,6 +45,8 @@ void *ceph_kmalloc(size_t size, gfp_t flags)
 
 	p->magic = CEPH_BK_MAGIC;
 	p->size = size;
+	p->fname = fname;
+	p->line = line;
 
 	spin_lock(&_bk_lock);
 	_total_alloc += size;
@@ -102,9 +106,9 @@ void ceph_bookkeeper_finalize(void)
 
 	list_for_each(p, &_bk_allocs) {
 		entry = list_entry(p, struct alloc_data, node);
-		printk("[%p]", entry->addr);
+		printk("[%p] %s(%d): ", entry->addr, entry->fname, entry->line);
 		print_symbol(" %s: ", (unsigned long)entry->addr);
-		printk("p=%p (%zu bytes)\n", entry, entry->size);
+		printk("p=%p (%zu bytes)\n", ((void *)entry)+sizeof(struct alloc_data), entry->size);
 	}
 
 }
