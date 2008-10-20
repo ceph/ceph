@@ -274,8 +274,9 @@ static int dup_array(u64 **dst, __le64 *src, int num)
 			return -ENOMEM;
 		for (i = 0; i < num; i++)
 			(*dst)[i] = le64_to_cpu(src[i]);
-	} else
+	} else {
 		*dst = NULL;
+	}
 	return 0;
 }
 
@@ -442,9 +443,10 @@ more:
 			dout(20, "update_snap_trace cap_snaps queued\n");
 		}
 
-	} else
+	} else {
 		dout(10, "update_snap_trace %llx %p seq %lld unchanged\n",
 		     realm->ino, realm, realm->seq);
+	}
 
 	/* ensure the parent is correct */
 	err = adjust_snap_realm_parent(mdsc, realm, le64_to_cpu(ri->parent));
@@ -471,8 +473,9 @@ more:
 			goto fail;
 
 		invalidate = 1;
-	} else if (!realm->cached_context)
+	} else if (!realm->cached_context) {
 		invalidate = 1;
+	}
 
 	dout(10, "done with %llx %p, invalidated=%d, %p %p\n", realm->ino,
 	     realm, invalidate, p, e);

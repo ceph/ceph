@@ -199,9 +199,10 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 		ceph_put_snap_context(snapc);
 		page->private = 0;
 		ClearPagePrivate(page);
-	} else
+	} else {
 		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n",
 		     &ci->vfs_inode, page, page->index);
+	}
 }
 
 /* just a sanity check */
@@ -616,8 +617,9 @@ get_more_pages:
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
 			dout(20, "? %p idx %lu\n", page, page->index);
-			if (locked_pages == 0)
+			if (locked_pages == 0) {
 				lock_page(page);  /* first page */
+			}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 			else if (!trylock_page(page))
 #else

@@ -630,8 +630,9 @@ static int wait_for_new_map(struct ceph_mds_client *mdsc,
 			err = 0;
 		else if (err == 0)
 			err = -EIO;
-	} else
+	} else {
 		wait_for_completion(&mdsc->map_waiters);
+	}
 	mutex_lock(&mdsc->mutex);
 	dout(30, "wait_for_new_map err %d\n", err);
 	return err;
@@ -685,8 +686,9 @@ static int open_session(struct ceph_mds_client *mdsc,
 			err = 0;
 		else if (err == 0)
 			err = -EIO;
-	} else
+	} else {
 		wait_for_completion(&session->s_completion);
+	}
 	dout(30, "open_session done waiting on session %p, state %d\n",
 	     session, session->s_state);
 
@@ -937,8 +939,9 @@ void renewed_caps(struct ceph_mds_client *mdsc,
 		if (time_before(jiffies, session->s_cap_ttl)) {
 			dout(1, "mds%d caps renewed\n", session->s_mds);
 			wake = 1;
-		} else
+		} else {
 			dout(1, "mds%d caps still stale\n", session->s_mds);
+		}
 	}
 	dout(10, "renewed_caps mds%d ttl now %lu, was %s, now %s\n",
 	     session->s_mds, session->s_cap_ttl, was_stale ? "stale":"fresh",
@@ -1051,9 +1054,9 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	void *p, *end;
 	int pathlen;
 
-	if (op == CEPH_MDS_OP_FINDINODE)
+	if (op == CEPH_MDS_OP_FINDINODE) {
 		pathlen = sizeof(u32) + ino1*sizeof(struct ceph_inopath_item);
-	else {
+	} else {
 		pathlen = 2*(sizeof(ino1) + sizeof(__u32));
 		if (path1)
 			pathlen += strlen(path1);
@@ -1856,11 +1859,13 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 			mds = di->lease_session->s_mds;
 			dnamelen = dentry->d_name.len;
 			len += dentry->d_name.len;
-		} else
+		} else {
 			mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
+		}
 		spin_unlock(&dentry->d_lock);
-	} else
+	} else {
 		mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
+	}
 
 	/* inode lease? */
 	ci = ceph_inode(inode);
@@ -1872,8 +1877,9 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 		mds = ci->i_lease_session->s_mds;
 		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
 		ci->i_lease_mask &= ~mask;
-	} else
+	} else {
 		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
+	}
 	spin_unlock(&inode->i_lock);
 
 	if (mask == 0) {
@@ -2168,8 +2174,9 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		    ceph_mdsmap_get_state(newmap, from) ==
 		    CEPH_MDS_STATE_RECONNECT)
 			send_mds_reconnect(mdsc, from);
-	} else
+	} else {
 		mdsc->mdsmap = newmap;  /* first mds map */
+	}
 
 	mutex_unlock(&mdsc->mutex);
 	schedule_delayed(mdsc);

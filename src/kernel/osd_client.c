@@ -828,8 +828,9 @@ out:
 		len -= rc;
 		if (len > 0)
 			goto more;
-	} else
+	} else {
 		finalrc = rc;
+	}
 	dout(10, "sync_read result %d\n", finalrc);
 	return finalrc;
 }
@@ -903,8 +904,9 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			req->r_pages[contig_pages] = page;
 			contig_pages++;
 			next_index++;
-		} else
+		} else {
 			break;
+		}
 	}
 	dout(10, "readpages found %d/%d contig\n", contig_pages, num_pages);
 	if (contig_pages == 0)
@@ -1003,8 +1005,9 @@ out:
 		len -= len;
 		if (len > 0)
 			goto more;
-	} else
+	} else {
 		finalrc = rc;
+	}
 	dout(10, "sync_write result %d\n", finalrc);
 	return finalrc;
 }

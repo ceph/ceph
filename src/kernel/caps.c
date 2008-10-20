@@ -162,8 +162,9 @@ retry:
 	if (!ci->i_snap_realm) {
 		ci->i_snap_realm = realm;
 		list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
-	} else
+	} else {
 		ceph_put_snap_realm(realm);
+	}
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %xh now %xh seq %d mds%d\n",
 	     inode, ceph_vinop(inode), issued, issued|cap->issued, seq, mds);
@@ -728,9 +729,10 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 			__take_cap_refs(ci, *got);
 			ret = 1;
 		}
-	} else
+	} else {
 		dout(30, "get_cap_refs %p have %d needed %d\n", inode,
 		     have, need);
+	}
 sorry:
 	spin_unlock(&inode->i_lock);
 	dout(30, "get_cap_refs %p ret %d got %d\n", inode,
@@ -840,9 +842,9 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	}
 	spin_unlock(&inode->i_lock);
 
-	if (last)
+	if (last) {
 		ceph_check_caps(ci, 0);
-	else if (last_snap) {
+	} else if (last_snap) {
 		ceph_flush_snaps(ci);
 		wake_up(&ci->i_cap_wq);
 	}
@@ -941,9 +943,9 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
 		if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
 			invalidate = 1;
-		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER)
+		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER) {
 			writeback = 1; /* will delay ack */
-		else {
+		} else {
 			/*
 			 * we're not using revoked caps.. ack now.
 			 * re-use incoming message.
@@ -1086,12 +1088,12 @@ static void handle_cap_trunc(struct inode *inode,
 	 * don't need to truncate.
 	 */
 	spin_lock(&inode->i_lock);
-	if (ci->i_vmtruncate_to < 0 && size > inode->i_size)
+	if (ci->i_vmtruncate_to < 0 && size > inode->i_size) {
 		dout(10, "clean fwd truncate, no vmtruncate needed\n");
-	else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to)
+	} else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to) {
 		dout(10, "trunc to %lld < %lld already queued\n",
 		     ci->i_vmtruncate_to, size);
-	else {
+	} else {
 		/* we need to trunc even smaller */
 		dout(10, "queueing trunc %lld -> %lld\n", inode->i_size, size);
 		ci->i_vmtruncate_to = size;
@@ -1150,8 +1152,9 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 			ci->i_cap_exporting_issued = cap->issued;
 		}
 		was_last = __ceph_remove_cap(cap);
-	} else
+	} else {
 		WARN_ON(!cap);
+	}
 
 	spin_unlock(&inode->i_lock);
 	if (was_last)
