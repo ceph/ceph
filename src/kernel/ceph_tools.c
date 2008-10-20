@@ -26,7 +26,6 @@ struct alloc_data {
 	u32 magic;
 	struct list_head node;
 	size_t size;
-	void *addr;
 	char *fname;
 	int line;
 };
@@ -50,16 +49,6 @@ void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 
 	spin_lock(&_bk_lock);
 	_total_alloc += size;
-
-#ifdef CONFIG_FRAME_POINTER
-	{
-		unsigned long bp;
-
-		asm("movq %%rbp, %0" : "=r" (bp) :);
-
-		p->addr = (void *)((struct stack_frame *)bp)->return_address;
-	}
-#endif
 
 	list_add_tail(&p->node, &_bk_allocs);
 	spin_unlock(&_bk_lock);
@@ -101,14 +90,20 @@ void ceph_bookkeeper_finalize(void)
 	struct list_head *p;
 	struct alloc_data *entry;
 
+	p=kmalloc(100, GFP_KERNEL);
+
 	printk("bookkeeper: total bytes alloc: %zu\n", _total_alloc);
 	printk("bookkeeper: total bytes free: %zu\n", _total_free);
 
-	list_for_each(p, &_bk_allocs) {
-		entry = list_entry(p, struct alloc_data, node);
-		printk("[%p] %s(%d): ", entry->addr, entry->fname, entry->line);
-		print_symbol(" %s: ", (unsigned long)entry->addr);
-		printk("p=%p (%zu bytes)\n", ((void *)entry)+sizeof(struct alloc_data), entry->size);
-	}
+	if (_total_alloc != _total_free) {
 
+		list_for_each(p, &_bk_allocs) {
+			entry = list_entry(p, struct alloc_data, node);
+			printk("%s(%d): p=%p (%zu bytes)\n", entry->fname, entry->line, 
+				((void *)entry)+sizeof(struct alloc_data), 
+				entry->size);
+		}
+	} else {
+		printk("No leaks found! Yay!\n");
+	}
 }
