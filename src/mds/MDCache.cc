@@ -3993,11 +3993,18 @@ void MDCache::_recovered(CInode *in, int r)
   file_recovering.erase(in);
   in->state_clear(CInode::STATE_RECOVERING);
 
-  // make sure this is in "newest" inode struct, and gets journaled
-  in->get_projected_inode()->size = in->inode.size;
-  mds->locker->check_inode_max_size(in, true, in->inode.size);
-
-  in->auth_unpin(this);
+  if (!in->parent && !in->projected_parent) {
+    dout(10) << " inode has no parents, killing it off" << dendl;
+    in->auth_unpin(this);
+    assert(in->get_num_ref() == 0);  // right?
+    remove_inode(in);
+  } else {
+    // make sure this is in "newest" inode struct, and gets journaled
+    in->get_projected_inode()->size = in->inode.size;
+    mds->locker->check_inode_max_size(in, true, in->inode.size);
+    
+    in->auth_unpin(this);
+  }
 
   do_file_recover();
 }
