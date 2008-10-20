@@ -2260,7 +2260,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	struct ceph_msg *m;
 
 	m = kmalloc(sizeof(*m), GFP_NOFS);
-	dout(1, "ceph_msg_new alloc %p\n", m);
 	if (m == NULL)
 		goto out;
 	atomic_set(&m->nref, 1);
@@ -2318,7 +2317,7 @@ void ceph_msg_put(struct ceph_msg *m)
 		WARN_ON(1);
 	}
 	if (atomic_dec_and_test(&m->nref)) {
-		dout(1, "ceph_msg_put last one on %p\n", m);
+		dout(20, "ceph_msg_put last one on %p\n", m);
 		WARN_ON(!list_empty(&m->list_head));
 		kfree(m->front.iov_base);
 		kfree(m);

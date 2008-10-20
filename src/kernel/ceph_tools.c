@@ -97,8 +97,8 @@ void ceph_bookkeeper_finalize(void)
 
 		list_for_each(p, &_bk_allocs) {
 			entry = list_entry(p, struct alloc_data, node);
-			printk("%s(%d): p=%p (%zu bytes)\n", entry->fname, entry->line, 
-				((void *)entry)+sizeof(struct alloc_data), 
+			printk("%s(%d): p=%p (%zu bytes)\n", entry->fname, entry->line,
+				((void *)entry)+sizeof(struct alloc_data),
 				entry->size);
 		}
 	} else {
