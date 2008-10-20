@@ -75,6 +75,11 @@ extern int ceph_monmap_contains(struct ceph_monmap *m,
 extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 extern void ceph_monc_stop(struct ceph_mon_client *monc);
 
+/*
+ * The model here is to indicate that we need a new map of at least epoch
+ * @want, and to indicate which maps receive.  Periodically rerequest the map
+ * from the monitor cluster until we get what we want.
+ */
 extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 want);
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have);
 
@@ -82,8 +87,6 @@ extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u32 want);
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have);
 
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
-extern void ceph_monc_report_failure(struct ceph_mon_client *monc,
-				     struct ceph_entity_inst *who);
 
 extern int ceph_monc_do_statfs(struct ceph_mon_client *monc,
 			       struct ceph_statfs *buf);

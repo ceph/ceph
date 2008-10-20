@@ -23,15 +23,15 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 
 	dout(30, "monmap_decode %p %p len %d\n", p, end, (int)(end-p));
 
-	/* the encoded and decoded sizes match. */
+	/* The encoded and decoded sizes match. */
 	m = kmalloc(end-p, GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
 	ceph_decode_need(&p, end, 2*sizeof(__u32) + 2*sizeof(__u64), bad);
-	ceph_decode_32(&p, m->epoch);
 	ceph_decode_64_le(&p, m->fsid.major);
 	ceph_decode_64_le(&p, m->fsid.minor);
+	ceph_decode_32(&p, m->epoch);
 	ceph_decode_32(&p, m->num_mon);
 	ceph_decode_need(&p, end, m->num_mon*sizeof(m->mon_inst[0]), bad);
 	ceph_decode_copy(&p, m->mon_inst, m->num_mon*sizeof(m->mon_inst[0]));
@@ -240,6 +240,7 @@ void ceph_monc_request_umount(struct ceph_mon_client *monc)
 	/* don't bother if forced unmount */
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN)
 		return;
+
 	mutex_lock(&monc->req_mutex);
 	monc->umount_delay = BASE_DELAY_INTERVAL;
 	do_request_umount(&monc->umount_delayed_work.work);
@@ -362,12 +363,13 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	if (monc->monmap == NULL)
 		return -ENOMEM;
 	spin_lock_init(&monc->statfs_lock);
-	mutex_init(&monc->req_mutex);
 	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_ATOMIC);
+	monc->last_tid = 0;
 	INIT_DELAYED_WORK(&monc->mds_delayed_work, do_request_mdsmap);
 	INIT_DELAYED_WORK(&monc->osd_delayed_work, do_request_osdmap);
 	INIT_DELAYED_WORK(&monc->umount_delayed_work, do_request_umount);
-	monc->last_tid = 0;
+	monc->mds_delay = monc->osd_delay = monc->umount_delay = 0;
+	mutex_init(&monc->req_mutex);
 	monc->want_mdsmap = 0;
 	monc->want_osdmap = 0;
 	return 0;
