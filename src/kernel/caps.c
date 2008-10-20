@@ -134,7 +134,7 @@ retry:
 			spin_unlock(&inode->i_lock);
 			new_cap = kmalloc(sizeof(*cap), GFP_NOFS);
 			if (new_cap == NULL) {
-				ceph_put_snap_realm(realm);
+				ceph_put_snap_realm(mdsc, realm);
 				return -ENOMEM;
 			}
 			goto retry;
@@ -163,7 +163,7 @@ retry:
 		ci->i_snap_realm = realm;
 		list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
 	} else {
-		ceph_put_snap_realm(realm);
+		ceph_put_snap_realm(mdsc, realm);
 	}
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %xh now %xh seq %d mds%d\n",
@@ -227,6 +227,7 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 {
 	struct ceph_mds_session *session = cap->session;
 	struct ceph_inode_info *ci = cap->ci;
+	struct ceph_mds_client *mdsc = &ceph_client(ci->vfs_inode.i_sb)->mdsc;
 
 	dout(20, "__ceph_remove_cap %p from %p\n", cap, &ci->vfs_inode);
 
@@ -242,7 +243,7 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 
 	if (RB_EMPTY_ROOT(&ci->i_caps)) {
 		list_del_init(&ci->i_snap_realm_item);
-		ceph_put_snap_realm(ci->i_snap_realm);
+		ceph_put_snap_realm(mdsc, ci->i_snap_realm);
 		ci->i_snap_realm = NULL;
 		return 1;
 	}

@@ -532,7 +532,8 @@ static inline int calc_pages_for(u64 off, u64 len)
 
 
 /* snap.c */
-extern void ceph_put_snap_realm(struct ceph_snap_realm *realm);
+extern void ceph_put_snap_realm(struct ceph_mds_client *mdsc,
+				struct ceph_snap_realm *realm);
 extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
 						      void *p, void *e,
 						      bool deletion);

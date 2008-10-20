@@ -75,7 +75,7 @@ struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 		if (!realm)
 			return ERR_PTR(-ENOMEM);
 		radix_tree_insert(&mdsc->snap_realms, ino, realm);
-		realm->nref = 1;    /* in tree */
+		realm->nref = 0;    /* tree does not take a ref */
 		realm->ino = ino;
 		INIT_LIST_HEAD(&realm->children);
 		INIT_LIST_HEAD(&realm->child_item);
@@ -91,12 +91,14 @@ struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 /*
  * caller must hold snap_rwsem for write
  */
-void ceph_put_snap_realm(struct ceph_snap_realm *realm)
+void ceph_put_snap_realm(struct ceph_mds_client *mdsc,
+			 struct ceph_snap_realm *realm)
 {
 	dout(20, "put_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
 	     realm->nref, realm->nref-1);
 	realm->nref--;
 	if (realm->nref == 0) {
+		radix_tree_delete(&mdsc->snap_realms, realm->ino);
 		kfree(realm->prior_parent_snaps);
 		kfree(realm->snaps);
 		ceph_put_snap_context(realm->cached_context);
@@ -129,7 +131,7 @@ static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
 	     parentino, parent);
 	if (realm->parent) {
 		list_del_init(&realm->child_item);
-		ceph_put_snap_realm(realm->parent);
+		ceph_put_snap_realm(mdsc, realm->parent);
 	}
 	realm->parent_ino = parentino;
 	realm->parent = parent;
@@ -484,7 +486,7 @@ more:
 	if (p == e && invalidate)
 		rebuild_snap_realms(realm);
 
-	ceph_put_snap_realm(realm);
+	ceph_put_snap_realm(mdsc, realm);
 	if (p < e)
 		goto more;
 
@@ -645,10 +647,10 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			if (IS_ERR(child))
 				continue;
 			adjust_snap_realm_parent(mdsc, child, realm->ino);
-			ceph_put_snap_realm(child);
+			ceph_put_snap_realm(mdsc, child);
 		}
 
-		ceph_put_snap_realm(realm);
+		ceph_put_snap_realm(mdsc, realm);
 	}
 
 	/*
@@ -676,7 +678,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 				continue;
 			ci = ceph_inode(inode);
 			spin_lock(&inode->i_lock);
-			ceph_put_snap_realm(ci->i_snap_realm);
+			ceph_put_snap_realm(mdsc, ci->i_snap_realm);
 			list_add(&ci->i_snap_realm_item,
 				 &realm->inodes_with_caps);
 			ci->i_snap_realm = realm;
@@ -686,7 +688,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 		}
 	}
 
-	ceph_put_snap_realm(realm);
+	ceph_put_snap_realm(mdsc, realm);
 	up_write(&mdsc->snap_rwsem);
 	return;
 
