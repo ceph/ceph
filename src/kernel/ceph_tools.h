@@ -11,6 +11,7 @@ extern void ceph_kfree(void *ptr);
 
 #ifndef CEPH_OVERRIDE_BOOKKEEPER
 #define kmalloc(size,flags)	ceph_kmalloc(__FILE__, __LINE__, size, flags)
+#define kzalloc(size,flags)	ceph_kmalloc(__FILE__, __LINE__, size, flags | __GFP_ZERO)
 #define kfree	ceph_kfree
 #endif
 

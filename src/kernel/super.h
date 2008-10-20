@@ -18,6 +18,8 @@
 #include "mds_client.h"
 #include "osd_client.h"
 
+#include "ceph_tools.h"
+
 /* f_type in struct statfs */
 #define CEPH_SUPER_MAGIC 0x00c36400
 

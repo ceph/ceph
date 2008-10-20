@@ -304,7 +304,7 @@ struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 
 void ceph_put_mds_session(struct ceph_mds_session *s)
 {
-	dout(30, "put_mds_session %p %d -> %d\n", s,
+	dout(0, "put_mds_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref))
 		kfree(s);
@@ -1133,7 +1133,7 @@ static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_request *req)
 {
-	struct ceph_mds_session *session;
+	struct ceph_mds_session *session = NULL;
 	struct ceph_mds_request_head *rhead = req->r_request->front.iov_base;
 	int err;
 	int mds = -1;

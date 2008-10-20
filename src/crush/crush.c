@@ -1,6 +1,7 @@
 
 #ifdef __KERNEL__
 # include <linux/slab.h>
+#include "../ceph_tools.h"
 #else
 # include <stdlib.h>
 # include <assert.h>
