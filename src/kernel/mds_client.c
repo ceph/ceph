@@ -2105,6 +2105,7 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
 	dout(10, "stop\n");
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
 	ceph_mdsmap_destroy(mdsc->mdsmap);
+	kfree(mdsc->sessions);
 }
 
 
