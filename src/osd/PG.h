@@ -703,8 +703,6 @@ public:
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
 
-  void write_state(ObjectStore::Transaction &t);
-
   void queue_snap_trim();
 
   bool is_dup(osd_reqid_t rid) {

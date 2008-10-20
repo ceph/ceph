@@ -549,7 +549,9 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   // create collection
   assert(!store->collection_exists(pgid.to_coll()));
   t.create_collection(pgid.to_coll());
-  pg->write_state(t);
+
+  pg->write_info(t);
+  pg->write_log(t);
 
   return pg;
 }
@@ -573,6 +575,8 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
     pg->info.history.same_since =
     pg->info.history.same_primary_since =
     pg->info.history.same_acker_since = osdmap->get_epoch();
+
+  pg->write_info(t);
   pg->write_log(t);
   
   dout(7) << "_create_lock_new_pg " << *pg << dendl;
@@ -2134,6 +2138,8 @@ void OSD::kick_pg_split_queue()
       bufferlist bl;
       ::encode(pg->info, bl);
       t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
+
+      pg->write_info(t);
       pg->write_log(t);
 
       wake_pg_waiters(pg->info.pgid);
@@ -2410,6 +2416,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->info.history = history;
 	pg->clear_primary_state();  // yep, notably, set hml=false
 	pg->build_prior();      
+	pg->write_info(t);
 	pg->write_log(t);
       }
       
@@ -2519,6 +2526,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     pg->acting.swap(acting);
     pg->set_role(role);
     pg->info.history = info.history;
+    pg->write_info(t);
     pg->write_log(t);
     store->apply_transaction(t);
     created++;
@@ -2667,6 +2675,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg->acting.swap( acting );
       pg->set_role(role);
       pg->info.history = history;
+      pg->write_info(t);
       pg->write_log(t);
       store->apply_transaction(t);
       created++;

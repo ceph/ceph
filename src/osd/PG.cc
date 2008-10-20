@@ -1245,6 +1245,10 @@ void PG::write_info(ObjectStore::Transaction& t)
   bufferlist infobl;
   ::encode(info, infobl);
   t.collection_setattr(info.pgid.to_coll(), "info", infobl);
+
+  bufferlist snapbl;
+  ::encode(snap_collections, snapbl);
+  t.collection_setattr(info.pgid.to_coll(), "snap_collections", snapbl);
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -1278,8 +1282,6 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  write_info(t);
-
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }
 
@@ -1441,15 +1443,6 @@ void PG::read_state(ObjectStore *store)
   ::decode(snap_collections, p);
 
   read_log(store);
-}
-
-void PG::write_state(ObjectStore::Transaction& t)
-{
-  bufferlist bl;
-  ::encode(snap_collections, bl);
-  t.collection_setattr(info.pgid.to_coll(), "snap_collections", bl);
-
-  write_log(t);   // will write_info().
 }
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
