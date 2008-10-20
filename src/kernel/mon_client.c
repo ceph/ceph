@@ -381,4 +381,5 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 	cancel_delayed_work_sync(&monc->mds_delayed_work);
 	cancel_delayed_work_sync(&monc->osd_delayed_work);
 	cancel_delayed_work_sync(&monc->umount_delayed_work);
+	kfree(monc->monmap);
 }
