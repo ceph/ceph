@@ -1,18 +1,17 @@
 
 #include <asm/div64.h>
 
+#include "super.h"
+#include "osdmap.h"
+#include "crush/hash.h"
+#include "decode.h"
+
 #include "ceph_debug.h"
 
 int ceph_debug_osdmap = -1;
 #define DOUT_MASK DOUT_MASK_OSDMAP
 #define DOUT_VAR ceph_debug_osdmap
 #define DOUT_PREFIX "osdmap: "
-#include "super.h"
-
-#include "osdmap.h"
-#include "crush/hash.h"
-
-#include "decode.h"
 
 /* maps */
 

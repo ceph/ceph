@@ -1,8 +1,8 @@
 diff --git a/fs/Kconfig b/fs/Kconfig
-index abccb5d..b4097a7 100644
+index e46297f..578db91 100644
 --- a/fs/Kconfig
 +++ b/fs/Kconfig
-@@ -1803,6 +1803,20 @@ config RPCSEC_GSS_SPKM3
+@@ -1407,6 +1407,26 @@ config RPCSEC_GSS_SPKM3
  
  	  If unsure, say N.
  
@@ -20,14 +20,20 @@ index abccb5d..b4097a7 100644
 +
 +	  If unsure, say N.
 +
++config CEPH_BOOKKEEPER
++	bool "Ceph leaks detection tool"
++	depends on CEPH_FS
++	help
++	  Leaks detection tool for the Ceph fs.
++
  config SMB_FS
  	tristate "SMB file system support (OBSOLETE, please use CIFS)"
  	depends on INET
 diff --git a/fs/Makefile b/fs/Makefile
-index a1482a5..549e129 100644
+index 2168c90..c12196e 100644
 --- a/fs/Makefile
 +++ b/fs/Makefile
-@@ -122,3 +122,4 @@ obj-$(CONFIG_HPPFS)		+= hppfs/
+@@ -124,3 +124,4 @@ obj-$(CONFIG_HPPFS)		+= hppfs/
  obj-$(CONFIG_DEBUG_FS)		+= debugfs/
  obj-$(CONFIG_OCFS2_FS)		+= ocfs2/
  obj-$(CONFIG_GFS2_FS)           += gfs2/

@@ -1,13 +1,13 @@
 #include <linux/exportfs.h>
 
 #include "ceph_fs.h"
+#include "super.h"
 #include "ceph_debug.h"
 
 int ceph_debug_export = -1;
 #define DOUT_MASK DOUT_MASK_EXPORT
 #define DOUT_VAR ceph_debug_export
 #define DOUT_PREFIX "export: "
-#include "super.h"
 
 /*
  * fh is N tuples of

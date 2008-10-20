@@ -1,9 +1,7 @@
 #ifndef _FS_CEPH_TOOLS_H
 #define _FS_CEPH_TOOLS_H
 
-#define CEPH_BOOKKEEPER
-
-#ifdef CEPH_BOOKKEEPER
+#ifdef CONFIG_CEPH_BOOKKEEPER
 extern void ceph_bookkeeper_init(void);
 extern void ceph_bookkeeper_finalize(void);
 extern void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags);

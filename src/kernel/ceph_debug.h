@@ -3,6 +3,8 @@
 
 #include <linux/string.h>
 
+#include "ceph_tools.h"
+
 extern int ceph_debug;      /* debug level; if <0, defer to per-module level. */
 extern int ceph_debug_console;               /* send debug output to console? */
 extern int ceph_debug_mask;
