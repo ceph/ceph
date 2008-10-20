@@ -52,19 +52,19 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 {
 	struct ceph_mdsmap *m;
 	int i, n;
-	__u32 mds;
+	u32 mds;
 	int err = -EINVAL;
 
 	m = kzalloc(sizeof(*m), GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 10*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 10*sizeof(u32), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
 	*p += sizeof(struct ceph_timespec);  /* ignore map timestamp */
-	*p += sizeof(__u32);                 /* skip anchortable */
+	*p += sizeof(u32);                 /* skip anchortable */
 	ceph_decode_32(p, m->m_root);
 	ceph_decode_32(p, m->m_session_timeout);
 	ceph_decode_32(p, m->m_session_autoclose);
@@ -77,7 +77,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 
 	/* state */
 	ceph_decode_32(p, n);
-	ceph_decode_need(p, end, n*2*sizeof(__u32), bad);
+	ceph_decode_need(p, end, n*2*sizeof(u32), bad);
 	for (i = 0; i < n; i++) {
 		ceph_decode_32(p, mds);
 		if (mds >= m->m_max_mds)
@@ -87,12 +87,12 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 
 	/* state_seq */
 	ceph_decode_32_safe(p, end, n, bad);
-	*p += n*(sizeof(__u32)+sizeof(__u64));
+	*p += n*(sizeof(u32)+sizeof(u64));
 
 	/* mds_inst */
 	ceph_decode_32_safe(p, end, n, bad);
 	ceph_decode_need(p, end,
-			 n*(sizeof(__u32)+sizeof(struct ceph_entity_name)+
+			 n*(sizeof(u32)+sizeof(struct ceph_entity_name)+
 			    sizeof(struct ceph_entity_addr)),
 			 bad);
 	for (i = 0; i < n; i++) {

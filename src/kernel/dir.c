@@ -38,7 +38,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
  * encode hidden .snap dirs as a double /, i.e.
  *   foo/.snap/bar -> foo//bar
  */
-char *ceph_build_path(struct dentry *dentry, int *plen, __u64 *base, int min)
+char *ceph_build_path(struct dentry *dentry, int *plen, u64 *base, int min)
 {
 	struct dentry *temp;
 	char *path;
@@ -145,7 +145,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	unsigned off = fpos_off(filp->f_pos);
 	unsigned skew;
 	int err;
-	__u32 ftype;
+	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
 
 nextfrag:

@@ -466,7 +466,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	struct address_space *mapping = inode->i_mapping;
 	struct writeback_control *wbc = req->r_wbc;
 	__s32 rc = -EIO;
-	__u64 bytes = 0;
+	u64 bytes = 0;
 
 	/* parse reply */
 	if (req->r_reply) {

@@ -67,10 +67,10 @@ bad:
 static int parse_reply_info_trace(void **p, void *end,
 				  struct ceph_mds_reply_info_parsed *info)
 {
-	__u16 numi, numd, snapdirpos;
+	u16 numi, numd, snapdirpos;
 	int err;
 
-	ceph_decode_need(p, end, 3*sizeof(__u16), bad);
+	ceph_decode_need(p, end, 3*sizeof(u16), bad);
 	ceph_decode_16(p, numi);
 	ceph_decode_16(p, numd);
 	ceph_decode_16(p, snapdirpos);
@@ -131,7 +131,7 @@ dentry:
 		goto bad;
 	info->trace_dir[numd] = *p;
 	*p += sizeof(struct ceph_mds_reply_dirfrag) +
-		sizeof(__u32)*le32_to_cpu(info->trace_dir[numd]->ndist);
+		sizeof(u32)*le32_to_cpu(info->trace_dir[numd]->ndist);
 	if (unlikely(*p > end))
 		goto bad;
 	goto inode;
@@ -154,13 +154,13 @@ out_bad:
 static int parse_reply_info_dir(void **p, void *end,
 				struct ceph_mds_reply_info_parsed *info)
 {
-	__u32 num, i = 0;
+	u32 num, i = 0;
 	int err;
 
 	info->dir_dir = *p;
 	if (*p + sizeof(*info->dir_dir) > end)
 		goto bad;
-	*p += sizeof(*info->dir_dir) + sizeof(__u32)*le32_to_cpu(info->dir_dir->ndist);
+	*p += sizeof(*info->dir_dir) + sizeof(u32)*le32_to_cpu(info->dir_dir->ndist);
 	if (*p > end)
 		goto bad;
 
@@ -223,7 +223,7 @@ static int parse_reply_info(struct ceph_msg *msg,
 			    struct ceph_mds_reply_info_parsed *info)
 {
 	void *p, *end;
-	__u32 len;
+	u32 len;
 	int err;
 
 	info->head = msg->front.iov_base;
@@ -421,7 +421,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
  * called under mdsc->mutex.
  */
 static struct ceph_mds_request *__get_request(struct ceph_mds_client *mdsc,
-					     __u64 tid)
+					     u64 tid)
 {
 	struct ceph_mds_request *req;
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
@@ -592,7 +592,7 @@ random:
 /*
  * session messages
  */
-static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
+static struct ceph_msg *create_session_msg(u32 op, u64 seq)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_session_head *h;
@@ -617,7 +617,7 @@ static struct ceph_msg *create_session_msg(__u32 op, __u64 seq)
 static int wait_for_new_map(struct ceph_mds_client *mdsc,
 			     unsigned long timeout)
 {
-	__u32 have;
+	u32 have;
 	int err = 0;
 
 	dout(30, "wait_for_new_map enter\n");
@@ -958,8 +958,8 @@ void renewed_caps(struct ceph_mds_client *mdsc,
 void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 			      struct ceph_msg *msg)
 {
-	__u32 op;
-	__u64 seq;
+	u32 op;
+	u64 seq;
 	struct ceph_mds_session *session = NULL;
 	int mds;
 	struct ceph_mds_session_head *h = msg->front.iov_base;
@@ -1057,7 +1057,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	if (op == CEPH_MDS_OP_FINDINODE) {
 		pathlen = sizeof(u32) + ino1*sizeof(struct ceph_inopath_item);
 	} else {
-		pathlen = 2*(sizeof(ino1) + sizeof(__u32));
+		pathlen = 2*(sizeof(ino1) + sizeof(u32));
 		if (path1)
 			pathlen += strlen(path1);
 		if (path2)
@@ -1117,7 +1117,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
  *
  * called under mdsc->mutex.
  */
-static __u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
+static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_request *first;
 	if (radix_tree_gang_lookup(&mdsc->request_tree,
@@ -1376,10 +1376,10 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 			      struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
-	__u64 tid;
-	__u32 next_mds;
-	__u32 fwd_seq;
-	__u8 must_resend;
+	u64 tid;
+	u32 next_mds;
+	u32 fwd_seq;
+	u8 must_resend;
 	int err = -EINVAL;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
@@ -1389,7 +1389,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		goto bad;
 	from_mds = le32_to_cpu(msg->hdr.src.name.num);
 
-	ceph_decode_need(&p, end, sizeof(__u64)+2*sizeof(__u32), bad);
+	ceph_decode_need(&p, end, sizeof(u64)+2*sizeof(u32), bad);
 	ceph_decode_64(&p, tid);
 	ceph_decode_32(&p, next_mds);
 	ceph_decode_32(&p, fwd_seq);
@@ -1835,7 +1835,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	struct ceph_dentry_info *di;
 	int origmask = mask;
 	int mds = -1;
-	int len = sizeof(*lease) + sizeof(__u32);
+	int len = sizeof(*lease) + sizeof(u32);
 	int dnamelen = 0;
 
 	BUG_ON(inode == NULL);
@@ -2119,8 +2119,8 @@ void ceph_mdsc_stop(struct ceph_mds_client *mdsc)
  */
 void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
-	__u32 epoch;
-	__u32 maplen;
+	u32 epoch;
+	u32 maplen;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
@@ -2133,7 +2133,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	else
 		from = -1;
 
-	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(__u32), bad);
+	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);
 	ceph_decode_64_le(&p, fsid.major);
 	ceph_decode_64_le(&p, fsid.minor);
 	if (!ceph_fsid_equal(&fsid, &mdsc->client->monc.monmap->fsid)) {

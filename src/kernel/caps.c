@@ -309,9 +309,9 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
  *
  * Caller should be holding s_mutex.
  */
-static void send_cap_msg(struct ceph_mds_client *mdsc, __u64 ino, int op,
-			 int caps, int wanted, __u64 seq, __u64 mseq,
-			 __u64 size, __u64 max_size,
+static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
+			 int caps, int wanted, u64 seq, u64 mseq,
+			 u64 size, u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq, u64 follows, int mds)
 {

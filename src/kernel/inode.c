@@ -123,7 +123,7 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci, 
  * specified, copy the frag delegation info to the caller if
  * it is present.
  */
-__u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
+u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 		       struct ceph_inode_frag *pfrag,
 		       int *found)
 {

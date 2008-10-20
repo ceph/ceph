@@ -341,8 +341,8 @@ static unsigned long hash_addr(struct ceph_entity_addr *addr)
 {
 	unsigned long key;
 
-	key = *(__u32 *)&addr->ipaddr.sin_addr.s_addr;
-	key ^= *(__u16 *)&addr->ipaddr.sin_port;
+	key = *(u32 *)&addr->ipaddr.sin_addr.s_addr;
+	key ^= *(u16 *)&addr->ipaddr.sin_port;
 	return key;
 }
 
