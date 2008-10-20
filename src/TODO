@@ -103,6 +103,9 @@ mds
   - build snaprealm for any hardlinked file
   - include snaps for all (primary+remote) parents
 
+- how do we properly clean up inodes when doing a snap purge?
+  - when they are mid-recover?  see 136470cf7ca876febf68a2b0610fa3bb77ad3532
+
 - whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
 
 - what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
