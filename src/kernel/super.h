@@ -10,65 +10,22 @@
 #include <linux/sysfs.h>
 #include <linux/backing-dev.h>
 
-#include "ceph_debug.h"
 #include "ceph_fs.h"
+#include "ceph_debug.h"
 #include "types.h"
 #include "messenger.h"
 #include "mon_client.h"
 #include "mds_client.h"
 #include "osd_client.h"
 
-extern int ceph_debug_console;
-extern int ceph_debug;
-extern int ceph_debug_msgr;
-extern int ceph_debug_super;
-extern int ceph_debug_mdsc;
-extern int ceph_debug_osdc;
-extern int ceph_debug_addr;
-extern int ceph_debug_inode;
-extern int ceph_debug_snap;
-extern int ceph_debug_ioctl;
-extern int ceph_debug_caps;
-
-extern int ceph_debug_mask;
-
-#define dout_flag(x, mask, args...) do {						\
-		if (((ceph_debug_mask | DOUT_UNMASKABLE) & mask) &&				\
-			((DOUT_VAR >= 0 && x <= DOUT_VAR) ||			\
-			(DOUT_VAR < 0 && x <= ceph_debug))) {		\
-			if (ceph_debug_console)				\
-				printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
-			else						\
-				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
-		}							\
-	} while (0)
-
-#define dout(x, args...) dout_flag(x, DOUT_MASK, args)
-
-#define derr(x, args...) do {						\
-		printk(KERN_ERR "ceph: " args);	\
-	} while (0)
-
+/* f_type in struct statfs */
 #define CEPH_SUPER_MAGIC 0x00c36400
 
-#define CEPH_BLOCK_SHIFT 20    /* 1 MB blocks for purposes of statfs*/
-#define CEPH_BLOCK  (1 << CEPH_BLOCK_SHIFT)
+/* large granularity for statfs utilization stats to facilitate
+ * large volume sizes on 32-bit machines. */
+#define CEPH_BLOCK_SHIFT   20  /* 1 MB */
+#define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
-
-#if 0
-# define dput(dentry)				       \
-	do {					       \
-		dout(20, "dput %p %d -> %d\n", dentry, \
-		     atomic_read(&dentry->d_count),    \
-		     atomic_read(&dentry->d_count)-1); \
-		dput(dentry);			       \
-	} while (0)
-# define d_drop(dentry)				       \
-	do {					       \
-		dout(20, "d_drop %p\n", dentry);       \
-		d_drop(dentry);			       \
-	} while (0)
-#endif
 
 /*
  * subtract jiffies

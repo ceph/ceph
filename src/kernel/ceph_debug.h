@@ -3,9 +3,9 @@
 
 #include <linux/string.h>
 
-extern int ceph_debug;
+extern int ceph_debug;      /* debug level; if <0, defer to per-module level. */
+extern int ceph_debug_console;               /* send debug output to console? */
 extern int ceph_debug_mask;
-extern int ceph_debug_console;
 
 /* different debug level for the different modules */
 extern int ceph_debug_addr;
@@ -74,17 +74,49 @@ static struct _debug_mask_name _debug_mask_names[] = {
 
 static inline int ceph_get_debug_mask(char *name)
 {
-	int i=0;
+	int i = 0;
 
 	while (_debug_mask_names[i].name) {
 		if (strcmp(_debug_mask_names[i].name, name) == 0)
 			return _debug_mask_names[i].mask;
 		i++;
 	}
-
 	return 0;
 }
 
+#define dout_flag(x, mask, args...) do {				\
+		if (((ceph_debug_mask | DOUT_UNMASKABLE) & mask) &&	\
+		    ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||		\
+		     (DOUT_VAR < 0 && x <= ceph_debug))) {		\
+			if (ceph_debug_console)				\
+				printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
+			else						\
+				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
+		}							\
+	} while (0)
+
+#define dout(x, args...) dout_flag(x, DOUT_MASK, args)
+
+#define derr(x, args...) do {			\
+		printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
+	} while (0)
+
+
+/* dcache d_count debugging */
+#if 0
+# define dput(dentry)				       \
+	do {					       \
+		dout(20, "dput %p %d -> %d\n", dentry, \
+		     atomic_read(&dentry->d_count),    \
+		     atomic_read(&dentry->d_count)-1); \
+		dput(dentry);			       \
+	} while (0)
+# define d_drop(dentry)				       \
+	do {					       \
+		dout(20, "d_drop %p\n", dentry);       \
+		d_drop(dentry);			       \
+	} while (0)
 #endif
 
 
+#endif
