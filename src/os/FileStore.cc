@@ -101,38 +101,44 @@ struct btrfs_ioctl_usertrans {
 
 
 /*
- * xattr portability stupidity
+ * xattr portability stupidity.  hide errno, while we're at it.
  */ 
 
+int do_getxattr(const char *fn, const char *name, void *val, size_t size) {
 #ifdef DARWIN
-int do_getxattr(const char *fn, const char *name, void *val, size_t size) {
-  return ::getxattr(fn, name, val, size, 0, 0);
-}
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
-  return ::setxattr(fn, name, val, size, 0, 0);
-}
-int do_removexattr(const char *fn, const char *name) {
-  return ::removexattr(fn, name, 0);
-}
-int do_listxattr(const char *fn, char *names, size_t len) {
-  return ::listxattr(fn, names, len, 0);
-}
+  int r = ::getxattr(fn, name, val, size, 0, 0);
 #else
-int do_getxattr(const char *fn, const char *name, void *val, size_t size) {
-  return ::getxattr(fn, name, val, size);
+  int r = ::getxattr(fn, name, val, size);
+#endif
+  return r < 0 ? -errno:r;
 }
 int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
-  return ::setxattr(fn, name, val, size, 0);
+#ifdef DARWIN
+  int r = ::setxattr(fn, name, val, size, 0, 0);
+#else
+  int r = ::setxattr(fn, name, val, size, 0);
+#endif
+  return r < 0 ? -errno:r;
 }
 int do_removexattr(const char *fn, const char *name) {
-  return ::removexattr(fn, name);
+#ifdef DARWIN
+  int r = ::removexattr(fn, name, 0);
+#else
+  int r = ::removexattr(fn, name);
+#endif
+  return r < 0 ? -errno:r;
 }
 int do_listxattr(const char *fn, char *names, size_t len) {
-  return ::listxattr(fn, names, len);
+#ifdef DARWIN
+  int r = ::listxattr(fn, names, len, 0);
+#else
+  int r = ::listxattr(fn, names, len);
+#endif
+  return r < 0 ? -errno:r;
 }
 
-#endif
 
+// .............
 
 
 void get_attrname(const char *name, char *buf)
@@ -257,7 +263,7 @@ int FileStore::mkfs()
   // journal?
   struct stat st;
   sprintf(fn, "%s.journal", basedir.c_str());
-  if (::lstat(fn, &st) == 0) {
+  if (::stat(fn, &st) == 0) {
     journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
     if (journal->create() < 0) {
       dout(0) << "mkfs error creating journal on " << fn << dendl;
@@ -1440,130 +1446,134 @@ void FileStore::sync(Context *onsafe)
 // -------------------------------
 // attributes
 
+// low-level attr helpers
+int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
+{
+  char val[100];
+  int l = do_getxattr(fn, name, val, sizeof(val));
+  if (l >= 0) {
+    bp = buffer::create(l);
+    memcpy(bp.c_str(), val, l);
+  } else if (l == -ERANGE) {
+    l = do_getxattr(fn, name, 0, 0);
+    bp = buffer::create(l);
+    l = do_getxattr(fn, name, bp.c_str(), l);
+  }
+  return l;
+}
+
+int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset) 
+{
+  int r;
+
+  // get attr list
+  char names1[100];
+  char *name = names1;
+  int num = do_listxattr(fn, names1, sizeof(names1));
+  char *names2 = 0;
+  if (num == -ERANGE) {
+    int l = do_listxattr(fn, 0, 0);
+    if (l < 0) return l;
+    name = names2 = new char[l];
+    num = do_listxattr(fn, names2, l);
+  }
+  
+  for (int i=0; i<num; i++) {
+    char *attrname = name;
+    if (parse_attrname(&name)) {
+      dout(0) << "getattrs " << fn << " getting " << (i+1) << "/" << num << " '" << name << "'" << dendl;
+      int r = _getattr(fn, attrname, aset[name]);
+      if (r < 0) return r;
+    }
+    name += strlen(name) + 1;
+  }
+
+  delete names2;
+  return r;
+}
+
 // objects
 
 int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
 		       void *value, size_t size) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.getattr(cid, oid, name, value, size);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    char n[40];
-    get_attrname(name, n);
-    r = do_getxattr(fn, n, value, size);
-    dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.getattr(cid, oid, name, value, size);
+
+  char fn[100];
+  get_coname(cid, oid, fn);
+  char n[40];
+  get_attrname(name, n);
+  return do_getxattr(fn, n, value, size);
 }
 
 int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp)
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.getattr(cid, oid, name, bp);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    char n[40];
-    get_attrname(name, n);
-    r = do_getxattr(fn, n, 0, 0);
-    if (r > 0) {
-      bp = buffer::create(r);
-      r = do_getxattr(fn, n, bp.c_str(), r);
-      if (r > 0) bp.set_length(r);
-    }
-    dout(10) << "getattr " << cid << " " << oid << " '" << name << "' size " << bp.length() << " = " << r << dendl;
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.getattr(cid, oid, name, bp);
+
+  char fn[100];
+  get_coname(cid, oid, fn);
+  char n[40];
+  get_attrname(name, n);
+  return _getattr(fn, n, bp);
 }
 
 int FileStore::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.getattrs(cid, oid, aset);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    
-    char val[1000];
-    char names[1000];
-    int num = do_listxattr(fn, names, 1000);
-    
-    char *name = names;
-    for (int i=0; i<num; i++) {
-      dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-      int l = do_getxattr(fn, name, val, 1000);
-      dout(0) << "getattrs " << oid << " getting " << (i+1) << "/" << num << " '" << names << "' = " << l << " bytes" << dendl;
-      if (parse_attrname(&name)) {
-	aset[name] = buffer::create(l);
-	memcpy(aset[name].c_str(), val, l);
-      }
-      name += strlen(name) + 1;
-    }
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.getattrs(cid, oid, aset);
+
+  char fn[100];
+  get_coname(cid, oid, fn);
+  
+  return _getattrs(fn, aset);
 }
+
+
+
 
 
 int FileStore::_setattr(coll_t cid, pobject_t oid, const char *name,
 			const void *value, size_t size) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.setattr(cid, oid, name, value, size);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    char n[40];
-    get_attrname(name, n);
-    r = do_setxattr(fn, n, value, size);
-    dout(10) << "setattr " << cid << " " << oid << " '" << name << "' size " << size << " = " << r << dendl;
- }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.setattr(cid, oid, name, value, size);
+
+  char fn[100];
+  get_coname(cid, oid, fn);
+  char n[40];
+  get_attrname(name, n);
+  return do_setxattr(fn, n, value, size);
 }
 
 int FileStore::_setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.setattrs(cid, oid, aset);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    r = 0;
-    for (map<string,bufferptr>::iterator p = aset.begin();
-	 p != aset.end();
-	 ++p) {
-      char n[40];
-      get_attrname(p->first.c_str(), n);
-      r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
-      if (r < 0) {
-	cerr << "error setxattr " << strerror(errno) << std::endl;
-	break;
-      }
+  if (fake_attrs) return attrs.setattrs(cid, oid, aset);
+
+  char fn[100];
+  get_coname(cid, oid, fn);
+  int r = 0;
+  for (map<string,bufferptr>::iterator p = aset.begin();
+       p != aset.end();
+       ++p) {
+    char n[100];
+    get_attrname(p->first.c_str(), n);
+    r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
+    if (r < 0) {
+      cerr << "error setxattr " << strerror(errno) << std::endl;
+      break;
     }
   }
-  return r < 0 ? -errno:r;
+  return r;
 }
 
 
 int FileStore::_rmattr(coll_t cid, pobject_t oid, const char *name) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.rmattr(cid, oid, name);
-  else {
-    char fn[100];
-    get_coname(cid, oid, fn);
-    char n[40];
-    get_attrname(name, n);
-    r = do_removexattr(fn, n);
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.rmattr(cid, oid, name);
+
+  char fn[100];
+  get_coname(cid, oid, fn);
+  char n[40];
+  get_attrname(name, n);
+  return do_removexattr(fn, n);
 }
 
 
@@ -1573,123 +1583,80 @@ int FileStore::_rmattr(coll_t cid, pobject_t oid, const char *name)
 int FileStore::collection_getattr(coll_t c, const char *name,
 				  void *value, size_t size) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_getattr(c, name, value, size);
-  else {
-    char fn[200];
-    get_cdir(c, fn);
-    char n[200];
-    get_attrname(name, n);
-    r = do_getxattr(fn, n, value, size);   
-  }
-  return r < 0 ? -errno:r;
-}
+  if (fake_attrs) return attrs.collection_getattr(c, name, value, size);
 
-int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
-{
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_getattr(c, name, bl);
-  else {
-    buffer::ptr bp;
-    r = collection_getattr(c, name, bp);
-    bl.push_back(bp);
-  }
-  return r;
-}
-
-int FileStore::collection_getattr(coll_t c, const char *name, buffer::ptr& bp)
-{
-  int r;
   char fn[200];
   get_cdir(c, fn);
   char n[200];
   get_attrname(name, n);
-  r = do_getxattr(fn, n, NULL, 0);
-  if (r > 0) {
-    bp = buffer::create(r);
-    r = do_getxattr(fn, n, bp.c_str(), r);
-  }
-  return r < 0 ? -errno:r;
+  return do_getxattr(fn, n, value, size);   
+}
+
+int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
+{
+  if (fake_attrs) return attrs.collection_getattr(c, name, bl);
+
+  char fn[200];
+  get_cdir(c, fn);
+  char n[200];
+  get_attrname(name, n);
+  
+  buffer::ptr bp;
+  int r = _getattr(fn, n, bp);
+  bl.push_back(bp);
+  return r;
 }
 
 int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_getattrs(cid, aset);
-  else {
-    char fn[100];
-    get_cdir(cid, fn);
-    
-    char names[1000];
-    int num = do_listxattr(fn, names, 1000);
-    
-    char *name = names;
-    for (int i=0; i<num; i++) {
-      dout(0) << "getattrs " << cid << " getting " << (i+1) << "/" << num << " '" << names << "'" << dendl;
-      if (parse_attrname(&name))
-	collection_getattr(cid, name, aset[name]);
-      name += strlen(name) + 1;
-    }
-    r = 0;
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.collection_getattrs(cid, aset);
+
+  char fn[100];
+  get_cdir(cid, fn);
+  return _getattrs(fn, aset);
 }
 
 
 int FileStore::_collection_setattr(coll_t c, const char *name,
 				  const void *value, size_t size) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_setattr(c, name, value, size);
-  else {
-    char fn[200];
-    get_cdir(c, fn);
-    char n[200];
-    get_attrname(name, n);
-    r = do_setxattr(fn, n, value, size);
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.collection_setattr(c, name, value, size);
+
+  char fn[200];
+  get_cdir(c, fn);
+  char n[200];
+  get_attrname(name, n);
+  return do_setxattr(fn, n, value, size);
 }
 
 int FileStore::_collection_rmattr(coll_t c, const char *name) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_rmattr(c, name);
-  else {
-    char fn[200];
-    get_cdir(c, fn);
-    char n[200];
-    get_attrname(name, n);
-    r = do_removexattr(fn, n);
-  }
-  return r < 0 ? -errno:r;
+  if (fake_attrs) return attrs.collection_rmattr(c, name);
+
+  char fn[200];
+  get_cdir(c, fn);
+  char n[200];
+  get_attrname(name, n);
+  return do_removexattr(fn, n);
 }
 
 
 int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
 {
-  int r;
-  if (fake_attrs) 
-    r = attrs.collection_setattrs(cid, aset);
-  else {
-    char fn[100];
-    get_cdir(cid, fn);
-    int r = 0;
-    for (map<string,bufferptr>::iterator p = aset.begin();
-	 p != aset.end();
+  if (fake_attrs) return attrs.collection_setattrs(cid, aset);
+
+  char fn[100];
+  get_cdir(cid, fn);
+  int r = 0;
+  for (map<string,bufferptr>::iterator p = aset.begin();
+       p != aset.end();
        ++p) {
-      char n[200];
-      get_attrname(p->first.c_str(), n);
-      r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
-      if (r < 0) break;
-    }
+    char n[200];
+    get_attrname(p->first.c_str(), n);
+    r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
+    if (r < 0) break;
   }
-  return r < 0 ? -errno:r;
+  return r;
 }
 
 
@@ -1705,7 +1672,8 @@ int FileStore::list_collections(vector<coll_t>& ls)
   sprintf(fn, "%s", basedir.c_str());
 
   DIR *dir = ::opendir(fn);
-  assert(dir);
+  if (!dir)
+    return -errno;
 
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
@@ -1724,7 +1692,7 @@ int FileStore::collection_stat(coll_t c, struct stat *st)
 
   char fn[200];
   get_cdir(c, fn);
-  int r = ::lstat(fn, st);
+  int r = ::stat(fn, st);
   return r < 0 ? -errno:r;
 }
 
@@ -1745,7 +1713,7 @@ int FileStore::collection_list(coll_t c, vector<pobject_t>& ls)
 
   DIR *dir = ::opendir(fn);
   if (!dir)
-    return -ENOENT;
+    return -errno;
   
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
@@ -1788,30 +1756,24 @@ int FileStore::_destroy_collection(coll_t c)
 
 int FileStore::_collection_add(coll_t c, coll_t cid, pobject_t o) 
 {
-  int r;
-  if (fake_collections) 
-    r = collections.collection_add(c, o);
-  else {
-    char cof[200];
-    get_coname(c, o, cof);
-    char of[200];
-    get_coname(cid, o, of);
-    r = ::link(of, cof);
-  }
-  return r < 0 ? -errno:r;
+  if (fake_collections) return collections.collection_add(c, o);
+
+  char cof[200];
+  get_coname(c, o, cof);
+  char of[200];
+  get_coname(cid, o, of);
+  int r = ::link(of, cof);
+  return r < 0 ? -errno:0;
 }
 
 int FileStore::_collection_remove(coll_t c, pobject_t o) 
 {
-  int r;
-  if (fake_collections) 
-    r = collections.collection_remove(c, o);
-  else {
-    char cof[200];
-    get_coname(c, o, cof);
-    r = ::unlink(cof);
-  }
-  return r < 0 ? -errno:r;
+  if (fake_collections) return collections.collection_remove(c, o);
+
+  char cof[200];
+  get_coname(c, o, cof);
+  int r = ::unlink(cof);
+  return r < 0 ? -errno:0;
 }
 
 
