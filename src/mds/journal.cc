@@ -483,7 +483,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	     << " transaction " << p->second << dendl;
     MDSTableClient *client = mds->get_table_client(p->first);
     client->got_journaled_agree(p->second, logseg);
-    logseg->pending_commit_tids[p->first].insert(p->second);
   }
 
   // allocated_inos
