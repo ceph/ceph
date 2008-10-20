@@ -5252,7 +5252,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
 
   // journal
   inode_t *pi = diri->project_inode();
-  pi->ctime = mdr->now;
+  pi->ctime = g_clock.now();
   pi->version = diri->pre_dirty();
   
   mdr->ls = mdlog->get_current_segment();
