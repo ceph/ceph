@@ -81,7 +81,7 @@ void ceph_kfree(void *ptr)
 
 void ceph_bookkeeper_init(void)
 {
-	printk("bookkeeper: start\n");
+	dout(10, "bookkeeper: start\n");
 	INIT_LIST_HEAD(&_bk_allocs);
 }
 
@@ -90,18 +90,18 @@ void ceph_bookkeeper_finalize(void)
 	struct list_head *p;
 	struct alloc_data *entry;
 
-	printk("bookkeeper: total bytes alloc: %zu\n", _total_alloc);
-	printk("bookkeeper: total bytes free: %zu\n", _total_free);
+	dout(1, "bookkeeper: total bytes alloc: %zu\n", _total_alloc);
+	dout(1, "bookkeeper: total bytes free: %zu\n", _total_free);
 
 	if (_total_alloc != _total_free) {
 
 		list_for_each(p, &_bk_allocs) {
 			entry = list_entry(p, struct alloc_data, node);
-			printk("%s(%d): p=%p (%zu bytes)\n", entry->fname, entry->line,
+			dout(1, "%s(%d): p=%p (%zu bytes)\n", entry->fname, entry->line,
 				((void *)entry)+sizeof(struct alloc_data),
 				entry->size);
 		}
 	} else {
-		printk("No leaks found! Yay!\n");
+		dout(1, "No leaks found! Yay!\n");
 	}
 }
