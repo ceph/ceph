@@ -304,7 +304,7 @@ struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 
 void ceph_put_mds_session(struct ceph_mds_session *s)
 {
-	dout(0, "put_mds_session %p %d -> %d\n", s,
+	dout(30, "put_mds_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref))
 		kfree(s);

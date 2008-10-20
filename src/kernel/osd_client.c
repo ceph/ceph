@@ -97,7 +97,6 @@ static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int op,
 	if (snapc)
 		size += sizeof(u64) * snapc->num_snaps;
 	req = ceph_msg_new(CEPH_MSG_OSD_OP, size, 0, 0, NULL);
-	dout(1, "new_request_msg %p\n", req);
 	if (IS_ERR(req))
 		return req;
 	memset(req->front.iov_base, 0, req->front.iov_len);
