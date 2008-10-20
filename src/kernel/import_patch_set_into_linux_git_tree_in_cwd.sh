@@ -84,4 +84,5 @@ git commit -m 'ceph: debugging'
 
 git add fs/Kconfig
 git add fs/Makefile
+git add fs/ceph/Makefile
 git commit -m 'ceph: Kconfig, Makefile'
