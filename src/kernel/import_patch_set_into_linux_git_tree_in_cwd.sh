@@ -46,6 +46,13 @@ git add fs/ceph/osdmap.h
 git add fs/ceph/osdmap.c
 git commit -m 'ceph: OSD client'
 
+git add fs/ceph/crush/crush.h
+git add fs/ceph/crush/crush.c
+git add fs/ceph/crush/mapper.h
+git add fs/ceph/crush/mapper.c
+git add fs/ceph/crush/hash.h
+git commit -m 'ceph: CRUSH mapping algorithm'
+
 git add fs/ceph/mon_client.h
 git add fs/ceph/mon_client.c
 git commit -m 'ceph: monitor client'
