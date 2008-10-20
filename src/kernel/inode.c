@@ -1636,6 +1636,8 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 		dentry = ret;
 	if (!dentry->d_inode)
 		return -ENOENT;
+	if (ret)
+		dput(dentry); /* do_lookup spliced.. drop new dentry */
 	return 0;
 }
 
