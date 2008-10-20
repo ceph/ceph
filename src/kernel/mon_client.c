@@ -28,7 +28,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(&p, end, 2*sizeof(__u32) + 2*sizeof(__u64), bad);
+	ceph_decode_need(&p, end, 2*sizeof(u32) + 2*sizeof(u64), bad);
 	ceph_decode_64_le(&p, m->fsid.major);
 	ceph_decode_64_le(&p, m->fsid.minor);
 	ceph_decode_32(&p, m->epoch);
@@ -193,7 +193,7 @@ void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want)
 	mutex_unlock(&monc->req_mutex);
 }
 
-int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 got)
+int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 got)
 {
 	int ret = 0;
 

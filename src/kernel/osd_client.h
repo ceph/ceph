@@ -35,7 +35,7 @@ typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 
 /* an in-flight request */
 struct ceph_osd_request {
-	__u64             r_tid;              /* unique for this client */
+	u64             r_tid;              /* unique for this client */
 	struct ceph_msg  *r_request;
 	struct ceph_msg  *r_reply;
 	int               r_result;
@@ -93,7 +93,7 @@ extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_file_layout *layout,
 				      struct ceph_vino vino,
-				      __u64 offset, __u64 *len, int op,
+				      u64 offset, u64 *len, int op,
 				      struct ceph_snap_context *snapc);
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
@@ -117,7 +117,7 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct page **pagevec, int nr_pages);
 extern int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 				      struct ceph_osd_request *req,
-				      __u64 len,
+				      u64 len,
 				      int nr_pages);
 
 extern int ceph_osdc_sync_read(struct ceph_osd_client *osdc,

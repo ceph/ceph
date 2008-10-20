@@ -123,7 +123,7 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci, 
  * specified, copy the frag delegation info to the caller if
  * it is present.
  */
-__u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
+u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 		       struct ceph_inode_frag *pfrag,
 		       int *found)
 {
@@ -360,8 +360,9 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 				inode->i_mtime = *mtime;
 			if (timespec_compare(atime, &inode->i_atime) > 0)
 				inode->i_atime = *atime;
-		} else
+		} else {
 			warn = 1;
+		}
 	} else {
 		/* we have no write caps; whatever the MDS says is true */
 		if (time_warp_seq >= ci->i_time_warp_seq) {
@@ -369,8 +370,9 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 			inode->i_mtime = *mtime;
 			inode->i_atime = *atime;
 			ci->i_time_warp_seq = time_warp_seq;
-		} else
+		} else {
 			warn = 1;
+		}
 	}
 	if (warn) /* time_warp_seq shouldn't go backwards */
 		dout(10, "%p mds time_warp_seq %llu < %llu\n",
@@ -571,8 +573,9 @@ static int update_inode_lease(struct inode *inode,
 			is_new = 1;
 		}
 		list_move_tail(&ci->i_lease_item, &session->s_inode_leases);
-	} else
+	} else {
 		mask = 0;
+	}
 	spin_unlock(&inode->i_lock);
 	if (is_new)
 		igrab(inode);
@@ -755,9 +758,10 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		dput(dn);
 		dn = realdn;
 		ceph_init_dentry(dn);
-	} else
+	} else {
 		dout(10, "dn %p attached to %p ino %llx.%llx\n",
 		     dn, dn->d_inode, ceph_vinop(dn->d_inode));
+	}
 	if ((!prehash || *prehash) && d_unhashed(dn))
 		d_rehash(dn);
 out:
@@ -1187,9 +1191,9 @@ retry_lookup:
 		}
 
 		/* inode */
-		if (dn->d_inode)
+		if (dn->d_inode) {
 			in = dn->d_inode;
-		else {
+		} else {
 			in = ceph_get_inode(parent->d_sb, vino);
 			if (in == NULL) {
 				dout(30, "new_inode badness\n");
@@ -1237,8 +1241,9 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
 		ceph_check_caps(ci, 0);
-	} else
+	} else {
 		spin_unlock(&inode->i_lock);
+	}
 }
 
 /*
@@ -1317,8 +1322,9 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		truncate_inode_pages(inode->i_mapping, to);
 		if (wrbuffer_refs == 0)
 			ceph_check_caps(ci, 0);
-	} else
+	} else {
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
+	}
 }
 
 /*
@@ -1831,8 +1837,9 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 			ceph_decode_32_safe(&p, end, len, bad);
 			p += len;
 		}
-	} else
+	} else {
 		namelen = 0;
+	}
 
 	/* include virtual dir xattrs */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
@@ -1859,8 +1866,9 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 			ceph_decode_32(&p, len);
 			p += len;
 		}
-	} else
+	} else {
 		names[0] = 0;
+	}
 
 	/* virtual xattr names, too */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)

@@ -171,16 +171,16 @@ struct ceph_connection {
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
-	__u32 connect_seq, global_seq; /* identify the most recent connection
+	u32 connect_seq, global_seq; /* identify the most recent connection
 					  attempt for this connection, client */
 	
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending/sent but unacked */
-	__u32 out_seq;		     /* last message queued for send */
+	u32 out_seq;		     /* last message queued for send */
 
-	__u32 in_seq, in_seq_acked;  /* last message received, acked */
+	u32 in_seq, in_seq_acked;  /* last message received, acked */
 
 	/* connection negotiation temps */
 	char in_banner[CEPH_BANNER_MAX_LEN];

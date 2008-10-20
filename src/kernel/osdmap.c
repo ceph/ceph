@@ -45,10 +45,10 @@ static int crush_decode_uniform_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_uniform_bucket %p to %p\n", *p, end);
-	b->primes = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
+	b->primes = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
 	if (b->primes == NULL)
 		return -ENOMEM;
-	ceph_decode_need(p, end, (1+b->h.size) * sizeof(__u32), bad);
+	ceph_decode_need(p, end, (1+b->h.size) * sizeof(u32), bad);
 	for (j = 0; j < b->h.size; j++)
 		ceph_decode_32(p, b->primes[j]);
 	ceph_decode_32(p, b->item_weight);
@@ -62,13 +62,13 @@ static int crush_decode_list_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_list_bucket %p to %p\n", *p, end);
-	b->item_weights = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
+	b->item_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
 	if (b->item_weights == NULL)
 		return -ENOMEM;
-	b->sum_weights = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
+	b->sum_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
 	if (b->sum_weights == NULL)
 		return -ENOMEM;
-	ceph_decode_need(p, end, 2 * b->h.size * sizeof(__u32), bad);
+	ceph_decode_need(p, end, 2 * b->h.size * sizeof(u32), bad);
 	for (j = 0; j < b->h.size; j++) {
 		ceph_decode_32(p, b->item_weights[j]);
 		ceph_decode_32(p, b->sum_weights[j]);
@@ -83,10 +83,10 @@ static int crush_decode_tree_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_tree_bucket %p to %p\n", *p, end);
-	b->node_weights = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
+	b->node_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
 	if (b->node_weights == NULL)
 		return -ENOMEM;
-	ceph_decode_need(p, end, b->h.size * sizeof(__u32), bad);
+	ceph_decode_need(p, end, b->h.size * sizeof(u32), bad);
 	for (j = 0; j < b->h.size; j++)
 		ceph_decode_32(p, b->node_weights[j]);
 	return 0;
@@ -99,10 +99,10 @@ static int crush_decode_straw_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_straw_bucket %p to %p\n", *p, end);
-	b->straws = kmalloc(b->h.size * sizeof(__u32), GFP_NOFS);
+	b->straws = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
 	if (b->straws == NULL)
 		return -ENOMEM;
-	ceph_decode_need(p, end, 2 * b->h.size * sizeof(__u32), bad);
+	ceph_decode_need(p, end, 2 * b->h.size * sizeof(u32), bad);
 	for (j = 0; j < b->h.size; j++) {
 		ceph_decode_32(p, b->item_weights[j]);
 		ceph_decode_32(p, b->straws[j]);
@@ -126,18 +126,18 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 3*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 3*sizeof(u32), bad);
 	ceph_decode_32(p, c->max_buckets);
 	ceph_decode_32(p, c->max_rules);
 	ceph_decode_32(p, c->max_devices);
 
-	c->device_offload = kmalloc(c->max_devices * sizeof(__u32), GFP_NOFS);
+	c->device_offload = kmalloc(c->max_devices * sizeof(u32), GFP_NOFS);
 	if (c->device_offload == NULL)
 		goto badmem;
-	c->device_parents = kmalloc(c->max_devices * sizeof(__u32), GFP_NOFS);
+	c->device_parents = kmalloc(c->max_devices * sizeof(u32), GFP_NOFS);
 	if (c->device_parents == NULL)
 		goto badmem;
-	c->bucket_parents = kmalloc(c->max_buckets * sizeof(__u32), GFP_NOFS);
+	c->bucket_parents = kmalloc(c->max_buckets * sizeof(u32), GFP_NOFS);
 	if (c->bucket_parents == NULL)
 		goto badmem;
 
@@ -148,14 +148,14 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	if (c->rules == NULL)
 		goto badmem;
 
-	ceph_decode_need(p, end, c->max_devices * sizeof(__u32), bad);
+	ceph_decode_need(p, end, c->max_devices * sizeof(u32), bad);
 	for (i = 0; i < c->max_devices; i++)
 		ceph_decode_32(p, c->device_offload[i]);
 
 	/* buckets */
 	for (i = 0; i < c->max_buckets; i++) {
 		int size = 0;
-		__u32 type;
+		u32 type;
 		struct crush_bucket *b;
 
 		dout(30, "crush_decode bucket %d off %x %p to %p\n",
@@ -188,7 +188,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 		if (b == NULL)
 			goto badmem;
 
-		ceph_decode_need(p, end, 4*sizeof(__u32), bad);
+		ceph_decode_need(p, end, 4*sizeof(u32), bad);
 		ceph_decode_32(p, b->id);
 		ceph_decode_16(p, b->type);
 		ceph_decode_16(p, b->alg);
@@ -202,7 +202,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 		if (b->items == NULL)
 			goto badmem;
 
-		ceph_decode_need(p, end, b->size*sizeof(__u32), bad);
+		ceph_decode_need(p, end, b->size*sizeof(u32), bad);
 		for (j = 0; j < b->size; j++)
 			ceph_decode_32(p, b->items[j]);
 
@@ -237,7 +237,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	/* rules */
 	dout(30, "rule vec is %p\n", c->rules);
 	for (i = 0; i < c->max_rules; i++) {
-		__u32 yes;
+		u32 yes;
 		struct crush_rule *r;
 
 		ceph_decode_32_safe(p, end, yes, bad);
@@ -262,7 +262,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 		dout(30, " rule %d is at %p\n", i, r);
 		r->len = yes;
 		ceph_decode_copy_safe(p, end, &r->mask, 4, bad); /* 4 u8's */
-		ceph_decode_need(p, end, r->len*3*sizeof(__u32), bad);
+		ceph_decode_need(p, end, r->len*3*sizeof(u32), bad);
 		for (j = 0; j < r->len; j++) {
 			ceph_decode_32(p, r->steps[j].op);
 			ceph_decode_32(p, r->steps[j].arg1);
@@ -302,10 +302,10 @@ void osdmap_destroy(struct ceph_osdmap *map)
  */
 static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 {
-	__u8 *state;
+	u8 *state;
 	struct ceph_entity_addr *addr;
 
-	state = kzalloc(max * sizeof(__u32), GFP_NOFS);
+	state = kzalloc(max * sizeof(u32), GFP_NOFS);
 	addr = kzalloc(max * sizeof(struct ceph_entity_addr), GFP_NOFS);
 	if (state == NULL || addr == NULL) {
 		kfree(state);
@@ -333,7 +333,7 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 struct ceph_osdmap *osdmap_decode(void **p, void *end)
 {
 	struct ceph_osdmap *map;
-	__u32 len, max;
+	u32 len, max;
 	int err = -EINVAL;
 	void *start = *p;
 
@@ -343,7 +343,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 2*sizeof(__u64)+11*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 2*sizeof(u64)+11*sizeof(u32), bad);
 	ceph_decode_64_le(p, map->fsid.major);
 	ceph_decode_64_le(p, map->fsid.minor);
 	ceph_decode_32(p, map->epoch);
@@ -370,7 +370,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 	/* osds */
 	err = -EINVAL;
-	ceph_decode_need(p, end, 2*sizeof(__u32) +
+	ceph_decode_need(p, end, 2*sizeof(u32) +
 			 map->max_osd*(1+sizeof(*map->osd_addr)), bad);
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_state, map->max_osd);
@@ -382,7 +382,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 	/* ignore pg primary swapping */
 	ceph_decode_32_safe(p, end, len, bad);
-	p += len * (sizeof(__u64) + sizeof(__u32));
+	p += len * (sizeof(u64) + sizeof(u32));
 	if (len)
 		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
 		     map->epoch);
@@ -426,14 +426,14 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = NULL;
 	struct ceph_fsid fsid;
-	__u32 epoch = 0;
+	u32 epoch = 0;
 	struct ceph_timespec ctime;
-	__u32 len, x;
+	u32 len, x;
 	__s32 new_flags, max;
 	void *start = *p;
 	int err = -EINVAL;
 
-	ceph_decode_need(p, end, sizeof(fsid)+sizeof(ctime)+2*sizeof(__u32),
+	ceph_decode_need(p, end, sizeof(fsid)+sizeof(ctime)+2*sizeof(u32),
 			 bad);
 	ceph_decode_64_le(p, fsid.major);
 	ceph_decode_64_le(p, fsid.minor);
@@ -466,7 +466,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	if (new_flags >= 0)
 		map->flags = new_flags;
 
-	ceph_decode_need(p, end, 5*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 5*sizeof(u32), bad);
 
 	/* new max? */
 	ceph_decode_32(p, max);
@@ -501,7 +501,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	err = -EINVAL;
 	ceph_decode_32_safe(p, end, len, bad);
 	while (len--) {
-		__u32 osd;
+		u32 osd;
 		struct ceph_entity_addr addr;
 		ceph_decode_32_safe(p, end, osd, bad);
 		ceph_decode_copy_safe(p, end, &addr, sizeof(addr), bad);
@@ -514,7 +514,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* new_down */
 	ceph_decode_32_safe(p, end, len, bad);
 	while (len--) {
-		__u32 osd;
+		u32 osd;
 		ceph_decode_32_safe(p, end, osd, bad);
 		(*p)++;  /* clean flag */
 		dout(1, "osd%d down\n", osd);
@@ -527,8 +527,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	/* new_offload */
 	ceph_decode_32_safe(p, end, len, bad);
 	while (len--) {
-		__u32 osd, off;
-		ceph_decode_need(p, end, sizeof(__u32)*2, bad);
+		u32 osd, off;
+		ceph_decode_need(p, end, sizeof(u32)*2, bad);
 		ceph_decode_32(p, osd);
 		ceph_decode_32(p, off);
 		dout(1, "osd%d offload 0x%x %s\n", osd, off,
@@ -544,20 +544,20 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 
 	/* skip old/new pg_swap stuff */
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * (sizeof(__u64) + sizeof(__u32));
+	*p += len * (sizeof(u64) + sizeof(u32));
 	if (len)
 		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
 		     epoch);
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * sizeof(__u64);
+	*p += len * sizeof(u64);
 	if (len)
 		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
 		     epoch);
 
 	/* skip new_max_snap, removed_snaps */
-	*p += sizeof(__u64);
+	*p += sizeof(u64);
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * 2 * sizeof(__u64);
+	*p += len * 2 * sizeof(u64);
 
 	if (*p != end) {
 		derr(10, "osdmap incremental has trailing gunk?\n");
@@ -585,9 +585,9 @@ bad:
  * pass a stride back to the caller.
  */
 void calc_file_object_mapping(struct ceph_file_layout *layout,
-			      __u64 off, __u64 *plen,
+			      u64 off, u64 *plen,
 			      struct ceph_object *oid,
-			      __u64 *oxoff, __u64 *oxlen)
+			      u64 *oxoff, u64 *oxlen)
 {
 	u32 osize = le32_to_cpu(layout->fl_object_size);
 	u32 su = le32_to_cpu(layout->fl_stripe_unit);
@@ -618,7 +618,7 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = off;
 	*oxoff = do_div(t, su);
-	*oxlen = min_t(__u64, *plen, su - *oxoff);
+	*oxlen = min_t(u64, *plen, su - *oxoff);
 	*plen = *oxlen;
 
 	dout(80, " obj extent %llu~%llu\n", *oxoff, *oxlen);

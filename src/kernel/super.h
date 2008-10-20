@@ -85,7 +85,7 @@ extern struct kobject *ceph_kobj;
  * mounting the same ceph filesystem/cluster.
  */
 struct ceph_client {
-	__u32 whoami;                   /* my client number */
+	u32 whoami;                   /* my client number */
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
@@ -276,7 +276,7 @@ __ceph_find_frag(struct ceph_inode_info *ci, u32 f)
  * choose fragment for value @v.  copy frag content to pfrag, if leaf
  * exists
  */
-extern __u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
+extern u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 			      struct ceph_inode_frag *pfrag,
 			      int *found);
 
@@ -640,7 +640,7 @@ extern const struct inode_operations ceph_dir_iops;
 extern struct dentry_operations ceph_dentry_ops, ceph_snap_dentry_ops,
 	ceph_snapdir_dentry_ops;
 
-extern char *ceph_build_path(struct dentry *dn, int *len, __u64 *base, int min);
+extern char *ceph_build_path(struct dentry *dn, int *len, u64 *base, int min);
 extern struct dentry *ceph_do_lookup(struct super_block *sb,
 				     struct dentry *dentry,
 				     int mask, int on_inode, int locked_dir);

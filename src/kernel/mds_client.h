@@ -45,9 +45,9 @@ struct ceph_cap;
  */
 struct ceph_mds_reply_info_in {
 	struct ceph_mds_reply_inode *in;
-	__u32 symlink_len;
+	u32 symlink_len;
 	char *symlink;
-	__u32 xattr_len;
+	u32 xattr_len;
 	char *xattr_data;
 };
 
@@ -64,14 +64,14 @@ struct ceph_mds_reply_info_parsed {
 	struct ceph_mds_reply_lease   **trace_ilease;
 	struct ceph_mds_reply_dirfrag **trace_dir;
 	char                          **trace_dname;
-	__u32                         *trace_dname_len;
+	u32                           *trace_dname_len;
 	struct ceph_mds_reply_lease   **trace_dlease;
 
 	struct ceph_mds_reply_dirfrag *dir_dir;
 	int                           dir_nr;
 	struct ceph_mds_reply_lease   **dir_ilease;
 	char                          **dir_dname;
-	__u32                         *dir_dname_len;
+	u32                           *dir_dname_len;
 	struct ceph_mds_reply_lease   **dir_dlease;
 	struct ceph_mds_reply_info_in *dir_in;
 
@@ -123,7 +123,7 @@ enum {
  * an in-flight mds request
  */
 struct ceph_mds_request {
-	__u64             r_tid;      /* transaction id */
+	u64             r_tid;      /* transaction id */
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info_parsed r_reply_info;
@@ -181,7 +181,7 @@ struct ceph_mds_client {
 	struct rw_semaphore     snap_rwsem;
 	struct radix_tree_root  snap_realms;
 
-	__u64                   last_tid;      /* most recent mds request */
+	u64                   last_tid;      /* most recent mds request */
 	struct radix_tree_root  request_tree;  /* pending mds requests */
 	struct delayed_work     delayed_work;  /* delayed work */
 	unsigned long last_renew_caps;     /* last time we renewed our caps */

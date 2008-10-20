@@ -19,21 +19,21 @@
 #define ceph_decode_64(p, v)				\
 	do {						\
 		v = le64_to_cpu(*(__le64*)*(p));	\
-		*(p) += sizeof(__u64);			\
+		*(p) += sizeof(u64);			\
 	} while (0)
 #define ceph_decode_32(p, v)				\
 	do {						\
 		v = le32_to_cpu(*(__le32*)*(p));	\
-		*(p) += sizeof(__u32);			\
+		*(p) += sizeof(u32);			\
 	} while (0)
 #define ceph_decode_16(p, v)				\
 	do {						\
 		v = le16_to_cpu(*(__le16*)*(p));	\
-		*(p) += sizeof(__u16);			\
+		*(p) += sizeof(u16);			\
 	} while (0)
 #define ceph_decode_8(p, v)				\
 	do {						\
-		v = *(__u8*)*(p);			\
+		v = *(u8*)*(p);			\
 		(*p)++;					\
 	} while (0)
 
@@ -41,17 +41,17 @@
 #define ceph_decode_64_le(p, v)				\
 	do {						\
 		v = *(__le64*)*(p);			\
-		*(p) += sizeof(__u64);			\
+		*(p) += sizeof(u64);			\
 	} while (0)
 #define ceph_decode_32_le(p, v)				\
 	do {						\
 		v = *(__le32*)*(p);			\
-		*(p) += sizeof(__u32);			\
+		*(p) += sizeof(u32);			\
 	} while (0)
 #define ceph_decode_16_le(p, v)				\
 	do {						\
 		v = *(__le16*)*(p);			\
-		*(p) += sizeof(__u16);			\
+		*(p) += sizeof(u16);			\
 	} while (0)
 
 #define ceph_decode_copy(p, pv, n)			\
@@ -63,17 +63,17 @@
 /* bounds check too */
 #define ceph_decode_64_safe(p, end, v, bad)			\
 	do {							\
-		ceph_decode_need(p, end, sizeof(__u64), bad);	\
+		ceph_decode_need(p, end, sizeof(u64), bad);	\
 		ceph_decode_64(p, v);				\
 	} while (0)
 #define ceph_decode_32_safe(p, end, v, bad)			\
 	do {							\
-		ceph_decode_need(p, end, sizeof(__u32), bad);	\
+		ceph_decode_need(p, end, sizeof(u32), bad);	\
 		ceph_decode_32(p, v);				\
 	} while (0)
 #define ceph_decode_16_safe(p, end, v, bad)			\
 	do {							\
-		ceph_decode_need(p, end, sizeof(__u16), bad);	\
+		ceph_decode_need(p, end, sizeof(u16), bad);	\
 		ceph_decode_16(p, v);				\
 	} while (0)
 
@@ -104,21 +104,21 @@
 #define ceph_encode_64(p, v)			  \
 	do {					  \
 		*(__le64*)*(p) = cpu_to_le64((v)); \
-		*(p) += sizeof(__u64);		  \
+		*(p) += sizeof(u64);		  \
 	} while (0)
 #define ceph_encode_32(p, v)			  \
 	do {					  \
 		*(__le32*)*(p) = cpu_to_le32((v)); \
-		*(p) += sizeof(__u32);		  \
+		*(p) += sizeof(u32);		  \
 	} while (0)
 #define ceph_encode_16(p, v)			  \
 	do {					  \
 		*(__le16*)*(p) = cpu_to_le16((v)); \
-		*(p) += sizeof(__u16);		  \
+		*(p) += sizeof(u16);		  \
 	} while (0)
 #define ceph_encode_8(p, v)			  \
 	do {					  \
-		*(__u8*)*(p) = v;		  \
+		*(u8*)*(p) = v;		  \
 		(*(p))++;			  \
 	} while (0)
 
@@ -126,9 +126,9 @@
  * filepath, string encoders
  */
 static __inline__ void ceph_encode_filepath(void **p, void *end,
-					    __u64 ino, const char *path)
+					    u64 ino, const char *path)
 {
-	__u32 len = path ? strlen(path):0;
+	u32 len = path ? strlen(path):0;
 	BUG_ON(*p + sizeof(ino) + sizeof(len) + len > end);
 	ceph_encode_64(p, ino);
 	ceph_encode_32(p, len);
@@ -138,7 +138,7 @@ static __inline__ void ceph_encode_filepath(void **p, void *end,
 }
 
 static __inline__ void ceph_encode_string(void **p, void *end,
-					  const char *s, __u32 len)
+					  const char *s, u32 len)
 {
 	BUG_ON(*p + sizeof(len) + len > end);
 	ceph_encode_32(p, len);

@@ -93,8 +93,9 @@ static void ceph_write_space(struct sock *sk)
 	if (test_bit(WRITE_PENDING, &con->state)) {
 		dout(30, "ceph_write_space %p queueing write work\n", con);
 		ceph_queue_con(con);
-	} else
+	} else {
 		dout(30, "ceph_write_space %p nothing to write\n", con);
+	}
 
 	/* since we have our own write_space, clear the SOCK_NOSPACE flag */
 	clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
@@ -340,8 +341,8 @@ static unsigned long hash_addr(struct ceph_entity_addr *addr)
 {
 	unsigned long key;
 
-	key = *(__u32 *)&addr->ipaddr.sin_addr.s_addr;
-	key ^= *(__u16 *)&addr->ipaddr.sin_port;
+	key = *(u32 *)&addr->ipaddr.sin_addr.s_addr;
+	key ^= *(u16 *)&addr->ipaddr.sin_port;
 	return key;
 }
 
@@ -433,8 +434,9 @@ static int __register_connection(struct ceph_messenger *msgr,
 	if (test_and_clear_bit(ACCEPTING, &con->state)) {
 		list_del_init(&con->list_bucket);
 		put_connection(con);
-	} else
+	} else {
 		list_add(&con->list_all, &msgr->con_all);
+	}
 
 	head = radix_tree_lookup(&msgr->con_tree, key);
 	if (head) {

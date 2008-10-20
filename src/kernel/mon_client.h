@@ -80,11 +80,11 @@ extern void ceph_monc_stop(struct ceph_mon_client *monc);
  * @want, and to indicate which maps receive.  Periodically rerequest the map
  * from the monitor cluster until we get what we want.
  */
-extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, __u32 want);
-extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, __u32 have);
+extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, u32 want);
+extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 have);
 
-extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, __u32 want);
-extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, __u32 have);
+extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want);
+extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 have);
 
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 
