@@ -90,8 +90,6 @@ void ceph_bookkeeper_finalize(void)
 	struct list_head *p;
 	struct alloc_data *entry;
 
-	p=kmalloc(100, GFP_KERNEL);
-
 	printk("bookkeeper: total bytes alloc: %zu\n", _total_alloc);
 	printk("bookkeeper: total bytes free: %zu\n", _total_free);
 
