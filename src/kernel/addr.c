@@ -302,9 +302,17 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		SetPageUptodate(page);
 		unlock_page(page);
 		if (pagevec_add(&pvec, page) == 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+			pagevec_lru_add_file(&pvec);   /* add to lru */
+#else
 			pagevec_lru_add(&pvec);   /* add to lru */
+#endif
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+	pagevec_lru_add_file(&pvec);
+#else
 	pagevec_lru_add(&pvec);
+#endif
 	return 0;
 }
 
