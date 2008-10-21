@@ -385,7 +385,8 @@ static match_table_t arg_tokens = {
 /*
  * FIXME: add error checking to ip parsing
  */
-static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr, int max_count, int *count)
+static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr,
+		    int max_count, int *count)
 {
 	int i;
 	int v;
@@ -411,18 +412,32 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr, int m
 			if (*p == '.')
 				p++;
 		}
-
 		if (i != 4)
 			goto bad;
-
 		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = htonl(ip);
-		dout(15, "parse_ip got %u.%u.%u.%u\n",
-			ip >> 24, (ip >> 16) & 0xff,
-			(ip >> 8) & 0xff, ip & 0xff);
+
+		/* port? */
+		if (*p == ':') {
+			p++;
+			numstart = p;
+			v = 0;
+			while (!ADDR_DELIM(*p) && *p != '.' && p < c+len) {
+				if (*p < '0' || *p > '9')
+					goto bad;
+				v = (v * 10) + (*p - '0');
+				p++;
+			}
+			if (v > 65535 || numstart == p)
+				goto bad;
+			addr[mon_count].ipaddr.sin_port = htons(v);
+		} else
+			addr[mon_count].ipaddr.sin_port = htons(CEPH_MON_PORT);
+
+		dout(15, "parse_ip got %u.%u.%u.%u:%u\n",
+		     IPQUADPORT(addr[mon_count].ipaddr));
 
 		if (*p != ',')
 			break;
-
 		p++;
 	}
 
@@ -457,10 +472,11 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->mount_timeout = 30; /* seconds */
 	args->snapdir_name = ".snap";
 
-	/* ip1[,ip2...]:/subdir/in/fs */
-	c = strchr(dev_name, ':');
+	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
+	c = strstr(dev_name, ":/");
 	if (c == NULL)
 		return -EINVAL;
+	*c = 0;
 
 	/* get mon ip(s) */
 	len = c - dev_name;
@@ -471,10 +487,12 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	for (i=0; i<args->num_mon; i++) {
 		args->mon_addr[i].ipaddr.sin_family = AF_INET;
-		args->mon_addr[i].ipaddr.sin_port = htons(CEPH_MON_PORT);
 		args->mon_addr[i].erank = 0;
 		args->mon_addr[i].nonce = 0;
 	}
+	args->my_addr.ipaddr.sin_family = AF_INET;
+	args->my_addr.ipaddr.sin_addr.s_addr = htonl(0);
+	args->my_addr.ipaddr.sin_port = htons(0);
 
 	/* path on server */
 	c++;
@@ -507,11 +525,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_fsidminor:
 			args->fsid.minor = cpu_to_le64(intval);
-			break;
-		case Opt_monport:
-			for (i = 0; i < args->num_mon; i++)
-				args->mon_addr[i].ipaddr.sin_port =
-					htons(intval);
 			break;
 		case Opt_port:
 			args->my_addr.ipaddr.sin_port = htons(intval);

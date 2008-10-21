@@ -66,11 +66,7 @@ no 'du' or similar recursive scan of the file system is required.
 Mount Options
 =============
 
-  monport=N 
- 	Specify the port for the monitor if it is running on a port
-	other than the default of 12345.
-
-  ip=A.B.C.D
+  ip=A.B.C.D[:N]
   port=N
         Specify the IP and/or port the client should bind to locally.
 	There is normally not much reason to do this.  If the IP is not
