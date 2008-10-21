@@ -17,7 +17,19 @@ git apply $cephtree/src/kernel/kbuild.patch
 
 # build the patch sequence
 git add fs/ceph/ceph_fs.h
-git commit -m 'ceph: on-wire types'
+git commit -F - <<EOF
+ceph: on-wire types
+
+This header describes the types used to exchange messages between the
+Ceph client and servers.  All types little-endian and packed.
+
+Additionally, we define a few magic values to identify the current
+version of the protocol(s) in use, allowing discrepancies to be
+detected on mount.
+
+There is a bit of #include cruft because ceph_fs.h is included both by
+the the kernel module and by the user space code.
+EOF
 
 git add fs/ceph/types.h
 git add fs/ceph/super.h
