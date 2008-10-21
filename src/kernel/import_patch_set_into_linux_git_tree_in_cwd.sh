@@ -9,9 +9,10 @@ test -e $cephtree/src/kernel/super.h || exit 0
 # copy into the tree
 mkdir fs/ceph
 mkdir fs/ceph/crush
-cp $cephtree/src/kernel/*.[ch] fs/ceph
 cp $cephtree/src/kernel/Makefile fs/ceph
-cp $cephtree/src/kernel/crush/crush.h fs/ceph/crush
+cp $cephtree/src/kernel/*.[ch] fs/ceph
+cp $cephtree/src/kernel/crush/*.[ch] fs/ceph/crush
+cp $cephtree/src/kernel/ceph.txt Documentation/filesystems
 git apply $cephtree/src/kernel/kbuild.patch
 
 # build the patch sequence
