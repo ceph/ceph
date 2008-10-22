@@ -4,7 +4,6 @@
 #include <linux/radix-tree.h>
 #include <linux/completion.h>
 
-#include "ceph_fs.h"
 #include "types.h"
 #include "osdmap.h"
 

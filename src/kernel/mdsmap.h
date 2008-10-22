@@ -1,7 +1,7 @@
 #ifndef _FS_CEPH_MDSMAP_H
 #define _FS_CEPH_MDSMAP_H
 
-#include "ceph_fs.h"
+#include "types.h"
 
 /*
  * mds map

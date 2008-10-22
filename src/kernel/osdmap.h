@@ -1,7 +1,7 @@
 #ifndef _FS_CEPH_OSDMAP_H
 #define _FS_CEPH_OSDMAP_H
 
-#include "ceph_fs.h"
+#include "types.h"
 #include "crush/crush.h"
 
 /*

@@ -10,9 +10,8 @@
 #include <linux/sysfs.h>
 #include <linux/backing-dev.h>
 
-#include "ceph_fs.h"
-#include "ceph_debug.h"
 #include "types.h"
+#include "ceph_debug.h"
 #include "messenger.h"
 #include "mon_client.h"
 #include "mds_client.h"

@@ -9,7 +9,7 @@
 #include <linux/version.h>
 #include <linux/workqueue.h>
 
-#include "ceph_fs.h"
+#include "types.h"
 
 /*
  * Ceph uses the messenger to exchange ceph_msg messages with

@@ -1,27 +1,26 @@
-/* ceph_fs.h
+/*
+ * ceph_fs.h - Ceph constants and data types to share between kernel and
+ * user space.
  *
- * C data types to share between kernel and userspace.
+ * LGPL2
  */
 
 #ifndef _FS_CEPH_CEPH_FS_H
 #define _FS_CEPH_CEPH_FS_H
 
-#ifdef __KERNEL__
-# include <linux/in.h>
-# include <linux/types.h>
-# include <asm/fcntl.h>
-# include <linux/string.h>
-#endif
-
 
 #define CEPH_MON_PORT 12345
-#define CEPH_FILE_MAX_SIZE (1ULL << 40) /* 1 TB */
 
+/*
+ * Max file size is a policy choice; in reality we are limited
+ * by 2^64.
+ */
+#define CEPH_FILE_MAX_SIZE (1ULL << 40)   /* 1 TB */
 
 /*
  * tcp connection banner.  include a protocol version. and adjust
- * whenever the wire protocol changes.  try to keep this string the
- * same length.
+ * whenever the wire protocol changes.  try to keep this string length
+ * constant.
  */
 #define CEPH_BANNER "ceph 004\n"
 #define CEPH_BANNER_MAX_LEN 30
