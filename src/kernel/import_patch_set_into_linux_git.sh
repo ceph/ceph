@@ -3,6 +3,7 @@
 # run me from the root of a _linux_ git tree, and pass ceph tree root.
 cephtree=$1
 echo ceph tree at $cephtree.
+test -d .git || exit 0
 test -e include/linux/mm.h || exit 0
 test -e $cephtree/src/kernel/super.h || exit 0
 
@@ -16,6 +17,9 @@ cp $cephtree/src/kernel/ceph.txt Documentation/filesystems
 git apply $cephtree/src/kernel/kbuild.patch
 
 # build the patch sequence
+git branch -D series_start
+git branch series_start
+
 git add fs/ceph/ceph_fs.h
 git commit -F - <<EOF
 ceph: on-wire types
@@ -229,3 +233,10 @@ ceph: Kconfig, Makefile
 Kconfig options and Makefile.
 
 EOF
+
+
+# build the patch files
+mkdir out
+rm out/
+git-format-patch -o out -n series_start..HEAD
+git diff --stat series_start > out/diffstat
