@@ -1344,14 +1344,16 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 
 
 /*
- * Force a flush of any write caps we hold.
+ * Force a flush of any snap_caps and write caps we hold.
+ *
+ * Caller holds snap_rwsem, s_mutex.
  */
 void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
-			   struct ceph_mds_session *session,
-			   int purge)
+			   struct ceph_mds_session *session)
 {
 	struct list_head *p, *n;
 
+	dout(10, "flush_write_caps mds%d\n", session->s_mds);
 	list_for_each_safe (p, n, &session->s_caps) {
 		struct ceph_cap *cap =
 			list_entry(p, struct ceph_cap, session_caps);
@@ -1359,6 +1361,10 @@ void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 		int used, wanted;
 
 		spin_lock(&inode->i_lock);
+
+		if (!list_empty(&cap->ci->i_cap_snaps))
+			__ceph_flush_snaps(cap->ci);
+
 		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
 			spin_unlock(&inode->i_lock);
 			continue;
@@ -1366,8 +1372,7 @@ void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 
 		used = __ceph_caps_used(cap->ci);
 		wanted = __ceph_caps_wanted(cap->ci);
-
-		if (purge && (used || wanted)) {
+		if (used || wanted) {
 			derr(0, "residual caps on %p u %d w %d s=%llu wrb=%d\n",
 			     inode, used, wanted, inode->i_size,
 			     cap->ci->i_wrbuffer_ref);

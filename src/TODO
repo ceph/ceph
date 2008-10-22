@@ -48,7 +48,6 @@ snaps on osd
 
 kernel client
 - make osd retry writes if failure after ack..
-- clean up cap flush on session close
 - ACLs
 - reconnect path should include pathbase, not just a string?
 - make writepages maybe skip pages with errors?

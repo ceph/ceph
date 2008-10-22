@@ -1718,7 +1718,7 @@ static int close_session(struct ceph_mds_client *mdsc,
 	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
 		goto done;
 
-	ceph_flush_write_caps(mdsc, session, 1);
+	ceph_flush_write_caps(mdsc, session);
 
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
 	err = request_close_session(mdsc, session);
