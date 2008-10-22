@@ -24,21 +24,21 @@ struct crush_map *crush_create()
 void crush_finalize(struct crush_map *map)
 {
 	int b, i;
-	
+
 	/* calc max_devices */
 	for (b=0; b<map->max_buckets; b++) {
 		if (map->buckets[b] == 0) continue;
-		for (i=0; i<map->buckets[b]->size; i++) 
+		for (i=0; i<map->buckets[b]->size; i++)
 			if (map->buckets[b]->items[i] >= map->max_devices)
 				map->max_devices = map->buckets[b]->items[i] + 1;
 	}
-	
+
 	/* allocate arrays */
 	map->device_parents = malloc(sizeof(map->device_parents[0]) * map->max_devices);
 	memset(map->device_parents, 0, sizeof(map->device_parents[0]) * map->max_devices);
 	map->bucket_parents = malloc(sizeof(map->bucket_parents[0]) * map->max_buckets);
 	memset(map->bucket_parents, 0, sizeof(map->bucket_parents[0]) * map->max_buckets);
-	
+
 	/* build parent maps */
 	crush_calc_parents(map);
 
@@ -70,7 +70,7 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 		map->rules = realloc(map->rules, map->max_rules * sizeof(map->rules[0]));
 		memset(map->rules + oldsize, 0, (map->max_rules-oldsize) * sizeof(map->rules[0]));
 	}
-	
+
 	/* add it */
 	map->rules[ruleno] = rule;
 	return ruleno;
@@ -105,7 +105,7 @@ int crush_get_next_bucket_id(struct crush_map *map)
 {
 	int pos;
 	for (pos=0; pos < map->max_buckets; pos++)
-		if (map->buckets[pos] == 0) 
+		if (map->buckets[pos] == 0)
 			break;
 	return -1 - pos;
 }
@@ -119,7 +119,7 @@ int crush_add_bucket(struct crush_map *map,
 	int pos;
 
 	/* find a bucket id */
-	if (id == 0) 
+	if (id == 0)
 		id = crush_get_next_bucket_id(map);
 	pos = -1 - id;
 
@@ -153,20 +153,20 @@ crush_make_uniform_bucket(int type, int size,
 {
 	int i, j, x;
 	struct crush_bucket_uniform *bucket;
-	
+
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_UNIFORM;
 	bucket->h.type = type;
 	bucket->h.size = size;
 	bucket->h.weight = size * item_weight;
-	
+
 	bucket->item_weight = item_weight;
-	
+
 	bucket->h.items = malloc(sizeof(__u32)*size);
 	for (i=0; i<size; i++)
 		bucket->h.items[i] = items[i];
-	
+
 	/* generate some primes */
 	bucket->primes = malloc(sizeof(__u32)*size);
 
@@ -177,12 +177,12 @@ crush_make_uniform_bucket(int type, int size,
 	x = size + 1;
 	x += crush_hash32(size) % (3*size);  /* make it big */
 	x |= 1;                              /* and odd */
-	
+
 	i=0;
 	while (i < size) {
-		for (j=2; j*j <= x; j++) 
+		for (j=2; j*j <= x; j++)
 			if (x % j == 0) break;
-		if (j*j > x) 
+		if (j*j > x)
 			bucket->primes[i++] = x;
 		x += 2;
 	}
@@ -207,7 +207,7 @@ crush_make_list_bucket(int type, int size,
 	bucket->h.alg = CRUSH_BUCKET_LIST;
 	bucket->h.type = type;
 	bucket->h.size = size;
-	
+
 	bucket->h.items = malloc(sizeof(__u32)*size);
 	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->sum_weights = malloc(sizeof(__u32)*size);
@@ -215,7 +215,7 @@ crush_make_list_bucket(int type, int size,
 	/*
 	 * caller will place new items at end.  so, we reverse things,
 	 * since we put new items at the beginning.
-	 */ 
+	 */
 	for (i=0; i<size; i++) {
 		int pos = size - i - 1;
 		bucket->h.items[pos] = items[i];
@@ -225,7 +225,7 @@ crush_make_list_bucket(int type, int size,
 		/*printf("%d item %d weight %d sum %d\n",
 		  i, items[i], weights[i], bucket->sum_weights[i]);*/
 	}
-	
+
 	bucket->h.weight = w;
 
 	return bucket;
@@ -237,15 +237,15 @@ crush_make_list_bucket(int type, int size,
 static int height(int n) {
 	int h = 0;
 	while ((n & 1) == 0) {
-		h++; 
+		h++;
 		n = n >> 1;
 	}
 	return h;
 }
-static int on_right(int n, int h) { 
-	return n & (1 << (h+1)); 
+static int on_right(int n, int h) {
+	return n & (1 << (h+1));
 }
-static int parent(int n) 
+static int parent(int n)
 {
 	int h = height(n);
 	if (on_right(n, h))
@@ -263,7 +263,7 @@ crush_make_tree_bucket(int type, int size,
 	int depth;
 	int node;
 	int t, i, j;
-	
+
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_TREE;
@@ -283,7 +283,7 @@ crush_make_tree_bucket(int type, int size,
 
 	memset(bucket->h.items, 0, sizeof(__u32)*bucket->h.size);
 	memset(bucket->node_weights, 0, sizeof(__u32)*bucket->h.size);
-	
+
 	for (i=0; i<size; i++) {
 		node = ((i+1) << 1)-1;
 		bucket->h.items[node] = items[i];
@@ -304,7 +304,7 @@ crush_make_tree_bucket(int type, int size,
 /* straw bucket */
 
 struct crush_bucket_straw *
-crush_make_straw_bucket(int type, 
+crush_make_straw_bucket(int type,
 			int size,
 			int *items,
 			int *weights)
@@ -312,27 +312,27 @@ crush_make_straw_bucket(int type,
 	struct crush_bucket_straw *bucket;
 	int *reverse;
 	int i, j, k;
-	
+
 	double straw, wbelow, lastw, wnext, pbelow;
 	int numleft;
-	
+
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_STRAW;
 	bucket->h.type = type;
 	bucket->h.size = size;
-	
+
 	bucket->h.items = malloc(sizeof(__u32)*size);
 	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->straws = malloc(sizeof(__u32)*size);
-	
+
 	bucket->h.weight = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
 		bucket->item_weights[i] = weights[i];
 	}
-	
+
 	/* reverse sort by weight (simple insertion sort) */
 	reverse = malloc(sizeof(int) * size);
 	reverse[0] = 0;
@@ -349,28 +349,28 @@ crush_make_straw_bucket(int type,
 		if (j == i)
 			reverse[i] = i;
 	}
-	
+
 	numleft = size;
 	straw = 1.0;
 	wbelow = 0;
 	lastw = 0;
-	
+
 	i=0;
 	while (i < size) {
 		/* set this item's straw */
 		bucket->straws[reverse[i]] = straw * 0x10000;
-		/*printf("item %d at %d weight %d straw %d (%lf)\n", 
+		/*printf("item %d at %d weight %d straw %d (%lf)\n",
 		       items[reverse[i]],
 		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);*/
 		i++;
 		if (i == size) break;
-		
+
 		/* same weight as previous? */
 		if (weights[reverse[i]] == weights[reverse[i-1]]) {
 			/*printf("same as previous\n");*/
 			continue;
 		}
-		
+
 		/* adjust straw for next guy */
 		wbelow += ((double)weights[reverse[i-1]] - lastw) * numleft;
 		for (j=i; j<size; j++)
@@ -381,14 +381,14 @@ crush_make_straw_bucket(int type,
 		wnext = numleft * (weights[reverse[i]] - weights[reverse[i-1]]);
 		pbelow = wbelow / (wbelow + wnext);
 		/*printf("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);*/
-		
+
 		straw *= pow((double)1.0 / pbelow, (double)1.0 / (double)numleft);
-		
+
 		lastw = weights[reverse[i-1]];
 	}
-	
+
 	free(reverse);
-	
+
 	return bucket;
 }
 
@@ -408,15 +408,15 @@ crush_make_bucket(int alg, int type, int size,
 		else
 			item_weight = 0;
 		return (struct crush_bucket *)crush_make_uniform_bucket(type, size, items, item_weight);
-	
+
 	case CRUSH_BUCKET_LIST:
 		return (struct crush_bucket *)crush_make_list_bucket(type, size, items, weights);
 
 	case CRUSH_BUCKET_TREE:
 		return (struct crush_bucket *)crush_make_tree_bucket(type, size, items, weights);
-		
+
 	case CRUSH_BUCKET_STRAW:
 		return (struct crush_bucket *)crush_make_straw_bucket(type, size, items, weights);
-	}		
+	}
 	return 0;
 }

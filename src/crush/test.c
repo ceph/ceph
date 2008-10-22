@@ -19,12 +19,12 @@ int main()
   int root;
   int ruleno;
   int r[10];
-  
+
   int uw[10] = { 1000, 1000, 500, 1000, 2000, 1000, 1000, 3000, 1000, 500 };
 
   struct crush_bucket *b;
   struct crush_rule *rule;
-  
+
   struct crush_map *map = crush_create();
 
   d = 0;
@@ -59,7 +59,7 @@ int main()
   }
 
   for (i=0; i<100; i += 10)
-    printf("%2d : %d\n", i, o[i]); 
+    printf("%2d : %d\n", i, o[i]);
 
   return 0;
 }
