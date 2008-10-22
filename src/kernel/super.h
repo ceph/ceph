@@ -102,6 +102,7 @@ struct ceph_client {
 
 	/* writeback */
 	struct workqueue_struct *wb_wq;
+	struct workqueue_struct *pg_inv_wq;
 	struct workqueue_struct *trunc_wq;
 
 	struct kobject *client_kobj;
@@ -233,12 +234,15 @@ struct ceph_inode_info {
 
 	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
+	int i_rdcache_pending;
 	int i_wrbuffer_ref, i_wrbuffer_ref_head;
+	u32 i_rdcache_gen;
 
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
 
 	struct work_struct i_wb_work;  /* writeback work */
+	struct work_struct i_pg_inv_work;  /* page invalidation work */
 
 	loff_t i_vmtruncate_to;        /* delayed truncate work */
 	struct work_struct i_vmtruncate_work;
@@ -368,7 +372,7 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 	int used = 0;
 	if (ci->i_rd_ref)
 		used |= CEPH_CAP_RD;
-	if (ci->i_rdcache_ref)
+	if (ci->i_rdcache_ref || ci->i_rdcache_pending)
 		used |= CEPH_CAP_RDCACHE;
 	if (ci->i_wr_ref)
 		used |= CEPH_CAP_WR;
@@ -422,6 +426,12 @@ static inline void ceph_queue_writeback(struct inode *inode)
 {
 	queue_work(ceph_inode_to_client(inode)->wb_wq,
 		   &ceph_inode(inode)->i_wb_work);
+}
+
+static inline void ceph_queue_page_invalidation(struct inode *inode)
+{
+	queue_work(ceph_inode_to_client(inode)->pg_inv_wq,
+		   &ceph_inode(inode)->i_pg_inv_work);
 }
 
 

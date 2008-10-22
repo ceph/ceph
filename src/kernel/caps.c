@@ -567,6 +567,14 @@ first:
 
 	if (!is_delayed)
 		__cap_delay_requeue(mdsc, ci);
+#if 0
+	/* delay cap release for a bit? */
+	if (time_after(jiffies, ci->i_hold_caps_until) &&
+	    ci->rdcache_pending) {
+		dout(30, "delaying cap release\n");
+		__send_cap(mdsc, session, cap, used, wanted);
+	}
+#endif
 
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
@@ -595,7 +603,7 @@ first:
 		}
 
 		/* completed revocation? */
-		if (revoking && (revoking && used) == 0) {
+		if (revoking && (revoking & used) == 0) {
 			dout(10, "completed revocation of %d\n",
 			     cap->implemented & ~cap->issued);
 			goto ack;
@@ -880,12 +888,15 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	int wake = 0;
 	int writeback = 0;
 	int invalidate = 0;
+	int tried_invalidate = 0;
+	u32 inv_gen = 0;
+	int ret;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n",
 	     inode, ci, mds, seq);
 	dout(10, " size %llu max_size %llu, i_size %llu\n", size, max_size,
 		inode->i_size);
-
+start:
 	spin_lock(&inode->i_lock);
 
 	/* do we have this cap? */
@@ -902,6 +913,39 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	}
 	dout(10, " cap %p\n", cap);
 	cap->gen = session->s_cap_gen;
+
+	if (((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
+	    && !ci->i_wrbuffer_ref){
+		dout(10, "RDCACHE invalidation\n");
+		if (!tried_invalidate) {
+			inv_gen = ci->i_rdcache_gen;
+			spin_unlock(&inode->i_lock);
+
+			tried_invalidate = 1;
+			ret = invalidate_inode_pages2(&inode->i_data);
+			ret = -EBUSY; /* FIXME debug only! */
+			if (ret < 0)
+				invalidate = 1;
+			goto start;
+		} else {
+			if (ci->i_rdcache_gen != inv_gen) /* was there a race? */
+				invalidate = 1;
+		}
+	}
+
+	if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE & __ceph_caps_issued(ci, 0)) {
+		if (!ci->i_rdcache_pending)
+			ci->i_rdcache_gen++;
+		else
+			invalidate = 0; /* ok, we're already taking care of it */
+	}
+
+	if (invalidate && !(ci->i_rdcache_pending))
+		ci->i_rdcache_pending = 1;
+
+
+	dout(10, "invalidate=%d ci->i_rdcache_pending=%d gen=%d\n", invalidate, ci->i_rdcache_pending, ci->i_rdcache_gen);
+
 
 	/* size/ctime/mtime/atime? */
 	issued = __ceph_caps_issued(ci, NULL);
@@ -942,11 +986,9 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	/* revocation? */
 	if (cap->issued & ~newcaps) {
 		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
-		if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
-			invalidate = 1;
 		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER) {
 			writeback = 1; /* will delay ack */
-		} else {
+		} else if (!invalidate) {
 			/*
 			 * we're not using revoked caps.. ack now.
 			 * re-use incoming message.
@@ -990,8 +1032,10 @@ out:
 		dout(10, "queueing %p for writeback\n", inode);
 		ceph_queue_writeback(inode);
 	}
-	if (invalidate) /* do what we can.. FIXME */
-		invalidate_mapping_pages(&inode->i_data, 0, -1);
+	if (invalidate) {
+		dout(10, "queueing %p for page invalidation\n", inode);
+		ceph_queue_page_invalidation(inode);
+	}
 	if (wake)
 		wake_up(&ci->i_cap_wq);
 	return reply;

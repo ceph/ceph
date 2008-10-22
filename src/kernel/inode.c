@@ -19,6 +19,8 @@ int ceph_debug_inode = -1;
 
 static const struct inode_operations ceph_symlink_iops;
 
+static void ceph_inode_invalidate_pages(struct work_struct *work);
+
 
 /*
  * find or create an inode, given the ceph ino number
@@ -276,6 +278,8 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_cap_exporting_issued = 0;
 
 	ci->i_rd_ref = ci->i_rdcache_ref = 0;
+	ci->i_rdcache_pending = 0;
+	ci->i_rdcache_gen = 0;
 	ci->i_wr_ref = 0;
 	ci->i_wrbuffer_ref = 0;
 	ci->i_wrbuffer_ref_head = 0;
@@ -285,6 +289,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_snap_realm = NULL;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
+	INIT_WORK(&ci->i_pg_inv_work, ceph_inode_invalidate_pages);
 
 	ci->i_vmtruncate_to = -1;
 	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
@@ -1278,6 +1283,37 @@ void ceph_inode_writeback(struct work_struct *work)
 
 	dout(10, "writeback %p\n", inode);
 	filemap_write_and_wait(&inode->i_data);
+}
+
+/*
+ * Invalidate inode pages in a worker thread.  (This can't be done
+ * in the message handler context.)
+ */
+static void ceph_inode_invalidate_pages(struct work_struct *work)
+{
+	struct ceph_inode_info *ci = container_of(work, struct ceph_inode_info,
+						  i_pg_inv_work);
+	struct inode *inode = &ci->vfs_inode;
+	u32 orig_gen;
+
+	dout(10, "invalidate_pages %p\n", inode);
+
+	spin_lock(&inode->i_lock);
+start:
+	orig_gen = ci->i_rdcache_gen;
+	spin_unlock(&inode->i_lock);
+
+	truncate_inode_pages(&inode->i_data, 0);
+	ci->i_rdcache_pending = 0;
+
+	ceph_check_caps(ci, 1);
+
+	spin_lock(&inode->i_lock);
+
+	if (orig_gen != ci->i_rdcache_gen)
+		goto start;
+
+	spin_unlock(&inode->i_lock);
 }
 
 

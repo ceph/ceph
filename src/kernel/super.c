@@ -644,6 +644,9 @@ static struct ceph_client *ceph_create_client(void)
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
 		goto fail;
+	client->pg_inv_wq = create_workqueue("ceph-pg-invalid");
+	if (client->pg_inv_wq == NULL)
+		goto fail;
 	client->trunc_wq = create_workqueue("ceph-trunc");
 	if (client->trunc_wq == NULL)
 		goto fail;
@@ -676,6 +679,8 @@ static void ceph_destroy_client(struct ceph_client *client)
 #endif
 	if (client->wb_wq)
 		destroy_workqueue(client->wb_wq);
+	if (client->pg_inv_wq)
+		destroy_workqueue(client->pg_inv_wq);
 	if (client->trunc_wq)
 		destroy_workqueue(client->trunc_wq);
 	if (client->msgr)
