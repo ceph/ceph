@@ -5,7 +5,6 @@
 #include "mon_client.h"
 
 #include "ceph_debug.h"
-#include "ceph_fs.h"
 
 int ceph_debug_mdsc = -1;
 #define DOUT_VAR ceph_debug_mdsc

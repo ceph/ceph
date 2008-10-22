@@ -8,7 +8,6 @@
 #include <linux/namei.h>
 #include <linux/writeback.h>
 
-#include "ceph_fs.h"
 #include "ceph_debug.h"
 
 int ceph_debug_inode = -1;

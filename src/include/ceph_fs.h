@@ -1,30 +1,17 @@
 /* ceph_fs.h
  *
- * C data types to share between kernel and userspace
+ * C data types to share between kernel and userspace.
  */
 
 #ifndef _FS_CEPH_CEPH_FS_H
 #define _FS_CEPH_CEPH_FS_H
-
-#define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up */
-
 
 #ifdef __KERNEL__
 # include <linux/in.h>
 # include <linux/types.h>
 # include <asm/fcntl.h>
 # include <linux/string.h>
-#else
-# include <netinet/in.h>
-# ifndef _LINUX_TYPES_H
-#  define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
-#  include "inttypes.h"
-#  include "byteorder.h"
-# endif
-# include <fcntl.h>
-# include <string.h>
 #endif
-
 
 
 #define CEPH_MON_PORT 12345

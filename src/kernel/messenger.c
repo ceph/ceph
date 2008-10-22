@@ -6,16 +6,15 @@
 #include <linux/highmem.h>
 #include <net/tcp.h>
 
-#include "ceph_debug.h"
-
-#include "ceph_fs.h"
-#include "messenger.h"
-
 int ceph_debug_msgr;
 #define DOUT_MASK DOUT_MASK_MSGR
 #define DOUT_VAR ceph_debug_msgr
 #define DOUT_PREFIX "msgr: "
+#include "ceph_debug.h"
+
 #include "super.h"
+#include "messenger.h"
+
 
 
 /* static tag bytes (protocol control messages) */

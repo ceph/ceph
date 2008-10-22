@@ -1,6 +1,5 @@
 #include <linux/exportfs.h>
 
-#include "ceph_fs.h"
 #include "super.h"
 #include "ceph_debug.h"
 

@@ -12,16 +12,25 @@
  * 
  */
 
-#ifndef __MDS_TYPES_H
-#define __MDS_TYPES_H
+#ifndef __CEPH_TYPES_H
+#define __CEPH_TYPES_H
+
+// this is needed for ceph_fs to compile in userland
+#include <netinet/in.h>
+#define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
+#include "inttypes.h"
+#include "byteorder.h"
+#include <fcntl.h>
+#include <string.h>
 
 #include "ceph_fs.h"
+
+#define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up about hash_*. */
 
 extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include "statlite.h"
 }
 
