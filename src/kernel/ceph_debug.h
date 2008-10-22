@@ -5,11 +5,14 @@
 
 #include "ceph_tools.h"
 
-extern int ceph_debug;      /* debug level; if <0, defer to per-module level. */
-extern int ceph_debug_console;               /* send debug output to console? */
+extern int ceph_debug;               /* debug level. */
+extern int ceph_debug_console;       /* send debug output to console? */
 extern int ceph_debug_mask;
 
-/* different debug level for the different modules */
+/*
+ * different debug levels for different modules.  These default to -1.
+ * If they are >=, then they override the global ceph_debug value.
+ */
 extern int ceph_debug_addr;
 extern int ceph_debug_caps;
 extern int ceph_debug_dir;

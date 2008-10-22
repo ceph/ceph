@@ -25,14 +25,12 @@ git commit -F - <<EOF
 ceph: on-wire types
 
 This header describes the types used to exchange messages between the
-Ceph client and servers.  All types little-endian and packed.
+Ceph client and various servers.  All types are little-endian and
+packed.
 
 Additionally, we define a few magic values to identify the current
-version of the protocol(s) in use, allowing discrepancies to be
+version of the protocol(s) in use, so that discrepancies to be
 detected on mount.
-
-There is a bit of #include cruft because ceph_fs.h is included both by
-the the kernel module and by the user space code.
 
 EOF
 
@@ -42,8 +40,10 @@ git commit -F - <<EOF
 ceph: client types
 
 We first define constants, types, and prototypes for the kernel client
-proper.  A few separable subsystems are defined separately, including
-the MDS, OSD, and monitor clients, and the messaging layer.
+proper.
+
+A few subsystems are defined separately later: the MDS, OSD, and
+monitor clients, and the messaging layer.
 
 EOF
 
@@ -63,7 +63,8 @@ ceph: inode operations
 
 Inode cache and inode operations.  We also include routines to
 incorporate metadata structures returned by the MDS into the client
-cache, and some helpers to deal with metadata leases.
+cache, and some helpers to deal with file capabilities and metadata
+leases.
 
 EOF
 
@@ -71,9 +72,16 @@ git add fs/ceph/dir.c
 git commit -F - <<EOF
 ceph: directory operations
 
-Directory operations, including lookup, are defined here.  For the
-most part, we just need to build the proper requests for the metadata
-server(s).
+Directory operations, including lookup, are defined here.  We take
+advantage of lookup intents when possible.  For the most part, we just
+need to build the proper requests for the metadata server(s) and
+pass things off to the mds_client.  
+
+The results of most operations are normally incorporated into the
+client's cache when the reply is parsed by ceph_fill_trace().
+However, if the MDS replies without a trace (e.g., when retrying an
+update after an MDS failure recovery), some operation-specific cleanup
+may be needed.
 
 EOF
 
@@ -83,7 +91,9 @@ ceph: file operations
 
 File open and close operations, and read and write methods that ensure
 we have obtained the proper capabilities from the MDS cluster before
-performing IO on a file.
+performing IO on a file.  We take references on held capabilities for
+the duration of the read/write to avoid prematurely releasing them
+back to the MDS.
 
 EOF
 
@@ -94,7 +104,12 @@ ceph: address space operations
 The ceph address space methods are concerned primarily with managing
 the dirty page accounting in the inode, which (among other things)
 must keep track of which snapshot context each page was dirtied in,
-and ensure dirty data is written out to the OSDs in snapshort order.
+and ensure that dirty data is written out to the OSDs in snapshort
+order.
+
+A writepage() on a page that is not currently writeable due to
+snapshot writeback ordering (presumably called from kswapd) is
+ignored.
 
 EOF
 
@@ -106,9 +121,12 @@ git commit -F - <<EOF
 ceph: MDS client
 
 The MDS client is responsible for submitting requests to the MDS
-cluster and parsing the response.  All of the complexity surrounding
-MDS server failure, recovery, and the migration of metadata between
-servers is captured here.
+cluster and parsing the response.  We decide which MDS to submit each
+request to based on cached information about the current partition of
+the directory hierarchy across the cluster.  A stateful session is
+opened with each MDS before we submit requests to it.  If a MDS fails
+and/or recovers, we resubmit (potentially) affected requests as
+needed.
 
 EOF
 
@@ -119,10 +137,10 @@ git add fs/ceph/osdmap.c
 git commit -F - <<EOF
 ceph: OSD client
 
-The OSD client is responsible for reading and writing data from/to
-the object storage pool.  This includes determining where objects
-are stored in the cluster, and ensuring that requests are redirected
-in the event of a node failure or data migration.
+The OSD client is responsible for reading and writing data from/to the
+object storage pool.  This includes determining where objects are
+stored in the cluster, and ensuring that requests are retried or
+redirected in the event of a node failure or data migration.
 
 EOF
 
@@ -141,6 +159,10 @@ features that are specifically useful for storage, most notably the
 ability to map each input onto a set of N devices that are separated
 across administrator-defined failure domains.  CRUSH is used to
 distribute data across the cluster of Ceph storage nodes.
+
+More information about CRUSH can be found in this paper:
+
+    http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
 
 EOF
 

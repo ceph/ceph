@@ -68,7 +68,7 @@ Mount Options
 
   ip=A.B.C.D[:N]
   port=N
-        Specify the IP and/or port the client should bind to locally.
+	Specify the IP and/or port the client should bind to locally.
 	There is normally not much reason to do this.  If the IP is not
 	specified, the client's IP address is determined by looking at the
 	address it's connection to the monitor originates from.
@@ -82,12 +82,12 @@ Mount Options
 	Specify the maximum readahead.
 
   mount_timeout=X
-        Specify the timeout value for mount (in seconds), in the case
+	Specify the timeout value for mount (in seconds), in the case
 	of a non-responsive Ceph file system.  The default is 30
 	seconds.
 
   rbytes
-        When stat() is called on a directory, set st_size to 'rbytes',
+	When stat() is called on a directory, set st_size to 'rbytes',
 	the summation of file sizes over all files nested beneath that
 	directory.  This is the default.
 
@@ -106,8 +106,7 @@ Debugging options:
   debug=N
 	Specify the level of debug output for the Ceph client.  Larger
 	values mean more output, and range from 0 to 50.  The default
-	is -1, which means no output, unless a more specific debug
-	level is specified.
+	is 1 (high-level informational messages only).
 
   debug_console=N
 	If non-zero, debug messages will be printk'ed with KERN_ERR,
@@ -116,28 +115,29 @@ Debugging options:
 	the system log.
 
   debug_msgr=N
-	Debug level for the messaging/communications layer.
+	Debug level for the messaging/communications layer, if >= 0.
+	Default is -1.
 
   debug_mdsc=N
-	Debug level for the MDS client.
+	Debug level for the MDS client, if >= 0.
 
   debug_osdc=N
-	Debug level for the OSD client.
+	Debug level for the OSD client, if >= 0.
 
   debug_addr=N
-	Debug level for address space operations.
+	Debug level for address space operations, if >= 0.
 
   debug_file=N
-	Debug level for file operations.
+	Debug level for file operations, if >= 0.
 
   debug_inode=N
-	Debug level for inode operations.
+	Debug level for inode operations, if >= 0.
 
   debug_caps=N
-	Debug level for file capability operations.
+	Debug level for file capability operations, if >= 0.
 
   debug_snap=N
-	Debug level for snapshot operations.
+	Debug level for snapshot operations, if >= 0.
 
 
 
