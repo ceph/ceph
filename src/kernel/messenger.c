@@ -902,10 +902,10 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 			  (int)(data_len - con->out_msg_pos.data_pos));
 		if (crc && !con->out_msg_pos.did_page_crc) {
 			void *base = kaddr + con->out_msg_pos.page_pos;
-			u32 crc = le32_to_cpu(con->out_msg->footer.data_crc);
+			u32 tmpcrc = le32_to_cpu(con->out_msg->footer.data_crc);
 
 			con->out_msg->footer.data_crc =
-				cpu_to_le32(crc32c_le(crc, base, len));
+				cpu_to_le32(crc32c_le(tmpcrc, base, len));
 			con->out_msg_pos.did_page_crc = 1;
 		}
 
