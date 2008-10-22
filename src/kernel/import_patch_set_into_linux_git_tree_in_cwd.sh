@@ -80,9 +80,8 @@ git add fs/ceph/ioctl.c
 git commit -m 'ceph: ioctls'
 
 git add fs/ceph/ceph_debug.h
+git add fs/ceph/ceph_tools.h
 git add fs/ceph/proc.c
-git add fs/ceph/sysfs.c
-git add fs/ceph/debugfs.c
 git commit -m 'ceph: debugging'
 
 git add fs/Kconfig
