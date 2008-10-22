@@ -567,14 +567,6 @@ first:
 
 	if (!is_delayed)
 		__cap_delay_requeue(mdsc, ci);
-#if 0
-	/* delay cap release for a bit? */
-	if (time_after(jiffies, ci->i_hold_caps_until) &&
-	    ci->rdcache_pending) {
-		dout(30, "delaying cap release\n");
-		__send_cap(mdsc, session, cap, used, wanted);
-	}
-#endif
 
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
@@ -923,7 +915,6 @@ start:
 
 			tried_invalidate = 1;
 			ret = invalidate_inode_pages2(&inode->i_data);
-			ret = -EBUSY; /* FIXME debug only! */
 			if (ret < 0)
 				invalidate = 1;
 			goto start;
