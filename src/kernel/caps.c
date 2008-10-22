@@ -879,9 +879,9 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	struct timespec mtime, atime, ctime;
 	int wake = 0;
 	int writeback = 0;
+	int revoked_rdcache = 0;
 	int invalidate = 0;
 	int tried_invalidate = 0;
-	u32 inv_gen = 0;
 	int ret;
 
 	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d\n",
@@ -906,36 +906,41 @@ start:
 	dout(10, " cap %p\n", cap);
 	cap->gen = session->s_cap_gen;
 
+	/*
+	 * Each time we receive RDCACHE anew, we increment i_rdcache_gen.
+	 */
+	if ((newcaps & CEPH_CAP_RDCACHE) &&            /* we just got RDCACHE */
+	    (cap->issued & CEPH_CAP_RDCACHE) == 0 &&    /* and didn't have it */
+	    (__ceph_caps_issued(ci, 0) & CEPH_CAP_RDCACHE) == 0)
+		ci->i_rdcache_gen++;
+
+	/*
+	 * If RDCACHE is being revoked, and we have no dirty buffers,
+	 * try to invalidate (once).  (If there are dirty buffers, we
+	 * will invalidate _after_ writeback.)
+	 */
 	if (((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
-	    && !ci->i_wrbuffer_ref){
+	    && !ci->i_wrbuffer_ref && !tried_invalidate) {
 		dout(10, "RDCACHE invalidation\n");
-		if (!tried_invalidate) {
-			inv_gen = ci->i_rdcache_gen;
-			spin_unlock(&inode->i_lock);
+		spin_unlock(&inode->i_lock);
 
-			tried_invalidate = 1;
-			ret = invalidate_inode_pages2(&inode->i_data);
-			if (ret < 0)
+		tried_invalidate = 1;
+		ret = invalidate_inode_pages2(&inode->i_data);
+		if (ret < 0) {
+			/* there were locked pages.. invalidate later
+			   in a separate thread. */
+			if (ci->i_rdcache_revoking != ci->i_rdcache_gen) {
 				invalidate = 1;
-			goto start;
+				ci->i_rdcache_revoking = ci->i_rdcache_gen;
+			}
 		} else {
-			if (ci->i_rdcache_gen != inv_gen) /* was there a race? */
-				invalidate = 1;
+			/* we successfully invalidated those pages */
+			revoked_rdcache = 1;
+			ci->i_rdcache_gen = 0;
+			ci->i_rdcache_revoking = 0;
 		}
+		goto start;
 	}
-
-	if ((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE & __ceph_caps_issued(ci, 0)) {
-		if (!ci->i_rdcache_pending)
-			ci->i_rdcache_gen++;
-		else
-			invalidate = 0; /* ok, we're already taking care of it */
-	}
-
-	if (invalidate && !(ci->i_rdcache_pending))
-		ci->i_rdcache_pending = 1;
-
-
-	dout(10, "invalidate=%d ci->i_rdcache_pending=%d gen=%d\n", invalidate, ci->i_rdcache_pending, ci->i_rdcache_gen);
 
 
 	/* size/ctime/mtime/atime? */
@@ -979,7 +984,8 @@ start:
 		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
 		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER) {
 			writeback = 1; /* will delay ack */
-		} else if (!invalidate) {
+		} else if (((used & ~newcaps) & CEPH_CAP_RDCACHE) == 0 ||
+			   revoked_rdcache) {
 			/*
 			 * we're not using revoked caps.. ack now.
 			 * re-use incoming message.

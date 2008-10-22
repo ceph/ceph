@@ -277,12 +277,13 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_cap_exporting_mseq = 0;
 	ci->i_cap_exporting_issued = 0;
 
-	ci->i_rd_ref = ci->i_rdcache_ref = 0;
-	ci->i_rdcache_pending = 0;
-	ci->i_rdcache_gen = 0;
+	ci->i_rd_ref = 0;
+	ci->i_rdcache_ref = 0;
 	ci->i_wr_ref = 0;
 	ci->i_wrbuffer_ref = 0;
 	ci->i_wrbuffer_ref_head = 0;
+	ci->i_rdcache_gen = 0;
+	ci->i_rdcache_revoking = 0;
 	ci->i_hold_caps_until = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 
@@ -1295,25 +1296,35 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 						  i_pg_inv_work);
 	struct inode *inode = &ci->vfs_inode;
 	u32 orig_gen;
-
-	dout(10, "invalidate_pages %p\n", inode);
+	int check = 0;
 
 	spin_lock(&inode->i_lock);
 start:
+	dout(10, "invalidate_pages %p gen %d revoking %d\n", inode,
+	     ci->i_rdcache_gen, ci->i_rdcache_revoking);
+	if (ci->i_rdcache_gen == 0 ||
+	    ci->i_rdcache_revoking != ci->i_rdcache_gen) {
+		BUG_ON(ci->i_rdcache_revoking > ci->i_rdcache_gen);
+		/* nevermind! */
+		ci->i_rdcache_revoking = 0;
+		spin_unlock(&inode->i_lock);
+		return;
+	}
 	orig_gen = ci->i_rdcache_gen;
 	spin_unlock(&inode->i_lock);
 
 	truncate_inode_pages(&inode->i_data, 0);
-	ci->i_rdcache_pending = 0;
-
-	ceph_check_caps(ci, 1);
 
 	spin_lock(&inode->i_lock);
-
-	if (orig_gen != ci->i_rdcache_gen)
-		goto start;
-
+	if (orig_gen == ci->i_rdcache_gen) {
+		ci->i_rdcache_gen = 0;
+		ci->i_rdcache_revoking = 0;
+		check = 1;
+	}
 	spin_unlock(&inode->i_lock);
+
+	if (check)
+		ceph_check_caps(ci, 0);
 }
 
 
