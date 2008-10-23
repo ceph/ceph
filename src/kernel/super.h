@@ -235,9 +235,10 @@ struct ceph_inode_info {
 	/* held references to caps */
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	int i_wrbuffer_ref, i_wrbuffer_ref_head;
-	/* these are used for async page invalidates when RDCACHE caps are
-	 * revoked. */
-	u32 i_rdcache_gen, i_rdcache_revoking;
+	u32 i_rdcache_gen;      /* we increment this each time we get RDCACHE.
+				   If it's non-zero, we _may_ have cached
+				   pages. */
+	u32 i_rdcache_revoking; /* RDCACHE gen to async invalidate, if any */
 
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;

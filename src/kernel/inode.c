@@ -1299,7 +1299,6 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 	int check = 0;
 
 	spin_lock(&inode->i_lock);
-start:
 	dout(10, "invalidate_pages %p gen %d revoking %d\n", inode,
 	     ci->i_rdcache_gen, ci->i_rdcache_revoking);
 	if (ci->i_rdcache_gen == 0 ||
@@ -1317,9 +1316,14 @@ start:
 
 	spin_lock(&inode->i_lock);
 	if (orig_gen == ci->i_rdcache_gen) {
+		dout(10, "invalidate_pages %p gen %d successful\n", inode,
+		     ci->i_rdcache_gen);
 		ci->i_rdcache_gen = 0;
 		ci->i_rdcache_revoking = 0;
 		check = 1;
+	} else {
+		dout(10, "invalidate_pages %p gen %d raced, gen now %d\n",
+		     inode, orig_gen, ci->i_rdcache_gen);
 	}
 	spin_unlock(&inode->i_lock);
 

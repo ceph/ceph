@@ -543,30 +543,67 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = &ci->vfs_inode;
 	struct ceph_cap *cap;
-	int wanted, used;
+	int file_wanted, used;
 	struct ceph_mds_session *session = NULL;  /* if non-NULL, i hold s_mutex */
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
 	int revoking;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
+	int tried_invalidate = 0;
 
 	spin_lock(&inode->i_lock);
 
 	/* flush snaps first time around only */
 	if (!list_empty(&ci->i_cap_snaps))
 		__ceph_flush_snaps(ci);
-	goto first;
+	goto retry_locked;
 retry:
 	spin_lock(&inode->i_lock);
-first:
-	wanted = __ceph_caps_wanted(ci);
+retry_locked:
+	file_wanted = __ceph_caps_file_wanted(ci);
 	used = __ceph_caps_used(ci);
-	dout(10, "check_caps %p wanted %d used %d issued %d\n",
-	     inode, wanted, used, __ceph_caps_issued(ci, NULL));
+	dout(10, "check_caps %p file_wanted %d used %d issued %d\n",
+	     inode, file_wanted, used, __ceph_caps_issued(ci, NULL));
 
+	/*
+	 * Reschedule delayed caps release, unless we are called from
+	 * the delayed work handler.
+	 */
 	if (!is_delayed)
 		__cap_delay_requeue(mdsc, ci);
+
+	/*
+	 * If we no longer need to hold onto old our caps, and we may
+	 * have cached pages, but don't want them, then try to invalidate.
+	 * If we fail, it's because pages are locked.... try again later.
+	 */
+	if (!time_before(jiffies, ci->i_hold_caps_until) &&
+	    ci->i_wrbuffer_ref == 0 &&               /* no dirty pages... */
+	    ci->i_rdcache_gen &&                     /* may have cached pages */
+	    (file_wanted & CEPH_CAP_RDCACHE) == 0 && /* but don't need them */
+	    !tried_invalidate) {
+		u32 invalidating_gen = ci->i_rdcache_gen;
+		int ret;
+
+		dout(10, "check_caps trying to invalidate on %p\n", inode);
+		spin_unlock(&inode->i_lock);
+		ret = invalidate_inode_pages2(&inode->i_data);
+		spin_lock(&inode->i_lock);
+		if (ret == 0 && invalidating_gen == ci->i_rdcache_gen) {
+			/* success. */
+			ci->i_rdcache_gen = 0;
+			ci->i_rdcache_revoking = 0;
+		} else {
+			dout(10, "check_caps failed to invalidate pages\n");
+			/* we failed to invalidate pages.  check these
+			   caps again later. */
+			if (is_delayed)
+				__cap_delay_requeue(mdsc, ci);
+		}
+		tried_invalidate = 1;
+		goto retry_locked;
+	}
 
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
@@ -601,7 +638,7 @@ first:
 			goto ack;
 		}
 
-		if ((cap->issued & ~wanted) == 0)
+		if ((cap->issued & ~(file_wanted | used)) == 0)
 			continue;     /* nothing extra, all good */
 
 		/* delay cap release for a bit? */
@@ -642,7 +679,7 @@ ack:
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, session, cap, used, wanted);
+		__send_cap(mdsc, session, cap, used, used | file_wanted);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
@@ -888,8 +925,8 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	     inode, ci, mds, seq);
 	dout(10, " size %llu max_size %llu, i_size %llu\n", size, max_size,
 		inode->i_size);
-start:
 	spin_lock(&inode->i_lock);
+start:
 
 	/* do we have this cap? */
 	cap = __get_cap_for_mds(inode, mds);
@@ -923,9 +960,10 @@ start:
 	    && !ci->i_wrbuffer_ref && !tried_invalidate) {
 		dout(10, "RDCACHE invalidation\n");
 		spin_unlock(&inode->i_lock);
-
 		tried_invalidate = 1;
+
 		ret = invalidate_inode_pages2(&inode->i_data);
+		spin_lock(&inode->i_lock);
 		if (ret < 0) {
 			/* there were locked pages.. invalidate later
 			   in a separate thread. */
