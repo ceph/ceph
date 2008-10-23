@@ -738,7 +738,7 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	osdc->last_requested_map = 0;
 	mutex_init(&osdc->request_mutex);
 	osdc->last_tid = 0;
-	INIT_RADIX_TREE(&osdc->request_tree, GFP_ATOMIC);
+	INIT_RADIX_TREE(&osdc->request_tree, GFP_NOFS);
 	osdc->num_requests = 0;
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
 }
