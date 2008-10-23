@@ -273,7 +273,7 @@ void ceph_remove_cap(struct ceph_cap *cap)
  *    -> we take mdsc->cap_delay_lock
  */
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
-			      struct ceph_inode_info *ci)
+				struct ceph_inode_info *ci)
 {
 	ci->i_hold_caps_until = round_jiffies(jiffies + HZ * 5);
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
@@ -568,7 +568,7 @@ retry_locked:
 
 	/*
 	 * Reschedule delayed caps release, unless we are called from
-	 * the delayed work handler.
+	 * the delayed work handler (i.e. this _is_ the delayed release)
 	 */
 	if (!is_delayed)
 		__cap_delay_requeue(mdsc, ci);
@@ -581,7 +581,7 @@ retry_locked:
 	if (!time_before(jiffies, ci->i_hold_caps_until) &&
 	    ci->i_wrbuffer_ref == 0 &&               /* no dirty pages... */
 	    ci->i_rdcache_gen &&                     /* may have cached pages */
-	    (file_wanted & CEPH_CAP_RDCACHE) == 0 && /* but don't need them */
+	    file_wanted == 0 &&                      /* no open files */
 	    !tried_invalidate) {
 		u32 invalidating_gen = ci->i_rdcache_gen;
 		int ret;
@@ -917,7 +917,7 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	int wake = 0;
 	int writeback = 0;
 	int revoked_rdcache = 0;
-	int invalidate = 0;
+	int invalidate_async = 0;
 	int tried_invalidate = 0;
 	int ret;
 
@@ -956,8 +956,8 @@ start:
 	 * try to invalidate (once).  (If there are dirty buffers, we
 	 * will invalidate _after_ writeback.)
 	 */
-	if (((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE)
-	    && !ci->i_wrbuffer_ref && !tried_invalidate) {
+	if (((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE) &&
+	    !ci->i_wrbuffer_ref && !tried_invalidate) {
 		dout(10, "RDCACHE invalidation\n");
 		spin_unlock(&inode->i_lock);
 		tried_invalidate = 1;
@@ -968,7 +968,7 @@ start:
 			/* there were locked pages.. invalidate later
 			   in a separate thread. */
 			if (ci->i_rdcache_revoking != ci->i_rdcache_gen) {
-				invalidate = 1;
+				invalidate_async = 1;
 				ci->i_rdcache_revoking = ci->i_rdcache_gen;
 			}
 		} else {
@@ -1067,7 +1067,7 @@ out:
 		dout(10, "queueing %p for writeback\n", inode);
 		ceph_queue_writeback(inode);
 	}
-	if (invalidate) {
+	if (invalidate_async) {
 		dout(10, "queueing %p for page invalidation\n", inode);
 		ceph_queue_page_invalidation(inode);
 	}
