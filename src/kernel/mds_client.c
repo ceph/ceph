@@ -440,7 +440,6 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_request = msg;
 	req->r_started = jiffies;
 	req->r_resend_mds = -1;
-	mutex_init(&req->r_mutex);
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
 	return req;
@@ -1214,10 +1213,8 @@ retry:
 		wait_for_completion(&req->r_completion);
 	}
 	mutex_lock(&mdsc->mutex);
-	mutex_lock(&req->r_mutex);
 	if (req->r_reply == NULL && !err) {
 		put_request_sessions(req);
-		mutex_unlock(&req->r_mutex);
 		goto retry;
 	}
 	if (IS_ERR(req->r_reply)) {
@@ -1227,8 +1224,6 @@ retry:
 	if (!err)
 		/* all is well, reply has been parsed. */
 		err = le32_to_cpu(req->r_reply_info.head->result);
-
-	mutex_unlock(&req->r_mutex);
 finish:
 	__unregister_request(mdsc, req);
 	mutex_unlock(&mdsc->mutex);
@@ -1276,6 +1271,13 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	dout(10, "handle_reply %p expected_cap=%p\n", req, req->r_expected_cap);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
+	if (req->r_got_reply) {
+		derr(1, "got reply on %llu, mds%d got more than one reply\n",
+		     tid, mds);
+		mutex_unlock(&mdsc->mutex);
+		return;
+	}
+	req->r_got_reply = 1;
 	if (req->r_session && req->r_session->s_mds != mds) {
 		ceph_put_mds_session(req->r_session);
 		req->r_session = __ceph_get_mds_session(mdsc, mds);
@@ -1353,14 +1355,12 @@ done:
 	if (took_snap_sem)
 		up_write(&mdsc->snap_rwsem);
 
-	mutex_lock(&req->r_mutex);
 	if (err) {
 		req->r_err = err;
 	} else {
 		req->r_reply = msg;
 		ceph_msg_get(msg);
 	}
-	mutex_unlock(&req->r_mutex);
 
 	mutex_unlock(&req->r_session->s_mutex);
 

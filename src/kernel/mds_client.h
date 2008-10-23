@@ -158,7 +158,7 @@ struct ceph_mds_request {
 
 	atomic_t          r_ref;
 	struct completion r_completion;
-	struct mutex      r_mutex;
+	int		  r_got_reply;
 };
 
 /*
