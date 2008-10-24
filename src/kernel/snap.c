@@ -517,6 +517,7 @@ fail:
 static void flush_snaps(struct ceph_mds_client *mdsc)
 {
 	struct ceph_inode_info *ci;
+	struct inode *inode;
 	struct ceph_mds_session *session = NULL;
 
 	dout(10, "flush_snaps\n");
@@ -524,10 +525,13 @@ static void flush_snaps(struct ceph_mds_client *mdsc)
 	while (!list_empty(&mdsc->snap_flush_list)) {
 		ci = list_entry(mdsc->snap_flush_list.next,
 				struct ceph_inode_info, i_snap_flush_item);
-		igrab(&ci->vfs_inode);
+		inode = &ci->vfs_inode;
+		igrab(inode);
 		spin_unlock(&mdsc->snap_flush_lock);
+		spin_lock(&inode->i_lock);
 		__ceph_flush_snaps(ci, &session);
-		iput(&ci->vfs_inode);
+		spin_unlock(&inode->i_lock);
+		iput(inode);
 		spin_lock(&mdsc->snap_flush_lock);
 	}
 	spin_unlock(&mdsc->snap_flush_lock);
