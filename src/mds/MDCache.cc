@@ -1423,10 +1423,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
 	if (in->is_dir()) {
 	  pf->fragstat.nsubdirs += linkunlink;
-	  pf->rstat.rsubdirs += linkunlink;
+	  //pf->rstat.rsubdirs += linkunlink;
 	} else {
  	  pf->fragstat.nfiles += linkunlink;
- 	  pf->rstat.rfiles += linkunlink;
+ 	  //pf->rstat.rfiles += linkunlink;
 	}
       }
     }
