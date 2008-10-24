@@ -528,6 +528,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 	int num_split_inos, num_split_realms;
 	__le64 *split_inos = NULL, *split_realms = NULL;
 	int i;
+	int locked_rwsem = 0;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		return;
@@ -558,6 +559,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 		dout(10, "WTF, got snap but no session for mds%d\n", mds);
 		return;
 	}
+	locked_rwsem = 1;
 
 	mutex_lock(&session->s_mutex);
 	session->s_seq++;
@@ -695,6 +697,8 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 bad:
 	derr(10, "corrupt snap message from mds%d\n", mds);
 out:
+	if (locked_rwsem)
+		up_write(&mdsc->snap_rwsem);
 	return;
 }
 
