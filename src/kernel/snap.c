@@ -367,7 +367,7 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	capsnap->ctime = inode->i_ctime;
 	capsnap->time_warp_seq = ci->i_time_warp_seq;
 	if (capsnap->dirty) {
-		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu s=%llu"
+		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu s=%llu "
 		     "still has %d dirty pages\n", inode, capsnap,
 		     capsnap->context, capsnap->context->seq,
 		     capsnap->size, capsnap->dirty);

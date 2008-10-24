@@ -440,6 +440,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci,
 	int mds;
 	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
+	u64 follows;
 	int issued;
 	u64 size;
 	struct timespec mtime, atime, ctime;
@@ -497,7 +498,8 @@ retry:
 			goto retry;
 		}
 
-		next_follows = capsnap->follows + 1;
+		follows = capsnap->follows;
+		next_follows = follows + 1;
 
 		size = capsnap->size;
 		atime = capsnap->atime;
@@ -513,7 +515,7 @@ retry:
 			     CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
 			     size, 0,
 			     &mtime, &atime, time_warp_seq,
-			     next_follows, mds);
+			     follows, mds);
 
 		spin_lock(&inode->i_lock);
 		goto retry;
@@ -1131,6 +1133,7 @@ static void handle_cap_flushedsnap(struct inode *inode,
 	u64 follows = le64_to_cpu(m->snap_follows);
 	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
+	int drop = 0;
 
 	dout(10, "handle_cap_flushedsnap inode %p ci %p mds%d follows %lld\n",
 	     inode, ci, session->s_mds, follows);
@@ -1145,10 +1148,16 @@ static void handle_cap_flushedsnap(struct inode *inode,
 			ceph_put_snap_context(capsnap->context);
 			list_del(&capsnap->ci_item);
 			kfree(capsnap);
+			drop = 1;
 			break;
+		} else {
+			dout(10, " skipping cap_snap %p follows %lld\n",
+			     capsnap, capsnap->follows);
 		}
 	}
 	spin_unlock(&inode->i_lock);
+	if (drop)
+		iput(inode);
 }
 
 
