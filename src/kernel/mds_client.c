@@ -921,7 +921,7 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 /*
  * Note new cap ttl, and any transition from stale -> not stale (fresh?).
  */
-void renewed_caps(struct ceph_mds_client *mdsc,
+static void renewed_caps(struct ceph_mds_client *mdsc,
 		  struct ceph_mds_session *session, int is_renew)
 {
 	int was_stale;

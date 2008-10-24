@@ -534,7 +534,7 @@ retry:
 	}
 }
 
-void ceph_flush_snaps(struct ceph_inode_info *ci)
+static void ceph_flush_snaps(struct ceph_inode_info *ci)
 {
 	struct inode *inode = &ci->vfs_inode;
 
