@@ -98,6 +98,10 @@ void ceph_put_snap_realm(struct ceph_mds_client *mdsc,
 	     realm->nref, realm->nref-1);
 	realm->nref--;
 	if (realm->nref == 0) {
+		if (realm->parent) {
+			list_del_init(&realm->child_item);
+			ceph_put_snap_realm(mdsc, realm->parent);
+		}
 		radix_tree_delete(&mdsc->snap_realms, realm->ino);
 		kfree(realm->prior_parent_snaps);
 		kfree(realm->snaps);
@@ -686,8 +690,6 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			adjust_snap_realm_parent(mdsc, child, realm->ino);
 			ceph_put_snap_realm(mdsc, child);
 		}
-
-		ceph_put_snap_realm(mdsc, realm);
 	}
 
 	/*
@@ -723,6 +725,9 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			spin_unlock(&inode->i_lock);
 			iput(inode);
 		}
+
+		/* we took a reference when we created the realm, above */
+		ceph_put_snap_realm(mdsc, realm);
 	}
 
 	ceph_put_snap_realm(mdsc, realm);
