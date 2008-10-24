@@ -960,7 +960,7 @@ start:
 	 */
 	if ((newcaps & CEPH_CAP_RDCACHE) &&            /* we just got RDCACHE */
 	    (cap->issued & CEPH_CAP_RDCACHE) == 0 &&    /* and didn't have it */
-	    (__ceph_caps_issued(ci, 0) & CEPH_CAP_RDCACHE) == 0)
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_RDCACHE) == 0)
 		ci->i_rdcache_gen++;
 
 	/*

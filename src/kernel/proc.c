@@ -4,11 +4,11 @@
 #include <asm/uaccess.h>
 
 
+#include "ceph_debug.h"
 int ceph_debug_proc = -1;
 #define DOUT_MASK DOUT_MASK_PROC
 #define DOUT_VAR ceph_debug_proc
 #define DOUT_PREFIX "proc: "
-#include "ceph_debug.h"
 
 #include "super.h"
 

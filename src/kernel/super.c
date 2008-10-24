@@ -1121,7 +1121,7 @@ out_proc:
 out_kobj:
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_put(ceph_kobj);
-	ceph_kobj = 0;
+	ceph_kobj = NULL;
 out:
 #endif
 	return ret;
@@ -1136,7 +1136,7 @@ static void __exit exit_ceph(void)
 	ceph_proc_cleanup();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 	kobject_put(ceph_kobj);
-	ceph_kobj = 0;
+	ceph_kobj = NULL;
 #endif
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_finalize();
