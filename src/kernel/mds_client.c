@@ -2061,7 +2061,6 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	spin_unlock(&mdsc->cap_delay_lock);
 
 	mutex_lock(&mdsc->mutex);
-	down_write(&mdsc->snap_rwsem);
 
 	/* close sessions, caps.
 	 *
@@ -2091,17 +2090,14 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 
 		dout(10, "waiting for sessions to close\n");
 		mutex_unlock(&mdsc->mutex);
-		up_write(&mdsc->snap_rwsem);
 
 		wait_for_completion_timeout(&mdsc->session_close_waiters,
 					    timeout);
 		mutex_lock(&mdsc->mutex);
-		down_write(&mdsc->snap_rwsem);
 	}
 
 	WARN_ON(!list_empty(&mdsc->cap_delay_list));
 
-	up_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
