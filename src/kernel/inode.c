@@ -1110,7 +1110,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 					     dn);
 					dput(dn);
 				}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+				dn = d_obtain_alias(in);
+#else
 				dn = d_alloc_anon(in);
+#endif
 				iput(in);
 				dout(10, " d_alloc_anon new dn %p\n", dn);
 			}
