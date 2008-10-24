@@ -332,8 +332,10 @@ public:
     crush->device_offload[i] = o;
   }
   unsigned get_offload(int i) {
-    assert(i < crush->max_devices);
-    return crush->device_offload[i];
+    if (i < crush->max_devices)
+      return crush->device_offload[i];
+    else
+      return 0x10000;  // not in map.. fully OUT!
   }
 
   int find_rule(int pool, int type, int size) {
