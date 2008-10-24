@@ -1763,7 +1763,7 @@ static size_t _ceph_vir_xattrcb_rfiles(struct ceph_inode_info *ci, char *val,
 static size_t _ceph_vir_xattrcb_rsubdirs(struct ceph_inode_info *ci, char *val,
 					 size_t size)
 {
-	return snprintf(val, size, "%lld", ci->i_subdirs);
+	return snprintf(val, size, "%lld", ci->i_rsubdirs);
 }
 
 static size_t _ceph_vir_xattrcb_rbytes(struct ceph_inode_info *ci, char *val,
