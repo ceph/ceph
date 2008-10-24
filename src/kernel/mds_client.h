@@ -36,6 +36,19 @@
  * are no longer valid.
  */
 
+/*
+ * Some lock dependencies:
+ *
+ * session->s_mutex
+ *         mdsc->mutex
+ *                 mdsc->snap_rwsem
+ *
+ *         inode->i_lock
+ *                 mdsc->snap_flush_lock
+ *                 mdsc->cap_delay_lock
+ *
+ */
+
 struct ceph_client;
 struct ceph_cap;
 
@@ -182,12 +195,14 @@ struct ceph_mds_client {
 	struct rw_semaphore     snap_rwsem;
 	struct radix_tree_root  snap_realms;
 
-	u64                   last_tid;      /* most recent mds request */
-	struct radix_tree_root  request_tree;  /* pending mds requests */
-	struct delayed_work     delayed_work;  /* delayed work */
-	unsigned long last_renew_caps;     /* last time we renewed our caps */
+	u64                    last_tid;      /* most recent mds request */
+	struct radix_tree_root request_tree;  /* pending mds requests */
+	struct delayed_work    delayed_work;  /* delayed work */
+	unsigned long    last_renew_caps;  /* last time we renewed our caps */
 	struct list_head cap_delay_list;   /* caps with delayed release */
-	spinlock_t cap_delay_lock;         /* protects cap_delay_list */
+	spinlock_t       cap_delay_lock;   /* protects cap_delay_list */
+	struct list_head snap_flush_list;  /* cap_snaps ready to flush */
+	spinlock_t       snap_flush_lock;
 };
 
 extern const char *ceph_mds_op_name(int op);

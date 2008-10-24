@@ -25,7 +25,6 @@
 #define CEPH_BLOCK_SHIFT   20  /* 1 MB */
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
-
 /*
  * subtract jiffies
  */
@@ -242,6 +241,7 @@ struct ceph_inode_info {
 
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
+	struct list_head i_snap_flush_item;
 
 	struct work_struct i_wb_work;  /* writeback work */
 	struct work_struct i_pg_inv_work;  /* page invalidation work */
@@ -625,7 +625,8 @@ extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);
-extern void __ceph_flush_snaps(struct ceph_inode_info *ci);
+extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
+			       struct ceph_mds_session **psession);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
 extern void ceph_flush_write_caps(struct ceph_mds_client *mdsc,

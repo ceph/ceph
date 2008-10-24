@@ -433,7 +433,8 @@ static void __send_cap(struct ceph_mds_client *mdsc,
  *
  * Called under i_lock.  Takes s_mutex as needed.
  */
-void __ceph_flush_snaps(struct ceph_inode_info *ci)
+void __ceph_flush_snaps(struct ceph_inode_info *ci,
+			struct ceph_mds_session **psession)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int mds;
@@ -450,6 +451,9 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 	u64 next_follows = 0;  /* keep track of how far we've gotten through the
 			     i_cap_snaps list, and skip these entries next time
 			     around to avoid an infinite loop */
+
+	if (psession)
+		session = *psession;
 
 	dout(10, "__flush_snaps %p\n", inode);
 retry:
@@ -515,7 +519,14 @@ retry:
 		goto retry;
 	}
 
-	if (session) {
+	/* we flushed them all; remove this inode from the queue */
+	spin_lock(&mdsc->snap_flush_lock);
+	list_del_init(&ci->i_snap_flush_item);
+	spin_unlock(&mdsc->snap_flush_lock);
+
+	if (psession)
+		*psession = session;
+	else if (session) {
 		mutex_unlock(&session->s_mutex);
 		ceph_put_mds_session(session);
 	}
@@ -526,7 +537,7 @@ void ceph_flush_snaps(struct ceph_inode_info *ci)
 	struct inode *inode = &ci->vfs_inode;
 
 	spin_lock(&inode->i_lock);
-	__ceph_flush_snaps(ci);
+	__ceph_flush_snaps(ci, NULL);
 	spin_unlock(&inode->i_lock);
 }
 
@@ -557,7 +568,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
 
 	/* flush snaps first time around only */
 	if (!list_empty(&ci->i_cap_snaps))
-		__ceph_flush_snaps(ci);
+		__ceph_flush_snaps(ci, &session);
 	goto retry_locked;
 retry:
 	spin_lock(&inode->i_lock);
@@ -1442,13 +1453,14 @@ void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
 
 		spin_lock(&inode->i_lock);
 
-		if (!list_empty(&cap->ci->i_cap_snaps))
-			__ceph_flush_snaps(cap->ci);
-
 		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
 			spin_unlock(&inode->i_lock);
 			continue;
 		}
+
+		/* FIXME */
+		if (!list_empty(&cap->ci->i_cap_snaps))
+			__ceph_flush_snaps(cap->ci, NULL);
 
 		used = __ceph_caps_used(cap->ci);
 		wanted = __ceph_caps_wanted(cap->ci);

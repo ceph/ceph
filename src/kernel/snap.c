@@ -339,8 +339,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 			capsnap->writing = 1;
 		} else {
 			/* note mtime, size NOW. */
-			if (__ceph_finish_cap_snap(ci, capsnap))
-				__ceph_flush_snaps(ci);
+			__ceph_finish_cap_snap(ci, capsnap);
 		}
 	}
 
@@ -351,7 +350,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
  * Finalize the size, mtime for a cap_snap.. that is, settle on final values
  * to be used for the snapshot, to be flushed back to the mds.
  *
- * Return 1 if capsnap can now be flushed.
+ * If capsnap can now be flushed, add to snap_flush list, and return 1.
  *
  * Caller must hold i_lock.
  */
@@ -359,6 +358,7 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 			    struct ceph_cap_snap *capsnap)
 {
 	struct inode *inode = &ci->vfs_inode;
+	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
 
 	BUG_ON(capsnap->writing);
 	capsnap->size = inode->i_size;
@@ -376,7 +376,11 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu s=%llu clean\n",
 	     inode, capsnap, capsnap->context,
 	     capsnap->context->seq, capsnap->size);
-	return 1;  /* caller should ceph_flush_snaps */
+
+	spin_lock(&mdsc->snap_flush_lock);
+	list_add_tail(&ci->i_snap_flush_item, &mdsc->snap_flush_list);
+	spin_lock(&mdsc->snap_flush_lock);
+	return 1;  /* caller may want to ceph_flush_snaps */
 }
 
 
@@ -499,6 +503,39 @@ fail:
 	return ERR_PTR(err);
 }
 
+
+/*
+ * Send any cap_snaps that are queued for flush.
+ *
+ * FIXME: we should coordinate with __ceph_flush_snaps so that we can
+ * keep s_mutex across multiple cap_snap messages...
+ *
+ * Caller holds no locks.
+ */
+static void flush_snaps(struct ceph_mds_client *mdsc)
+{
+	struct ceph_inode_info *ci;
+	struct ceph_mds_session *session = NULL;
+
+	dout(10, "flush_snaps\n");
+	spin_lock(&mdsc->snap_flush_lock);
+	while (!list_empty(&mdsc->snap_flush_list)) {
+		ci = list_entry(mdsc->snap_flush_list.next,
+				struct ceph_inode_info, i_snap_flush_item);
+		igrab(&ci->vfs_inode);
+		spin_unlock(&mdsc->snap_flush_lock);
+		__ceph_flush_snaps(ci, &session);
+		spin_lock(&mdsc->snap_flush_lock);
+		iput(&ci->vfs_inode);
+	}
+	spin_unlock(&mdsc->snap_flush_lock);
+
+	if (session) {
+		mutex_unlock(&session->s_mutex);
+		ceph_put_mds_session(session);
+	}
+	dout(10, "flush_snaps done\n");
+}
 
 
 /*
@@ -692,6 +729,8 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 
 	ceph_put_snap_realm(mdsc, realm);
 	up_write(&mdsc->snap_rwsem);
+
+	flush_snaps(mdsc);
 	return;
 
 bad:
