@@ -379,7 +379,7 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 
 	spin_lock(&mdsc->snap_flush_lock);
 	list_add_tail(&ci->i_snap_flush_item, &mdsc->snap_flush_list);
-	spin_lock(&mdsc->snap_flush_lock);
+	spin_unlock(&mdsc->snap_flush_lock);
 	return 1;  /* caller may want to ceph_flush_snaps */
 }
 
@@ -505,10 +505,8 @@ fail:
 
 
 /*
- * Send any cap_snaps that are queued for flush.
- *
- * FIXME: we should coordinate with __ceph_flush_snaps so that we can
- * keep s_mutex across multiple cap_snap messages...
+ * Send any cap_snaps that are queued for flush.  Try to carry
+ * s_mutex across multiple snap flushes to avoid locking overhead.
  *
  * Caller holds no locks.
  */
@@ -525,8 +523,8 @@ static void flush_snaps(struct ceph_mds_client *mdsc)
 		igrab(&ci->vfs_inode);
 		spin_unlock(&mdsc->snap_flush_lock);
 		__ceph_flush_snaps(ci, &session);
-		spin_lock(&mdsc->snap_flush_lock);
 		iput(&ci->vfs_inode);
+		spin_lock(&mdsc->snap_flush_lock);
 	}
 	spin_unlock(&mdsc->snap_flush_lock);
 
