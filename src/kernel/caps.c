@@ -499,8 +499,6 @@ retry:
 		}
 
 		follows = capsnap->follows;
-		next_follows = follows + 1;
-
 		size = capsnap->size;
 		atime = capsnap->atime;
 		mtime = capsnap->mtime;
@@ -518,6 +516,7 @@ retry:
 			     follows, mds);
 
 		spin_lock(&inode->i_lock);
+		next_follows = follows + 1;
 		goto retry;
 	}
 
@@ -656,7 +655,8 @@ retry_locked:
 			continue;     /* nothing extra, all good */
 
 		/* delay cap release for a bit? */
-		if (time_before(jiffies, ci->i_hold_caps_until)) {
+		if (!is_delayed &&
+		    time_before(jiffies, ci->i_hold_caps_until)) {
 			dout(30, "delaying cap release\n");
 			continue;
 		}
@@ -1375,6 +1375,8 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	case CEPH_CAP_OP_RELEASED:
 		handle_cap_released(inode, h, session);
 		up_write(&mdsc->snap_rwsem);
+		if (list_empty(&session->s_caps))
+			ceph_mdsc_flushed_all_caps(mdsc, session);
 		break;
 
 	case CEPH_CAP_OP_FLUSHEDSNAP:
@@ -1385,6 +1387,8 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	case CEPH_CAP_OP_EXPORT:
 		handle_cap_export(inode, h, session);
 		up_write(&mdsc->snap_rwsem);
+		if (list_empty(&session->s_caps))
+			ceph_mdsc_flushed_all_caps(mdsc, session);
 		break;
 
 	case CEPH_CAP_OP_IMPORT:
@@ -1441,48 +1445,4 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
 }
-
-
-/*
- * Force a flush of any snap_caps and write caps we hold.
- *
- * Caller holds snap_rwsem, s_mutex.
- */
-void ceph_flush_write_caps(struct ceph_mds_client *mdsc,
-			   struct ceph_mds_session *session)
-{
-	struct list_head *p, *n;
-
-	dout(10, "flush_write_caps mds%d\n", session->s_mds);
-	list_for_each_safe (p, n, &session->s_caps) {
-		struct ceph_cap *cap =
-			list_entry(p, struct ceph_cap, session_caps);
-		struct inode *inode = &cap->ci->vfs_inode;
-		int used, wanted;
-
-		spin_lock(&inode->i_lock);
-
-		if ((cap->implemented & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		/* FIXME */
-		if (!list_empty(&cap->ci->i_cap_snaps))
-			__ceph_flush_snaps(cap->ci, NULL);
-
-		used = __ceph_caps_used(cap->ci);
-		wanted = __ceph_caps_wanted(cap->ci);
-		if (used || wanted) {
-			derr(0, "residual caps on %p u %d w %d s=%llu wrb=%d\n",
-			     inode, used, wanted, inode->i_size,
-			     cap->ci->i_wrbuffer_ref);
-			used = wanted = 0;
-		}
-
-		/* __send_cap drops i_lock */
-		__send_cap(mdsc, session, cap, used, wanted);
-	}
-}
-
 

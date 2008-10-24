@@ -101,7 +101,8 @@ enum {
 	CEPH_MDS_SESSION_NEW = 1,
 	CEPH_MDS_SESSION_OPENING = 2,
 	CEPH_MDS_SESSION_OPEN = 3,
-	CEPH_MDS_SESSION_CLOSING = 4,
+	CEPH_MDS_SESSION_FLUSHING = 4,
+	CEPH_MDS_SESSION_CLOSING = 5,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
 
@@ -247,5 +248,8 @@ extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
+
+extern void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
+				       struct ceph_mds_session *session);
 
 #endif

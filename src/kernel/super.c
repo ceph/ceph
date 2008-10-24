@@ -813,6 +813,15 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		err = PTR_ERR(root);
 		goto out;
 	}
+
+	/*
+	 * Drop the reference we just got, since the VFS doesn't give
+	 * us a reliable way to drop it later when a particular
+	 * vfsmount goes away.  If the directory we just mounted on is
+	 * renamed on the server, we are screwed.
+	 */
+	ceph_put_fmode(ceph_inode(root->d_inode), CEPH_FILE_MODE_PIN);
+
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
 	client->mount_state = CEPH_MOUNT_MOUNTED;
