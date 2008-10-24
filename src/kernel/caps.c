@@ -447,7 +447,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci)
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct ceph_mds_session *session = NULL; /* if session != NULL, we hold
 						    session->s_mutex */
-	u64 follows = 0;  /* keep track of how far we've gotten through the
+	u64 next_follows = 0;  /* keep track of how far we've gotten through the
 			     i_cap_snaps list, and skip these entries next time
 			     around to avoid an infinite loop */
 
@@ -457,7 +457,7 @@ retry:
 		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
 
 		/* avoid an infiniute loop after retry */
-		if (capsnap->follows <= follows)
+		if (capsnap->follows < next_follows)
 			continue;
 		/*
 		 * we need to wait for sync writes to complete and for dirty
@@ -493,7 +493,8 @@ retry:
 			goto retry;
 		}
 
-		follows = capsnap->follows;
+		next_follows = capsnap->follows + 1;
+
 		size = capsnap->size;
 		atime = capsnap->atime;
 		mtime = capsnap->mtime;
@@ -503,12 +504,12 @@ retry:
 		spin_unlock(&inode->i_lock);
 
 		dout(10, "flush_snaps %p cap_snap %p follows %lld size %llu\n",
-		     inode, capsnap, follows, size);
+		     inode, capsnap, next_follows, size);
 		send_cap_msg(mdsc, ceph_vino(inode).ino,
 			     CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
 			     size, 0,
 			     &mtime, &atime, time_warp_seq,
-			     follows, mds);
+			     next_follows, mds);
 
 		spin_lock(&inode->i_lock);
 		goto retry;
