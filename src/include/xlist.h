@@ -63,6 +63,20 @@ public:
     while (_front) remove(_front);
   }
 
+  void push_front(item *item) {
+    if (item->_list) 
+      item->_list->remove(item);
+
+    item->_list = this;
+    item->_next = _front;
+    item->_prev = 0;
+    if (_front) 
+      _front->_prev = item;
+    else
+      _back = item;
+    _front = item;
+    _size++;
+  }
   void push_back(item *item) {
     if (item->_list) 
       item->_list->remove(item);
