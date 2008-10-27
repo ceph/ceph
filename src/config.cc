@@ -427,8 +427,8 @@ md_config_t g_conf = {
   osd_max_pull: 2,
   osd_pad_pg_log: false,
 
-  osd_recovery_delay_start: 30.0,
-  osd_recovery_max_active: 1,
+  osd_recovery_delay_start: 15,
+  osd_recovery_max_active: 5,
 
   osd_auto_weight: false,
 

@@ -433,6 +433,7 @@ private:
   void maybe_start_recovery();
   void do_recovery();
   void finish_recovery_op(PG *pg, int count, bool more);
+  void defer_recovery(PG *pg);
 
   struct C_StartRecovery : public Context {
     OSD *osd;

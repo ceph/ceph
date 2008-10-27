@@ -26,7 +26,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 
 /******* PGLog ********/
@@ -1184,6 +1184,11 @@ void PG::_finish_recovery(Context *c)
   osd->osd_lock.Unlock();
   osd->finish_recovery_op(this, recovery_ops_active, true);
   put_unlock();
+}
+
+void PG::defer_recovery()
+{
+  osd->defer_recovery(this);
 }
 
 

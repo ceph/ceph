@@ -639,7 +639,7 @@ public:
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
   virtual void cancel_recovery() = 0;
-  virtual void start_recovery_op() = 0;
+  virtual int start_recovery_ops(int max) = 0;
 
   void purge_strays();
 
@@ -648,6 +648,7 @@ public:
 
   void finish_recovery();
   void _finish_recovery(Context *c);
+  void defer_recovery();
 
   loff_t get_log_write_pos() {
     return 0;

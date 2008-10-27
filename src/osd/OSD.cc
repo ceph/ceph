@@ -80,7 +80,7 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
 
@@ -618,10 +618,11 @@ void OSD::_remove_unlock_pg(PG *pg)
 	 p++) {
       vector<pobject_t> olist;      
       store->collection_list(pgid.to_snap_coll(*p), olist);
-      for (vector<pobject_t>::iterator p = olist.begin();
-	   p != olist.end();
-	   p++)
-	t.remove(pgid.to_coll(), *p);
+      dout(10) << "_remove_unlock_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
+      for (vector<pobject_t>::iterator q = olist.begin();
+	   q != olist.end();
+	   q++)
+	t.remove(pgid.to_snap_coll(*p), *q);
     }
 
     // log
@@ -629,12 +630,14 @@ void OSD::_remove_unlock_pg(PG *pg)
 
     // main collection
     store->collection_list(pgid.to_coll(), olist);
+    dout(10) << "_remove_unlock_pg " << pgid << " " << olist.size() << " objects" << dendl;
     for (vector<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(pgid.to_coll(), *p);
     t.remove_collection(pgid.to_coll());
   }
+  dout(10) << "_remove_unlock_pg " << pgid << " applying" << dendl;
   store->apply_transaction(t);
 
   // mark deleted
@@ -645,6 +648,7 @@ void OSD::_remove_unlock_pg(PG *pg)
 
   // unlock, and probably delete
   pg->put_unlock();     // will delete, if last reference
+  dout(10) << "_remove_unlock_pg " << pgid << " done" << dendl;
 }
 
 void OSD::load_pgs()
@@ -2840,26 +2844,32 @@ void OSD::do_recovery()
       recovery_lock.Unlock();
       return;
     }
+    int max = g_conf.osd_recovery_max_active - recovery_ops_active;
     
     PG *pg = recovering_pgs.front();
     pg->get();
-    recovery_ops_active++;
 
-    dout(10) << "do_recovery " << recovery_ops_active << "/" << g_conf.osd_recovery_max_active
-	     << " " << *pg << dendl;
+    dout(10) << "do_recovery starting " << max
+	     << " (" << recovery_ops_active
+	     << "/" << g_conf.osd_recovery_max_active << " active) on "
+	     << *pg << dendl;
 
     recovery_lock.Unlock();
     
     pg->lock();
-    pg->recovery_ops_active++;
-    pg->start_recovery_op();
+    int started = pg->start_recovery_ops(max);
+    recovery_ops_active += started;
+    pg->recovery_ops_active += started;
+    if (started < max)
+      pg->recovery_item.remove_myself();
     pg->put_unlock();
   }
 }
 
 void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
 {
-  dout(10) << "finish_recovery_op " << *pg << " count " << count << " dequeue=" << dequeue << dendl;
+  dout(10) << "finish_recovery_op " << *pg << " count " << count
+	   << " dequeue=" << dequeue << dendl;
   recovery_lock.Lock();
 
   // adjust count
@@ -2868,6 +2878,9 @@ void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
 
   if (dequeue)
     pg->recovery_item.remove_myself();
+  else
+    recovering_pgs.push_front(&pg->recovery_item);  // requeue
+
   recovery_lock.Unlock();
 
   // continue recovery?
@@ -2875,6 +2888,16 @@ void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
     do_recovery();
 }
 
+void OSD::defer_recovery(PG *pg)
+{
+  dout(10) << "defer_recovery " << *pg << dendl;
+  recovery_lock.Lock();
+
+  // move pg to the end of the queue...
+  recovering_pgs.push_back(&pg->recovery_item);
+
+  recovery_lock.Unlock();
+}
 
 
 // =========================================================

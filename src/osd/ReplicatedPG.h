@@ -133,10 +133,10 @@ protected:
   void cancel_recovery();
 
   void queue_for_recovery();
-  void start_recovery_op();
+  int start_recovery_ops(int max);
   void finish_recovery_op();
-  bool recover_primary();
-  void recover_replicas();
+  int recover_primary(int max);
+  int recover_replicas(int max);
 
   void reply_op_error(MOSDOp *op, int r);
 

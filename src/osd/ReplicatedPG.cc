@@ -29,7 +29,7 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 #include <errno.h>
@@ -2298,14 +2298,23 @@ void ReplicatedPG::cancel_recovery()
   osd->finish_recovery_op(this, recovery_ops_active, true);
 }
 
-void ReplicatedPG::start_recovery_op()
+int ReplicatedPG::start_recovery_ops(int max)
 {
+  int started = 0;
   assert(is_primary());
   
-  if (uptodate_set.count(osd->whoami))
-    recover_replicas();
-  else
-    recover_primary();
+  while (max > 0) {
+    int n;
+    if (uptodate_set.count(osd->whoami))
+      n = recover_replicas(max);
+    else
+      n = recover_primary(max);
+    started += n;
+    if (n < max)
+      break;
+    max -= n;
+  }
+  return started;
 }
 
 void ReplicatedPG::finish_recovery_op()
@@ -2319,7 +2328,7 @@ void ReplicatedPG::finish_recovery_op()
  * do one recovery op.
  * return true if done, false if nothing left to do.
  */
-bool ReplicatedPG::recover_primary()
+int ReplicatedPG::recover_primary(int max)
 {
   assert(is_primary());
 
@@ -2332,11 +2341,12 @@ bool ReplicatedPG::recover_primary()
   // can we slow down on this PG?
   if (osd->num_pulling >= g_conf.osd_max_pull && !pulling.empty()) {
     dout(-10) << "recover_primary already pulling max, waiting" << dendl;
-    return true;
+    return 0;
   }
 
   // look at log!
   Log::Entry *latest = 0;
+  int started = 0;
 
   list<Log::Entry>::iterator p = log.requested_to;
 
@@ -2378,7 +2388,8 @@ bool ReplicatedPG::recover_primary()
       }
 
       pull(poid);
-      return true;
+      if (++started >= max)
+	return started;
     }
     
     //if (p == log.requested_to)
@@ -2388,7 +2399,7 @@ bool ReplicatedPG::recover_primary()
 
   if (!pulling.empty()) {
     dout(7) << "recover_primary requested everything, still waiting" << dendl;
-    return false;
+    return started;
   }
 
   // done?
@@ -2411,11 +2422,12 @@ bool ReplicatedPG::recover_primary()
     finish_recovery_op();
   }
 
-  return false;
+  return started;
 }
 
-void ReplicatedPG::recover_replicas()
+int ReplicatedPG::recover_replicas(int max)
 {
+  int started = 0;
   dout(-10) << "recover_replicas" << dendl;
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
@@ -2441,7 +2453,8 @@ void ReplicatedPG::recover_replicas()
 	push_to_replica(poid, peer);
     }
 
-    return;
+    if (++started >= max)
+      return started;
   }
   
   // nothing to do!
@@ -2452,6 +2465,8 @@ void ReplicatedPG::recover_replicas()
   else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
   }
+
+  return started;
 }
 
 
