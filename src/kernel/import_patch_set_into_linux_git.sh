@@ -266,6 +266,6 @@ EOF
 
 # build the patch files
 mkdir out
-rm out/
+rm out/*
 git-format-patch -o out -n series_start..HEAD
 git diff --stat series_start > out/diffstat
