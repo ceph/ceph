@@ -188,7 +188,6 @@ bool FileStore::parse_object(char *s, pobject_t& o)
       s[26] != '.' ||
       s[35] != '.')
     return false;
-  dout(0) << "  got object " << s << dendl;
   o.volume = strtoll(s, 0, 16);
   assert(s[4] == '.');
   o.rank = strtoll(s+5, 0, 16);
@@ -198,7 +197,6 @@ bool FileStore::parse_object(char *s, pobject_t& o)
   o.oid.bno = strtoll(s+27, 0, 16);
   assert(s[35] == '.');
   o.oid.snap = strtoll(s+36, 0, 16);
-  dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
   return true;
 }
 
@@ -1529,7 +1527,7 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset)
   while (name < end) {
     char *attrname = name;
     if (parse_attrname(&name)) {
-      dout(0) << "getattrs " << fn << " getting '" << name << "'" << dendl;
+      dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
       int r = _getattr(fn, attrname, aset[name]);
       if (r < 0) return r;
     }
