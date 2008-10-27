@@ -298,7 +298,8 @@ private:
     dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
     xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
     snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
-    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET)
+    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
+    loner_cap(-1)
   {
     memset(&inode, 0, sizeof(inode));
     state = 0;  
@@ -471,25 +472,48 @@ public:
 
   // -- caps -- (new)
   // client caps
+  int loner_cap;
+
+  bool choose_loner() {
+    assert(loner_cap < 0);
+
+    if (!mds_caps_wanted.empty())
+      return false;
+
+    int n = 0;
+    int loner;
+    for (map<int,Capability*>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) 
+      if (!it->second->is_stale() &&
+	  (it->second->wanted() & (CEPH_CAP_WR|CEPH_CAP_RD))) {
+	if (n)
+	  return false;
+	n++;
+	loner = it->first;
+      }
+    if (n == 1) {
+      loner_cap = loner;
+      return true;
+    }
+    return false;
+  }
+
   int count_nonstale_caps() {
     int n = 0;
     for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) 
-      if (!it->second->is_stale()) {
-	if (n) return false;
+      if (!it->second->is_stale())
 	n++;
-      }
     return n;
+  }
+  int get_loner() {
+    return loner_cap;
   }
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
-  bool is_loner_cap() {
-    if (!mds_caps_wanted.empty())
-      return false;
-    return count_nonstale_caps() == 1;
-  }
 
   map<int,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(int client) {
@@ -574,21 +598,39 @@ public:
   }
 
   // caps issued, wanted
-  int get_caps_issued() {
+  int get_caps_issued(int *ploner = 0, int *pother = 0) {
     int c = 0;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
-         it != client_caps.end();
-         it++) 
-      c |= it->second->issued();
-    return c;
-  }
-  int get_caps_wanted() {
-    int w = 0;
+    int loner = 0, other = 0;
+    if (!is_auth())
+      loner_cap = -1;
     for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
-      if (!it->second->is_stale())
-	w |= it->second->wanted();
+      int i = it->second->issued();
+      c |= i;
+      if (it->first == loner_cap)
+	loner |= i;
+      else
+	other |= i;
+    }
+    if (ploner) *ploner = loner;
+    if (pother) *pother = other;
+    return c;
+  }
+  int get_caps_wanted(int *ploner = 0, int *pother = 0) {
+    int w = 0;
+    int loner = 0, other = 0;
+    for (map<int,Capability*>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) {
+      if (!it->second->is_stale()) {
+	int t = it->second->wanted();
+	w |= t;
+	if (it->first == loner_cap)
+	  loner |= t;
+	else
+	  other |= t;	
+      }
       //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
     }
     if (is_auth())
@@ -596,8 +638,11 @@ public:
            it != mds_caps_wanted.end();
            it++) {
         w |= it->second;
+	other |= it->second;
         //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
       }
+    if (ploner) *ploner = loner;
+    if (pother) *pother = other;
     return w;
   }
 
