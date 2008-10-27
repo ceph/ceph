@@ -1931,7 +1931,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	/* virtual xattr names, too */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
 		for (i=0;  _ceph_vir_xattr_recs[i].name; i++) {
-			len = sprintf(names, _ceph_vir_xattr_recs[i].name);
+			len = sprintf(names, "%s", _ceph_vir_xattr_recs[i].name);
 			names += len + 1;
 		}
 
