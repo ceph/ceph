@@ -501,8 +501,9 @@ void ObjectCacher::bh_write(BufferHead *bh)
   oncommit->tid = tid;
   bh->ob->last_write_tid = tid;
   bh->last_write_tid = tid;
-  if (commit_set_callback)
-    last_write_by_ino[bh->ob->get_ino()] = tid;
+  if (commit_set_callback) {
+    uncommitted_by_ino[bh->ob->get_ino()].push_back(&bh->ob->uncommitted_item);
+  }
 
   mark_tx(bh);
 }
@@ -654,16 +655,19 @@ void ObjectCacher::bh_write_commit(object_t oid, loff_t start, size_t length, ti
   } else {
     Object *ob = objects[oid];
     
-    // is the entire object set now clean and fully committed?
-    if (commit_set_callback && 
-	last_write_by_ino[ob->get_ino()] <= tid) {
-      commit_set_callback(flush_set_callback_arg, ob->get_ino());      
-      last_write_by_ino.erase(ob->get_ino());
-    }
-
     // update last_commit.
     ob->last_commit_tid = tid;
-    
+
+    // is the entire object set now clean and fully committed?
+    if (commit_set_callback &&
+	ob->last_commit_tid == ob->last_write_tid) {
+      ob->uncommitted_item.remove_myself();
+      if (uncommitted_by_ino[ob->get_ino()].empty()) {
+	uncommitted_by_ino.erase(ob->get_ino());
+	commit_set_callback(flush_set_callback_arg, ob->get_ino());      
+      }
+    }
+   
     // waiters?
     if (ob->waitfor_commit.count(tid)) {
       list<Context*> ls;
