@@ -835,7 +835,7 @@ out:
 
 
 /*
- * Process and incoming message.
+ * Process an incoming message.
  *
  * This should be relatively fast and must not do any work that waits
  * on other messages to be received.
