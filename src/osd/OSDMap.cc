@@ -109,7 +109,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     // replication
     for (int pool=0; pool<npools; pool++) {
       // size minrep..ndom
-      crush_rule *rule = crush_make_rule(4, pool, CEPH_PG_TYPE_REP, minrep, ndom);
+      crush_rule *rule = crush_make_rule(4, pool, CEPH_PG_TYPE_REP, minrep, g_conf.osd_max_rep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
       crush_rule_set_step(rule, 2, CRUSH_RULE_CHOOSE_FIRSTN, 1, 0);  // and 1 device in each

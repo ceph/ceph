@@ -412,8 +412,8 @@ md_config_t g_conf = {
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_min_rep: 2,
   osd_max_rep: 3,
-  osd_min_raid_width: 4,
-  osd_max_raid_width: 3, //6, 
+  osd_min_raid_width: 3,
+  osd_max_raid_width: 2, //6, 
 
   osd_maxthreads: 2,    // 0 == no threading
   osd_max_opq: 10,
