@@ -599,7 +599,7 @@ bool Locker::issue_caps(CInode *in)
   }
 
   // should we increase max_size?
-  if (!in->is_dir() && (all_allowed & CEPH_CAP_WR) && in->is_auth())
+  if (!in->is_dir() && ((all_allowed|loner_allowed) & CEPH_CAP_WR) && in->is_auth())
     check_inode_max_size(in);
 
   // client caps
