@@ -63,6 +63,24 @@ the identification of large disk space consumers relatively quick, as
 no 'du' or similar recursive scan of the file system is required.
 
 
+Mount Syntax
+============
+
+The basic mount syntax is:
+
+ # mount -t ceph monip[:port][,monip2[:port]...]:/[subdir] mnt
+
+You only need to specify a single monitor, as the client will get the
+full list when it connects.  (However, if the monitor you specify
+happens to be down, the mount won't succeed.)  The port can be left
+off if the monitor is using the default.  So if the monitor is at
+1.2.3.4,
+
+ # mount -t ceph 1.2.3.4:/ /mnt/ceph
+
+is sufficient.
+
+
 Mount Options
 =============
 

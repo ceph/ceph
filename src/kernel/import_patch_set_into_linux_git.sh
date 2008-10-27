@@ -20,6 +20,14 @@ git apply $cephtree/src/kernel/kbuild.patch
 git branch -D series_start
 git branch series_start
 
+git add Documentation/filesystems/ceph.txt
+git commit -F - <<EOF
+ceph: documentation
+
+Mount options, syntax.
+
+EOF
+
 git add fs/ceph/ceph_fs.h
 git commit -F - <<EOF
 ceph: on-wire types
@@ -236,6 +244,7 @@ EOF
 
 git add fs/ceph/ceph_debug.h
 git add fs/ceph/ceph_tools.h
+git add fs/ceph/ceph_tools.c
 git add fs/ceph/proc.c
 git commit -F - <<EOF
 ceph: debugging
