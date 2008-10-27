@@ -22,24 +22,10 @@
 
 class MPing : public Message {
  public:
-  __u64 seq;
-  utime_t stamp;
-  MPing(int s, utime_t w) : Message(CEPH_MSG_PING) {
-    seq = s;
-    stamp = w;
-  }
   MPing() : Message(CEPH_MSG_PING) {}
 
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(seq, p);
-    ::decode(stamp, p);
-  }
-  void encode_payload() {
-    ::encode(seq, payload);
-    ::encode(stamp, payload);
-  }
-
+  void decode_payload() { }
+  void encode_payload() { }
   const char *get_type_name() { return "ping"; }
 };
 

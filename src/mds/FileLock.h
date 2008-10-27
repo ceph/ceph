@@ -16,7 +16,6 @@
 #ifndef __FILELOCK_H
 #define __FILELOCK_H
 
-#include <assert.h>
 #include <set>
 using namespace std;
 
@@ -29,7 +28,7 @@ using namespace std;
 
 //                               -----auth--------   ---replica-------
 #define LOCK_SYNC_    1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
-#define LOCK_GSYNCL  -12 // A    . . / C ? . . . L                       loner -> sync (*)
+#define LOCK_GSYNCL  -12 // A    . . / C r . . . L *                     loner -> sync
 #define LOCK_GSYNCM  -13 // A    . . / . R . . . L
 
 #define LOCK_LOCK_    2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
@@ -39,18 +38,15 @@ using namespace std;
 
 #define LOCK_MIXED    6  // AR   . . / . R W A . L   . . / . R . . . L
 #define LOCK_GMIXEDR -7  // AR   R . / . R . . . L   . . / . R . . . L 
-#define LOCK_GMIXEDL -8  // A    . . / . . . . . L                       loner -> mixed
+#define LOCK_GMIXEDL -8  // A    . . / . r w a . L *                     loner -> mixed
 
-#define LOCK_LONER    9  // A    . . / C R W A B L        (lock)      
-#define LOCK_GLONERR -10 // A    . . / . R . . . L
-#define LOCK_GLONERM -11 // A    . . / . R W A . L
+#define LOCK_LONER    9  // A    . . / c r w a b L *      (lock)      
+#define LOCK_GLONERR -10 // A    . . / . R . . . L 
+#define LOCK_GLONERM -11 // A    . . / . R W A . L 
+#define LOCK_GLONERL -15 // A    . . / c . . . b . *
 
-// (*) FIXME: how to let old loner keep R, somehow, during GSYNCL
-
-//   4 stable
-//  +9 transition
-//  13 total
-
+//                                                 * <- varies if client is loner vs non-loner.
+ 
 inline const char *get_filelock_state_name(int n) {
   switch (n) {
   case LOCK_SYNC: return "sync";
@@ -66,6 +62,7 @@ inline const char *get_filelock_state_name(int n) {
   case LOCK_LONER: return "loner";
   case LOCK_GLONERR: return "glonerr";
   case LOCK_GLONERM: return "glonerm";
+  case LOCK_GLONERL: return "glonerl";
   default: assert(0); return 0;
   }
 }
@@ -111,6 +108,7 @@ class FileLock : public SimpleLock {
     case LOCK_LONER:
     case LOCK_GLONERR:
     case LOCK_GLONERM:
+    case LOCK_GLONERL:
       return LOCK_LOCK;
     case LOCK_MIXED:
     case LOCK_GMIXEDR:
@@ -167,7 +165,7 @@ class FileLock : public SimpleLock {
       parent->is_auth() && 
       (state == LOCK_LOCK || state == LOCK_GLOCKM || state == LOCK_GLOCKL ||
        state == LOCK_MIXED || state == LOCK_GMIXEDL ||
-       state == LOCK_LONER || state == LOCK_GLONERM ||
+       state == LOCK_LONER || state == LOCK_GLONERM || state == LOCK_GLONERL ||
        state == LOCK_GSYNCM || state == LOCK_GSYNCL);
   }
   void get_wrlock(bool force) {
@@ -194,7 +192,7 @@ class FileLock : public SimpleLock {
       return CEPH_CAP_PIN | 
 	CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
   }
-  int caps_allowed() {
+  int caps_allowed(bool loner) {
     if (parent->is_auth())
       switch (state) {
       case LOCK_SYNC:
@@ -213,17 +211,20 @@ class FileLock : public SimpleLock {
       case LOCK_GMIXEDR:
         return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GMIXEDL:
-        return CEPH_CAP_PIN;
+        return CEPH_CAP_PIN | (loner ? (CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND) : 0);
 
       case LOCK_LONER:  // single client writer, of course.
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_LAZYIO | CEPH_CAP_EXCL;
+        return CEPH_CAP_PIN | CEPH_CAP_LAZYIO |
+	  ( loner ? (CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_EXCL) : 0 );
       case LOCK_GLONERR:
         return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       case LOCK_GLONERM:
         return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
+      case LOCK_GLONERL:
+        return CEPH_CAP_PIN | (loner ? (CEPH_CAP_RDCACHE | CEPH_CAP_WRBUFFER) : 0);
 
       case LOCK_GSYNCL:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
+        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | (loner ? CEPH_CAP_RD:0) | CEPH_CAP_LAZYIO;
       case LOCK_GSYNCM:
         return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
       }
@@ -241,6 +242,16 @@ class FileLock : public SimpleLock {
     assert(0);
     return 0;
   }
+
+  // true if we are in a "loner" mode that distinguishes between a loner and everyone else
+  bool is_loner_mode() {
+    return state == LOCK_GSYNCL ||
+      state == LOCK_GLOCKL ||
+      state == LOCK_GMIXEDL ||
+      state == LOCK_LONER ||
+      state == LOCK_GLONERL;
+  }
+
 
   void print(ostream& out) {
     out << "(";

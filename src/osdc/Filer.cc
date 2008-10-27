@@ -13,8 +13,6 @@
  */
 
 
-#include <assert.h>
-
 #include "Filer.h"
 #include "osd/OSDMap.h"
 

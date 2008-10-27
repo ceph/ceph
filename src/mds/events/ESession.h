@@ -15,7 +15,6 @@
 #ifndef __MDS_ESESSION_H
 #define __MDS_ESESSION_H
 
-#include <assert.h>
 #include "config.h"
 #include "include/types.h"
 

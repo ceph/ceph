@@ -1,23 +1,33 @@
 #include <linux/exportfs.h>
 
-#include "ceph_fs.h"
-
+#include "super.h"
 #include "ceph_debug.h"
 
 int ceph_debug_export = -1;
 #define DOUT_MASK DOUT_MASK_EXPORT
 #define DOUT_VAR ceph_debug_export
 #define DOUT_PREFIX "export: "
-#include "super.h"
 
 /*
  * fh is N tuples of
  *  <ino, parent's d_name.hash>
+ *
+ * This is only a semi-reliable strategy.  The fundamental issue is
+ * that ceph doesn't not have a way to locate an arbitrary inode by
+ * ino.  Keeping a few parents in the handle increases the probability
+ * that we'll find it in one of the MDS caches, but it is by no means
+ * a guarantee.
+ *
+ * Also, the FINDINODE request is currently directed at a single MDS.
+ * It should probably try all MDS's before giving up.  For a single MDS
+ * system that isn't a problem.
+ *
+ * In the meantime, this works reasonably well for basic usage.
  */
 
 #define IPSZ (sizeof(struct ceph_inopath_item) / sizeof(u32))
 
-int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len, 
+static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 		   int connectable)
 {
 	int type = 1;
@@ -28,14 +38,14 @@ int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len,
 
 	dout(10, "encode_fh %p max_len %d u32s (%d inopath items)%s\n", dentry,
 	     *max_len, max, connectable ? " connectable":"");
-	
+
 	if (max < 1 || (connectable && max < 2))
 		return -ENOSPC;
 
 	/*
-	 * pretty sure this is racy
+	 * pretty sure this is racy.  caller holds dentry->d_lock, but
+	 * not parents'.
 	 */
-	/* note: caller holds dentry->d_lock */
 	fh[0].ino = cpu_to_le64(ceph_vino(dentry->d_inode).ino);
 	fh[0].dname_hash = cpu_to_le32(dentry->d_name.hash);
 	len = 1;
@@ -55,7 +65,7 @@ int ceph_encode_fh(struct dentry *dentry, __u32 *rawfh, int *max_len,
 	return type;
 }
 
-struct dentry *__fh_to_dentry(struct super_block *sb,
+static struct dentry *__fh_to_dentry(struct super_block *sb,
 			      struct ceph_inopath_item *fh, int len)
 {
 	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
@@ -72,22 +82,26 @@ struct dentry *__fh_to_dentry(struct super_block *sb,
 	if (!inode) {
 		struct ceph_mds_request *req;
 		derr(10, "__fh_to_dentry %llx.%x -- no inode\n", vino.ino,hash);
-		
+
 		req = ceph_mdsc_create_request(mdsc,
 					       CEPH_MDS_OP_FINDINODE,
-					       len, (char *)fh, 0, 0,
+					       len, (char *)fh, 0, NULL,
 					       NULL, USE_ANY_MDS);
 		if (IS_ERR(req))
 			return ERR_PTR(PTR_ERR(req));
 		err = ceph_mdsc_do_request(mdsc, req);
 		ceph_mdsc_put_request(req);
-		
+
 		inode = ceph_find_inode(sb, vino);
 		if (!inode)
 			return ERR_PTR(err ? err : -ESTALE);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+	dentry = d_obtain_alias(inode);
+#else
 	dentry = d_alloc_anon(inode);
+#endif
 	if (!dentry) {
 		derr(10, "__fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
 		     vino.ino,
@@ -97,18 +111,18 @@ struct dentry *__fh_to_dentry(struct super_block *sb,
 	}
 	dout(10, "__fh_to_dentry %llx.%x -- inode %p dentry %p\n", vino.ino,
 	     hash, inode, dentry);
-	return dentry;	
+	return dentry;
 
 }
 
-struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
+static struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
 	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh, fh_len/IPSZ);
 }
 
-struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
+static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;

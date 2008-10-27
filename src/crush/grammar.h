@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef __CRUSH_GRAMMAR
@@ -70,7 +70,7 @@ struct crush_grammar : public grammar<crush_grammar>
     rule<ScannerT, parser_context<>, parser_tag<_crushrule> >      crushrule;
 
     rule<ScannerT, parser_context<>, parser_tag<_crushmap> >      crushmap;
-    
+
     definition(crush_grammar const& /*self*/)
     {
       // base types
@@ -86,21 +86,21 @@ struct crush_grammar : public grammar<crush_grammar>
 			       >> !( ( str_p("offload") >> real_p ) |
 				     ( str_p("load") >> real_p ) |
 				     str_p("down"));
-      
+
       // bucket types
       bucket_type = str_p("type") >> posint >> name;
 
       // buckets
       bucket_id = str_p("id") >> negint;
-      bucket_alg = str_p("alg") >> ( str_p("uniform") | 
-				     str_p("list") | 
-				     str_p("tree") | 
+      bucket_alg = str_p("alg") >> ( str_p("uniform") |
+				     str_p("list") |
+				     str_p("tree") |
 				     str_p("straw") );
       bucket_item = str_p("item") >> name
 				  >> !( str_p("weight") >> real_p )
 				  >> !( str_p("pos") >> posint );
       bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_item >> '}';
-      
+
       // rules
       step_take = str_p("take") >> name;
       step_choose = str_p("choose")
@@ -112,11 +112,11 @@ struct crush_grammar : public grammar<crush_grammar>
 	>> integer
 	>> str_p("type") >> name;
       step_emit = str_p("emit");
-      step = str_p("step") >> ( step_take | 
-				step_choose | 
-				step_chooseleaf | 
+      step = str_p("step") >> ( step_take |
+				step_choose |
+				step_chooseleaf |
 				step_emit );
-      crushrule = str_p("rule") >> !name >> '{' 
+      crushrule = str_p("rule") >> !name >> '{'
 			   >> str_p("pool") >> posint
 			   >> str_p("type") >> ( str_p("replicated") | str_p("raid4") )
 			   >> str_p("min_size") >> posint
@@ -127,8 +127,8 @@ struct crush_grammar : public grammar<crush_grammar>
       // the whole crush map
       crushmap = *(device | bucket_type) >> *bucket >> *crushrule;
     }
-    
-    rule<ScannerT, parser_context<>, parser_tag<_crushmap> > const& 
+
+    rule<ScannerT, parser_context<>, parser_tag<_crushmap> > const&
     start() const { return crushmap; }
   };
 };

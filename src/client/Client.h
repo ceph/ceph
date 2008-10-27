@@ -921,12 +921,12 @@ private:
   int _symlink(const filepath &path, const char *target, int uid=-1, int gid=-1);
   int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1, frag_info_t *dirstat=0);
   int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
-  int _chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid=-1, int cgid=-1);
+  int _chown(const filepath &path, uid_t uid, gid_t gid, int mask, bool followsym, int cuid=-1, int cgid=-1);
   int _getxattr(const filepath &path, const char *name, void *value, size_t len, bool followsym, int uid=-1, int gid=-1);
   int _listxattr(const filepath &path, char *names, size_t len, bool followsym, int uid=-1, int gid=-1);
   int _setxattr(const filepath &path, const char *name, const void *value, size_t len, int flags, bool followsym, int uid=-1, int gid=-1);
   int _removexattr(const filepath &path, const char *nm, bool followsym, int uid=-1, int gid=-1);
-  int _utimes(const filepath &path, utime_t mtime, utime_t atime, bool followsym, int uid=-1, int gid=-1);
+  int _utimes(const filepath &path, utime_t mtime, utime_t atime, int mask, bool followsym, int uid=-1, int gid=-1);
   int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
   int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);

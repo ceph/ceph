@@ -30,7 +30,6 @@
 #include <stack>
 #include <functional>
 #include <string>
-#include <cassert>
 #include <map>
 
 #include <typeinfo>

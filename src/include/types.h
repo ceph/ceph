@@ -12,17 +12,25 @@
  * 
  */
 
-#ifndef __MDS_TYPES_H
-#define __MDS_TYPES_H
+#ifndef __CEPH_TYPES_H
+#define __CEPH_TYPES_H
+
+// this is needed for ceph_fs to compile in userland
+#include <netinet/in.h>
+#define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
+#include "inttypes.h"
+#include "byteorder.h"
+#include <fcntl.h>
+#include <string.h>
 
 #include "ceph_fs.h"
+
+#define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up about hash_*. */
 
 extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <assert.h>
-#include <fcntl.h>
 #include "statlite.h"
 }
 
@@ -40,7 +48,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-
+#include "assert.h"
 #include "object.h"
 #include "utime.h"
 #include "intarith.h"
@@ -205,7 +213,8 @@ WRITE_RAW_ENCODER(ceph_inopath_item)
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
 
-WRITE_RAW_ENCODER(ceph_statfs)
+WRITE_RAW_ENCODER(ceph_mon_statfs)
+WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
 
 // ----------------------
 // some basic types

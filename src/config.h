@@ -26,6 +26,8 @@ extern const char *get_pool_name(int pool);
 #include <vector>
 #include <map>
 
+#include "include/assert.h"
+
 #include "common/Mutex.h"
 
 extern std::map<int,float> g_fake_osd_down;

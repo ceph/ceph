@@ -16,7 +16,6 @@
 #ifndef __DISTRIBUTION_H
 #define __DISTRIBUTION_H
 
-#include <cassert>
 #include <vector>
 using namespace std;
 

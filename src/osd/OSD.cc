@@ -38,7 +38,6 @@
 
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
-#include "messages/MPingAck.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
@@ -70,7 +69,6 @@
 #include "common/ThreadPool.h"
 
 #include <iostream>
-#include <cassert>
 #include <errno.h>
 #include <sys/stat.h>
 
@@ -552,6 +550,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   assert(!store->collection_exists(pgid.to_coll()));
   t.create_collection(pgid.to_coll());
 
+  pg->write_info(t);
   pg->write_log(t);
 
   return pg;
@@ -576,6 +575,8 @@ PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Trans
     pg->info.history.same_since =
     pg->info.history.same_primary_since =
     pg->info.history.same_acker_since = osdmap->get_epoch();
+
+  pg->write_info(t);
   pg->write_log(t);
   
   dout(7) << "_create_lock_new_pg " << *pg << dendl;
@@ -608,15 +609,30 @@ void OSD::_remove_unlock_pg(PG *pg)
 
   // remove from store
   vector<pobject_t> olist;
-  store->collection_list(pgid.to_coll(), olist);
-  
+
   ObjectStore::Transaction t;
   {
+    // snap collections
+    for (set<snapid_t>::iterator p = pg->snap_collections.begin();
+	 p != pg->snap_collections.end();
+	 p++) {
+      vector<pobject_t> olist;      
+      store->collection_list(pgid.to_snap_coll(*p), olist);
+      for (vector<pobject_t>::iterator p = olist.begin();
+	   p != olist.end();
+	   p++)
+	t.remove(pgid.to_coll(), *p);
+    }
+
+    // log
+    t.remove(pgid.to_coll(), pgid.to_pobject());
+
+    // main collection
+    store->collection_list(pgid.to_coll(), olist);
     for (vector<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(pgid.to_coll(), *p);
-    t.remove(pgid.to_coll(), pgid.to_pobject());  // log too
     t.remove_collection(pgid.to_coll());
   }
   store->apply_transaction(t);
@@ -650,14 +666,8 @@ void OSD::load_pgs()
     pg_t pgid = it->high;
     PG *pg = _open_lock_pg(pgid);
 
-    // read pg info
-    bufferlist bl;
-    store->collection_getattr(pgid.to_coll(), "info", bl);
-    bufferlist::iterator p = bl.begin();
-    ::decode(pg->info, p);
-    
-    // read pg log
-    pg->read_log(store);
+    // read pg state, log
+    pg->read_state(store);
 
     // generate state for current mapping
     int nrep = osdmap->pg_to_acting_osds(pgid, pg->acting);
@@ -2082,6 +2092,8 @@ void OSD::kick_pg_split_queue()
       bufferlist bl;
       ::encode(pg->info, bl);
       t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
+
+      pg->write_info(t);
       pg->write_log(t);
 
       wake_pg_waiters(pg->info.pgid);
@@ -2358,6 +2370,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->info.history = history;
 	pg->clear_primary_state();  // yep, notably, set hml=false
 	pg->build_prior();      
+	pg->write_info(t);
 	pg->write_log(t);
       }
       
@@ -2467,6 +2480,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     pg->acting.swap(acting);
     pg->set_role(role);
     pg->info.history = info.history;
+    pg->write_info(t);
     pg->write_log(t);
     store->apply_transaction(t);
     created++;
@@ -2614,6 +2628,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg->acting.swap( acting );
       pg->set_role(role);
       pg->info.history = history;
+      pg->write_info(t);
       pg->write_log(t);
       store->apply_transaction(t);
       created++;

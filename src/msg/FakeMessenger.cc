@@ -32,7 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
-#include <cassert>
 #include <iostream>
 
 using namespace std;

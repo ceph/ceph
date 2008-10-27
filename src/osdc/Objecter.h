@@ -185,7 +185,8 @@ class Objecter {
     assert(pg_map[pgid].active_tids.empty());
     pg_map.erase(pgid);
   }
-  void scan_pgs(set<pg_t>& chnaged_pgs);
+  void scan_pgs(set<pg_t>& changed_pgs);
+  void scan_pgs_for(set<pg_t>& changed_pgs, int osd);
   void kick_requests(set<pg_t>& changed_pgs);
     
 
@@ -251,7 +252,7 @@ class Objecter {
   tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
 
 
-  void ms_handle_failure(Message *m, entity_name_t dest, const entity_inst_t& inst);
+  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t dest);
 
 };
 

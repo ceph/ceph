@@ -31,8 +31,6 @@
 
 #include "osdc/Objecter.h"
 
-#include <cassert>
-
 #include "config.h"
 
 #define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
@@ -147,7 +145,7 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   frag = fg;
   this->cache = mdcache;
 
-  first = 1;
+  first = 2;
   
   num_head_items = num_head_null = 0;
   num_snap_items = num_snap_null = 0;

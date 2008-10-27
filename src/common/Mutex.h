@@ -16,7 +16,7 @@
 #define __MUTEX_H
 
 #include <pthread.h>
-#include <cassert>
+#include "include/assert.h"
 
 class Mutex {
 private:
@@ -47,6 +47,15 @@ public:
 
   bool is_locked() {
     return (nlock > 0);
+  }
+
+  bool TryLock() {
+    int r = pthread_mutex_trylock(&_m);
+    if (r == 0) {
+      nlock++;
+      assert(nlock == 1 || recursive);
+    }
+    return r == 0;
   }
 
   void Lock() {

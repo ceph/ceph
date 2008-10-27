@@ -18,7 +18,7 @@
 
 #include "config.h"
 
-#include <assert.h>
+#include "assert.h"
 #include <list>
 #include <set>
 

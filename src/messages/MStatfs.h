@@ -20,6 +20,7 @@
 
 class MStatfs : public Message {
 public:
+  ceph_fsid fsid;
   tid_t tid;
 
   MStatfs() : Message(CEPH_MSG_STATFS) {}
@@ -31,10 +32,12 @@ public:
   }
 
   void encode_payload() {
+    ::encode(fsid, payload);
     ::encode(tid, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
     ::decode(tid, p);
   }
 };

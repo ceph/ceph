@@ -73,12 +73,9 @@ public:
   void resend_commits();
 
   // for recovery (by me)
-  void got_journaled_agree(version_t tid, LogSegment *ls) {
-    pending_commit[tid] = ls;
-  }
-  void got_journaled_ack(version_t tid) {
-    pending_commit.erase(tid);
-  }
+  void got_journaled_agree(version_t tid, LogSegment *ls);
+  void got_journaled_ack(version_t tid);
+
   bool has_committed(version_t tid) {
     return pending_commit.count(tid) == 0;
   }

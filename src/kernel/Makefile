@@ -12,7 +12,7 @@ ceph-objs := super.o inode.o dir.o file.o addr.o ioctl.o \
 	mds_client.o mdsmap.o \
 	mon_client.o \
 	osd_client.o osdmap.o crush/crush.o crush/mapper.o \
-	proc.o
+	proc.o ceph_tools.o
 
 else
 #Otherwise we were called directly from the command
@@ -23,7 +23,7 @@ PWD := $(shell pwd)
 
 default: all
 
-all: ceph_fs.h 
+all:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) CONFIG_CEPH_FS=m modules
 
 modules_install:
@@ -31,8 +31,5 @@ modules_install:
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
-
-ceph_fs.h:
-	ln -s ../include/ceph_fs.h ceph_fs.h
 
 endif

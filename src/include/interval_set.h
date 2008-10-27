@@ -18,7 +18,6 @@
 
 #include <map>
 #include <ostream>
-#include <cassert>
 using namespace std;
 
 #ifndef MIN

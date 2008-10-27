@@ -21,7 +21,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <assert.h>
 
 // ceph
 #include "include/types.h"

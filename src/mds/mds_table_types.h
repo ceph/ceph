@@ -38,6 +38,7 @@ enum {
   TABLESERVER_OP_COMMIT       =  5,
   TABLESERVER_OP_ACK          = -6,
   TABLESERVER_OP_ROLLBACK     =  7,
+  TABLESERVER_OP_SERVER_UPDATE = 8,
 };
 
 inline const char *get_mdstableserver_opname(int op) {
@@ -49,6 +50,7 @@ inline const char *get_mdstableserver_opname(int op) {
   case TABLESERVER_OP_COMMIT: return "commit";
   case TABLESERVER_OP_ACK: return "ack";
   case TABLESERVER_OP_ROLLBACK: return "rollback";
+  case TABLESERVER_OP_SERVER_UPDATE: return "server_update";
   default: assert(0); return 0;
   }
 };

@@ -153,6 +153,17 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
 // recovery
 
+void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
+{
+  ls->pending_commit_tids[table].insert(tid);
+  pending_commit[tid] = ls;
+}
+void MDSTableClient::got_journaled_ack(version_t tid)
+{
+  if (pending_commit.count(tid))
+    pending_commit[tid]->pending_commit_tids[table].erase(tid);
+  pending_commit.erase(tid);
+}
 
 void MDSTableClient::finish_recovery()
 {

@@ -16,10 +16,9 @@
 #ifndef __MDSMAP_H
 #define __MDSMAP_H
 
+#include "include/types.h"
 #include "common/Clock.h"
 #include "msg/Message.h"
-
-#include "include/types.h"
 
 #include <set>
 #include <map>

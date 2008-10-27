@@ -1251,6 +1251,10 @@ void PG::write_info(ObjectStore::Transaction& t)
   bufferlist infobl;
   ::encode(info, infobl);
   t.collection_setattr(info.pgid.to_coll(), "info", infobl);
+
+  bufferlist snapbl;
+  ::encode(snap_collections, snapbl);
+  t.collection_setattr(info.pgid.to_coll(), "snap_collections", snapbl);
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -1284,8 +1288,6 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  write_info(t);
-
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
 }
 
@@ -1426,6 +1428,41 @@ void PG::read_log(ObjectStore *store)
     if (r < 0 || v < i->version) 
       missing.add_event(*i);
   }
+}
+
+
+
+void PG::read_state(ObjectStore *store)
+{
+  bufferlist bl;
+  bufferlist::iterator p;
+
+  // info
+  store->collection_getattr(info.pgid.to_coll(), "info", bl);
+  p = bl.begin();
+  ::decode(info, p);
+  
+  // snap_collections
+  bl.clear();
+  store->collection_getattr(info.pgid.to_coll(), "snap_collections", bl);
+  p = bl.begin();
+  ::decode(snap_collections, p);
+
+  read_log(store);
+}
+
+coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
+{
+  coll_t c = info.pgid.to_snap_coll(s);
+  if (snap_collections.count(s) == 0) {
+    snap_collections.insert(s);
+    dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
+    bufferlist bl;
+    ::encode(snap_collections, bl);
+    t.collection_setattr(info.pgid.to_coll(), "snap_collections", bl);
+    t.create_collection(c);
+  }
+  return c;
 }
 
 

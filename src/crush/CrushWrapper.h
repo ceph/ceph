@@ -1,13 +1,18 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef __CRUSH_WRAPPER_H
 #define __CRUSH_WRAPPER_H
 
+#define BUG_ON(x) assert(!(x))
+#include "include/inttypes.h"  /* just for int types */
+
+extern "C" {
 #include "crush.h"
 #include "hash.h"
 #include "mapper.h"
 #include "builder.h"
+}
 
 #include "include/err.h"
 #include "include/encoding.h"
@@ -61,12 +66,12 @@ private:
     for (std::map<int, string>::iterator p = f.begin(); p != f.end(); p++)
       r[p->second] = p->first;
   }
-  
+
 public:
   CrushWrapper() : crush(0), have_rmaps(false) {}
   ~CrushWrapper() {
     if (crush) crush_destroy(crush);
-  }  
+  }
 
   /* building */
   void create() {
@@ -104,7 +109,7 @@ public:
     if (name_rmap.count(name))
       return name_rmap[name];
     return 0;  /* hrm */
-  }  
+  }
   const char *get_item_name(int t) {
     if (name_map.count(t))
       return name_map[t].c_str();
@@ -124,7 +129,7 @@ public:
     if (rule_name_rmap.count(name))
       return rule_name_rmap[name];
     return 0;  /* hrm */
-  }  
+  }
   const char *get_rule_name(int t) {
     if (rule_name_map.count(t))
       return rule_name_map[t].c_str();
@@ -147,13 +152,13 @@ public:
     if (d >= crush->max_devices) return -1;
     return crush->device_offload[d];
   }
-  
-  
+
+
   /*** rules ***/
 private:
   crush_rule *get_rule(unsigned ruleno) {
     if (!crush) return (crush_rule *)(-ENOENT);
-    if (ruleno >= crush->max_rules) 
+    if (ruleno >= crush->max_rules)
       return 0;
     return crush->rules[ruleno];
   }
@@ -250,15 +255,15 @@ public:
   int set_rule_step_emit(unsigned ruleno, unsigned step) {
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
-  
-  
+
+
 
   /** buckets **/
 private:
   crush_bucket *get_bucket(int id) {
     if (!crush) return (crush_bucket *)(-ENOENT);
     int pos = -1 - id;
-    if ((unsigned)pos >= crush->max_buckets) return 0;
+    if (pos >= crush->max_buckets) return 0;
     return crush->buckets[pos];
   }
 
@@ -313,7 +318,7 @@ public:
     crush_bucket *b = crush_make_bucket(alg, type, size, items, weights);
     return crush_add_bucket(crush, bucketno, b);
   }
-  
+
   void finalize() {
     assert(crush);
     crush_finalize(crush);
@@ -327,8 +332,10 @@ public:
     crush->device_offload[i] = o;
   }
   unsigned get_offload(int i) {
-    assert(i < crush->max_devices);
-    return crush->device_offload[i];
+    if (i < crush->max_devices)
+      return crush->device_offload[i];
+    else
+      return 0x10000;  // not in map.. fully OUT!
   }
 
   int find_rule(int pool, int type, int size) {
@@ -337,7 +344,7 @@ public:
   }
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed) {
     int rawout[maxout];
-    
+
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout, forcefeed);
 
     out.resize(numrep);
@@ -351,13 +358,13 @@ public:
     for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
       if (p->second > max)
 	max = p->second;
-    
+
     for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++) {
       unsigned w = 0x10000 - (unsigned)(p->second / max * 0x10000);
       set_offload(p->first, w);
     }
   }
-  
+
 
 
   int read_from_file(const char *fn) {
@@ -385,7 +392,7 @@ public:
       ::encode(crush->device_offload[i], bl);
 
     // buckets
-    for (unsigned i=0; i<crush->max_buckets; i++) {
+    for (int i=0; i<crush->max_buckets; i++) {
       __u32 alg = 0;
       if (crush->buckets[i]) alg = crush->buckets[i]->alg;
       ::encode(alg, bl);
@@ -398,7 +405,7 @@ public:
       ::encode(crush->buckets[i]->size, bl);
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	::encode(crush->buckets[i]->items[j], bl);
-      
+
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
 	for (unsigned j=0; j<crush->buckets[i]->size; j++)
@@ -414,7 +421,7 @@ public:
 	break;
 
       case CRUSH_BUCKET_TREE:
-	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
+	for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	  ::encode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], bl);
 	break;
 
@@ -454,10 +461,10 @@ public:
     crush->device_offload = (__u32*)malloc(sizeof(crush->device_offload[0])*crush->max_devices);
     for (int i=0; i < crush->max_devices; i++)
       ::decode(crush->device_offload[i], blp);
-    
+
     // buckets
     crush->buckets = (crush_bucket**)malloc(sizeof(crush_bucket*)*crush->max_buckets);
-    for (unsigned i=0; i<crush->max_buckets; i++) {
+    for (int i=0; i<crush->max_buckets; i++) {
       __u32 alg;
       ::decode(alg, blp);
       if (!alg) {
@@ -484,7 +491,7 @@ public:
       }
       crush->buckets[i] = (crush_bucket*)malloc(size);
       memset(crush->buckets[i], 0, size);
-      
+
       ::decode(crush->buckets[i]->id, blp);
       ::decode(crush->buckets[i]->type, blp);
       ::decode(crush->buckets[i]->alg, blp);
@@ -497,7 +504,7 @@ public:
 
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
-	((crush_bucket_uniform*)crush->buckets[i])->primes = 
+	((crush_bucket_uniform*)crush->buckets[i])->primes =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 	for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	  ::decode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], blp);
@@ -505,9 +512,9 @@ public:
 	break;
 
       case CRUSH_BUCKET_LIST:
-	((crush_bucket_list*)crush->buckets[i])->item_weights = 
+	((crush_bucket_list*)crush->buckets[i])->item_weights =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	((crush_bucket_list*)crush->buckets[i])->sum_weights = 
+	((crush_bucket_list*)crush->buckets[i])->sum_weights =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
@@ -517,16 +524,16 @@ public:
 	break;
 
       case CRUSH_BUCKET_TREE:
-	((crush_bucket_tree*)crush->buckets[i])->node_weights = 
+	((crush_bucket_tree*)crush->buckets[i])->node_weights =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	for (unsigned j=0; j<crush->buckets[i]->size; j++) 
+	for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	  ::decode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], blp);
 	break;
 
       case CRUSH_BUCKET_STRAW:
-	((crush_bucket_straw*)crush->buckets[i])->straws = 
+	((crush_bucket_straw*)crush->buckets[i])->straws =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	((crush_bucket_straw*)crush->buckets[i])->item_weights = 
+	((crush_bucket_straw*)crush->buckets[i])->item_weights =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
 	  ::decode(((crush_bucket_straw*)crush->buckets[i])->item_weights[j], blp);

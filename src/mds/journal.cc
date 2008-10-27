@@ -204,9 +204,9 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	 q != p->second.end();
 	 ++q) {
       if (!gather) gather = new C_Gather;
-      assert(!client->has_committed(*q));
       dout(10) << "try_to_expire " << get_mdstable_name(p->first) << " transaction " << *q 
 	       << " pending commit (not yet acked), waiting" << dendl;
+      assert(!client->has_committed(*q));
       client->wait_for_ack(*q, gather->new_sub());
     }
   }
@@ -483,7 +483,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	     << " transaction " << p->second << dendl;
     MDSTableClient *client = mds->get_table_client(p->first);
     client->got_journaled_agree(p->second, logseg);
-    logseg->pending_commit_tids[p->first].insert(p->second);
   }
 
   // allocated_inos
@@ -616,6 +615,9 @@ void ETableServer::replay(MDS *mds)
     break;
   case TABLESERVER_OP_COMMIT:
     server->_commit(tid);
+    break;
+  case TABLESERVER_OP_SERVER_UPDATE:
+    server->_server_update(mutation);
     break;
   default:
     assert(0);

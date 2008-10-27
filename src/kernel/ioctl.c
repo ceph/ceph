@@ -1,12 +1,12 @@
+#include "ioctl.h"
+#include "super.h"
 #include "ceph_debug.h"
 
 int ceph_debug_ioctl = -1;
 #define DOUT_MASK DOUT_MASK_IOCTL
 #define DOUT_VAR ceph_debug_ioctl
 #define DOUT_PREFIX "ioctl: "
-#include "super.h"
 
-#include "ioctl.h"
 
 /*
  * ioctls
@@ -43,16 +43,16 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 		return -EFAULT;
 
 	/* set */
-	path = ceph_build_dentry_path(file->f_dentry, &pathlen, &pathbase, 0);
+	path = ceph_build_path(file->f_dentry, &pathlen, &pathbase, 0);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETLAYOUT,
-				       pathbase, path, 0, 0,
+				       pathbase, path, 0, NULL,
 				       file->f_dentry, USE_ANY_MDS);
 	kfree(path);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.setlayout.layout = layout;
-	ceph_mdsc_lease_release(mdsc, inode, 0, CEPH_LOCK_ICONTENT);
+	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

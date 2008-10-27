@@ -21,7 +21,6 @@
 #include "Messenger.h"
 #include "messages/MGenericMessage.h"
 
-#include <cassert>
 #include <iostream>
 using namespace std;
 

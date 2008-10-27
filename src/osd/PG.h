@@ -536,6 +536,7 @@ public:
   IndexedLog  log;
   OndiskLog   ondisklog;
   Missing     missing;
+  set<snapid_t> snap_collections;
 
   xlist<PG*>::item recovery_item;
   int recovery_ops_active;
@@ -725,6 +726,9 @@ public:
                   eversion_t trim_to);
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
+
+  void read_state(ObjectStore *store);
+  coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
 
   void queue_snap_trim();
 

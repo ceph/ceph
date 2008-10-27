@@ -15,7 +15,6 @@
 #ifndef __MDS_ETABLECLIENT_H
 #define __MDS_ETABLECLIENT_H
 
-#include <assert.h>
 #include "config.h"
 #include "include/types.h"
 

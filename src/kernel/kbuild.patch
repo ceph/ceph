@@ -1,0 +1,40 @@
+diff --git a/fs/Kconfig b/fs/Kconfig
+index e46297f..578db91 100644
+--- a/fs/Kconfig
++++ b/fs/Kconfig
+@@ -1407,6 +1407,26 @@ config RPCSEC_GSS_SPKM3
+ 
+ 	  If unsure, say N.
+ 
++config CEPH_FS
++        tristate "Ceph distributed file system (EXPERIMENTAL)"
++	depends on INET && EXPERIMENTAL
++	select LIBCRC32C
++	help
++	  Choose Y or M here to include support for mounting the
++	  experimental Ceph distributed file system.  Ceph is an extremely
++	  scalable file system designed to provide high performance,
++	  reliable access to petabytes of storage.
++
++	  More information at http://ceph.newdream.net/.
++
++	  If unsure, say N.
++
++config CEPH_BOOKKEEPER
++	bool "Ceph leaks detection tool"
++	depends on CEPH_FS
++	help
++	  Leaks detection tool for the Ceph fs.
++
+ config SMB_FS
+ 	tristate "SMB file system support (OBSOLETE, please use CIFS)"
+ 	depends on INET
+diff --git a/fs/Makefile b/fs/Makefile
+index 2168c90..c12196e 100644
+--- a/fs/Makefile
++++ b/fs/Makefile
+@@ -124,3 +124,4 @@ obj-$(CONFIG_HPPFS)		+= hppfs/
+ obj-$(CONFIG_DEBUG_FS)		+= debugfs/
+ obj-$(CONFIG_OCFS2_FS)		+= ocfs2/
+ obj-$(CONFIG_GFS2_FS)           += gfs2/
++obj-$(CONFIG_CEPH_FS)           += ceph/

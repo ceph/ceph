@@ -2,7 +2,7 @@
 #define FS_CEPH_IOCTL_H
 
 #include <linux/ioctl.h>
-#include "ceph_fs.h"
+#include "types.h"
 
 #define CEPH_IOCTL_MAGIC 0x97
 

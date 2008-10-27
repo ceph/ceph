@@ -2904,16 +2904,17 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   tout << uid << std::endl;
   tout << gid << std::endl;
   filepath path = mkpath(relpath);
-  return _chown(path, uid, gid, true);
+  return _chown(path, uid, gid, CEPH_CHOWN_UID|CEPH_CHOWN_GID, true);
 }
 
-int Client::_chown(const filepath &path, uid_t uid, gid_t gid, bool followsym, int cuid, int cgid)
+int Client::_chown(const filepath &path, uid_t uid, gid_t gid, int mask, bool followsym, int cuid, int cgid)
 {
   dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << dendl;
   MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHOWN, followsym));
   req->set_filepath(path); 
   req->head.args.chown.uid = uid;
   req->head.args.chown.gid = gid;
+  req->head.args.chown.mask = mask;
 
   MClientReply *reply = make_request(req, cuid, cgid);
   int res = reply->get_result();
@@ -2933,10 +2934,11 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   tout << buf->modtime << std::endl;
   tout << buf->actime << std::endl;
   filepath path = mkpath(relpath);
-  return _utimes(path, utime_t(buf->modtime,0), utime_t(buf->actime,0), true);
+  return _utimes(path, utime_t(buf->modtime,0), utime_t(buf->actime,0),
+		 CEPH_UTIME_MTIME|CEPH_UTIME_ATIME, true);
 }
 
-int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, bool followsym,
+int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, int mask, bool followsym,
 		    int uid, int gid)
 {
   dout(3) << "_utimes(" << path << ", " << mtime << ", " << atime << ")" << dendl;
@@ -2947,8 +2949,10 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, bool fol
       (dn->inode->caps_issued() & want) == want) {
     dout(5) << " have WR and EXCL caps, just updating our m/atime" << dendl;
     dn->inode->inode.time_warp_seq++;
-    dn->inode->inode.mtime = mtime;
-    dn->inode->inode.atime = atime;
+    if (mask & CEPH_UTIME_MTIME)
+      dn->inode->inode.mtime = mtime;
+    if (mask & CEPH_UTIME_ATIME)
+      dn->inode->inode.atime = atime;
     return 0;
   }
 
@@ -2956,7 +2960,7 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, bool fol
   req->set_filepath(path); 
   mtime.encode_timeval(&req->head.args.utime.mtime);
   atime.encode_timeval(&req->head.args.utime.atime);
-  req->head.args.utime.mask = CEPH_UTIME_ATIME | CEPH_UTIME_MTIME;
+  req->head.args.utime.mask = mask;
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4057,10 +4061,10 @@ int Client::_statfs(struct statvfs *stbuf)
   memset(stbuf, 0, sizeof(*stbuf));
   stbuf->f_bsize = 4096;
   stbuf->f_frsize = 4096;
-  stbuf->f_blocks = req->reply->stfs.f_total / 4;
-  stbuf->f_bfree = req->reply->stfs.f_free / 4;
-  stbuf->f_bavail = req->reply->stfs.f_avail / 4;
-  stbuf->f_files = req->reply->stfs.f_objects;
+  stbuf->f_blocks = req->reply->h.st.f_total / 4;
+  stbuf->f_bfree = req->reply->h.st.f_free / 4;
+  stbuf->f_bavail = req->reply->h.st.f_avail / 4;
+  stbuf->f_files = req->reply->h.st.f_objects;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
@@ -4078,11 +4082,11 @@ int Client::_statfs(struct statvfs *stbuf)
 
 void Client::handle_statfs_reply(MStatfsReply *reply)
 {
-  if (statfs_requests.count(reply->tid) &&
-      statfs_requests[reply->tid]->reply == 0) {
+  if (statfs_requests.count(reply->h.tid) &&
+      statfs_requests[reply->h.tid]->reply == 0) {
     dout(10) << "handle_statfs_reply " << *reply << ", kicking waiter" << dendl;
-    statfs_requests[reply->tid]->reply = reply;
-    statfs_requests[reply->tid]->caller_cond->Signal();
+    statfs_requests[reply->h.tid]->reply = reply;
+    statfs_requests[reply->h.tid]->caller_cond->Signal();
   } else {
     dout(10) << "handle_statfs_reply " << *reply << ", dup or old, dropping" << dendl;
     delete reply;
@@ -4408,21 +4412,20 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
   if ((mask & FUSE_SET_ATTR_MODE) &&
       ((r = _chmod(path.c_str(), attr->st_mode, false, uid, gid)) < 0)) return r;
 
-  if ((mask & FUSE_SET_ATTR_UID) && (mask & FUSE_SET_ATTR_GID) &&
-      ((r = _chown(path.c_str(), attr->st_uid, attr->st_gid, false, uid, gid)) < 0)) return r;
-  //if ((mask & FUSE_SET_ATTR_GID) &&
-  //(r = client->_chgrp(path.c_str(), attr->st_gid) < 0)) return r;
+  if ((mask & (FUSE_SET_ATTR_UID|FUSE_SET_ATTR_GID)) &&
+      ((r = _chown(path.c_str(), attr->st_uid, attr->st_gid,
+		   ((mask & FUSE_SET_ATTR_UID) ? CEPH_CHOWN_UID:0) |
+		   ((mask & FUSE_SET_ATTR_GID) ? CEPH_CHOWN_GID:0),
+		   false, uid, gid)) < 0)) return r;
 
   if ((mask & FUSE_SET_ATTR_SIZE) &&
       ((r = _truncate(path.c_str(), attr->st_size, false, uid, gid)) < 0)) return r;
   
-  if ((mask & FUSE_SET_ATTR_MTIME) && (mask & FUSE_SET_ATTR_ATIME)) {
-    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0), false, uid, gid)) < 0) return r;
-  } else if (mask & FUSE_SET_ATTR_MTIME) {
-    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(), false, uid, gid)) < 0) return r;
-  } else if (mask & FUSE_SET_ATTR_ATIME) {
-    if ((r = _utimes(path.c_str(), utime_t(), utime_t(attr->st_atime,0), false, uid, gid)) < 0) return r;
-  }
+  if ((mask & (FUSE_SET_ATTR_MTIME|FUSE_SET_ATTR_ATIME)))
+    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0),
+		     ((mask & FUSE_SET_ATTR_MTIME) ? CEPH_UTIME_MTIME:0) |
+		     ((mask & FUSE_SET_ATTR_ATIME) ? CEPH_UTIME_ATIME:0),
+		     false, uid, gid)) < 0) return r;
   
   assert(r == 0);
   fill_stat(in, attr);
@@ -5036,9 +5039,6 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
             << dendl;
     messenger->send_message(m, monmap->get_inst(mon));
   }
-  else if (dest.is_osd()) {
-    objecter->ms_handle_failure(m, dest, inst);
-  } 
   else {
     dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
     delete m;
@@ -5077,4 +5077,7 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
     // or requests
     kick_requests(mds);
   }
+  else 
+    objecter->ms_handle_remote_reset(addr, last);
+
 }

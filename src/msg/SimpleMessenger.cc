@@ -794,7 +794,7 @@ int Rank::Pipe::accept()
   dout(10) << "accept sd=" << sd << dendl;
   
   // identify peer
-  char banner[strlen(CEPH_BANNER)];
+  char banner[strlen(CEPH_BANNER)+1];
   rc = tcp_read(sd, banner, strlen(CEPH_BANNER));
   if (rc < 0) {
     dout(10) << "accept couldn't read banner" << dendl;
@@ -802,7 +802,8 @@ int Rank::Pipe::accept()
     return -1;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
-    dout(10) << "accept peer sent bad banner" << dendl;
+    banner[strlen(CEPH_BANNER)] = 0;
+    dout(10) << "accept peer sent bad banner '" << banner << "'" << dendl;
     state = STATE_CLOSED;
     return -1;
   }
@@ -872,6 +873,19 @@ int Rank::Pipe::accept()
 	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
 	existing->was_session_reset();
 	goto replace;
+      }
+      if (lossy_rx) {
+	if (existing->state == STATE_STANDBY) {
+	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless" << dendl;
+	  existing->state = STATE_CONNECTING;
+	  existing->cond.Signal();
+	} else {
+	  dout(-10) << "accept incoming lossy connection, our lossless has state " << existing->state
+		    << ", doing nothing" << dendl;
+	}
+	existing->lock.Unlock();
+	rank.lock.Unlock();
+	goto fail;
       }
 
       if (connect.connect_seq < existing->connect_seq) {

@@ -14,8 +14,6 @@ using namespace std;
 #include "common/DecayCounter.h"
 #include "include/Context.h"
 
-#include <cassert>
-
 #include "include/frag.h"
 #include "include/xlist.h"
 #include "include/nstring.h"
@@ -60,6 +58,7 @@ typedef __u32 capseq_t;
 inline string cap_string(int cap)
 {
   string s;
+  /*
   s = "[";
   if (cap & CEPH_CAP_PIN) s += " pin";
   if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
@@ -70,6 +69,15 @@ inline string cap_string(int cap)
   if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
   if (cap & CEPH_CAP_EXCL) s += " excl";
   s += " ]";
+  */
+  if (cap & CEPH_CAP_PIN) s += "p";
+  if (cap & CEPH_CAP_RDCACHE) s += "c";
+  if (cap & CEPH_CAP_RD) s += "r";
+  if (cap & CEPH_CAP_WR) s += "w";
+  if (cap & CEPH_CAP_WRBUFFER) s += "b";
+  if (cap & CEPH_CAP_WRBUFFER) s += "a";
+  if (cap & CEPH_CAP_LAZYIO) s += "l";
+  if (cap & CEPH_CAP_EXCL) s += "x";
   return s;
 }
 

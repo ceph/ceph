@@ -15,7 +15,6 @@
 #ifndef __EPURGE_H
 #define __EPURGE_H
 
-#include <assert.h>
 #include "config.h"
 #include "include/types.h"
 

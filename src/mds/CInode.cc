@@ -126,18 +126,19 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.xattrlock;
   
   // hack: spit out crap on which clients have caps
-  /*
   if (!in.get_client_caps().empty()) {
     out << " caps={";
     for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
          it++) {
       if (it != in.get_client_caps().begin()) out << ",";
-      out << it->first << "=" << it->second->issued();
+      out << it->first << "=" << cap_string(it->second->issued())
+	  << "/" << cap_string(it->second->wanted());
     }
     out << "}";
+    if (in.get_loner() >= 0)
+      out << ",l=" << in.get_loner();
   }
-  */
 
   if (in.get_num_ref()) {
     out << " |";
@@ -1453,6 +1454,8 @@ void CInode::finish_export(utime_t now)
 
   // just in case!
   //dirlock.clear_updated();
+
+  loner_cap = -1;
 
   put(PIN_TEMPEXPORTING);
 }

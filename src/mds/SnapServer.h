@@ -26,7 +26,7 @@ public:
 protected:
   snapid_t last_snap;
   map<snapid_t, SnapInfo> snaps;
-  set<snapid_t> pending_purge;
+  set<snapid_t> need_to_purge;
   
   map<version_t, SnapInfo> pending_create;
   map<version_t, snapid_t> pending_destroy;
@@ -42,7 +42,7 @@ public:
   void encode_server_state(bufferlist& bl) {
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
-    ::encode(pending_purge, bl);
+    ::encode(need_to_purge, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_noop, bl);
@@ -50,7 +50,7 @@ public:
   void decode_server_state(bufferlist::iterator& bl) {
     ::decode(last_snap, bl);
     ::decode(snaps, bl);
-    ::decode(pending_purge, bl);
+    ::decode(need_to_purge, bl);
     ::decode(pending_create, bl);
     ::decode(pending_destroy, bl);
     ::decode(pending_noop, bl);
@@ -61,6 +61,7 @@ public:
   bool _is_prepared(version_t tid);
   void _commit(version_t tid);
   void _rollback(version_t tid);
+  void _server_update(bufferlist& bl);
   void handle_query(MMDSTableRequest *m);
 
   void check_osd_map(bool force);

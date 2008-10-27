@@ -5,11 +5,15 @@
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
 let debug=0
+norestart=""
 
 while [ $# -ge 1 ]; do
         case $1 in
                 -d | --debug )
                 debug=1
+		;;
+		-n )
+		norestart="--norestart"
         esac
         shift
 done
@@ -81,14 +85,14 @@ do
  echo mkfs osd$osd
  $SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
  echo start osd$osd
- $CEPH_BIN/crun $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
+ $CEPH_BIN/crun $norestart $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
 # echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 done
 
 # mds
 for mds in `seq 0 $((CEPH_NUM_MDS-1))`
 do
-  $CEPH_BIN/crun $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
+  $CEPH_BIN/crun $norestart $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20

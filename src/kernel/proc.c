@@ -3,12 +3,13 @@
 #include <linux/ctype.h>
 #include <asm/uaccess.h>
 
+
+#include "ceph_debug.h"
 int ceph_debug_proc = -1;
 #define DOUT_MASK DOUT_MASK_PROC
 #define DOUT_VAR ceph_debug_proc
 #define DOUT_PREFIX "proc: "
 
-#include "ceph_fs.h"
 #include "super.h"
 
 
@@ -129,7 +130,7 @@ static int ceph_debug_mask_write(struct file *file, const char __user *buffer,
 				*debug &= ~mask;
 			else
 				*debug |= mask;
-	
+
 		}
 	} while (mask_str);
 
@@ -175,10 +176,11 @@ int ceph_proc_init(void)
 	return 0;
 }
 
-void ceph_proc_cleanup()
+void ceph_proc_cleanup(void)
 {
 	remove_proc_entry("debug", proc_fs_ceph);
 	remove_proc_entry("debug_msgr", proc_fs_ceph);
 	remove_proc_entry("debug_console", proc_fs_ceph);
+	remove_proc_entry("debug_mask", proc_fs_ceph);
 	remove_proc_entry("fs/ceph", NULL);
 }

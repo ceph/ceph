@@ -15,7 +15,6 @@
 #ifndef __EIMPORTSTART_H
 #define __EIMPORTSTART_H
 
-#include <assert.h>
 #include "config.h"
 #include "include/types.h"
 

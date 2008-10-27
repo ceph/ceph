@@ -18,7 +18,6 @@
 #define __LRU_H
 
 #include <stdint.h>
-#include <assert.h>
 
 #include "config.h"
 

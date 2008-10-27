@@ -1,41 +1,56 @@
 
 #ifdef __KERNEL__
 # include <linux/slab.h>
-# define free(x) kfree(x)
+#include "../ceph_tools.h"
 #else
 # include <stdlib.h>
+# include <assert.h>
+# define kfree(x) do { if (x) free(x); } while (0)
+# define BUG_ON(x) assert(!(x))
 #endif
 
 #include "crush.h"
 
-int crush_get_bucket_item_weight(struct crush_bucket *b, int pos)
+/**
+ * crush_get_bucket_item_weight - Get weight of an item in given bucket
+ * @b: bucket pointer
+ * @p: item index in bucket
+ */
+int crush_get_bucket_item_weight(struct crush_bucket *b, int p)
 {
-	if (pos >= b->size) 
+	if (p >= b->size)
 		return 0;
-	switch (b->alg) {
+
+ 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
 		return ((struct crush_bucket_uniform*)b)->item_weight;
 	case CRUSH_BUCKET_LIST:
-		return ((struct crush_bucket_list*)b)->item_weights[pos];
-	case CRUSH_BUCKET_TREE: 
-		if (pos & 1)
-			return ((struct crush_bucket_tree*)b)->node_weights[pos];
+		return ((struct crush_bucket_list*)b)->item_weights[p];
+	case CRUSH_BUCKET_TREE:
+		if (p & 1)
+			return ((struct crush_bucket_tree*)b)->node_weights[p];
 		return 0;
 	case CRUSH_BUCKET_STRAW:
-		return ((struct crush_bucket_straw*)b)->item_weights[pos];
+		return ((struct crush_bucket_straw*)b)->item_weights[p];
 	}
 	return 0;
 }
 
-
+/**
+ * crush_calc_parents - Calculate parent vectors for the given crush map.
+ * @map: crush_map pointer
+ */
 void crush_calc_parents(struct crush_map *map)
 {
 	int i, b, c;
-	for (b=0; b<map->max_buckets; b++) {
-		if (map->buckets[b] == 0) continue;
-		for (i=0; i<map->buckets[b]->size; i++) {
+
+	for (b = 0; b < map->max_buckets; b++) {
+		if (map->buckets[b] == NULL)
+			continue;
+		for (i = 0; i < map->buckets[b]->size; i++) {
 			c = map->buckets[b]->items[i];
-			BUG_ON(c >= map->max_devices);
+			BUG_ON(c >= map->max_devices ||
+			       c < -map->max_buckets);
 			if (c >= 0)
 				map->device_parents[c] = map->buckets[b]->id;
 			else
@@ -46,79 +61,80 @@ void crush_calc_parents(struct crush_map *map)
 
 void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b)
 {
-	free(b->primes);
-	free(b->h.items);
-	free(b);
+	kfree(b->primes);
+	kfree(b->h.items);
+	kfree(b);
 }
 
 void crush_destroy_bucket_list(struct crush_bucket_list *b)
 {
-	free(b->item_weights);
-	free(b->sum_weights);
-	free(b->h.items);
-	free(b);
+	kfree(b->item_weights);
+	kfree(b->sum_weights);
+	kfree(b->h.items);
+	kfree(b);
 }
 
 void crush_destroy_bucket_tree(struct crush_bucket_tree *b)
 {
-	free(b->node_weights);
-	free(b);
+	kfree(b->node_weights);
+	kfree(b);
 }
 
 void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 {
-	free(b->straws);
-	free(b->item_weights);
-	free(b->h.items);
-	free(b);
+	kfree(b->straws);
+	kfree(b->item_weights);
+	kfree(b->h.items);
+	kfree(b);
 }
 
+void crush_destroy_bucket(struct crush_bucket *b)
+{
+	switch (b->alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		crush_destroy_bucket_uniform((struct crush_bucket_uniform *)b);
+		break;
+	case CRUSH_BUCKET_LIST:
+		crush_destroy_bucket_list((struct crush_bucket_list *)b);
+		break;
+	case CRUSH_BUCKET_TREE:
+		crush_destroy_bucket_tree((struct crush_bucket_tree *)b);
+		break;
+	case CRUSH_BUCKET_STRAW:
+		crush_destroy_bucket_straw((struct crush_bucket_straw *)b);
+		break;
+	}
+}
 
-/* 
- * deallocate
+/**
+ * crush_destroy - Destroy a crush_map
+ * @map: crush_map pointer
  */
 void crush_destroy(struct crush_map *map)
 {
 	int b;
-	
+
 	/* buckets */
 	if (map->buckets) {
-		for (b=0; b<map->max_buckets; b++) {
-			if (map->buckets[b] == 0) continue;
-			switch (map->buckets[b]->alg) {
-			case CRUSH_BUCKET_UNIFORM:
-				crush_destroy_bucket_uniform((struct crush_bucket_uniform*)map->buckets[b]);
-				break;
-			case CRUSH_BUCKET_LIST:
-				crush_destroy_bucket_list((struct crush_bucket_list*)map->buckets[b]);
-				break;
-			case CRUSH_BUCKET_TREE:
-				crush_destroy_bucket_tree((struct crush_bucket_tree*)map->buckets[b]);
-				break;
-			case CRUSH_BUCKET_STRAW:
-				crush_destroy_bucket_straw((struct crush_bucket_straw*)map->buckets[b]);
-				break;
-			}
+		for (b = 0; b < map->max_buckets; b++) {
+			if (map->buckets[b] == NULL)
+				continue;
+			crush_destroy_bucket(map->buckets[b]);
 		}
-		free(map->buckets);
+		kfree(map->buckets);
 	}
-	
+
 	/* rules */
 	if (map->rules) {
-		for (b=0; b<map->max_rules; b++) {
-			if (map->rules[b] == 0) continue;
-			free(map->rules[b]);
-		}
-		free(map->rules);
+		for (b = 0; b < map->max_rules; b++)
+			kfree(map->rules[b]);
+		kfree(map->rules);
 	}
-	
-	if (map->bucket_parents)
-		free(map->bucket_parents);
-	if (map->device_parents)
-		free(map->device_parents);
-	if (map->device_offload)
-		free(map->device_offload);
-	free(map);
+
+	kfree(map->bucket_parents);
+	kfree(map->device_parents);
+	kfree(map->device_offload);
+	kfree(map);
 }
 
 

@@ -36,7 +36,7 @@ void SnapServer::reset_state()
 {
   last_snap = 1;  /* snapid 1 reserved for initial root snaprealm */
   snaps.clear();
-  pending_purge.clear();
+  need_to_purge.clear();
 }
 
 
@@ -81,7 +81,7 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
       dout(10) << "prepare v" << version << " destroy " << snapid << dendl;
     }
     break;
-    
+
   default:
     assert(0);
   }
@@ -107,14 +107,14 @@ void SnapServer::_commit(version_t tid)
     snapid_t sn = pending_destroy[tid];
     dout(7) << "commit " << tid << " destroy " << sn << dendl;
     snaps.erase(sn);
-    pending_purge.insert(sn);
+    need_to_purge.insert(sn);
     pending_destroy.erase(tid);
   }
   else if (pending_noop.count(tid)) {
     dout(7) << "commit " << tid << " noop" << dendl;
     pending_noop.erase(tid);
   }
-  else 
+  else
     assert(0);
 
   // bump version.
@@ -145,6 +145,21 @@ void SnapServer::_rollback(version_t tid)
   // bump version.
   version++;
   //dump();
+}
+
+void SnapServer::_server_update(bufferlist& bl)
+{
+  bufferlist::iterator p = bl.begin();
+  vector<snapid_t> purge;
+  ::decode(purge, p);
+
+  dout(7) << "_server_update purged " << purge << dendl;
+  for (vector<snapid_t>::iterator p = purge.begin();
+       p != purge.end();
+       p++)
+    need_to_purge.erase(*p);
+
+  version++;
 }
 
 void SnapServer::handle_query(MMDSTableRequest *req)
@@ -184,25 +199,28 @@ void SnapServer::check_osd_map(bool force)
     dout(10) << "check_osd_map - version unchanged" << dendl;
     return;
   }
-  dout(10) << "check_osd_map pending_purge=" << pending_purge << dendl;
+  dout(10) << "check_osd_map need_to_purge=" << need_to_purge << dendl;
 
   vector<snapid_t> purge;
-  bool purged = false;
+  vector<snapid_t> purged;
 
-  set<snapid_t>::iterator p = pending_purge.begin();
-  while (p != pending_purge.end()) {
+  for (set<snapid_t>::iterator p = need_to_purge.begin();
+       p != need_to_purge.end();
+       p++) {
     if (mds->osdmap->is_removed_snap(*p)) {
       dout(10) << " osdmap marks " << *p << " as removed" << dendl;
-      pending_purge.erase(p++);
-      purged = true;
+      purged.push_back(*p);
     } else {
       purge.push_back(*p);
-      p++;
     }
   }
 
-  if (purged)
-    version++;
+  if (purged.size()) {
+    // prepare to remove from need_to_purge list
+    bufferlist bl;
+    ::encode(purged, bl);
+    do_server_update(bl);
+  }
 
   if (!purge.empty()) {
     dout(10) << "requesting removal of " << purge << dendl;

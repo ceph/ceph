@@ -1164,7 +1164,7 @@ void MDS::_dispatch(Message *m)
       break;
     case CEPH_MSG_OSD_MAP:
       objecter->handle_osd_map((MOSDMap*)m);
-      if (snapserver)
+      if (is_active() && snapserver)
 	snapserver->check_osd_map(true);
       break;
       
@@ -1309,4 +1309,5 @@ void MDS::ms_handle_reset(const entity_addr_t& addr, entity_name_t last)
 void MDS::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+  objecter->ms_handle_remote_reset(addr, last);
 }

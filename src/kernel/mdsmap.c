@@ -16,14 +16,10 @@ int ceph_debug_mdsmap = -1;
 #define DOUT_PREFIX "mdsmap: "
 #include "super.h"
 
-int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w)
-{
-	BUG_ON(w < 0);
-	if (w >= m->m_max_mds)
-		return CEPH_MDS_STATE_DNE;
-	return m->m_state[w];
-}
 
+/*
+ * choose a random mds that is "up" (i.e. has a state > 0), or -1.
+ */
 int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 {
 	int n = 0;
@@ -48,31 +44,27 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 	return i;
 }
 
-struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
-{
-	if (w >= m->m_max_mds)
-		return NULL;
-	return &m->m_addr[w];
-}
-
+/*
+ * Ignore any fields we don't care about in the MDS map (there are quite
+ * a few of them).
+ */
 struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 {
 	struct ceph_mdsmap *m;
 	int i, n;
-	__u32 mds;
+	u32 mds;
 	int err = -EINVAL;
 
 	m = kzalloc(sizeof(*m), GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 10*sizeof(__u32), bad);
+	ceph_decode_need(p, end, 10*sizeof(u32), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
-	ceph_decode_32(p, m->m_created.tv_sec);
-	ceph_decode_32(p, m->m_created.tv_nsec);
-	ceph_decode_32(p, m->m_anchortable);
+	*p += sizeof(struct ceph_timespec);  /* ignore map timestamp */
+	*p += sizeof(u32);                 /* skip anchortable */
 	ceph_decode_32(p, m->m_root);
 	ceph_decode_32(p, m->m_session_timeout);
 	ceph_decode_32(p, m->m_session_autoclose);
@@ -85,7 +77,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 
 	/* state */
 	ceph_decode_32(p, n);
-	ceph_decode_need(p, end, n*2*sizeof(__u32), bad);
+	ceph_decode_need(p, end, n*2*sizeof(u32), bad);
 	for (i = 0; i < n; i++) {
 		ceph_decode_32(p, mds);
 		if (mds >= m->m_max_mds)
@@ -95,12 +87,12 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 
 	/* state_seq */
 	ceph_decode_32_safe(p, end, n, bad);
-	*p += n*(sizeof(__u32)+sizeof(__u64));
+	*p += n*(sizeof(u32)+sizeof(u64));
 
 	/* mds_inst */
 	ceph_decode_32_safe(p, end, n, bad);
 	ceph_decode_need(p, end,
-			 n*(sizeof(__u32)+sizeof(struct ceph_entity_name)+
+			 n*(sizeof(u32)+sizeof(struct ceph_entity_name)+
 			    sizeof(struct ceph_entity_addr)),
 			 bad);
 	for (i = 0; i < n; i++) {

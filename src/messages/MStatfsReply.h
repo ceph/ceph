@@ -18,25 +18,25 @@
 
 class MStatfsReply : public Message {
 public:
-  tid_t tid;
-  struct ceph_statfs stfs;
+  struct ceph_mon_statfs_reply h;
 
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
-  MStatfsReply(tid_t t) : Message(CEPH_MSG_STATFS_REPLY), tid(t) {}
+  MStatfsReply(ceph_fsid &f, tid_t t) : Message(CEPH_MSG_STATFS_REPLY) {
+    h.fsid = f;
+    h.tid = t;
+  }
 
   const char *get_type_name() { return "statfs_reply"; }
   void print(ostream& out) {
-    out << "statfs_reply(" << tid << ")";
+    out << "statfs_reply(" << h.tid << ")";
   }
 
   void encode_payload() {
-    ::encode(tid, payload);
-    ::encode(stfs, payload);
+    ::encode(h, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(tid, p);
-    ::decode(stfs, p);
+    ::decode(h, p);
   }
 };
 

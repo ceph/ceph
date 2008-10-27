@@ -50,7 +50,6 @@
 #include "messages/MMDSSlaveRequest.h"
 
 #include <errno.h>
-#include <assert.h>
 
 #include "config.h"
 
@@ -566,10 +565,28 @@ Capability* Locker::issue_new_caps(CInode *in,
 bool Locker::issue_caps(CInode *in)
 {
   // allowed caps are determined by the lock mode.
-  int all_allowed = in->filelock.caps_allowed();
-  dout(7) << "issue_caps filelock allows=" << cap_string(all_allowed) 
-          << " on " << *in << dendl;
+  int all_allowed = in->filelock.caps_allowed(false);
 
+  // loner mode?  if so, we restict allows caps to a single loner client
+  bool loner_mode = in->filelock.is_loner_mode();
+  int loner_allowed;
+  if (loner_mode)
+    loner_allowed = in->filelock.caps_allowed(true);
+  else
+    loner_allowed = all_allowed;
+
+  int loner = -1;
+  if (loner_mode) {
+    loner = in->get_loner();
+    dout(7) << "issue_caps filelock loner client" << loner
+	    << " allowed=" << cap_string(loner_allowed) 
+	    << ", others allowed=" << cap_string(all_allowed)
+	    << " on " << *in << dendl;
+  } else {
+    dout(7) << "issue_caps filelock allowed=" << cap_string(all_allowed) 
+	    << " on " << *in << dendl;
+  }
+  
   // count conflicts with
   int nissued = 0;        
 
@@ -594,12 +611,18 @@ bool Locker::issue_caps(CInode *in)
       continue;
 
     // do not issue _new_ bits when size|mtime is projected
-    int allowed = all_allowed;
+    int allowed;
+    if (loner_mode && loner == it->first)
+      allowed = loner_allowed;
+    else
+      allowed = all_allowed;
+
     int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
     int pending = cap->pending();
     if (sizemtime_is_projected)
       allowed &= ~careful | pending;   // only allow "careful" bits if already issued
-    dout(20) << " all_allowed " << cap_string(all_allowed) 
+
+    dout(20) << " client" << it->first
 	     << " pending " << cap_string(pending) 
 	     << " allowed " << cap_string(allowed) 
 	     << " wanted " << cap_string(cap->wanted())
@@ -3089,12 +3112,17 @@ void Locker::try_file_eval(FileLock *lock)
 void Locker::file_eval_gather(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  int issued = in->get_caps_issued();
+
+  int loner_allowed = lock->caps_allowed(true);
+  int other_allowed = lock->caps_allowed(false);
+
+  int loner_issued, other_issued;
+  in->get_caps_issued(&loner_issued, &other_issued);
  
-  dout(7) << "file_eval_gather issued " << cap_string(issued)
-	  << " vs " << cap_string(lock->caps_allowed())
-	  << " on " << *lock << " on " << *lock->get_parent()
-	  << dendl;
+  dout(7) << "file_eval_gather issued "
+	  << cap_string(loner_issued) << "/" << cap_string(other_issued) << " vs "
+	  << cap_string(loner_allowed) << "/" << cap_string(other_allowed)
+	  << " on " << *lock << " on " << *lock->get_parent() << dendl;
 
   if (lock->is_stable())
     return;  // nothing for us to do here!
@@ -3104,7 +3132,8 @@ void Locker::file_eval_gather(FileLock *lock)
       !lock->is_gathering() &&
       !lock->is_wrlocked() &&
       lock->get_num_client_lease() == 0 &&
-      ((issued & ~lock->caps_allowed()) == 0)) {
+      ((loner_issued & ~loner_allowed) == 0) &&
+      ((other_issued & ~other_allowed) == 0)) {
 
     if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
       dout(7) << "file_eval_gather finished gather, but need to recover" << dendl;
@@ -3124,7 +3153,8 @@ void Locker::file_eval_gather(FileLock *lock)
     case LOCK_GLOCKM:
     case LOCK_GLOCKL:
       lock->set_state(LOCK_LOCK);
-      
+      in->loner_cap = -1;
+
       // waiters
       lock->get_rdlock();
       lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
@@ -3141,6 +3171,7 @@ void Locker::file_eval_gather(FileLock *lock)
 
     case LOCK_GMIXEDL:
       lock->set_state(LOCK_MIXED);
+      in->loner_cap = -1;
       
       if (in->is_replicated()) {
 	// data
@@ -3157,12 +3188,8 @@ void Locker::file_eval_gather(FileLock *lock)
 
       // to loner
     case LOCK_GLONERR:
-      lock->set_state(LOCK_LONER);
-      lock->finish_waiters(SimpleLock::WAIT_STABLE);
-      lock->get_parent()->auth_unpin(lock);
-      break;
-
     case LOCK_GLONERM:
+    case LOCK_GLONERL:
       lock->set_state(LOCK_LONER);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
       lock->get_parent()->auth_unpin(lock);
@@ -3172,6 +3199,7 @@ void Locker::file_eval_gather(FileLock *lock)
     case LOCK_GSYNCL:
     case LOCK_GSYNCM:
       lock->set_state(LOCK_SYNC);
+      in->loner_cap = -1;
       
       { // bcast data to replicas
 	bufferlist softdata;
@@ -3201,7 +3229,7 @@ void Locker::file_eval_gather(FileLock *lock)
   // [replica] finished caps gather?
   if (!in->is_auth() &&
       lock->get_num_client_lease() == 0 &&
-      ((issued & ~lock->caps_allowed()) == 0)) {
+      ((other_issued & ~other_allowed)) == 0) {
     switch (lock->get_state()) {
     case LOCK_GMIXEDR:
       { 
@@ -3234,11 +3262,11 @@ void Locker::file_eval_gather(FileLock *lock)
 void Locker::file_eval(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
-  int wanted = in->get_caps_wanted();
-  bool loner = in->is_loner_cap();
+  int loner_wanted, other_wanted;
+  int wanted = in->get_caps_wanted(&loner_wanted, &other_wanted);
   dout(7) << "file_eval wanted=" << cap_string(wanted)
 	  << "  filelock=" << *lock << " on " << *lock->get_parent()
-	  << "  loner=" << loner
+	  << " loner " << in->get_loner()
 	  << dendl;
 
   assert(lock->get_parent()->is_auth());
@@ -3247,52 +3275,62 @@ void Locker::file_eval(FileLock *lock)
   if (lock->is_xlocked() || 
       lock->is_wrlocked() || 
       lock->get_parent()->is_frozen()) return;
+
+  if (lock->get_state() == LOCK_LONER) {
+    // lose loner?
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued);
+
+    if (in->get_loner() >= 0) {
+      if ((loner_wanted & (CEPH_CAP_WR|CEPH_CAP_RD)) == 0 ||
+	  (other_wanted & (CEPH_CAP_WR|CEPH_CAP_RD))) {
+	// we should lose it.
+	if ((other_wanted & CEPH_CAP_WR) ||
+	    lock->is_waiter_for(SimpleLock::WAIT_WR) ||
+	    lock->is_wrlocked())
+	  file_mixed(lock);
+	else
+	  file_sync(lock);
+      }
+    }    
+  }
   
   // * -> loner?
-  if (!lock->is_rdlocked() &&
-      !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-      (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
-      loner &&
-      lock->get_state() != LOCK_LONER) {
-    dout(7) << "file_eval stable, bump to loner " << *lock << " on " << *lock->get_parent() << dendl;
+  else if (lock->get_state() != LOCK_LONER &&
+	   !lock->is_rdlocked() &&
+	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+	   (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	   in->choose_loner()) {
+    dout(7) << "file_eval stable, bump to loner " << *lock
+	    << " on " << *lock->get_parent() << dendl;
     file_loner(lock);
   }
 
   // * -> mixed?
-  else if ((!lock->is_rdlocked() &&
-	    !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	    (wanted & CEPH_CAP_RD) &&
-	    (wanted & CEPH_CAP_WR) &&
-	    !(loner && lock->get_state() == LOCK_LONER) &&
-	    lock->get_state() != LOCK_MIXED) ||
-	   (!loner && in->is_any_nonstale_caps() && lock->get_state() == LOCK_LONER)) {
-    dout(7) << "file_eval stable, bump to mixed " << *lock << " on " << *lock->get_parent() << dendl;
+  else if (lock->get_state() != LOCK_MIXED &&
+	   !lock->is_rdlocked() &&
+	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+	   (wanted & CEPH_CAP_RD) &&
+	   (wanted & CEPH_CAP_WR)) {
+    dout(7) << "file_eval stable, bump to mixed " << *lock
+	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
   }
   
   // * -> sync?
-  else if (!in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+  else if (lock->get_state() != LOCK_SYNC &&
+	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
+	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
 	   //((wanted & CEPH_CAP_RD) || 
-	    //in->is_replicated() || 
-	    //lock->get_num_client_lease() || 
+	   //in->is_replicated() || 
+	   //lock->get_num_client_lease() || 
 	   //(!loner && lock->get_state() == LOCK_LONER)) &&
-	   !(loner && lock->get_state() == LOCK_LONER) &&       // leave loner in loner state
-	   lock->get_state() != LOCK_SYNC) {
-    dout(7) << "file_eval stable, bump to sync " << *lock << " on " << *lock->get_parent() << dendl;
+	   ) {
+    dout(7) << "file_eval stable, bump to sync " << *lock 
+	    << " on " << *lock->get_parent() << dendl;
     file_sync(lock);
   }
   
-  // * -> lock?  (if not replicated or open)
-/*
-  else if (!in->is_replicated() &&
-	   wanted == 0 &&
-	   lock->get_num_client_lease() == 0 && 
-	   lock->get_state() != LOCK_LOCK) {
-    file_lock(lock);
-  }
-*/
-
   else
     issue_caps(in);
 }
@@ -3317,8 +3355,10 @@ bool Locker::file_sync(FileLock *lock)
     }
 
     int gather = 0;
-    int issued = in->get_caps_issued();
-    if (issued & ~lock->caps_allowed()) {
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued);
+    if ((loner_issued & ~lock->caps_allowed(true)) ||
+	(other_issued & ~lock->caps_allowed(false))) {
       issue_caps(in);
       gather++;
     }
@@ -3346,6 +3386,7 @@ bool Locker::file_sync(FileLock *lock)
   }
   
   lock->set_state(LOCK_SYNC);
+  in->loner_cap = -1;
   issue_caps(in);
   return true;
 }
@@ -3379,8 +3420,10 @@ void Locker::file_lock(FileLock *lock)
     revoke_client_leases(lock);
     gather++;
   }
-  int issued = in->get_caps_issued();
-  if (issued & ~lock->caps_allowed()) {
+  int loner_issued, other_issued;
+  in->get_caps_issued(&loner_issued, &other_issued);
+  if ((loner_issued & ~lock->caps_allowed(true)) ||
+      (other_issued & ~lock->caps_allowed(false))) {
     issue_caps(in);
     gather++;
   }
@@ -3392,8 +3435,10 @@ void Locker::file_lock(FileLock *lock)
 
   if (gather)
     lock->get_parent()->auth_pin(lock);
-  else
+  else {
     lock->set_state(LOCK_LOCK);
+    in->loner_cap = -1;
+  }
 }
 
 
@@ -3438,8 +3483,10 @@ void Locker::file_mixed(FileLock *lock)
       revoke_client_leases(lock);
       gather++;
     }
-    int issued = in->get_caps_issued();
-    if (issued & ~lock->caps_allowed()) {
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued);
+    if ((loner_issued & ~lock->caps_allowed(true)) ||
+	(other_issued & ~lock->caps_allowed(false))) {
       issue_caps(in);
       gather++;
     }
@@ -3453,6 +3500,7 @@ void Locker::file_mixed(FileLock *lock)
       lock->get_parent()->auth_pin(lock);
     else {
       lock->set_state(LOCK_MIXED);
+      in->loner_cap = -1;
       issue_caps(in);
     }
   }
@@ -3467,39 +3515,45 @@ void Locker::file_loner(FileLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  assert(in->count_nonstale_caps() == 1 && in->mds_caps_wanted.empty());
+  assert(in->get_loner() >= 0 && in->mds_caps_wanted.empty());
   
-  if (lock->get_state() != LOCK_LOCK) {  // LONER replicas are LOCK
-    switch (lock->get_state()) {
-    case LOCK_SYNC: lock->set_state(LOCK_GLONERR); break;
-    case LOCK_MIXED: lock->set_state(LOCK_GLONERM); break;
-    default: assert(0);
-    }
-    int gather = 0;
-
-    if (in->is_replicated()) {
-      send_lock_message(lock, LOCK_AC_LOCK);
-      lock->init_gather();
-      gather++;
-    }
-    if (lock->get_num_client_lease()) {
-      revoke_client_leases(lock);
-      gather++;
-    }
-    if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
-      mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
-      gather++;
-    }
- 
-    if (gather) {
-      lock->get_parent()->auth_pin(lock);
-      return;
-    }
+  switch (lock->get_state()) {
+  case LOCK_SYNC: lock->set_state(LOCK_GLONERR); break;
+  case LOCK_MIXED: lock->set_state(LOCK_GLONERM); break;
+  case LOCK_LOCK: lock->set_state(LOCK_GLONERL); break;
+  default: assert(0);
   }
-
-  lock->set_state(LOCK_LONER);
-  issue_caps(in);
+  int gather = 0;
+  
+  if (in->is_replicated()) {
+    send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    gather++;
+  }
+  if (lock->get_num_client_lease()) {
+    revoke_client_leases(lock);
+    gather++;
+  }
+  int loner_issued, other_issued;
+  in->get_caps_issued(&loner_issued, &other_issued);
+  dout(10) << " issued loner " << cap_string(loner_issued) << " other " << cap_string(other_issued) << dendl;
+  if ((loner_issued & ~lock->caps_allowed(true)) ||
+      (other_issued & ~lock->caps_allowed(false))) {
+    issue_caps(in);
+    gather++;
+  }
+  if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+    mds->mdcache->queue_file_recover(in);
+    mds->mdcache->do_file_recover();
+    gather++;
+  }
+  
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+  } else {
+    lock->set_state(LOCK_LONER);
+    issue_caps(in);
+  }
 }
 
 
@@ -3524,8 +3578,6 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
   dout(7) << "handle_file_lock a=" << m->get_action() << " from " << from << " " 
 	  << *in << " filelock=" << *lock << dendl;  
   
-  int issued = in->get_caps_issued();
-
   switch (m->get_action()) {
     // -- replica --
   case LOCK_AC_SYNC:
@@ -3551,7 +3603,10 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     lock->set_state(LOCK_GLOCKR);
     
     // call back caps?
-    if (issued & CEPH_CAP_RD) {
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued);
+    if ((loner_issued & ~lock->caps_allowed(true)) ||
+	(other_issued & ~lock->caps_allowed(false))) {
       dout(7) << "handle_file_lock client readers, gathering caps on " << *in << dendl;
       issue_caps(in);
       break;
@@ -3576,19 +3631,21 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     
     if (lock->get_state() == LOCK_SYNC) {
       // MIXED
-      if (issued & CEPH_CAP_RD) {
+      lock->set_state(LOCK_GMIXEDR);
+      int loner_issued, other_issued;
+      in->get_caps_issued(&loner_issued, &other_issued);
+      if ((loner_issued & ~lock->caps_allowed(true)) ||
+	  (other_issued & ~lock->caps_allowed(false))) {
         // call back client caps
-        lock->set_state(LOCK_GMIXEDR);
         issue_caps(in);
         break;
-      } else {
-        // no clients, go straight to mixed
-        lock->set_state(LOCK_MIXED);
-
-        // ack
-        MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
-        mds->send_message_mds(reply, from);
       }
+      
+      lock->set_state(LOCK_MIXED);
+      
+      // ack
+      MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
+      mds->send_message_mds(reply, from);
     } else {
       // LOCK
       lock->set_state(LOCK_MIXED);
