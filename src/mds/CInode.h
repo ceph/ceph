@@ -481,7 +481,7 @@ public:
       return false;
 
     int n = 0;
-    int loner;
+    int loner = -1;
     for (map<int,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) 
