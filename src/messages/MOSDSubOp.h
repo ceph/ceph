@@ -38,7 +38,7 @@ public:
   
   // subop metadata
   tid_t rep_tid;
-  eversion_t version;
+  eversion_t version, old_version;
   uint32_t inc_lock;
 
   SnapSet snapset;
@@ -64,6 +64,7 @@ public:
     ::decode(length, p);
     ::decode(rep_tid, p);
     ::decode(version, p);
+    ::decode(old_version, p);
     ::decode(inc_lock, p);
     ::decode(snapset, p);
     ::decode(snapc, p);
@@ -84,6 +85,7 @@ public:
     ::encode(length, payload);
     ::encode(rep_tid, payload);
     ::encode(version, payload);
+    ::encode(old_version, payload);
     ::encode(inc_lock, payload);
     ::encode(snapset, payload);
     ::encode(snapc, payload);

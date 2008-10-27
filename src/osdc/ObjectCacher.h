@@ -6,6 +6,7 @@
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/Context.h"
+#include "include/xlist.h"
 
 #include "common/Cond.h"
 #include "common/Thread.h"
@@ -115,6 +116,8 @@ class ObjectCacher {
     list<Context*> waitfor_rd;
     list<Context*> waitfor_wr;
 
+    xlist<Object*>::item uncommitted_item;
+
     // lock
     static const int LOCK_NONE = 0;
     static const int LOCK_WRLOCKING = 1;
@@ -134,6 +137,7 @@ class ObjectCacher {
       oc(_oc),
       oid(o), ino(i), layout(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
+      uncommitted_item(this),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0)
       {}
     ~Object() {
@@ -212,7 +216,7 @@ class ObjectCacher {
   hash_map<object_t, Object*> objects;
   hash_map<inodeno_t, set<Object*> > objects_by_ino;
   hash_map<inodeno_t, int> dirty_tx_by_ino;
-  hash_map<inodeno_t, tid_t> last_write_by_ino;
+  hash_map<inodeno_t, xlist<Object*> > uncommitted_by_ino;
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;

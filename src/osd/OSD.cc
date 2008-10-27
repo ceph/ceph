@@ -80,7 +80,7 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 #define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
 
 
@@ -618,10 +618,11 @@ void OSD::_remove_unlock_pg(PG *pg)
 	 p++) {
       vector<pobject_t> olist;      
       store->collection_list(pgid.to_snap_coll(*p), olist);
-      for (vector<pobject_t>::iterator p = olist.begin();
-	   p != olist.end();
-	   p++)
-	t.remove(pgid.to_coll(), *p);
+      dout(10) << "_remove_unlock_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
+      for (vector<pobject_t>::iterator q = olist.begin();
+	   q != olist.end();
+	   q++)
+	t.remove(pgid.to_snap_coll(*p), *q);
     }
 
     // log
@@ -629,12 +630,14 @@ void OSD::_remove_unlock_pg(PG *pg)
 
     // main collection
     store->collection_list(pgid.to_coll(), olist);
+    dout(10) << "_remove_unlock_pg " << pgid << " " << olist.size() << " objects" << dendl;
     for (vector<pobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(pgid.to_coll(), *p);
     t.remove_collection(pgid.to_coll());
   }
+  dout(10) << "_remove_unlock_pg " << pgid << " applying" << dendl;
   store->apply_transaction(t);
 
   // mark deleted
@@ -645,6 +648,7 @@ void OSD::_remove_unlock_pg(PG *pg)
 
   // unlock, and probably delete
   pg->put_unlock();     // will delete, if last reference
+  dout(10) << "_remove_unlock_pg " << pgid << " done" << dendl;
 }
 
 void OSD::load_pgs()
@@ -771,52 +775,6 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 
   dout(15) << "project_pg_history end " << h << dendl;
 }
-
-/*
- * NOTE: this is called from SafeTimer, so caller holds osd_lock
- */
-void OSD::activate_pg(pg_t pgid, epoch_t epoch)
-{
-  assert(osd_lock.is_locked());
-
-  if (pg_map.count(pgid)) {
-    PG *pg = _lookup_lock_pg(pgid);
-    if (pg->is_crashed() &&
-	pg->is_replay() &&
-	pg->get_role() == 0 &&
-	pg->info.history.same_primary_since <= epoch) {
-      ObjectStore::Transaction t;
-      pg->activate(t);
-      store->apply_transaction(t);
-    }
-    pg->unlock();
-  }
-
-  // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
-  wake_all_pg_waiters();
-
-  // finishers?
-  finished_lock.Lock();
-  if (finished.empty()) {
-    finished_lock.Unlock();
-  } else {
-    list<Message*> waiting;
-    waiting.splice(waiting.begin(), finished);
-
-    finished_lock.Unlock();
-    osd_lock.Unlock();
-    
-    for (list<Message*>::iterator it = waiting.begin();
-         it != waiting.end();
-         it++) {
-      dispatch(*it);
-    }
-
-    osd_lock.Lock();
-  }
-}
-
-
 
 // -------------------------------------
 
@@ -2568,7 +2526,6 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       
       // merge log
       pg->merge_log(log, missing, from);
-      pg->proc_missing(log, missing, from);
       
       // ok activate!
       pg->activate(t, info_map);
@@ -2789,7 +2746,158 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
 
 
+// =========================================================
+// RECOVERY
 
+
+/*
+ * NOTE: this is called from SafeTimer, so caller holds osd_lock
+ */
+void OSD::activate_pg(pg_t pgid, epoch_t epoch)
+{
+  assert(osd_lock.is_locked());
+
+  if (pg_map.count(pgid)) {
+    PG *pg = _lookup_lock_pg(pgid);
+    if (pg->is_crashed() &&
+	pg->is_replay() &&
+	pg->get_role() == 0 &&
+	pg->info.history.same_primary_since <= epoch) {
+      ObjectStore::Transaction t;
+      pg->activate(t);
+      store->apply_transaction(t);
+    }
+    pg->unlock();
+  }
+
+  // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
+  wake_all_pg_waiters();
+
+  // finishers?
+  finished_lock.Lock();
+  if (finished.empty()) {
+    finished_lock.Unlock();
+  } else {
+    list<Message*> waiting;
+    waiting.splice(waiting.begin(), finished);
+
+    finished_lock.Unlock();
+    osd_lock.Unlock();
+    
+    for (list<Message*>::iterator it = waiting.begin();
+         it != waiting.end();
+         it++) {
+      dispatch(*it);
+    }
+
+    osd_lock.Lock();
+  }
+}
+
+
+
+void OSD::queue_for_recovery(PG *pg)
+{
+  recovery_lock.Lock();
+  if (!pg->recovery_item.get_xlist()) {
+    recovering_pgs.push_back(&pg->recovery_item);
+    pg->get();
+    dout(10) << "queue_for_recovery " << *pg
+	     << " -- " << recovering_pgs.size() << " queued" << dendl;
+  } else {
+    dout(10) << "queue_for_recovery " << *pg << " -- already queued" << dendl;
+  }
+  
+  // delay recovery start?
+  if (g_conf.osd_recovery_delay_start > 0) {
+    defer_recovery_until = g_clock.now();
+    defer_recovery_until += g_conf.osd_recovery_delay_start;
+  }
+
+  recovery_lock.Unlock();  
+
+  if (defer_recovery_until == utime_t())
+    maybe_start_recovery();
+  else
+    timer.add_event_at(defer_recovery_until, new C_StartRecovery(this));
+}
+
+void OSD::maybe_start_recovery()
+{
+  if (g_clock.now() > defer_recovery_until &&
+      recovery_ops_active == 0) {
+    dout(10) << "maybe_start_recovery starting" << dendl;
+    do_recovery();
+  }
+}
+
+void OSD::do_recovery()
+{
+  while (1) {
+    recovery_lock.Lock();
+    if (recovering_pgs.empty()) {
+      dout(10) << "do_recovery -- no recoverying pgs, nothing to do" << dendl;
+      recovery_lock.Unlock();
+      return;
+    }
+    if (recovery_ops_active >= g_conf.osd_recovery_max_active) {
+      recovery_lock.Unlock();
+      return;
+    }
+    int max = g_conf.osd_recovery_max_active - recovery_ops_active;
+    
+    PG *pg = recovering_pgs.front();
+    pg->get();
+
+    dout(10) << "do_recovery starting " << max
+	     << " (" << recovery_ops_active
+	     << "/" << g_conf.osd_recovery_max_active << " active) on "
+	     << *pg << dendl;
+
+    recovery_lock.Unlock();
+    
+    pg->lock();
+    int started = pg->start_recovery_ops(max);
+    recovery_ops_active += started;
+    pg->recovery_ops_active += started;
+    if (started < max)
+      pg->recovery_item.remove_myself();
+    pg->put_unlock();
+  }
+}
+
+void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
+{
+  dout(10) << "finish_recovery_op " << *pg << " count " << count
+	   << " dequeue=" << dequeue << dendl;
+  recovery_lock.Lock();
+
+  // adjust count
+  recovery_ops_active -= count;
+  pg->recovery_ops_active -= count;
+
+  if (dequeue)
+    pg->recovery_item.remove_myself();
+  else
+    recovering_pgs.push_front(&pg->recovery_item);  // requeue
+
+  recovery_lock.Unlock();
+
+  // continue recovery?
+  if (count && g_clock.now() > defer_recovery_until)
+    do_recovery();
+}
+
+void OSD::defer_recovery(PG *pg)
+{
+  dout(10) << "defer_recovery " << *pg << dendl;
+  recovery_lock.Lock();
+
+  // move pg to the end of the queue...
+  recovering_pgs.push_back(&pg->recovery_item);
+
+  recovery_lock.Unlock();
+}
 
 
 // =========================================================

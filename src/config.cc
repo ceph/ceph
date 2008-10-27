@@ -427,6 +427,9 @@ md_config_t g_conf = {
   osd_max_pull: 2,
   osd_pad_pg_log: false,
 
+  osd_recovery_delay_start: 15,
+  osd_recovery_max_active: 5,
+
   osd_auto_weight: false,
 
   
@@ -1036,6 +1039,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.osd_max_pull = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_pad_pg_log") == 0) 
       g_conf.osd_pad_pg_log = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--osd_recovery_delay_start") == 0) 
+      g_conf.osd_recovery_delay_start = atof(args[++i]);
+    else if (strcmp(args[i], "--osd_recovery_max_active") == 0) 
+      g_conf.osd_recovery_max_active = atoi(args[++i]);
 
     else if (strcmp(args[i], "--osd_auto_weight") == 0) 
       g_conf.osd_auto_weight = atoi(args[++i]);

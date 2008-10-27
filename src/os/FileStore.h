@@ -109,6 +109,8 @@ class FileStore : public JournalingObjectStore {
   int _write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl);
   int _zero(coll_t cid, pobject_t oid, __u64 offset, size_t len);
   int _clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
+  int _clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len);
+  int _do_clone_range(int from, int to, __u64 off, __u64 len);
 
   void sync();
   void sync(Context *onsafe);

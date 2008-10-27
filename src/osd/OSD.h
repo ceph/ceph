@@ -288,7 +288,6 @@ private:
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
-  void activate_pg(pg_t pgid, epoch_t epoch);
 
   Mutex snap_trimmer_lock;
   Cond snap_trimmer_cond;
@@ -319,16 +318,6 @@ private:
     waiting_for_pg.clear();
   }
 
-  class C_Activate : public Context {
-    OSD *osd;
-    pg_t pgid;
-    epoch_t epoch;
-  public:
-    C_Activate(OSD *o, pg_t p, epoch_t e) : osd(o), pgid(p), epoch(e) {}
-    void finish(int r) {
-      osd->activate_pg(pgid, epoch);
-    }
-  };
 
   // -- pg creation --
   struct create_pg_info {
@@ -409,7 +398,7 @@ private:
 
 
 
-  // -- generic pg recovery --
+  // -- generic pg peering --
   int num_pulling;
 
   void do_notifies(map< int, vector<PG::Info> >& notify_list);
@@ -433,6 +422,39 @@ private:
 			PG::Missing &missing,
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
+
+  // -- pg recovery --
+  Mutex recovery_lock;
+  xlist<PG*> recovering_pgs;
+  utime_t defer_recovery_until;
+  int recovery_ops_active;
+
+  void queue_for_recovery(PG *pg);
+  void maybe_start_recovery();
+  void do_recovery();
+  void finish_recovery_op(PG *pg, int count, bool more);
+  void defer_recovery(PG *pg);
+
+  struct C_StartRecovery : public Context {
+    OSD *osd;
+    C_StartRecovery(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->maybe_start_recovery();
+    }
+  };
+  
+  void activate_pg(pg_t pgid, epoch_t epoch);
+
+  class C_Activate : public Context {
+    OSD *osd;
+    pg_t pgid;
+    epoch_t epoch;
+  public:
+    C_Activate(OSD *o, pg_t p, epoch_t e) : osd(o), pgid(p), epoch(e) {}
+    void finish(int r) {
+      osd->activate_pg(pgid, epoch);
+    }
+  };
 
 
  public:

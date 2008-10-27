@@ -188,7 +188,6 @@ bool FileStore::parse_object(char *s, pobject_t& o)
       s[26] != '.' ||
       s[35] != '.')
     return false;
-  dout(0) << "  got object " << s << dendl;
   o.volume = strtoll(s, 0, 16);
   assert(s[4] == '.');
   o.rank = strtoll(s+5, 0, 16);
@@ -198,7 +197,6 @@ bool FileStore::parse_object(char *s, pobject_t& o)
   o.oid.bno = strtoll(s+27, 0, 16);
   assert(s[35] == '.');
   o.oid.snap = strtoll(s+36, 0, 16);
-  dout(0) << " got " << o << " errno " << errno << " on " << s << dendl;
   return true;
 }
 
@@ -696,6 +694,21 @@ unsigned FileStore::_apply_transaction(Transaction& t)
           pobject_t noid;
 	  t.get_oid(noid);
 	  _clone(cid, oid, noid);
+	}
+	break;
+
+      case Transaction::OP_CLONERANGE:
+	{
+  	  coll_t cid;
+	  t.get_cid(cid);
+	  pobject_t oid;
+	  t.get_oid(oid);
+          pobject_t noid;
+	  t.get_oid(noid);
+	  __u64 off, len;
+	  t.get_length(off);
+	  t.get_length(len);
+	  _clone_range(cid, oid, noid, off, len);
 	}
 	break;
 
@@ -1227,7 +1240,7 @@ int FileStore::read(coll_t cid, pobject_t oid,
     return -errno;
   }
   
-  __u64 actual = lseek(fd, offset, SEEK_SET);
+  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
   size_t got = 0;
 
   if (len == 0) {
@@ -1285,7 +1298,7 @@ int FileStore::_write(coll_t cid, pobject_t oid,
   }
   
   // seek
-  __u64 actual = ::lseek(fd, offset, SEEK_SET);
+  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
   int did = 0;
   assert(actual == offset);
 
@@ -1344,40 +1357,8 @@ int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
 #endif /* DARWIN */
     struct stat st;
     ::fstat(o, &st);
-
-#if 0 //der, this doesn't work on non-pipes? #ifdef SPLICE_F_MOVE
-    dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE size " << st.st_size << dendl;
-
-    loff_t op = 0, np = 0;
-    while (op < st.st_size && r >= 0) {
-      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE op " << op << " np " << np << dendl;
-      r = ::splice(o, &op, n, &np, st.st_size-op, SPLICE_F_MOVE);
-      dout(20) << "clone " << ofn << " -> " << nfn << " SPLICE r= " << r << dendl;
-      if (r < 0)
-	dout(0) << "clone " << ofn << " -> " << nfn << " error " << strerror(errno) << dendl;
-    }
-#else
     dout(20) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
-
-    loff_t pos = 0;
-    int buflen = 4096*32;
-    char buf[buflen];
-    while (pos < st.st_size) {
-      int l = MIN(st.st_size-pos, buflen);
-      r = ::read(o, buf, l);
-      if (r < 0)
-	break;
-      int op = 0;
-      while (op < l) {
-	int r2 = ::write(n, buf+op, l-op);
-	
-	if (r2 < 0) { r = r2; break; }
-	op += r2;	  
-      }
-      if (r < 0) break;
-      pos += r;
-    }
-#endif
+    r = _do_clone_range(o, n, 0, st.st_size);
   }
 
   if (r < 0)
@@ -1386,6 +1367,69 @@ int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   ::close(n);
   ::close(o);
   return 0;
+}
+
+int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
+{
+  dout(20) << "_do_clone_range " << off << "~" << len << dendl;
+  int r = 0;
+  
+  if (btrfs >= 2) {
+    btrfs_ioctl_clone_range_args a;
+    a.src_fd = from;
+    a.src_offset = off;
+    a.src_length = len;
+    a.dest_offset = off;
+    r = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
+    if (r >= 0) return r;
+    // hmm, fall back to a manual copy
+  }
+
+  loff_t pos = off;
+  loff_t end = off + len;
+  int buflen = 4096*32;
+  char buf[buflen];
+  while (pos < end) {
+    int l = MIN(end-pos, buflen);
+    r = ::read(from, buf, l);
+    if (r < 0)
+      break;
+    int op = 0;
+    while (op < l) {
+      int r2 = ::write(to, buf+op, l-op);
+      
+      if (r2 < 0) { r = r2; break; }
+      op += r2;	  
+    }
+    if (r < 0) break;
+    pos += r;
+  }
+
+  return r;
+}
+
+int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len)
+{
+  char ofn[200], nfn[200];
+  get_coname(cid, oldoid, ofn);
+  get_coname(cid, newoid, nfn);
+
+  dout(20) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << dendl;
+
+  int r;
+  int o = ::open(ofn, O_RDONLY);
+  if (o < 0)
+    return -errno;
+  int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (n < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _do_clone_range(o, n, off, len);
+  ::close(n);
+ out:
+  ::close(o);
+  return r;
 }
 
 
@@ -1483,7 +1527,7 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset)
   while (name < end) {
     char *attrname = name;
     if (parse_attrname(&name)) {
-      dout(0) << "getattrs " << fn << " getting '" << name << "'" << dendl;
+      dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
       int r = _getattr(fn, attrname, aset[name]);
       if (r < 0) return r;
     }

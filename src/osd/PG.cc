@@ -26,7 +26,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
 
 
 /******* PGLog ********/
@@ -167,7 +167,7 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
     
     // merge log into our own log
     merge_log(olog, omissing, from);
-    proc_missing(olog, omissing, from);
+    proc_replica_missing(olog, omissing, from);
   } else {
     // i'm just building missing lists.
     peer_missing[from] = omissing;
@@ -226,7 +226,7 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
       }
     }
 
-    proc_missing(olog, peer_missing[from], from);
+    proc_replica_missing(olog, peer_missing[from], from);
   }
 }
 
@@ -405,29 +405,28 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 
 }
 
-void PG::proc_missing(Log &olog, Missing &omissing, int fromosd)
+/*
+ * process replica's missing map to determine if they have
+ * any objects that i need
+ */
+void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
 {
   // found items?
-  for (map<object_t,eversion_t>::iterator p = missing.missing.begin();
+  for (map<object_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
        p++) {
+    eversion_t need = p->second.need;
+    eversion_t have = p->second.have;
     if (omissing.is_missing(p->first)) {
-      assert(omissing.is_missing(p->first, p->second));
-      if (omissing.loc.count(p->first)) {
-        dout(10) << "proc_missing " << p->first << " " << p->second
-                 << " is on osd" << omissing.loc[p->first] << dendl;
-        missing.loc[p->first] = omissing.loc[p->first];
-      } else {
-        dout(10) << "proc_missing " << p->first << " " << p->second
-                 << " also missing on osd" << fromosd << dendl;
-      }
+      dout(10) << "proc_missing " << p->first << " " << need
+	       << " also missing on osd" << fromosd << dendl;
     } 
-    else if (p->second <= olog.top) {
-      dout(10) << "proc_missing " << p->first << " " << p->second
+    else if (need <= olog.top) {
+      dout(10) << "proc_missing " << p->first << " " << need
                << " is on osd" << fromosd << dendl;
       missing.loc[p->first] = fromosd;
     } else {
-      dout(10) << "proc_missing " << p->first << " " << p->second
+      dout(10) << "proc_missing " << p->first << " " << need
                << " > olog.top " << olog.top << ", also missing on osd" << fromosd
                << dendl;
     }
@@ -453,16 +452,22 @@ void PG::generate_backlog()
        it != olist.end();
        it++) {
     local++;
-    object_t oid = it->oid;
+    pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
 
-    if (log.logged_object(oid)) continue; // already have it logged.
+    if (log.logged_object(poid.oid)) continue; // already have it logged.
     
     // add entry
     Log::Entry e;
-    e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
-    e.oid = oid;
-    osd->store->getattr(info.pgid.to_coll(), pobject_t(0,0,oid), 
-                        "version",
+    e.oid = poid.oid;
+    if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
+      e.op = Log::Entry::CLONE;
+      osd->store->getattr(info.pgid.to_coll(), poid, "snaps", e.snaps);
+      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", 
+			  &e.prior_version, sizeof(e.prior_version));
+    } else {
+      e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
+    }
+    osd->store->getattr(info.pgid.to_coll(), poid, "version",
                         &e.version, sizeof(e.version));
     add[e.version] = e;
     dout(10) << "generate_backlog found " << e << dendl;
@@ -1001,7 +1006,7 @@ void PG::activate(ObjectStore::Transaction& t,
       // start recovery
       dout(10) << "activate - starting recovery" << dendl;    
       log.requested_to = log.complete_to;
-      do_recovery();
+      osd->queue_for_recovery(this);
     }
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
@@ -1085,7 +1090,7 @@ void PG::activate(ObjectStore::Transaction& t,
       finish_recovery();
     else {
       dout(10) << "activate not all replicas are uptodate, starting recovery" << dendl;
-      do_recovery();
+      osd->queue_for_recovery(this);
     }
   }
 
@@ -1177,7 +1182,13 @@ void PG::_finish_recovery(Context *c)
     update_stats();
   }
   osd->osd_lock.Unlock();
+  osd->finish_recovery_op(this, recovery_ops_active, true);
   put_unlock();
+}
+
+void PG::defer_recovery()
+{
+  osd->defer_recovery(this);
 }
 
 

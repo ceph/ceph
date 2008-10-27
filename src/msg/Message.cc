@@ -112,9 +112,8 @@ using namespace std;
 
 
 
-Message *
-decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
-	       bufferlist& front, bufferlist& data)
+Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
+			bufferlist& front, bufferlist& data)
 {
   // verify crc
   __u32 front_crc = front.crc32c(0);

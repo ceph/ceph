@@ -152,11 +152,6 @@ void RAID4PG::cancel_recovery()
   //assert(0);
 }
 
-bool RAID4PG::do_recovery() 
-{
-  //assert(0);
-  return false;
-}
 
 
 
