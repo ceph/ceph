@@ -36,10 +36,10 @@ fi
 test -d dev/osd0 && SUDO="sudo"
 
 $SUDO ./stop.sh
-$SUDO rm core*
+$SUDO rm -f core*
 
 test -d out || mkdir out
-$SUDO rm out/*
+$SUDO rm -f out/*
 
 # figure machine's ip
 HOSTNAME=`hostname`
