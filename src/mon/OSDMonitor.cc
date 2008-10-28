@@ -612,7 +612,8 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
     if (*p > max)
       max = *p;
 
-    if (!osdmap.removed_snaps.contains(*p)) {
+    if (!osdmap.removed_snaps.contains(*p) &&
+	!pending_inc.removed_snaps.contains(*p)) {
       dout(10) << " adding " << *p << " to removed_snaps" << dendl;
       pending_inc.removed_snaps.insert(*p);
     }
