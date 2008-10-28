@@ -9,6 +9,21 @@ int ceph_debug_dir = -1;
 #define DOUT_PREFIX "dir: "
 #include "super.h"
 
+/*
+ * Ceph MDS operations are specified in terms of a base ino and
+ * relative path.  Thus, the client can specify an operation on a
+ * specific inode (e.g., a getattr due to fstat(2)), or as a path
+ * relative to, say, the root directory.
+ *
+ * Because the MDS does not statefully track which inodes the client
+ * has in its cache, the client has to take care to only specify
+ * operations relative to inodes it knows the MDS has cached.  (The
+ * MDS cannot do a lookup by ino.)
+ *
+ * So, in general, we try to specify operations in terms of generate
+ * path names relative to the root.
+ */
+
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
 struct dentry_operations ceph_dentry_ops;
@@ -18,22 +33,6 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
 /*
  * build a dentry's path.  allocate on heap; caller must kfree.  based
  * on build_path_from_dentry in fs/cifs/dir.c.
- *
- * <old, ignore me>
- * stop path construction as soon as we hit a dentry we do not have a
- * valid lease over.  races aside, this ensures we describe the
- * operation relative to a base inode that is likely to be cached by
- * the MDS, using a relative path that is known to be valid (e.g., not
- * munged up by a directory rename on another client).
- *
- * this is, unfortunately, both racy and inefficient.  dentries are
- * revalidated during path traversal, and revalidated _again_ when we
- * reconstruct the reverse path.  lame.  unfortunately the VFS doesn't
- * tell us the path it traversed, so i'm not sure we can do any better.
- *
- * always include at least @min dentry(ies), or else paths for
- * namespace operations (link, rename, etc.) are meaningless.
- * </old, ignore me>
  *
  * encode hidden .snap dirs as a double /, i.e.
  *   foo/.snap/bar -> foo//bar
@@ -51,14 +50,6 @@ retry:
 	len = 0;
 	for (temp = dentry; !IS_ROOT(temp);) {
 		struct inode *inode = temp->d_inode;
-		/*
-		 * NO, don't do this.. our model is a bit broken here
-		if (len >= min &&
-		    inode &&
-		    ceph_snap(inode) == CEPH_NOSNAP &&
-		    !ceph_dentry_revalidate(temp, 0))
-			break;
-		*/
 		if (inode && ceph_snap(inode) == CEPH_SNAPDIR)
 			len++;  /* slash only */
 		else
