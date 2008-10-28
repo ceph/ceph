@@ -434,6 +434,11 @@ int OSD::shutdown()
   timer.cancel_all();
   timer.join();
 
+  // flush data to disk
+  osd_lock.Unlock();
+  store->sync();
+  osd_lock.Lock();
+
   // finish ops
   wait_for_no_ops();
 
