@@ -964,7 +964,8 @@ public:
       for (std::list<ptr>::const_iterator it = _buffers.begin(); 
 	   it != _buffers.end(); 
 	   it++)
-	crc = crc32c_le(crc, (unsigned char*)it->c_str(), it->length());
+	if (it->length())
+	  crc = crc32c_le(crc, (unsigned char*)it->c_str(), it->length());
       return crc;
     }
 
