@@ -79,6 +79,11 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
       version++;
       pending_destroy[version] = snapid;
       dout(10) << "prepare v" << version << " destroy " << snapid << dendl;
+
+      // bump last_snap... we use it as a version value on the snaprealm.
+      bl.clear();
+      ++last_snap;
+      ::encode(last_snap, bl);
     }
     break;
 
