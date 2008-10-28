@@ -267,10 +267,18 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 {
   dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_orig_source() << dendl;
   int from = stats->get_orig_source().num();
+
+  if (!ceph_fsid_equal(&stats->fsid, &mon->monmap->fsid)) {
+    dout(0) << "handle_statfs on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
+    delete stats;
+    return false;
+  }
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd" << dendl;
+    delete stats;
+    return false;
   }
       
   // osd stat

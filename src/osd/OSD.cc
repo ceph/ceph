@@ -1110,7 +1110,7 @@ void OSD::send_pg_stats()
   if (!pg_stat_pending.empty() || osd_stat_pending) {
     dout(1) << "send_pg_stats - " << pg_stat_pending.size() << " pgs updated" << dendl;
     
-    MPGStats *m = new MPGStats;
+    MPGStats *m = new MPGStats(osdmap->get_fsid());
     for (map<pg_t,eversion_t>::iterator p = pg_stat_pending.begin();
 	 p != pg_stat_pending.end();
 	 p++) {
