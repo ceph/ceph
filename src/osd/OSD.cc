@@ -980,6 +980,21 @@ void OSD::heartbeat()
     */
   }
 
+  // remove stray pgs?
+  remove_list_lock.Lock();
+  for (map<epoch_t, map<int, vector<pg_t> > >::iterator p = remove_list.begin();
+       p != remove_list.end();
+       p++)
+    for (map<int, vector<pg_t> >::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      MOSDPGRemove *m = new MOSDPGRemove(p->first, q->second);
+      messenger->send_message(m, osdmap->get_inst(q->first));
+    }
+  remove_list.clear();
+  remove_list_lock.Unlock();
+
+
   // schedule next!  randomly.
   float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
   timer.add_event_after(wait, new C_Heartbeat(this));
@@ -2713,11 +2728,12 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 {
   assert(osd_lock.is_locked());
 
-  dout(7) << "handle_pg_remove from " << m->get_source() << dendl;
+  dout(7) << "handle_pg_remove from " << m->get_source() << " on "
+	  << m->pg_list.size() << " pgs" << dendl;
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
-  for (set<pg_t>::iterator it = m->pg_list.begin();
+  for (vector<pg_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
        it++) {
     pg_t pgid = *it;

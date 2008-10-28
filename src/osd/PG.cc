@@ -1196,20 +1196,19 @@ void PG::purge_strays()
 {
   dout(10) << "purge_strays " << stray_set << dendl;
   
+  osd->remove_list_lock.Lock();
   for (set<int>::iterator p = stray_set.begin();
        p != stray_set.end();
        p++) {
     if (osd->osdmap->is_up(*p)) {
       dout(10) << "sending PGRemove to osd" << *p << dendl;
-      set<pg_t> ls;
-      ls.insert(info.pgid);
-      MOSDPGRemove *m = new MOSDPGRemove(osd->osdmap->get_epoch(), ls);
-      osd->messenger->send_message(m, osd->osdmap->get_inst(*p));
+      osd->queue_for_removal(*p, info.pgid);
     } else {
       dout(10) << "not sending PGRemove to down osd" << *p << dendl;
     }
     peer_info.erase(*p);
   }
+  osd->remove_list_lock.Unlock();
 
   stray_set.clear();
 }

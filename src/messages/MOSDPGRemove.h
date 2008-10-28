@@ -23,15 +23,15 @@ class MOSDPGRemove : public Message {
   epoch_t epoch;
 
  public:
-  set<pg_t> pg_list;
+  vector<pg_t> pg_list;
 
   epoch_t get_epoch() { return epoch; }
 
   MOSDPGRemove() {}
-  MOSDPGRemove(epoch_t e, set<pg_t>& l) :
+  MOSDPGRemove(epoch_t e, vector<pg_t>& l) :
     Message(MSG_OSD_PG_REMOVE) {
     this->epoch = e;
-    pg_list = l;
+    pg_list.swap(l);
   }
   
   const char *get_type_name() { return "PGrm"; }

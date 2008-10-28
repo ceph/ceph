@@ -429,11 +429,20 @@ private:
   utime_t defer_recovery_until;
   int recovery_ops_active;
 
+  Mutex remove_list_lock;
+  map<epoch_t, map<int, vector<pg_t> > > remove_list;
+
   void queue_for_recovery(PG *pg);
   void maybe_start_recovery();
   void do_recovery();
   void finish_recovery_op(PG *pg, int count, bool more);
   void defer_recovery(PG *pg);
+
+  void queue_for_removal(int osd, pg_t pgid) {
+    remove_list_lock.Lock();
+    remove_list[osdmap->get_epoch()][osd].push_back(pgid);
+    remove_list_lock.Unlock();
+  }
 
   struct C_StartRecovery : public Context {
     OSD *osd;
