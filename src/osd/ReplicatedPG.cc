@@ -2410,7 +2410,7 @@ int ReplicatedPG::recover_primary(int max)
     info.last_complete = info.last_update;
   }
 
-  log.complete_to == log.log.end();
+  log.complete_to = log.log.end();
   log.requested_to = log.log.end();
 
   uptodate_set.insert(osd->whoami);
