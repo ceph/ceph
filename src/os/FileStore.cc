@@ -482,16 +482,13 @@ int FileStore::umount()
 
 unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 {
-  bufferlist tbl;
-  t.encode(tbl);  // apply_transaction modifies t; encode first
-
   op_start();
   int r = _apply_transaction(t);
 
   op_journal_start();
   dout(10) << "op_seq is " << op_seq << dendl;
   if (r >= 0) {
-    journal_transaction(tbl, onsafe);
+    journal_transaction(t, onsafe);
 
     char fn[100];
     sprintf(fn, "%s/commit_op_seq", basedir.c_str());
@@ -1267,6 +1264,7 @@ int FileStore::_remove(coll_t cid, pobject_t oid)
   char fn[200];
   get_coname(cid, oid, fn);
   int r = ::unlink(fn);
+  dout(20) << "remove " << cid << " " << oid << " = " << r << dendl;
   return r < 0 ? -errno:r;
 }
 
@@ -1793,10 +1791,13 @@ int FileStore::_destroy_collection(coll_t c)
 
   char fn[200];
   get_cdir(c, fn);
-  char cmd[200];
-  sprintf(cmd, "test -d %s && rm -r %s", fn, fn);
-  system(cmd);
-  return 0;
+  dout(0) << "_destroy_collection " << c << dendl;
+  int r = ::rmdir(fn);
+  //char cmd[200];
+  //sprintf(cmd, "test -d %s && rm -r %s", fn, fn);
+  //system(cmd);
+  dout(0) << "_destroy_collection " << c << " = " << r << dendl;
+  return r < 0 ? -errno:r;
 }
 
 

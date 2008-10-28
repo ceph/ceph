@@ -87,11 +87,13 @@ protected:
       commit_waiters[op_seq].push_back(oncommit);
   }
 
-  void journal_transaction(bufferlist& tbl, Context *onsafe) {
+  void journal_transaction(ObjectStore::Transaction& t, Context *onsafe) {
     Mutex::Locker l(lock);
 
     ++op_seq;
     if (journal && journal->is_writeable()) {
+      bufferlist tbl;
+      t.encode(tbl);
       journal->submit_entry(op_seq, tbl, onsafe);
     } else
       queue_commit_waiter(onsafe);
