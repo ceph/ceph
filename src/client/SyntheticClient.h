@@ -84,6 +84,8 @@
 #define SYNCLIENT_MODE_MKSNAP 1000
 #define SYNCLIENT_MODE_RMSNAP 1001
 
+#define SYNCLIENT_MODE_MKSNAPFILE 1002
+
 
 void parse_syn_options(vector<const char*>& args);
 
@@ -260,6 +262,7 @@ class SyntheticClient {
 
   void mksnap(const char *base, const char *name);
   void rmsnap(const char *base, const char *name);
+  void mksnapfile(const char *dir);
 };
 
 #endif

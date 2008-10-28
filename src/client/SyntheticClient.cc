@@ -66,6 +66,9 @@ void parse_syn_options(vector<const char*>& args)
 	syn_modes.push_back(SYNCLIENT_MODE_RMSNAP);
 	syn_sargs.push_back(args[++i]); // path
 	syn_sargs.push_back(args[++i]); // name
+      } else if (strcmp(args[i], "mksnapfile") == 0) {
+	syn_modes.push_back(SYNCLIENT_MODE_MKSNAPFILE);
+	syn_sargs.push_back(args[++i]); // path
       } else if (strcmp(args[i],"rmfile") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_RMFILE );
       } else if (strcmp(args[i],"writefile") == 0) {
@@ -853,6 +856,14 @@ int SyntheticClient::run()
 	string name = get_sarg(0);
 	if (run_me())
 	  rmsnap(base.c_str(), name.c_str());
+	did_run_me();
+      }
+      break;
+    case SYNCLIENT_MODE_MKSNAPFILE:
+      {
+	string base = get_sarg(0);
+	if (run_me())
+	  mksnapfile(base.c_str());
 	did_run_me();
       }
       break;
@@ -3332,4 +3343,27 @@ void SyntheticClient::mksnap(const char *base, const char *name)
 void SyntheticClient::rmsnap(const char *base, const char *name)
 {
   client->rmsnap(base, name);
+}
+
+void SyntheticClient::mksnapfile(const char *dir)
+{
+  client->mkdir(dir, 0755);
+
+  string f = dir;
+  f += "/foo";
+  int fd = client->open(f.c_str(), O_WRONLY|O_CREAT|O_TRUNC);
+
+  char buf[1048576*4];
+  client->write(fd, buf, sizeof(buf), 0);
+  client->fsync(fd, true);
+  client->close(fd);
+  
+  string s = dir;
+  s += "/.snap/1";
+  client->mkdir(s.c_str(), 0755);
+
+  fd = client->open(f.c_str(), O_WRONLY);
+  client->write(fd, buf, 1048576*2, 1048576);
+  client->fsync(fd, true);
+  client->close(fd);
 }
