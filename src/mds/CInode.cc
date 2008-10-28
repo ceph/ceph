@@ -509,7 +509,10 @@ void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   _mark_dirty(ls);
 
   // mark dentry too
-  parent->mark_dirty(pv, ls);
+  if (projected_parent)
+    projected_parent->mark_dirty(pv, ls);
+  else
+    parent->mark_dirty(pv, ls);
 }
 
 
