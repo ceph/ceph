@@ -1143,7 +1143,7 @@ void OSD::send_pg_stats()
       if (pg->pg_stats_valid) {
 	pg->pg_stats_valid = false;
 	m->pg_stat[pgid] = pg->pg_stats;
-	dout(20) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+	dout(30) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
       }
       pg->pg_stats_lock.Unlock();
     }
@@ -1170,12 +1170,12 @@ void OSD::handle_pgstats_ack(MPGStatsAck *ack)
        p != ack->pg_stat.end();
        p++) {
     if (pg_stat_pending.count(p->first) == 0) {
-      dout(10) << "ignoring " << p->first << " " << p->second << dendl;
+      dout(30) << " ignoring " << p->first << " " << p->second << dendl;
     } else if (pg_stat_pending[p->first] <= p->second) {
-      dout(10) << "ack on " << p->first << " " << p->second << dendl;
+      dout(30) << " ack on " << p->first << " " << p->second << dendl;
       pg_stat_pending.erase(p->first);
     } else {
-      dout(10) << "still pending " << p->first << " " << pg_stat_pending[p->first]
+      dout(30) << " still pending " << p->first << " " << pg_stat_pending[p->first]
 	       << " > acked " << p->second << dendl;
     }
   }
