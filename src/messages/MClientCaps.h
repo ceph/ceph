@@ -98,8 +98,8 @@ class MClientCaps : public Message {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " seq " << head.seq 
-	<< " caps " << cap_string(head.caps)
-	<< " wanted" << cap_string(head.wanted)
+	<< " caps=" << cap_string(head.caps)
+	<< " wanted=" << cap_string(head.wanted)
 	<< " size " << head.size << "/" << head.max_size
 	<< " ts" << head.truncate_seq
 	<< " mtime " << utime_t(head.mtime)
