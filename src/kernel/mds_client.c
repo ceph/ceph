@@ -1275,7 +1275,8 @@ retry:
 
 	/* send and wait */
 	mutex_unlock(&mdsc->mutex);
-	dout(10, "do_request %p r_expected_cap=%p\n", req, req->r_expected_cap);
+	dout(10, "do_request %p %lld r_expected_cap=%p\n", req, req->r_tid,
+	     req->r_expected_cap);
 
 	/* if there are other references on this message, e.g., if we are
 	 * told to forward it and the previous copy is still in flight, dup
@@ -1361,7 +1362,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		mutex_unlock(&mdsc->mutex);
 		return;
 	}
-	req->r_got_reply = 1;
 	if (req->r_session && req->r_session->s_mds != mds) {
 		ceph_put_mds_session(req->r_session);
 		req->r_session = __ceph_get_mds_session(mdsc, mds);
@@ -1374,6 +1374,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		return;
 	}
 	BUG_ON(req->r_reply);
+	req->r_got_reply = 1;
 
 	/* take the snap sem if we are adding a cap here */
 	if (req->r_expected_cap) {
