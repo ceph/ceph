@@ -109,7 +109,7 @@ int main(int argc, const char **argv)
 
   rank.start();  // may daemonize
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(g_conf.mon_lease_timeout * 2));
+  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossless());
 
   rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossy_fast_fail());
   rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossy_fast_fail());
