@@ -402,7 +402,8 @@ public:
   int getattr(coll_t cid, pobject_t oid, const char *name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name, bp);
-    value.push_back(bp);
+    if (bp.length())
+      value.push_back(bp);
     return r;
   }
   virtual int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {return 0;};
