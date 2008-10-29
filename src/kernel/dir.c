@@ -615,7 +615,6 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 
 	ceph_mdsc_lease_release(mdsc, dir, NULL, CEPH_LOCK_ICONTENT);
 	err = ceph_mdsc_do_request(mdsc, req);
-	ceph_mdsc_put_request(req);
 	if (err) {
 		d_drop(dentry);
 	} else if (req->r_reply_info.trace_numd == 0) {
@@ -626,6 +625,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		dget(dentry);
 		d_instantiate(dentry, inode);
 	}
+	ceph_mdsc_put_request(req);
 	return err;
 }
 
