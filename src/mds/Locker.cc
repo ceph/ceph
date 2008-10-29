@@ -2988,8 +2988,12 @@ void Locker::file_wrlock_finish(FileLock *lock, Mutation *mut)
     mut->locks.erase(lock);
   }
 
-  if (!lock->is_wrlocked())
-    file_eval_gather(lock);
+  if (!lock->is_wrlocked()) {
+    if (!lock->is_stable())
+      file_eval_gather(lock);
+    else
+      file_eval(lock);
+  }
 }
 
 
