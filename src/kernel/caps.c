@@ -565,6 +565,10 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
 	struct rb_node *p;
 	int tried_invalidate = 0;
 
+	/* if we are unmounting, flush any unused caps immediately. */
+	if (mdsc->stopping)
+		is_delayed = 1;
+
 	spin_lock(&inode->i_lock);
 
 	/* flush snaps first time around only */

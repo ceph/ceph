@@ -2088,7 +2088,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	struct ceph_mds_session *session;
 	int i;
 	int n;
-	unsigned long started, timeout = 30 * HZ;
+	unsigned long started, timeout = 60 * HZ;
 	struct ceph_client *client = mdsc->client;
 
 	dout(10, "close_sessions\n");
