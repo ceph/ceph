@@ -2581,7 +2581,7 @@ void ReplicatedPG::scrub()
   // traverse in reverse order.
   pobject_t head;
   SnapSet snapset;
-  unsigned curclone;
+  unsigned curclone = 0;
   int r;
 
   bufferlist last_data;
