@@ -453,7 +453,8 @@ void PG::generate_backlog()
        it++) {
     local++;
     pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
-
+    
+    if (poid == info.pgid.to_pobject()) continue;
     if (log.logged_object(poid.oid)) continue; // already have it logged.
     
     // add entry
