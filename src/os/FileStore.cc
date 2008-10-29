@@ -188,15 +188,15 @@ bool FileStore::parse_object(char *s, pobject_t& o)
       s[26] != '.' ||
       s[35] != '.')
     return false;
-  o.volume = strtoll(s, 0, 16);
+  o.volume = strtoull(s, 0, 16);
   assert(s[4] == '.');
-  o.rank = strtoll(s+5, 0, 16);
+  o.rank = strtoull(s+5, 0, 16);
   assert(s[9] == '.');
-  o.oid.ino = strtoll(s+10, 0, 16);
+  o.oid.ino = strtoull(s+10, 0, 16);
   assert(s[26] == '.');
-  o.oid.bno = strtoll(s+27, 0, 16);
+  o.oid.bno = strtoull(s+27, 0, 16);
   assert(s[35] == '.');
-  o.oid.snap = strtoll(s+36, 0, 16);
+  o.oid.snap = strtoull(s+36, 0, 16);
   return true;
 }
 
@@ -204,8 +204,8 @@ bool FileStore::parse_coll(char *s, coll_t& c)
 {
   if (s[16] == '.' && strlen(s) == 33) {
     s[16] = 0;
-    c.high = strtoll(s, 0, 16);
-    c.low = strtoll(s+17, 0, 16);
+    c.high = strtoull(s, 0, 16);
+    c.low = strtoull(s+17, 0, 16);
     return true;
   } else 
     return false;
@@ -1498,8 +1498,10 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
     memcpy(bp.c_str(), val, l);
   } else if (l == -ERANGE) {
     l = do_getxattr(fn, name, 0, 0);
-    bp = buffer::create(l);
-    l = do_getxattr(fn, name, bp.c_str(), l);
+    if (l) {
+      bp = buffer::create(l);
+      l = do_getxattr(fn, name, bp.c_str(), l);
+    }
   }
   return l;
 }
