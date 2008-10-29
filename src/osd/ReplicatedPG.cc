@@ -845,6 +845,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
 
       snapset.clones.push_back(coid.oid.snap);
       snapset.clone_size[coid.oid.snap] = st.st_size;
+      snapset.clone_overlap[coid.oid.snap].insert(0, st.st_size);
       
       at_version.version++;
     }
@@ -1623,6 +1624,9 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, pobject_t head,
 				     interval_set<__u64>& data_subset,
 				     map<pobject_t, interval_set<__u64> >& clone_subsets)
 {
+  dout(10) << "calc_head_subsets " << head
+	   << " clone_overlap " << snapset.clone_overlap << dendl;
+
   struct stat st;
   osd->store->stat(info.pgid.to_coll(), head, &st);
 
@@ -1650,6 +1654,10 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, pobject_t head,
   if (st.st_size)
     data_subset.insert(0, st.st_size);
   data_subset.subtract(cloning);
+
+  dout(10) << "calc_head_subsets " << head
+	   << "  data_subset " << data_subset
+	   << "  clone_subsets " << clone_subsets << dendl;
 }
 
 void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, pobject_t poid,
@@ -1657,6 +1665,9 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, pobject_t poid,
 				      interval_set<__u64>& data_subset,
 				      map<pobject_t, interval_set<__u64> >& clone_subsets)
 {
+  dout(10) << "calc_clone_subsets " << poid
+	   << " clone_overlap " << snapset.clone_overlap << dendl;
+
   __u64 size = snapset.clone_size[poid.oid.snap];
 
   unsigned i;
@@ -1707,6 +1718,10 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, pobject_t poid,
   if (size)
     data_subset.insert(0, size);
   data_subset.subtract(cloning);
+
+  dout(10) << "calc_clone_subsets " << poid
+	   << "  data_subset " << data_subset
+	   << "  clone_subsets " << clone_subsets << dendl;
 }
 
 
@@ -2072,21 +2087,24 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   t.remove(info.pgid.to_coll(), poid);  // in case old version exists
 
   __u64 boff = 0;
+  for (map<pobject_t, interval_set<__u64> >::iterator p = clone_subsets.begin();
+       p != clone_subsets.end();
+       p++)
+    for (map<__u64,__u64>::iterator q = p->second.m.begin();
+	 q != p->second.m.end(); 
+	 q++) {
+      dout(15) << " clone_range " << p->first << " " << q->first << "~" << q->second << dendl;
+      t.clone_range(info.pgid.to_coll(), poid, p->first, q->first, q->second);
+    }
   for (map<__u64,__u64>::iterator p = data_subset.m.begin();
        p != data_subset.m.end(); 
        p++) {
     bufferlist bit;
     bit.substr_of(op->get_data(), boff, p->second);
     t.write(info.pgid.to_coll(), poid, p->first, p->second, bit);
+    dout(15) << " write " << p->first << "~" << p->second << dendl;
     boff += p->second;
   }
-  for (map<pobject_t, interval_set<__u64> >::iterator p = clone_subsets.begin();
-       p != clone_subsets.end();
-       p++)
-    for (map<__u64,__u64>::iterator q = p->second.m.begin();
-	 q != p->second.m.end(); 
-	 q++)
-      t.clone_range(info.pgid.to_coll(), poid, p->first, q->first, q->second);
 
   t.setattrs(info.pgid.to_coll(), poid, op->attrset);
   if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP &&
