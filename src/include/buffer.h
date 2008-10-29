@@ -271,6 +271,8 @@ public:
       release();
     }
     
+    bool have_raw() const { return _raw ? true:false; }
+
     raw *clone() {
       return _raw->clone();
     }
@@ -1007,11 +1009,14 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
 }
 
 inline std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {
-  out << "buffer::ptr(" << bp.offset() << "~" << bp.length()
-      << " " << (void*)bp.c_str() 
-      << " in raw " << (void*)bp.raw_c_str()
-      << " len " << bp.raw_length()
-      << " nref " << bp.raw_nref() << ")";
+  if (bp.have_raw())
+    out << "buffer::ptr(" << bp.offset() << "~" << bp.length()
+	<< " " << (void*)bp.c_str() 
+	<< " in raw " << (void*)bp.raw_c_str()
+	<< " len " << bp.raw_length()
+	<< " nref " << bp.raw_nref() << ")";
+  else
+    out << "buffer:ptr(" << bp.offset() << "~" << bp.length() << " no raw)";
   return out;
 }
 
