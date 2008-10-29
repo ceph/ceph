@@ -1508,8 +1508,6 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
 
 int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset) 
 {
-  int r;
-
   // get attr list
   char names1[100];
   char *name = names1;
@@ -1535,7 +1533,7 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset)
   }
 
   delete names2;
-  return r;
+  return 0;
 }
 
 // objects
