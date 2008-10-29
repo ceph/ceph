@@ -1418,7 +1418,7 @@ int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u6
   int o = ::open(ofn, O_RDONLY);
   if (o < 0)
     return -errno;
-  int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  int n = ::open(nfn, O_CREAT|O_WRONLY, 0644);
   if (n < 0) {
     r = -errno;
     goto out;
