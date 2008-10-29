@@ -683,13 +683,6 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
-	if (req->r_reply_info.trace_numd == 0) {
-		/* no trace */
-		if (err == -ENOENT)
-			d_drop(dentry);
-		dput(dentry);
-	}
-
 	return err;
 }
 
