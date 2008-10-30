@@ -1,6 +1,6 @@
 #!/bin/sh
 
-killall cmon cmds
+killall cmon cmds crun
 
 for host in `cd dev/hosts ; ls`
 do
