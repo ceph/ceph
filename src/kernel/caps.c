@@ -595,7 +595,7 @@ retry_locked:
 	 * have cached pages, but don't want them, then try to invalidate.
 	 * If we fail, it's because pages are locked.... try again later.
 	 */
-	if (!time_before(jiffies, ci->i_hold_caps_until) &&
+	if ((!time_before(jiffies, ci->i_hold_caps_until) || mdsc->stopping) &&
 	    ci->i_wrbuffer_ref == 0 &&               /* no dirty pages... */
 	    ci->i_rdcache_gen &&                     /* may have cached pages */
 	    file_wanted == 0 &&                      /* no open files */
