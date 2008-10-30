@@ -1706,7 +1706,7 @@ needmore:
 	 * factor in snap realms, but it's safe.
 	 */
 	num_caps += num_realms;
-	newlen = (len * (session->s_nr_caps+1)) / (num_caps + 1);
+	newlen = (len * (session->s_nr_caps+3)) / (num_caps + 1);
 	dout(30, "i guessed %d, and did %d of %d caps, retrying with %d\n",
 	     len, num_caps, session->s_nr_caps, newlen);
 	len = newlen;
