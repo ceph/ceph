@@ -1443,7 +1443,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	int err;
 	int mask = 0;
 
-	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_CHOWN);
+	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LCHOWN);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
