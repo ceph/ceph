@@ -2838,7 +2838,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
 				 req->get_filepath(), trace, NULL, NULL,
 				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't unlink root
+  if (r == 0 && trace.empty()) r = -EINVAL;   // can't unlink root
   if (r < 0) {
     reply_request(mdr, r);
     return;
