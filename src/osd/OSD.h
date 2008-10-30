@@ -425,18 +425,33 @@ private:
 
   // -- pg recovery --
   Mutex recovery_lock;
+  Cond recovery_cond;
   xlist<PG*> recovering_pgs;
   utime_t defer_recovery_until;
   int recovery_ops_active;
+  bool recovery_stop;
 
   Mutex remove_list_lock;
   map<epoch_t, map<int, vector<pg_t> > > remove_list;
 
   void queue_for_recovery(PG *pg);
-  void maybe_start_recovery();
-  void do_recovery();
   void finish_recovery_op(PG *pg, int count, bool more);
   void defer_recovery(PG *pg);
+  void _do_recovery();
+  void recovery_entry();
+  bool _recover_now();
+  void kick_recovery() {
+    recovery_lock.Lock();
+    recovery_cond.Signal();
+    recovery_lock.Unlock();
+  }
+  void stop_recovery_thread() {
+    recovery_lock.Lock();
+    recovery_stop = true;
+    recovery_cond.Signal();
+    recovery_lock.Unlock();
+    recovery_thread.join();
+  }
 
   void queue_for_removal(int osd, pg_t pgid) {
     remove_list_lock.Lock();
@@ -444,11 +459,20 @@ private:
     remove_list_lock.Unlock();
   }
 
+  struct RecoveryThread : public Thread {
+    OSD *osd;
+    RecoveryThread(OSD *o) : osd(o) {}
+    void *entry() {
+      osd->recovery_entry();
+      return 0;
+    }
+  } recovery_thread;
+
   struct C_StartRecovery : public Context {
     OSD *osd;
     C_StartRecovery(OSD *o) : osd(o) {}
     void finish(int r) {
-      osd->maybe_start_recovery();
+      osd->kick_recovery();
     }
   };
   

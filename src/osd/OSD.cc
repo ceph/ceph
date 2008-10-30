@@ -260,7 +260,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
   iat_averager(g_conf.osd_flash_crowd_iat_alpha),
-  snap_trimmer_thread(this)
+  snap_trimmer_thread(this),
+  recovery_ops_active(0), recovery_stop(false), recovery_thread(this)
 {
   messenger = m;
   monmap = mm;
@@ -412,6 +413,8 @@ int OSD::init()
   booting = true;
   do_mon_report();     // start mon report timer
   
+  recovery_thread.create();
+
   // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
 
@@ -434,9 +437,13 @@ int OSD::shutdown()
   timer.cancel_all();
   timer.join();
 
-  // flush data to disk
   osd_lock.Unlock();
+
+  // flush data to disk
   store->sync();
+
+  stop_recovery_thread();
+
   osd_lock.Lock();
 
   // finish ops
@@ -830,7 +837,7 @@ void OSD::_refresh_my_stat(utime_t now)
     logger->fset("rdlatm", my_stat.read_latency_mine);
     logger->fset("fshdin", my_stat.frac_rd_ops_shed_in);
     logger->fset("fshdout", my_stat.frac_rd_ops_shed_out);
-    dout(12) << "_refresh_my_stat " << my_stat << dendl;
+    dout(30) << "_refresh_my_stat " << my_stat << dendl;
 
     stat_rd_ops = 0;
     stat_rd_ops_shed_in = 0;
@@ -1029,7 +1036,7 @@ void OSD::do_mon_report()
   }
   pg_stat_queue_lock.Lock();
   if (!pg_stat_pending.empty() || osd_stat_pending) {
-    dout(10) << "requeueing pg_stat_pending" << dendl;
+    dout(30) << "requeueing pg_stat_pending" << dendl;
     retry = true;
     osd_stat_updated = osd_stat_updated || osd_stat_pending;
     osd_stat_pending = false;
@@ -1117,7 +1124,7 @@ void OSD::send_pg_stats()
 {
   assert(osd_lock.is_locked());
 
-  dout(10) << "send_pg_stats" << dendl;
+  dout(20) << "send_pg_stats" << dendl;
 
   // grab queue
   assert(pg_stat_pending.empty());
@@ -2833,59 +2840,69 @@ void OSD::queue_for_recovery(PG *pg)
   if (g_conf.osd_recovery_delay_start > 0) {
     defer_recovery_until = g_clock.now();
     defer_recovery_until += g_conf.osd_recovery_delay_start;
-  }
-
-  recovery_lock.Unlock();  
-
-  if (defer_recovery_until == utime_t())
-    maybe_start_recovery();
-  else
     timer.add_event_at(defer_recovery_until, new C_StartRecovery(this));
+  } else if (_recover_now())
+    recovery_cond.Signal();
+  recovery_lock.Unlock();  
 }
 
-void OSD::maybe_start_recovery()
+bool OSD::_recover_now()
 {
-  if (g_clock.now() > defer_recovery_until &&
-      recovery_ops_active == 0) {
-    dout(10) << "maybe_start_recovery starting" << dendl;
-    do_recovery();
-  }
-}
+  if (recovering_pgs.empty())
+    return false;
 
-void OSD::do_recovery()
+  if (recovery_ops_active >= g_conf.osd_recovery_max_active) {
+    dout(15) << "_recover_now max " << g_conf.osd_recovery_max_active << " active" << dendl;
+    return false;
+  }
+  if (g_clock.now() >= defer_recovery_until) {
+    dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
+    return false;
+  }
+
+  return true;
+}
+void OSD::_do_recovery()
 {
-  while (1) {
-    recovery_lock.Lock();
-    if (recovering_pgs.empty()) {
-      dout(10) << "do_recovery -- no recoverying pgs, nothing to do" << dendl;
-      recovery_lock.Unlock();
-      return;
-    }
-    if (recovery_ops_active >= g_conf.osd_recovery_max_active) {
-      recovery_lock.Unlock();
-      return;
-    }
-    int max = g_conf.osd_recovery_max_active - recovery_ops_active;
-    
-    PG *pg = recovering_pgs.front();
-    pg->get();
+  assert(recovery_lock.is_locked());
 
-    dout(10) << "do_recovery starting " << max
-	     << " (" << recovery_ops_active
-	     << "/" << g_conf.osd_recovery_max_active << " active) on "
-	     << *pg << dendl;
-
-    recovery_lock.Unlock();
-    
-    pg->lock();
-    int started = pg->start_recovery_ops(max);
-    recovery_ops_active += started;
-    pg->recovery_ops_active += started;
-    if (started < max)
-      pg->recovery_item.remove_myself();
-    pg->put_unlock();
-  }
+  int max = g_conf.osd_recovery_max_active - recovery_ops_active;
+  
+  PG *pg = recovering_pgs.front();
+  pg->get();
+  
+  dout(10) << "do_recovery starting " << max
+	   << " (" << recovery_ops_active
+	   << "/" << g_conf.osd_recovery_max_active << " active) on "
+	   << *pg << dendl;
+  
+  recovery_lock.Unlock();
+  
+  pg->lock();
+  int started = pg->start_recovery_ops(max);
+  recovery_ops_active += started;
+  pg->recovery_ops_active += started;
+  if (started < max)
+    pg->recovery_item.remove_myself();
+  pg->put_unlock();
+  
+  recovery_lock.Lock();
 }
+
+void OSD::recovery_entry()
+{
+  recovery_lock.Lock();
+  dout(10) << "recovery_entry - start" << dendl;
+  while (!recovery_stop) {
+    while (_recover_now())
+      _do_recovery();
+    recovery_cond.Wait(recovery_lock);
+  }
+  dout(10) << "recovery_entry - done" << dendl;
+  recovery_lock.Unlock();
+}
+
+
 
 void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
 {
@@ -2902,11 +2919,8 @@ void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
   else
     recovering_pgs.push_front(&pg->recovery_item);  // requeue
 
+  recovery_cond.Signal();
   recovery_lock.Unlock();
-
-  // continue recovery?
-  if (count && g_clock.now() > defer_recovery_until)
-    do_recovery();
 }
 
 void OSD::defer_recovery(PG *pg)
