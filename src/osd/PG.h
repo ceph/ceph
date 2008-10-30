@@ -302,6 +302,11 @@ public:
       assert(0);
       unindex();
       Log::clear();
+      reset_recovery();
+    }
+    void reset_recovery() {
+      requested_to = log.end();
+      complete_to = log.end();
     }
 
     bool logged_object(object_t oid) const {

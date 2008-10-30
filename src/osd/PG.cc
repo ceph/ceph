@@ -110,6 +110,9 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   if (backlog && s < bottom)
     s = bottom;
 
+  assert(complete_to == log.end() &&
+	 requested_to == log.end());
+
   while (!log.empty()) {
     Entry &e = *log.begin();
 
@@ -713,6 +716,8 @@ void PG::clear_primary_state()
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
   
+  log.reset_recovery();
+
   stat_object_temp_rd.clear();
 }
 
@@ -1162,6 +1167,8 @@ void PG::finish_recovery()
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
+  log.reset_recovery();
+
   /*
    * sync all this before purging strays.  but don't block!
    */
@@ -1355,7 +1362,8 @@ void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry,
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   // trim?
-  if (trim_to > log.bottom) {
+  if (trim_to > log.bottom &&
+      is_clean()) {
     dout(10) << " trimming " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_bottom = log.bottom;
