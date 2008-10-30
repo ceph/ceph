@@ -1037,12 +1037,13 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		ceph_destroy_client(client);
 		client = ceph_client(sb);
 		dout(20, "get_sb got existing client %p\n", client);
-	} else
+	} else {
 		dout(20, "get_sb using new client %p\n", client);
 
-	err = ceph_init_bdi(sb, client);
-	if (err < 0)
-		goto out_splat;
+		err = ceph_init_bdi(sb, client);
+		if (err < 0)
+			goto out_splat;
+	}
 
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
