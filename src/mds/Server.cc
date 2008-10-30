@@ -2994,14 +2994,15 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (dn->is_primary())
     dn->inode->projected_parent = straydn;
 
+  // the unlinked dentry
+  dn->pre_dirty();
+
   inode_t *pi = dn->inode->project_inode();
-  mdr->add_projected_inode(dn->inode);
+  mdr->add_projected_inode(dn->inode); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = dn->inode->pre_dirty();
   pi->nlink--;
   pi->ctime = mdr->now;
 
-  // the unlinked dentry
-  dn->pre_dirty();
   mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
   le->metablob.add_null_dentry(dn, true);
 
