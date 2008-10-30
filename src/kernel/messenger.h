@@ -115,6 +115,7 @@ struct ceph_msg {
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
 	atomic_t nref;
+	bool front_is_vmalloc;
 };
 
 struct ceph_msg_pos {

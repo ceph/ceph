@@ -2271,10 +2271,16 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->hdr.data_off = cpu_to_le32(page_off);
 	m->footer.front_crc = 0;
 	m->footer.data_crc = 0;
+	m->front_is_vmalloc = false;
 
 	/* front */
 	if (front_len) {
-		m->front.iov_base = kmalloc(front_len, GFP_NOFS);
+		if (front_len > PAGE_CACHE_SIZE) {
+			m->front.iov_base = vmalloc(front_len);
+			m->front_is_vmalloc = true;
+		} else {
+			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
+		}
 		if (m->front.iov_base == NULL) {
 			derr(0, "ceph_msg_new can't allocate %d bytes\n",
 			     front_len);
@@ -2318,7 +2324,10 @@ void ceph_msg_put(struct ceph_msg *m)
 	if (atomic_dec_and_test(&m->nref)) {
 		dout(20, "ceph_msg_put last one on %p\n", m);
 		WARN_ON(!list_empty(&m->list_head));
-		kfree(m->front.iov_base);
+		if (m->front_is_vmalloc)
+			vfree(m->front.iov_base);
+		else
+			kfree(m->front.iov_base);
 		kfree(m);
 	}
 }
