@@ -1232,10 +1232,12 @@ void PG::update_stats()
   if (is_primary()) {
     // update our stat summary
     pg_stats_valid = true;
-    pg_stats.reported = info.last_update;
+    pg_stats.version = info.last_update;
+    pg_stats.reported = osd->osdmap->get_epoch();
     pg_stats.state = state;
     pg_stats.num_bytes = stat_num_bytes;
     pg_stats.num_kb = stat_num_kb;
+    pg_stats.acting = acting;
   } else {
     pg_stats_valid = false;
   }

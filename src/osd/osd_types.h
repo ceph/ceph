@@ -246,6 +246,7 @@ struct osd_stat_t {
   int64_t kb;
   int64_t kb_used, kb_avail;
   int64_t num_objects;
+  vector<int> hb_in, hb_out;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0), num_objects(0) {}
 
@@ -254,12 +255,16 @@ struct osd_stat_t {
     ::encode(kb_used, bl);
     ::encode(kb_avail, bl);
     ::encode(num_objects, bl);
+    ::encode(hb_in, bl);
+    ::encode(hb_out, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(kb, bl);
     ::decode(kb_used, bl);
     ::decode(kb_avail, bl);
     ::decode(num_objects, bl);
+    ::decode(hb_in, bl);
+    ::decode(hb_out, bl);
   }
 };
 WRITE_CLASS_ENCODER(osd_stat_t)
@@ -268,7 +273,8 @@ WRITE_CLASS_ENCODER(osd_stat_t)
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
   return out << "osd_stat(" << (s.kb_used) << "/" << s.kb << " KB used, " 
 	     << s.kb_avail << " avail, "
-	     << s.num_objects << " objects)";
+	     << s.num_objects << " objects, "
+	     << "peers " << s.hb_in << "/" << s.hb_out << ")";
 }
 
 
@@ -309,16 +315,18 @@ static inline std::string pg_state_string(int state) {
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
-  eversion_t reported;
-  epoch_t created;
+  eversion_t version;
+  epoch_t reported, created;
   pg_t    parent;
   int32_t parent_split_bits;
   int32_t state;
   int64_t num_bytes;    // in bytes
   int64_t num_kb;       // in KB
   int64_t num_objects;
+  vector<int> acting;
   
   void encode(bufferlist &bl) const {
+    ::encode(version, bl);
     ::encode(reported, bl);
     ::encode(created, bl);
     ::encode(parent, bl);
@@ -327,8 +335,10 @@ struct pg_stat_t {
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
+    ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    ::decode(version, bl);
     ::decode(reported, bl);
     ::decode(created, bl);
     ::decode(parent, bl);
@@ -337,8 +347,9 @@ struct pg_stat_t {
     ::decode(num_bytes, bl);
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
+    ::decode(acting, bl);
   }
-  pg_stat_t() : created(0), parent_split_bits(0), state(0), num_bytes(0), num_kb(0), num_objects(0) {}
+  pg_stat_t() : reported(0), created(0), parent_split_bits(0), state(0), num_bytes(0), num_kb(0), num_objects(0) {}
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 
