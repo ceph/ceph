@@ -20,6 +20,7 @@
 
 class Mutex {
 private:
+  const char *name;
   pthread_mutex_t _m;
   int nlock;
   bool recursive;
@@ -29,7 +30,7 @@ private:
   Mutex( const Mutex &M ) {}
 
 public:
-  Mutex(bool r = true) : nlock(0), recursive(r) {
+  Mutex(const char *n, bool r = true) : name(n), nlock(0), recursive(r) {
     if (recursive) {
       pthread_mutexattr_t attr;
       pthread_mutexattr_init(&attr);
@@ -88,5 +89,6 @@ public:
     }
   };
 };
+
 
 #endif

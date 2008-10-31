@@ -82,6 +82,7 @@ class FileStore : public JournalingObjectStore {
     lock_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
+    lock("FileStore::lock"),
     stop(false), sync_thread(this) { }
 
   int mount();

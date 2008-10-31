@@ -24,7 +24,7 @@ class Semaphore
 
   public:
 
-  Semaphore()
+  Semaphore() : m("Semaphore::m")
   {
     count = 0;
   }

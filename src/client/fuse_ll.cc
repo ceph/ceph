@@ -29,7 +29,7 @@
 
 static Client *client;
 
-Mutex stag_lock;
+Mutex stag_lock("fuse_ll.cc stag_lock");
 int last_stag = 0;
 hash_map<__u64,int> snap_stag_map;
 hash_map<int,__u64> stag_snap_map;

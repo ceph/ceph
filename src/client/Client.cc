@@ -72,7 +72,7 @@ using namespace std;
 
 
 // static logger
-Mutex client_logger_lock;
+Mutex client_logger_lock("client_logger_lock");
 LogType client_logtype;
 Logger  *client_logger = 0;
 
@@ -100,7 +100,7 @@ void client_flush_set_callback(void *p, inodeno_t ino)
 
 // cons/des
 
-Client::Client(Messenger *m, MonMap *mm) : timer(client_lock)
+Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Client::client_lock")
 {
   // which client am i?
   whoami = m->get_myname().num();

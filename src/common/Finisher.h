@@ -58,7 +58,7 @@ class Finisher {
   void start();
   void stop();
 
-  Finisher() : finisher_stop(false), finisher_thread(this) {}
+  Finisher() : finisher_lock("Finisher::finisher_lock"), finisher_stop(false), finisher_thread(this) {}
 };
 
 #endif

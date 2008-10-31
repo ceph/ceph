@@ -100,7 +100,9 @@ protected:
   }
 
 public:
-  JournalingObjectStore() : op_seq(0), committing_op_seq(0), journal(0) { }
+  JournalingObjectStore() : op_seq(0), committing_op_seq(0), journal(0),
+			    journal_lock("JournalingObjectStore::journal_lock"),
+			    lock("JournalingObjectStore::lock") { }
   
 };
 

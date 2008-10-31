@@ -47,6 +47,7 @@
 Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   whoami(w), 
   messenger(m),
+  lock("Monitor::lock"),
   monmap(map),
   timer(lock), tick_timer(0),
   store(s),

@@ -73,6 +73,7 @@
 
 // cons/des
 MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
+  mds_lock("MDS::mds_lock"),
   timer(mds_lock), 
   sessionmap(this) {
 

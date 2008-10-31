@@ -40,7 +40,7 @@ class Clock {
   Mutex lock;
 
  public:
-  Clock() {
+  Clock() : lock("Clock::lock") {
     // set offset
     //tare();
   }

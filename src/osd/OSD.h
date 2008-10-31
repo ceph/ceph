@@ -142,7 +142,7 @@ private:
     double m_Total;
     
   public:
-    MovingAverager(unsigned size) : m_Size(size), m_Total(0) { }
+    MovingAverager(unsigned size) : lock("OSD::MovingAverager::lock"), m_Size(size), m_Total(0) { }
 
     void set_size(unsigned size) {
       m_Size = size;
@@ -182,7 +182,7 @@ private:
     hash_map<object_t, iat_data> iat_map;
 
   public:
-    IATAverager(double a) : alpha(a) {}
+    IATAverager(double a) : lock("IATAverager::lock"),alpha(a) {}
     
     void add_sample(object_t oid, double now) {
       Mutex::Locker locker(lock);

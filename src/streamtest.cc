@@ -26,7 +26,7 @@ struct io {
 };
 map<off_t,io> writes;
 
-Mutex lock;
+Mutex lock("streamtest.cc lock");
 
 
 void pr(off_t off)

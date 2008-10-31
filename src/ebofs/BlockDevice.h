@@ -257,11 +257,13 @@ class BlockDevice {
  public:
   BlockDevice(const char *d) : 
     dev(d), fd(0), num_blocks(0),
+    lock("BlockDevice::lock"),
     root_queue(this, dev.c_str()),
     io_stop(false), io_threads_started(0), io_threads_running(0), is_idle_waiting(false),
+    complete_lock("BlockDevice::complete_lock"),
     complete_queue_len(0),
     complete_thread(this),
-    idle_kicker(0), kicker_thread(this) { }
+    idle_kicker(0), kicker_lock("BlockDevice::kicker_lock"), kicker_thread(this) { }
   ~BlockDevice() {
     if (fd > 0) close();
   }

@@ -2133,7 +2133,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   bufferlist bl;
   bl.push_back(bp);
 
-  Mutex lock;
+  Mutex lock("lock");
   Cond cond;
   
   int unack = 0;
@@ -2224,7 +2224,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     prime += 2;
   }
 
-  Mutex lock;
+  Mutex lock("lock");
   Cond cond;
 
   int unack = 0;
@@ -3299,7 +3299,7 @@ int SyntheticClient::chunk_file(string &filename)
   while (pos < size) {
     int get = MIN(size-pos, 1048576);
 
-    Mutex lock;
+    Mutex lock("lock");
     Cond cond;
     bool done;
     bufferlist bl;

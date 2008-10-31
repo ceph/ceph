@@ -254,14 +254,23 @@ void OSD::force_remount()
 LogType osd_logtype;
 
 OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) : 
+  osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   whoami(id), dev_name(dev),
   stat_oprate(5.0),
+  peer_stat_lock("OSD::peer_stat_lock"),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
   iat_averager(g_conf.osd_flash_crowd_iat_alpha),
+  finished_lock("OSD::finished_lock"),
+  snap_trimmer_lock("OSD::snap_trimmer_lock"),
   snap_trimmer_thread(this),
-  recovery_ops_active(0), recovery_stop(false), recovery_thread(this)
+  pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
+  tid_lock("OSD::tid_lock"),
+  recovery_lock("OSD::recovery_lock"),
+  recovery_ops_active(0), recovery_stop(false),
+  remove_list_lock("OSD::remove_list_lock"),
+  recovery_thread(this)
 {
   messenger = m;
   monmap = mm;

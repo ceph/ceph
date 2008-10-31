@@ -31,7 +31,7 @@ class FakeCollections {
   hash_map<coll_t, set<pobject_t> > fakecollections;
 
  public:
-  FakeCollections(ObjectStore *s) : store(s) {}
+  FakeCollections(ObjectStore *s) : faker_lock("FakeCollections::faker_lock"), store(s) {}
 
   // faked collections
   int list_collections(vector<coll_t>& ls) {
@@ -184,7 +184,7 @@ class FakeAttrs {
   hash_map<coll_t, FakeAttrSet> fakecattrs;
 
  public:
-  FakeAttrs(ObjectStore *s) : store(s) {}
+  FakeAttrs(ObjectStore *s) : faker_lock("FakeAttrs::faker_lock"), store(s) {}
 
   int setattr(coll_t cid, pobject_t oid, const char *name,
               const void *value, size_t size,

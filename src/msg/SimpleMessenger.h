@@ -177,6 +177,7 @@ private:
   public:
     Pipe(int st) : 
       sd(-1),
+      lock("Rank::Pipe::lock"),
       state(st), 
       reader_running(false), writer_running(false),
       connect_seq(0), peer_global_seq(0),
@@ -307,6 +308,7 @@ private:
   public:
     EntityMessenger(entity_name_t name, int r) : 
       Messenger(name),
+      lock("Rank::EntityMessenger::lock"),
       stop(false),
       qlen(0),
       my_rank(r),
@@ -376,8 +378,9 @@ private:
   void reaper();
 
 public:
-  Rank() : started(false), need_addr(true),
-	   max_local(0), num_local(0) { }
+  Rank() : lock("Rank::lock"), started(false), need_addr(true),
+	   max_local(0), num_local(0),
+	   global_seq_lock("Rank::global_seq_lock"), global_seq(0) { }
   ~Rank() { }
 
   //void set_listen_addr(tcpaddr_t& a);

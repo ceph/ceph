@@ -40,7 +40,7 @@ using namespace std;
 
 
 OSDMap osdmap;
-Mutex lock;
+Mutex lock("dumpjournal.cc lock");
 Cond cond;
 
 Messenger *messenger = 0;

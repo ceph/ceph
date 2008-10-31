@@ -87,6 +87,7 @@ class Timer {
  public:
   Timer() :
     thread_stop(false),
+    lock("Timer::lock"),
     timed_sleep(false),
     sleeping(false),
     timer_thread(this),

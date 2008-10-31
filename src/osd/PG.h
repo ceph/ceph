@@ -664,6 +664,7 @@ public:
  public:  
   PG(OSD *o, pg_t p) : 
     osd(o), 
+    _lock("PG::_lock"),
     ref(0), deleted(false),
     info(p),
     recovery_item(this), recovery_ops_active(0),
@@ -673,6 +674,7 @@ public:
     have_master_log(true),
     must_notify_mon(false),
     stat_num_bytes(0), stat_num_kb(0),
+    pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL)
   { }

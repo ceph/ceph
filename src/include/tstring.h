@@ -18,6 +18,7 @@ private:
   hash_map<const char *, stringrec, hash<const char*>, eqstr> stab;
 
 public:
+  stringtable() : lock("stringtable::lock") {}
 
   // @s must be null terminated
   const char *get_cstr(const char *s, int len) {

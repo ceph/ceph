@@ -214,6 +214,7 @@ protected:
 
  public:
   Ebofs(const char *devfn, const char *jfn=0) : 
+    ebofs_lock("Ebofs::ebofs_lock"),
     fake_writes(false),
     dev(devfn), 
     mounted(false), unmounting(false), dirty(false), readonly(false), 

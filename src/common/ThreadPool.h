@@ -98,6 +98,7 @@ class ThreadPool {
  public:
 
   ThreadPool(char *myname, int howmany, void (*f)(U,T), U obj, void (*pf)(U,T) = 0) :
+    q_lock("ThreadPool::q_lock"),
     num_ops(0), num_threads(howmany), 
     thread(num_threads),
     u(obj),

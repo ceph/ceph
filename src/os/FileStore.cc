@@ -286,7 +286,7 @@ int FileStore::mkfs()
   return 0;
 }
 
-Mutex sig_lock;
+Mutex sig_lock("FileStore.cc sig_lock");
 Cond sig_cond;
 bool sig_installed = false;
 int sig_pending = 0;

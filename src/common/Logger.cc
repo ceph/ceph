@@ -30,7 +30,7 @@
 #include "common/Timer.h"
 
 // per-process lock.  lame, but this way I protect LogType too!
-Mutex logger_lock;
+Mutex logger_lock("logger_lock");
 SafeTimer logger_timer(logger_lock);
 Context *logger_event = 0;
 list<Logger*> logger_list;

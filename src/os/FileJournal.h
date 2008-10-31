@@ -141,6 +141,7 @@ private:
     last_committed_seq(0), 
     full_commit_seq(0), full_restart_seq(0),
     fd(-1),
+    write_lock("FileJournal::write_lock"),
     write_stop(false), write_thread(this) { }
   ~FileJournal() {}
 

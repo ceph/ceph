@@ -1294,6 +1294,7 @@ public:
 
   C_OSD_RepModifyCommit(ReplicatedPG *p, MOSDSubOp *oo, int dosd, eversion_t lc) : 
     pg(p), op(oo), destosd(dosd), pg_last_complete(lc),
+    lock("C_OSD_RepModifyCommit::lock"),
     acked(false), waiting(false) { 
     pg->get();  // we're copying the pointer.
   }
