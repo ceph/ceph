@@ -18,7 +18,7 @@ monmaptool_LDADD = libcommon.a
 crushtool_SOURCES = crushtool.cc
 crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
-osdmaptool_LDADD = libmon.a libcommon.a libcrush.a
+osdmaptool_LDADD = libcommon.a libcrush.a
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc

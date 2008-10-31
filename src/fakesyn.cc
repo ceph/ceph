@@ -122,7 +122,8 @@ int main(int argc, const char **argv)
   // build initial osd map
   {
     OSDMap map;
-    map.build_simple(0, monmap->fsid, g_conf.num_osd, g_conf.osd_pg_bits, 0);
+    map.build_simple(0, monmap->fsid, g_conf.num_osd, 0,
+		     g_conf.osd_pg_bits, g_conf.osd_lpg_bits, 0);
     bufferlist bl;
     map.encode(bl);
     Messenger *messenger = new FakeMessenger(entity_name_t::ADMIN(-1));

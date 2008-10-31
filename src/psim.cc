@@ -26,7 +26,7 @@ int main(int argc, char **argv)
   }
 
   ceph_file_layout layout = g_default_file_layout;
-  layout.fl_pg_preferred = 2;
+  //layout.fl_pg_preferred = 2;
   for (int f = 1; f < 10000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
       object_t oid(f, b);

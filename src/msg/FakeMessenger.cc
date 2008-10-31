@@ -214,7 +214,8 @@ int fakemessenger_do_loop_2()
           // encode
           if (m->empty_payload()) 
             m->encode_payload();
-          ceph_msg_header env = m->get_env();
+          ceph_msg_header head = m->get_header();
+          ceph_msg_footer foot = m->get_footer();
           bufferlist front;
           front.claim( m->get_payload() );
 	  bufferlist data;
@@ -224,7 +225,7 @@ int fakemessenger_do_loop_2()
           delete m;
           
           // decode
-          m = decode_message(env, front, data);
+          m = decode_message(head, foot, front, data);
           assert(m);
         } 
 

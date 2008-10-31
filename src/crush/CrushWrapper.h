@@ -5,7 +5,7 @@
 #define __CRUSH_WRAPPER_H
 
 #define BUG_ON(x) assert(!(x))
-#include "include/inttypes.h"  /* just for int types */
+#include "include/types.h"
 
 extern "C" {
 #include "crush.h"
