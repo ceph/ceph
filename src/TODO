@@ -162,8 +162,6 @@ osdmon
 - monitor needs to monitor some osds...
 
 crush
-- fall back to an exhaustive search to ensure we get _something_
-- more efficient failure when all/too many osds are down
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 - "knob" bucket
 
