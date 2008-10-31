@@ -4,6 +4,9 @@
 # include <linux/slab.h>
 # include <asm/bug.h>
 # include <linux/kernel.h>
+# ifndef dprintk
+#  define dprintk(args...)
+# endif
 #else
 # include <string.h>
 # include <stdio.h>
