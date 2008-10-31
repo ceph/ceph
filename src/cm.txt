@@ -87,8 +87,7 @@ rule data {
 	min_size 2
 	max_size 2
 	step take root
-	step choose firstn 0 type domain
-	step choose firstn 1 type device
+	step chooseleaf firstn 0 type domain
 	step emit
 }
 rule casdata {
@@ -97,8 +96,7 @@ rule casdata {
 	min_size 2
 	max_size 2
 	step take root
-	step choose firstn 0 type domain
-	step choose firstn 1 type device
+	step chooseleaf firstn 0 type domain
 	step emit
 }
 
