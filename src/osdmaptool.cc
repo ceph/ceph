@@ -93,9 +93,11 @@ int main(int argc, const char **argv)
   const char *export_crush = 0;
   const char *import_crush = 0;
   list<entity_addr_t> add, rm;
+  const char *test_map_pg = 0;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--print") == 0)
+    if (strcmp(args[i], "--print") == 0 ||
+	strcmp(args[i], "-p") == 0)
       print = true;
     else if (strcmp(args[i], "--createsimple") == 0) {
       createsimple = true;
@@ -113,6 +115,8 @@ int main(int argc, const char **argv)
       export_crush = args[++i];
     else if (strcmp(args[i], "--import-crush") == 0)
       import_crush = args[++i];
+    else if (strcmp(args[i], "--test-map-pg") == 0)
+      test_map_pg = args[++i];
     else if (!fn)
       fn = args[i];
     else 
@@ -190,7 +194,25 @@ int main(int argc, const char **argv)
     cout << me << ": exported crush map to " << export_crush << std::endl;
   }  
 
-  if (!print && !modified && !export_crush && !import_crush) {
+  if (test_map_pg) {
+    int numrep;
+    int pool;
+    int ps;
+    int r = sscanf(test_map_pg, "%dx%d.%x", &numrep, &pool, &ps);
+    if (r < 3) {
+      cerr << me << ": failed to parse pg '" << test_map_pg
+	   << "', r = " << r << std::endl;
+      usage(me);
+    }
+    pg_t pgid(pg_t::TYPE_REP, numrep, ps, pool, -1);
+    cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
+
+    vector<int> acting;
+    osdmap.pg_to_acting_osds(pgid, acting);
+    cout << pgid << " maps to " << acting << std::endl;
+  }
+
+  if (!print && !modified && !export_crush && !import_crush && !test_map_pg) {
     cerr << me << ": no action specified?" << std::endl;
     usage(me);
   }
