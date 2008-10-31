@@ -334,6 +334,8 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		   snapshot. */
 		capsnap->dirty = ci->i_wrbuffer_ref_head;
 		ci->i_wrbuffer_ref_head = 0;
+		ceph_put_snap_context(ci->i_head_snapc);
+		ci->i_head_snapc = NULL;
 		list_add_tail(&capsnap->ci_item, &ci->i_cap_snaps);
 
 		if (used & CEPH_CAP_WR) {

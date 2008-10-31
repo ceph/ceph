@@ -220,6 +220,7 @@ struct ceph_inode_info {
 	unsigned i_cap_exporting_mseq;   /*  mds's. */
 	unsigned i_cap_exporting_issued;
 	struct list_head i_cap_snaps;   /* snapped state pending flush to mds */
+	struct ceph_snap_context *i_head_snapc; /* defined if wr_buffer_head > 0 */
 	unsigned i_snap_caps;           /* cap bits for snapped files */
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */

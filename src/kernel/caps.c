@@ -865,17 +865,27 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	struct inode *inode = &ci->vfs_inode;
 	int last = 0;
 	int last_snap = 0;
-	int snapc_cached = 0;
 	int found = 0;
+	struct list_head *p;
+	struct ceph_cap_snap *capsnap = NULL;
 
 	spin_lock(&inode->i_lock);
 	ci->i_wrbuffer_ref -= nr;
 	last = !ci->i_wrbuffer_ref;
-	if (snapc == ci->i_snap_realm->cached_context) {
-		snapc_cached = 1;
+
+	if (ci->i_head_snapc == snapc) {
+		ci->i_wrbuffer_ref_head -= nr;
+		dout(30, "put_wrbuffer_cap_refs on %p head %d/%d -> %d/%d %s\n",
+			inode,
+			ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
+			ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
+			last ? " LAST":"");
+
+	     if (!ci->i_wrbuffer_ref_head) {
+		ceph_put_snap_context(ci->i_head_snapc);
+		ci->i_head_snapc = NULL;
+	     }
 	} else {
-		struct list_head *p;
-		struct ceph_cap_snap *capsnap = NULL;
 		list_for_each(p, &ci->i_cap_snaps) {
 			capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
 			if (capsnap->context == snapc) {
@@ -885,24 +895,14 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				break;
 			}
 		}
-		if (found) {
-			dout(30, "put_wrbuffer_cap_refs on %p cap_snap %p "
-			     " snap %lld %d/%d -> %d/%d %s%s\n",
-			     inode, capsnap, capsnap->context->seq,
-			     ci->i_wrbuffer_ref+nr, capsnap->dirty + nr,
-			     ci->i_wrbuffer_ref, capsnap->dirty,
-			     last ? " (wrbuffer last)":"",
-			     last_snap ? " (capsnap last)":"");
-		}
-	}
-
-	if (snapc_cached || !found) {
-		ci->i_wrbuffer_ref_head -= nr;
-		dout(30, "put_wrbuffer_cap_refs on %p head %d/%d -> %d/%d %s\n",
-		     inode,
-		     ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
-		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
-		     last ? " LAST":"");
+		BUG_ON(!found);
+		dout(30, "put_wrbuffer_cap_refs on %p cap_snap %p "
+		     " snap %lld %d/%d -> %d/%d %s%s\n",
+		     inode, capsnap, capsnap->context->seq,
+		     ci->i_wrbuffer_ref+nr, capsnap->dirty + nr,
+		     ci->i_wrbuffer_ref, capsnap->dirty,
+		     last ? " (wrbuffer last)":"",
+		     last_snap ? " (capsnap last)":"");
 	}
 
 	spin_unlock(&inode->i_lock);

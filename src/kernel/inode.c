@@ -269,6 +269,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	init_waitqueue_head(&ci->i_cap_wq);
 	INIT_LIST_HEAD(&ci->i_cap_snaps);
 	ci->i_snap_caps = 0;
+	ci->i_head_snapc = 0;
 
 	ci->i_wanted_max_size = 0;
 	ci->i_requested_max_size = 0;
