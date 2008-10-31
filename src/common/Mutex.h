@@ -18,6 +18,8 @@
 #include <pthread.h>
 #include "include/assert.h"
 
+#define LOCKDEP
+
 class Mutex {
 private:
   const char *name;
@@ -46,6 +48,16 @@ public:
     pthread_mutex_destroy(&_m); 
   }
 
+#ifdef LOCKDEP
+  void _will_lock(); // about to lock
+  void _locked();    // just locked
+  void _unlocked();  // just unlocked
+#else
+  void _will_lock() {} // about to lock
+  void _locked() {}    // just locked
+  void _unlocked() {}  // just unlocked
+#endif
+
   bool is_locked() {
     return (nlock > 0);
   }
@@ -53,6 +65,7 @@ public:
   bool TryLock() {
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
+      _locked();
       nlock++;
       assert(nlock == 1 || recursive);
     }
@@ -60,7 +73,9 @@ public:
   }
 
   void Lock() {
+    _will_lock();
     int r = pthread_mutex_lock(&_m);
+    _locked();
     assert(r == 0);
     nlock++;
     assert(nlock == 1 || recursive);
@@ -71,6 +86,7 @@ public:
     --nlock;
     int r = pthread_mutex_unlock(&_m);
     assert(r == 0);
+    _unlocked();
   }
 
   friend class Cond;

@@ -81,6 +81,7 @@ struct md_config_t {
   int tick;
 
   int debug;
+  int debug_lockdep;
   int debug_mds;
   int debug_mds_balancer;
   int debug_mds_log;

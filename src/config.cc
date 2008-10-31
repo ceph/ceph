@@ -223,6 +223,7 @@ md_config_t g_conf = {
   tick: 0,
 
   debug: 0,
+  debug_lockdep: 0,
   debug_mds: 1,
   debug_mds_balancer: 1,
   debug_mds_log: 1,
@@ -694,6 +695,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
         g_conf.debug = atoi(args[++i]);
       else 
         g_debug_after_conf.debug = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_lockdep") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_lockdep = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_lockdep = atoi(args[++i]);
     else if (strcmp(args[i], "--debug_mds") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds = atoi(args[++i]);
