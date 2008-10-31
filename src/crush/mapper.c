@@ -12,7 +12,7 @@
 # include <stdio.h>
 # include <assert.h>
 # define BUG_ON(x) assert(!(x))
-# define dprintk(args...) printf(args)
+# define dprintk(args...) /* printf(args) */
 #endif
 
 #include "crush.h"
