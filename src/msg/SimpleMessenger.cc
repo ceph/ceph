@@ -1142,6 +1142,9 @@ int Rank::Pipe::connect()
     ceph_msg_connect connect;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
+    connect.flags = 0;
+    if (policy.lossy_tx)
+      connect.flags |= CEPH_MSG_CONNECT_LOSSYTX;
     memset(&msg, 0, sizeof(msg));
     msgvec[0].iov_base = (char*)&connect;
     msgvec[0].iov_len = sizeof(connect);
