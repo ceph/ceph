@@ -20,6 +20,9 @@
 
 #define LOCKDEP
 
+extern int g_lockdep;
+
+
 class Mutex {
 private:
   const char *name;
@@ -65,7 +68,7 @@ public:
   bool TryLock() {
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
-      _locked();
+      if (g_lockdep) _locked();
       nlock++;
       assert(nlock == 1 || recursive);
     }
@@ -73,9 +76,9 @@ public:
   }
 
   void Lock() {
-    _will_lock();
+    if (g_lockdep) _will_lock();
     int r = pthread_mutex_lock(&_m);
-    _locked();
+    if (g_lockdep) _locked();
     assert(r == 0);
     nlock++;
     assert(nlock == 1 || recursive);
@@ -86,7 +89,7 @@ public:
     --nlock;
     int r = pthread_mutex_unlock(&_m);
     assert(r == 0);
-    _unlocked();
+    if (g_lockdep) _unlocked();
   }
 
   friend class Cond;

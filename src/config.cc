@@ -690,6 +690,9 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 	     strcmp(args[i], "--doutdir") == 0) 
       g_conf.dout_dir = args[++i];
 
+    else if (strcmp(args[i], "--lockdep") == 0)
+      g_lockdep = atoi(args[++i]);
+
     else if (strcmp(args[i], "--debug") == 0) 
       if (!g_conf.debug_after) 
         g_conf.debug = atoi(args[++i]);
