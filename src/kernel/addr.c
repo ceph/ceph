@@ -86,11 +86,10 @@ static int ceph_set_page_dirty(struct page *page,
 	++ci->i_wrbuffer_ref;
 	if (!snapc || snapc == ci->i_snap_realm->cached_context) {
 		/* dirty the head */
-		++ci->i_wrbuffer_ref_head;
 		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);
-		if (ci->i_wrbuffer_ref_head == 1) {
+		if (ci->i_wrbuffer_ref_head == 0)
 			ci->i_head_snapc = ceph_get_snap_context(snapc);
-		}
+		++ci->i_wrbuffer_ref_head;
 		dout(20, "%p set_page_dirty %p head %d/%d -> %d/%d "
 		     "snapc %p seq %lld (%d snaps)\n",
 		     mapping->host, page,

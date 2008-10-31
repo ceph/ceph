@@ -875,16 +875,15 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 
 	if (ci->i_head_snapc == snapc) {
 		ci->i_wrbuffer_ref_head -= nr;
+		if (!ci->i_wrbuffer_ref_head) {
+			ceph_put_snap_context(ci->i_head_snapc);
+			ci->i_head_snapc = NULL;
+		}
 		dout(30, "put_wrbuffer_cap_refs on %p head %d/%d -> %d/%d %s\n",
-			inode,
-			ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
-			ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
-			last ? " LAST":"");
-
-	     if (!ci->i_wrbuffer_ref_head) {
-		ceph_put_snap_context(ci->i_head_snapc);
-		ci->i_head_snapc = NULL;
-	     }
+		     inode,
+		     ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
+		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
+		     last ? " LAST":"");
 	} else {
 		list_for_each(p, &ci->i_cap_snaps) {
 			capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
