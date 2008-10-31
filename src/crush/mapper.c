@@ -64,15 +64,15 @@ static int bucket_list_choose(struct crush_bucket_list *bucket,
 {
 	int i;
 
-	for (i = 0; i < bucket->h.size; i++) {
+	for (i = bucket->h.size-1; i >= 0; i--) {
 		__u64 w = crush_hash32_4(x, bucket->h.items[i], r,
 					 bucket->h.id);
 		w &= 0xffff;
-		/*printf("%d x %d item %d weight %d sum_weight %d r %lld",
-		  i, x, bucket->h.items[i], bucket->item_weights[i], bucket->sum_weights[i], w);*/
+		/*printf("list_choose i=%d x=%d r=%d item %d weight %x sum_weight %x rand %llx",
+		  i, x, r, bucket->h.items[i], bucket->item_weights[i], bucket->sum_weights[i], w);*/
 		w *= bucket->sum_weights[i];
 		w = w >> 16;
-		/*printf(" scaled %lld\n", w);*/
+		/*printf(" scaled %llx\n", w);*/
 		if (w < bucket->item_weights[i])
 			return bucket->h.items[i];
 	}
@@ -221,6 +221,7 @@ static int crush_choose(struct crush_map *map,
 	int item;
 	int itemtype;
 	int collide, reject;
+	/*printf("choose bucket %d x %d outpos %d\n", bucket->id, x, outpos);*/
 
 	for (rep = outpos; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
@@ -242,17 +243,17 @@ static int crush_choose(struct crush_map *map,
 						r += ftotal;
 					else if (in->size % numrep == 0)
 						/* r'=r+(n+1)*f_local */
-						r += (numrep+1) * flocal;
+						r += (numrep+1) * (flocal+ftotal);
 					else
 						/* r' = r + n*f_local */
-						r += numrep * flocal;
+						r += numrep * (flocal+ftotal);
 				} else {
 					if (firstn)
 						/* r' = r + f_total */
 						r += ftotal;
 					else
 						/* r' = r + n*f_local */
-						r += numrep * flocal;
+						r += numrep * (flocal+ftotal);
 				}
 
 				/* bucket choose */
@@ -264,6 +265,7 @@ static int crush_choose(struct crush_map *map,
 					itemtype = map->buckets[-1-item]->type;
 				else
 					itemtype = 0;
+				/*printf("  item %d type %d\n", item, itemtype);*/
 
 				/* keep going? */
 				if (itemtype != type) {
@@ -282,22 +284,24 @@ static int crush_choose(struct crush_map *map,
 					}
 				}
 
-				/* out? */
-				if (itemtype == 0)
-					reject = is_out(map, item, x);
-				else
-					reject = 0;
-
 				if (recurse_to_leaf &&
-				    !crush_choose(map, map->buckets[-1-item],
-						  x, 1, 0,
-						  out2+outpos, 0,
-						  firstn, 0, NULL))
+				    crush_choose(map, map->buckets[-1-item],
+						 x, outpos+1, 0,
+						 out2, outpos,
+						 firstn, 0, NULL) <= outpos) {
 					reject = 1;
+				} else {
+					/* out? */
+					if (itemtype == 0)
+						reject = is_out(map, item, x);
+					else
+						reject = 0;
+				}
 
 				if (reject || collide) {
 					ftotal++;
 					flocal++;
+					/*printf("  reject %d  collide %d  ftotal %d  flocal %d\n", reject, collide, ftotal, flocal);*/
 
 					if (collide && flocal < 3)
 						/* retry locally a few times */
@@ -312,12 +316,17 @@ static int crush_choose(struct crush_map *map,
 			} while (retry_bucket);
 		} while (retry_descent);
 
-		if (skip_rep) continue;
+		if (skip_rep) {
+			/*printf("skip rep\n");*/
+			continue;
+		}
 
+		/*printf("choose got %d\n", item);*/
 		out[outpos] = item;
 		outpos++;
 	}
 
+	/*printf("choose returns %d\n", outpos);*/
 	return outpos;
 }
 
@@ -351,6 +360,7 @@ int crush_do_rule(struct crush_map *map,
 	int step;
 	int i,j;
 	int numrep;
+	int firstn;
 
 	BUG_ON(ruleno >= map->max_rules);
 	rule = map->rules[ruleno];
@@ -384,6 +394,7 @@ int crush_do_rule(struct crush_map *map,
 	}
 
 	for (step = 0; step < rule->len; step++) {
+		firstn = 0;
 		switch (rule->steps[step].op) {
 		case CRUSH_RULE_TAKE:
 			w[0] = rule->steps[step].arg1;
@@ -394,10 +405,11 @@ int crush_do_rule(struct crush_map *map,
 			wsize = 1;
 			break;
 
-		case CRUSH_RULE_CHOOSE_FIRSTN:
-		case CRUSH_RULE_CHOOSE_INDEP:
 		case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
+		case CRUSH_RULE_CHOOSE_FIRSTN:
+			firstn = 1;
 		case CRUSH_RULE_CHOOSE_LEAF_INDEP:
+		case CRUSH_RULE_CHOOSE_INDEP:
 			BUG_ON(wsize == 0);
 
 			/* reset output */
@@ -436,8 +448,7 @@ int crush_do_rule(struct crush_map *map,
 						      x, numrep,
 						      rule->steps[step].arg2,
 						      o+osize, j,
-						      rule->steps[step].op ==
-						       CRUSH_RULE_CHOOSE_FIRSTN,
+						      firstn,
 						      recurse_to_leaf, c+osize);
 			}
 
