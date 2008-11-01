@@ -80,7 +80,7 @@ int buffer::list::write_file(const char *fn)
 
 
 // debug output
-Mutex _dout_lock("_dout_lock");
+Mutex _dout_lock("_dout_lock", false, false /* no lockdep */);  
 ostream *_dout = &std::cout;
 ostream *_derr = &std::cerr;
 char _dout_file[100] = {0};
