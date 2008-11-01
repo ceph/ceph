@@ -26,20 +26,22 @@ extern int g_lockdep;
 class Mutex {
 private:
   const char *name;
+  bool recursive;
+  bool lockdep;
+
   pthread_mutex_t _m;
   int nlock;
-  bool recursive;
 
   // don't allow copying.
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
 
 public:
-  Mutex(const char *n, bool r = true) : name(n), nlock(0), recursive(r) {
+  Mutex(const char *n, bool r = true, bool ld=true) : name(n), recursive(r), lockdep(ld), nlock(0) {
     if (recursive) {
       pthread_mutexattr_t attr;
       pthread_mutexattr_init(&attr);
-      pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
       pthread_mutex_init(&_m,&attr);
       pthread_mutexattr_destroy(&attr);
     } else {
@@ -68,7 +70,7 @@ public:
   bool TryLock() {
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
-      if (g_lockdep) _locked();
+      if (lockdep && g_lockdep) _locked();
       nlock++;
       assert(nlock == 1 || recursive);
     }
@@ -76,9 +78,9 @@ public:
   }
 
   void Lock() {
-    if (g_lockdep) _will_lock();
+    if (lockdep && g_lockdep) _will_lock();
     int r = pthread_mutex_lock(&_m);
-    if (g_lockdep) _locked();
+    if (lockdep && g_lockdep) _locked();
     assert(r == 0);
     nlock++;
     assert(nlock == 1 || recursive);
@@ -89,7 +91,7 @@ public:
     --nlock;
     int r = pthread_mutex_unlock(&_m);
     assert(r == 0);
-    if (g_lockdep) _unlocked();
+    if (lockdep && g_lockdep) _unlocked();
   }
 
   friend class Cond;

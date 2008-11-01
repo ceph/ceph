@@ -46,7 +46,7 @@ class atomic_t {
   Mutex lock;
   long nref;
 public:
-  atomic_t(int i=0) : lock("atomic_t::lock", false), nref(i) {}
+  atomic_t(int i=0) : lock("atomic_t::lock", false, false /* no lockdep */), nref(i) {}
   atomic_t(const atomic_t& other);
   void inc() { 
     lock.Lock();
