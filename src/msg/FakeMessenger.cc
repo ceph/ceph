@@ -55,7 +55,7 @@ LogType fakemsg_logtype;
 
 set<entity_addr_t>           shutdown_set;
 
-Mutex lock;
+Mutex lock("FakeMessenger.cc lock");
 Cond  cond;
 
 bool      awake = false;
