@@ -1,6 +1,6 @@
 #!/bin/sh
 
-let daemon=0
+daemon=0
 
 # explicit -n/--norestart?
 case $1 in
