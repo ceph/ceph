@@ -2270,14 +2270,17 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
     
     PG *pg = try_create_pg(pgid, t);
-    if (pg)
+    if (pg) {
       to_peer.push_back(pg);
+      pg->unlock();
+    }
   }
 
   store->apply_transaction(t);
 
   for (vector<PG*>::iterator p = to_peer.begin(); p != to_peer.end(); p++) {
     PG *pg = *p;
+    pg->lock();
     wake_pg_waiters(pg->info.pgid);
     pg->peer(t, query_map, &info_map);
     pg->update_stats();
