@@ -9,7 +9,7 @@ int g_lockdep = 0;
 #include "Clock.h"
 #include "BackTrace.h"
 
-#include <hash_map>
+#include <ext/hash_map>
 
 #include "config.h"
 
