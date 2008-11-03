@@ -76,7 +76,6 @@ public:
     if (r == 0) {
       if (lockdep && g_lockdep) _locked();
       nlock++;
-      assert(nlock == 1 || recursive);
     }
     return r == 0;
   }
@@ -87,7 +86,6 @@ public:
     if (lockdep && g_lockdep) _locked();
     assert(r == 0);
     nlock++;
-    assert(nlock == 1 || recursive);
   }
 
   void Unlock() {
