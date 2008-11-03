@@ -52,8 +52,8 @@ void Mutex::_register()
     lock_names[id] = name;
     dout(10) << "registered '" << name << "' as " << id << std::endl;
   } else {
-    dout(20) << "had '" << name << "' as " << id << std::endl;
     id = p->second;
+    dout(20) << "had '" << name << "' as " << id << std::endl;
   }
 
   pthread_mutex_unlock(&lockdep_mutex);
@@ -98,7 +98,20 @@ void Mutex::_will_lock()
   for (map<int, BackTrace *>::iterator p = m.begin();
        p != m.end();
        p++) {
-    if (!follows[p->first][id]) {
+    if (p->first == id) {
+      *_dout << std::endl;
+      dout(0) << "recursive lock of " << name << " (" << id << ")" << std::endl;
+      BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
+      bt->print(*_dout);
+      if (g_lockdep >= 2) {
+	*_dout << std::endl;
+	dout(0) << "previously locked at" << std::endl;
+	p->second->print(*_dout);
+      }
+      *_dout << std::endl;
+      assert(0);
+    }
+    else if (!follows[p->first][id]) {
       // new dependency 
       
       // did we just create a cycle?
