@@ -26,7 +26,7 @@ extern int g_lockdep;
 class Mutex {
 private:
   const char *name;
-  int lock_id;
+  int id;
   bool recursive;
   bool lockdep;
 
