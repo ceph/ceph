@@ -380,8 +380,24 @@ static const _dendl_t dendl = 0;
 class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
 
+// the streams
+extern ostream *_dout;
+extern ostream *_derr;
+extern bool _dout_need_open;
+extern bool _dout_is_open;
+
+extern void open_dout_file();
+
 inline ostream& operator<<(ostream& out, _dbeginl_t) {
   _dout_lock.Lock();
+
+  if (_dout_need_open) {
+    if (_dout && _dout_is_open) {
+      delete _dout;
+    }
+    open_dout_file();
+  }
+
   return out;
 }
 inline ostream& operator<<(ostream& out, _dendl_t) {
@@ -394,9 +410,6 @@ inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
-// the streams
-extern ostream *_dout;
-extern ostream *_derr;
 
 // generic macros
 #define generic_dout(x) if ((x) <= g_conf.debug) *_dout << dbeginl

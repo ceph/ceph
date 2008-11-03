@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 // for tstring stringtable
 #include "include/tstring.h"
@@ -86,6 +87,8 @@ ostream *_derr = &std::cerr;
 char _dout_file[100] = {0};
 char _dout_dir[1000] = {0};
 char _dout_symlink_path[1000] = {0};
+bool _dout_is_open;
+bool _dout_need_open;
 
 // page size crap, see page.h
 int _get_bits_of(int v) {
@@ -592,6 +595,11 @@ void parse_config_option_string(string& s)
     while (*p && *p == ' ') p++;
   }
   parse_config_options(nargs, false);
+}
+
+void sighup_handler(int signum)
+{
+  _dout_need_open = true;
 }
 
 void parse_config_options(std::vector<const char*>& args, bool open)
@@ -1171,7 +1179,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
   }
   */
   if (g_conf.dout_dir && g_conf.file_logs && open) {
-    char fn[80];
     char hostname[80];
     gethostname(hostname, 79);
 
@@ -1184,17 +1191,34 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     }
     sprintf(_dout_file, "%s.%d", hostname, getpid());
 
-    sprintf(fn, "%s/%s", _dout_dir, _dout_file);
-    std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
-    if (!out->is_open()) {
-      std::cerr << "error opening output file " << fn << std::endl;
-      delete out;
-    } else {
-      _dout = out;
-    }
+    _dout_is_open = false;
+    _dout_need_open = true;
+
+    open_dout_file();
   }
 
+  signal(SIGHUP, sighup_handler);
+
   args = nargs;
+}
+
+void open_dout_file()
+{
+  char fn[80];
+  if (_dout && _dout_is_open) {
+    delete _dout;
+  }
+
+  sprintf(fn, "%s/%s", _dout_dir, _dout_file);
+  std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
+  if (!out->is_open()) {
+    std::cerr << "error opening output file " << fn << std::endl;
+    delete out;
+  } else {
+    _dout_need_open = false;
+    _dout_is_open = true;
+    _dout = out;
+  }
 }
 
 int rename_output_file()  // after calling daemon()
@@ -1227,4 +1251,5 @@ int create_courtesy_output_symlink(const char *type, int n)
   }
   return 0;
 }
+
 
