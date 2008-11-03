@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # sudo if btrfs
 test -d dev/osd0 && SUDO="sudo"
