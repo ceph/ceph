@@ -75,6 +75,18 @@ void Mutex::_will_lock()
 		<< std::endl;
 	bt->print(*_dout);
 	*_dout << std::endl;
+
+	dout(0) << "btw, i am holding these locks:" << std::endl;
+	for (map<const char *, BackTrace *>::iterator q = m.begin();
+	     q != m.end();
+	     q++) {
+	  dout(0) << q->first << std::endl;
+	  if (g_lockdep >= 2) {
+	    q->second->print(*_dout);
+	    *_dout << std::endl;
+	  }
+	}
+
 	*_dout << std::endl;
 	*_dout << std::endl;
 
@@ -93,13 +105,15 @@ void Mutex::_will_lock()
 
 void Mutex::_locked()
 {
-  BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
   pthread_t p = pthread_self();
 
   dout(20) << name << " _locked" << std::endl;
 
   pthread_mutex_lock(&lockdep_mutex);
-  held[p][name] = bt;
+  if (g_lockdep >= 2)
+    held[p][name] = new BackTrace(BACKTRACE_SKIP);
+  else
+    held[p][name] = 0;
   pthread_mutex_unlock(&lockdep_mutex);
 }
 
