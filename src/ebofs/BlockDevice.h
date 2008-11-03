@@ -288,6 +288,9 @@ class BlockDevice {
     root_queue.barrier();
     lock.Unlock();
   }
+  void _barrier() {
+    root_queue.barrier();
+  }
 
   // ** blocking interface **
 
@@ -303,7 +306,7 @@ class BlockDevice {
     
     lock.Lock();
     _submit_io(&bio);
-    barrier();         // need this, to prevent starvation!
+    _barrier();         // need this, to prevent starvation!
     while (!bio.done) 
       c.Wait(lock);
     lock.Unlock();
@@ -322,7 +325,7 @@ class BlockDevice {
 
     lock.Lock();
     _submit_io(&bio);
-    barrier();         // need this, to prevent starvation!
+    _barrier();         // need this, to prevent starvation!
     while (!bio.done) 
       c.Wait(lock);
     lock.Unlock();
