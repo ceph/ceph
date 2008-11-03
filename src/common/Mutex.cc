@@ -19,11 +19,33 @@ int g_lockdep = 0;
 
 pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+
+#define MAX_LOCKS  100   // increase me as needed
+
+hash_map<const char *, int> lock_ids;
+int last_id = 0;
+
+
 hash_map<pthread_t, map<const char *, BackTrace *> > held;
 hash_map<const char *, map<const char *, BackTrace *> > follows;       // <left item> follows <right items>
 hash_map<const char *, map<const char *, BackTrace *> > follows_ever;
 
 #define BACKTRACE_SKIP 3
+
+
+
+void Mutex::_register()
+{
+  hash_map<const char *, int>::iterator p = lock_ids.find(name);
+  if (p == lock_ids.end()) {
+    lock_id = last_id++;
+    lock_ids[name] = lock_id;
+    assert(last_id <= MAX_LOCKS);
+  } else {
+    lock_id = p->second;
+  }
+}
+
 
 // does a follow b?
 bool does_follow(const char *a, const char *b)

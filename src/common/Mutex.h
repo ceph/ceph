@@ -26,6 +26,7 @@ extern int g_lockdep;
 class Mutex {
 private:
   const char *name;
+  int lock_id;
   bool recursive;
   bool lockdep;
 
@@ -35,6 +36,18 @@ private:
   // don't allow copying.
   void operator=(Mutex &M) {}
   Mutex( const Mutex &M ) {}
+
+#ifdef LOCKDEP
+  void _register();  
+  void _will_lock(); // about to lock
+  void _locked();    // just locked
+  void _unlocked();  // just unlocked
+#else
+  void _register() {}
+  void _will_lock() {} // about to lock
+  void _locked() {}    // just locked
+  void _unlocked() {}  // just unlocked
+#endif
 
 public:
   Mutex(const char *n, bool r = true, bool ld=true) : name(n), recursive(r), lockdep(ld), nlock(0) {
@@ -47,21 +60,12 @@ public:
     } else {
       pthread_mutex_init(&_m,NULL);
     }
+    if (lockdep && g_lockdep) _register();
   }
   ~Mutex() {
     assert(nlock == 0);
     pthread_mutex_destroy(&_m); 
   }
-
-#ifdef LOCKDEP
-  void _will_lock(); // about to lock
-  void _locked();    // just locked
-  void _unlocked();  // just unlocked
-#else
-  void _will_lock() {} // about to lock
-  void _locked() {}    // just locked
-  void _unlocked() {}  // just unlocked
-#endif
 
   bool is_locked() {
     return (nlock > 0);
