@@ -994,9 +994,6 @@ int Rank::Pipe::accept()
 
  open:
   // open
-  register_pipe();
-  rank.lock.Unlock();
-
   connect_seq = connect.connect_seq + 1;
   peer_global_seq = connect.global_seq;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
@@ -1013,17 +1010,24 @@ int Rank::Pipe::accept()
       goto fail;
   }
 
+  register_pipe();
+  rank.lock.Unlock();
+
+  lock.Lock();
   if (state != STATE_CLOSED) {
     dout(10) << "accept starting writer, " << "state=" << state << dendl;
     start_writer();
   }
   dout(20) << "accept done" << dendl;
+  lock.Unlock();
   return 0;   // success.
 
 
  fail:
+  lock.Lock();
   state = STATE_CLOSED;
   fault();
+  lock.Unlock();
   return -1;
 }
 
@@ -1236,7 +1240,7 @@ int Rank::Pipe::connect()
 	goto fail;
       }
       lossy_rx = flags & CEPH_MSG_CONNECT_LOSSYTX;
-
+      
 
       // hooray!
       state = STATE_OPEN;
@@ -1443,10 +1447,10 @@ void Rank::Pipe::dirty_close()
  */
 void Rank::Pipe::reader()
 {
-  lock.Lock();
-
   if (state == STATE_ACCEPTING) 
     accept();
+
+  lock.Lock();
 
   // loop.
   while (state != STATE_CLOSED) {
