@@ -23,7 +23,7 @@ pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define MAX_LOCKS  100   // increase me as needed
 
 hash_map<const char *, int> lock_ids;
-vector<const char *> lock_names(MAX_LOCKS);
+map<int, const char *> lock_names;
 
 int last_id = 0;
 
@@ -46,12 +46,13 @@ void Mutex::_register()
   
   hash_map<const char *, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
+    assert(last_id < MAX_LOCKS);
     id = last_id++;
     lock_ids[name] = id;
     lock_names[id] = name;
     dout(10) << "registered '" << name << "' as " << id << std::endl;
-    assert(last_id <= MAX_LOCKS);
   } else {
+    dout(20) << "had '" << name << "' as " << id << std::endl;
     id = p->second;
   }
 
@@ -63,8 +64,9 @@ void Mutex::_register()
 bool does_follow(int a, int b)
 {
   if (follows[a][b]) {
+    *_dout << std::endl;
     dout(0) << "------------------------------------" << std::endl;
-    dout(0) << "existing dependency " << lock_names[a] << " -> " << lock_names[b] << " at: " << std::endl;
+    dout(0) << "existing dependency " << lock_names[a] << " (" << a << ") -> " << lock_names[b] << " (" << b << ") at: " << std::endl;
     follows[a][b]->print(*_dout);
     *_dout << std::endl;
     return true;
@@ -73,7 +75,7 @@ bool does_follow(int a, int b)
   for (int i=0; i<MAX_LOCKS; i++) {
     if (follows[a][i] &&
 	does_follow(i, b)) {
-      dout(0) << "existing dependency " << lock_names[a] << " -> " << lock_names[i] << " at:" << std::endl;
+      dout(0) << "existing intermediate dependency " << lock_names[a] << " (" << a << ") -> " << lock_names[i] << " (" << i << ") at:" << std::endl;
       follows[a][i]->print(*_dout);
       *_dout << std::endl;
       return true;
@@ -86,9 +88,10 @@ bool does_follow(int a, int b)
 void Mutex::_will_lock()
 {
   pthread_t p = pthread_self();
+  if (id < 0) _register();
 
   pthread_mutex_lock(&lockdep_mutex);
-  dout(20) << "_will_lock " << name << std::endl;
+  dout(20) << "_will_lock " << name << " (" << id << ")" << std::endl;
 
   // check dependency graph
   map<int, BackTrace *> &m = held[p];
@@ -101,7 +104,7 @@ void Mutex::_will_lock()
       // did we just create a cycle?
       BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
       if (does_follow(id, p->first)) {
-	dout(0) << "new dependency " << lock_names[p->first] << " -> " << name
+	dout(0) << "new dependency " << lock_names[p->first] << " (" << p->first << ") -> " << name << " (" << id << ")"
 		<< " creates a cycle at"
 		<< std::endl;
 	bt->print(*_dout);
@@ -111,7 +114,7 @@ void Mutex::_will_lock()
 	for (map<int, BackTrace *>::iterator q = m.begin();
 	     q != m.end();
 	     q++) {
-	  dout(0) << "  " << lock_names[q->first] << std::endl;
+	  dout(0) << "  " << lock_names[q->first] << " (" << q->first << ")" << std::endl;
 	  if (g_lockdep >= 2) {
 	    q->second->print(*_dout);
 	    *_dout << std::endl;
@@ -123,6 +126,8 @@ void Mutex::_will_lock()
 
 	// don't add this dependency, or we'll get aMutex. cycle in the graph, and
 	// does_follow() won't terminate.
+
+	assert(0);  // actually, we should just die here.
       } else {
 	follows[p->first][id] = bt;
 	dout(10) << lock_names[p->first] << " -> " << name << " at" << std::endl;
@@ -138,6 +143,8 @@ void Mutex::_locked()
 {
   pthread_t p = pthread_self();
 
+  if (id < 0) _register();
+
   pthread_mutex_lock(&lockdep_mutex);
   dout(20) << "_locked " << name << std::endl;
   if (g_lockdep >= 2)
@@ -151,10 +158,15 @@ void Mutex::_unlocked()
 {
   pthread_t p = pthread_self();
   
+  if (id < 0) _register();
+
   pthread_mutex_lock(&lockdep_mutex);
   dout(20) << "_unlocked " << name << std::endl;
-  assert(held.count(p));
-  assert(held[p].count(id));
+
+  // don't assert.. lockdep may be enabled at any point in time
+  //assert(held.count(p));
+  //assert(held[p].count(id));
+
   delete held[p][id];
   held[p].erase(id);
   pthread_mutex_unlock(&lockdep_mutex);

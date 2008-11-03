@@ -50,7 +50,7 @@ private:
 #endif
 
 public:
-  Mutex(const char *n, bool r = true, bool ld=true) : name(n), recursive(r), lockdep(ld), nlock(0) {
+  Mutex(const char *n, bool r = true, bool ld=true) : name(n), id(-1), recursive(r), lockdep(ld), nlock(0) {
     if (recursive) {
       pthread_mutexattr_t attr;
       pthread_mutexattr_init(&attr);
