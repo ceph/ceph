@@ -2873,7 +2873,7 @@ bool OSD::_recover_now()
     dout(15) << "_recover_now max " << g_conf.osd_recovery_max_active << " active" << dendl;
     return false;
   }
-  if (g_clock.now() >= defer_recovery_until) {
+  if (g_clock.now() < defer_recovery_until) {
     dout(15) << "_recover_now defer until " << defer_recovery_until << dendl;
     return false;
   }
