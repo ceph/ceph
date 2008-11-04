@@ -1743,8 +1743,10 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     }   
     
     // no change?
-    if (tacting == pg->acting) 
+    if (tacting == pg->acting) {
+      dout(15) << *pg << " unchanged with " << tacting << dendl;
       continue;
+    }
     
     // -- there was a change! --
     pg->lock();
