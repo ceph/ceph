@@ -136,9 +136,9 @@ int FileJournal::open(__u64 next_seq)
 
   // find next entry
   read_pos = header.start;
+  __u64 seq = 0;
   while (1) {
     bufferlist bl;
-    __u64 seq;
     off64_t old_pos = read_pos;
     if (!read_entry(bl, seq)) {
       dout(10) << "open reached end of journal." << dendl;
@@ -154,6 +154,7 @@ int FileJournal::open(__u64 next_seq)
       read_pos = old_pos;
       break;
     }
+    seq++;  // next event should follow.
   }
 
   return 0;
@@ -665,6 +666,11 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
   dout(1) << "read_entry " << read_pos << " : seq " << h.seq
 	  << " " << h.len << " bytes"
 	  << dendl;
+
+  if (seq && h.seq != seq) {
+    dout(2) << "read_entry " << read_pos << " : got seq " << h.seq << ", expected " << seq << ", stopping" << dendl;
+    return false;
+  }
 
   if (h.seq < last_committed_seq) {
     dout(0) << "read_entry seq " << seq << " < last_committed_seq " << last_committed_seq << dendl;

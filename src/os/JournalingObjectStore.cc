@@ -23,7 +23,7 @@ int JournalingObjectStore::journal_replay()
   int count = 0;
   while (1) {
     bufferlist bl;
-    __u64 seq;
+    __u64 seq = op_seq + 1;
     if (!journal->read_entry(bl, seq)) {
       dout(3) << "journal_replay: end of journal, done." << dendl;
       break;
@@ -41,6 +41,7 @@ int JournalingObjectStore::journal_replay()
 
     dout(3) << "journal_replay: r = " << r << ", op now seq " << op_seq << dendl;
     assert(op_seq == seq);
+    seq++;  // we expect the next op
   }
 
   // done reading, make writeable.
