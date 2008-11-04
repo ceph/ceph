@@ -562,6 +562,8 @@ protected:
   bool        have_master_log;
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
+  set<int>    prior_set_down;
+  epoch_t     prior_set_primary_up_thru;
   bool        must_notify_mon;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
@@ -613,6 +615,7 @@ public:
   bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
   void build_prior();
+  bool prior_set_affected(OSDMap *map);
 
   bool adjust_peers_complete_thru() {
     eversion_t t = info.last_complete;

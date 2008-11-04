@@ -540,6 +540,41 @@ ostream& PG::IndexedLog::print(ostream& out) const
 
 
 /******* PG ***********/
+
+// true if the given map affects the prior set
+bool PG::prior_set_affected(OSDMap *osdmap)
+{
+  // did someone in the prior set go down?
+  for (set<int>::iterator p = prior_set.begin();
+       p != prior_set.end();
+       p++)
+    if (osdmap->is_down(*p)) {
+      dout(10) << "prior_set_affected: osd" << *p << " now down" << dendl;
+      return true;
+    }
+
+  // did someone in the prior down set go up?
+  for (set<int>::iterator p = prior_set_down.begin();
+       p != prior_set_down.end();
+       p++)
+    if (osdmap->is_up(*p)) {
+      dout(10) << "prior_set_affected: osd" << *p << " now up" << dendl;
+      return true;
+    }
+  
+  // did primary's up_thru change?
+  if (acting.size() && prior_set_down.size() &&
+      prior_set_primary_up_thru != osdmap->get_up_thru(acting[0])) {
+    dout(10) << "prior_set_affected: primary osd" << acting[0]
+	     << " up_thru " << prior_set_primary_up_thru
+	     << " -> " << osdmap->get_up_thru(acting[0]) 
+	     << dendl;
+    return true;
+  }
+
+  return false;
+}
+
 void PG::build_prior()
 {
   if (1) {
@@ -594,7 +629,8 @@ void PG::build_prior()
 
   // build prior set.
   prior_set.clear();
-  
+  prior_set_down.clear();
+
   // current nodes, of course.
   for (unsigned i=1; i<acting.size(); i++)
     prior_set.insert(acting[i]);
@@ -638,9 +674,10 @@ void PG::build_prior()
       continue;
     }
 
+    prior_set_primary_up_thru = lastmap->get_up_thru(acting[0]);
     bool maybe_went_rw = 
-      lastmap->get_up_thru(acting[0]) >= first_epoch &&
-      lastmap->get_up_from(acting[0]) < first_epoch;
+      prior_set_primary_up_thru >= first_epoch &&
+      prior_set_primary_up_thru < first_epoch;
 
     dout(10) << "build_prior epochs " << first_epoch << "-" << last_epoch << " " << acting
 	     << " - primary osd" << acting[0]
@@ -664,6 +701,8 @@ void PG::build_prior()
       } else {
 	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
+
+	prior_set_down.insert(acting[i]);
 
 	// fixme: how do we identify a "clean" shutdown anyway?
 
@@ -691,6 +730,7 @@ void PG::build_prior()
   }
 
   dout(10) << "build_prior = " << prior_set
+	   << " down = " << prior_set_down << " ..."
 	   << (is_crashed() ? " crashed":"")
 	   << (is_down() ? " down":"")
 	   << (some_down ? " some_down":"")
@@ -705,6 +745,8 @@ void PG::clear_primary_state()
   // clear peering state
   have_master_log = false;
   prior_set.clear();
+  prior_set_down.clear();
+  prior_set_primary_up_thru = 0;
   stray_set.clear();
   uptodate_set.clear();
   peer_info_requested.clear();

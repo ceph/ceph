@@ -1746,15 +1746,16 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       pg->unlock();
     }   
     
+    pg->lock();
+
     // no change?
-    if (tacting == pg->acting) {
+    if (tacting == pg->acting && !pg->prior_set_affected(osdmap)) {
       dout(15) << *pg << " unchanged with " << tacting << dendl;
+      pg->unlock();
       continue;
     }
     
     // -- there was a change! --
-    pg->lock();
-    
     int oldrole = pg->get_role();
     int oldprimary = pg->get_primary();
     int oldacker = pg->get_acker();
