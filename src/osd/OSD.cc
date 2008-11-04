@@ -446,26 +446,31 @@ int OSD::shutdown()
   timer.cancel_all();
   timer.join();
 
-  osd_lock.Unlock();
-
-  // flush data to disk
-  store->sync();
-
-  stop_recovery_thread();
-
-  osd_lock.Lock();
-
   // finish ops
   wait_for_no_ops();
+  dout(10) << "no ops" << dendl;
 
   // stop threads
   delete threadpool;
   threadpool = 0;
 
+  stop_recovery_thread();
+  dout(10) << "recovery thread stopped" << dendl;
+
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
   finished.clear();
   finished_lock.Unlock();
+
+  // flush data to disk
+  osd_lock.Unlock();
+  dout(10) << "sync" << dendl;
+  store->sync();
+  int r = store->umount();
+  delete store;
+  store = 0;
+  dout(10) << "sync done" << dendl;
+  osd_lock.Lock();
 
   // close pgs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
@@ -478,10 +483,6 @@ int OSD::shutdown()
   // shut everything else down
   //monitor->shutdown();
   messenger->shutdown();
-
-  osd_lock.Unlock();
-  int r = store->umount();
-  osd_lock.Lock();
   return r;
 }
 

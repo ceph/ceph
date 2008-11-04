@@ -446,11 +446,13 @@ private:
     recovery_lock.Unlock();
   }
   void stop_recovery_thread() {
+    osd_lock.Unlock();
     recovery_lock.Lock();
     recovery_stop = true;
     recovery_cond.Signal();
     recovery_lock.Unlock();
     recovery_thread.join();
+    osd_lock.Lock();
   }
 
   void queue_for_removal(int osd, pg_t pgid) {
