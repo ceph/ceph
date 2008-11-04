@@ -317,6 +317,7 @@ void handle_signal(int signal)
 {
   switch (signal) {
   case SIGTERM:
+  case SIGINT:
     got_sigterm = true;
     break;
   }
@@ -432,6 +433,7 @@ int OSD::init()
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
 
   signal(SIGTERM, handle_signal);
+  signal(SIGINT, handle_signal);
 
   return 0;
 }
