@@ -311,11 +311,15 @@ OSD::~OSD()
   if (store) { delete store; store = 0; }
 }
 
-bool got_sighup = false;
+bool got_sigterm = false;
 
-void handle_sighup(int signal, siginfo_t *info, void *p)
+void handle_signal(int signal)
 {
-  got_sighup = true;
+  switch (signal) {
+  case SIGTERM:
+    got_sigterm = true;
+    break;
+  }
 }
 
 int OSD::init()
@@ -427,11 +431,7 @@ int OSD::init()
   // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
 
-  // SIGHUP
-  struct sigaction hup;
-  memset(&hup, 0, sizeof(hup));
-  hup.sa_sigaction = handle_sighup;
-  sigaction(SIGHUP, &hup, 0);
+  signal(SIGTERM, handle_signal);
 
   return 0;
 }
@@ -915,9 +915,10 @@ void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
 
-  if (got_sighup) {
-    dout(0) << "got SIGHUP, shutting down" << dendl;
-    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), messenger->get_myinst());
+  if (got_sigterm) {
+    dout(0) << "got SIGTERM, shutting down" << dendl;
+    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
+			    messenger->get_myinst());
     return;
   }
     
