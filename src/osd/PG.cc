@@ -1204,7 +1204,6 @@ void PG::purge_strays()
 {
   dout(10) << "purge_strays " << stray_set << dendl;
   
-  osd->remove_list_lock.Lock();
   for (set<int>::iterator p = stray_set.begin();
        p != stray_set.end();
        p++) {
@@ -1216,7 +1215,6 @@ void PG::purge_strays()
     }
     peer_info.erase(*p);
   }
-  osd->remove_list_lock.Unlock();
 
   stray_set.clear();
 }
