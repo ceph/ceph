@@ -285,7 +285,7 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	if (p->version == split->version)
 	  break;
       }
-      assert(p->version == split->version);
+      //assert(p->version == split->version);
 
       /*
        * FIXME: what if we have a divergent update vs a non-divergent delete?
