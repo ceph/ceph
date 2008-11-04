@@ -562,15 +562,17 @@ bool PG::prior_set_affected(OSDMap *osdmap)
       return true;
     }
   
-  // did primary's up_thru change?
-  if (acting.size() && prior_set_down.size() &&
-      prior_set_primary_up_thru != osdmap->get_up_thru(acting[0])) {
-    dout(10) << "prior_set_affected: primary osd" << acting[0]
-	     << " up_thru " << prior_set_primary_up_thru
-	     << " -> " << osdmap->get_up_thru(acting[0]) 
-	     << dendl;
-    return true;
-  }
+  // did a significant osd's up_thru change?
+  for (map<int,epoch_t>::iterator p = prior_set_up_thru.begin();
+       p != prior_set_up_thru.end();
+       p++)
+    if (p->second != osdmap->get_up_thru(p->first)) {
+      dout(10) << "prior_set_affected: primary osd" << p->first
+	       << " up_thru " << p->second
+	       << " -> " << osdmap->get_up_thru(p->first) 
+	       << dendl;
+      return true;
+    }
 
   return false;
 }
@@ -630,6 +632,7 @@ void PG::build_prior()
   // build prior set.
   prior_set.clear();
   prior_set_down.clear();
+  prior_set_up_thru.clear();
 
   // current nodes, of course.
   for (unsigned i=1; i<acting.size(); i++)
@@ -674,10 +677,9 @@ void PG::build_prior()
       continue;
     }
 
-    prior_set_primary_up_thru = lastmap->get_up_thru(acting[0]);
     bool maybe_went_rw = 
-      prior_set_primary_up_thru >= first_epoch &&
-      prior_set_primary_up_thru < first_epoch;
+      lastmap->get_up_thru(acting[0]) >= first_epoch &&
+      lastmap->get_up_from(acting[0]) < first_epoch;
 
     dout(10) << "build_prior epochs " << first_epoch << "-" << last_epoch << " " << acting
 	     << " - primary osd" << acting[0]
@@ -702,6 +704,7 @@ void PG::build_prior()
 	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
 
+	// include osd in set anyway
 	prior_set_down.insert(acting[i]);
 
 	// fixme: how do we identify a "clean" shutdown anyway?
@@ -712,6 +715,11 @@ void PG::build_prior()
 		     << (lastmap->get_up_thru(acting[i]) + 1) << dendl;
 	    some_down = true;
 	    prior_set.insert(acting[i]);
+
+	    // take note that we care about this osd's up_thru.  if it
+	    // changes later, it will affect our prior_set, and we'll want
+	    // to rebuild the prior set!
+	    prior_set_up_thru[acting[0]] = lastmap->get_up_thru(acting[0]);
 	  }
 	}
       }
@@ -746,7 +754,7 @@ void PG::clear_primary_state()
   have_master_log = false;
   prior_set.clear();
   prior_set_down.clear();
-  prior_set_primary_up_thru = 0;
+  prior_set_up_thru.clear();
   stray_set.clear();
   uptodate_set.clear();
   peer_info_requested.clear();
