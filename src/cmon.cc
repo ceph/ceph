@@ -122,6 +122,13 @@ int main(int argc, const char **argv)
 
   store.umount();
   delete mon;
+
+  // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
+  char s[20];
+  sprintf(s, "gmon/%d", getpid());
+  if (mkdir(s, 0755) == 0)
+    chdir(s);
+
   return 0;
 }
 
