@@ -80,13 +80,6 @@ protected:
     }
   }
 
-  void queue_commit_waiter(Context *oncommit) {
-    Mutex::Locker l(lock);
-
-    if (oncommit) 
-      commit_waiters[op_seq].push_back(oncommit);
-  }
-
   void journal_transaction(ObjectStore::Transaction& t, Context *onsafe) {
     Mutex::Locker l(lock);
 
@@ -95,8 +88,8 @@ protected:
       bufferlist tbl;
       t.encode(tbl);
       journal->submit_entry(op_seq, tbl, onsafe);
-    } else
-      queue_commit_waiter(onsafe);
+    } else if (onsafe) 
+      commit_waiters[op_seq].push_back(onsafe);
   }
 
 public:
