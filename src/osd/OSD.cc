@@ -1765,15 +1765,15 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     pg->acting.swap(tacting);
     pg->set_role(role);
     
-    // did primary|acker change?
-    pg->info.history.same_since = osdmap->get_epoch();
+    // did acting, primary|acker change?
+    if (tacting != pg->acting)
+      pg->info.history.same_since = osdmap->get_epoch();
     if (oldprimary != pg->get_primary()) {
       pg->info.history.same_primary_since = osdmap->get_epoch();
       pg->cancel_recovery();
     }
-    if (oldacker != pg->get_acker()) {
+    if (oldacker != pg->get_acker())
       pg->info.history.same_acker_since = osdmap->get_epoch();
-    }
     
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
