@@ -747,6 +747,7 @@ void Rank::mark_down(entity_addr_t addr)
   if (rank_pipe.count(addr)) {
     Pipe *p = rank_pipe[addr];
     dout(2) << "mark_down " << addr << " -- " << p << dendl;
+    p->unregister_pipe();
     lock.Unlock();
     p->lock.Lock();
     p->stop();
@@ -1370,6 +1371,13 @@ void Rank::Pipe::fail()
   for (unsigned i=0; i<rank.local.size(); i++) 
     if (rank.local[i] && rank.local[i]->get_dispatcher())
       rank.local[i]->queue_reset(peer_addr, last_dest_name);
+
+  // unregister
+  lock.Unlock();
+  rank.lock.Lock();
+  unregister_pipe();
+  rank.lock.Unlock();
+  lock.Lock();
 }
 
 void Rank::Pipe::was_session_reset()
@@ -1420,13 +1428,6 @@ void Rank::Pipe::stop()
   if (sd >= 0)
     ::close(sd);
   sd = -1;
-
-  // deactivate myself
-  lock.Unlock();
-  rank.lock.Lock();
-  unregister_pipe();
-  rank.lock.Unlock();
-  lock.Lock();
 }
 
 
