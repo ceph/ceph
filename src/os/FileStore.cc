@@ -241,6 +241,12 @@ int FileStore::mkfs()
 
   dout(1) << "mkfs in " << basedir << dendl;
 
+  char fn[100];
+  sprintf(fn, "%s/fsid", basedir.c_str());
+  fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  if (lock_fsid() < 0)
+    return -EBUSY;
+
   // wipe
   sprintf(cmd, "test -d %s && rm -r %s/* ; mkdir -p %s",
 	  basedir.c_str(), basedir.c_str(), basedir.c_str());
@@ -251,11 +257,13 @@ int FileStore::mkfs()
   // fsid
   srand(time(0) + getpid());
   fsid = rand();
-  char fn[100];
-  sprintf(fn, "%s/fsid", basedir.c_str());
-  int fd = ::open(fn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
-  ::write(fd, &fsid, sizeof(fsid));
-  ::close(fd);
+
+  ::close(fsid_fd);
+  fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  if (lock_fsid() < 0)
+    return -EBUSY;
+  ::write(fsid_fd, &fsid, sizeof(fsid));
+  ::close(fsid_fd);
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
   // journal?
@@ -312,6 +320,21 @@ void handle_signal(int signal, siginfo_t *info, void *p)
     _handle_signal(signal);
 }
 
+int FileStore::lock_fsid()
+{
+  struct flock l;
+  memset(&l, 0, sizeof(l));
+  l.l_type = F_WRLCK;
+  l.l_whence = SEEK_SET;
+  l.l_start = 0;
+  l.l_len = 0;
+  int r = ::fcntl(fsid_fd, F_SETLK, &l);
+  if (r < 0) {
+    derr(0) << "mount failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror(errno) << dendl;
+    return -errno;
+  }
+  return 0;
+}
 
 int FileStore::mount() 
 {
@@ -362,22 +385,11 @@ int FileStore::mount()
 
   // get fsid
   sprintf(fn, "%s/fsid", basedir.c_str());
-  lock_fd = ::open(fn, O_RDONLY);
-  ::read(lock_fd, &fsid, sizeof(fsid));
+  fsid_fd = ::open(fn, O_RDWR|O_CREAT);
+  ::read(fsid_fd, &fsid, sizeof(fsid));
 
-  // and lock it..
-  /*
-  struct flock l;
-  memset(&l, 0, sizeof(l));
-  l.l_type = F_WRLCK;
-  l.l_whence = SEEK_SET;
-  l.l_start = 0;
-  l.l_len = 0;
-  r = ::fcntl(lock_fd, F_SETLK, &l);
-  if (r < 0) {
-    derr(0) << "mount failed to lock " << fn << ", is another cosd still running? " << strerror(errno) << dendl;
-    return -errno;
-    }*/
+  if (lock_fsid() < 0)
+    return -EBUSY;
 
   dout(10) << "mount fsid is " << fsid << dendl;
 
@@ -464,7 +476,7 @@ int FileStore::umount()
   lock.Unlock();
   sync_thread.join();
 
-  ::close(lock_fd);
+  ::close(fsid_fd);
 
   if (g_conf.filestore_dev) {
     char cmd[100];
@@ -1175,7 +1187,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
   // apply
   int r = 0;
   if (trans->len) {
-    r = ::ioctl(lock_fd, BTRFS_IOC_USERTRANS, (unsigned long)trans);
+    r = ::ioctl(fsid_fd, BTRFS_IOC_USERTRANS, (unsigned long)trans);
     if (r < 0) {
       derr(0) << "apply_transaction_end got " << strerror(errno)
 	      << " from btrfs usertrans ioctl" << dendl;    

@@ -41,7 +41,7 @@ class FileStore : public JournalingObjectStore {
   
   int btrfs;
   bool btrfs_trans_start_end;
-  int lock_fd;
+  int fsid_fd;
 
   // fake attrs?
   FakeAttrs attrs;
@@ -58,6 +58,8 @@ class FileStore : public JournalingObjectStore {
   void get_coname(coll_t cid, pobject_t oid, char *s);
   bool parse_object(char *s, pobject_t& o);
   bool parse_coll(char *s, coll_t& c);
+  
+  int lock_fsid();
 
   // sync thread
   Mutex lock;
@@ -79,7 +81,7 @@ class FileStore : public JournalingObjectStore {
   FileStore(const char *base) : 
     basedir(base),
     btrfs(false), btrfs_trans_start_end(false),
-    lock_fd(-1),
+    fsid_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
