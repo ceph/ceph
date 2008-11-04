@@ -457,7 +457,6 @@ void PG::generate_backlog()
     local++;
     pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
     
-    if (poid == info.pgid.to_pobject()) continue;
     if (log.logged_object(poid.oid)) continue; // already have it logged.
     
     // add entry
@@ -1295,8 +1294,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove(info.pgid.to_coll(), info.pgid.to_pobject() );
-  t.write(info.pgid.to_coll(), info.pgid.to_pobject() , 0, bl.length(), bl);
+  t.remove(0, info.pgid.to_pobject() );
+  t.write(0, info.pgid.to_pobject() , 0, bl.length(), bl);
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
@@ -1334,7 +1333,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(info.pgid.to_coll(), info.pgid.to_pobject(), 0, ondisklog.bottom);
+  t.zero(0, info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1352,7 +1351,7 @@ void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry,
     bl.push_back(bp);
   }
   */
-  t.write(info.pgid.to_coll(),  info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
+  t.write(0, info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
@@ -1391,7 +1390,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(info.pgid.to_coll(), info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(0, info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log data doesn't match attrs" << dendl;
       assert(0);

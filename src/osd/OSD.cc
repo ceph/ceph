@@ -647,7 +647,7 @@ void OSD::_remove_unlock_pg(PG *pg)
     }
 
     // log
-    t.remove(pgid.to_coll(), pgid.to_pobject());
+    t.remove(0, pgid.to_pobject());
 
     // main collection
     store->collection_list(pgid.to_coll(), olist);
