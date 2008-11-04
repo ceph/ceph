@@ -101,6 +101,7 @@ protected:
 
 public:
   JournalingObjectStore() : op_seq(0), committing_op_seq(0), journal(0),
+			    op_lock("JournalingObjectStore::op_lock"),
 			    journal_lock("JournalingObjectStore::journal_lock"),
 			    lock("JournalingObjectStore::lock") { }
   

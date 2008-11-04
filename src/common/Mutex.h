@@ -17,10 +17,9 @@
 
 #include <pthread.h>
 #include "include/assert.h"
+#include "lockdep.h"
 
 #define LOCKDEP
-
-extern int g_lockdep;
 
 
 class Mutex {
@@ -38,10 +37,18 @@ private:
   Mutex( const Mutex &M ) {}
 
 #ifdef LOCKDEP
-  void _register();  
-  void _will_lock(); // about to lock
-  void _locked();    // just locked
-  void _unlocked();  // just unlocked
+  void _register() {
+    id = lockdep_register(name);
+  }
+  void _will_lock() { // about to lock
+    id = lockdep_will_lock(name, id);
+  }
+  void _locked() {    // just locked
+    id = lockdep_locked(name, id);
+  }
+  void _unlocked() {  // just unlocked
+    id = lockdep_unlocked(name, id);
+  }
 #else
   void _register() {}
   void _will_lock() {} // about to lock

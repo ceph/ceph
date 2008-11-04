@@ -18,15 +18,19 @@
 #define _RWLock_Posix_
 
 #include <pthread.h>
+#include "lockdep.h"
 
 class RWLock
 {
   mutable pthread_rwlock_t L;
+  const char *name;
+  int id;
 
   public:
 
-  RWLock() {
+  RWLock(const char *n) : name(n), id(-1) {
     pthread_rwlock_init(&L, NULL);
+    if (g_lockdep) id = lockdep_register(name);
   }
 
   virtual ~RWLock() {
@@ -35,14 +39,19 @@ class RWLock
   }
 
   void unlock() {
+    if (g_lockdep) id = lockdep_unlocked(name, id);
     pthread_rwlock_unlock(&L);
   }
   void get_read() {
+    if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_rdlock(&L);    
+    if (g_lockdep) id = lockdep_locked(name, id);
   }
   void put_read() { unlock(); }
   void get_write() {
+    if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_wrlock(&L);
+    if (g_lockdep) id = lockdep_locked(name, id);
   }
   void put_write() { unlock(); }
 };

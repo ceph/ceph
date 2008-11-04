@@ -167,7 +167,7 @@ libcommon_a_SOURCES = \
 	msg/Message.cc \
 	common/Logger.cc \
 	common/Clock.cc \
-	common/Mutex.cc \
+	common/lockdep.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/sctp_crc32.c\
@@ -254,6 +254,7 @@ noinst_HEADERS = \
         client/fuse.h\
         client/fuse_ll.h\
         client/hadoop/CephFSInterface.h\
+	common/lockdep.h\
 	common/BackTrace.h\
         common/Clock.h\
         common/Cond.h\
