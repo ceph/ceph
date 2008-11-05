@@ -73,7 +73,8 @@ int main(int argc, const char **argv)
       clobber = true;
     else if (strcmp(args[i], "--add") == 0 ||
 	     strcmp(args[i], "--rm") == 0) {
-      if (++i >= args.size()) usage(me);
+      if (++i >= args.size())
+	usage(me);
       entity_addr_t addr;
       if (!parse_ip_port(args[i], addr)) {
 	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
@@ -87,8 +88,10 @@ int main(int argc, const char **argv)
       modified = true;
     } else if (!fn)
       fn = args[i];
-    else 
+    else {
+      cout << "what is '" << args[i] << "'" << std::endl;
       usage(me);
+    }
   }
   if (!fn)
     usage(me);

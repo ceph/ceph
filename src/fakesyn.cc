@@ -59,6 +59,7 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  env_to_vec(args);
 
   // stop on our own (by default)
   g_conf.mon_stop_on_last_unmount = true;

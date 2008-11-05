@@ -42,6 +42,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  env_to_vec(args);
   parse_config_options(args);
 
   // args for fuse

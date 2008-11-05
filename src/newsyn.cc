@@ -199,6 +199,8 @@ int main(int argc, const char **argv)
   g_conf.mon_stop_on_last_unmount = true;
   g_conf.mon_stop_with_last_mds = true;
 
+  env_to_vec(args);
+
   parse_config_options(args);
   parse_syn_options(args);
 

@@ -514,8 +514,6 @@ void argv_to_vec(int argc, const char **argv,
 {
   for (int i=1; i<argc; i++)
     args.push_back(argv[i]);
-
-  env_to_vec(args);
 }
 
 void vec_to_argv(std::vector<const char*>& args,
