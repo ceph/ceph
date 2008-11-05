@@ -1665,7 +1665,8 @@ void Client::_flush(Inode *in, Context *onfinish)
 
 void Client::flush_set_callback(inodeno_t ino)
 {
-  Mutex::Locker l(client_lock);
+  //  Mutex::Locker l(client_lock);
+  assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
   Inode *in = inode_map[vinodeno_t(ino,CEPH_NOSNAP)];
   assert(in);
   _flushed(in);
