@@ -12,11 +12,12 @@
  * 
  */
 
-#define dout(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl
-
 #include <iostream>
 #include "ebofs/Ebofs.h"
 #include "os/FileStore.h"
+
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl
 
 struct io {
   utime_t start, ack, commit;
@@ -75,6 +76,7 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  env_to_vec(args);
   parse_config_options(args);
 
   // args
