@@ -4,6 +4,7 @@
 [ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=4
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
+let new=0
 let debug=0
 norestart=""
 
@@ -12,7 +13,10 @@ while [ $# -ge 1 ]; do
                 -d | --debug )
                 debug=1
 		;;
-		-n )
+                --new | -n )
+                new=1
+		;;
+		--norestart )
 		norestart="--norestart"
         esac
         shift
@@ -46,62 +50,73 @@ test -d out || mkdir out
 $SUDO rm -f out/*
 test -d gmon && $SUDO rm -rf gmon/*
 
+
 # figure machine's ip
 HOSTNAME=`hostname`
 IP=`host $HOSTNAME | grep $HOSTNAME | cut -d ' ' -f 4`
-[ "$CEPH_BIN" == "" ] && CEPH_BIN=.
 [ "$CEPH_PORT" == "" ] && CEPH_PORT=12345
-
 echo hostname $HOSTNAME
 echo "ip $IP"
-if [ `echo $IP | grep '^127\\.'` ]
-then
+
+if [ $new -eq 1 ]; then
+    if [ `echo $IP | grep '^127\\.'` ]
+    then
 	echo
 	echo "WARNING: hostname resolves to loopback; remote hosts will not be able to"
 	echo "  connect.  either adjust /etc/hosts, or edit this script to use your"
 	echo "  machine's real IP."
 	echo
+    fi
+    
+    # build a fresh fs monmap, mon fs
+    # ./monmaptool --create --clobber --print .ceph_monmap
+    str="./monmaptool --create --clobber"
+    for f in `seq 0 $((CEPH_NUM_MON-1))`
+    do
+	str=$str" --add $IP:$(($CEPH_PORT+$f))"
+    done
+    str=$str" --print .ceph_monmap"
+    echo $str
+    $str
+    
+    for f in `seq 0 $((CEPH_NUM_MON-1))`
+    do
+	./mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap
+    done
 fi
 
-# build a fresh fs monmap, mon fs
-# $CEPH_BIN/monmaptool --create --clobber --print .ceph_monmap
-str="$CEPH_BIN/monmaptool --create --clobber"
+# start monitors
 for f in `seq 0 $((CEPH_NUM_MON-1))`
 do
- str=$str" --add $IP:$(($CEPH_PORT+$f))"
-done
-str=$str" --print .ceph_monmap"
-echo $str
-$str
-
-for f in `seq 0 $((CEPH_NUM_MON-1))`
-do
-#  $CEPH_BIN/monmaptool --add $IP:$(($CEPH_PORT+$f)) --print .ceph_monmap
- $CEPH_BIN/mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap
- $CEPH_BIN/cmon $ARGS -d $CMON_ARGS mondata/mon$f
+    ./cmon $ARGS -d $CMON_ARGS mondata/mon$f
 done
 
-# build and inject an initial osd map
-$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
-$CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
+
+if [ $new -eq 1 ]; then
+    # build and inject an initial osd map
+    ./osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
+    ./cmonctl osd setmap -i .ceph_osdmap
+fi
 
 for osd in `seq 0 $((CEPH_NUM_OSD-1))`
 do
- echo mkfs osd$osd
- $SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
- echo start osd$osd
- $CEPH_BIN/crun $norestart $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
-# echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
+    if [ $new -eq 1 ]; then
+	echo mkfs osd$osd
+	$SUDO ./cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+    fi
+    echo start osd$osd
+    ./crun $norestart $SUDO ./cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
+# echo valgrind --leak-check=full --show-reachable=yes ./cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 done
 
 # mds
 for mds in `seq 0 $((CEPH_NUM_MDS-1))`
 do
-  $CEPH_BIN/crun $norestart $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
+    ./crun $norestart ./cmds $ARGS $CMDS_ARGS &
 
-#valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
-#$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_BIN/cmonctl mds set_max_mds 2
+#valgrind --tool=massif ./cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
+#./cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+#./cmonctl mds set_max_mds 2
 done
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."

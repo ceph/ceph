@@ -39,7 +39,6 @@ if [ $new -eq 1 ]; then
     # figure machine's ip
     HOSTNAME=`hostname`
     IP=`host $HOSTNAME | grep $HOSTNAME | cut -d ' ' -f 4`
-    [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
 
     echo hostname $HOSTNAME
     echo "ip $IP"

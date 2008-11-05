@@ -1,6 +1,6 @@
 v0.5
 - debug restart, cosd reformat, etc.
-- finish btrfs ioctl interface
+/- finish btrfs ioctl interface
 - efficient snap recovery
 - throttle osd recovery
 - forced unmount?
