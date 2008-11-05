@@ -1,20 +1,38 @@
 #!/bin/bash
 
 let new=0
+let debug=0
 
 while [ $# -ge 1 ]; do
         case $1 in
+                -d | --debug )
+                debug=1
+		;;
                 --new | -n )
                 new=1
         esac
         shift
 done
 
+
+if [ $debug -eq 0 ]; then
+	CMON_ARGS="--debug_mon 10 --debug_ms 1"
+	COSD_ARGS=""
+	CMDS_ARGS=""
+else
+	echo "** going verbose **"
+	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
+	COSD_ARGS="--lockdep 1 --debug_osd 20 --debug_journal 20 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
+fi
+
+
 ./dstop.sh
 rm -f core*
 
 test -d out || mkdir out
 rm -f out/*
+test -d gmon && sudo rm -rf gmon/*
 
 # mkmonfs
 if [ $new -eq 1 ]; then
@@ -40,7 +58,7 @@ if [ $new -eq 1 ]; then
 fi
 
 # monitor
-./cmon -d mondata/mon0 --debug_mon 20 --debug_ms 1
+./cmon -d mondata/mon0 $CMON_ARGS
 
 if [ $new -eq 1 ]; then
     # build and inject an initial osd map
@@ -84,12 +102,12 @@ do
    if [ $new -eq 1 ]; then
        ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
-   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./cosd $devm -d --debug_ms 1 --debug_osd 20 --lockdep 1 --debug_journal 10 # --debug_filestore 10 --debug_ebofs 30 --osd_heartbeat_grace 300
+   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./cosd $devm -d $COSD_ARGS
 
  done
 done
 
 # mds
-./cmds -d --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
+./cmds -d $CMDS_ARGS
 
 
