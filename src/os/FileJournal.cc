@@ -257,7 +257,7 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
     if (*pos + size < header.start)
       return true; // fits
 
-    dout(10) << "JOURNAL FULL (and wrapped), " << *pos << "+" << size
+    dout(1) << "JOURNAL FULL (and wrapped), " << *pos << "+" << size
 	     << " >= " << header.start
 	     << dendl;
   } else {
@@ -280,7 +280,7 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
     }
 
     // no room.
-    dout(10) << "submit_entry JOURNAL FULL (and can't wrap), " << *pos << "+" << size
+    dout(1) << "submit_entry JOURNAL FULL (and can't wrap), " << *pos << "+" << size
 	     << " >= " << header.max_size
 	     << dendl;
   }
@@ -526,7 +526,7 @@ void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
   
   if (!full_commit_seq && full_restart_seq && 
       seq >= full_restart_seq) {
-    dout(10) << " seq " << seq << " >= full_restart_seq " << full_restart_seq 
+    dout(1) << " seq " << seq << " >= full_restart_seq " << full_restart_seq 
 	     << ", restarting journal" << dendl;
     full_restart_seq = 0;
   }
@@ -565,7 +565,7 @@ void FileJournal::committed_thru(__u64 seq)
   // was full?
   if (full_commit_seq && seq >= full_commit_seq) {
     dout(1) << " seq " << seq << " >= full_commit_seq " << full_commit_seq 
-	    << ", prior journal contents are now fully committed.  resetting journal." << dendl;
+	     << ", prior journal contents are now fully committed.  resetting journal." << dendl;
     full_commit_seq = 0;
   }
 
