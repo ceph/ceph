@@ -487,26 +487,25 @@ md_config_t g_conf = {
 
 void env_to_vec(std::vector<const char*>& args) 
 {
-  const char *p = getenv("CEPH_ARGS");
+  char *p = getenv("CEPH_ARGS");
   if (!p) return;
   
+  int len = MIN(strlen(p), 1000);  // bleh.
   static char buf[1000];  
-  int len = strlen(p);
   memcpy(buf, p, len);
   buf[len] = 0;
-  //cout << "CEPH_ARGS " << buf << endl;
+  //cout << "CEPH_ARGS='" << p << ";" << endl;
 
-  int l = 0;
-  for (int i=0; i<len; i++) {
-    if (buf[i] == ' ') {
-      buf[i] = 0;
-      args.push_back(buf+l);
-      //cout << "arg " << (buf+l) << endl;
-      l = i+1;
-    }
+  p = buf;
+  while (*p && p < buf + len) {
+    char *e = p;
+    while (*e && *e != ' ')
+      e++;
+    *e = 0;
+    args.push_back(p);
+    //cout << "arg " << p << std::endl;
+    p = e+1;
   }
-  args.push_back(buf+l);
-  //cout << "arg " << (buf+l) << endl;
 }
 
 
@@ -515,6 +514,8 @@ void argv_to_vec(int argc, const char **argv,
 {
   for (int i=1; i<argc; i++)
     args.push_back(argv[i]);
+
+  env_to_vec(args);
 }
 
 void vec_to_argv(std::vector<const char*>& args,

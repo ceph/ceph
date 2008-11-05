@@ -32,6 +32,10 @@ else
 fi
 
 
+# lockdep everywhere?
+export CEPH_ARGS="--lockdep 1"
+
+
 # sudo if btrfs
 test -d dev/osd0 && SUDO="sudo"
 
