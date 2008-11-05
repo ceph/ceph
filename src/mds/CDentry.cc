@@ -25,9 +25,9 @@
 
 #include "messages/MLock.h"
 
-
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
-
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 
 ostream& CDentry::print_db_line_prefix(ostream& out) 

@@ -60,8 +60,9 @@ using namespace std;
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".server "
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".server "
 
 
 void Server::reopen_logger(utime_t start, bool append)

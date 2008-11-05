@@ -26,7 +26,12 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << osd->whoami << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define DOUT_SUBSYS osd
+#undef dout_prefix
+#define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
+static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
+  return *_dout << dbeginl<< pthread_self() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+}
 
 
 /******* PGLog ********/

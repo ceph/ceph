@@ -26,7 +26,9 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_filer) *_dout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".filer "
+#define DOUT_SUBSYS filer
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".filer "
 
 
 class Filer::C_Probe : public Context {

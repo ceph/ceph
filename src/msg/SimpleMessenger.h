@@ -104,6 +104,8 @@ private:
   // pipe
   class Pipe {
   public:
+    ostream& _pipe_prefix();
+
     enum {
       STATE_ACCEPTING,
       STATE_CONNECTING,

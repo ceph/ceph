@@ -12,7 +12,10 @@
 
 /*** ObjectCacher::Object ***/
 
-#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) *_dout << dbeginl << g_clock.now() << " " << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define DOUT_SUBSYS objectcacher
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+
 
 
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t off)
@@ -369,9 +372,8 @@ void ObjectCacher::Object::truncate(loff_t s)
 
 /*** ObjectCacher ***/
 
-#undef dout
-#define dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_objectcacher) *_dout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".objectcacher "
-
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".objectcacher "
 
 
 /* private */

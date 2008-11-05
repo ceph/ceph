@@ -20,8 +20,9 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) *_dout << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_journaler) *_derr << dbeginl << g_clock.now() << " " << objecter->messenger->get_myname() << ".journaler "
+#define DOUT_SUBSYS journaler
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".journaler "
 
 
 

@@ -17,6 +17,7 @@
 #include "BufferCache.h"
 #include "Onode.h"
 
+#define DOUT_SUBSYS ebofs
 
 void do_apply_partial(bufferlist& bl, map<__u64, bufferlist>& pm) 
 {
@@ -36,11 +37,8 @@ void do_apply_partial(bufferlist& bl, map<__u64, bufferlist>& pm)
 
 /*********** BufferHead **************/
 
-
-#undef dout
-#undef derr
-#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs." << *this << "."
-#define derr(x)  if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs." << *this << "."
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "ebofs." << *this << "."
 
 
 void BufferHead::add_partial(__u64 off, bufferlist& p) 
@@ -125,13 +123,8 @@ void BufferHead::apply_partial()
 
 /************ ObjectCache **************/
 
-
-#undef dout
-#undef derr
-#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.oc."
-#define derr(x)  if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs.oc."
-
-
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "ebofs.oc."
 
 void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist& bl)
 {
@@ -989,9 +982,8 @@ void ObjectCache::scrub_csums()
 
 /************** BufferCache ***************/
 
-#undef dout
-#define dout(x)  if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs.bc."
-
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "ebofs.bc."
 
 
 BufferHead *BufferCache::split(BufferHead *orig, block_t after) 

@@ -106,7 +106,6 @@ using namespace std;
 
 #include "config.h"
 
-#define dout(l)    if (l<=g_conf.debug) *_dout << dbeginl << g_clock.now() << " MESSENGER: "
 #define DEBUGLVL  10    // debug level of output
 
 

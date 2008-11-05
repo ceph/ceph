@@ -17,8 +17,9 @@
 #include "msg/Messenger.h"
 #include "messages/MMDSTableRequest.h"
 
-#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchorserver "
-#define derr(x)  if (x <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " " << mds->messenger->get_myname() << ".anchorserver "
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".anchorserver "
 
 // table
 

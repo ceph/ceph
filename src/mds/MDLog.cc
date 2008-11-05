@@ -26,8 +26,11 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_derr << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".log "
+#define DOUT_SUBSYS mds
+#undef DOUT_COND
+#define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_log
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 

@@ -53,8 +53,11 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log || l <= g_conf.debug_mds_log_expire) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log || l <= g_conf.debug_mds_log_expire) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#define DOUT_SUBSYS mds
+#undef DOUT_COND
+#define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_log || l <= g_conf.debug_mds_log_expire
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".journal "
 
 
 // -----------------------
@@ -253,11 +256,8 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 }
 
 
-
-#undef dout
-#undef derr
-#define  dout(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
-#define  derr(l)    if (l<=g_conf.debug_mds || l <= g_conf.debug_mds_log) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".journal "
+#undef DOUT_COND
+#define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_log
 
 
 // -----------------------

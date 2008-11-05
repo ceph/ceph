@@ -81,7 +81,7 @@ public:
   const static int STATE_RECOVERING = 1;  // leader|peon: recovering paxos state
   const static int STATE_ACTIVE     = 2;  // leader|peon: idle.  peon may or may not have valid lease
   const static int STATE_UPDATING   = 3;  // leader|peon: updating to new value
-  const char *get_statename(int s) {
+  static const char *get_statename(int s) {
     switch (s) {
     case STATE_RECOVERING: return "recovering";
     case STATE_ACTIVE: return "active";

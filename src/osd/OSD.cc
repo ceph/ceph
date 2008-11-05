@@ -80,8 +80,15 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
-#define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " "
+#define DOUT_SUBSYS osd
+#undef dout_prefix
+#define dout_prefix _prefix(*_dout, whoami, osdmap)
+
+static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
+  return out << dbeginl << pthread_self()
+	     << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
+}
+
 
 
 

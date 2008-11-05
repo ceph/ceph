@@ -29,8 +29,9 @@
 
 // *******************
 
-#define dout(x) if (x <= g_conf.debug_ebofs) *_dout << dbeginl << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
-#define derr(x) if (x <= g_conf.debug_ebofs) *_derr << dbeginl << g_clock.now() << " ebofs(" << dev.get_device_name() << ")."
+#define DOUT_SUBSYS ebofs
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "ebofs(" << dev.get_device_name() << ")."
 
 
 char *nice_blocks(block_t b) 

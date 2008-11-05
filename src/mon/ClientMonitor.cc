@@ -27,9 +27,15 @@
 
 #include "config.h"
 
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client v" << client_map.version << " "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".client v" << client_map.version << " "
-
+#define DOUT_SUBSYS mon
+#undef dout_prefix
+#define dout_prefix _prefix(mon, client_map)
+static ostream& _prefix(Monitor *mon, ClientMonitor::Map& client_map) {
+  return *_dout << dbeginl
+		<< "mon" << mon->whoami
+		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
+		<< ".client v" << client_map.version << " ";
+}
 
 ostream& operator<<(ostream& out, ClientMonitor& om)
 {

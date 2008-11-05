@@ -3,8 +3,10 @@
 
 #include "config.h"
 
-#define dout(x) if (x <= g_conf.debug_journal) *_dout << dbeginl << g_clock.now() << " journal "
-#define derr(x) if (x <= g_conf.debug_journal) *_derr << dbeginl << g_clock.now() << " journal "
+#define DOUT_SUBSYS journal
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "journal "
+
 
 int JournalingObjectStore::journal_replay()
 {

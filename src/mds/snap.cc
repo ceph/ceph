@@ -22,10 +22,15 @@
  * SnapRealm
  */
 
-#define dout(x) if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() \
-						  << " mds" << mdcache->mds->get_nodeid() \
-						  << ".cache.snaprealm(" << inode->ino() \
-						  << " seq " << seq << " " << this << ") "
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix _prefix(mdcache->mds->get_nodeid(), inode, seq, this)
+static ostream& _prefix(int whoami, CInode *inode, __u64 seq, SnapRealm *realm) {
+  return *_dout << dbeginl << g_clock.now() 
+		<< " mds" << whoami
+		<< ".cache.snaprealm(" << inode->ino()
+		<< " seq " << seq << " " << realm << ") ";
+}
 
 ostream& operator<<(ostream& out, const SnapRealm& realm) 
 {

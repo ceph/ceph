@@ -464,7 +464,7 @@ public:
       q.pop_front();
       // newline + indent?
       if (t.bits()) {
-	out << dendl;
+	out << std::endl;
 	for (unsigned i=0; i<t.bits(); i++) out << ' ';
       }
       int nb = get_split(t);

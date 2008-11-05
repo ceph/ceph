@@ -105,7 +105,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  create_courtesy_output_symlink("osd", whoami);
+  _dout_create_courtesy_output_symlink("osd", whoami);
 
   // start up network
   rank.bind();

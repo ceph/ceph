@@ -20,8 +20,21 @@
 
 #include "config.h"
 
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) *_dout << dbeginl << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) *_derr << dbeginl << g_clock.now() << " mon" << whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxos(" << machine_name << " " << get_statename(state) << " lc " << last_committed << ") "
+#define DOUT_SUBSYS paxos
+#undef dout_prefix
+#define dout_prefix _prefix(mon, whoami, machine_name, state, last_committed)
+static ostream& _prefix(Monitor *mon, int whoami, const char *machine_name, int state, version_t last_committed) {
+  return *_dout << dbeginl
+		<< "mon" << whoami
+		<< (mon->is_starting() ?
+		    (const char*)"(starting)" :
+		    (mon->is_leader() ?
+		     (const char*)"(leader)" : 
+		     (mon->is_peon() ?
+		      (const char*)"(peon)" : (const char*)"(?\?)"))) 
+		<< ".paxos(" << machine_name << " " << Paxos::get_statename(state) << " lc " << last_committed
+		<< ") ";
+}
 
 
 void Paxos::init()

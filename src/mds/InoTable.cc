@@ -19,7 +19,9 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".inotable: "
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << "." << table_name << ": "
 
 void InoTable::init_inode()
 {

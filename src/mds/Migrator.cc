@@ -58,8 +58,12 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".migrator "
 
+#define DOUT_SUBSYS mds
+#undef DOUT_COND
+#define DOUT_COND(l) l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".migrator "
 
 
 void Migrator::dispatch(Message *m)

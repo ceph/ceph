@@ -11,8 +11,8 @@ int g_lockdep = 0;
 
 #include "config.h"
 
+#undef dout
 #define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << pthread_self() << " lockdep: "
-#define  derr(l)    if (l<=g_conf.debug_lockdep) *_derr << g_clock.now() << " " << pthread_self() << " lockdep: "
 
 
 pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;

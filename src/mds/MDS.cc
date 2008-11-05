@@ -64,10 +64,9 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << whoami << " "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " mds" << whoami << " "
-
-
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "mds" << whoami << " "
 
 
 
@@ -557,7 +556,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (whoami >= 0 &&
       mdsmap->is_up(whoami) &&
       (oldwhoami != whoami || !logger)) {
-    create_courtesy_output_symlink("mds", whoami);
+    _dout_create_courtesy_output_symlink("mds", whoami);
     reopen_logger(mdsmap->get_created());   // adopt mds cluster timeline
   }
   

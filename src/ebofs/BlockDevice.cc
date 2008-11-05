@@ -39,6 +39,7 @@
 #endif
 #endif
 
+#define DOUT_SUBSYS bdev
 
 
 /*******************************************
@@ -63,8 +64,8 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
  * ElevatorQueue
  */
 
-#define dout(x) if (x <= g_conf.debug_bdev) *_dout << dbeginl << g_clock.now() << " bdev(" << dev << ").elevatorq."
-#define derr(x) if (x <= g_conf.debug_bdev) *_derr << dbeginl << g_clock.now() << " bdev(" << dev << ").elevatorq."
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "bdev(" << dev << ").elevatorq."
 
 
 int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols, 
@@ -212,10 +213,8 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
 /*******************************************
  * BarrierQueue
  */
-#undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) *_dout << dbeginl << g_clock.now() << " bdev(" << dev << ").barrierq."
-#undef derr
-#define derr(x) if (x <= g_conf.debug_bdev) *_derr << dbeginl << g_clock.now() << " bdev(" << dev << ").barrierq."
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "bdev(" << dev << ").barrierq."
 
 void BlockDevice::BarrierQueue::barrier()
 {
@@ -263,12 +262,8 @@ int BlockDevice::BarrierQueue::dequeue_io(list<biovec*>& biols,
  * BlockDevice
  */
 
-#undef dout
-#define dout(x) if (x <= g_conf.debug_bdev) *_dout << dbeginl << g_clock.now() << " bdev(" << dev << ")."
-#undef derr
-#define derr(x) if (x <= g_conf.debug_bdev) *_derr << dbeginl << g_clock.now() << " bdev(" << dev << ")."
-
-
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "bdev(" << dev << ")."
 
 block_t BlockDevice::get_num_blocks() 
 {

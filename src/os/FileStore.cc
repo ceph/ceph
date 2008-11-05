@@ -92,8 +92,9 @@ struct btrfs_ioctl_usertrans {
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug_filestore) *_dout << dbeginl << g_clock.now() << " filestore(" << basedir << ") "
-#define  derr(l)    if (l<=g_conf.debug_filestore) *_derr << dbeginl << g_clock.now() << " filestore(" << basedir << ") "
+#define DOUT_SUBSYS filestore
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "filestore(" << basedir << ") "
 
 #include "include/buffer.h"
 

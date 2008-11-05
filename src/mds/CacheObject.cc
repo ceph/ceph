@@ -18,8 +18,10 @@
 #include "Locker.h"
 
 #include "config.h"
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " " << this << " "
-#define  derr(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_derr << dbeginl << g_clock.now() << " " << this << " "
+
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << *this << " "
 
 ClientLease *MDSCacheObject::add_client_lease(int c, int mask) 
 {

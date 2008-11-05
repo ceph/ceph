@@ -53,8 +53,13 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_mds) *_dout << dbeginl << g_clock.now() << " mds" << mds->get_nodeid() << ".locker "
 
+#define DOUT_SUBSYS mds
+#undef dout_prefix
+#define dout_prefix _prefix(mds)
+static ostream& _prefix(MDS *mds) {
+  return *_dout << dbeginl << " mds" << mds->get_nodeid() << ".locker ";
+}
 
 
 void Locker::dispatch(Message *m)

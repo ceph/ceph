@@ -8,8 +8,8 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " monclient "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " monclient "
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << " monclient "
 
 Mutex monmap_lock("monmap_lock");
 Cond monmap_cond;

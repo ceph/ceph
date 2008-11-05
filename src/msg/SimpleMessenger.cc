@@ -36,9 +36,12 @@
 
 #include "common/Timer.h"
 
-#define dout(l)  if (l<=g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " "
-#define derr(l)  if (l<=g_conf.debug_ms) *_derr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " "
-
+#define DOUT_SUBSYS ms
+#undef dout_prefix
+#define dout_prefix _prefix()
+static ostream& _prefix() {
+  return *_dout << dbeginl << pthread_self() << " -- " << rank.rank_addr << " ";
+}
 
 
 #include "tcp.cc"
@@ -319,7 +322,7 @@ int Rank::start(bool nodaemon)
     }
     dout(1) << "rank.start daemonizing" << dendl;
     daemon(1, 0);  /* fixme.. we should chdir(/) too! */
-    rename_output_file();
+    _dout_rename_output_file();
   }
 
   // some debug hackery?
@@ -766,10 +769,12 @@ void Rank::mark_down(entity_addr_t addr)
  * Pipe
  */
 
-#undef dout
-#undef derr
-#define dout(l)  if (l<=g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " >> " << peer_addr << " pipe(" << this << ")."
-#define derr(l)  if (l<=g_conf.debug_ms) *_derr << dbeginl << g_clock.now() << " " << pthread_self() << " -- " << rank.rank_addr << " >> " << peer_addr << " pipe(" << this << ")."
+#undef dout_prefix
+#define dout_prefix _pipe_prefix()
+ostream& Rank::Pipe::_pipe_prefix() {
+  return *_dout << dbeginl << pthread_self()
+		<< " -- " << rank.rank_addr << " >> " << peer_addr << " pipe(" << this << ").";
+}
 
 int Rank::Pipe::accept()
 {

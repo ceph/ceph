@@ -100,7 +100,7 @@ int main(int argc, const char **argv)
   if (err < 0)
     return 1;
 
-  create_courtesy_output_symlink("mon", whoami);
+  _dout_create_courtesy_output_symlink("mon", whoami);
   
   // start monitor
   Messenger *m = rank.register_entity(entity_name_t::MON(whoami));

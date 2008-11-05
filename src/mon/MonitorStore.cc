@@ -17,8 +17,13 @@
 
 #include "config.h"
 
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_dout << dbeginl << g_clock.now() << " store(" << dir <<") "
-#define  derr(l) if (l<=g_conf.debug || l<=g_conf.debug_mon) *_derr << dbeginl << g_clock.now() << " store(" << dir <<") "
+#define DOUT_SUBSYS mon
+#undef dout_prefix
+#define dout_prefix _prefix(dir)
+static ostream& _prefix(const string& dir) {
+  return *_dout << dbeginl << "store(" << dir << ") ";
+}
+
 
 #include <stdio.h>
 #include <sys/types.h>

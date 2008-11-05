@@ -20,8 +20,15 @@
 
 #include "config.h"
 
-#define  dout(l) if (l<=g_conf.debug || l<=g_conf.debug_paxos) *_dout << dbeginl << g_clock.now() << " mon" << mon->whoami << (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)"))) << ".paxosservice(" << get_paxos_name(paxos->machine_id) << ") "
-
+#define DOUT_SUBSYS paxos
+#undef dout_prefix
+#define dout_prefix _prefix(mon, paxos, paxos->machine_id)
+static ostream& _prefix(Monitor *mon, Paxos *paxos, int machine_id) {
+  return *_dout << dbeginl
+		<< "mon" << mon->whoami
+		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
+		<< ".paxosservice(" << get_paxos_name(machine_id) << ") ";
+}
 
 const char *PaxosService::get_machine_name()
 {

@@ -66,7 +66,9 @@ using namespace std;
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l <= g_conf.debug_client) *_dout << dbeginl << g_clock.now() << " client" << whoami /*<< "." << pthread_self() */ << " "
+#define DOUT_SUBSYS client
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "client" << whoami << " "
 
 #define  tout       if (g_conf.client_trace) traceout
 

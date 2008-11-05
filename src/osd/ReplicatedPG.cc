@@ -29,8 +29,15 @@
 
 #include "config.h"
 
-#define  dout(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_dout << dbeginl << g_clock.now() << " " << pthread_self() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
-#define  derr(l)    if (l<=g_conf.debug || l<=g_conf.debug_osd) *_derr << dbeginl << g_clock.now() << " osd" << osd->get_nodeid() << " " << (osd->osdmap ? osd->osdmap->get_epoch():0) << " " << *this << " "
+#define DOUT_SUBSYS osd
+#define DOUT_PREFIX_ARGS this, osd->whoami, osd->osdmap
+#undef dout_prefix
+#define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
+static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
+  return *_dout << dbeginl<< pthread_self() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+}
+
+
 
 #include <errno.h>
 #include <sys/stat.h>

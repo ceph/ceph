@@ -31,8 +31,9 @@
 
 #include "config.h"
 
-#define dout(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) *_dout << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
-#define derr(x)  if (x <= g_conf.debug || x <= g_conf.debug_objecter) *_derr << dbeginl << g_clock.now() << " " << messenger->get_myname() << ".objecter "
+#define DOUT_SUBSYS objecter
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << messenger->get_myname() << ".objecter "
 
 
 // messages ------------------------------

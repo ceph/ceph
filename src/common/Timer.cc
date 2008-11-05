@@ -21,8 +21,9 @@
 #include "config.h"
 #include "include/Context.h"
 
-#define dout(x)  if (x <= g_conf.debug_timer) *_dout << dbeginl << g_clock.now() << " TIMER "
-#define derr(x)  if (x <= g_conf.debug_timer) *_derr << dbeginl << g_clock.now() << " TIMER "
+#define DOUT_SUBSYS timer
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << " TIMER "
 
 #define DBL 10
 

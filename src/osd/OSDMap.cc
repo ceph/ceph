@@ -15,8 +15,6 @@
 #include "OSDMap.h"
 
 #include "config.h"
-#define dout generic_dout
-#define derr generic_derr
 
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
