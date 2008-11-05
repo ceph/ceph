@@ -44,6 +44,7 @@ $SUDO rm -f core*
 
 test -d out || mkdir out
 $SUDO rm -f out/*
+test -d gmon && $SUDO rm -rf gmon/*
 
 # figure machine's ip
 HOSTNAME=`hostname`
