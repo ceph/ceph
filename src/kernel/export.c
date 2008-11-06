@@ -37,7 +37,7 @@ static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 	int len;
 
 	dout(10, "encode_fh %p max_len %d u32s (%d inopath items)%s\n", dentry,
-	     *max_len, max, connectable ? " connectable":"");
+	     *max_len, max, connectable ? " connectable" : "");
 
 	if (max < 1 || (connectable && max < 2))
 		return -ENOSPC;
@@ -81,7 +81,7 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 	inode = ceph_find_inode(sb, vino);
 	if (!inode) {
 		struct ceph_mds_request *req;
-		derr(10, "__fh_to_dentry %llx.%x -- no inode\n", vino.ino,hash);
+		derr(10, "fh_to_dentry %llx.%x -- no inode\n", vino.ino, hash);
 
 		req = ceph_mdsc_create_request(mdsc,
 					       CEPH_MDS_OP_FINDINODE,
@@ -97,19 +97,19 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 			return ERR_PTR(err ? err : -ESTALE);
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 	dentry = d_obtain_alias(inode);
 #else
 	dentry = d_alloc_anon(inode);
 #endif
 	if (!dentry) {
-		derr(10, "__fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
+		derr(10, "fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
 		     vino.ino,
 		     hash, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
 	}
-	dout(10, "__fh_to_dentry %llx.%x -- inode %p dentry %p\n", vino.ino,
+	dout(10, "fh_to_dentry %llx.%x -- inode %p dentry %p\n", vino.ino,
 	     hash, inode, dentry);
 	return dentry;
 

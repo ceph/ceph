@@ -13,7 +13,7 @@
 
 /*
  * Ceph uses the messenger to exchange ceph_msg messages with
- * other hosts in the system.  The messenger provides ordered and 
+ * other hosts in the system.  The messenger provides ordered and
  * reliable delivery.  It tolerates TCP disconnects by reconnecting
  * (with exponential backoff) in the case of a fault (disconnection,
  * bad crc, protocol error).  Acks allow sent messages to be discarded
@@ -33,11 +33,11 @@
 struct ceph_msg;
 
 #define IPQUADPORT(n)							\
-	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr) >> 24)) & 0xFF,			\
-		(unsigned int)((be32_to_cpu((n).sin_addr.s_addr)) >> 16) & 0xFF,	\
-		(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))>>8) & 0xFF,	\
-		(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))) & 0xFF,	\
-		(unsigned int)(ntohs((n).sin_port))
+	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr) >> 24)) & 0xFF, \
+	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr)) >> 16) & 0xFF, \
+	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))>>8) & 0xFF, \
+	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))) & 0xFF, \
+	(unsigned int)(ntohs((n).sin_port))
 
 
 extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
@@ -56,7 +56,8 @@ typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
 typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
 					struct ceph_entity_name *pn);
 
-static inline const char *ceph_name_type_str(int t) {
+static inline const char *ceph_name_type_str(int t)
+{
 	switch (t) {
 	case CEPH_ENTITY_TYPE_MON: return "mon";
 	case CEPH_ENTITY_TYPE_MDS: return "mds";
@@ -173,8 +174,8 @@ struct ceph_connection {
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
 	u32 connect_seq, global_seq; /* identify the most recent connection
-					  attempt for this connection, client */
-	
+					attempt for this connection, client */
+
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
 	struct list_head out_queue;
@@ -228,7 +229,8 @@ extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
 
-static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg) {
+static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
+{
 	/*printk("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
 	  atomic_read(&msg->nref)+1);*/
 	atomic_inc(&msg->nref);

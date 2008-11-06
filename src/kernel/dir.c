@@ -150,7 +150,7 @@ nextfrag:
 		int pathlen;
 		u64 pathbase;
 		int op = ceph_snap(inode) == CEPH_SNAPDIR ?
-			CEPH_MDS_OP_LSSNAP:CEPH_MDS_OP_READDIR;
+			CEPH_MDS_OP_LSSNAP : CEPH_MDS_OP_READDIR;
 
 		/* discard old result, if any */
 		if (fi->last_readdir)
@@ -402,7 +402,8 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		return ceph_lookup_open(dir, dentry, nd, mode, 1);
 	}
 
-	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL, 0,1);
+	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL,
+			      0, 1);
 }
 
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
@@ -847,7 +848,7 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	if (left == size)
 		return -EFAULT;
 	*ppos += (size - left);
-	return (size - left);
+	return size - left;
 }
 
 const struct file_operations ceph_dir_fops = {

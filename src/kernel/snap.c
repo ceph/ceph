@@ -272,8 +272,7 @@ static int dup_array(u64 **dst, __le64 *src, int num)
 {
 	int i;
 
-	if (*dst)
-		kfree(*dst);
+	kfree(*dst);
 	if (num) {
 		*dst = kmalloc(sizeof(u64) * num, GFP_NOFS);
 		if (!*dst)

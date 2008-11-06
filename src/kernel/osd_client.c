@@ -1,9 +1,9 @@
-#include <asm/uaccess.h>
 #include <linux/err.h>
 #include <linux/highmem.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 
 #include "ceph_debug.h"
 
@@ -19,7 +19,8 @@ int ceph_debug_osdc = -1;
 #include "decode.h"
 
 
-static void reschedule_timeout(struct ceph_osd_client *osdc, unsigned long base_time);
+static void reschedule_timeout(struct ceph_osd_client *osdc,
+			       unsigned long base_time);
 
 
 
@@ -197,11 +198,12 @@ static void __register_next_request_timeout(struct ceph_osd_client *osdc,
 	ret = radix_tree_gang_lookup(&osdc->request_tree, (void **)&next_req,
 						     req->r_tid+1, 1);
 	if (!ret || (next_req->r_tid == osdc->timeout_tid))
-			ret = radix_tree_gang_lookup(&osdc->request_tree, (void **)&next_req,
-						     0, 1);
+			ret = radix_tree_gang_lookup(&osdc->request_tree,
+						     (void **)&next_req, 0, 1);
 
 	if (ret == 1) {
-		dout(10, "replacing timeout_tid: %lld-> %lld\n", osdc->timeout_tid, next_req->r_tid);
+		dout(10, "replacing timeout_tid: %lld-> %lld\n",
+		     osdc->timeout_tid, next_req->r_tid);
 		osdc->timeout_tid = next_req->r_tid;
 		reschedule_timeout(osdc, req->r_last_stamp);
 	}
@@ -431,7 +433,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	int err;
 	struct ceph_fsid fsid;
 
-	dout(2, "handle_map, have %u\n", osdc->osdmap ? osdc->osdmap->epoch:0);
+	dout(2, "handle_map have %u\n", osdc->osdmap ? osdc->osdmap->epoch : 0);
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
 
@@ -660,7 +662,8 @@ static int do_sync_request(struct ceph_osd_client *osdc,
  *
  * FIXME.
  */
-static void reschedule_timeout(struct ceph_osd_client *osdc, unsigned long base_time)
+static void reschedule_timeout(struct ceph_osd_client *osdc,
+			       unsigned long base_time)
 {
 	int timeout = osdc->client->mount_args.osd_timeout;
 	long jifs = 0;
@@ -668,11 +671,11 @@ static void reschedule_timeout(struct ceph_osd_client *osdc, unsigned long base_
 	if (base_time)
 		jifs = jiffies-base_time;
 
-	jifs=timeout*HZ-jifs;
+	jifs = timeout * HZ - jifs;
 
 	if (jifs < 0) {
-		jifs %= timeout*HZ;
-		jifs += timeout*HZ;
+		jifs %= timeout * HZ;
+		jifs += timeout * HZ;
 	}
 
 	dout(10, "reschedule timeout (%ld jiffies)\n", jifs);

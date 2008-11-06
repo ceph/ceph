@@ -1,8 +1,8 @@
+#include <linux/bug.h>
 #include <linux/err.h>
-#include <linux/types.h>
 #include <linux/random.h>
 #include <linux/slab.h>
-#include <asm/bug.h>
+#include <linux/types.h>
 
 #include "mdsmap.h"
 #include "messenger.h"

@@ -178,8 +178,7 @@ retry:
 	spin_unlock(&inode->i_lock);
 	if (is_first)
 		igrab(inode);
-	if (new_cap)
-		kfree(new_cap);
+	kfree(new_cap);
 	return 0;
 }
 
@@ -557,7 +556,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
 	struct inode *inode = &ci->vfs_inode;
 	struct ceph_cap *cap;
 	int file_wanted, used;
-	struct ceph_mds_session *session = NULL;  /* if non-NULL, i hold s_mutex */
+	struct ceph_mds_session *session = NULL;    /* if set, i hold s_mutex */
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
 	int revoking;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
@@ -842,7 +841,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		}
 	spin_unlock(&inode->i_lock);
 
-	dout(30, "put_cap_refs %p had %d %s\n", inode, had, last ? "last":"");
+	dout(30, "put_cap_refs %p had %d %s\n", inode, had, last ? "last" : "");
 
 	if (last && !flushsnaps)
 		ceph_check_caps(ci, 0);
@@ -883,7 +882,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 		     inode,
 		     ci->i_wrbuffer_ref+nr, ci->i_wrbuffer_ref_head+nr,
 		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
-		     last ? " LAST":"");
+		     last ? " LAST" : "");
 	} else {
 		list_for_each(p, &ci->i_cap_snaps) {
 			capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
@@ -900,8 +899,8 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 		     inode, capsnap, capsnap->context->seq,
 		     ci->i_wrbuffer_ref+nr, capsnap->dirty + nr,
 		     ci->i_wrbuffer_ref, capsnap->dirty,
-		     last ? " (wrbuffer last)":"",
-		     last_snap ? " (capsnap last)":"");
+		     last ? " (wrbuffer last)" : "",
+		     last_snap ? " (capsnap last)" : "");
 	}
 
 	spin_unlock(&inode->i_lock);

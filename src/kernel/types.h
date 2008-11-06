@@ -4,7 +4,7 @@
 /* needed before including ceph_fs.h */
 #include <linux/in.h>
 #include <linux/types.h>
-#include <asm/fcntl.h>
+#include <linux/fcntl.h>
 #include <linux/string.h>
 
 #include "ceph_fs.h"

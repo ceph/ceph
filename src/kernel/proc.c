@@ -1,7 +1,7 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 
 #include "ceph_debug.h"
@@ -115,13 +115,13 @@ static int ceph_debug_mask_write(struct file *file, const char __user *buffer,
 			new_dl = simple_strtol(tok, NULL, 0);
 			*debug = new_dl;
 		} else {
-			int remove=0;
+			int remove = 0;
 			int mask;
 
 			if (*tok == '-') {
-				remove=1;
+				remove = 1;
 				tok++;
-			} else if (*tok =='+')
+			} else if (*tok == '+')
 				tok++;
 
 			mask = ceph_get_debug_mask(tok);

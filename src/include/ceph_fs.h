@@ -57,7 +57,8 @@ struct ceph_fsid {
 } __attribute__ ((packed));
 
 static inline int ceph_fsid_equal(const struct ceph_fsid *a,
-				  const struct ceph_fsid *b) {
+				  const struct ceph_fsid *b)
+{
 	return a->major == b->major && a->minor == b->minor;
 }
 
@@ -106,63 +107,84 @@ struct ceph_timespec {
  * can't sort encoded frags numerically.  However, it does allow you
  * to feed encoded frags as values into frag_contains_value.
  */
-static inline __u32 frag_make(__u32 b, __u32 v) {
+static inline __u32 frag_make(__u32 b, __u32 v)
+{
 	return (b << 24) |
 		(v & (0xffffffu << (24-b)) & 0xffffffu);
 }
-static inline __u32 frag_bits(__u32 f) { return f >> 24; }
-static inline __u32 frag_value(__u32 f) { return f & 0xffffffu; }
-static inline __u32 frag_mask(__u32 f) {
+static inline __u32 frag_bits(__u32 f)
+{
+	return f >> 24;
+}
+static inline __u32 frag_value(__u32 f)
+{
+	return f & 0xffffffu;
+}
+static inline __u32 frag_mask(__u32 f)
+{
 	return (0xffffffu << (24-frag_bits(f))) & 0xffffffu;
 }
-static inline __u32 frag_mask_shift(__u32 f) {
+static inline __u32 frag_mask_shift(__u32 f)
+{
 	return 24 - frag_bits(f);
 }
 
-static inline int frag_contains_value(__u32 f, __u32 v) {
+static inline int frag_contains_value(__u32 f, __u32 v)
+{
 	return (v & frag_mask(f)) == frag_value(f);
 }
-static inline int frag_contains_frag(__u32 f, __u32 sub) {
+static inline int frag_contains_frag(__u32 f, __u32 sub)
+{
 	/* is sub as specific as us, and contained by us? */
 	return frag_bits(sub) >= frag_bits(f) &&
 		(frag_value(sub) & frag_mask(f)) == frag_value(f);
 }
 
-static inline __u32 frag_parent(__u32 f) {
+static inline __u32 frag_parent(__u32 f)
+{
 	return frag_make(frag_bits(f) - 1,
 			 frag_value(f) & (frag_mask(f) << 1));
 }
-static inline int frag_is_left_child(__u32 f) {
+static inline int frag_is_left_child(__u32 f)
+{
 	return frag_bits(f) > 0 &&
 		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 0;
 }
-static inline int frag_is_right_child(__u32 f) {
+static inline int frag_is_right_child(__u32 f)
+{
 	return frag_bits(f) > 0 &&
 		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 1;
 }
-static inline __u32 frag_sibling(__u32 f) {
+static inline __u32 frag_sibling(__u32 f)
+{
 	return frag_make(frag_bits(f),
 			 frag_value(f) ^ (0x1000000 >> frag_bits(f)));
 }
-static inline __u32 frag_left_child(__u32 f) {
+static inline __u32 frag_left_child(__u32 f)
+{
 	return frag_make(frag_bits(f)+1, frag_value(f));
 }
-static inline __u32 frag_right_child(__u32 f) {
+static inline __u32 frag_right_child(__u32 f)
+{
 	return frag_make(frag_bits(f)+1,
 			 frag_value(f) | (0x1000000 >> (1+frag_bits(f))));
 }
-static inline __u32 frag_make_child(__u32 f, int by, int i) {
+static inline __u32 frag_make_child(__u32 f, int by, int i)
+{
 	int newbits = frag_bits(f) + by;
 	return frag_make(newbits,
 			 frag_value(f) | (i << (24 - newbits)));
 }
-static inline int frag_is_leftmost(__u32 f) {
+static inline int frag_is_leftmost(__u32 f)
+{
 	return frag_value(f) == 0;
 }
-static inline int frag_is_rightmost(__u32 f) {
+static inline int frag_is_rightmost(__u32 f)
+{
 	return frag_value(f) == frag_mask(f);
 }
-static inline __u32 frag_next(__u32 f) {
+static inline __u32 frag_next(__u32 f)
+{
 	return frag_make(frag_bits(f),
 			 frag_value(f) + (0x1000000 >> frag_bits(f)));
 }
@@ -171,7 +193,8 @@ static inline __u32 frag_next(__u32 f) {
  * comparator to sort frags logically, as when traversing the
  * number space in ascending order...
  */
-static inline int frag_compare(__u32 a, __u32 b) {
+static inline int frag_compare(__u32 a, __u32 b)
+{
 	unsigned va = frag_value(a);
 	unsigned vb = frag_value(b);
 	if (va < vb)
@@ -225,11 +248,14 @@ struct ceph_file_layout {
 } __attribute__ ((packed));
 
 #define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
-#define ceph_file_layout_stripe_count(l) ((__s32)le32_to_cpu((l).fl_stripe_count))
+#define ceph_file_layout_stripe_count(l) \
+	((__s32)le32_to_cpu((l).fl_stripe_count))
 #define ceph_file_layout_object_size(l) ((__s32)le32_to_cpu((l).fl_object_size))
 #define ceph_file_layout_cas_hash(l) ((__s32)le32_to_cpu((l).fl_cas_hash))
-#define ceph_file_layout_object_su(l) ((__s32)le32_to_cpu((l).fl_object_stripe_unit))
-#define ceph_file_layout_pg_preferred(l) ((__s32)le32_to_cpu((l).fl_pg_preferred))
+#define ceph_file_layout_object_su(l) \
+	((__s32)le32_to_cpu((l).fl_object_stripe_unit))
+#define ceph_file_layout_pg_preferred(l) \
+	((__s32)le32_to_cpu((l).fl_pg_preferred))
 
 #define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
 					  le32_to_cpu((l).fl_stripe_count))
@@ -268,11 +294,12 @@ union ceph_pg {
  * b <= bmask and bmask=(2**n)-1
  * e.g., b=12 -> bmask=15, b=123 -> bmask=127
  */
-static inline int ceph_stable_mod(int x, int b, int bmask) {
-  if ((x & bmask) < b)
-    return x & bmask;
-  else
-    return (x & (bmask>>1));
+static inline int ceph_stable_mod(int x, int b, int bmask)
+{
+	if ((x & bmask) < b)
+		return x & bmask;
+	else
+		return x & (bmask >> 1);
 }
 
 /*
@@ -384,7 +411,7 @@ struct ceph_entity_addr {
 	__le32 erank;  /* entity's rank in process */
 	__le32 nonce;  /* unique id for process (e.g. pid) */
 	struct sockaddr_in ipaddr;
-} __attribute ((packed));
+} __attribute__ ((packed));
 
 static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
 					     const struct ceph_entity_addr *b)
@@ -496,8 +523,8 @@ struct ceph_mon_statfs {
 
 struct ceph_statfs {
 	__le64 f_total;
-	__le64 f_free;  // used = total - free  (KB)
-	__le64 f_avail; // usable
+	__le64 f_free;  /* used = total - free (KB) */
+	__le64 f_avail; /* usable */
 	__le64 f_objects;
 };
 
@@ -620,44 +647,44 @@ struct ceph_mds_session_head {
  *  & 0x010000 -> follow symlink (e.g. stat(), not lstat()).
  &  & 0x100000 -> use weird ino/path trace
  */
-#define CEPH_MDS_OP_WRITE       0x001000
-#define CEPH_MDS_OP_FOLLOW_LINK 0x010000
-#define CEPH_MDS_OP_INO_PATH    0x100000
+#define CEPH_MDS_OP_WRITE        0x001000
+#define CEPH_MDS_OP_FOLLOW_LINK  0x010000
+#define CEPH_MDS_OP_INO_PATH     0x100000
 enum {
-	CEPH_MDS_OP_FINDINODE = 0x100100,
+	CEPH_MDS_OP_FINDINODE  = 0x100100,
 
-	CEPH_MDS_OP_LSTAT     = 0x00100,
-	CEPH_MDS_OP_LUTIME    = 0x01101,
-	CEPH_MDS_OP_LCHMOD    = 0x01102,
-	CEPH_MDS_OP_LCHOWN    = 0x01103,
-	CEPH_MDS_OP_LSETXATTR = 0x01104,
-	CEPH_MDS_OP_LRMXATTR  = 0x01105,
-	CEPH_MDS_OP_LSETLAYOUT= 0x01106,
+	CEPH_MDS_OP_LSTAT      = 0x00100,
+	CEPH_MDS_OP_LUTIME     = 0x01101,
+	CEPH_MDS_OP_LCHMOD     = 0x01102,
+	CEPH_MDS_OP_LCHOWN     = 0x01103,
+	CEPH_MDS_OP_LSETXATTR  = 0x01104,
+	CEPH_MDS_OP_LRMXATTR   = 0x01105,
+	CEPH_MDS_OP_LSETLAYOUT = 0x01106,
 
-	CEPH_MDS_OP_STAT      = 0x10100,
-	CEPH_MDS_OP_UTIME     = 0x11101,
-	CEPH_MDS_OP_CHMOD     = 0x11102,
-	CEPH_MDS_OP_CHOWN     = 0x11103,
-	CEPH_MDS_OP_SETXATTR  = 0x11104,
-	CEPH_MDS_OP_RMXATTR   = 0x11105,
+	CEPH_MDS_OP_STAT       = 0x10100,
+	CEPH_MDS_OP_UTIME      = 0x11101,
+	CEPH_MDS_OP_CHMOD      = 0x11102,
+	CEPH_MDS_OP_CHOWN      = 0x11103,
+	CEPH_MDS_OP_SETXATTR   = 0x11104,
+	CEPH_MDS_OP_RMXATTR    = 0x11105,
 
-	CEPH_MDS_OP_MKNOD     = 0x01201,
-	CEPH_MDS_OP_LINK      = 0x01202,
-	CEPH_MDS_OP_UNLINK    = 0x01203,
-	CEPH_MDS_OP_RENAME    = 0x01204,
-	CEPH_MDS_OP_MKDIR     = 0x01220,
-	CEPH_MDS_OP_RMDIR     = 0x01221,
-	CEPH_MDS_OP_SYMLINK   = 0x01222,
+	CEPH_MDS_OP_MKNOD      = 0x01201,
+	CEPH_MDS_OP_LINK       = 0x01202,
+	CEPH_MDS_OP_UNLINK     = 0x01203,
+	CEPH_MDS_OP_RENAME     = 0x01204,
+	CEPH_MDS_OP_MKDIR      = 0x01220,
+	CEPH_MDS_OP_RMDIR      = 0x01221,
+	CEPH_MDS_OP_SYMLINK    = 0x01222,
 
-	CEPH_MDS_OP_OPEN      = 0x10302,
-	CEPH_MDS_OP_TRUNCATE  = 0x11303,
-	CEPH_MDS_OP_LTRUNCATE = 0x01303,
-	CEPH_MDS_OP_FSYNC     = 0x00304,
-	CEPH_MDS_OP_READDIR   = 0x00305,
+	CEPH_MDS_OP_OPEN       = 0x10302,
+	CEPH_MDS_OP_TRUNCATE   = 0x11303,
+	CEPH_MDS_OP_LTRUNCATE  = 0x01303,
+	CEPH_MDS_OP_FSYNC      = 0x00304,
+	CEPH_MDS_OP_READDIR    = 0x00305,
 
-	CEPH_MDS_OP_MKSNAP    = 0x01400,
-	CEPH_MDS_OP_RMSNAP    = 0x01401,
-	CEPH_MDS_OP_LSSNAP    = 0x00402,
+	CEPH_MDS_OP_MKSNAP     = 0x01400,
+	CEPH_MDS_OP_RMSNAP     = 0x01401,
+	CEPH_MDS_OP_LSSNAP     = 0x00402,
 };
 
 static inline const char *ceph_mds_op_name(int op)
@@ -880,18 +907,19 @@ static inline int ceph_caps_for_mode(int mode)
 
 enum {
 	CEPH_CAP_OP_GRANT,     /* mds->client grant */
-	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify (invalidate size+mtime) */
+	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify */
 	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
 	CEPH_CAP_OP_RELEASED,    /* mds->client close out cap */
 	CEPH_CAP_OP_FLUSHEDSNAP, /* mds->client flushed snap */
-	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was a recall) */
+	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was recall) */
 	CEPH_CAP_OP_REQUEST,   /* client->mds request (update wanted bits) */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
 	CEPH_CAP_OP_RELEASE,   /* client->mds request release cap */
 };
 
-inline static const char* ceph_cap_op_name(int op) {
+static inline const char *ceph_cap_op_name(int op)
+{
 	switch (op) {
 	case CEPH_CAP_OP_GRANT: return "grant";
 	case CEPH_CAP_OP_TRUNC: return "trunc";
@@ -965,7 +993,8 @@ enum {
 	CEPH_SNAP_OP_SPLIT,
 };
 
-static inline const char *ceph_snap_op_name(int o) {
+static inline const char *ceph_snap_op_name(int o)
+{
 	switch (o) {
 	case CEPH_SNAP_OP_UPDATE: return "update";
 	case CEPH_SNAP_OP_CREATE: return "create";

@@ -1246,16 +1246,16 @@ static int read_partial_accept(struct ceph_connection *con)
 		con->in_base_pos += ret;
 	}
 
-       /* connect */
-       to += sizeof(con->in_connect);
-       while (con->in_base_pos < to) {
-	       int left = to - con->in_base_pos;
-	       int have = sizeof(u32) - left;
-	       ret = ceph_tcp_recvmsg(con->sock,
-	                              (char *)&con->in_connect + have, left);
-	        if (ret <= 0)
-	                return ret;
-	        con->in_base_pos += ret;
+	/* connect */
+	to += sizeof(con->in_connect);
+	while (con->in_base_pos < to) {
+		int left = to - con->in_base_pos;
+		int have = sizeof(u32) - left;
+		ret = ceph_tcp_recvmsg(con->sock,
+				       (char *)&con->in_connect + have, left);
+		if (ret <= 0)
+			return ret;
+		con->in_base_pos += ret;
 	}
 
 	return 1; /* done */

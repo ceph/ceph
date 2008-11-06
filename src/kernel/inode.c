@@ -79,7 +79,8 @@ const struct inode_operations ceph_file_iops = {
 /*
  * find/create a frag in the tree
  */
-static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci, u32 f)
+static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci,
+						    u32 f)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -462,7 +463,8 @@ int ceph_fill_inode(struct inode *inode,
 	ci->i_old_atime = inode->i_atime;
 
 	inode->i_mapping->a_ops = &ceph_aops;
-	inode->i_mapping->backing_dev_info = &ceph_client(inode->i_sb)->backing_dev_info;
+	inode->i_mapping->backing_dev_info =
+		&ceph_client(inode->i_sb)->backing_dev_info;
 
 no_change:
 	spin_unlock(&inode->i_lock);
@@ -848,7 +850,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	if (vino.ino == 1) {
 		err = ceph_fill_inode(in, &rinfo->trace_in[0],
 				      rinfo->trace_numd ?
-				      rinfo->trace_dir[0]:NULL);
+				      rinfo->trace_dir[0] : NULL);
 		if (err < 0)
 			return err;
 		if (rinfo->trace_numd == 0)
@@ -888,7 +890,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* do we have a dn lease? */
 		have_lease = have_icontent ||
-			(le16_to_cpu(rinfo->trace_dlease[d]->mask) & CEPH_LOCK_DN);
+			(le16_to_cpu(rinfo->trace_dlease[d]->mask) &
+			 CEPH_LOCK_DN);
 		if (!have_lease)
 			dout(10, "fill_trace  no icontent|dentry lease\n");
 
@@ -1016,7 +1019,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		err = ceph_fill_inode(in,
 				      &rinfo->trace_in[d+1],
 				      rinfo->trace_numd <= d ?
-				      rinfo->trace_dir[d+1]:NULL);
+				      rinfo->trace_dir[d+1] : NULL);
 		if (err < 0) {
 			derr(30, "ceph_fill_inode badness\n");
 			d_delete(dn);
@@ -1111,7 +1114,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 					     dn);
 					dput(dn);
 				}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 				dn = d_obtain_alias(in);
 #else
 				dn = d_alloc_anon(in);
@@ -1426,8 +1429,8 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 		path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
 		if (IS_ERR(path))
 			return ERR_PTR(PTR_ERR(path));
-		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0, NULL,
-					       dentry, USE_ANY_MDS);
+		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0,
+					       NULL, dentry, USE_ANY_MDS);
 		kfree(path);
 	}
 	return req;
@@ -1777,7 +1780,7 @@ static size_t _ceph_vir_xattrcb_rctime(struct ceph_inode_info *ci, char *val,
 				       size_t size)
 {
 	return snprintf(val, size, "%ld.%ld", (long)ci->i_rctime.tv_sec,
-	                        (long)ci->i_rctime.tv_nsec);
+			(long)ci->i_rctime.tv_nsec);
 }
 
 static struct _ceph_vir_xattr_cb _ceph_vir_xattr_recs[] = {
@@ -1902,7 +1905,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	/* include virtual dir xattrs */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
-		for (i=0;  _ceph_vir_xattr_recs[i].name; i++)
+		for (i = 0; _ceph_vir_xattr_recs[i].name; i++)
 			namelen += strlen(_ceph_vir_xattr_recs[i].name) + 1;
 
 	err = -ERANGE;
@@ -1931,8 +1934,9 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	/* virtual xattr names, too */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
-		for (i=0;  _ceph_vir_xattr_recs[i].name; i++) {
-			len = sprintf(names, "%s", _ceph_vir_xattr_recs[i].name);
+		for (i = 0; _ceph_vir_xattr_recs[i].name; i++) {
+			len = sprintf(names, "%s",
+				      _ceph_vir_xattr_recs[i].name);
 			names += len + 1;
 		}
 

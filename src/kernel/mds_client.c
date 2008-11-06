@@ -159,7 +159,8 @@ static int parse_reply_info_dir(void **p, void *end,
 	info->dir_dir = *p;
 	if (*p + sizeof(*info->dir_dir) > end)
 		goto bad;
-	*p += sizeof(*info->dir_dir) + sizeof(u32)*le32_to_cpu(info->dir_dir->ndist);
+	*p += sizeof(*info->dir_dir) +
+		sizeof(u32)*le32_to_cpu(info->dir_dir->ndist);
 	if (*p > end)
 		goto bad;
 
@@ -474,7 +475,7 @@ static bool __have_session(struct ceph_mds_client *mdsc, int mds)
 {
 	if (mds >= mdsc->max_sessions)
 		return false;
-	return mdsc->sessions[mds] ? true:false;
+	return mdsc->sessions[mds];
 }
 
 
@@ -944,8 +945,8 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 		}
 	}
 	dout(10, "renewed_caps mds%d ttl now %lu, was %s, now %s\n",
-	     session->s_mds, session->s_cap_ttl, was_stale ? "stale":"fresh",
-	     time_before(jiffies, session->s_cap_ttl) ? "stale":"fresh");
+	     session->s_mds, session->s_cap_ttl, was_stale ? "stale" : "fresh",
+	     time_before(jiffies, session->s_cap_ttl) ? "stale" : "fresh");
 	spin_unlock(&session->s_cap_lock);
 
 	if (wake)
@@ -978,7 +979,7 @@ static void check_all_caps(struct ceph_mds_client *mdsc,
 {
 	struct list_head *p, *n;
 
-	list_for_each_safe (p, n, &session->s_caps) {
+	list_for_each_safe(p, n, &session->s_caps) {
 		struct ceph_cap *cap =
 			list_entry(p, struct ceph_cap, session_caps);
 		struct inode *inode = &cap->ci->vfs_inode;

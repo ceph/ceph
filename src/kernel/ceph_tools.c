@@ -18,8 +18,8 @@ static struct list_head _bk_allocs;
 
 static DEFINE_SPINLOCK(_bk_lock);
 
-static size_t _total_alloc = 0;
-static size_t _total_free = 0;
+static size_t _total_alloc;
+static size_t _total_free;
 
 
 struct alloc_data {
@@ -37,7 +37,7 @@ struct stack_frame {
 
 void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 {
-	struct alloc_data *p=kmalloc(size+sizeof(struct alloc_data), flags);
+	struct alloc_data *p = kmalloc(size+sizeof(struct alloc_data), flags);
 
 	if (!p)
 		return NULL;
@@ -59,7 +59,8 @@ void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 
 void ceph_kfree(void *ptr)
 {
-	struct alloc_data *p=(struct alloc_data *)(ptr-sizeof(struct alloc_data));
+	struct alloc_data *p = (struct alloc_data *)(ptr -
+						     sizeof(struct alloc_data));
 
 	if (!ptr)
 		return;
@@ -94,12 +95,12 @@ void ceph_bookkeeper_finalize(void)
 	dout(1, "bookkeeper: total bytes free: %zu\n", _total_free);
 
 	if (_total_alloc != _total_free) {
-
 		list_for_each(p, &_bk_allocs) {
 			entry = list_entry(p, struct alloc_data, node);
-			dout(1, "%s(%d): p=%p (%zu bytes)\n", entry->fname, entry->line,
-				((void *)entry)+sizeof(struct alloc_data),
-				entry->size);
+			dout(1, "%s(%d): p=%p (%zu bytes)\n", entry->fname,
+			     entry->line,
+			     ((void *)entry)+sizeof(struct alloc_data),
+			     entry->size);
 		}
 	} else {
 		dout(1, "No leaks found! Yay!\n");

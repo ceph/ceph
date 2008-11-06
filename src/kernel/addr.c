@@ -119,7 +119,7 @@ static int ceph_set_page_dirty(struct page *page,
 	spin_unlock(&inode->i_lock);
 
 	/* now adjust page */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 	spin_lock_irq(&mapping->tree_lock);
 #else
 	write_lock_irq(&mapping->tree_lock);
@@ -148,7 +148,7 @@ static int ceph_set_page_dirty(struct page *page,
 		undo = 1;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 	spin_unlock_irq(&mapping->tree_lock);
 #else
 	write_unlock_irq(&mapping->tree_lock);
@@ -210,7 +210,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 /* just a sanity check */
 static int ceph_releasepage(struct page *page, gfp_t g)
 {
-	struct inode *inode = page->mapping ? page->mapping->host:NULL;
+	struct inode *inode = page->mapping ? page->mapping->host : NULL;
 	dout(20, "%p releasepage %p idx %lu\n", inode, page, page->index);
 	WARN_ON(PageDirty(page));
 	WARN_ON(page->private);
@@ -304,13 +304,13 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		SetPageUptodate(page);
 		unlock_page(page);
 		if (pagevec_add(&pvec, page) == 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 			pagevec_lru_add_file(&pvec);   /* add to lru */
 #else
 			pagevec_lru_add(&pvec);   /* add to lru */
 #endif
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 	pagevec_lru_add_file(&pvec);
 #else
 	pagevec_lru_add(&pvec);
@@ -627,18 +627,14 @@ get_more_pages:
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
 			page = pvec.pages[i];
 			dout(20, "? %p idx %lu\n", page, page->index);
-			if (locked_pages == 0) {
+			if (locked_pages == 0)
 				lock_page(page);  /* first page */
-			}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 			else if (!trylock_page(page))
 #else
 			else if (TestSetPageLocked(page))
 #endif
-			{
-				dout(20, "couldn't lock page %p\n", page);
 				break;
-			}
 
 			/* only dirty pages, or our accounting breaks */
 			if (unlikely(!PageDirty(page)) ||

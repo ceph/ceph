@@ -220,7 +220,7 @@ struct ceph_inode_info {
 	unsigned i_cap_exporting_mseq;   /*  mds's. */
 	unsigned i_cap_exporting_issued;
 	struct list_head i_cap_snaps;   /* snapped state pending flush to mds */
-	struct ceph_snap_context *i_head_snapc; /* defined if wr_buffer_head > 0 */
+	struct ceph_snap_context *i_head_snapc;  /* set if wr_buffer_head > 0 */
 	unsigned i_snap_caps;           /* cap bits for snapped files */
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */
@@ -344,8 +344,8 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
 {
 	struct ceph_vino *pvino = (struct ceph_vino *)data;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	return (ci->i_vino.ino == pvino->ino &&
-		ci->i_vino.snap == pvino->snap);
+	return ci->i_vino.ino == pvino->ino &&
+		ci->i_vino.snap == pvino->snap;
 }
 
 static inline struct inode *ceph_find_inode(struct super_block *sb,
@@ -560,7 +560,7 @@ extern int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
  * a cap_snap is "pending" if it is still awaiting an in-progress
  * sync write (that may/may not still update size, mtime, etc.).
  */
-inline static bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
+static inline bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
 {
 	return !list_empty(&ci->i_cap_snaps) &&
 		list_entry(ci->i_cap_snaps.prev, struct ceph_cap_snap,
@@ -605,7 +605,8 @@ extern int ceph_do_getattr(struct dentry *dentry, int mask);
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			struct kstat *stat);
-extern int ceph_setxattr(struct dentry *, const char *,const void *,size_t,int);
+extern int ceph_setxattr(struct dentry *, const char *, const void *,
+			 size_t, int);
 extern ssize_t ceph_getxattr(struct dentry *, const char *, void *, size_t);
 extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
 extern int ceph_removexattr(struct dentry *, const char *);
@@ -662,7 +663,8 @@ extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
  * our d_ops vary depending on whether the inode is live,
  * snapshotted (read-only), or a virtual ".snap" directory.
  */
-static inline void ceph_init_dentry(struct dentry *dentry) {
+static inline void ceph_init_dentry(struct dentry *dentry)
+{
 	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
 		dentry->d_op = &ceph_dentry_ops;
 	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)

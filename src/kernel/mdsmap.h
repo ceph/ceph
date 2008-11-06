@@ -18,7 +18,8 @@ struct ceph_mdsmap {
 	s32 *m_state;                   /* states */
 };
 
-static inline struct ceph_entity_addr *ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
+static inline struct ceph_entity_addr *
+ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
 {
 	if (w >= m->m_max_mds)
 		return NULL;
@@ -34,7 +35,7 @@ static inline int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w)
 }
 
 extern int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m);
-extern struct ceph_mdsmap * ceph_mdsmap_decode(void **p, void *end);
+extern struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end);
 extern void ceph_mdsmap_destroy(struct ceph_mdsmap *m);
 
 #endif

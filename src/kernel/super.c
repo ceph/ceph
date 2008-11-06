@@ -159,7 +159,7 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
  */
 struct kmem_cache *ceph_inode_cachep;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 static void init_once(void *foo)
 #else
 static void init_once(struct kmem_cache *cachep, void *foo)
@@ -186,13 +186,13 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(ceph_inode_cachep);
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
 static void ceph_umount_begin(struct vfsmount *vfsmnt, int flags)
 #else
 static void ceph_umount_begin(struct super_block *sb)
 #endif
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
 	struct ceph_client *client = ceph_sb_to_client(vfsmnt->mnt_sb);
 #else
 	struct ceph_client *client = ceph_sb_to_client(sb);
@@ -200,7 +200,7 @@ static void ceph_umount_begin(struct super_block *sb)
 
 	dout(30, "ceph_umount_begin\n");
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
 	if (!(flags & MNT_FORCE))
 		return;
 #endif
@@ -256,10 +256,12 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 		     le64_to_cpu(client->monc.monmap->fsid.major),
 		     le64_to_cpu(client->monc.monmap->fsid.minor));
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 		client->client_kobj = kobject_create_and_add(name, ceph_kobj);
-		//client->fsid_kobj = kobject_create_and_add("fsid",
-		//client->client_kobj);
+		/*
+		  client->fsid_kobj = kobject_create_and_add("fsid",
+		  client->client_kobj);
+		*/
 #endif
 	}
 }
@@ -485,7 +487,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	if (err < 0)
 		return err;
 
-	for (i=0; i<args->num_mon; i++) {
+	for (i = 0; i < args->num_mon; i++) {
 		args->mon_addr[i].ipaddr.sin_family = AF_INET;
 		args->mon_addr[i].erank = 0;
 		args->mon_addr[i].nonce = 0;
@@ -496,7 +498,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	/* path on server */
 	c++;
-	while (*c == '/') c++;  /* remove leading '/'(s) */
+	while (*c == '/')
+		c++;  /* remove leading '/'(s) */
 	*path = c;
 	dout(15, "server path '%s'\n", *path);
 
@@ -673,7 +676,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 	ceph_monc_stop(&client->monc);
 	ceph_osdc_stop(&client->osdc);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	if (client->client_kobj)
 		kobject_put(client->client_kobj);
 #endif
@@ -848,7 +851,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 
 	switch (type) {
 	case CEPH_MSG_MON_MAP:
-		had = client->monc.monmap->epoch ? 1:0;
+		had = client->monc.monmap->epoch ? 1 : 0;
 		handle_monmap(client, msg);
 		if (!had && client->monc.monmap->epoch && have_all_maps(client))
 			wake_up(&client->mount_wq);
@@ -864,7 +867,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 
 		/* mds client */
 	case CEPH_MSG_MDS_MAP:
-		had = client->mdsc.mdsmap ? 1:0;
+		had = client->mdsc.mdsmap ? 1 : 0;
 		ceph_mdsc_handle_map(&client->mdsc, msg);
 		if (!had && client->mdsc.mdsmap && have_all_maps(client))
 			wake_up(&client->mount_wq);
@@ -890,7 +893,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 
 		/* osd client */
 	case CEPH_MSG_OSD_MAP:
-		had = client->osdc.osdmap ? 1:0;
+		had = client->osdc.osdmap ? 1 : 0;
 		ceph_osdc_handle_map(&client->osdc, msg);
 		if (!had && client->osdc.osdmap && have_all_maps(client))
 			wake_up(&client->mount_wq);
@@ -992,7 +995,7 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 
 	err = bdi_init(&client->backing_dev_info);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 	if (err < 0)
 		return err;
 
@@ -1067,7 +1070,7 @@ static void ceph_kill_sb(struct super_block *s)
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
 	ceph_mdsc_pre_umount(&client->mdsc);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 	bdi_unregister(&client->backing_dev_info);
 #endif
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
@@ -1098,7 +1101,7 @@ static int __init init_ceph(void)
 	ceph_bookkeeper_init();
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	ret = -ENOMEM;
 	ceph_kobj = kobject_create_and_add("ceph", fs_kobj);
 	if (!ceph_kobj)
@@ -1129,7 +1132,7 @@ out_msgr:
 out_proc:
 	ceph_proc_cleanup();
 out_kobj:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	kobject_put(ceph_kobj);
 	ceph_kobj = NULL;
 out:
@@ -1144,7 +1147,7 @@ static void __exit exit_ceph(void)
 	destroy_inodecache();
 	ceph_msgr_exit();
 	ceph_proc_cleanup();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	kobject_put(ceph_kobj);
 	ceph_kobj = NULL;
 #endif
