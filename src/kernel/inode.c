@@ -156,8 +156,7 @@ u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 		dout(30, "choose_frag(%x) %x splits by %d (%d ways)\n", v, t,
 		     frag->split_by, nway);
 		for (i = 0; i < nway; i++) {
-			n = frag_make(frag_bits(t) + frag->split_by,
-				      frag_value(t) | (i << frag_bits(t)));
+			n = frag_make_child(t, frag->split_by, i);
 			if (frag_contains_value(n, v)) {
 				t = n;
 				break;
