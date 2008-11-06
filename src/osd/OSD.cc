@@ -326,6 +326,10 @@ void handle_signal(int signal)
   case SIGTERM:
   case SIGINT:
     got_sigterm = true;
+    g_conf.debug_osd = 100;
+    g_conf.debug_journal = 100;
+    g_conf.debug_filestore = 100;
+    g_conf.debug_ebofs = 100;
     break;
   }
 }
