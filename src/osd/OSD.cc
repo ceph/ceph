@@ -3320,7 +3320,7 @@ void OSD::wait_for_no_ops()
 
 void OSD::wake_snap_trimmer()
 {
-  osd_lock.Lock();
+  assert(osd_lock.is_locked());
   if (!snap_trimmer_thread.is_started()) {
     dout(10) << "wake_snap_trimmer - creating thread" << dendl;
     snap_trimmer_thread.create();
@@ -3328,7 +3328,6 @@ void OSD::wake_snap_trimmer()
     dout(10) << "wake_snap_trimmer - kicking thread" << dendl;
     snap_trimmer_cond.Signal();
   }
-  osd_lock.Unlock();  
 }
 
 void OSD::snap_trimmer()
