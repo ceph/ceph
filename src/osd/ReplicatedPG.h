@@ -107,7 +107,7 @@ protected:
   void push(pobject_t oid, int dest);
   void push(pobject_t oid, int dest, interval_set<__u64>& data_subset, 
 	    map<pobject_t, interval_set<__u64> >& clone_subsets);
-  void pull(pobject_t oid);
+  bool pull(pobject_t oid);
 
   // modify
   void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);

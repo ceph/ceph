@@ -1735,7 +1735,7 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, pobject_t poid,
 
 /** pull - request object from a peer
  */
-void ReplicatedPG::pull(pobject_t poid)
+bool ReplicatedPG::pull(pobject_t poid)
 {
   assert(missing.loc.count(poid.oid));
   eversion_t v = missing.missing[poid.oid].need;
@@ -1745,6 +1745,11 @@ void ReplicatedPG::pull(pobject_t poid)
           << " v " << v 
           << " from osd" << fromosd
           << dendl;
+
+  if (!osd->osdmap->is_up(fromosd)) {
+    dout(7) << " osd" << fromosd << " is down" << dendl;
+    return false;
+  }
 
   map<pobject_t, interval_set<__u64> > clone_subsets;
   interval_set<__u64> data_subset;
@@ -1762,7 +1767,7 @@ void ReplicatedPG::pull(pobject_t poid)
 	pull(head);
       }
       waiting_for_head.insert(poid.oid);
-      return;
+      return false;
     }
 
     // check snapset
@@ -1801,6 +1806,7 @@ void ReplicatedPG::pull(pobject_t poid)
   assert(pulling.count(poid.oid) == 0);
   pulling[poid.oid].first = v;
   pulling[poid.oid].second = fromosd;
+  return true;
 }
 
 
@@ -2414,8 +2420,9 @@ int ReplicatedPG::recover_primary(int max)
 	}
       }
 
-      pull(poid);
-      if (++started >= max)
+      if (pull(poid))
+	++started;
+      if (started >= max)
 	return started;
     }
     
