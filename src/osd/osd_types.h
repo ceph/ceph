@@ -112,7 +112,7 @@ public:
   bool is_rep()   { return type() == TYPE_REP; }
   bool is_raid4() { return type() == TYPE_RAID4; }
 
-  int size() { return u.pg.size; }
+  unsigned size() { return u.pg.size; }
   ps_t ps() { return u.pg.ps; }
   int pool() { return u.pg.pool; }
   int preferred() { return u.pg.preferred; }   // hack: avoid negative.
@@ -291,6 +291,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SPLITTING 128  // i am splitting
 #define PG_STATE_SNAPTRIMQUEUE  256  // i am queued for snapshot trimming
 #define PG_STATE_SNAPTRIMMING   512  // i am trimming snapshot data
+#define PG_STATE_DEGRADED      1024  // pg membership not complete
 
 static inline std::string pg_state_string(int state) {
   std::string st;
@@ -304,6 +305,7 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_SPLITTING) st += "splitting+";
   if (state & PG_STATE_SNAPTRIMQUEUE) st += "snaptrimqueue+";
   if (state & PG_STATE_SNAPTRIMMING) st += "snaptrimming+";
+  if (state & PG_STATE_DEGRADED) st += "degraded+";
   if (!st.length()) 
     st = "inactive";
   else 

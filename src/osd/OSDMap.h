@@ -601,26 +601,26 @@ private:
       break;
       
     case CEPH_PG_LAYOUT_LINEAR:
-      for (int i=0; i<pg.size(); i++) 
+      for (unsigned i=0; i<pg.size(); i++) 
 	osds.push_back( (i + pps*pg.size()) % g_conf.num_osd );
       break;
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
 	int h = crush_hash32(pps);
-	for (int i=0; i<pg.size(); i++) 
+	for (unsigned i=0; i<pg.size(); i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
       break;
       
     case CEPH_PG_LAYOUT_HASH:
       {
-	for (int i=0; i<pg.size(); i++) {
+	for (unsigned i=0; i<pg.size(); i++) {
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
 	    osd = crush_hash32_3(i, pps, t) % g_conf.num_osd;
-	    int j = 0;
+	    unsigned j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;
 	    if (j == i) break;
@@ -644,7 +644,7 @@ private:
         osds.push_back(osd);
       } else {
         assert(pg.size() > 0);
-        for (int i=1; i<pg.size(); i++)
+        for (unsigned i=1; i<pg.size(); i++)
           if (osds[i] == osd) {
             // swap with position 0
             osds[i] = osds[0];

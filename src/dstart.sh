@@ -32,7 +32,7 @@ rm -f core*
 
 test -d out || mkdir out
 rm -f out/*
-test -d gmon && sudo rm -rf gmon/*
+test -d gmon && ssh cosd0 rm -rf ceph/src/gmon/*
 
 # mkmonfs
 if [ $new -eq 1 ]; then

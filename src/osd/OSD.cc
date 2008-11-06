@@ -1789,7 +1789,13 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
     pg->state_clear(PG_STATE_DOWN);
-    
+
+    if (pg->is_primary() && 
+	pg->info.pgid.size() != pg->acting.size())
+      pg->state_set(PG_STATE_DEGRADED);
+    else
+      pg->state_clear(PG_STATE_DEGRADED);
+
     // reset primary state?
     if (oldrole == 0 || pg->get_role() == 0)
       pg->clear_primary_state();
