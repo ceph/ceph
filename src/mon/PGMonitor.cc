@@ -228,8 +228,7 @@ bool PGMonitor::prepare_update(Message *m)
     return prepare_pg_stats((MPGStats*)m);
 
   case MSG_MON_COMMAND:
-    delete m;
-    return false;
+    return prepare_command((MMonCommand*)m);
 
   default:
     assert(0);
