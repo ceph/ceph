@@ -23,11 +23,12 @@ static size_t _total_free;
 
 
 struct alloc_data {
-	u32 magic;
+	u32 prefix_magic;
 	struct list_head node;
 	size_t size;
 	char *fname;
 	int line;
+	u32 suffix_magic;
 };
 
 struct stack_frame {
@@ -42,10 +43,11 @@ void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 	if (!p)
 		return NULL;
 
-	p->magic = CEPH_BK_MAGIC;
+	p->prefix_magic = CEPH_BK_MAGIC;
 	p->size = size;
 	p->fname = fname;
 	p->line = line;
+	p->suffix_magic = CEPH_BK_MAGIC;
 
 	spin_lock(&_bk_lock);
 	_total_alloc += size;
@@ -61,14 +63,29 @@ void ceph_kfree(void *ptr)
 {
 	struct alloc_data *p = (struct alloc_data *)(ptr -
 						     sizeof(struct alloc_data));
+	int overrun = 0;
 
 	if (!ptr)
 		return;
 
-	if (p->magic != CEPH_BK_MAGIC) {
-		kfree(ptr);
-		return;
+	if (p->prefix_magic != CEPH_BK_MAGIC) {
+		derr(0, "ERROR: memory overrun (under)!\n");
+		overrun = 1;
 	}
+
+	if (p->suffix_magic != CEPH_BK_MAGIC) {
+		derr(0, "ERROR: Memory overrun (over)!\n");
+		overrun = 1;
+	}
+
+	if (overrun) {
+		derr(0, "Memory allocated at %s(%d): p=%p (%zu bytes)\n", p->fname, 
+			p->line,
+			((void *)p)+sizeof(struct alloc_data),
+			p->size);
+	}
+
+	BUG_ON(overrun);
 
 	spin_lock(&_bk_lock);
 	_total_free += p->size;
