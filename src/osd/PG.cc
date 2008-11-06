@@ -693,45 +693,53 @@ void PG::build_prior()
 	     << dendl;
     
     int num_still_up_or_clean = 0;
+    bool any_survived = false;
     for (unsigned i=0; i<acting.size(); i++) {
       if (osd->osdmap->is_up(acting[i])) {  // is up now
-	if (first_epoch <= info.history.last_epoch_started &&  // FIXME this is sloppy i think?
+
+	// FIXME this is sloppy i think?
+	if (first_epoch <= info.history.last_epoch_started && 
 	    last_epoch >= info.history.last_epoch_started)
 	  any_up = true;
 
+	any_survived = true;
+
 	if (acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(acting[i]);
-
+	
 	// has it been up this whole time?
 	if (osd->osdmap->get_up_from(acting[i]) <= first_epoch)
 	  num_still_up_or_clean++;
       } else {
-	dout(10) << "build_prior  prior osd" << acting[i] << " is down, must notify mon" << dendl;
+	dout(10) << "build_prior  prior osd" << acting[i]
+		 << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
-
-	// include osd in set anyway
 	prior_set_down.insert(acting[i]);
-
-	// fixme: how do we identify a "clean" shutdown anyway?
-
-	if (i == 0) {
-	  if (maybe_went_rw) {
-	    dout(10) << "build_prior  pg possibly went active+rw in epoch " 
-		     << (lastmap->get_up_thru(acting[i]) + 1) << dendl;
-	    some_down = true;
-	    prior_set.insert(acting[i]);
-
-	    // take note that we care about this osd's up_thru.  if it
-	    // changes later, it will affect our prior_set, and we'll want
-	    // to rebuild the prior set!
-	    prior_set_up_thru[acting[0]] = lastmap->get_up_thru(acting[0]);
-	  }
-	}
       }
     }
 
+    // if nobody survived this interval, and we may have gone rw,
+    // then we need to wait for one of those osds to recover to
+    // ensure that we haven't lost any information.
+    if (!any_survived && maybe_went_rw) {
+      // fixme: how do we identify a "clean" shutdown anyway?
+      dout(10) << "build_prior  possibly went active+rw, no survivors, including" << dendl;
+      for (unsigned i=0; i<acting.size(); i++)
+	if (osd->osdmap->is_down(acting[i])) {
+	  prior_set.insert(acting[i]);
+	  prior_set_down.erase(acting[i]);
+	}
+      some_down = true;
+      
+      // take note that we care about the primary's up_thru.  if it
+      // changes later, it will affect our prior_set, and we'll want
+      // to rebuild it!
+      prior_set_up_thru[acting[0]] = lastmap->get_up_thru(acting[0]);
+    }
+
     if (num_still_up_or_clean == 0) {
-      dout(10) << "build_prior  none of " << acting << " still up or cleanly shutdown, pg crashed" << dendl;
+      dout(10) << "build_prior  none of " << acting 
+	       << " still up or cleanly shutdown, pg crashed" << dendl;
       state_set(PG_STATE_CRASHED);
     }
   }
