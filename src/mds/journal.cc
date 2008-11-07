@@ -521,8 +521,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p)
-    if (p->name.is_client())
+    if (p->name.is_client()) {
+      dout(10) << "EMetaBlob.replay request " << *p << dendl;
       mds->sessionmap.add_completed_request(*p);
+    }
 
 
   // update segment

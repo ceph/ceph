@@ -84,6 +84,7 @@ void SessionMap::_load_finish(bufferlist &bl)
 	   << bl.length() << " bytes"
 	   << dendl;
   projected = committing = committed = version;
+  dump();
   finish_contexts(waiting_for_load);
 }
 
