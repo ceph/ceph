@@ -3506,7 +3506,7 @@ int Ebofs::_destroy_collection(coll_t cid)
 
   // hose mappings
   vector<pobject_t> objects;
-  collection_list(cid, objects);
+  _collection_list(cid, objects);
   for (vector<pobject_t>::iterator i = objects.begin(); 
        i != objects.end();
        i++) {
