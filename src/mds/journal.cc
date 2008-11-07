@@ -359,7 +359,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	 p != lump.get_dfull().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn, p->dnlast);
-      if (!dn) {
+      if (!dn || dn->last != p->dnlast) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
@@ -432,7 +432,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	 p != lump.get_dremote().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn, p->dnlast);
-      if (!dn) {
+      if (!dn || dn->last != p->dnlast) {
 	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
@@ -456,7 +456,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	 p != lump.get_dnull().end();
 	 p++) {
       CDentry *dn = dir->lookup(p->dn, p->dnfirst);
-      if (!dn) {
+      if (!dn || dn->last != p->dnlast) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
