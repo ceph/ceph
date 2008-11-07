@@ -1762,8 +1762,8 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     pg->lock();
 
     // no change?
-    if (tacting == pg->acting && !pg->prior_set_affected(osdmap)) {
-      dout(15) << *pg << " unchanged with " << tacting << dendl;
+    if (tacting == pg->acting && (pg->is_active() || !pg->prior_set_affected(osdmap))) {
+      dout(15) << *pg << " unchanged|active with " << tacting << dendl;
       pg->unlock();
       continue;
     }
