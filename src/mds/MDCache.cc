@@ -1135,7 +1135,8 @@ void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, 
 inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(mut, metablob, dn, follows);
+  if (!dn->is_null())  // no need to cow a null dentry
+    journal_cow_dentry(mut, metablob, dn, follows);
   return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
 }
 
