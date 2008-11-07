@@ -269,6 +269,19 @@ struct osd_stat_t {
 };
 WRITE_CLASS_ENCODER(osd_stat_t)
 
+inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
+  return l.kb == r.kb &&
+    l.kb_used == r.kb_used &&
+    l.kb_avail == r.kb_avail &&
+    l.num_objects == r.num_objects &&
+    l.hb_in == r.hb_in &&
+    l.hb_out == r.hb_out;
+}
+inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
+  return !(l == r);
+}
+
+
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
   return out << "osd_stat(" << (s.kb_used) << "/" << s.kb << " KB used, " 
