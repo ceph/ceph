@@ -647,8 +647,9 @@ retry_locked:
 			goto ack;
 		}
 
-		/* completed revocation? */
-		if (revoking && (revoking & used) == 0) {
+		/* completed revocation? going down and there are no caps? */
+		if ((revoking && (revoking & used) == 0) ||
+		    (mdsc->stopping && (used == 0))) {
 			dout(10, "completed revocation of %d\n",
 			     cap->implemented & ~cap->issued);
 			goto ack;
