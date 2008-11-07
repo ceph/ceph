@@ -36,10 +36,11 @@ class MOSDSubOpReply : public Message {
   osd_reqid_t reqid;
   pg_t pgid;
   tid_t rep_tid;
-  int32_t op;
   pobject_t poid;
-  off_t length, offset;
-  
+
+public:
+  vector<ceph_osd_op> ops;
+
   // result
   bool commit;
   int32_t result;
@@ -50,17 +51,14 @@ class MOSDSubOpReply : public Message {
 
   map<string,bufferptr> attrset;
 
- public:
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid, p);
     ::decode(rep_tid, p);
-    ::decode(op, p);
     ::decode(poid, p);
-    ::decode(length, p);
-    ::decode(offset, p);
+    ::decode(ops, p);
     ::decode(commit, p);
     ::decode(result, p);
     ::decode(pg_complete_thru, p);
@@ -72,26 +70,20 @@ class MOSDSubOpReply : public Message {
     ::encode(reqid, payload);
     ::encode(pgid, payload);
     ::encode(rep_tid, payload);
-    ::encode(op, payload);
     ::encode(poid, payload);
-    ::encode(length, payload);
-    ::encode(offset, payload);
+    ::encode(ops, payload);
     ::encode(commit, payload);
     ::encode(result, payload);
     ::encode(pg_complete_thru, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
-    header.data_off = offset;
   }
 
   epoch_t get_map_epoch() { return map_epoch; }
 
   pg_t get_pg() { return pgid; }
   tid_t get_rep_tid() { return rep_tid; }
-  int get_op()  { return op; }
   pobject_t get_poid() { return poid; }
-  const off_t get_length() { return length; }
-  const off_t get_offset() { return offset; }
 
   bool get_commit() { return commit; }
   int get_result() { return result; }
@@ -112,10 +104,8 @@ public:
     reqid(req->reqid),
     pgid(req->pgid),
     rep_tid(req->rep_tid),
-    op(req->op),
     poid(req->poid),
-    length(req->length),
-    offset(req->offset),
+    ops(req->ops),
     commit(commit_),
     result(result_) {
     memset(&peer_stat, 0, sizeof(peer_stat));
@@ -126,15 +116,11 @@ public:
   
   void print(ostream& out) {
     out << "osd_sub_op_reply(" << reqid
-	<< " " << ceph_osd_op_name(op)
-	<< " " << poid;
-    if (length) out << " " << offset << "~" << length;
-    if (op >= 10) {
-      if (commit)
-	out << " commit";
-      else
-	out << " ack";
-    }
+	<< " " << poid << " " << ops;
+    if (commit)
+      out << " commit";
+    else
+      out << " ack";
     out << " = " << result;
     out << ")";
   }

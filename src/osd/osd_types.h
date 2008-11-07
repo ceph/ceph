@@ -368,7 +368,17 @@ struct pg_stat_t {
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 
-typedef struct ceph_osd_peer_stat osd_peer_stat_t;
+struct osd_peer_stat_t {
+	struct ceph_timespec stamp;
+	float oprate;
+	float qlen;
+	float recent_qlen;
+	float read_latency;
+	float read_latency_mine;
+	float frac_rd_ops_shed_in;
+	float frac_rd_ops_shed_out;
+} __attribute__ ((packed));
+
 WRITE_RAW_ENCODER(osd_peer_stat_t)
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
@@ -459,6 +469,9 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 // -------
 
 WRITE_CLASS_ENCODER(interval_set<__u64>)
+
+
+
 
 
 /*

@@ -338,8 +338,11 @@ void Objecter::tick()
 
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
+  assert(m->ops.size() >= 1);
+  int op = m->ops[0].op;
+
   // read or modify?
-  switch (m->get_op()) {
+  switch (op) {
   case CEPH_OSD_OP_READ:
     handle_osd_read_reply(m);
     break;
@@ -348,22 +351,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     handle_osd_stat_reply(m);
     break;
     
-  case CEPH_OSD_OP_WRNOOP:
-  case CEPH_OSD_OP_WRITE:
-  case CEPH_OSD_OP_WRITEFULL:
-  case CEPH_OSD_OP_ZERO:
-  case CEPH_OSD_OP_DELETE:
-  case CEPH_OSD_OP_WRUNLOCK:
-  case CEPH_OSD_OP_WRLOCK:
-  case CEPH_OSD_OP_RDLOCK:
-  case CEPH_OSD_OP_RDUNLOCK:
-  case CEPH_OSD_OP_UPLOCK:
-  case CEPH_OSD_OP_DNLOCK:
+  default:
+    assert(m->is_modify());
     handle_osd_modify_reply(m);
     break;
-
-  default:
-    assert(0);
   }
 }
 
@@ -409,9 +400,10 @@ tid_t Objecter::stat_submit(OSDStat *st)
     int flags = st->flags;
     if (st->onfinish) flags |= CEPH_OSD_OP_ACK;
 
-    MOSDOp *m = new MOSDOp(client_inc, last_tid,
+    MOSDOp *m = new MOSDOp(client_inc, last_tid, false,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
-			   CEPH_OSD_OP_STAT, flags);
+			   flags);
+    m->stat();
     if (inc_lock > 0) {
       st->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -434,10 +426,12 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
     return;
   }
 
+  ceph_osd_op& op = m->ops[0];
+
   dout(7) << "handle_osd_stat_reply " << tid 
-		  << " r=" << m->get_result()
-		  << " size=" << m->get_length()
-		  << dendl;
+	  << " r=" << m->get_result()
+	  << " size=" << op.length
+	  << dendl;
   OSDStat *st = op_stat[ tid ];
   op_stat.erase( tid );
 
@@ -466,7 +460,7 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
   if (m->get_result() < 0) {
     *st->size = 0;
   } else {
-    *st->size = m->get_length();
+    *st->size = op.length;
   }
 
   // finish, clean up
@@ -537,15 +531,14 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
   if (pg.acker() >= 0) {
     int flags = rd->flags;
     if (rd->onfinish) flags |= CEPH_OSD_OP_ACK;
-    MOSDOp *m = new MOSDOp(client_inc, last_tid,
+    MOSDOp *m = new MOSDOp(client_inc, last_tid, false,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
-			   CEPH_OSD_OP_READ, flags);
+			   flags);
+    m->read(ex.start, ex.length);
     if (inc_lock > 0) {
       rd->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
     }
-    m->set_length(ex.length);
-    m->set_offset(ex.start);
     m->set_retry_attempt(retry);
     
     int who = pg.acker();
@@ -577,6 +570,8 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   dout(7) << "handle_osd_read_reply " << tid << dendl;
   OSDRead *rd = op_read[ tid ];
   op_read.erase( tid );
+  
+  ceph_osd_op& op = m->ops[0];
 
   // remove from osd/tid maps
   PG& pg = get_pg( m->get_pg() );
@@ -611,7 +606,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
   // what buffer offset are we?
   dout(7) << " got frag from " << m->get_oid() << " "
-          << m->get_offset() << "~" << m->get_length()
+          << op.offset << "~" << op.length
           << ", still have " << rd->ops.size() << " more ops" << dendl;
   
   if (rd->ops.empty()) {
@@ -859,17 +854,16 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
            << " osd" << pg.primary()
            << dendl;
   if (pg.primary() >= 0) {
-    MOSDOp *m = new MOSDOp(client_inc, tid,
+    MOSDOp *m = new MOSDOp(client_inc, tid, true,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
-			   wr->op, flags);
+			   flags);
+    m->add_simple_op(wr->op, ex.start, ex.length);
     m->set_snap_seq(wr->snapc.seq);
     m->get_snaps() = wr->snapc.snaps;
     if (inc_lock > 0) {
       wr->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
     }
-    m->set_length(ex.length);
-    m->set_offset(ex.start);
     if (usetid > 0)
       m->set_retry_attempt(true);
     

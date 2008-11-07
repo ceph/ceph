@@ -1040,6 +1040,8 @@ enum {
 	/* read */
 	CEPH_OSD_OP_READ       = 1,
 	CEPH_OSD_OP_STAT       = 2,
+	CEPH_OSD_OP_GETXATTR   = 3,
+	CEPH_OSD_OP_GETXATTRS  = 4,
 
 	/* modify */
 	CEPH_OSD_OP_WRNOOP     = 10, /* write no-op (i.e. sync) */
@@ -1048,6 +1050,9 @@ enum {
 	CEPH_OSD_OP_TRUNCATE   = 13,
 	CEPH_OSD_OP_ZERO       = 14, /* zero extent */
 	CEPH_OSD_OP_WRITEFULL  = 15, /* write complete object */
+	CEPH_OSD_OP_SETXATTR   = 16,
+	CEPH_OSD_OP_SETXATTRS  = 17,
+	CEPH_OSD_OP_RMXATTR    = 18,
 
 	/* lock */
 	CEPH_OSD_OP_WRLOCK     = 20,
@@ -1122,26 +1127,27 @@ enum {
 	CEPH_OSD_OP_BALANCE_READS = 16,
 	CEPH_OSD_OP_ACKNVRAM = 32,    /* ACK when stable in NVRAM, not RAM */
 	CEPH_OSD_OP_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
+	CEPH_OSD_OP_PEERSTAT = 128,   /* msg includes osd_peer_stat */
 };
 
 #define EOLDSNAPC 44 /* ORDERSNAP flag set and writer has old snap context*/
 
-struct ceph_osd_peer_stat {
-	struct ceph_timespec stamp;
-	float oprate;
-	float qlen;
-	float recent_qlen;
-	float read_latency;
-	float read_latency_mine;
-	float frac_rd_ops_shed_in;
-	float frac_rd_ops_shed_out;
+struct ceph_osd_op {
+	__le16 op;
+	union {
+		struct {
+			__le64 offset, length;
+		};
+		struct {
+			__le32 name_len;
+			__le32 value_len;
+		};
+	};
 } __attribute__ ((packed));
 
 struct ceph_osd_request_head {
 	ceph_tid_t                tid;
 	__le32                    client_inc;
-	__le32                    op;
-	__le64                    offset, length;
 	struct ceph_object        oid;
 	struct ceph_object_layout layout;
 	ceph_epoch_t              osdmap_epoch;
@@ -1151,26 +1157,30 @@ struct ceph_osd_request_head {
 
 	struct ceph_eversion      reassert_version;
 
-	/* semi-hack, fix me */
-	__le32                    shed_count;
-	struct ceph_osd_peer_stat peer_stat;
-
 	/* writer's snap context */
 	__le64 snap_seq;
 	__le32 num_snaps;
-	__le64 snaps[];
+
+	/* read or mutation */
+	__le16 num_ops;
+	__u8 is_modify;
+	__u8 object_type;
+	struct ceph_osd_op ops[];  /* followed by snaps */
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {
 	ceph_tid_t           tid;
-	__le32               op;
 	__le32               flags;
 	struct ceph_object   oid;
 	struct ceph_object_layout layout;
 	ceph_epoch_t         osdmap_epoch;
-	__le32               result;
-	__le64               offset, length;
 	struct ceph_eversion reassert_version;
+
+	__le32 result;
+
+	__le16 num_ops;
+	__le16 is_modify;
+	struct ceph_osd_op ops[0];
 } __attribute__ ((packed));
 
 #endif

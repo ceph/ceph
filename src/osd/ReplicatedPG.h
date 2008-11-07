@@ -116,10 +116,18 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
 		   eversion_t ov, eversion_t v, bufferlist& snaps);
+  void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid,
+		     pobject_t poid, loff_t old_size,
+		     eversion_t old_version, eversion_t at_version,
+		     SnapSet& snapset, SnapContext& snapc);
+  int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
+			pobject_t poid, __u64& old_size,
+			ceph_osd_op& op, bufferlist::iterator& bp,
+			SnapSet& snapset, SnapContext& snapc); 
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
-			   pobject_t poid, int op,
+			   pobject_t poid, 
+			   vector<ceph_osd_op>& ops, bufferlist& bl,
 			   eversion_t old_version, eversion_t at_version,
-			   off_t offset, off_t length, bufferlist& bl,
 			   SnapSet& snapset, SnapContext& snapc,
 			   __u32 inc_lock, eversion_t trim_to);
   

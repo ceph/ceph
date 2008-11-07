@@ -33,9 +33,10 @@ public:
   // subop
   pg_t pgid;
   pobject_t poid;
-  int32_t op;
-  loff_t offset, length;
   
+  bool is_modify, wants_reply;
+  vector<ceph_osd_op> ops;
+
   // subop metadata
   tid_t rep_tid;
   eversion_t version, old_version;
@@ -59,9 +60,7 @@ public:
     ::decode(reqid, p);
     ::decode(pgid, p);
     ::decode(poid, p);
-    ::decode(op, p);
-    ::decode(offset, p);
-    ::decode(length, p);
+    ::decode(ops, p);
     ::decode(rep_tid, p);
     ::decode(version, p);
     ::decode(old_version, p);
@@ -80,9 +79,7 @@ public:
     ::encode(reqid, payload);
     ::encode(pgid, payload);
     ::encode(poid, payload);
-    ::encode(op, payload);
-    ::encode(offset, payload);
-    ::encode(length, payload);
+    ::encode(ops, payload);
     ::encode(rep_tid, payload);
     ::encode(version, payload);
     ::encode(old_version, payload);
@@ -94,26 +91,22 @@ public:
     ::encode(attrset, payload);
     ::encode(data_subset, payload);
     ::encode(clone_subsets, payload);
-    header.data_off = offset;
+    if (ops.size())
+      header.data_off = ops[0].offset;
+    else
+      header.data_off = 0;
   }
 
-  bool wants_reply() {
-    if (op < 100) return true;
-    return false;  // no reply needed for primary-lock, -unlock.
-  }
 
-  bool is_read() { return op < 10; }
- 
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, int o, loff_t of, loff_t le,
+  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, bool wr,
 	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
     reqid(r),
     pgid(p),
     poid(po),
-    op(o),
-    offset(of),
-    length(le),
+    wants_reply(wr),
+    ops(o),
     rep_tid(rtid),
     version(v),
     inc_lock(il)
@@ -125,11 +118,10 @@ public:
   const char *get_type_name() { return "osd_sub_op"; }
   void print(ostream& out) {
     out << "osd_sub_op(" << reqid
-	<< " " << ceph_osd_op_name(op)
 	<< " " << poid
+	<< " " << ops
 	<< " v " << version
 	<< " snapset=" << snapset << " snapc=" << snapc;    
-    if (length) out << " " << offset << "~" << length;
     if (!data_subset.empty()) out << " subset " << data_subset;
     out << ")";
   }

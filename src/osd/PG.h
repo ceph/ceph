@@ -727,9 +727,8 @@ public:
   // pg on-disk state
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
-  void append_log(ObjectStore::Transaction &t, 
-                  const PG::Log::Entry &logentry, 
-                  eversion_t trim_to);
+  void append_log(ObjectStore::Transaction &t, bufferlist& bl,
+		  eversion_t log_version, eversion_t trim_to);
   void read_log(ObjectStore *store);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
@@ -835,7 +834,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   out << "pg[" << pg.info 
       << " r=" << pg.get_role();
 
-  if (pg.log.bottom != pg.info.log_bottom)
+  if (pg.log.bottom != pg.info.log_bottom ||
+      pg.log.top != pg.info.last_update)
     out << " (info mismatch, " << pg.log << ")";
 
   if (pg.log.log.empty()) {

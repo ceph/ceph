@@ -47,6 +47,7 @@ bool RAID4PG::preprocess_op(MOSDOp *op, utime_t now)
 
 void RAID4PG::do_op(MOSDOp *op)
 {
+  /*
 
   // a write will do something like
   object_t oid = op->get_oid();   // logical object
@@ -75,7 +76,7 @@ void RAID4PG::do_op(MOSDOp *op)
     if (rank == n) rank = 0;
   }
 
-  
+  */
   
 
 }

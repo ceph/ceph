@@ -32,11 +32,13 @@
 class MOSDOp : public Message {
 private:
   ceph_osd_request_head head;
+public:
+  vector<ceph_osd_op> ops;
   vector<snapid_t> snaps;
+  osd_peer_stat_t peer_stat;
 
   friend class MOSDOpReply;
 
-public:
   snapid_t get_snap_seq() { return snapid_t(head.snap_seq); }
   vector<snapid_t> &get_snaps() { return snaps; }
   void set_snap_seq(snapid_t s) { head.snap_seq = s; }
@@ -54,48 +56,79 @@ public:
 
   eversion_t get_version() { return head.reassert_version; }
   
-  const int    get_op() { return head.op; }
-  void set_op(int o) { head.op = o; }
-  bool is_read() { return ceph_osd_op_is_read(get_op()); }
-
-  loff_t get_length() const { return head.length; }
-  loff_t get_offset() const { return head.offset; }
+  bool is_modify() { return head.is_modify; }
 
   unsigned get_inc_lock() const { return head.inc_lock; }
 
-  void set_peer_stat(const osd_peer_stat_t& stat) { head.peer_stat = stat; }
-  const ceph_osd_peer_stat& get_peer_stat() { return head.peer_stat; }
+  void set_peer_stat(const osd_peer_stat_t& stat) {
+    peer_stat = stat;
+    head.flags = (head.flags | CEPH_OSD_OP_PEERSTAT);
+  }
+  const osd_peer_stat_t& get_peer_stat() {
+    assert(head.flags & CEPH_OSD_OP_PEERSTAT);
+    return peer_stat; 
+  }
 
-  void inc_shed_count() { head.shed_count = get_shed_count() + 1; }
-  int get_shed_count() { return head.shed_count; }
-  
+  //void inc_shed_count() { head.shed_count = get_shed_count() + 1; }
+  //int get_shed_count() { return head.shed_count; }
+ 
 
 
-  MOSDOp(int inc, long tid,
-         object_t oid, ceph_object_layout ol, epoch_t mapepoch, int op,
+  MOSDOp(int inc, long tid, bool modify,
+         object_t oid, ceph_object_layout ol, epoch_t mapepoch,
 	 int flags) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
     head.tid = tid;
     head.client_inc = inc;
+    head.is_modify = modify;
     head.oid = oid;
     head.layout = ol;
     head.osdmap_epoch = mapepoch;
-    head.op = op;
     head.flags = flags;
   }
   MOSDOp() {}
 
-  void set_inc_lock(__u32 l) {
-    head.inc_lock = l;
+  void set_inc_lock(__u32 l) { head.inc_lock = l; }
+  void set_layout(const ceph_object_layout& l) { head.layout = l; }
+  void set_version(eversion_t v) { head.reassert_version = v; }
+
+  // ops
+  void add_simple_op(int o, __u64 off, __u64 len) {
+    ceph_osd_op op;
+    op.op = o;
+    op.offset = off;
+    op.length = len;
+    ops.push_back(op);
+  }
+  void write(__u64 off, __u64 len, bufferlist& bl) {
+    add_simple_op(CEPH_OSD_OP_WRITE, off, len);
+    data.claim(bl);
+    header.data_off = off;
+  }
+  void writefull(bufferlist& bl) {
+    add_simple_op(CEPH_OSD_OP_WRITEFULL, 0, bl.length());
+    data.claim(bl);
+    header.data_off = 0;
+  }
+  void zero(__u64 off, __u64 len) {
+    add_simple_op(CEPH_OSD_OP_ZERO, off, len);
+  }
+  void truncate(__u64 off) {
+    add_simple_op(CEPH_OSD_OP_TRUNCATE, off, 0);
+  }
+  void remove() {
+    add_simple_op(CEPH_OSD_OP_DELETE, 0, 0);
   }
 
-  void set_layout(const ceph_object_layout& l) { head.layout = l; }
+  void read(__u64 off, __u64 len) {
+    add_simple_op(CEPH_OSD_OP_READ, off, len);
+  }
+  void stat() {
+    add_simple_op(CEPH_OSD_OP_STAT, 0, 0);
+  }
 
-  void set_length(loff_t l) { head.length = l; }
-  void set_offset(loff_t o) { head.offset = o; }
-  void set_version(eversion_t v) { head.reassert_version = v; }
-  
+  // flags
   int get_flags() const { return head.flags; }
   bool wants_ack() const { return get_flags() & CEPH_OSD_OP_ACK; }
   bool wants_commit() const { return get_flags() & CEPH_OSD_OP_SAFE; }
@@ -113,27 +146,28 @@ public:
   // marshalling
   virtual void encode_payload() {
     head.num_snaps = snaps.size();
+    head.num_ops = ops.size();
     ::encode(head, payload);
-    for (unsigned i=0; i<snaps.size(); i++)
-      ::encode(snaps[i], payload);
-    header.data_off = get_offset();
+    ::encode_nohead(ops, payload);
+    ::encode_nohead(snaps, payload);
+    if (head.flags & CEPH_OSD_OP_PEERSTAT)
+      ::encode(peer_stat, payload);
   }
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    snaps.resize(head.num_snaps);
-    for (unsigned i=0; i<snaps.size(); i++)
-      ::decode(snaps[i], p);
+    decode_nohead(head.num_ops, ops, p);
+    decode_nohead(head.num_snaps, snaps, p);
+    if (head.flags & CEPH_OSD_OP_PEERSTAT)
+      ::decode(peer_stat, p);
   }
 
 
   const char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
-    out << "osd_op(" << get_reqid()
-	<< " " << ceph_osd_op_name(get_op())
-	<< " " << head.oid;
-    if (get_length()) out << " " << get_offset() << "~" << get_length();
+    out << "osd_op(" << get_reqid();
+    out << " " << head.oid << " " << ops;
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
     if (!snaps.empty())

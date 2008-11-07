@@ -1401,28 +1401,24 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 }
 
 
-void PG::append_log(ObjectStore::Transaction &t, const PG::Log::Entry &logentry, 
-                    eversion_t trim_to)
+void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
+		    eversion_t logversion, eversion_t trim_to)
 {
-  dout(10) << "append_log " << ondisklog.top << " " << logentry << dendl;
+  dout(10) << "append_log " << ondisklog.top << dendl;
 
-  // write entry on disk
-  bufferlist bl;
-  ::encode(logentry, bl);
-  /*
   if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
-    bufferptr bp(4096 - sizeof(logentry));
+    bufferptr bp(4096 - bl.length());
     bl.push_back(bp);
   }
-  */
   t.write(0, info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
   if (ondisklog.top % 4096 == 0) 
-    ondisklog.block_map[ondisklog.top] = logentry.version;
+    ondisklog.block_map[ondisklog.top] = logversion;
   
   ondisklog.top += bl.length();
-  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top",
+		       &ondisklog.top, sizeof(ondisklog.top));
   
   // trim?
   if (trim_to > log.bottom &&

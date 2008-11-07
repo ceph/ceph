@@ -212,6 +212,7 @@ WRITE_RAW_ENCODER(ceph_frag_tree_split)
 WRITE_RAW_ENCODER(ceph_inopath_item)
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
+WRITE_RAW_ENCODER(ceph_osd_op)
 
 WRITE_RAW_ENCODER(ceph_mon_statfs)
 WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
@@ -373,8 +374,11 @@ inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
   return out << hex << f.major << '.' << f.minor << dec;
 }
 
-
-
+inline ostream& operator<<(ostream& out, const ceph_osd_op& op) {
+  out << ceph_osd_op_name(op.op);
+  out << " " << op.offset << "~" << op.length;
+  return out;
+}
 
 
 #endif

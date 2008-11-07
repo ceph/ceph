@@ -467,6 +467,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 {
 	struct inode *inode = req->r_inode;
 	struct ceph_osd_reply_head *replyhead;
+	struct ceph_osd_op *op;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	unsigned wrote;
 	loff_t offset = req->r_pages[0]->index << PAGE_CACHE_SHIFT;
@@ -481,8 +482,9 @@ static void writepages_finish(struct ceph_osd_request *req)
 	/* parse reply */
 	if (req->r_reply) {
 		replyhead = req->r_reply->front.iov_base;
+		op = (void *)(replyhead + 1);
 		rc = le32_to_cpu(replyhead->result);
-		bytes = le64_to_cpu(replyhead->length);
+		bytes = le64_to_cpu(op->length);
 	}
 
 	if (rc >= 0) {

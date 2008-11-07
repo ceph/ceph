@@ -31,26 +31,22 @@
 
 class MOSDOpReply : public Message {
   ceph_osd_reply_head head;
-
  public:
+  vector<ceph_osd_op> ops;
+
   long     get_tid() { return head.tid; }
   object_t get_oid() { return head.oid; }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
-  int      get_op()  { return head.op; }
   int      get_flags() { return head.flags; }
   bool     is_safe() { return get_flags() & CEPH_OSD_OP_SAFE; }
   
   __s32 get_result() { return head.result; }
-  __u64 get_length() { return head.length; }
-  __u64 get_offset() { return head.offset; }
   eversion_t get_version() { return head.reassert_version; }
 
-  void set_result(int r) { head.result = r; }
-  void set_length(loff_t s) { head.length = s; }
-  void set_offset(loff_t o) { head.offset = o; }
-  void set_version(eversion_t v) { head.reassert_version = v; }
+  bool is_modify() { return head.is_modify; }
 
-  void set_op(int op) { head.op = op; }
+  void set_result(int r) { head.result = r; }
+  void set_version(eversion_t v) { head.reassert_version = v; }
 
   // osdmap
   epoch_t get_map_epoch() { return head.osdmap_epoch; }
@@ -61,14 +57,13 @@ public:
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
     head.tid = req->head.tid;
-    head.op = req->head.op;
+    head.is_modify = req->is_modify();
+    ops = req->ops;
+    head.result = result;
     head.flags = commit ? CEPH_OSD_OP_SAFE:0;
     head.oid = req->head.oid;
     head.layout = req->head.layout;
     head.osdmap_epoch = e;
-    head.result = result;
-    head.offset = req->head.offset;
-    head.length = req->head.length;  // speculative... OSD should ensure these are correct
     head.reassert_version = req->head.reassert_version;
   }
   MOSDOpReply() {}
@@ -78,20 +73,20 @@ public:
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
+    ::decode_nohead(head.num_ops, ops, p);
   }
   virtual void encode_payload() {
+    head.num_ops = ops.size();
     ::encode(head, payload);
-    header.data_off = get_offset();
+    ::encode_nohead(ops, payload);
   }
 
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
     out << "osd_op_reply(" << get_tid()
-	<< " " << ceph_osd_op_name(get_op())
-	<< " " << head.oid;
-    if (get_length()) out << " " << get_offset() << "~" << get_length();
-    if (get_op() >= 10) {
+	<< " " << head.oid << " " << ops;
+    if (is_modify()) {
       if (is_safe())
 	out << " commit";
       else

@@ -3002,7 +3002,7 @@ void OSD::handle_op(MOSDOp *op)
   stat_oprate.hit(now);
   stat_ops++;
   stat_qlen += pending_ops;
-  if (op->get_op() == CEPH_OSD_OP_READ) {
+  if (!op->is_modify()) {
     stat_rd_ops++;
     if (op->get_source().is_osd()) {
       //derr(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
@@ -3036,7 +3036,7 @@ void OSD::handle_op(MOSDOp *op)
     }
 
     // pg must be same-ish...
-    if (op->is_read()) {
+    if (!op->is_modify()) {
       // read
       if (!pg->same_for_read_since(op->get_map_epoch())) {
 	dout(7) << "handle_rep_op pg changed " << pg->info.history
@@ -3142,7 +3142,7 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  if (op->get_op() == CEPH_OSD_OP_READ) {
+  if (!op->is_modify()) {
     Mutex::Locker lock(peer_stat_lock);
     stat_rd_ops_in_queue++;
   }
