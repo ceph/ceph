@@ -211,7 +211,7 @@ CDentry* CDir::add_null_dentry(const nstring& dname,
 			       snapid_t first, snapid_t last)
 {
   // foreign
-  assert(lookup(dname, last) == 0);
+  assert(lookup_exact_snap(dname, last) == 0);
    
   // create dentry
   CDentry* dn = new CDentry(dname, first, last);
@@ -247,7 +247,7 @@ CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in,
 				  snapid_t first, snapid_t last) 
 {
   // primary
-  assert(lookup(dname, last) == 0);
+  assert(lookup_exact_snap(dname, last) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, first, last);
@@ -278,7 +278,7 @@ CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned c
 				 snapid_t first, snapid_t last) 
 {
   // foreign
-  assert(lookup(dname, last) == 0);
+  assert(lookup_exact_snap(dname, last) == 0);
   
   // create dentry
   CDentry* dn = new CDentry(dname, ino, d_type, first, last);
