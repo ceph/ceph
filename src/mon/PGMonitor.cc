@@ -185,30 +185,7 @@ bool PGMonitor::preprocess_query(Message *m)
     return true;
     
   case MSG_PGSTATS:
-    {
-      MPGStats *stats = (MPGStats*)m;
-
-      int from = m->get_orig_source().num();
-      if (pg_map.osd_stat.count(from) ||
-	  memcmp(&pg_map.osd_stat[from], &stats->osd_stat, sizeof(stats->osd_stat)) != 0)
-	return false;  // new osd stat
-      for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
-	   p != stats->pg_stat.end();
-	   p++) {
-	if (pg_map.pg_stat.count(p->first) == 0 ||
-	    memcmp(&pg_map.pg_stat[p->first], &p->second, sizeof(p->second)) != 0)
-	  return false; // new pg stat(s)
-      }
-
-      dout(10) << " message contains no new osd|pg stats" << dendl;
-      MPGStatsAck *ack = new MPGStatsAck;
-      for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
-	   p != stats->pg_stat.end();
-	   p++)
-	ack->pg_stat[p->first] = p->second.version;
-      mon->messenger->send_message(ack, stats->get_orig_source_inst());
-      return true;
-    }
+    return preprocess_pg_stats((MPGStats*)m);
 
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
@@ -266,6 +243,30 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   mon->messenger->send_message(reply, statfs->get_orig_source_inst());
  out:
   delete statfs;
+}
+
+bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
+{
+  int from = stats->get_orig_source().num();
+  if (pg_map.osd_stat.count(from) ||
+      pg_map.osd_stat[from] != stats->osd_stat)
+    return false;  // new osd stat
+  for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
+       p != stats->pg_stat.end();
+       p++) {
+    if (pg_map.pg_stat.count(p->first) == 0 ||
+	memcmp(&pg_map.pg_stat[p->first], &p->second, sizeof(p->second)) != 0)
+      return false; // new pg stat(s)
+  }
+  
+  dout(10) << " message contains no new osd|pg stats" << dendl;
+  MPGStatsAck *ack = new MPGStatsAck;
+  for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
+       p != stats->pg_stat.end();
+       p++)
+    ack->pg_stat[p->first] = p->second.version;
+  mon->messenger->send_message(ack, stats->get_orig_source_inst());
+  return true;
 }
 
 bool PGMonitor::prepare_pg_stats(MPGStats *stats) 

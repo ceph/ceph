@@ -52,6 +52,7 @@ private:
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
 
+  bool preprocess_pg_stats(MPGStats *stats);
   bool prepare_pg_stats(MPGStats *stats);
   void _updated_stats(MPGStatsAck *ack, entity_inst_t who);
 

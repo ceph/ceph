@@ -39,12 +39,54 @@ using namespace std;
 Messenger *messenger = 0;
 
 const char *outfile = 0;
+int watch = 0;
+
+MonMap monmap;
+
+enum { OSD, MON, MDS, LAST };
+int which = 0;
+int same = 0;
+const char *prefix[3] = { "mds", "osd", "pg" };
+string status[3];
+
+void get_next_status()
+{
+  which++;
+  which = which % LAST;
+
+  vector<string> vcmd(2);
+  vcmd[0] = prefix[which];
+  vcmd[1] = "stat";
+  
+  MMonCommand *m = new MMonCommand(monmap.fsid);
+  m->cmd.swap(vcmd);
+  int mon = monmap.pick_mon();
+  messenger->send_message(m, monmap.get_inst(mon));
+}
 
 void handle_ack(MMonCommandAck *ack)
 {
-  generic_dout(0) << ack->get_source() << " -> '"
-		  << ack->rs << "' (" << ack->r << ")"
-		  << dendl;
+  if (watch) {
+    if (ack->rs != status[which]) {
+      status[which] = ack->rs;
+      generic_dout(0) << prefix[which] << " " << status[which] << dendl;
+      same = 0;
+    } else
+      same++;
+    
+    if (same >= LAST) {
+      sleep(1);
+      same = 0;
+    }
+    
+    get_next_status();
+
+  } else {
+    generic_dout(0) << ack->get_source() << " -> '"
+		    << ack->rs << "' (" << ack->r << ")"
+		    << dendl;
+    messenger->shutdown();
+  }
   int len = ack->get_data().length();
   if (len) {
     if (outfile) {
@@ -61,7 +103,6 @@ void handle_ack(MMonCommandAck *ack)
       generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
     }
   }
-  messenger->shutdown();
 }
 
 
@@ -83,6 +124,7 @@ void usage()
   cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
   cerr << "   -i infile         -- specify input file" << std::endl;
   cerr << "   -o outfile        -- specify output file" << std::endl;
+  cerr << "   -w or --watch     -- watch mds, osd, pg status" << std::endl;
   cerr << "Commands:" << std::endl;
   cerr << "   stop              -- cleanly shut down file system" << std::endl
        << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
@@ -114,6 +156,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 	::close(fd);
 	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
       }
+    } else if (strcmp(args[i], "-w") == 0 ||
+	       strcmp(args[i], "--watch") == 0) {
+      watch = 1;
     } else
       nargs.push_back(args[i]);
   }
@@ -121,18 +166,19 @@ int main(int argc, const char **argv, const char *envp[]) {
   // build command
   vector<string> vcmd;
   string cmd;
-  for (unsigned i=0; i<nargs.size(); i++) {
-    if (i) cmd += " ";
-    cmd += nargs[i];
-    vcmd.push_back(string(nargs[i]));
-  }
-  if (vcmd.empty()) {
-    cerr << "no mon command specified" << std::endl;
-    usage();
+  if (!watch) {
+    for (unsigned i=0; i<nargs.size(); i++) {
+      if (i) cmd += " ";
+      cmd += nargs[i];
+      vcmd.push_back(string(nargs[i]));
+    }
+    if (vcmd.empty()) {
+      cerr << "no mon command specified" << std::endl;
+      usage();
+    }
   }
 
   // get monmap
-  MonMap monmap;
   MonClient mc;
   if (mc.get_monmap(&monmap) < 0)
     return -1;
@@ -144,16 +190,20 @@ int main(int argc, const char **argv, const char *envp[]) {
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
   
-  // build command
-  MMonCommand *m = new MMonCommand(monmap.fsid);
-  m->set_data(indata);
-  m->cmd.swap(vcmd);
-  int mon = monmap.pick_mon();
-
-  generic_dout(0) << "mon" << mon << " <- '" << cmd << "'" << dendl;
-
-  // send it
-  messenger->send_message(m, monmap.get_inst(mon));
+  if (watch) {
+    get_next_status();
+  } else {
+    // build command
+    MMonCommand *m = new MMonCommand(monmap.fsid);
+    m->set_data(indata);
+    m->cmd.swap(vcmd);
+    int mon = monmap.pick_mon();
+    
+    generic_dout(0) << "mon" << mon << " <- '" << cmd << "'" << dendl;
+    
+    // send it
+    messenger->send_message(m, monmap.get_inst(mon));
+  }
 
   // wait for messenger to finish
   rank.wait();
