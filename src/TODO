@@ -87,7 +87,6 @@ kclient items to review
 - cache invalidation race, locking problems
   - cap changes are serialized by i_lock, but (thorough) cache invalidation may block..
 
-
 vfs issues
 - real_lookup() race:
   1- hash lookup find no dentry
@@ -111,44 +110,30 @@ mds
   - anchor source dir
   - build snaprealm for any hardlinked file
   - include snaps for all (primary+remote) parents
-
+- remove anchors when purging
+- delayed open_remote_ino vs purge?
 - how do we properly clean up inodes when doing a snap purge?
   - when they are mid-recover?  see 136470cf7ca876febf68a2b0610fa3bb77ad3532
-
 - whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
-
 - what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
-
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - try_remove_unlinked_dn thing
-
 - rename: importing inode... also journal imported client map?
-
 - rerun destro trace against latest, with various journal lengths
-
 - lease length heuristics
   - mds lock last_change stamp?
-
 - handle slow client reconnect (i.e. after mds has gone active)
-
 - fix reconnect/rejoin open file weirdness
-
 - can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
-
 - make truncate faster with a trunc_seq, attached to objects as attributes?
-
 - osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
-
 - could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...
-
 - FIXME how to journal/store root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
-
-- efficient stat for single writers
 - add FILE_CAP_EXTEND capability bit
 
 
@@ -166,7 +151,6 @@ osdmon
 
 crush
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
-- "knob" bucket
 
 pgmon
 - include osd vector with pg state
@@ -178,13 +162,6 @@ mon
 - paxos need to clean up old states.
 - some sort of tester for PaxosService...
 - osdmon needs to lower-bound old osdmap versions it keeps around?
-
-objecter
-- fix failure handler...
-  - generic mon client?
-- maybe_request_map should set a timer event to periodically re-request.
-- transaction prepare/commit?
-- read+floor_lockout
 
 osd
 - snap_trimmers should detect, remove unused snap collections (and update snap_collections set)
@@ -209,9 +186,8 @@ simplemessenger
 - close idle connections
 
 objectcacher
-- merge clean bh's
-- ocacher caps transitions vs locks
-- test read locks
+- read locks?
+- maintain more explicit inode grouping instead of wonky hashes
 
 ebofs
 - btrees
