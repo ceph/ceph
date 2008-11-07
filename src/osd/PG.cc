@@ -432,7 +432,7 @@ void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
     else if (need <= olog.top) {
       dout(10) << "proc_missing " << p->first << " " << need
                << " is on osd" << fromosd << dendl;
-      missing.loc[p->first] = fromosd;
+      missing_loc[p->first].insert(fromosd);
     } else {
       dout(10) << "proc_missing " << p->first << " " << need
                << " > olog.top " << olog.top << ", also missing on osd" << fromosd
@@ -777,7 +777,8 @@ void PG::clear_primary_state()
   peer_missing.clear();
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
-  
+
+  missing_loc.clear();
   log.reset_recovery();
 
   stat_object_temp_rd.clear();
@@ -946,8 +947,8 @@ void PG::peer(ObjectStore::Transaction& t,
 
   
   // -- ok.  and have i located all pg contents?
-  if (missing.num_lost() > 0) {
-    dout(10) << "there are still " << missing.num_lost() << " lost objects" << dendl;
+  if (missing_loc.size()) {
+    dout(10) << "there are still " << missing_loc.size() << " lost objects" << dendl;
 
     // *****
     // FIXME: i don't think this actually accomplishes anything!
@@ -973,13 +974,13 @@ void PG::peer(ObjectStore::Transaction& t,
     }
     
     if (!waiting) {
-      dout(10) << missing.num_lost() << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
+      dout(10) << missing_loc.size() << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
     }
     return;
   }
 
   // sanity check
-  assert(missing.num_lost() == 0);
+  assert(missing_loc.empty());
   assert(info.last_complete >= log.bottom || log.backlog);
 
   // -- do need to notify the monitor?

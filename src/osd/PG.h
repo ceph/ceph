@@ -418,9 +418,6 @@ public:
     map<object_t, item> missing;         // oid -> (need v, have v)
     map<eversion_t, object_t> rmissing;  // v -> oid
 
-    map<object_t, int>       loc;       // where i think i can get them.
-
-    int num_lost() const { return missing.size() - loc.size(); }
     int num_missing() const { return missing.size(); }
 
     bool is_missing(object_t oid) {
@@ -457,24 +454,20 @@ public:
       if (missing.count(oid) && missing[oid].need < when) {
         rmissing.erase(missing[oid].need);
         missing.erase(oid);
-        loc.erase(oid);
-      }        
+      }
     }
     void got(object_t oid, eversion_t v) {
       assert(missing.count(oid));
       assert(missing[oid].need <= v);
-      loc.erase(oid);
       rmissing.erase(missing[oid].need);
       missing.erase(oid);
     }
 
     void encode(bufferlist &bl) const {
       ::encode(missing, bl);
-      ::encode(loc, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(missing, bl);
-      ::decode(loc, bl);
 
       for (map<object_t,item>::iterator it = missing.begin();
            it != missing.end();
@@ -541,6 +534,8 @@ public:
   IndexedLog  log;
   OndiskLog   ondisklog;
   Missing     missing;
+  map<object_t, set<int> > missing_loc;
+  
   set<snapid_t> snap_collections;
 
   xlist<PG*>::item recovery_item;
@@ -868,8 +863,11 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
   if (pg.missing.num_missing())
     out << " m=" << pg.missing.num_missing();
-  if (pg.is_primary() && pg.missing.num_lost())
-    out << " l=" << pg.missing.num_lost();
+  if (pg.is_primary()) {
+    int lost = pg.missing.num_missing() - pg.missing_loc.size();
+    if (lost)
+      out << " l=" << lost;
+  }
   if (pg.info.dead_snaps.size())
     out << " dead=" << pg.info.dead_snaps;
   out << "]";

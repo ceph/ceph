@@ -1737,19 +1737,27 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, pobject_t poid,
  */
 bool ReplicatedPG::pull(pobject_t poid)
 {
-  assert(missing.loc.count(poid.oid));
   eversion_t v = missing.missing[poid.oid].need;
-  int fromosd = missing.loc[poid.oid];
+
+  int fromosd = -1;
+  assert(missing_loc.count(poid.oid));
+  for (set<int>::iterator p = missing_loc[poid.oid].begin();
+       p != missing_loc[poid.oid].end();
+       p++) {
+    if (osd->osdmap->is_up(fromosd)) {
+      fromosd = *p;
+      break;
+    }
+  }
   
   dout(7) << "pull " << poid
           << " v " << v 
-          << " from osd" << fromosd
-          << dendl;
+	  << " on osds " << missing_loc[poid.oid]
+	  << " from osd" << fromosd
+	  << dendl;
 
-  if (!osd->osdmap->is_up(fromosd)) {
-    dout(7) << " osd" << fromosd << " is down" << dendl;
+  if (fromosd < 0)
     return false;
-  }
 
   map<pobject_t, interval_set<__u64> > clone_subsets;
   interval_set<__u64> data_subset;
@@ -2144,7 +2152,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     pulling.erase(poid.oid);
 
   missing.got(poid.oid, v);
-
+  missing_loc.erase(poid.oid);
 
   // raise last_complete?
   assert(log.complete_to != log.log.end());
@@ -2322,7 +2330,7 @@ void ReplicatedPG::on_role_change()
 void ReplicatedPG::cancel_recovery()
 {
   // forget about where missing items are, or anything we're pulling
-  missing.loc.clear();
+  missing_loc.clear();
   osd->num_pulling -= pulling.size();
   pulling.clear();
   pushing.clear();
@@ -2416,6 +2424,7 @@ int ReplicatedPG::recover_primary(int max)
 		      latest->snaps);
 	  osd->store->apply_transaction(t);
 	  missing.got(latest->oid, latest->version);
+	  missing_loc.erase(latest->oid);
 	  continue;
 	}
       }
