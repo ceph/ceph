@@ -3658,9 +3658,17 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
   return 0;
 }
 
+
 int Ebofs::collection_list(coll_t cid, vector<pobject_t>& ls)
 {
   ebofs_lock.Lock();
+  int num = _collection_list(cid, ls);
+  ebofs_lock.Unlock();
+  return num;
+}
+
+int Ebofs::_collection_list(coll_t cid, vector<pobject_t>& ls)
+{
   dout(9) << "collection_list " << hex << cid << dec << dendl;
 
   if (!_collection_exists(cid)) {
@@ -3683,7 +3691,6 @@ int Ebofs::collection_list(coll_t cid, vector<pobject_t>& ls)
     }
   }
 
-  ebofs_lock.Unlock();
   return num;
 }
 

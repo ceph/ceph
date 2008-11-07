@@ -344,6 +344,7 @@ private:
   int _setattrs(pobject_t oid, map<string,bufferptr>& attrset);
   int _rmattr(pobject_t oid, const char *name);
   bool _collection_exists(coll_t c);
+  int _collection_list(coll_t c, vector<pobject_t>& o);
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, pobject_t o);
