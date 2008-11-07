@@ -1308,8 +1308,9 @@ void Rank::Pipe::fault(bool onconnect)
 
   if (!onconnect) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
 
-  if (state == STATE_CLOSED) {
-    dout(10) << "fault already closed" << dendl;
+  if (state == STATE_CLOSED ||
+      state == STATE_CLOSING) {
+    dout(10) << "fault already closed|closing" << dendl;
     return;
   }
 
