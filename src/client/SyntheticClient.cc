@@ -1604,7 +1604,7 @@ int SyntheticClient::dump_placement(string& fn) {
   off_t filesize = stbuf.st_size;
  
   // grab the placement info
-  list<ObjectExtent> extents;
+  vector<ObjectExtent> extents;
   off_t offset = 0;
   client->enumerate_layout(fd, extents, filesize, offset);
   client->close(fd);
@@ -1613,13 +1613,13 @@ int SyntheticClient::dump_placement(string& fn) {
   // run through all the object extents
   dout(0) << "file size is " << filesize << dendl;
   dout(0) << "(osd, start, length) tuples for file " << fn << dendl;
-  for (list<ObjectExtent>::iterator i = extents.begin(); 
+  for (vector<ObjectExtent>::iterator i = extents.begin(); 
        i != extents.end(); ++i) {
     
     int osd = client->osdmap->get_pg_primary(pg_t(i->layout.ol_pgid.v));
 
     // run through all the buffer extents
-    for (map<size_t, size_t>::iterator j = i ->buffer_extents.begin();
+    for (map<__u32,__u32>::iterator j = i ->buffer_extents.begin();
 	 j != i->buffer_extents.end(); ++j) {
       
       dout(0) << "OSD " << osd << ", offset " << (*j).first <<
@@ -1897,7 +1897,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 
 // See what the primary is for the first object in this file.
 int SyntheticClient::check_first_primary(int fh) {
-  list<ObjectExtent> extents;
+  vector<ObjectExtent> extents;
   client->enumerate_layout(fh, extents, 1, 0);  
   return client->osdmap->get_pg_primary(pg_t((extents.begin())->layout.ol_pgid));
 }

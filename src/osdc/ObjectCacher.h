@@ -23,6 +23,34 @@ class ObjectCacher {
 
   class Object;
 
+  // read scatter/gather  
+  struct OSDRead {
+    vector<ObjectExtent> extents;
+    map<object_t, bufferlist*> read_data;  // bits of data as they come back
+    bufferlist *bl;
+    int flags;
+    OSDRead(bufferlist *b, int f) : bl(b), flags(f) {}
+  };
+
+  OSDRead *prepare_read(bufferlist *b, int f) {
+    return new OSDRead(b, f);
+  }
+  
+  // write scatter/gather  
+  struct OSDWrite {
+    vector<ObjectExtent> extents;
+    SnapContext snapc;
+    bufferlist bl;
+    int flags;
+    OSDWrite(const SnapContext& sc, bufferlist& b, int f) : snapc(sc), bl(b), flags(f) {}
+  };
+
+  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, int f) { 
+    return new OSDWrite(sc, b, f); 
+  }
+
+
+
   // ******* BufferHead *********
   class BufferHead : public LRUObject {
   public:
@@ -191,11 +219,11 @@ class ObjectCacher {
     void merge_left(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
-    int map_read(Objecter::OSDRead *rd,
+    int map_read(OSDRead *rd,
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
                  map<loff_t, BufferHead*>& rx);
-    BufferHead *map_write(Objecter::OSDWrite *wr);
+    BufferHead *map_write(OSDWrite *wr);
     
     void truncate(loff_t s);
 
@@ -462,11 +490,11 @@ class ObjectCacher {
 
   class C_RetryRead : public Context {
     ObjectCacher *oc;
-    Objecter::OSDRead *rd;
+    OSDRead *rd;
     inodeno_t ino;
     Context *onfinish;
   public:
-    C_RetryRead(ObjectCacher *_oc, Objecter::OSDRead *r, inodeno_t i, Context *c) : oc(_oc), rd(r), ino(i), onfinish(c) {}
+    C_RetryRead(ObjectCacher *_oc, OSDRead *r, inodeno_t i, Context *c) : oc(_oc), rd(r), ino(i), onfinish(c) {}
     void finish(int) {
       int r = oc->readx(rd, ino, onfinish);
       if (r > 0 && onfinish) {
@@ -476,16 +504,18 @@ class ObjectCacher {
     }
   };
 
+
+
   // non-blocking.  async.
-  int readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish);
-  int writex(Objecter::OSDWrite *wr, inodeno_t ino);
+  int readx(OSDRead *rd, inodeno_t ino, Context *onfinish);
+  int writex(OSDWrite *wr, inodeno_t ino);
 
   // write blocking
   bool wait_for_write(size_t len, Mutex& lock);
   
   // blocking.  atomic+sync.
-  int atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock);
-  int atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock);
+  int atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock);
+  int atomic_sync_writex(OSDWrite *wr, inodeno_t ino, Mutex& lock);
 
   bool set_is_cached(inodeno_t ino);
   bool set_is_dirty_or_committing(inodeno_t ino);
@@ -500,7 +530,7 @@ class ObjectCacher {
 
   loff_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
 
-  void truncate_set(inodeno_t ino, list<ObjectExtent>& ex);
+  void truncate_set(inodeno_t ino, vector<ObjectExtent>& ex);
 
   void kick_sync_writers(inodeno_t ino);
   void kick_sync_readers(inodeno_t ino);
@@ -514,7 +544,7 @@ class ObjectCacher {
                 bufferlist *bl,
 		int flags,
                 Context *onfinish) {
-    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
+    OSDRead *rd = prepare_read(bl, flags);
     filer.file_to_extents(ino, layout, snapid, offset, len, rd->extents);
     return readx(rd, ino, onfinish);
   }
@@ -522,7 +552,7 @@ class ObjectCacher {
   int file_write(inodeno_t ino, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, size_t len, 
                  bufferlist& bl, int flags) {
-    Objecter::OSDWrite *wr = objecter->prepare_write(snapc, bl, flags);
+    OSDWrite *wr = prepare_write(snapc, bl, flags);
     filer.file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
     return writex(wr, ino);
   }
@@ -530,13 +560,13 @@ class ObjectCacher {
 
 
   /*** sync+blocking file interface ***/
-  
+
   int file_atomic_sync_read(inodeno_t ino, ceph_file_layout *layout, 
 			    snapid_t snapid,
                             loff_t offset, size_t len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
-    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
+    OSDRead *rd = prepare_read(bl, flags);
     filer.file_to_extents(ino, layout, snapid, offset, len, rd->extents);
     return atomic_sync_readx(rd, ino, lock);
   }
@@ -546,7 +576,7 @@ class ObjectCacher {
                              loff_t offset, size_t len, 
                              bufferlist& bl, int flags,
                              Mutex &lock) {
-    Objecter::OSDWrite *wr = objecter->prepare_write(snapc, bl, flags);
+    OSDWrite *wr = prepare_write(snapc, bl, flags);
     filer.file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
     return atomic_sync_writex(wr, ino, lock);
   }

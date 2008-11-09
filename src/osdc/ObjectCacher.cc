@@ -131,24 +131,24 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
  * map a range of bytes into buffer_heads.
  * - create missing buffer_heads as necessary.
  */
-int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
+int ObjectCacher::Object::map_read(OSDRead *rd,
                                    map<loff_t, BufferHead*>& hits,
                                    map<loff_t, BufferHead*>& missing,
                                    map<loff_t, BufferHead*>& rx)
 {
-  for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
+  for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ex_it++) {
     
     if (ex_it->oid != oid) continue;
     
     dout(10) << "map_read " << ex_it->oid 
-             << " " << ex_it->start << "~" << ex_it->length << dendl;
+             << " " << ex_it->offset << "~" << ex_it->length << dendl;
     
-    map<loff_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
+    map<loff_t, BufferHead*>::iterator p = data.lower_bound(ex_it->offset);
     // p->first >= start
     
-    loff_t cur = ex_it->start;
+    loff_t cur = ex_it->offset;
     loff_t left = ex_it->length;
     
     if (p != data.begin() && 
@@ -171,7 +171,7 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
         cur += left;
         left -= left;
         assert(left == 0);
-        assert(cur == ex_it->start + (loff_t)ex_it->length);
+        assert(cur == ex_it->offset + (loff_t)ex_it->length);
         break;  // no more.
       }
       
@@ -223,23 +223,23 @@ int ObjectCacher::Object::map_read(Objecter::OSDRead *rd,
  * - break up bufferheads that don't fall completely within the range
  * //no! - return a bh that includes the write.  may also include other dirty data to left and/or right.
  */
-ObjectCacher::BufferHead *ObjectCacher::Object::map_write(Objecter::OSDWrite *wr)
+ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
 {
   BufferHead *final = 0;
 
-  for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
+  for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ex_it++) {
     
     if (ex_it->oid != oid) continue;
     
     dout(10) << "map_write oex " << ex_it->oid
-             << " " << ex_it->start << "~" << ex_it->length << dendl;
+             << " " << ex_it->offset << "~" << ex_it->length << dendl;
     
-    map<loff_t, BufferHead*>::iterator p = data.lower_bound(ex_it->start);
+    map<loff_t, BufferHead*>::iterator p = data.lower_bound(ex_it->offset);
     // p->first >= start
     
-    loff_t cur = ex_it->start;
+    loff_t cur = ex_it->offset;
     loff_t left = ex_it->length;
     
     if (p != data.begin() && 
@@ -404,7 +404,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(), 
+  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(),
 		 &onfinish->bl, 0,
 		 onfinish);
 }
@@ -746,13 +746,13 @@ void ObjectCacher::trim(loff_t max)
  * returns # bytes read (if in cache).  onfinish is untouched (caller must delete it)
  * returns 0 if doing async read
  */
-int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
+int ObjectCacher::readx(OSDRead *rd, inodeno_t ino, Context *onfinish)
 {
   bool success = true;
   list<BufferHead*> hit_ls;
   map<size_t, bufferlist> stripe_map;  // final buffer offset -> substring
 
-  for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
+  for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ex_it++) {
     dout(10) << "readx " << *ex_it << dendl;
@@ -805,11 +805,11 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
       // this is over a single ObjectExtent, so we know that
       //  - the bh's are contiguous
       //  - the buffer frags need not be (and almost certainly aren't)
-      loff_t opos = ex_it->start;
+      loff_t opos = ex_it->offset;
       map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
       assert(bh_it->second->start() <= opos);
       size_t bhoff = opos - bh_it->second->start();
-      map<size_t,size_t>::iterator f_it = ex_it->buffer_extents.begin();
+      map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
       size_t foff = 0;
       while (1) {
         BufferHead *bh = bh_it->second;
@@ -844,7 +844,7 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
         if (f_it == ex_it->buffer_extents.end()) break;
       }
       assert(f_it == ex_it->buffer_extents.end());
-      assert(opos == ex_it->start + (loff_t)ex_it->length);
+      assert(opos == ex_it->offset + (loff_t)ex_it->length);
     }
   }
   
@@ -887,11 +887,11 @@ int ObjectCacher::readx(Objecter::OSDRead *rd, inodeno_t ino, Context *onfinish)
 }
 
 
-int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
+int ObjectCacher::writex(OSDWrite *wr, inodeno_t ino)
 {
   utime_t now = g_clock.now();
   
-  for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
+  for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ex_it++) {
     // get object cache
@@ -906,8 +906,8 @@ int ObjectCacher::writex(Objecter::OSDWrite *wr, inodeno_t ino)
     //  - there is one contiguous bh
     //  - the buffer frags need not be (and almost certainly aren't)
     // note: i assume striping is monotonic... no jumps backwards, ever!
-    loff_t opos = ex_it->start;
-    for (map<size_t,size_t>::iterator f_it = ex_it->buffer_extents.begin();
+    loff_t opos = ex_it->offset;
+    for (map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
          f_it != ex_it->buffer_extents.end();
          f_it++) {
       dout(10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << dendl;
@@ -1019,7 +1019,7 @@ void ObjectCacher::flusher_entry()
 
   
 // blocking.  atomic+sync.
-int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex& lock)
+int ObjectCacher::atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock)
 {
   dout(10) << "atomic_sync_readx " << rd
            << " in " << ino
@@ -1030,7 +1030,10 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
     // just write synchronously.
     Cond cond;
     bool done = false;
-    objecter->readx(rd, new C_SafeCond(&lock, &cond, &done));
+    //objecter->readx(rd, new C_SafeCond(&lock, &cond, &done));
+    objecter->read(rd->extents[0].oid, rd->extents[0].offset, rd->extents[0].length,
+		   rd->extents[0].layout, rd->bl, 0,
+		   new C_SafeCond(&lock, &cond, &done));
 
     // block
     while (!done) cond.Wait(lock);
@@ -1039,7 +1042,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
 
     // sort by object...
     map<object_t,ObjectExtent> by_oid;
-    for (list<ObjectExtent>::iterator ex_it = rd->extents.begin();
+    for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
          ex_it != rd->extents.end();
          ex_it++) 
       by_oid[ex_it->oid] = *ex_it;
@@ -1053,7 +1056,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
     }
 
     // readx will hose rd
-    list<ObjectExtent> extents = rd->extents;
+    vector<ObjectExtent> extents = rd->extents;
 
     // do the read, into our cache
     Cond cond;
@@ -1064,7 +1067,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
     while (!done) cond.Wait(lock);
     
     // release the locks
-    for (list<ObjectExtent>::iterator ex_it = extents.begin();
+    for (vector<ObjectExtent>::iterator ex_it = extents.begin();
          ex_it != extents.end();
          ex_it++) {
       assert(objects.count(ex_it->oid));
@@ -1076,7 +1079,7 @@ int ObjectCacher::atomic_sync_readx(Objecter::OSDRead *rd, inodeno_t ino, Mutex&
   return 0;
 }
 
-int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mutex& lock)
+int ObjectCacher::atomic_sync_writex(OSDWrite *wr, inodeno_t ino, Mutex& lock)
 {
   dout(10) << "atomic_sync_writex " << wr
            << " in " << ino
@@ -1102,7 +1105,8 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
 
       Cond cond;
       bool done = false;
-      objecter->modifyx(wr, new C_SafeCond(&lock, &cond, &done), 0);
+      objecter->sg_write(wr->extents, wr->snapc, wr->bl, 0, 
+			 new C_SafeCond(&lock, &cond, &done), 0);
       
       // block
       while (!done) cond.Wait(lock);
@@ -1113,7 +1117,7 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
   // spans multiple objects, or is big.
   // sort by object...
   map<object_t,ObjectExtent> by_oid;
-  for (list<ObjectExtent>::iterator ex_it = wr->extents.begin();
+  for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ex_it++) 
     by_oid[ex_it->oid] = *ex_it;
@@ -1127,14 +1131,14 @@ int ObjectCacher::atomic_sync_writex(Objecter::OSDWrite *wr, inodeno_t ino, Mute
   }
   
   // writex will hose wr
-  list<ObjectExtent> extents = wr->extents;
+  vector<ObjectExtent> extents = wr->extents;
 
   // do the write, into our cache
   writex(wr, ino);
   
   // flush 
   // ...and release the locks?
-  for (list<ObjectExtent>::iterator ex_it = extents.begin();
+  for (vector<ObjectExtent>::iterator ex_it = extents.begin();
        ex_it != extents.end();
        ex_it++) {
     assert(objects.count(ex_it->oid));
@@ -1548,7 +1552,7 @@ loff_t ObjectCacher::release_set(inodeno_t ino)
   return unclean;
 }
 
-void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
+void ObjectCacher::truncate_set(inodeno_t ino, vector<ObjectExtent>& exls)
 {
   if (objects_by_ino.count(ino) == 0) {
     dout(10) << "truncate_set on " << ino << " dne" << dendl;
@@ -1557,27 +1561,27 @@ void ObjectCacher::truncate_set(inodeno_t ino, list<ObjectExtent>& exls)
   
   dout(10) << "truncate_set " << ino << dendl;
 
-  for (list<ObjectExtent>::iterator p = exls.begin();
-	   p != exls.end();
-	   ++p) {
-	ObjectExtent &ex = *p;
-	if (objects.count(ex.oid) == 0) continue;
-	Object *ob = objects[ex.oid];
-
-	// purge or truncate?
-	if (ex.start == 0) {
-	  dout(10) << "truncate_set purging " << *ob << dendl;
-	  purge(ob);
-	} else {
-	  // hrm, truncate object
-	  dout(10) << "truncate_set truncating " << *ob << " at " << ex.start << dendl;
-	  ob->truncate(ex.start);
-
-	  if (ob->can_close()) {
-		dout(10) << "truncate_set trimming " << *ob << dendl;
-		close_object(ob);
-	  }
-	}
+  for (vector<ObjectExtent>::iterator p = exls.begin();
+       p != exls.end();
+       ++p) {
+    ObjectExtent &ex = *p;
+    if (objects.count(ex.oid) == 0) continue;
+    Object *ob = objects[ex.oid];
+    
+    // purge or truncate?
+    if (ex.offset == 0) {
+      dout(10) << "truncate_set purging " << *ob << dendl;
+      purge(ob);
+    } else {
+      // hrm, truncate object
+      dout(10) << "truncate_set truncating " << *ob << " at " << ex.offset << dendl;
+      ob->truncate(ex.offset);
+      
+      if (ob->can_close()) {
+	dout(10) << "truncate_set trimming " << *ob << dendl;
+	close_object(ob);
+      }
+    }
   }
 }
 

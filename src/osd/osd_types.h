@@ -396,22 +396,22 @@ inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
 class ObjectExtent {
  public:
   object_t    oid;       // object id
-  off_t       start;     // in object
-  size_t      length;    // in object
+  __u32      offset;    // in object
+  __u32      length;    // in object
 
   ceph_object_layout layout;   // object layout (pgid, etc.)
 
-  map<size_t, size_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
+  map<__u32, __u32>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent() : start(0), length(0) {}
-  ObjectExtent(object_t o, off_t s=0, size_t l=0) : oid(o), start(s), length(l) { }
+  ObjectExtent() : offset(0), length(0) {}
+  ObjectExtent(object_t o, __u32 off=0, __u32 l=0) : oid(o), offset(off), length(l) { }
 };
 
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
              << ex.oid << " in " << ex.layout
-             << " " << ex.start << "~" << ex.length
+             << " " << ex.offset << "~" << ex.length
              << ")";
 }
 

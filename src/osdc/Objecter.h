@@ -247,10 +247,79 @@ class Objecter {
               Context *onack, Context *oncommit);
   tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags,
              Context *onack, Context *oncommit);
+  tid_t remove(object_t oid, ceph_object_layout ol, const SnapContext& snapc, int flags,
+	       Context *onack, Context *oncommit);
 
   // no snapc for lock ops
   tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
 
+
+
+  // ---------------------------
+  // some scatter/gather hackery
+
+  void _sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>& resultbl, 
+		       bufferlist *bl, Context *onfinish);
+
+  struct C_SGRead : public Context {
+    Objecter *objecter;
+    vector<ObjectExtent> extents;
+    vector<bufferlist> resultbl;
+    bufferlist *bl;
+    Context *onfinish;
+    C_SGRead(Objecter *ob, 
+	     vector<ObjectExtent>& e, vector<bufferlist>& r, bufferlist *b, Context *c) :
+      objecter(ob), bl(b), onfinish(c) {
+      extents.swap(e);
+      resultbl.swap(r);
+    }
+    void finish(int r) {
+      objecter->_sg_read_finish(extents, resultbl, bl, onfinish);
+    }      
+  };
+
+  void sg_read(vector<ObjectExtent>& extents, bufferlist *bl, int flags, Context *onfinish) {
+    if (extents.size() == 1) {
+      read(extents[0].oid, extents[0].offset, extents[0].length, extents[0].layout,
+	   bl, flags, onfinish);
+    } else {
+      C_Gather *g = new C_Gather;
+      vector<bufferlist> resultbl(extents.size());
+      int i=0;
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+	read(p->oid, p->offset, p->length, p->layout,
+	     &resultbl[i++], flags, onfinish);
+      }
+      g->set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
+    }
+  }
+
+
+  void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, bufferlist bl,
+		int flags, Context *onack, Context *oncommit) {
+    if (extents.size() == 1) {
+      write(extents[0].oid, extents[0].offset, extents[0].length, extents[0].layout,
+	    snapc, bl, flags, onack, oncommit);
+    } else {
+      C_Gather *gack = 0, *gcom = 0;
+      if (onack)
+	gack = new C_Gather(onack);
+      if (oncommit)
+	gcom = new C_Gather(oncommit);
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+	bufferlist cur;
+	for (map<__u32,__u32>::iterator bit = p->buffer_extents.begin();
+	     bit != p->buffer_extents.end();
+	     bit++)
+	  bl.copy(bit->first, bit->second, cur);
+	assert(cur.length() == p->length);
+	write(p->oid, p->offset, p->length, p->layout,
+	      snapc, cur, flags,
+	      gack ? gack->new_sub():0,
+	      gcom ? gcom->new_sub():0);
+      }
+    }
+  }
 
   void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t dest);
 

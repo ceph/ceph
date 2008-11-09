@@ -2078,7 +2078,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   if (g_conf.client_oc &&
       m->get_size() < in->inode.size) {
     // map range to objects
-    list<ObjectExtent> ls;
+    vector<ObjectExtent> ls;
     filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP,
 			   m->get_size(), in->inode.size - m->get_size(),
 			   ls);
@@ -3699,12 +3699,11 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     // object cache OFF -- non-atomic sync read from osd
   
     // do sync read
-    Objecter::OSDRead *rd = filer->prepare_read(in->inode.ino, &in->inode.layout, in->snapid,
-						offset, size, bl, 0);
+    int flags = 0;
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
-      rd->flags |= CEPH_OSD_OP_BALANCE_READS;
-    r = objecter->readx(rd, onfinish);
-    assert(r >= 0);
+      flags |= CEPH_OSD_OP_BALANCE_READS;
+    filer->read(in->inode.ino, &in->inode.layout, in->snapid,
+		offset, size, bl, flags, onfinish);
 
     while (!done)
       cond.Wait(client_lock);
@@ -5010,7 +5009,7 @@ int Client::get_stripe_period(int fd)
   return ceph_file_layout_period(layout);
 }
 
-int Client::enumerate_layout(int fd, list<ObjectExtent>& result,
+int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 			     loff_t length, loff_t offset)
 {
   Mutex::Locker lock(client_lock);

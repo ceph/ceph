@@ -54,7 +54,7 @@ class Filer {
 
     Context *onfinish;
     
-    list<ObjectExtent> probing;
+    vector<ObjectExtent> probing;
     __u64 probing_len;
     
     map<object_t, __u64> known;
@@ -79,18 +79,23 @@ class Filer {
     return objecter->is_active(); // || (oc && oc->is_active());
   }
 
-  /*** async file interface ***/
-  Objecter::OSDRead *prepare_read(inodeno_t ino,
-				  ceph_file_layout *layout,
-				  snapid_t snapid,
-				  __u64 offset, 
-				  size_t len, 
-				  bufferlist *bl, 
-				  int flags) {
-    Objecter::OSDRead *rd = objecter->prepare_read(bl, flags);
-    file_to_extents(ino, layout, snapid, offset, len, rd->extents);
-    return rd;
-  }
+
+  /***** mapping *****/
+
+  /*
+   * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
+   * ranges in objects on (primary) osds)
+   */
+  void file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t snap,
+		       __u64 offset,
+		       size_t len,
+		       vector<ObjectExtent>& extents);
+
+
+  
+
+  /*** async file interface.  scatter/gather as needed. ***/
+
   int read(inodeno_t ino,
 	   ceph_file_layout *layout,
 	   snapid_t snapid,
@@ -100,9 +105,12 @@ class Filer {
 	   int flags,
            Context *onfinish) {
     assert(snapid);  // (until there is a non-NOSNAP write)
-    Objecter::OSDRead *rd = prepare_read(ino, layout, snapid, offset, len, bl, flags);
-    return objecter->readx(rd, onfinish) > 0 ? 0:-1;
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, snapid, offset, len, extents);
+    objecter->sg_read(extents, bl, flags, onfinish);
+    return 0;
   }
+
 
   int write(inodeno_t ino,
 	    ceph_file_layout *layout,
@@ -113,9 +121,10 @@ class Filer {
             int flags, 
             Context *onack,
             Context *oncommit) {
-    Objecter::OSDWrite *wr = objecter->prepare_write(snapc, bl, flags);
-    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
-    return objecter->modifyx(wr, onack, oncommit) > 0 ? 0:-1;
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
+    objecter->sg_write(extents, snapc, bl, flags, onack, oncommit);
+    return 0;
   }
 
   int zero(inodeno_t ino,
@@ -126,9 +135,25 @@ class Filer {
 	   int flags,
            Context *onack,
            Context *oncommit) {
-    Objecter::OSDModify *z = objecter->prepare_modify(snapc, CEPH_OSD_OP_ZERO, flags);
-    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, z->extents);
-    return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
+    if (extents.size() == 1) {
+      objecter->zero(extents[0].oid, extents[0].offset, extents[0].length, extents[0].layout,
+		     snapc, flags, onack, oncommit);
+    } else {
+      C_Gather *gack = 0, *gcom = 0;
+      if (onack)
+	gack = new C_Gather(onack);
+      if (oncommit)
+	gcom = new C_Gather(oncommit);
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+	objecter->zero(p->oid, p->offset, p->length, p->layout,
+		       snapc, flags,
+		       gack ? gack->new_sub():0,
+		       gcom ? gcom->new_sub():0);
+      }
+    }
+    return 0;
   }
 
   int remove(inodeno_t ino,
@@ -139,9 +164,24 @@ class Filer {
 	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
-    Objecter::OSDModify *z = objecter->prepare_modify(snapc, CEPH_OSD_OP_DELETE, flags);
-    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, z->extents);
-    return objecter->modifyx(z, onack, oncommit) > 0 ? 0:-1;
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
+    if (extents.size() == 1) {
+      objecter->remove(extents[0].oid, extents[0].layout,
+		       snapc, flags, onack, oncommit);
+    } else {
+      C_Gather *gack = 0, *gcom = 0;
+      if (onack)
+	gack = new C_Gather(onack);
+      if (oncommit)
+	gcom = new C_Gather(oncommit);
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++)
+	objecter->remove(p->oid, p->layout,
+			 snapc, flags,
+			 gack ? gack->new_sub():0,
+			 gcom ? gcom->new_sub():0);
+    }
+    return 0;
   }
 
   /*
@@ -158,18 +198,6 @@ class Filer {
 	    int flags,
 	    Context *onfinish);
 
-
-  /***** mapping *****/
-
-  /*
-   * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
-   * ranges in objects on (primary) osds)
-   */
-  void file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t snap,
-		       __u64 offset,
-		       size_t len,
-		       list<ObjectExtent>& extents);
-  
 };
 
 

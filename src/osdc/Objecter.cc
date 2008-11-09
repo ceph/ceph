@@ -480,7 +480,8 @@ void Objecter::handle_osd_stat_reply(MOSDOpReply *m)
 // read -----------------------------------
 
 
-tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags, 
+tid_t Objecter::read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, 
+		     bufferlist *bl, int flags, 
                      Context *onfinish)
 {
   OSDRead *rd = prepare_read(bl, flags);
@@ -522,7 +523,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
 
   // send?
   dout(10) << "readx_submit " << rd << " tid " << last_tid
-           << " oid " << ex.oid << " " << ex.start << "~" << ex.length
+           << " oid " << ex.oid << " " << ex.offset << "~" << ex.length
            << " (" << ex.buffer_extents.size() << " buffer fragments)" 
            << " " << ex.layout
            << " osd" << pg.acker() 
@@ -534,7 +535,7 @@ tid_t Objecter::readx_submit(OSDRead *rd, ObjectExtent &ex, bool retry)
     MOSDOp *m = new MOSDOp(client_inc, last_tid, false,
 			   ex.oid, ex.layout, osdmap->get_epoch(), 
 			   flags);
-    m->read(ex.start, ex.length);
+    m->read(ex.offset, ex.length);
     if (inc_lock > 0) {
       rd->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);
@@ -641,10 +642,13 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
         assert(ox_len <= eit->length);           
 
         // for each buffer extent we're mapping into...
-        for (map<size_t,size_t>::iterator bit = eit->buffer_extents.begin();
+        for (map<__u32,__u32>::iterator bit = eit->buffer_extents.begin();
              bit != eit->buffer_extents.end();
              bit++) {
-          dout(21) << " object " << eit->oid << " extent " << eit->start << "~" << eit->length << " : ox offset " << ox_off << " -> buffer extent " << bit->first << "~" << bit->second << dendl;
+          dout(21) << " object " << eit->oid
+		   << " extent " << eit->offset << "~" << eit->length
+		   << " : ox offset " << ox_off
+		   << " -> buffer extent " << bit->first << "~" << bit->second << dendl;
           by_off[bit->first] = new bufferlist;
 
           if (ox_off + bit->second <= ox_len) {
@@ -779,6 +783,20 @@ tid_t Objecter::zero(object_t oid, __u64 off, size_t len,
   return last_tid;
 }
 
+// remove
+
+tid_t Objecter::remove(object_t oid,
+		       ceph_object_layout ol, const SnapContext& snapc,
+		       int flags, 
+		       Context *onack, Context *oncommit)
+{
+  OSDModify *z = prepare_modify(snapc, CEPH_OSD_OP_DELETE, flags);
+  z->extents.push_back(ObjectExtent(oid, 0, 0));
+  z->extents.front().layout = ol;
+  modifyx(z, onack, oncommit);
+  return last_tid;
+}
+
 
 // lock ops
 
@@ -849,7 +867,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
   // send?
   dout(10) << "modifyx_submit " << ceph_osd_op_name(wr->op) << " tid " << tid
            << "  oid " << ex.oid
-           << " " << ex.start << "~" << ex.length 
+           << " " << ex.offset << "~" << ex.length 
            << " " << ex.layout 
            << " osd" << pg.primary()
            << dendl;
@@ -857,7 +875,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
     MOSDOp *m = new MOSDOp(client_inc, tid, true,
 			   ex.oid, ex.layout, osdmap->get_epoch(),
 			   flags);
-    m->add_simple_op(wr->op, ex.start, ex.length);
+    m->add_simple_op(wr->op, ex.offset, ex.length);
     m->set_snap_seq(wr->snapc.seq);
     m->get_snaps() = wr->snapc.snaps;
     if (inc_lock > 0) {
@@ -878,7 +896,7 @@ tid_t Objecter::modifyx_submit(OSDModify *wr, ObjectExtent &ex, tid_t usetid)
 	// map buffer segments into this extent
 	// (may be fragmented bc of striping)
 	bufferlist cur;
-	for (map<size_t,size_t>::iterator bit = ex.buffer_extents.begin();
+	for (map<__u32,__u32>::iterator bit = ex.buffer_extents.begin();
 	     bit != ex.buffer_extents.end();
 	     bit++) 
 	  ((OSDWrite*)wr)->bl.copy(bit->first, bit->second, cur);
@@ -1051,6 +1069,121 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   delete m;
 }
 
+
+
+
+// scatter/gather
+
+void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>& resultbl, 
+			       bufferlist *bl, Context *onfinish)
+{
+  // all done
+  size_t bytes_read = 0;
+  
+  dout(15) << "_sg_read_finish" << dendl;
+
+  if (extents.size() > 1) {
+    /** FIXME This doesn't handle holes efficiently.
+     * It allocates zero buffers to fill whole buffer, and
+     * then discards trailing ones at the end.
+     *
+     * Actually, this whole thing is pretty messy with temporary bufferlist*'s all over
+     * the heap. 
+     */
+    
+    // map extents back into buffer
+    map<__u64, bufferlist*> by_off;  // buffer offset -> bufferlist
+    
+    // for each object extent...
+    vector<bufferlist>::iterator bit = resultbl.begin();
+    for (vector<ObjectExtent>::iterator eit = extents.begin();
+	 eit != extents.end();
+	 eit++, bit++) {
+      bufferlist& ox_buf = *bit;
+      unsigned ox_len = ox_buf.length();
+      unsigned ox_off = 0;
+      assert(ox_len <= eit->length);           
+      
+      // for each buffer extent we're mapping into...
+      for (map<__u32,__u32>::iterator bit = eit->buffer_extents.begin();
+	   bit != eit->buffer_extents.end();
+	   bit++) {
+	dout(21) << " object " << eit->oid
+		 << " extent " << eit->offset << "~" << eit->length
+		 << " : ox offset " << ox_off
+		 << " -> buffer extent " << bit->first << "~" << bit->second << dendl;
+	by_off[bit->first] = new bufferlist;
+	
+	if (ox_off + bit->second <= ox_len) {
+	  // we got the whole bx
+	  by_off[bit->first]->substr_of(ox_buf, ox_off, bit->second);
+	  if (bytes_read < bit->first + bit->second) 
+	    bytes_read = bit->first + bit->second;
+	} else if (ox_off + bit->second > ox_len && ox_off < ox_len) {
+	  // we got part of this bx
+	  by_off[bit->first]->substr_of(ox_buf, ox_off, (ox_len-ox_off));
+	  if (bytes_read < bit->first + ox_len-ox_off) 
+	    bytes_read = bit->first + ox_len-ox_off;
+	  
+	  // zero end of bx
+	  dout(21) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << dendl;
+	  bufferptr z(ox_off + bit->second - ox_len);
+	  z.zero();
+	  by_off[bit->first]->append( z );
+	} else {
+	  // we got none of this bx.  zero whole thing.
+	  assert(ox_off >= ox_len);
+	  dout(21) << "  adding all zeros for this bit " << bit->second << dendl;
+	  bufferptr z(bit->second);
+	  z.zero();
+	  by_off[bit->first]->append( z );
+	}
+	ox_off += bit->second;
+      }
+      assert(ox_off == eit->length);
+    }
+    
+    // sort and string bits together
+    for (map<__u64, bufferlist*>::iterator it = by_off.begin();
+	 it != by_off.end();
+	 it++) {
+      assert(it->second->length());
+      if (it->first < (__u64)bytes_read) {
+	dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << dendl;
+	bl->claim_append(*(it->second));
+      } else {
+	dout(21) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << dendl;          
+      }
+      delete it->second;
+    }
+    
+    // trim trailing zeros?
+    if (bl->length() > bytes_read) {
+      dout(10) << " trimming off trailing zeros . bytes_read=" << bytes_read 
+	       << " len=" << bl->length() << dendl;
+      bl->splice(bytes_read, bl->length() - bytes_read);
+      assert(bytes_read == bl->length());
+    }
+    
+  } else {
+    dout(15) << "  only one frag" << dendl;
+  
+    // only one fragment, easy
+    bl->claim(resultbl[0]);
+    bytes_read = bl->length();
+  }
+  
+  // finish, clean up
+  dout(7) << " " << bytes_read << " bytes " 
+	  << bl->length()
+	  << dendl;
+    
+  // done
+  if (onfinish) {
+    onfinish->finish(bytes_read);// > 0 ? bytes_read:m->get_result());
+    delete onfinish;
+  }
+}
 
 
 void Objecter::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t dest)

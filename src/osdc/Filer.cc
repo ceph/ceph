@@ -90,7 +90,7 @@ void Filer::_probe(Probe *probe)
   // map range onto objects
   file_to_extents(probe->ino, &probe->layout, probe->snapid, probe->from, probe->probing_len, probe->probing);
   
-  for (list<ObjectExtent>::iterator p = probe->probing.begin();
+  for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
@@ -114,13 +114,20 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
   bool found = false;
   __u64 end = 0;
 
-  if (!probe->fwd)
-    probe->probing.reverse();
+  if (!probe->fwd) {
+    // reverse
+    vector<ObjectExtent> r;
+    for (vector<ObjectExtent>::reverse_iterator p = probe->probing.rbegin();
+	 p != probe->probing.rend();
+	 p++)
+      r.push_back(*p);
+    probe->probing.swap(r);
+  }
 
-  for (list<ObjectExtent>::iterator p = probe->probing.begin();
+  for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
-    __u64 shouldbe = p->length+p->start;
+    __u64 shouldbe = p->length + p->offset;
     dout(10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known[p->oid]
@@ -134,8 +141,8 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
    
     // aha, we found the end!
     // calc offset into buffer_extent to get distance from probe->from.
-    __u64 oleft = probe->known[p->oid] - p->start;
-    for (map<size_t,size_t>::iterator i = p->buffer_extents.begin();
+    __u64 oleft = probe->known[p->oid] - p->offset;
+    for (map<__u32,__u32>::iterator i = p->buffer_extents.begin();
 	 i != p->buffer_extents.end();
 	 i++) {
       if (oleft <= (__u64)i->second) {
@@ -187,11 +194,12 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
 
 void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t snap,
                             __u64 offset, size_t len,
-                            list<ObjectExtent>& extents)
+                            vector<ObjectExtent>& extents)
 {
   dout(10) << "file_to_extents " << offset << "~" << len 
            << " on " << hex << ino << dec
            << dendl;
+  assert(len > 0);
 
   /* we want only one extent per object!
    * this means that each extent we read may map into different bits of the 
@@ -239,14 +247,14 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t sn
     else
       x_len = left;
     
-    if (ex->start + (__u64)ex->length == x_offset) {
+    if (ex->offset + (__u64)ex->length == x_offset) {
       // add to extent
       ex->length += x_len;
     } else {
       // new extent
       assert(ex->length == 0);
-      assert(ex->start == 0);
-      ex->start = x_offset;
+      assert(ex->offset == 0);
+      ex->offset = x_offset;
       ex->length = x_len;
     }
     ex->buffer_extents[cur-offset] = x_len;

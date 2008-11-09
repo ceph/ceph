@@ -1011,7 +1011,7 @@ public:
   int get_stripe_unit(int fd);
   int get_stripe_width(int fd);
   int get_stripe_period(int fd);
-  int enumerate_layout(int fd, list<ObjectExtent>& result,
+  int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 
   int mksnap(const char *path, const char *name);
