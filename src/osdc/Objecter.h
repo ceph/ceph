@@ -68,86 +68,55 @@ class Objecter {
   /*** track pending operations ***/
   // read
  public:
-  class OSDOp {
-  public:
-    list<ObjectExtent> extents;
-    int inc_lock;
-    OSDOp() : inc_lock(0) {}
-    virtual ~OSDOp() {}
-  };
-
-  class OSDRead : public OSDOp {
-  public:
-    bufferlist *bl;
-    Context *onfinish;
-    map<tid_t, ObjectExtent> ops;
-    map<object_t, bufferlist*> read_data;  // bits of data as they come back
+  struct ReadOp {
+    object_t oid;
+    ceph_object_layout layout;
+    vector<ceph_osd_op> ops;
+    bufferlist *pbl;
+    __u64 *psize;
     int flags;
+    Context *onfinish;
+    int inc_lock;
 
-    OSDRead(bufferlist *b, int f) : OSDOp(), bl(b), onfinish(0), flags(f) {
-      if (bl)
-	bl->clear();
+    tid_t tid;
+    int attempts;
+
+    ReadOp(object_t o, ceph_object_layout& ol, int f, Context *of, int n=0) :
+      oid(o), layout(ol), ops(n),
+      pbl(0), psize(0), flags(f), onfinish(of), inc_lock(-1),
+      tid(0), attempts(0) {
+      for (int i=0; i<n; i++)
+	memset(&ops[i], 0,sizeof(ops[i]));
     }
   };
 
-  OSDRead *prepare_read(bufferlist *b, int f) {
-    return new OSDRead(b, f);
-  }
 
-  class OSDStat : public OSDOp {
-  public:
-    tid_t tid;
-    __u64 *size;  // where the size goes.
-    int flags;
-    Context *onfinish;
-    OSDStat(__u64 *s, int f) : OSDOp(), tid(0), size(s), flags(f), onfinish(0) { }
-  };
-
-  OSDStat *prepare_stat(__u64 *s, int f) {
-    return new OSDStat(s, f);
-  }
-
-  // generic modify
-  class OSDModify : public OSDOp {
-  public:
+  struct ModifyOp {
+    object_t oid;
+    ceph_object_layout layout;
     SnapContext snapc;
-    int op;
-    list<ObjectExtent> extents;
-    int flags;
-    Context *onack;
-    Context *oncommit;
-    map<tid_t, ObjectExtent> waitfor_ack;
-    map<tid_t, eversion_t>   tid_version;
-    map<tid_t, ObjectExtent> waitfor_commit;
-
-    OSDModify(const SnapContext& sc, int o, int f) : OSDOp(), snapc(sc), op(o), flags(f), onack(0), oncommit(0) {}
-  };
-
-  OSDModify *prepare_modify(const SnapContext& sc, int o, int f) { 
-    return new OSDModify(sc, o, f); 
-  }
-  
-  // write (includes the bufferlist)
-  class OSDWrite : public OSDModify {
-  public:
+    vector<ceph_osd_op> ops;
     bufferlist bl;
-    OSDWrite(int op, const SnapContext& sc, bufferlist &b, int f) : OSDModify(sc, op, f), bl(b) {}
+    int flags;
+    Context *onack, *oncommit;
+    int inc_lock;
+
+    tid_t tid;
+    eversion_t version;
+    int attempts;
+
+    ModifyOp(object_t o, ceph_object_layout& l, const SnapContext& sc, int f, Context *ac, Context *co, int n=0) :
+      oid(o), layout(l), snapc(sc), ops(n), flags(f), onack(ac), oncommit(co), inc_lock(-1),
+      tid(0), attempts(0) {
+      for (int i=0; i<n; i++)
+	memset(&ops[i], 0,sizeof(ops[i]));
+    }
   };
-
-  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, int f) { 
-    return new OSDWrite(CEPH_OSD_OP_WRITE, sc, b, f); 
-  }
-  OSDWrite *prepare_write_full(const SnapContext& sc, bufferlist &b, int f) { 
-    return new OSDWrite(CEPH_OSD_OP_WRITEFULL, sc, b, f); 
-  }
-
-  
 
  private:
   // pending ops
-  hash_map<tid_t,OSDStat*>   op_stat;
-  hash_map<tid_t,OSDRead*>   op_read;
-  hash_map<tid_t,OSDModify*> op_modify;
+  hash_map<tid_t,ReadOp* >  op_read;
+  hash_map<tid_t,ModifyOp*> op_modify;
 
   /**
    * track pending ops by pg
@@ -207,16 +176,14 @@ class Objecter {
  public:
   void dispatch(Message *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_stat_reply(class MOSDOpReply *m);
   void handle_osd_read_reply(class MOSDOpReply *m);
   void handle_osd_modify_reply(class MOSDOpReply *m);
   void handle_osd_lock_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
 
  private:
-  tid_t readx_submit(OSDRead *rd, ObjectExtent& ex, bool retry=false);
-  tid_t modifyx_submit(OSDModify *wr, ObjectExtent& ex, tid_t tid=0);
-  tid_t stat_submit(OSDStat *st);
+  tid_t read_submit(ReadOp *rd);
+  tid_t modify_submit(ModifyOp *wr);
 
   // public interface
  public:
@@ -232,26 +199,70 @@ class Objecter {
   void set_inc_lock(int l) { inc_lock = l; }
     
 
-  // med level
-  tid_t readx(OSDRead *read, Context *onfinish);
-  tid_t modifyx(OSDModify *wr, Context *onack, Context *oncommit);
+  // 
+  tid_t stat(object_t oid, ceph_object_layout ol,
+	     __u64 *size, int flags, 
+	     Context *onfinish) {
+    ReadOp *rd = new ReadOp(oid, ol, flags, onfinish, 1);
+    rd->psize = size;
+    rd->ops[0].op = CEPH_OSD_OP_STAT;
+    return read_submit(rd);
+  }
 
-  // even lazier
-  tid_t read(object_t oid, __u64 off, size_t len, ceph_object_layout ol, bufferlist *bl, int flags,
-             Context *onfinish);
-  tid_t stat(object_t oid, __u64 *size, ceph_object_layout ol, int flags, Context *onfinish);
+  tid_t read(object_t oid, ceph_object_layout ol,
+	     __u64 off, size_t len, bufferlist *bl, int flags,
+	     Context *onfinish) {
+    ReadOp *rd = new ReadOp(oid, ol, flags, onfinish, 1);
+    rd->pbl = bl;
+    rd->ops[0].op = CEPH_OSD_OP_READ;
+    rd->ops[0].offset = off;
+    rd->ops[0].length = len;
+    return read_submit(rd);
+  }
 
-  tid_t write(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
-              Context *onack, Context *oncommit);
-  tid_t write_full(object_t oid, ceph_object_layout ol, const SnapContext& snapc, bufferlist &bl, int flags,
-              Context *onack, Context *oncommit);
-  tid_t zero(object_t oid, __u64 off, size_t len, ceph_object_layout ol, const SnapContext& snapc, int flags,
-             Context *onack, Context *oncommit);
-  tid_t remove(object_t oid, ceph_object_layout ol, const SnapContext& snapc, int flags,
-	       Context *onack, Context *oncommit);
+  tid_t write(object_t oid, ceph_object_layout ol,
+	      __u64 off, size_t len, const SnapContext& snapc, bufferlist &bl, int flags,
+              Context *onack, Context *oncommit) {
+    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
+    wr->bl = bl;
+    wr->ops[0].op = CEPH_OSD_OP_WRITE;
+    wr->ops[0].offset = off;
+    wr->ops[0].length = len;
+    return modify_submit(wr);    
+  }
+  tid_t write_full(object_t oid, ceph_object_layout ol,
+		   const SnapContext& snapc, bufferlist &bl, int flags,
+		   Context *onack, Context *oncommit) {
+    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
+    wr->bl = bl;
+    wr->ops[0].op = CEPH_OSD_OP_WRITEFULL;
+    wr->ops[0].offset = 0;
+    wr->ops[0].length = bl.length();
+    return modify_submit(wr);    
+  }
+  tid_t zero(object_t oid, ceph_object_layout ol, 
+	     __u64 off, size_t len, const SnapContext& snapc, int flags,
+             Context *onack, Context *oncommit) {
+    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
+    wr->ops[0].op = CEPH_OSD_OP_ZERO;
+    wr->ops[0].offset = 0;
+    wr->ops[0].length = len;
+    return modify_submit(wr);    
+  }
+  tid_t remove(object_t oid, ceph_object_layout ol, 
+	       const SnapContext& snapc, int flags,
+	       Context *onack, Context *oncommit) {
+    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
+    wr->ops[0].op = CEPH_OSD_OP_DELETE;
+    return modify_submit(wr);    
+  }
 
-  // no snapc for lock ops
-  tid_t lock(int op, object_t oid, int flags, ceph_object_layout ol, Context *onack, Context *oncommit);
+  tid_t lock(object_t oid, ceph_object_layout ol, int op, int flags, Context *onack, Context *oncommit) {
+    SnapContext snapc;  // no snapc for lock ops
+    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
+    wr->ops[0].op = op;
+    return modify_submit(wr);    
+  }
 
 
 
@@ -280,14 +291,14 @@ class Objecter {
 
   void sg_read(vector<ObjectExtent>& extents, bufferlist *bl, int flags, Context *onfinish) {
     if (extents.size() == 1) {
-      read(extents[0].oid, extents[0].offset, extents[0].length, extents[0].layout,
+      read(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
 	   bl, flags, onfinish);
     } else {
       C_Gather *g = new C_Gather;
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
-	read(p->oid, p->offset, p->length, p->layout,
+	read(p->oid, p->layout, p->offset, p->length,
 	     &resultbl[i++], flags, onfinish);
       }
       g->set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
@@ -298,7 +309,7 @@ class Objecter {
   void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, bufferlist bl,
 		int flags, Context *onack, Context *oncommit) {
     if (extents.size() == 1) {
-      write(extents[0].oid, extents[0].offset, extents[0].length, extents[0].layout,
+      write(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
 	    snapc, bl, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
@@ -313,7 +324,7 @@ class Objecter {
 	     bit++)
 	  bl.copy(bit->first, bit->second, cur);
 	assert(cur.length() == p->length);
-	write(p->oid, p->offset, p->length, p->layout,
+	write(p->oid, p->layout, p->offset, p->length, 
 	      snapc, cur, flags,
 	      gack ? gack->new_sub():0,
 	      gcom ? gcom->new_sub():0);

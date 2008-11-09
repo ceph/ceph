@@ -67,9 +67,9 @@ void SessionMap::load(Context *onload)
   C_SM_Load *c = new C_SM_Load(this);
   object_t oid(inode.ino, 0);
   mds->objecter->read(oid,
-		      0, 0, // whole object
 		      mds->objecter->osdmap->file_to_object_layout(oid,
 								   g_default_mds_dir_layout),
+		      0, 0, // whole object
 		      &c->bl, 0,
 		      c);
 

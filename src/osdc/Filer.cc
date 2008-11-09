@@ -95,7 +95,7 @@ void Filer::_probe(Probe *probe)
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, &c->size, p->layout, probe->flags, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, p->layout, &c->size, probe->flags, c);
   }
 }
 

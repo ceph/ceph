@@ -404,7 +404,8 @@ void ObjectCacher::bh_read(BufferHead *bh)
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  objecter->read(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(),
+  objecter->read(bh->ob->get_oid(), bh->ob->get_layout(), 
+		 bh->start(), bh->length(), 
 		 &onfinish->bl, 0,
 		 onfinish);
 }
@@ -494,7 +495,8 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->get_oid(), bh->start(), bh->length());
 
   // go
-  tid_t tid = objecter->write(bh->ob->get_oid(), bh->start(), bh->length(), bh->ob->get_layout(),
+  tid_t tid = objecter->write(bh->ob->get_oid(), bh->ob->get_layout(),
+			      bh->start(), bh->length(), 
 			      bh->snapc, bh->bl, 0,
 			      onack, oncommit);
 
@@ -1031,8 +1033,9 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock)
     Cond cond;
     bool done = false;
     //objecter->readx(rd, new C_SafeCond(&lock, &cond, &done));
-    objecter->read(rd->extents[0].oid, rd->extents[0].offset, rd->extents[0].length,
-		   rd->extents[0].layout, rd->bl, 0,
+    objecter->read(rd->extents[0].oid, rd->extents[0].layout, 
+		   rd->extents[0].offset, rd->extents[0].length,
+		   rd->bl, 0,
 		   new C_SafeCond(&lock, &cond, &done));
 
     // block
@@ -1169,7 +1172,7 @@ void ObjectCacher::rdlock(Object *o)
     
     commit->tid = 
       ack->tid = 
-      o->last_write_tid = objecter->lock(CEPH_OSD_OP_RDLOCK, o->get_oid(), 0, o->get_layout(), ack, commit);
+      o->last_write_tid = objecter->lock(o->get_oid(), o->get_layout(), CEPH_OSD_OP_RDLOCK, 0, ack, commit);
   }
   
   // stake our claim.
@@ -1212,7 +1215,7 @@ void ObjectCacher::wrlock(Object *o)
     
     commit->tid = 
       ack->tid = 
-      o->last_write_tid = objecter->lock(op, o->get_oid(), 0, o->get_layout(), ack, commit);
+      o->last_write_tid = objecter->lock(o->get_oid(), o->get_layout(), op, 0, ack, commit);
   }
   
   // stake our claim.
@@ -1255,7 +1258,7 @@ void ObjectCacher::rdunlock(Object *o)
   C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 0);
   commit->tid = 
     lockack->tid = 
-    o->last_write_tid = objecter->lock(CEPH_OSD_OP_RDUNLOCK, o->get_oid(), 0, o->get_layout(), lockack, commit);
+    o->last_write_tid = objecter->lock(o->get_oid(), o->get_layout(), CEPH_OSD_OP_RDUNLOCK, 0, lockack, commit);
 }
 
 void ObjectCacher::wrunlock(Object *o)
@@ -1287,7 +1290,7 @@ void ObjectCacher::wrunlock(Object *o)
   C_WriteCommit *commit = new C_WriteCommit(this, o->get_oid(), 0, 0);
   commit->tid = 
     lockack->tid = 
-    o->last_write_tid = objecter->lock(op, o->get_oid(), 0, o->get_layout(), lockack, commit);
+    o->last_write_tid = objecter->lock(o->get_oid(), o->get_layout(), op, 0, lockack, commit);
 }
 
 

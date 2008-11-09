@@ -1044,9 +1044,9 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this);
   cache->mds->objecter->read( get_ondisk_object(),
-			      0, 0,   // whole object
 			      cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
 										   g_default_mds_dir_layout ),
+			      0, 0,   // whole object
 			      &fin->bl, 0,
 			      fin );
 }

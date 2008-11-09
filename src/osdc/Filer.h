@@ -138,7 +138,7 @@ class Filer {
     vector<ObjectExtent> extents;
     file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
     if (extents.size() == 1) {
-      objecter->zero(extents[0].oid, extents[0].offset, extents[0].length, extents[0].layout,
+      objecter->zero(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length, 
 		     snapc, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
@@ -147,7 +147,7 @@ class Filer {
       if (oncommit)
 	gcom = new C_Gather(oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
-	objecter->zero(p->oid, p->offset, p->length, p->layout,
+	objecter->zero(p->oid, p->layout, p->offset, p->length, 
 		       snapc, flags,
 		       gack ? gack->new_sub():0,
 		       gcom ? gcom->new_sub():0);

@@ -121,9 +121,9 @@ void MDSTable::load(Context *onfinish)
   C_MT_Load *c = new C_MT_Load(this, onfinish);
   object_t oid(ino, 0);
   mds->objecter->read(oid,
-		      0, 0, // whole object
 		      mds->objecter->osdmap->file_to_object_layout(oid,
 								   g_default_mds_dir_layout),
+		      0, 0, // whole object
 		      &c->bl, 0, c);
 }
 
