@@ -280,7 +280,7 @@ class Objecter {
 	       Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
-    ops[0].op = CEPH_OSD_OP_ZERO;
+    ops[0].op = CEPH_OSD_OP_DELETE;
     return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
   }
 
