@@ -321,10 +321,15 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
 	struct ceph_osd_request *req;
 	u64 tid;
+	int numops;
 
-	if (msg->front.iov_len != sizeof(*rhead))
+	if (msg->front.iov_len < sizeof(*rhead))
 		goto bad;
 	tid = le64_to_cpu(rhead->tid);
+	numops = le16_to_cpu(rhead->num_ops);
+	if (msg->front.iov_len != sizeof(*rhead) +
+	    numops * sizeof(struct ceph_osd_op))
+		goto bad;
 	dout(10, "handle_reply %p tid %llu\n", msg, tid);
 
 	/* lookup */
