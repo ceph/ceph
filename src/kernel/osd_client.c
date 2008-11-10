@@ -937,6 +937,12 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	     off, len, req->r_num_pages);
 	rc = do_sync_request(osdc, req);
 
+	if (rc == 0) {
+		/* on success, return bytes read */
+		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
+		struct ceph_osd_op *op = (void *)(head + 1);
+		rc = op->length;
+	}
 out:
 	ceph_osdc_put_request(req);
 	dout(10, "readpages result %d\n", rc);
@@ -973,8 +979,10 @@ more:
 		return PTR_ERR(req);
 	reqm = req->r_request;
 	reqhead = reqm->front.iov_base;
-	reqhead->flags = cpu_to_le32(CEPH_OSD_OP_ACK | /* ack for now, FIXME */
-		CEPH_OSD_OP_ORDERSNAP);     /* get EOLDSNAPC if out of order */
+	reqhead->flags =
+		cpu_to_le32(CEPH_OSD_OP_ACK |           /* ack for now, FIXME */
+			    CEPH_OSD_OP_ORDERSNAP |     /* EOLDSNAPC if ooo */
+			    CEPH_OSD_OP_MODIFY);
 
 	dout(10, "sync_write %llu~%llu -> %d pages\n", off, len,
 	     req->r_num_pages);
@@ -1043,6 +1051,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	struct ceph_osd_op *op;
 	struct ceph_osd_request *req;
 	int rc = 0;
+	int flags;
 
 	BUG_ON(vino.snap != CEPH_NOSNAP);
 
@@ -1052,17 +1061,20 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 		return PTR_ERR(req);
 	reqm = req->r_request;
 	reqhead = reqm->front.iov_base;
-	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
-		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_ACK);
-	else
-		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_SAFE);
 	op = (void *)(reqhead + 1);
+
+	flags = CEPH_OSD_OP_MODIFY;
+	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
+		flags |= CEPH_OSD_OP_ACK;
+	else
+		flags |= CEPH_OSD_OP_SAFE;
+	reqhead->flags = cpu_to_le32(flags);
 
 	len = le64_to_cpu(op->length);
 	dout(10, "writepages %llu~%llu -> %d pages\n", off, len,
 	     req->r_num_pages);
 
-	/* copy pages */
+	/* copy page vector */
 	memcpy(req->r_pages, pages, req->r_num_pages * sizeof(struct page *));
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_num_pages;
@@ -1089,13 +1101,16 @@ int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 	struct ceph_osd_op *op = (void *)(reqhead + 1);
 	u64 off = le64_to_cpu(op->offset);
 	int rc;
+	int flags;
 
 	dout(10, "writepages_start %llu~%llu, %d pages\n", off, len, num_pages);
 
+	flags = CEPH_OSD_OP_MODIFY;
 	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
-		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_ACK);
+		flags |= CEPH_OSD_OP_ACK;
 	else
-		reqhead->flags = cpu_to_le32(CEPH_OSD_OP_SAFE);
+		flags |= CEPH_OSD_OP_SAFE;
+	reqhead->flags = cpu_to_le32(flags);
 	op->length = cpu_to_le64(len);
 
 	/* reference pages in message */
