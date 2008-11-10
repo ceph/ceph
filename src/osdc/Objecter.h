@@ -35,6 +35,8 @@ class OSDMap;
 class MonMap;
 class Message;
 
+
+
 class Objecter {
  public:  
   Messenger *messenger;
@@ -76,18 +78,15 @@ class Objecter {
     __u64 *psize;
     int flags;
     Context *onfinish;
-    int inc_lock;
 
     tid_t tid;
     int attempts;
+    int inc_lock;
 
-    ReadOp(object_t o, ceph_object_layout& ol, int f, Context *of, int n=0) :
-      oid(o), layout(ol), ops(n),
-      pbl(0), psize(0), flags(f), onfinish(of), inc_lock(-1),
-      tid(0), attempts(0) {
-      for (int i=0; i<n; i++)
-	memset(&ops[i], 0,sizeof(ops[i]));
-    }
+    ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, int f, Context *of) :
+      oid(o), layout(ol), ops(op),
+      pbl(0), psize(0), flags(f), onfinish(of), 
+      tid(0), attempts(0), inc_lock(-1) { }
   };
 
 
@@ -99,19 +98,18 @@ class Objecter {
     bufferlist bl;
     int flags;
     Context *onack, *oncommit;
-    int inc_lock;
 
     tid_t tid;
-    eversion_t version;
     int attempts;
+    int inc_lock;
+    eversion_t version;
 
-    ModifyOp(object_t o, ceph_object_layout& l, const SnapContext& sc, int f, Context *ac, Context *co, int n=0) :
-      oid(o), layout(l), snapc(sc), ops(n), flags(f), onack(ac), oncommit(co), inc_lock(-1),
-      tid(0), attempts(0) {
-      for (int i=0; i<n; i++)
-	memset(&ops[i], 0,sizeof(ops[i]));
-    }
+    ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op,
+	     const SnapContext& sc, int f, Context *ac, Context *co) :
+      oid(o), layout(l), snapc(sc), ops(op), flags(f), onack(ac), oncommit(co), 
+      tid(0), attempts(0), inc_lock(-1) { }
   };
+
 
  private:
   // pending ops
@@ -182,9 +180,6 @@ class Objecter {
   void handle_osd_map(class MOSDMap *m);
 
  private:
-  tid_t read_submit(ReadOp *rd);
-  tid_t modify_submit(ModifyOp *wr);
-
   // public interface
  public:
   bool is_active() {
@@ -198,70 +193,93 @@ class Objecter {
   //int get_inc_lock() const { return inc_lock; }
   void set_inc_lock(int l) { inc_lock = l; }
     
+  // low-level
+  tid_t read_submit(ReadOp *rd);
+  tid_t modify_submit(ModifyOp *wr);
 
-  // 
-  tid_t stat(object_t oid, ceph_object_layout ol,
-	     __u64 *size, int flags, 
+  tid_t read(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
+	     bufferlist *pbl, __u64 *psize, int flags, 
 	     Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, flags, onfinish, 1);
-    rd->psize = size;
-    rd->ops[0].op = CEPH_OSD_OP_STAT;
+    ReadOp *rd = new ReadOp(oid, ol, ops, flags, onfinish);
+    rd->pbl = pbl;
+    rd->psize = psize;
     return read_submit(rd);
   }
 
-  tid_t read(object_t oid, ceph_object_layout ol,
-	     __u64 off, size_t len, bufferlist *bl, int flags,
+  tid_t modify(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
+	       const SnapContext& snapc, bufferlist &bl, int flags,
+	       Context *onack, Context *oncommit) {
+    ModifyOp *wr = new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit);
+    wr->bl = bl;
+    return modify_submit(wr);
+  }
+
+  // high-level helpers
+  tid_t stat(object_t oid, ceph_object_layout ol,
+	     __u64 *psize, int flags, 
 	     Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, flags, onfinish, 1);
-    rd->pbl = bl;
-    rd->ops[0].op = CEPH_OSD_OP_READ;
-    rd->ops[0].offset = off;
-    rd->ops[0].length = len;
-    return read_submit(rd);
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_STAT;
+    return read(oid, ol, ops, 0, psize, flags, onfinish);
+  }
+
+  tid_t read(object_t oid, ceph_object_layout ol,
+	     __u64 off, size_t len, bufferlist *pbl, int flags,
+	     Context *onfinish) {
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_READ;
+    ops[0].offset = off;
+    ops[0].length = len;
+    return read(oid, ol, ops, pbl, 0, flags, onfinish);
   }
 
   tid_t write(object_t oid, ceph_object_layout ol,
 	      __u64 off, size_t len, const SnapContext& snapc, bufferlist &bl, int flags,
               Context *onack, Context *oncommit) {
-    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
-    wr->bl = bl;
-    wr->ops[0].op = CEPH_OSD_OP_WRITE;
-    wr->ops[0].offset = off;
-    wr->ops[0].length = len;
-    return modify_submit(wr);    
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_WRITE;
+    ops[0].offset = off;
+    ops[0].length = len;
+    return modify(oid, ol, ops, snapc, bl, flags, onack, oncommit);
   }
   tid_t write_full(object_t oid, ceph_object_layout ol,
 		   const SnapContext& snapc, bufferlist &bl, int flags,
 		   Context *onack, Context *oncommit) {
-    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
-    wr->bl = bl;
-    wr->ops[0].op = CEPH_OSD_OP_WRITEFULL;
-    wr->ops[0].offset = 0;
-    wr->ops[0].length = bl.length();
-    return modify_submit(wr);    
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_WRITEFULL;
+    ops[0].offset = 0;
+    ops[0].length = bl.length();
+    return modify(oid, ol, ops, snapc, bl, flags, onack, oncommit);
   }
   tid_t zero(object_t oid, ceph_object_layout ol, 
 	     __u64 off, size_t len, const SnapContext& snapc, int flags,
              Context *onack, Context *oncommit) {
-    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
-    wr->ops[0].op = CEPH_OSD_OP_ZERO;
-    wr->ops[0].offset = 0;
-    wr->ops[0].length = len;
-    return modify_submit(wr);    
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_ZERO;
+    ops[0].offset = off;
+    ops[0].length = len;
+    return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
   }
   tid_t remove(object_t oid, ceph_object_layout ol, 
 	       const SnapContext& snapc, int flags,
 	       Context *onack, Context *oncommit) {
-    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
-    wr->ops[0].op = CEPH_OSD_OP_DELETE;
-    return modify_submit(wr);    
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_ZERO;
+    return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
   }
 
   tid_t lock(object_t oid, ceph_object_layout ol, int op, int flags, Context *onack, Context *oncommit) {
     SnapContext snapc;  // no snapc for lock ops
-    ModifyOp *wr = new ModifyOp(oid, ol, snapc, flags, onack, oncommit, 1);
-    wr->ops[0].op = op;
-    return modify_submit(wr);    
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = op;
+    return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
   }
 
 
