@@ -84,9 +84,11 @@ class Objecter {
     int inc_lock;
 
     ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, int f, Context *of) :
-      oid(o), layout(ol), ops(op),
+      oid(o), layout(ol), 
       pbl(0), psize(0), flags(f), onfinish(of), 
-      tid(0), attempts(0), inc_lock(-1) { }
+      tid(0), attempts(0), inc_lock(-1) {
+      ops.swap(op);
+    }
   };
 
 
@@ -106,8 +108,10 @@ class Objecter {
 
     ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op,
 	     const SnapContext& sc, int f, Context *ac, Context *co) :
-      oid(o), layout(l), snapc(sc), ops(op), flags(f), onack(ac), oncommit(co), 
-      tid(0), attempts(0), inc_lock(-1) { }
+      oid(o), layout(l), snapc(sc), flags(f), onack(ac), oncommit(co), 
+      tid(0), attempts(0), inc_lock(-1) {
+      ops.swap(op);
+    }
   };
 
 
@@ -210,7 +214,7 @@ class Objecter {
 	       const SnapContext& snapc, bufferlist &bl, int flags,
 	       Context *onack, Context *oncommit) {
     ModifyOp *wr = new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit);
-    wr->bl = bl;
+    wr->bl.swap(bl);
     return modify_submit(wr);
   }
 
