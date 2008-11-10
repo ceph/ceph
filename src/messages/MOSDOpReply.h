@@ -43,7 +43,7 @@ class MOSDOpReply : public Message {
   __s32 get_result() { return head.result; }
   eversion_t get_version() { return head.reassert_version; }
 
-  bool is_modify() { return head.is_modify; }
+  bool is_modify() { return head.flags & CEPH_OSD_OP_MODIFY; }
 
   void set_result(int r) { head.result = r; }
   void set_version(eversion_t v) { head.reassert_version = v; }
@@ -57,10 +57,11 @@ public:
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
     head.tid = req->head.tid;
-    head.is_modify = req->is_modify();
     ops = req->ops;
     head.result = result;
-    head.flags = commit ? CEPH_OSD_OP_SAFE:0;
+    head.flags =
+      (req->head.flags & ~(CEPH_OSD_OP_SAFE|CEPH_OSD_OP_ACK)) |
+      (commit ? CEPH_OSD_OP_SAFE:CEPH_OSD_OP_ACK);
     head.oid = req->head.oid;
     head.layout = req->head.layout;
     head.osdmap_epoch = e;

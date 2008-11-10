@@ -1082,10 +1082,10 @@ enum {
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
 
 	/* fancy read */
-	CEPH_OSD_OP_GREP       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 1,
+	CEPH_OSD_OP_GREP       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 3,
 
 	/* fancy write */
-	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
+	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 6,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -1156,10 +1156,11 @@ enum {
 	CEPH_OSD_OP_SAFE = 2,         /* want (or is) "safe" ack */
 	CEPH_OSD_OP_RETRY = 4,        /* resend attempt */
 	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
-	CEPH_OSD_OP_BALANCE_READS = 16,
+	CEPH_OSD_OP_MODIFY = 16,      /* op is/was a mutation */
 	CEPH_OSD_OP_ACKNVRAM = 32,    /* ACK when stable in NVRAM, not RAM */
 	CEPH_OSD_OP_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 	CEPH_OSD_OP_PEERSTAT = 128,   /* msg includes osd_peer_stat */
+	CEPH_OSD_OP_BALANCE_READS = 256,
 };
 
 #define EOLDSNAPC 44 /* ORDERSNAP flag set and writer has old snap context*/
@@ -1195,8 +1196,7 @@ struct ceph_osd_request_head {
 
 	/* read or mutation */
 	__le16 num_ops;
-	__u8 is_modify;
-	__u8 object_type;
+	__u16 object_type;
 	struct ceph_osd_op ops[];  /* followed by snaps */
 } __attribute__ ((packed));
 
@@ -1210,8 +1210,7 @@ struct ceph_osd_reply_head {
 
 	__le32 result;
 
-	__le16 num_ops;
-	__le16 is_modify;
+	__le32 num_ops;
 	struct ceph_osd_op ops[0];
 } __attribute__ ((packed));
 

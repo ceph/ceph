@@ -56,7 +56,7 @@ public:
 
   eversion_t get_version() { return head.reassert_version; }
   
-  bool is_modify() { return head.is_modify; }
+  bool is_modify() { return head.flags & CEPH_OSD_OP_MODIFY; }
 
   unsigned get_inc_lock() const { return head.inc_lock; }
 
@@ -74,14 +74,13 @@ public:
  
 
 
-  MOSDOp(int inc, long tid, bool modify,
+  MOSDOp(int inc, long tid,
          object_t oid, ceph_object_layout ol, epoch_t mapepoch,
 	 int flags) :
     Message(CEPH_MSG_OSD_OP) {
     memset(&head, 0, sizeof(head));
     head.tid = tid;
     head.client_inc = inc;
-    head.is_modify = modify;
     head.oid = oid;
     head.layout = ol;
     head.osdmap_epoch = mapepoch;

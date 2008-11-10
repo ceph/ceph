@@ -350,7 +350,7 @@ tid_t Objecter::read_submit(ReadOp *rd)
     int flags = rd->flags;
     if (rd->onfinish)
       flags |= CEPH_OSD_OP_ACK;
-    MOSDOp *m = new MOSDOp(client_inc, last_tid, false,
+    MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   rd->oid, rd->layout, osdmap->get_epoch(), 
 			   flags);
     m->ops = rd->ops;
@@ -425,11 +425,11 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
 
   if (rd->pbl)
     rd->pbl->claim(m->get_data());
-  if (rd->psize) {
-    ceph_osd_op& op = m->ops[0];
-    *(rd->psize) = op.length;
-  }
-
+  if (rd->psize)
+    for (vector<ceph_osd_op>::iterator p = m->ops.begin(); p != m->ops.end(); p++)
+      if (p->op == CEPH_OSD_OP_STAT)
+	*(rd->psize) = p->length;
+  
   // finish, clean up
   Context *onfinish = rd->onfinish;
   dout(7) << " " << bytes_read << " bytes " << dendl;
@@ -482,9 +482,9 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
            << " osd" << pg.primary()
            << dendl;
   if (pg.primary() >= 0) {
-    MOSDOp *m = new MOSDOp(client_inc, wr->tid, true,
+    MOSDOp *m = new MOSDOp(client_inc, wr->tid,
 			   wr->oid, wr->layout, osdmap->get_epoch(),
-			   flags);
+			   flags | CEPH_OSD_OP_MODIFY);
     m->ops = wr->ops;
     m->set_snap_seq(wr->snapc.seq);
     m->get_snaps() = wr->snapc.snaps;
