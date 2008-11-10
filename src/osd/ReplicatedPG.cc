@@ -1825,7 +1825,7 @@ bool ReplicatedPG::pull(pobject_t poid)
   for (set<int>::iterator p = missing_loc[poid.oid].begin();
        p != missing_loc[poid.oid].end();
        p++) {
-    if (osd->osdmap->is_up(fromosd)) {
+    if (osd->osdmap->is_up(*p)) {
       fromosd = *p;
       break;
     }
