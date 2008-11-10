@@ -20,6 +20,7 @@
 #include "include/Context.h"
 #include "include/buffer.h"
 #include "include/pobject.h"
+#include "include/nstring.h"
 
 #include "include/Distribution.h"
 
@@ -108,7 +109,7 @@ public:
     // for these guys, just use a pointer.
     // but, decode to a full value, and create pointers to that.
     vector<const char*> attrnames;
-    vector<string> attrnames2;
+    vector<nstring> attrnames2;
     vector<map<string,bufferptr> *> attrsets;
     vector<map<string,bufferptr> > attrsets2;
 
@@ -205,6 +206,11 @@ public:
       bl.append((char*)val, len);
       setattr(cid, oid, name, bl);
     }
+    void setattr(coll_t cid, pobject_t oid, nstring& s, bufferlist& val) {
+      attrnames2.push_back(nstring());
+      attrnames2.back().swap(s);
+      setattr(cid, oid, attrnames2.back().c_str(), val);
+    }
     void setattr(coll_t cid, pobject_t oid, const char* name, bufferlist& val) {
       int op = OP_SETATTR;
       ops.push_back(op);
@@ -223,6 +229,11 @@ public:
       attrsets.push_back(&attrset);
       len++;
       blen += 5 + attrset.size();     // HACK allowance for removing old attrs
+    }
+    void rmattr(coll_t cid, pobject_t oid, nstring& s) {
+      attrnames2.push_back(nstring());
+      attrnames2.back().swap(s);
+      rmattr(cid, oid, attrnames2.back().c_str());
     }
     void rmattr(coll_t cid, pobject_t oid, const char* name) {
       int op = OP_RMATTR;
@@ -348,7 +359,7 @@ public:
       ::decode(cids, bl);
       ::decode(lengths, bl);
       ::decode(attrnames2, bl);
-      for (vector<string>::iterator p = attrnames2.begin();
+      for (vector<nstring>::iterator p = attrnames2.begin();
 	   p != attrnames2.end();
 	   ++p)
 	attrnames.push_back((*p).c_str());

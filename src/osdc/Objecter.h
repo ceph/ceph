@@ -235,6 +235,12 @@ class Objecter {
     return read(oid, ol, ops, pbl, 0, flags, onfinish);
   }
 
+  tid_t mutate(object_t oid, ceph_object_layout ol, 
+	       ObjectMutation& mutation,
+	       const SnapContext& snapc, int flags,
+	       Context *onack, Context *oncommit) {
+    return modify(oid, ol, mutation.ops, snapc, mutation.data, flags, onack, oncommit);
+  }
   tid_t write(object_t oid, ceph_object_layout ol,
 	      __u64 off, size_t len, const SnapContext& snapc, bufferlist &bl, int flags,
               Context *onack, Context *oncommit) {

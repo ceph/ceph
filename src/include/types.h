@@ -376,7 +376,10 @@ inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
 
 inline ostream& operator<<(ostream& out, const ceph_osd_op& op) {
   out << ceph_osd_op_name(op.op);
-  out << " " << op.offset << "~" << op.length;
+  if (ceph_osd_op_type_data(op.op))
+    out << " " << op.offset << "~" << op.length;
+  else if (ceph_osd_op_type_attr(op.op))
+    out << " " << op.name_len << "+" << op.value_len;
   return out;
 }
 

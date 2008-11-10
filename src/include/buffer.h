@@ -786,6 +786,9 @@ public:
 	append_buffer.set_length(0);   // unused, so far.
       }
     }
+    void append(const string& s) {
+      append(s.data(), s.length());
+    }
     void append(const ptr& bp) {
       if (bp.length())
 	push_back(bp);

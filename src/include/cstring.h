@@ -47,8 +47,8 @@ class cstring {
   // accessors
   int length() const { return _len; }
   bool empty() const { return _len == 0; }
-  const char *c_str() const { return _data; }
-  const char *data() const { return _data; }
+  char *c_str() const { return _data; }
+  char *data() const { return _data; }
 
   //const char *operator() const { return _data; }
 
@@ -76,6 +76,10 @@ class cstring {
     memcpy(_data, ns.data(), _len);
     _data[_len] = 0;
     return *this;
+  }
+  char &operator[](int n) {
+    assert(n < _len);
+    return _data[n];
   }
   void swap(cstring &other) {
     int tlen = _len;

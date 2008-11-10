@@ -22,14 +22,14 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 004\n"
+#define CEPH_BANNER "ceph 005\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.
  */
-#define CEPH_OSD_PROTOCOL    1
+#define CEPH_OSD_PROTOCOL    2
 #define CEPH_MDS_PROTOCOL    2
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
@@ -1036,54 +1036,76 @@ struct ceph_mds_snap_realm {
 /*
  * osd ops
  */
+#define CEPH_OSD_OP_MODE       0xf00
+#define CEPH_OSD_OP_MODE_RD    0x100
+#define CEPH_OSD_OP_MODE_WR    0x200
+#define CEPH_OSD_OP_MODE_SUB   0x400
+
+#define CEPH_OSD_OP_TYPE       0x0f0
+#define CEPH_OSD_OP_TYPE_LOCK  0x300
+#define CEPH_OSD_OP_TYPE_DATA  0x010
+#define CEPH_OSD_OP_TYPE_ATTR  0x020
+
 enum {
 	/* read */
-	CEPH_OSD_OP_READ       = 1,
-	CEPH_OSD_OP_STAT       = 2,
-	CEPH_OSD_OP_GETXATTR   = 3,
-	CEPH_OSD_OP_GETXATTRS  = 4,
+	CEPH_OSD_OP_READ       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 1,
+	CEPH_OSD_OP_STAT       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 2,
 
-	/* modify */
-	CEPH_OSD_OP_WRNOOP     = 10, /* write no-op (i.e. sync) */
-	CEPH_OSD_OP_WRITE      = 11, /* write extent */
-	CEPH_OSD_OP_DELETE     = 12, /* delete object */
-	CEPH_OSD_OP_TRUNCATE   = 13,
-	CEPH_OSD_OP_ZERO       = 14, /* zero extent */
-	CEPH_OSD_OP_WRITEFULL  = 15, /* write complete object */
-	CEPH_OSD_OP_SETXATTR   = 16,
-	CEPH_OSD_OP_SETXATTRS  = 17,
-	CEPH_OSD_OP_RMXATTR    = 18,
-
-	/* lock */
-	CEPH_OSD_OP_WRLOCK     = 20,
-	CEPH_OSD_OP_WRUNLOCK   = 21,
-	CEPH_OSD_OP_RDLOCK     = 22,
-	CEPH_OSD_OP_RDUNLOCK   = 23,
-	CEPH_OSD_OP_UPLOCK     = 24,
-	CEPH_OSD_OP_DNLOCK     = 25,
+	CEPH_OSD_OP_GETXATTR   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
+	CEPH_OSD_OP_GETXATTRS  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 2,
 
 	/* subop */
-	CEPH_OSD_OP_PULL       = 30,
-	CEPH_OSD_OP_PUSH       = 31,
-	CEPH_OSD_OP_BALANCEREADS   = 40,
-	CEPH_OSD_OP_UNBALANCEREADS = 41
+	CEPH_OSD_OP_PULL           = CEPH_OSD_OP_MODE_SUB | 1,
+	CEPH_OSD_OP_PUSH           = CEPH_OSD_OP_MODE_SUB | 2,
+	CEPH_OSD_OP_BALANCEREADS   = CEPH_OSD_OP_MODE_SUB | 3,
+	CEPH_OSD_OP_UNBALANCEREADS = CEPH_OSD_OP_MODE_SUB | 4,
+
+	/* object data */
+	CEPH_OSD_OP_WRITE      = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
+	CEPH_OSD_OP_WRITEFULL  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 2,
+	CEPH_OSD_OP_TRUNCATE   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 3,
+	CEPH_OSD_OP_ZERO       = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 4,
+	CEPH_OSD_OP_DELETE     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 5,
+
+	/* object attrs */
+	CEPH_OSD_OP_SETXATTR   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 1,
+	CEPH_OSD_OP_SETXATTRS  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 2,
+	CEPH_OSD_OP_RESETXATTRS= CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 3,
+	CEPH_OSD_OP_RMXATTR    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 4,
+
+	/* lock */
+	CEPH_OSD_OP_WRLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 1,
+	CEPH_OSD_OP_WRUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 2,
+	CEPH_OSD_OP_RDLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 3,
+	CEPH_OSD_OP_RDUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
+	CEPH_OSD_OP_UPLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
+	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
 };
 
-static inline int ceph_osd_op_is_read(int op)
+static inline int ceph_osd_op_type_lock(int op)
 {
-	return op < 10;
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_LOCK;
 }
-static inline int ceph_osd_op_is_modify(int op)
+static inline int ceph_osd_op_type_data(int op)
 {
-	return op >= 10 && op < 20;
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_DATA;
 }
-static inline int ceph_osd_op_is_lock(int op)
+static inline int ceph_osd_op_type_attr(int op)
 {
-	return op >= 20 && op < 30;
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_ATTR;
 }
-static inline int ceph_osd_op_is_subop(int op)
+
+static inline int ceph_osd_op_mode_subop(int op)
 {
-	return op >= 30 && op < 40;
+	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_SUB;
+}
+static inline int ceph_osd_op_mode_read(int op)
+{
+	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_RD;
+}
+static inline int ceph_osd_op_mode_modify(int op)
+{
+	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_WR;
 }
 
 static inline const char *ceph_osd_op_name(int op)
@@ -1092,12 +1114,16 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_READ: return "read";
 	case CEPH_OSD_OP_STAT: return "stat";
 
-	case CEPH_OSD_OP_WRNOOP: return "wrnoop";
 	case CEPH_OSD_OP_WRITE: return "write";
 	case CEPH_OSD_OP_DELETE: return "delete";
 	case CEPH_OSD_OP_TRUNCATE: return "truncate";
 	case CEPH_OSD_OP_ZERO: return "zero";
 	case CEPH_OSD_OP_WRITEFULL: return "writefull";
+
+	case CEPH_OSD_OP_SETXATTR: return "setxattr";
+	case CEPH_OSD_OP_SETXATTRS: return "setxattrs";
+	case CEPH_OSD_OP_RESETXATTRS: return "resetxattrs";
+	case CEPH_OSD_OP_RMXATTR: return "rmxattr";
 
 	case CEPH_OSD_OP_WRLOCK: return "wrlock";
 	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";

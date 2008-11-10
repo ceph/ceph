@@ -109,6 +109,7 @@ protected:
 	    map<pobject_t, interval_set<__u64> >& clone_subsets);
   bool pull(pobject_t oid);
 
+
   // modify
   void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
   void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);

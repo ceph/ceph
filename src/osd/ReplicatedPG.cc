@@ -775,6 +775,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 // ========================================================================
 // MODIFY
 
+
+
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       pobject_t head, pobject_t coid,
 			       eversion_t ov, eversion_t v, bufferlist& snapsbl)
@@ -909,7 +911,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     break;
 
 
-    // -- modify --
+    // -- object data --
 
   case CEPH_OSD_OP_WRITE:
     { // write
@@ -981,6 +983,29 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     }
     break;
     
+
+    // -- object data --
+  case CEPH_OSD_OP_SETXATTR:
+    {
+      nstring name(op.name_len + 1);
+      name[0] = '_';
+      bp.copy(op.name_len, name.data()+1);
+      bufferlist bl;
+      bp.copy(op.value_len, bl);
+      t.setattr(info.pgid.to_coll(), poid, name, bl);
+    }
+    break;
+
+  case CEPH_OSD_OP_RMXATTR:
+    {
+      nstring name(op.name_len + 1);
+      name[0] = '_';
+      bp.copy(op.name_len, name.data()+1);
+      t.rmattr(info.pgid.to_coll(), poid, name);
+    }
+    break;
+    
+
   default:
     return -EINVAL;
   }
@@ -1012,7 +1037,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   for (unsigned i=0; i<ops.size(); i++) {
     // clone?
     if (!did_snap && poid.oid.snap &&
-	ceph_osd_op_is_modify(ops[i].op)) {     // is a (non-lock) modification
+	!ceph_osd_op_type_lock(ops[i].op)) {     // is a (non-lock) modification
       prepare_clone(t, log_bl, reqid, poid, old_size, old_version, at_version, snapset, snapc);
       did_snap = true;
     }
@@ -1516,9 +1541,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // note my stats
   utime_t now = g_clock.now();
-
-  // permute operation?
-  // ...
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
