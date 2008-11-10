@@ -984,7 +984,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     break;
     
 
-    // -- object data --
+    // -- object attrs --
+
   case CEPH_OSD_OP_SETXATTR:
     {
       nstring name(op.name_len + 1);
@@ -1005,6 +1006,20 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     }
     break;
     
+
+    // -- fancy writers --
+  case CEPH_OSD_OP_APPEND:
+    {
+      // do it inline; this works because we can safely execute on replicas
+      // as well.
+      ceph_osd_op newop;
+      newop.op = CEPH_OSD_OP_WRITE;
+      newop.offset = old_size;
+      newop.length = op.length;
+      prepare_simple_op(t, reqid, poid, old_size, newop, bp, snapset, snapc);
+    }
+    break;
+
 
   default:
     return -EINVAL;

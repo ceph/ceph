@@ -1036,15 +1036,15 @@ struct ceph_mds_snap_realm {
 /*
  * osd ops
  */
-#define CEPH_OSD_OP_MODE       0xf00
-#define CEPH_OSD_OP_MODE_RD    0x100
-#define CEPH_OSD_OP_MODE_WR    0x200
-#define CEPH_OSD_OP_MODE_SUB   0x400
+#define CEPH_OSD_OP_MODE       0xf000
+#define CEPH_OSD_OP_MODE_RD    0x1000
+#define CEPH_OSD_OP_MODE_WR    0x2000
+#define CEPH_OSD_OP_MODE_SUB   0x4000
 
-#define CEPH_OSD_OP_TYPE       0x0f0
-#define CEPH_OSD_OP_TYPE_LOCK  0x300
-#define CEPH_OSD_OP_TYPE_DATA  0x010
-#define CEPH_OSD_OP_TYPE_ATTR  0x020
+#define CEPH_OSD_OP_TYPE       0x0f00
+#define CEPH_OSD_OP_TYPE_LOCK  0x0100
+#define CEPH_OSD_OP_TYPE_DATA  0x0200
+#define CEPH_OSD_OP_TYPE_ATTR  0x0300
 
 enum {
 	/* read */
@@ -1080,6 +1080,12 @@ enum {
 	CEPH_OSD_OP_RDUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
 	CEPH_OSD_OP_UPLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
+
+	/* fancy read */
+	CEPH_OSD_OP_GREP       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 1,
+
+	/* fancy write */
+	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
