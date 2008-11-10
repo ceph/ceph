@@ -112,7 +112,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   // we only care about reads here on out..
   if (op->is_modify() ||
       op->ops.size() < 1 ||
-      op->ops[0].op != CEPH_OSD_OP_READ) 
+      op->is_modify())
     return false;
   ceph_osd_op& readop = op->ops[0];
 
