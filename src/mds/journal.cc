@@ -455,7 +455,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (list<nullbit>::iterator p = lump.get_dnull().begin();
 	 p != lump.get_dnull().end();
 	 p++) {
-      CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnfirst);
+      CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
