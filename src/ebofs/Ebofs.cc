@@ -838,7 +838,8 @@ csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
     int l = i->second.length();
     bl.copy_in(off, sizeof(int), (char*)&l);
     off += sizeof(int);
-    bl.copy_in(off, l, i->second.c_str());
+    if (l)
+      bl.copy_in(off, l, i->second.c_str());
     off += l;
     dout(15) << "encode_onode " << *on  << " attr " << i->first << " len " << l << dendl;
   }
