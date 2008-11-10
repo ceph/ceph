@@ -1030,7 +1030,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   }
   if (oldin->is_any_caps())
     oldin->filelock.set_state(LOCK_LOCK);
-  else {
+  else if (oldin->inode.max_size) {
     dout(10) << "cow_inode WARNING max_size " << oldin->inode.max_size << " > 0 on " << *oldin << dendl;
     //oldin->inode.max_size = 0;
   }
