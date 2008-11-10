@@ -1472,12 +1472,18 @@ void CDir::_commit(version_t want)
 
   // write it.
   SnapContext snapc;
-  cache->mds->objecter->write_full( get_ondisk_object(),
-				    cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
-											 g_default_mds_dir_layout ),
-				    snapc,
-				    finalbl, 0,
-				    NULL, new C_Dir_Committed(this, get_version()) );
+  ObjectMutation m;
+  m.write_full(finalbl);
+
+  string path;
+  inode->make_path_string(path);
+  m.setxattr("path", path);
+
+  cache->mds->objecter->mutate( get_ondisk_object(),
+				cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
+										     g_default_mds_dir_layout ),
+				m, snapc, 0,
+				NULL, new C_Dir_Committed(this, get_version()) );
 }
 
 
