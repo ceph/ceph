@@ -796,7 +796,7 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 
 void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid,
 				 pobject_t poid, loff_t old_size,
-				 eversion_t old_version, eversion_t at_version, 
+				 eversion_t old_version, eversion_t& at_version, 
 				 SnapSet& snapset, SnapContext& snapc)
 {
   // clone?

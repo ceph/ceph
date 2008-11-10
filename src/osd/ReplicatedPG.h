@@ -119,7 +119,7 @@ protected:
 		   eversion_t ov, eversion_t v, bufferlist& snaps);
   void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid,
 		     pobject_t poid, loff_t old_size,
-		     eversion_t old_version, eversion_t at_version,
+		     eversion_t old_version, eversion_t& at_version,
 		     SnapSet& snapset, SnapContext& snapc);
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			pobject_t poid, __u64& old_size,
