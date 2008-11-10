@@ -327,7 +327,7 @@ class Objecter {
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	read(p->oid, p->layout, p->offset, p->length,
-	     &resultbl[i++], flags, onfinish);
+	     &resultbl[i++], flags, g->new_sub());
       }
       g->set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
     }
