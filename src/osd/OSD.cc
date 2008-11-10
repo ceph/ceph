@@ -2574,21 +2574,22 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 
   if (pg->is_primary()) {
     // i am PRIMARY
-    assert(pg->peer_log_requested.count(from) ||
-           pg->peer_summary_requested.count(from));
-    
-    if (!pg->is_active()) {
-      pg->proc_replica_log(log, missing, from);
-      
-      // peer
-      map< int, map<pg_t,PG::Query> > query_map;
-      pg->peer(t, query_map, info_map);
-      pg->update_stats();
-      do_queries(query_map);
+    if (pg->peer_log_requested.count(from) ||
+	pg->peer_summary_requested.count(from)) {
+      if (!pg->is_active()) {
+	pg->proc_replica_log(log, missing, from);
+	
+	// peer
+	map< int, map<pg_t,PG::Query> > query_map;
+	pg->peer(t, query_map, info_map);
+	pg->update_stats();
+	do_queries(query_map);
+      } else {
+	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+      }
     } else {
-      dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+	dout(10) << *pg << " ignoring osd" << from << " log, i didn't ask for it (recently)" << dendl;
     }
-
   } else {
     if (!pg->info.dne()) {
       // i am REPLICA
