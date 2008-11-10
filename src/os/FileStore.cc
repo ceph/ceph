@@ -1612,7 +1612,12 @@ int FileStore::_setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset)
        ++p) {
     char n[100];
     get_attrname(p->first.c_str(), n);
-    r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
+    const char *val;
+    if (p->second.length())
+      val = p->second.c_str();
+    else
+      val = "";
+    r = do_setxattr(fn, n, val, p->second.length());
     if (r < 0) {
       cerr << "error setxattr " << strerror(errno) << std::endl;
       break;
