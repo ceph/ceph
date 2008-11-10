@@ -922,6 +922,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 
   case CEPH_OSD_OP_WRITE:
     { // write
+      assert(op.length);
       bufferlist nbl;
       bp.copy(op.length, nbl);
       t.write(info.pgid.to_coll(), poid, op.offset, op.length, nbl);
@@ -954,6 +955,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     
   case CEPH_OSD_OP_ZERO:
     { // zero
+      assert(op.length);
       t.zero(info.pgid.to_coll(), poid, op.offset, op.length);
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
