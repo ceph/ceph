@@ -426,15 +426,15 @@ void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
     if (omissing.is_missing(p->first)) {
-      dout(10) << "proc_missing " << p->first << " " << need
+      dout(10) << "proc_replica_missing " << p->first << " " << need
 	       << " also missing on osd" << fromosd << dendl;
     } 
     else if (need <= olog.top) {
-      dout(10) << "proc_missing " << p->first << " " << need
+      dout(10) << "proc_replica_missing " << p->first << " " << need
                << " is on osd" << fromosd << dendl;
       missing_loc[p->first].insert(fromosd);
     } else {
-      dout(10) << "proc_missing " << p->first << " " << need
+      dout(10) << "proc_replica_missing " << p->first << " " << need
                << " > olog.top " << olog.top << ", also missing on osd" << fromosd
                << dendl;
     }
@@ -947,14 +947,12 @@ void PG::peer(ObjectStore::Transaction& t,
 
   
   // -- ok.  and have i located all pg contents?
-  if (missing_loc.size()) {
-    dout(10) << "there are still " << missing_loc.size() << " lost objects" << dendl;
+  if (missing.num_missing() > missing_loc.size()) {
+    dout(10) << "there are still " << (missing.num_missing() - missing_loc.size()) << " lost objects" << dendl;
 
-    // *****
-    // FIXME: i don't think this actually accomplishes anything!
-    // *****
+    // let's pull info+logs from _everyone_ (strays included, this
+    // time) in search of missing objects.
 
-    // ok, let's get more summaries!
     bool waiting = false;
     for (map<int,Info>::iterator it = peer_info.begin();
          it != peer_info.end();
@@ -973,14 +971,14 @@ void PG::peer(ObjectStore::Transaction& t,
       waiting = true;
     }
     
-    if (!waiting) {
-      dout(10) << missing_loc.size() << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
-    }
+    if (!waiting)
+      dout(10) << (missing.num_missing() - missing_loc.size())
+	       << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
     return;
   }
 
   // sanity check
-  assert(missing_loc.empty());
+  assert(missing.num_missing() == missing_loc.size());
   assert(info.last_complete >= log.bottom || log.backlog);
 
   // -- do need to notify the monitor?

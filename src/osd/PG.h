@@ -418,7 +418,7 @@ public:
     map<object_t, item> missing;         // oid -> (need v, have v)
     map<eversion_t, object_t> rmissing;  // v -> oid
 
-    int num_missing() const { return missing.size(); }
+    unsigned num_missing() const { return missing.size(); }
 
     bool is_missing(object_t oid) {
       return missing.count(oid);

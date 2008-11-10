@@ -2530,14 +2530,17 @@ int ReplicatedPG::recover_primary(int max)
     p++;
   }
 
+  // done?
   if (!pulling.empty()) {
     dout(7) << "recover_primary requested everything, still waiting" << dendl;
     return started;
   }
+  if (missing.num_missing()) {
+    dout(7) << "recover_primary still missing " << missing << dendl;
+    return started;
+  }
 
-  // done?
-  assert(missing.num_missing() == 0);
-  
+  // done.
   if (info.last_complete != info.last_update) {
     dout(7) << "recover_primary last_complete " << info.last_complete << " -> " << info.last_update << dendl;
     info.last_complete = info.last_update;
