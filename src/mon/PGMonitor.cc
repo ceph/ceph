@@ -396,10 +396,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     mon->store->get_bl_sn(bl, "osdmap", e);
     assert(bl.length());
     OSDMap::Incremental inc(bl);
-    for (map<int32_t,uint32_t>::iterator p = inc.new_offload.begin();
-	 p != inc.new_offload.end();
+    for (map<int32_t,uint32_t>::iterator p = inc.new_weight.begin();
+	 p != inc.new_weight.end();
 	 p++)
-      if (p->second == 0x10000) {
+      if (p->second == CEPH_OSD_OUT) {
 	dout(10) << "check_osd_map  osd" << p->first << " went OUT" << dendl;
 	pending_inc.osd_stat_rm.insert(p->first);
       } else {

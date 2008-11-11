@@ -155,14 +155,6 @@ struct crush_map {
 	__u32 *bucket_parents;
 	__u32 *device_parents;
 
-	/*
-	 * device offload.
-	 * size max_devices, values 0..0x10000
-	 *        0 == normal
-	 *  0x10000 == 100% offload (i.e. failed)
-	 */
-	__u32 *device_offload;
-
 	__s32 max_buckets;
 	__u32 max_rules;
 	__s32 max_devices;

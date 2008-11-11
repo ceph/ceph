@@ -82,10 +82,7 @@ struct crush_grammar : public grammar<crush_grammar>
       name = leaf_node_d[ lexeme_d[ +alnum_p ] ];
 
       // devices
-      device = str_p("device") >> posint >> name
-			       >> !( ( str_p("offload") >> real_p ) |
-				     ( str_p("load") >> real_p ) |
-				     str_p("down"));
+      device = str_p("device") >> posint >> name;
 
       // bucket types
       bucket_type = str_p("type") >> posint >> name;

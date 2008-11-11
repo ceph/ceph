@@ -66,7 +66,7 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
     pending_inc.new_down[osd] = false;
   } else {
     dout(1) << "fake_osd_failure OUT osd" << osd << dendl;
-    pending_inc.new_offload[osd] = CEPH_OSD_OUT;
+    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
   }
   propose_pending();
 
@@ -92,10 +92,10 @@ void OSDMonitor::fake_reorg()
   
   if (osdmap.is_out(r)) {
     dout(1) << "fake_reorg marking osd" << r << " in" << dendl;
-    pending_inc.new_offload[r] = CEPH_OSD_IN;
+    pending_inc.new_weight[r] = CEPH_OSD_IN;
   } else {
     dout(1) << "fake_reorg marking osd" << r << " out" << dendl;
-    pending_inc.new_offload[r] = CEPH_OSD_OUT;
+    pending_inc.new_weight[r] = CEPH_OSD_OUT;
   }
 
   propose_pending();
@@ -230,8 +230,8 @@ void OSDMonitor::encode_pending(bufferlist &bl)
     dout(2) << " osd" << i->first << " UP " << i->second << dendl;
     derr(0) << " osd" << i->first << " UP " << i->second << dendl;
   }
-  for (map<int32_t,uint32_t>::iterator i = pending_inc.new_offload.begin();
-       i != pending_inc.new_offload.end();
+  for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
+       i != pending_inc.new_weight.end();
        i++) {
     if (i->second == CEPH_OSD_OUT) {
       dout(2) << " osd" << i->first << " OUT" << dendl;
@@ -240,8 +240,8 @@ void OSDMonitor::encode_pending(bufferlist &bl)
       dout(2) << " osd" << i->first << " IN" << dendl;
       derr(0) << " osd" << i->first << " IN" << dendl;
     } else {
-      dout(2) << " osd" << i->first << " OFFLOAD " << i->second << dendl;
-      derr(0) << " osd" << i->first << " OFFLOAD " << i->second << dendl;
+      dout(2) << " osd" << i->first << " WEIGHT " << hex << i->second << dec << dendl;
+      derr(0) << " osd" << i->first << " WEIGHT " << hex << i->second << dec << dendl;
     }
   }
 
@@ -337,14 +337,8 @@ bool OSDMonitor::should_propose(double& delay)
 
   // adjust osd weights?
   if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
-    dout(0) << " adjusting crush osd weights based on " << osd_weight << dendl;
-    bufferlist bl;
-    osdmap.crush.encode(bl);
-    CrushWrapper crush;
-    bufferlist::iterator p = bl.begin();
-    crush.decode(p);
-    crush.adjust_osd_weights(osd_weight);
-    crush.encode(pending_inc.crush);
+    dout(0) << " adjusting osd weights based on " << osd_weight << dendl;
+    osdmap.adjust_osd_weights(osd_weight, pending_inc);
     delay = 0.0;
     osd_weight.clear();
     return true;
@@ -531,7 +525,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_up[from] = m->get_orig_source_addr();
     
     // mark in?
-    pending_inc.new_offload[from] = CEPH_OSD_IN;
+    pending_inc.new_weight[from] = CEPH_OSD_IN;
 
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
@@ -794,7 +788,7 @@ void OSDMonitor::tick()
        i != mark_out.end();
        i++) {
     down_pending_out.erase(*i);
-    pending_inc.new_offload[*i] = CEPH_OSD_OUT;
+    pending_inc.new_weight[*i] = CEPH_OSD_OUT;
   }
   if (!mark_out.empty()) {
     propose_pending();
@@ -994,7 +988,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else if (!osdmap.exists(osd)) {
 	ss << "osd" << osd << " does not exist";
       } else {
-	pending_inc.new_offload[osd] = CEPH_OSD_OUT;
+	pending_inc.new_weight[osd] = CEPH_OSD_OUT;
 	ss << "marked out osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
@@ -1008,7 +1002,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else if (!osdmap.exists(osd)) {
 	ss << "osd" << osd << " does not exist";
       } else {
-	pending_inc.new_offload[osd] = CEPH_OSD_IN;
+	pending_inc.new_weight[osd] = CEPH_OSD_IN;
 	ss << "marked in osd" << osd;
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
@@ -1018,9 +1012,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "reweight" && m->cmd.size() > 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       float w = strtof(m->cmd[3].c_str(), 0);
-      long ww = CEPH_OSD_OUT - (int)((float)CEPH_OSD_OUT*w);
+      long ww = (int)((float)CEPH_OSD_IN*w);
       if (osdmap.exists(osd)) {
-	pending_inc.new_offload[osd] = ww;
+	pending_inc.new_weight[osd] = ww;
 	ss << "reweighted osd" << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));

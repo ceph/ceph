@@ -37,7 +37,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 
   for (int i=0; i<num_osd; i++) {
     set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
-    set_offload(i, CEPH_OSD_OUT);
+    set_weight(i, CEPH_OSD_OUT);
   }
   
   if (mds_local_osd) {
@@ -46,7 +46,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
     // add mds local osds, but don't put them in the crush mapping func
     for (int i=0; i<mds_local_osd; i++) {
       set_state(i+num_osd, CEPH_OSD_EXISTS);
-      set_offload(i+num_osd, CEPH_OSD_OUT);
+      set_weight(i+num_osd, CEPH_OSD_OUT);
     }
   }
 }
@@ -160,10 +160,6 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
   }
 
   crush.finalize();
-
-  // mark all in
-  for (int i=0; i<num_osd; i++)
-    crush.set_offload(i, CEPH_OSD_IN);
 
   dout(20) << "crush max_devices " << crush.crush->max_devices << dendl;
 }

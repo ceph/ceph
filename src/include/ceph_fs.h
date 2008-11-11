@@ -327,10 +327,9 @@ struct ceph_eversion {
 #define CEPH_OSD_UP     2
 #define CEPH_OSD_CLEAN  4  /* as in, clean shutdown */
 
-/* offload weights.  fixed point value: 0x10000 == 1.0 */
-#define CEPH_OSD_IN  0
-#define CEPH_OSD_OUT 0x10000
-
+/* osd weights.  fixed point value: 0x10000 == 1.0 ("in"), 0 == "out" */
+#define CEPH_OSD_IN  0x10000
+#define CEPH_OSD_OUT 0
 
 
 /*

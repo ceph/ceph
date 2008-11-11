@@ -147,11 +147,6 @@ public:
     if (!crush) return 0;
     return crush->max_devices;
   }
-  int get_device_offload(int d) {
-    if (!crush) return -1;
-    if (d >= crush->max_devices) return -1;
-    return crush->device_offload[d];
-  }
 
 
   /*** rules ***/
@@ -327,45 +322,19 @@ public:
   void set_max_devices(int m) {
     crush->max_devices = m;
   }
-  void set_offload(int i, unsigned o) {
-    assert(i < crush->max_devices);
-    crush->device_offload[i] = o;
-  }
-  unsigned get_offload(int i) {
-    if (i < crush->max_devices)
-      return crush->device_offload[i];
-    else
-      return 0x10000;  // not in map.. fully OUT!
-  }
 
   int find_rule(int pool, int type, int size) {
     if (!crush) return -1;
     return crush_find_rule(crush, pool, type, size);
   }
-  void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed) {
+  void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
+	       vector<__u32>& weight) {
     int rawout[maxout];
-
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, forcefeed);
-
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, forcefeed, &weight[0]);
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
-
-
-  void adjust_osd_weights(map<int,double> &weights) {
-    float max = 0;
-    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
-      if (p->second > max)
-	max = p->second;
-
-    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++) {
-      unsigned w = 0x10000 - (unsigned)(p->second / max * 0x10000);
-      set_offload(p->first, w);
-    }
-  }
-
-
 
   int read_from_file(const char *fn) {
     bufferlist bl;
@@ -386,10 +355,6 @@ public:
     ::encode(crush->max_buckets, bl);
     ::encode(crush->max_rules, bl);
     ::encode(crush->max_devices, bl);
-
-    // simple arrays
-    for (int i=0; i < crush->max_devices; i++)
-      ::encode(crush->device_offload[i], bl);
 
     // buckets
     for (int i=0; i<crush->max_buckets; i++) {
@@ -457,10 +422,6 @@ public:
     ::decode(crush->max_buckets, blp);
     ::decode(crush->max_rules, blp);
     ::decode(crush->max_devices, blp);
-
-    crush->device_offload = (__u32*)malloc(sizeof(crush->device_offload[0])*crush->max_devices);
-    for (int i=0; i < crush->max_devices; i++)
-      ::decode(crush->device_offload[i], blp);
 
     // buckets
     crush->buckets = (crush_bucket**)malloc(sizeof(crush_bucket*)*crush->max_buckets);

@@ -47,8 +47,6 @@ map<string, int> item_id;
 map<int, string> id_item;
 map<int, float> item_weight;
 
-map<int, int> device_offload;  // may or may not be set.
-
 map<string, int> type_id;
 
 map<string, int> rule_id;
@@ -72,7 +70,6 @@ float float_node(node_t &node)
 
 void parse_device(iter_t const& i, CrushWrapper &crush)
 {
-  int size = i->children.size();
   int id = int_node(i->children[1]);
 
   string name = string_node(i->children[2]);
@@ -84,29 +81,7 @@ void parse_device(iter_t const& i, CrushWrapper &crush)
   item_id[name] = id;
   id_item[id] = name;
 
-  if (verbose) cout << "device " << id << " " << name;
-
-  if (size >= 4) {
-    string tag = string_node(i->children[3]);
-    float offload;
-    if (tag == "offload") 
-      offload = float_node(i->children[4]);
-    else if (tag == "load") 
-      offload = 1.0 - float_node(i->children[4]);
-    else if (tag == "down") 
-      offload = 1.0;
-    else
-      assert(0);
-
-    if (verbose) cout << " offload " << offload;
-    if (offload < 0 || offload > 1.0) {
-      cerr << "illegal device offload " << offload << " on device " << id << " " << name
-	   << " (valid range is [0,1])" << std::endl;
-      exit(1);
-    }
-    device_offload[id] = (unsigned)(offload * 0x10000);
-  }
-  if (verbose) cout << std::endl;
+  if (verbose) cout << "device " << id << " " << name << std::endl;
 
   if (id >= crush.get_max_devices())
     crush.set_max_devices(id+1);
@@ -388,9 +363,6 @@ void parse_crush(iter_t const& i, CrushWrapper &crush)
 
   //cout << "max_devices " << crush.get_max_devices() << std::endl;
   crush.finalize();
-  for (int i=0; i<crush.get_max_devices(); i++)
-    if (device_offload.count(i))
-      crush.set_offload(i, device_offload[i]);
   
 } 
 
@@ -512,10 +484,6 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
     //continue;
     out << "device " << i << " ";
     print_item_name(out, i, crush);
-    if (crush.get_device_offload(i)) {
-      out << " offload ";
-      print_fixedpoint(out, crush.get_device_offload(i));
-    }
     out << "\n";
   }
   

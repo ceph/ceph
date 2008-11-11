@@ -90,7 +90,7 @@ public:
     int32_t new_pg_num, new_pgp_num, new_lpg_num, new_lpgp_num;
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
-    map<int32_t,uint32_t> new_offload;
+    map<int32_t,uint32_t> new_weight;
     map<int32_t,epoch_t> new_up_thru;
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
@@ -112,7 +112,7 @@ public:
       ::encode(new_lpgp_num, bl);
       ::encode(new_up, bl);
       ::encode(new_down, bl);
-      ::encode(new_offload, bl);
+      ::encode(new_weight, bl);
       ::encode(new_up_thru, bl);
       ::encode(new_pg_swap_primary, bl);
       ::encode(old_pg_swap_primary, bl);
@@ -133,7 +133,7 @@ public:
       ::decode(new_lpgp_num, p);
       ::decode(new_up, p);
       ::decode(new_down, p);
-      ::decode(new_offload, p);
+      ::decode(new_weight, p);
       ::decode(new_up_thru, p);
       ::decode(new_pg_swap_primary, p);
       ::decode(old_pg_swap_primary, p);
@@ -187,8 +187,9 @@ private:
   uint32_t flags;
 
   int32_t max_osd;
-  vector<uint8_t>  osd_state;
+  vector<uint8_t> osd_state;
   vector<entity_addr_t> osd_addr;
+  vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<epoch_t> osd_up_from;  // when it went up
   vector<epoch_t> osd_up_thru;      // lower bound on _actual_ osd death.  bumped by osd before activating pgs with no replicas.
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
@@ -262,10 +263,12 @@ private:
     osd_state.resize(m);
     osd_up_from.resize(m);
     osd_up_thru.resize(m);
+    osd_weight.resize(m);
     for (; o<max_osd; o++) {
       osd_state[o] = 0;
       osd_up_from[o] = 0;
       osd_up_thru[o] = 0;
+      osd_weight[o] = CEPH_OSD_OUT;
     }
     osd_addr.resize(m);
   }
@@ -293,7 +296,7 @@ private:
     int n = 0;
     for (int i=0; i<max_osd; i++)
       if (//osd_state[i] & CEPH_OSD_EXISTS &&
-	  crush.get_offload(i) != CEPH_OSD_OUT) n++;
+	  get_weight(i) != CEPH_OSD_OUT) n++;
     return n;
   }
 
@@ -305,20 +308,31 @@ private:
     assert(o < max_osd);
     osd_state[o] = s;
   }
-  void set_weight(int o, float w) {
-    unsigned off = CEPH_OSD_OUT - (int)((float)CEPH_OSD_OUT * w);
-    set_offload(o, off);
+  void set_weightf(int o, float w) {
+    set_weight(o, (float)CEPH_OSD_IN * w);
   }
-  void set_offload(int o, unsigned off) {
-    crush.set_offload(o, off);
+  void set_weight(int o, unsigned w) {
+    assert(o < max_osd);
+    osd_weight[o] = w;
   }
-  float get_weight(int o) {
-    float off = crush.get_offload(o);
-    return (CEPH_OSD_OUT - off) / CEPH_OSD_OUT;
+  unsigned get_weight(int o) {
+    assert(o < max_osd);
+    return osd_weight[o];
   }
-  unsigned get_offload(int o) {
-    return crush.get_offload(o);
+  float get_weightf(int o) {
+    return (float)get_weight(o) / (float)CEPH_OSD_IN;
   }
+  void adjust_osd_weights(map<int,double>& weights, Incremental& inc) {
+    float max = 0;
+    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
+      if (p->second > max)
+	max = p->second;
+
+    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
+      inc.new_weight[p->first] = p->second / max;
+  }
+
+
 
   bool exists(int osd) { return osd < max_osd/* && osd_state[osd] & CEPH_OSD_EXISTS*/; }
   bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
@@ -327,7 +341,7 @@ private:
     assert(exists(osd)); 
     return is_down(osd) && osd_state[osd] & CEPH_OSD_CLEAN; 
   }
-  bool is_out(int osd) { return !exists(osd) || crush.get_offload(osd) == CEPH_OSD_OUT; }
+  bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
   bool is_in(int osd) { return exists(osd) && !is_out(osd); }
   
   bool have_inst(int osd) {
@@ -418,10 +432,10 @@ private:
       osd_state[i->first] &= ~CEPH_OSD_UP;
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
-    for (map<int32_t,uint32_t>::iterator i = inc.new_offload.begin();
-         i != inc.new_offload.end();
+    for (map<int32_t,uint32_t>::iterator i = inc.new_weight.begin();
+         i != inc.new_weight.end();
          i++)
-      crush.set_offload(i->first, i->second);
+      set_weight(i->first, i->second);
 
     for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
          i != inc.new_up_thru.end();
@@ -472,6 +486,7 @@ private:
     
     ::encode(max_osd, blist);
     ::encode(osd_state, blist);
+    ::encode(osd_weight, blist);
     ::encode(osd_addr, blist);
     ::encode(osd_up_from, blist);
     ::encode(osd_up_thru, blist);
@@ -501,6 +516,7 @@ private:
 
     ::decode(max_osd, p);
     ::decode(osd_state, p);
+    ::decode(osd_weight, p);
     ::decode(osd_addr, p);
     ::decode(osd_up_from, p);
     ::decode(osd_up_thru, p);
@@ -596,7 +612,7 @@ private:
 	// what crush rule?
 	int ruleno = crush.find_rule(pg.pool(), pg.type(), pg.size());
 	if (ruleno >= 0)
-	  crush.do_rule(ruleno, pps, osds, pg.size(), pg.preferred());
+	  crush.do_rule(ruleno, pps, osds, pg.size(), pg.preferred(), osd_weight);
       }
       break;
       

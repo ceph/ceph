@@ -41,12 +41,6 @@ void crush_finalize(struct crush_map *map)
 
 	/* build parent maps */
 	crush_calc_parents(map);
-
-	/* new device offload map? */
-	if (!map->device_offload) {
-		map->device_offload = malloc(sizeof(map->device_offload[0]) * map->max_devices);
-		memset(map->device_offload, 0, sizeof(map->device_offload[0]) * map->max_devices);
-	}
 }
 
 

@@ -266,7 +266,7 @@ static int pick_osd(struct ceph_osd_client *osdc,
 				     osdc->osdmap->pgp_num_mask);
 	num = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
 			    min_t(int, req->r_pgid.pg.size, ARRAY_SIZE(osds)),
-			    req->r_pgid.pg.preferred);
+			    req->r_pgid.pg.preferred, osdc->osdmap->osd_weight);
 
 	for (i = 0; i < num; i++)
 		if (ceph_osd_is_up(osdc->osdmap, osds[i]))

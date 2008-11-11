@@ -130,9 +130,6 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	ceph_decode_32(p, c->max_rules);
 	ceph_decode_32(p, c->max_devices);
 
-	c->device_offload = kmalloc(c->max_devices * sizeof(u32), GFP_NOFS);
-	if (c->device_offload == NULL)
-		goto badmem;
 	c->device_parents = kmalloc(c->max_devices * sizeof(u32), GFP_NOFS);
 	if (c->device_parents == NULL)
 		goto badmem;
@@ -146,10 +143,6 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	c->rules = kmalloc(c->max_rules * sizeof(*c->rules), GFP_NOFS);
 	if (c->rules == NULL)
 		goto badmem;
-
-	ceph_decode_need(p, end, c->max_devices * sizeof(u32), bad);
-	for (i = 0; i < c->max_devices; i++)
-		ceph_decode_32(p, c->device_offload[i]);
 
 	/* buckets */
 	for (i = 0; i < c->max_buckets; i++) {
@@ -292,6 +285,7 @@ void osdmap_destroy(struct ceph_osdmap *map)
 	if (map->crush)
 		crush_destroy(map->crush);
 	kfree(map->osd_state);
+	kfree(map->osd_weight);
 	kfree(map->osd_addr);
 	kfree(map);
 }
@@ -303,12 +297,15 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 {
 	u8 *state;
 	struct ceph_entity_addr *addr;
+	u32 *weight;
 
-	state = kzalloc(max * sizeof(u32), GFP_NOFS);
-	addr = kzalloc(max * sizeof(struct ceph_entity_addr), GFP_NOFS);
-	if (state == NULL || addr == NULL) {
+	state = kzalloc(max * sizeof(*state), GFP_NOFS);
+	addr = kzalloc(max * sizeof(*addr), GFP_NOFS);
+	weight = kzalloc(max * sizeof(*weight), GFP_NOFS);
+	if (state == NULL || addr == NULL || weight == NULL) {
 		kfree(state);
 		kfree(addr);
+		kfree(weight);
 		return -ENOMEM;
 	}
 
@@ -316,11 +313,14 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 	if (map->osd_state) {
 		memcpy(state, map->osd_state, map->max_osd*sizeof(*state));
 		memcpy(addr, map->osd_addr, map->max_osd*sizeof(*addr));
+		memcpy(weight, map->osd_weight, map->max_osd*sizeof(*weight));
 		kfree(map->osd_state);
 		kfree(map->osd_addr);
+		kfree(map->osd_weight);
 	}
 
 	map->osd_state = state;
+	map->osd_weight = weight;
 	map->osd_addr = addr;
 	map->max_osd = max;
 	return 0;
@@ -332,7 +332,7 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 struct ceph_osdmap *osdmap_decode(void **p, void *end)
 {
 	struct ceph_osdmap *map;
-	u32 len, max;
+	u32 len, max, i;
 	int err = -EINVAL;
 	void *start = *p;
 
@@ -369,10 +369,16 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 	/* osds */
 	err = -EINVAL;
-	ceph_decode_need(p, end, 2*sizeof(u32) +
-			 map->max_osd*(1+sizeof(*map->osd_addr)), bad);
+	ceph_decode_need(p, end, 3*sizeof(u32) +
+			 map->max_osd*(1 + sizeof(*map->osd_weight) +
+				       sizeof(*map->osd_addr)), bad);
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_state, map->max_osd);
+	
+	*p += 4; /* skip length field (should match max) */
+	for (i = 0; i < map->max_osd; i++)
+		ceph_decode_32(p, map->osd_weight[i]);
+
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_addr, map->max_osd*sizeof(*map->osd_addr));
 
@@ -523,18 +529,18 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		}
 	}
 
-	/* new_offload */
+	/* new_weight */
 	ceph_decode_32_safe(p, end, len, bad);
 	while (len--) {
 		u32 osd, off;
 		ceph_decode_need(p, end, sizeof(u32)*2, bad);
 		ceph_decode_32(p, osd);
 		ceph_decode_32(p, off);
-		dout(1, "osd%d offload 0x%x %s\n", osd, off,
+		dout(1, "osd%d weight 0x%x %s\n", osd, off,
 		     off == CEPH_OSD_IN ? "(in)" :
 		     (off == CEPH_OSD_OUT ? "(out)" : ""));
 		if (osd < map->max_osd)
-			map->crush->device_offload[osd] = off;
+			map->osd_weight[osd] = off;
 	}
 
 	/* skip new_up_thru */

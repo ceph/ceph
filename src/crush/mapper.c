@@ -199,16 +199,15 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r, int shift)
  * true if device is marked "out" (failed, fully offloaded)
  * of the cluster
  */
-static int is_out(struct crush_map *map, int item, int x)
+static int is_out(struct crush_map *map, __u32 *weight, int item, int x)
 {
-	if (map->device_offload[item]) {
-		if (map->device_offload[item] >= 0x10000)
-			return 1;
-		else if ((crush_hash32_2(x, item) & 0xffff) <
-			 map->device_offload[item])
-			return 1;
-	}
-	return 0;
+	if (weight[item] >= 0x1000)
+		return 0;
+	if (weight[item] == 0)
+		return 1;
+	if ((crush_hash32_2(x, item) & 0xffff) < weight[item])
+		return 0;
+	return 1;
 }
 
 /**
@@ -226,6 +225,7 @@ static int is_out(struct crush_map *map, int item, int x)
  */
 static int crush_choose(struct crush_map *map,
 			struct crush_bucket *bucket,
+			__u32 *weight,
 			int x, int numrep, int type,
 			int *out, int outpos,
 			int firstn, int recurse_to_leaf,
@@ -305,7 +305,7 @@ static int crush_choose(struct crush_map *map,
 				}
 
 				if (recurse_to_leaf &&
-				    crush_choose(map, map->buckets[-1-item],
+				    crush_choose(map, map->buckets[-1-item], weight,
 						 x, outpos+1, 0,
 						 out2, outpos,
 						 firstn, 0, NULL) <= outpos) {
@@ -313,7 +313,7 @@ static int crush_choose(struct crush_map *map,
 				} else {
 					/* out? */
 					if (itemtype == 0)
-						reject = is_out(map, item, x);
+						reject = is_out(map, weight, item, x);
 					else
 						reject = 0;
 				}
@@ -365,7 +365,7 @@ static int crush_choose(struct crush_map *map,
  */
 int crush_do_rule(struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
-		  int force)
+		  int force, __u32 *weight)
 {
 	int result_len;
 	int force_context[CRUSH_MAX_DEPTH];
@@ -402,7 +402,7 @@ int crush_do_rule(struct crush_map *map,
 			/*dprintk("CRUSH: forcefed device dne\n");*/
 			return -1;  /* force fed device dne */
 		}
-		if (!is_out(map, force, x)) {
+		if (!is_out(map, weight, force, x)) {
 			while (1) {
 				force_context[++force_pos] = force;
 				/*dprintk("force_context[%d] = %d\n", force_pos, force);*/
@@ -468,6 +468,7 @@ int crush_do_rule(struct crush_map *map,
 				}
 				osize += crush_choose(map,
 						      map->buckets[-1-w[i]],
+						      weight,
 						      x, numrep,
 						      rule->steps[step].arg2,
 						      o+osize, j,
