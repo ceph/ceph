@@ -17,6 +17,11 @@ device 12 device12 offload 1.000
 device 13 device13 offload 1.000
 device 14 device14 offload 1.000
 device 15 device15 offload 1.000
+device 16 device16 offload 1.000
+device 17 device17 offload 1.000
+device 18 device18 offload 1.000
+device 19 device19 offload 1.000
+device 20 device20 offload 1.000
 
 # types
 type 0 device
@@ -24,51 +29,61 @@ type 1 domain
 type 2 pool
 
 # buckets
-domain dom0 {
-	id -1		# do not change unnecessarily
+pool metaroot {
+     	id -2
+	alg straw
+	item device0 weight 1.000
+	item device4 weight 1.000
+	item device8 weight 1.000
+	item device12 weight 1.000
+	item device16 weight 1.000
+}
+
+domain cosd1 {
+	id -3		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
 	item device1 weight 1.000 pos 0
 	item device2 weight 1.000 pos 1
 	item device3 weight 1.000 pos 2
 }
-domain dom1 {
-	id -2		# do not change unnecessarily
+domain cosd2 {
+	id -4		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
 	item device5 weight 1.000 pos 0
 	item device6 weight 1.000 pos 1
 	item device7 weight 1.000 pos 2
 }
-domain dom2 {
-	id -3		# do not change unnecessarily
+domain cosd3 {
+	id -5		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
 	item device9 weight 1.000 pos 0
 	item device10 weight 1.000 pos 1
 	item device11 weight 1.000 pos 2
 }
-domain dom3 {
-	id -4		# do not change unnecessarily
+domain cosd4 {
+	id -6		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
 	item device13 weight 1.000 pos 0
 	item device14 weight 1.000 pos 1
 	item device15 weight 1.000 pos 2
 }
+domain cosd5 {
+	id -7		# do not change unnecessarily
+	alg uniform	# do not change bucket size (4) unnecessarily
+	item device17 weight 1.000 pos 0
+	item device18 weight 1.000 pos 1
+	item device19 weight 1.000 pos 2
+}
 pool root {
-	id -5		# do not change unnecessarily
-	alg list	# add new items at the end; do not change order unnecessarily
-	item dom3 weight 4.000
-	item dom2 weight 4.000
-	item dom1 weight 4.000
-	item dom0 weight 4.000
+	id -1		# do not change unnecessarily
+	alg straw
+	item cosd1 weight 4.000
+	item cosd2 weight 4.000
+	item cosd3 weight 4.000
+	item cosd4 weight 4.000
+	item cosd5 weight 4.000
 }
 
-pool metaroot {
-	id -6
-	alg list
-	item device0 weight 1.000 pos 0
-	item device4 weight 1.000 pos 1
-	item device8 weight 1.000 pos 2
-	item device12 weight 1.000 pos 3
-}
 
 
 # rules

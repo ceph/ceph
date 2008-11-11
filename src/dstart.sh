@@ -61,7 +61,7 @@ fi
 
 if [ $new -eq 1 ]; then
     # build and inject an initial osd map
-    ./osdmaptool --clobber --createsimple .ceph_monmap 16 --num_dom 4 .ceph_osdmap
+    ./osdmaptool --clobber --createsimple .ceph_monmap 32 --num_dom 4 .ceph_osdmap
 
     # use custom crush map to separate data from metadata
     ./crushtool -c cm.txt -o cm
