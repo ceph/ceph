@@ -981,7 +981,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   int n = 0;
 
   // for object traces
-  Mutex &lock = client->client_lock;
+  Mutex lock("synclient foo");
   Cond cond;
   bool ack;
   bool safe;
@@ -2134,7 +2134,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   bufferlist bl;
   bl.push_back(bp);
 
-  Mutex lock("lock");
+  Mutex lock("create_objects lock");
   Cond cond;
   
   int unack = 0;
@@ -3300,17 +3300,17 @@ int SyntheticClient::chunk_file(string &filename)
   while (pos < size) {
     int get = MIN(size-pos, 1048576);
 
-    Mutex lock("lock");
+    Mutex flock("synclient chunk_file lock");
     Cond cond;
     bool done;
     bufferlist bl;
     
-    lock.Lock();
-    Context *onfinish = new C_SafeCond(&lock, &cond, &done);
+    flock.Lock();
+    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
     filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0, onfinish);
     while (!done)
-      cond.Wait(lock);
-    lock.Unlock();
+      cond.Wait(flock);
+    flock.Unlock();
 
     dout(0) << "got " << bl.length() << " bytes at " << pos << dendl;
     

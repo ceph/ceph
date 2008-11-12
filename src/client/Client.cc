@@ -3631,9 +3631,10 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   in->get_cap_ref(CEPH_CAP_RD);
 
   int rvalue = 0;
+  Mutex flock("Client::_read flock");
   Cond cond;
   bool done = false;
-  Context *onfinish = new C_SafeCond(&client_lock, &cond, &done, &rvalue);
+  Context *onfinish = new C_SafeCond(&flock, &cond, &done, &rvalue);
   
   int r = 0;
   if (g_conf.client_oc) {
@@ -3866,9 +3867,10 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     }   
   } else {
     // simple, non-atomic sync write
+    Mutex flock("Client::_write flock");
     Cond cond;
     bool done = false;
-    Context *onfinish = new C_SafeCond(&client_lock, &cond, &done);
+    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;

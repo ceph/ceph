@@ -1030,13 +1030,13 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock)
   if (rd->extents.size() == 1) {
     // single object.
     // just write synchronously.
+    Mutex flock("ObjectCacher::atomic_sync_readx flock 1");
     Cond cond;
     bool done = false;
-    //objecter->readx(rd, new C_SafeCond(&lock, &cond, &done));
     objecter->read(rd->extents[0].oid, rd->extents[0].layout, 
 		   rd->extents[0].offset, rd->extents[0].length,
 		   rd->bl, 0,
-		   new C_SafeCond(&lock, &cond, &done));
+		   new C_SafeCond(&flock, &cond, &done));
 
     // block
     while (!done) cond.Wait(lock);
@@ -1062,9 +1062,10 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock)
     vector<ObjectExtent> extents = rd->extents;
 
     // do the read, into our cache
+    Mutex flock("ObjectCacher::atomic_sync_readx flock 2");
     Cond cond;
     bool done = false;
-    readx(rd, ino, new C_SafeCond(&lock, &cond, &done));
+    readx(rd, ino, new C_SafeCond(&flock, &cond, &done));
     
     // block
     while (!done) cond.Wait(lock);
@@ -1106,10 +1107,11 @@ int ObjectCacher::atomic_sync_writex(OSDWrite *wr, inodeno_t ino, Mutex& lock)
                << " doing sync write"
                << dendl;
 
+      Mutex flock("ObjectCacher::atomic_sync_writex flock");
       Cond cond;
       bool done = false;
       objecter->sg_write(wr->extents, wr->snapc, wr->bl, 0, 
-			 new C_SafeCond(&lock, &cond, &done), 0);
+			 new C_SafeCond(&flock, &cond, &done), 0);
       
       // block
       while (!done) cond.Wait(lock);
@@ -1182,9 +1184,10 @@ void ObjectCacher::rdlock(Object *o)
   if (o->lock_state == Object::LOCK_RDLOCKING ||
       o->lock_state == Object::LOCK_WRLOCKING) {
     dout(10) << "rdlock waiting for rdlock|wrlock on " << *o << dendl;
+    Mutex flock("ObjectCacher::rdlock flock");
     Cond cond;
     bool done = false;
-    o->waitfor_rd.push_back(new C_SafeCond(&lock, &cond, &done));
+    o->waitfor_rd.push_back(new C_SafeCond(&flock, &cond, &done));
     while (!done) cond.Wait(lock);
   }
   assert(o->lock_state == Object::LOCK_RDLOCK ||
@@ -1225,9 +1228,10 @@ void ObjectCacher::wrlock(Object *o)
   if (o->lock_state == Object::LOCK_WRLOCKING ||
       o->lock_state == Object::LOCK_UPGRADING) {
     dout(10) << "wrlock waiting for wrlock on " << *o << dendl;
+    Mutex flock("ObjectCacher::wrlock flock");
     Cond cond;
     bool done = false;
-    o->waitfor_wr.push_back(new C_SafeCond(&lock, &cond, &done));
+    o->waitfor_wr.push_back(new C_SafeCond(&flock, &cond, &done));
     while (!done) cond.Wait(lock);
   }
   assert(o->lock_state == Object::LOCK_WRLOCK);
