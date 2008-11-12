@@ -1096,15 +1096,11 @@ void Client::dispatch(Message *m)
 
     // osd
   case CEPH_MSG_OSD_OPREPLY:
-    client_lock.Unlock();
     objecter->handle_osd_op_reply((MOSDOpReply*)m);
-    client_lock.Lock();
     break;
 
   case CEPH_MSG_OSD_MAP:
-    client_lock.Unlock();
     objecter->handle_osd_map((class MOSDMap*)m);
-    client_lock.Lock();
     if (!mounted) mount_cond.Signal();
     break;
     
@@ -1669,7 +1665,8 @@ void Client::_flush(Inode *in, Context *onfinish)
 
 void Client::flush_set_callback(inodeno_t ino)
 {
-  Mutex::Locker l(client_lock);
+  //  Mutex::Locker l(client_lock);
+  assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
   Inode *in = inode_map[vinodeno_t(ino,CEPH_NOSNAP)];
   assert(in);
   _flushed(in);
@@ -3755,8 +3752,7 @@ public:
 
 void Client::sync_write_commit(Inode *in)
 {
-  Mutex::Locker l(client_lock);
-
+  client_lock.Lock();
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
@@ -3769,6 +3765,8 @@ void Client::sync_write_commit(Inode *in)
   }
 
   put_inode(in);
+
+  client_lock.Unlock();
 }
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
