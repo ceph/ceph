@@ -77,6 +77,7 @@ public:
    */
   class Transaction {
   public:
+    static const int OP_TOUCH =        9;   // cid, oid
     static const int OP_WRITE =        10;  // cid, oid, offset, len, bl
     static const int OP_ZERO =         11;  // cid, oid, offset, len
     static const int OP_TRUNCATE =     12;  // cid, oid, len
@@ -154,6 +155,14 @@ public:
       ps = attrsets[attrsetp++];
     }
 
+    void touch(coll_t cid, pobject_t oid) {
+      int op = OP_WRITE;
+      ops.push_back(op);
+      cids.push_back(cid);
+      oids.push_back(oid);
+      len++;
+      blen += 3;
+    }
     void write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl) {
       int op = OP_WRITE;
       ops.push_back(op);
