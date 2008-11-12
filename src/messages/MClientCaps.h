@@ -100,11 +100,13 @@ class MClientCaps : public Message {
 	<< " seq " << head.seq 
 	<< " caps=" << cap_string(head.caps)
 	<< " wanted=" << cap_string(head.wanted)
-	<< " size " << head.size << "/" << head.max_size
-	<< " ts" << head.truncate_seq
-	<< " mtime " << utime_t(head.mtime)
-	<< " tws " << head.time_warp_seq
-	<< " follows " << snapid_t(head.snap_follows);
+	<< " size " << head.size << "/" << head.max_size;
+    if (head.truncate_seq)
+      out << " ts " << head.truncate_seq;
+    out << " mtime " << utime_t(head.mtime);
+    if (head.time_warp_seq)
+      out << " tws " << head.time_warp_seq;
+    out << " follows " << snapid_t(head.snap_follows);
     if (head.migrate_seq)
       out << " mseq " << head.migrate_seq;
     out << ")";
