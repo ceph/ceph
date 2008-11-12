@@ -107,13 +107,14 @@ class FileStore : public JournalingObjectStore {
   int stat(coll_t cid, pobject_t oid, struct stat *st);
   int read(coll_t cid, pobject_t oid, __u64 offset, size_t len, bufferlist& bl);
 
-  int _remove(coll_t cid, pobject_t oid);
-  int _truncate(coll_t cid, pobject_t oid, __u64 size);
+  int _touch(coll_t cid, pobject_t oid);
   int _write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl);
   int _zero(coll_t cid, pobject_t oid, __u64 offset, size_t len);
+  int _truncate(coll_t cid, pobject_t oid, __u64 size);
   int _clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
   int _clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len);
   int _do_clone_range(int from, int to, __u64 off, __u64 len);
+  int _remove(coll_t cid, pobject_t oid);
 
   void sync();
   void sync(Context *onsafe);

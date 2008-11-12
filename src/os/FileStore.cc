@@ -595,6 +595,16 @@ unsigned FileStore::_apply_transaction(Transaction& t)
   while (t.have_op()) {
     int op = t.get_op();
     switch (op) {
+    case Transaction::OP_TOUCH:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+	pobject_t oid;
+	t.get_oid(oid);
+	_touch(cid, oid);
+      }
+      break;
+      
     case Transaction::OP_WRITE:
       {
 	coll_t cid;
@@ -1291,6 +1301,22 @@ int FileStore::_truncate(coll_t cid, pobject_t oid, __u64 size)
   return r < 0 ? -errno:r;
 }
 
+
+int FileStore::_touch(coll_t cid, pobject_t oid)
+{
+  char fn[200];
+  get_coname(cid, oid, fn);
+
+  dout(20) << "touch " << fn << dendl;
+
+  int flags = O_WRONLY|O_CREAT;
+  int fd = ::open(fn, flags, 0644);
+  if (fd >= 0) {
+    ::close(fd);
+    return 0;
+  } else
+    return -errno;
+}
 
 int FileStore::_write(coll_t cid, pobject_t oid, 
                      __u64 offset, size_t len,
