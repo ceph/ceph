@@ -873,13 +873,16 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       snapset.head_exists &&
       op.offset + op.length >= old_size) {
     if (op.offset == 0) {
-      dout(10) << " munging ZERO " << op.offset << "~" << op.length
-	       << " -> DELETE (size is " << old_size << ")" << dendl;
-      eop = CEPH_OSD_OP_DELETE;
+      // FIXME: no, this will zap object attributes... do we really want
+      // to do this?  ...
+      //dout(10) << " munging ZERO " << op.offset << "~" << op.length
+      //<< " -> DELETE (size is " << old_size << ")" << dendl;
+      //eop = CEPH_OSD_OP_DELETE;
     } else {
       dout(10) << " munging ZERO " << op.offset << "~" << op.length
 	       << " -> TRUNCATE (size is " << old_size << ")" << dendl;
       eop = CEPH_OSD_OP_TRUNCATE;
+      snapset.head_exists = true;
     }
   }
   // munge DELETE -> TRUNCATE?
@@ -926,7 +929,6 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       bufferlist nbl;
       bp.copy(op.length, nbl);
       t.write(info.pgid.to_coll(), poid, op.offset, op.length, nbl);
-      snapset.head_exists = true;
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
 	interval_set<__u64> ch;
@@ -935,6 +937,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	snapset.clone_overlap[newest].subtract(ch);
       }
       old_size = MAX(old_size, op.offset + op.length);
+      snapset.head_exists = true;
     }
     break;
     
@@ -944,12 +947,12 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       bp.copy(op.length, nbl);
       t.truncate(info.pgid.to_coll(), poid, 0);
       t.write(info.pgid.to_coll(), poid, op.offset, op.length, nbl);
-      snapset.head_exists = true;
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
 	snapset.clone_overlap.erase(newest);
       }
       old_size = op.length;
+      snapset.head_exists = true;
     }
     break;
     
@@ -964,6 +967,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	ch.intersection_of(snapset.clone_overlap[newest]);
 	snapset.clone_overlap[newest].subtract(ch);
       }
+      snapset.head_exists = true;
     }
     break;
 
@@ -978,6 +982,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	snapset.clone_overlap[newest].intersection_of(keep);
       }
       old_size = op.length;
+      // do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
     }
     break;
     
@@ -989,6 +994,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	snapset.clone_overlap.erase(newest);  // ok, redundant.
       }
       old_size = 0;
+      snapset.head_exists = false;
     }
     break;
     
@@ -1002,7 +1008,10 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       bp.copy(op.name_len, name.data()+1);
       bufferlist bl;
       bp.copy(op.value_len, bl);
+      if (!snapset.head_exists)  // create object if it doesn't yet exist.
+	t.touch(info.pgid.to_coll(), poid);
       t.setattr(info.pgid.to_coll(), poid, name, bl);
+      snapset.head_exists = true;
     }
     break;
 
@@ -1019,8 +1028,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     // -- fancy writers --
   case CEPH_OSD_OP_APPEND:
     {
-      // do it inline; this works because we can safely execute on replicas
-      // as well.
+      // just do it inline; this works because we are happy to execute
+      // fancy op on replicas as well.
       ceph_osd_op newop;
       newop.op = CEPH_OSD_OP_WRITE;
       newop.offset = old_size;
