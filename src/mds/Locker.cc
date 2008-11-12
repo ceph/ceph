@@ -498,13 +498,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   in->put(CInode::PIN_PTRWAITER);
 
   mut->apply();
-  drop_locks(mut);
-  mut->cleanup();
-  delete mut;
   
-  if (share && in->is_auth() && in->filelock.is_stable())
-    share_inode_max_size(in);
-
   if (releasecap) {
     // before we remove the cap, make sure the release request is
     // _still_ the most recent (and not racing with open() or
@@ -512,21 +506,28 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
     Capability *cap = in->get_client_cap(client);
     if (!cap) {
       dout(10) << " can't releasecap client" << client << ", cap has gone away?" << dendl;
-      assert(0);
-    } else if (releasecap >= cap->get_last_open()) {
-      _finish_release_cap(in, client, releasecap);
-      assert(ack);
-    } else {
+      delete ack;
+      ack = 0;
+    } else if (releasecap < cap->get_last_open()) {
       dout(10) << " NOT releasing cap client" << client << ", last_open " << cap->get_last_open()
 	       << " > " << releasecap << dendl;
       delete ack;
       ack = 0;
+    } else {
+      _finish_release_cap(in, client, releasecap);
+      assert(ack);
     }
   }
 
   if (ack)
     mds->send_message_client(ack, client);
 
+  drop_locks(mut);
+  mut->cleanup();
+  delete mut;
+
+  if (share && in->is_auth() && in->filelock.is_stable())
+    share_inode_max_size(in);
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
