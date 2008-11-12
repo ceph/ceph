@@ -89,7 +89,7 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
 /*
  * build osd request message only.
  */
-static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int opc,
+static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, short opc,
 					struct ceph_snap_context *snapc)
 {
 	struct ceph_msg *req;
@@ -113,7 +113,7 @@ static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, int opc,
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = 0;
 	head->num_ops = cpu_to_le16(1);
-	op->op = cpu_to_le32(opc);
+	op->op = cpu_to_le16(opc);
 
 	if (snapc) {
 		head->snap_seq = cpu_to_le64(snapc->seq);
@@ -296,7 +296,7 @@ static int send_request(struct ceph_osd_client *osdc,
 
 	reqhead = req->r_request->front.iov_base;
 	reqhead->osdmap_epoch = cpu_to_le32(osdc->osdmap->epoch);
-	reqhead->flags |= req->r_flags;  /* e.g., RETRY */
+	reqhead->flags |= cpu_to_le32(req->r_flags);  /* e.g., RETRY */
 
 	req->r_request->hdr.dst.name.type =
 		cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
@@ -326,7 +326,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	if (msg->front.iov_len < sizeof(*rhead))
 		goto bad;
 	tid = le64_to_cpu(rhead->tid);
-	numops = le16_to_cpu(rhead->num_ops);
+	numops = le32_to_cpu(rhead->num_ops);
 	if (msg->front.iov_len != sizeof(*rhead) +
 	    numops * sizeof(struct ceph_osd_op))
 		goto bad;
@@ -941,7 +941,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 		/* on success, return bytes read */
 		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
 		struct ceph_osd_op *rop = (void *)(head + 1);
-		rc = rop->length;
+		rc = le64_to_cpu(rop->length);
 	}
 out:
 	ceph_osdc_put_request(req);
