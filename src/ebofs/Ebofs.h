@@ -333,6 +333,7 @@ private:
   int _get_object_collections(pobject_t oid, set<coll_t>& ls);
 
   bool _write_will_block();
+  int _touch(pobject_t oid);
   int _write(pobject_t oid, __u64 off, size_t len, const bufferlist& bl);
   void _trim_from_cache(pobject_t oid, __u64 off, size_t len);
   int _truncate(pobject_t oid, __u64 size);

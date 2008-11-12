@@ -2483,6 +2483,19 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
     int op = t.get_op();
     switch (op) {
  
+    case Transaction::OP_TOUCH:
+      {
+	coll_t cid;
+	t.get_cid(cid);
+        pobject_t oid;
+	t.get_oid(oid);
+        if (_touch(oid) < 0) {
+          dout(7) << "apply_transaction fail on _touch" << dendl;
+          r &= bit;
+        }
+      }
+      break;
+
     case Transaction::OP_WRITE:
       {
 	coll_t cid;
@@ -2727,6 +2740,19 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
   return r;
 }
 
+int Ebofs::_touch(pobject_t oid)
+{
+  dout(7) << "_touch " << oid << dendl;
+
+  // get|create inode
+  Onode *on = get_onode(oid);
+  if (!on) {
+    on = new_onode(oid);    // new inode!
+    dirty_onode(on);
+  }
+  put_onode(on);
+  return 0;
+}
 
 
 int Ebofs::_write(pobject_t oid, __u64 offset, size_t length, const bufferlist& bl)
