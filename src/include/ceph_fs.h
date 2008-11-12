@@ -22,17 +22,18 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 005\n"
+#define CEPH_BANNER "ceph 006\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.
  */
-#define CEPH_OSD_PROTOCOL    2
+#define CEPH_OSD_PROTOCOL    3
 #define CEPH_MDS_PROTOCOL    2
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
+#define CEPH_ONDISK_FORMAT   1
 
 /*
  * types in this file are defined as little-endian, and are
