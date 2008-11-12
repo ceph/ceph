@@ -940,8 +940,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	if (rc == 0) {
 		/* on success, return bytes read */
 		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
-		struct ceph_osd_op *op = (void *)(head + 1);
-		rc = op->length;
+		struct ceph_osd_op *rop = (void *)(head + 1);
+		rc = rop->length;
 	}
 out:
 	ceph_osdc_put_request(req);
