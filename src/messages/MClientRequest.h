@@ -79,7 +79,7 @@ public:
   }
   bool is_idempotent() {
     if (head.op == CEPH_MDS_OP_OPEN) 
-      return open_file_mode_is_readonly();
+      return false;  //open_file_mode_is_readonly();
     return (head.op & CEPH_MDS_OP_WRITE) == 0;
   }
   bool auth_is_best() {
