@@ -1293,6 +1293,7 @@ void ceph_inode_writeback(struct work_struct *work)
 
 	dout(10, "writeback %p\n", inode);
 	filemap_write_and_wait(&inode->i_data);
+	iput(inode);
 }
 
 /*
@@ -1316,7 +1317,7 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 		/* nevermind! */
 		ci->i_rdcache_revoking = 0;
 		spin_unlock(&inode->i_lock);
-		return;
+		goto out;
 	}
 	orig_gen = ci->i_rdcache_gen;
 	spin_unlock(&inode->i_lock);
@@ -1338,6 +1339,8 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 
 	if (check)
 		ceph_check_caps(ci, 0);
+out:
+	iput(inode);
 }
 
 
@@ -1356,6 +1359,7 @@ void ceph_vmtruncate_work(struct work_struct *work)
 	mutex_lock(&inode->i_mutex);
 	__ceph_do_pending_vmtruncate(inode);
 	mutex_unlock(&inode->i_mutex);
+	iput(inode);
 }
 
 /*

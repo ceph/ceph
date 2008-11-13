@@ -1091,11 +1091,13 @@ out:
 		 * context.
 		 */
 		dout(10, "queueing %p for writeback\n", inode);
-		ceph_queue_writeback(inode);
+		if (ceph_queue_writeback(inode))
+			igrab(inode);
 	}
 	if (invalidate_async) {
 		dout(10, "queueing %p for page invalidation\n", inode);
-		ceph_queue_page_invalidation(inode);
+		if (ceph_queue_page_invalidation(inode))
+			igrab(inode);
 	}
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -1216,9 +1218,11 @@ static void handle_cap_trunc(struct inode *inode,
 	ci->i_reported_size = size;
 	spin_unlock(&inode->i_lock);
 
-	if (queue_trunc)
-		queue_work(ceph_client(inode->i_sb)->trunc_wq,
-			   &ci->i_vmtruncate_work);
+	if (queue_trunc) {
+		if (queue_work(ceph_client(inode->i_sb)->trunc_wq,
+			   &ci->i_vmtruncate_work))
+			   igrab(inode);
+	}
 }
 
 /*

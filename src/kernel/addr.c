@@ -856,7 +856,8 @@ retry_locked:
 			 * to be writeable or written */
 			snapc = ceph_get_snap_context((void *)page->private);
 			unlock_page(page);
-			ceph_queue_writeback(inode);
+			if (ceph_queue_writeback(inode))
+				igrab(inode);
 			wait_event_interruptible(ci->i_cap_wq,
 			       context_is_writeable_or_written(inode, snapc));
 			ceph_put_snap_context(snapc);

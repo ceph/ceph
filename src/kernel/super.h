@@ -425,15 +425,15 @@ static inline struct ceph_client *ceph_sb_to_client(struct super_block *sb)
 	return (struct ceph_client *)sb->s_fs_info;
 }
 
-static inline void ceph_queue_writeback(struct inode *inode)
+static inline int ceph_queue_writeback(struct inode *inode)
 {
-	queue_work(ceph_inode_to_client(inode)->wb_wq,
+	return queue_work(ceph_inode_to_client(inode)->wb_wq,
 		   &ceph_inode(inode)->i_wb_work);
 }
 
-static inline void ceph_queue_page_invalidation(struct inode *inode)
+static inline int ceph_queue_page_invalidation(struct inode *inode)
 {
-	queue_work(ceph_inode_to_client(inode)->pg_inv_wq,
+	return queue_work(ceph_inode_to_client(inode)->pg_inv_wq,
 		   &ceph_inode(inode)->i_pg_inv_work);
 }
 
