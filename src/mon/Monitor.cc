@@ -252,7 +252,7 @@ void Monitor::handle_command(MMonCommand *m)
     }
 
     if (m->cmd[0] == "_injectargs") {
-      parse_config_option_string(m->cmd[0]);
+      parse_config_option_string(m->cmd[1]);
       return;
     } 
     if (m->cmd[0] == "mon") {
