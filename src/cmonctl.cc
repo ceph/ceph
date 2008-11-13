@@ -186,9 +186,10 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start up network
   rank.bind();
   g_conf.daemonize = false; // not us!
-  rank.start();
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
+
+  rank.start();
   
   if (watch) {
     get_next_status();

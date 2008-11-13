@@ -397,6 +397,7 @@ static void put_connection(struct ceph_connection *con)
 {
 	dout(20, "put_connection %p nref = %d -> %d\n", con,
 	     atomic_read(&con->nref), atomic_read(&con->nref) - 1);
+	BUG_ON(atomic_read(&con->nref) == 0);
 	if (atomic_dec_and_test(&con->nref)) {
 		dout(20, "put_connection %p destroying\n", con);
 		ceph_msg_put_list(&con->out_queue);
@@ -591,6 +592,7 @@ static void prepare_write_message_footer(struct ceph_connection *con, int v)
 {
 	struct ceph_msg *m = con->out_msg;
 
+	dout(10, "prepare_write_message_footer %p\n", con);
 	con->out_kvec[v].iov_base = &m->footer;
 	con->out_kvec[v].iov_len = sizeof(m->footer);
 	con->out_kvec_bytes += sizeof(m->footer);
@@ -703,6 +705,8 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 {
 	int len = strlen(CEPH_BANNER);
 
+	dout(10, "prepare_write_connect %p\n", con);
+	con->out_connect.host_type = CEPH_ENTITY_TYPE_CLIENT;
 	con->out_connect.connect_seq = cpu_to_le32(con->connect_seq);
 	con->out_connect.global_seq = get_global_seq(con->msgr, 0);
 	con->out_connect.flags = 0;
@@ -726,6 +730,7 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 static void prepare_write_connect_retry(struct ceph_messenger *msgr,
 					struct ceph_connection *con)
 {
+	dout(10, "prepare_write_connect_retry %p\n", con);
 	con->out_connect.connect_seq = cpu_to_le32(con->connect_seq);
 	con->out_connect.global_seq = get_global_seq(con->msgr, 0);
 
@@ -746,6 +751,7 @@ static void prepare_write_accept_hello(struct ceph_messenger *msgr,
 {
 	int len = strlen(CEPH_BANNER);
 
+	dout(10, "prepare_write_accept_hello %p\n", con);
 	con->out_kvec[0].iov_base = CEPH_BANNER;
 	con->out_kvec[0].iov_len = len;
 	con->out_kvec[1].iov_base = &msgr->inst.addr;
@@ -763,6 +769,7 @@ static void prepare_write_accept_hello(struct ceph_messenger *msgr,
  */
 static void prepare_write_accept_reply(struct ceph_connection *con, bool retry)
 {
+	dout(10, "prepare_write_accept_reply %p\n", con);
 	con->out_reply.flags = 0;
 	if (test_bit(LOSSYTX, &con->state))
 		con->out_reply.flags = CEPH_MSG_CONNECT_LOSSY;
@@ -917,16 +924,19 @@ out:
  */
 static void prepare_read_connect(struct ceph_connection *con)
 {
+	dout(10, "prepare_read_connect %p\n", con);
 	con->in_base_pos = 0;
 }
 
 static void prepare_read_ack(struct ceph_connection *con)
 {
+	dout(10, "prepare_read_ack %p\n", con);
 	con->in_base_pos = 0;
 }
 
 static void prepare_read_tag(struct ceph_connection *con)
 {
+	dout(10, "prepare_read_tag %p\n", con);
 	con->in_base_pos = 0;
 	con->in_tag = CEPH_MSGR_TAG_READY;
 }
@@ -938,6 +948,7 @@ static int prepare_read_message(struct ceph_connection *con)
 {
 	int err;
 
+	dout(10, "prepare_read_message %p\n", con);
 	con->in_base_pos = 0;
 	BUG_ON(con->in_msg != NULL);
 	con->in_msg = ceph_msg_new(0, 0, 0, 0, NULL);
@@ -952,50 +963,43 @@ static int prepare_read_message(struct ceph_connection *con)
 }
 
 
+static int read_partial(struct ceph_connection *con,
+			int *to, int size, void *object)
+{
+	*to += size;
+	while (con->in_base_pos < *to) {
+		int left = *to - con->in_base_pos;
+		int have = size - left;
+		int ret = ceph_tcp_recvmsg(con->sock, object + have, left);
+		if (ret <= 0)
+			return ret;
+		con->in_base_pos += ret;
+	}
+	return 1;
+}
+
 
 /*
  * Read all or part of the connect-side handshake on a new connection
  */
 static int read_partial_connect(struct ceph_connection *con)
 {
-	int ret, to;
+	int ret, to = 0;
+
 	dout(20, "read_partial_connect %p at %d\n", con, con->in_base_pos);
 
 	/* peer's banner */
-	to = strlen(CEPH_BANNER);
-	while (con->in_base_pos < to) {
-		int left = to - con->in_base_pos;
-		int have = con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&con->in_banner + have,
-				       left);
-		if (ret <= 0)
-			goto out;
-		con->in_base_pos += ret;
-	}
+	ret = read_partial(con, &to, strlen(CEPH_BANNER), con->in_banner);
+	if (ret <= 0)
+		goto out;
+	ret = read_partial(con, &to, sizeof(con->actual_peer_addr),
+			   &con->actual_peer_addr);
+	if (ret <= 0)
+		goto out;
+	ret = read_partial(con, &to, sizeof(con->in_reply), &con->in_reply);
+	if (ret <= 0)
+		goto out;
 
-	/* peer's addr */
-	to += sizeof(con->actual_peer_addr);
-	while (con->in_base_pos < to) {
-		int left = to - con->in_base_pos;
-		int have = sizeof(con->actual_peer_addr) - left;
-		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&con->actual_peer_addr + have,
-				       left);
-		if (ret <= 0)
-			goto out;
-		con->in_base_pos += ret;
-	}
-
-	/* in_reply */
-	to += sizeof(con->in_reply);
-	if (con->in_base_pos < to) {
-		ret = ceph_tcp_recvmsg(con->sock, &con->in_reply, 1);
-		if (ret <= 0)
-			goto out;
-		con->in_base_pos += ret;
-	}
-	ret = 1;  /* done */
 	dout(20, "read_partial_connect %p connect_seq = %u, global_seq = %u\n",
 	     con, le32_to_cpu(con->in_reply.connect_seq),
 	     le32_to_cpu(con->in_reply.global_seq));
@@ -1157,46 +1161,19 @@ static int process_connect(struct ceph_connection *con)
 static int read_partial_accept(struct ceph_connection *con)
 {
 	int ret;
-	int to;
+	int to = 0;
 
 	/* banner */
-	to = strlen(CEPH_BANNER);
-	while (con->in_base_pos < to) {
-		int left = to - con->in_base_pos;
-		int have = con->in_base_pos;
-		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&con->in_banner + have, left);
-		if (ret <= 0)
-			return ret;
-		con->in_base_pos += ret;
-	}
-
-	/* peer_addr */
-	to += sizeof(con->peer_addr);
-	while (con->in_base_pos < to) {
-		int left = to - con->in_base_pos;
-		int have = sizeof(con->peer_addr) - left;
-		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&con->peer_addr + have,
-				       left);
-		if (ret <= 0)
-			return ret;
-		con->in_base_pos += ret;
-	}
-
-	/* connect */
-	to += sizeof(con->in_connect);
-	while (con->in_base_pos < to) {
-		int left = to - con->in_base_pos;
-		int have = sizeof(con->in_connect) - left;
-		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&con->in_connect + have, left);
-		if (ret <= 0)
-			return ret;
-		con->in_base_pos += ret;
-	}
-
-	return 1; /* done */
+	ret = read_partial(con, &to, strlen(CEPH_BANNER), con->in_banner);
+	if (ret <= 0)
+		return ret;
+	ret = read_partial(con, &to, sizeof(con->peer_addr), &con->peer_addr);
+	if (ret <= 0)
+		return ret;
+	ret = read_partial(con, &to, sizeof(con->in_connect), &con->in_connect);
+	if (ret <= 0)
+		return ret;
+	return 1;
 }
 
 /*
@@ -1330,6 +1307,7 @@ accept:
 		__replace_connection(msgr, existing, con);
 	else
 		__register_connection(msgr, con);
+	put_connection(con);
 
 reply:
 	if (existing)
@@ -1340,7 +1318,6 @@ reply:
 	radix_tree_preload_end();
 
 	ceph_queue_con(con);
-	put_connection(con);
 	return 0;
 }
 
@@ -1349,17 +1326,12 @@ reply:
  */
 static int read_partial_ack(struct ceph_connection *con)
 {
-	while (con->in_base_pos < sizeof(con->in_temp_ack)) {
-		int left = sizeof(con->in_temp_ack) - con->in_base_pos;
-		int ret = ceph_tcp_recvmsg(con->sock,
-					   (char *)&con->in_temp_ack +
-					   con->in_base_pos, left);
-		if (ret <= 0)
-			return ret;
-		con->in_base_pos += ret;
-	}
-	return 1; /* done */
+	int to = 0;
+
+	return read_partial(con, &to, sizeof(con->in_temp_ack),
+			    &con->in_temp_ack);
 }
+
 
 /*
  * We can finally discard anything that's been acked.

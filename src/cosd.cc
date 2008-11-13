@@ -107,6 +107,7 @@ int main(int argc, const char **argv)
 
   _dout_create_courtesy_output_symlink("osd", whoami);
 
+
   // start up network
   rank.bind();
 
@@ -117,7 +118,8 @@ int main(int argc, const char **argv)
 
   g_timer.shutdown();
 
-  rank.start();
+  Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
+  assert(m);
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
   rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
@@ -128,9 +130,9 @@ int main(int argc, const char **argv)
   rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossy_fast_fail());
   rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossy_fast_fail());
 
+  rank.start();
+
   // start osd
-  Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
-  assert(m);
   OSD *osd = new OSD(whoami, m, &monmap, dev);
   osd->init();
 

@@ -315,6 +315,9 @@ class C_Debug : public Context {
 
 int Rank::start(bool nodaemon)
 {
+  // register at least one entity, first!
+  assert(rank.my_type >= 0); 
+
   lock.Lock();
   if (started) {
     dout(10) << "rank.start already started" << dendl;
@@ -388,6 +391,12 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   // create messenger
   int erank = max_local;
   EntityMessenger *msgr = new EntityMessenger(name, erank);
+
+  // now i know my type.
+  if (my_type >= 0)
+    assert(my_type == name.type());
+  else
+    my_type = name.type();
 
   // add to directory
   max_local++;
@@ -548,6 +557,7 @@ void Rank::wait()
   dout(10) << "wait: done." << dendl;
   dout(1) << "shutdown complete." << dendl;
   started = false;
+  my_type = -1;
 }
 
 
@@ -873,7 +883,8 @@ int Rank::Pipe::accept()
     
     rank.lock.Lock();
 
-    // note peer's flags
+    // note peer's type, flags
+    policy = rank.policy_map[connect.host_type];  /* apply policy */
     lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
 
     memset(&reply, 0, sizeof(reply));
@@ -1179,6 +1190,7 @@ int Rank::Pipe::connect()
 
   while (1) {
     ceph_msg_connect connect;
+    connect.host_type = rank.my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.flags = 0;
@@ -1524,9 +1536,6 @@ void Rank::Pipe::reader()
 	continue;
       }
       in_seq++;
-
-      if (in_seq == 1)
-	policy = rank.policy_map[m->get_source().type()];  /* apply policy */
 
       if (!lossy_rx && in_seq != m->get_seq()) {
 	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq

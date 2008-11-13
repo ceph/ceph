@@ -370,7 +370,8 @@ private:
   
   // remote
   hash_map<entity_addr_t, Pipe*> rank_pipe;
-
+ 
+  int my_type;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
   set<Pipe*>      pipes;
@@ -390,6 +391,7 @@ private:
 public:
   Rank() : lock("Rank::lock"), started(false), need_addr(true),
 	   max_local(0), num_local(0),
+	   my_type(-1),
 	   global_seq_lock("Rank::global_seq_lock"), global_seq(0) { }
   ~Rank() { }
 

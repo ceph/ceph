@@ -21,11 +21,12 @@ int MonClient::probe_mon(MonMap *pmonmap)
   parse_ip_port(g_conf.mon_host, monaddr);
   
   rank.bind();
-  rank.start(true);  // do not daemonize!
   cout << " connecting to monitor at " << monaddr << " ..." << std::endl;
   
   Messenger *msgr = rank.register_entity(entity_name_t::CLIENT(-1));
   msgr->set_dispatcher(this);
+
+  rank.start(true);  // do not daemonize!
   
   int attempt = 10;
   monmap_lock.Lock();

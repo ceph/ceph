@@ -436,6 +436,7 @@ struct ceph_entity_inst {
  * connection negotiation
  */
 struct ceph_msg_connect {
+	__le32 host_type;  /* CEPH_ENTITY_TYPE_* */
 	__le32 global_seq;
 	__le32 connect_seq;
 	__u8  flags;
@@ -443,7 +444,8 @@ struct ceph_msg_connect {
 
 struct ceph_msg_connect_reply {
 	__u8 tag;
-	__le32 global_seq, connect_seq;
+	__le32 global_seq;
+	__le32 connect_seq;
 	__u8 flags;
 } __attribute__ ((packed));
 
