@@ -1229,6 +1229,8 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 retry:
 	if (req->r_timeout &&
 	    time_after_eq(jiffies, req->r_started + req->r_timeout)) {
+		if (session && session->s_state == CEPH_MDS_SESSION_OPENING)
+			unregister_session(mdsc, mds);
 		dout(10, "do_request timed out\n");
 		err = -EIO;
 		goto finish;
