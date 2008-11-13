@@ -152,7 +152,7 @@ private:
     int do_sendmsg(int sd, struct msghdr *msg, int len);
     int write_ack(unsigned s);
 
-    void fault(bool silent=false);
+    void fault(bool silent=false, bool reader=false);
     void fail();
 
     void was_session_reset();
@@ -194,6 +194,15 @@ private:
     void start_writer() {
       writer_running = true;
       writer_thread.create();
+    }
+    void join_reader() {
+      if (!reader_running)
+	return;
+      cond.Signal();
+      reader_thread.kill(SIGUSR1);
+      lock.Unlock();
+      reader_thread.join();
+      lock.Lock();
     }
 
     // public constructors
