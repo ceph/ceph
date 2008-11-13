@@ -1768,15 +1768,25 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 				 * out now */
 				complete(&s->s_completion);
 				unregister_session(mdsc, i);
-				continue;
 			}
+
+			/* kick any requests waiting on the recovering mds */
+			kick_requests(mdsc, i, 1);
+			continue;
 		}
 
-		/* kick if cur or forwarder: we may have sent the request
-		 * to mds1, mds1 told us it forwarded it to mds2, but then
-		 * we learn mds1 failed and can't be sure it successfully
-		 * forwarded our request before it died. */
-		kick_requests(mdsc, i, 1);
+		/*
+		 * kick requests on any mds that has gone active.
+		 *
+		 * kick requests on cur or forwarder: we may have sent
+		 * the request to mds1, mds1 told us it forwarded it
+		 * to mds2, but then we learn mds1 failed and can't be
+		 * sure it successfully forwarded our request before
+		 * it died.
+		 */
+		if (oldstate < CEPH_MDS_STATE_ACTIVE &&
+		    newstate >= CEPH_MDS_STATE_ACTIVE)
+			kick_requests(mdsc, i, 1);
 	}
 }
 
@@ -2058,6 +2068,7 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 {
 	int i;
 
+	dout(10, "drop_leases\n");
 	mutex_lock(&mdsc->mutex);
 	for (i = 0; i < mdsc->max_sessions; i++) {
 		struct ceph_mds_session *s = __ceph_get_mds_session(mdsc, i);
