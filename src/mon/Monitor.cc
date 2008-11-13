@@ -236,6 +236,10 @@ void Monitor::handle_command(MMonCommand *m)
       pgmon->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "client") {
+      clientmon->dispatch(m);
+      return;
+    }
     if (m->cmd[0] == "stop") {
       shutdown();
       reply_command(m, 0, "stopping");

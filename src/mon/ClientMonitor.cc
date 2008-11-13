@@ -22,8 +22,11 @@
 #include "messages/MMonMap.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
+#include "messages/MMonCommand.h"
 
 #include "common/Timer.h"
+
+#include <sstream>
 
 #include "config.h"
 
@@ -154,6 +157,8 @@ bool ClientMonitor::preprocess_query(Message *m)
     }
     return false;
     
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
 
   default:
     assert(0);
@@ -204,12 +209,78 @@ bool ClientMonitor::prepare_update(Message *m)
     }
     return true;
   
+
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+
   default:
     assert(0);
     delete m;
     return false;
   }
 
+}
+
+
+// COMMAND
+
+bool ClientMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmap") {
+      client_map.encode(rdata);
+      ss << "got clientmap version " << client_map.version;
+      r = 0;
+    }
+    else if (m->cmd[1] == "dump") {
+      ss << "version " << client_map.version << std::endl;
+      ss << "next_client " << client_map.next_client << std::endl;
+      for (map<uint32_t, entity_addr_t>::iterator p = client_map.client_addr.begin();
+	   p != client_map.client_addr.end();
+	   p++) {
+	ss << "client" << p->first << "\t" << p->second << std::endl;
+      }
+      while (!ss.eof()) {
+	string s;
+	getline(ss, s);
+	rdata.append(s.c_str(), s.length());
+	rdata.append("\n", 1);
+      }
+      ss << "ok";
+      r = 0;
+    }
+  }
+
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(m, r, rs, rdata);
+    return true;
+  } else
+    return false;
+}
+
+
+bool ClientMonitor::prepare_command(MMonCommand *m)
+{
+  stringstream ss;
+  string rs;
+  int err = -EINVAL;
+
+  // nothing here yet
+  ss << "unrecognized command";
+
+  getline(ss, rs);
+  mon->reply_command(m, err, rs);
+  return false;
 }
 
 

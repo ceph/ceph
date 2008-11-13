@@ -43,11 +43,11 @@ int watch = 0;
 
 MonMap monmap;
 
-enum { OSD, MON, MDS, LAST };
+enum { OSD, MON, MDS, CLIENT, LAST };
 int which = 0;
 int same = 0;
-const char *prefix[3] = { "mds", "osd", "pg" };
-string status[3];
+const char *prefix[4] = { "mds", "osd", "pg", "client" };
+string status[4];
 
 void get_next_status()
 {

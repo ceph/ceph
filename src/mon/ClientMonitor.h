@@ -34,6 +34,7 @@ class Monitor;
 class Paxos;
 class MClientMount;
 class MClientUnmount;
+class MMonCommand;
 
 class ClientMonitor : public PaxosService {
 public:
@@ -171,7 +172,9 @@ private:
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
 
-  
+  bool preprocess_command(MMonCommand *m);  // true if processed.
+  bool prepare_command(MMonCommand *m);
+
  public:
   ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
