@@ -58,7 +58,6 @@ class Admin : public Dispatcher {
 
   void ms_handle_failure(Message *m, const entity_inst_t& inst) { 
     
-    #warning fixme?
 
   }
 
