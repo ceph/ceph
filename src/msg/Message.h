@@ -125,8 +125,11 @@ protected:
   friend class Messenger;
 
 public:
-  Message() { };
+  Message() {
+    memset(&header, 0, sizeof(header));
+  };
   Message(int t) {
+    memset(&header, 0, sizeof(header));
     header.type = t;
     header.priority = 0;  // undef
     header.data_off = 0;
