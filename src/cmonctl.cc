@@ -141,6 +141,8 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   vec_to_argv(args, argc, argv);
 
+  srand(getpid());
+
   bufferlist indata;
   vector<const char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
