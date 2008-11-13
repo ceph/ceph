@@ -309,7 +309,7 @@ private:
     osd_state[o] = s;
   }
   void set_weightf(int o, float w) {
-    set_weight(o, (float)CEPH_OSD_IN * w);
+    set_weight(o, (int)((float)CEPH_OSD_IN * w));
   }
   void set_weight(int o, unsigned w) {
     assert(o < max_osd);
@@ -329,7 +329,7 @@ private:
 	max = p->second;
 
     for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
-      inc.new_weight[p->first] = p->second / max;
+      inc.new_weight[p->first] = (unsigned)((p->second / max) * CEPH_OSD_IN);
   }
 
 
