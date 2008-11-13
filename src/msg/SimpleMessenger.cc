@@ -531,7 +531,9 @@ void Rank::wait()
 	 i != toclose.end();
 	 i++) {
       (*i)->unregister_pipe();
-      (*i)->dirty_close();
+      (*i)->lock.Lock();
+      (*i)->stop();
+      (*i)->lock.Unlock();
     }
 
     reaper();
@@ -853,6 +855,7 @@ int Rank::Pipe::accept()
   }
   
   ceph_msg_connect connect;
+  ceph_msg_connect_reply reply;
   Pipe *existing = 0;
   
   // this should roughly mirror pseudocode at
@@ -871,7 +874,9 @@ int Rank::Pipe::accept()
     rank.lock.Lock();
 
     // note peer's flags
-    lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSYTX;
+    lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
+
+    memset(&reply, 0, sizeof(reply));
 
     // existing?
     if (rank.rank_pipe.count(peer_addr)) {
@@ -881,16 +886,11 @@ int Rank::Pipe::accept()
       if (connect.global_seq < existing->peer_global_seq) {
 	dout(10) << "accept existing " << existing << ".gseq " << existing->peer_global_seq
 		 << " > " << connect.global_seq << ", RETRY_GLOBAL" << dendl;
-	__le32 gseq;
-	gseq = existing->peer_global_seq;  // so we can send it below..
+	reply.tag = CEPH_MSGR_TAG_RETRY_GLOBAL;
+	reply.global_seq = existing->peer_global_seq;  // so we can send it below..
 	existing->lock.Unlock();
 	rank.lock.Unlock();
-	char tag = CEPH_MSGR_TAG_RETRY_GLOBAL;
-	if (tcp_write(sd, &tag, 1) < 0)
-	  goto fail;
-	if (tcp_write(sd, (char*)&gseq, sizeof(gseq)) < 0)
-	  goto fail;
-	continue;
+	goto reply;
       } else {
 	dout(10) << "accept existing " << existing << ".gseq " << existing->peer_global_seq
 		 << " <= " << connect.global_seq << ", looks ok" << dendl;
@@ -903,15 +903,15 @@ int Rank::Pipe::accept()
       }
       if (lossy_rx) {
 	if (existing->state == STATE_STANDBY) {
-	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless" << dendl;
+	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless "
+		    << existing << dendl;
 	  existing->state = STATE_CONNECTING;
 	  existing->cond.Signal();
 	} else {
-	  dout(-10) << "accept incoming lossy connection, our lossless has state " << existing->state
-		    << ", doing nothing" << dendl;
+	  dout(-10) << "accept incoming lossy connection, our lossless " << existing
+		    << " has state " << existing->state << ", doing nothing" << dendl;
 	}
 	existing->lock.Unlock();
-	rank.lock.Unlock();
 	goto fail;
       }
 
@@ -928,21 +928,16 @@ int Rank::Pipe::accept()
 	  // old attempt, or we sent READY but they didn't get it.
 	  dout(10) << "accept existing " << existing << ".cseq " << existing->connect_seq
 		   << " > " << connect.connect_seq << ", RETRY_SESSION" << dendl;
-	  __le32 cseq;
-	  cseq = existing->connect_seq;  // so we can send it below..
+	  reply.tag = CEPH_MSGR_TAG_RETRY_SESSION;
+	  reply.connect_seq = existing->connect_seq;  // so we can send it below..
 	  existing->lock.Unlock();
 	  rank.lock.Unlock();
-	  char tag = CEPH_MSGR_TAG_RETRY_SESSION;
-	  if (tcp_write(sd, &tag, 1) < 0)
-	    goto fail;
-	  if (tcp_write(sd, (char*)&cseq, sizeof(cseq)) < 0)
-	    goto fail;
-	  continue;
+	  goto reply;
 	}
       }
 
       if (connect.connect_seq == existing->connect_seq) {
-	// connection race
+	// connection race?
 	if (peer_addr < rank.rank_addr) {
 	  // incoming wins
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
@@ -957,13 +952,10 @@ int Rank::Pipe::accept()
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > rank.rank_addr);
 	  assert(existing->state == STATE_CONNECTING); // this will win
+	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->lock.Unlock();
 	  rank.lock.Unlock();
-	  
-	  char tag = CEPH_MSGR_TAG_WAIT;
-	  if (tcp_write(sd, &tag, 1) < 0)
-	    goto fail;
-	  continue;	
+	  goto reply;
 	}
       }
 
@@ -973,34 +965,34 @@ int Rank::Pipe::accept()
 	dout(0) << "accept we reset (peer sent cseq " << connect.connect_seq 
 		 << ", " << existing << ".cseq = " << existing->connect_seq
 		 << "), sending RESETSESSION" << dendl;
+	reply.tag = CEPH_MSGR_TAG_RESETSESSION;
 	rank.lock.Unlock();
 	existing->lock.Unlock();
-	char tag = CEPH_MSGR_TAG_RESETSESSION;
-	if (tcp_write(sd, &tag, 1) < 0)
-	  goto fail;
-	continue;	
-      } else {
-	// reconnect
-	dout(10) << "accept peer sent cseq " << connect.connect_seq
-		 << " > " << existing->connect_seq << dendl;
-	goto replace;
+	goto reply;
       }
-      assert(0);
+
+      // reconnect
+      dout(10) << "accept peer sent cseq " << connect.connect_seq
+	       << " > " << existing->connect_seq << dendl;
+      goto replace;
     } // existing
     else if (connect.connect_seq > 0) {
       // we reset, and they are opening a new session
       dout(0) << "accept we reset (peer sent cseq " << connect.connect_seq << "), sending RESETSESSION" << dendl;
       rank.lock.Unlock();
-      char tag = CEPH_MSGR_TAG_RESETSESSION;
-      if (tcp_write(sd, &tag, 1) < 0)
-	goto fail;
-      continue;	
+      reply.tag = CEPH_MSGR_TAG_RESETSESSION;
+      goto reply;
     } else {
       // new session
       dout(10) << "accept new session" << dendl;
       goto open;
     }
     assert(0);    
+
+  reply:
+    rc = tcp_write(sd, (char*)&reply, sizeof(reply));
+    if (rc < 0)
+      goto fail_unlocked;
   }
   
  replace:
@@ -1029,20 +1021,21 @@ int Rank::Pipe::accept()
   peer_global_seq = connect.global_seq;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
-  // send READY + flags
-  { 
-    char tag = CEPH_MSGR_TAG_READY;
-    if (tcp_write(sd, &tag, 1) < 0) 
-      goto fail;
-    __u8 flags = 0;
-    if (policy.lossy_tx)
-      flags |= CEPH_MSG_CONNECT_LOSSYTX;
-    if (tcp_write(sd, (const char *)&flags, 1) < 0) 
-      goto fail;
-  }
+  // send READY reply
+  reply.tag = CEPH_MSGR_TAG_READY;
+  reply.global_seq = rank.get_global_seq();
+  reply.connect_seq = connect_seq;
+  reply.flags = 0;
+  if (policy.lossy_tx)
+    reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
+  // ok!
   register_pipe();
   rank.lock.Unlock();
+
+  rc = tcp_write(sd, (char*)&reply, sizeof(reply));
+  if (rc < 0)
+    goto fail;
 
   lock.Lock();
   if (state != STATE_CLOSED) {
@@ -1190,7 +1183,7 @@ int Rank::Pipe::connect()
     connect.connect_seq = cseq;
     connect.flags = 0;
     if (policy.lossy_tx)
-      connect.flags |= CEPH_MSG_CONNECT_LOSSYTX;
+      connect.flags |= CEPH_MSG_CONNECT_LOSSY;
     memset(&msg, 0, sizeof(msg));
     msgvec[0].iov_base = (char*)&connect;
     msgvec[0].iov_len = sizeof(connect);
@@ -1203,90 +1196,60 @@ int Rank::Pipe::connect()
       dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
       goto fail;
     }
-    dout(20) << "connect wrote (self +) cseq, waiting for tag" << dendl;
-    if (tcp_read(sd, &tag, 1) < 0) {
-      dout(2) << "connect read tag, seq, " << strerror(errno) << dendl;
+
+    dout(20) << "connect wrote (self +) cseq, waiting for reply" << dendl;
+    ceph_msg_connect_reply reply;
+    if (tcp_read(sd, (char*)&reply, sizeof(reply)) < 0) {
+      dout(2) << "connect read reply " << strerror(errno) << dendl;
       goto fail;
     }
-    dout(20) << "connect got tag " << (int)tag << dendl;
+    dout(20) << "connect got reply tag " << (int)reply.tag
+	     << " connect_seq " << reply.connect_seq
+	     << " global_seq " << reply.global_seq
+	     << " flags " << (int)reply.flags
+	     << dendl;
 
-    if (tag == CEPH_MSGR_TAG_RESETSESSION) {
-      lock.Lock();
-      if (state != STATE_CONNECTING) {
-	dout(0) << "connect got RESETSESSION but no longer connecting" << dendl;
-	goto stop_locked;
-      }
+    lock.Lock();
+    if (state != STATE_CONNECTING) {
+      dout(0) << "connect got RESETSESSION but no longer connecting" << dendl;
+      goto stop_locked;
+    }
 
+    if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       dout(0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
       cseq = 0;
       lock.Unlock();
       continue;
     }
-    if (tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
-      int rc = tcp_read(sd, (char*)&gseq, sizeof(gseq));
-      if (rc < 0) {
-	dout(0) << "connect got RETRY_GLOBAL tag but couldn't read gseq" << dendl;
-	goto fail;
-      }
-      lock.Lock();
-      if (state != STATE_CONNECTING) {
-	dout(0) << "connect got RETRY_GLOBAL, but connection race or something, failing" << dendl;
-	goto stop_locked;
-      }
-      gseq = rank.get_global_seq(gseq);
-      dout(10) << "connect got RETRY_GLOBAL " << gseq << dendl;
+    if (reply.tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
+      gseq = rank.get_global_seq(reply.global_seq);
+      dout(10) << "connect got RETRY_GLOBAL " << reply.global_seq
+	       << " chose new " << gseq << dendl;
       lock.Unlock();
       continue;
     }
-    if (tag == CEPH_MSGR_TAG_RETRY_SESSION) {
-      int rc = tcp_read(sd, (char*)&cseq, sizeof(cseq));
-      if (rc < 0) {
-	dout(0) << "connect got RETRY_SESSION tag but couldn't read cseq" << dendl;
-	goto fail;
-      }
-      lock.Lock();
-      if (state != STATE_CONNECTING) {
-	dout(0) << "connect got RETRY_SESSION, but connection race or something, failing" << dendl;
-	goto stop_locked;
-      }
-      assert(cseq > connect_seq);
-      dout(10) << "connect got RETRY_SESSION " << connect_seq << " -> " << cseq << dendl;
-      connect_seq = cseq;
+    if (reply.tag == CEPH_MSGR_TAG_RETRY_SESSION) {
+      assert(reply.connect_seq > connect_seq);
+      dout(10) << "connect got RETRY_SESSION " << connect_seq
+	       << " -> " << reply.connect_seq << dendl;
+      cseq = connect_seq = reply.connect_seq;
       lock.Unlock();
       continue;
     }
 
-    if (tag == CEPH_MSGR_TAG_WAIT) {
-      lock.Lock();
-      if (state == STATE_CONNECTING) {
-	dout(3) << "connect got WAIT (connection race), will wait" << dendl;
-	state = STATE_WAIT;
-      } else {
-	dout(3) << "connect got WAIT (connection race), and lo, the wait is already over" << dendl;
-      }
+    if (reply.tag == CEPH_MSGR_TAG_WAIT) {
+      dout(3) << "connect got WAIT (connection race), and lo, the wait is already over" << dendl;
       goto stop_locked;
     }
 
-    if (tag == CEPH_MSGR_TAG_READY) {
-      lock.Lock();
-      if (state != STATE_CONNECTING) {
-	dout(3) << "connect got READY but no longer connecting?" << dendl;
-	goto stop_locked;
-      }
-
-      // read flags
-      __u8 flags;
-      if (tcp_read(sd, (char *)&flags, 1) < 0) {
-	dout(2) << "connect read tag, seq, " << strerror(errno) << dendl;
-	goto fail;
-      }
-      lossy_rx = flags & CEPH_MSG_CONNECT_LOSSYTX;
-      
-
+    if (reply.tag == CEPH_MSGR_TAG_READY) {
       // hooray!
+      peer_global_seq = reply.global_seq;
+      lossy_rx = reply.flags & CEPH_MSG_CONNECT_LOSSY;
       state = STATE_OPEN;
-      connect_seq = cseq+1;
+      connect_seq = cseq + 1;
+      assert(connect_seq == reply.connect_seq);
       first_fault = last_attempt = utime_t();
       dout(20) << "connect success " << connect_seq << ", lossy_rx = " << lossy_rx << dendl;
 
@@ -1299,11 +1262,12 @@ int Rank::Pipe::connect()
     
     // protocol error
     dout(0) << "connect got bad tag " << (int)tag << dendl;
-    goto fail;
+    goto fail_locked;
   }
 
  fail:
   lock.Lock();
+ fail_locked:
   if (state == STATE_CONNECTING)
     fault();
   else
@@ -1427,6 +1391,8 @@ void Rank::Pipe::fail()
 
 void Rank::Pipe::was_session_reset()
 {
+  assert(lock.is_locked());
+
   dout(10) << "was_session_reset" << dendl;
   report_failures();
   for (unsigned i=0; i<rank.local.size(); i++) 
@@ -1466,28 +1432,12 @@ void Rank::Pipe::report_failures()
 void Rank::Pipe::stop()
 {
   dout(10) << "stop" << dendl;
-  assert(lock.is_locked());
-
-  cond.Signal();
   state = STATE_CLOSED;
-  if (sd >= 0) {
-    ::close(sd);
-    sd = -1;
-    closed_socket();
-  }
-}
-
-
-
-void Rank::Pipe::dirty_close()
-{
-  dout(10) << "dirty_close" << dendl;
-  lock.Lock();
-  state = STATE_CLOSING;
   cond.Signal();
-  dout(10) << "dirty_close sending SIGUSR1" << dendl;
-  reader_thread.kill(SIGUSR1);
-  lock.Unlock();
+  if (reader_running)
+    reader_thread.kill(SIGUSR1);
+  if (writer_running)
+    writer_thread.kill(SIGUSR1);
 }
 
 

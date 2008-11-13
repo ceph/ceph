@@ -173,8 +173,9 @@ struct ceph_connection {
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
-	u32 connect_seq, global_seq; /* identify the most recent connection
-					attempt for this connection, client */
+	u32 connect_seq;      /* identify the most recent connection
+				 attempt for this connection, client */
+	u32 peer_global_seq;  /* peer's global seq for this connection */
 
 	/* out queue */
 	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
@@ -186,9 +187,17 @@ struct ceph_connection {
 
 	/* connection negotiation temps */
 	char in_banner[CEPH_BANNER_MAX_LEN];
-	struct ceph_msg_connect out_connect, in_connect;
+	union {
+		struct {  /* outgoing connection */
+			struct ceph_msg_connect out_connect;
+			struct ceph_msg_connect_reply in_reply;
+		};
+		struct {  /* incoming */
+			struct ceph_msg_connect in_connect;
+			struct ceph_msg_connect_reply out_reply;
+		};
+	};
 	struct ceph_entity_addr actual_peer_addr;
-	u8 in_flags;       /* follows TAG_READY */
 
 	/* message out temps */
 	struct ceph_msg *out_msg;        /* sending message (== tail of

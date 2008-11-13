@@ -215,7 +215,6 @@ private:
 
     void register_pipe();
     void unregister_pipe();
-    void dirty_close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
       if (reader_thread.is_started()) reader_thread.join();
