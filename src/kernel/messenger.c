@@ -1133,14 +1133,18 @@ static int process_connect(struct ceph_connection *con)
 		break;
 
 	case CEPH_MSGR_TAG_READY:
-		dout(10, "process_connect got READY, now open\n");
 		clear_bit(CONNECTING, &con->state);
-
 		if (le32_to_cpu(con->in_reply.flags) & CEPH_MSG_CONNECT_LOSSY)
 			set_bit(LOSSYRX, &con->state);
 		con->peer_global_seq = le32_to_cpu(con->in_reply.global_seq);
+		con->connect_seq++;
+		dout(10, "process_connect got READY gseq %d cseq %d (%d)\n",
+		     con->peer_global_seq,
+		     le32_to_cpu(con->in_reply.connect_seq),
+		     con->connect_seq);
 		WARN_ON(con->connect_seq !=
 			le32_to_cpu(con->in_reply.connect_seq));
+
 		con->delay = 0;  /* reset backoff memory */
 		prepare_read_tag(con);
 		break;
