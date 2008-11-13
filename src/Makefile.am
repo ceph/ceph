@@ -43,9 +43,14 @@ bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	cmonctl \
 	mkmonfs monmaptool osdmaptool crushtool \
-	streamtest dupstore dumpjournal
+	streamtest dupstore dumpjournal testmsgr
 
 bin_SCRIPTS = crun
+
+
+testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
+testmsgr_LDADD = libcommon.a
+
 
 # fuse targets?
 if WITH_FUSE
