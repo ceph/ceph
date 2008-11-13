@@ -527,7 +527,8 @@ int Monitor::mkfs()
 
   bufferlist monmapbl;
   monmap->encode(monmapbl);
-  store->put_bl_ss(monmapbl, "monmap", 0);
+  store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  
+  store->put_bl_ss(monmapbl, "monmap", "latest");
 
   list<PaxosService*> services;
   services.push_back(osdmon);

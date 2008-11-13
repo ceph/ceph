@@ -79,7 +79,7 @@ int main(int argc, const char **argv)
 
   // monmap?
   bufferlist mapbl;
-  store.get_bl_ss(mapbl, "monmap", 0);
+  store.get_bl_ss(mapbl, "monmap/latest", 0);
   if (mapbl.length() == 0) {
     cerr << "mon fs missing 'monmap'" << std::endl;
     exit(1);
