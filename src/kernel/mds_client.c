@@ -1235,8 +1235,9 @@ retry:
 	}
 
 	mds = __choose_mds(mdsc, req);
-	if (mds < 0) {
-		dout(30, "do_request waiting for new mdsmap\n");
+	if (mds < 0 ||
+	    ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
+		dout(30, "do_request no mds or not active, waiting for map\n");
 		err = wait_for_new_map(mdsc, req->r_timeout);
 		if (err)
 			goto finish;
