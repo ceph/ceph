@@ -89,6 +89,7 @@ bool ClientMonitor::update_from_paxos()
   bufferlist bl;
   client_map.encode(bl);
   mon->store->put_bl_ss(bl, "clientmap", "latest");
+  mon->store->put_int(paxosv, "clientmap", "last_consumed");
 
   return true;
 }
