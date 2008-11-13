@@ -1191,7 +1191,7 @@ static int process_accept(struct ceph_connection *con)
 	u32 peer_cseq = le32_to_cpu(con->in_connect.connect_seq);
 	bool retry = true;
 	bool replace = false;
-	
+
 	dout(10, "process_accept %p got gseq %d cseq %d\n", con,
 	     peer_gseq, peer_cseq);
 
@@ -1208,7 +1208,7 @@ static int process_accept(struct ceph_connection *con)
 		con->error_msg = "out of memory";
 		return -1;
 	}
-	
+
 	memset(&con->out_reply, 0, sizeof(con->out_reply));
 
 	spin_lock(&msgr->con_lock);
@@ -1237,14 +1237,14 @@ static int process_accept(struct ceph_connection *con)
 				replace = true;
 				goto accept;
 			}
-			
+
 			/* old attempt or peer didn't get the READY */
 			con->out_reply.tag = CEPH_MSGR_TAG_RETRY_SESSION;
 			con->out_reply.connect_seq =
 				cpu_to_le32(con->connect_seq);
 			goto reply;
 		}
-		
+
 		if (peer_cseq == existing->connect_seq) {
 			/* connection race */
 			dout(20, "process_accept connection race state = %lu\n",
@@ -1261,7 +1261,7 @@ static int process_accept(struct ceph_connection *con)
 			con->out_reply.tag = CEPH_MSGR_TAG_WAIT;
 			goto reply;
 		}
-		
+
 		if (existing->connect_seq == 0 &&
 		    peer_cseq > existing->connect_seq) {
 			/* we reset and already reconnecting */
@@ -1276,7 +1276,7 @@ static int process_accept(struct ceph_connection *con)
 			con->out_reply.tag = CEPH_MSGR_TAG_RESETSESSION;
 			goto reply;
 		}
-		
+
 		/* reconnect, replace connection */
 		replace = true;
 		goto accept;
@@ -1298,7 +1298,7 @@ accept:
 	con->peer_global_seq = peer_gseq;
 	dout(10, "process_accept %p cseq %d peer_gseq %d %s\n", con,
 	     con->connect_seq, peer_gseq, replace ? "replace" : "new");
-	
+
 	con->out_reply.tag = CEPH_MSGR_TAG_READY;
 	con->out_reply.global_seq = get_global_seq(con->msgr, 0);
 	con->out_reply.connect_seq = peer_cseq + 1;

@@ -374,7 +374,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 				       sizeof(*map->osd_addr)), bad);
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_state, map->max_osd);
-	
+
 	*p += 4; /* skip length field (should match max) */
 	for (i = 0; i < map->max_osd; i++)
 		ceph_decode_32(p, map->osd_weight[i]);

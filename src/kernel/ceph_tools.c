@@ -79,7 +79,7 @@ void ceph_kfree(void *ptr)
 	}
 
 	if (overrun) {
-		derr(0, "Memory allocated at %s(%d): p=%p (%zu bytes)\n", p->fname, 
+		derr(0, "Memory allocated at %s(%d): p=%p (%zu bytes)\n", p->fname,
 			p->line,
 			((void *)p)+sizeof(struct alloc_data),
 			p->size);
