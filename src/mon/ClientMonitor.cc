@@ -22,8 +22,11 @@
 #include "messages/MMonMap.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientUnmount.h"
+#include "messages/MMonCommand.h"
 
 #include "common/Timer.h"
+
+#include <sstream>
 
 #include "config.h"
 
@@ -40,7 +43,7 @@ static ostream& _prefix(Monitor *mon, ClientMonitor::Map& client_map) {
 ostream& operator<<(ostream& out, ClientMonitor& om)
 {
   return out << "v" << om.client_map.version << ": "
-	     << om.client_map.client_addr.size() << " clients, next is client" << om.client_map.next_client;
+	     << om.client_map.client_info.size() << " clients, next is client" << om.client_map.next_client;
 }
 
 bool ClientMonitor::update_from_paxos()
@@ -77,7 +80,7 @@ bool ClientMonitor::update_from_paxos()
     inc.decode(p);
     client_map.apply_incremental(inc);
     
-    dout(1) << client_map.client_addr.size() << " clients (+" 
+    dout(1) << client_map.client_info.size() << " clients (+" 
 	    << inc.mount.size() << " -" << inc.unmount.size() << ")" 
 	    << dendl;
   }
@@ -86,6 +89,7 @@ bool ClientMonitor::update_from_paxos()
   bufferlist bl;
   client_map.encode(bl);
   mon->store->put_bl_ss(bl, "clientmap", "latest");
+  mon->store->put_int(paxosv, "clientmap", "last_consumed");
 
   return true;
 }
@@ -146,7 +150,7 @@ bool ClientMonitor::preprocess_query(Message *m)
     {
       // already unmounted?
       int client = m->get_orig_source().num();
-      if (client_map.client_addr.count(client) == 0) {
+      if (client_map.client_info.count(client) == 0) {
 	dout(7) << " client" << client << " not mounted" << dendl;
 	_unmounted((MClientUnmount*)m);
 	return true;
@@ -154,6 +158,8 @@ bool ClientMonitor::preprocess_query(Message *m)
     }
     return false;
     
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
 
   default:
     assert(0);
@@ -180,14 +186,17 @@ bool ClientMonitor::prepare_update(Message *m)
 	dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
       } else {
 	dout(10) << "mount: client" << client << " requested by " << addr << dendl;
-	if (client_map.client_addr.count(client)) {
-	  assert(client_map.client_addr[client] != addr);
+	if (client_map.client_info.count(client)) {
+	  assert(client_map.client_info[client].addr != addr);
 	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
-		  << ", which used to be "  << client_map.client_addr[client] << dendl;
+		  << ", which used to be "  << client_map.client_info[client].addr << dendl;
 	}
       }
       
-      pending_inc.add_mount(client, addr);
+      client_info_t info;
+      info.addr = addr;
+      info.mount_time = g_clock.now();
+      pending_inc.add_mount(client, info);
       paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
     }
     return true;
@@ -197,19 +206,88 @@ bool ClientMonitor::prepare_update(Message *m)
       assert(m->get_orig_source().is_client());
       int client = m->get_orig_source().num();
 
-      assert(client_map.client_addr.count(client));
+      assert(client_map.client_info.count(client));
       
       pending_inc.add_unmount(client);
       paxos->wait_for_commit(new C_Unmounted(this, (MClientUnmount*)m));
     }
     return true;
   
+
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+
   default:
     assert(0);
     delete m;
     return false;
   }
 
+}
+
+
+// COMMAND
+
+bool ClientMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stat") {
+      ss << *this;
+      r = 0;
+    }
+    else if (m->cmd[1] == "getmap") {
+      client_map.encode(rdata);
+      ss << "got clientmap version " << client_map.version;
+      r = 0;
+    }
+    else if (m->cmd[1] == "dump") {
+      ss << "version " << client_map.version << std::endl;
+      ss << "next_client " << client_map.next_client << std::endl;
+      for (map<uint32_t, client_info_t>::iterator p = client_map.client_info.begin();
+	   p != client_map.client_info.end();
+	   p++) {
+	ss << "client" << p->first
+	   << "\t" << p->second.addr
+	   << "\t" << p->second.mount_time
+	   << std::endl;
+      }
+      while (!ss.eof()) {
+	string s;
+	getline(ss, s);
+	rdata.append(s.c_str(), s.length());
+	rdata.append("\n", 1);
+      }
+      ss << "ok";
+      r = 0;
+    }
+  }
+
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(m, r, rs, rdata);
+    return true;
+  } else
+    return false;
+}
+
+
+bool ClientMonitor::prepare_command(MMonCommand *m)
+{
+  stringstream ss;
+  string rs;
+  int err = -EINVAL;
+
+  // nothing here yet
+  ss << "unrecognized command";
+
+  getline(ss, rs);
+  mon->reply_command(m, err, rs);
+  return false;
 }
 
 
@@ -246,7 +324,7 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
   // (hack for fakesyn/newsyn, mostly)
   if (mon->is_leader() &&
       client_map.version > 1 &&
-      client_map.client_addr.empty() && 
+      client_map.client_info.empty() && 
       g_conf.mon_stop_on_last_unmount &&
       !mon->is_stopping()) {
     dout(1) << "last client unmounted" << dendl;

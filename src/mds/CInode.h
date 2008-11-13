@@ -144,7 +144,12 @@ class CInode : public MDSCacheObject {
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
   set<snapid_t> dirty_old_rstats;
 
-  bool is_multiversion() { return snaprealm || inode.is_dir(); }
+  bool is_multiversion() {
+    return snaprealm ||  // other snaprealms will link to me
+      inode.is_dir() ||  // links to me in other snaps
+      inode.nlink > 1 || // there are remote links, possibly snapped, that will need to find me
+      old_inodes.size(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
+  }
   snapid_t get_oldest_snap();
 
   loff_t last_journaled;       // log offset for the last time i was journaled

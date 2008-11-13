@@ -619,12 +619,17 @@ void Paxos::lease_renew_timeout()
 
 void Paxos::trim_to(version_t first)
 {
-  dout(10) << "trim_to " << first << " (was " << first_committed << ")" << dendl;
+  version_t last_consumed = mon->store->get_int(machine_name, "last_consumed");
+
+  dout(10) << "trim_to " << first << " (was " << first_committed << ")"
+	   << ", last_consumed " << last_consumed
+	   << dendl;
 
   if (first_committed >= first)
     return;
 
-  while (first_committed < first) {
+  while (first_committed < first &&
+	 first_committed < last_consumed) {
     dout(10) << "trim " << first_committed << dendl;
     mon->store->erase_sn(machine_name, first_committed);
     first_committed++;

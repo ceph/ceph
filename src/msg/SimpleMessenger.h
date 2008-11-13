@@ -152,7 +152,7 @@ private:
     int do_sendmsg(int sd, struct msghdr *msg, int len);
     int write_ack(unsigned s);
 
-    void fault(bool silent=false);
+    void fault(bool silent=false, bool reader=false);
     void fail();
 
     void was_session_reset();
@@ -195,6 +195,15 @@ private:
       writer_running = true;
       writer_thread.create();
     }
+    void join_reader() {
+      if (!reader_running)
+	return;
+      cond.Signal();
+      reader_thread.kill(SIGUSR1);
+      lock.Unlock();
+      reader_thread.join();
+      lock.Lock();
+    }
 
     // public constructors
     static const Pipe& Server(int s);
@@ -206,7 +215,6 @@ private:
 
     void register_pipe();
     void unregister_pipe();
-    void dirty_close();
     void join() {
       if (writer_thread.is_started()) writer_thread.join();
       if (reader_thread.is_started()) reader_thread.join();
@@ -362,7 +370,8 @@ private:
   
   // remote
   hash_map<entity_addr_t, Pipe*> rank_pipe;
-
+ 
+  int my_type;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
   set<Pipe*>      pipes;
@@ -382,6 +391,7 @@ private:
 public:
   Rank() : lock("Rank::lock"), started(false), need_addr(true),
 	   max_local(0), num_local(0),
+	   my_type(-1),
 	   global_seq_lock("Rank::global_seq_lock"), global_seq(0) { }
   ~Rank() { }
 

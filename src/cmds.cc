@@ -66,16 +66,18 @@ int main(int argc, const char **argv)
 
   rank.bind();
   cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
-  rank.start();
-  
+
+  Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
+  assert(m);
+
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
   rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
   rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossless());  // mds does its own timeout/markdown
 
+  rank.start();
+  
   // start mds
-  Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
-  assert(m);
   MDS *mds = new MDS(whoami, m, &monmap);
   mds->init(standby);
   

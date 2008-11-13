@@ -150,11 +150,12 @@ bool PGMonitor::update_from_paxos()
   bufferlist bl;
   pg_map.encode(bl);
   mon->store->put_bl_ss(bl, "pgmap", "latest");
+  mon->store->put_int(paxosv, "pgmap", "last_consumed");
 
   if (mon->is_leader() &&
       mon->is_full_quorum() &&
       paxosv > 10)
-    paxos->trim_to(paxosv-10);
+    paxos->trim_to(paxosv - 10);
 
   if (mon->is_leader())
     send_pg_creates();

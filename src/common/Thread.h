@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+ // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -63,7 +63,7 @@ class Thread {
   int join(void **prval = 0) {
     if (thread_id == 0) {
       generic_derr(0) << "WARNING: join on thread that was never started" << dendl;
-      //assert(0);
+      assert(0);
       return -EINVAL;   // never started.
     }
 

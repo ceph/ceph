@@ -57,7 +57,6 @@ int main(int argc, const char **argv, char *envp[])
   // start up network
   rank.bind();
   cout << "starting csyn at " << rank.get_rank_addr() << std::endl;
-  rank.start();
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
   rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
@@ -70,10 +69,16 @@ int main(int argc, const char **argv, char *envp[])
   for (int i=0; i<g_conf.num_client; i++) {
     Client *client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1)), &monmap);
     SyntheticClient *syn = new SyntheticClient(client);
-    syn->start_thread();
     clients.push_back(client);
     synclients.push_back(syn);
   }
+
+  rank.start();
+
+  for (list<SyntheticClient*>::iterator p = synclients.begin(); 
+       p != synclients.end();
+       p++)
+    (*p)->start_thread();
 
   cout << "waiting for client(s) to finish" << std::endl;
   while (!clients.empty()) {

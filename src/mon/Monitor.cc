@@ -236,6 +236,10 @@ void Monitor::handle_command(MMonCommand *m)
       pgmon->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "client") {
+      clientmon->dispatch(m);
+      return;
+    }
     if (m->cmd[0] == "stop") {
       shutdown();
       reply_command(m, 0, "stopping");
@@ -248,7 +252,7 @@ void Monitor::handle_command(MMonCommand *m)
     }
 
     if (m->cmd[0] == "_injectargs") {
-      parse_config_option_string(m->cmd[0]);
+      parse_config_option_string(m->cmd[1]);
       return;
     } 
     if (m->cmd[0] == "mon") {
@@ -523,7 +527,8 @@ int Monitor::mkfs()
 
   bufferlist monmapbl;
   monmap->encode(monmapbl);
-  store->put_bl_ss(monmapbl, "monmap", 0);
+  store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  
+  store->put_bl_ss(monmapbl, "monmap", "latest");
 
   list<PaxosService*> services;
   services.push_back(osdmon);

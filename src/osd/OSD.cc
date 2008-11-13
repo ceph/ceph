@@ -1095,7 +1095,7 @@ void OSD::do_mon_report()
 
 void OSD::send_boot()
 {
-  int mon = monmap->pick_mon();
+  int mon = monmap->pick_mon(true);
   dout(10) << "send_boot to mon" << mon << dendl;
   messenger->send_message(new MOSDBoot(superblock), 
 			  monmap->get_inst(mon));

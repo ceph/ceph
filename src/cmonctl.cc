@@ -43,11 +43,11 @@ int watch = 0;
 
 MonMap monmap;
 
-enum { OSD, MON, MDS, LAST };
+enum { OSD, MON, MDS, CLIENT, LAST };
 int which = 0;
 int same = 0;
-const char *prefix[3] = { "mds", "osd", "pg" };
-string status[3];
+const char *prefix[4] = { "mds", "osd", "pg", "client" };
+string status[4];
 
 void get_next_status()
 {
@@ -141,6 +141,8 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   vec_to_argv(args, argc, argv);
 
+  srand(getpid());
+
   bufferlist indata;
   vector<const char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
@@ -186,9 +188,10 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start up network
   rank.bind();
   g_conf.daemonize = false; // not us!
-  rank.start();
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
+
+  rank.start();
   
   if (watch) {
     get_next_status();
