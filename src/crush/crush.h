@@ -12,6 +12,8 @@
  * (although the algorithm has evolved somewhat since then):
  *
  *     http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
+ *
+ * LGPL2
  */
 
 

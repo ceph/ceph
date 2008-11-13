@@ -17,7 +17,7 @@
 
 #define crush_hash_seed 1315423911
 
-static __inline__ unsigned crush_hash32(unsigned a) {
+static inline unsigned crush_hash32(unsigned a) {
 	unsigned hash = crush_hash_seed ^ a;
 	unsigned b = a;
 	unsigned x = 231232;
@@ -27,7 +27,7 @@ static __inline__ unsigned crush_hash32(unsigned a) {
 	return (hash & 0xFFFFFFFF);
 }
 
-static __inline__ unsigned crush_hash32_2(unsigned a, unsigned b) {
+static inline unsigned crush_hash32_2(unsigned a, unsigned b) {
 	unsigned hash = crush_hash_seed ^ a ^ b;
 	unsigned x = 231232;
 	unsigned y = 1232;
@@ -37,7 +37,7 @@ static __inline__ unsigned crush_hash32_2(unsigned a, unsigned b) {
 	return (hash & 0xFFFFFFFF);
 }
 
-static __inline__ unsigned crush_hash32_3(unsigned a, unsigned b, unsigned c) {
+static inline unsigned crush_hash32_3(unsigned a, unsigned b, unsigned c) {
 	unsigned int hash = crush_hash_seed ^ a ^ b ^ c;
 	unsigned x = 231232;
 	unsigned y = 1232;
@@ -49,7 +49,7 @@ static __inline__ unsigned crush_hash32_3(unsigned a, unsigned b, unsigned c) {
 	return (hash & 0xFFFFFFFF);
 }
 
-static __inline__ unsigned crush_hash32_4(unsigned a, unsigned b, unsigned c, unsigned d) {
+static inline unsigned crush_hash32_4(unsigned a, unsigned b, unsigned c, unsigned d) {
 	unsigned int hash = crush_hash_seed ^a ^ b ^ c ^ d;
 	unsigned x = 231232;
 	unsigned y = 1232;
@@ -62,7 +62,7 @@ static __inline__ unsigned crush_hash32_4(unsigned a, unsigned b, unsigned c, un
 	return (hash & 0xFFFFFFFF);
 }
 
-static __inline__ unsigned crush_hash32_5(unsigned a, unsigned b, unsigned c, unsigned d, unsigned e) {
+static inline unsigned crush_hash32_5(unsigned a, unsigned b, unsigned c, unsigned d, unsigned e) {
 	unsigned int hash = crush_hash_seed ^ a ^ b ^ c ^ d ^ e;
 	unsigned x = 231232;
 	unsigned y = 1232;
