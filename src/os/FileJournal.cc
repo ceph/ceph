@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mount.h>
 #include <fcntl.h>
 
 
@@ -51,8 +52,28 @@ int FileJournal::_open(bool forwrite)
   assert(r == 0);
   max_size = st.st_size;
   block_size = st.st_blksize;
+
+  if (max_size == 0) {
+    // hmm, is this a raw block device?
+#ifdef BLKGETSIZE64
+    // ioctl block device
+    uint64_t bytes;
+    r = ::ioctl(fd, BLKGETSIZE64, &bytes);
+    assert(r == 0);
+    max_size = bytes;
+#else
+# ifdef BLKGETSIZE
+    // hrm, try the 32 bit ioctl?
+    unsigned long sectors = 0;
+    r = ioctl(fd, BLKGETSIZE, &sectors);
+    assert(r == 0);
+    max_size = sectors * 512ULL;
+# endif
+#endif
+  }
+
   dout(2) << "_open " << fn << " fd " << fd 
-	  << ": " << st.st_size << " bytes, block size " << block_size << dendl;
+	  << ": " << max_size << " bytes, block size " << block_size << dendl;
 
   return 0;
 }
