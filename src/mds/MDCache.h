@@ -797,6 +797,9 @@ public:
     else
       lru.lru_midtouch(dn);
   }
+  void touch_dentry_bottom(CDentry *dn) {
+    lru.lru_bottouch(dn);
+  }
 
   void inode_remove_replica(CInode *in, int rep);
   void dentry_remove_replica(CDentry *dn, int rep);

@@ -274,8 +274,9 @@ private:
   list<inodeno_t> allocated_inos;
   version_t inotablev;
 
-  // inodes i've destroyed.
+  // inodes i've truncated
   list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
+  vector<inodeno_t> destroyed_inodes;
 
   // idempotent op(s)
   list<metareqid_t> client_reqs;
@@ -289,6 +290,7 @@ private:
     if (!allocated_inos.empty())
       ::encode(inotablev, bl);
     ::encode(truncated_inodes, bl);
+    ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
   } 
   void decode(bufferlist::iterator &bl) {
@@ -299,6 +301,7 @@ private:
     if (!allocated_inos.empty())
       ::decode(inotablev, bl);
     ::decode(truncated_inodes, bl);
+    ::decode(destroyed_inodes, bl);
     ::decode(client_reqs, bl);
   }
 
@@ -336,6 +339,9 @@ private:
 
   void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
     truncated_inodes.push_back(triple<inodeno_t,uint64_t,uint64_t>(ino, newsize, oldsize));
+  }
+  void add_destroyed_inode(inodeno_t ino) {
+    destroyed_inodes.push_back(ino);
   }
   
   void add_null_dentry(CDentry *dn, bool dirty) {

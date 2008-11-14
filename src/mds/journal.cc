@@ -517,6 +517,19 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     mds->mdcache->add_recovered_purge(in, p->second, p->third, logseg);
   }
 
+  // destroyed inodes
+  for (vector<inodeno_t>::iterator p = destroyed_inodes.begin();
+       p != destroyed_inodes.end();
+       p++) {
+    CInode *in = mds->mdcache->get_inode(*p);
+    if (in) {
+      dout(10) << "EMetaBlob.replay destroyed " << *p << ", dropping " << *in << dendl;
+      mds->mdcache->remove_inode(in);
+    } else {
+      dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
+    }
+  }
+
   // client requests
   for (list<metareqid_t>::iterator p = client_reqs.begin();
        p != client_reqs.end();

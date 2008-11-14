@@ -91,7 +91,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix _prefix(mds)
 static ostream& _prefix(MDS *mds) {
-  return *_dout << dbeginl << " mds" << mds->get_nodeid() << ".cache ";
+  return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".cache ";
 }
 
 
@@ -4149,10 +4149,6 @@ void MDCache::purge_inode_finish_2(CInode *in, loff_t newsize, loff_t oldsize)
       waiting_for_purge.erase(in);
     finish_contexts(ls, 0);
   }
-
-  // done with inode?
-  if (in->get_num_ref() == 0) 
-    remove_inode(in);
 }
 
 void MDCache::add_recovered_purge(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls)
@@ -6414,7 +6410,9 @@ public:
 void MDCache::_purge_stray_purged(CDentry *dn)
 {
   dout(10) << "_purge_stray_purged " << *dn << dendl;
-  assert(dn->is_null());
+
+  CInode *in = dn->inode;
+  assert(in->get_num_ref() == 0);
 
   // kill dentry.
   version_t pdv = dn->pre_dirty();
@@ -6422,20 +6420,25 @@ void MDCache::_purge_stray_purged(CDentry *dn)
   EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_null_dentry(dn, true);
+  le->metablob.add_destroyed_inode(in->ino());
 
   mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLogged(this, dn, pdv, mds->mdlog->get_current_segment()));
 }
 
 void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 {
-  dout(10) << "_purge_stray_logged " << *dn << dendl;
-  assert(dn->is_null());
+  dout(10) << "_purge_stray_logged " << *dn << " " << *dn->inode << dendl;
 
-  // dirty+unlink dentry
   dn->state_clear(CDentry::STATE_PURGING);
   dn->put(CDentry::PIN_PURGING);
+
+  // unlink and remove dentry
+  dn->mark_clean();
+  remove_inode(dn->inode);
+  assert(dn->is_null());
+
   dn->dir->mark_dirty(pdv, ls);
-  dn->dir->remove_dentry(dn);
+  touch_dentry_bottom(dn);  // drop as quickly as possible.
 }
 
 
