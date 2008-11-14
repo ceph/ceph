@@ -66,7 +66,6 @@ struct C_Commit : public Context {
   off_t off;
   C_Commit(off_t o) : off(o) {}
   void finish(int r) {
-    Mutex::Locker l(lock);
     set_commit(off, g_clock.now());
   }
 };
