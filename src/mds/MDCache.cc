@@ -6381,7 +6381,8 @@ void MDCache::purge_stray(CDentry *dn)
   dout(10) << "purge_stray " << *dn << " " << *in << dendl;
   assert(!dn->is_replicated());
 
-  in->mark_clean();
+  if (in->is_dirty())
+    in->mark_clean();
 
   dn->state_set(CDentry::STATE_PURGING);
   dn->get(CDentry::PIN_PURGING);
@@ -6433,7 +6434,8 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   dn->put(CDentry::PIN_PURGING);
 
   // unlink and remove dentry
-  dn->mark_clean();
+  if (dn->is_dirty())
+    dn->mark_clean();
   remove_inode(dn->inode);
   assert(dn->is_null());
 
