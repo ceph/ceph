@@ -32,15 +32,17 @@ public:
   int mount();
   int umount();
 
+  void sync();
+
   // ints (stored as ascii)
   version_t get_int(const char *a, const char *b=0);
-  void put_int(version_t v, const char *a, const char *b=0);
+  void put_int(version_t v, const char *a, const char *b=0, bool sync=true);
 
   // buffers
   // ss and sn varieties.
   bool exists_bl_ss(const char *a, const char *b=0);
   int get_bl_ss(bufferlist& bl, const char *a, const char *b);
-  int put_bl_ss(bufferlist& bl, const char *a, const char *b);
+  int put_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync=true);
   bool exists_bl_sn(const char *a, version_t b) {
     char bs[20];
 #ifdef __LP64__
@@ -59,14 +61,14 @@ public:
 #endif
     return get_bl_ss(bl, a, bs);
   }
-  int put_bl_sn(bufferlist& bl, const char *a, version_t b) {
+  int put_bl_sn(bufferlist& bl, const char *a, version_t b, bool sync=true) {
     char bs[20];
 #ifdef __LP64__
     sprintf(bs, "%lu", b);
 #else
     sprintf(bs, "%llu", b);
 #endif
-    return put_bl_ss(bl, a, bs);
+    return put_bl_ss(bl, a, bs, sync);
   }
 
   int erase_ss(const char *a, const char *b);

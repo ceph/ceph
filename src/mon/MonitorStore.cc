@@ -92,6 +92,11 @@ int MonitorStore::mkfs()
   return r;
 }
 
+void MonitorStore::sync()
+{
+  dout(10) << "sync" << dendl;
+  ::sync();
+}
 
 version_t MonitorStore::get_int(const char *a, const char *b)
 {
@@ -120,7 +125,7 @@ version_t MonitorStore::get_int(const char *a, const char *b)
 }
 
 
-void MonitorStore::put_int(version_t val, const char *a, const char *b)
+void MonitorStore::put_int(version_t val, const char *a, const char *b, bool sync)
 {
   char fn[200];
   sprintf(fn, "%s/%s", dir.c_str(), a);
@@ -145,6 +150,8 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
   assert(fd >= 0);
   ::write(fd, vs, strlen(vs));
+  if (sync)
+    ::fsync(fd);
   ::close(fd);
   ::rename(tfn, fn);
 }
@@ -231,7 +238,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
+int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync)
 {
   char fn[200];
   sprintf(fn, "%s/%s", dir.c_str(), a);
@@ -259,7 +266,8 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b)
       derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror(errno) << dendl;
   }
 
-  ::fsync(fd);
+  if (sync)
+    ::fsync(fd);
   ::close(fd);
   ::rename(tfn, fn);
 

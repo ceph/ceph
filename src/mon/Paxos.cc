@@ -142,13 +142,31 @@ void Paxos::handle_collect(MMonPaxos *collect)
   last->pn_from = accepted_pn_from;
 
   // and share whatever data we have
-  for (version_t v = collect->last_committed+1;
-       v <= last_committed;
-       v++) {
-    if (mon->store->exists_bl_sn(machine_name, v)) {
-      mon->store->get_bl_sn(last->values[v], machine_name, v);
-      dout(10) << " sharing " << v << " (" 
-	       << last->values[v].length() << " bytes)" << dendl;
+  if (collect->last_committed < last_committed) {
+    bufferlist bl;
+    version_t l = get_latest(bl);
+    assert(l <= last_committed);
+
+    version_t v = collect->last_committed;
+
+    // start with a stashed full copy?
+    /* hmm.
+    if (l > v + 10) {
+      last->latest_value.claim(bl);
+      last->latest_version = l;
+      v = l;
+    }
+    */
+
+    // include (remaining) incrementals
+    for (v++;
+	 v <= last_committed;
+	 v++) {
+      if (mon->store->exists_bl_sn(machine_name, v)) {
+	mon->store->get_bl_sn(last->values[v], machine_name, v);
+	dout(10) << " sharing " << v << " (" 
+		 << last->values[v].length() << " bytes)" << dendl;
+      }
     }
   }
 
@@ -187,13 +205,21 @@ void Paxos::handle_last(MMonPaxos *last)
 
   // did we receive a committed value?
   if (last->last_committed > last_committed) {
+    /* hmm.
+    if (last->latest_version) {
+      last_committed = last->latest_value;
+      dout(10) << "stashing latest full value " << last_committed << dendl;
+      stash_latest(last_committed, last->latest_value);
+    }
+    */
     for (version_t v = last_committed+1;
 	 v <= last->last_committed;
 	 v++) {
-      mon->store->put_bl_sn(last->values[v], machine_name, v);
+      mon->store->put_bl_sn(last->values[v], machine_name, v, false);
       dout(10) << "committing " << v << " " 
 	       << last->values[v].length() << " bytes" << dendl;
     }
+    mon->store->sync();
     last_committed = last->last_committed;
     mon->store->put_int(last_committed, machine_name, "last_committed");
     dout(10) << "last_committed now " << last_committed << dendl;
@@ -465,8 +491,9 @@ void Paxos::handle_commit(MMonPaxos *commit)
     assert(p->first == last_committed+1);
     last_committed = p->first;
     dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
-    mon->store->put_bl_sn(p->second, machine_name, last_committed);
+    mon->store->put_bl_sn(p->second, machine_name, last_committed, false);
   }
+  mon->store->sync();
   mon->store->put_int(last_committed, machine_name, "last_committed");
   
   delete commit;
@@ -878,7 +905,8 @@ version_t Paxos::get_latest(bufferlist& bl)
     return 0;
   }
   bufferlist::iterator p = full.begin();
-  ::decode(latest_stashed, p);
+  version_t v;
+  ::decode(v, p);
   ::decode(bl, p);
   dout(10) << "get_latest v" << latest_stashed << " len " << bl.length() << dendl;
   return latest_stashed;  

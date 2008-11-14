@@ -53,6 +53,9 @@ class MMonPaxos : public Message {
   version_t uncommitted_pn;     // previous pn, if we are a LAST with an uncommitted value
   utime_t lease_expire;
 
+  version_t latest_version;
+  bufferlist latest_value;
+
   map<version_t,bufferlist> values;
 
   MMonPaxos() : Message(MSG_MON_PAXOS) {}
@@ -60,7 +63,8 @@ class MMonPaxos : public Message {
     Message(MSG_MON_PAXOS),
     epoch(e),
     op(o), machine_id(mid),
-    first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0) { }
+    first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
+    latest_version(0) { }
   
   const char *get_type_name() { return "paxos"; }
   
@@ -69,8 +73,10 @@ class MMonPaxos : public Message {
 	<< " " << get_opname(op) 
 	<< " lc " << last_committed
 	<< " fc " << first_committed
-	<< " pn " << pn << " opn " << uncommitted_pn
-	<< ")";
+	<< " pn " << pn << " opn " << uncommitted_pn;
+    if (latest_version)
+      out << " latest " << latest_version << " (" << latest_value.length() << " bytes)";
+    out << ")";
   }
 
   void encode_payload() {
@@ -83,6 +89,8 @@ class MMonPaxos : public Message {
     ::encode(pn, payload);
     ::encode(uncommitted_pn, payload);
     ::encode(lease_expire, payload);
+    ::encode(latest_version, payload);
+    ::encode(latest_value, payload);
     ::encode(values, payload);
   }
   void decode_payload() {
@@ -96,6 +104,8 @@ class MMonPaxos : public Message {
     ::decode(pn, p);   
     ::decode(uncommitted_pn, p);
     ::decode(lease_expire, p);
+    ::decode(latest_version, p);
+    ::decode(latest_value, p);
     ::decode(values, p);
   }
 };
