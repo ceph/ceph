@@ -35,9 +35,21 @@ struct ceph_monmap {
 	struct ceph_entity_inst mon_inst[0];
 };
 
+struct ceph_mon_client;
+
 /*
- * a pending statfs() request.
+ * Generic mechanism for resending monitor requests.
  */
+typedef void (*ceph_monc_request_func_t)(struct ceph_mon_client *monc,
+					 int newmon);
+struct ceph_mon_request_type {
+	struct ceph_mon_client *monc;
+	struct delayed_work delayed_work;
+	unsigned long delay;
+	ceph_monc_request_func_t do_request;
+};
+
+/* statfs() is done a bit differently */
 struct ceph_mon_statfs_request {
 	u64 tid;
 	int result;
@@ -56,16 +68,11 @@ struct ceph_mon_client {
 	struct radix_tree_root statfs_request_tree;
 	int num_statfs_requests;
 	u64 last_tid;
+	struct delayed_work statfs_delayed_work;
 
 	/* mds/osd map or umount requests */
-	struct delayed_work mds_delayed_work;
-	struct delayed_work osd_delayed_work;
-	struct delayed_work umount_delayed_work;
-	struct delayed_work statfs_delayed_work;
-	unsigned long mds_delay;
-	unsigned long osd_delay;
-	unsigned long umount_delay;
 	struct mutex req_mutex;
+	struct ceph_mon_request_type mdsreq, osdreq, umountreq;
 	u32 want_mdsmap;
 	u32 want_osdmap;
 };
