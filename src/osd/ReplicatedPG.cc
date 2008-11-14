@@ -1275,7 +1275,8 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   wr->snapset = repop->snapset;
   wr->snapc = repop->snapc;
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
-  wr->pg_trim_to = peers_complete_thru;
+  if (is_complete_pg())
+    wr->pg_trim_to = peers_complete_thru;
   wr->peer_stat = osd->get_my_stat_for(now, dest);
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }

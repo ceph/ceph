@@ -724,6 +724,8 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
+  bool is_complete_pg() { return acting.size() == info.pgid.size(); }
+
   // pg on-disk state
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
