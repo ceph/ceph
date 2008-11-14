@@ -1109,6 +1109,14 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq)
   in->remove_client_cap(client);
   if (!in->is_auth())
     request_inode_file_caps(in);
+
+  // unlinked stray?  may need to purge (e.g., after all caps are released)
+  if (in->inode.nlink == 0 &&
+      !in->is_any_caps() &&
+      in->is_auth() && 
+      in->get_parent_dn() &&
+      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
+    mdcache->eval_stray(in->get_parent_dn());
 }
 
 void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
@@ -1233,14 +1241,6 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     file_eval_gather(&in->filelock);
   else if (in->is_auth())
     file_eval(&in->filelock);
-  
-  // unlinked stray?  may need to purge (e.g., after all caps are released)
-  if (in->inode.nlink == 0 &&
-      !in->is_any_caps() &&
-      in->is_auth() && 
-      in->get_parent_dn() &&
-      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
-    mdcache->eval_stray(in->get_parent_dn());
 }
 
 
