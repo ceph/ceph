@@ -112,6 +112,7 @@ private:
   list<Context*> waiting_for_active;
   list<Context*> waiting_for_readable;
 
+  version_t latest_stashed;
 
   // -- leader --
   // recovery (paxos phase 1)
@@ -264,6 +265,11 @@ public:
   void wait_for_commit_front(Context *oncommit) {
     waiting_for_commit.push_front(oncommit);
   }
+
+  // if state values are incrementals, it is usefult to keep
+  // the latest copy of the complete structure.
+  void stash_latest(version_t v, bufferlist& bl);
+  version_t get_latest(bufferlist& bl);
 
 };
 

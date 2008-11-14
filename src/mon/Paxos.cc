@@ -44,6 +44,7 @@ void Paxos::init()
   accepted_pn = mon->store->get_int(machine_name, "accepted_pn");
   last_committed = mon->store->get_int(machine_name, "last_committed");
   first_committed = mon->store->get_int(machine_name, "first_committed");
+  latest_stashed = 0;
 
   dout(10) << "init" << dendl;
 }
@@ -850,5 +851,36 @@ bool Paxos::propose_new_value(bufferlist& bl, Context *oncommit)
   begin(bl);
   
   return true;
+}
+
+void Paxos::stash_latest(version_t v, bufferlist& bl)
+{
+  if (v == latest_stashed) {
+    dout(10) << "stash_latest v" << v << " already stashed" << dendl;
+    return;  // already stashed.
+  }
+
+  bufferlist final;
+  ::encode(v, final);
+  ::encode(bl, final);
+  
+  dout(10) << "stash_latest v" << v << " len " << bl.length() << dendl;
+  mon->store->put_bl_ss(final, machine_name, "latest");
+
+  latest_stashed = v;
+}
+
+version_t Paxos::get_latest(bufferlist& bl)
+{
+  bufferlist full;
+  if (mon->store->get_bl_ss(full, machine_name, "latest") < 0) {
+    dout(10) << "get_latest not found" << dendl;
+    return 0;
+  }
+  bufferlist::iterator p = full.begin();
+  ::decode(latest_stashed, p);
+  ::decode(bl, p);
+  dout(10) << "get_latest v" << latest_stashed << " len " << bl.length() << dendl;
+  return latest_stashed;  
 }
 

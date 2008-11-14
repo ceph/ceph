@@ -121,14 +121,15 @@ bool PGMonitor::update_from_paxos()
   if (paxosv == pg_map.version) return true;
   assert(paxosv >= pg_map.version);
 
-  if (pg_map.version == 0 && paxosv > 1 &&
-      mon->store->exists_bl_ss("pgmap","latest")) {
+  if (pg_map.version == 0 && paxosv > 1) {
     // starting up: load latest
-    dout(7) << "update_from_paxos startup: loading latest full pgmap" << dendl;
-    bufferlist bl;
-    mon->store->get_bl_ss(bl, "pgmap", "latest");
-    bufferlist::iterator p = bl.begin();
-    pg_map.decode(p);
+    bufferlist latest;
+    version_t v = paxos->get_latest(latest);
+    if (v) {
+      dout(7) << "update_from_paxos startup: got latest latest full pgmap v" << v << dendl;
+      bufferlist::iterator p = latest.begin();
+      pg_map.decode(p);
+    }
   } 
 
   // walk through incrementals
@@ -146,10 +147,12 @@ bool PGMonitor::update_from_paxos()
     dout(0) << *this << dendl;
   }
 
+  assert(paxosv == pg_map.version);
+
   // save latest
   bufferlist bl;
   pg_map.encode(bl);
-  mon->store->put_bl_ss(bl, "pgmap", "latest");
+  paxos->stash_latest(paxosv, bl);
   mon->store->put_int(paxosv, "pgmap", "last_consumed");
 
   if (mon->is_leader() &&

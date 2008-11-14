@@ -58,14 +58,15 @@ bool ClientMonitor::update_from_paxos()
 	   << ", my v " << client_map.version << dendl;
 
 
-  if (client_map.version == 0 && paxosv > 1 &&
-      mon->store->exists_bl_ss("clientmap","latest")) {
+  if (client_map.version == 0 && paxosv > 1) {
     // starting up: load latest
-    dout(7) << "update_from_paxos startup: loading latest full clientmap" << dendl;
-    bufferlist bl;
-    mon->store->get_bl_ss(bl, "clientmap", "latest");
-    bufferlist::iterator p = bl.begin();
-    client_map.decode(p);
+    bufferlist latest;
+    version_t v = paxos->get_latest(latest);
+    if (v) {
+      dout(7) << "update_from_paxos startup: loaded latest full clientmap" << dendl;
+      bufferlist::iterator p = latest.begin();
+      client_map.decode(p);
+    }
   } 
 
   // walk through incrementals
@@ -85,10 +86,12 @@ bool ClientMonitor::update_from_paxos()
 	    << dendl;
   }
 
+  assert(paxosv == client_map.version);
+
   // save latest
   bufferlist bl;
   client_map.encode(bl);
-  mon->store->put_bl_ss(bl, "clientmap", "latest");
+  paxos->stash_latest(paxosv, bl);
   mon->store->put_int(paxosv, "clientmap", "last_consumed");
 
   return true;
