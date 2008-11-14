@@ -6335,7 +6335,7 @@ void MDCache::eval_stray(CDentry *dn)
     if (dn->is_replicated() || in->is_any_caps()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
     if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
-    _purge_stray(dn);
+    purge_stray(dn);
   }
   else if (in->inode.nlink == 1) {
     // trivial reintegrate?
@@ -6368,53 +6368,74 @@ void MDCache::eval_remote(CDentry *dn)
   }
 }
 
+class C_MDC_PurgeStrayPurged : public Context {
+  MDCache *cache;
+  CDentry *dn;
+public:
+  C_MDC_PurgeStrayPurged(MDCache *c, CDentry *d) : 
+    cache(c), dn(d) { }
+  void finish(int r) {
+    cache->_purge_stray_purged(dn);
+  }
+};
 
-class C_MDC_PurgeStray : public Context {
+void MDCache::purge_stray(CDentry *dn)
+{
+  CInode *in = dn->inode;
+  dout(10) << "purge_stray " << *dn << " " << *in << dendl;
+  assert(!dn->is_replicated());
+
+  in->mark_clean();
+
+  dn->state_set(CDentry::STATE_PURGING);
+  dn->get(CDentry::PIN_PURGING);
+
+  // CHEAT.  there's no real need to journal our intent to purge, since
+  // that is implicit in the dentry's presence and non-use in the stray
+  // dir.  on recovery, we'll need to re-eval all strays anyway.
+
+  purge_inode(in, 0, in->inode.size, mds->mdlog->get_current_segment());
+  waiting_for_purge[in][0].push_back(new C_MDC_PurgeStrayPurged(this, dn));
+}
+
+class C_MDC_PurgeStrayLogged : public Context {
   MDCache *cache;
   CDentry *dn;
   version_t pdv;
   LogSegment *ls;
 public:
-  C_MDC_PurgeStray(MDCache *c, CDentry *d, version_t v, LogSegment *s) : 
+  C_MDC_PurgeStrayLogged(MDCache *c, CDentry *d, version_t v, LogSegment *s) : 
     cache(c), dn(d), pdv(v), ls(s) { }
   void finish(int r) {
     cache->_purge_stray_logged(dn, pdv, ls);
   }
 };
 
-void MDCache::_purge_stray(CDentry *dn)
+void MDCache::_purge_stray_purged(CDentry *dn)
 {
-  dout(10) << "_purge_stray " << *dn << " " << *dn->inode << dendl;
-  assert(!dn->is_replicated());
+  dout(10) << "_purge_stray_purged " << *dn << dendl;
+  assert(dn->is_null());
 
-  // log removal
+  // kill dentry.
   version_t pdv = dn->pre_dirty();
 
   EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_null_dentry(dn, true);
-  le->metablob.add_inode_truncate(dn->inode->ino(), 0, dn->inode->inode.size);
 
-  dn->state_set(CDentry::STATE_PURGING);
-  dn->get(CDentry::PIN_PURGING);
-  mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv, mds->mdlog->get_current_segment()));
+  mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLogged(this, dn, pdv, mds->mdlog->get_current_segment()));
 }
 
 void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 {
-  dout(10) << "_purge_stray_logged " << *dn << " " << *dn->inode << dendl;
-  CInode *in = dn->inode;
-  
+  dout(10) << "_purge_stray_logged " << *dn << dendl;
+  assert(dn->is_null());
+
   // dirty+unlink dentry
   dn->state_clear(CDentry::STATE_PURGING);
   dn->put(CDentry::PIN_PURGING);
   dn->dir->mark_dirty(pdv, ls);
-  dn->dir->unlink_inode(dn);
   dn->dir->remove_dentry(dn);
-
-  // purge+remove inode
-  in->mark_clean();
-  purge_inode(in, 0, in->inode.size, ls);
 }
 
 
