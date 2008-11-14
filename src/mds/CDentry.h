@@ -51,14 +51,17 @@ class CDentry : public MDSCacheObject, public LRUObject {
   // -- state --
   static const int STATE_NEW = 1;
   static const int STATE_FRAGMENTING = 2;
+  static const int STATE_PURGING = 3;
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
   static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
+  static const int PIN_PURGING =      3;
   const char *pin_name(int p) {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_FRAGMENTING: return "fragmenting";
+    case PIN_PURGING: return "purging";
     default: return generic_pin_name(p);
     }
   };

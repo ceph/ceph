@@ -6334,6 +6334,7 @@ void MDCache::eval_stray(CDentry *dn)
     }
     if (dn->is_replicated() || in->is_any_caps()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
+    if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
     _purge_stray(dn);
   }
   else if (in->inode.nlink == 1) {
@@ -6394,9 +6395,9 @@ void MDCache::_purge_stray(CDentry *dn)
   le->metablob.add_null_dentry(dn, true);
   le->metablob.add_inode_truncate(dn->inode->ino(), 0, dn->inode->inode.size);
 
+  dn->state_set(CDentry::STATE_PURGING);
+  dn->get(CDentry::PIN_PURGING);
   mds->mdlog->submit_entry(le, new C_MDC_PurgeStray(this, dn, pdv, mds->mdlog->get_current_segment()));
-
-
 }
 
 void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
@@ -6405,6 +6406,8 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   CInode *in = dn->inode;
   
   // dirty+unlink dentry
+  dn->state_clear(CDentry::STATE_PURGING);
+  dn->put(CDentry::PIN_PURGING);
   dn->dir->mark_dirty(pdv, ls);
   dn->dir->unlink_inode(dn);
   dn->dir->remove_dentry(dn);
