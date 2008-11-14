@@ -15,7 +15,7 @@
  * Communication with the monitor cluster is lossy, so requests for
  * information may have to be resent if we time out waiting for a response.
  * As long as we do not time out, we continue to send all requests to the
- * same monitor.  If there is a problem, we randomly pick a new monitor form
+ * same monitor.  If there is a problem, we randomly pick a new monitor from
  * the cluster to try.
  */
 
@@ -43,7 +43,7 @@ struct ceph_mon_statfs_request {
 	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;
-	unsigned long last_attempt; /* jiffies */
+	unsigned long last_attempt, delay; /* jiffies */
 };
 
 struct ceph_mon_client {
@@ -52,14 +52,16 @@ struct ceph_mon_client {
 	struct ceph_monmap *monmap;
 
 	/* pending statfs requests */
-	spinlock_t statfs_lock;
+	struct mutex statfs_mutex;
 	struct radix_tree_root statfs_request_tree;
+	int num_statfs_requests;
 	u64 last_tid;
 
 	/* mds/osd map or umount requests */
 	struct delayed_work mds_delayed_work;
 	struct delayed_work osd_delayed_work;
 	struct delayed_work umount_delayed_work;
+	struct delayed_work statfs_delayed_work;
 	unsigned long mds_delay;
 	unsigned long osd_delay;
 	unsigned long umount_delay;
