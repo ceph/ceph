@@ -3378,7 +3378,7 @@ void Locker::file_eval(FileLock *lock)
     file_sync(lock);
   }
   
-  else
+  else if (in->is_any_caps())
     issue_caps(in);
 }
 
