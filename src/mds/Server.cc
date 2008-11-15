@@ -3004,9 +3004,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->nlink--;
   pi->ctime = mdr->now;
 
-  mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
-  le->metablob.add_null_dentry(dn, true);
-
   if (dn->is_primary()) {
     // project snaprealm, too
     bufferlist snapbl;
@@ -3028,6 +3025,9 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     mdcache->predirty_journal_parents(mdr, &le->metablob, dn->inode, 0, PREDIRTY_PRIMARY);
     mdcache->journal_dirty_inode(mdr, &le->metablob, dn->inode);
   }
+
+  mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
+  le->metablob.add_null_dentry(dn, true);
 
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
