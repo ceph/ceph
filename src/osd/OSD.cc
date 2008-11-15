@@ -1905,8 +1905,6 @@ void OSD::activate_map(ObjectStore::Transaction& t)
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
-  clear_map_cache();  // we're done with it
-
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
@@ -1944,6 +1942,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
 
+  clear_map_cache();  // we're done with it
   update_heartbeat_peers();
 }
 
@@ -1990,9 +1989,12 @@ OSDMap *OSD::get_map(epoch_t epoch)
 {
   Mutex::Locker l(map_cache_lock);
 
-  if (map_cache.count(epoch))
+  if (map_cache.count(epoch)) {
+    dout(30) << "get_map " << epoch << " - cached" << dendl;
     return map_cache[epoch];
+  }
 
+  dout(25) << "get_map " << epoch << " - loading and decoding" << dendl;
   OSDMap *map = new OSDMap;
 
   // find a complete map
@@ -2001,7 +2003,7 @@ OSDMap *OSD::get_map(epoch_t epoch)
   for (e = epoch; e > 0; e--) {
     bufferlist bl;
     if (get_map_bl(e, bl)) {
-      //dout(10) << "get_map " << epoch << " full " << e << dendl;
+      dout(30) << "get_map " << epoch << " full " << e << dendl;
       map->decode(bl);
       break;
     } else {
@@ -2015,7 +2017,7 @@ OSDMap *OSD::get_map(epoch_t epoch)
 
   // apply incrementals
   for (e++; e <= epoch; e++) {
-    //dout(10) << "get_map " << epoch << " inc " << e << dendl;
+    dout(30) << "get_map " << epoch << " inc " << e << dendl;
     map->apply_incremental( incs.front() );
     incs.pop_front();
   }
