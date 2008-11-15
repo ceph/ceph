@@ -271,6 +271,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   iat_averager(g_conf.osd_flash_crowd_iat_alpha),
   finished_lock("OSD::finished_lock"),
   osdmap(NULL),
+  map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"),
   snap_trimmer_lock("OSD::snap_trimmer_lock"),
   snap_trimmer_thread(this),
@@ -956,6 +957,8 @@ void OSD::heartbeat()
 
   //load_calc.set_size(stat_ops);
   
+  map_lock.get_read();
+
   // send heartbeats
   for (set<int>::iterator i = heartbeat_to.begin();
        i != heartbeat_to.end();
@@ -1031,6 +1034,7 @@ void OSD::heartbeat()
   remove_list.clear();
   remove_list_lock.Unlock();
 
+  map_lock.put_read();
 
   // schedule next!  randomly.
   float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
@@ -1494,7 +1498,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   wait_for_no_ops();
   pause_recovery_thread();
-  
+  map_lock.get_write();
+
   assert(osd_lock.is_locked());
 
   ObjectStore::Transaction t;
@@ -1684,8 +1689,9 @@ void OSD::handle_osd_map(MOSDMap *m)
   store->apply_transaction(t);
   store->sync();
 
+  map_lock.put_write();
   unpause_recovery_thread();
-  
+
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
   delete m;

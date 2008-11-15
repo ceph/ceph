@@ -18,6 +18,7 @@
 #include "msg/Dispatcher.h"
 
 #include "common/Mutex.h"
+#include "common/RWLock.h"
 #include "common/ThreadPool.h"
 #include "common/Timer.h"
 
@@ -249,6 +250,7 @@ private:
 
   // -- osd map --
   OSDMap         *osdmap;
+  RWLock          map_lock;
   list<Message*>  waiting_for_osdmap;
 
   hash_map<entity_name_t, epoch_t>  peer_map_epoch;  // FIXME types
