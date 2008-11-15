@@ -1514,19 +1514,19 @@ void Rank::Pipe::reader()
     else if (tag == CEPH_MSGR_TAG_MSG) {
       dout(20) << "reader got MSG" << dendl;
       Message *m = read_message();
+      lock.Lock();
+      
       if (!m) {
 	derr(2) << "reader read null message, " << strerror(errno) << dendl;
-	lock.Lock();
 	fault(false, true);
 	continue;
       }
 
-      // note received seq#
-      lock.Lock();
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING)
 	continue;
 
+      // check received seq#
       if (m->get_seq() <= in_seq) {
 	dout(-10) << "reader got old message "
 		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
