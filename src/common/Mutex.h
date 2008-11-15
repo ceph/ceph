@@ -28,6 +28,7 @@ private:
   int id;
   bool recursive;
   bool lockdep;
+  bool backtrace;  // gather backtrace on lock acquisition
 
   pthread_mutex_t _m;
   int nlock;
@@ -44,7 +45,7 @@ private:
     id = lockdep_will_lock(name, id);
   }
   void _locked() {    // just locked
-    id = lockdep_locked(name, id);
+    id = lockdep_locked(name, id, backtrace);
   }
   void _unlocked() {  // just unlocked
     id = lockdep_unlocked(name, id);
@@ -57,7 +58,8 @@ private:
 #endif
 
 public:
-  Mutex(const char *n, bool r = false, bool ld=true) : name(n), id(-1), recursive(r), lockdep(ld), nlock(0) {
+  Mutex(const char *n, bool r = false, bool ld=true, bool bt=false) :
+    name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt), nlock(0) {
     if (recursive) {
       pthread_mutexattr_t attr;
       pthread_mutexattr_init(&attr);

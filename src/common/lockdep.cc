@@ -104,7 +104,7 @@ int lockdep_will_lock(const char *name, int id)
       dout(0) << "recursive lock of " << name << " (" << id << ")" << std::endl;
       BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
       bt->print(*_dout);
-      if (g_lockdep >= 2) {
+      if (p->second) {
 	*_dout << std::endl;
 	dout(0) << "previously locked at" << std::endl;
 	p->second->print(*_dout);
@@ -129,7 +129,7 @@ int lockdep_will_lock(const char *name, int id)
 	     q != m.end();
 	     q++) {
 	  dout(0) << "  " << lock_names[q->first] << " (" << q->first << ")" << std::endl;
-	  if (g_lockdep >= 2) {
+	  if (q->second) {
 	    q->second->print(*_dout);
 	    *_dout << std::endl;
 	  }
@@ -154,7 +154,7 @@ int lockdep_will_lock(const char *name, int id)
   return id;
 }
 
-int lockdep_locked(const char *name, int id)
+int lockdep_locked(const char *name, int id, bool force_backtrace)
 {
   pthread_t p = pthread_self();
 
@@ -162,7 +162,7 @@ int lockdep_locked(const char *name, int id)
 
   pthread_mutex_lock(&lockdep_mutex);
   dout(20) << "_locked " << name << std::endl;
-  if (g_lockdep >= 2)
+  if (g_lockdep >= 2 || force_backtrace)
     held[p][id] = new BackTrace(BACKTRACE_SKIP);
   else
     held[p][id] = 0;
