@@ -430,6 +430,7 @@ private:
   utime_t defer_recovery_until;
   int recovery_ops_active;
   bool recovery_stop;
+  bool recovery_pause;
 
   Mutex remove_list_lock;
   map<epoch_t, map<int, vector<pg_t> > > remove_list;
@@ -453,6 +454,17 @@ private:
     recovery_lock.Unlock();
     recovery_thread.join();
     osd_lock.Lock();
+  }
+  void pause_recovery_thread() {
+    recovery_lock.Lock();
+    recovery_pause = true;
+    recovery_lock.Unlock();
+  }
+  void unpause_recovery_thread() {
+    recovery_lock.Lock();
+    recovery_pause = false;
+    recovery_cond.Signal();
+    recovery_lock.Unlock();
   }
 
   void queue_for_removal(int osd, pg_t pgid) {

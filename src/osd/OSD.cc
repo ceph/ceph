@@ -275,7 +275,7 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   tid_lock("OSD::tid_lock"),
   recovery_lock("OSD::recovery_lock"),
-  recovery_ops_active(0), recovery_stop(false),
+  recovery_ops_active(0), recovery_stop(false), recovery_pause(false),
   remove_list_lock("OSD::remove_list_lock"),
   recovery_thread(this)
 {
@@ -1494,6 +1494,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   booting = boot_pending = false;
 
   wait_for_no_ops();
+  pause_recovery_thread();
   
   assert(osd_lock.is_locked());
 
@@ -1684,6 +1685,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   store->apply_transaction(t);
   store->sync();
 
+  unpause_recovery_thread();
+  
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
   delete m;
@@ -2937,7 +2940,7 @@ void OSD::recovery_entry()
   recovery_lock.Lock();
   dout(10) << "recovery_entry - start" << dendl;
   while (!recovery_stop) {
-    while (_recover_now())
+    if (!recovery_pause && _recover_now())
       _do_recovery();
     recovery_cond.Wait(recovery_lock);
   }
