@@ -864,6 +864,12 @@ void EPurgeFinish::replay(MDS *mds)
 {
   dout(10) << "EPurgeFinish.replay " << ino << " " << oldsize << " -> " << newsize << dendl;
   CInode *in = mds->mdcache->get_inode(ino);
+
+  // if we don't have *in at this point, it's because purge_stray is lazy and
+  // doesn't jouranl it's intent to purge.  no worries, if *in isn't in the cache,
+  // it's not in the purge table either.  we'll eval_stray when we finish
+  // recovery.
+  //assert(in);
   if (in)
     mds->mdcache->remove_recovered_purge(in, newsize, oldsize);
 }

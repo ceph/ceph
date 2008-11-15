@@ -6387,6 +6387,10 @@ void MDCache::purge_stray(CDentry *dn)
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.
+  //
+  // as a result, we adjust EPurgeFinish::replay to forgive us if hte
+  // inode isn't in the cache.  If we later decide to journal our
+  // intent here, add that assertion back.
 
   purge_inode(in, 0, in->inode.size, mds->mdlog->get_current_segment());
   waiting_for_purge[in][0].push_back(new C_MDC_PurgeStrayPurged(this, dn));
