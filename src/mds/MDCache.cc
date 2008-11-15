@@ -6410,7 +6410,6 @@ void MDCache::_purge_stray_purged(CDentry *dn)
   dout(10) << "_purge_stray_purged " << *dn << dendl;
 
   CInode *in = dn->inode;
-  assert(in->get_num_ref() == 0);
 
   // kill dentry.
   version_t pdv = dn->pre_dirty();
