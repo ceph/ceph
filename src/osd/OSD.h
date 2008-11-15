@@ -263,7 +263,13 @@ private:
   void advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps);
   void activate_map(ObjectStore::Transaction& t);
 
-  void get_map(epoch_t e, OSDMap &m);
+  // osd map cache (past osd maps)
+  map<epoch_t,OSDMap*> map_cache;
+  Mutex map_cache_lock;
+
+  OSDMap* get_map(epoch_t e);
+  void clear_map_cache();
+
   bool get_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);

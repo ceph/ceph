@@ -270,6 +270,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   qlen_calc(3),
   iat_averager(g_conf.osd_flash_crowd_iat_alpha),
   finished_lock("OSD::finished_lock"),
+  osdmap(NULL),
+  map_cache_lock("OSD::map_cache_lock"),
   snap_trimmer_lock("OSD::snap_trimmer_lock"),
   snap_trimmer_thread(this),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
@@ -732,10 +734,9 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
   dout(15) << "calc_priors_during " << pgid << " [" << start << "," << end << ")" << dendl;
   
   for (epoch_t e = start; e < end; e++) {
-    OSDMap oldmap;
-    get_map(e, oldmap);
+    OSDMap *oldmap = get_map(e);
     vector<int> acting;
-    oldmap.pg_to_acting_osds(pgid, acting);
+    oldmap->pg_to_acting_osds(pgid, acting);
     dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
     int added = 0;
     for (unsigned i=0; i<acting.size(); i++)
@@ -772,11 +773,10 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
        e > from;
        e--) {
     // verify during intermediate epoch (e-1)
-    OSDMap oldmap;
-    get_map(e-1, oldmap);
+    OSDMap *oldmap = get_map(e-1);
 
     vector<int> acting;
-    oldmap.pg_to_acting_osds(pgid, acting);
+    oldmap->pg_to_acting_osds(pgid, acting);
 
     // acting set change?
     if (acting != last && 
@@ -937,8 +937,7 @@ void OSD::heartbeat()
 			    messenger->get_myinst());
     return;
   }
-    
-
+  
   // get CPU load avg
   ifstream in("/proc/loadavg");
   if (in.is_open()) {
@@ -1900,6 +1899,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
+  clear_map_cache();  // we're done with it
+
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
@@ -1979,8 +1980,15 @@ bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
   return store->read(0, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
-void OSD::get_map(epoch_t epoch, OSDMap &m)
+OSDMap *OSD::get_map(epoch_t epoch)
 {
+  Mutex::Locker l(map_cache_lock);
+
+  if (map_cache.count(epoch))
+    return map_cache[epoch];
+
+  OSDMap *map = new OSDMap;
+
   // find a complete map
   list<OSDMap::Incremental> incs;
   epoch_t e;
@@ -1988,7 +1996,7 @@ void OSD::get_map(epoch_t epoch, OSDMap &m)
     bufferlist bl;
     if (get_map_bl(e, bl)) {
       //dout(10) << "get_map " << epoch << " full " << e << dendl;
-      m.decode(bl);
+      map->decode(bl);
       break;
     } else {
       OSDMap::Incremental inc;
@@ -2002,11 +2010,23 @@ void OSD::get_map(epoch_t epoch, OSDMap &m)
   // apply incrementals
   for (e++; e <= epoch; e++) {
     //dout(10) << "get_map " << epoch << " inc " << e << dendl;
-    m.apply_incremental( incs.front() );
+    map->apply_incremental( incs.front() );
     incs.pop_front();
   }
+
+  map_cache[epoch] = map;
+  return map;
 }
 
+void OSD::clear_map_cache()
+{
+  Mutex::Locker l(map_cache_lock);
+  for (map<epoch_t,OSDMap*>::iterator p = map_cache.begin();
+       p != map_cache.end();
+       p++)
+    delete p->second;
+  map_cache.clear();
+}
 
 bool OSD::get_inc_map(epoch_t e, OSDMap::Incremental &inc)
 {

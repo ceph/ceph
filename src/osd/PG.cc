@@ -657,9 +657,8 @@ void PG::build_prior()
   epoch_t stop = MAX(1, info.history.last_epoch_started);
 
   dout(10) << "build_prior considering interval " << first_epoch << " down to " << stop << dendl;
-  OSDMap *nextmap = new OSDMap;
-  osd->get_map(last_epoch, *nextmap);
-
+  OSDMap *nextmap = osd->get_map(last_epoch);
+  
   for (; last_epoch >= stop; last_epoch = first_epoch-1) {
     OSDMap *lastmap = nextmap;
     assert(last_epoch == lastmap->get_epoch());
@@ -668,9 +667,8 @@ void PG::build_prior()
     lastmap->pg_to_acting_osds(get_pgid(), acting);
     
     // calc first_epoch, first_map
-    nextmap = new OSDMap;
     for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
-      osd->get_map(first_epoch-1, *nextmap);
+      nextmap = osd->get_map(first_epoch-1);
       vector<int> t;
       nextmap->pg_to_acting_osds(get_pgid(), t);
       if (t != acting)
