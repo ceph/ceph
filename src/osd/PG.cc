@@ -546,6 +546,61 @@ ostream& PG::IndexedLog::print(ostream& out) const
 
 /******* PG ***********/
 
+void PG::generate_past_intervals()
+{
+  epoch_t first_epoch = 0;
+  epoch_t stop = MAX(1, info.history.last_epoch_started);
+  epoch_t last_epoch = info.history.same_since - 1;
+
+  dout(10) << "generate_past_intervals over epochs " << stop << "-" << last_epoch << dendl;
+
+  OSDMap *nextmap = osd->get_map(last_epoch);
+  for (;
+       last_epoch >= stop;
+       last_epoch = first_epoch - 1) {
+    OSDMap *lastmap = nextmap;
+    vector<int> tacting;
+    lastmap->pg_to_acting_osds(get_pgid(), tacting);
+    
+    // calc first_epoch, first_map
+    for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
+      nextmap = osd->get_map(first_epoch-1);
+      vector<int> t;
+      nextmap->pg_to_acting_osds(get_pgid(), t);
+      if (t != tacting)
+	break;
+    }
+
+    Interval &i = past_intervals[first_epoch];
+    i.first = first_epoch;
+    i.last = last_epoch;
+    i.acting.swap(tacting);
+    if (i.acting.size()) {
+      i.maybe_went_rw = 
+	lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
+	lastmap->get_up_from(i.acting[0]) <= first_epoch;
+      dout(10) << "generate_past_intervals " << i
+	       << " : primary up " << lastmap->get_up_from(i.acting[0])
+	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << dendl;
+    } else {
+      i.maybe_went_rw = false;
+      dout(10) << "generate_past_intervals " << i << " : empty" << dendl;
+    }
+  }
+}
+
+void PG::trim_past_intervals()
+{
+  while (past_intervals.size() &&
+	 past_intervals.begin()->second.first < info.history.last_epoch_started) {
+    dout(10) << "trim_past_intervals trimming " << past_intervals.begin()->second << dendl;
+    past_intervals.erase(past_intervals.begin());
+  }
+}
+
+
+
 // true if the given map affects the prior set
 bool PG::prior_set_affected(OSDMap *osdmap)
 {
@@ -646,96 +701,69 @@ void PG::build_prior()
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
   state_clear(PG_STATE_DOWN);
-  bool any_up = false;
+  bool any_up_now = false;
   bool some_down = false;
 
   must_notify_mon = false;
 
-  // for each acting set, we need to know same_since and last_epoch
-  epoch_t first_epoch = info.history.same_since;
-  epoch_t last_epoch = first_epoch - 1;
-  epoch_t stop = MAX(1, info.history.last_epoch_started);
-
-  dout(10) << "build_prior considering interval " << first_epoch << " down to " << stop << dendl;
-  OSDMap *nextmap = osd->get_map(last_epoch);
+  // generate past intervals, if we don't have them.
+  if (info.history.same_since > info.history.last_epoch_started &&
+      past_intervals.empty())
+    generate_past_intervals();
   
-  for (; last_epoch >= stop; last_epoch = first_epoch-1) {
-    OSDMap *lastmap = nextmap;
-    assert(last_epoch == lastmap->get_epoch());
-    
-    vector<int> acting;
-    lastmap->pg_to_acting_osds(get_pgid(), acting);
-    
-    // calc first_epoch, first_map
-    for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
-      nextmap = osd->get_map(first_epoch-1);
-      vector<int> t;
-      nextmap->pg_to_acting_osds(get_pgid(), t);
-      if (t != acting)
-	break;
-    }
+  for (map<epoch_t,Interval>::reverse_iterator p = past_intervals.rbegin();
+       p != past_intervals.rend();
+       p++) {
+    Interval &interval = p->second;
+    dout(10) << "build_prior " << interval << dendl;
 
-    if (acting.empty()) {
-      dout(20) << "build_prior epochs " << first_epoch << "-" << last_epoch << " empty" << dendl;
+    if (interval.acting.empty())
       continue;
-    }
 
-    bool maybe_went_rw = 
-      lastmap->get_up_thru(acting[0]) >= first_epoch &&
-      lastmap->get_up_from(acting[0]) < first_epoch;
+    OSDMap *lastmap = osd->get_map(interval.last);
 
-    dout(10) << "build_prior epochs " << first_epoch << "-" << last_epoch << " " << acting
-	     << " - primary osd" << acting[0]
-	     << " up [" << lastmap->get_up_from(acting[0]) << ", " << lastmap->get_up_thru(acting[0]) << "]"
-	     << (maybe_went_rw ? " -> maybe went rw":"")
-	     << dendl;
-    
-    int num_still_up_or_clean = 0;
+    int still_up_or_clean = 0;
     bool any_survived = false;
-    for (unsigned i=0; i<acting.size(); i++) {
-      if (osd->osdmap->is_up(acting[i])) {  // is up now
-
-	// FIXME this is sloppy i think?
-	if (first_epoch <= info.history.last_epoch_started && 
-	    last_epoch >= info.history.last_epoch_started)
-	  any_up = true;
-
+    for (unsigned i=0; i<interval.acting.size(); i++) {
+      if (osd->osdmap->is_up(interval.acting[i])) {  // is up now
+	any_up_now = true;
 	any_survived = true;
 
-	if (acting[i] != osd->whoami)       // and is not me
-	  prior_set.insert(acting[i]);
+	if (interval.acting[i] != osd->whoami)       // and is not me
+	  prior_set.insert(interval.acting[i]);
 	
-	// has it been up this whole time?
-	if (osd->osdmap->get_up_from(acting[i]) <= first_epoch)
-	  num_still_up_or_clean++;
+ 	// has it been up this whole time?
+	//  FIXME: what is a 'clean' shutdown?
+	if (osd->osdmap->get_up_from(interval.acting[i]) <= interval.first)
+	  still_up_or_clean++;
       } else {
-	dout(10) << "build_prior  prior osd" << acting[i]
+	dout(10) << "build_prior  prior osd" << interval.acting[i]
 		 << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
-	prior_set_down.insert(acting[i]);
+	prior_set_down.insert(interval.acting[i]);
       }
     }
 
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_survived && maybe_went_rw) {
+    if (!any_survived && interval.maybe_went_rw) {
       // fixme: how do we identify a "clean" shutdown anyway?
       dout(10) << "build_prior  possibly went active+rw, no survivors, including" << dendl;
-      for (unsigned i=0; i<acting.size(); i++)
-	if (osd->osdmap->is_down(acting[i])) {
-	  prior_set.insert(acting[i]);
-	  prior_set_down.erase(acting[i]);
+      for (unsigned i=0; i<interval.acting.size(); i++)
+	if (osd->osdmap->is_down(interval.acting[i])) {
+	  prior_set.insert(interval.acting[i]);
+	  prior_set_down.erase(interval.acting[i]);
 	}
       some_down = true;
       
       // take note that we care about the primary's up_thru.  if it
       // changes later, it will affect our prior_set, and we'll want
       // to rebuild it!
-      prior_set_up_thru[acting[0]] = lastmap->get_up_thru(acting[0]);
+      prior_set_up_thru[interval.acting[0]] = lastmap->get_up_thru(interval.acting[0]);
     }
 
-    if (num_still_up_or_clean == 0) {
+    if (still_up_or_clean == 0) {
       dout(10) << "build_prior  none of " << acting 
 	       << " still up or cleanly shutdown, pg crashed" << dendl;
       state_set(PG_STATE_CRASHED);
@@ -743,7 +771,7 @@ void PG::build_prior()
   }
 
   if (info.history.last_epoch_started < info.history.same_since &&
-      !any_up) {
+      !any_up_now) {
     dout(10) << "build_prior  no osds are up from the last epoch started, PG is down for now." << dendl;
     state_set(PG_STATE_DOWN);
   }
@@ -1026,7 +1054,9 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(PG_STATE_CRASHED);
     state_clear(PG_STATE_REPLAY);
   }
+
   info.history.last_epoch_started = osd->osdmap->get_epoch();
+  trim_past_intervals();
   
   if (role == 0) {    // primary state
     peers_complete_thru = eversion_t(0,0);  // we don't know (yet)!
@@ -1326,6 +1356,10 @@ void PG::write_info(ObjectStore::Transaction& t)
   bufferlist snapbl;
   ::encode(snap_collections, snapbl);
   t.collection_setattr(info.pgid.to_coll(), "snap_collections", snapbl);
+
+  bufferlist ki;
+  ::encode(past_intervals, ki);
+  t.collection_setattr(info.pgid.to_coll(), "past_intervals", ki);
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -1515,6 +1549,14 @@ void PG::read_state(ObjectStore *store)
   store->collection_getattr(info.pgid.to_coll(), "snap_collections", bl);
   p = bl.begin();
   ::decode(snap_collections, p);
+
+  // past_intervals
+  bl.clear();
+  store->collection_getattr(info.pgid.to_coll(), "past_intervals", bl);
+  if (bl.length()) {
+    p = bl.begin();
+    ::decode(past_intervals, p);
+  }
 
   read_log(store);
 }

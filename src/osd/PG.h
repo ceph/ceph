@@ -528,7 +528,28 @@ public:
   void mark_deleted() { deleted = true; }
   bool is_deleted() { return deleted; }
 
+
 public:
+  struct Interval {
+    vector<int> acting;
+    epoch_t first, last;
+    bool maybe_went_rw;
+
+    void encode(bufferlist& bl) const {
+      ::encode(first, bl);
+      ::encode(last, bl);
+      ::encode(acting, bl);
+      ::encode(maybe_went_rw, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(first, bl);
+      ::decode(last, bl);
+      ::decode(acting, bl);
+      ::decode(maybe_went_rw, bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(Interval)
+
   // pg state
   Info        info;
   IndexedLog  log;
@@ -537,6 +558,7 @@ public:
   map<object_t, set<int> > missing_loc;
   
   set<snapid_t> snap_collections;
+  map<epoch_t,Interval> past_intervals;
 
   xlist<PG*>::item recovery_item;
   int recovery_ops_active;
@@ -609,6 +631,8 @@ public:
   
   bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
 
+  void generate_past_intervals();
+  void trim_past_intervals();
   void build_prior();
   bool prior_set_affected(OSDMap *map);
 
@@ -772,6 +796,7 @@ WRITE_CLASS_ENCODER(PG::Missing::item)
 WRITE_CLASS_ENCODER(PG::Missing)
 WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
+WRITE_CLASS_ENCODER(PG::Interval)
 
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
@@ -827,6 +852,15 @@ inline ostream& operator<<(ostream& out, const PG::Missing& missing)
 {
   out << "missing(" << missing.num_missing();
   //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
+  out << ")";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, const PG::Interval& i)
+{
+  out << "interval(" << i.first << "-" << i.last << " " << i.acting;
+  if (i.maybe_went_rw)
+    out << " maybe_went_rw";
   out << ")";
   return out;
 }

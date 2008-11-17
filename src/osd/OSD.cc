@@ -1740,6 +1740,8 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     }
   }
 
+  OSDMap *lastmap = get_map(osdmap->get_epoch() - 1);
+
   // scan existing pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
@@ -1787,8 +1789,22 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     pg->set_role(role);
     
     // did acting, primary|acker change?
-    if (tacting != pg->acting)
+    if (tacting != pg->acting) {
+      // remember past interval
+      PG::Interval& i = pg->past_intervals[pg->info.history.same_since];
+      i.acting = pg->acting;
+      i.first = pg->info.history.same_since;
+      i.last = osdmap->get_epoch() - 1;
+      if (i.acting.size())
+	i.maybe_went_rw = 
+	  lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	  lastmap->get_up_from(i.acting[0]) <= i.first;
+      else
+	i.maybe_went_rw = 0;
+      dout(10) << *pg << " noting past " << i << dendl;
+
       pg->info.history.same_since = osdmap->get_epoch();
+    }
     if (oldprimary != pg->get_primary()) {
       pg->info.history.same_primary_since = osdmap->get_epoch();
       pg->cancel_recovery();
@@ -1913,7 +1929,6 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     pg->lock();
     if (pg->is_active()) {
       // update started counter
-      pg->info.history.last_epoch_started = osdmap->get_epoch();
       if (!pg->info.dead_snaps.empty())
 	pg->queue_snap_trim();
     }
