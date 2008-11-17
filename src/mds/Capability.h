@@ -89,6 +89,7 @@ public:
   
   capseq_t get_mseq() { return mseq; }
 
+  capseq_t get_last_sent() { return last_sent; }
   capseq_t get_last_open() { return last_open; }
   void set_last_open() { last_open = last_sent; }
 

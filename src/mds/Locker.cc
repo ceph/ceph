@@ -508,8 +508,8 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
       dout(10) << " can't releasecap client" << client << ", cap has gone away?" << dendl;
       delete ack;
       ack = 0;
-    } else if (releasecap < cap->get_last_open()) {
-      dout(10) << " NOT releasing cap client" << client << ", last_open " << cap->get_last_open()
+    } else if (releasecap < cap->get_last_sent()) {
+      dout(10) << " NOT releasing cap client" << client << ", last_sent " << cap->get_last_sent()
 	       << " > " << releasecap << dendl;
       delete ack;
       ack = 0;
@@ -1067,16 +1067,19 @@ void Locker::handle_client_caps(MClientCaps *m)
       MClientCaps *ack = 0;
       capseq_t releasecap = 0;
 
-      if (m->get_seq() < cap->get_last_open()) {
+      if (m->get_seq() < cap->get_last_sent()) {
 	/* client may be trying to release caps (i.e. inode closed, etc.)
 	 * by setting reducing wanted set.  but it may also be opening the
 	 * same filename, not sure that it'll map to the same inode.  so,
 	 * we don't want RELEASE or wanted updates to clobber mds's notion
 	 * of wanted unless we're sure the client has seen all the latest
 	 * caps.
+	 *
+	 * we use last_sent here, not last_open, just to keep the client
+	 * logic for deciding when to reply to a revocation simple.
 	 */
 	dout(10) << " ignoring release|wanted " << cap_string(m->get_wanted())
-		 << " bc seq " << m->get_seq() << " < last open " << cap->get_last_open() << dendl;
+		 << " bc seq " << m->get_seq() << " < last sent " << cap->get_last_sent() << dendl;
       } else if (m->get_op() == CEPH_CAP_OP_RELEASE) {
 	dout(7) << " release request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
 	releasecap = m->get_seq();
