@@ -35,7 +35,7 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
-
+Mutex lock("cmonctl.cc lock");
 Messenger *messenger = 0;
 
 const char *outfile = 0;
@@ -49,10 +49,23 @@ int same = 0;
 const char *prefix[4] = { "mds", "osd", "pg", "client" };
 string status[4];
 
-void get_next_status()
+
+// refresh every second
+void get_status();
+
+struct C_Refresh : public Context {
+  void finish(int r) {
+    get_status();
+  }
+};
+
+SafeTimer timer(lock);
+Context *event = 0;
+
+void get_status()
 {
-  which++;
-  which = which % LAST;
+  int mon = monmap.pick_mon();
+  //for (int i=0; i<LAST; i++) {
 
   vector<string> vcmd(2);
   vcmd[0] = prefix[which];
@@ -60,27 +73,29 @@ void get_next_status()
   
   MMonCommand *m = new MMonCommand(monmap.fsid);
   m->cmd.swap(vcmd);
-  int mon = monmap.pick_mon();
   messenger->send_message(m, monmap.get_inst(mon));
+
+  event = new C_Refresh;
+  timer.add_event_after(1.0, event);
 }
+
 
 void handle_ack(MMonCommandAck *ack)
 {
   if (watch) {
+    lock.Lock();
     if (ack->rs != status[which]) {
       status[which] = ack->rs;
       generic_dout(0) << prefix[which] << " " << status[which] << dendl;
-      same = 0;
-    } else
-      same++;
-    
-    if (same >= LAST) {
-      sleep(1);
-      same = 0;
     }
-    
-    get_next_status();
 
+    which++;
+    which = which % LAST;
+    
+    if (event)
+      timer.cancel_event(event);
+    get_status();
+    lock.Unlock();
   } else {
     generic_dout(0) << ack->get_source() << " -> '"
 		    << ack->rs << "' (" << ack->r << ")"
@@ -192,9 +207,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   messenger->set_dispatcher(&dispatcher);
 
   rank.start();
-  
+  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
+
   if (watch) {
-    get_next_status();
+    lock.Lock();
+    get_status();
+    lock.Unlock();
   } else {
     // build command
     MMonCommand *m = new MMonCommand(monmap.fsid);
