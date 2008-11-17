@@ -864,8 +864,8 @@ void EPurgeFinish::replay(MDS *mds)
 {
   dout(10) << "EPurgeFinish.replay " << ino << " " << oldsize << " -> " << newsize << dendl;
   CInode *in = mds->mdcache->get_inode(ino);
-  assert(in);
-  mds->mdcache->remove_recovered_purge(in, newsize, oldsize);
+  if (in)
+    mds->mdcache->remove_recovered_purge(in, newsize, oldsize);
 }
 
 
