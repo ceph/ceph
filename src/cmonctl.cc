@@ -51,21 +51,20 @@ string status[4];
 
 
 // refresh every second
-void get_status();
+void get_status(bool newmon=false);
 
 struct C_Refresh : public Context {
   void finish(int r) {
-    get_status();
+    get_status(true);
   }
 };
 
 SafeTimer timer(lock);
 Context *event = 0;
 
-void get_status()
+void get_status(bool newmon)
 {
-  int mon = monmap.pick_mon();
-  //for (int i=0; i<LAST; i++) {
+  int mon = monmap.pick_mon(newmon);
 
   vector<string> vcmd(2);
   vcmd[0] = prefix[which];
