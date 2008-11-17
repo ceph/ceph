@@ -1402,6 +1402,9 @@ static int read_partial_message(struct ceph_connection *con)
 
 	/* front */
 	front_len = le32_to_cpu(m->hdr.front_len);
+	if (front_len > CEPH_MSG_MAX_FRONT_LEN)
+		return -EIO;
+
 	while (m->front.iov_len < front_len) {
 		if (m->front.iov_base == NULL) {
 			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
@@ -1421,6 +1424,9 @@ static int read_partial_message(struct ceph_connection *con)
 
 	/* (page) data */
 	data_len = le32_to_cpu(m->hdr.data_len);
+	if (data_len > CEPH_MSG_MAX_DATA_LEN)
+		return -EIO;
+
 	data_off = le32_to_cpu(m->hdr.data_off);
 	if (data_len == 0)
 		goto no_data;

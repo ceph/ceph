@@ -50,6 +50,8 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define CEPH_DEFAULT_READ_SIZE	(128*1024) /* readahead */
 
 #define MAX_MON_MOUNT_ADDR	5
+#define CEPH_MSG_MAX_FRONT_LEN	(128*1024)
+#define CEPH_MSG_MAX_DATA_LEN	(1024*1024)
 
 struct ceph_mount_args {
 	int sb_flags;
