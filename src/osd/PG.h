@@ -181,28 +181,10 @@ public:
    *  we do not have any deletion info before that time, however.
    *  log is a "summary" in that it contains all objects in the PG.
    */
-  class Log {
-  public:
-    /*
-     *    top - newest entry (update|delete)
-     * bottom - entry previous to oldest (update|delete) for which we have
-     *          complete negative information.  
-     * i.e. we can infer pg contents for any store whose last_update >= bottom.
-     */
-    eversion_t top;       // newest entry (update|delete)
-    eversion_t bottom;    // version prior to oldest (update|delete) 
-
-    /*
-     * backlog - true if log is a complete summary of pg contents.
-     * updated will include all items in pg, but deleted will not
-     * include negative entries for items deleted prior to 'bottom'.
-     */
-    bool      backlog;
-    
+  struct Log {
     /** Entry
      */
-    class Entry {
-    public:
+    struct Entry {
       const static int LOST = 0;
       const static int MODIFY = 1;
       const static int CLONE = 2;  
@@ -248,6 +230,22 @@ public:
     };
     WRITE_CLASS_ENCODER(Entry)
 
+    /*
+     *    top - newest entry (update|delete)
+     * bottom - entry previous to oldest (update|delete) for which we have
+     *          complete negative information.  
+     * i.e. we can infer pg contents for any store whose last_update >= bottom.
+     */
+    eversion_t top;       // newest entry (update|delete)
+    eversion_t bottom;    // version prior to oldest (update|delete) 
+
+    /*
+     * backlog - true if log is a complete summary of pg contents.
+     * updated will include all items in pg, but deleted will not
+     * include negative entries for items deleted prior to 'bottom'.
+     */
+    bool backlog;
+    
     list<Entry> log;  // the actual log.
 
     Log() : backlog(false) {}
@@ -286,10 +284,9 @@ public:
    * IndexLog - adds in-memory index of the log, by oid.
    * plus some methods to manipulate it all.
    */
-  class IndexedLog : public Log {
-  public:
+  struct IndexedLog : public Log {
     hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<osd_reqid_t>      caller_ops;
+    hash_set<osd_reqid_t>     caller_ops;
 
     // recovery pointers
     list<Entry>::iterator requested_to; // not inclusive of referenced item
@@ -648,8 +645,9 @@ public:
     return false;
   }
 
-  void proc_replica_log(Log &olog, Missing& omissing, int from);
-  void merge_log(Log &olog, Missing& omissing, int from);
+  void proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from);
+  void merge_entry(ObjectStore::Transaction& t, Log::Entry& oe);
+  void merge_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from);
   void proc_replica_missing(Log &olog, Missing &omissing, int fromosd);
   
   void generate_backlog();
