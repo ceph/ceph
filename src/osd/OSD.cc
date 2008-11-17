@@ -948,6 +948,9 @@ void OSD::heartbeat()
     in.close();
   }
 
+  // read lock osdmap
+  map_lock.get_read();
+
   // calc my stats
   Mutex::Locker lock(peer_stat_lock);
   _refresh_my_stat(now);
@@ -957,7 +960,6 @@ void OSD::heartbeat()
 
   //load_calc.set_size(stat_ops);
   
-  map_lock.get_read();
 
   // send heartbeats
   for (set<int>::iterator i = heartbeat_to.begin();
