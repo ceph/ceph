@@ -169,20 +169,20 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 osd
-- snap_trimmers should detect, remove unused snap collections (and update snap_collections set)
+- how to represent a "clean" osd shutdown
+- snap_trimmers should detect, remove unused snap collections (and update snap_collections set)?
 - cope with divergent logs (update AND removal) in merge_log...
   (make merge_log augment omissing?)
-
-- how does an admin intervene when a pg needs a dead osd to repeer?
-
+- pg size accounting
 - a more general fencing mechanism?  per-object granularity isn't usually a good match.
 
-- consider implications of nvram writeahead logs
+- how does an admin intervene when a pg needs to repeer despite a dead osd?
 
-- flag missing log entries on crash recovery  --> WRNOOP? or WRLOST?
+- generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
+- consider implications of nvram writeahead logs?
 
-- efficiently replicate clone() objects
-- fix heartbeat wrt new replication
+- flag missing log entries on crash recovery?
+
 - mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
