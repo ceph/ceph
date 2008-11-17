@@ -19,26 +19,30 @@
 
 class MMonCommandAck : public Message {
  public:
+  vector<string> cmd;
   __s32 r;
   string rs;
   
   MMonCommandAck() : Message(MSG_MON_COMMAND_ACK) {}
-  MMonCommandAck(int _r, string s) : Message(MSG_MON_COMMAND_ACK),
-				     r(_r), rs(s) { }
+  MMonCommandAck(vector<string>& c, int _r, string s) : 
+    Message(MSG_MON_COMMAND_ACK),
+    cmd(c), r(_r), rs(s) { }
   
   const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
-    o << "mon_command_ack(" << r << " " << rs << ")";
+    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << ")";
   }
   
   void encode_payload() {
     ::encode(r, payload);
     ::encode(rs, payload);
+    ::encode(cmd, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(r, p);
     ::decode(rs, p);
+    ::decode(cmd, p);
   }
 };
 

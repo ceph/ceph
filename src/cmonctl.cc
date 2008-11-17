@@ -47,7 +47,7 @@ enum { OSD, MON, MDS, CLIENT, LAST };
 int which = 0;
 int same = 0;
 const char *prefix[4] = { "mds", "osd", "pg", "client" };
-string status[4];
+map<string,string> status;
 
 
 // refresh every second
@@ -83,9 +83,10 @@ void handle_ack(MMonCommandAck *ack)
 {
   if (watch) {
     lock.Lock();
-    if (ack->rs != status[which]) {
-      status[which] = ack->rs;
-      generic_dout(0) << prefix[which] << " " << status[which] << dendl;
+    string w = ack->cmd[0];
+    if (ack->rs != status[w]) {
+      status[w] = ack->rs;
+      generic_dout(0) << w << " " << status[w] << dendl;
     }
 
     which++;
