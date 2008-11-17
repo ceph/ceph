@@ -908,6 +908,8 @@ version_t Paxos::get_latest(bufferlist& bl)
   version_t v;
   ::decode(v, p);
   ::decode(bl, p);
+
+  latest_stashed = v;
   dout(10) << "get_latest v" << latest_stashed << " len " << bl.length() << dendl;
   return latest_stashed;  
 }
