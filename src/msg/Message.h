@@ -147,7 +147,7 @@ public:
   void set_payload(bufferlist& bl) { payload.claim(bl); }
   void copy_payload(const bufferlist& bl) { payload = bl; }
 
-  void set_data(bufferlist &d) { data.claim(d); }
+  void set_data(const bufferlist &d) { data = d; }
   void copy_data(const bufferlist &d) { data = d; }
   bufferlist& get_data() { return data; }
   off_t get_data_len() { return data.length(); }
