@@ -726,11 +726,15 @@ void PG::build_prior()
     bool any_survived = false;
     for (unsigned i=0; i<interval.acting.size(); i++) {
       if (osd->osdmap->is_up(interval.acting[i])) {  // is up now
-	any_up_now = true;
-	any_survived = true;
-
 	if (interval.acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(interval.acting[i]);
+
+	// did any osds survive _this_ interval?
+	any_survived = true;
+
+	// are any osds alive from the last epoch started?
+	if (interval.first == info.history.last_epoch_started)
+	  any_up_now = true;
 	
  	// has it been up this whole time?
 	//  FIXME: what is a 'clean' shutdown?
