@@ -776,14 +776,13 @@ void Rank::mark_down(entity_addr_t addr)
     Pipe *p = rank_pipe[addr];
     dout(2) << "mark_down " << addr << " -- " << p << dendl;
     p->unregister_pipe();
-    lock.Unlock();
     p->lock.Lock();
     p->stop();
     p->lock.Unlock();
   } else {
-    lock.Unlock();
     dout(2) << "mark_down " << addr << " -- pipe dne" << dendl;
   }
+  lock.Unlock();
 }
 
 
