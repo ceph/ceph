@@ -1686,10 +1686,11 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 	if (d_unhashed(dentry)) {
 		if (ceph_get_cap_mds(dentry->d_inode) >= 0)
 			on_inode = 1;
-		else
+		else if (dentry != dentry->d_inode->i_sb->s_root) {
 			derr(0, "WARNING: getattr on unhashed cap-less"
 			     " dentry %p %.*s\n", dentry,
 			     dentry->d_name.len, dentry->d_name.name);
+		}
 	}
 	ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
 			     on_inode, 0);
