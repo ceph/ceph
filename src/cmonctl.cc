@@ -47,25 +47,24 @@ enum { OSD, MON, MDS, CLIENT, LAST };
 int which = 0;
 int same = 0;
 const char *prefix[4] = { "mds", "osd", "pg", "client" };
-string status[4];
+map<string,string> status;
 
 
 // refresh every second
-void get_status();
+void get_status(bool newmon=false);
 
 struct C_Refresh : public Context {
   void finish(int r) {
-    get_status();
+    get_status(true);
   }
 };
 
 SafeTimer timer(lock);
 Context *event = 0;
 
-void get_status()
+void get_status(bool newmon)
 {
-  int mon = monmap.pick_mon();
-  //for (int i=0; i<LAST; i++) {
+  int mon = monmap.pick_mon(newmon);
 
   vector<string> vcmd(2);
   vcmd[0] = prefix[which];
@@ -84,9 +83,10 @@ void handle_ack(MMonCommandAck *ack)
 {
   if (watch) {
     lock.Lock();
-    if (ack->rs != status[which]) {
-      status[which] = ack->rs;
-      generic_dout(0) << prefix[which] << " " << status[which] << dendl;
+    string w = ack->cmd[0];
+    if (ack->rs != status[w]) {
+      status[w] = ack->rs;
+      generic_dout(0) << w << " " << status[w] << dendl;
     }
 
     which++;

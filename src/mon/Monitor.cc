@@ -293,7 +293,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs)
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata)
 {
-  MMonCommandAck *reply = new MMonCommandAck(rc, rs);
+  MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs);
   reply->set_data(rdata);
   messenger->send_message(reply, m->get_orig_source_inst());
   delete m;

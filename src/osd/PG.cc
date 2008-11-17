@@ -163,7 +163,7 @@ void PG::trim_write_ahead()
 
 }
 
-void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
+void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_replica_log for osd" << from << ": " << olog << " " << omissing << dendl;
   assert(!is_active());
@@ -174,7 +174,7 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
     peer_missing[from] = omissing;
     
     // merge log into our own log
-    merge_log(olog, omissing, from);
+    merge_log(t, olog, omissing, from);
     proc_replica_missing(olog, omissing, from);
   } else {
     // i'm just building missing lists.
@@ -238,7 +238,36 @@ void PG::proc_replica_log(Log &olog, Missing& omissing, int from)
   }
 }
 
-void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
+
+void PG::merge_entry(ObjectStore::Transaction& t, Log::Entry& oe)
+{
+  if (log.objects.count(oe.oid)) {
+    // object still exists.
+    Log::Entry &ne = *log.objects[oe.oid];  // new(er?) entry
+    if (ne.version < oe.version) {
+      dout(10) << "merge_entry  divergent old " << oe
+	       << " not superceded by " << ne
+	       << ", adding to missing" << dendl;
+      missing.add_event(oe);
+    } else {
+      // a-ok.  new log either has same or newer object.
+      if (ne.version > oe.version) {
+	dout(20) << "merge_entry  newer " << ne << " " << oe << dendl;
+	assert(missing.is_missing(oe.oid));
+      } else {
+	dout(20) << "merge_entry  same " << oe << " " << ne << dendl;
+      }
+    }
+  } else {
+    dout(10) << "merge_entry  dne " << oe << dendl;
+    if (oe.is_update()) {
+      pobject_t poid(info.pgid.pool(), 0, oe.oid);
+      t.remove(info.pgid.to_coll(), poid);
+    }
+  }
+}
+
+void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
@@ -251,68 +280,45 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
   if (log.empty() ||
       (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
 
+    // build local backlog
+    if (!log.empty() && !log.backlog)
+      generate_backlog();
+    
     // swap and index
     log.log.swap(olog.log);
     log.index();
 
-    // first, find split point (old log.top) in new log
-    list<Log::Entry>::iterator split = log.log.end();
+    // first, find split point (old log.top) in new log.
+    // adjust oldest_updated as needed.
     list<Log::Entry>::iterator p = log.log.end();
     while (p != log.log.begin()) {
       p--;
       if (p->version <= log.top) {
-	split = p; // p is last entry shared by both logs.
-	dout(10) << "merge_log split point is " << *split << dendl;
+	dout(10) << "merge_log split point is " << *p << dendl;
+
+	if (p->version < log.top && p->version < oldest_update) {
+	  dout(10) << "merge_log oldest_update " << oldest_update << " -> "
+		   << p->version << dendl;
+	  oldest_update = p->version;
+	}
+
 	p++;       // move past the split point, tho...
 	break;
       }
     }
     
-    // first, add new items (_after_ split) to missing
+    // then add all new items (_after_ split) to missing
     for (; p != log.log.end(); p++) {
       dout(10) << "merge_log merging " << *p << dendl;
       missing.add_event(*p);
     }
 
-    // was our old log divergent?
-    if (split != log.log.end() && log.top > split->version) {
-      dout(10) << "merge_log i was (possibly) divergent for (" 
-	       << split->version << "," << log.top << "]" << dendl;
-      assert(!olog.log.empty());
-      
-      if (split->version < oldest_update)
-	oldest_update = split->version;
-      
-      // find the same entry in the old log
-      p = olog.log.end();
-      while (p != olog.log.begin()) {
-	p--;
-	if (p->version == split->version)
-	  break;
-      }
-      //assert(p->version == split->version);
-
-      /*
-       * FIXME: what if we have a divergent update vs a non-divergent delete?
-       */
-      for (p++; p != olog.log.end(); p++) {
-	Log::Entry &oe = *p;  // old entry (possibly divergent)
-	if (log.objects.count(oe.oid)) {
-	  if (log.objects[oe.oid]->version < oe.version) {
-	    dout(10) << "merge_log  divergent entry " << oe
-		     << " not superceded by " << *log.objects[oe.oid]
-		     << ", adding to missing" << dendl;
-	    missing.add_event(oe);
-	  } else {
-	    dout(10) << "merge_log  divergent entry " << oe
-		       << " superceded by " << *log.objects[oe.oid] 
-		     << ", ignoring" << dendl;
-	  }
-	} else {
-	  dout(10) << "merge_log  divergent entry " << oe << ", adding to missing" << dendl;
-	  missing.add_event(oe);
-	}
-      }
+    // find any divergent or removed items in old log
+    for (p = olog.log.begin();
+	 p != olog.log.end();
+	 p++) {
+      Log::Entry &oe = *p;                      // old entry
+      merge_entry(t, oe);
     }
 
     info.last_update = log.top = olog.top;
@@ -364,11 +370,13 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
       
       list<Log::Entry>::iterator to = olog.log.end();
       list<Log::Entry>::iterator from = olog.log.end();
+      list<Log::Entry>::iterator last_kept = olog.log.end();
       while (1) {
         if (from == olog.log.begin()) break;
         from--;
         //dout(0) << "? " << *from << dendl;
         if (from->version <= log.top) {
+	  last_kept = from;
           from++;
           break;
         }
@@ -380,31 +388,27 @@ void PG::merge_log(Log &olog, Missing &omissing, int fromosd)
 	missing.add_event(*from);
       }
       
-      // remove divergent items
+      // move aside divergent items
+      list<Log::Entry> divergent;
       while (1) {
-        Log::Entry *oldtail = &(*log.log.rbegin());
-        if (oldtail->version.version+1 == from->version.version) break;
-
-        // divergent!
-        assert(oldtail->version.version >= from->version.version);
-        
-        if (log.objects[oldtail->oid]->version == oldtail->version) {
-          // and significant.
-          dout(10) << "merge_log had divergent " << *oldtail << ", adding to missing" << dendl;
-          //missing.add(oldtail->oid);
-          assert(0);
-        } else {
-          dout(10) << "merge_log had divergent " << *oldtail << ", already missing" << dendl;
-          assert(missing.is_missing(oldtail->oid));
-        }
-        log.log.pop_back();
+	Log::Entry &oe = *log.log.rbegin();
+        if (last_kept != olog.log.end() &&
+	    oe.version == last_kept->version)
+	  break;
+	dout(10) << "merge_log divergent " << oe << dendl;
+	divergent.push_front(oe);
+	log.log.pop_back();
       }
-
+      
       // splice
       log.log.splice(log.log.end(), 
                      olog.log, from, to);
       
       info.last_update = log.top = olog.top;
+
+      // process divergent items
+      for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
+	merge_entry(t, *d);
     }
   }
   
@@ -732,8 +736,9 @@ void PG::build_prior()
 	// did any osds survive _this_ interval?
 	any_survived = true;
 
-	// are any osds alive from the last epoch started?
-	if (interval.first == info.history.last_epoch_started)
+	// are any osds alive from the last interval started?
+	if (interval.first <= info.history.last_epoch_started &&
+	    interval.last >= info.history.last_epoch_started)
 	  any_up_now = true;
 	
  	// has it been up this whole time?

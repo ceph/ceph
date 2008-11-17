@@ -445,15 +445,14 @@ int FileStore::mount()
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
   if (r == 0) {
-    // do we have the shiny new ioctls: WAIT_FOR_SYNC and CLONE_RANGE?
-    int fd = ::open(basedir.c_str(), O_RDONLY);
-    r = ::ioctl(fd, BTRFS_IOC_WAIT_FOR_SYNC);
-    ::close(fd);
-    if (r == 0) {
+    // do we have the shiny new CLONE_RANGE ioctl?
+    btrfs = 2;
+    int r = _do_clone_range(fsid_fd, -1, 0, 1);
+    if (r == -EBADF) {
       dout(0) << "mount detected shiny new btrfs" << dendl;      
-      btrfs = 2;
     } else {
-      dout(0) << "mount detected dingey old btrfs" << dendl;
+      dout(0) << "mount detected dingey old btrfs (r=" << r << " " << strerror(-r) << ")" << dendl;
+      btrfs = 1;
     }
   } else {
     dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
@@ -1418,8 +1417,9 @@ int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
     a.src_length = len;
     a.dest_offset = off;
     r = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
-    if (r >= 0) return r;
-    // hmm, fall back to a manual copy
+    if (r >= 0)
+      return r;
+    return -errno;
   }
 
   loff_t pos = off;
