@@ -103,8 +103,6 @@ char *mount_resolve_dest(char *orig_str)
 	pos = safe_cat(&new_str, &len, pos, ":");
 	pos = safe_cat(&new_str, &len, pos, mount_path);
 
-	printf("new_str = %s\n", new_str);
-
 	return new_str;
 }
 
