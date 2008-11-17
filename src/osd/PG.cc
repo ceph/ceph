@@ -732,8 +732,9 @@ void PG::build_prior()
 	// did any osds survive _this_ interval?
 	any_survived = true;
 
-	// are any osds alive from the last epoch started?
-	if (interval.first == info.history.last_epoch_started)
+	// are any osds alive from the last interval started?
+	if (interval.first <= info.history.last_epoch_started &&
+	    interval.last >= info.history.last_epoch_started)
 	  any_up_now = true;
 	
  	// has it been up this whole time?
