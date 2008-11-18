@@ -696,6 +696,7 @@ public:
   set<CInode*> file_recovering;
 
   void queue_file_recover(CInode *in);
+  void unqueue_file_recover(CInode *in);
   void _queued_file_recover_cow(CInode *in, Mutation *mut);
   void _queue_file_recover(CInode *in);
   void identify_files_to_recover();

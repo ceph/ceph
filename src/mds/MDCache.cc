@@ -3925,6 +3925,14 @@ void MDCache::_queue_file_recover(CInode *in)
   file_recover_queue.insert(in);
 }
 
+void MDCache::unqueue_file_recover(CInode *in)
+{
+  dout(15) << "unqueue_file_recover " << *in << dendl;
+  in->state_clear(CInode::STATE_RECOVERING);
+  in->auth_unpin(this);
+  file_recover_queue.erase(in);
+}
+
 /*
  * called after recovery to recover file sizes for previously opened (for write)
  * files.  that is, those where max_size > size.
@@ -6331,6 +6339,8 @@ void MDCache::eval_stray(CDentry *dn)
     if (dn->is_replicated() || in->is_any_caps()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
     if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
+    if (in->state_test(CInode::STATE_NEEDSRECOVER) ||
+	in->state_test(CInode::STATE_RECOVERING)) return;  // don't mess with file size probing
     purge_stray(dn);
   }
   else if (in->inode.nlink == 1) {
@@ -6437,6 +6447,8 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   CInode *in = dn->inode;
   if (in->is_dirty())
     in->mark_clean();
+  if (in->state_test(CInode::STATE_RECOVERING))
+    unqueue_file_recover(in);
   if (dn->is_dirty())
     dn->mark_clean();
   remove_inode(in);
