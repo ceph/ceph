@@ -944,7 +944,11 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	ch.intersection_of(snapset.clone_overlap[newest]);
 	snapset.clone_overlap[newest].subtract(ch);
       }
-      old_size = MAX(old_size, op.offset + op.length);
+      if (op.offset + op.length > old_size) {
+	pg_stats.num_bytes += (op.offset + op.length) - old_size;
+	pg_stats.num_kb += DIV_ROUND_UP(op.offset + op.length, 1<<10) - DIV_ROUND_UP(old_size, 1<<10);
+	old_size = op.offset + op.length;
+      }
       snapset.head_exists = true;
     }
     break;
@@ -959,7 +963,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	snapid_t newest = *snapset.clones.rbegin();
 	snapset.clone_overlap.erase(newest);
       }
-      old_size = op.length;
+      if (op.length != old_size) {
+	pg_stats.num_bytes -= old_size;
+	pg_stats.num_kb -= DIV_ROUND_UP(old_size, 1<<10);
+	pg_stats.num_bytes += op.length;
+	pg_stats.num_kb += DIV_ROUND_UP(op.length, 1<<10);
+	old_size = op.length;
+      }
       snapset.head_exists = true;
     }
     break;
@@ -989,7 +999,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	  keep.insert(0, op.length);
 	snapset.clone_overlap[newest].intersection_of(keep);
       }
-      old_size = op.length;
+      if (op.length != old_size) {
+	pg_stats.num_bytes -= old_size;
+	pg_stats.num_kb -= DIV_ROUND_UP(old_size, 1<<10);
+	pg_stats.num_bytes += op.length;
+	pg_stats.num_kb += DIV_ROUND_UP(op.length, 1<<10);
+	old_size = op.length;
+      }
       // do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
     }
     break;
@@ -1001,11 +1017,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	snapid_t newest = *snapset.clones.rbegin();
 	snapset.clone_overlap.erase(newest);  // ok, redundant.
       }
-      old_size = 0;
-      snapset.head_exists = false;
       if (exists) {
 	pg_stats.num_objects--;
+	pg_stats.num_bytes -= old_size;
+	pg_stats.num_kb -= DIV_ROUND_UP(old_size, 1<<10);
+	old_size = 0;
 	exists = false;
+	snapset.head_exists = false;
       }      
     }
     break;
