@@ -669,7 +669,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 		  << " > them " << op->get_peer_stat().read_latency
 		  << ", but they didn't know better, sharing" << dendl;
 	osd->my_stat_on_peer[from] = osd->my_stat;
-	osd->messenger->send_message(new MOSDPing(osd->osdmap->get_epoch(), osd->my_stat),
+	osd->messenger->send_message(new MOSDPing(osd->osdmap->get_fsid(), osd->osdmap->get_epoch(),
+						  osd->my_stat),
 				     osd->osdmap->get_inst(from));
       }
     } else {

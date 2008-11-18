@@ -967,7 +967,7 @@ void OSD::heartbeat()
        i++) {
     _share_map_outgoing( osdmap->get_inst(*i) );
     my_stat_on_peer[*i] = my_stat;
-    Message *m = new MOSDPing(osdmap->get_epoch(), my_stat);
+    Message *m = new MOSDPing(osdmap->get_fsid(),osdmap->get_epoch(), my_stat);
     m->set_priority(CEPH_MSG_PRIO_HIGH);
     messenger->send_message(m, osdmap->get_inst(*i));
   }
@@ -1437,6 +1437,13 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "osdping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
+
+  if (!ceph_fsid_equal(&osdmap->get_fsid(), &m->fsid)) {
+    dout(20) << "osdping from " << m->get_source()
+	     << " bad fsid " << m->fsid << " != " << osdmap->get_fsid() << dendl;
+    delete m;
+    return;
+  }
 
   int from = m->get_source().num();
   if (osdmap->have_inst(from) &&

@@ -23,21 +23,24 @@
 
 class MOSDPing : public Message {
  public:
+  ceph_fsid fsid;
   epoch_t map_epoch;
   bool ack;
   osd_peer_stat_t peer_stat;
 
-  MOSDPing(epoch_t e, osd_peer_stat_t& ps, bool a=false) : 
-    Message(MSG_OSD_PING), map_epoch(e), ack(a), peer_stat(ps) { }
+  MOSDPing(ceph_fsid& f, epoch_t e, osd_peer_stat_t& ps, bool a=false) : 
+    Message(MSG_OSD_PING), fsid(f), map_epoch(e), ack(a), peer_stat(ps) { }
   MOSDPing() {}
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
     ::decode(map_epoch, p);
     ::decode(ack, p);
     ::decode(peer_stat, p);
   }
   void encode_payload() {
+    ::encode(fsid, payload);
     ::encode(map_epoch, payload);
     ::encode(ack, payload);
     ::encode(peer_stat, payload);
