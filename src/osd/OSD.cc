@@ -528,6 +528,12 @@ int OSD::read_superblock()
   bl.copy(0, sizeof(superblock), (char*)&superblock);
 
   dout(10) << "read_superblock " << superblock << dendl;
+
+  if (!ceph_fsid_equal(&superblock.fsid, &monmap->fsid)) {
+    derr(0) << "read_superblock fsid " << superblock.fsid << " != monmap " << monmap->fsid << dendl;
+    return -1;
+  }
+
   if (whoami != superblock.whoami) {
     derr(0) << "read_superblock superblock says osd" << superblock.whoami
 	    << ", but i (think i) am osd" << whoami << dendl;
