@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
 	if (mount(new_argv[1], new_argv[2], "ceph", flags, new_argv[options_pos])) {
 		switch (errno) {
 		case ENODEV:
-			printf("mount error: cifs filesystem not supported by the system\n");
+			printf("mount error: ceph filesystem not supported by the system\n");
 			break;
 		default:
 			printf("mount error %d = %s\n",errno,strerror(errno));
