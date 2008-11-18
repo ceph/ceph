@@ -245,6 +245,8 @@ private:
       return m;
     }
 
+    void requeue_sent();
+
     void force_close() {
       if (sd >= 0) ::close(sd);
     }

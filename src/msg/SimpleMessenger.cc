@@ -1013,15 +1013,14 @@ int Rank::Pipe::accept()
   existing->unregister_pipe();
     
   // steal queue and out_seq
+  existing->requeue_sent();
   out_seq = existing->out_seq;
-  if (!existing->sent.empty()) {
-    out_seq = existing->sent.front()->get_seq()-1;
-    q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), existing->sent);
-  }
+  in_seq = existing->in_seq;
+  dout(10) << "accept   out_seq " << out_seq << "  in_seq " << in_seq << dendl;
   for (map<int, list<Message*> >::iterator p = existing->q.begin();
        p != existing->q.end();
        p++)
-    q[p->first].splice(q[p->first].end(), p->second);
+    q[p->first].splice(q[p->first].begin(), p->second);
   
   existing->lock.Unlock();
 
@@ -1308,6 +1307,24 @@ void Rank::Pipe::unregister_pipe()
   }
 }
 
+
+void Rank::Pipe::requeue_sent()
+{
+  if (sent.empty())
+    return;
+
+  list<Message*>& rq = q[CEPH_MSG_PRIO_HIGHEST];
+  while (!sent.empty()) {
+    Message *m = sent.back();
+    sent.pop_back();
+    dout(10) << "requeue_sent " << *m << " for resend seq " << out_seq
+	     << " (" << m->get_seq() << ")" << dendl;
+    rq.push_front(m);
+    out_seq--;
+  }
+}
+
+
 void Rank::Pipe::fault(bool onconnect, bool onread)
 {
   assert(lock.is_locked());
@@ -1338,6 +1355,9 @@ void Rank::Pipe::fault(bool onconnect, bool onread)
     fail();
     return;
   }
+
+  // requeue sent items
+  requeue_sent();
 
   if (q.empty()) {
     if (state == STATE_CLOSING || onconnect) {
@@ -1696,6 +1716,7 @@ void Rank::Pipe::writer()
       Message *m = _get_next_outgoing();
       if (m) {
 	m->set_seq(++out_seq);
+	sent.push_back(m); // move to sent list
 	lock.Unlock();
 
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
@@ -1705,14 +1726,10 @@ void Rank::Pipe::writer()
 	  m->encode_payload();
 	m->calc_front_crc();
 
-	lock.Lock();
-	sent.push_back(m); // move to sent list
-	lock.Unlock();
-
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
+
 	lock.Lock();
-	
 	if (rc < 0) {
           derr(1) << "writer error sending " << m << " to " << m->get_header().dst << ", "
 		  << errno << ": " << strerror(errno) << dendl;
