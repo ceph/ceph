@@ -1330,12 +1330,12 @@ void PG::update_stats()
   pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
-    pg_stats_stable = pg_stats;
     pg_stats_valid = true;
-    pg_stats.version = info.last_update;
-    pg_stats.reported = osd->osdmap->get_epoch();
-    pg_stats.state = state;
-    pg_stats.acting = acting;
+    pg_stats_stable = pg_stats;
+    pg_stats_stable.version = info.last_update;
+    pg_stats_stable.reported = osd->osdmap->get_epoch();
+    pg_stats_stable.state = state;
+    pg_stats_stable.acting = acting;
   } else {
     pg_stats_valid = false;
   }
