@@ -22,6 +22,9 @@ device 17 device17
 device 18 device18
 device 19 device19
 device 20 device20
+device 21 device21
+device 22 device22
+device 23 device23
 
 # types
 type 0 device
@@ -37,6 +40,7 @@ pool metaroot {
 	item device8 weight 1.000
 	item device12 weight 1.000
 	item device16 weight 1.000
+	item device20 weight 1.000
 }
 
 domain cosd1 {
@@ -74,6 +78,13 @@ domain cosd5 {
 	item device18 weight 1.000 pos 1
 	item device19 weight 1.000 pos 2
 }
+domain cosd5 {
+	id -8		# do not change unnecessarily
+	alg uniform	# do not change bucket size (4) unnecessarily
+	item device21 weight 1.000 pos 0
+	item device22 weight 1.000 pos 1
+	item device23 weight 1.000 pos 2
+}
 pool root {
 	id -1		# do not change unnecessarily
 	alg straw
@@ -82,6 +93,7 @@ pool root {
 	item cosd3 weight 4.000
 	item cosd4 weight 4.000
 	item cosd5 weight 4.000
+	item cosd6 weight 4.000
 }
 
 
