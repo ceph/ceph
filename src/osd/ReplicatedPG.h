@@ -121,6 +121,7 @@ protected:
 		     pobject_t poid, loff_t old_size,
 		     eversion_t old_version, eversion_t& at_version,
 		     SnapSet& snapset, SnapContext& snapc);
+  void add_interval_usage(interval_set<__u64>& s);  
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			pobject_t poid, __u64& old_size, bool& exists,
 			ceph_osd_op& op, bufferlist::iterator& bp,

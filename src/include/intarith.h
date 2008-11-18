@@ -31,4 +31,8 @@
 # define ROUND_UP_TO(n, d) (((n)+(d)-1) & ~((d)-1))
 #endif
 
+#ifndef SHIFT_ROUND_UP
+# define SHIFT_ROUND_UP(x,y) (((x)+(1<<(y))-1) >> (y))
+#endif
+
 #endif

@@ -487,13 +487,20 @@ bool ReplicatedPG::snap_trimmer()
 	if (p != snapset.clones.begin()) {
 	  // not the oldest... merge overlap into next older clone
 	  vector<snapid_t>::iterator n = p - 1;
+	  interval_set<__u64> keep;
+	  keep.union_of(snapset.clone_overlap[*n], snapset.clone_overlap[*p]);
+	  add_interval_usage(keep);  // not deallocated
  	  snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
+	} else {
+	  add_interval_usage(snapset.clone_overlap[last]);  // not deallocated
 	}
+	pg_stats.num_objects--;
+	pg_stats.num_object_clones--;
+	pg_stats.num_bytes -= snapset.clone_size[last];
+	pg_stats.num_kb -= SHIFT_ROUND_UP(snapset.clone_size[last], 10);
 	snapset.clones.erase(p);
 	snapset.clone_overlap.erase(last);
 	snapset.clone_size.erase(last);
-	pg_stats.num_objects--;
-	pg_stats.num_object_clones--;
       } else {
 	// save adjusted snaps for this object
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
@@ -868,6 +875,14 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
 }
 
 
+void ReplicatedPG::add_interval_usage(interval_set<__u64>& s)
+{
+  for (map<__u64,__u64>::iterator p = s.m.begin(); p != s.m.end(); p++) {
+    pg_stats.num_bytes += p->second;
+    pg_stats.num_kb += SHIFT_ROUND_UP(p->first+p->second, 10) - (p->first >> 10);
+  }
+}
+
 // low level object operations
 int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
 				    pobject_t poid, __u64& old_size, bool& exists,
@@ -943,11 +958,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	ch.insert(op.offset, op.length);
 	ch.intersection_of(snapset.clone_overlap[newest]);
 	snapset.clone_overlap[newest].subtract(ch);
+	add_interval_usage(ch);
       }
       if (op.offset + op.length > old_size) {
-	pg_stats.num_bytes += (op.offset + op.length) - old_size;
-	pg_stats.num_kb += DIV_ROUND_UP(op.offset + op.length, 1<<10) - DIV_ROUND_UP(old_size, 1<<10);
-	old_size = op.offset + op.length;
+	__u64 new_size = op.offset + op.length;
+	pg_stats.num_bytes += new_size - old_size;
+	pg_stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(old_size, 10);
+	old_size = new_size;
       }
       snapset.head_exists = true;
     }
@@ -962,12 +979,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
 	snapset.clone_overlap.erase(newest);
+	old_size = 0;
       }
       if (op.length != old_size) {
 	pg_stats.num_bytes -= old_size;
-	pg_stats.num_kb -= DIV_ROUND_UP(old_size, 1<<10);
+	pg_stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
 	pg_stats.num_bytes += op.length;
-	pg_stats.num_kb += DIV_ROUND_UP(op.length, 1<<10);
+	pg_stats.num_kb += SHIFT_ROUND_UP(op.length, 10);
 	old_size = op.length;
       }
       snapset.head_exists = true;
@@ -984,6 +1002,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	ch.insert(op.offset, op.length);
 	ch.intersection_of(snapset.clone_overlap[newest]);
 	snapset.clone_overlap[newest].subtract(ch);
+	add_interval_usage(ch);
       }
       snapset.head_exists = true;
     }
@@ -994,6 +1013,12 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       t.truncate(info.pgid.to_coll(), poid, op.length);
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
+	interval_set<__u64> trim;
+	if (old_size > op.length) {
+	  trim.insert(op.length, old_size-op.length);
+	  trim.intersection_of(snapset.clone_overlap[newest]);
+	  add_interval_usage(trim);
+	}
 	interval_set<__u64> keep;
 	if (op.length)
 	  keep.insert(0, op.length);
@@ -1001,9 +1026,9 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       }
       if (op.length != old_size) {
 	pg_stats.num_bytes -= old_size;
-	pg_stats.num_kb -= DIV_ROUND_UP(old_size, 1<<10);
+	pg_stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
 	pg_stats.num_bytes += op.length;
-	pg_stats.num_kb += DIV_ROUND_UP(op.length, 1<<10);
+	pg_stats.num_kb += SHIFT_ROUND_UP(op.length, 10);
 	old_size = op.length;
       }
       // do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
@@ -1015,12 +1040,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       t.remove(info.pgid.to_coll(), poid);
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
+	add_interval_usage(snapset.clone_overlap[newest]);
 	snapset.clone_overlap.erase(newest);  // ok, redundant.
       }
       if (exists) {
 	pg_stats.num_objects--;
 	pg_stats.num_bytes -= old_size;
-	pg_stats.num_kb -= DIV_ROUND_UP(old_size, 1<<10);
+	pg_stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
 	old_size = 0;
 	exists = false;
 	snapset.head_exists = false;
