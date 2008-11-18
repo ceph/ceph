@@ -269,6 +269,7 @@ void ceph_monc_handle_umount(struct ceph_mon_client *monc,
 	dout(5, "handle_umount\n");
 	mutex_lock(&monc->req_mutex);
 	cancel_timeout(&monc->umountreq);
+	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
 	mutex_unlock(&monc->req_mutex);
 	wake_up(&monc->client->mount_wq);
 }
