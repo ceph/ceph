@@ -191,6 +191,8 @@ public:
   void log_mark_dirty();
   void mark_clean();
 
+  void mark_new(LogSegment *ls);
+
 public:
   //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
   //typedef map<const char *, CDentry*, ltstr> map_t;

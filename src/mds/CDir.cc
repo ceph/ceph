@@ -952,6 +952,11 @@ void CDir::_mark_dirty(LogSegment *ls)
   }
 }
 
+void CDir::mark_new(LogSegment *ls)
+{
+  ls->new_dirfrags.push_back(&xlist_new);
+}
+
 void CDir::mark_clean()
 {
   dout(10) << "mark_clean " << *this << " version " << get_version() << dendl;

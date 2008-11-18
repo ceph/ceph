@@ -2116,6 +2116,7 @@ public:
       CDir *dir = newi->get_dirfrag(frag_t());
       assert(dir);
       dir->mark_dirty(1, mdr->ls);
+      dir->mark_new(mdr->ls);
     }
 
     mdr->apply();
