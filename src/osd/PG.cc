@@ -457,6 +457,9 @@ void PG::generate_backlog()
 
   vector<pobject_t> olist;
   osd->store->collection_list(info.pgid.to_coll(), olist);
+  if (olist.size() != pg_stats.num_objects)
+    dout(10) << " WARNING: " << olist.size() << " != num_objects " << pg_stats.num_objects << dendl;
+
   
   int local = 0;
   map<eversion_t,Log::Entry> add;
@@ -1327,12 +1330,11 @@ void PG::update_stats()
   pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
+    pg_stats_stable = pg_stats;
     pg_stats_valid = true;
     pg_stats.version = info.last_update;
     pg_stats.reported = osd->osdmap->get_epoch();
     pg_stats.state = state;
-    pg_stats.num_bytes = stat_num_bytes;
-    pg_stats.num_kb = stat_num_kb;
     pg_stats.acting = acting;
   } else {
     pg_stats_valid = false;
@@ -1369,6 +1371,10 @@ void PG::write_info(ObjectStore::Transaction& t)
   bufferlist ki;
   ::encode(past_intervals, ki);
   t.collection_setattr(info.pgid.to_coll(), "past_intervals", ki);
+
+  bufferlist st;
+  ::encode(pg_stats, st);
+  t.collection_setattr(info.pgid.to_coll(), "stats", st);
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -1565,6 +1571,13 @@ void PG::read_state(ObjectStore *store)
   if (bl.length()) {
     p = bl.begin();
     ::decode(past_intervals, p);
+  }
+
+  bl.clear();
+  store->collection_getattr(info.pgid.to_coll(), "stats", bl);
+  if (bl.length()) {
+    p = bl.begin();
+    ::decode(pg_stats, p);
   }
 
   read_log(store);

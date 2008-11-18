@@ -1180,8 +1180,8 @@ void OSD::send_pg_stats()
       pg->pg_stats_lock.Lock();
       if (pg->pg_stats_valid) {
 	pg->pg_stats_valid = false;
-	m->pg_stat[pgid] = pg->pg_stats;
-	dout(30) << " sending " << pgid << " " << pg->pg_stats.state << dendl;
+	m->pg_stat[pgid] = pg->pg_stats_stable;
+	dout(30) << " sending " << pgid << " " << pg->pg_stats_stable.state << dendl;
       }
       pg->pg_stats_lock.Unlock();
     }

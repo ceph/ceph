@@ -335,9 +335,12 @@ struct pg_stat_t {
   pg_t    parent;
   int32_t parent_split_bits;
   int32_t state;
+
   int64_t num_bytes;    // in bytes
   int64_t num_kb;       // in KB
   int64_t num_objects;
+  int64_t num_object_clones;
+
   vector<int> acting;
   
   void encode(bufferlist &bl) const {
@@ -350,6 +353,7 @@ struct pg_stat_t {
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
+    ::encode(num_object_clones, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -362,9 +366,13 @@ struct pg_stat_t {
     ::decode(num_bytes, bl);
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
+    ::decode(num_object_clones, bl);
     ::decode(acting, bl);
   }
-  pg_stat_t() : reported(0), created(0), parent_split_bits(0), state(0), num_bytes(0), num_kb(0), num_objects(0) {}
+  pg_stat_t() : reported(0), created(0), parent_split_bits(0), 
+		state(0),
+		num_bytes(0), num_kb(0), 
+		num_objects(0), num_object_clones(0) {}
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 

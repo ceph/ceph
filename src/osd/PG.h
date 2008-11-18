@@ -602,14 +602,11 @@ protected:
 
 
   // stats
-  loff_t stat_num_bytes;
-  loff_t stat_num_kb;
-
   hash_map<object_t, DecayCounter> stat_object_temp_rd;
 
   Mutex pg_stats_lock;
   bool pg_stats_valid;
-  pg_stat_t pg_stats;
+  pg_stat_t pg_stats, pg_stats_stable;
 
   void update_stats();
   void clear_stats();
@@ -693,7 +690,6 @@ public:
     pending_snap_removal_item(this),
     have_master_log(true),
     must_notify_mon(false),
-    stat_num_bytes(0), stat_num_kb(0),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL)

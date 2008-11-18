@@ -433,6 +433,8 @@ bool ReplicatedPG::snap_trimmer()
     coll_t c = info.pgid.to_snap_coll(sn);
     vector<pobject_t> ls;
     osd->store->collection_list(c, ls);
+    if (ls.size() != pg_stats.num_objects)
+      dout(10) << " WARNING: " << ls.size() << " != num_objects " << pg_stats.num_objects << dendl;
 
     dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
 
@@ -475,7 +477,7 @@ bool ReplicatedPG::snap_trimmer()
 	t.collection_remove(info.pgid.to_snap_coll(snaps[0]), coid);
 	if (snaps.size() > 1)
 	  t.collection_remove(info.pgid.to_snap_coll(snaps[snaps.size()-1]), coid);
-	
+
 	// ...from snapset
 	snapid_t last = coid.oid.snap;
 	vector<snapid_t>::iterator p;
@@ -490,6 +492,8 @@ bool ReplicatedPG::snap_trimmer()
 	snapset.clones.erase(p);
 	snapset.clone_overlap.erase(last);
 	snapset.clone_size.erase(last);
+	pg_stats.num_objects--;
+	pg_stats.num_object_clones--;
       } else {
 	// save adjusted snaps for this object
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
@@ -514,6 +518,7 @@ bool ReplicatedPG::snap_trimmer()
       if (snapset.clones.empty() && !snapset.head_exists) {
 	dout(10) << coid << " removing head " << head << dendl;
 	t.remove(info.pgid.to_coll(), head);
+	pg_stats.num_objects--;
       } else {
 	bl.clear();
 	::encode(snapset, bl);
@@ -847,6 +852,8 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
       t.collection_add(lc, info.pgid.to_coll(), coid);
     }
     
+    pg_stats.num_objects++;
+    pg_stats.num_object_clones++;
     snapset.clones.push_back(coid.oid.snap);
     snapset.clone_size[coid.oid.snap] = old_size;
     snapset.clone_overlap[coid.oid.snap].insert(0, old_size);
@@ -862,7 +869,7 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
 
 // low level object operations
 int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
-				    pobject_t poid, __u64& old_size,
+				    pobject_t poid, __u64& old_size, bool& exists,
 				    ceph_osd_op& op, bufferlist::iterator& bp,
 				    SnapSet& snapset, SnapContext& snapc)
 {
@@ -995,6 +1002,10 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       }
       old_size = 0;
       snapset.head_exists = false;
+      if (exists) {
+	pg_stats.num_objects--;
+	exists = false;
+      }      
     }
     break;
     
@@ -1034,13 +1045,18 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       newop.op = CEPH_OSD_OP_WRITE;
       newop.offset = old_size;
       newop.length = op.length;
-      prepare_simple_op(t, reqid, poid, old_size, newop, bp, snapset, snapc);
+      prepare_simple_op(t, reqid, poid, old_size, exists, newop, bp, snapset, snapc);
     }
     break;
 
 
   default:
     return -EINVAL;
+  }
+
+  if (!exists && snapset.head_exists) {
+    pg_stats.num_objects++;
+    exists = true;
   }
 
   return 0;
@@ -1061,8 +1077,11 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   struct stat st;
   int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
   __u64 old_size = 0;
-  if (r == 0)
+  bool exists = false;
+  if (r == 0) {
+    exists = true;
     old_size = st.st_size;
+  }
 
   // apply ops
   bool did_snap = false;
@@ -1071,10 +1090,12 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     // clone?
     if (!did_snap && poid.oid.snap &&
 	!ceph_osd_op_type_lock(ops[i].op)) {     // is a (non-lock) modification
-      prepare_clone(t, log_bl, reqid, poid, old_size, old_version, at_version, snapset, snapc);
+      prepare_clone(t, log_bl, reqid, poid, old_size, old_version, at_version,
+		    snapset, snapc);
       did_snap = true;
     }
-    prepare_simple_op(t, reqid, poid, old_size, ops[i], bp,
+    prepare_simple_op(t, reqid, poid, old_size, exists,
+		      ops[i], bp,
 		      snapset, snapc);
   }
 
@@ -2636,6 +2657,9 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     // be thorough.
     vector<pobject_t> ls;
     osd->store->collection_list(info.pgid.to_coll(), ls);
+    if (ls.size() != pg_stats.num_objects)
+      dout(10) << " WARNING: " << ls.size() << " != num_objects " << pg_stats.num_objects << dendl;
+
     set<object_t> s;
     
     for (vector<pobject_t>::iterator i = ls.begin();
@@ -2703,6 +2727,8 @@ void ReplicatedPG::scrub()
   coll_t c = info.pgid.to_coll();
   vector<pobject_t> ls;
   osd->store->collection_list(c, ls);
+  if (ls.size() != pg_stats.num_objects)
+    dout(10) << " WARNING: " << ls.size() << " != num_objects " << pg_stats.num_objects << dendl;
   dout(10) << "scrub " << ls.size() << " objects" << dendl;
 
   sort(ls.begin(), ls.end());
