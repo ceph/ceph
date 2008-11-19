@@ -556,14 +556,12 @@ public:
   set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
-  xlist<PG*>::item recovery_item, scrub_item;
+  xlist<PG*>::item recovery_item, scrub_item, snap_trim_item;
   int recovery_ops_active;
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   int         state;   // see bit defns above
-
-  xlist<PG*>::item pending_snap_removal_item;
 
   // primary state
  public:
@@ -683,11 +681,10 @@ public:
     _lock("PG::_lock"),
     ref(0), deleted(false),
     info(p),
-    recovery_item(this), scrub_item(this), 
+    recovery_item(this), scrub_item(this), snap_trim_item(this),
     recovery_ops_active(0),
     role(0),
     state(0),
-    pending_snap_removal_item(this),
     have_master_log(true),
     must_notify_mon(false),
     pg_stats_lock("PG::pg_stats_lock"),

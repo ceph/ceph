@@ -284,7 +284,6 @@ private:
   // -- placement groups --
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
-  xlist<PG*> pgs_pending_snap_removal;
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
@@ -297,21 +296,6 @@ private:
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 			  vector<int>& last);
-
-  Mutex snap_trimmer_lock;
-  Cond snap_trimmer_cond;
-
-  void wake_snap_trimmer();
-  void snap_trimmer();       // thread entry
-
-  struct SnapTrimmer : public Thread {
-    OSD *osd;
-    SnapTrimmer(OSD *o) : osd(o) {}
-    void *entry() {
-      osd->snap_trimmer();
-      return NULL;
-    }
-  } snap_trimmer_thread;
 
   void wake_pg_waiters(pg_t pgid) {
     if (waiting_for_pg.count(pgid)) {
@@ -511,6 +495,32 @@ private:
       osd->activate_pg(pgid, epoch);
     }
   };
+
+
+  // -- snap trimming --
+  xlist<PG*> snap_trim_queue;
+  
+  struct SnapTrimWQ : public WorkQueue<PG> {
+    OSD *osd;
+    SnapTrimWQ(OSD *o) : osd(o) {}
+
+    void _enqueue(PG *pg) {
+      osd->snap_trim_queue.push_back(&pg->snap_trim_item);
+    }
+    void _dequeue(PG *pg) {
+      pg->snap_trim_item.remove_myself();
+    }
+    PG * _dequeue() {
+      if (osd->snap_trim_queue.empty())
+	return NULL;
+      PG *pg = osd->snap_trim_queue.front();
+      osd->snap_trim_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      pg->snap_trimmer();
+    }
+  } snap_trim_wq;
 
 
   // -- scrubbing --

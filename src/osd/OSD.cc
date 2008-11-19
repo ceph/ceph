@@ -273,14 +273,13 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"),
-  snap_trimmer_lock("OSD::snap_trimmer_lock"),
-  snap_trimmer_thread(this),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   tid_lock("OSD::tid_lock"),
   recovery_lock("OSD::recovery_lock"),
   recovery_ops_active(0), recovery_stop(false), recovery_pause(false),
   remove_list_lock("OSD::remove_list_lock"),
   recovery_thread(this),
+  snap_trim_wq(this),
   scrub_wq(this)
 {
   messenger = m;
@@ -440,6 +439,7 @@ int OSD::init()
   
   recovery_thread.create();
   scrub_wq.start();
+  snap_trim_wq.start();
 
   // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
@@ -478,7 +478,10 @@ int OSD::shutdown()
   dout(10) << "recovery thread stopped" << dendl;
 
   scrub_wq.stop();
-  dout(10) << "scrub thread stopped" << dendl;
+  dout(10) << "scrub wq stopped" << dendl;
+  snap_trim_wq.stop();
+  dout(10) << "snap trim wq stopped" << dendl;
+
 
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
@@ -657,6 +660,9 @@ void OSD::_remove_unlock_pg(PG *pg)
   pg_t pgid = pg->info.pgid;
 
   dout(10) << "_remove_unlock_pg " << pgid << dendl;
+
+  snap_trim_wq.dequeue(pg);
+  scrub_wq.dequeue(pg);
 
   // remove from store
   vector<pobject_t> olist;
@@ -1509,6 +1515,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   wait_for_no_ops();
   pause_recovery_thread();
   scrub_wq.pause();
+  snap_trim_wq.pause();
   map_lock.get_write();
 
   assert(osd_lock.is_locked());
@@ -1703,6 +1710,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   map_lock.put_write();
   unpause_recovery_thread();
   scrub_wq.unpause();
+  snap_trim_wq.unpause();
 
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
@@ -3391,39 +3399,3 @@ void OSD::wait_for_no_ops()
 
 
 
-
-void OSD::wake_snap_trimmer()
-{
-  assert(osd_lock.is_locked());
-  if (!snap_trimmer_thread.is_started()) {
-    dout(10) << "wake_snap_trimmer - creating thread" << dendl;
-    snap_trimmer_thread.create();
-  } else {
-    dout(10) << "wake_snap_trimmer - kicking thread" << dendl;
-    snap_trimmer_cond.Signal();
-  }
-}
-
-void OSD::snap_trimmer()
-{
-  osd_lock.Lock();
-  while (1) {
-    snap_trimmer_lock.Lock();
-    if (pgs_pending_snap_removal.empty()) {
-      snap_trimmer_lock.Unlock();
-      dout(10) << "snap_trimmer - no pgs pending trim, sleeping" << dendl;
-      snap_trimmer_cond.Wait(osd_lock);
-      continue;
-    }
-    
-    PG *pg = pgs_pending_snap_removal.front();
-    pgs_pending_snap_removal.pop_front();
-    snap_trimmer_lock.Unlock();
-    osd_lock.Unlock();
-
-    pg->snap_trimmer();
-
-    osd_lock.Lock();
-  }
-  osd_lock.Unlock();
-}

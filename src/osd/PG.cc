@@ -1300,11 +1300,7 @@ void PG::queue_snap_trim()
 
   state_set(PG_STATE_SNAPTRIMQUEUE);
 
-  osd->snap_trimmer_lock.Lock();
-  osd->pgs_pending_snap_removal.push_back(&pending_snap_removal_item);
-  osd->snap_trimmer_lock.Unlock();
-
-  osd->wake_snap_trimmer();     // FIXME: we probably want to wait until at least peering completes?
+  osd->snap_trim_wq.queue(this);
 }
 
 

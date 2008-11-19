@@ -93,7 +93,7 @@ public:
     cond.Signal();
     queue_lock.Unlock();
   }
-  void unqueue(T *item) {
+  void dequeue(T *item) {
     queue_lock.Lock();
     _dequeue(item);
     queue_lock.Unlock();
