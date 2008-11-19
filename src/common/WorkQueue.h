@@ -1,3 +1,17 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __CEPH_WORKQUEUE
 #define __CEPH_WORKQUEUE
 
@@ -48,11 +62,12 @@ class WorkQueue {
   } thread;
 
 public:
-  WorkQueue() : lock("WorkQueue::lock"),
-		queue_lock("WorkQueue::queue_lock"),
-		_stop(false), _pause(false),
-		processing(0),
-		thread(this) {}
+  WorkQueue(string name) :
+    lock(string(name + "::lock").c_str()),
+    queue_lock(string(name + "::queue_lock").c_str()),
+    _stop(false), _pause(false),
+    processing(0),
+    thread(this) {}
 
   virtual void _enqueue(T *) = 0;
   virtual void _dequeue(T *) = 0;
@@ -68,6 +83,11 @@ public:
     cond.Signal();
     lock.Unlock();
     thread.join();
+  }
+  void kick() {
+    lock.Lock();
+    cond.Signal();
+    lock.Unlock();
   }
 
   void pause() {

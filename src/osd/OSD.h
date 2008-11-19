@@ -502,7 +502,7 @@ private:
   
   struct SnapTrimWQ : public WorkQueue<PG> {
     OSD *osd;
-    SnapTrimWQ(OSD *o) : osd(o) {}
+    SnapTrimWQ(OSD *o) : WorkQueue<PG>("OSD::SnapTrimWQ"), osd(o) {}
 
     void _enqueue(PG *pg) {
       osd->snap_trim_queue.push_back(&pg->snap_trim_item);
@@ -528,7 +528,7 @@ private:
 
   struct ScrubWQ : public WorkQueue<PG> {
     OSD *osd;
-    ScrubWQ(OSD *o) : osd(o) {}
+    ScrubWQ(OSD *o) : WorkQueue<PG>("OSD::ScrubWQ"), osd(o) {}
 
     void _enqueue(PG *pg) {
       osd->scrub_queue.push_back(&pg->scrub_item);
