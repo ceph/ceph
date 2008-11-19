@@ -1702,6 +1702,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.put_write();
   unpause_recovery_thread();
+  scrub_wq.unpause();
 
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
@@ -3221,9 +3222,6 @@ void OSD::handle_op(MOSDOp *op)
   }
   
   pg->unlock();
-  
-#warning hack
-  scrub_wq.queue(pg);
 }
 
 
@@ -3355,6 +3353,9 @@ void OSD::dequeue_op(PG *pg)
   // unlock and put pg
   pg->put_unlock();
   
+  //#warning foo
+  //scrub_wq.queue(pg);
+
   // finish
   osd_lock.Lock();
   {

@@ -81,8 +81,8 @@ public:
 
   void unpause() {
     lock.Lock();
-    assert(pause);
-    pause = false;
+    assert(_pause);
+    _pause = false;
     cond.Signal();
     lock.Unlock();
   }
@@ -90,6 +90,7 @@ public:
   void queue(T *item) {
     queue_lock.Lock();
     _enqueue(item);
+    cond.Signal();
     queue_lock.Unlock();
   }
   void unqueue(T *item) {

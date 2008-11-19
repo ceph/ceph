@@ -2774,7 +2774,7 @@ void ReplicatedPG::scrub()
   vector<pobject_t> ls;
   osd->store->collection_list(c, ls);
   if (ls.size() != pg_stats.num_objects)
-    dout(10) << " WARNING: " << ls.size() << " != num_objects " << pg_stats.num_objects << dendl;
+    dout(10) << "scrub WARNING: " << ls.size() << " != num_objects " << pg_stats.num_objects << dendl;
   dout(10) << "scrub " << ls.size() << " objects" << dendl;
 
   sort(ls.begin(), ls.end());
@@ -2795,8 +2795,6 @@ void ReplicatedPG::scrub()
        p++) {
     pobject_t poid = *p;
     stat.num_objects++;
-    if (poid.oid.snap != CEPH_NOSNAP)
-      stat.num_object_clones++;
 
     // basic checks.
     eversion_t v;
@@ -2852,6 +2850,8 @@ void ReplicatedPG::scrub()
     } else if (poid.oid.snap) {
       // it's a clone
       assert(head != pobject_t());
+
+      stat.num_object_clones++;
       
       assert(poid.oid.snap == snapset.clones[curclone]);
       bufferlist bl;
