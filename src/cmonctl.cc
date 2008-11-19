@@ -75,7 +75,7 @@ void get_status(bool newmon)
   messenger->send_message(m, monmap.get_inst(mon));
 
   event = new C_Refresh;
-  timer.add_event_after(1.0, event);
+  timer.add_event_after(.2, event);
 }
 
 
@@ -83,18 +83,20 @@ void handle_ack(MMonCommandAck *ack)
 {
   if (watch) {
     lock.Lock();
+
+    which++;
+    which = which % LAST;
+
     string w = ack->cmd[0];
     if (ack->rs != status[w]) {
       status[w] = ack->rs;
       generic_dout(0) << w << " " << status[w] << dendl;
-    }
 
-    which++;
-    which = which % LAST;
+      if (event)
+	timer.cancel_event(event);
+      get_status();
+    }
     
-    if (event)
-      timer.cancel_event(event);
-    get_status();
     lock.Unlock();
   } else {
     generic_dout(0) << ack->get_source() << " -> '"
