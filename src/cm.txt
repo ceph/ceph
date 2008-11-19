@@ -93,7 +93,7 @@ pool root {
 	item cosd3 weight 4.000
 	item cosd4 weight 4.000
 	item cosd5 weight 4.000
-	item cosd6 weight 4.000
+#	item cosd6 weight 4.000
 }
 
 
