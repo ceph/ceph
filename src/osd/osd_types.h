@@ -369,6 +369,14 @@ struct pg_stat_t {
     ::decode(num_object_clones, bl);
     ::decode(acting, bl);
   }
+
+  void add(const pg_stat_t& o) {
+    num_bytes += o.num_bytes;
+    num_kb += o.num_kb;
+    num_objects += o.num_objects;
+    num_object_clones += o.num_object_clones;
+  }
+
   pg_stat_t() : reported(0), created(0), parent_split_bits(0), 
 		state(0),
 		num_bytes(0), num_kb(0), 

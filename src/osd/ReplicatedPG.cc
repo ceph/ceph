@@ -489,10 +489,10 @@ bool ReplicatedPG::snap_trimmer()
 	  vector<snapid_t>::iterator n = p - 1;
 	  interval_set<__u64> keep;
 	  keep.union_of(snapset.clone_overlap[*n], snapset.clone_overlap[*p]);
-	  add_interval_usage(keep);  // not deallocated
+	  add_interval_usage(keep, pg_stats);  // not deallocated
  	  snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
 	} else {
-	  add_interval_usage(snapset.clone_overlap[last]);  // not deallocated
+	  add_interval_usage(snapset.clone_overlap[last], pg_stats);  // not deallocated
 	}
 	pg_stats.num_objects--;
 	pg_stats.num_object_clones--;
@@ -807,7 +807,7 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
   t.setattr(info.pgid.to_coll(), coid, "from_version", &ov, sizeof(v));
 }
 
-void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid,
+void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& stats,
 				 pobject_t poid, loff_t old_size,
 				 eversion_t old_version, eversion_t& at_version, 
 				 SnapSet& snapset, SnapContext& snapc)
@@ -860,8 +860,8 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
       t.collection_add(lc, info.pgid.to_coll(), coid);
     }
     
-    pg_stats.num_objects++;
-    pg_stats.num_object_clones++;
+    stats.num_objects++;
+    stats.num_object_clones++;
     snapset.clones.push_back(coid.oid.snap);
     snapset.clone_size[coid.oid.snap] = old_size;
     snapset.clone_overlap[coid.oid.snap].insert(0, old_size);
@@ -875,16 +875,16 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
 }
 
 
-void ReplicatedPG::add_interval_usage(interval_set<__u64>& s)
+void ReplicatedPG::add_interval_usage(interval_set<__u64>& s, pg_stat_t& stats)
 {
   for (map<__u64,__u64>::iterator p = s.m.begin(); p != s.m.end(); p++) {
-    pg_stats.num_bytes += p->second;
-    pg_stats.num_kb += SHIFT_ROUND_UP(p->first+p->second, 10) - (p->first >> 10);
+    stats.num_bytes += p->second;
+    stats.num_kb += SHIFT_ROUND_UP(p->first+p->second, 10) - (p->first >> 10);
   }
 }
 
 // low level object operations
-int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
+int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 				    pobject_t poid, __u64& old_size, bool& exists,
 				    ceph_osd_op& op, bufferlist::iterator& bp,
 				    SnapSet& snapset, SnapContext& snapc)
@@ -958,12 +958,12 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	ch.insert(op.offset, op.length);
 	ch.intersection_of(snapset.clone_overlap[newest]);
 	snapset.clone_overlap[newest].subtract(ch);
-	add_interval_usage(ch);
+	add_interval_usage(ch, st);
       }
       if (op.offset + op.length > old_size) {
 	__u64 new_size = op.offset + op.length;
-	pg_stats.num_bytes += new_size - old_size;
-	pg_stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(old_size, 10);
+	st.num_bytes += new_size - old_size;
+	st.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(old_size, 10);
 	old_size = new_size;
       }
       snapset.head_exists = true;
@@ -982,10 +982,10 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	old_size = 0;
       }
       if (op.length != old_size) {
-	pg_stats.num_bytes -= old_size;
-	pg_stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
-	pg_stats.num_bytes += op.length;
-	pg_stats.num_kb += SHIFT_ROUND_UP(op.length, 10);
+	st.num_bytes -= old_size;
+	st.num_kb -= SHIFT_ROUND_UP(old_size, 10);
+	st.num_bytes += op.length;
+	st.num_kb += SHIFT_ROUND_UP(op.length, 10);
 	old_size = op.length;
       }
       snapset.head_exists = true;
@@ -1002,7 +1002,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	ch.insert(op.offset, op.length);
 	ch.intersection_of(snapset.clone_overlap[newest]);
 	snapset.clone_overlap[newest].subtract(ch);
-	add_interval_usage(ch);
+	add_interval_usage(ch, st);
       }
       snapset.head_exists = true;
     }
@@ -1017,7 +1017,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	if (old_size > op.length) {
 	  trim.insert(op.length, old_size-op.length);
 	  trim.intersection_of(snapset.clone_overlap[newest]);
-	  add_interval_usage(trim);
+	  add_interval_usage(trim, st);
 	}
 	interval_set<__u64> keep;
 	if (op.length)
@@ -1025,10 +1025,10 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 	snapset.clone_overlap[newest].intersection_of(keep);
       }
       if (op.length != old_size) {
-	pg_stats.num_bytes -= old_size;
-	pg_stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
-	pg_stats.num_bytes += op.length;
-	pg_stats.num_kb += SHIFT_ROUND_UP(op.length, 10);
+	st.num_bytes -= old_size;
+	st.num_kb -= SHIFT_ROUND_UP(old_size, 10);
+	st.num_bytes += op.length;
+	st.num_kb += SHIFT_ROUND_UP(op.length, 10);
 	old_size = op.length;
       }
       // do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
@@ -1040,13 +1040,13 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       t.remove(info.pgid.to_coll(), poid);
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
-	add_interval_usage(snapset.clone_overlap[newest]);
+	add_interval_usage(snapset.clone_overlap[newest], st);
 	snapset.clone_overlap.erase(newest);  // ok, redundant.
       }
       if (exists) {
-	pg_stats.num_objects--;
-	pg_stats.num_bytes -= old_size;
-	pg_stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
+	st.num_objects--;
+	st.num_bytes -= old_size;
+	st.num_kb -= SHIFT_ROUND_UP(old_size, 10);
 	old_size = 0;
 	exists = false;
 	snapset.head_exists = false;
@@ -1090,7 +1090,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       newop.op = CEPH_OSD_OP_WRITE;
       newop.offset = old_size;
       newop.length = op.length;
-      prepare_simple_op(t, reqid, poid, old_size, exists, newop, bp, snapset, snapc);
+      prepare_simple_op(t, reqid, st, poid, old_size, exists, newop, bp, snapset, snapc);
     }
     break;
 
@@ -1100,14 +1100,14 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
   }
 
   if (!exists && snapset.head_exists) {
-    pg_stats.num_objects++;
+    st.num_objects++;
     exists = true;
   }
 
   return 0;
 }
 
-void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
+void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& stats,
 				       pobject_t poid,
 				       vector<ceph_osd_op>& ops, bufferlist& bl,
 				       eversion_t old_version, eversion_t at_version,
@@ -1135,11 +1135,11 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     // clone?
     if (!did_snap && poid.oid.snap &&
 	!ceph_osd_op_type_lock(ops[i].op)) {     // is a (non-lock) modification
-      prepare_clone(t, log_bl, reqid, poid, old_size, old_version, at_version,
+      prepare_clone(t, log_bl, reqid, stats, poid, old_size, old_version, at_version,
 		    snapset, snapc);
       did_snap = true;
     }
-    prepare_simple_op(t, reqid, poid, old_size, exists,
+    prepare_simple_op(t, reqid, stats, poid, old_size, exists,
 		      ops[i], bp,
 		      snapset, snapc);
   }
@@ -1222,6 +1222,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   
   repop->applied = true;
 
+  pg_stats.add(repop->stats);
 
   // any completion stuff to do here?
   object_t oid = repop->op->get_oid();
@@ -1651,7 +1652,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // we are acker.
   if (op->ops.size()) {
     // log and update later.
-    prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
+    prepare_transaction(repop->t, op->get_reqid(), repop->stats, poid, op->ops, op->get_data(),
 			old_version, av,
 			snapset, snapc,
 			op->get_inc_lock(), peers_complete_thru);
@@ -1713,7 +1714,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   osd->logger->inc("r_wrb", op->get_data().length());
   
   if (op->ops.size()) {
-    prepare_transaction(t, op->reqid,
+    prepare_transaction(t, op->reqid, pg_stats,
 			op->poid, op->ops, op->get_data(),
 			op->old_version, op->version,
 			op->snapset, op->snapc,

@@ -33,6 +33,7 @@ public:
 
     ObjectStore::Transaction t;
     bool applied;
+    pg_stat_t stats;
 
     set<int>  waitfor_ack;
     set<int>  waitfor_commit;
@@ -117,16 +118,16 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
 		   eversion_t ov, eversion_t v, bufferlist& snaps);
-  void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid,
+  void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& st,
 		     pobject_t poid, loff_t old_size,
 		     eversion_t old_version, eversion_t& at_version,
 		     SnapSet& snapset, SnapContext& snapc);
-  void add_interval_usage(interval_set<__u64>& s);  
-  int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid,
+  void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
+  int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			pobject_t poid, __u64& old_size, bool& exists,
 			ceph_osd_op& op, bufferlist::iterator& bp,
 			SnapSet& snapset, SnapContext& snapc); 
-  void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
+  void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
 			   eversion_t old_version, eversion_t at_version,
