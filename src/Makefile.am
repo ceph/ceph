@@ -274,6 +274,7 @@ noinst_HEADERS = \
         common/Thread.h\
         common/ThreadPool.h\
         common/Timer.h\
+	common/WorkQueue.h\
         config.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\

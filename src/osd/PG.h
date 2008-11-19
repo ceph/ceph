@@ -556,7 +556,7 @@ public:
   set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
-  xlist<PG*>::item recovery_item;
+  xlist<PG*>::item recovery_item, scrub_item;
   int recovery_ops_active;
 
 protected:
@@ -683,7 +683,8 @@ public:
     _lock("PG::_lock"),
     ref(0), deleted(false),
     info(p),
-    recovery_item(this), recovery_ops_active(0),
+    recovery_item(this), scrub_item(this), 
+    recovery_ops_active(0),
     role(0),
     state(0),
     pending_snap_removal_item(this),
@@ -768,6 +769,7 @@ public:
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
   virtual bool snap_trimmer() = 0;
+  virtual void scrub() { };
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;

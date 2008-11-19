@@ -21,6 +21,7 @@
 #include "common/RWLock.h"
 #include "common/ThreadPool.h"
 #include "common/Timer.h"
+#include "common/WorkQueue.h"
 
 #include "mon/MonMap.h"
 
@@ -510,6 +511,32 @@ private:
       osd->activate_pg(pgid, epoch);
     }
   };
+
+
+  // -- scrubbing --
+  xlist<PG*> scrub_queue;
+
+  struct ScrubWQ : public WorkQueue<PG> {
+    OSD *osd;
+    ScrubWQ(OSD *o) : osd(o) {}
+
+    void _enqueue(PG *pg) {
+      osd->scrub_queue.push_back(&pg->scrub_item);
+    }
+    void _dequeue(PG *pg) {
+      pg->scrub_item.remove_myself();
+    }
+    PG * _dequeue() {
+      if (osd->scrub_queue.empty())
+	return NULL;
+      PG *pg = osd->scrub_queue.front();
+      osd->scrub_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      pg->scrub();
+    }
+  } scrub_wq;
 
 
  public:

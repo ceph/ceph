@@ -2785,12 +2785,17 @@ void ReplicatedPG::scrub()
   unsigned curclone = 0;
   int r;
 
+  pg_stat_t stat;
+
   bufferlist last_data;
 
   for (vector<pobject_t>::reverse_iterator p = ls.rbegin(); 
        p != ls.rend(); 
        p++) {
     pobject_t poid = *p;
+    stat.num_objects++;
+    if (poid.oid.snap != CEPH_NOSNAP)
+      stat.num_object_clones++;
 
     // basic checks.
     eversion_t v;
@@ -2801,6 +2806,9 @@ void ReplicatedPG::scrub()
     dout(20) << "scrub  " << poid << " v " << v
 	     << " size " << st.st_size << dendl;
   
+    stat.num_bytes += st.st_size;
+    stat.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
+
     bufferlist data;
     osd->store->read(c, poid, 0, 0, data);
     assert(data.length() == st.st_size);
@@ -2827,6 +2835,19 @@ void ReplicatedPG::scrub()
 	head = pobject_t();  // no clones.
       else
 	curclone = snapset.clones.size()-1;
+
+      // subtract off any clone overlap
+      for (map<snapid_t,interval_set<__u64> >::iterator q = snapset.clone_overlap.begin();
+	   q != snapset.clone_overlap.end();
+	   q++) {
+	for (map<__u64,__u64>::iterator r = q->second.m.begin();
+	     r != q->second.m.end();
+	     r++) {
+	  stat.num_bytes -= r->second;
+	  stat.num_kb -= SHIFT_ROUND_UP(r->first+r->second, 10) - (r->first >> 10);
+	}	  
+      }
+
     } else if (poid.oid.snap) {
       // it's a clone
       assert(head != pobject_t());
@@ -2857,6 +2878,13 @@ void ReplicatedPG::scrub()
     }
   }  
   
+  dout(10) << "scrub got "
+	   << stat.num_objects << "/" << pg_stats.num_objects << " objects, "
+	   << stat.num_object_clones << "/" << pg_stats.num_object_clones << " clones, "
+	   << stat.num_bytes << "/" << pg_stats.num_bytes << " bytes, "
+	   << stat.num_kb << "/" << pg_stats.num_kb << " kb."
+	   << dendl;
+
   dout(10) << "scrub finish" << dendl;
   unlock();
 }

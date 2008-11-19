@@ -280,7 +280,8 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   recovery_lock("OSD::recovery_lock"),
   recovery_ops_active(0), recovery_stop(false), recovery_pause(false),
   remove_list_lock("OSD::remove_list_lock"),
-  recovery_thread(this)
+  recovery_thread(this),
+  scrub_wq(this)
 {
   messenger = m;
   monmap = mm;
@@ -438,6 +439,7 @@ int OSD::init()
   do_mon_report();     // start mon report timer
   
   recovery_thread.create();
+  scrub_wq.start();
 
   // start the heartbeat
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
@@ -474,6 +476,9 @@ int OSD::shutdown()
 
   stop_recovery_thread();
   dout(10) << "recovery thread stopped" << dendl;
+
+  scrub_wq.stop();
+  dout(10) << "scrub thread stopped" << dendl;
 
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
@@ -1503,6 +1508,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   wait_for_no_ops();
   pause_recovery_thread();
+  scrub_wq.pause();
   map_lock.get_write();
 
   assert(osd_lock.is_locked());
@@ -3215,6 +3221,9 @@ void OSD::handle_op(MOSDOp *op)
   }
   
   pg->unlock();
+  
+#warning hack
+  scrub_wq.queue(pg);
 }
 
 
