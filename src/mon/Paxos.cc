@@ -900,7 +900,7 @@ void Paxos::stash_latest(version_t v, bufferlist& bl)
 version_t Paxos::get_latest(bufferlist& bl)
 {
   bufferlist full;
-  if (mon->store->get_bl_ss(full, machine_name, "latest") < 0) {
+  if (mon->store->get_bl_ss(full, machine_name, "latest") <= 0) {
     dout(10) << "get_latest not found" << dendl;
     return 0;
   }
