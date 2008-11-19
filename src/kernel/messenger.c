@@ -1667,6 +1667,9 @@ static int try_read(struct ceph_connection *con)
 	if (!con->sock)
 		return 0;
 
+	if (test_bit(STANDBY, &con->state))
+		return 0;
+
 	dout(20, "try_read start on %p\n", con);
 	msgr = con->msgr;
 
@@ -1794,9 +1797,8 @@ bad_tag:
 static void ceph_queue_con(struct ceph_connection *con)
 {
 	if (test_bit(WAIT, &con->state) ||
-	    test_bit(CLOSED, &con->state) ||
-	    test_bit(BACKOFF, &con->state)) {
-		dout(40, "ceph_queue_con %p ignoring: WAIT|CLOSED|BACKOFF\n",
+	    test_bit(CLOSED, &con->state)) {
+		dout(40, "ceph_queue_con %p ignoring: WAIT|CLOSED\n",
 		     con);
 		return;
 	}
@@ -1820,6 +1822,7 @@ static void con_work(struct work_struct *work)
 {
 	struct ceph_connection *con = container_of(work, struct ceph_connection,
 						   work.work);
+	int backoff = 0;
 
 more:
 	if (test_and_set_bit(BUSY, &con->state) != 0) {
@@ -1837,18 +1840,19 @@ more:
 		dout(5, "con_work WAIT\n");
 		goto done;
 	}
-	if (test_and_clear_bit(BACKOFF, &con->state))
-		dout(5, "con_work cleared BACKOFF\n");
 
 	if (test_and_clear_bit(SOCK_CLOSED, &con->state) ||
 	    try_read(con) < 0 ||
-	    try_write(con) < 0)
+	    try_write(con) < 0) {
+		backoff = 1;
 		ceph_fault(con);     /* error/fault path */
+	}
 
 done:
 	clear_bit(BUSY, &con->state);
+	dout(10, "con->state=%d\n", con->state);
 	if (test_bit(QUEUED, &con->state)) {
-		if (!test_bit(BACKOFF, &con->state)) {
+		if (!backoff) {
 			dout(10, "con_work %p QUEUED reset, looping\n", con);
 			goto more;
 		}
@@ -1879,7 +1883,10 @@ static void ceph_fault(struct ceph_connection *con)
 		return;
 	}
 
+	clear_bit(BUSY, &con->state);  /* to avoid an improbable race */
+
 	con_close_socket(con);
+	con->in_msg = NULL;
 
 	/* If there are no messages in the queue, place the connection
 	 * in a STANDBY state (i.e., don't try to reconnect just yet). */
@@ -1895,12 +1902,6 @@ static void ceph_fault(struct ceph_connection *con)
 	 * delay. */
 	list_splice_init(&con->out_sent, &con->out_queue);
 	spin_unlock(&con->out_queue_lock);
-
-	/* set BACKOFF so that caller does not loop and to prevent
-	 * anything from requeuing work on this connection. */
-	dout(10, "fault setting BACKOFF\n");
-	set_bit(BACKOFF, &con->state);
-	clear_bit(BUSY, &con->state);  /* to avoid an improbable race */
 
 	if (con->delay == 0)
 		con->delay = BASE_DELAY_INTERVAL;
@@ -2170,8 +2171,8 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		radix_tree_preload_end();
 	} else {
 		dout(10, "ceph_msg_send had connection %p to peer "
-		     "%u.%u.%u.%u:%u\n", con,
-		     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
+		     "%u.%u.%u.%u:%u con->sock=%p\n", con,
+		     IPQUADPORT(msg->hdr.dst.addr.ipaddr), con->sock);
 		spin_unlock(&msgr->con_lock);
 	}
 
