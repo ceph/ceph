@@ -2487,7 +2487,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
         pobject_t oid = t.get_oid();
-        if (_touch(oid) < 0) {
+        if (_touch(cid, oid) < 0) {
           dout(7) << "apply_transaction fail on _touch" << dendl;
           r &= bit;
         }
@@ -2501,7 +2501,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         __u64 offset = t.get_length();
 	__u64 len = t.get_length();
         bufferlist& bl = t.get_bl();
-        if (_write(oid, offset, len, bl) < 0) {
+        if (_write(cid, oid, offset, len, bl) < 0) {
           dout(7) << "apply_transaction fail on _write" << dendl;
           r &= bit;
         }
@@ -2514,7 +2514,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         pobject_t oid = t.get_oid();
         __u64 offset = t.get_length();
 	__u64 len = t.get_length();
-        if (_zero(oid, offset, len) < 0) {
+        if (_zero(cid, oid, offset, len) < 0) {
           dout(7) << "apply_transaction fail on _zero" << dendl;
           r &= bit;
         }
@@ -2536,7 +2536,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 	coll_t cid = t.get_cid();
         pobject_t oid = t.get_oid();
         __u64 offset = t.get_length();
-        if (_truncate(oid, offset) < 0) {
+        if (_truncate(cid, oid, offset) < 0) {
           dout(7) << "apply_transaction fail on _truncate" << dendl;
           r &= bit;
         }
@@ -2547,7 +2547,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
         pobject_t oid = t.get_oid();
-        if (_remove(oid) < 0) {
+        if (_remove(cid, oid) < 0) {
           dout(7) << "apply_transaction fail on _remove" << dendl;
           r &= bit;
         }
@@ -2596,7 +2596,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
 	coll_t cid = t.get_cid();
         pobject_t oid = t.get_oid();
         pobject_t noid = t.get_oid();
-	if (_clone(oid, noid) < 0) {
+	if (_clone(cid, oid, noid) < 0) {
 	  dout(7) << "apply_transaction fail on _clone" << dendl;
 	  r &= bit;
 	}
@@ -2610,7 +2610,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
         pobject_t noid = t.get_oid();
 	__u64 off = t.get_length();
 	__u64 len = t.get_length();
-	if (_clone_range(oid, noid, off, len) < 0) {
+	if (_clone_range(cid, oid, noid, off, len) < 0) {
 	  dout(7) << "apply_transaction fail on _clone_range" << dendl;
 	  r &= bit;
 	}
@@ -2695,7 +2695,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
   return r;
 }
 
-int Ebofs::_touch(pobject_t oid)
+int Ebofs::_touch(coll_t cid, pobject_t oid)
 {
   dout(7) << "_touch " << oid << dendl;
 
@@ -2703,6 +2703,7 @@ int Ebofs::_touch(pobject_t oid)
   Onode *on = get_onode(oid);
   if (!on) {
     on = new_onode(oid);    // new inode!
+    _collection_add(cid, oid);
     dirty_onode(on);
   }
   put_onode(on);
@@ -2710,14 +2711,17 @@ int Ebofs::_touch(pobject_t oid)
 }
 
 
-int Ebofs::_write(pobject_t oid, __u64 offset, size_t length, const bufferlist& bl)
+int Ebofs::_write(coll_t cid, pobject_t oid, __u64 offset, size_t length, const bufferlist& bl)
 {
-  dout(7) << "_write " << oid << " " << offset << "~" << length << dendl;
+  dout(7) << "_write " << cid << " " << oid << " " << offset << "~" << length << dendl;
   assert(bl.length() == length);
 
   // get|create inode
   Onode *on = get_onode(oid);
-  if (!on) on = new_onode(oid);    // new inode!
+  if (!on) {
+    on = new_onode(oid);    // new inode!
+    _collection_add(cid, oid);
+  }
   
   while (1) {
     // too much unflushed dirty data?  (if so, block!)
@@ -2786,13 +2790,16 @@ int Ebofs::_write(pobject_t oid, __u64 offset, size_t length, const bufferlist& 
   return length;
 }
 
-int Ebofs::_zero(pobject_t oid, __u64 offset, size_t length)
+int Ebofs::_zero(coll_t cid, pobject_t oid, __u64 offset, size_t length)
 {
   dout(7) << "_zero " << oid << " " << offset << "~" << length << dendl;
 
   // get|create inode
   Onode *on = get_onode(oid);
-  if (!on) on = new_onode(oid);    // new inode!
+  if (!on) {
+    on = new_onode(oid);    // new inode!
+    _collection_add(cid, oid);
+  }
   if (on->readonly) {
     put_onode(on);
     return -EACCES;
@@ -2801,7 +2808,7 @@ int Ebofs::_zero(pobject_t oid, __u64 offset, size_t length)
   if (length > 0 &&
       offset < on->object_size) {
     if (offset + (__u64)length >= on->object_size) {
-      _truncate(oid, offset);
+      _truncate(cid, oid, offset);
     } else {
       while (1) {
 	int r = apply_zero(on, offset, length);
@@ -2832,7 +2839,7 @@ int Ebofs::write(coll_t cid, pobject_t oid,
   ebofs_lock.Lock();
 
   // go
-  int r = _write(oid, off, len, bl);
+  int r = _write(cid, oid, off, len, bl);
 
   // commit waiter
   if (r > 0) {
@@ -2858,7 +2865,7 @@ int Ebofs::zero(coll_t cid, pobject_t oid, __u64 off, size_t len, Context *onsaf
   ebofs_lock.Lock();
   
   // go
-  int r = _zero(oid, off, len);
+  int r = _zero(cid, oid, off, len);
 
   // commit waiter
   if (r > 0) {
@@ -2880,7 +2887,7 @@ int Ebofs::zero(coll_t cid, pobject_t oid, __u64 off, size_t len, Context *onsaf
 }
 
 
-int Ebofs::_remove(pobject_t oid)
+int Ebofs::_remove(coll_t cid, pobject_t oid)
 {
   dout(7) << "_remove " << oid << dendl;
 
@@ -2900,7 +2907,7 @@ int Ebofs::remove(coll_t cid, pobject_t oid, Context *onsafe)
   ebofs_lock.Lock();
 
   // do it
-  int r = _remove(oid);
+  int r = _remove(cid, oid);
 
   // journal, wait for commit
   if (r >= 0) {
@@ -2920,7 +2927,7 @@ int Ebofs::remove(coll_t cid, pobject_t oid, Context *onsafe)
   return r;
 }
 
-int Ebofs::_truncate(pobject_t oid, __u64 size)
+int Ebofs::_truncate(coll_t cid, pobject_t oid, __u64 size)
 {
   dout(7) << "_truncate " << oid << " size " << size << dendl;
 
@@ -2983,7 +2990,7 @@ int Ebofs::truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe)
 {
   ebofs_lock.Lock();
   
-  int r = _truncate(oid, size);
+  int r = _truncate(cid, oid, size);
 
   // journal, wait for commit
   if (r >= 0) {
@@ -3009,7 +3016,7 @@ int Ebofs::clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe)
 {
   ebofs_lock.Lock();
   
-  int r = _clone(from, to);
+  int r = _clone(cid, from, to);
 
   // journal, wait for commit
   if (r >= 0) {
@@ -3029,7 +3036,7 @@ int Ebofs::clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe)
   return r;
 }
 
-int Ebofs::_clone(pobject_t from, pobject_t to)
+int Ebofs::_clone(coll_t cid, pobject_t from, pobject_t to)
 {
   dout(7) << "_clone " << from << " -> " << to << dendl;
 
@@ -3047,6 +3054,7 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
   }
   ton = new_onode(to); 
   assert(ton);
+  _collection_add(cid, to);
   
   // copy easy bits
   ton->readonly = true;
@@ -3083,7 +3091,7 @@ int Ebofs::_clone(pobject_t from, pobject_t to)
 }
 
 
-int Ebofs::_clone_range(pobject_t from, pobject_t to, __u64 off, __u64 len)
+int Ebofs::_clone_range(coll_t cid, pobject_t from, pobject_t to, __u64 off, __u64 len)
 {
   dout(7) << "_clone_range " << from << " -> " << to << " " << off << "~" << len << dendl;
 
@@ -3092,7 +3100,7 @@ int Ebofs::_clone_range(pobject_t from, pobject_t to, __u64 off, __u64 len)
   int r = _read(from, off, len, bl);
   if (r < 0)
     return r;
-  r = _write(to, off, len, bl);
+  r = _write(cid, to, off, len, bl);
   return r;
 }  
 

@@ -333,14 +333,14 @@ private:
   int _get_object_collections(pobject_t oid, set<coll_t>& ls);
 
   bool _write_will_block();
-  int _touch(pobject_t oid);
-  int _write(pobject_t oid, __u64 off, size_t len, const bufferlist& bl);
+  int _touch(coll_t cid, pobject_t oid);
+  int _write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl);
   void _trim_from_cache(pobject_t oid, __u64 off, size_t len);
-  int _truncate(pobject_t oid, __u64 size);
-  int _zero(pobject_t oid, __u64 offset, size_t length);
-  int _remove(pobject_t oid);
-  int _clone(pobject_t from, pobject_t to);
-  int _clone_range(pobject_t from, pobject_t to, __u64 off, __u64 len);
+  int _truncate(coll_t cid, pobject_t oid, __u64 size);
+  int _zero(coll_t cid, pobject_t oid, __u64 offset, size_t length);
+  int _remove(coll_t cid, pobject_t oid);
+  int _clone(coll_t cid, pobject_t from, pobject_t to);
+  int _clone_range(coll_t cid, pobject_t from, pobject_t to, __u64 off, __u64 len);
   int _setattr(pobject_t oid, const char *name, const void *value, size_t size);
   int _setattrs(pobject_t oid, map<string,bufferptr>& attrset);
   int _rmattr(pobject_t oid, const char *name);
