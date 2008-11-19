@@ -332,14 +332,14 @@ static inline std::string pg_state_string(int state) {
 struct pg_stat_t {
   eversion_t version;
   epoch_t reported, created;
-  pg_t    parent;
-  int32_t parent_split_bits;
-  int32_t state;
+  pg_t parent;
+  __u32 parent_split_bits;
+  __u32 state;
 
-  int64_t num_bytes;    // in bytes
-  int64_t num_kb;       // in KB
-  int64_t num_objects;
-  int64_t num_object_clones;
+  __u64 num_bytes;    // in bytes
+  __u64 num_kb;       // in KB
+  __u64 num_objects;
+  __u64 num_object_clones;
 
   vector<int> acting;
   
