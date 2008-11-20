@@ -375,6 +375,7 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     if (queue_pos % header.alignment) {
       int pad = header.alignment - (queue_pos % header.alignment);
       bufferptr bp(pad);
+      bp.zero();
       bl.push_back(bp);
       queue_pos += pad;
       //dout(20) << "   padding with " << pad << " bytes, queue_pos now " << queue_pos << dendl;
