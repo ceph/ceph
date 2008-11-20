@@ -25,7 +25,8 @@ public:
     
     item(T i) : _item(i), _prev(0), _next(0), _list(0) {}
     ~item() { 
-      remove_myself();
+      assert(!is_on_xlist());
+      //remove_myself();
     }
     // no copying!
     item(const item& other);

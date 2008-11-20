@@ -86,6 +86,8 @@ int MDSCacheObject::remove_client_lease(ClientLease *l, int mask, Locker *locker
   if (rc == 0) {
     dout(20) << "removing lease for client" << l->client << dendl;
     client_lease_map.erase(l->client);
+    l->lease_item.remove_myself();
+    l->session_lease_item.remove_myself();
     delete l;
     if (client_lease_map.empty())
       put(PIN_CLIENTLEASE);
