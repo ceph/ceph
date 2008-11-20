@@ -22,34 +22,31 @@
 template<class T>
 class WorkQueue {
   
-  Mutex lock;
+  Mutex _lock;
   Cond cond;
-  Mutex queue_lock;
   bool _stop, _pause;
   int processing;
   Cond wait_cond;
 
   void entry() {
-    lock.Lock();
+    _lock.Lock();
     while (!_stop) {
       if (!_pause) {
-	queue_lock.Lock();
 	T *item = _dequeue();
-	queue_lock.Unlock();
 	if (item) {
 	  processing++;
-	  lock.Unlock();
+	  _lock.Unlock();
 	  _process(item);
-	  lock.Lock();
+	  _lock.Lock();
 	  processing--;
 	  if (_pause)
 	    wait_cond.Signal();
 	  continue;
 	}
       }
-      cond.Wait(lock);
+      cond.Wait(_lock);
     }
-    lock.Unlock();
+    _lock.Unlock();
   }
 
   struct WorkThread : public Thread {
@@ -63,13 +60,12 @@ class WorkQueue {
 
 public:
   WorkQueue(string name) :
-    lock(string(name + "::lock").c_str()),
-    queue_lock(string(name + "::queue_lock").c_str()),
+    _lock(string(name + "::lock").c_str()),
     _stop(false), _pause(false),
     processing(0),
     thread(this) {}
 
-  virtual void _enqueue(T *) = 0;
+  virtual bool _enqueue(T *) = 0;
   virtual void _dequeue(T *) = 0;
   virtual T *_dequeue() = 0;
   virtual void _process(T *) = 0;
@@ -78,45 +74,56 @@ public:
     thread.create();
   }
   void stop() {
-    lock.Lock();
+    _lock.Lock();
     _stop = true;
     cond.Signal();
-    lock.Unlock();
+    _lock.Unlock();
     thread.join();
   }
   void kick() {
-    lock.Lock();
+    _lock.Lock();
     cond.Signal();
-    lock.Unlock();
+    _lock.Unlock();
+  }
+  void _kick() {
+    assert(_lock.is_locked());
+    cond.Signal();
+  }
+  void lock() {
+    _lock.Lock();
+  }
+  void unlock() {
+    _lock.Unlock();
   }
 
   void pause() {
-    lock.Lock();
+    _lock.Lock();
     assert(!_pause);
     _pause = true;
     while (processing)
-      wait_cond.Wait(lock);
-    lock.Unlock();
+      wait_cond.Wait(_lock);
+    _lock.Unlock();
   }
 
   void unpause() {
-    lock.Lock();
+    _lock.Lock();
     assert(_pause);
     _pause = false;
     cond.Signal();
-    lock.Unlock();
+    _lock.Unlock();
   }
 
-  void queue(T *item) {
-    queue_lock.Lock();
-    _enqueue(item);
+  bool queue(T *item) {
+    _lock.Lock();
+    bool r = _enqueue(item);
     cond.Signal();
-    queue_lock.Unlock();
+    _lock.Unlock();
+    return r;
   }
   void dequeue(T *item) {
-    queue_lock.Lock();
+    _lock.Lock();
     _dequeue(item);
-    queue_lock.Unlock();
+    _lock.Unlock();
   }
 
 };
