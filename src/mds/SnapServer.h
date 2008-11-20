@@ -35,7 +35,8 @@ protected:
   version_t last_checked_osdmap;
 
 public:
-  SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP) { }
+  SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP),
+		       last_checked_osdmap(0) { }
     
   void init_inode();
   void reset_state();
