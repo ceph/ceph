@@ -1,8 +1,6 @@
 
 #include "lockdep.h"
 
-int g_lockdep = 0;
-
 #include "include/types.h"
 #include "Clock.h"
 #include "BackTrace.h"
@@ -13,6 +11,20 @@ int g_lockdep = 0;
 
 #undef dout
 #define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << pthread_self() << " lockdep: "
+
+
+// global
+int g_lockdep = 0;
+
+
+// disable lockdep when this module destructs.
+struct lockdep_stopper_t {
+  ~lockdep_stopper_t() {
+    g_lockdep = 0;
+  }
+};
+
+static lockdep_stopper_t lockdep_stopper;
 
 
 pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
