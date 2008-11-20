@@ -373,6 +373,15 @@ int OSD::init()
     return -1;
   }
   
+  // load up "current" osdmap
+  assert(!osdmap);
+  osdmap = new OSDMap;
+  if (superblock.current_epoch) {
+    bufferlist bl;
+    get_map_bl(superblock.current_epoch, bl);
+    osdmap->decode(bl);
+  }
+
   // load up pgs (as they previously existed)
   load_pgs();
   
@@ -533,7 +542,8 @@ int OSD::read_superblock()
     return -1;
   }
 
-  bl.copy(0, sizeof(superblock), (char*)&superblock);
+  bufferlist::iterator p = bl.begin();
+  ::decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
 
@@ -548,15 +558,6 @@ int OSD::read_superblock()
     return -1;
   }
   
-  // load up "current" osdmap
-  assert(!osdmap);
-  osdmap = new OSDMap;
-  if (superblock.current_epoch) {
-    bl.clear();
-    get_map_bl(superblock.current_epoch, bl);
-    osdmap->decode(bl);
-  }
-
   return 0;
 }
 
