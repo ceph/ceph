@@ -417,48 +417,54 @@ private:
 			int& created);
 
   // -- pg recovery --
-  Mutex recovery_lock;
-  Cond recovery_cond;
-  xlist<PG*> recovering_pgs;
+  xlist<PG*> recovery_queue;
   utime_t defer_recovery_until;
   int recovery_ops_active;
-  bool recovery_stop;
-  bool recovery_pause;
+
+  struct RecoveryWQ : public WorkQueue<PG> {
+    OSD *osd;
+    RecoveryWQ(OSD *o) : WorkQueue<PG>("OSD::RecoveryWQ"), osd(o) {}
+
+    bool _enqueue(PG *pg) {
+      if (!pg->recovery_item.get_xlist()) {
+	pg->get();
+	osd->recovery_queue.push_back(&pg->recovery_item);
+
+	if (g_conf.osd_recovery_delay_start > 0) {
+	  osd->defer_recovery_until = g_clock.now();
+	  osd->defer_recovery_until += g_conf.osd_recovery_delay_start;
+	}
+	return true;
+      }
+      return false;
+    }
+    void _dequeue(PG *pg) {
+      pg->recovery_item.remove_myself();
+    }
+    PG * _dequeue() {
+      if (osd->recovery_queue.empty())
+	return NULL;
+      
+      if (!osd->_recover_now())
+	return NULL;
+
+      PG *pg = osd->recovery_queue.front();
+      osd->recovery_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      osd->do_recovery(pg);
+    }
+  } recovery_wq;
+
+  bool queue_for_recovery(PG *pg);
+  void finish_recovery_op(PG *pg, int count, bool more);
+  void defer_recovery(PG *pg);
+  void do_recovery(PG *pg);
+  bool _recover_now();
 
   Mutex remove_list_lock;
   map<epoch_t, map<int, vector<pg_t> > > remove_list;
-
-  void queue_for_recovery(PG *pg);
-  void finish_recovery_op(PG *pg, int count, bool more);
-  void defer_recovery(PG *pg);
-  void _do_recovery();
-  void recovery_entry();
-  bool _recover_now();
-  void kick_recovery() {
-    recovery_lock.Lock();
-    recovery_cond.Signal();
-    recovery_lock.Unlock();
-  }
-  void stop_recovery_thread() {
-    osd_lock.Unlock();
-    recovery_lock.Lock();
-    recovery_stop = true;
-    recovery_cond.Signal();
-    recovery_lock.Unlock();
-    recovery_thread.join();
-    osd_lock.Lock();
-  }
-  void pause_recovery_thread() {
-    recovery_lock.Lock();
-    recovery_pause = true;
-    recovery_lock.Unlock();
-  }
-  void unpause_recovery_thread() {
-    recovery_lock.Lock();
-    recovery_pause = false;
-    recovery_cond.Signal();
-    recovery_lock.Unlock();
-  }
 
   void queue_for_removal(int osd, pg_t pgid) {
     remove_list_lock.Lock();
@@ -466,23 +472,6 @@ private:
     remove_list_lock.Unlock();
   }
 
-  struct RecoveryThread : public Thread {
-    OSD *osd;
-    RecoveryThread(OSD *o) : osd(o) {}
-    void *entry() {
-      osd->recovery_entry();
-      return 0;
-    }
-  } recovery_thread;
-
-  struct C_StartRecovery : public Context {
-    OSD *osd;
-    C_StartRecovery(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->kick_recovery();
-    }
-  };
-  
   void activate_pg(pg_t pgid, epoch_t epoch);
 
   class C_Activate : public Context {
@@ -504,8 +493,11 @@ private:
     OSD *osd;
     SnapTrimWQ(OSD *o) : WorkQueue<PG>("OSD::SnapTrimWQ"), osd(o) {}
 
-    void _enqueue(PG *pg) {
+    bool _enqueue(PG *pg) {
+      if (pg->snap_trim_item.is_on_xlist())
+	return false;
       osd->snap_trim_queue.push_back(&pg->snap_trim_item);
+      return true;
     }
     void _dequeue(PG *pg) {
       pg->snap_trim_item.remove_myself();
@@ -530,8 +522,11 @@ private:
     OSD *osd;
     ScrubWQ(OSD *o) : WorkQueue<PG>("OSD::ScrubWQ"), osd(o) {}
 
-    void _enqueue(PG *pg) {
+    bool _enqueue(PG *pg) {
+      if (pg->scrub_item.is_on_xlist())
+	return false;
       osd->scrub_queue.push_back(&pg->scrub_item);
+      return true;
     }
     void _dequeue(PG *pg) {
       pg->scrub_item.remove_myself();
