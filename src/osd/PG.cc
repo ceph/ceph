@@ -251,38 +251,42 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
     // object still exists.
     Log::Entry &ne = *log.objects[oe.oid];  // new(er?) entry
     
-    if (ne.version >= oe.version) {
-      dout(20) << "merge_entry  had " << oe << " new " << ne << " : same or older, missing" << dendl;
+    if (ne.version > oe.version) {
+      dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : older, missing" << dendl;
       assert(missing.is_missing(ne.oid));
+      return;
+    }
+    if (ne.version == oe.version) {
+      dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : same" << dendl;
       return;
     }
 
     if (oe.is_delete()) {
       if (ne.is_delete()) {
 	// old and new are delete
-	dout(20) << "merge_entry  had " << oe << " new " << ne << " : both deletes" << dendl;
+	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : both deletes" << dendl;
       } else {
 	// old delete, new update.
-	dout(20) << "merge_entry  had " << oe << " new " << ne << " : missing" << dendl;
+	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : missing" << dendl;
 	assert(missing.is_missing(oe.oid));
       }
     } else {
       if (ne.is_delete()) {
 	// old update, new delete
-	dout(20) << "merge_entry  had " << oe << " new " << ne << " : new delete supercedes" << dendl;
+	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : new delete supercedes" << dendl;
 	missing.rm(oe.oid, oe.version);
       } else {
 	// old update, new update
-	dout(20) << "merge_entry  had " << oe << " new " << ne << " : new item supercedes" << dendl;
+	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : new item supercedes" << dendl;
 	missing.rm(oe.oid, oe.version);  // re-add older "new" entry to missing
 	missing.add_event(ne);
       }
     }
   } else {
     if (oe.is_delete()) {
-      dout(20) << "merge_entry  had " << oe << " new dne : ok" << dendl;      
+      dout(20) << "merge_old_entry  had " << oe << " new dne : ok" << dendl;      
     } else {
-      dout(20) << "merge_entry  had " << oe << " new dne : deleting" << dendl;
+      dout(20) << "merge_old_entry  had " << oe << " new dne : deleting" << dendl;
       t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, oe.oid));
       missing.rm(oe.oid, oe.version);
     }
