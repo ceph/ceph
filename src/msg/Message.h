@@ -127,12 +127,14 @@ protected:
 public:
   Message() {
     memset(&header, 0, sizeof(header));
+    memset(&footer, 0, sizeof(footer));
   };
   Message(int t) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.priority = 0;  // undef
     header.data_off = 0;
+    memset(&footer, 0, sizeof(footer));
   }
   virtual ~Message() { }
 
