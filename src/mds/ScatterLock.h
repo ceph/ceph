@@ -76,6 +76,9 @@ public:
     num_wrlock(0),
     updated(false),
     xlistitem_updated(this) {}
+  ~ScatterLock() {
+    xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
+  }
 
   int get_replica_state() const {
     switch (state) {
