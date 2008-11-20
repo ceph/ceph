@@ -1365,6 +1365,8 @@ void Client::put_inode(Inode *in, int n)
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
+    in->cap_delay_item.remove_myself();
+    in->snaprealm_item.remove_myself();
     if (in == root) root = 0;
     delete in;
   }
