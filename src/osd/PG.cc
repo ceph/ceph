@@ -239,6 +239,12 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omiss
 }
 
 
+/*
+ * merge an old (possibly divergent) log entry into the new log.  this 
+ * happens _after_ new log items have been assimilated.  thus, we assume
+ * the index already references newer entries (if present), and missing
+ * has been updated accordingly.
+ */
 void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 {
   if (log.objects.count(oe.oid)) {
@@ -247,7 +253,7 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
     
     if (ne.version >= oe.version) {
       dout(20) << "merge_entry  had " << oe << " new " << ne << " : same or older, missing" << dendl;
-      assert(missing.is_missing(oe.oid));
+      assert(missing.is_missing(ne.oid));
       return;
     }
 
@@ -263,11 +269,13 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
     } else {
       if (ne.is_delete()) {
 	// old update, new delete
-	dout(20) << "merge_entry  had " << oe << " new " << ne << " : newer supercedes" << dendl;
+	dout(20) << "merge_entry  had " << oe << " new " << ne << " : new delete supercedes" << dendl;
+	missing.rm(oe.oid, oe.version);
       } else {
 	// old update, new update
-	dout(20) << "merge_entry  had " << oe << " new " << ne << " : adding to missing" << dendl;
-	missing.add_event(oe);
+	dout(20) << "merge_entry  had " << oe << " new " << ne << " : new item supercedes" << dendl;
+	missing.rm(oe.oid, oe.version);  // re-add older "new" entry to missing
+	missing.add_event(ne);
       }
     }
   } else {
@@ -276,6 +284,7 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
     } else {
       dout(20) << "merge_entry  had " << oe << " new dne : deleting" << dendl;
       t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, oe.oid));
+      missing.rm(oe.oid, oe.version);
     }
   }
 }

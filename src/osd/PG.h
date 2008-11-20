@@ -394,8 +394,7 @@ public:
    *  kept in memory, as a supplement to Log.
    *  also used to pass missing info in messages.
    */
-  class Missing {
-  public:
+  struct Missing {
     struct item {
       eversion_t need, have;
       item() {}
