@@ -17,10 +17,9 @@ class cstring {
   cstring() : _len(0), _data(0) {}
   cstring(int l, const char *d=0) : _len(l) {
     _data = new char[_len + 1];
-    if (d) {
+    if (d)
       memcpy(_data, d, l);
-      _data[l] = 0;
-    }
+    _data[l] = 0;
   }
   cstring(const char *s) { 
     _len = strlen(s);
@@ -78,7 +77,7 @@ class cstring {
     return *this;
   }
   char &operator[](int n) {
-    assert(n < _len);
+    assert(n <= _len);
     return _data[n];
   }
   void swap(cstring &other) {
