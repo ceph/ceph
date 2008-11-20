@@ -1334,15 +1334,17 @@ void PG::finish_recovery()
 
 void PG::_finish_recovery(Context *c)
 {
-  osd->osd_lock.Lock();  // avoid race with advance_map, etc..
+  osd->map_lock.get_read();  // avoid race with advance_map, etc..
   lock();
   if (c == finish_sync_event) {
-    finish_sync_event = 0;
     dout(10) << "_finish_recovery" << dendl;
+    finish_sync_event = 0;
     purge_strays();
     update_stats();
+  } else {
+    dout(10) << "_finish_recovery -- stale" << dendl;
   }
-  osd->osd_lock.Unlock();
+  osd->map_lock.put_read();
   osd->finish_recovery_op(this, recovery_ops_active, true);
   put_unlock();
 }
