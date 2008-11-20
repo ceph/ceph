@@ -491,26 +491,26 @@ protected:
 
 public:
   void lock() {
-    //cout << this << " " << info.pgid << " lock" << endl;
+    //generic_dout(0) << this << " " << info.pgid << " lock" << dendl;
     _lock.Lock();
   }
   void unlock() {
-    //cout << this << " " << info.pgid << " unlock" << endl;
+    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     _lock.Unlock();
   }
   void get() {
-    //cout << this << " " << info.pgid << " get " << ref << endl;
+    //generic_dout(0) << this << " " << info.pgid << " get " << ref.test() << dendl;
     //assert(_lock.is_locked());
     ref.inc();
   }
   void put() { 
-    //cout << this << " " << info.pgid << " put " << ref << endl;
+    //generic_dout(0) << this << " " << info.pgid << " put " << ref.test() << dendl;
     assert(_lock.is_locked());
     ref.dec();
     assert(ref.test() > 0);  // last put must be a put_unlock.
   }
   void put_unlock() { 
-    //cout << this << " " << info.pgid << " put_unlock " << ref << endl;
+    //generic_dout(0) << this << " " << info.pgid << " put_unlock " << ref.test() << dendl;
     assert(_lock.is_locked());
     int last = ref.dec();
     _lock.Unlock();
