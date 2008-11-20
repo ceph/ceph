@@ -39,11 +39,28 @@ protected:
   entity_inst_t _myinst;
   int default_send_priority;
 
+  atomic_t nref;
+
  public:
-  Messenger(entity_name_t w) : dispatcher(0), default_send_priority(CEPH_MSG_PRIO_DEFAULT) {
+  Messenger(entity_name_t w) : dispatcher(0),
+			       default_send_priority(CEPH_MSG_PRIO_DEFAULT),
+			       nref(1) {
     _myinst.name = w;
   }
-  virtual ~Messenger() { }
+  virtual ~Messenger() {
+    assert(nref.test() == 0);
+  }
+
+  void get() {
+    nref.inc();
+  }
+  void put() {
+    if (nref.dec() == 0)
+      delete this;
+  }
+  virtual void destroy() {
+    put();
+  }
   
   // accessors
   entity_name_t get_myname() { return _myinst.name; }

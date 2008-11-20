@@ -142,11 +142,12 @@ MDS::~MDS() {
 
   if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }
-  if (messenger) { delete messenger; messenger = NULL; }
 
   if (logger) { delete logger; logger = 0; }
   if (logger2) { delete logger2; logger2 = 0; }
-
+  
+  if (messenger)
+    messenger->destroy();
 }
 
 
@@ -1295,8 +1296,6 @@ void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
   mds_lock.Lock();
   dout(0) << "ms_handle_failure to " << inst << " on " << *m << dendl;
-  
-  delete m;
   mds_lock.Unlock();
 }
 

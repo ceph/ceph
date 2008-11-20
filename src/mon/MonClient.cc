@@ -50,7 +50,7 @@ int MonClient::probe_mon(MonMap *pmonmap)
     dout(2) << "get_monmap got monmap epoch " << pmonmap->epoch << " fsid " << pmonmap->fsid << dendl;
   }
   msgr->shutdown();
-  //delete msgr;  // FIXME: we need proper reference counting in messenger
+  msgr->destroy();
   rank.wait();
 
   if (monmap_bl.length())

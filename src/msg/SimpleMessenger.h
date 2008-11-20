@@ -326,10 +326,14 @@ private:
       my_rank(r),
       need_addr(false),
       dispatch_thread(this) { }
-    ~EntityMessenger() {
+    ~EntityMessenger() { }
+
+    void destroy() {
       // join dispatch thread
       if (dispatch_thread.is_started())
 	dispatch_thread.join();
+
+      Messenger::destroy();
     }
 
     void ready();

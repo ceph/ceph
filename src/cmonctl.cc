@@ -230,7 +230,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   // wait for messenger to finish
   rank.wait();
-  
+  messenger->destroy();
   return 0;
 }
 

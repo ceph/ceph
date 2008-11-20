@@ -158,8 +158,8 @@ Client::~Client()
   if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
-
-  if (messenger) { delete messenger; messenger = 0; }
+  if (messenger)
+    messenger->destroy();
 }
 
 
@@ -5043,11 +5043,11 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
     dout(0) << "ms_handle_failure " << *m << " to " << inst 
             << ", resending to mon" << mon 
             << dendl;
-    messenger->send_message(m, monmap->get_inst(mon));
+    Message *n = decode_message(m->get_header(), m->get_footer(), m->get_payload(), m->get_data());
+    messenger->send_message(n, monmap->get_inst(mon));
   }
   else {
     dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
-    delete m;
   }
 }
 

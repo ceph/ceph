@@ -403,6 +403,7 @@ Rank::EntityMessenger *Rank::register_entity(entity_name_t name)
   local.resize(max_local);
   stopped.resize(max_local);
 
+  msgr->get();
   local[erank] = msgr;
   stopped[erank] = false;
   msgr->_myinst.addr = rank_addr;
@@ -427,9 +428,15 @@ void Rank::unregister_entity(EntityMessenger *msgr)
   dout(10) << "unregister_entity " << msgr->get_myname() << dendl;
   
   // remove from local directory.
+  assert(msgr->my_rank >= 0);
+  assert(local[msgr->my_rank] == msgr);
   local[msgr->my_rank] = 0;
   stopped[msgr->my_rank] = true;
   num_local--;
+  msgr->my_rank = -1;
+
+  assert(msgr->nref.test() > 1);
+  msgr->put();
 
   wait_cond.Signal();
 
@@ -639,14 +646,14 @@ void Rank::EntityMessenger::dispatch_entry()
 
   // deregister
   rank.unregister_entity(this);
+  put();
 }
 
 void Rank::EntityMessenger::ready()
 {
   dout(10) << "ready " << get_myaddr() << dendl;
   assert(!dispatch_thread.is_started());
-  
-  // start my dispatch thread
+  get();
   dispatch_thread.create();
 }
 
@@ -666,7 +673,6 @@ int Rank::EntityMessenger::shutdown()
     cond.Signal();
     lock.Unlock();
   }
-
   return 0;
 }
 

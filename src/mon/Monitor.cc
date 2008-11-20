@@ -90,7 +90,8 @@ Monitor::~Monitor()
   delete mdsmon;
   delete clientmon;
   delete pgmon;
-  delete messenger;
+  if (messenger)
+    messenger->destroy();
 }
 
 void Monitor::init()

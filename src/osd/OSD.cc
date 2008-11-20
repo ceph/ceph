@@ -313,12 +313,12 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
 
 OSD::~OSD()
 {
-  if (threadpool) { delete threadpool; threadpool = 0; }
-  if (osdmap) { delete osdmap; osdmap = 0; }
-  //if (monitor) { delete monitor; monitor = 0; }
-  if (messenger) { delete messenger; messenger = 0; }
-  if (logger) { delete logger; logger = 0; }
-  if (store) { delete store; store = 0; }
+  delete threadpool;
+  delete osdmap;
+  delete logger;
+  delete store;
+  if (messenger) 
+    messenger->destroy();
 }
 
 bool got_sigterm = false;
