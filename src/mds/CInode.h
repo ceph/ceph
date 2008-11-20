@@ -552,10 +552,12 @@ public:
   }
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
+    Capability *cap = client_caps[client];
 
-    containing_realm->remove_cap(client, client_caps[client]);
+    cap->session_caps_item.remove_myself();
+    containing_realm->remove_cap(client, cap);
 
-    delete client_caps[client];
+    delete cap;
     client_caps.erase(client);
     if (client_caps.empty()) {
       put(PIN_CAPS);
