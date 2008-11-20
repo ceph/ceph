@@ -221,13 +221,14 @@ int OSD::peek_whoami(ceph_fsid& fsid, const char *dev)
   OSDSuperblock sb;
   bufferlist bl;
   err = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
+  store->umount();
+  delete store;
+
   if (err < 0) 
     return -ENOENT;
-  delete store;
 
   bufferlist::iterator p = bl.begin();
   ::decode(sb, p);
-  store->umount();
 
   if (!ceph_fsid_equal(&sb.fsid, &fsid)) {
     generic_dout(0) << "dev fsid " << sb.fsid << " != monmap fsid " << fsid << dendl;
