@@ -23,6 +23,7 @@
 
 #include "include/interval_set.h"
 
+#include "include/nstring.h"
 
 /*
  * object node (like an inode)
@@ -83,7 +84,7 @@ public:
 
   // onode
   set<coll_t>            collections;
-  map<string, bufferptr> attr;
+  map<nstring, bufferptr> attr;
 
   map<block_t, ExtentCsum>   extent_map;
   interval_set<__u64> bad_byte_extents;
@@ -507,7 +508,7 @@ public:
   }
   int get_attr_bytes() {
     int s = 0;
-    for (map<string, bufferptr>::iterator i = attr.begin();
+    for (map<nstring, bufferptr>::iterator i = attr.begin();
          i != attr.end();
          i++) {
       s += i->first.length() + 1;

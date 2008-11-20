@@ -111,7 +111,7 @@ public:
     // but, decode to a full value, and create pointers to that.
     vector<const char*> attrnames;
     vector<nstring> attrnames2;
-    vector<map<string,bufferptr> > attrsets;
+    vector<map<nstring,bufferptr> > attrsets;
 
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
@@ -150,7 +150,7 @@ public:
     const char *get_attrname() {
       return attrnames[attrnamep++];
     }
-    map<string,bufferptr>& get_attrset() {
+    map<nstring,bufferptr>& get_attrset() {
       return attrsets[attrsetp++];
     }
 
@@ -229,8 +229,8 @@ public:
       len++;
       blen++;
     }
-    void setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset) {
-      map<string,bufferptr> empty;
+    void setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& attrset) {
+      map<nstring,bufferptr> empty;
       int op = OP_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
@@ -328,7 +328,7 @@ public:
       len++;
       blen++;
     }
-    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
+    void collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset) {
       int op = OP_COLL_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
@@ -423,7 +423,7 @@ public:
       value.push_back(bp);
     return r;
   }
-  virtual int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) {return 0;};
+  virtual int getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) {return 0;};
 
   /*
   virtual int _setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size) = 0;
@@ -443,7 +443,7 @@ public:
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) = 0;
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
-  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
+  virtual int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset) = 0;
   virtual int collection_list(coll_t c, vector<pobject_t>& o) = 0;
 
   /*

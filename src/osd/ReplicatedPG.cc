@@ -2008,7 +2008,7 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
 	       << " v" << from_version 
 	       << ", pushing " << poid << " attrs as a clone op" << dendl;
       // get attrs
-      map<string, bufferptr> attrset;
+      map<nstring, bufferptr> attrset;
       osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
       
       osd_reqid_t rid;  // useless?
@@ -2075,7 +2075,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   // read data+attrs
   bufferlist bl;
   eversion_t v;
-  map<string,bufferptr> attrset;
+  map<nstring,bufferptr> attrset;
   __u64 size;
 
   if (data_subset.size()) {

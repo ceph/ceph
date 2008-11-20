@@ -855,7 +855,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
     case Transaction::OP_COLL_SETATTRS:
       {
 	// make note of old attrs
-	map<string,bufferptr> oldattrs;
+	map<nstring,bufferptr> oldattrs;
 	char *fn = new char[80];
 	str.push_back(fn);
 
@@ -872,10 +872,10 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	  collection_getattrs(cid, oldattrs);
 	  get_cdir(cid, fn);
 	}
-	map<string,bufferptr> *pattrset;
+	map<nstring,bufferptr> *pattrset;
 	t.get_pattrset(pattrset);
 	
-	for (map<string,bufferptr>::iterator p = pattrset->begin();
+	for (map<nstring,bufferptr>::iterator p = pattrset->begin();
 	     p != pattrset->end();
 	     p++) {
 	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
@@ -892,7 +892,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	}
 	
 	// and remove any leftovers
-	for (map<string,bufferptr>::iterator p = oldattrs.begin();
+	for (map<nstring,bufferptr>::iterator p = oldattrs.begin();
 	     p != oldattrs.end();
 	     p++) {
 	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
@@ -1422,7 +1422,7 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset) 
+int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset) 
 {
   // get attr list
   char names1[100];
@@ -1477,7 +1477,7 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &b
   return _getattr(fn, n, bp);
 }
 
-int FileStore::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.getattrs(cid, oid, aset);
 
@@ -1503,14 +1503,14 @@ int FileStore::_setattr(coll_t cid, pobject_t oid, const char *name,
   return do_setxattr(fn, n, value, size);
 }
 
-int FileStore::_setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) 
+int FileStore::_setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.setattrs(cid, oid, aset);
 
   char fn[100];
   get_coname(cid, oid, fn);
   int r = 0;
-  for (map<string,bufferptr>::iterator p = aset.begin();
+  for (map<nstring,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
     char n[100];
@@ -1572,7 +1572,7 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
   return r;
 }
 
-int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
+int FileStore::collection_getattrs(coll_t cid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.collection_getattrs(cid, aset);
 
@@ -1606,14 +1606,14 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
 }
 
 
-int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
+int FileStore::_collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.collection_setattrs(cid, aset);
 
   char fn[100];
   get_cdir(cid, fn);
   int r = 0;
-  for (map<string,bufferptr>::iterator p = aset.begin();
+  for (map<nstring,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
     char n[200];

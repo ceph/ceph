@@ -41,7 +41,7 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
     {
       ObjectStore::Transaction t;
       t.create_collection(*p);
-      map<string,bufferptr> attrs;
+      map<nstring,bufferptr> attrs;
       src->collection_getattrs(*p, attrs);
       t.collection_setattrs(*p, attrs);
       dst->apply_transaction(t);
@@ -60,7 +60,7 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
 	src->read(*p, *q, 0, 0, bl);
 	cout << "object " << j++ << "/" << numo << " " << *q << " = " << bl.length() << " bytes" << std::endl;
 	t.write(*p, *q, 0, bl.length(), bl);
-	map<string,bufferptr> attrs;
+	map<nstring,bufferptr> attrs;
 	src->getattrs(*p, *q, attrs);
 	t.setattrs(*p, *q, attrs);
 	did_object[*q] = *p;

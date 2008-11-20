@@ -122,22 +122,22 @@ class FileStore : public JournalingObjectStore {
   // attrs
   int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
   int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp);
-  int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
+  int getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset);
 
   int _getattr(const char *fn, const char *name, bufferptr& bp);
-  int _getattrs(const char *fn, map<string,bufferptr>& aset);
+  int _getattrs(const char *fn, map<nstring,bufferptr>& aset);
 
   int _setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size);
-  int _setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset);
+  int _setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset);
   int _rmattr(coll_t cid, pobject_t oid, const char *name);
 
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   int collection_getattr(coll_t c, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
+  int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset);
 
   int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
   int _collection_rmattr(coll_t c, const char *name);
-  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
+  int _collection_setattrs(coll_t cid, map<nstring,bufferptr> &aset);
 
   // collections
   int list_collections(vector<coll_t>& ls);
