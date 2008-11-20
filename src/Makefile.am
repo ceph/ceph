@@ -6,13 +6,13 @@ AUTOMAKE_OPTIONS = gnu
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
-cmon_LDADD = libmon.a libcrush.a libcommon.a
+cmon_LDADD = libcommon.a libmon.a libcrush.a libcommon.a 
 
 # admin tools
 cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
 cmonctl_LDADD = libcommon.a
 mkmonfs_SOURCES = mkmonfs.cc
-mkmonfs_LDADD = libmon.a libcommon.a libcrush.a
+mkmonfs_LDADD = libcommon.a libmon.a libcrush.a libcommon.a
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a
 crushtool_SOURCES = crushtool.cc
@@ -22,22 +22,22 @@ osdmaptool_LDADD = libcommon.a libcrush.a
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
-cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
+cmds_LDADD = libcommon.a libmds.a libosdc.a libcrush.a libcommon.a
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
+dumpjournal_LDADD = libcommon.a libosdc.a libcrush.a libcommon.a
 
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
-cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
+cosd_LDADD = libcommon.a libosd.a libos.a libebofs.a libcrush.a libcommon.a
 dupstore_SOURCES = dupstore.cc config.cc
-dupstore_LDADD = libos.a libebofs.a libcommon.a
+dupstore_LDADD = libcommon.a libos.a libebofs.a
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libebofs.a libcommon.a libos.a
+streamtest_LDADD = libcommon.a libebofs.a libos.a
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
-csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
+csyn_LDADD = libcommon.a libclient.a libosdc.a libcrush.a libcommon.a
 
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
@@ -55,13 +55,13 @@ testmsgr_LDADD = libcommon.a
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a
+cfuse_LDADD = -lfuse libcommon.a libclient.a libosdc.a libcrush.a libcommon.a
 bin_PROGRAMS += cfuse
 
 if WITH_DEBUG
 fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
-fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a libebofs.a \
-	libclient.a libosdc.a libcrush.a libcommon.a
+fakefuse_LDADD = -lfuse libcommon.a libmon.a libmds.a libosd.a libos.a libebofs.a \
+	libclient.a libosdc.a libcrush.a 
 bin_PROGRAMS += fakefuse
 endif
 
@@ -73,13 +73,13 @@ psim_SOURCES = psim.cc
 psim_LDADD = libcommon.a libcrush.a
 
 test_ebofs_SOURCES = ebofs/test.ebofs.cc
-test_ebofs_LDADD = libebofs.a libcommon.a libos.a
+test_ebofs_LDADD = libcommon.a libebofs.a libos.a
 mkfs_ebofs_SOURCES = ebofs/mkfs.ebofs.cc
-mkfs_ebofs_LDADD = libebofs.a libcommon.a libos.a
+mkfs_ebofs_LDADD = libcommon.a libebofs.a libos.a
 
 fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
-fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a libebofs.a \
-	libclient.a libosdc.a libcrush.a libcommon.a
+fakesyn_LDADD = libcommon.a libmon.a libmds.a libosd.a libos.a libebofs.a \
+	libclient.a libosdc.a libcrush.a 
 
 bin_PROGRAMS += psim test.ebofs mkfs.ebofs fakesyn
 endif
@@ -169,10 +169,10 @@ clean-local:
 
 # libs
 libcommon_a_SOURCES = \
+	common/lockdep.cc \
 	msg/Message.cc \
 	common/Logger.cc \
 	common/Clock.cc \
-	common/lockdep.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/sctp_crc32.c\
