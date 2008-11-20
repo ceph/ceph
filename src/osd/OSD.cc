@@ -211,7 +211,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   return 0;
 }
 
-int OSD::peek_whoami(const char *dev)
+int OSD::peek_whoami(ceph_fsid& fsid, const char *dev)
 {
   ObjectStore *store = create_object_store(dev);
   int err = store->mount();
@@ -223,9 +223,16 @@ int OSD::peek_whoami(const char *dev)
   err = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
   if (err < 0) 
     return -ENOENT;
-  bl.copy(0, sizeof(sb), (char*)&sb);
-  store->umount();
   delete store;
+
+  bufferlist::iterator p = bl.begin();
+  ::decode(sb, p);
+  store->umount();
+
+  if (!ceph_fsid_equal(&sb.fsid, &fsid)) {
+    generic_dout(0) << "dev fsid " << sb.fsid << " != monmap fsid " << fsid << dendl;
+    return -EPERM;
+  }
 
   return sb.whoami;
 }

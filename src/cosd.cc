@@ -98,7 +98,7 @@ int main(int argc, const char **argv)
   }
 
   if (whoami < 0) {
-    whoami = OSD::peek_whoami(dev);
+    whoami = OSD::peek_whoami(monmap.fsid, dev);
     if (whoami < 0) {
       cerr << "unable to determine OSD identity from superblock on " << dev << ": " << strerror(-whoami) << std::endl;
       exit(1);
@@ -114,6 +114,7 @@ int main(int argc, const char **argv)
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
        << " dev " << dev
+       << " fsid " << monmap.fsid
        << std::endl;
 
   g_timer.shutdown();
