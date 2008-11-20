@@ -599,15 +599,27 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       break;
       
     case Transaction::OP_WRITE:
-      _write(t.get_cid(), t.get_oid(), t.get_length(), t.get_length(), t.get_bl());
+      {
+	__u64 off = t.get_length();
+	__u64 len = t.get_length();
+	_write(t.get_cid(), t.get_oid(), off, len, t.get_bl());
+      }
       break;
       
     case Transaction::OP_ZERO:
-      _zero(t.get_cid(), t.get_oid(), t.get_length(), t.get_length());
+      {
+	__u64 off = t.get_length();
+	__u64 len = t.get_length();
+	_zero(t.get_cid(), t.get_oid(), off, len);
+      }
       break;
       
     case Transaction::OP_TRIMCACHE:
-      trim_from_cache(t.get_cid(), t.get_oid(), t.get_length(), t.get_length());
+      {
+	__u64 off = t.get_length();
+	__u64 len = t.get_length();
+	trim_from_cache(t.get_cid(), t.get_oid(), off, len);
+      }
       break;
       
     case Transaction::OP_TRUNCATE:
@@ -634,11 +646,21 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       break;
       
     case Transaction::OP_CLONE:
-      _clone(t.get_cid(), t.get_oid(), t.get_oid());
+      {
+	pobject_t oid = t.get_oid();
+	pobject_t noid = t.get_oid();
+	_clone(t.get_cid(), oid, noid);
+      }
       break;
 
     case Transaction::OP_CLONERANGE:
-      _clone_range(t.get_cid(), t.get_oid(), t.get_oid(), t.get_length(), t.get_length());
+      {
+	pobject_t oid = t.get_oid();
+	pobject_t noid = t.get_oid();
+ 	__u64 off = t.get_length();
+	__u64 len = t.get_length();
+	_clone_range(t.get_cid(), oid, noid, off, len);
+      }
       break;
 
     case Transaction::OP_MKCOLL:
@@ -650,7 +672,11 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      _collection_add(t.get_cid(), t.get_cid(), t.get_oid());
+      {
+	coll_t ocid = t.get_cid();
+	coll_t ncid = t.get_cid();
+	_collection_add(ocid, ncid, t.get_oid());
+      }
       break;
 
     case Transaction::OP_COLL_REMOVE:
