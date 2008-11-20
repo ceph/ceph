@@ -393,6 +393,9 @@ void* BlockDevice::io_thread_entry()
       int r = io_wakeup.WaitInterval(lock, utime_t(0, g_conf.bdev_idle_kick_after_ms*1000));
       is_idle_waiting = false;
 
+      if (io_stop)
+	break;
+
       if (r == ETIMEDOUT) {
 	dout(20) << "io_thread" << whoami << " timeout expired, kicking ebofs" << dendl;
 	kicker_cond.Signal(); // signal kicker thread
