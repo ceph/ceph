@@ -181,6 +181,8 @@ osd
 - optimize remove wrt recovery pushes
 
 simplemessenger
+- properly reference count entities, messages.
+  - fix MonClient delete msgr; when done
 - close idle connections
 
 objectcacher
