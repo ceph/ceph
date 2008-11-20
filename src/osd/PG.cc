@@ -239,30 +239,43 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omiss
 }
 
 
-void PG::merge_entry(ObjectStore::Transaction& t, Log::Entry& oe)
+void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 {
   if (log.objects.count(oe.oid)) {
     // object still exists.
     Log::Entry &ne = *log.objects[oe.oid];  // new(er?) entry
-    if (ne.version < oe.version) {
-      dout(10) << "merge_entry  divergent old " << oe
-	       << " not superceded by " << ne
-	       << ", adding to missing" << dendl;
-      missing.add_event(oe);
-    } else {
-      // a-ok.  new log either has same or newer object.
-      if (ne.version > oe.version) {
-	dout(20) << "merge_entry  newer " << ne << " " << oe << dendl;
-	assert(missing.is_missing(oe.oid));
+    
+    if (ne.version >= oe.version) {
+      dout(20) << "merge_entry  had " << oe << " new " << ne << " : same or older, missing" << dendl;
+      assert(missing.is_missing(oe.oid));
+      return;
+    }
+
+    if (oe.is_delete()) {
+      if (ne.is_delete()) {
+	// old and new are delete
+	dout(20) << "merge_entry  had " << oe << " new " << ne << " : both deletes" << dendl;
       } else {
-	dout(20) << "merge_entry  same " << oe << " " << ne << dendl;
+	// old delete, new update.
+	dout(20) << "merge_entry  had " << oe << " new " << ne << " : missing" << dendl;
+	assert(missing.is_missing(oe.oid));
+      }
+    } else {
+      if (ne.is_delete()) {
+	// old update, new delete
+	dout(20) << "merge_entry  had " << oe << " new " << ne << " : newer supercedes" << dendl;
+      } else {
+	// old update, new update
+	dout(20) << "merge_entry  had " << oe << " new " << ne << " : adding to missing" << dendl;
+	missing.add_event(oe);
       }
     }
   } else {
-    dout(10) << "merge_entry  dne " << oe << dendl;
-    if (oe.is_update()) {
-      pobject_t poid(info.pgid.pool(), 0, oe.oid);
-      t.remove(info.pgid.to_coll(), poid);
+    if (oe.is_delete()) {
+      dout(20) << "merge_entry  had " << oe << " new dne : ok" << dendl;      
+    } else {
+      dout(20) << "merge_entry  had " << oe << " new dne : deleting" << dendl;
+      t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, oe.oid));
     }
   }
 }
@@ -271,20 +284,28 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
+  bool changed = false;
 
-  //dout(0) << "log" << dendl;
-  //log.print(*_dout);
-  //dout(0) << "olog" << dendl;
-  //olog.print(*_dout);
-  
+  dout(0) << "log" << dendl;
+  *_dout << dbeginl;
+  log.print(*_dout);
+  _dout_end_line();
+  dout(0) << "olog" << dendl;
+  *_dout << dbeginl;
+  olog.print(*_dout);
+  _dout_end_line();
+
   if (log.empty() ||
       (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
 
-    // build local backlog
+    // build local backlog, and save old index
     if (!log.empty() && !log.backlog)
       generate_backlog();
-    
-    // swap and index
+
+    hash_map<object_t,Log::Entry*> old_objects;
+    old_objects.swap(log.objects);
+
+    // swap in other log and index
     log.log.swap(olog.log);
     log.index();
 
@@ -309,49 +330,52 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
     
     // then add all new items (_after_ split) to missing
     for (; p != log.log.end(); p++) {
-      dout(10) << "merge_log merging " << *p << dendl;
-      missing.add_event(*p);
+      Log::Entry &ne = *p;
+      dout(10) << "merge_log merging " << ne << dendl;
+      missing.add_event(ne);
+      if (ne.is_delete())
+	t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, ne.oid));
     }
 
-    // find any divergent or removed items in old log
+    // find any divergent or removed items in old log.
+    //  skip anything not in the index.
     for (p = olog.log.begin();
 	 p != olog.log.end();
 	 p++) {
       Log::Entry &oe = *p;                      // old entry
-      merge_entry(t, oe);
+      if (old_objects.count(oe.oid) &&
+	  old_objects[oe.oid] == &oe) {
+	merge_old_entry(t, oe);
+      }
     }
 
     info.last_update = log.top = olog.top;
     info.log_bottom = log.bottom = olog.bottom;
     info.log_backlog = log.backlog = olog.backlog;
+    changed = true;
   } 
 
   else {
     // i can merge the two logs!
 
     // extend on bottom?
+    //  this is just filling in history.  it does not affect our
+    //  missing set, as that should already be consistent with our
+    //  current log.
     // FIXME: what if we have backlog, but they have lower bottom?
     if (olog.bottom < log.bottom && olog.top >= log.bottom && !log.backlog) {
       dout(10) << "merge_log extending bottom to " << olog.bottom
                << (olog.backlog ? " +backlog":"")
-             << dendl;
-      
-      // ok
+	       << dendl;
       list<Log::Entry>::iterator from = olog.log.begin();
       list<Log::Entry>::iterator to;
       for (to = from;
            to != olog.log.end();
            to++) {
-        if (to->version > log.bottom) break;
-        
-        // update our index while we're here
+        if (to->version > log.bottom)
+	  break;
         log.index(*to);
-        
         dout(15) << *to << dendl;
-        
-        // new missing object?
-        if (to->version > info.last_complete)
-	  missing.add_event(*to);
       }
       assert(to != olog.log.end());
       
@@ -361,6 +385,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
       
       info.log_bottom = log.bottom = olog.bottom;
       info.log_backlog = log.backlog = olog.backlog;
+      changed = true;
     }
     
     // extend on top?
@@ -368,6 +393,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
         olog.bottom <= log.top) {
       dout(10) << "merge_log extending top to " << olog.top << dendl;
       
+      // find start point in olog
       list<Log::Entry>::iterator to = olog.log.end();
       list<Log::Entry>::iterator from = olog.log.end();
       list<Log::Entry>::iterator last_kept = olog.log.end();
@@ -375,19 +401,23 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
         if (from == olog.log.begin())
 	  break;
         from--;
-        //dout(0) << "? " << *from << dendl;
+        dout(20) << "  ? " << *from << dendl;
         if (from->version <= log.top) {
 	  dout(20) << "merge_log last shared is " << *from << dendl;
 	  last_kept = from;
           from++;
           break;
         }
-        
-        log.index(*from);
-        dout(10) << "merge_log " << *from << dendl;
-        
-        // add to missing
-	missing.add_event(*from);
+      }
+
+      // index, update missing, delete deleted
+      for (list<Log::Entry>::iterator p = from; p != to; p++) {
+	Log::Entry &ne = *p;
+        dout(10) << "merge_log " << ne << dendl;
+	log.index(ne);
+	missing.add_event(ne);
+	if (ne.is_delete())
+	  t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, ne.oid));
       }
       
       // move aside divergent items
@@ -402,7 +432,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
 	  log.log.pop_back();
 	}
       }
-      
+
       // splice
       log.log.splice(log.log.end(), 
                      olog.log, from, to);
@@ -410,14 +440,24 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
       info.last_update = log.top = olog.top;
 
       // process divergent items
-      for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
-	merge_entry(t, *d);
+      if (!divergent.empty()) {
+	// removing items screws screws our index
+	log.index();   
+	for (list<Log::Entry>::iterator d = divergent.begin(); d != divergent.end(); d++)
+	  merge_old_entry(t, *d);
+      }
+
+      changed = true;
     }
   }
   
-  dout(10) << "merge_log result " << log << " " << missing << dendl;
+  dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
   //log.print(cout);
 
+  if (changed) {
+    write_info(t);
+    write_log(t);
+  }
 }
 
 /*

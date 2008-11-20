@@ -643,7 +643,7 @@ public:
   }
 
   void proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from);
-  void merge_entry(ObjectStore::Transaction& t, Log::Entry& oe);
+  void merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from);
   void proc_replica_missing(Log &olog, Missing &omissing, int fromosd);
   
