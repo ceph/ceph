@@ -105,6 +105,7 @@ using std::list;
 #include "include/buffer.h"
 #include "msg_types.h"
 
+#include "common/debug.h"
 
 
 
@@ -125,18 +126,36 @@ protected:
   friend class Messenger;
 
 public:
-  Message() {
+  atomic_t nref;
+
+  Message() : nref(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
-  Message(int t) {
+  Message(int t) : nref(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
   }
-  virtual ~Message() { }
+  virtual ~Message() { 
+    assert(nref.test() == 0);
+  }
+
+  void get() {
+    //int r = 
+      nref.inc();
+    //*_dout << dbeginl << "message(" << this << ").get " << (r-1) << " -> " << r << std::endl;
+    //_dout_end_line();
+  }
+  void put() {
+    int r = nref.dec();
+    //*_dout << dbeginl << "message(" << this << ").put " << (r+1) << " -> " << r << std::endl;
+    //_dout_end_line();
+    if (r == 0)
+      delete this;
+  }
 
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }

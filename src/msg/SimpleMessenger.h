@@ -227,6 +227,7 @@ private:
       lock.Unlock();
     }    
     void _send(Message *m) {
+      m->get();
       q[m->get_priority()].push_back(m);
       last_dest_name = m->get_dest();
       cond.Signal();
@@ -282,7 +283,9 @@ private:
     void queue_message(Message *m) {
       // set recv stamp
       m->set_recv_stamp(g_clock.now());
-      
+
+      assert(m->nref.test() == 0);
+
       lock.Lock();
       qlen++;
       dispatch_queue[m->get_priority()].push_back(m);
@@ -311,6 +314,7 @@ private:
     }
     void queue_failure(Message *m, entity_inst_t i) {
       lock.Lock();
+      m->get();
       failed_q.push_back(pair<Message*,entity_inst_t>(m,i));
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
       cond.Signal();

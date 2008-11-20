@@ -118,7 +118,7 @@ done
 # mds
 for mds in `seq 0 $((CEPH_NUM_MDS-1))`
 do
-    $CEPH_BIN/crun $norestart $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
+    $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20

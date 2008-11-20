@@ -1422,19 +1422,9 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
   entity_name_t dest = inst.name;
 
-  if (g_conf.ms_die_on_failure) {
-    dout(0) << "ms_handle_failure " << inst << " on " << *m << dendl;
-    exit(0);
-  }
-
-  if (is_stopping()) {
-    delete m;
-    return;
-  }
-
-  dout(1) << "ms_handle_failure " << inst 
-	  << ", dropping " << *m << dendl;
-  delete m;
+  dout(1) << "ms_handle_failure " << inst << " on " << *m << dendl;
+  if (g_conf.ms_die_on_failure)
+    assert(0);
 }
 
 

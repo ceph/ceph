@@ -448,6 +448,8 @@ void Rank::submit_message(Message *m, const entity_addr_t& dest_addr, bool lazy)
 {
   const entity_name_t dest = m->get_dest();
 
+  assert(m->nref.test() == 0);
+
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
   dest_proc_addr.erank = 0;
@@ -623,6 +625,7 @@ void Rank::EntityMessenger::dispatch_entry()
 	    failed_q.pop_front();
 	    lock.Unlock();
 	    get_dispatcher()->ms_handle_failure(m, i);
+	    m->put();
 	  } else {
 	    dout(1) << m->get_dest() 
 		    << " <== " << m->get_source_inst()
@@ -1454,15 +1457,14 @@ void Rank::Pipe::report_failures()
       unsigned srcrank = m->get_source_inst().addr.erank;
       if (srcrank >= rank.max_local || rank.local[srcrank] == 0) {
 	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
-	delete m;
       } else if (rank.local[srcrank]->is_stopped()) {
 	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
-	delete m;
       } else {
 	dout(10) << "fail on " << *m << dendl;
 	rank.local[srcrank]->queue_failure(m, m->get_dest_inst());
       }
     }
+    m->put();
   }
 }
 
@@ -1530,7 +1532,7 @@ void Rank::Pipe::reader()
 	  sent.pop_front();
 	  dout(10) << "reader got ack seq " 
 		    << seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
-	  delete m;
+	  m->put();
 	}
       }
       continue;
@@ -1589,6 +1591,7 @@ void Rank::Pipe::reader()
 	if (erank < rank.max_local && rank.local[erank]) {
 	  // find entity
 	  entity = rank.local[erank];
+	  entity->get();
 
 	  // first message?
 	  if (entity->need_addr) {
@@ -1610,8 +1613,10 @@ void Rank::Pipe::reader()
       }
       rank.lock.Unlock();
       
-      if (entity)
+      if (entity) {
 	entity->queue_message(m);        // queue
+	entity->put();
+      }
 
       lock.Lock();
     } 
@@ -1723,6 +1728,7 @@ void Rank::Pipe::writer()
       if (m) {
 	m->set_seq(++out_seq);
 	sent.push_back(m); // move to sent list
+	m->get();
 	lock.Unlock();
 
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
@@ -1741,6 +1747,7 @@ void Rank::Pipe::writer()
 		  << errno << ": " << strerror(errno) << dendl;
 	  fault();
         }
+	m->put();
       }
       continue;
     }
