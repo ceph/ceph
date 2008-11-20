@@ -7,17 +7,22 @@
 let new=0
 let debug=0
 norestart=""
+valgrind=""
 
 while [ $# -ge 1 ]; do
-        case $1 in
-                -d | --debug )
-                debug=1
-		;;
-                --new | -n )
-                new=1
-		;;
-		--norestart )
-		norestart="--norestart"
+    case $1 in
+        -d | --debug )
+            debug=1
+	    ;;
+        --new | -n )
+            new=1
+	    ;;
+	--norestart )
+	    norestart="--norestart"
+	    ;;
+	--valgrind )
+	    valgrind="--valgrind"
+	    ;;
         esac
         shift
 done
@@ -106,7 +111,7 @@ do
 	$SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
     fi
     echo start osd$osd
-    $CEPH_BIN/crun $norestart $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
+    $CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
 # echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 done
 
