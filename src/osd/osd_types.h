@@ -66,8 +66,8 @@ inline bool operator>=(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l 
 namespace __gnu_cxx {
   template<> struct hash<osd_reqid_t> {
     size_t operator()(const osd_reqid_t &r) const { 
-      static blobhash H;
-      return H((const char*)&r, sizeof(r));
+      static hash<__u64> H;
+      return H(r.name.num() ^ r.tid ^ r.inc);
     }
   };
 }
