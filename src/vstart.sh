@@ -1,7 +1,7 @@
 #!/bin/bash
 
 [ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
-[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=1
+[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=3
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
 let new=0
