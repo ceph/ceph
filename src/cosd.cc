@@ -98,9 +98,14 @@ int main(int argc, const char **argv)
   }
 
   if (whoami < 0) {
-    whoami = OSD::peek_whoami(monmap.fsid, dev);
-    if (whoami < 0) {
-      cerr << "unable to determine OSD identity from superblock on " << dev << ": " << strerror(-whoami) << std::endl;
+    ceph_fsid fsid;
+    int r = OSD::peek_super(dev, fsid, whoami);
+    if (r < 0) {
+      cerr << "unable to determine OSD identity from superblock on " << dev << ": " << strerror(-r) << std::endl;
+      exit(1);
+    }
+    if (!ceph_fsid_equal(&fsid, &monmap.fsid)) {
+      cerr << "OSD fsid " << fsid << " != monmap fsid " << monmap.fsid << std::endl;
       exit(1);
     }
   }

@@ -557,7 +557,7 @@ private:
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const char *dev);
   static int mkfs(const char *dev, ceph_fsid fsid, int whoami);
-  static int peek_whoami(ceph_fsid& fsid, const char *dev);
+  static int peek_super(const char *dev, ceph_fsid& fsid, int& whoami);
 
   // startup/shutdown
   int init();
