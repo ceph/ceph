@@ -111,8 +111,7 @@ public:
     // but, decode to a full value, and create pointers to that.
     vector<const char*> attrnames;
     vector<nstring> attrnames2;
-    vector<map<string,bufferptr> *> attrsets;
-    vector<map<string,bufferptr> > attrsets2;
+    vector<map<string,bufferptr> > attrsets;
 
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
@@ -136,23 +135,23 @@ public:
     int get_op() {
       return ops[opp++];
     }
-    void get_bl(bufferlist& bl) {
-      bl = bls[blp++];
+    bufferlist &get_bl() {
+      return bls[blp++];
     }
-    void get_oid(pobject_t& oid) {
-      oid = oids[oidp++];
+    pobject_t get_oid() {
+      return oids[oidp++];
     }
-    void get_cid(coll_t& cid) {
-      cid = cids[cidp++];
+    coll_t get_cid() {
+      return cids[cidp++];
     }
-    void get_length(__u64& len) {
-      len = lengths[lengthp++];
+    __u64 get_length() {
+      return lengths[lengthp++];
     }
-    void get_attrname(const char * &p) {
-      p = attrnames[attrnamep++];
+    const char *get_attrname() {
+      return attrnames[attrnamep++];
     }
-    void get_pattrset(map<string,bufferptr>* &ps) {
-      ps = attrsets[attrsetp++];
+    map<string,bufferptr>& get_attrset() {
+      return attrsets[attrsetp++];
     }
 
     void touch(coll_t cid, pobject_t oid) {
@@ -231,11 +230,13 @@ public:
       blen++;
     }
     void setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset) {
+      map<string,bufferptr> empty;
       int op = OP_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      attrsets.push_back(&attrset);
+      attrsets.push_back(empty);
+      attrsets.back().swap(attrset);
       len++;
       blen += 5 + attrset.size();     // HACK allowance for removing old attrs
     }
@@ -331,7 +332,7 @@ public:
       int op = OP_COLL_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
-      attrsets.push_back(&aset);
+      attrsets.push_back(aset);
       len++;
       blen += 5 + aset.size();
     }
@@ -372,11 +373,7 @@ public:
 	   p != attrnames2.end();
 	   ++p)
 	attrnames.push_back((*p).c_str());
-      ::decode(attrsets2, bl);
-      for (vector<map<string,bufferptr> >::iterator p = attrsets2.begin();
-	   p != attrsets2.end();
-	   ++p)
-	attrsets.push_back(&(*p));
+      ::decode(attrsets, bl);
     }
   };
 

@@ -595,211 +595,88 @@ unsigned FileStore::_apply_transaction(Transaction& t)
     int op = t.get_op();
     switch (op) {
     case Transaction::OP_TOUCH:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	_touch(cid, oid);
-      }
+      _touch(t.get_cid(), t.get_oid());
       break;
       
     case Transaction::OP_WRITE:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	__u64 offset, len;
-	t.get_length(offset);
-	t.get_length(len);
-	bufferlist bl;
-	t.get_bl(bl);
-	_write(cid, oid, offset, len, bl);
-      }
+      _write(t.get_cid(), t.get_oid(), t.get_length(), t.get_length(), t.get_bl());
       break;
       
     case Transaction::OP_ZERO:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	__u64 offset, len;
-	t.get_length(offset);
-	t.get_length(len);
-	_zero(cid, oid, offset, len);
-      }
+      _zero(t.get_cid(), t.get_oid(), t.get_length(), t.get_length());
       break;
       
     case Transaction::OP_TRIMCACHE:
+      trim_from_cache(t.get_cid(), t.get_oid(), t.get_length(), t.get_length());
+      break;
+      
+    case Transaction::OP_TRUNCATE:
+      _truncate(t.get_cid(), t.get_oid(), t.get_len());
+      break;
+      
+    case Transaction::OP_REMOVE:
+      _remove(t.get_cid(), t.get_oid());
+      break;
+      
+    case Transaction::OP_SETATTR:
       {
-	coll_t cid;
-	t.get_cid(cid);
-	pobject_t oid;
-	t.get_oid(oid);
-	__u64 offset, len;
-	t.get_length(offset);
-	  t.get_length(len);
-          trim_from_cache(cid, oid, offset, len);
-        }
-        break;
-
-      case Transaction::OP_TRUNCATE:
-        {
-  	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          __u64 len;
-	  t.get_length(len);
-          _truncate(cid, oid, len);
-        }
-        break;
-
-      case Transaction::OP_REMOVE:
-        {
- 	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          _remove(cid, oid);
-        }
-        break;
-
-      case Transaction::OP_SETATTR:
-        {
- 	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          const char *attrname;
-	  t.get_attrname(attrname);
-          bufferlist bl;
-	  t.get_bl(bl);
-          _setattr(cid, oid, attrname, bl.c_str(), bl.length());
-        }
-        break;
-      case Transaction::OP_SETATTRS:
-        {
-	  coll_t cid;
-	  t.get_cid(cid);
-          pobject_t oid;
-	  t.get_oid(oid);
-          map<string,bufferptr> *pattrset;
-	  t.get_pattrset(pattrset);
-          _setattrs(cid, oid, *pattrset);
-        }
-        break;
-
-      case Transaction::OP_RMATTR:
-        {
-  	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          const char *attrname;
-	  t.get_attrname(attrname);
-          _rmattr(cid, oid, attrname);
-        }
-        break;
-
-      case Transaction::OP_CLONE:
-	{
-  	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          pobject_t noid;
-	  t.get_oid(noid);
-	  _clone(cid, oid, noid);
-	}
-	break;
-
-      case Transaction::OP_CLONERANGE:
-	{
-  	  coll_t cid;
-	  t.get_cid(cid);
-	  pobject_t oid;
-	  t.get_oid(oid);
-          pobject_t noid;
-	  t.get_oid(noid);
-	  __u64 off, len;
-	  t.get_length(off);
-	  t.get_length(len);
-	  _clone_range(cid, oid, noid, off, len);
-	}
-	break;
-
-      case Transaction::OP_MKCOLL:
-        {
-          coll_t cid;
-	  t.get_cid(cid);
-          _create_collection(cid);
-        }
-        break;
-
-      case Transaction::OP_RMCOLL:
-        {
-          coll_t cid;
-	  t.get_cid(cid);
-          _destroy_collection(cid);
-        }
-        break;
-
-      case Transaction::OP_COLL_ADD:
-        {
-          coll_t cid, ocid;
-	  t.get_cid(cid);
-	  t.get_cid(ocid);
-          pobject_t oid;
-	  t.get_oid(oid);
-          _collection_add(cid, ocid, oid);
-        }
-        break;
-
-      case Transaction::OP_COLL_REMOVE:
-        {
-          coll_t cid;
-	  t.get_cid(cid);
-          pobject_t oid;
-	  t.get_oid(oid);
-          _collection_remove(cid, oid);
-        }
-        break;
-
-      case Transaction::OP_COLL_SETATTR:
-        {
-          coll_t cid;
-	  t.get_cid(cid);
-          const char *attrname;
-	  t.get_attrname(attrname);
-          bufferlist bl;
-	  t.get_bl(bl);
-          _collection_setattr(cid, attrname, bl.c_str(), bl.length());
-        }
-        break;
-
-      case Transaction::OP_COLL_RMATTR:
-        {
-          coll_t cid;
-	  t.get_cid(cid);
-          const char *attrname;
-	  t.get_attrname(attrname);
-          _collection_rmattr(cid, attrname);
-        }
-        break;
-
-
-      default:
-        cerr << "bad op " << op << std::endl;
-        assert(0);
+	bufferlist& bl = t.get_bl();
+	_setattr(t.get_cid(), t.get_oid(), t.get_attrname(), bl.c_str(), bl.length());
       }
-    }
-    _transaction_finish(id);
+      break;
+      
+    case Transaction::OP_SETATTRS:
+      _setattrs(t.get_cid(), t.get_oid(), t.get_attrset());
+      break;
 
-    return 0;  // FIXME count errors
+    case Transaction::OP_RMATTR:
+      _rmattr(t.get_cid(), t.get_oid(), t.get_attrname());
+      break;
+      
+    case Transaction::OP_CLONE:
+      _clone(t.get_cid(), t.get_oid(), t.get_oid());
+      break;
+
+    case Transaction::OP_CLONERANGE:
+      _clone_range(t.get_cid(), t.get_oid(), t.get_oid(), t.get_length(), t.get_length());
+      break;
+
+    case Transaction::OP_MKCOLL:
+      _create_collection(t.get_cid());
+      break;
+
+    case Transaction::OP_RMCOLL:
+      _destroy_collection(t.get_cid());
+      break;
+
+    case Transaction::OP_COLL_ADD:
+      _collection_add(t.get_cid(), t.get_cid(), t.get_oid());
+      break;
+
+    case Transaction::OP_COLL_REMOVE:
+      _collection_remove(t.get_cid(), t.get_oid());
+      break;
+
+    case Transaction::OP_COLL_SETATTR:
+      {
+	bufferlist& bl = t.get_bl();
+	_collection_setattr(t.get_cid(), t.get_attrname(), bl.c_str(), bl.length());
+      }
+      break;
+
+    case Transaction::OP_COLL_RMATTR:
+      _collection_rmattr(t.get_cid(), t.get_attrname());
+      break;
+
+    default:
+      cerr << "bad op " << op << std::endl;
+      assert(0);
+    }
   }
+  _transaction_finish(id);
+  
+  return 0;  // FIXME count errors
+}
 
   /*********************************************/
 
