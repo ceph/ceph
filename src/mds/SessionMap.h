@@ -170,6 +170,7 @@ public:
   }
   void remove_session(Session *s) {
     s->trim_completed_requests(0);
+    s->session_list_item.remove_myself();
     session_map.erase(s->inst.name);
     delete s;
   }
