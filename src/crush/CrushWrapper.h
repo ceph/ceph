@@ -352,6 +352,10 @@ public:
 
   void encode(bufferlist &bl, bool lean=false) {
     if (!crush) create();  // duh.
+
+    __u32 magic = CRUSH_MAGIC;
+    ::encode(magic, bl);
+
     ::encode(crush->max_buckets, bl);
     ::encode(crush->max_rules, bl);
     ::encode(crush->max_devices, bl);
@@ -419,6 +423,11 @@ public:
 
   void decode(bufferlist::iterator &blp) {
     create();
+
+    __u32 magic;
+    ::decode(magic, blp);
+    assert(magic == CRUSH_MAGIC);
+
     ::decode(crush->max_buckets, blp);
     ::decode(crush->max_rules, blp);
     ::decode(crush->max_devices, blp);

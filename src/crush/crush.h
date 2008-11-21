@@ -17,6 +17,9 @@
  */
 
 
+#define CRUSH_MAGIC 0x00010000ul
+
+
 #define CRUSH_MAX_DEPTH 10
 #define CRUSH_MAX_SET   10
 

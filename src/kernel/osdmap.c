@@ -118,6 +118,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	int i, j;
 	void **p = &pbyval;
 	void *start = pbyval;
+	u32 magic;
 
 	dout(30, "crush_decode %p to %p len %d\n", *p, end, (int)(end - *p));
 
@@ -125,7 +126,13 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 3*sizeof(u32), bad);
+	ceph_decode_need(p, end, 4*sizeof(u32), bad);
+	ceph_decode_32(p, magic);
+	if (magic != CRUSH_MAGIC) {
+		derr(0, "crush_decode magic %x != current %x\n",
+		     (unsigned)magic, (unsigned)CRUSH_MAGIC);
+		goto bad;
+	}
 	ceph_decode_32(p, c->max_buckets);
 	ceph_decode_32(p, c->max_rules);
 	ceph_decode_32(p, c->max_devices);
