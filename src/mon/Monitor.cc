@@ -526,6 +526,11 @@ int Monitor::mkfs()
   
   store->put_int(whoami, "whoami", 0);
 
+  bufferlist magicbl;
+  magicbl.append(CEPH_MON_ONDISK_MAGIC);
+  magicbl.append("\n");
+  store->put_bl_ss(magicbl, "magic", 0);
+
   bufferlist monmapbl;
   monmap->encode(monmapbl);
   store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  

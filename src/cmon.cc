@@ -29,6 +29,8 @@ using namespace std;
 
 #include "msg/SimpleMessenger.h"
 
+#include "include/nstring.h"
+
 #include "common/Timer.h"
 
 void usage()
@@ -76,6 +78,14 @@ int main(int argc, const char **argv)
     exit(1);
   }
   int whoami = store.get_int("whoami");
+
+  bufferlist magicbl;
+  store.get_bl_ss(magicbl, "magic", 0);
+  nstring magic(magicbl.length()-1, magicbl.c_str());  // ignore trailing \n
+  if (strcmp(magic.c_str(), CEPH_MON_ONDISK_MAGIC)) {
+    cerr << "mon fs magic '" << magic << "' != current '" << CEPH_MON_ONDISK_MAGIC << "'" << std::endl;
+    exit(1);
+  }
 
   // monmap?
   bufferlist mapbl;

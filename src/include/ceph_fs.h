@@ -33,7 +33,9 @@
 #define CEPH_MDS_PROTOCOL    2
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
-#define CEPH_ONDISK_FORMAT   1
+
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v1"
+#define CEPH_MON_ONDISK_MAGIC "ceph monitor volume v1"
 
 /*
  * types in this file are defined as little-endian, and are
