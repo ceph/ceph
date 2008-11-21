@@ -5036,21 +5036,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
 {
   entity_name_t dest = inst.name;
-
-  if (dest.is_mon()) {
-    // resend to a different monitor.
-    int mon = monmap->pick_mon(true);
-    dout(0) << "ms_handle_failure " << *m << " to " << inst 
-            << ", resending to mon" << mon 
-            << dendl;
-    if (m->get_payload().length() == 0)
-      m->encode_payload();
-    Message *n = decode_message(m->get_header(), m->get_footer(), m->get_payload(), m->get_data());
-    messenger->send_message(n, monmap->get_inst(mon));
-  }
-  else {
-    dout(0) << "ms_handle_failure " << *m << " to " << inst << ", dropping" << dendl;
-  }
+  dout(0) << "ms_handle_failure " << *m << " to " << inst << dendl;
 }
 
 void Client::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
