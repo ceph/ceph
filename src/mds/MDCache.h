@@ -855,9 +855,10 @@ public:
   
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
-  void open_remote_ino(inodeno_t ino, Context *fin);
+  void open_remote_ino(inodeno_t ino, Context *fin, inodeno_t hadino=0, version_t hadv=0);
   void open_remote_ino_2(inodeno_t ino,
                          vector<Anchor>& anchortrace,
+			 inodeno_t hadino, version_t hadv,
                          Context *onfinish);
 
   C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);

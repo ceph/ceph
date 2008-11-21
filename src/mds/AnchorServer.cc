@@ -63,7 +63,7 @@ bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash)
   
   if (anchor_map.count(ino) == 0) {
     // new item
-    anchor_map[ino] = Anchor(ino, dirino, dn_hash);
+    anchor_map[ino] = Anchor(ino, dirino, dn_hash, 0, version);
     dout(7) << "add added " << anchor_map[ino] << dendl;
     return true;
   } else {
@@ -81,6 +81,7 @@ void AnchorServer::inc(inodeno_t ino)
   while (1) {
     Anchor &anchor = anchor_map[ino];
     anchor.nref++;
+    anchor.updated = version;
       
     dout(10) << "inc now " << anchor << dendl;
     ino = anchor.dirino;
@@ -98,7 +99,8 @@ void AnchorServer::dec(inodeno_t ino)
   while (true) {
     Anchor &anchor = anchor_map[ino];
     anchor.nref--;
-      
+    anchor.updated = version;
+
     if (anchor.nref == 0) {
       dout(10) << "dec removing " << anchor << dendl;
       inodeno_t dirino = anchor.dirino;

@@ -5625,20 +5625,21 @@ public:
 class C_MDC_OpenRemoteIno : public Context {
   MDCache *mdcache;
   inodeno_t ino;
+  inodeno_t hadino;
+  version_t hadv;
   Context *onfinish;
 public:
   vector<Anchor> anchortrace;
 
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c) :
-    mdcache(mdc), ino(i), onfinish(c) {}
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, vector<Anchor>& at,
-		      Context *c) :
-    mdcache(mdc), ino(i), onfinish(c), anchortrace(at) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, inodeno_t hi, version_t hv, Context *c) :
+    mdcache(mdc), ino(i), hadino(hi), hadv(hv), onfinish(c) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, vector<Anchor>& at, Context *c) :
+    mdcache(mdc), ino(i), hadino(0), hadv(0), onfinish(c), anchortrace(at) {}
 
   void finish(int r) {
     assert(r == 0);
     if (r == 0)
-      mdcache->open_remote_ino_2(ino, anchortrace, onfinish);
+      mdcache->open_remote_ino_2(ino, anchortrace, hadino, hadv, onfinish);
     else {
       onfinish->finish(r);
       delete onfinish;
@@ -5646,16 +5647,17 @@ public:
   }
 };
 
-void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish)
+void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish, inodeno_t hadino, version_t hadv)
 {
   dout(7) << "open_remote_ino on " << ino << dendl;
   
-  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, onfinish);
+  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, hadino, hadv, onfinish);
   mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
 void MDCache::open_remote_ino_2(inodeno_t ino,
                                 vector<Anchor>& anchortrace,
+				inodeno_t hadino, version_t hadv,
                                 Context *onfinish)
 {
   dout(7) << "open_remote_ino_2 on " << ino
@@ -5729,12 +5731,21 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
   if (dir->is_auth()) {
     if (dir->is_complete()) {
-      // hrm.  requery anchor table.
-      dout(10) << "expected ino " << anchortrace[i].ino
-	       << " in complete dir " << *dir
-	       << ", requerying anchortable"
-	       << dendl;
-      open_remote_ino(ino, onfinish);
+      // make sure we didn't get to the same version anchor 2x in a row
+      if (hadv && hadino == anchortrace[i].ino && hadv == anchortrace[i].updated) {
+	dout(10) << "expected ino " << anchortrace[i].ino
+		 << " in complete dir " << *dir
+		 << ", got same anchor " << anchortrace[i] << " 2x in a row" << dendl;
+	onfinish->finish(-ENOENT);
+	delete onfinish;
+      } else {
+	// hrm.  requery anchor table.
+	dout(10) << "expected ino " << anchortrace[i].ino
+		 << " in complete dir " << *dir
+		 << ", requerying anchortable"
+		 << dendl;
+	open_remote_ino(ino, onfinish, anchortrace[i].ino, anchortrace[i].updated);
+      }
     } else {
       dout(10) << "need ino " << anchortrace[i].ino
 	       << ", fetching incomplete dir " << *dir

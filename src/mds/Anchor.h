@@ -35,33 +35,36 @@ public:
   inodeno_t dirino;
   __u32     dn_hash;
   int       nref;     // reference count
+  version_t updated;
 
-  Anchor() : dn_hash(0), nref(0) {}
-  Anchor(inodeno_t i, inodeno_t di, __u32 hash, int nr=0) :
-    ino(i), dirino(di), dn_hash(hash), nref(nr) { }
-  Anchor(inodeno_t i, inodeno_t di, const nstring &dname, int nr=0) :
+  Anchor() : dn_hash(0), nref(0), updated(0) {}
+  Anchor(inodeno_t i, inodeno_t di, __u32 hash, int nr, version_t u) :
+    ino(i), dirino(di), dn_hash(hash), nref(nr), updated(u) { }
+  Anchor(inodeno_t i, inodeno_t di, const nstring &dname, int nr, version_t u) :
     ino(i), dirino(di),
     dn_hash(ceph_full_name_hash(dname.data(), dname.length())),
-    nref(nr) { }
+    nref(nr), updated(u) { }
   
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
     ::encode(dirino, bl);
     ::encode(dn_hash, bl);
     ::encode(nref, bl);
+    ::encode(updated, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(ino, bl);
     ::decode(dirino, bl);
     ::decode(dn_hash, bl);
     ::decode(nref, bl);
+    ::decode(updated, bl);
   }
 };
 WRITE_CLASS_ENCODER(Anchor)
 
 inline ostream& operator<<(ostream& out, const Anchor &a)
 {
-  return out << "a(" << a.ino << " " << a.dirino << "/" << a.dn_hash << " " << a.nref << ")";
+  return out << "a(" << a.ino << " " << a.dirino << "/" << a.dn_hash << " " << a.nref << " v" << a.updated << ")";
 }
 
 #endif

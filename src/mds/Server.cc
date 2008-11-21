@@ -2038,6 +2038,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
       if (in) {
 	dn->link_remote(in);
       } else {
+	dout(10) << "opening remote ino for " << *dn << dendl;
 	mdcache->open_remote_ino(dn->get_remote_ino(),
 				 new C_MDS_RetryRequest(mdcache, mdr));
 
