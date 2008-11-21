@@ -193,6 +193,9 @@ void MDCache::remove_inode(CInode *o)
     dn->dir->unlink_inode(dn);   // leave dentry ... FIXME?
   }
 
+  if (o->is_dirty())
+    o->mark_clean();
+
   // remove from inode map
   inode_map.erase(o->vino());    
 
