@@ -656,7 +656,7 @@ void PG::generate_past_intervals()
 void PG::trim_past_intervals()
 {
   while (past_intervals.size() &&
-	 past_intervals.begin()->second.first < info.history.last_epoch_started) {
+	 past_intervals.begin()->second.last < info.history.last_epoch_started) {
     dout(10) << "trim_past_intervals trimming " << past_intervals.begin()->second << dendl;
     past_intervals.erase(past_intervals.begin());
   }
