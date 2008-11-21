@@ -2201,8 +2201,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   interval_set<__u64> data_subset;
   map<pobject_t, interval_set<__u64> > clone_subsets;
 
-  if (is_replica()) {
-    // replica should only accept pushes from the current primary.
+  if (!is_primary()) {
+    // non-primary should only accept pushes from the current primary.
     if (op->map_epoch < info.history.same_primary_since) {
       dout(10) << "sub_op_push discarding old sub_op from "
 	       << op->map_epoch << " < " << info.history.same_primary_since << dendl;
