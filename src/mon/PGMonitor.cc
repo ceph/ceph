@@ -257,7 +257,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   // only if they've had the map for a while.
   if (stats->had_map_for > 10.0 && 
       stats->epoch < mon->osdmon->osdmap.get_epoch())
-    mon->osdmon->send_latest(stats->get_source_inst(), stats->epoch+1);
+    mon->osdmon->send_latest(stats->get_orig_source_inst(), stats->epoch+1);
 
   // any new osd or pg info?
   if (pg_map.osd_stat.count(from) ||
