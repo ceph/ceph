@@ -1822,7 +1822,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     if (tacting != pg->acting) {
       // remember past interval
       PG::Interval& i = pg->past_intervals[pg->info.history.same_since];
-      i.acting = pg->acting;
+      i.acting = oldacting;
       i.first = pg->info.history.same_since;
       i.last = osdmap->get_epoch() - 1;
       if (i.acting.size())
