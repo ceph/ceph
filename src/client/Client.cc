@@ -5043,6 +5043,8 @@ void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
     dout(0) << "ms_handle_failure " << *m << " to " << inst 
             << ", resending to mon" << mon 
             << dendl;
+    if (m->get_payload().length() == 0)
+      m->encode_payload();
     Message *n = decode_message(m->get_header(), m->get_footer(), m->get_payload(), m->get_data());
     messenger->send_message(n, monmap->get_inst(mon));
   }
