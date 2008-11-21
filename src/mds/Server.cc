@@ -2037,10 +2037,11 @@ void Server::handle_client_readdir(MDRequest *mdr)
       in = mdcache->get_inode(dn->get_remote_ino());
       if (in) {
 	dn->link_remote(in);
+      } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
+	dout(10) << "skipping bad remote ino on " << *dn << dendl;
+	continue;
       } else {
-	dout(10) << "opening remote ino for " << *dn << dendl;
-	mdcache->open_remote_ino(dn->get_remote_ino(),
-				 new C_MDS_RetryRequest(mdcache, mdr));
+	mdcache->open_remote_dentry(dn, new C_MDS_RetryRequest(mdcache, mdr));
 
 	// touch everything i _do_ have
 	for (it = dir->begin(); 
