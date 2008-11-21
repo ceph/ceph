@@ -541,6 +541,8 @@ int OSD::read_superblock()
 {
   bufferlist bl;
   int r = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  if (r < 0)
+    return r;
 
   bufferlist::iterator p = bl.begin();
   ::decode(superblock, p);
