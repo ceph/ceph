@@ -78,7 +78,7 @@ domain cosd5 {
 	item device18 weight 1.000 pos 1
 	item device19 weight 1.000 pos 2
 }
-domain cosd5 {
+domain cosd6 {
 	id -8		# do not change unnecessarily
 	alg uniform	# do not change bucket size (4) unnecessarily
 	item device21 weight 1.000 pos 0
