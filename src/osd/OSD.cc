@@ -541,11 +541,6 @@ int OSD::read_superblock()
 {
   bufferlist bl;
   int r = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
-  if (bl.length() != sizeof(superblock)) {
-    derr(0) << "read_superblock failed, r = " << r 
-	    << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << dendl;
-    return -1;
-  }
 
   bufferlist::iterator p = bl.begin();
   ::decode(superblock, p);
