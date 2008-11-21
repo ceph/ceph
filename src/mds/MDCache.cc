@@ -5762,6 +5762,35 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 }
 
 
+struct C_MDC_OpenRemoteDentry : public Context {
+  MDCache *mdc;
+  CDentry *dn;
+  Context *onfinish;
+  C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, Context *f) :
+    mdc(m), dn(d), onfinish(f) {}
+  void finish(int r) {
+    mdc->_open_remote_dentry_finish(r, dn, onfinish);
+  }
+};
+
+void MDCache::open_remote_dentry(CDentry *dn, Context *fin)
+{
+  dout(10) << "open_remote_dentry " << *dn << dendl;
+  open_remote_ino(dn->get_remote_ino(), 
+		  new C_MDC_OpenRemoteDentry(this, dn, fin));
+}
+
+void MDCache::_open_remote_dentry_finish(int r, CDentry *dn, Context *fin)
+{
+  if (r == -ENOENT) {
+    dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
+    dn->state_set(CDentry::STATE_BADREMOTEINO);
+  } else if (r != 0)
+    assert(0);
+  fin->finish(r);
+  delete fin;
+}
+
 
 
 void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
