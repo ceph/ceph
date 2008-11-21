@@ -22,9 +22,12 @@ public:
   ceph_fsid fsid;
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
+  epoch_t epoch;
+  utime_t had_map_for;
   
   MPGStats() : Message(MSG_PGSTATS) {}
-  MPGStats(ceph_fsid& f) : Message(MSG_PGSTATS), fsid(f) {}
+  MPGStats(ceph_fsid& f, epoch_t e, utime_t had) : 
+    Message(MSG_PGSTATS), fsid(f), epoch(e), had_map_for(had) {}
 
   const char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
@@ -35,12 +38,16 @@ public:
     ::encode(fsid, payload);
     ::encode(osd_stat, payload);
     ::encode(pg_stat, payload);
+    ::encode(epoch, payload);
+    ::encode(had_map_for, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(osd_stat, p);
     ::decode(pg_stat, p);
+    ::decode(epoch, p);
+    ::decode(had_map_for, p);
   }
 };
 

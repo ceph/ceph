@@ -1192,7 +1192,9 @@ void OSD::send_pg_stats()
   if (!pg_stat_pending.empty() || osd_stat_pending) {
     dout(1) << "send_pg_stats - " << pg_stat_pending.size() << " pgs updated" << dendl;
     
-    MPGStats *m = new MPGStats(osdmap->get_fsid());
+    utime_t had_for = g_clock.now();
+    had_for -= had_map_since;
+    MPGStats *m = new MPGStats(osdmap->get_fsid(), osdmap->get_epoch(), had_for);
     for (map<pg_t,eversion_t>::iterator p = pg_stat_pending.begin();
 	 p != pg_stat_pending.end();
 	 p++) {
@@ -1684,6 +1686,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.current_epoch = cur;
     advance_map(t, inc.removed_snaps);
     advanced = true;
+    had_map_since = g_clock.now();
   }
 
   // all the way?

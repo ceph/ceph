@@ -251,6 +251,7 @@ private:
 
   // -- osd map --
   OSDMap         *osdmap;
+  utime_t         had_map_since;
   RWLock          map_lock;
   list<Message*>  waiting_for_osdmap;
 
