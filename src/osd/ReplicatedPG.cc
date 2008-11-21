@@ -422,10 +422,6 @@ bool ReplicatedPG::snap_trimmer()
 {
   lock();
   dout(10) << "snap_trimmer start" << dendl;
-  
-  state_clear(PG_STATE_SNAPTRIMQUEUE);
-  state_set(PG_STATE_SNAPTRIMMING);
-  update_stats();
 
   while (info.dead_snaps.size() &&
 	 is_active()) {
@@ -544,8 +540,6 @@ bool ReplicatedPG::snap_trimmer()
 
   // done
   dout(10) << "snap_trimmer done" << dendl;
-  state_clear(PG_STATE_SNAPTRIMMING);
-  update_stats();
 
   ObjectStore::Transaction t;
   write_info(t);

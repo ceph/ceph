@@ -246,15 +246,19 @@ struct osd_stat_t {
   int64_t kb;
   int64_t kb_used, kb_avail;
   int64_t num_objects;
+  int32_t snap_trim_queue_len, num_snap_trimming;
   vector<int> hb_in, hb_out;
 
-  osd_stat_t() : kb(0), kb_used(0), kb_avail(0), num_objects(0) {}
+  osd_stat_t() : kb(0), kb_used(0), kb_avail(0), num_objects(0),
+		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
   void encode(bufferlist &bl) const {
     ::encode(kb, bl);
     ::encode(kb_used, bl);
     ::encode(kb_avail, bl);
     ::encode(num_objects, bl);
+    ::encode(snap_trim_queue_len, bl);
+    ::encode(num_snap_trimming, bl);
     ::encode(hb_in, bl);
     ::encode(hb_out, bl);
   }
@@ -263,6 +267,8 @@ struct osd_stat_t {
     ::decode(kb_used, bl);
     ::decode(kb_avail, bl);
     ::decode(num_objects, bl);
+    ::decode(snap_trim_queue_len, bl);
+    ::decode(num_snap_trimming, bl);
     ::decode(hb_in, bl);
     ::decode(hb_out, bl);
   }
@@ -302,8 +308,6 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_REPLAY     32  // crashed, waiting for replay
 #define PG_STATE_STRAY      64  // i must notify the primary i exist.
 #define PG_STATE_SPLITTING 128  // i am splitting
-#define PG_STATE_SNAPTRIMQUEUE  256  // i am queued for snapshot trimming
-#define PG_STATE_SNAPTRIMMING   512  // i am trimming snapshot data
 #define PG_STATE_DEGRADED      1024  // pg membership not complete
 
 static inline std::string pg_state_string(int state) {
@@ -316,8 +320,6 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_REPLAY) st += "replay+";
   if (state & PG_STATE_STRAY) st += "stray+";
   if (state & PG_STATE_SPLITTING) st += "splitting+";
-  if (state & PG_STATE_SNAPTRIMQUEUE) st += "snaptrimqueue+";
-  if (state & PG_STATE_SNAPTRIMMING) st += "snaptrimming+";
   if (state & PG_STATE_DEGRADED) st += "degraded+";
   if (!st.length()) 
     st = "inactive";

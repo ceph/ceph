@@ -1293,14 +1293,10 @@ void PG::activate(ObjectStore::Transaction& t,
 
 void PG::queue_snap_trim()
 {
-  if (state_test(PG_STATE_SNAPTRIMMING)) {
+  if (osd->snap_trim_wq.queue(this))
+    dout(10) << "queue_snap_trim -- queuing" << dendl;
+  else
     dout(10) << "queue_snap_trim -- already trimming" << dendl;
-    return;
-  }
-
-  state_set(PG_STATE_SNAPTRIMQUEUE);
-
-  osd->snap_trim_wq.queue(this);
 }
 
 
