@@ -388,33 +388,34 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
 
   osd->logger->inc("subop");
 
-  assert(op->ops.size() >= 1);
-  ceph_osd_op& first = op->ops[0];
-
-  switch (first.op) {
-    // rep stuff
-  case CEPH_OSD_OP_PULL:
-    sub_op_pull(op);
-    break;
-  case CEPH_OSD_OP_PUSH:
-    sub_op_push(op);
-    break;
-
-  default:
-    sub_op_modify(op);
+  if (op->ops.size() >= 1) {
+    ceph_osd_op& first = op->ops[0];
+    switch (first.op) {
+      // rep stuff
+    case CEPH_OSD_OP_PULL:
+      sub_op_pull(op);
+      return;
+    case CEPH_OSD_OP_PUSH:
+      sub_op_push(op);
+      return;
+    }
   }
+
+  sub_op_modify(op);
 }
 
 void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 {
-  assert(r->ops.size() >= 1);
-  ceph_osd_op& first = r->ops[0];
-  if (first.op == CEPH_OSD_OP_PUSH) {
-    // continue peer recovery
-    sub_op_push_reply(r);
-  } else {
-    sub_op_modify_reply(r);
+  if (r->ops.size() >= 1) {
+    ceph_osd_op& first = r->ops[0];
+    if (first.op == CEPH_OSD_OP_PUSH) {
+      // continue peer recovery
+      sub_op_push_reply(r);
+      return;
+    }
   }
+
+  sub_op_modify_reply(r);
 }
 
 
