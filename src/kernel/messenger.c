@@ -4,6 +4,7 @@
 #include <linux/net.h>
 #include <linux/string.h>
 #include <linux/highmem.h>
+#include <linux/ctype.h>
 #include <net/tcp.h>
 
 #include "ceph_debug.h"
@@ -49,6 +50,38 @@ void ceph_msgr_exit(void)
 	destroy_workqueue(ceph_msgr_wq);
 }
 
+/* from slub.c */
+static void print_section(char *text, u8 *addr, unsigned int length)
+{
+	int i, offset;
+	int newline = 1;
+	char ascii[17];
+
+	ascii[16] = 0;
+
+	for (i = 0; i < length; i++) {
+		if (newline) {
+			printk(KERN_ERR "%8s 0x%p: ", text, addr + i);
+			newline = 0;
+		}
+		printk(KERN_CONT " %02x", addr[i]);
+		offset = i % 16;
+		ascii[offset] = isgraph(addr[i]) ? addr[i] : '.';
+		if (offset == 15) {
+			printk(KERN_CONT " %s\n", ascii);
+			newline = 1;
+		}
+	}
+	if (!newline) {
+		i %= 16;
+		while (i < 16) {
+			printk(KERN_CONT "   ");
+			ascii[i] = ' ';
+			i++;
+		}
+		printk(KERN_CONT " %s\n", ascii);
+	}
+}
 
 /*
  * socket callback functions
@@ -321,6 +354,8 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, con_work);
+
+	dout(0, "new connection: %p\n", con);
 	return con;
 }
 
@@ -479,6 +514,7 @@ static void __remove_connection(struct ceph_messenger *msgr,
 	unsigned long key;
 	void **slot, *val;
 
+	dout(0, "__remove_connection: %p\n", con);
 	dout(20, "__remove_connection %p\n", con);
 	if (list_empty(&con->list_all)) {
 		dout(20, "__remove_connection %p not registered\n", con);
@@ -531,6 +567,7 @@ static void __replace_connection(struct ceph_messenger *msgr,
 				 struct ceph_connection *old,
 				 struct ceph_connection *new)
 {
+	dout(0, "replace_connection %p with %p\n", old, new);
 	dout(10, "replace_connection %p with %p\n", old, new);
 
 	/* replace in con_tree */
@@ -1377,7 +1414,7 @@ static int read_partial_message(struct ceph_connection *con)
 	int to, want, left;
 	unsigned front_len, data_len, data_off;
 
-	dout(20, "read_partial_message con %p msg %p\n", con, m);
+	dout(20, "read_partial_message con %p msg %p\n", con, m);	
 
 	/* header */
 	while (con->in_base_pos < sizeof(m->hdr)) {
@@ -1392,10 +1429,11 @@ static int read_partial_message(struct ceph_connection *con)
 			u32 crc = crc32c_le(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
 			if (crc != le32_to_cpu(m->hdr.crc)) {
+				print_section("hdr", (u8 *)&m->hdr, sizeof(m->hdr));
 				derr(0, "read_partial_message %p bad hdr crc"
 				     " %u != expected %u\n",
 				     m, crc, m->hdr.crc);
-				return -EIO;
+				return -EBADMSG;
 			}
 		}
 	}
@@ -1430,6 +1468,7 @@ static int read_partial_message(struct ceph_connection *con)
 	data_off = le32_to_cpu(m->hdr.data_off);
 	if (data_len == 0)
 		goto no_data;
+
 	if (m->nr_pages == 0) {
 		con->in_msg_pos.page = 0;
 		con->in_msg_pos.page_pos = data_off & ~PAGE_MASK;
@@ -1501,13 +1540,33 @@ no_data:
 		derr(0, "read_partial_message %p front crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_front_crc, m->footer.front_crc);
-		return -EIO;
+		print_section("front", (u8 *)&m->front.iov_base, sizeof(m->front.iov_len));
+		return -EBADMSG;
 	}
 	if (con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
+		int cur_page, data_pos;
 		derr(0, "read_partial_message %p data crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_data_crc, m->footer.data_crc);
-		return -EIO;
+		for (data_pos = 0, cur_page = 0; data_pos < data_len; data_pos += PAGE_SIZE, cur_page++) {
+			left = min((int)(data_len - data_pos),
+			   (int)(PAGE_SIZE));
+			mutex_lock(&m->page_mutex);
+
+			if (!m->pages) {
+				derr(0, "m->pages == NULL\n");
+				mutex_unlock(&m->page_mutex);
+				break;
+			}
+
+			p = kmap(m->pages[cur_page]);
+			printk("data page %d len %d\n", cur_page, left);
+			print_section("data", p, left);
+					  
+			kunmap(m->pages[0]);
+			mutex_unlock(&m->page_mutex);
+		}
+		return -EBADMSG;
 	}
 
 	/* did i learn my ip? */
@@ -1739,12 +1798,19 @@ more:
 	}
 	if (con->in_tag == CEPH_MSGR_TAG_MSG) {
 		ret = read_partial_message(con);
-		if (ret == -EIO) {
-			con->error_msg = "bad crc";
-			goto out;
+		if (ret <= 0) {
+			switch (ret) {
+			case -EBADMSG:
+				con->error_msg = "bad crc";
+				ret = -EIO;
+				goto out;
+			case -EIO:
+				con->error_msg = "io error";
+				goto out;
+			default:
+				goto done;
+			}
 		}
-		if (ret <= 0)
-			goto done;
 		if (con->in_tag == CEPH_MSGR_TAG_READY)
 			goto more;
 		process_message(con);
@@ -1850,7 +1916,7 @@ more:
 
 done:
 	clear_bit(BUSY, &con->state);
-	dout(10, "con->state=%d\n", con->state);
+	dout(10, "con->state=%lu\n", con->state);
 	if (test_bit(QUEUED, &con->state)) {
 		if (!backoff) {
 			dout(10, "con_work %p QUEUED reset, looping\n", con);
