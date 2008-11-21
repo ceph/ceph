@@ -592,6 +592,7 @@ static void __replace_connection(struct ceph_messenger *msgr,
 
 	new->connect_seq = le32_to_cpu(new->in_connect.connect_seq);
 	new->out_seq = old->out_seq;
+	new->peer_name = old->peer_name;
 
 	set_bit(CLOSED, &old->state);
 	put_connection(old); /* dec reference count */
