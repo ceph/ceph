@@ -28,14 +28,17 @@ fi
 
 
 ./dstop.sh
-rm -f core*
-
-test -d out || mkdir out
-rm -f out/*
-test -d gmon && ssh cosd0 rm -rf ceph/src/gmon/*
-
 # mkmonfs
 if [ $new -eq 1 ]; then
+
+    # clean up
+    rm -f core*
+
+    test -d out || mkdir out
+    rm -f out/*
+    test -d gmon && ssh cosd0 rm -rf ceph/src/gmon/*
+
+
     # figure machine's ip
     HOSTNAME=`hostname`
     IP=`host $HOSTNAME | grep $HOSTNAME | cut -d ' ' -f 4`
