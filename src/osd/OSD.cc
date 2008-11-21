@@ -155,6 +155,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   if (err < 0) return err;
     
   OSDSuperblock sb;
+  sb.magic = CEPH_OSD_ONDISK_MAGIC;
   sb.fsid = fsid;
   sb.whoami = whoami;
 
@@ -211,7 +212,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   return 0;
 }
 
-int OSD::peek_super(const char *dev, ceph_fsid& fsid, int& whoami)
+int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid& fsid, int& whoami)
 {
   ObjectStore *store = create_object_store(dev);
   int err = store->mount();
@@ -220,7 +221,7 @@ int OSD::peek_super(const char *dev, ceph_fsid& fsid, int& whoami)
 
   OSDSuperblock sb;
   bufferlist bl;
-  err = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(sb), bl);
+  err = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   store->umount();
   delete store;
 
@@ -230,6 +231,7 @@ int OSD::peek_super(const char *dev, ceph_fsid& fsid, int& whoami)
   bufferlist::iterator p = bl.begin();
   ::decode(sb, p);
 
+  magic = sb.magic;
   fsid = sb.fsid;
   whoami = sb.whoami;
   return 0;
@@ -532,13 +534,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
+  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, sizeof(superblock), bl);
+  int r = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (bl.length() != sizeof(superblock)) {
     derr(0) << "read_superblock failed, r = " << r 
 	    << ", i got " << bl.length() << " bytes, not " << sizeof(superblock) << dendl;

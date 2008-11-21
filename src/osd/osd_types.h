@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/pobject.h"
 #include "include/interval_set.h"
+#include "include/nstring.h"
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
@@ -516,16 +517,15 @@ struct ObjectMutation {
 
 class OSDSuperblock {
 public:
-  const static uint64_t MAGIC = 0xeb0f505dULL;
-  uint64_t magic;
+  nstring magic;
   ceph_fsid fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
   double weight;
 
-  OSDSuperblock(int w=0) : 
-    magic(MAGIC), whoami(w), 
+  OSDSuperblock() : 
+    whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
@@ -553,7 +553,7 @@ WRITE_CLASS_ENCODER(OSDSuperblock)
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 {
-  return out << "sb(fsid " << sb.fsid
+  return out << "sb('" << sb.magic << "' fsid " << sb.fsid
              << " osd" << sb.whoami
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map
