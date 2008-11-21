@@ -335,9 +335,9 @@ void CDir::remove_dentry(CDentry *dn)
   assert(items.count(dn->key()) == 1);
   items.erase(dn->key());
 
-  // adjust dirty counter?
-  if (dn->state_test(CDentry::STATE_DIRTY))
-    num_dirty--;
+  // clean?
+  if (dn->is_dirty())
+    dn->mark_clean();
 
   cache->lru.lru_remove(dn);
   delete dn;
