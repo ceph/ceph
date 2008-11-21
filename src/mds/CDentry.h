@@ -49,9 +49,10 @@ bool operator<(const CDentry& l, const CDentry& r);
 class CDentry : public MDSCacheObject, public LRUObject {
  public:
   // -- state --
-  static const int STATE_NEW = 1;
-  static const int STATE_FRAGMENTING = 2;
-  static const int STATE_PURGING = 3;
+  static const int STATE_NEW =          (1<<0);
+  static const int STATE_FRAGMENTING =  (1<<1);
+  static const int STATE_PURGING =      (1<<2);
+  static const int STATE_BADREMOTEINO = (1<<3);
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
