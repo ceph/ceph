@@ -435,11 +435,13 @@ int crush_do_rule(struct crush_map *map,
 		case CRUSH_RULE_CHOOSE_INDEP:
 			BUG_ON(wsize == 0);
 
+			recurse_to_leaf = 
+				rule->steps[step].op == CRUSH_RULE_CHOOSE_LEAF_FIRSTN ||
+				rule->steps[step].op == CRUSH_RULE_CHOOSE_LEAF_INDEP;				
+
 			/* reset output */
 			osize = 0;
 
-			recurse_to_leaf = rule->steps[step].op >=
-				CRUSH_RULE_CHOOSE_LEAF_FIRSTN;
 			for (i = 0; i < wsize; i++) {
 				/*
 				 * see CRUSH_N, CRUSH_N_MINUS macros.
