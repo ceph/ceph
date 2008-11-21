@@ -567,21 +567,22 @@ static void __replace_connection(struct ceph_messenger *msgr,
 				 struct ceph_connection *old,
 				 struct ceph_connection *new)
 {
+	unsigned long key = hash_addr(&new->peer_addr);
+	void **slot;
+
 	dout(0, "replace_connection %p with %p\n", old, new);
 	dout(10, "replace_connection %p with %p\n", old, new);
 
 	/* replace in con_tree */
-	if (list_empty(&old->list_bucket)) {
-		/* oh, just replace old with new in bucket list */
+	slot = radix_tree_lookup_slot(&msgr->con_tree, key);
+	if (*slot == &old->list_bucket)
+		radix_tree_replace_slot(slot, &new->list_bucket);
+	else
+		BUG_ON(list_empty(&old->list_bucket));
+	if (!list_empty(&old->list_bucket)) {
+		/* replace old with new in bucket list */
 		list_add(&new->list_bucket, &old->list_bucket);
 		list_del_init(&old->list_bucket);
-	} else {
-		unsigned long key = hash_addr(&new->peer_addr);
-		void **slot;
-
-		slot = radix_tree_lookup_slot(&msgr->con_tree, key);
-		BUG_ON(radix_tree_deref_slot(slot) != &old->list_bucket);
-		radix_tree_replace_slot(slot, &new->list_bucket);
 	}
 
 	/* take old connections message queue */
