@@ -741,6 +741,8 @@ public:
 
   bool is_complete_pg() { return acting.size() == info.pgid.size(); }
 
+  void add_log_entry(Log::Entry& e, bufferlist& log_bl);
+
   // pg on-disk state
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);

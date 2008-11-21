@@ -835,15 +835,6 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
     bufferlist snapsbl;
     ::encode(snaps, snapsbl);
     
-    // log clone
-    dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
-    Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, old_version, reqid);
-    cloneentry.snaps = snapsbl;
-    dout(10) << "prepare_transaction " << cloneentry << dendl;
-    log.add(cloneentry);
-    ::encode(cloneentry, logbl);
-    assert(log.top == at_version);
-    
     // prepare clone
     _make_clone(t, poid, coid, old_version, at_version, snapsbl);
     
@@ -861,6 +852,12 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
     snapset.clone_size[coid.oid.snap] = old_size;
     snapset.clone_overlap[coid.oid.snap].insert(0, old_size);
     
+    // log clone
+    dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
+    Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, old_version, reqid);
+    cloneentry.snaps = snapsbl;
+    add_log_entry(cloneentry, logbl);
+
     at_version.version++;
   }
   
@@ -1151,29 +1148,17 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     t.setattr(info.pgid.to_coll(), poid, "snapset", snapsetbl);
   }
 
-  // update pg info:
-  // raise last_complete only if we were previously up to date
-  if (info.last_complete == info.last_update)
-    info.last_complete = at_version;
-  
-  // raise last_update.
-  assert(at_version > info.last_update);
-  info.last_update = at_version;
-
-  // log mutation
+  // append to log
   int logopcode = Log::Entry::MODIFY;
   if (!snapset.head_exists)
     logopcode = Log::Entry::DELETE;
   Log::Entry logentry(logopcode, poid.oid, at_version, old_version, reqid);
-  dout(10) << "prepare_transaction " << logentry << dendl;
-  log.add(logentry);
-  ::encode(logentry, log_bl);
+  add_log_entry(logentry, log_bl);
 
   // write pg info, log to disk
   write_info(t);
   append_log(t, log_bl, log_version, trim_to);
 }
-
 
 
 // ========================================================================

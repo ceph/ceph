@@ -1496,15 +1496,28 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 }
 
 
+void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
+{
+  // raise last_complete only if we were previously up to date
+  if (info.last_complete == info.last_update)
+    info.last_complete = e.version;
+  
+  // raise last_update.
+  assert(e.version > info.last_update);
+  info.last_update = e.version;
+
+  // log mutation
+  log.add(e);
+  ::encode(e, log_bl);
+  dout(10) << "add_log_entry " << e << dendl;
+}
+
+
 void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 		    eversion_t logversion, eversion_t trim_to)
 {
   dout(10) << "append_log " << ondisklog.top << dendl;
 
-  if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
-    bufferptr bp(4096 - bl.length());
-    bl.push_back(bp);
-  }
   t.write(0, info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   // update block map?
@@ -1566,13 +1579,6 @@ void PG::read_log(ObjectStore *store)
       } else {
 	dout(10) << "read_log ignoring entry at " << pos << dendl;
       }
-
-      /*
-      if (g_conf.osd_pad_pg_log)   // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
-	pos += 4096;
-      else
-	pos += sizeof(e);
-      */
     }
   }
   log.top = info.last_update;
