@@ -208,6 +208,7 @@ void MDCache::remove_inode(CInode *o)
   }
 
   // delete it
+  assert(o->get_num_ref() == 0);
   delete o; 
 }
 
