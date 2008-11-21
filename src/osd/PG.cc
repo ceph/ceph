@@ -832,7 +832,7 @@ void PG::build_prior()
     }
 
     if (still_up_or_clean == 0) {
-      dout(10) << "build_prior  none of " << acting 
+      dout(10) << "build_prior  none of " << interval.acting 
 	       << " still up or cleanly shutdown, pg crashed" << dendl;
       state_set(PG_STATE_CRASHED);
     }
