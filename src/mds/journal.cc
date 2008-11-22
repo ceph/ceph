@@ -536,7 +536,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
        ++p)
     if (p->name.is_client()) {
       dout(10) << "EMetaBlob.replay request " << *p << dendl;
-      mds->sessionmap.add_completed_request(*p);
+      if (mds->sessionmap.have_session(p->name))
+	mds->sessionmap.add_completed_request(*p);
     }
 
 
@@ -557,11 +558,6 @@ void ESession::replay(MDS *mds)
   if (mds->sessionmap.version >= cmapv) {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version 
 	     << " >= " << cmapv << ", noop" << dendl;
-
-    // hrm, this isn't very pretty.
-    if (!open)
-      mds->sessionmap.trim_completed_requests(client_inst.name, 0);
-
   } else {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version
 	     << " < " << cmapv << " " << (open ? "open":"close") << dendl;
