@@ -588,7 +588,7 @@ void FileStore::_transaction_finish(int fd)
 unsigned FileStore::_apply_transaction(Transaction& t)
 {
   // non-atomic implementation
-  int id = _transaction_start(t.get_len());
+  int id = _transaction_start(t.get_trans_len());
   if (id < 0) return id;
   
   while (t.have_op()) {
@@ -623,7 +623,7 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       break;
       
     case Transaction::OP_TRUNCATE:
-      _truncate(t.get_cid(), t.get_oid(), t.get_len());
+      _truncate(t.get_cid(), t.get_oid(), t.get_length());
       break;
       
     case Transaction::OP_REMOVE:
@@ -1195,10 +1195,11 @@ int FileStore::_remove(coll_t cid, pobject_t oid)
 
 int FileStore::_truncate(coll_t cid, pobject_t oid, __u64 size)
 {
-  dout(20) << "truncate " << cid << " " << oid << " size " << size << dendl;
-
   char fn[200];
   get_coname(cid, oid, fn);
+
+  dout(20) << "truncate " << fn << " size " << size << dendl;
+
   int r = ::truncate(fn, size);
   return r < 0 ? -errno:r;
 }

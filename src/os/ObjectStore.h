@@ -116,7 +116,7 @@ public:
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
-    int get_len() { return len ? len : ops.size(); }
+    int get_trans_len() { return len ? len : ops.size(); }
     int get_btrfs_len() { return blen; }
 
     __u64 disk_space_required() {
