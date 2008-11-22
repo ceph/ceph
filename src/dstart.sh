@@ -79,7 +79,7 @@ for host in `cd dev/hosts ; ls`
 do
  ssh root@cosd$host killall cosd
 
- test -d devm && ssh root@cosd$host modprobe crc32c \; insmod $HOME/src/btrfs-unstable/fs/btrfs/btrfs.ko
+ test -d devm && ssh root@cosd$host modprobe btrfs  #crc32c \; insmod $HOME/src/btrfs-unstable/fs/btrfs/btrfs.ko
 
  for osd in `cd dev/hosts/$host ; ls`
  do
