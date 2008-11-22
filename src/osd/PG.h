@@ -524,6 +524,7 @@ public:
   void mark_deleted() { deleted = true; }
   bool is_deleted() { return deleted; }
 
+  bool dirty_info, dirty_log;
 
 public:
   struct Interval {
@@ -679,7 +680,7 @@ public:
   PG(OSD *o, pg_t p) : 
     osd(o), 
     _lock("PG::_lock"),
-    ref(0), deleted(false),
+    ref(0), deleted(false), dirty_info(false), dirty_log(false),
     info(p),
     recovery_item(this), scrub_item(this), snap_trim_item(this),
     recovery_ops_active(0),

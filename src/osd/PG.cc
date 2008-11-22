@@ -1425,6 +1425,8 @@ void PG::write_info(ObjectStore::Transaction& t)
   bufferlist st;
   ::encode(pg_stats, st);
   t.collection_setattr(info.pgid.to_coll(), "stats", st);
+
+  dirty_info = false;
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -1459,6 +1461,7 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
   dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dirty_log = false;
 }
 
 void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v) 

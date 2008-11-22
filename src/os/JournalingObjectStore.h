@@ -60,6 +60,7 @@ protected:
     Mutex::Locker l(lock);
     if (op_seq == committed_op_seq) {
       op_lock.put_write();
+      assert(commit_waiters.empty());
       return false;
     }
     return true;

@@ -613,7 +613,7 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   return pg;
 }
 
-PG * OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t)
+PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_new_pg pgid " << pgid << " -> " << acting << dendl;
@@ -1705,11 +1705,11 @@ void OSD::handle_osd_map(MOSDMap *m)
   for (hash_map<pg_t,PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
        i++) {
-    pg_t pgid = i->first;
     PG *pg = i->second;
-    bufferlist bl;
-    ::encode(pg->info, bl);
-    t.collection_setattr( pgid.to_coll(), "info", bl );
+    if (pg->dirty_info)
+      pg->write_info(t);
+    if (pg->dirty_log)
+      pg->write_log(t);
   }
 
   // superblock and commit
@@ -1784,23 +1784,19 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     int nrep = osdmap->pg_to_acting_osds(pgid, tacting);
     int role = osdmap->calc_pg_role(whoami, tacting, nrep);
 
+    pg->lock();
+
     // adjust removed_snaps?
     if (!removed_snaps.empty()) {
-      pg->lock();
       for (map<snapid_t,snapid_t>::iterator p = removed_snaps.m.begin();
 	   p != removed_snaps.m.end();
 	   p++)
 	for (snapid_t t = 0; t < p->second; ++t)
 	  pg->info.dead_snaps.insert(p->first + t);
       dout(10) << *pg << " dead_snaps now " << pg->info.dead_snaps << dendl;
-      bufferlist bl;
-      ::encode(pg->info, bl);
-      t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
-      pg->unlock();
+      pg->dirty_info = true;
     }   
     
-    pg->lock();
-
     // no change?
     if (tacting == pg->acting && (pg->is_active() || !pg->prior_set_affected(osdmap))) {
       dout(15) << *pg << " unchanged|active with " << tacting << dendl;
@@ -1834,13 +1830,17 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       dout(10) << *pg << " noting past " << i << dendl;
 
       pg->info.history.same_since = osdmap->get_epoch();
+      pg->dirty_info = true;
     }
     if (oldprimary != pg->get_primary()) {
       pg->info.history.same_primary_since = osdmap->get_epoch();
       pg->cancel_recovery();
+      pg->dirty_info = true;
     }
-    if (oldacker != pg->get_acker())
+    if (oldacker != pg->get_acker()) {
       pg->info.history.same_acker_since = osdmap->get_epoch();
+      pg->dirty_info = true;
+    }
     
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
@@ -1974,6 +1974,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     }
     if (pg->is_primary())
       pg->update_stats();
+
     pg->unlock();
   }  
 
@@ -2235,9 +2236,6 @@ void OSD::kick_pg_split_queue()
       PG *pg = q->second;
       // fix up pg metadata
       pg->info.last_complete = pg->info.last_update;
-      bufferlist bl;
-      ::encode(pg->info, bl);
-      t.collection_setattr(pg->info.pgid.to_coll(), "info", bl);
 
       pg->write_info(t);
       pg->write_log(t);
