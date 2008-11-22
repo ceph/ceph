@@ -1384,32 +1384,34 @@ void FileStore::sync_entry()
     sync_cond.WaitInterval(lock, interval);
     lock.Unlock();
 
-    dout(20) << "sync_entry committing " << op_seq << " " << interval << dendl;
-    commit_start();
+    if (commit_start()) {
+      dout(20) << "sync_entry committing " << op_seq << " " << interval << dendl;
 
-    __u64 cp = op_seq;
-
-    // induce an fs sync.
-    // we assume data=ordered or similar semantics
-    char fn[100];
-    sprintf(fn, "%s/commit_op_seq", basedir.c_str());
-    int fd = ::open(fn, O_RDWR, 0644);
-
-    commit_started();
-
-    if (btrfs) {
-      // do a full btrfs commit
-      ::ioctl(fd, BTRFS_IOC_SYNC);
-    } else {
-      // make the file system's journal to commit.
-      ::fsync(fd);  
+      __u64 cp = op_seq;
+      
+      // induce an fs sync.
+      // we assume data=ordered or similar semantics
+      char fn[100];
+      sprintf(fn, "%s/commit_op_seq", basedir.c_str());
+      int fd = ::open(fn, O_RDWR, 0644);
+      
+      commit_started();
+      
+      if (btrfs) {
+	// do a full btrfs commit
+	::ioctl(fd, BTRFS_IOC_SYNC);
+      } else {
+	// make the file system's journal to commit.
+	::fsync(fd);  
+      }
+      ::close(fd);
+      
+      commit_finish();
+      dout(20) << "sync_entry committed to op_seq " << cp << dendl;
     }
-    ::close(fd);
-
-    commit_finish();
 
     lock.Lock();
-    dout(20) << "sync_entry committed to op_seq " << cp << dendl;
+
   }
   lock.Unlock();
 }

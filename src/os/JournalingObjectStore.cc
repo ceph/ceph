@@ -46,6 +46,8 @@ int JournalingObjectStore::journal_replay()
     seq++;  // we expect the next op
   }
 
+  committed_op_seq = op_seq;
+
   // done reading, make writeable.
   journal->make_writeable();
 

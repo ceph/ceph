@@ -22,7 +22,7 @@
 class JournalingObjectStore : public ObjectStore {
 protected:
   __u64 op_seq;
-  __u64 committing_op_seq;
+  __u64 committing_op_seq, committed_op_seq;
   Journal *journal;
   Finisher finisher;
   map<version_t, vector<Context*> > commit_waiters;
@@ -54,9 +54,15 @@ protected:
     op_lock.put_read();    
   }
 
-  void commit_start() {
+  bool commit_start() {
     // suspend new ops...
     op_lock.get_write();
+    Mutex::Locker l(lock);
+    if (op_seq == committed_op_seq) {
+      op_lock.put_write();
+      return false;
+    }
+    return true;
   }
   void commit_started() {
     Mutex::Locker l(lock);
@@ -71,6 +77,7 @@ protected:
 
     if (journal)
       journal->committed_thru(committing_op_seq);
+    committed_op_seq = committing_op_seq;
 
     map<version_t, vector<Context*> >::iterator p = commit_waiters.begin();
     while (p != commit_waiters.end() &&
@@ -93,7 +100,8 @@ protected:
   }
 
 public:
-  JournalingObjectStore() : op_seq(0), committing_op_seq(0), journal(0),
+  JournalingObjectStore() : op_seq(0), committing_op_seq(0), committed_op_seq(0), 
+			    journal(0),
 			    op_lock("JournalingObjectStore::op_lock"),
 			    journal_lock("JournalingObjectStore::journal_lock"),
 			    lock("JournalingObjectStore::lock") { }
