@@ -1517,12 +1517,12 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 		    eversion_t logversion, eversion_t trim_to)
 {
   dout(10) << "append_log " << ondisklog.top << dendl;
-
-  t.write(0, info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
-  
+ 
   // update block map?
   if (ondisklog.top % 4096 == 0) 
     ondisklog.block_map[ondisklog.top] = logversion;
+
+  t.write(0, info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
   
   ondisklog.top += bl.length();
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top",
@@ -1560,7 +1560,10 @@ void PG::read_log(ObjectStore *store)
     bufferlist bl;
     store->read(0, info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
-      dout(0) << "read_log data doesn't match attrs" << dendl;
+      dout(0) << "read_log got " << bl.length() << " bytes, expected " 
+	      << ondisklog.top << "-" << ondisklog.bottom << "="
+	      << (ondisklog.top-ondisklog.bottom)
+	      << dendl;
       assert(0);
     }
     
