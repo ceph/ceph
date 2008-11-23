@@ -196,6 +196,8 @@ void MDCache::remove_inode(CInode *o)
   if (o->is_dirty())
     o->mark_clean();
 
+  o->xlist_open_file.remove_myself();
+
   // remove from inode map
   inode_map.erase(o->vino());    
 
@@ -3598,6 +3600,33 @@ void MDCache::send_snaps(map<int,MClientSnap*>& splits)
   }
   splits.clear();
 }
+
+
+/*
+ * remove any items from logsegment open_file lists that don't have
+ * any caps
+ */
+void MDCache::reconnect_clean_open_file_lists()
+{
+  dout(10) << "reconnect_clean_open_file_lists" << dendl;
+  
+  for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+       p != mds->mdlog->segments.end();
+       p++) {
+    LogSegment *ls = p->second;
+    
+    xlist<CInode*>::iterator q = ls->open_files.begin();
+    while (!q.end()) {
+      CInode *in = *q;
+      ++q;
+      if (!in->is_any_caps()) {
+	dout(10) << " unlisting capless inode " << *in << dendl;
+	in->xlist_open_file.remove_myself();
+      }
+    }
+  }
+}
+
 
 
 void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds)

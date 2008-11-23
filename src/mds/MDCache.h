@@ -615,6 +615,9 @@ public:
   ESubtreeMap *create_subtree_map();
 
 
+  // [reconnect]
+  void reconnect_clean_open_file_lists();
+
 protected:
   // [rejoin]
   set<int> rejoin_gather;      // nodes from whom i need a rejoin

@@ -960,6 +960,8 @@ void MDS::reconnect_done()
   dout(1) << "reconnect_done" << dendl;
   request_state(MDSMap::STATE_REJOIN);    // move to rejoin state
 
+  mdcache->reconnect_clean_open_file_lists();
+
   /*
   if (mdsmap->get_num_in_mds() == 1 &&
       mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!

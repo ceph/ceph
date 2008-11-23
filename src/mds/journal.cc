@@ -158,6 +158,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     for (xlist<CInode*>::iterator p = open_files.begin(); !p.end(); ++p) {
       CInode *in = *p;
       dout(20) << "try_to_expire requeueing open file " << *in << dendl;
+      assert(in->is_any_caps());
       if (!le) le = new EOpen(mds->mdlog);
       le->add_clean_inode(in);
       ls->open_files.push_back(&in->xlist_open_file);
