@@ -21,14 +21,14 @@
 class EOpen : public LogEvent {
 public:
   EMetaBlob metablob;
-  list<inodeno_t> inos;
+  vector<inodeno_t> inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
   EOpen(MDLog *mdlog) : 
     LogEvent(EVENT_OPEN), metablob(mdlog) { }
 
   void print(ostream& out) {
-    out << "EOpen " << metablob;
+    out << "EOpen " << metablob << ", " << inos.size() << " open files";
   }
 
   void add_clean_inode(CInode *in) {

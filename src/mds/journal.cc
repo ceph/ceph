@@ -723,7 +723,7 @@ void EOpen::replay(MDS *mds)
   metablob.replay(mds, _segment);
 
   // note which segments inodes belong to, so we don't have to start rejournaling them
-  for (list<inodeno_t>::iterator p = inos.begin();
+  for (vector<inodeno_t>::iterator p = inos.begin();
        p != inos.end();
        p++) {
     CInode *in = mds->mdcache->get_inode(*p);
