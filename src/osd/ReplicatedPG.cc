@@ -1149,7 +1149,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
 
   // append to log
   int logopcode = Log::Entry::MODIFY;
-  if (!snapset.head_exists)
+  if (!exists)
     logopcode = Log::Entry::DELETE;
   Log::Entry logentry(logopcode, poid.oid, at_version, old_version, reqid);
   add_log_entry(logentry, log_bl);
