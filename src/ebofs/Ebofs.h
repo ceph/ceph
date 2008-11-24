@@ -252,7 +252,7 @@ protected:
   int statfs(struct statfs *buf);
 
   // atomic transaction
-  unsigned apply_transaction(Transaction& t, Context *onsafe=0);
+  unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0);
 
   int pick_object_revision_lt(coll_t cid, pobject_t& oid);
 

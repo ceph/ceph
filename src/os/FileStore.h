@@ -41,7 +41,7 @@ class FileStore : public JournalingObjectStore {
   
   int btrfs;
   bool btrfs_trans_start_end;
-  int fsid_fd;
+  int fsid_fd, op_fd;
 
   // fake attrs?
   FakeAttrs attrs;
@@ -81,7 +81,7 @@ class FileStore : public JournalingObjectStore {
   FileStore(const char *base) : 
     basedir(base),
     btrfs(false), btrfs_trans_start_end(false),
-    fsid_fd(-1),
+    fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
@@ -93,7 +93,7 @@ class FileStore : public JournalingObjectStore {
 
   int statfs(struct statfs *buf);
 
-  unsigned apply_transaction(Transaction& t, Context *onsafe=0);
+  unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0);
   int _transaction_start(int len);
   void _transaction_finish(int id);
   unsigned _apply_transaction(Transaction& t);

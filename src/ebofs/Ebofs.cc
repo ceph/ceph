@@ -2442,7 +2442,7 @@ bool Ebofs::write_will_block()
 }
 
 
-unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
+unsigned Ebofs::apply_transaction(Transaction& t, Context *onjournal, Context *ondisk)
 {
   ebofs_lock.Lock();
   dout(7) << "apply_transaction start (" << t.get_num_ops() << " ops)" << dendl;
@@ -2454,14 +2454,24 @@ unsigned Ebofs::apply_transaction(Transaction& t, Context *onsafe)
   unsigned r = _apply_transaction(t);
 
   // journal, wait for commit
-  if (r != 0 && onsafe) {
-    delete onsafe;  // kill callback, but still journal below (in case transaction had side effects)
-    onsafe = 0;
+  if (r != 0) {
+    if (onjournal) {
+      delete onjournal;  // kill callback, but still journal below (in case transaction had side effects)
+      onjournal = 0;
+    }
+    if (ondisk) {
+      delete ondisk;
+      ondisk = 0;
+    }
   }
+
   if (journal) {
-    journal->submit_entry(++op_seq, bl, onsafe);
-  } else
-    queue_commit_waiter(onsafe);
+    journal->submit_entry(++op_seq, bl, onjournal);
+  } else if (onjournal)
+    queue_commit_waiter(onjournal);
+
+  if (ondisk)
+    queue_commit_waiter(ondisk);
 
   ebofs_lock.Unlock();
   return r;

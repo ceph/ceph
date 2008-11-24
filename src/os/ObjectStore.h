@@ -377,7 +377,7 @@ public:
     }
   };
 
-  virtual unsigned apply_transaction(Transaction& t, Context *onsafe=0) = 0;
+  virtual unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0) = 0;
 
 
 

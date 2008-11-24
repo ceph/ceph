@@ -88,16 +88,20 @@ protected:
     }
   }
 
-  void journal_transaction(ObjectStore::Transaction& t, Context *onsafe) {
+  void journal_transaction(ObjectStore::Transaction& t, Context *onjournal, Context *ondisk) {
     Mutex::Locker l(lock);
 
     ++op_seq;
+
     if (journal && journal->is_writeable()) {
       bufferlist tbl;
       t.encode(tbl);
-      journal->submit_entry(op_seq, tbl, onsafe);
-    } else if (onsafe) 
-      commit_waiters[op_seq].push_back(onsafe);
+      journal->submit_entry(op_seq, tbl, onjournal);
+    } else if (onjournal)
+      commit_waiters[op_seq].push_back(onjournal);
+
+    if (ondisk)
+      commit_waiters[op_seq].push_back(ondisk);
   }
 
 public:

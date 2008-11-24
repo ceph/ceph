@@ -382,7 +382,6 @@ int FileStore::mount()
   }
 
   char fn[100];
-  int fd;
 
   // get fsid
   sprintf(fn, "%s/fsid", basedir.c_str());
@@ -414,12 +413,11 @@ int FileStore::mount()
 
   // get epoch
   sprintf(fn, "%s/commit_op_seq", basedir.c_str());
-  fd = ::open(fn, O_RDONLY);
-  if (fd >= 0) {
-    ::read(fd, &op_seq, sizeof(op_seq));
-    ::close(fd);
-  } else
-    op_seq = 0;
+  op_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  assert(op_fd >= 0);
+  op_seq = 0;
+  ::read(op_fd, &op_seq, sizeof(op_seq));
+
   dout(5) << "mount op_seq is " << op_seq << dendl;
 
   // journal
@@ -477,6 +475,7 @@ int FileStore::umount()
   sync_thread.join();
 
   ::close(fsid_fd);
+  ::close(op_fd);
 
   if (g_conf.filestore_dev) {
     char cmd[100];
@@ -492,7 +491,9 @@ int FileStore::umount()
 
 
 
-unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
+unsigned FileStore::apply_transaction(Transaction &t,
+				      Context *onjournal,
+				      Context *ondisk)
 {
   op_start();
   int r = _apply_transaction(t);
@@ -500,16 +501,14 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
   op_journal_start();
   dout(10) << "op_seq is " << op_seq << dendl;
   if (r >= 0) {
-    journal_transaction(t, onsafe);
+    journal_transaction(t, onjournal, ondisk);
 
-    char fn[100];
-    sprintf(fn, "%s/commit_op_seq", basedir.c_str());
-    int fd = ::open(fn, O_CREAT|O_WRONLY, 0644);
-    ::write(fd, &op_seq, sizeof(op_seq));
-    ::close(fd);
+    ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
 
-  } else
-    delete onsafe;
+  } else {
+    delete onjournal;
+    delete ondisk;
+  }
 
   op_finish();
   return r;
@@ -1386,22 +1385,16 @@ void FileStore::sync_entry()
 
       __u64 cp = op_seq;
       
-      // induce an fs sync.
-      // we assume data=ordered or similar semantics
-      char fn[100];
-      sprintf(fn, "%s/commit_op_seq", basedir.c_str());
-      int fd = ::open(fn, O_RDWR, 0644);
-      
       commit_started();
       
       if (btrfs) {
 	// do a full btrfs commit
-	::ioctl(fd, BTRFS_IOC_SYNC);
+	::ioctl(op_fd, BTRFS_IOC_SYNC);
       } else {
-	// make the file system's journal to commit.
-	::fsync(fd);  
+	// make the file system's journal commit.
+	//  this works with ext3, but NOT ext4
+	::fsync(op_fd);  
       }
-      ::close(fd);
       
       commit_finish();
       dout(15) << "sync_entry committed to op_seq " << cp << dendl;
