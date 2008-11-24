@@ -162,8 +162,6 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 osd
-- snap_trimmers should detect, remove unused snap collections (and update snap_collections set)?
-
 - how does an admin intervene when a pg needs to repeer despite a dead osd?
 
 - generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...

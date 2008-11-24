@@ -535,7 +535,15 @@ bool ReplicatedPG::snap_trimmer()
       unlock();
       lock();
     }
-    
+
+    // remove snap collection
+    ObjectStore::Transaction t;
+    dout(10) << "removing snap " << sn << " collection " << c << dendl;
+    snap_collections.erase(sn);
+    write_info(t);
+    t.remove_collection(c);
+    osd->store->apply_transaction(t);
+ 
     info.dead_snaps.erase(sn);
   }  
 
