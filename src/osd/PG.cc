@@ -788,17 +788,16 @@ void PG::build_prior()
     int crashed = 0;
     bool any_survived = false;
     for (unsigned i=0; i<interval.acting.size(); i++) {
+      const osd_info_t& pinfo = osd->osdmap->get_info(interval.acting[i]);
 
-      // if the osd is not still alive (i.e. failed after this interval) and 
-      // did not stop cleanly, then pg crashed.  
-      // note that it is possible it shut down cleanly after the interval, but we
-      // do not keep full clean_thru info handy for all shutdowns, so we can't
-      // be sure it didn't crash, start, then stop cleanly.
-      pair<epoch_t,epoch_t> lci = osd->osdmap->get_last_clean_interval(interval.acting[i]);
-      if (osd->osdmap->get_up_from(interval.acting[i]) > interval.last &&
-	  !(lci.first <= interval.first && lci.second >= interval.first)) {
+      // if the osd restarted after this interval but is not known to have
+      // cleanly survived through this interval, we mark the pg crashed.
+      if (pinfo.up_from > interval.last &&
+	  !(pinfo.last_clean_first <= interval.first &&
+	    pinfo.last_clean_last >= interval.last)) {
 	dout(10) << "build_prior  prior osd" << interval.acting[i]
-		 << " went down and last clean interval " << lci.first << "-" << lci.second
+		 << " up_from " << pinfo.up_from
+		 << " and last clean interval " << pinfo.last_clean_first << "-" << pinfo.last_clean_last
 		 << " does not include us" << dendl;
 	crashed++;
       }

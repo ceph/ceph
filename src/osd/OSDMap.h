@@ -62,6 +62,53 @@ inline int calc_bits_of(int t) {
 
 
 
+/*
+ * we track up to two intervals during which the osd was alive and
+ * healthy.  the most recent is [up_from,up_thru), where up_thru is
+ * the last epoch the osd is known to have _started_.  i.e., a lower
+ * bound on the actual osd death.  down_at (if it is > up_from) is an
+ * upper bound on the actual osd death.
+ *
+ * the second is the last_clean interval [first,last].  in that case,
+ * the last interval is the last epoch known to have been either
+ * _finished_, or during which the osd cleanly shut down.  when
+ * possible, we push this forward to the epoch the osd was eventually
+ * marked down.
+ */
+struct osd_info_t {
+  epoch_t last_clean_first;  // last interval that ended with a clean osd shutdown
+  epoch_t last_clean_last;
+  epoch_t up_from;   // epoch osd marked up
+  epoch_t up_thru;   // lower bound on actual osd death
+  epoch_t down_at;   // upper bound on actual osd death (if > up_from)
+  
+  osd_info_t() : last_clean_first(0), last_clean_last(0),
+		 up_from(0), up_thru(0), down_at(0) {}
+  void encode(bufferlist& bl) const {
+    ::encode(last_clean_first, bl);
+    ::encode(last_clean_last, bl);
+    ::encode(up_from, bl);
+    ::encode(up_thru, bl);
+    ::encode(down_at, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(last_clean_first, bl);
+    ::decode(last_clean_last, bl);
+    ::decode(up_from, bl);
+    ::decode(up_thru, bl);
+    ::decode(down_at, bl);
+  }
+};
+WRITE_CLASS_ENCODER(osd_info_t)
+
+inline ostream& operator<<(ostream& out, const osd_info_t& info) {
+  return out << "up_from " << info.up_from
+	     << " up_thru " << info.up_thru
+	     << " down_at " << info.down_at
+	     << " last_clean_interval " << info.last_clean_first << "-" << info.last_clean_last;
+}
+
+
 /** OSDMap
  */
 class OSDMap {
@@ -201,20 +248,7 @@ private:
   vector<uint8_t> osd_state;
   vector<entity_addr_t> osd_addr;
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
-
-  /*
-   * we track up to two intervals during which the osd was alive and
-   * healthy.  the most recent is [up_from,up_thru), where up_thru is the 
-   * last epoch the osd is known to have _started_.  i.e., a lower bound on the
-   * actual osd death.
-   *
-   * the second is last_clean_interval [first,last].  in that case, the last
-   * interval is the last epoch known to have been either _finished_, or during
-   * which the osd cleanly shut down.
-   */
-  vector<epoch_t> osd_up_from;  // when it went up
-  vector<epoch_t> osd_up_thru;  // lower bound on _actual_ osd death.
-  vector<pair<epoch_t,epoch_t> > osd_last_clean_interval;
+  vector<osd_info_t> osd_info;
 
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   snapid_t max_snap;
@@ -285,16 +319,10 @@ private:
     int o = max_osd;
     max_osd = m;
     osd_state.resize(m);
-    osd_up_from.resize(m);
-    osd_up_thru.resize(m);
-    osd_last_clean_interval.resize(m);
+    osd_info.resize(m);
     osd_weight.resize(m);
     for (; o<max_osd; o++) {
       osd_state[o] = 0;
-      osd_up_from[o] = 0;
-      osd_up_thru[o] = 0;
-      osd_last_clean_interval[o].first = 0;
-      osd_last_clean_interval[o].second = 0;
       osd_weight[o] = CEPH_OSD_OUT;
     }
     osd_addr.resize(m);
@@ -390,15 +418,19 @@ private:
 
   epoch_t get_up_from(int osd) {
     assert(exists(osd));
-    return osd_up_from[osd];
+    return osd_info[osd].up_from;
   }
   epoch_t get_up_thru(int osd) {
     assert(exists(osd));
-    return osd_up_thru[osd];
+    return osd_info[osd].up_thru;
   }
-  pair<epoch_t,epoch_t> get_last_clean_interval(int osd) {
+  epoch_t get_down_at(int osd) {
     assert(exists(osd));
-    return osd_last_clean_interval[osd];
+    return osd_info[osd].down_at;
+  }
+  osd_info_t& get_info(int osd) {
+    assert(exists(osd));
+    return osd_info[osd];
   }
   
   int get_any_up_osd() {
@@ -452,37 +484,42 @@ private:
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
 
-    for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
-         i != inc.new_down.end();
-         i++) {
-      assert(osd_state[i->first] & CEPH_OSD_UP);
-      osd_state[i->first] &= ~CEPH_OSD_UP;
-      //cout << "epoch " << epoch << " down osd" << i->first << endl;
-    }
     for (map<int32_t,uint32_t>::iterator i = inc.new_weight.begin();
          i != inc.new_weight.end();
          i++)
       set_weight(i->first, i->second);
 
-    for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
-         i != inc.new_up_thru.end();
-         i++)
-      osd_up_thru[i->first] = i->second;
-
-    for (map<int32_t,pair<epoch_t,epoch_t> >::iterator i = inc.new_last_clean_interval.begin();
-         i != inc.new_last_clean_interval.end();
-         i++)
-      osd_last_clean_interval[i->first] = i->second;
-
+    // up/down
+    for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
+         i != inc.new_down.end();
+         i++) {
+      assert(osd_state[i->first] & CEPH_OSD_UP);
+      osd_state[i->first] &= ~CEPH_OSD_UP;
+      osd_info[i->first].down_at = epoch;
+      //cout << "epoch " << epoch << " down osd" << i->first << endl;
+    }
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
          i != inc.new_up.end(); 
          i++) {
       osd_state[i->first] |= CEPH_OSD_UP;
       osd_addr[i->first] = i->second;
-      osd_up_from[i->first] = epoch;
+      osd_info[i->first].up_from = epoch;
       //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << endl;
     }
 
+    // info
+    for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
+         i != inc.new_up_thru.end();
+         i++)
+      osd_info[i->first].up_thru = i->second;
+    for (map<int32_t,pair<epoch_t,epoch_t> >::iterator i = inc.new_last_clean_interval.begin();
+         i != inc.new_last_clean_interval.end();
+         i++) {
+      osd_info[i->first].last_clean_first = i->second.first;
+      osd_info[i->first].last_clean_last = i->second.second;
+    }
+
+    // pg swap
     for (map<pg_t,uint32_t>::iterator i = inc.new_pg_swap_primary.begin();
 	 i != inc.new_pg_swap_primary.end();
 	 i++)
@@ -528,9 +565,7 @@ private:
     ::encode(cbl, blist);
 
     // extended
-    ::encode(osd_up_from, blist);
-    ::encode(osd_up_thru, blist);
-    ::encode(osd_last_clean_interval, blist);
+    ::encode(osd_info, blist);
     ::encode(pg_swap_primary, blist);
 
     ::encode(max_snap, blist);
@@ -564,9 +599,7 @@ private:
     crush.decode(cblp);
 
     // extended
-    ::decode(osd_up_from, p);
-    ::decode(osd_up_thru, p);
-    ::decode(osd_last_clean_interval, p);
+    ::decode(osd_info, p);
     ::decode(pg_swap_primary, p);
     
     ::decode(max_snap, p);

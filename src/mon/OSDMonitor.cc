@@ -499,7 +499,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
-  dout(7) << "prepare_boot from " << m->get_orig_source_inst() << dendl;
+  dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb << dendl;
   assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
   
@@ -530,9 +530,26 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
 
-    // note last clean unmount epoch
-    pending_inc.new_last_clean_interval[from] =
-      pair<epoch_t,epoch_t>(m->sb.epoch_mounted, m->sb.epoch_unmounted);
+    // adjust last clean unmount epoch?
+    const osd_info_t& info = osdmap.get_info(from);
+    dout(10) << " old osd_info: " << info << dendl;
+    if (m->sb.epoch_mounted > info.last_clean_first ||
+	(m->sb.epoch_mounted == info.last_clean_first &&
+	 m->sb.epoch_unmounted > info.last_clean_last)) {
+      epoch_t first = m->sb.epoch_mounted;
+      epoch_t last = m->sb.epoch_unmounted;
+
+      // adjust clean interval forward to the epoch the osd was actually marked down.
+      if (info.up_from == first &&
+	  (info.down_at-1) > last)
+	last = info.down_at-1;
+
+      dout(10) << "prepare_boot osd" << from << " last_clean_interval "
+	       << info.last_clean_first << "-" << info.last_clean_last
+	       << " -> " << first << "-" << last
+	       << dendl;
+      pending_inc.new_last_clean_interval[from] = pair<epoch_t,epoch_t>(first, last);
+    }
 
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
