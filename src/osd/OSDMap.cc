@@ -36,7 +36,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
   build_simple_crush_map(crush, num_osd, num_dom);
 
   for (int i=0; i<num_osd; i++) {
-    set_state(i, CEPH_OSD_EXISTS|CEPH_OSD_CLEAN);
+    set_state(i, CEPH_OSD_EXISTS);
     set_weight(i, CEPH_OSD_OUT);
   }
   

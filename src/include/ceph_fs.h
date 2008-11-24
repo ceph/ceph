@@ -22,7 +22,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 008\n"
+#define CEPH_BANNER "ceph 009\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
@@ -34,8 +34,8 @@
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v1"
-#define CEPH_MON_ONDISK_MAGIC "ceph monitor volume v1"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v2"
+#define CEPH_MON_ONDISK_MAGIC "ceph monitor volume v2"
 
 /*
  * types in this file are defined as little-endian, and are
@@ -328,7 +328,6 @@ struct ceph_eversion {
 /* status bits */
 #define CEPH_OSD_EXISTS 1
 #define CEPH_OSD_UP     2
-#define CEPH_OSD_CLEAN  4  /* as in, clean shutdown */
 
 /* osd weights.  fixed point value: 0x10000 == 1.0 ("in"), 0 == "out" */
 #define CEPH_OSD_IN  0x10000

@@ -389,21 +389,6 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	*p += 4; /* skip length field (should match max) */
 	ceph_decode_copy(p, map->osd_addr, map->max_osd*sizeof(*map->osd_addr));
 
-	*p += sizeof(u32) + map->max_osd * sizeof(u32); /* osd_up_from */
-	*p += sizeof(u32) + map->max_osd * sizeof(u32); /* osd_up_thru */
-
-	/* ignore pg primary swapping */
-	ceph_decode_32_safe(p, end, len, bad);
-	p += len * (sizeof(u64) + sizeof(u32));
-	if (len)
-		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
-		     map->epoch);
-
-	/* ignore max_snap, removed_snaps */
-	*p += sizeof(u64);
-	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * 2 * sizeof(u64);
-
 	/* crush */
 	ceph_decode_32_safe(p, end, len, bad);
 	dout(30, "osdmap_decode crush len %d from off 0x%x\n", len,
@@ -417,9 +402,10 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		goto bad;
 	}
 
+	/* ignore the rest of the map */
+	*p = end;
+
 	dout(30, "osdmap_decode done %p %p\n", *p, end);
-	if (*p != end)
-		goto bad;
 	return map;
 
 bad:
@@ -550,31 +536,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 			map->osd_weight[osd] = off;
 	}
 
-	/* skip new_up_thru */
-	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * 2 * sizeof(u32);
-
-	/* skip old/new pg_swap stuff */
-	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * (sizeof(u64) + sizeof(u32));
-	if (len)
-		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
-		     epoch);
-	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * sizeof(u64);
-	if (len)
-		derr(0, "WARNING: pg primary swaps in osdmap e%d unsupported\n",
-		     epoch);
-
-	/* skip new_max_snap, removed_snaps */
-	*p += sizeof(u64);
-	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * 2 * sizeof(u64);
-
-	if (*p != end) {
-		derr(10, "osdmap incremental has trailing gunk?\n");
-		goto bad;
-	}
+	/* ignore the rest */
+	*p = end;
 	return map;
 
 bad:

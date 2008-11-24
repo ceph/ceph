@@ -530,6 +530,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
 
+    // note last clean unmount epoch
+    pending_inc.new_last_clean_interval[from] =
+      pair<epoch_t,epoch_t>(m->sb.epoch_mounted, m->sb.epoch_unmounted);
+
     // wait
     paxos->wait_for_commit(new C_Booted(this, m));
   }
