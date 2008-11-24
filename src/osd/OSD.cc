@@ -502,6 +502,14 @@ int OSD::shutdown()
   finished.clear();
   finished_lock.Unlock();
 
+  // note unmount epoch
+  dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
+  superblock.epoch_mounted = boot_epoch;
+  superblock.epoch_unmounted = osdmap->get_epoch();
+  ObjectStore::Transaction t;
+  write_superblock(t);
+  store->apply_transaction(t);
+
   // flush data to disk
   osd_lock.Unlock();
   dout(10) << "sync" << dendl;
@@ -1542,7 +1550,6 @@ void OSD::handle_osd_map(MOSDMap *m)
             << "], i have none"
             << dendl;
     osdmap = new OSDMap;
-    boot_epoch = m->get_last(); // hrm...?
   }
 
   logger->inc("mapmsg");
@@ -1747,6 +1754,13 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
           << "  " << pg_map.size() << " pgs"
 	  << " removed_snaps " << removed_snaps
           << dendl;
+
+  if (!boot_epoch &&
+      osdmap->is_up(whoami) &&
+      osdmap->get_inst(whoami) == messenger->get_myinst()) {
+    boot_epoch = osdmap->get_epoch();
+    dout(10) << "my boot_epoch is " << boot_epoch << dendl;
+  }
   
   // scan pg creations
   hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
@@ -1896,21 +1910,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
 	// i am now replica|stray.  we need to send a notify.
 	pg->state_set(PG_STATE_STRAY);
 	pg->have_master_log = false;
-
-	if (nrep == 0) {
-	  // did they all shut down cleanly?
-	  bool clean = true;
-	  vector<int> inset;
-	  osdmap->pg_to_osds(pg->info.pgid, inset);
-	  for (unsigned i=0; i<inset.size(); i++)
-	    if (!osdmap->is_down_clean(inset[i])) clean = false;
-	  if (clean) {
-	    dout(1) << *pg << " is cleanly inactive" << dendl;
-	  } else {
-	    pg->state_set(PG_STATE_CRASHED);
-	    dout(1) << *pg << " is crashed" << dendl;
-	  }
-	}
       }
       
     } else {
