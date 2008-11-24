@@ -38,6 +38,10 @@
 #include <map>
 using namespace std;
 
+#include <ext/hash_set>
+using __gnu_cxx::hash_set;
+
+
 
 /*
  * some system constants
@@ -143,6 +147,9 @@ public:
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
 
+    vector<entity_addr_t> new_blacklist;
+    vector<entity_addr_t> old_blacklist;
+
     snapid_t new_max_snap;
     interval_set<snapid_t> removed_snaps;
     
@@ -171,6 +178,8 @@ public:
       ::encode(old_pg_swap_primary, bl);
       ::encode(new_max_snap, bl);
       ::encode(removed_snaps.m, bl);
+      ::encode(new_blacklist, bl);
+      ::encode(old_blacklist, bl);
     }
     void decode(bufferlist::iterator &p) {
       // base
@@ -197,6 +206,8 @@ public:
       ::decode(old_pg_swap_primary, p);
       ::decode(new_max_snap, p);
       ::decode(removed_snaps.m, p);
+      ::decode(new_blacklist, p);
+      ::decode(old_blacklist, p);
     }
 
     Incremental(epoch_t e=0) : epoch(e), new_flags(-1), new_max_osd(-1), 
@@ -253,6 +264,8 @@ private:
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   snapid_t max_snap;
   interval_set<snapid_t> removed_snaps;
+
+  hash_set<entity_addr_t> blacklist;
 
  public:
   CrushWrapper     crush;       // hierarchical map
@@ -311,6 +324,10 @@ private:
     return removed_snaps.contains(sn); 
   }
   interval_set<snapid_t>& get_removed_snaps() { return removed_snaps; }
+
+  bool is_blacklisted(const entity_addr_t& a) {
+    return !blacklist.empty() && blacklist.count(a);
+  }
 
   /***** cluster state *****/
   /* osds */
@@ -529,9 +546,20 @@ private:
 	 i++)
       pg_swap_primary.erase(*i);
 
+    // snaps
     if (inc.new_max_snap > 0)
       max_snap = inc.new_max_snap;
     removed_snaps.union_of(inc.removed_snaps);
+
+    // blacklist
+    for (vector<entity_addr_t>::iterator p = inc.new_blacklist.begin();
+	 p != inc.new_blacklist.end();
+	 p++)
+      blacklist.insert(*p);
+    for (vector<entity_addr_t>::iterator p = inc.old_blacklist.begin();
+	 p != inc.old_blacklist.end();
+	 p++)
+      blacklist.erase(*p);
 
     // do new crush map last (after up/down stuff)
     if (inc.crush.length()) {
@@ -570,6 +598,7 @@ private:
 
     ::encode(max_snap, blist);
     ::encode(removed_snaps.m, blist);
+    ::encode(blacklist, blist);
   }
   
   void decode(bufferlist& blist) {
@@ -604,6 +633,7 @@ private:
     
     ::decode(max_snap, p);
     ::decode(removed_snaps.m, p);
+    ::decode(blacklist, p);
   }
  
 

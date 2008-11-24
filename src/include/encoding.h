@@ -93,6 +93,7 @@ WRITE_INTTYPE_ENCODER(s16, le16)
 #include <vector>
 #include <string>
 #include <ext/hash_map>
+#include <ext/hash_set>
 #include "triple.h"
 
 // pair
@@ -384,6 +385,28 @@ inline void decode(__gnu_cxx::hash_map<T,U>& m, bufferlist::iterator& p)
     T k;
     decode(k, p);
     decode(m[k], p);
+  }
+}
+
+// hash_set
+template<class T>
+inline void encode(const __gnu_cxx::hash_set<T>& m, bufferlist& bl)
+{
+  __u32 n = m.size();
+  encode(n, bl);
+  for (typename __gnu_cxx::hash_set<T>::const_iterator p = m.begin(); p != m.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode(__gnu_cxx::hash_set<T>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    m.insert(k);
   }
 }
 
