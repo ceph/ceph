@@ -932,18 +932,31 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
     pi->rstat.rbytes = new_size;
   }
 
-  EOpen *le = new EOpen(mds->mdlog);
+  // use EOpen if the file is still open; otherwise, use EUpdate.
+  // this is just an optimization to push open files forward into
+  // newer log segments.
+  LogEvent *le;
+  EMetaBlob *metablob;
+  if (in->is_any_caps()) {
+    EOpen *eo = new EOpen(mds->mdlog);
+    eo->add_ino(in->ino());
+    metablob = &eo->metablob;
+    le = eo;
+    mut->ls->open_files.push_back(&in->xlist_open_file);
+  } else {
+    EUpdate *eu = new EUpdate(mds->mdlog, "check_inode_max_size");
+    metablob = &eu->metablob;
+    le = eu;
+  }
   if (forceupdate) {  // FIXME if/when we do max_size nested accounting
-    mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+    mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
     // no cow, here!
     CDentry *parent = in->get_projected_parent_dn();
-    le->metablob.add_primary_dentry(parent, true, in, in->get_projected_inode());
+    metablob->add_primary_dentry(parent, true, in, in->get_projected_inode());
   } else {
-    le->metablob.add_dir_context(in->get_parent_dir());
-    mdcache->journal_dirty_inode(mut, &le->metablob, in);
+    metablob->add_dir_context(in->get_parent_dir());
+    mdcache->journal_dirty_inode(mut, metablob, in);
   }
-  le->add_ino(in->ino());
-  mut->ls->open_files.push_back(&in->xlist_open_file);
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
   file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
