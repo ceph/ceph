@@ -2012,7 +2012,8 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
     }
     
     bufferlist bl;
-    osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+    r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+    assert(r >= 0);
     bufferlist::iterator blp = bl.begin();
     SnapSet snapset;
     ::decode(snapset, blp);
@@ -2024,7 +2025,8 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
     // pushing head.
     // base this on partially on replica's clones?
     bufferlist bl;
-    osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
+    assert(r >= 0);
     bufferlist::iterator blp = bl.begin();
     SnapSet snapset;
     ::decode(snapset, blp);
