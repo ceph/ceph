@@ -3649,6 +3649,36 @@ int Ebofs::collection_remove(coll_t cid, pobject_t oid, Context *onsafe)
 }
 
 
+bool Ebofs::collection_empty(coll_t cid)
+{
+  ebofs_lock.Lock();
+
+  dout(9) << "collection_empty " << hex << cid << dec << dendl;
+
+  if (!_collection_exists(cid)) {
+    ebofs_lock.Unlock();
+    return -ENOENT;
+  }
+  
+  Table<coll_pobject_t, bool>::Cursor cursor(co_tab);
+
+  bool empty = true;
+  if (co_tab->find(coll_pobject_t(cid,pobject_t()), cursor) >= 0) {
+    while (1) {
+      const coll_t c = cursor.current().key.first;
+      const pobject_t o = cursor.current().key.second;
+      if (c != cid) break;   // end!
+      empty = false;
+      break;
+    }
+  }
+
+  ebofs_lock.Unlock();
+  return empty;
+}
+
+
+
 int Ebofs::collection_list(coll_t cid, vector<pobject_t>& ls)
 {
   ebofs_lock.Lock();

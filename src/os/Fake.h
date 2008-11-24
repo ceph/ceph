@@ -99,6 +99,11 @@ class FakeCollections {
     return 0;
   }
 
+  int collection_empty(coll_t c) {
+    Mutex::Locker l(faker_lock);
+    return fakecollections[c].empty();
+  }
+
   int collection_list(coll_t c, vector<pobject_t>& o) {
     faker_lock.Lock();
     int r = 0;

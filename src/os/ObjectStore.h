@@ -444,6 +444,7 @@ public:
                                  void *value, size_t size) = 0;
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
   virtual int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset) = 0;
+  virtual bool collection_empty(coll_t c) = 0;
   virtual int collection_list(coll_t c, vector<pobject_t>& o) = 0;
 
   /*

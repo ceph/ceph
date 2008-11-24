@@ -143,6 +143,7 @@ class FileStore : public JournalingObjectStore {
   int list_collections(vector<coll_t>& ls);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
+  bool collection_empty(coll_t c);
   int collection_list(coll_t c, vector<pobject_t>& o);
 
   int _create_collection(coll_t c);

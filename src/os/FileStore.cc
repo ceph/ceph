@@ -1709,6 +1709,35 @@ bool FileStore::collection_exists(coll_t c)
   return collection_stat(c, &st) == 0;
 }
 
+bool FileStore::collection_empty(coll_t c) 
+{  
+  if (fake_collections) return collections.collection_empty(c);
+
+  char fn[200];
+  get_cdir(c, fn);
+  dout(10) << "collection_empty " << fn << dendl;
+
+  DIR *dir = ::opendir(fn);
+  if (!dir)
+    return -errno;
+
+  bool empty = true;
+  struct dirent *de;
+  while ((de = ::readdir(dir)) != 0) {
+    // parse
+    if (de->d_name[0] == '.') continue;
+    //cout << "  got object " << de->d_name << std::endl;
+    pobject_t o;
+    if (parse_object(de->d_name, o)) {
+      empty = false;
+      break;
+    }
+  }
+  
+  ::closedir(dir);
+  return empty;
+}
+
 int FileStore::collection_list(coll_t c, vector<pobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);

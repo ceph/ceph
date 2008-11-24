@@ -292,6 +292,7 @@ protected:
   int collection_add(coll_t c, coll_t cid, pobject_t o, Context *onsafe);
   int collection_remove(coll_t c, pobject_t o, Context *onsafe);
 
+  bool collection_empty(coll_t c);
   int collection_list(coll_t c, vector<pobject_t>& o);
   
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
