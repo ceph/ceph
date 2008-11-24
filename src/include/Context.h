@@ -107,6 +107,8 @@ public:
 };
 
 
+
+
 /*
  * C_Gather
  *
@@ -118,13 +120,22 @@ public:
     //cout << "C_Gather sub_finish " << this << " got " << r << " of " << waitfor << endl;
     assert(waitfor.count(r));
     waitfor.erase(r);
+
+    if (any && onfinish) {
+      onfinish->finish(0);
+      delete onfinish;
+      onfinish = 0;
+    }
+
     if (!waitfor.empty()) 
       return false;  // more subs left
 
     // last one
-    onfinish->finish(0);
-    delete onfinish;
-    onfinish = 0;
+    if (!any && onfinish) {
+      onfinish->finish(0);
+      delete onfinish;
+      onfinish = 0;
+    }
     return true;
   }
 
@@ -149,9 +160,10 @@ private:
   Context *onfinish;
   std::set<int> waitfor;
   int num;
+  bool any;  /* if true, OR, otherwise, AND */
 
 public:
-  C_Gather(Context *f=0) : onfinish(f), num(0) {
+  C_Gather(Context *f=0, bool an=false) : onfinish(f), num(0), any(an) {
     //cout << "C_Gather new " << this << endl;
   }
   ~C_Gather() {
