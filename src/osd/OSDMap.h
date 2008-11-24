@@ -79,7 +79,7 @@ struct osd_info_t {
   epoch_t last_clean_first;  // last interval that ended with a clean osd shutdown
   epoch_t last_clean_last;
   epoch_t up_from;   // epoch osd marked up
-  epoch_t up_thru;   // lower bound on actual osd death
+  epoch_t up_thru;   // lower bound on actual osd death (if > up_from)
   epoch_t down_at;   // upper bound on actual osd death (if > up_from)
   
   osd_info_t() : last_clean_first(0), last_clean_last(0),
