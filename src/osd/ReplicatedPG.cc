@@ -617,14 +617,13 @@ bool ReplicatedPG::pick_read_snap(pobject_t& poid)
   dout(20) << "pick_read_snap  " << poid << " snaps " << snaps << dendl;
   snapid_t first = snaps[snaps.size()-1];
   snapid_t last = snaps[0];
-  assert(last == poid.oid.snap);
   if (first <= want) {
     dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] contains " << want << " -- HIT" << dendl;
     return true;
+  } else {
+    dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] does not contain " << want << " -- DNE" << dendl;
+    return false;
   }
-
-  dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] does not contain " << want << " -- DNE" << dendl;
-  return false;
 } 
 
 
