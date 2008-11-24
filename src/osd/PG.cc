@@ -785,9 +785,24 @@ void PG::build_prior()
 
     OSDMap *lastmap = osd->get_map(interval.last);
 
-    int still_up_or_clean = 0;
+    int crashed = 0;
     bool any_survived = false;
     for (unsigned i=0; i<interval.acting.size(); i++) {
+
+      // if the osd is not still alive (i.e. failed after this interval) and 
+      // did not stop cleanly, then pg crashed.  
+      // note that it is possible it shut down cleanly after the interval, but we
+      // do not keep full clean_thru info handy for all shutdowns, so we can't
+      // be sure it didn't crash, start, then stop cleanly.
+      pair<epoch_t,epoch_t> lci = osd->osdmap->get_last_clean_interval(interval.acting[i]);
+      if (osd->osdmap->get_up_from(interval.acting[i]) > interval.last &&
+	  !(lci.first <= interval.first && lci.second >= interval.first)) {
+	dout(10) << "build_prior  prior osd" << interval.acting[i]
+		 << " went down and last clean interval " << lci.first << "-" << lci.second
+		 << " does not include us" << dendl;
+	crashed++;
+      }
+
       if (osd->osdmap->is_up(interval.acting[i])) {  // is up now
 	if (interval.acting[i] != osd->whoami)       // and is not me
 	  prior_set.insert(interval.acting[i]);
@@ -799,11 +814,6 @@ void PG::build_prior()
 	if (interval.first <= info.history.last_epoch_started &&
 	    interval.last >= info.history.last_epoch_started)
 	  any_up_now = true;
-	
- 	// has it been up this whole time?
-	//  FIXME: what is a 'clean' shutdown?
-	if (osd->osdmap->get_up_from(interval.acting[i]) <= interval.first)
-	  still_up_or_clean++;
       } else {
 	dout(10) << "build_prior  prior osd" << interval.acting[i]
 		 << " is down, must notify mon" << dendl;
@@ -831,9 +841,9 @@ void PG::build_prior()
       prior_set_up_thru[interval.acting[0]] = lastmap->get_up_thru(interval.acting[0]);
     }
 
-    if (still_up_or_clean == 0) {
-      dout(10) << "build_prior  none of " << interval.acting 
-	       << " still up or cleanly shutdown, pg crashed" << dendl;
+    if (crashed) {
+      dout(10) << "build_prior  one of " << interval.acting 
+	       << " possibly crashed, marking pg crashed" << dendl;
       state_set(PG_STATE_CRASHED);
     }
   }
