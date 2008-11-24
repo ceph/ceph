@@ -22,7 +22,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 009\n"
+#define CEPH_BANNER "ceph 010\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
@@ -34,8 +34,8 @@
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v2"
-#define CEPH_MON_ONDISK_MAGIC "ceph monitor volume v2"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v003"
+#define CEPH_MON_ONDISK_MAGIC "ceph mon volume v003"
 
 /*
  * types in this file are defined as little-endian, and are
