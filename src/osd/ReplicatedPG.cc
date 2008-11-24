@@ -1480,13 +1480,6 @@ public:
   }
 };
 
-void ReplicatedPG::reply_op_error(MOSDOp *op, int err)
-{
-  MOSDOpReply *reply = new MOSDOpReply(op, err, osd->osdmap->get_epoch(), true);
-  osd->messenger->send_message(reply, op->get_orig_source_inst());
-  delete op;
-}
-
 void ReplicatedPG::op_modify(MOSDOp *op)
 {
   int whoami = osd->get_nodeid();
@@ -1510,7 +1503,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
-      reply_op_error(op, -EINCLOCKED);
+      osd->reply_op_error(op, -EINCLOCKED);
       return;
     }
   }
@@ -1599,7 +1592,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       snapc.seq < snapset.seq) {
     dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << snapset.seq
 	     << " on " << poid << dendl;
-    reply_op_error(op, -EOLDSNAPC);
+    osd->reply_op_error(op, -EOLDSNAPC);
     return;
   }
 

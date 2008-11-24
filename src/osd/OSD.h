@@ -563,6 +563,8 @@ private:
   virtual void dispatch(Message *m);
   virtual void ms_handle_failure(Message *m, const entity_inst_t& inst);
 
+  void reply_op_error(MOSDOp *op, int r);
+
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);
   void handle_sub_op(class MOSDSubOp *m);

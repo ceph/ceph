@@ -41,6 +41,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
@@ -3023,11 +3024,20 @@ void OSD::defer_recovery(PG *pg)
 // =========================================================
 // OPS
 
+void OSD::reply_op_error(MOSDOp *op, int err)
+{
+  MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), true);
+  messenger->send_message(reply, op->get_orig_source_inst());
+  delete op;
+}
+
+
 void OSD::handle_op(MOSDOp *op)
 {
   // throttle?  FIXME PROBABLY!
   while (pending_ops > g_conf.osd_max_opq) {
-    dout(10) << "enqueue_op waiting for pending_ops " << pending_ops << " to drop to " << g_conf.osd_max_opq << dendl;
+    dout(10) << "enqueue_op waiting for pending_ops " << pending_ops 
+	     << " to drop to " << g_conf.osd_max_opq << dendl;
     op_queue_cond.Wait(osd_lock);
   }
 
@@ -3056,6 +3066,13 @@ void OSD::handle_op(MOSDOp *op)
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch())) {
     if (pg) pg->unlock();
+    return;
+  }
+
+  // blacklisted?
+  if (osdmap->is_blacklisted(op->get_source_addr())) {
+    dout(4) << "handle_op " << op->get_source_addr() << " is blacklisted" << dendl;
+    reply_op_error(op, -EBLACKLISTED);
     return;
   }
 

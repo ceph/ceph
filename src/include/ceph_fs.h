@@ -1172,7 +1172,8 @@ enum {
 	CEPH_OSD_OP_BALANCE_READS = 256,
 };
 
-#define EOLDSNAPC 44 /* ORDERSNAP flag set and writer has old snap context*/
+#define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set and writer has old snap context*/
+#define EBLACKLISTED ESHUTDOWN /* blacklisted */
 
 struct ceph_osd_op {
 	__le16 op;
