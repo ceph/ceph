@@ -1203,9 +1203,10 @@ void ReplicatedPG::op_modify_ondisk(RepGather *repop)
 {
   if (repop->aborted) {
     dout(10) << "op_modify_ondisk " << *repop << " -- aborted" << dendl;
+  } else if (repop->waitfor_disk.count(osd->get_nodeid()) == 0) {
+    dout(10) << "op_modify_ondisk " << *repop << " -- already marked ondisk" << dendl;
   } else {
     dout(10) << "op_modify_ondisk " << *repop << dendl;
-    assert(repop->waitfor_disk.count(osd->get_nodeid()));
     repop->waitfor_disk.erase(osd->get_nodeid());
     repop->waitfor_nvram.erase(osd->get_nodeid());
     repop->pg_complete_thru[osd->get_nodeid()] = repop->pg_local_last_complete;

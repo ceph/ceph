@@ -220,7 +220,6 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " wfdisk=" << repop.waitfor_disk;
   out << " pct=" << repop.pg_complete_thru;
   out << " op=" << *(repop.op);
-  out << " " << &repop;
   out << ")";
   return out;
 }
