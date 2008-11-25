@@ -28,34 +28,34 @@ public:
    */
   class RepGather {
   public:
+    int nref;
+
     class MOSDOp *op;
     tid_t rep_tid;
 
     ObjectStore::Transaction t;
-    bool applied;
+    bool applied, aborted;
     pg_stat_t stats;
 
     set<int>  waitfor_ack;
     set<int>  waitfor_nvram;
     set<int>  waitfor_disk;
-    
-    utime_t   start;
-
     bool sent_ack, sent_nvram, sent_disk;
     
-    set<int>         osds;
+    utime_t   start;
+    
     eversion_t       old_version, at_version;
 
     SnapSet snapset;
     SnapContext snapc;
 
-    eversion_t       pg_local_last_complete;
+    eversion_t          pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
     RepGather(MOSDOp *o, tid_t rt, eversion_t av, eversion_t lc,
 	      SnapSet& ss, SnapContext& sc) :
-      op(o), rep_tid(rt),
-      applied(false),
+      nref(1), op(o), rep_tid(rt),
+      applied(false), aborted(false),
       sent_ack(false), sent_nvram(false), sent_disk(false),
       at_version(av), 
       snapset(ss), snapc(sc),
@@ -79,28 +79,38 @@ public:
     bool can_delete() { 
       return waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
     }
+
+    void get() {
+      nref++;
+    }
+    void put() {
+      if (--nref == 0) {
+	delete op;
+	delete this;
+      }
+    }
   };
 
 protected:
   // replica ops
   // [primary|tail]
-  hash_map<tid_t, RepGather*>            rep_gather;
-  hash_map<tid_t, list<class Message*> > waiting_for_repop;
+  deque<RepGather*> repop_queue;
+  map<tid_t, RepGather*> repop_map;
+
+  void apply_repop(RepGather *repop);
+  void eval_repop(RepGather*);
+  void issue_repop(RepGather *repop, int dest, utime_t now);
+  RepGather *new_repop(MOSDOp *op, tid_t rep_tid, eversion_t nv,
+		       SnapSet& snapset, SnapContext& snapc);
+  void repop_ack(RepGather *repop,
+                 int result, int ack_type,
+                 int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
 
   // load balancing
   set<object_t> balancing_reads;
   set<object_t> unbalancing_reads;
   hash_map<object_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
-  void get_rep_gather(RepGather*);
-  void apply_repop(RepGather *repop);
-  void put_rep_gather(RepGather*);
-  void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
-			    SnapSet& snapset, SnapContext& snapc);
-  void repop_ack(RepGather *repop,
-                 int result, int ack_type,
-                 int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
   
   // push/pull
   map<object_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
@@ -122,7 +132,7 @@ protected:
 
 
   // modify
-  void op_modify_ondisk(tid_t rep_tid, eversion_t pg_complete_thru);
+  void op_modify_ondisk(RepGather *repop);
   void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
   void _make_clone(ObjectStore::Transaction& t,
