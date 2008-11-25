@@ -1991,7 +1991,8 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
 	       << ", pushing " << poid << " attrs as a clone op" << dendl;
       // get attrs
       map<nstring, bufferptr> attrset;
-      osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
+      int r = osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
+      assert(r >= 0);
       
       osd_reqid_t rid;  // useless?
       vector<ceph_osd_op> push(1);
@@ -2000,7 +2001,7 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
       push[0].length = st.st_size;
       MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, 0,
 				       osd->osdmap->get_epoch(), osd->get_tid(), 0, version);
-      subop->data_subset.insert(0, st.st_size);
+      subop->clone_subsets[head].insert(0, st.st_size);
       subop->attrset.swap(attrset);
       osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
       return;
