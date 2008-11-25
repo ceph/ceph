@@ -34,7 +34,7 @@ public:
   pg_t pgid;
   pobject_t poid;
   
-  bool is_modify, wants_reply;
+  __u8 acks_wanted;
   vector<ceph_osd_op> ops;
 
   // subop metadata
@@ -61,6 +61,7 @@ public:
     ::decode(pgid, p);
     ::decode(poid, p);
     ::decode(ops, p);
+    ::decode(acks_wanted, p);
     ::decode(rep_tid, p);
     ::decode(version, p);
     ::decode(old_version, p);
@@ -80,6 +81,7 @@ public:
     ::encode(pgid, payload);
     ::encode(poid, payload);
     ::encode(ops, payload);
+    ::encode(acks_wanted, payload);
     ::encode(rep_tid, payload);
     ::encode(version, payload);
     ::encode(old_version, payload);
@@ -98,14 +100,14 @@ public:
   }
 
 
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, bool wr,
+  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, int aw,
 	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
     reqid(r),
     pgid(p),
     poid(po),
-    wants_reply(wr),
+    acks_wanted(aw),
     ops(o),
     rep_tid(rtid),
     version(v),

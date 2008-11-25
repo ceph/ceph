@@ -1332,8 +1332,9 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
           << dendl;
   
   // forward the write/update/whatever
+  int acks_wanted = CEPH_OSD_OP_ACK | CEPH_OSD_OP_ONDISK;
   MOSDSubOp *wr = new MOSDSubOp(repop->op->get_reqid(), info.pgid, poid,
-				repop->op->ops, true,
+				repop->op->ops, acks_wanted,
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
   wr->old_version = repop->old_version;
@@ -1724,7 +1725,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   }
   
   // send ack to acker
-  MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), false);
+  MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK);
   ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
   osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
   
@@ -1739,7 +1740,7 @@ void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t 
            << ", sending commit to osd" << ackerosd
            << dendl;
   if (osd->osdmap->is_up(ackerosd)) {
-    MOSDSubOpReply *commit = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), true);
+    MOSDSubOpReply *commit = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ONDISK);
     commit->set_pg_complete_thru(last_complete);
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
     osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
@@ -1954,7 +1955,7 @@ bool ReplicatedPG::pull(pobject_t poid)
   tid_t tid = osd->get_tid();
   vector<ceph_osd_op> pull(1);
   pull[0].op = CEPH_OSD_OP_PULL;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, true,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, CEPH_OSD_OP_ACK,
 				   osd->osdmap->get_epoch(), tid, 0, v);
   subop->data_subset.swap(data_subset);
   // do not include clone_subsets in pull request; we will recalculate this
@@ -2009,7 +2010,7 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
       push[0].op = CEPH_OSD_OP_PUSH;
       push[0].offset = 0;
       push[0].length = st.st_size;
-      MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false,
+      MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, 0,
 				       osd->osdmap->get_epoch(), osd->get_tid(), 0, version);
       subop->data_subset.insert(0, st.st_size);
       subop->attrset.swap(attrset);
@@ -2110,7 +2111,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   push[0].op = CEPH_OSD_OP_PUSH;
   push[0].offset = 0;
   push[0].length = size;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, 0,
 				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
   subop->data_subset.swap(data_subset);
   subop->clone_subsets.swap(clone_subsets);
@@ -2354,7 +2355,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   } else {
     // ack if i'm a replica and being pushed to.
-    MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), false); 
+    MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK); 
     osd->messenger->send_message(reply, op->get_source_inst());
   }
 
