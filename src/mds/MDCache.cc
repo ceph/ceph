@@ -6120,10 +6120,6 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
 
-  // FIXME: i need to xlock in->linklock, somehow, before i get used, to avoid
-  //        races with anchor_destroy
-  assert(0);
-
   // auth pin
   if (!in->can_auth_pin()/* &&
 			    !mdr->is_auth_pinned(in)*/) {
@@ -6131,6 +6127,8 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
     in->add_waiter(CInode::WAIT_UNFREEZE, onfinish);
     return;
   }
+
+  dout(7) << "anchor_destroy " << *in << dendl;
 
   // wait
   if (onfinish)
@@ -6141,8 +6139,6 @@ void MDCache::anchor_destroy(CInode *in, Context *onfinish)
     dout(7) << "anchor_destroy already unanchoring " << *in << dendl;
     return;
   }
-
-  dout(7) << "anchor_destroy " << *in << dendl;
 
   // auth: do it
   in->state_set(CInode::STATE_UNANCHORING);
@@ -6201,9 +6197,13 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   dout(10) << "_anchor_logged on " << *in << dendl;
 
   // unpin
-  assert(in->state_test(CInode::STATE_ANCHORING));
-  in->state_clear(CInode::STATE_ANCHORING);
-  in->put(CInode::PIN_ANCHORING);
+  if (in->state_test(CInode::STATE_ANCHORING)) {
+    in->state_clear(CInode::STATE_ANCHORING);
+    in->put(CInode::PIN_ANCHORING);
+  } else if (in->state_test(CInode::STATE_UNANCHORING)) {
+    in->state_clear(CInode::STATE_UNANCHORING);
+    in->put(CInode::PIN_UNANCHORING);
+  }
   in->auth_unpin(this);
   
   // apply update to cache
@@ -6219,7 +6219,7 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   delete mut;
 
   // trigger waiters
-  in->finish_waiting(CInode::WAIT_ANCHORED, 0);
+  in->finish_waiting(CInode::WAIT_ANCHORED|CInode::WAIT_UNANCHORED, 0);
 }
 
 
@@ -6462,6 +6462,12 @@ void MDCache::purge_stray(CDentry *dn)
   CInode *in = dn->inode;
   dout(10) << "purge_stray " << *dn << " " << *in << dendl;
   assert(!dn->is_replicated());
+
+  // anchored?
+  if (in->inode.anchored) {
+    anchor_destroy(in, new C_MDC_EvalStray(this, dn));
+    return;
+  }
 
   dn->state_set(CDentry::STATE_PURGING);
   dn->get(CDentry::PIN_PURGING);

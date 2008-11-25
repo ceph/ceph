@@ -127,10 +127,10 @@ void AnchorServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
   vector<Anchor> trace;
   ::decode(what, p);
   ::decode(ino, p);
-  ::decode(trace, p);
 
   switch (what) {
   case TABLE_OP_CREATE:
+    ::decode(trace, p);
     version++;
 
     // make sure trace is in table
@@ -147,6 +147,7 @@ void AnchorServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
     break;
     
   case TABLE_OP_UPDATE:
+    ::decode(trace, p);
     version++;
     pending_update[version].first = ino;
     pending_update[version].second = trace;
