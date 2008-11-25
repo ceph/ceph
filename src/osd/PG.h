@@ -38,7 +38,6 @@ using namespace __gnu_cxx;
 
 class OSD;
 class MOSDOp;
-class MOSDOpReply;
 class MOSDSubOp;
 class MOSDSubOpReply;
 class MOSDPGInfo;

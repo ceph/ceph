@@ -1067,7 +1067,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
 		flags |= CEPH_OSD_OP_ACK;
 	else
-		flags |= CEPH_OSD_OP_SAFE;
+		flags |= CEPH_OSD_OP_ONDISK;
 	reqhead->flags = cpu_to_le32(flags);
 
 	len = le64_to_cpu(op->length);
@@ -1109,7 +1109,7 @@ int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
 		flags |= CEPH_OSD_OP_ACK;
 	else
-		flags |= CEPH_OSD_OP_SAFE;
+		flags |= CEPH_OSD_OP_ONDISK;
 	reqhead->flags = cpu_to_le32(flags);
 	op->length = cpu_to_le64(len);
 

@@ -466,7 +466,7 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
     dout(20) << " note: not requesting ack" << dendl;
   }
   if (wr->oncommit) {
-    flags |= CEPH_OSD_OP_SAFE;
+    flags |= CEPH_OSD_OP_ONDISK;
     ++num_uncommitted;
   } else {
     dout(20) << " note: not requesting commit" << dendl;
@@ -516,17 +516,17 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   tid_t tid = m->get_tid();
 
   if (op_modify.count(tid) == 0) {
-    dout(7) << "handle_osd_modify_reply " << tid 
-            << (m->is_safe() ? " commit":" ack")
-            << " ... stray" << dendl;
+    dout(7) << "handle_osd_modify_reply " << tid
+	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
+	    << " ... stray" << dendl;
     delete m;
     return;
   }
 
-  dout(7) << "handle_osd_modify_reply " << tid 
-          << (m->is_safe() ? " commit":" ack")
-          << " v " << m->get_version() << " in " << m->get_pg()
-          << dendl;
+  dout(7) << "handle_osd_modify_reply " << tid
+	  << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
+	  << " v " << m->get_version() << " in " << m->get_pg()
+	  << dendl;
   ModifyOp *wr = op_modify[ tid ];
 
   Context *onack = 0;

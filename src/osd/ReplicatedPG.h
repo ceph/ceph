@@ -36,11 +36,12 @@ public:
     pg_stat_t stats;
 
     set<int>  waitfor_ack;
-    set<int>  waitfor_commit;
+    set<int>  waitfor_nvram;
+    set<int>  waitfor_disk;
     
     utime_t   start;
 
-    bool sent_ack, sent_commit;
+    bool sent_ack, sent_nvram, sent_disk;
     
     set<int>         osds;
     eversion_t       old_version, at_version;
@@ -55,19 +56,28 @@ public:
 	      SnapSet& ss, SnapContext& sc) :
       op(o), rep_tid(rt),
       applied(false),
-      sent_ack(false), sent_commit(false),
+      sent_ack(false), sent_nvram(false), sent_disk(false),
       at_version(av), 
       snapset(ss), snapc(sc),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
-      return !sent_ack && !sent_commit && waitfor_ack.empty(); 
+      return
+	!sent_ack && !sent_nvram && !sent_disk &&
+	waitfor_ack.empty(); 
     }
-    bool can_send_commit() { 
-      return !sent_commit && waitfor_ack.empty() && waitfor_commit.empty(); 
+    bool can_send_nvram() { 
+      return
+	!sent_nvram && !sent_disk &&
+	waitfor_ack.empty() && waitfor_disk.empty(); 
+    }
+    bool can_send_disk() { 
+      return
+	!sent_disk &&
+	waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
     }
     bool can_delete() { 
-      return waitfor_ack.empty() && waitfor_commit.empty(); 
+      return waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
     }
   };
 
@@ -112,8 +122,8 @@ protected:
 
 
   // modify
-  void op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru);
-  void sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
+  void op_modify_ondisk(tid_t rep_tid, eversion_t pg_complete_thru);
+  void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
@@ -192,7 +202,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop << " rep_tid=" << repop.rep_tid 
       << " wfack=" << repop.waitfor_ack
-      << " wfcommit=" << repop.waitfor_commit;
+      << " wfnvram=" << repop.waitfor_nvram
+      << " wfdisk=" << repop.waitfor_disk;
   out << " pct=" << repop.pg_complete_thru;
   out << " op=" << *(repop.op);
   out << " repop=" << &repop;

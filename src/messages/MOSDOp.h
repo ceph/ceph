@@ -129,12 +129,16 @@ public:
 
   // flags
   int get_flags() const { return head.flags; }
+
   bool wants_ack() const { return get_flags() & CEPH_OSD_OP_ACK; }
-  bool wants_commit() const { return get_flags() & CEPH_OSD_OP_SAFE; }
-  bool is_retry_attempt() const { return get_flags() & CEPH_OSD_OP_RETRY; }
+  bool wants_ondisk() const { return get_flags() & CEPH_OSD_OP_ONDISK; }
+  bool wants_onnvram() const { return get_flags() & CEPH_OSD_OP_ONNVRAM; }
 
   void set_want_ack(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ACK; }
-  void set_want_commit(bool b) { head.flags = get_flags() | CEPH_OSD_OP_SAFE; }
+  void set_want_onnvram(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ONNVRAM; }
+  void set_want_ondisk(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ONDISK; }
+
+  bool is_retry_attempt() const { return get_flags() & CEPH_OSD_OP_RETRY; }
   void set_retry_attempt(bool a) { 
     if (a)
       head.flags = head.flags | CEPH_OSD_OP_RETRY;

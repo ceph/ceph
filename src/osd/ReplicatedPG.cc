@@ -765,7 +765,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   
  done:
   // reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), true); 
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK); 
   reply->set_data(data);
   reply->get_header().data_off = data_off;
   reply->set_result(result);
@@ -1182,7 +1182,7 @@ public:
   void finish(int r) {
     pg->lock();
     if (!pg->is_deleted()) 
-      pg->op_modify_commit(rep_tid, pg_last_complete);
+      pg->op_modify_ondisk(rep_tid, pg_last_complete);
     pg->put_unlock();
   }
 };
@@ -1252,14 +1252,25 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
 {
   dout(10) << "put_repop " << *repop << dendl;
   
-  // commit?
-  if (repop->can_send_commit()) {
-    if (repop->op->wants_commit()) {
+  // disk?
+  if (repop->can_send_disk()) {
+    if (repop->op->wants_ondisk()) {
       // send commit.
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), true);
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ONDISK);
       dout(10) << "put_repop  sending commit on " << *repop << " " << reply << dendl;
       osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
-      repop->sent_commit = true;
+      repop->sent_disk = true;
+    }
+  }
+
+  // nvram?
+  else if (repop->can_send_nvram()) {
+    if (repop->op->wants_onnvram()) {
+      // send commit.
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ONNVRAM);
+      dout(10) << "put_repop  sending onnvram on " << *repop << " " << reply << dendl;
+      osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
+      repop->sent_nvram = true;
     }
   }
 
@@ -1271,7 +1282,7 @@ void ReplicatedPG::put_rep_gather(RepGather *repop)
 
     if (repop->op->wants_ack()) {
       // send ack
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), false);
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK);
       dout(10) << "put_repop  sending ack on " << *repop << " " << reply << dendl;
       osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
       repop->sent_ack = true;
@@ -1346,7 +1357,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid,
   for (unsigned i=0; i<acting.size(); i++) {
     int osd = acting[i];
     repop->osds.insert(osd);
-    repop->waitfor_commit.insert(osd);
+    repop->waitfor_disk.insert(osd);
   }
 
   // primary.  all osds ack to me.
@@ -1382,9 +1393,9 @@ void ReplicatedPG::repop_ack(RepGather *repop,
   get_rep_gather(repop);
   {
     if (commit) {
-      // commit
-      assert(repop->waitfor_commit.count(fromosd));      
-      repop->waitfor_commit.erase(fromosd);
+      // disk
+      assert(repop->waitfor_disk.count(fromosd));      
+      repop->waitfor_disk.erase(fromosd);
       repop->waitfor_ack.erase(fromosd);
       repop->pg_complete_thru[fromosd] = pg_complete_thru;
     } else {
@@ -1420,22 +1431,23 @@ void ReplicatedPG::repop_ack(RepGather *repop,
 /** op_modify_commit
  * transaction commit on the acker.
  */
-void ReplicatedPG::op_modify_commit(tid_t rep_tid, eversion_t pg_complete_thru)
+void ReplicatedPG::op_modify_ondisk(tid_t rep_tid, eversion_t pg_complete_thru)
 {
   if (rep_gather.count(rep_tid)) {
     RepGather *repop = rep_gather[rep_tid];
     
-    dout(10) << "op_modify_commit " << *repop->op << dendl;
+    dout(10) << "op_modify_ondisk " << *repop->op << dendl;
     get_rep_gather(repop);
     {
-      assert(repop->waitfor_commit.count(osd->get_nodeid()));
-      repop->waitfor_commit.erase(osd->get_nodeid());
+      assert(repop->waitfor_disk.count(osd->get_nodeid()));
+      repop->waitfor_nvram.erase(osd->get_nodeid());
+      repop->waitfor_disk.erase(osd->get_nodeid());
       repop->pg_complete_thru[osd->get_nodeid()] = pg_complete_thru;
     }
     put_rep_gather(repop);
-    dout(10) << "op_modify_commit done on " << repop << dendl;
+    dout(10) << "op_modify_ondisk done on " << repop << dendl;
   } else {
-    dout(10) << "op_modify_commit rep_tid " << rep_tid << " dne" << dendl;
+    dout(10) << "op_modify_ondisk rep_tid " << rep_tid << " dne" << dendl;
   }
 }
 
@@ -1472,7 +1484,7 @@ public:
     lock.Unlock();
 
     pg->lock();
-    pg->sub_op_modify_commit(op, destosd, pg_last_complete);
+    pg->sub_op_modify_ondisk(op, destosd, pg_last_complete);
     pg->put_unlock();
   }
   void ack() {
@@ -1720,7 +1732,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   oncommit->ack(); 
 }
 
-void ReplicatedPG::sub_op_modify_commit(MOSDSubOp *op, int ackerosd, eversion_t last_complete)
+void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete)
 {
   // send commit.
   dout(10) << "rep_modify_commit on op " << *op
@@ -2371,7 +2383,7 @@ void ReplicatedPG::on_osd_failure(int o)
     p++;
     dout(-1) << "checking repop tid " << repop->rep_tid << dendl;
     if (repop->waitfor_ack.count(o) ||
-	repop->waitfor_commit.count(o))
+	repop->waitfor_disk.count(o))
       repop_ack(repop, -1, true, o);
   }
   
@@ -2420,7 +2432,7 @@ void ReplicatedPG::on_change()
       p++;
       dout(-1) << "checking repop tid " << repop->rep_tid << dendl;
       set<int> all;
-      set_union(repop->waitfor_commit.begin(), repop->waitfor_commit.end(),
+      set_union(repop->waitfor_disk.begin(), repop->waitfor_disk.end(),
 		repop->waitfor_ack.begin(), repop->waitfor_ack.end(),
 		inserter(all, all.begin()));
       for (set<int>::iterator q = all.begin(); q != all.end(); q++) {

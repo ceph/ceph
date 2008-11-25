@@ -38,7 +38,9 @@ class MOSDOpReply : public Message {
   object_t get_oid() { return head.oid; }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   int      get_flags() { return head.flags; }
-  bool     is_safe() { return get_flags() & CEPH_OSD_OP_SAFE; }
+
+  bool     is_ondisk() { return get_flags() & CEPH_OSD_OP_ONDISK; }
+  bool     is_onnvram() { return get_flags() & CEPH_OSD_OP_ONNVRAM; }
   
   __s32 get_result() { return head.result; }
   eversion_t get_version() { return head.reassert_version; }
@@ -53,15 +55,14 @@ class MOSDOpReply : public Message {
 
 
 public:
-  MOSDOpReply(MOSDOp *req, __s32 result, epoch_t e, bool commit) :
+  MOSDOpReply(MOSDOp *req, __s32 result, epoch_t e, int acktype) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
     head.tid = req->head.tid;
     ops = req->ops;
     head.result = result;
     head.flags =
-      (req->head.flags & ~(CEPH_OSD_OP_SAFE|CEPH_OSD_OP_ACK)) |
-      (commit ? CEPH_OSD_OP_SAFE:CEPH_OSD_OP_ACK);
+      (req->head.flags & ~(CEPH_OSD_OP_ONDISK|CEPH_OSD_OP_ONNVRAM|CEPH_OSD_OP_ACK)) | acktype;
     head.oid = req->head.oid;
     head.layout = req->head.layout;
     head.osdmap_epoch = e;
@@ -88,8 +89,10 @@ public:
     out << "osd_op_reply(" << get_tid()
 	<< " " << head.oid << " " << ops;
     if (is_modify()) {
-      if (is_safe())
-	out << " commit";
+      if (is_ondisk())
+	out << " ondisk";
+      else if (is_onnvram())
+	out << " onnvram";
       else
 	out << " ack";
     }

@@ -1162,11 +1162,11 @@ static inline const char *ceph_osd_op_name(int op)
  */
 enum {
 	CEPH_OSD_OP_ACK = 1,          /* want (or is) "ack" ack */
-	CEPH_OSD_OP_SAFE = 2,         /* want (or is) "safe" ack */
-	CEPH_OSD_OP_RETRY = 4,        /* resend attempt */
-	CEPH_OSD_OP_INCLOCK_FAIL = 8, /* fail on inclock collision */
-	CEPH_OSD_OP_MODIFY = 16,      /* op is/was a mutation */
-	CEPH_OSD_OP_ACKNVRAM = 32,    /* ACK when stable in NVRAM, not RAM */
+	CEPH_OSD_OP_ONNVRAM = 2,      /* want (or is) "onnvram" ack */
+	CEPH_OSD_OP_ONDISK = 4,       /* want (or is) "ondisk" ack */
+	CEPH_OSD_OP_RETRY = 8,        /* resend attempt */
+	CEPH_OSD_OP_INCLOCK_FAIL = 16, /* fail on inclock collision */
+	CEPH_OSD_OP_MODIFY = 32,      /* op is/was a mutation */
 	CEPH_OSD_OP_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 	CEPH_OSD_OP_PEERSTAT = 128,   /* msg includes osd_peer_stat */
 	CEPH_OSD_OP_BALANCE_READS = 256,

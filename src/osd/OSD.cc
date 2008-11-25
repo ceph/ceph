@@ -3026,7 +3026,7 @@ void OSD::defer_recovery(PG *pg)
 
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
-  MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), true);
+  MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), CEPH_OSD_OP_ACK);
   messenger->send_message(reply, op->get_orig_source_inst());
   delete op;
 }
