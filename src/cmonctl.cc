@@ -49,6 +49,7 @@ int same = 0;
 const char *prefix[4] = { "mds", "osd", "pg", "client" };
 map<string,string> status;
 
+int lines = 0;
 
 // refresh every second
 void get_status(bool newmon=false);
@@ -91,6 +92,15 @@ void handle_ack(MMonCommandAck *ack)
     if (ack->rs != status[w]) {
       status[w] = ack->rs;
       generic_dout(0) << w << " " << status[w] << dendl;
+      lines++;
+
+      if (lines > 20) {
+	generic_dout(0) << dendl;
+	for (map<string,string>::iterator p = status.begin(); p != status.end(); p++)
+	  generic_dout(0) << p->first << " " << p->second << dendl;
+	generic_dout(0) << dendl;	
+	lines = 0;
+      }
 
       if (event)
 	timer.cancel_event(event);
