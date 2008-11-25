@@ -497,6 +497,11 @@ int OSD::shutdown()
   snap_trim_wq.stop();
   dout(10) << "snap trim wq stopped" << dendl;
 
+  // tell pgs we're shutting down
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+       p != pg_map.end();
+       p++)
+    p->second->on_shutdown();
 
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
@@ -525,12 +530,12 @@ int OSD::shutdown()
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
        p++) {
-    delete p->second;
+    PG *pg = p->second;
+    pg->lock();
+    pg->put_unlock();
   }
   pg_map.clear();
 
-  // shut everything else down
-  //monitor->shutdown();
   messenger->shutdown();
   return r;
 }

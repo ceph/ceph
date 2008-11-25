@@ -470,6 +470,29 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
   if (changed) {
     write_info(t);
     write_log(t);
+
+    // init complete pointer
+    if (missing.num_missing() == 0 &&
+	info.last_complete != info.last_update) {
+      dout(10) << "merge_log - no missing, moving last_complete " << info.last_complete 
+	       << " -> " << info.last_update << dendl;
+      info.last_complete = info.last_update;
+    }
+
+    if (info.last_complete == info.last_update) {
+      dout(10) << "merge_log - complete" << dendl;
+      log.complete_to = log.log.end();
+      log.requested_to = log.log.end();
+    } else {
+      dout(10) << "merge_log - not complete, " << missing << dendl;
+      
+      log.complete_to = log.log.begin();
+      while (log.complete_to->version < info.last_complete) {
+	log.complete_to++;
+	assert(log.complete_to != log.log.end());
+      }
+      log.requested_to = log.complete_to;
+    }
   }
 }
 
@@ -1154,37 +1177,20 @@ void PG::activate(ObjectStore::Transaction& t,
   if (!info.dead_snaps.empty())
     queue_snap_trim();
 
-  // init complete pointer
-  if (missing.num_missing() == 0 &&
-      info.last_complete != info.last_update) {
-    dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
-	     << " -> " << info.last_update << dendl;
-    info.last_complete = info.last_update;
-  }
-
   if (info.last_complete == info.last_update) {
     dout(10) << "activate - complete" << dendl;
-    log.complete_to == log.log.end();
+    log.complete_to = log.log.end();
     log.requested_to = log.log.end();
-  } 
-  else if (true) {
+  } else {
     dout(10) << "activate - not complete, " << missing << dendl;
-    
-    // init complete_to
-    log.complete_to = log.log.begin();
-    while (log.complete_to->version < info.last_complete) {
-      log.complete_to++;
-      assert(log.complete_to != log.log.end());
-    }
+    assert(log.complete_to->version >= info.last_complete);
     
     if (is_primary()) {
       // start recovery
       dout(10) << "activate - starting recovery" << dendl;    
-      log.requested_to = log.complete_to;
+      assert(log.requested_to == log.complete_to);
       osd->queue_for_recovery(this);
     }
-  } else {
-    dout(10) << "activate - not complete, " << missing << dendl;
   }
 
   // if primary..

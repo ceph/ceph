@@ -781,6 +781,7 @@ public:
   virtual void on_acker_change() = 0;
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;
+  virtual void on_shutdown() = 0;
 };
 
 WRITE_CLASS_ENCODER(PG::Info::History)

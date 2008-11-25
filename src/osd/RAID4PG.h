@@ -68,6 +68,7 @@ public:
   void on_acker_change();
   void on_role_change();
   void on_change();
+  void on_shutdown() {}
 };
 
 

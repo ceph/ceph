@@ -34,7 +34,8 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl<< pthread_self() << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+  return *_dout << dbeginl << pthread_self() << " osd" << whoami
+		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
 
@@ -1201,12 +1202,12 @@ public:
 void ReplicatedPG::op_modify_ondisk(RepGather *repop)
 {
   if (repop->aborted) {
-    dout(10) << "op_modify_ondisk " << *repop->op << " -- aborted" << dendl;
+    dout(10) << "op_modify_ondisk " << *repop << " -- aborted" << dendl;
   } else {
-    dout(10) << "op_modify_ondisk " << *repop->op << dendl;
+    dout(10) << "op_modify_ondisk " << *repop << dendl;
     assert(repop->waitfor_disk.count(osd->get_nodeid()));
-    repop->waitfor_nvram.erase(osd->get_nodeid());
     repop->waitfor_disk.erase(osd->get_nodeid());
+    repop->waitfor_nvram.erase(osd->get_nodeid());
     repop->pg_complete_thru[osd->get_nodeid()] = repop->pg_local_last_complete;
     eval_repop(repop);
   }
@@ -1381,7 +1382,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, tid_t rep_tid, ever
 
   repop->start = g_clock.now();
 
-  repop_queue.push_back(repop);
+  repop_queue.push_back(&repop->queue_item);
   repop_map[repop->rep_tid] = repop;
   repop->get();
 
@@ -2304,9 +2305,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   missing_loc.erase(poid.oid);
 
   // raise last_complete?
-  assert(log.complete_to != log.log.end());
   while (log.complete_to != log.log.end()) {
-    if (missing.missing.count(log.complete_to->oid)) break;
+    if (missing.missing.count(log.complete_to->oid))
+      break;
     if (info.last_complete < log.complete_to->version)
       info.last_complete = log.complete_to->version;
     log.complete_to++;
@@ -2364,9 +2365,10 @@ void ReplicatedPG::on_osd_failure(int o)
   dout(10) << "on_osd_failure " << o << dendl;
 
   // artificially ack failed osds
-  deque<RepGather*>::iterator p = repop_queue.begin();
-  while (p != repop_queue.end()) {
-    RepGather *repop = *p++;
+  xlist<RepGather*>::iterator p = repop_queue.begin();
+  while (!p.end()) {
+    RepGather *repop = *p;
+    ++p;
     dout(-1) << " artificialling acking repop tid " << repop->rep_tid << dendl;
     if (repop->waitfor_ack.count(o) ||
 	repop->waitfor_nvram.count(o) ||
@@ -2392,44 +2394,62 @@ void ReplicatedPG::on_acker_change()
   dout(10) << "on_acker_change" << dendl;
 }
 
+void ReplicatedPG::on_shutdown()
+{
+  dout(10) << "on_shutdown" << dendl;
+
+  // apply all local repops
+  //  (pg is inactive; we will repeer)
+  xlist<RepGather*>::iterator p = repop_queue.begin();
+  while (!p.end()) {
+    RepGather *repop = *p;
+    ++p;
+    if (!repop->applied)
+      apply_repop(repop);
+    repop->queue_item.remove_myself();
+    repop->put();
+  }
+}
+
 void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
 
   // apply all local repops
   //  (pg is inactive; we will repeer)
-  for (deque<RepGather*>::iterator p = repop_queue.begin();
-       p != repop_queue.end();
-       p++) 
+  for (xlist<RepGather*>::iterator p = repop_queue.begin();
+       !p.end(); ++p)
     if (!(*p)->applied)
       apply_repop(*p);
 
-  deque<RepGather*>::iterator p = repop_queue.begin(); 
-  while (p != repop_queue.end()) {
+  xlist<RepGather*>::iterator p = repop_queue.begin(); 
+  while (!p.end()) {
     RepGather *repop = *p;
+    ++p;
 
     if (!is_primary()) {
       // no longer primary.  hose repops.
       dout(-1) << " aborting repop tid " << repop->rep_tid << dendl;
       repop->aborted = true;
-      repop_queue.erase(p++);
+      repop->queue_item.remove_myself();
       repop_map.erase(repop->rep_tid);
       repop->put();
     } else {
       // still primary. artificially ack+commit any replicas who dropped out of the pg
-      p++;
       dout(-1) << " checking for dropped osds on repop tid " << repop->rep_tid << dendl;
       set<int> all;
       set_union(repop->waitfor_disk.begin(), repop->waitfor_disk.end(),
 		repop->waitfor_ack.begin(), repop->waitfor_ack.end(),
 		inserter(all, all.begin()));
       for (set<int>::iterator q = all.begin(); q != all.end(); q++) {
+	if (*q == osd->get_nodeid())
+	  continue;
 	bool have = false;
 	for (unsigned i=1; i<acting.size(); i++)
 	  if (acting[i] == *q) 
 	    have = true;
 	if (!have)
-	  repop_ack(repop, -EIO, true, *q);
+	  repop_ack(repop, -EIO, CEPH_OSD_OP_ONDISK, *q);
       }
     }
   }

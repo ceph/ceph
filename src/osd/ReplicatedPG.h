@@ -28,6 +28,7 @@ public:
    */
   class RepGather {
   public:
+    xlist<RepGather*>::item queue_item;
     int nref;
 
     class MOSDOp *op;
@@ -54,6 +55,7 @@ public:
     
     RepGather(MOSDOp *o, tid_t rt, eversion_t av, eversion_t lc,
 	      SnapSet& ss, SnapContext& sc) :
+      queue_item(this),
       nref(1), op(o), rep_tid(rt),
       applied(false), aborted(false),
       sent_ack(false), sent_nvram(false), sent_disk(false),
@@ -87,6 +89,7 @@ public:
       if (--nref == 0) {
 	delete op;
 	delete this;
+	generic_dout(0) << "deleting " << this << dendl;
       }
     }
   };
@@ -94,7 +97,7 @@ public:
 protected:
   // replica ops
   // [primary|tail]
-  deque<RepGather*> repop_queue;
+  xlist<RepGather*> repop_queue;
   map<tid_t, RepGather*> repop_map;
 
   void apply_repop(RepGather *repop);
@@ -205,6 +208,7 @@ public:
   void on_acker_change();
   void on_role_change();
   void on_change();
+  void on_shutdown();
 };
 
 
@@ -212,11 +216,11 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop << " rep_tid=" << repop.rep_tid 
       << " wfack=" << repop.waitfor_ack
-      << " wfnvram=" << repop.waitfor_nvram
+    //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
   out << " pct=" << repop.pg_complete_thru;
   out << " op=" << *(repop.op);
-  out << " repop=" << &repop;
+  out << " " << &repop;
   out << ")";
   return out;
 }
