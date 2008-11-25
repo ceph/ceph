@@ -1730,8 +1730,9 @@ void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t 
     commit->set_pg_complete_thru(last_complete);
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
     osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
-    delete op;
   }
+  
+  delete op;
 }
 
 void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
