@@ -1530,8 +1530,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     if (r >= 0) {
       bufferlist::iterator p = bl.begin();
       ::decode(snapset, p);
-    } else {
-      dout(10) << " no \"snapset\" attr, r = " << r << " " << strerror(-r) << dendl;
     }
   } else 
     assert(poid.oid.snap == 0);   // no snapshotting.
@@ -2503,12 +2501,14 @@ void ReplicatedPG::on_role_change()
 
 void ReplicatedPG::cancel_recovery()
 {
+  dout(10) << "cancel_recovery" << dendl;
+
   // forget about where missing items are, or anything we're pulling
   missing_loc.clear();
   osd->num_pulling -= pulling.size();
   pulling.clear();
   pushing.clear();
-  log.reset_recovery();
+  log.reset_recovery_pointers();
 
   osd->finish_recovery_op(this, recovery_ops_active, true);
 }

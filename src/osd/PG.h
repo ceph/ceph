@@ -298,9 +298,9 @@ public:
       assert(0);
       unindex();
       Log::clear();
-      reset_recovery();
+      reset_recovery_pointers();
     }
-    void reset_recovery() {
+    void reset_recovery_pointers() {
       requested_to = log.end();
       complete_to = log.end();
     }

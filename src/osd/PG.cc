@@ -470,29 +470,6 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
   if (changed) {
     write_info(t);
     write_log(t);
-
-    // init complete pointer
-    if (missing.num_missing() == 0 &&
-	info.last_complete != info.last_update) {
-      dout(10) << "merge_log - no missing, moving last_complete " << info.last_complete 
-	       << " -> " << info.last_update << dendl;
-      info.last_complete = info.last_update;
-    }
-
-    if (info.last_complete == info.last_update) {
-      dout(10) << "merge_log - complete" << dendl;
-      log.complete_to = log.log.end();
-      log.requested_to = log.log.end();
-    } else {
-      dout(10) << "merge_log - not complete, " << missing << dendl;
-      
-      log.complete_to = log.log.begin();
-      while (log.complete_to->version < info.last_complete) {
-	log.complete_to++;
-	assert(log.complete_to != log.log.end());
-      }
-      log.requested_to = log.complete_to;
-    }
   }
 }
 
@@ -908,7 +885,7 @@ void PG::clear_primary_state()
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
 
   missing_loc.clear();
-  log.reset_recovery();
+  log.reset_recovery_pointers();
 
   stat_object_temp_rd.clear();
 }
@@ -1177,18 +1154,30 @@ void PG::activate(ObjectStore::Transaction& t,
   if (!info.dead_snaps.empty())
     queue_snap_trim();
 
+  // init complete pointer
+  if (missing.num_missing() == 0 &&
+      info.last_complete != info.last_update) {
+    dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
+	     << " -> " << info.last_update << dendl;
+    info.last_complete = info.last_update;
+  }
+
   if (info.last_complete == info.last_update) {
     dout(10) << "activate - complete" << dendl;
-    log.complete_to = log.log.end();
-    log.requested_to = log.log.end();
+    log.reset_recovery_pointers();
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
-    assert(log.complete_to->version >= info.last_complete);
-    
+
+    log.complete_to = log.log.begin();
+    while (log.complete_to->version < info.last_complete)
+      log.complete_to++;
+    assert(log.complete_to != log.log.end());
+    dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
+
     if (is_primary()) {
       // start recovery
-      dout(10) << "activate - starting recovery" << dendl;    
-      assert(log.requested_to == log.complete_to);
+      dout(10) << "activate - starting recovery" << dendl;
+      log.requested_to = log.complete_to;
       osd->queue_for_recovery(this);
     }
   }
@@ -1334,7 +1323,7 @@ void PG::finish_recovery()
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
-  log.reset_recovery();
+  log.reset_recovery_pointers();
 
   /*
    * sync all this before purging strays.  but don't block!
