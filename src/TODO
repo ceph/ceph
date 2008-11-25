@@ -37,17 +37,6 @@ repair
 - mds scrubbing
 - rados scrubbing
 
-snaps on osd
-- garbage collection
-  - don't start collection on replica until clean?
-- efficient recovery of clones using the clone diff info
-  - recovery on primary
-    - log order vs recovery/clone order?
-    - rep_op_push on primary needs to be smart
-    - IndexLog could somehow aggregate data_subsets?
-  - primary pushes to replicas
-    - clone/rename, + push of new head
-
 
 kernel client
 - make osd retry writes if failure after ack..
@@ -163,13 +152,7 @@ mon
 
 osd
 - how does an admin intervene when a pg needs to repeer despite a dead osd?
-
 - generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
-- consider implications of nvram writeahead logs?
-
-- flag missing log entries on crash recovery?
-
-- mark residual pgs obsolete  ???
 - rdlocks
 - optimize remove wrt recovery pushes
 
