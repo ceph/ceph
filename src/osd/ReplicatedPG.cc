@@ -1963,10 +1963,13 @@ bool ReplicatedPG::pull(pobject_t poid)
  */
 void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
 {
+  dout(10) << "push_to_replica " << poid << " osd" << peer << dendl;
+
   // get size
   struct stat st;
-  osd->store->stat(info.pgid.to_coll(), poid, &st);
-
+  int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
+  assert(r == 0);
+  
   map<pobject_t, interval_set<__u64> > clone_subsets;
   interval_set<__u64> data_subset;
 
