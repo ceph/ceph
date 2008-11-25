@@ -569,7 +569,6 @@ public:
     int uid, gid;
 
     utime_t  sent_stamp;
-    bool     idempotent;         // is request idempotent?
     set<int> mds;                // who i am asking
     int      resend_mds;         // someone wants you to (re)send the request here
     int      num_fwd;            // # of times i've been forwarded
@@ -582,7 +581,7 @@ public:
 
     MetaRequest(MClientRequest *req, tid_t t) : 
       tid(t), request(req), 
-      idempotent(false), resend_mds(-1), num_fwd(0), retry_attempt(0),
+      resend_mds(-1), num_fwd(0), retry_attempt(0),
       reply(0), 
       caller_cond(0), dispatch_cond(0) { }
   };

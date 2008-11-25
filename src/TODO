@@ -88,11 +88,6 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- we either need to stop forwarding mds requests on behalf of client,
-  or we need to gracefully deal with multiple replies that (may) contain caps,
-  or we need to not forward requests that may include a cap reply.
-  * the problem is when we get duplicate replies with caps, we drop the second one, and in so doing
-    lose important state that is difficult to clean up...
 - hard link backpointers
   - anchor source dir
   - build snaprealm for any hardlinked file

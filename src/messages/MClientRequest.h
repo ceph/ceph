@@ -74,17 +74,26 @@ public:
     return metareqid_t(get_orig_source(), head.tid); 
   }
 
-  bool open_file_mode_is_readonly() {
+  /*bool open_file_mode_is_readonly() {
     return file_mode_is_readonly(ceph_flags_to_mode(head.args.open.flags));
+    }*/
+  bool is_write() {
+    return
+      (head.op & CEPH_MDS_OP_WRITE) || 
+      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
   }
-  bool is_idempotent() {
-    if (head.op == CEPH_MDS_OP_OPEN) 
-      return false;  //open_file_mode_is_readonly();
-    return (head.op & CEPH_MDS_OP_WRITE) == 0;
+  bool can_forward() {
+    if (is_write() ||
+	head.op == CEPH_MDS_OP_OPEN)   // do not forward _any_ open request.
+      return false;
+    return true;
   }
   bool auth_is_best() {
-    if (!is_idempotent()) return true;
-    if (head.op == CEPH_MDS_OP_READDIR) return true;
+    if (is_write()) 
+      return true;
+    if (head.op == CEPH_MDS_OP_OPEN ||
+	head.op == CEPH_MDS_OP_READDIR) 
+      return true;
     return false;    
   }
   bool follow_trailing_symlink() {

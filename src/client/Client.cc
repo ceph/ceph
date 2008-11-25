@@ -808,9 +808,6 @@ MClientReply *Client::make_request(MClientRequest *req,
   req->encode_payload();
   request.request_payload = req->get_payload();
 
-  // note idempotency
-  request.idempotent = req->is_idempotent();
-
   // hack target mds?
   if (use_mds >= 0)
     request.resend_mds = use_mds;

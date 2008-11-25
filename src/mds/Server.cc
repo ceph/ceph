@@ -515,7 +515,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 	   << ") " << *req << dendl;
 
   // note result code in session map?
-  if (!req->is_idempotent() && mdr->session)
+  if (req->is_write() && mdr->session)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
   /*
