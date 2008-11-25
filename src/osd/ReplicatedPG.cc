@@ -1382,23 +1382,30 @@ ReplicatedPG::RepGather *ReplicatedPG::new_rep_gather(MOSDOp *op, tid_t rep_tid,
  
 
 void ReplicatedPG::repop_ack(RepGather *repop,
-                    int result, bool commit,
-                    int fromosd, eversion_t pg_complete_thru)
+			     int result, int ack_type,
+			     int fromosd, eversion_t pg_complete_thru)
 {
   MOSDOp *op = repop->op;
 
   dout(7) << "repop_ack rep_tid " << repop->rep_tid << " op " << *op
-          << " result " << result << " commit " << commit << " from osd" << fromosd
+          << " result " << result
+	  << " ack_type " << ack_type
+	  << " from osd" << fromosd
           << dendl;
 
   get_rep_gather(repop);
   {
-    if (commit) {
+    if (ack_type & CEPH_OSD_OP_ONDISK) {
       // disk
       assert(repop->waitfor_disk.count(fromosd));      
       repop->waitfor_disk.erase(fromosd);
+      repop->waitfor_nvram.erase(fromosd);
       repop->waitfor_ack.erase(fromosd);
       repop->pg_complete_thru[fromosd] = pg_complete_thru;
+    } else if (ack_type & CEPH_OSD_OP_ONNVRAM) {
+      // nvram
+      repop->waitfor_nvram.erase(fromosd);
+      repop->waitfor_ack.erase(fromosd);
     } else {
       // ack
       repop->waitfor_ack.erase(fromosd);
@@ -1759,7 +1766,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
   if (rep_gather.count(rep_tid)) {
     // oh, good.
     repop_ack(rep_gather[rep_tid], 
-	      r->get_result(), r->get_commit(), 
+	      r->get_result(), r->ack_type,
 	      fromosd, 
 	      r->get_pg_complete_thru());
     delete r;

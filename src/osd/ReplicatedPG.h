@@ -99,7 +99,7 @@ protected:
   RepGather *new_rep_gather(MOSDOp *op, tid_t rep_tid, eversion_t nv,
 			    SnapSet& snapset, SnapContext& snapc);
   void repop_ack(RepGather *repop,
-                 int result, bool commit,
+                 int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
   
   // push/pull
