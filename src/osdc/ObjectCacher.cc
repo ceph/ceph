@@ -625,19 +625,19 @@ void ObjectCacher::bh_write_ack(object_t oid, loff_t start, size_t length, tid_t
     assert(ob->last_ack_tid < tid);
     ob->last_ack_tid = tid;
 
-    // is the entire object set now clean?
-    if (flush_set_callback && 
-	dirty_tx_by_ino[ob->get_ino()] == 0) {
-      flush_set_callback(flush_set_callback_arg, ob->get_ino());
-      dirty_tx_by_ino.erase(ob->get_ino());
-    }
-    
     // waiters?
     if (ob->waitfor_ack.count(tid)) {
       list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_ack[tid]);
       ob->waitfor_ack.erase(tid);
       finish_contexts(ls);
+    }
+
+    // is the entire object set now clean?
+    if (flush_set_callback && 
+	dirty_tx_by_ino[ob->get_ino()] == 0) {
+      flush_set_callback(flush_set_callback_arg, ob->get_ino());
+      dirty_tx_by_ino.erase(ob->get_ino());
     }
   }
   //lock.Unlock();
@@ -662,6 +662,14 @@ void ObjectCacher::bh_write_commit(object_t oid, loff_t start, size_t length, ti
     // update last_commit.
     ob->last_commit_tid = tid;
 
+    // waiters?
+    if (ob->waitfor_commit.count(tid)) {
+      list<Context*> ls;
+      ls.splice(ls.begin(), ob->waitfor_commit[tid]);
+      ob->waitfor_commit.erase(tid);
+      finish_contexts(ls);
+    }
+
     // is the entire object set now clean and fully committed?
     if (commit_set_callback &&
 	ob->last_commit_tid == ob->last_write_tid) {
@@ -670,14 +678,6 @@ void ObjectCacher::bh_write_commit(object_t oid, loff_t start, size_t length, ti
 	uncommitted_by_ino.erase(ob->get_ino());
 	commit_set_callback(flush_set_callback_arg, ob->get_ino());      
       }
-    }
-   
-    // waiters?
-    if (ob->waitfor_commit.count(tid)) {
-      list<Context*> ls;
-      ls.splice(ls.begin(), ob->waitfor_commit[tid]);
-      ob->waitfor_commit.erase(tid);
-      finish_contexts(ls);
     }
   }
 
