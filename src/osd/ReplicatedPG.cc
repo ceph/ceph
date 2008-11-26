@@ -995,7 +995,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
   case CEPH_OSD_OP_ZERO:
     { // zero
       assert(op.length);
-      if (!snapset.head_exists)
+      if (!exists)
 	t.touch(info.pgid.to_coll(), poid);
       t.zero(info.pgid.to_coll(), poid, op.offset, op.length);
       if (snapset.clones.size()) {
@@ -1012,7 +1012,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
-      if (!snapset.head_exists)
+      if (!exists)
 	t.touch(info.pgid.to_coll(), poid);
       t.truncate(info.pgid.to_coll(), poid, op.length);
       if (snapset.clones.size()) {
@@ -1063,6 +1063,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 
   case CEPH_OSD_OP_SETXATTR:
     {
+      if (!exists)
+	t.touch(info.pgid.to_coll(), poid);
       nstring name(op.name_len + 1);
       name[0] = '_';
       bp.copy(op.name_len, name.data()+1);
