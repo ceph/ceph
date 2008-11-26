@@ -1734,10 +1734,10 @@ void Client::remove_cap(Inode *in, int mds)
   in->caps.erase(mds);
   if (in->caps.empty()) {
     dout(15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
-    put_inode(in);
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
     in->snaprealm_item.remove_myself();
+    put_inode(in);
   }
 }
 
@@ -1747,10 +1747,10 @@ void Client::remove_all_caps(Inode *in)
   in->caps.clear();
   if (!wasempty) {
     dout(15) << "remove_all_caps closing snaprealm " << in->snaprealm << dendl;
-    put_inode(in);
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
     in->snaprealm_item.remove_myself();
+    put_inode(in);
   }
 }
 
