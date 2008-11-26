@@ -995,6 +995,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
   case CEPH_OSD_OP_ZERO:
     { // zero
       assert(op.length);
+      if (!snapset.head_exists)
+	t.touch(info.pgid.to_coll(), poid);
       t.zero(info.pgid.to_coll(), poid, op.offset, op.length);
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
@@ -1010,6 +1012,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 
   case CEPH_OSD_OP_TRUNCATE:
     { // truncate
+      if (!snapset.head_exists)
+	t.touch(info.pgid.to_coll(), poid);
       t.truncate(info.pgid.to_coll(), poid, op.length);
       if (snapset.clones.size()) {
 	snapid_t newest = *snapset.clones.rbegin();
@@ -2281,6 +2285,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     dout(15) << " write " << p->first << "~" << p->second << dendl;
     boff += p->second;
   }
+
+  if (data_subset.empty())
+    t.touch(info.pgid.to_coll(), poid);
 
   t.setattrs(info.pgid.to_coll(), poid, op->attrset);
   if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP &&
