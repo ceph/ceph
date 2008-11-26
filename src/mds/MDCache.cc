@@ -3500,8 +3500,10 @@ void MDCache::process_reconnected_caps()
     if (in->is_auth()) {
       // wr?
       if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+	in->loner_cap = -1;
 	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
 	  in->filelock.set_state(LOCK_LONER);
+	  in->choose_loner();
 	} else {
 	  in->filelock.set_state(LOCK_MIXED);
 	}
@@ -3509,6 +3511,7 @@ void MDCache::process_reconnected_caps()
     } else {
       // note that client should perform stale/reap cleanup during reconnect.
       assert((issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0);   // ????
+      in->loner_cap = -1;
       if (in->filelock.is_xlocked())
 	in->filelock.set_state(LOCK_LOCK);
       else
