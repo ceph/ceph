@@ -2408,8 +2408,10 @@ void ReplicatedPG::on_shutdown()
   while (!p.end()) {
     RepGather *repop = *p;
     ++p;
+    dout(10) << " applying + aborting " << *repop << dendl;
     if (!repop->applied)
       apply_repop(repop);
+    repop->aborted = true;
     repop->queue_item.remove_myself();
     repop->put();
   }
