@@ -159,7 +159,7 @@ public:
     }
 
     void touch(coll_t cid, pobject_t oid) {
-      int op = OP_WRITE;
+      int op = OP_TOUCH;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
