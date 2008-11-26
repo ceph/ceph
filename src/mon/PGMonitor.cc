@@ -76,8 +76,9 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
   string states = ss.str();
   return out << "v" << pm.pg_map.version << ": "
 	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states
-	     << "; " << kb_t(pm.pg_map.total_used_kb()) << " used, "
+	     << states << "; "
+	     << kb_t(pm.pg_map.total_pg_kb()) << " data, " 
+	     << kb_t(pm.pg_map.total_used_kb()) << " used, "
 	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
 	     << kb_t(pm.pg_map.total_kb()) << " free";
 }

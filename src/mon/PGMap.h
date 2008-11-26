@@ -156,6 +156,7 @@ public:
     total_osd_num_objects -= s.num_objects;
   }
 
+  uint64_t total_pg_kb() { return total_pg_num_kb; }
   uint64_t total_kb() { return total_osd_kb; }
   uint64_t total_avail_kb() { return total_osd_kb_avail; }
   uint64_t total_used_kb() { return total_osd_kb_used; }
