@@ -126,14 +126,13 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	assert(e == osdmap->get_epoch());
       }
       
-      // kick requests who might be timing out on the wrong osds
-      if (!changed_pgs.empty())
-	kick_requests(changed_pgs);
     } else {
       // first map.  we want the full thing.
       if (m->maps.count(m->get_last())) {
 	dout(3) << "handle_osd_map decoding full epoch " << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
+
+	scan_pgs(changed_pgs);
       } else {
 	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
 	int mon = monmap->pick_mon();
@@ -141,6 +140,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
 				monmap->get_inst(mon));
       }
     }
+
+    // kick requests who might be timing out on the wrong osds
+    if (!changed_pgs.empty())
+      kick_requests(changed_pgs);
   }
   
   delete m;
