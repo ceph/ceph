@@ -185,7 +185,11 @@ private:
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
-    //~Pipe() { cout << "destructor on " << this << std::endl; }
+    ~Pipe() {
+      assert(q.empty());
+      assert(sent.empty());
+    }
+
 
     void start_reader() {
       reader_running = true;
@@ -247,6 +251,7 @@ private:
     }
 
     void requeue_sent();
+    void discard_queue();
 
     void force_close() {
       if (sd >= 0) ::close(sd);

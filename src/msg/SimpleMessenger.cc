@@ -272,6 +272,7 @@ void Rank::reaper()
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
+    p->discard_queue();
     dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     assert(p->sd < 0);
     delete p;
@@ -1331,6 +1332,18 @@ void Rank::Pipe::requeue_sent()
     rq.push_front(m);
     out_seq--;
   }
+}
+
+void Rank::Pipe::discard_queue()
+{
+  dout(10) << "discard_queue" << dendl;
+  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
+    (*p)->put();
+  sent.clear();
+  for (map<int,list<Message*> >::iterator p = q.begin(); p != q.end(); p++)
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
+      (*r)->put();
+  q.clear();
 }
 
 
