@@ -186,6 +186,27 @@ void Timer::cancel_timer()
   }
 }
 
+void Timer::cancel_all_events()
+{
+  lock.Lock();
+
+  // clean up unfired events.
+  for (map<utime_t, set<Context*> >::iterator p = scheduled.begin();
+       p != scheduled.end();
+       p++) {
+    for (set<Context*>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      dout(DBL) << "cancel_all_events deleting " << *q << dendl;
+      delete *q;
+    }
+  }
+  scheduled.clear();
+  event_times.clear();
+
+  lock.Unlock();
+}
+
 
 /*
  * schedule

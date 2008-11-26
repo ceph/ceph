@@ -115,6 +115,7 @@ class Timer {
   }
   void shutdown() {
     cancel_timer();
+    cancel_all_events();
   }
 
   // schedule events
@@ -123,6 +124,7 @@ class Timer {
   void add_event_at(utime_t when,
                     Context *callback);
   bool cancel_event(Context *callback);
+  void cancel_all_events();
 
   // execute pending events
   void execute_pending();
