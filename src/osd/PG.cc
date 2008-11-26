@@ -790,6 +790,7 @@ void PG::build_prior()
     OSDMap *lastmap = osd->get_map(interval.last);
 
     int crashed = 0;
+    int need_down = 0;
     bool any_survived = false;
     for (unsigned i=0; i<interval.acting.size(); i++) {
       const osd_info_t& pinfo = osd->osdmap->get_info(interval.acting[i]);
@@ -817,10 +818,15 @@ void PG::build_prior()
 	if (interval.first <= info.history.last_epoch_started &&
 	    interval.last >= info.history.last_epoch_started)
 	  any_up_now = true;
+      } else if (pinfo.lost_at > interval.first) {
+	dout(10) << "build_prior  prior osd" << interval.acting[i]
+		 << " is down, but marked lost at " << pinfo.lost_at << dendl;
+	prior_set_down.insert(interval.acting[i]);
       } else {
 	dout(10) << "build_prior  prior osd" << interval.acting[i]
 		 << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
+	need_down++;
 	prior_set_down.insert(interval.acting[i]);
       }
     }
@@ -828,13 +834,15 @@ void PG::build_prior()
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_survived && interval.maybe_went_rw) {
+    if (!any_survived && need_down && interval.maybe_went_rw) {
       // fixme: how do we identify a "clean" shutdown anyway?
-      dout(10) << "build_prior  possibly went active+rw, no survivors, including" << dendl;
+      dout(10) << "build_prior  " << need_down
+	       << " osds possibly went active+rw, no survivors, including" << dendl;
       for (unsigned i=0; i<interval.acting.size(); i++)
 	if (osd->osdmap->is_down(interval.acting[i])) {
 	  prior_set.insert(interval.acting[i]);
 	  prior_set_down.erase(interval.acting[i]);
+	  state_set(PG_STATE_DOWN);
 	}
       some_down = true;
       
@@ -849,12 +857,6 @@ void PG::build_prior()
 	       << " possibly crashed, marking pg crashed" << dendl;
       state_set(PG_STATE_CRASHED);
     }
-  }
-
-  if (info.history.last_epoch_started < info.history.same_since &&
-      !any_up_now) {
-    dout(10) << "build_prior  no osds are up from the last epoch started, PG is down for now." << dendl;
-    state_set(PG_STATE_DOWN);
   }
 
   dout(10) << "build_prior = " << prior_set

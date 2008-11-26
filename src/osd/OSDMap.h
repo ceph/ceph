@@ -78,6 +78,15 @@ inline int calc_bits_of(int t) {
  * _finished_, or during which the osd cleanly shut down.  when
  * possible, we push this forward to the epoch the osd was eventually
  * marked down.
+ *
+ * the lost_at is used to allow build_prior to proceed without waiting
+ * for an osd to recover.  In certain cases, progress may be blocked 
+ * because an osd is down that may contain updates (i.e., a pg may have
+ * gone rw during an interval).  If the osd can't be brought online, we
+ * can force things to proceed knowing that we _might_ be losing some
+ * acked writes.  If the osd comes back to life later, that's fine to,
+ * but those writes will still be lost (the divergent objects will be
+ * thrown out).
  */
 struct osd_info_t {
   epoch_t last_clean_first;  // last interval that ended with a clean osd shutdown
@@ -85,15 +94,17 @@ struct osd_info_t {
   epoch_t up_from;   // epoch osd marked up
   epoch_t up_thru;   // lower bound on actual osd death (if > up_from)
   epoch_t down_at;   // upper bound on actual osd death (if > up_from)
+  epoch_t lost_at;   // last epoch we decided data was "lost"
   
   osd_info_t() : last_clean_first(0), last_clean_last(0),
-		 up_from(0), up_thru(0), down_at(0) {}
+		 up_from(0), up_thru(0), down_at(0), lost_at(0) {}
   void encode(bufferlist& bl) const {
     ::encode(last_clean_first, bl);
     ::encode(last_clean_last, bl);
     ::encode(up_from, bl);
     ::encode(up_thru, bl);
     ::encode(down_at, bl);
+    ::encode(lost_at, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(last_clean_first, bl);
@@ -101,6 +112,7 @@ struct osd_info_t {
     ::decode(up_from, bl);
     ::decode(up_thru, bl);
     ::decode(down_at, bl);
+    ::decode(lost_at, bl);
   }
 };
 WRITE_CLASS_ENCODER(osd_info_t)
@@ -144,6 +156,7 @@ public:
     map<int32_t,uint32_t> new_weight;
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
+    map<int32_t,epoch_t> new_lost;
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
 
@@ -174,6 +187,7 @@ public:
       // extended
       ::encode(new_up_thru, bl);
       ::encode(new_last_clean_interval, bl);
+      ::encode(new_lost, bl);
       ::encode(new_pg_swap_primary, bl);
       ::encode(old_pg_swap_primary, bl);
       ::encode(new_max_snap, bl);
@@ -202,6 +216,7 @@ public:
       // extended
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
+      ::decode(new_lost, p);
       ::decode(new_pg_swap_primary, p);
       ::decode(old_pg_swap_primary, p);
       ::decode(new_max_snap, p);
@@ -542,6 +557,8 @@ private:
       osd_info[i->first].last_clean_first = i->second.first;
       osd_info[i->first].last_clean_last = i->second.second;
     }
+    for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
+      osd_info[p->first].lost_at = p->second;
 
     // pg swap
     for (map<pg_t,uint32_t>::iterator i = inc.new_pg_swap_primary.begin();

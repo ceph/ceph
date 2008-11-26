@@ -148,8 +148,8 @@ mon
 - osdmon needs to lower-bound old osdmap versions it keeps around?
 
 osd
+- pg split should be a work queue
 - pg split needs to fix up pg stats.  this is tricky with the clone overlap business...
-- how does an admin intervene when a pg needs to repeer despite a dead osd?
 - generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
 - rdlocks
 - optimize remove wrt recovery pushes

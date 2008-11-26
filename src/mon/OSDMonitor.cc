@@ -996,7 +996,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
-    else if (m->cmd[1] == "down" && m->cmd.size() > 2) {
+    else if (m->cmd[1] == "down" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_down(osd)) {
 	ss << "osd" << osd << " is already down";
@@ -1014,7 +1014,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
-    else if (m->cmd[1] == "out" && m->cmd.size() > 2) {
+    else if (m->cmd[1] == "out" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_out(osd)) {
 	ss << "osd" << osd << " is already out";
@@ -1028,7 +1028,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       } 
     }
-    else if (m->cmd[1] == "in" && m->cmd.size() > 2) {
+    else if (m->cmd[1] == "in" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (osdmap.is_in(osd)) {
 	ss << "osd" << osd << " is already in";
@@ -1042,7 +1042,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       } 
     }
-    else if (m->cmd[1] == "reweight" && m->cmd.size() > 3) {
+    else if (m->cmd[1] == "reweight" && m->cmd.size() == 4) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       float w = strtof(m->cmd[3].c_str(), 0);
       long ww = (int)((float)CEPH_OSD_IN*w);
@@ -1053,6 +1053,23 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } 
+    }
+    else if (m->cmd[1] == "lost" && m->cmd.size() >= 3) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (m->cmd.size() < 4 ||
+	  m->cmd[3] != "--yes-i-really-mean-it") {
+	ss << "are you SURE?  this might mean real, permanent data loss.  pass --yes-i-really-mean-it if you really do.";
+      }
+      else if (!osdmap.exists(osd) || !osdmap.is_down(osd)) {
+	ss << "osd" << osd << " is not down or doesn't exist";
+      } else {
+	epoch_t e = osdmap.get_info(osd).down_at;
+	pending_inc.new_lost[osd] = e;
+	ss << "marked osd lost in epoch " << e;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      }
     }
     else {
       ss << "unknown command " << m->cmd[1];
