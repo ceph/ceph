@@ -76,6 +76,7 @@ int _dout_rename_output_file()  // after calling daemon()
     sprintf(_dout_file, "%s.%d", hostname, getpid());
 
     if (_dout_symlink_path[0]) {
+      // new symlink
       ::unlink(_dout_symlink_path);
       ::symlink(_dout_file, _dout_symlink_path);
     }
@@ -90,9 +91,31 @@ int _dout_create_courtesy_output_symlink(const char *type, int n)
       _dout_open_log();
 
     sprintf(_dout_symlink_path, "%s/%s%d", _dout_dir, type, n);
-    ::unlink(_dout_symlink_path);
+
+    // rotate out old symlink
+    int n = 0;
+    while (1) {
+      char fn[200];
+      struct stat st;
+      sprintf(fn, "%s.%d", _dout_symlink_path, n);
+      if (::stat(fn, &st) != 0)
+	break;
+      n++;
+    }
+    while (n >= 0) {
+      char a[200], b[200];
+      if (n)
+	sprintf(a, "%s.%d", _dout_symlink_path, n-1);
+      else
+	sprintf(a, "%s", _dout_symlink_path);
+      sprintf(b, "%s.%d", _dout_symlink_path, n);
+      ::rename(a, b);
+      dout(0) << "---- renamed symlink " << a << " -> " << b << " ----" << dendl;
+      n--;
+    }
+
     ::symlink(_dout_file, _dout_symlink_path);
-    dout(0) << "---- creating symlink " << _dout_symlink_path
+    dout(0) << "---- created symlink " << _dout_symlink_path
 	    << " -> " << _dout_file << " ----" << dendl;
   }
   return 0;
