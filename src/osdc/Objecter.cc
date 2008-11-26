@@ -91,42 +91,56 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
     set<pg_t> changed_pgs;
 
-    for (epoch_t e = osdmap->get_epoch() + 1;
-         e <= m->get_last();
-         e++) {
-      if (m->incremental_maps.count(e)) {
-        dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
-        OSDMap::Incremental inc(m->incremental_maps[e]);
-        osdmap->apply_incremental(inc);
-    
-        // notify messenger
-        for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
-             i != inc.new_down.end();
-             i++) 
-          messenger->mark_down(osdmap->get_addr(i->first));
+    if (osdmap->get_epoch()) {
+      // we want incrementals
+      for (epoch_t e = osdmap->get_epoch() + 1;
+	   e <= m->get_last();
+	   e++) {
+	if (m->incremental_maps.count(e)) {
+	  dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
+	  OSDMap::Incremental inc(m->incremental_maps[e]);
+	  osdmap->apply_incremental(inc);
+	  
+	  // notify messenger
+	  for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
+	       i != inc.new_down.end();
+	       i++) 
+	    messenger->mark_down(osdmap->get_addr(i->first));
+	  
+	}
+	else if (m->maps.count(e)) {
+	  dout(3) << "handle_osd_map decoding full epoch " << e << dendl;
+	  osdmap->decode(m->maps[e]);
+	}
+	else {
+	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
+	  int mon = monmap->pick_mon();
+	  messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1), 
+				  monmap->get_inst(mon));
+	  break;
+	}
+	
+	// scan pgs for changes
+	scan_pgs(changed_pgs);
         
-      }
-      else if (m->maps.count(e)) {
-        dout(3) << "handle_osd_map decoding full epoch " << e << dendl;
-        osdmap->decode(m->maps[e]);
-      }
-      else {
-        dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-        int mon = monmap->pick_mon();
-        messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1), 
-                                monmap->get_inst(mon));
-        break;
+	assert(e == osdmap->get_epoch());
       }
       
-      // scan pgs for changes
-      scan_pgs(changed_pgs);
-        
-      assert(e == osdmap->get_epoch());
+      // kick requests who might be timing out on the wrong osds
+      if (!changed_pgs.empty())
+	kick_requests(changed_pgs);
+    } else {
+      // first map.  we want the full thing.
+      if (m->maps.count(m->get_last())) {
+	dout(3) << "handle_osd_map decoding full epoch " << m->get_last() << dendl;
+	osdmap->decode(m->maps[m->get_last()]);
+      } else {
+	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
+	int mon = monmap->pick_mon();
+	messenger->send_message(new MOSDGetMap(monmap->fsid, 0),
+				monmap->get_inst(mon));
+      }
     }
-
-    // kick requests who might be timing out on the wrong osds
-    if (!changed_pgs.empty())
-      kick_requests(changed_pgs);
   }
   
   delete m;
