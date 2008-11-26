@@ -15,6 +15,8 @@
 #ifndef __OSD_TYPES_H
 #define __OSD_TYPES_H
 
+#include <stdio.h>
+
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/pobject.h"
@@ -133,6 +135,20 @@ public:
     return coll_t(u.pg64, sn);
   }
 
+  bool parse(const char *s) {
+    int numrep;
+    int pool;
+    int ps;
+    int r = sscanf(s, "%dx%d.%x", &numrep, &pool, &ps);
+    if (r < 3)
+      return false;
+    u.pg.type = TYPE_REP;
+    u.pg.pool = pool;
+    u.pg.size = numrep;
+    u.pg.ps = ps;
+    u.pg.preferred = -1;
+    return true;
+  }
 
 } __attribute__ ((packed));
 
@@ -345,7 +361,7 @@ struct pg_stat_t {
   __u64 num_object_clones;
 
   vector<int> acting;
-  
+
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
     ::encode(reported, bl);

@@ -196,16 +196,12 @@ int main(int argc, const char **argv)
   }  
 
   if (test_map_pg) {
-    int numrep;
-    int pool;
-    int ps;
-    int r = sscanf(test_map_pg, "%dx%d.%x", &numrep, &pool, &ps);
-    if (r < 3) {
+    pg_t pgid;
+    if (pgid.parse(test_map_pg)) {
       cerr << me << ": failed to parse pg '" << test_map_pg
 	   << "', r = " << r << std::endl;
       usage(me);
     }
-    pg_t pgid(pg_t::TYPE_REP, numrep, ps, pool, -1);
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
     vector<int> acting;

@@ -26,6 +26,7 @@
 #include "messages/MStatfsReply.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MMonCommand.h"
+#include "messages/MOSDScrub.h"
 
 #include "common/Timer.h"
 
@@ -629,6 +630,29 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       }
       ss << "ok";
       r = 0;
+    }
+    else if (m->cmd[1] == "scrub" && m->cmd.size() == 3) {
+      pg_t pgid;
+      r = -EINVAL;
+      if (pgid.parse(m->cmd[2].c_str())) {
+	if (mon->pgmon->pg_map.pg_stat.count(pgid)) {
+	  if (mon->pgmon->pg_map.pg_stat[pgid].acting.size()) {
+	    int osd = mon->pgmon->pg_map.pg_stat[pgid].acting[0];
+	    if (mon->osdmon->osdmap.is_up(osd)) {
+	      vector<pg_t> pgs(1);
+	      pgs[0] = pgid;
+	      mon->messenger->send_message(new MOSDScrub(mon->monmap->fsid, pgs),
+					   mon->osdmon->osdmap.get_inst(osd));
+	      ss << "instructing pg " << pgid << " on osd" << osd << " to scrub";
+	      r = 0;
+	    } else
+	      ss << "pg " << pgid << " primary osd" << osd << " not up";
+	  } else
+	    ss << "pg " << pgid << " has no primary osd";
+	} else
+	  ss << "pg " << pgid << " dne";
+      } else
+	ss << "invalid pgid '" << m->cmd[2] << "'";
     }
   }
 
