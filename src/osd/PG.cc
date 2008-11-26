@@ -1426,15 +1426,18 @@ void PG::write_info(ObjectStore::Transaction& t)
   // pg state
   bufferlist infobl;
   ::encode(info, infobl);
+  dout(20) << "write_info info " << infobl.length() << dendl;
   t.collection_setattr(info.pgid.to_coll(), "info", infobl);
  
   // local state
   bufferlist snapbl;
   ::encode(snap_collections, snapbl);
+  dout(20) << "write_info snap " << snapbl.length() << dendl;
   t.collection_setattr(info.pgid.to_coll(), "snap_collections", snapbl);
 
   bufferlist ki;
   ::encode(past_intervals, ki);
+  dout(20) << "write_info pastintervals " << ki.length() << dendl;
   t.collection_setattr(info.pgid.to_coll(), "past_intervals", ki);
 
   dirty_info = false;
@@ -1477,7 +1480,7 @@ void PG::write_log(ObjectStore::Transaction& t)
 
 void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v) 
 {
-  dout(15) << "  trim_ondisk_log_to v " << v << dendl;
+  dout(15) << "trim_ondisk_log_to v " << v << dendl;
 
   map<loff_t,eversion_t>::iterator p = ondisklog.block_map.begin();
   while (p != ondisklog.block_map.end()) {
@@ -1530,7 +1533,7 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 		    eversion_t logversion, eversion_t trim_to)
 {
-  dout(10) << "append_log " << ondisklog.top << dendl;
+  dout(10) << "append_log " << ondisklog.bottom << "," << ondisklog.top << ") adding " << bl.length() <<  dendl;
  
   // update block map?
   if (ondisklog.top % 4096 == 0) 

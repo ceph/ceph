@@ -587,7 +587,7 @@ void FileStore::_transaction_finish(int fd)
 unsigned FileStore::_apply_transaction(Transaction& t)
 {
   // non-atomic implementation
-  int id = _transaction_start(t.get_trans_len());
+  int id = _transaction_start(0);// t.get_trans_len());
   if (id < 0) return id;
   
   while (t.have_op()) {

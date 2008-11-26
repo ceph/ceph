@@ -99,8 +99,10 @@ public:
     static const int OP_COLL_SETATTRS = 26;  // cid, attrset
 
   private:
+    /*
     int len;
     int blen;  // for btrfs transactions
+    */
     vector<int8_t> ops;
     vector<bufferlist> bls;
     vector<pobject_t> oids;
@@ -116,8 +118,10 @@ public:
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
+    /*
     int get_trans_len() { return len ? len : ops.size(); }
     int get_btrfs_len() { return blen; }
+    */
 
     __u64 disk_space_required() {
       // be conservative!
@@ -159,8 +163,8 @@ public:
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      len++;
-      blen += 3;
+      //len++;
+      //blen += 3;
     }
     void write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl) {
       int op = OP_WRITE;
@@ -170,8 +174,8 @@ public:
       lengths.push_back(off);
       lengths.push_back(len);
       bls.push_back(bl);
-      len++;
-      blen += 3 + bl.buffers().size();
+      //len++;
+      //blen += 3 + bl.buffers().size();
     }
     void zero(coll_t cid, pobject_t oid, __u64 off, size_t len) {
       int op = OP_ZERO;
@@ -180,8 +184,8 @@ public:
       oids.push_back(oid);
       lengths.push_back(off);
       lengths.push_back(len);
-      len++;
-      blen += 3 + 1;
+      //len++;
+      //blen += 3 + 1;
     }
     void trim_from_cache(coll_t cid, pobject_t oid, __u64 off, size_t len) {
       int op = OP_TRIMCACHE;
@@ -190,7 +194,7 @@ public:
       oids.push_back(oid);
       lengths.push_back(off);
       lengths.push_back(len);
-      len++;
+      //len++;
     }
     void truncate(coll_t cid, pobject_t oid, __u64 off) {
       int op = OP_TRUNCATE;
@@ -198,16 +202,16 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       lengths.push_back(off);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void remove(coll_t cid, pobject_t oid) {
       int op = OP_REMOVE;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void setattr(coll_t cid, pobject_t oid, const char* name, const void* val, int len) {
       bufferlist bl;
@@ -226,8 +230,8 @@ public:
       oids.push_back(oid);
       attrnames.push_back(name);
       bls.push_back(val);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& attrset) {
       map<nstring,bufferptr> empty;
@@ -237,8 +241,8 @@ public:
       oids.push_back(oid);
       attrsets.push_back(empty);
       attrsets.back().swap(attrset);
-      len++;
-      blen += 5 + attrset.size();     // HACK allowance for removing old attrs
+      //len++;
+      //blen += 5 + attrset.size();     // HACK allowance for removing old attrs
     }
     void rmattr(coll_t cid, pobject_t oid, nstring& s) {
       attrnames2.push_back(nstring());
@@ -251,8 +255,8 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       attrnames.push_back(name);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void clone(coll_t cid, pobject_t oid, pobject_t noid) {
       int op = OP_CLONE;
@@ -260,8 +264,8 @@ public:
       cids.push_back(cid);
       oids.push_back(oid);
       oids.push_back(noid);
-      len++;
-      blen += 5;
+      //len++;
+      //blen += 5;
     }
     void clone_range(coll_t cid, pobject_t oid, pobject_t noid, __u64 off, __u64 len) {
       int op = OP_CLONERANGE;
@@ -271,22 +275,22 @@ public:
       oids.push_back(noid);
       lengths.push_back(off);
       lengths.push_back(len);
-      len++;
-      blen += 5;
+      //len++;
+      //blen += 5;
     }
     void create_collection(coll_t cid) {
       int op = OP_MKCOLL;
       ops.push_back(op);
       cids.push_back(cid);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void remove_collection(coll_t cid) {
       int op = OP_RMCOLL;
       ops.push_back(op);
       cids.push_back(cid);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void collection_add(coll_t cid, coll_t ocid, pobject_t oid) {
       int op = OP_COLL_ADD;
@@ -294,16 +298,16 @@ public:
       cids.push_back(cid);
       cids.push_back(ocid);
       oids.push_back(oid);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void collection_remove(coll_t cid, pobject_t oid) {
       int op = OP_COLL_REMOVE;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      len++;
-       blen++;
+      //len++;
+      //blen++;
    }
     void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
       bufferlist bl;
@@ -316,8 +320,8 @@ public:
       cids.push_back(cid);
       attrnames.push_back(name);
       bls.push_back(val);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
 
     void collection_rmattr(coll_t cid, const char* name) {
@@ -325,29 +329,29 @@ public:
       ops.push_back(op);
       cids.push_back(cid);
       attrnames.push_back(name);
-      len++;
-      blen++;
+      //len++;
+      //blen++;
     }
     void collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset) {
       int op = OP_COLL_SETATTRS;
       ops.push_back(op);
       cids.push_back(cid);
       attrsets.push_back(aset);
-      len++;
-      blen += 5 + aset.size();
+      //len++;
+      //blen += 5 + aset.size();
     }
 
 
     // etc.
     Transaction() :
-      len(0),
+      //len(0),
       opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {}
     Transaction(bufferlist::iterator &p) : 
-      len(0),
+      //len(0),
       opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0)
     { decode(p); }
     Transaction(bufferlist &bl) : 
-      len(0),
+      //len(0),
       opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { 
       bufferlist::iterator p = bl.begin();
       decode(p); 
