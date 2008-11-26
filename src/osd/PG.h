@@ -68,6 +68,8 @@ public:
 
     set<snapid_t> dead_snaps; // snaps we need to trim
 
+    pg_stat_t stats;
+
     struct History {
       epoch_t epoch_created;       // epoch in which PG was created
       epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
@@ -116,6 +118,7 @@ public:
       ::encode(last_complete, bl);
       ::encode(log_bottom, bl);
       ::encode(log_backlog, bl);
+      ::encode(stats, bl);
       history.encode(bl);
       ::encode(dead_snaps, bl);
     }
@@ -125,6 +128,7 @@ public:
       ::decode(last_complete, bl);
       ::decode(log_bottom, bl);
       ::decode(log_backlog, bl);
+      ::decode(stats, bl);
       history.decode(bl);
       ::decode(dead_snaps, bl);
     }
@@ -603,7 +607,7 @@ protected:
 
   Mutex pg_stats_lock;
   bool pg_stats_valid;
-  pg_stat_t pg_stats, pg_stats_stable;
+  pg_stat_t pg_stats_stable;
 
   void update_stats();
   void clear_stats();

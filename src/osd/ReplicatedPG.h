@@ -36,7 +36,6 @@ public:
 
     ObjectStore::Transaction t;
     bool applied, aborted;
-    pg_stat_t stats;
 
     set<int>  waitfor_ack;
     set<int>  waitfor_nvram;
@@ -150,7 +149,7 @@ protected:
 			pobject_t poid, __u64& old_size, bool& exists,
 			ceph_osd_op& op, bufferlist::iterator& bp,
 			SnapSet& snapset, SnapContext& snapc); 
-  void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
+  void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
 			   eversion_t old_version, eversion_t at_version,

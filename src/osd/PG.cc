@@ -365,6 +365,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
     info.last_update = log.top = olog.top;
     info.log_bottom = log.bottom = olog.bottom;
     info.log_backlog = log.backlog = olog.backlog;
+    info.stats = peer_info[fromosd].stats;
     changed = true;
   } 
 
@@ -451,6 +452,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
                      olog.log, from, to);
       
       info.last_update = log.top = olog.top;
+      info.stats = peer_info[fromosd].stats;
 
       // process divergent items
       if (!divergent.empty()) {
@@ -513,8 +515,8 @@ void PG::generate_backlog()
 
   vector<pobject_t> olist;
   osd->store->collection_list(info.pgid.to_coll(), olist);
-  if (olist.size() != pg_stats.num_objects)
-    dout(10) << " WARNING: " << olist.size() << " != num_objects " << pg_stats.num_objects << dendl;
+  if (olist.size() != info.stats.num_objects)
+    dout(10) << " WARNING: " << olist.size() << " != num_objects " << info.stats.num_objects << dendl;
 
   
   int local = 0;
@@ -1393,7 +1395,7 @@ void PG::update_stats()
   if (is_primary()) {
     // update our stat summary
     pg_stats_valid = true;
-    pg_stats_stable = pg_stats;
+    pg_stats_stable = info.stats;
     pg_stats_stable.version = info.last_update;
     pg_stats_stable.reported = osd->osdmap->get_epoch();
     pg_stats_stable.state = state;
@@ -1421,11 +1423,12 @@ void PG::clear_stats()
 
 void PG::write_info(ObjectStore::Transaction& t)
 {
-  // write pg info
+  // pg state
   bufferlist infobl;
   ::encode(info, infobl);
   t.collection_setattr(info.pgid.to_coll(), "info", infobl);
-
+ 
+  // local state
   bufferlist snapbl;
   ::encode(snap_collections, snapbl);
   t.collection_setattr(info.pgid.to_coll(), "snap_collections", snapbl);
@@ -1433,10 +1436,6 @@ void PG::write_info(ObjectStore::Transaction& t)
   bufferlist ki;
   ::encode(past_intervals, ki);
   t.collection_setattr(info.pgid.to_coll(), "past_intervals", ki);
-
-  bufferlist st;
-  ::encode(pg_stats, st);
-  t.collection_setattr(info.pgid.to_coll(), "stats", st);
 
   dirty_info = false;
 }
@@ -1642,17 +1641,8 @@ void PG::read_state(ObjectStore *store)
   // past_intervals
   bl.clear();
   store->collection_getattr(info.pgid.to_coll(), "past_intervals", bl);
-  if (bl.length()) {
-    p = bl.begin();
-    ::decode(past_intervals, p);
-  }
-
-  bl.clear();
-  store->collection_getattr(info.pgid.to_coll(), "stats", bl);
-  if (bl.length()) {
-    p = bl.begin();
-    ::decode(pg_stats, p);
-  }
+  p = bl.begin();
+  ::decode(past_intervals, p);
 
   read_log(store);
 }
