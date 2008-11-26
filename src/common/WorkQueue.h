@@ -69,16 +69,19 @@ public:
   virtual void _dequeue(T *) = 0;
   virtual T *_dequeue() = 0;
   virtual void _process(T *) = 0;
+  virtual void _clear() = 0;
 
   void start() {
     thread.create();
   }
-  void stop() {
+  void stop(bool clear_after=true) {
     _lock.Lock();
     _stop = true;
     cond.Signal();
     _lock.Unlock();
     thread.join();
+    if (clear_after)
+      clear();      
   }
   void kick() {
     _lock.Lock();
@@ -123,6 +126,11 @@ public:
   void dequeue(T *item) {
     _lock.Lock();
     _dequeue(item);
+    _lock.Unlock();
+  }
+  void clear() {
+    _lock.Lock();
+    _clear();
     _lock.Unlock();
   }
 
