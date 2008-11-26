@@ -1068,8 +1068,10 @@ void OSD::heartbeat()
     for (map<int, vector<pg_t> >::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      MOSDPGRemove *m = new MOSDPGRemove(p->first, q->second);
-      messenger->send_message(m, osdmap->get_inst(q->first));
+      if (osdmap->is_up(q->first)) {
+	MOSDPGRemove *m = new MOSDPGRemove(p->first, q->second);
+	messenger->send_message(m, osdmap->get_inst(q->first));
+      }
     }
   remove_list.clear();
   remove_list_lock.Unlock();
@@ -1731,6 +1733,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   store->sync();
 
   map_lock.put_write();
+
   recovery_wq.unpause();
   scrub_wq.unpause();
   snap_trim_wq.unpause();
