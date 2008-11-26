@@ -59,6 +59,8 @@
 
 #include "messages/MOSDAlive.h"
 
+#include "messages/MOSDScrub.h"
+
 #include "messages/MMonCommand.h"
 
 #include "messages/MPGStats.h"
@@ -1370,8 +1372,11 @@ void OSD::dispatch(Message *m)
   case MSG_MON_COMMAND:
     parse_config_option_string(((MMonCommand*)m)->cmd[0]);
     delete m;
+    break;
+
+  case MSG_OSD_SCRUB:
+    handle_scrub((MOSDScrub*)m);
     break;    
-    
 
     // -- need OSDMap --
 
@@ -1490,6 +1495,33 @@ void OSD::handle_osd_ping(MOSDPing *m)
   delete m;
 }
 
+
+
+void OSD::handle_scrub(MOSDScrub *m)
+{
+  dout(10) << "handle_scrub " << *m << dendl;
+  
+  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+    dout(0) << "handle_scrub fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    delete m;
+    return;
+  }
+
+  if (m->scrub_pgs.empty()) {
+    for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+	 p != pg_map.end();
+	 p++)
+      scrub_wq.queue(p->second);
+  } else {
+    for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
+	 p != m->scrub_pgs.end();
+	 p++)
+      if (pg_map.count(*p))
+	scrub_wq.queue(pg_map[*p]);
+  }
+
+  delete m;
+}
 
 
 

@@ -44,15 +44,21 @@
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
 
-#define MSG_PGSTATS    86
-#define MSG_PGSTATSACK 87
+#define MSG_PGSTATS            86
+#define MSG_PGSTATSACK         87
 
 #define MSG_OSD_PG_CREATE      88
-#define MSG_REMOVE_SNAPS 89
+#define MSG_REMOVE_SNAPS       89
+
+#define MSG_OSD_SCRUB          90
 
 
 
 // *** MDS ***
+
+#define MSG_MDS_BEACON             100  // to monitor
+#define MSG_MDS_SLAVE_REQUEST      101
+#define MSG_MDS_TABLE_REQUEST      102
 
 #define MSG_MDS_RESOLVE            0x200
 #define MSG_MDS_RESOLVEACK         0x201
@@ -83,10 +89,6 @@
 
 #define MSG_MDS_EXPORTCAPS            0x470
 #define MSG_MDS_EXPORTCAPSACK         0x471
-
-#define MSG_MDS_BEACON             90  // to monitor
-#define MSG_MDS_SLAVE_REQUEST      91
-#define MSG_MDS_TABLE_REQUEST      92
 
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 

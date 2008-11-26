@@ -28,6 +28,7 @@
 #include "messages/MOSDAlive.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
+#include "messages/MOSDScrub.h"
 
 #include "common/Timer.h"
 
@@ -909,6 +910,17 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  ss << "specify osd number or *";
       }
     }
+    else if (m->cmd[1] == "scrub" && m->cmd.size() > 2) {
+      long osd = strtol(m->cmd[2].c_str(), 0, 10);
+      if (osdmap.is_up(osd)) {
+	mon->messenger->send_message(new MOSDScrub(osdmap.get_fsid()),
+				     osdmap.get_inst(osd));
+	r = 0;
+	ss << "osd" << osd << " instructed to scrub";
+      } else 
+	ss << "osd" << osd << " is not up";
+    }
+
   }
   if (r != -1) {
     string rs;
@@ -1041,7 +1053,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } 
-    } else {
+    }
+    else {
       ss << "unknown command " << m->cmd[1];
     }
   } else {

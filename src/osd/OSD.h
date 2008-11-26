@@ -589,6 +589,7 @@ private:
 
   void reply_op_error(MOSDOp *op, int r);
 
+  void handle_scrub(class MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);
   void handle_sub_op(class MOSDSubOp *m);
