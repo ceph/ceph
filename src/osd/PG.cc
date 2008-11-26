@@ -1134,7 +1134,12 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(PG_STATE_CRASHED);
     state_clear(PG_STATE_REPLAY);
   }
-
+  if (is_primary() && 
+      info.pgid.size() != acting.size())
+    state_set(PG_STATE_DEGRADED);
+  else
+    state_clear(PG_STATE_DEGRADED);
+  
   info.history.last_epoch_started = osd->osdmap->get_epoch();
   trim_past_intervals();
   
