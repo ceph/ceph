@@ -1,6 +1,6 @@
 Index: configure.in
 ===================================================================
---- configure.in	(revision 26845)
+--- configure.in	(revision 26859)
 +++ configure.in	(working copy)
 @@ -1671,6 +1671,7 @@
    plugins/agentx/Makefile
@@ -12,7 +12,7 @@ Index: configure.in
    plugins/enttec/Makefile
 Index: Makefile.am
 ===================================================================
---- Makefile.am	(revision 26845)
+--- Makefile.am	(revision 26859)
 +++ Makefile.am	(working copy)
 @@ -243,6 +243,7 @@
  	-dlopen plugins/agentx/agentx.la \
@@ -22,39 +22,6 @@ Index: Makefile.am
  	-dlopen plugins/ciscosm/ciscosm.la \
  	-dlopen plugins/docsis/docsis.la \
  	-dlopen plugins/enttec/enttec.la \
-Index: plugins/ceph/plugin.c
-===================================================================
---- plugins/ceph/plugin.c	(revision 0)
-+++ plugins/ceph/plugin.c	(revision 0)
-@@ -0,0 +1,28 @@
-+/* Do not modify this file.  */
-+/* It is created automatically by the Makefile.  */
-+
-+#ifdef HAVE_CONFIG_H
-+# include "config.h"
-+#endif
-+
-+#include <gmodule.h>
-+
-+#include "moduleinfo.h"
-+
-+#ifndef ENABLE_STATIC
-+G_MODULE_EXPORT const gchar version[] = VERSION;
-+
-+/* Start the functions we need for the plugin stuff */
-+
-+G_MODULE_EXPORT void
-+plugin_register (void)
-+{
-+  {extern void proto_register_ceph (void); proto_register_ceph ();}
-+}
-+
-+G_MODULE_EXPORT void
-+plugin_reg_handoff(void)
-+{
-+  {extern void proto_reg_handoff_ceph (void); proto_reg_handoff_ceph ();}
-+}
-+#endif
 Index: plugins/ceph/Makefile.common
 ===================================================================
 --- plugins/ceph/Makefile.common	(revision 0)
@@ -86,7 +53,7 @@ Index: plugins/ceph/Makefile.common
 +# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 +
 +# the name of the plugin
-+PLUGIN_NAME = ciscosm
++PLUGIN_NAME = ceph
 +
 +# the dissector sources (without any helpers)
 +DISSECTOR_SRC = \
@@ -95,7 +62,7 @@ Index: plugins/ceph/packet-ceph.c
 ===================================================================
 --- plugins/ceph/packet-ceph.c	(revision 0)
 +++ plugins/ceph/packet-ceph.c	(revision 0)
-@@ -0,0 +1,1141 @@
+@@ -0,0 +1,1155 @@
 +/* packet-ceph.c
 +* This program is free software; you can redistribute it and/or
 +* modify it under the terms of the GNU General Public License
@@ -122,15 +89,25 @@ Index: plugins/ceph/packet-ceph.c
 +#include <epan/dissectors/packet-tcp.h>
 +
 +// this is needed for ceph_fs to compile in userland
++#ifdef _MSC_VER
++typedef  char				__s8;
++typedef short				__s16;
++typedef int					__s32;
++typedef __int64				__s64;
++typedef unsigned char		__u8;
++typedef unsigned short		__u16;
++typedef unsigned int		__u32;
++typedef unsigned __int64	__u64;
++typedef __u16				__le16;
++typedef __u32				__le32;
++typedef __u64				__le64;
++#define __attribute__(x)
++#define O_ACCMODE (O_RDONLY | O_RDWR | O_WRONLY)
++#include <winsock.h>
++#else
 +#include <netinet/in.h>
-+#if 0
-+#define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
-+#include "inttypes.h"
-+#include "byteorder.h"
-+#endif
-+
-+
 +#include <linux/types.h>
++#endif
 +typedef int bool;
 +
 +#define le16_to_cpu(x) (x)
@@ -139,7 +116,14 @@ Index: plugins/ceph/packet-ceph.c
 +
 +#include <fcntl.h>
 +#include <string.h>
++
++#ifdef _MSC_VER
++#pragma pack(1)
++#endif
 +#include "ceph_fs.h"
++#ifdef _MSC_VER
++#pragma pack()
++#endif
 +
 +
 +
@@ -193,13 +177,10 @@ Index: plugins/ceph/packet-ceph.c
 +
 +#define PROTO_ADD_TIME(tvb, tree, type, offset, head, field, name) \
 +	do { \
-+		char buf[CTIME_BUF_LEN];	\
 +		time_t time;			\
 +		time = head->field.tv_sec;	\
-+		ctime_r(&time, buf);		\
-+		buf[strlen(buf)-1] = '\0';	\
 +		proto_tree_add_text(tree, tvb, offset + offsetof(type, field), \
-+			sizeof(head->field), "" #name ": %s (%d ns)", buf, head->field.tv_nsec); \
++			sizeof(head->field), "" #name ": %s (%d ns)", ctime(&time), head->field.tv_nsec); \
 +	} while (0)
 +
 +static const value_string packettypenames[] = {
@@ -1246,7 +1227,7 @@ Index: plugins/ceph/plugin.rc.in
 +
 +VS_VERSION_INFO VERSIONINFO
 + FILEVERSION @RC_MODULE_VERSION@
-+ PRODUCTVERSION @RC_VERSION@,0
++ PRODUCTVERSION @RC_VERSION@
 + FILEFLAGSMASK 0x0L
 +#ifdef _DEBUG
 + FILEFLAGS VS_FF_PRERELEASE+VS_FF_DEBUG
@@ -1264,7 +1245,7 @@ Index: plugins/ceph/plugin.rc.in
 +            VALUE "FileDescription", "@PACKAGE@ dissector\0"
 +            VALUE "FileVersion", "@MODULE_VERSION@\0"
 +            VALUE "InternalName", "@PACKAGE@ @MODULE_VERSION@\0"
-+            VALUE "LegalCopyright", "Copyright © 1998 Gerald Combs <gerald@wireshark.org>, Gilbert Ramirez <gram@alumni.rice.edu> and others\0"
++            VALUE "LegalCopyright", "Copyright ï¿½ 1998 Gerald Combs <gerald@wireshark.org>, Gilbert Ramirez <gram@alumni.rice.edu> and others\0"
 +            VALUE "OriginalFilename", "@PLUGIN_NAME@.dll\0"
 +            VALUE "ProductName", "Wireshark\0"
 +            VALUE "ProductVersion", "@VERSION@\0"
@@ -2796,9 +2777,31 @@ Index: plugins/ceph/ceph_fs.h
 +} __attribute__ ((packed));
 +
 +#endif
+Index: plugins/Makefile.nmake
+===================================================================
+--- plugins/Makefile.nmake	(revision 26859)
++++ plugins/Makefile.nmake	(working copy)
+@@ -39,6 +39,9 @@
+ 	cd asn1
+ 	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
+ 	cd ..
++	cd ceph
++	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
++	cd ..
+ 	cd ciscosm
+ 	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
+ 	cd ..
+@@ -128,6 +131,7 @@
+ 	xcopy agentx\*.dll $(VERSION) /d
+ 	xcopy artnet\*.dll $(VERSION) /d
+ 	xcopy asn1\*.dll $(VERSION) /d
++	xcopy ceph\*.dll $(VERSION) /d
+ 	xcopy ciscosm\*.dll $(VERSION) /d
+ 	xcopy docsis\*.dll $(VERSION) /d
+ 	xcopy enttec\*.dll $(VERSION) /d
 Index: plugins/Makefile.am
 ===================================================================
---- plugins/Makefile.am	(revision 26845)
+--- plugins/Makefile.am	(revision 26859)
 +++ plugins/Makefile.am	(working copy)
 @@ -26,6 +26,7 @@
  	agentx \
@@ -2810,7 +2813,7 @@ Index: plugins/Makefile.am
  	enttec \
 Index: epan/Makefile.am
 ===================================================================
---- epan/Makefile.am	(revision 26845)
+--- epan/Makefile.am	(revision 26859)
 +++ epan/Makefile.am	(working copy)
 @@ -189,6 +189,7 @@
  plugin_src = \
@@ -2822,7 +2825,7 @@ Index: epan/Makefile.am
  	../plugins/docsis/packet-bpkmrsp.c \
 Index: packaging/nsis/Makefile.nmake
 ===================================================================
---- packaging/nsis/Makefile.nmake	(revision 26845)
+--- packaging/nsis/Makefile.nmake	(revision 26859)
 +++ packaging/nsis/Makefile.nmake	(working copy)
 @@ -47,6 +47,7 @@
  	../../plugins/agentx/agentx.dll \
@@ -2834,7 +2837,7 @@ Index: packaging/nsis/Makefile.nmake
  	../../plugins/enttec/enttec.dll \
 Index: packaging/nsis/wireshark.nsi
 ===================================================================
---- packaging/nsis/wireshark.nsi	(revision 26845)
+--- packaging/nsis/wireshark.nsi	(revision 26859)
 +++ packaging/nsis/wireshark.nsi	(working copy)
 @@ -779,6 +779,7 @@
  File "..\..\plugins\agentx\agentx.dll"
