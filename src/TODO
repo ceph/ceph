@@ -92,7 +92,6 @@ mds
   - anchor source dir
   - build snaprealm for any hardlinked file
   - include snaps for all (primary+remote) parents
-- delayed open_remote_ino vs purge?
 - how do we properly clean up inodes when doing a snap purge?
   - when they are mid-recover?  see 136470cf7ca876febf68a2b0610fa3bb77ad3532
 - whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
