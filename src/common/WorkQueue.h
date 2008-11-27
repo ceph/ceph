@@ -60,7 +60,7 @@ class WorkQueue {
 
 public:
   WorkQueue(string name) :
-    _lock(string(name + "::lock").c_str()),
+    _lock((new string(name + "::lock"))->c_str()),  // deliberately leak this
     _stop(false), _pause(false),
     processing(0),
     thread(this) {}
