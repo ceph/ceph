@@ -3136,6 +3136,8 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	      MDRequest *mdr = request_get(r->second);  // should have this from auth_pin above.
 	      assert(mdr->is_auth_pinned(in));
 	      lock->set_state(LOCK_LOCK);
+	      if (lock == &in->filelock)
+		in->loner_cap = -1;
 	      lock->get_xlock(mdr);
 	      mdr->xlocks.insert(lock);
 	      mdr->locks.insert(lock);
@@ -3992,6 +3994,7 @@ void MDCache::identify_files_to_recover()
       continue;
     if (in->inode.max_size > in->inode.size) {
       in->filelock.set_state(LOCK_LOCK);
+      in->loner_cap = -1;
       q.push_back(in);
     }
   }
