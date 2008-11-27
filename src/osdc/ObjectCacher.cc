@@ -674,9 +674,10 @@ void ObjectCacher::bh_write_commit(object_t oid, loff_t start, size_t length, ti
     if (commit_set_callback &&
 	ob->last_commit_tid == ob->last_write_tid) {
       ob->uncommitted_item.remove_myself();
-      if (uncommitted_by_ino[ob->get_ino()].empty()) {
+      if (uncommitted_by_ino[ob->get_ino()].empty()) {  // no uncommitted in flight
 	uncommitted_by_ino.erase(ob->get_ino());
-	commit_set_callback(flush_set_callback_arg, ob->get_ino());      
+	if (dirty_tx_by_ino[ob->get_ino()] == 0)        // AND nothing dirty/tx
+	  commit_set_callback(flush_set_callback_arg, ob->get_ino());      
       }
     }
   }
