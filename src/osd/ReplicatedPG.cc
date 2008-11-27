@@ -2188,8 +2188,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
           << poid 
           << " v " << v 
 	  << " len " << push.length
-	  << " subset " << op->data_subset
-	  << " data " << op->get_data().length()
+	  << " data_subset " << op->data_subset
+	  << " clone_subsets " << op->clone_subsets
+	  << " data len " << op->get_data().length()
           << dendl;
 
   interval_set<__u64> data_subset;
@@ -2219,12 +2220,16 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   if (!missing.is_missing(poid.oid, v)) {
     dout(7) << "sub_op_push not missing " << poid << " v" << v << dendl;
     dout(15) << " but i AM missing " << missing.missing << dendl;
+    delete op;
     return;
   }
 
+  bufferlist data;
+  data.claim(op->get_data());
+
   // determine data/clone subsets
   data_subset = op->data_subset;
-  if (data_subset.empty() && push.length && push.length == op->get_data().length())
+  if (data_subset.empty() && push.length && push.length == data.length())
     data_subset.insert(0, push.length);
   clone_subsets = op->clone_subsets;
 
@@ -2248,11 +2253,41 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       calc_clone_subsets(snapset, poid, missing, data_needed, clone_subsets);
       
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset << dendl;
-      assert(!data_needed.subset_of(data_subset));
+      if (!data_needed.subset_of(data_subset)) {
+	dout(0) << " we did not get enough of " << poid << " object data" << dendl;
+	delete op;
+	return;
+      }
 
-      // fixme: we could adjust data bl wrt data_needed vs
-      // data_subset.  instead, just write (pot. larger) data_subset,
-      // and then clone over whatever wasn't needed.
+      // did we get more data than we need?
+      if (!data_subset.subset_of(data_needed)) {
+	interval_set<__u64> extra = data_subset;
+	extra.subtract(data_needed);
+	dout(10) << " we got some extra: " << extra << dendl;
+
+	bufferlist result;
+	int off = 0;
+	for (map<__u64,__u64>::iterator p = data_subset.m.begin();
+	     p != data_subset.m.end();
+	     p++) {
+	  interval_set<__u64> x;
+	  x.insert(p->first, p->second);
+	  x.intersection_of(data_needed);
+	  dout(20) << " data_subset object extent " << p->first << "~" << p->second << " need " << x << dendl;
+	  if (!x.empty()) {
+	    __u64 first = x.m.begin()->first;
+	    __u64 len = x.m.begin()->second;
+	    bufferlist sub;
+	    int boff = off + (first - p->first);
+	    dout(20) << "   keeping buffer extent " << boff << "~" << len << dendl;
+	    sub.substr_of(data, boff, len);
+	    result.claim_append(sub);
+	  }
+	  off += p->second;
+	}
+	data.claim(result);
+	dout(20) << " new data len is " << data.length() << dendl;
+      }
     } else {
       // head. for now, primary will _only_ pull full copies of the head.
       assert(op->clone_subsets.empty());
@@ -2280,7 +2315,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
        p != data_subset.m.end(); 
        p++) {
     bufferlist bit;
-    bit.substr_of(op->get_data(), boff, p->second);
+    bit.substr_of(data, boff, p->second);
     t.write(info.pgid.to_coll(), poid, p->first, p->second, bit);
     dout(15) << " write " << p->first << "~" << p->second << dendl;
     boff += p->second;
