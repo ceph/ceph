@@ -509,15 +509,8 @@ public:
   void put() { 
     //generic_dout(0) << this << " " << info.pgid << " put " << ref.test() << dendl;
     assert(_lock.is_locked());
-    ref.dec();
-    assert(ref.test() > 0);  // last put must be a put_unlock.
-  }
-  void put_unlock() { 
-    //generic_dout(0) << this << " " << info.pgid << " put_unlock " << ref.test() << dendl;
-    assert(_lock.is_locked());
-    int last = ref.dec();
-    _lock.Unlock();
-    if (last == 0) delete this;
+    if (ref.dec() == 0)
+      delete this;
   }
 
 

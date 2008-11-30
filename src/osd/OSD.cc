@@ -534,7 +534,8 @@ int OSD::shutdown()
        p++) {
     PG *pg = p->second;
     pg->lock();
-    pg->put_unlock();
+    pg->unlock();
+    pg->put();
   }
   pg_map.clear();
 
@@ -724,7 +725,8 @@ void OSD::_remove_unlock_pg(PG *pg)
   pg_map.erase(pgid);
 
   // unlock, and probably delete
-  pg->put_unlock();     // will delete, if last reference
+  pg->unlock();
+  pg->put();  // will delete, if last reference
   dout(10) << "_remove_unlock_pg " << pgid << " done" << dendl;
 }
 
@@ -3021,7 +3023,8 @@ void OSD::do_recovery(PG *pg)
   if (started < max)
     pg->recovery_item.remove_myself();
 
-  pg->put_unlock();
+  pg->unlock();
+  pg->put();
 }
 
 
@@ -3392,7 +3395,8 @@ void OSD::dequeue_op(PG *pg)
     assert(0);
 
   // unlock and put pg
-  pg->put_unlock();
+  pg->unlock();
+  pg->put();
   
   //#warning foo
   //scrub_wq.queue(pg);

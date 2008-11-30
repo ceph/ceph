@@ -1198,7 +1198,8 @@ public:
     if (!pg->is_deleted()) 
       pg->op_modify_ondisk(repop);
     repop->put();
-    pg->put_unlock();
+    pg->unlock();
+    pg->put();
   }
 };
 
@@ -1641,7 +1642,8 @@ public:
 
     pg->lock();
     pg->sub_op_modify_ondisk(op, destosd, pg_last_complete);
-    pg->put_unlock();
+    pg->unlock();
+    pg->put();
   }
   void ack() {
     lock.Lock();

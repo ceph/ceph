@@ -459,9 +459,8 @@ private:
     void _clear() {
       while (!osd->recovery_queue.empty()) {
 	PG *pg = osd->recovery_queue.front();
-	pg->lock();
-	pg->put_unlock();
 	osd->recovery_queue.pop_front();
+	pg->put();
       }
     }
   } recovery_wq;
@@ -524,9 +523,8 @@ private:
     void _clear() {
       while (!osd->snap_trim_queue.empty()) {
 	PG *pg = osd->snap_trim_queue.front();
-	pg->lock();
-	pg->put_unlock();
 	osd->snap_trim_queue.pop_front();
+	pg->put();
       }
     }
   } snap_trim_wq;
@@ -559,11 +557,10 @@ private:
       pg->scrub();
     }
     void _clear() {
-       while (!osd->scrub_queue.empty()) {
+      while (!osd->scrub_queue.empty()) {
 	PG *pg = osd->scrub_queue.front();
-	pg->lock();
-	pg->put_unlock();
 	osd->scrub_queue.pop_front();
+	pg->put();
       }
     }
   } scrub_wq;

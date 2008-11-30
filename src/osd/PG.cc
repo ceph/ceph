@@ -1356,7 +1356,8 @@ void PG::_finish_recovery(Context *c)
   }
   osd->map_lock.put_read();
   osd->finish_recovery_op(this, recovery_ops_active, true);
-  put_unlock();
+  unlock();
+  put();
 }
 
 void PG::defer_recovery()
