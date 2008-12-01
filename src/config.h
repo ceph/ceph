@@ -287,7 +287,7 @@ struct md_config_t {
   int   osd_mon_report_interval;
   int   osd_replay_window;
   int   osd_max_pull;
-  bool  osd_pad_pg_log;
+  bool  osd_preserve_trimmed_log;
 
   float osd_recovery_delay_start;
   int osd_recovery_max_active;

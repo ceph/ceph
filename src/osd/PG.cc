@@ -1515,7 +1515,9 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  t.zero(0, info.pgid.to_pobject(), 0, ondisklog.bottom);
+
+  if (!g_conf.osd_preserve_trimmed_log)
+    t.zero(0, info.pgid.to_pobject(), 0, ondisklog.bottom);
 }
 
 
