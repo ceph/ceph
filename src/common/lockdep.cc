@@ -44,6 +44,28 @@ BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b taken a
 #define BACKTRACE_SKIP 3
 
 
+int lockdep_dump_locks()
+{
+  pthread_mutex_lock(&lockdep_mutex);
+
+  for (hash_map<pthread_t, map<int,BackTrace*> >::iterator p = held.begin();
+       p != held.end();
+       p++) {
+    dout(0) << "--- thread " << p->first << " ---" << std::endl;
+    for (map<int,BackTrace*>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      dout(0) << "  * " << lock_names[q->first] << std::endl;
+      if (q->second)
+	q->second->print(*_dout);
+    }
+  }
+
+  pthread_mutex_unlock(&lockdep_mutex);
+  return 0;
+}
+
+
 int lockdep_register(const char *name)
 {
   int id;
