@@ -55,8 +55,11 @@ void printmap(const char *me, OSDMap *m, ostream& out)
       out << (m->is_up(i) ? " up":" down");
       if (m->is_up(i))
 	out << " " << m->get_addr(i);
-      out << " up_from " << m->get_up_from(i)
-	  << " up_thru " << m->get_up_thru(i);
+      osd_info_t& info = m->get_info(i);
+      out << " (up_from " << info.up_from
+	  << " up_thru " << info.up_thru
+	  << " down_at " << info.down_at
+	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
       out << (m->is_in(i) ? " in":" out");
       if (m->is_in(i))
 	out << " weight " << m->get_weight(i);
