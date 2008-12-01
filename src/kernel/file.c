@@ -1,6 +1,7 @@
 
 #include <linux/sched.h>
 #include <linux/file.h>
+#include <linux/writeback.h>
 
 #include "ceph_debug.h"
 
@@ -358,6 +359,7 @@ static ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		       unsigned long nr_segs, loff_t pos)
 {
 	struct file *file = iocb->ki_filp;
+	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_client(inode->i_sb)->osdc;
@@ -385,14 +387,14 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u  got cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
 
-	if ((got & CEPH_CAP_WRBUFFER) == 0 ||
+	ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
+
+	if (ret >= 0 &&
+	    (got & CEPH_CAP_WRBUFFER) == 0 ||
 	    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL) ||
-	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
-		/* fixme, this isn't actually async! */
-		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
-				      &iocb->ki_pos);
-	else
-		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
+	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) {
+		ret = sync_page_range(inode, mapping, pos, ret);
+	}
 
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
