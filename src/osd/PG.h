@@ -508,7 +508,6 @@ public:
   }
   void put() { 
     //generic_dout(0) << this << " " << info.pgid << " put " << ref.test() << dendl;
-    assert(_lock.is_locked());
     if (ref.dec() == 0)
       delete this;
   }
