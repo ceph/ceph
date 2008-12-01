@@ -383,7 +383,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	     cap->issued, cap->issued & wanted);
 	cap->issued &= wanted;  /* drop bits we don't want */
 
-	if (revoking && (revoking && used) == 0) {
+	if (revoking && (revoking & used) == 0) {
 		cap->implemented = cap->issued;
 		/*
 		 * Wake up any waiters on wanted -> needed transition.
