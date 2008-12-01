@@ -6414,7 +6414,7 @@ void MDCache::eval_stray(CDentry *dn)
 	if (in->snaprealm->has_past_parents()) return;  // not until some snaps are deleted.
       }
     }
-    if (dn->is_replicated() || in->is_any_caps()) return;  // wait
+    if (dn->is_replicated() || in->is_any_caps() || in->is_any_leases()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
     if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
     if (in->state_test(CInode::STATE_NEEDSRECOVER) ||
