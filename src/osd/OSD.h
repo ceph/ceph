@@ -46,18 +46,11 @@ class ObjectStore;
 class OSDMap;
 
 class OSD : public Dispatcher {
-public:
-  // -- states --
-  static const int STATE_BOOTING = 1;
-  static const int STATE_ACTIVE = 2;
-  static const int STATE_STOPPING = 3;
-
-
 
   /** OSD **/
 protected:
   Mutex osd_lock;     // global lock
-  SafeTimer timer;    // safe timer
+  SafeTimer timer;    // safe timer (osd_lock)
 
   Messenger   *messenger; 
   Logger      *logger;
@@ -66,6 +59,17 @@ protected:
 
   int whoami;
   const char *dev_name;
+
+  class C_Tick : public Context {
+    OSD *osd;
+  public:
+    C_Tick(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->tick();
+    }
+  };
+
+  void tick();
 
 public:
   int get_nodeid() { return whoami; }
@@ -79,7 +83,7 @@ public:
   
 
 private:
-  /** superblock **/
+  // -- superblock --
   OSDSuperblock superblock;
   epoch_t boot_epoch;      
   epoch_t last_active_epoch;
@@ -90,6 +94,12 @@ private:
 
 
   // -- state --
+public:
+  static const int STATE_BOOTING = 1;
+  static const int STATE_ACTIVE = 2;
+  static const int STATE_STOPPING = 3;
+
+private:
   int state;
 
 public:
@@ -100,22 +110,41 @@ public:
 private:
 
   // -- heartbeat --
-  set<int> heartbeat_to, heartbeat_from;
+  Mutex heartbeat_lock;
+  Cond heartbeat_cond;
+  bool heartbeat_stop;
+  epoch_t heartbeat_epoch;
+  map<int, epoch_t> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
-
+  map<int, entity_inst_t> heartbeat_inst;
+  Messenger *heartbeat_messenger;
+  
   void update_heartbeat_peers();
   void heartbeat();
+  void heartbeat_entry();
 
-  class C_Heartbeat : public Context {
+  struct T_Heartbeat : public Thread {
     OSD *osd;
-  public:
-    C_Heartbeat(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->heartbeat();
+    T_Heartbeat(OSD *o) : osd(o) {}
+    void *entry() {
+      osd->heartbeat_entry();
+      return 0;
     }
-  };
+  } heartbeat_thread;
+
+public:
+  void heartbeat_dispatch(Message *m);
+
+  struct HeartbeatDispatcher : public Dispatcher {
+    OSD *osd;
+    HeartbeatDispatcher(OSD *o) : osd(o) {}
+    void dispatch(Message *m) {
+      osd->heartbeat_dispatch(m);
+    };
+  } heartbeat_dispatcher;
 
 
+private:
   // -- stats --
   DecayCounter stat_oprate;
   int stat_ops;  // ops since last heartbeat
@@ -256,6 +285,7 @@ private:
   list<Message*>  waiting_for_osdmap;
 
   hash_map<entity_name_t, epoch_t>  peer_map_epoch;  // FIXME types
+
   bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch);
   void _share_map_outgoing(const entity_inst_t& inst);
 
@@ -336,17 +366,8 @@ private:
 
   void do_mon_report();
 
-  struct C_MonReport : public Context {
-    OSD *osd;
-    C_MonReport(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->do_mon_report();
-    }
-  };
 
   // -- boot --
-  bool booting, boot_pending;
-
   void send_boot();
 
   // -- alive --
@@ -567,7 +588,7 @@ private:
 
 
  public:
-  OSD(int id, Messenger *m, MonMap *mm, const char *dev = 0);
+  OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev = 0);
   ~OSD();
 
   // static bits
