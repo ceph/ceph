@@ -1844,9 +1844,9 @@ bad_tag:
  * Atomically queue work on a connection.  Bump @con reference to
  * avoid races with connection teardown.
  *
- * There is some trickery going on with QUEUED, BUSY, and BACKOFF because
- * we only want a _single_ thread operating on each connection at any point
- * in time, but we want to use all available CPUs.
+ * There is some trickery going on with QUEUED and BUSY because we
+ * only want a _single_ thread operating on each connection at any
+ * point in time, but we want to use all available CPUs.
  *
  * The worker thread only proceeds if it can atomically set BUSY.  It
  * clears QUEUED and does it's thing.  When it thinks it's done, it
@@ -1857,10 +1857,6 @@ bad_tag:
  * try to queue work.  If that fails (work is already queued, or BUSY)
  * we give up (work also already being done or is queued) but leave QUEUED
  * set so that the worker thread will loop if necessary.
- *
- * BACKOFF is set by the fault error path to prevent the worker thread from
- * looping or socket events from requeuing work; instead, we schedule delayed
- * work explicitly.
  */
 static void ceph_queue_con(struct ceph_connection *con)
 {
@@ -1924,7 +1920,7 @@ done:
 			dout(10, "con_work %p QUEUED reset, looping\n", con);
 			goto more;
 		}
-		dout(10, "con_work %p QUEUED reset, but BACKOFF\n", con);
+		dout(10, "con_work %p QUEUED reset, but just faulted\n", con);
 		clear_bit(QUEUED, &con->state);
 	}
 	dout(10, "con_work %p done\n", con);

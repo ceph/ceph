@@ -242,38 +242,26 @@ int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid& fsid, int& whoam
 
 
 
-// <hack> force remount hack for performance testing FileStore
-class C_Remount : public Context {
-  OSD *osd;
-public:
-  C_Remount(OSD *o) : osd(o) {}
-  void finish(int) {
-    osd->force_remount();
-  }
-};
-
-void OSD::force_remount()
-{
-  dout(0) << "forcing remount" << dendl;
-  osd_lock.Lock();
-  {
-    store->umount();
-    store->mount();
-  }
-  osd_lock.Unlock();
-  dout(0) << "finished remount" << dendl;
-}
-// </hack>
-
 
 // cons/des
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) : 
+OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
+  messenger(m),
+  logger(NULL),
+  store(NULL),
+  monmap(mm),
   whoami(id), dev_name(dev),
+  boot_epoch(0), last_active_epoch(0),
+  state(STATE_BOOTING),
+  heartbeat_lock("OSD::heartbeat_lock"),
+  heartbeat_stop(false), heartbeat_epoch(0),
+  heartbeat_messenger(hbm),
+  heartbeat_thread(this),
+  heartbeat_dispatcher(this),
   stat_oprate(5.0),
   peer_stat_lock("OSD::peer_stat_lock"),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
@@ -291,20 +279,13 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
   snap_trim_wq(this),
   scrub_wq(this)
 {
-  messenger = m;
-  monmap = mm;
-
   osdmap = 0;
-  boot_epoch = 0;
 
   last_tid = 0;
   num_pulling = 0;
 
-  state = STATE_BOOTING;
-
   memset(&my_stat, 0, sizeof(my_stat));
 
-  booting = boot_pending = false;
   up_thru_wanted = up_thru_pending = 0;
   osd_stat_updated = osd_stat_pending = false;
 
@@ -315,9 +296,6 @@ OSD::OSD(int id, Messenger *m, MonMap *mm, const char *dev) :
 
   pending_ops = 0;
   waiting_for_no_ops = false;
-
-  if (g_conf.osd_remount_at) 
-    timer.add_event_after(g_conf.osd_remount_at, new C_Remount(this));
 }
 
 OSD::~OSD()
@@ -450,17 +428,20 @@ int OSD::init()
   
   // i'm ready!
   messenger->set_dispatcher(this);
+  heartbeat_messenger->set_dispatcher(&heartbeat_dispatcher);
   
   // announce to monitor i exist and have booted.
-  booting = true;
-  do_mon_report();     // start mon report timer
+  do_mon_report();
   
   recovery_wq.start();
   scrub_wq.start();
   snap_trim_wq.start();
 
   // start the heartbeat
-  timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Heartbeat(this));
+  heartbeat_thread.create();
+
+  // tick
+  timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Tick(this));
 
   signal(SIGTERM, handle_signal);
   signal(SIGINT, handle_signal);
@@ -483,6 +464,12 @@ int OSD::shutdown()
   // cancel timers
   timer.cancel_all();
   timer.join();
+
+  heartbeat_lock.Lock();
+  heartbeat_stop = true;
+  heartbeat_cond.Signal();
+  heartbeat_lock.Unlock();
+  heartbeat_thread.join();
 
   // finish ops
   wait_for_no_ops();
@@ -540,6 +527,9 @@ int OSD::shutdown()
   pg_map.clear();
 
   messenger->shutdown();
+  if (heartbeat_messenger)
+    heartbeat_messenger->shutdown();
+
   return r;
 }
 
@@ -930,18 +920,23 @@ void OSD::take_peer_stat(int peer, const osd_peer_stat_t& stat)
 void OSD::update_heartbeat_peers()
 {
   assert(osd_lock.is_locked());
+  heartbeat_lock.Lock();
 
   // filter heartbeat_from_stamp to only include osds that remain in
   // heartbeat_from.
   map<int, utime_t> stamps;
   stamps.swap(heartbeat_from_stamp);
 
-  set<int> old_heartbeat_from;
-  old_heartbeat_from.swap(heartbeat_from);
+  map<int, epoch_t> old_to, old_from;
+  map<int, entity_inst_t> old_inst;
+  old_to.swap(heartbeat_to);
+  old_from.swap(heartbeat_from);
+  old_inst.swap(heartbeat_inst);
 
   // build heartbeat to/from set
   heartbeat_to.clear();
   heartbeat_from.clear();
+  heartbeat_inst.clear();
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
        i++) {
@@ -950,21 +945,101 @@ void OSD::update_heartbeat_peers()
     // replicas ping primary.
     if (pg->get_role() > 0) {
       assert(pg->acting.size() > 1);
-      heartbeat_to.insert(pg->acting[0]);
+      heartbeat_to[pg->acting[0]] = osdmap->get_epoch();
+      heartbeat_inst[pg->acting[0]] = osdmap->get_hb_inst(pg->acting[0]);
     }
     else if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
       for (unsigned i=1; i<pg->acting.size(); i++) {
 	int p = pg->acting[i]; // peer
 	assert(p != whoami);
-	heartbeat_from.insert(p);
-	if (stamps.count(p) && old_heartbeat_from.count(p))  // have a stamp _AND_ i'm not new to the set
+	heartbeat_from[p] = osdmap->get_epoch();
+	heartbeat_inst[p] = osdmap->get_hb_inst(p);
+	if (stamps.count(p) && old_from.count(p))  // have a stamp _AND_ i'm not new to the set
 	  heartbeat_from_stamp[p] = stamps[p];
       }
     }
   }
+  for (map<int,epoch_t>::iterator p = old_to.begin();
+       p != old_to.end();
+       p++) {
+    if (p->second > osdmap->get_epoch()) {
+      dout(10) << " keeping newer _to peer " << old_inst[p->first] << " as of " << p->second << dendl;
+      heartbeat_to[p->first] = p->second;
+      heartbeat_inst[p->first] = old_inst[p->first];
+    }
+  }
+  heartbeat_epoch = osdmap->get_epoch();
+
   dout(10) << "hb   to: " << heartbeat_to << dendl;
   dout(10) << "hb from: " << heartbeat_from << dendl;
+
+  heartbeat_lock.Unlock();
+}
+
+void OSD::handle_osd_ping(MOSDPing *m)
+{
+  dout(20) << "handle_osd_ping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
+
+  if (!is_active()) {
+    dout(10) << "handle_osd_ping - not active" << dendl;
+    delete m;
+    return;
+  }
+
+  if (!ceph_fsid_equal(&superblock.fsid, &m->fsid)) {
+    dout(20) << "handle_osd_ping from " << m->get_source()
+	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
+    delete m;
+    return;
+  }
+
+  heartbeat_lock.Lock();
+  int from = m->get_source().num();
+
+  bool locked = map_lock.try_get_read();
+
+  if (m->ack) {
+    dout(5) << " peer " << m->get_source_inst() << " requesting heartbeats" << dendl;
+    heartbeat_to[from] = m->peer_as_of_epoch;
+    heartbeat_inst[from] = m->get_source_inst();
+
+    if (locked && m->map_epoch)
+      _share_map_incoming(m->get_source_inst(), m->map_epoch);
+  }
+
+  if (heartbeat_from.count(from) &&
+      heartbeat_inst[from] == m->get_source_inst()) {
+
+    // only take peer stat or share map now if map_lock is uncontended
+    if (locked) {
+      if (m->map_epoch)
+	_share_map_incoming(m->get_source_inst(), m->map_epoch);
+      take_peer_stat(from, m->peer_stat);  // only with map_lock held!
+    }
+
+    heartbeat_from_stamp[from] = g_clock.now(); // don't let _my_ lag interfere... //  m->get_recv_stamp();
+  }
+
+  if (locked) 
+    map_lock.put_read();
+
+  heartbeat_lock.Unlock();
+  delete m;
+}
+
+void OSD::heartbeat_entry()
+{
+  heartbeat_lock.Lock();
+  while (!heartbeat_stop) {
+    heartbeat();
+
+    double wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
+    utime_t w;
+    w.set_from_double(wait);
+    heartbeat_cond.WaitInterval(heartbeat_lock, w);
+  }
+  heartbeat_lock.Unlock();
 }
 
 void OSD::heartbeat()
@@ -978,9 +1053,6 @@ void OSD::heartbeat()
     return;
   }
 
-  // periodically kick recovery work queue
-  recovery_wq.kick();
-  
   // get CPU load avg
   ifstream in("/proc/loadavg");
   if (in.is_open()) {
@@ -990,9 +1062,6 @@ void OSD::heartbeat()
     in.close();
   }
 
-  // read lock osdmap
-  map_lock.get_read();
-
   // calc my stats
   Mutex::Locker lock(peer_stat_lock);
   _refresh_my_stat(now);
@@ -1001,33 +1070,42 @@ void OSD::heartbeat()
   dout(5) << "heartbeat: " << my_stat << dendl;
 
   //load_calc.set_size(stat_ops);
-  
 
+  bool map_locked = map_lock.try_get_read();
+  
   // send heartbeats
-  for (set<int>::iterator i = heartbeat_to.begin();
+  for (map<int, epoch_t>::iterator i = heartbeat_to.begin();
        i != heartbeat_to.end();
        i++) {
-    _share_map_outgoing( osdmap->get_inst(*i) );
-    my_stat_on_peer[*i] = my_stat;
-    Message *m = new MOSDPing(osdmap->get_fsid(),osdmap->get_epoch(), my_stat);
+    int peer = i->first;
+    my_stat_on_peer[peer] = my_stat;
+    Message *m = new MOSDPing(osdmap->get_fsid(),
+			      map_locked ? osdmap->get_epoch():0, 
+			      i->second,
+			      my_stat);
     m->set_priority(CEPH_MSG_PRIO_HIGH);
-    messenger->send_message(m, osdmap->get_inst(*i));
+    heartbeat_messenger->send_message(m, heartbeat_inst[peer]);
   }
 
   // check for incoming heartbeats (move me elsewhere?)
   utime_t grace = now;
   grace -= g_conf.osd_heartbeat_grace;
-  for (set<int>::iterator p = heartbeat_from.begin();
+  for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
        p != heartbeat_from.end();
        p++) {
-    if (heartbeat_from_stamp.count(*p)) {
-      if (heartbeat_from_stamp[*p] < grace) {
-	dout(0) << "no heartbeat from osd" << *p << " since " << heartbeat_from_stamp[*p]
+    if (heartbeat_from_stamp.count(p->first)) {
+      if (heartbeat_from_stamp[p->first] < grace) {
+	dout(0) << "no heartbeat from osd" << p->first << " since " << heartbeat_from_stamp[p->first]
 		<< " (cutoff " << grace << ")" << dendl;
-	queue_failure(*p);
+	queue_failure(p->first);
       }
-    } else
-      heartbeat_from_stamp[*p] = now;  // fake initial
+    } else {
+      // fake initial stamp.  and send them a ping so they know we expect it.
+      heartbeat_from_stamp[p->first] = now;  
+      Message *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true);  // request ack
+      m->set_priority(CEPH_MSG_PRIO_HIGH);
+      heartbeat_messenger->send_message(m, heartbeat_inst[p->first]);
+    }
   }
 
   if (logger) logger->set("hbto", heartbeat_to.size());
@@ -1042,27 +1120,34 @@ void OSD::heartbeat()
                             monmap->get_inst(mon));
   }
 
+  if (map_locked)
+    map_lock.put_read();
+}
 
-  // hack: fake reorg?
-  if (osdmap && g_conf.fake_osdmap_updates) {
-    int mon = monmap->pick_mon();
-    if ((rand() % g_conf.fake_osdmap_updates) == 0) {
-      //if ((rand() % (g_conf.num_osd / g_conf.fake_osdmap_updates)) == whoami / g_conf.fake_osdmap_updates) {
-      messenger->send_message(new MOSDIn(osdmap->get_epoch()),
-                              monmap->get_inst(mon));
-    }
-    /*
-      if (osdmap->is_out(whoami)) {
-      messenger->send_message(new MOSDIn(osdmap->get_epoch()),
-                              MSG_ADDR_MON(mon), monmap->get_inst(mon));
-      } 
-      else if ((rand() % g_conf.fake_osdmap_updates) == 0) {
-      //messenger->send_message(new MOSDOut(osdmap->get_epoch()),
-      //MSG_ADDR_MON(mon), monmap->get_inst(mon));
-      }
-    }
-    */
+
+// =========================================
+
+void OSD::tick()
+{
+  assert(osd_lock.is_locked());
+  dout(5) << "tick" << dendl;
+
+  if (got_sigterm) {
+    dout(0) << "got SIGTERM, shutting down" << dendl;
+    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
+			    messenger->get_myinst());
+    return;
   }
+
+  // periodically kick recovery work queue
+  recovery_wq.kick();
+  
+  map_lock.get_read();
+
+  // mon report?
+  utime_t now = g_clock.now();
+  if (now - last_mon_report > g_conf.osd_mon_report_interval)
+    do_mon_report();
 
   // remove stray pgs?
   remove_list_lock.Lock();
@@ -1082,12 +1167,8 @@ void OSD::heartbeat()
 
   map_lock.put_read();
 
-  // schedule next!  randomly.
-  float wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
-  timer.add_event_after(wait, new C_Heartbeat(this));
+  timer.add_event_after(1.0, new C_Tick(this));
 }
-
-
 
 // =========================================
 
@@ -1099,7 +1180,7 @@ void OSD::do_mon_report()
 
   // are prior reports still pending?
   bool retry = false;
-  if (boot_pending) {
+  if (is_booting()) {
     dout(10) << "boot still pending" << dendl;
     retry = true;
   }
@@ -1132,14 +1213,11 @@ void OSD::do_mon_report()
   }
 
   // do any pending reports
-  if (booting)
+  if (is_booting())
     send_boot();
   send_alive();
   send_failures();
   send_pg_stats();
-
-  // reschedule
-  timer.add_event_after(g_conf.osd_mon_report_interval, new C_MonReport(this));
 }
 
 void OSD::send_boot()
@@ -1239,10 +1317,10 @@ void OSD::send_pg_stats()
     m->osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
     m->osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
     m->osd_stat.num_objects = stbuf.f_files;
-    for (set<int>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
-      m->osd_stat.hb_in.push_back(*p);
-    for (set<int>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
-      m->osd_stat.hb_out.push_back(*p);
+    for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
+      m->osd_stat.hb_in.push_back(p->first);
+    for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
+      m->osd_stat.hb_out.push_back(p->first);
     dout(20) << " osd_stat " << m->osd_stat << dendl;
     
     int mon = monmap->pick_mon();
@@ -1286,7 +1364,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
 {
   bool shared = false;
   dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
-  assert(osd_lock.is_locked());
+  //assert(osd_lock.is_locked());
 
   // does client have old map?
   if (inst.name.is_client()) {
@@ -1299,8 +1377,9 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
 
   // does peer have old map?
   if (inst.name.is_osd() &&
-      osdmap->have_inst(inst.name.num()) &&
-      osdmap->get_inst(inst.name.num()) == inst) {
+      osdmap->is_up(inst.name.num()) &&
+      (osdmap->get_inst(inst.name.num()) == inst ||
+       osdmap->get_hb_inst(inst.name.num()) == inst)) {
     // remember
     if (peer_map_epoch[inst.name] < epoch) {
       dout(20) << "peer " << inst.name << " has " << epoch << dendl;
@@ -1310,8 +1389,8 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
     // older?
     if (peer_map_epoch[inst.name] < osdmap->get_epoch()) {
       dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
-      send_incremental_map(epoch, inst, true);
       peer_map_epoch[inst.name] = osdmap->get_epoch();  // so we don't send it again.
+      send_incremental_map(epoch, osdmap->get_inst(inst.name.num()), true);
       shared = true;
     }
   }
@@ -1339,6 +1418,27 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 }
 
 
+void OSD::heartbeat_dispatch(Message *m)
+{
+  dout(20) << "heartbeat_dispatch " << m << dendl;
+
+  switch (m->get_type()) {
+    
+  case CEPH_MSG_PING:
+    dout(10) << "ping from " << m->get_source() << dendl;
+    delete m;
+    break;
+
+  case MSG_OSD_PING:
+    handle_osd_ping((MOSDPing*)m);
+    break;
+
+  default:
+    dout(1) << " got unknown message " << m->get_type() << dendl;
+    assert(0);
+  }
+
+}
 
 void OSD::dispatch(Message *m) 
 {
@@ -1394,9 +1494,11 @@ void OSD::dispatch(Message *m)
       // need OSDMap
       switch (m->get_type()) {
 
+	/*
       case MSG_OSD_PING:
         handle_osd_ping((MOSDPing*)m);
         break;
+	*/
 
       case MSG_OSD_PG_CREATE:
 	handle_pg_create((MOSDPGCreate*)m);
@@ -1473,32 +1575,6 @@ void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
 
 
 
-void OSD::handle_osd_ping(MOSDPing *m)
-{
-  dout(20) << "osdping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
-
-  if (!ceph_fsid_equal(&osdmap->get_fsid(), &m->fsid)) {
-    dout(20) << "osdping from " << m->get_source()
-	     << " bad fsid " << m->fsid << " != " << osdmap->get_fsid() << dendl;
-    delete m;
-    return;
-  }
-
-  int from = m->get_source().num();
-  if (osdmap->have_inst(from) &&
-      osdmap->get_inst(from) == m->get_source_inst()) {
-
-    _share_map_incoming(m->get_source_inst(), ((MOSDPing*)m)->map_epoch);
-  
-    take_peer_stat(from, m->peer_stat);
-    heartbeat_from_stamp[from] = g_clock.now(); // don't let _my_ lag interfere... //  m->get_recv_stamp();
-  }
-
-  delete m;
-}
-
-
-
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
@@ -1569,7 +1645,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  booting = boot_pending = false;
+  state = STATE_ACTIVE;
 
   wait_for_no_ops();
   recovery_wq.pause();

@@ -131,6 +131,8 @@ int main(int argc, const char **argv)
 
   Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
   assert(m);
+  Messenger *hbm = rank.register_entity(entity_name_t::OSD(whoami));
+  assert(hbm);
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
   rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
@@ -144,7 +146,7 @@ int main(int argc, const char **argv)
   rank.start();
 
   // start osd
-  OSD *osd = new OSD(whoami, m, &monmap, dev);
+  OSD *osd = new OSD(whoami, m, hbm, &monmap, dev);
   osd->init();
 
   rank.wait();

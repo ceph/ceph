@@ -38,6 +38,10 @@ repair
 - rados scrubbing
 
 
+timer
+- each SafeTimer should just be its own thread.
+
+
 kernel client
 - make osd retry writes if failure after ack..
 - ACLs
