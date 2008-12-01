@@ -42,18 +42,40 @@ class RWLock
     if (g_lockdep) id = lockdep_unlocked(name, id);
     pthread_rwlock_unlock(&L);
   }
+
+  // read
   void get_read() {
     if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_rdlock(&L);    
     if (g_lockdep) id = lockdep_locked(name, id);
   }
-  void put_read() { unlock(); }
+  bool try_get_read() {
+    if (pthread_rwlock_tryrdlock(&L) == 0) {
+      if (g_lockdep) id = lockdep_locked(name, id);
+      return true;
+    }
+    return false;
+  }
+  void put_read() {
+    unlock();
+  }
+
+  // write
   void get_write() {
     if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_wrlock(&L);
     if (g_lockdep) id = lockdep_locked(name, id);
   }
-  void put_write() { unlock(); }
+  bool try_get_write() {
+    if (pthread_rwlock_trywrlock(&L) == 0) {
+      if (g_lockdep) id = lockdep_locked(name, id);
+      return true;
+    }
+    return false;
+  }
+  void put_write() {
+    unlock();
+  }
 };
 
 #endif // !_Mutex_Posix_
