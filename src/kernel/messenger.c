@@ -355,7 +355,7 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, con_work);
 
-	dout(0, "new connection: %p\n", con);
+	dout(20, "new connection: %p\n", con);
 	return con;
 }
 
