@@ -299,14 +299,12 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
            << " into " << log << dendl;
   bool changed = false;
 
-  dout(0) << "log" << dendl;
-  *_dout << dbeginl;
+  dout(15) << "log";
   log.print(*_dout);
-  _dout_end_line();
-  dout(0) << "olog" << dendl;
-  *_dout << dbeginl;
+  *_dout << dendl;
+  dout(15) << "olog";
   olog.print(*_dout);
-  _dout_end_line();
+  *_dout << dendl;
 
   if (log.empty() ||
       (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
