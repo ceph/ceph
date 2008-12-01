@@ -773,7 +773,8 @@ void PG::build_prior()
 
   // generate past intervals, if we don't have them.
   if (info.history.same_since > info.history.last_epoch_started &&
-      past_intervals.empty())
+      (past_intervals.empty() ||
+       past_intervals.begin()->first > info.history.last_epoch_started))
     generate_past_intervals();
   
   for (map<epoch_t,Interval>::reverse_iterator p = past_intervals.rbegin();
@@ -1652,8 +1653,10 @@ void PG::read_state(ObjectStore *store)
   // past_intervals
   bl.clear();
   store->collection_getattr(info.pgid.to_coll(), "past_intervals", bl);
-  p = bl.begin();
-  ::decode(past_intervals, p);
+  if (bl.length()) {
+    p = bl.begin();
+    ::decode(past_intervals, p);
+  }
 
   read_log(store);
 }
