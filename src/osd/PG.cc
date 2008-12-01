@@ -948,6 +948,8 @@ void PG::peer(ObjectStore::Transaction& t,
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
        it++) {
+    if (osd->osdmap->is_down(it->first))
+      continue;
     if (it->second.last_update > newest_update ||
 	(it->second.last_update == newest_update &&    // prefer osds in the prior set
 	 prior_set.count(newest_update_osd) == 0)) {
@@ -1066,6 +1068,9 @@ void PG::peer(ObjectStore::Transaction& t,
          it != peer_info.end();
          it++) {
       int peer = it->first;
+
+      if (osd->osdmap->is_down(peer))
+	continue;
 
       if (peer_summary_requested.count(peer)) {
         dout(10) << " already requested summary/backlog from osd" << peer << dendl;
