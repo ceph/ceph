@@ -387,15 +387,17 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u  got cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
 
-	ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
+	if ((got & CEPH_CAP_WRBUFFER) == 0) {
+		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
+			&iocb->ki_pos);
+	} else {
+		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 
-	if (ret >= 0 &&
-	    (got & CEPH_CAP_WRBUFFER) == 0 ||
-	    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL) ||
-	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) {
-		ret = sync_page_range(inode, mapping, pos, ret);
+		if (ret >= 0 &&
+	    	    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)) {
+			ret = sync_page_range(inode, mapping, pos, ret);
+		}
 	}
-
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
