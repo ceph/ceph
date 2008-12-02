@@ -1316,7 +1316,6 @@ void OSD::send_pg_stats()
     m->osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
     m->osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
     m->osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
-    m->osd_stat.num_objects = stbuf.f_files;
     for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
       m->osd_stat.hb_in.push_back(p->first);
     for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)

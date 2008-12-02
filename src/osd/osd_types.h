@@ -260,20 +260,17 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
  * aggregate stats for an osd
  */
 struct osd_stat_t {
-  int64_t kb;
-  int64_t kb_used, kb_avail;
-  int64_t num_objects;
-  int32_t snap_trim_queue_len, num_snap_trimming;
+  int64_t kb, kb_used, kb_avail;
   vector<int> hb_in, hb_out;
+  int32_t snap_trim_queue_len, num_snap_trimming;
 
-  osd_stat_t() : kb(0), kb_used(0), kb_avail(0), num_objects(0),
+  osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
   void encode(bufferlist &bl) const {
     ::encode(kb, bl);
     ::encode(kb_used, bl);
     ::encode(kb_avail, bl);
-    ::encode(num_objects, bl);
     ::encode(snap_trim_queue_len, bl);
     ::encode(num_snap_trimming, bl);
     ::encode(hb_in, bl);
@@ -283,12 +280,27 @@ struct osd_stat_t {
     ::decode(kb, bl);
     ::decode(kb_used, bl);
     ::decode(kb_avail, bl);
-    ::decode(num_objects, bl);
     ::decode(snap_trim_queue_len, bl);
     ::decode(num_snap_trimming, bl);
     ::decode(hb_in, bl);
     ::decode(hb_out, bl);
   }
+  
+  void add(const osd_stat_t& o) {
+    kb += o.kb;
+    kb_used += o.kb_used;
+    kb_avail += o.kb_avail;
+    snap_trim_queue_len += o.snap_trim_queue_len;
+    num_snap_trimming += o.num_snap_trimming;
+  }
+  void sub(const osd_stat_t& o) {
+    kb -= o.kb;
+    kb_used -= o.kb_used;
+    kb_avail -= o.kb_avail;
+    snap_trim_queue_len -= o.snap_trim_queue_len;
+    num_snap_trimming -= o.num_snap_trimming;
+  }
+
 };
 WRITE_CLASS_ENCODER(osd_stat_t)
 
@@ -296,7 +308,8 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.kb == r.kb &&
     l.kb_used == r.kb_used &&
     l.kb_avail == r.kb_avail &&
-    l.num_objects == r.num_objects &&
+    l.snap_trim_queue_len == r.snap_trim_queue_len &&
+    l.num_snap_trimming == r.num_snap_trimming &&
     l.hb_in == r.hb_in &&
     l.hb_out == r.hb_out;
 }
@@ -309,7 +322,6 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
   return out << "osd_stat(" << (s.kb_used) << "/" << s.kb << " KB used, " 
 	     << s.kb_avail << " avail, "
-	     << s.num_objects << " objects, "
 	     << "peers " << s.hb_in << "/" << s.hb_out << ")";
 }
 
@@ -359,8 +371,17 @@ struct pg_stat_t {
   __u64 num_kb;       // in KB
   __u64 num_objects;
   __u64 num_object_clones;
+  __u64 num_objects_missing_on_primary;
+  __u64 num_objects_degraded;
 
   vector<int> acting;
+
+  pg_stat_t() : reported(0), created(0), parent_split_bits(0), 
+		state(0),
+		num_bytes(0), num_kb(0), 
+		num_objects(0), num_object_clones(0),
+		num_objects_missing_on_primary(0), num_objects_degraded(0)
+  { }
 
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
@@ -373,6 +394,8 @@ struct pg_stat_t {
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
     ::encode(num_object_clones, bl);
+    ::encode(num_objects_missing_on_primary, bl);
+    ::encode(num_objects_degraded, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -386,6 +409,8 @@ struct pg_stat_t {
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
     ::decode(num_object_clones, bl);
+    ::decode(num_objects_missing_on_primary, bl);
+    ::decode(num_objects_degraded, bl);
     ::decode(acting, bl);
   }
 
@@ -394,12 +419,17 @@ struct pg_stat_t {
     num_kb += o.num_kb;
     num_objects += o.num_objects;
     num_object_clones += o.num_object_clones;
+    num_objects_missing_on_primary += o.num_objects_missing_on_primary;
+    num_objects_degraded += o.num_objects_degraded;
   }
-
-  pg_stat_t() : reported(0), created(0), parent_split_bits(0), 
-		state(0),
-		num_bytes(0), num_kb(0), 
-		num_objects(0), num_object_clones(0) {}
+  void sub(const pg_stat_t& o) {
+    num_bytes -= o.num_bytes;
+    num_kb -= o.num_kb;
+    num_objects -= o.num_objects;
+    num_object_clones -= o.num_object_clones;
+    num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
+    num_objects_degraded -= o.num_objects_degraded;
+  }
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 

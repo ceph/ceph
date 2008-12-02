@@ -1405,6 +1405,7 @@ void PG::update_stats()
     pg_stats_stable.reported = osd->osdmap->get_epoch();
     pg_stats_stable.state = state;
     pg_stats_stable.acting = acting;
+    pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
   } else {
     pg_stats_valid = false;
   }
