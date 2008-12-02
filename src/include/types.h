@@ -296,7 +296,7 @@ inline ostream& operator<<(ostream& out, snapid_t s) {
   else if (s == CEPH_SNAPDIR)
     return out << "snapdir";
   else
-    return out << s.val;
+    return out << hex << s.val << dec;
 }
 
 
