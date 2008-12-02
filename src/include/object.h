@@ -93,10 +93,11 @@ inline bool operator<=(const object_t l, const object_t r) {
   return memcmp(&l, &r, sizeof(l)) <= 0;
 }
 inline ostream& operator<<(ostream& out, const object_t o) {
-  out << hex << o.ino << '.';
+  out << hex;
+  out << o.ino << '.';
   out.setf(ios::right);
   out.fill('0');
-  out << setw(8) << o.bno << dec;
+  out << setw(8) << o.bno;
   out.unsetf(ios::right);
   if (o.snap) {
     if (o.snap == CEPH_NOSNAP)
@@ -104,6 +105,7 @@ inline ostream& operator<<(ostream& out, const object_t o) {
     else
       out << '.' << o.snap;
   }
+  out << dec;
   return out;
 }
 
