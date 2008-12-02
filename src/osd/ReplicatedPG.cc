@@ -2641,8 +2641,8 @@ int ReplicatedPG::recover_primary(int max)
 	head.oid.snap = CEPH_NOSNAP;
 	if (missing.is_missing(head.oid) &&
 	    missing.have_old(head.oid) == latest->prior_version) {
-	  dout(10) << "recover_primary cloning " << head << " to " << poid
-		   << " v" << latest->version
+	  dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
+		   << " to " << poid << " v" << latest->version
 		   << " snaps " << latest->snaps << dendl;
 	  ObjectStore::Transaction t;
 	  _make_clone(t, head, poid, latest->prior_version, latest->version,
