@@ -1153,31 +1153,34 @@ int FileStore::read(coll_t cid, pobject_t oid,
   char fn[200];
   get_coname(cid, oid, fn);
 
-  dout(10) << "read " << fn << " " << offset << "~" << len << dendl;
-  
+  dout(15) << "read " << fn << " " << offset << "~" << len << dendl;
+
+  int r;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << dendl;
-    return -errno;
+    r = -errno;
+  } else {
+    __u64 actual = ::lseek64(fd, offset, SEEK_SET);
+    size_t got = 0;
+    
+    if (len == 0) {
+      struct stat st;
+      ::fstat(fd, &st);
+      len = st.st_size;
+    }
+    
+    if (actual == offset) {
+      bufferptr bptr(len);  // prealloc space for entire read
+      got = ::read(fd, bptr.c_str(), len);
+      bptr.set_length(got);   // properly size the buffer
+      if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
+    }
+    ::close(fd);
+    r = got;
   }
-  
-  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
-  size_t got = 0;
-
-  if (len == 0) {
-    struct stat st;
-    ::fstat(fd, &st);
-    len = st.st_size;
-  }
-
-  if (actual == offset) {
-    bufferptr bptr(len);  // prealloc space for entire read
-    got = ::read(fd, bptr.c_str(), len);
-    bptr.set_length(got);   // properly size the buffer
-    if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
-  }
-  ::close(fd);
-  return got;
+  dout(10) << "read " << fn << " " << offset << "~" << len << " = " << r << dendl;
+  return r;
 }
 
 
@@ -1186,18 +1189,22 @@ int FileStore::_remove(coll_t cid, pobject_t oid)
 {
   char fn[200];
   get_coname(cid, oid, fn);
-  dout(10) << "remove " << fn << dendl;
+  dout(15) << "remove " << fn << dendl;
   int r = ::unlink(fn);
-  return r < 0 ? -errno:r;
+  if (r < 0) r = -errno;
+  dout(10) << "remove " << fn << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_truncate(coll_t cid, pobject_t oid, __u64 size)
 {
   char fn[200];
   get_coname(cid, oid, fn);
-  dout(10) << "truncate " << fn << " size " << size << dendl;
+  dout(15) << "truncate " << fn << " size " << size << dendl;
   int r = ::truncate(fn, size);
-  return r < 0 ? -errno:r;
+  if (r < 0) r = -errno;
+  dout(10) << "truncate " << fn << " size " << size << " = " << r << dendl;
+  return r;
 }
 
 
@@ -1206,15 +1213,18 @@ int FileStore::_touch(coll_t cid, pobject_t oid)
   char fn[200];
   get_coname(cid, oid, fn);
 
-  dout(10) << "touch " << fn << dendl;
+  dout(15) << "touch " << fn << dendl;
 
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
+  int r;
   if (fd >= 0) {
     ::close(fd);
-    return 0;
+    r = 0;
   } else
-    return -errno;
+    r = -errno;
+  dout(10) << "touch " << fn << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_write(coll_t cid, pobject_t oid, 
@@ -1224,39 +1234,43 @@ int FileStore::_write(coll_t cid, pobject_t oid,
   char fn[200];
   get_coname(cid, oid, fn);
 
-  dout(10) << "write " << fn << " " << offset << "~" << len << dendl;
+  dout(15) << "write " << fn << " " << offset << "~" << len << dendl;
+  int r;
 
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
-    return -errno;
-  }
-  
-  // seek
-  __u64 actual = ::lseek64(fd, offset, SEEK_SET);
-  int did = 0;
-  assert(actual == offset);
-
-  // write buffers
-  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-       it != bl.buffers().end();
-       it++) {
-    int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
-    if (r > 0)
-      did += r;
-    else {
+    r = -errno;
+  } else {
+    
+    // seek
+    __u64 actual = ::lseek64(fd, offset, SEEK_SET);
+    int did = 0;
+    assert(actual == offset);
+    
+    // write buffers
+    for (list<bufferptr>::const_iterator it = bl.buffers().begin();
+	 it != bl.buffers().end();
+	 it++) {
+      int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
+      if (r > 0)
+	did += r;
+      else {
+	derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
+      }
+    }
+    
+    if (did < 0) {
       derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
     }
-  }
-  
-  if (did < 0) {
-    derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
+    
+    ::close(fd);
+    r = did;
   }
 
-  ::close(fd);
-
-  return did;
+  dout(10) << "write " << fn << " " << offset << "~" << len << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_zero(coll_t cid, pobject_t oid, __u64 offset, size_t len)
@@ -1274,34 +1288,39 @@ int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
   get_coname(cid, oldoid, ofn);
   get_coname(cid, newoid, nfn);
 
-  dout(10) << "clone " << ofn << " -> " << nfn << dendl;
+  dout(15) << "clone " << ofn << " -> " << nfn << dendl;
 
-  int o = ::open(ofn, O_RDONLY);
-  if (o < 0)
-      return -errno;
-  int n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
-  if (n < 0)
-      return -errno;
-
-  int r = 0;
-#ifndef DARWIN
+  int o, n, r;
+  o = ::open(ofn, O_RDONLY);
+  if (o < 0) {
+    r = -errno;
+    goto out2;
+  }
+  n = ::open(nfn, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (n < 0) {
+    r = -errno;
+    goto out;
+  }
   if (btrfs)
+#ifndef DARWIN
     r = ::ioctl(n, BTRFS_IOC_CLONE, o);
-  else {
 #else 
-    {
+  ;
 #endif /* DARWIN */
+  else {
     struct stat st;
     ::fstat(o, &st);
     dout(10) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
     r = _do_clone_range(o, n, 0, st.st_size);
   }
+  if (r < 0) r = -errno;
 
-  if (r < 0)
-    return -errno;
-
+ out:
   ::close(n);
+ out2:
   ::close(o);
+  
+  dout(10) << "clone " << ofn << " -> " << nfn << " = " << r << dendl;
   return 0;
 }
 
@@ -1351,13 +1370,16 @@ int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u6
   get_coname(cid, oldoid, ofn);
   get_coname(cid, newoid, nfn);
 
-  dout(10) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << dendl;
+  dout(15) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << dendl;
 
   int r;
-  int o = ::open(ofn, O_RDONLY);
-  if (o < 0)
-    return -errno;
-  int n = ::open(nfn, O_CREAT|O_WRONLY, 0644);
+  int o, n;
+  o = ::open(ofn, O_RDONLY);
+  if (o < 0) {
+    r = -errno;
+    goto out2;
+  }
+  n = ::open(nfn, O_CREAT|O_WRONLY, 0644);
   if (n < 0) {
     r = -errno;
     goto out;
@@ -1366,6 +1388,8 @@ int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u6
   ::close(n);
  out:
   ::close(o);
+ out2:
+  dout(10) << "clone_range " << ofn << " -> " << nfn << " " << off << "~" << len << " = " << r << dendl;
   return r;
 }
 
@@ -1480,10 +1504,12 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
 
   char fn[100];
   get_coname(cid, oid, fn);
-  dout(10) << "getattr " << fn << " '" << name << "' len " << size << dendl;
+  dout(15) << "getattr " << fn << " '" << name << "' len " << size << dendl;
   char n[40];
   get_attrname(name, n);
-  return do_getxattr(fn, n, value, size);
+  int r = do_getxattr(fn, n, value, size);
+  dout(10) << "getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp)
@@ -1492,10 +1518,12 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &b
 
   char fn[100];
   get_coname(cid, oid, fn);
-  dout(10) << "getattr " << fn << " '" << name << "'" << dendl;
+  dout(15) << "getattr " << fn << " '" << name << "'" << dendl;
   char n[40];
   get_attrname(name, n);
-  return _getattr(fn, n, bp);
+  int r = _getattr(fn, n, bp);
+  dout(10) << "getattr " << fn << " '" << name << "' = " << r << dendl;
+  return r;
 }
 
 int FileStore::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) 
@@ -1504,8 +1532,10 @@ int FileStore::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset)
 
   char fn[100];
   get_coname(cid, oid, fn);
-  dout(10) << "getattrs " << fn << dendl;
-  return _getattrs(fn, aset);
+  dout(15) << "getattrs " << fn << dendl;
+  int r = _getattrs(fn, aset);
+  dout(10) << "getattrs " << fn << " = " << r << dendl;
+  return r;
 }
 
 
@@ -1519,10 +1549,12 @@ int FileStore::_setattr(coll_t cid, pobject_t oid, const char *name,
 
   char fn[100];
   get_coname(cid, oid, fn);
-  dout(10) << "setattr " << fn << " '" << name << "' len " << size << dendl;
+  dout(15) << "setattr " << fn << " '" << name << "' len " << size << dendl;
   char n[40];
   get_attrname(name, n);
-  return do_setxattr(fn, n, value, size);
+  int r = do_setxattr(fn, n, value, size);
+  dout(10) << "setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) 
@@ -1531,7 +1563,7 @@ int FileStore::_setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset
 
   char fn[100];
   get_coname(cid, oid, fn);
-  dout(10) << "setattrs " << fn << dendl;
+  dout(15) << "setattrs " << fn << dendl;
   int r = 0;
   for (map<nstring,bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -1549,6 +1581,7 @@ int FileStore::_setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset
       break;
     }
   }
+  dout(10) << "setattrs " << fn << " = " << r << dendl;
   return r;
 }
 
@@ -1559,10 +1592,12 @@ int FileStore::_rmattr(coll_t cid, pobject_t oid, const char *name)
 
   char fn[100];
   get_coname(cid, oid, fn);
-  dout(10) << "rmattr " << fn << " '" << name << "'" << dendl;
+  dout(15) << "rmattr " << fn << " '" << name << "'" << dendl;
   char n[40];
   get_attrname(name, n);
-  return do_removexattr(fn, n);
+  int r = do_removexattr(fn, n);
+  dout(10) << "rmattr " << fn << " '" << name << "' = " << r << dendl;
+  return r;
 }
 
 
@@ -1576,10 +1611,12 @@ int FileStore::collection_getattr(coll_t c, const char *name,
 
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "collection_getattr " << fn << " '" << name << "' len " << size << dendl;
+  dout(15) << "collection_getattr " << fn << " '" << name << "' len " << size << dendl;
   char n[200];
   get_attrname(name, n);
-  return do_getxattr(fn, n, value, size);   
+  int r = do_getxattr(fn, n, value, size);   
+  dout(10) << "collection_getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
@@ -1588,13 +1625,14 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
 
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "collection_getattr " << fn << " '" << name << "'" << dendl;
+  dout(15) << "collection_getattr " << fn << " '" << name << "'" << dendl;
   char n[200];
   get_attrname(name, n);
   
   buffer::ptr bp;
   int r = _getattr(fn, n, bp);
   bl.push_back(bp);
+  dout(10) << "collection_getattr " << fn << " '" << name << "' = " << r << dendl;
   return r;
 }
 
@@ -1605,7 +1643,9 @@ int FileStore::collection_getattrs(coll_t cid, map<nstring,bufferptr>& aset)
   char fn[100];
   get_cdir(cid, fn);
   dout(10) << "collection_getattrs " << fn << dendl;
-  return _getattrs(fn, aset);
+  int r = _getattrs(fn, aset);
+  dout(10) << "collection_getattrs " << fn << " = " << r << dendl;
+  return r;
 }
 
 
@@ -1619,7 +1659,9 @@ int FileStore::_collection_setattr(coll_t c, const char *name,
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << dendl;
   char n[200];
   get_attrname(name, n);
-  return do_setxattr(fn, n, value, size);
+  int r = do_setxattr(fn, n, value, size);
+  dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_collection_rmattr(coll_t c, const char *name) 
@@ -1628,10 +1670,12 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
 
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "collection_rmattr " << fn << dendl;
+  dout(15) << "collection_rmattr " << fn << dendl;
   char n[200];
   get_attrname(name, n);
-  return do_removexattr(fn, n);
+  int r = do_removexattr(fn, n);
+  dout(10) << "collection_rmattr " << fn << " = " << r << dendl;
+  return r;
 }
 
 
@@ -1641,7 +1685,7 @@ int FileStore::_collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset)
 
   char fn[100];
   get_cdir(cid, fn);
-  dout(10) << "collection_setattrs " << fn << dendl;
+  dout(15) << "collection_setattrs " << fn << dendl;
   int r = 0;
   for (map<nstring,bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -1651,6 +1695,7 @@ int FileStore::_collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset)
     r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
     if (r < 0) break;
   }
+  dout(10) << "collection_setattrs " << fn << " = " << r << dendl;
   return r;
 }
 
@@ -1689,9 +1734,11 @@ int FileStore::collection_stat(coll_t c, struct stat *st)
 
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "collection_stat " << fn << dendl;
+  dout(15) << "collection_stat " << fn << dendl;
   int r = ::stat(fn, st);
-  return r < 0 ? -errno:r;
+  if (r < 0) r = -errno;
+  dout(10) << "collection_stat " << fn << " = " << r << dendl;
+  return r;
 }
 
 bool FileStore::collection_exists(coll_t c) 
@@ -1708,7 +1755,7 @@ bool FileStore::collection_empty(coll_t c)
 
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "collection_empty " << fn << dendl;
+  dout(15) << "collection_empty " << fn << dendl;
 
   DIR *dir = ::opendir(fn);
   if (!dir)
@@ -1728,6 +1775,7 @@ bool FileStore::collection_empty(coll_t c)
   }
   
   ::closedir(dir);
+  dout(10) << "collection_empty " << fn << " = " << empty << dendl;
   return empty;
 }
 
@@ -1764,10 +1812,11 @@ int FileStore::_create_collection(coll_t c)
   
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "create_collection " << fn << dendl;
-
+  dout(15) << "create_collection " << fn << dendl;
   int r = ::mkdir(fn, 0755);
-  return r < 0 ? -errno:r;
+  if (r < 0) r = -errno;
+  dout(10) << "create_collection " << fn << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_destroy_collection(coll_t c) 
@@ -1776,13 +1825,14 @@ int FileStore::_destroy_collection(coll_t c)
 
   char fn[200];
   get_cdir(c, fn);
-  dout(10) << "_destroy_collection " << fn << dendl;
+  dout(15) << "_destroy_collection " << fn << dendl;
   int r = ::rmdir(fn);
   //char cmd[200];
   //sprintf(cmd, "test -d %s && rm -r %s", fn, fn);
   //system(cmd);
+  if (r < 0) r = -errno;
   dout(10) << "_destroy_collection " << fn << " = " << r << dendl;
-  return r < 0 ? -errno:r;
+  return r;
 }
 
 
@@ -1794,9 +1844,11 @@ int FileStore::_collection_add(coll_t c, coll_t cid, pobject_t o)
   get_coname(c, o, cof);
   char of[200];
   get_coname(cid, o, of);
-  dout(10) << "collection_add " << cof << " " << of << dendl;
+  dout(15) << "collection_add " << cof << " " << of << dendl;
   int r = ::link(of, cof);
-  return r < 0 ? -errno:0;
+  if (r < 0) r = -errno;
+  dout(10) << "collection_add " << cof << " " << of << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_collection_remove(coll_t c, pobject_t o) 
@@ -1805,9 +1857,11 @@ int FileStore::_collection_remove(coll_t c, pobject_t o)
 
   char cof[200];
   get_coname(c, o, cof);
-  dout(10) << "collection_remove " << cof << dendl;
+  dout(15) << "collection_remove " << cof << dendl;
   int r = ::unlink(cof);
-  return r < 0 ? -errno:0;
+  if (r < 0) r = -errno;
+  dout(10) << "collection_remove " << cof << " = " << r << dendl;
+  return r;
 }
 
 
