@@ -38,6 +38,7 @@
 #include "MDSMonitor.h"
 #include "ClientMonitor.h"
 #include "PGMonitor.h"
+#include "LogMonitor.h"
 
 #include "config.h"
 
@@ -75,6 +76,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_osdmap(this, w, PAXOS_OSDMAP),
   paxos_clientmap(this, w, PAXOS_CLIENTMAP),
   paxos_pgmap(this, w, PAXOS_PGMAP),
+  paxos_log(this, w, PAXOS_LOG),
   
   osdmon(0), mdsmon(0), clientmon(0)
 {
@@ -82,6 +84,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   mdsmon = new MDSMonitor(this, &paxos_mdsmap);
   clientmon = new ClientMonitor(this, &paxos_clientmap);
   pgmon = new PGMonitor(this, &paxos_pgmap);
+  logmon = new LogMonitor(this, &paxos_log);
 }
 
 Monitor::~Monitor()
@@ -90,6 +93,7 @@ Monitor::~Monitor()
   delete mdsmon;
   delete clientmon;
   delete pgmon;
+  delete logmon;
   if (messenger)
     messenger->destroy();
 }
@@ -137,6 +141,7 @@ void Monitor::shutdown()
   mdsmon->shutdown();
   clientmon->shutdown();
   pgmon->shutdown();
+  logmon->shutdown();
 
   // cancel all events
   cancel_tick();
@@ -160,11 +165,13 @@ void Monitor::call_election()
   paxos_osdmap.election_starting();
   paxos_clientmap.election_starting();
   paxos_pgmap.election_starting();
+  paxos_log.election_starting();
 
   mdsmon->election_starting();
   osdmon->election_starting();
   clientmon->election_starting();
   pgmon->election_starting();
+  logmon->election_starting();
   
   // call a new election
   elector.call_election();
@@ -183,12 +190,14 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   paxos_osdmap.leader_init();
   paxos_clientmap.leader_init();
   paxos_pgmap.leader_init();
+  paxos_log.leader_init();
   
   // init
   pgmon->election_finished();  // hack: before osdmon, for osd->pg kick works ok
   osdmon->election_finished();
   mdsmon->election_finished();
   clientmon->election_finished();
+  logmon->election_finished();
 } 
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
@@ -205,12 +214,14 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   paxos_osdmap.peon_init();
   paxos_clientmap.peon_init();
   paxos_pgmap.peon_init();
+  paxos_log.peon_init();
   
   // init
   osdmon->election_finished();
   mdsmon->election_finished();
   clientmon->election_finished();
   pgmon->election_finished();
+  logmon->election_finished();
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -373,6 +384,10 @@ void Monitor::dispatch(Message *m)
       pgmon->dispatch(m);
       break;
 
+      // log
+    case MSG_LOG:
+      logmon->dispatch(m);
+      break;
 
       // paxos
     case MSG_MON_PAXOS:
@@ -400,6 +415,9 @@ void Monitor::dispatch(Message *m)
 	  break;
 	case PAXOS_PGMAP:
 	  paxos_pgmap.dispatch(m);
+	  break;
+	case PAXOS_LOG:
+	  paxos_log.dispatch(m);
 	  break;
 	default:
 	  assert(0);
@@ -502,6 +520,7 @@ void Monitor::tick()
   mdsmon->tick();
   clientmon->tick();
   pgmon->tick();
+  logmon->tick();
   
   // next tick!
   reset_tick();
@@ -541,6 +560,7 @@ int Monitor::mkfs()
   services.push_back(mdsmon);
   services.push_back(clientmon);
   services.push_back(pgmon);
+  services.push_back(logmon);
   for (list<PaxosService*>::iterator p = services.begin(); 
        p != services.end();
        p++) {

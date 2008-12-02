@@ -21,6 +21,7 @@ using namespace std;
 #include "messages/MMonPaxos.h"
 
 #include "messages/MMonElection.h"
+#include "messages/MLog.h"
 
 #include "messages/MPing.h"
 
@@ -162,6 +163,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case MSG_MON_ELECTION:
     m = new MMonElection;
+    break;
+
+  case MSG_LOG:
+    m = new MLog;
     break;
 
   case CEPH_MSG_PING:

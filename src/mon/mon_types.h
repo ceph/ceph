@@ -20,6 +20,7 @@
 #define PAXOS_OSDMAP     2
 #define PAXOS_CLIENTMAP  3
 #define PAXOS_PGMAP      4
+#define PAXOS_LOG        5
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
@@ -28,6 +29,7 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_OSDMAP: return "osdmap";
   case PAXOS_CLIENTMAP: return "clientmap";
   case PAXOS_PGMAP: return "pgmap";
+  case PAXOS_LOG: return "log";
   default: assert(0); return 0;
   }
 }

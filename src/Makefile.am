@@ -196,6 +196,7 @@ libmon_a_SOURCES = \
 	mon/MDSMonitor.cc \
 	mon/ClientMonitor.cc \
 	mon/PGMonitor.cc \
+	mon/LogMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
 
