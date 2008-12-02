@@ -109,6 +109,7 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   beacon_last_seq = 0;
   beacon_sender = 0;
   beacon_killer = 0;
+  laggy = false;
 
   // tick
   tick_event = 0;
@@ -381,6 +382,9 @@ void MDS::tick()
   // reschedule
   reset_tick();
 
+  if (laggy)
+    return;
+
   // log
   mds_load_t load = balancer->get_load();
   
@@ -400,10 +404,10 @@ void MDS::tick()
     locker->scatter_tick();
     server->find_idle_sessions();
   }
-
+  
   if (is_reconnect())
     server->reconnect_tick();
-
+  
   if (is_active()) {
     balancer->tick();
     if (snapserver)
@@ -467,6 +471,13 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
     while (!beacon_seq_stamp.empty() &&
 	   beacon_seq_stamp.begin()->first <= seq)
       beacon_seq_stamp.erase(beacon_seq_stamp.begin());
+
+    if (laggy &&
+	g_clock.now() - beacon_last_acked_stamp < g_conf.mds_beacon_grace) {
+      dout(1) << " clearing laggy flag" << dendl;
+      laggy = false;
+      queue_waiters(waiting_for_nolaggy);
+    }
     
     reset_beacon_killer();
   }
@@ -492,9 +503,10 @@ void MDS::beacon_kill(utime_t lab)
 {
   if (lab == beacon_last_acked_stamp) {
     dout(0) << "beacon_kill last_acked_stamp " << lab 
-	    << ", killing myself."
+	    << ", setting laggy flag."
 	    << dendl;
-    suicide();
+    laggy = true;
+    //suicide();
   } else {
     dout(20) << "beacon_kill last_acked_stamp " << beacon_last_acked_stamp 
 	     << " != my " << lab 
@@ -1119,78 +1131,92 @@ void MDS::_dispatch(Message *m)
     }
   }
 
-
-  int port = m->get_type() & 0xff00;
-  switch (port) {
-  case MDS_PORT_CACHE:
-    mdcache->dispatch(m);
+  switch (m->get_type()) {
+    // MDS
+  case CEPH_MSG_MDS_MAP:
+    handle_mds_map((MMDSMap*)m);
     break;
-
-  case MDS_PORT_LOCKER:
-    locker->dispatch(m);
+  case MSG_MDS_BEACON:
+    handle_mds_beacon((MMDSBeacon*)m);
     break;
-
-  case MDS_PORT_MIGRATOR:
-    mdcache->migrator->dispatch(m);
-    break;
-
+    
+    // misc
+  case MSG_MON_COMMAND:
+    parse_config_option_string(((MMonCommand*)m)->cmd[0]);
+    delete m;
+    break;    
+    
   default:
-    switch (m->get_type()) {
-      // SERVER
-    case CEPH_MSG_CLIENT_SESSION:
-    case CEPH_MSG_CLIENT_REQUEST:
-    case CEPH_MSG_CLIENT_RECONNECT:
-    case MSG_MDS_SLAVE_REQUEST:
-      server->dispatch(m);
-      break;
-      
-    case MSG_MDS_HEARTBEAT:
-      balancer->proc_message(m);
-      break;
-
-    case MSG_MDS_TABLE_REQUEST:
-      {
-	MMDSTableRequest *req = (MMDSTableRequest*)m;
-	if (req->op < 0) {
-	  MDSTableClient *client = get_table_client(req->table);
-	  client->handle_request(req);
-	} else {
-	  MDSTableServer *server = get_table_server(req->table);
-	  server->handle_request(req);
+    
+    if (laggy) {
+      dout(10) << "laggy, deferring " << *m << dendl;
+      waiting_for_nolaggy.push_back(new C_MDS_RetryMessage(this, m));
+    } else {
+      int port = m->get_type() & 0xff00;
+      switch (port) {
+      case MDS_PORT_CACHE:
+	mdcache->dispatch(m);
+	break;
+	
+      case MDS_PORT_LOCKER:
+	locker->dispatch(m);
+	break;
+	
+      case MDS_PORT_MIGRATOR:
+	mdcache->migrator->dispatch(m);
+	break;
+	
+      default:
+	switch (m->get_type()) {
+	  // SERVER
+	case CEPH_MSG_CLIENT_SESSION:
+	case CEPH_MSG_CLIENT_REQUEST:
+	case CEPH_MSG_CLIENT_RECONNECT:
+	case MSG_MDS_SLAVE_REQUEST:
+	  server->dispatch(m);
+	  break;
+	  
+	case MSG_MDS_HEARTBEAT:
+	  balancer->proc_message(m);
+	  break;
+	  
+	case MSG_MDS_TABLE_REQUEST:
+	  {
+	    MMDSTableRequest *req = (MMDSTableRequest*)m;
+	    if (req->op < 0) {
+	      MDSTableClient *client = get_table_client(req->table);
+	      client->handle_request(req);
+	    } else {
+	      MDSTableServer *server = get_table_server(req->table);
+	      server->handle_request(req);
+	    }
+	  }
+	  break;
+	  
+	  // OSD
+	case CEPH_MSG_OSD_OPREPLY:
+	  objecter->handle_osd_op_reply((class MOSDOpReply*)m);
+	  break;
+	case CEPH_MSG_OSD_MAP:
+	  objecter->handle_osd_map((MOSDMap*)m);
+	  if (is_active() && snapserver)
+	    snapserver->check_osd_map(true);
+	  break;
+	  
+	default:
+	  dout(1) << "MDS unknown messge " << m->get_type() << dendl;
+	  assert(0);
 	}
       }
-      break;
-
-      // OSD
-    case CEPH_MSG_OSD_OPREPLY:
-      objecter->handle_osd_op_reply((class MOSDOpReply*)m);
-      break;
-    case CEPH_MSG_OSD_MAP:
-      objecter->handle_osd_map((MOSDMap*)m);
-      if (is_active() && snapserver)
-	snapserver->check_osd_map(true);
-      break;
       
-      // MDS
-    case CEPH_MSG_MDS_MAP:
-      handle_mds_map((MMDSMap*)m);
-      break;
-    case MSG_MDS_BEACON:
-      handle_mds_beacon((MMDSBeacon*)m);
-      break;
-      
-      // misc
-    case MSG_MON_COMMAND:
-      parse_config_option_string(((MMonCommand*)m)->cmd[0]);
-      delete m;
-      break;    
-
-    default:
-      dout(1) << "MDS unknown messge " << m->get_type() << dendl;
-      assert(0);
     }
   }
-  
+
+
+  if (laggy)
+    return;
+
+
   // finish any triggered contexts
   if (finished_queue.size()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;

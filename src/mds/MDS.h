@@ -117,6 +117,7 @@ class MDS : public Dispatcher {
 
   list<Context*> waiting_for_active;
   map<int, list<Context*> > waiting_for_active_peer;
+  list<Context*> waiting_for_nolaggy;
 
   map<int,version_t> peer_mdsmap_epoch;
 
@@ -163,6 +164,9 @@ class MDS : public Dispatcher {
   version_t               beacon_last_seq;          // last seq sent to monitor
   map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
+  bool laggy;
+
+  bool is_laggy() { return laggy; }
 
   class C_MDS_BeaconSender : public Context {
     MDS *mds;
