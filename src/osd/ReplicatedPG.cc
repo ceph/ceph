@@ -2373,7 +2373,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   unsigned r = osd->store->apply_transaction(t);
   assert(r == 0);
 
-
+  osd->logger->inc("r_pull");
+  osd->logger->inc("r_pullb", data.length());
 
   if (is_primary()) {
     if (info.is_uptodate())

@@ -386,10 +386,13 @@ int OSD::init()
   osd_logtype.add_inc("c_wr");
   osd_logtype.add_inc("c_wrb");
   
-  osd_logtype.add_inc("r_push");
-  osd_logtype.add_inc("r_pushb");
   osd_logtype.add_inc("r_wr");
   osd_logtype.add_inc("r_wrb");
+
+  osd_logtype.add_inc("r_push");
+  osd_logtype.add_inc("r_pushb");
+  osd_logtype.add_inc("r_pull");
+  osd_logtype.add_inc("r_pullb");
   
   osd_logtype.add_set("qlen");
   osd_logtype.add_set("rqlen");
