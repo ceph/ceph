@@ -1173,6 +1173,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	head->op = cpu_to_le32(op);
 	head->caller_uid = cpu_to_le32(current->fsuid);
 	head->caller_gid = cpu_to_le32(current->fsgid);
+	memset(&head->args, 0, sizeof(head->args));
 
 	/* encode paths */
 	if (op == CEPH_MDS_OP_FINDINODE) {
