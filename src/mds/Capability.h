@@ -69,7 +69,10 @@ private:
 
   int suppress;
   bool stale;
+
 public:
+  int releasing;   // only allow a single in-progress release (it may be waiting for log to flush)
+
   snapid_t client_follows;
   
   xlist<Capability*>::item session_caps_item;
@@ -83,7 +86,7 @@ public:
     last_recv(s),
     last_open(0),
     mseq(0),
-    suppress(0), stale(false),
+    suppress(0), stale(false), releasing(0),
     client_follows(0),
     session_caps_item(this), snaprealm_caps_item(this) { }
   

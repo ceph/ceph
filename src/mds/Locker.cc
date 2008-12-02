@@ -500,26 +500,9 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   mut->apply();
   
   if (releasecap) {
-    // before we remove the cap, make sure the release request is
-    // _still_ the most recent (and not racing with open() or
-    // something)
-    Capability *cap = in->get_client_cap(client);
-    if (!cap) {
-      dout(10) << " can't releasecap client" << client << ", cap has gone away?" << dendl;
-      delete ack;
-      ack = 0;
-    } else if (releasecap < cap->get_last_sent()) {
-      dout(10) << " NOT releasing cap client" << client << ", last_sent " << cap->get_last_sent()
-	       << " > " << releasecap << dendl;
-      delete ack;
-      ack = 0;
-    } else {
-      _finish_release_cap(in, client, releasecap);
-      assert(ack);
-    }
-  }
-
-  if (ack)
+    assert(ack);
+    _finish_release_cap(in, client, releasecap, ack);
+  } else if (ack)
     mds->send_message_client(ack, client);
 
   drop_locks(mut);
@@ -1101,6 +1084,12 @@ void Locker::handle_client_caps(MClientCaps *m)
       } else if (m->get_op() == CEPH_CAP_OP_RELEASE) {
 	dout(7) << " release request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
 	releasecap = m->get_seq();
+	/*
+	 * if multiple release requests overlap (i.e. because the first one is waiting
+	 * for the log to flush), wait for them all to "complete", and only ack the
+	 * last one.  to do this, keep count; see matching decrement in _finish_release_cap().
+	 */
+	cap->releasing++;
 	ack = new MClientCaps(CEPH_CAP_OP_RELEASED, in->inode, 0, 0, 0, 0, 0);
       } else if (wanted != cap->wanted()) {
 	dout(10) << " wanted " << cap_string(cap->wanted())
@@ -1124,26 +1113,48 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq)
+void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCaps *ack)
 {
   dout(10) << "_finish_release_cap client" << client << " seq " << seq << " on " << *in << dendl;
-  in->remove_client_cap(client);
-  if (!in->is_auth())
-    request_inode_file_caps(in);
+  
+  Capability *cap = in->get_client_cap(client);
+  assert(cap);
 
-  // unlinked stray?  may need to purge (e.g., after all caps are released)
-  if (in->inode.nlink == 0 &&
-      !in->is_any_caps() &&
-      in->is_auth() && 
-      in->get_parent_dn() &&
-      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
-    mdcache->eval_stray(in->get_parent_dn());
+  // before we remove the cap, make sure the release request is
+  // _still_ the most recent (and not racing with open() or
+  // something)
+
+  cap->releasing--;
+  if (cap->releasing) {
+    dout(10) << " another release attempt in flight, not releasing yet" << dendl;
+    delete ack;
+  } else if (seq < cap->get_last_sent()) {
+    dout(10) << " NOT releasing cap client" << client << ", last_sent " << cap->get_last_sent()
+	     << " > " << seq << dendl;
+    delete ack;
+  } else {
+    in->remove_client_cap(client);
+    if (!in->is_auth())
+      request_inode_file_caps(in);
+    
+    mds->send_message_client(ack, client);
+
+    // unlinked stray?  may need to purge (e.g., after all caps are released)
+    if (in->inode.nlink == 0 &&
+	!in->is_any_caps() &&
+	in->is_auth() && 
+	in->get_parent_dn() &&
+	in->get_parent_dn()->get_dir()->get_inode()->is_stray())
+      mdcache->eval_stray(in->get_parent_dn());
+  }
 }
 
 void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
 			    MClientCaps *ack, capseq_t releasecap)
 {
   dout(10) << "_do_cap_update had " << cap_string(had) << " on " << *in << dendl;
+
+  int client = m->get_source().num();
 
   inode_t *latest = in->get_projected_inode();
 
@@ -1246,15 +1257,14 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
     mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
-								m->get_source().num(),
-								ack, releasecap));
+								client, ack, releasecap));
   } else {
     // no update, ack now.
-    if (ack) {
-      mds->send_message_client(ack, m->get_source().num());
-      if (releasecap)
-	_finish_release_cap(in, m->get_source().num(), releasecap);
-    }
+    if (releasecap) {
+      assert(ack);
+      _finish_release_cap(in, client, releasecap, ack);
+    } else if (ack)
+      mds->send_message_client(ack, client);
   }
 
   // reevaluate, waiters

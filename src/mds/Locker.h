@@ -206,7 +206,7 @@ protected:
   void handle_client_caps(class MClientCaps *m);
   void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0, capseq_t releasecap=0);
-  void _finish_release_cap(CInode *in, int client, capseq_t seq);
+  void _finish_release_cap(CInode *in, int client, capseq_t seq, MClientCaps *ack);
 
 
   void request_inode_file_caps(CInode *in);
