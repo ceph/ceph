@@ -969,9 +969,6 @@ int MDCache::num_subtrees_fullnonauth()
  */
 CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
 {
-  if (follows == 0)
-    return in;
-
   dout(10) << "pick_inode_snap follows " << follows << " on " << *in << dendl;
 
   SnapRealm *realm = in->find_snaprealm();
