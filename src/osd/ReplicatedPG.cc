@@ -863,7 +863,9 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
     snapset.clone_overlap[coid.oid.snap].insert(0, old_size);
     
     // log clone
-    dout(10) << "cloning to " << coid << " v " << at_version << " snaps=" << snaps << dendl;
+    dout(10) << "cloning v " << old_version
+	     << " to " << coid << " v " << at_version
+	     << " snaps=" << snaps << dendl;
     Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, old_version, reqid);
     cloneentry.snaps = snapsbl;
     add_log_entry(cloneentry, logbl);
@@ -1528,12 +1530,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   snapc.seq = op->get_snap_seq();
   snapc.snaps = op->get_snaps();
 
-  SnapSet snapset;
   eversion_t old_version;
+  osd->store->getattr(info.pgid.to_coll(), poid, "version",
+		      &old_version, sizeof(old_version));
+  
+  SnapSet snapset;
   if (poid.oid.snap == CEPH_NOSNAP) {
     bufferlist bl;
-    osd->store->getattr(info.pgid.to_coll(), poid, "version",
-			&old_version, sizeof(old_version));
     int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
     if (r >= 0) {
       bufferlist::iterator p = bl.begin();
