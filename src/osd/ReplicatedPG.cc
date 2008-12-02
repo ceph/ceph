@@ -2617,6 +2617,7 @@ int ReplicatedPG::recover_primary(int max)
   // look at log!
   Log::Entry *latest = 0;
   int started = 0;
+  int skipped = 0;
 
   list<Log::Entry>::iterator p = log.requested_to;
 
@@ -2660,13 +2661,17 @@ int ReplicatedPG::recover_primary(int max)
 
       if (pull(poid))
 	++started;
+      else
+	++skipped;
       if (started >= max)
 	return started;
     }
     
-    //if (p == log.requested_to)
-    log.requested_to++;
     p++;
+
+    // only advance requested_to if we haven't skipped anything
+    if (!skipped)
+      log.requested_to = p;
   }
 
   // done?
