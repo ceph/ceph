@@ -1375,12 +1375,12 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, tid_t rep_tid, eversion_t nv,
+ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, tid_t rep_tid, eversion_t ov, eversion_t nv,
 						 SnapSet& snapset, SnapContext& snapc)
 {
   dout(10) << "new_repop rep_tid " << rep_tid << " on " << *op << dendl;
 
-  RepGather *repop = new RepGather(op, rep_tid, nv, info.last_complete,
+  RepGather *repop = new RepGather(op, rep_tid, ov, nv, info.last_complete,
 				   snapset, snapc);
   
   // initialize gather sets
@@ -1585,7 +1585,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(op, rep_tid, av, snapset, snapc);
+  RepGather *repop = new_repop(op, rep_tid, old_version, av, snapset, snapc);
 
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
