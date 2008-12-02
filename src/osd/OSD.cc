@@ -36,6 +36,8 @@
 #include "msg/Messenger.h"
 #include "msg/Message.h"
 
+#include "messages/MLog.h"
+
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
 #include "messages/MOSDPing.h"
@@ -271,8 +273,12 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"),
+  log_lock("OSD::log_lock"), last_log(0),
+  up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
+  last_tid(0),
   tid_lock("OSD::tid_lock"),
+  num_pulling(0),
   recovery_ops_active(0),
   recovery_wq(this),
   remove_list_lock("OSD::remove_list_lock"),
@@ -281,12 +287,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
 {
   osdmap = 0;
 
-  last_tid = 0;
-  num_pulling = 0;
-
   memset(&my_stat, 0, sizeof(my_stat));
 
-  up_thru_wanted = up_thru_pending = 0;
   osd_stat_updated = osd_stat_pending = false;
 
   stat_ops = 0;
@@ -1213,11 +1215,51 @@ void OSD::do_mon_report()
   }
 
   // do any pending reports
+  send_log();
   if (is_booting())
     send_boot();
   send_alive();
   send_failures();
   send_pg_stats();
+}
+
+
+void OSD::log(__u8 level, string s)
+{
+  Mutex::Locker l(log_lock);
+  dout(10) << "log " << (int)level << " : " << s << dendl;
+  LogEntry e;
+  e.who = messenger->get_myinst();
+  e.stamp = g_clock.now();
+  e.seq = ++last_log;
+  e.level = level;
+  e.msg = s;
+  log_queue.push_back(e);
+}
+
+void OSD::send_log()
+{
+  Mutex::Locker l(log_lock);
+  if (log_queue.empty())
+    return;
+  MLog *log = new MLog(osdmap->get_fsid());
+  log->entries = log_queue;
+  int mon = monmap->pick_mon();
+  dout(10) << "send_log to mon" << mon << dendl;
+  messenger->send_message(log, monmap->get_inst(mon));
+}
+
+void OSD::handle_log(MLog *m)
+{
+  Mutex::Locker l(log_lock);
+  dout(10) << "handle_log " << *m << dendl;
+
+  version_t last = m->entries.rbegin()->seq;
+  while (log_queue.size() && log_queue.begin()->seq <= last) {
+    dout(10) << " logged " << log_queue.front() << dendl;
+    log_queue.pop_front();
+  }
+  delete m;
 }
 
 void OSD::send_boot()
@@ -1451,6 +1493,10 @@ void OSD::dispatch(Message *m)
   case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
     delete m;
+    break;
+
+  case MSG_LOG:
+    handle_log((MLog*)m);
     break;
 
     // -- don't need OSDMap --

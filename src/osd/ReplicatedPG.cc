@@ -39,9 +39,9 @@ static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
 }
 
 
+#include <sstream>
 
 #include <errno.h>
-#include <sys/stat.h>
 
 static const int LOAD_LATENCY    = 1;
 static const int LOAD_QUEUE_SIZE = 2;
@@ -2941,6 +2941,29 @@ void ReplicatedPG::scrub()
 	   << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
 	   << stat.num_kb << "/" << info.stats.num_kb << " kb."
 	   << dendl;
+
+  if (stat.num_objects != info.stats.num_objects ||
+      stat.num_object_clones != info.stats.num_object_clones ||
+      stat.num_bytes != info.stats.num_bytes ||
+      stat.num_kb != info.stats.num_kb) {
+    stringstream ss;
+    ss << info.pgid << " scrub got "
+       << stat.num_objects << "/" << info.stats.num_objects << " objects, "
+       << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
+       << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
+       << stat.num_kb << "/" << info.stats.num_kb << " kb.";
+    string s;
+    getline(ss, s);
+    osd->log(10, s);
+    /*
+  } else {
+    stringstream ss;
+    ss << info.pgid << " scrub ok";
+    string s;
+    getline(ss, s);
+    osd->log(0, s);
+    */
+  }
 
   dout(10) << "scrub finish" << dendl;
   unlock();

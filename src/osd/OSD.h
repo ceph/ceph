@@ -30,6 +30,7 @@
 
 #include "common/DecayCounter.h"
 
+#include "include/LogEntry.h"
 
 #include <map>
 using namespace std;
@@ -44,6 +45,7 @@ class Message;
 class Logger;
 class ObjectStore;
 class OSDMap;
+class MLog;
 
 class OSD : public Dispatcher {
 
@@ -366,6 +368,14 @@ private:
 
   void do_mon_report();
 
+  // -- log --
+  Mutex log_lock;
+  deque<LogEntry> log_queue;
+  version_t last_log;
+
+  void log(__u8 level, string s);
+  void send_log();
+  void handle_log(MLog *m);
 
   // -- boot --
   void send_boot();
