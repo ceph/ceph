@@ -323,7 +323,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
 		     " already pending\n", inode, snapc, snapc->seq, used);
 		kfree(capsnap);
-	} else {
+	} else if (ci->i_wrbuffer_ref_head || (used & CEPH_CAP_WR)) {
 		igrab(inode);
 		capsnap->follows = snapc->seq - 1;
 		capsnap->context = ceph_get_snap_context(snapc);
@@ -346,6 +346,9 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 			/* note mtime, size NOW. */
 			__ceph_finish_cap_snap(ci, capsnap);
 		}
+	} else {
+		dout(10, "queue_cap_snap %p nothing dirty|writing\n", inode);
+		kfree(capsnap);
 	}
 
 	spin_unlock(&inode->i_lock);
