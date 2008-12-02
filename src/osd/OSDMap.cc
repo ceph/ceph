@@ -116,7 +116,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     }
 
     // raid
-    if (g_conf.osd_min_raid_width <= g_conf.osd_max_raid_width)
+    if (false && g_conf.osd_min_raid_width <= g_conf.osd_max_raid_width)
       for (int pool=0; pool<npools; pool++) {
 	crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_RAID4, g_conf.osd_min_raid_width, g_conf.osd_max_raid_width);
 	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
@@ -147,7 +147,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     }
 
     // raid4
-    if (g_conf.osd_min_raid_width <= g_conf.osd_max_raid_width)
+    if (false && g_conf.osd_min_raid_width <= g_conf.osd_max_raid_width)
       for (int pool=0; pool<npools; pool++) {
 	crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_RAID4, g_conf.osd_min_raid_width, g_conf.osd_max_raid_width);
 	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);

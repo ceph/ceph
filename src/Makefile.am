@@ -236,9 +236,9 @@ libos_a_SOURCES = \
 libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
-	osd/RAID4PG.cc \
 	osd/Ager.cc \
 	osd/OSD.cc
+#	osd/RAID4PG.cc
 
 libosdc_a_SOURCES = \
 	osdc/Objecter.cc \

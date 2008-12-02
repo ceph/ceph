@@ -28,7 +28,7 @@
 
 
 #include "ReplicatedPG.h"
-#include "RAID4PG.h"
+//#include "RAID4PG.h"
 
 #include "Ager.h"
 
@@ -588,8 +588,8 @@ PG *OSD::_open_lock_pg(pg_t pgid)
   PG *pg;
   if (pgid.is_rep())
     pg = new ReplicatedPG(this, pgid);
-  else if (pgid.is_raid4())
-    pg = new RAID4PG(this, pgid);
+  //else if (pgid.is_raid4())
+  //pg = new RAID4PG(this, pgid);
   else 
     assert(0);
 
