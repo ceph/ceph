@@ -122,7 +122,7 @@ public:
   
   operator uint64_t() const { return u.pg64; }
 
-  pobject_t to_pobject() const { 
+  pobject_t to_log_pobject() const { 
     return pobject_t(OSD_METADATA_PG_POOL,   // osd metadata 
 		     0,
 		     object_t(u.pg64, 0));
@@ -662,5 +662,46 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 	     << cs.clones
 	     << (cs.head_exists ? "+head":"");
 }
+
+
+/*
+ * summarize pg contents for purposes of a scrub
+ */
+struct ScrubMap {
+  struct object {
+    pobject_t poid;
+    __u64 size;
+    map<nstring,bufferptr> attrs;
+
+    void encode(bufferlist& bl) const {
+      ::encode(poid, bl);
+      ::encode(size, bl);
+      ::encode(attrs, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(poid, bl);
+      ::decode(size, bl);
+      ::decode(attrs, bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(object)
+
+  vector<object> objects;
+  map<nstring,bufferptr> attrs;
+  bufferlist logbl;
+
+  void encode(bufferlist& bl) const {
+    ::encode(objects, bl);
+    ::encode(attrs, bl);
+    ::encode(logbl, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(objects, bl);
+    ::decode(attrs, bl);
+    ::decode(logbl, bl);
+  }
+};
+WRITE_CLASS_ENCODER(ScrubMap::object)
+WRITE_CLASS_ENCODER(ScrubMap)
 
 #endif

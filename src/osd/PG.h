@@ -489,6 +489,7 @@ protected:
    * put_unlock() when done with the current pointer (_most common_).
    */  
   Mutex _lock;
+  Cond _cond;
   atomic_t ref;
   bool deleted;
 
@@ -501,6 +502,14 @@ public:
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     _lock.Unlock();
   }
+  void wait() {
+    _cond.Wait(_lock);
+  }
+  void kick() {
+    assert(_lock.is_locked());
+    _cond.Signal();
+  }
+
   void get() {
     //generic_dout(0) << this << " " << info.pgid << " get " << ref.test() << dendl;
     //assert(_lock.is_locked());
@@ -671,6 +680,15 @@ public:
 
   friend class C_OSD_RepModify_Commit;
 
+
+  // -- scrub --
+  map<int,ScrubMap> peer_scrub_map;
+
+  void scrub();
+  void build_scrub_map(ScrubMap &map);
+  virtual void _scrub(ScrubMap &map) {}
+
+
  public:  
   PG(OSD *o, pg_t p) : 
     osd(o), 
@@ -764,7 +782,6 @@ public:
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
   virtual bool snap_trimmer() = 0;
-  virtual void scrub() { };
 
   virtual bool same_for_read_since(epoch_t e) = 0;
   virtual bool same_for_modify_since(epoch_t e) = 0;

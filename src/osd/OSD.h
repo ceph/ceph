@@ -439,6 +439,7 @@ private:
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_info(class MOSDPGInfo *m);
   void handle_pg_remove(class MOSDPGRemove *m);
+  void handle_pg_scrub(class MOSDPGScrub *m);
 
   // helper for handle_pg_log and handle_pg_info
   void _process_pg_info(epoch_t epoch, int from,

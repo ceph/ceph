@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 /*
- * Scru - instruct an OSD to create a pg, if it doesn't already exist
+ * instruct an OSD to scrub some or all pg(s)
  */
 
 struct MOSDScrub : public Message {

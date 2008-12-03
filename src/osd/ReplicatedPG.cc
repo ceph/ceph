@@ -2821,11 +2821,12 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
 
 
-void ReplicatedPG::scrub()
-{
-  lock();
-  dout(10) << "scrub start" << dendl;
 
+// ==========================================================================================
+// SCRUB
+
+void ReplicatedPG::_scrub()
+{
   coll_t c = info.pgid.to_coll();
   vector<pobject_t> ls;
   osd->store->collection_list(c, ls);
@@ -2966,5 +2967,4 @@ void ReplicatedPG::scrub()
   }
 
   dout(10) << "scrub finish" << dendl;
-  unlock();
 }
