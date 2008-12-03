@@ -481,6 +481,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	/* parse reply */
 	if (req->r_reply) {
 		replyhead = req->r_reply->front.iov_base;
+		WARN_ON(le32_to_cpu(replyhead->num_ops) == 0);
 		op = (void *)(replyhead + 1);
 		rc = le32_to_cpu(replyhead->result);
 		bytes = le64_to_cpu(op->length);
@@ -489,7 +490,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	if (rc >= 0) {
 		wrote = (bytes + (offset & ~PAGE_CACHE_MASK) + ~PAGE_CACHE_MASK)
 			>> PAGE_CACHE_SHIFT;
-		BUG_ON(wrote != req->r_num_pages);
+		WARN_ON(wrote != req->r_num_pages);
 	} else {
 		wrote = 0;
 		mapping_set_error(mapping, rc);
