@@ -500,7 +500,7 @@ void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
     }
   }
 
-  dout(10) << "proc_missing missing " << missing.missing << dendl;
+  dout(10) << "proc_replica_missing missing " << missing.missing << dendl;
 }
 
 
@@ -1620,9 +1620,12 @@ void PG::read_log(ObjectStore *store)
     eversion_t v;
     pobject_t poid(info.pgid.pool(), 0, i->oid);
     int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
-    if (r < 0 || v < i->version) 
-      missing.add_event(*i);
+    if (r < 0 || v < i->version) {
+      dout(15) << "read_log missing " << *i << dendl;
+      missing.add(i->oid, i->version, v);
+    }
   }
+  dout(10) << "read_log done" << dendl;
 }
 
 
