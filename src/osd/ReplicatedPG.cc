@@ -1362,7 +1362,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   // forward the write/update/whatever
   int acks_wanted = CEPH_OSD_OP_ACK | CEPH_OSD_OP_ONDISK;
   MOSDSubOp *wr = new MOSDSubOp(repop->op->get_reqid(), info.pgid, poid,
-				repop->op->ops, acks_wanted,
+				repop->op->ops, repop->noop, acks_wanted,
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
   wr->old_version = repop->old_version;
@@ -1375,12 +1375,13 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, tid_t rep_tid, eversion_t ov, eversion_t nv,
+ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, bool noop,
+						 tid_t rep_tid, eversion_t ov, eversion_t nv,
 						 SnapSet& snapset, SnapContext& snapc)
 {
   dout(10) << "new_repop rep_tid " << rep_tid << " on " << *op << dendl;
 
-  RepGather *repop = new RepGather(op, rep_tid, ov, nv, info.last_complete,
+  RepGather *repop = new RepGather(op, noop, rep_tid, ov, nv, info.last_complete,
 				   snapset, snapc);
   
   // initialize gather sets
@@ -1454,10 +1455,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   int whoami = osd->get_nodeid();
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
-  const char *opname = "no-op";
-  if (op->ops.size())
-    opname = ceph_osd_op_name(op->ops[0].op);
-
   // --- locking ---
 
   // wrlock?
@@ -1508,17 +1505,23 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 #endif
 
   // dup op?
-  if (is_dup(op->get_reqid())) {
+  bool noop = false;
+  const char *opname;
+  if (op->ops.size()) {
+    opname = "no-op";
+    noop = true;
+  } else if (is_dup(op->get_reqid())) {
     dout(3) << "op_modify " << opname << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << dendl;
-    op->ops.clear();
     opname = "no-op";
-  }
+    noop = true;
+  } else
+    opname = ceph_osd_op_name(op->ops[0].op);
 
 
   // version
   eversion_t av = log.top;
-  if (op->ops.size()) {
+  if (!noop) {
     av.epoch = osd->osdmap->get_epoch();
     av.version++;
     assert(av > info.last_update);
@@ -1585,13 +1588,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(op, rep_tid, old_version, av, snapset, snapc);
+  RepGather *repop = new_repop(op, noop, rep_tid, old_version, av, snapset, snapc);
 
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
 
   // we are acker.
-  if (op->ops.size()) {
+  if (!noop) {
     // log and update later.
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
 			old_version, av,
@@ -1666,10 +1669,13 @@ public:
 void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 {
   pobject_t poid = op->poid;
-  const char *opname = "no-op";
-  if (op->ops.size())
-    ceph_osd_op_name(op->ops[0].op);
-  
+
+  const char *opname;
+  if (op->noop)
+    opname = "no-op";
+  else
+    opname = ceph_osd_op_name(op->ops[0].op);
+
   dout(10) << "sub_op_modify " << opname 
            << " " << poid 
            << " v " << op->version
@@ -1704,7 +1710,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   osd->logger->inc("r_wr");
   osd->logger->inc("r_wrb", op->get_data().length());
   
-  if (op->ops.size()) {
+  if (!op->noop) {
     prepare_transaction(t, op->reqid,
 			op->poid, op->ops, op->get_data(),
 			op->old_version, op->version,
@@ -1952,7 +1958,7 @@ bool ReplicatedPG::pull(pobject_t poid)
   tid_t tid = osd->get_tid();
   vector<ceph_osd_op> pull(1);
   pull[0].op = CEPH_OSD_OP_PULL;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, CEPH_OSD_OP_ACK,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, false, CEPH_OSD_OP_ACK,
 				   osd->osdmap->get_epoch(), tid, 0, v);
   subop->data_subset.swap(data_subset);
   // do not include clone_subsets in pull request; we will recalculate this
@@ -2011,7 +2017,7 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
       push[0].op = CEPH_OSD_OP_PUSH;
       push[0].offset = 0;
       push[0].length = st.st_size;
-      MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, 0,
+      MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false, 0,
 				       osd->osdmap->get_epoch(), osd->get_tid(), 0, version);
       subop->clone_subsets[head].insert(0, st.st_size);
       subop->attrset.swap(attrset);
@@ -2112,7 +2118,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   push[0].op = CEPH_OSD_OP_PUSH;
   push[0].offset = 0;
   push[0].length = size;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, 0,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false, 0,
 				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
   subop->data_subset.swap(data_subset);
   subop->clone_subsets.swap(clone_subsets);

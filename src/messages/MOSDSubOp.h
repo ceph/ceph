@@ -36,6 +36,7 @@ public:
   
   __u8 acks_wanted;
   vector<ceph_osd_op> ops;
+  bool noop;
 
   // subop metadata
   tid_t rep_tid;
@@ -61,6 +62,7 @@ public:
     ::decode(pgid, p);
     ::decode(poid, p);
     ::decode(ops, p);
+    ::decode(noop, p);
     ::decode(acks_wanted, p);
     ::decode(rep_tid, p);
     ::decode(version, p);
@@ -81,6 +83,7 @@ public:
     ::encode(pgid, payload);
     ::encode(poid, payload);
     ::encode(ops, payload);
+    ::encode(noop, payload);
     ::encode(acks_wanted, payload);
     ::encode(rep_tid, payload);
     ::encode(version, payload);
@@ -100,7 +103,7 @@ public:
   }
 
 
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, int aw,
+  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, bool noop_, int aw,
 	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
@@ -108,7 +111,7 @@ public:
     pgid(p),
     poid(po),
     acks_wanted(aw),
-    ops(o),
+    ops(o), noop(noop_),   
     rep_tid(rtid),
     version(v),
     inc_lock(il)
@@ -121,8 +124,10 @@ public:
   void print(ostream& out) {
     out << "osd_sub_op(" << reqid
 	<< " " << poid
-	<< " " << ops
-	<< " v " << version
+	<< " " << ops;
+    if (noop)
+      out << " (NOOP)";
+    out << " v " << version
 	<< " snapset=" << snapset << " snapc=" << snapc;    
     if (!data_subset.empty()) out << " subset " << data_subset;
     out << ")";

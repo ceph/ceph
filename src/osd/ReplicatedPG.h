@@ -33,6 +33,7 @@ public:
 
     class MOSDOp *op;
     tid_t rep_tid;
+    bool noop;
 
     ObjectStore::Transaction t;
     bool applied, aborted;
@@ -52,10 +53,11 @@ public:
     eversion_t          pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(MOSDOp *o, tid_t rt, eversion_t ov, eversion_t av, eversion_t lc,
+    RepGather(MOSDOp *o, bool noop_, tid_t rt, eversion_t ov, eversion_t av, eversion_t lc,
 	      SnapSet& ss, SnapContext& sc) :
       queue_item(this),
-      nref(1), op(o), rep_tid(rt),
+      nref(1), op(o), rep_tid(rt), 
+      noop(noop_),
       applied(false), aborted(false),
       sent_ack(false), sent_nvram(false), sent_disk(false),
       old_version(ov), at_version(av), 
@@ -102,7 +104,7 @@ protected:
   void apply_repop(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_repop(MOSDOp *op, tid_t rep_tid, eversion_t ov, eversion_t nv,
+  RepGather *new_repop(MOSDOp *op, bool noop, tid_t rep_tid, eversion_t ov, eversion_t nv,
 		       SnapSet& snapset, SnapContext& snapc);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
