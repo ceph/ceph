@@ -27,6 +27,8 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGScrub.h"
 
+#include <sstream>
+
 #define DOUT_SUBSYS osd
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
@@ -1827,6 +1829,9 @@ void PG::scrub()
   for (unsigned i=0; i<acting.size(); i++)
     p[i] = m[i]->objects.begin();
 
+  int num_missing = 0;
+  int num_bad = 0;
+
   while (1) {
     ScrubMap::object *po = 0;
     bool missing = false;
@@ -1845,9 +1850,10 @@ void PG::scrub()
       break;
     if (missing) {
       for (unsigned i=0; i<acting.size(); i++) {
-	if (po->poid != p[i]->poid)
+	if (po->poid != p[i]->poid) {
 	  dout(0) << " osd" << acting[i] << " missing " << po->poid << dendl;
-	else
+	  num_missing++;
+	} else
 	  p[i]++;
       }
       continue;
@@ -1860,6 +1866,7 @@ void PG::scrub()
 	dout(0) << " osd" << acting[i] << " " << po->poid
 		<< " size " << p[i]->size << " != " << po->size << dendl;
 	ok = false;
+	num_bad++;
       }
       // fixme: check attrs
     }
@@ -1871,6 +1878,15 @@ void PG::scrub()
     // next
     for (unsigned i=0; i<acting.size(); i++)
       p[i]++;
+  }
+
+  if (num_missing || num_bad) {
+    dout(10) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
+    stringstream ss;
+    ss << "scrub " << info.pgid << " " << num_missing << " missing, " << num_bad << " bad objects";
+    string s;
+    getline(ss, s);
+    osd->log(10, s);
   }
 
   // discard peer scrub info.

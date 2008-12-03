@@ -2965,7 +2965,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
     stringstream ss;
-    ss << info.pgid << " scrub got "
+    ss << "scrub " << info.pgid << " stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
