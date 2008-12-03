@@ -894,6 +894,7 @@ void PG::clear_primary_state()
   stat_object_temp_rd.clear();
 
   peer_scrub_map.clear();
+  osd->recovery_wq.dequeue(this);
 }
 
 void PG::peer(ObjectStore::Transaction& t, 
