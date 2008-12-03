@@ -574,7 +574,7 @@ void ESession::replay(MDS *mds)
 	mds->sessionmap.remove_session(session);
     }
   }
-  _segment->sessionmapv = cmapv;
+  update_segment();
 }
 
 void ESessions::update_segment()
@@ -594,7 +594,7 @@ void ESessions::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;
   }
-  _segment->sessionmapv = cmapv;
+  update_segment();
 }
 
 
@@ -620,7 +620,7 @@ void ETableServer::replay(MDS *mds)
 	   << " " << get_mdstableserver_opname(op)
 	   << " event " << version << " - 1 == table " << server->get_version() << dendl;
   assert(version-1 == server->get_version());
-  
+
   switch (op) {
   case TABLESERVER_OP_PREPARE:
     server->_prepare(mutation, reqid, bymds);
@@ -636,6 +636,7 @@ void ETableServer::replay(MDS *mds)
   }
   
   assert(version == server->get_version());
+  update_segment();
 }
 
 
@@ -934,7 +935,7 @@ void EImportStart::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     mds->sessionmap.projected = mds->sessionmap.version;
   }
-  _segment->sessionmapv = cmapv;
+  update_segment();
 }
 
 // -----------------------
