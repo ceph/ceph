@@ -30,6 +30,7 @@
 
 #include "common/DecayCounter.h"
 
+#include "include/LogEntry.h"
 
 #include <map>
 using namespace std;
@@ -44,6 +45,7 @@ class Message;
 class Logger;
 class ObjectStore;
 class OSDMap;
+class MLog;
 
 class OSD : public Dispatcher {
 
@@ -366,6 +368,14 @@ private:
 
   void do_mon_report();
 
+  // -- log --
+  Mutex log_lock;
+  deque<LogEntry> log_queue;
+  version_t last_log;
+
+  void log(__u8 level, string s);
+  void send_log();
+  void handle_log(MLog *m);
 
   // -- boot --
   void send_boot();
@@ -446,6 +456,7 @@ private:
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_info(class MOSDPGInfo *m);
   void handle_pg_remove(class MOSDPGRemove *m);
+  void handle_pg_scrub(class MOSDPGScrub *m);
 
   // helper for handle_pg_log and handle_pg_info
   void _process_pg_info(epoch_t epoch, int from,
@@ -478,7 +489,10 @@ private:
       return false;
     }
     void _dequeue(PG *pg) {
-      pg->recovery_item.remove_myself();
+      if (pg->recovery_item.get_xlist()) {
+	pg->recovery_item.remove_myself();
+	pg->put();
+      }
     }
     PG * _dequeue() {
       if (osd->recovery_queue.empty())
@@ -559,11 +573,7 @@ private:
       pg->snap_trimmer();
     }
     void _clear() {
-      while (!osd->snap_trim_queue.empty()) {
-	PG *pg = osd->snap_trim_queue.front();
-	osd->snap_trim_queue.pop_front();
-	pg->put();
-      }
+      osd->snap_trim_queue.clear();
     }
   } snap_trim_wq;
 
@@ -595,11 +605,7 @@ private:
       pg->scrub();
     }
     void _clear() {
-      while (!osd->scrub_queue.empty()) {
-	PG *pg = osd->scrub_queue.front();
-	osd->scrub_queue.pop_front();
-	pg->put();
-      }
+      osd->scrub_queue.clear();
     }
   } scrub_wq;
 

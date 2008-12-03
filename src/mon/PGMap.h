@@ -98,36 +98,23 @@ public:
 
   // aggregate stats (soft state)
   hash_map<int,int> num_pg_by_state;
-  int64_t num_pg;
-  int64_t total_pg_num_bytes;
-  int64_t total_pg_num_kb;
-  int64_t total_pg_num_objects;
-  int64_t num_osd;
-  int64_t total_osd_kb;
-  int64_t total_osd_kb_used;
-  int64_t total_osd_kb_avail;
-  int64_t total_osd_num_objects;
+  int64_t num_pg, num_osd;
+  pg_stat_t pg_sum;
+  osd_stat_t osd_sum;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   
   void stat_zero() {
     num_pg = 0;
     num_pg_by_state.clear();
-    total_pg_num_bytes = 0;
-    total_pg_num_kb = 0;
-    total_pg_num_objects = 0;
     num_osd = 0;
-    total_osd_kb = 0;
-    total_osd_kb_used = 0;
-    total_osd_kb_avail = 0;
-    total_osd_num_objects = 0;
+    pg_sum = pg_stat_t();
+    osd_sum = osd_stat_t();
   }
   void stat_pg_add(pg_t pgid, pg_stat_t &s) {
     num_pg++;
     num_pg_by_state[s.state]++;
-    total_pg_num_bytes += s.num_bytes;
-    total_pg_num_kb += s.num_kb;
-    total_pg_num_objects += s.num_objects;
+    pg_sum.add(s);
     if (s.state & PG_STATE_CREATING)
       creating_pgs.insert(pgid);
   }
@@ -135,43 +122,23 @@ public:
     num_pg--;
     if (--num_pg_by_state[s.state] == 0)
       num_pg_by_state.erase(s.state);
-    total_pg_num_bytes -= s.num_bytes;
-    total_pg_num_kb -= s.num_kb;
-    total_pg_num_objects -= s.num_objects;
+    pg_sum.sub(s);
     if (s.state & PG_STATE_CREATING)
       creating_pgs.erase(pgid);
   }
   void stat_osd_add(osd_stat_t &s) {
     num_osd++;
-    total_osd_kb += s.kb;
-    total_osd_kb_used += s.kb_used;
-    total_osd_kb_avail += s.kb_avail;
-    total_osd_num_objects += s.num_objects;
+    osd_sum.add(s);
   }
   void stat_osd_sub(osd_stat_t &s) {
     num_osd--;
-    total_osd_kb -= s.kb;
-    total_osd_kb_used -= s.kb_used;
-    total_osd_kb_avail -= s.kb_avail;
-    total_osd_num_objects -= s.num_objects;
+    osd_sum.sub(s);
   }
-
-  uint64_t total_pg_kb() { return total_pg_num_kb; }
-  uint64_t total_kb() { return total_osd_kb; }
-  uint64_t total_avail_kb() { return total_osd_kb_avail; }
-  uint64_t total_used_kb() { return total_osd_kb_used; }
 
   PGMap() : version(0),
 	    last_osdmap_epoch(0), last_pg_scan(0),
 	    num_pg(0), 
-	    total_pg_num_bytes(0), 
-	    total_pg_num_kb(0), 
-	    total_pg_num_objects(0), 
-	    num_osd(0),
-	    total_osd_kb(0),
-	    total_osd_kb_used(0),
-	    total_osd_kb_avail(0),
-	    total_osd_num_objects(0) {}
+	    num_osd(0) {}
 
   void encode(bufferlist &bl) {
     ::encode(version, bl);

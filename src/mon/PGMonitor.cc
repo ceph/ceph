@@ -78,10 +78,10 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
   return out << "v" << pm.pg_map.version << ": "
 	     << pm.pg_map.pg_stat.size() << " pgs: "
 	     << states << "; "
-	     << kb_t(pm.pg_map.total_pg_kb()) << " data, " 
-	     << kb_t(pm.pg_map.total_used_kb()) << " used, "
-	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
-	     << kb_t(pm.pg_map.total_kb()) << " free";
+	     << kb_t(pm.pg_map.pg_sum.num_kb) << " data, " 
+	     << kb_t(pm.pg_map.osd_sum.kb_used) << " used, "
+	     << kb_t(pm.pg_map.osd_sum.kb_avail) << " / "
+	     << kb_t(pm.pg_map.osd_sum.kb) << " avail";
 }
 
 /*
@@ -240,10 +240,10 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply = new MStatfsReply(mon->monmap->fsid, statfs->tid);
 
   // these are in KB.
-  reply->h.st.f_total = pg_map.total_kb();
-  reply->h.st.f_free = pg_map.total_avail_kb();
-  reply->h.st.f_avail = pg_map.total_avail_kb();
-  reply->h.st.f_objects = pg_map.total_osd_num_objects;
+  reply->h.st.f_total = pg_map.osd_sum.kb;
+  reply->h.st.f_free = pg_map.osd_sum.kb_avail;
+  reply->h.st.f_avail = pg_map.osd_sum.kb_avail;
+  reply->h.st.f_objects = pg_map.pg_sum.num_objects;
 
   // reply
   mon->messenger->send_message(reply, statfs->get_orig_source_inst());
@@ -595,7 +595,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       ss << "version " << pg_map.version << std::endl;
       ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
       ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat\tobjects\tkb\tbytes\tv\treported\tstate\tosds" << std::endl;
+      ss << "pg_stat\tobjects\tkb\tbytes\tv\treported\tstate\tosds\tlast_scrub" << std::endl;
       for (set<pg_t>::iterator p = pg_map.pg_set.begin();
 	   p != pg_map.pg_set.end();
 	   p++) {
@@ -608,14 +608,14 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	   << "\t" << st.version
 	   << "\t" << st.reported
 	   << "\t" << st.acting
+	   << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	   << std::endl;
       }
-      ss << "osdstat\tobject\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
+      ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
       for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
 	   p != pg_map.osd_stat.end();
 	   p++)
 	ss << p->first
-	   << "\t" << p->second.num_objects
 	   << "\t" << p->second.kb_used
 	   << "\t" << p->second.kb_avail 
 	   << "\t" << p->second.kb

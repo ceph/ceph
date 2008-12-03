@@ -36,6 +36,8 @@
 #include "msg/Messenger.h"
 #include "msg/Message.h"
 
+#include "messages/MLog.h"
+
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
 #include "messages/MOSDPing.h"
@@ -56,6 +58,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGScrub.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -271,8 +274,12 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"),
+  log_lock("OSD::log_lock"), last_log(0),
+  up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
+  last_tid(0),
   tid_lock("OSD::tid_lock"),
+  num_pulling(0),
   recovery_ops_active(0),
   recovery_wq(this),
   remove_list_lock("OSD::remove_list_lock"),
@@ -281,12 +288,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
 {
   osdmap = 0;
 
-  last_tid = 0;
-  num_pulling = 0;
-
   memset(&my_stat, 0, sizeof(my_stat));
 
-  up_thru_wanted = up_thru_pending = 0;
   osd_stat_updated = osd_stat_pending = false;
 
   stat_ops = 0;
@@ -699,7 +702,7 @@ void OSD::_remove_unlock_pg(PG *pg)
     }
 
     // log
-    t.remove(0, pgid.to_pobject());
+    t.remove(0, pgid.to_log_pobject());
 
     // main collection
     store->collection_list(pgid.to_coll(), olist);
@@ -1210,11 +1213,51 @@ void OSD::do_mon_report()
   }
 
   // do any pending reports
+  send_log();
   if (is_booting())
     send_boot();
   send_alive();
   send_failures();
   send_pg_stats();
+}
+
+
+void OSD::log(__u8 level, string s)
+{
+  Mutex::Locker l(log_lock);
+  dout(10) << "log " << (int)level << " : " << s << dendl;
+  LogEntry e;
+  e.who = messenger->get_myinst();
+  e.stamp = g_clock.now();
+  e.seq = ++last_log;
+  e.level = level;
+  e.msg = s;
+  log_queue.push_back(e);
+}
+
+void OSD::send_log()
+{
+  Mutex::Locker l(log_lock);
+  if (log_queue.empty())
+    return;
+  MLog *log = new MLog(osdmap->get_fsid());
+  log->entries = log_queue;
+  int mon = monmap->pick_mon();
+  dout(10) << "send_log to mon" << mon << dendl;
+  messenger->send_message(log, monmap->get_inst(mon));
+}
+
+void OSD::handle_log(MLog *m)
+{
+  Mutex::Locker l(log_lock);
+  dout(10) << "handle_log " << *m << dendl;
+
+  version_t last = m->entries.rbegin()->seq;
+  while (log_queue.size() && log_queue.begin()->seq <= last) {
+    dout(10) << " logged " << log_queue.front() << dendl;
+    log_queue.pop_front();
+  }
+  delete m;
 }
 
 void OSD::send_boot()
@@ -1311,7 +1354,6 @@ void OSD::send_pg_stats()
     m->osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
     m->osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
     m->osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
-    m->osd_stat.num_objects = stbuf.f_files;
     for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
       m->osd_stat.hb_in.push_back(p->first);
     for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
@@ -1462,6 +1504,10 @@ void OSD::dispatch(Message *m)
     delete m;
     break;
 
+  case MSG_LOG:
+    handle_log((MLog*)m);
+    break;
+
     // -- don't need OSDMap --
 
     // map and replication
@@ -1527,6 +1573,9 @@ void OSD::dispatch(Message *m)
       case MSG_OSD_PG_INFO:
         handle_pg_info((MOSDPGInfo*)m);
         break;
+      case MSG_OSD_PG_SCRUB:
+	handle_pg_scrub((MOSDPGScrub*)m);
+	break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -2853,6 +2902,42 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   if (created)
     update_heartbeat_peers();
 
+  delete m;
+}
+
+void OSD::handle_pg_scrub(MOSDPGScrub *m)
+{
+  dout(7) << "handle_pg_scrub " << *m << " from " << m->get_source() << dendl;
+  int from = m->get_source().num();
+  if (!require_same_or_newer_map(m, m->epoch)) return;
+
+  PG *pg = _lookup_lock_pg(m->pgid);
+  if (pg) {
+    if (m->epoch < pg->info.history.same_since) {
+      dout(10) << *pg << " has changed since " << m->epoch << dendl;
+    } else {
+      if (pg->is_primary()) {
+	dout(10) << "handle_pg_scrub got peer osd" << from << " scrub map" << dendl;
+	bufferlist::iterator p = m->map.begin();
+	pg->peer_scrub_map[from].decode(p);
+	pg->kick();
+      } else {
+	// replica, reply
+	dout(10) << "handle_pg_scrub generating scrub map for primary" << dendl;
+
+	// do this is a separate thread.. FIXME
+	ScrubMap map;
+	pg->build_scrub_map(map);
+
+	MOSDPGScrub *reply = new MOSDPGScrub(pg->info.pgid, osdmap->get_epoch());
+	::encode(map, reply->map);
+	messenger->send_message(reply, m->get_source_inst());
+      }
+    }
+    pg->unlock();
+  } else {
+    dout(10) << " pg " << m->pgid << " not found" << dendl;
+  }
   delete m;
 }
 

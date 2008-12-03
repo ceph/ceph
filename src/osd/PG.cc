@@ -25,6 +25,7 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGScrub.h"
 
 #define DOUT_SUBSYS osd
 #undef dout_prefix
@@ -790,6 +791,7 @@ void PG::build_prior()
     OSDMap *lastmap = osd->get_map(interval.last);
 
     int crashed = 0;
+    int need_down = 0;
     bool any_survived = false;
     for (unsigned i=0; i<interval.acting.size(); i++) {
       const osd_info_t& pinfo = osd->osdmap->get_info(interval.acting[i]);
@@ -817,10 +819,15 @@ void PG::build_prior()
 	if (interval.first <= info.history.last_epoch_started &&
 	    interval.last >= info.history.last_epoch_started)
 	  any_up_now = true;
+      } else if (pinfo.lost_at > interval.first) {
+	dout(10) << "build_prior  prior osd" << interval.acting[i]
+		 << " is down, but marked lost at " << pinfo.lost_at << dendl;
+	prior_set_down.insert(interval.acting[i]);
       } else {
 	dout(10) << "build_prior  prior osd" << interval.acting[i]
 		 << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
+	need_down++;
 	prior_set_down.insert(interval.acting[i]);
       }
     }
@@ -828,13 +835,15 @@ void PG::build_prior()
     // if nobody survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_survived && interval.maybe_went_rw) {
+    if (!any_survived && need_down && interval.maybe_went_rw) {
       // fixme: how do we identify a "clean" shutdown anyway?
-      dout(10) << "build_prior  possibly went active+rw, no survivors, including" << dendl;
+      dout(10) << "build_prior  " << need_down
+	       << " osds possibly went active+rw, no survivors, including" << dendl;
       for (unsigned i=0; i<interval.acting.size(); i++)
 	if (osd->osdmap->is_down(interval.acting[i])) {
 	  prior_set.insert(interval.acting[i]);
 	  prior_set_down.erase(interval.acting[i]);
+	  state_set(PG_STATE_DOWN);
 	}
       some_down = true;
       
@@ -849,12 +858,6 @@ void PG::build_prior()
 	       << " possibly crashed, marking pg crashed" << dendl;
       state_set(PG_STATE_CRASHED);
     }
-  }
-
-  if (info.history.last_epoch_started < info.history.same_since &&
-      !any_up_now) {
-    dout(10) << "build_prior  no osds are up from the last epoch started, PG is down for now." << dendl;
-    state_set(PG_STATE_DOWN);
   }
 
   dout(10) << "build_prior = " << prior_set
@@ -889,6 +892,9 @@ void PG::clear_primary_state()
   log.reset_recovery_pointers();
 
   stat_object_temp_rd.clear();
+
+  peer_scrub_map.clear();
+  osd->recovery_wq.dequeue(this);
 }
 
 void PG::peer(ObjectStore::Transaction& t, 
@@ -1405,6 +1411,7 @@ void PG::update_stats()
     pg_stats_stable.reported = osd->osdmap->get_epoch();
     pg_stats_stable.state = state;
     pg_stats_stable.acting = acting;
+    pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
   } else {
     pg_stats_valid = false;
   }
@@ -1469,8 +1476,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.top = bl.length();
   
   // write it
-  t.remove(0, info.pgid.to_pobject() );
-  t.write(0, info.pgid.to_pobject() , 0, bl.length(), bl);
+  t.remove(0, info.pgid.to_log_pobject() );
+  t.write(0, info.pgid.to_log_pobject() , 0, bl.length(), bl);
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
@@ -1511,7 +1518,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
 
   if (!g_conf.osd_preserve_trimmed_log)
-    t.zero(0, info.pgid.to_pobject(), 0, ondisklog.bottom);
+    t.zero(0, info.pgid.to_log_pobject(), 0, ondisklog.bottom);
 }
 
 
@@ -1541,7 +1548,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
   if (ondisklog.top % 4096 == 0) 
     ondisklog.block_map[ondisklog.top] = logversion;
 
-  t.write(0, info.pgid.to_pobject(), ondisklog.top, bl.length(), bl );
+  t.write(0, info.pgid.to_log_pobject(), ondisklog.top, bl.length(), bl );
   
   ondisklog.top += bl.length();
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top",
@@ -1577,7 +1584,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(0, info.pgid.to_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
+    store->read(0, info.pgid.to_log_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
     if (bl.length() < ondisklog.top-ondisklog.bottom) {
       dout(0) << "read_log got " << bl.length() << " bytes, expected " 
 	      << ondisklog.top << "-" << ondisklog.bottom << "="
@@ -1699,5 +1706,187 @@ bool PG::block_if_wrlocked(MOSDOp* op)
   return false; //the object wasn't locked, so the operation can be handled right away
 }
 
+
+
+// ==========================================================================================
+// SCRUB
+
+
+/*
+ * build a (sorted) summary of pg content for purposes of scrubbing
+ */ 
+void PG::build_scrub_map(ScrubMap &map)
+{
+  dout(10) << "build_scrub_map" << dendl;
+  coll_t c = info.pgid.to_coll();
+
+  // objects
+  vector<pobject_t> ls;
+  osd->store->collection_list(c, ls);
+
+  // sort
+  dout(10) << "sorting" << dendl;
+  vector< pair<pobject_t,int> > tab(ls.size());
+  vector< pair<pobject_t,int> >::iterator q = tab.begin();
+  int i = 0;
+  for (vector<pobject_t>::iterator p = ls.begin(); 
+       p != ls.end(); 
+       p++, i++, q++) {
+    q->first = *p;
+    q->second = i;
+  }
+  sort(tab.begin(), tab.end());
+  // tab is now sorted, with ->second indicating object's original position
+  vector<int> pos(ls.size());
+  i = 0;
+  for (vector< pair<pobject_t,int> >::iterator p = tab.begin(); 
+       p != tab.end(); 
+       p++, i++)
+    pos[p->second] = i;
+  // now, pos[orig pos] = sorted pos
+
+  dout(10) << " " << ls.size() << " objects" << dendl;
+  map.objects.resize(ls.size());
+  i = 0;
+  for (vector<pobject_t>::iterator p = ls.begin(); 
+       p != ls.end(); 
+       p++, i++) {
+    pobject_t poid = *p;
+
+    ScrubMap::object& o = map.objects[pos[i]];
+    o.poid = *p;
+
+    struct stat st;
+    int r = osd->store->stat(c, poid, &st);
+    assert(r == 0);
+    o.size = st.st_size;
+
+    osd->store->getattrs(c, poid, o.attrs);    
+
+    dout(15) << "   " << poid << dendl;
+  }
+
+  // pg attrs
+  osd->store->collection_getattrs(c, map.attrs);
+
+  // log
+  osd->store->read(coll_t(), info.pgid.to_log_pobject(), 0, 0, map.logbl);
+  dout(10) << " log " << map.logbl.length() << " bytes" << dendl;
+}
+
+
+
+void PG::scrub()
+{
+  osd->map_lock.get_read();
+
+  lock();
+  if (!is_primary()) {
+    dout(10) << "scrub -- not primary" << dendl;
+    unlock();
+    osd->map_lock.put_read();
+    return;
+  }
+
+  if (!is_active() || !is_clean()) {
+    dout(10) << "scrub -- not active or not clean" << dendl;
+    unlock();
+    osd->map_lock.put_read();
+    return;
+  }
+
+  dout(10) << "scrub start" << dendl;
+  state_set(PG_STATE_SCRUBBING);
+  update_stats();
+
+  // request maps from replicas
+  for (unsigned i=1; i<acting.size(); i++) {
+    dout(10) << " requesting scrubmap from osd" << acting[i] << dendl;
+    osd->messenger->send_message(new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
+				 osd->osdmap->get_inst(acting[i]));
+  }
+
+  osd->map_lock.put_read();
+
+  dout(10) << " building my scrub map" << dendl;
+  ScrubMap map;
+  build_scrub_map(map);
+
+  while (peer_scrub_map.size() < acting.size() - 1) {
+    dout(10) << " have " << peer_scrub_map.size() << " / " << (acting.size()-1)
+	     << " scrub maps, waiting" << dendl;
+    wait();
+  }
+
+  // first, compare scrub maps
+  vector<ScrubMap*> m(acting.size());
+  m[0] = &map;
+  for (unsigned i=1; i<acting.size(); i++)
+    m[i] = &peer_scrub_map[acting[i]];
+  vector<ScrubMap::object>::iterator p[acting.size()];
+  for (unsigned i=0; i<acting.size(); i++)
+    p[i] = m[i]->objects.begin();
+
+  while (1) {
+    ScrubMap::object *po = 0;
+    bool missing = false;
+    for (unsigned i=0; i<acting.size(); i++) {
+      if (p[i] == m[i]->objects.end())
+	continue;
+      if (!po)
+	po = &(*p[i]);
+      else if (po->poid != p[i]->poid) {
+	missing = true;
+	if (po->poid > p[i]->poid)
+	  po = &(*p[i]);
+      }
+    }
+    if (!po)
+      break;
+    if (missing) {
+      for (unsigned i=0; i<acting.size(); i++) {
+	if (po->poid != p[i]->poid)
+	  dout(0) << " osd" << acting[i] << " missing " << po->poid << dendl;
+	else
+	  p[i]++;
+      }
+      continue;
+    }
+
+    // compare
+    bool ok = true;
+    for (unsigned i=1; i<acting.size(); i++) {
+      if (po->size != p[i]->size) {
+	dout(0) << " osd" << acting[i] << " " << po->poid
+		<< " size " << p[i]->size << " != " << po->size << dendl;
+	ok = false;
+      }
+      // fixme: check attrs
+    }
+
+    
+    if (ok)
+      dout(10) << "scrub " << po->poid << " size " << po->size << " ok" << dendl;
+
+    // next
+    for (unsigned i=0; i<acting.size(); i++)
+      p[i]++;
+  }
+
+  // discard peer scrub info.
+  peer_scrub_map.clear();
+
+  // ok, do the pg-type specific scrubbing
+  _scrub(map);
+  
+  info.stats.last_scrub = info.last_update;
+  info.stats.last_scrub_stamp = g_clock.now();
+  state_clear(PG_STATE_SCRUBBING);
+  update_stats();
+
+  dout(10) << "scrub done" << dendl;
+
+  unlock();
+}
 
 

@@ -12,45 +12,36 @@
  * 
  */
 
+#ifndef __MLOG_H
+#define __MLOG_H
 
-#ifndef __MOSDSCRUB_H
-#define __MOSDSCRUB_H
+#include "include/LogEntry.h"
 
-#include "msg/Message.h"
-
-/*
- * instruct an OSD to scrub some or all pg(s)
- */
-
-struct MOSDScrub : public Message {
+class MLog : public Message {
+public:
   ceph_fsid fsid;
-  vector<pg_t> scrub_pgs;
+  deque<LogEntry> entries;
+  version_t last;
+  
+  MLog() : Message(MSG_PGSTATS) {}
+  MLog(ceph_fsid& f) : 
+    Message(MSG_LOG), fsid(f) {}
 
-  MOSDScrub() {}
-  MOSDScrub(ceph_fsid& f) :
-    Message(MSG_OSD_SCRUB),
-    fsid(f) {}
-  MOSDScrub(ceph_fsid& f, vector<pg_t>& pgs) :
-    Message(MSG_OSD_SCRUB),
-    fsid(f), scrub_pgs(pgs) {}
-
-  const char *get_type_name() { return "scrub"; }
+  const char *get_type_name() { return "log"; }
   void print(ostream& out) {
-    out << "scrub(";
-    if (scrub_pgs.empty())
-      out << "osd)";
-    else
-      out << scrub_pgs << ")";
+    out << "log";
   }
 
   void encode_payload() {
     ::encode(fsid, payload);
-    ::encode(scrub_pgs, payload);
+    ::encode(entries, payload);
+    ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
-    ::decode(scrub_pgs, p);
+    ::decode(entries, p);
+    ::decode(last, p);
   }
 };
 

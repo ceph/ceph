@@ -161,7 +161,6 @@ protected:
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
 
-
   // pg on-disk content
   void clean_up_local(ObjectStore::Transaction& t);
 
@@ -184,6 +183,11 @@ protected:
   void sub_op_pull(MOSDSubOp *op);
 
 
+  // -- scrub --
+  void _scrub(ScrubMap& map);
+
+
+
 public:
   ReplicatedPG(OSD *o, pg_t p) : 
     PG(o,p)
@@ -196,8 +200,6 @@ public:
   void do_sub_op_reply(MOSDSubOpReply *op);
   bool snap_trimmer();
 
-  void scrub();
-  
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);

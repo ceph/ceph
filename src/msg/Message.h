@@ -26,6 +26,8 @@
 #define MSG_MON_COMMAND            50
 #define MSG_MON_COMMAND_ACK        51
 
+#define MSG_LOG              52
+
 // osd internal
 #define MSG_OSD_PING         70
 #define MSG_OSD_BOOT         71
@@ -51,6 +53,7 @@
 #define MSG_REMOVE_SNAPS       89
 
 #define MSG_OSD_SCRUB          90
+#define MSG_OSD_PG_SCRUB       91
 
 
 

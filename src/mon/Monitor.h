@@ -38,6 +38,7 @@ class OSDMonitor;
 class MDSMonitor;
 class ClientMonitor;
 class PGMonitor;
+class LogMonitor;
 
 class MMonGetMap;
 
@@ -104,6 +105,7 @@ public:
   Paxos paxos_osdmap;
   Paxos paxos_clientmap;
   Paxos paxos_pgmap;
+  Paxos paxos_log;
   friend class Paxos;
   
 
@@ -112,11 +114,13 @@ public:
   MDSMonitor *mdsmon;
   ClientMonitor *clientmon;
   PGMonitor *pgmon;
+  LogMonitor *logmon;
 
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class ClientMonitor;
   friend class PGMonitor;
+  friend class LogMonitor;
 
 
   // messages

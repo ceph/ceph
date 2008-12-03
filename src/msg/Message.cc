@@ -21,6 +21,7 @@ using namespace std;
 #include "messages/MMonPaxos.h"
 
 #include "messages/MMonElection.h"
+#include "messages/MLog.h"
 
 #include "messages/MPing.h"
 
@@ -43,6 +44,7 @@ using namespace std;
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGScrub.h"
 #include "messages/MOSDScrub.h"
 
 #include "messages/MRemoveSnaps.h"
@@ -164,6 +166,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     m = new MMonElection;
     break;
 
+  case MSG_LOG:
+    m = new MLog;
+    break;
+
   case CEPH_MSG_PING:
     m = new MPing();
     break;
@@ -230,6 +236,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_OSD_PG_CREATE:
     m = new MOSDPGCreate;
+    break;
+  case MSG_OSD_PG_SCRUB:
+    m = new MOSDPGScrub;
     break;
 
   case MSG_OSD_SCRUB:
