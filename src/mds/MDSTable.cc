@@ -137,6 +137,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     bufferlist::iterator p = bl.begin();
     ::decode(version, p);
     committed_version = version;
+    dout(10) << "load_2 loaded v" << version << dendl;
     decode_state(p);
   }
   else {
