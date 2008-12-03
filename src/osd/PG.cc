@@ -1202,7 +1202,7 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   // if primary..
-  if (role == 0) {
+  if (is_primary()) {
     // who is clean?
     uptodate_set.clear();
     if (info.is_uptodate()) 
@@ -1281,6 +1281,8 @@ void PG::activate(ObjectStore::Transaction& t,
       dout(10) << "activate not all replicas are uptodate, starting recovery" << dendl;
       osd->queue_for_recovery(this);
     }
+
+    update_stats();
   }
 
   
@@ -1309,9 +1311,6 @@ void PG::activate(ObjectStore::Transaction& t,
     replay_queue.clear();
     osd->take_waiters(replay);
   }
-
-  if (is_primary())
-    update_stats(); // update stats
 
   // waiters
   osd->take_waiters(waiting_for_active);

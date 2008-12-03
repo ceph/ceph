@@ -2356,12 +2356,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
 
 
-  // close out pull op?
-  if (pulling.count(poid.oid))
-    pulling.erase(poid.oid);
-
   missing.got(poid.oid, v);
-  missing_loc.erase(poid.oid);
 
   // raise last_complete?
   while (log.complete_to != log.log.end()) {
@@ -2372,8 +2367,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     log.complete_to++;
   }
   dout(10) << "last_complete now " << info.last_complete << dendl;
-  
-  
+
   // apply to disk!
   write_info(t);
   unsigned r = osd->store->apply_transaction(t);
@@ -2383,6 +2377,15 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   osd->logger->inc("r_pullb", data.length());
 
   if (is_primary()) {
+
+    missing_loc.erase(poid.oid);
+
+    // close out pull op?
+    if (pulling.count(poid.oid))
+      pulling.erase(poid.oid);
+
+    update_stats();
+
     if (info.is_uptodate())
       uptodate_set.insert(osd->get_nodeid());
     
