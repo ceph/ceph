@@ -7,7 +7,6 @@
 int ceph_debug_snap = -1;
 #define DOUT_MASK DOUT_MASK_SNAP
 #define DOUT_VAR ceph_debug_snap
-#define DOUT_PREFIX "snap: "
 
 #include "super.h"
 #include "decode.h"

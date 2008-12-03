@@ -11,7 +11,6 @@
 int ceph_debug_addr = -1;
 #define DOUT_MASK DOUT_MASK_ADDR
 #define DOUT_VAR ceph_debug_addr
-#define DOUT_PREFIX "addr: "
 #include "super.h"
 
 #include "osd_client.h"

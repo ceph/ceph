@@ -6,7 +6,6 @@
 int ceph_debug_export = -1;
 #define DOUT_MASK DOUT_MASK_EXPORT
 #define DOUT_VAR ceph_debug_export
-#define DOUT_PREFIX "export: "
 
 /*
  * fh is N tuples of

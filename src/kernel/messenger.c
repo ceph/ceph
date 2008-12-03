@@ -11,7 +11,6 @@
 int ceph_debug_msgr;
 #define DOUT_MASK DOUT_MASK_MSGR
 #define DOUT_VAR ceph_debug_msgr
-#define DOUT_PREFIX "msgr: "
 
 #include "super.h"
 #include "messenger.h"

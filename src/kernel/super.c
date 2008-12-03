@@ -29,7 +29,6 @@ int ceph_debug_super = -1;   /* for this file */
 
 #define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
-#define DOUT_PREFIX "super: "
 #include "super.h"
 
 #include "mon_client.h"

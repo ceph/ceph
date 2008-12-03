@@ -13,7 +13,6 @@
 int ceph_debug_mdsmap = -1;
 #define DOUT_MASK DOUT_MASK_MDSMAP
 #define DOUT_VAR ceph_debug_mdsmap
-#define DOUT_PREFIX "mdsmap: "
 #include "super.h"
 
 

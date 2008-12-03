@@ -13,7 +13,6 @@
 int ceph_debug_inode = -1;
 #define DOUT_MASK DOUT_MASK_INODE
 #define DOUT_VAR ceph_debug_inode
-#define DOUT_PREFIX "inode: "
 #include "super.h"
 #include "decode.h"
 

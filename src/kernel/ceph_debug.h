@@ -92,23 +92,35 @@ static inline int ceph_get_debug_mask(char *name)
 	return 0;
 }
 
-#define dout_flag(x, mask, args...) do {				\
+#define _STRINGIFY(x) #x
+#define STRINGIFY(x) _STRINGIFY(x)
+
+#define FMT_PREFIX "%-30.30s: "
+#define FMT_SUFFIX "%s"
+#define LOG_ARGS __FILE__ ":" STRINGIFY(__LINE__)
+#define TRAIL_PARAM ""
+
+#define LOG_LINE FMT_PREFIX fmt, LOG_ARGS, args
+
+#define dout_flag(x, mask, fmt, args...) do {				\
 		if (((ceph_debug_mask | DOUT_UNMASKABLE) & mask) &&	\
 		    ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||		\
 		     (DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
-				printk(KERN_ERR "ceph_" DOUT_PREFIX args); \
+				printk(KERN_ERR FMT_PREFIX fmt, LOG_ARGS, args);	\
 			else						\
-				printk(KERN_DEBUG "ceph_" DOUT_PREFIX args); \
+				printk(KERN_DEBUG FMT_PREFIX fmt, LOG_ARGS, args);	\
 		}							\
 	} while (0)
 
-#define dout(x, args...) dout_flag(x, DOUT_MASK, args)
+#define _dout(x, fmt, args...) dout_flag(x, DOUT_MASK, fmt FMT_SUFFIX, args)
 
-#define derr(x, args...) do {			\
-		printk(KERN_ERR "ceph_" DOUT_PREFIX args);	\
+#define _derr(x, fmt, args...) do {					\
+		printk(KERN_ERR FMT_PREFIX fmt FMT_SUFFIX, LOG_ARGS, args);	\
 	} while (0)
 
+#define dout(x, args...) _dout(x, args, TRAIL_PARAM)
+#define derr(x, args...) _derr(x, args, TRAIL_PARAM)
 
 /* dcache d_count debugging */
 #if 0

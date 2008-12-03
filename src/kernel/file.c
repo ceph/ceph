@@ -8,7 +8,6 @@
 int ceph_debug_file = -1;
 #define DOUT_MASK DOUT_MASK_FILE
 #define DOUT_VAR ceph_debug_file
-#define DOUT_PREFIX "file: "
 #include "super.h"
 
 #include "mds_client.h"

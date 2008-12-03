@@ -11,7 +11,6 @@
 int ceph_debug_tools = -1;
 #define DOUT_VAR ceph_debug_tools
 #define DOUT_MASK DOUT_MASK_TOOLS
-#define DOUT_PREFIX "tools: "
 #include "super.h"
 
 static struct list_head _bk_allocs;

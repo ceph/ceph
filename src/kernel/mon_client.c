@@ -9,7 +9,6 @@
 int ceph_debug_mon = -1;
 #define DOUT_MASK DOUT_MASK_MON
 #define DOUT_VAR ceph_debug_mon
-#define DOUT_PREFIX "mon: "
 #include "super.h"
 #include "decode.h"
 
