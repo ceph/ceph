@@ -595,7 +595,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       ss << "version " << pg_map.version << std::endl;
       ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
       ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat\tobjects\tkb\tbytes\tv\treported\tstate\tosds" << std::endl;
+      ss << "pg_stat\tobjects\tkb\tbytes\tv\treported\tstate\tosds\tlast_scrub" << std::endl;
       for (set<pg_t>::iterator p = pg_map.pg_set.begin();
 	   p != pg_map.pg_set.end();
 	   p++) {
@@ -608,6 +608,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	   << "\t" << st.version
 	   << "\t" << st.reported
 	   << "\t" << st.acting
+	   << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	   << std::endl;
       }
       ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
