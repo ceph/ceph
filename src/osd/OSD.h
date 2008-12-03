@@ -472,7 +472,10 @@ private:
       return false;
     }
     void _dequeue(PG *pg) {
-      pg->recovery_item.remove_myself();
+      if (pg->recovery_item.get_xlist()) {
+	pg->recovery_item.remove_myself();
+	pg->put();
+      }
     }
     PG * _dequeue() {
       if (osd->recovery_queue.empty())
@@ -553,11 +556,7 @@ private:
       pg->snap_trimmer();
     }
     void _clear() {
-      while (!osd->snap_trim_queue.empty()) {
-	PG *pg = osd->snap_trim_queue.front();
-	osd->snap_trim_queue.pop_front();
-	pg->put();
-      }
+      osd->snap_trim_queue.clear();
     }
   } snap_trim_wq;
 
@@ -589,11 +588,7 @@ private:
       pg->scrub();
     }
     void _clear() {
-      while (!osd->scrub_queue.empty()) {
-	PG *pg = osd->scrub_queue.front();
-	osd->scrub_queue.pop_front();
-	pg->put();
-      }
+      osd->scrub_queue.clear();
     }
   } scrub_wq;
 
