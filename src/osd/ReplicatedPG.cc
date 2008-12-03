@@ -1507,7 +1507,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // dup op?
   bool noop = false;
   const char *opname;
-  if (op->ops.size()) {
+  if (op->ops.empty()) {
     opname = "no-op";
     noop = true;
   } else if (is_dup(op->get_reqid())) {
