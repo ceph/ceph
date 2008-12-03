@@ -182,7 +182,7 @@ protected:
 
 
   // -- scrub --
-  void _scrub();
+  void _scrub(ScrubMap& map);
 
 
 

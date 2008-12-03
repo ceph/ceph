@@ -1874,8 +1874,10 @@ void PG::scrub()
       p[i]++;
   }
 
+  // discard peer scrub info.
+  peer_scrub_map.clear();
 
-  // ok, do pg-type specific scrubbing
+  // ok, do the pg-type specific scrubbing
   _scrub(map);
   
   info.stats.last_scrub = info.last_update;

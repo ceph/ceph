@@ -2825,49 +2825,41 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 // ==========================================================================================
 // SCRUB
 
-void ReplicatedPG::_scrub()
+void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {
-  coll_t c = info.pgid.to_coll();
-  vector<pobject_t> ls;
-  osd->store->collection_list(c, ls);
-  if (ls.size() != info.stats.num_objects)
-    dout(10) << "scrub WARNING: " << ls.size() << " != num_objects " << info.stats.num_objects << dendl;
-  dout(10) << "scrub " << ls.size() << " objects" << dendl;
+  dout(10) << "_scrub" << dendl;
 
-  sort(ls.begin(), ls.end());
-  dout(10) << "scrub sorted object lists" << dendl;
+  coll_t c = info.pgid.to_coll();
 
   // traverse in reverse order.
   pobject_t head;
   SnapSet snapset;
   unsigned curclone = 0;
-  int r;
 
   pg_stat_t stat;
 
   bufferlist last_data;
 
-  for (vector<pobject_t>::reverse_iterator p = ls.rbegin(); 
-       p != ls.rend(); 
+  for (vector<ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
+       p != scrubmap.objects.rend(); 
        p++) {
-    pobject_t poid = *p;
+    pobject_t poid = p->poid;
     stat.num_objects++;
 
     // basic checks.
     eversion_t v;
-    r = osd->store->getattr(c, poid, "version", &v, sizeof(v));
-    assert(r == sizeof(v));
-    struct stat st;
-    r = osd->store->stat(c, poid, &st);
-    dout(20) << "scrub  " << poid << " v " << v
-	     << " size " << st.st_size << dendl;
-  
-    stat.num_bytes += st.st_size;
-    stat.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
+    if (p->attrs.count("version") == 0) {
+      dout(0) << "scrub no 'version' attr on " << poid << dendl;
+      continue;
+    }
+    p->attrs["version"].copy_out(0, sizeof(v), (char *)&v);
+
+    stat.num_bytes += p->size;
+    stat.num_kb += SHIFT_ROUND_UP(p->size, 10);
 
     bufferlist data;
     osd->store->read(c, poid, 0, 0, data);
-    assert(data.length() == st.st_size);
+    assert(data.length() == p->size);
 
     // new head?
     if (poid.oid.snap == CEPH_NOSNAP) {
@@ -2878,13 +2870,16 @@ void ReplicatedPG::_scrub()
       }
 
       bufferlist bl;
-      r = osd->store->getattr(c, poid, "snapset", bl);
-      assert(r > 0);
+      if (p->attrs.count("snapset") == 0) {
+	dout(0) << "no 'snapset' attr on " << p->poid << dendl;
+	continue;
+      }
+      bl.push_back(p->attrs["snapset"]);
       bufferlist::iterator blp = bl.begin();
       ::decode(snapset, blp);
       dout(20) << "scrub  " << poid << " snapset " << snapset << dendl;
       if (!snapset.head_exists)
-	assert(st.st_size == 0); // make sure object is 0-sized.
+	assert(p->size == 0); // make sure object is 0-sized.
 
       // what will be next?
       if (snapset.clones.empty())
@@ -2912,16 +2907,23 @@ void ReplicatedPG::_scrub()
       
       assert(poid.oid.snap == snapset.clones[curclone]);
       bufferlist bl;
-      r = osd->store->getattr(c, poid, "snaps", bl);
-      assert(r > 0);
+      if (p->attrs.count("snaps") == 0) {
+	dout(0) << "no 'snaps' attr on " << p->poid << dendl;
+	continue;
+      }
+      bl.push_back(p->attrs["snaps"]);
       bufferlist::iterator blp = bl.begin();
       vector<snapid_t> snaps;
       ::decode(snaps, blp);
       
       eversion_t from;
-      r = osd->store->getattr(c, poid, "from_version", &from, sizeof(from));
+      if (p->attrs.count("from_version") == 0) {
+	dout(0) << "no 'from_version' attr on " << p->poid << dendl;
+	continue;
+      }
+      p->attrs["from_version"].copy_out(0, sizeof(from), (char *)&from);
 
-      assert((__u64)st.st_size == snapset.clone_size[curclone]);
+      assert(p->size == snapset.clone_size[curclone]);
 
       // verify overlap?
       // ...
