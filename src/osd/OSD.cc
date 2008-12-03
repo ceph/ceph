@@ -478,6 +478,8 @@ int OSD::shutdown()
   wait_for_no_ops();
   dout(10) << "no ops" << dendl;
 
+  clear_pg_stat_queue();
+
   // stop threads
   delete threadpool;
   threadpool = 0;
@@ -1194,17 +1196,9 @@ void OSD::do_mon_report()
     retry = true;
   }
   pg_stat_queue_lock.Lock();
-  if (!pg_stat_pending.empty() || osd_stat_pending) {
-    dout(30) << "requeueing pg_stat_pending" << dendl;
+  if (!pg_stat_queue.empty() || osd_stat_pending) {
+    dout(30) << "pg_stat_queue not empty" << dendl;
     retry = true;
-    osd_stat_updated = osd_stat_updated || osd_stat_pending;
-    osd_stat_pending = false;
-    for (map<pg_t,eversion_t>::iterator p = pg_stat_pending.begin(); 
-	 p != pg_stat_pending.end(); 
-	 p++)
-      if (pg_stat_queue.count(p->first) == 0)   // _queue value will always be >= _pending
-	pg_stat_queue[p->first] = p->second;
-    pg_stat_pending.clear();
   }
   pg_stat_queue_lock.Unlock();
 
@@ -1282,33 +1276,31 @@ void OSD::send_pg_stats()
 
   dout(20) << "send_pg_stats" << dendl;
 
-  // grab queue
-  assert(pg_stat_pending.empty());
   pg_stat_queue_lock.Lock();
-  pg_stat_pending.swap(pg_stat_queue);
-  osd_stat_pending = osd_stat_updated;
-  osd_stat_updated = false;
-  pg_stat_queue_lock.Unlock();
 
-  if (!pg_stat_pending.empty() || osd_stat_pending) {
-    dout(1) << "send_pg_stats - " << pg_stat_pending.size() << " pgs updated" << dendl;
+  if (osd_stat_updated || !pg_stat_queue.empty()) {
+    osd_stat_updated = false;
+    
+    dout(1) << "send_pg_stats - " << pg_stat_queue.size() << " pgs updated" << dendl;
     
     utime_t had_for = g_clock.now();
     had_for -= had_map_since;
     MPGStats *m = new MPGStats(osdmap->get_fsid(), osdmap->get_epoch(), had_for);
-    for (map<pg_t,eversion_t>::iterator p = pg_stat_pending.begin();
-	 p != pg_stat_pending.end();
-	 p++) {
-      pg_t pgid = p->first;
-      
-      if (!pg_map.count(pgid)) 
+
+    xlist<PG*>::iterator p = pg_stat_queue.begin();
+    while (!p.end()) {
+      PG *pg = *p;
+      ++p;
+      if (!pg->is_active()) {
+	pg->stat_queue_item.remove_myself();
+	pg->put();
 	continue;
-      PG *pg = pg_map[pgid];
+      }
       pg->pg_stats_lock.Lock();
       if (pg->pg_stats_valid) {
 	pg->pg_stats_valid = false;
-	m->pg_stat[pgid] = pg->pg_stats_stable;
-	dout(30) << " sending " << pgid << " " << pg->pg_stats_stable.state << dendl;
+	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
+	dout(30) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.state << dendl;
       }
       pg->pg_stats_lock.Unlock();
     }
@@ -1329,30 +1321,43 @@ void OSD::send_pg_stats()
     int mon = monmap->pick_mon();
     messenger->send_message(m, monmap->get_inst(mon));  
   }
+
+  pg_stat_queue_lock.Unlock();
 }
 
-void OSD::handle_pgstats_ack(MPGStatsAck *ack)
+void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 {
-  dout(10) << "handle_pgstats_ack " << dendl;
+  dout(10) << "handle_pg_stats_ack " << dendl;
 
-  for (map<pg_t,eversion_t>::iterator p = ack->pg_stat.begin();
-       p != ack->pg_stat.end();
-       p++) {
-    if (pg_stat_pending.count(p->first) == 0) {
-      dout(30) << " ignoring " << p->first << " " << p->second << dendl;
-    } else if (pg_stat_pending[p->first] <= p->second) {
-      dout(30) << " ack on " << p->first << " " << p->second << dendl;
-      pg_stat_pending.erase(p->first);
-    } else {
-      dout(30) << " still pending " << p->first << " " << pg_stat_pending[p->first]
-	       << " > acked " << p->second << dendl;
-    }
+  pg_stat_queue_lock.Lock();
+
+  xlist<PG*>::iterator p = pg_stat_queue.begin();
+  while (!p.end()) {
+    PG *pg = *p;
+    ++p;
+
+    if (ack->pg_stat.count(pg->info.pgid)) {
+      eversion_t acked = ack->pg_stat[pg->info.pgid];
+      pg->pg_stats_lock.Lock();
+      if (acked == pg->pg_stats_stable.version) {
+	dout(30) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.version << dendl;
+	pg->stat_queue_item.remove_myself();
+	pg->put();
+      } else {
+	dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.version
+		 << " > acked " << acked << dendl;
+      }
+      pg->pg_stats_lock.Unlock();
+    } else
+      dout(30) << " still pending " << pg->info.pgid << dendl;
   }
   
-  if (pg_stat_pending.empty()) {
+  if (pg_stat_queue.empty()) {
     dout(10) << "clearing osd_stat_pending" << dendl;
     osd_stat_pending = false;
   }
+
+  pg_stat_queue_lock.Unlock();
 
   delete ack;
 }
@@ -1471,7 +1476,7 @@ void OSD::dispatch(Message *m)
     break;
 
   case MSG_PGSTATSACK:
-    handle_pgstats_ack((MPGStatsAck*)m);
+    handle_pg_stats_ack((MPGStatsAck*)m);
     break;
 
   case MSG_MON_COMMAND:
@@ -1591,16 +1596,22 @@ void OSD::handle_scrub(MOSDScrub *m)
   if (m->scrub_pgs.empty()) {
     for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
 	 p != pg_map.end();
-	 p++)
-      scrub_wq.queue(p->second);
+	 p++) {
+      PG *pg = p->second;
+      if (pg->is_primary())
+	scrub_wq.queue(pg);
+    }
   } else {
     for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
 	 p != m->scrub_pgs.end();
 	 p++)
-      if (pg_map.count(*p))
-	scrub_wq.queue(pg_map[*p]);
+      if (pg_map.count(*p)) {
+	PG *pg = pg_map[*p];
+	if (pg->is_primary())
+	  scrub_wq.queue(pg);
+      }
   }
-
+  
   delete m;
 }
 

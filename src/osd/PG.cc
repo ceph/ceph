@@ -1410,12 +1410,7 @@ void PG::update_stats()
   }
   pg_stats_lock.Unlock();
 
-  // put in osd stat_queue
-  osd->pg_stat_queue_lock.Lock();
-  if (is_primary())
-    osd->pg_stat_queue[info.pgid] = info.last_update;    
-  osd->osd_stat_updated = true;
-  osd->pg_stat_queue_lock.Unlock();
+  osd->pg_stat_queue_enqueue(this);
 }
 
 void PG::clear_stats()

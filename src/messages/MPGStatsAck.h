@@ -25,7 +25,7 @@ public:
 
   const char *get_type_name() { return "pg_stats_ack"; }
   void print(ostream& out) {
-    out << "pg_stats_ack";
+    out << "pg_stats_ack(" << pg_stat.size() << " pgs)";
   }
 
   void encode_payload() {

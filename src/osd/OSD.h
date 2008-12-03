@@ -385,17 +385,34 @@ private:
     failure_queue.insert(n);
   }
   void send_failures();
-  void handle_pgstats_ack(class MPGStatsAck *ack);
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;
-  map<pg_t,eversion_t> pg_stat_queue;
-  map<pg_t,eversion_t> pg_stat_pending;
+  xlist<PG*> pg_stat_queue;
   bool osd_stat_updated;
   bool osd_stat_pending;
 
-  void send_pg_stats(); 
+  void send_pg_stats();
+  void handle_pg_stats_ack(class MPGStatsAck *ack);
 
+  void pg_stat_queue_enqueue(PG *pg) {
+    pg_stat_queue_lock.Lock();
+    if (pg->is_primary() && !pg->stat_queue_item.is_on_xlist()) {
+      pg->get();
+      pg_stat_queue.push_back(&pg->stat_queue_item);
+    }
+    osd_stat_updated = true;
+    pg_stat_queue_lock.Unlock();
+  }
+  void clear_pg_stat_queue() {
+    pg_stat_queue_lock.Lock();
+    while (!pg_stat_queue.empty()) {
+      PG *pg = pg_stat_queue.front();
+      pg_stat_queue.pop_front();
+      pg->put();
+    }
+    pg_stat_queue_lock.Unlock();
+  }
 
 
   // -- tids --
