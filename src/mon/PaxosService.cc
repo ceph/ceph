@@ -153,8 +153,7 @@ void PaxosService::election_finished()
 {
   dout(10) << "election_finished" << dendl;
 
-  if (have_pending && 
-      !mon->is_leader()) {
+  if (have_pending) {
     discard_pending();
     have_pending = false;
   }
