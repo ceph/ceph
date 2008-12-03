@@ -1797,7 +1797,9 @@ void PG::scrub()
   }
 
   dout(10) << "scrub start" << dendl;
-  
+  state_set(PG_STATE_SCRUBBING);
+  update_stats();
+
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
     dout(10) << " requesting scrubmap from osd" << acting[i] << dendl;
@@ -1812,7 +1814,8 @@ void PG::scrub()
   build_scrub_map(map);
 
   while (peer_scrub_map.size() < acting.size() - 1) {
-    dout(10) << " have " << peer_scrub_map.size() << " / " << (acting.size()-1) << " scrub maps, waiting" << dendl;
+    dout(10) << " have " << peer_scrub_map.size() << " / " << (acting.size()-1)
+	     << " scrub maps, waiting" << dendl;
     wait();
   }
 
@@ -1875,7 +1878,13 @@ void PG::scrub()
   // ok, do pg-type specific scrubbing
   _scrub(map);
   
+  info.stats.last_scrub = info.last_update;
+  info.stats.last_scrub_stamp = g_clock.now();
+  state_clear(PG_STATE_SCRUBBING);
+  update_stats();
+
   dout(10) << "scrub done" << dendl;
+
   unlock();
 }
 

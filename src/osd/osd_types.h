@@ -337,6 +337,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_REPLAY     32  // crashed, waiting for replay
 #define PG_STATE_STRAY      64  // i must notify the primary i exist.
 #define PG_STATE_SPLITTING 128  // i am splitting
+#define PG_STATE_SCRUBBING 256  // scrubbing
+#define PG_STATE_SCRUBQ    512  // queued for scrub
 #define PG_STATE_DEGRADED      1024  // pg membership not complete
 
 static inline std::string pg_state_string(int state) {
@@ -350,6 +352,8 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_STRAY) st += "stray+";
   if (state & PG_STATE_SPLITTING) st += "splitting+";
   if (state & PG_STATE_DEGRADED) st += "degraded+";
+  if (state & PG_STATE_SCRUBBING) st += "scrubbing+";
+  if (state & PG_STATE_SCRUBQ) st += "scrubq+";
   if (!st.length()) 
     st = "inactive";
   else 
@@ -362,10 +366,15 @@ static inline std::string pg_state_string(int state) {
  */
 struct pg_stat_t {
   eversion_t version;
-  epoch_t reported, created;
+  epoch_t reported;
+  __u32 state;
+
+  epoch_t created;
   pg_t parent;
   __u32 parent_split_bits;
-  __u32 state;
+
+  eversion_t last_scrub;
+  utime_t last_scrub_stamp;
 
   __u64 num_bytes;    // in bytes
   __u64 num_kb;       // in KB
@@ -376,8 +385,8 @@ struct pg_stat_t {
 
   vector<int> acting;
 
-  pg_stat_t() : reported(0), created(0), parent_split_bits(0), 
-		state(0),
+  pg_stat_t() : reported(0), state(0),
+		created(0), parent_split_bits(0), 
 		num_bytes(0), num_kb(0), 
 		num_objects(0), num_object_clones(0),
 		num_objects_missing_on_primary(0), num_objects_degraded(0)
@@ -386,10 +395,12 @@ struct pg_stat_t {
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
     ::encode(reported, bl);
+    ::encode(state, bl);
     ::encode(created, bl);
     ::encode(parent, bl);
     ::encode(parent_split_bits, bl);
-    ::encode(state, bl);
+    ::encode(last_scrub, bl);
+    ::encode(last_scrub_stamp, bl);
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
@@ -401,10 +412,12 @@ struct pg_stat_t {
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
     ::decode(reported, bl);
+    ::decode(state, bl);
     ::decode(created, bl);
     ::decode(parent, bl);
     ::decode(parent_split_bits, bl);
-    ::decode(state, bl);
+    ::decode(last_scrub, bl);
+    ::decode(last_scrub_stamp, bl);
     ::decode(num_bytes, bl);
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
