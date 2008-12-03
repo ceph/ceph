@@ -75,13 +75,19 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
     ss << p->second << " " << pg_state_string(p->first);
   }
   string states = ss.str();
-  return out << "v" << pm.pg_map.version << ": "
-	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states << "; "
-	     << kb_t(pm.pg_map.pg_sum.num_kb) << " data, " 
-	     << kb_t(pm.pg_map.osd_sum.kb_used) << " used, "
-	     << kb_t(pm.pg_map.osd_sum.kb_avail) << " / "
-	     << kb_t(pm.pg_map.osd_sum.kb) << " avail";
+  out << "v" << pm.pg_map.version << ": "
+      << pm.pg_map.pg_stat.size() << " pgs: "
+      << states << "; "
+      << kb_t(pm.pg_map.pg_sum.num_kb) << " data, " 
+      << kb_t(pm.pg_map.osd_sum.kb_used) << " used, "
+      << kb_t(pm.pg_map.osd_sum.kb_avail) << " / "
+      << kb_t(pm.pg_map.osd_sum.kb) << " avail";
+
+  if (pm.pg_map.pg_sum.num_objects_missing_on_primary)
+    out << "; " << pm.pg_map.pg_sum.num_objects_missing_on_primary << "/"
+	<< pm.pg_map.pg_sum.num_objects << " mip";
+
+  return out;
 }
 
 /*
@@ -595,13 +601,15 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       ss << "version " << pg_map.version << std::endl;
       ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
       ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat\tobjects\tkb\tbytes\tv\treported\tstate\tosds\tlast_scrub" << std::endl;
+      ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tstate\tv\tepoch\tosds\tlast_scrub" << std::endl;
       for (set<pg_t>::iterator p = pg_map.pg_set.begin();
 	   p != pg_map.pg_set.end();
 	   p++) {
 	pg_stat_t &st = pg_map.pg_stat[*p];
 	ss << *p 
 	   << "\t" << st.num_objects
+	   << "\t" << st.num_objects_missing_on_primary
+	   << "\t" << st.num_objects_degraded
 	   << "\t" << st.num_kb
 	   << "\t" << st.num_bytes
 	   << "\t" << pg_state_string(st.state)
