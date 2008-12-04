@@ -167,6 +167,13 @@ bool PGMonitor::update_from_paxos()
   paxos->stash_latest(paxosv, bl);
   mon->store->put_int(paxosv, "pgmap", "last_consumed");
 
+  // dump pgmap summaries?  (useful for debugging)
+  if (0) {
+    bufferlist d;
+    dump(d);
+    mon->store->put_bl_sn(d, "pgmap_dump", paxosv);
+  }
+
   if (mon->is_leader() &&
       mon->is_full_quorum() &&
       paxosv > 10)
@@ -280,7 +287,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
        p != stats->pg_stat.end();
        p++) {
     if (pg_map.pg_stat.count(p->first) == 0 ||
-	memcmp(&pg_map.pg_stat[p->first], &p->second, sizeof(p->second)) != 0)
+	pg_map.pg_stat[p->first].reported != p->second.reported)
       return false; // new pg stat(s)
   }
   
@@ -289,7 +296,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++)
-    ack->pg_stat[p->first] = p->second.version;
+    ack->pg_stat[p->first] = p->second.reported;
   mon->messenger->send_message(ack, stats->get_orig_source_inst());
   return true;
 }
@@ -331,22 +338,22 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
        p != stats->pg_stat.end();
        p++) {
     pg_t pgid = p->first;
-    ack->pg_stat[pgid] = p->second.version;
+    ack->pg_stat[pgid] = p->second.reported;
 
     if ((pg_map.pg_stat.count(pgid) && 
-	 pg_map.pg_stat[pgid].version > p->second.version)) {
-      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].version << dendl;
+	 pg_map.pg_stat[pgid].reported > p->second.reported)) {
+      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported << dendl;
       continue;
     }
     if (pending_inc.pg_stat_updates.count(pgid) && 
-	pending_inc.pg_stat_updates[pgid].version > p->second.version) {
-      dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].version
+	pending_inc.pg_stat_updates[pgid].reported > p->second.reported) {
+      dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].reported
 	       << " (pending)" << dendl;
       continue;
     }
 
     if (pg_map.pg_stat.count(pgid) == 0) {
-      dout(15) << " got " << pgid << " reported at " << p->second.version 
+      dout(15) << " got " << pgid << " reported at " << p->second.reported
 	       << " state " << pg_state_string(p->second.state)
 	       << " but DNE in pg_map!!"
 	       << dendl;
@@ -354,7 +361,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     }
       
     dout(15) << " got " << pgid
-	     << " reported at " << p->second.version
+	     << " reported at " << p->second.reported
 	     << " state " << pg_state_string(pg_map.pg_stat[pgid].state)
 	     << " -> " << pg_state_string(p->second.state)
 	     << dendl;
@@ -579,6 +586,17 @@ void PGMonitor::send_pg_creates()
   }
 }
 
+void PGMonitor::dump(bufferlist& bl)
+{
+  stringstream ss;
+  pg_map.dump(ss);
+  while (!ss.eof()) {
+    string s;
+    getline(ss, s);
+    bl.append(s.c_str(), s.length());
+    bl.append("\n", 1);
+  }
+}
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
@@ -602,44 +620,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "dump") {
-      ss << "version " << pg_map.version << std::endl;
-      ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
-      ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tstate\tv\tepoch\tosds\tlast_scrub" << std::endl;
-      for (set<pg_t>::iterator p = pg_map.pg_set.begin();
-	   p != pg_map.pg_set.end();
-	   p++) {
-	pg_stat_t &st = pg_map.pg_stat[*p];
-	ss << *p 
-	   << "\t" << st.num_objects
-	   << "\t" << st.num_objects_missing_on_primary
-	   << "\t" << st.num_objects_degraded
-	   << "\t" << st.num_kb
-	   << "\t" << st.num_bytes
-	   << "\t" << pg_state_string(st.state)
-	   << "\t" << st.version
-	   << "\t" << st.reported
-	   << "\t" << st.acting
-	   << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
-	   << std::endl;
-      }
-      ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
-      for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
-	   p != pg_map.osd_stat.end();
-	   p++)
-	ss << p->first
-	   << "\t" << p->second.kb_used
-	   << "\t" << p->second.kb_avail 
-	   << "\t" << p->second.kb
-	   << "\t" << p->second.hb_in
-	   << "\t" << p->second.hb_out
-	   << std::endl;
-      while (!ss.eof()) {
-	string s;
-	getline(ss, s);
-	rdata.append(s.c_str(), s.length());
-	rdata.append("\n", 1);
-      }
+      dump(rdata);
       ss << "ok";
       r = 0;
     }

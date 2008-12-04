@@ -1129,8 +1129,6 @@ void PG::peer(ObjectStore::Transaction& t,
   }
   else if (is_all_uptodate()) 
     finish_recovery();
-
-  update_stats(); // update stats
 }
 
 
@@ -1409,7 +1407,7 @@ void PG::update_stats()
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
     pg_stats_stable.version = info.last_update;
-    pg_stats_stable.reported = osd->osdmap->get_epoch();
+    pg_stats_stable.reported.inc(osd->osdmap->get_epoch());
     pg_stats_stable.state = state;
     pg_stats_stable.acting = acting;
 

@@ -165,6 +165,55 @@ public:
 	 ++p)
       stat_osd_add(p->second);
   }
+
+  void dump(ostream& ss)
+  {
+    ss << "version " << version << std::endl;
+    ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
+    ss << "last_pg_scan " << last_pg_scan << std::endl;
+    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tstate\tv\tepoch\tosds\tlast_scrub" << std::endl;
+    for (set<pg_t>::iterator p = pg_set.begin();
+	 p != pg_set.end();
+	 p++) {
+      pg_stat_t &st = pg_stat[*p];
+      ss << *p 
+	 << "\t" << st.num_objects
+	//<< "\t" << st.num_object_copies
+	 << "\t" << st.num_objects_missing_on_primary
+	 << "\t" << st.num_objects_degraded
+	 << "\t" << st.num_kb
+	 << "\t" << st.num_bytes
+	 << "\t" << pg_state_string(st.state)
+	 << "\t" << st.version
+	 << "\t" << st.reported
+	 << "\t" << st.acting
+	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
+	 << std::endl;
+    }
+    ss << " sum\t" << pg_sum.num_objects
+      //<< "\t" << pg_sum.num_object_copies
+       << "\t" << pg_sum.num_objects_missing_on_primary
+       << "\t" << pg_sum.num_objects_degraded
+       << "\t" << pg_sum.num_kb
+       << "\t" << pg_sum.num_bytes
+       << std::endl;
+    ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
+    for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+	 p != osd_stat.end();
+	 p++)
+      ss << p->first
+	 << "\t" << p->second.kb_used
+	 << "\t" << p->second.kb_avail 
+	 << "\t" << p->second.kb
+	 << "\t" << p->second.hb_in
+	 << "\t" << p->second.hb_out
+	 << std::endl;
+    ss << " sum\t" << osd_sum.kb_used
+	 << "\t" << osd_sum.kb_avail 
+	 << "\t" << osd_sum.kb
+	 << std::endl;
+  }
+
 };
 
 #endif

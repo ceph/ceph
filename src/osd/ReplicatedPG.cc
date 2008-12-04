@@ -1237,6 +1237,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   
   put_projected_object(repop->pinfo);
 
+  update_stats();
 
   // any completion stuff to do here?
   object_t oid = repop->op->get_oid();
@@ -1271,7 +1272,6 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     break;
   }   
   
-  update_stats();
 }
 
 void ReplicatedPG::eval_repop(RepGather *repop)

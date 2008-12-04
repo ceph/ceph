@@ -221,6 +221,13 @@ public:
     c.version = version;
     return c;
   }
+
+  void inc(epoch_t e) {
+    if (epoch < e)
+      epoch = e;
+    version++;
+  }
+
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
     ::encode(epoch, bl);
@@ -366,7 +373,7 @@ static inline std::string pg_state_string(int state) {
  */
 struct pg_stat_t {
   eversion_t version;
-  epoch_t reported;
+  eversion_t reported;
   __u32 state;
 
   epoch_t created;
@@ -386,10 +393,10 @@ struct pg_stat_t {
 
   vector<int> acting;
 
-  pg_stat_t() : reported(0), state(0),
+  pg_stat_t() : state(0),
 		created(0), parent_split_bits(0), 
 		num_bytes(0), num_kb(0), 
-		num_objects(0), num_object_clones(0),
+		num_objects(0), num_object_clones(0), num_object_copies(0),
 		num_objects_missing_on_primary(0), num_objects_degraded(0)
   { }
 
