@@ -506,6 +506,7 @@ public:
     _lock.Unlock();
   }
   void wait() {
+    assert(_lock.is_locked());
     _cond.Wait(_lock);
   }
   void kick() {
@@ -753,6 +754,8 @@ public:
   //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_stray() const { return state_test(PG_STATE_STRAY); }
+
+  bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 

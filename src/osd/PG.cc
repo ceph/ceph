@@ -1734,7 +1734,7 @@ void PG::build_scrub_map(ScrubMap &map)
   osd->store->collection_list(c, ls);
 
   // sort
-  dout(10) << "sorting" << dendl;
+  dout(10) << "sorting " << ls.size() << " objects" << dendl;
   vector< pair<pobject_t,int> > tab(ls.size());
   vector< pair<pobject_t,int> >::iterator q = tab.begin();
   int i = 0;
@@ -1754,7 +1754,7 @@ void PG::build_scrub_map(ScrubMap &map)
     pos[p->second] = i;
   // now, pos[orig pos] = sorted pos
 
-  dout(10) << " " << ls.size() << " objects" << dendl;
+  dout(10) << " scanning " << ls.size() << " objects" << dendl;
   map.objects.resize(ls.size());
   i = 0;
   for (vector<pobject_t>::iterator p = ls.begin(); 
@@ -1780,7 +1780,7 @@ void PG::build_scrub_map(ScrubMap &map)
 
   // log
   osd->store->read(coll_t(), info.pgid.to_log_pobject(), 0, 0, map.logbl);
-  dout(10) << " log " << map.logbl.length() << " bytes" << dendl;
+  dout(10) << " done.  pg log is " << map.logbl.length() << " bytes" << dendl;
 }
 
 
@@ -1826,22 +1826,24 @@ void PG::scrub()
     wait();
   }
 
-  unlock();
+  //unlock();
 
-  dout(10) << "scrub building my map" << dendl;
+  dout(10) << "scrub  building my map" << dendl;
   ScrubMap scrubmap;
   build_scrub_map(scrubmap);
 
+  /*
   lock();
   if (epoch != info.history.same_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     unlock();
     return;
   }
+  */
 
   while (peer_scrub_map.size() < acting.size() - 1) {
-    dout(10) << " have " << (peer_scrub_map.size()+1) << " / " << acting.size()
-	     << " scrub maps, waiting" << dendl;
+    dout(10) << "scrub  has " << (peer_scrub_map.size()+1) << " / " << acting.size()
+	     << " maps, waiting" << dendl;
     wait();
 
     if (epoch != info.history.same_since) {
@@ -1851,117 +1853,134 @@ void PG::scrub()
     }
   }
 
+  /*
   unlock();
+  */
 
-  // first, compare scrub maps
-  vector<ScrubMap*> m(acting.size());
-  m[0] = &scrubmap;
-  for (unsigned i=1; i<acting.size(); i++)
-    m[i] = &peer_scrub_map[acting[i]];
-  vector<ScrubMap::object>::iterator p[acting.size()];
-  for (unsigned i=0; i<acting.size(); i++)
-    p[i] = m[i]->objects.begin();
+  if (acting.size() > 1) {
+    dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
-  int num_missing = 0;
-  int num_bad = 0;
-
-  while (1) {
-    ScrubMap::object *po = 0;
-    bool missing = false;
-    for (unsigned i=0; i<acting.size(); i++) {
-      if (p[i] == m[i]->objects.end())
-	continue;
-      if (!po)
-	po = &(*p[i]);
-      else if (po->poid != p[i]->poid) {
-	missing = true;
-	if (po->poid > p[i]->poid)
-	  po = &(*p[i]);
-      }
-    }
-    if (!po)
-      break;
-    if (missing) {
+    // first, compare scrub maps
+    vector<ScrubMap*> m(acting.size());
+    m[0] = &scrubmap;
+    for (unsigned i=1; i<acting.size(); i++)
+      m[i] = &peer_scrub_map[acting[i]];
+    vector<ScrubMap::object>::iterator p[acting.size()];
+    for (unsigned i=0; i<acting.size(); i++)
+      p[i] = m[i]->objects.begin();
+    
+    int num_missing = 0;
+    int num_bad = 0;
+    
+    while (1) {
+      ScrubMap::object *po = 0;
+      bool missing = false;
       for (unsigned i=0; i<acting.size(); i++) {
-	if (po->poid != p[i]->poid) {
-	  dout(0) << " osd" << acting[i] << " missing " << po->poid << dendl;
-	  num_missing++;
-	} else
-	  p[i]++;
+	if (p[i] == m[i]->objects.end()) {
+	  missing = true;
+	  continue;
+	}
+	if (!po)
+	  po = &(*p[i]);
+	else if (po->poid != p[i]->poid) {
+	  missing = true;
+	  if (po->poid > p[i]->poid)
+	    po = &(*p[i]);
+	}
       }
-      continue;
-    }
+      if (!po)
+	break;
+      if (missing) {
+	for (unsigned i=0; i<acting.size(); i++) {
+	  if (p[i] == m[i]->objects.end() || po->poid != p[i]->poid) {
+	    dout(0) << "scrub  osd" << acting[i] << " missing " << po->poid << dendl;
+	    num_missing++;
+	  } else
+	    p[i]++;
+	}
+	continue;
+      }
+      
+      // compare
+      dout(10) << " po is " << (void*)po << dendl;
+      dout(10) << " po is " << po->poid << dendl;
 
-    // compare
-    bool ok = true;
-    for (unsigned i=1; i<acting.size(); i++) {
-      if (po->size != p[i]->size) {
-	dout(0) << " osd" << acting[i] << " " << po->poid
-		<< " size " << p[i]->size << " != " << po->size << dendl;
-	ok = false;
-	num_bad++;
-      }
-      if (po->attrs.size() != p[i]->attrs.size()) {
-	dout(0) << " osd" << acting[i] << " " << po->poid
-		<< " attr count " << p[i]->attrs.size() << " != " << po->attrs.size() << dendl;
-	ok = false;
-	num_bad++;
-      }
-      for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
-	if (p[i]->attrs.count(q->first)) {
-	  if (q->second.cmp(p[i]->attrs[q->first])) {
-	    dout(0) << " osd" << acting[i] << " " << po->poid
-		    << " attr " << q->first << " value mismatch" << dendl;
-	    ok = false;
-	    num_bad++;
-	  }
-	} else {
-	  dout(0) << " osd" << acting[i] << " " << po->poid
-		  << " attr " << q->first << " missing" << dendl;
+      bool ok = true;
+      for (unsigned i=1; i<acting.size(); i++) {
+	if (po->size != p[i]->size) {
+	  dout(0) << "scrub  osd" << acting[i] << " " << po->poid
+		  << " size " << p[i]->size << " != " << po->size << dendl;
 	  ok = false;
 	  num_bad++;
 	}
+	if (po->attrs.size() != p[i]->attrs.size()) {
+	  dout(0) << "scrub  osd" << acting[i] << " " << po->poid
+		  << " attr count " << p[i]->attrs.size() << " != " << po->attrs.size() << dendl;
+	  ok = false;
+	  num_bad++;
+	}
+	for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
+	  if (p[i]->attrs.count(q->first)) {
+	    if (q->second.cmp(p[i]->attrs[q->first])) {
+	      dout(0) << "scrub  osd" << acting[i] << " " << po->poid
+		      << " attr " << q->first << " value mismatch" << dendl;
+	      ok = false;
+	      num_bad++;
+	    }
+	  } else {
+	    dout(0) << "scrub  osd" << acting[i] << " " << po->poid
+		    << " attr " << q->first << " missing" << dendl;
+	    ok = false;
+	    num_bad++;
+	  }
+	}
       }
+      
+      if (ok)
+	dout(20) << "scrub  " << po->poid << " size " << po->size << " ok" << dendl;
+      
+      // next
+      for (unsigned i=0; i<acting.size(); i++)
+	p[i]++;
     }
-
-    if (ok)
-      dout(10) << "scrub " << po->poid << " size " << po->size << " ok" << dendl;
-
-    // next
-    for (unsigned i=0; i<acting.size(); i++)
-      p[i]++;
+    
+    if (num_missing || num_bad) {
+      dout(10) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
+      stringstream ss;
+      ss << "scrub " << info.pgid << " " << num_missing << " missing, " << num_bad << " bad objects";
+      string s;
+      getline(ss, s);
+      osd->get_logclient()->log(LOG_ERROR, s);
+    }
   }
 
-  if (num_missing || num_bad) {
-    dout(10) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
-    stringstream ss;
-    ss << "scrub " << info.pgid << " " << num_missing << " missing, " << num_bad << " bad objects";
-    string s;
-    getline(ss, s);
-    osd->get_logclient()->log(LOG_ERROR, s);
-  }
-
+  /*
   lock();
   if (epoch != info.history.same_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     unlock();
     return;
   }
+  */
 
   // discard peer scrub info.
   peer_scrub_map.clear();
 
+  /*
   unlock();
-  
+  */
+
   // ok, do the pg-type specific scrubbing
   _scrub(scrubmap);
 
+  /*
   lock();
   if (epoch != info.history.same_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     unlock();
     return;
   }
+  */
 
   // finish up
   info.stats.last_scrub = info.last_update;

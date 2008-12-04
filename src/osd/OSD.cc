@@ -1610,7 +1610,7 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p != pg_map.end();
 	 p++) {
       PG *pg = p->second;
-      if (pg->is_primary())
+      if (pg->is_primary() && !pg->is_scrubbing())
 	scrub_wq.queue(pg);
     }
   } else {
@@ -1619,7 +1619,7 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p++)
       if (pg_map.count(*p)) {
 	PG *pg = pg_map[*p];
-	if (pg->is_primary())
+	if (pg->is_primary() && !pg->is_scrubbing())
 	  scrub_wq.queue(pg);
       }
   }
@@ -2881,16 +2881,16 @@ void OSD::handle_pg_scrub(MOSDPGScrub *m)
     } else {
       if (pg->is_primary()) {
 	if (pg->peer_scrub_map.count(from)) {
-	  dout(10) << "handle_pg_scrub got peer osd" << from << " scrub map -- had it already" << dendl;
+	  dout(10) << *pg << " already had osd" << from << " scrub map" << dendl;
 	} else {
-	  dout(10) << "handle_pg_scrub got peer osd" << from << " scrub map" << dendl;
+	  dout(10) << *pg << " got osd" << from << " scrub map" << dendl;
 	  bufferlist::iterator p = m->map.begin();
 	  pg->peer_scrub_map[from].decode(p);
 	  pg->kick();
 	}
       } else {
 	// replica, reply
-	dout(10) << "handle_pg_scrub generating scrub map for primary" << dendl;
+	dout(10) << *pg << " building scrub map for primary" << dendl;
 
 	// do this is a separate thread.. FIXME
 	ScrubMap map;
@@ -3322,7 +3322,7 @@ void OSD::handle_op(MOSDOp *op)
       }
 
       // scrubbing?
-      if (pg->state_test(PG_STATE_SCRUBBING)) {
+      if (pg->is_scrubbing()) {
 	dout(10) << *pg << " is scrubbing, deferring op " << *op << dendl;
 	pg->waiting_for_active.push_back(op);
 	pg->unlock();
