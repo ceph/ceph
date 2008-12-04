@@ -30,20 +30,22 @@ class Dispatcher {
   Dispatcher() : next(NULL) { }
 
   virtual void dispatch(Message *m) { 
-    if (!dispatch_impl(m)) {
-      if (next) {
-        next->dispatch(m);
-      } else {
+    bool ret = false;
+    if (next)
+      ret = next->dispatch_impl(m);
+
+    if (!ret) {
+      if (!dispatch_impl(m)) {
         assert(0);
       }
     }
   }
 
-  virtual void add(Dispatcher *disp) {
+  virtual void link_dispatcher(Dispatcher *disp) {
     if (!next) {
       next = disp; 
     } else {
-      next->add(disp);
+      next->link_dispatcher(disp);
     }
   }
 

@@ -82,4 +82,16 @@ void LogClient::handle_log(MLog *m)
   delete m;
 }
 
+bool LogClient::dispatch_impl(Message *m) 
+{
+  dout(20) << "dispatch " << m << dendl;
+
+  switch (m->get_type()) {
+  case MSG_LOG:
+    handle_log((MLog*)m);
+    return true;
+  }
+  return false;
+}
+
 

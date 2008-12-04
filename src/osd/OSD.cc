@@ -378,7 +378,7 @@ int OSD::init()
   assert(whoami == superblock.whoami);
     
   // log
-  logclient = new LogClient(messenger, monmap);
+  logclient = new LogClient(messenger, monmap, this);
   char name[80];
   sprintf(name, "osd%d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
@@ -1464,10 +1464,6 @@ bool OSD::dispatch_impl(Message *m)
   case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
     delete m;
-    break;
-
-  case MSG_LOG:
-    logclient->handle_log((MLog*)m);
     break;
 
     // -- don't need OSDMap --
