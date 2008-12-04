@@ -20,6 +20,7 @@
 #include "msg/Message.h"
 
 #include "messages/MLog.h"
+#include "mon/MonMap.h"
 
 #include <iostream>
 #include <errno.h>
@@ -32,18 +33,17 @@
 
 #include "common/LogClient.h"
 
-
 #include "config.h"
 
-void LogClient::log(__u8 level, string s)
+void LogClient::log(log_type type, string s)
 {
   Mutex::Locker l(log_lock);
-  dout(10) << "log " << (int)level << " : " << s << dendl;
+  dout(10) << "log " << (log_type)type << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
   e.stamp = g_clock.now();
   e.seq = ++last_log;
-  e.level = level;
+  e.type = type;
   e.msg = s;
   log_queue.push_back(e);
 }

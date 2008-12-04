@@ -18,33 +18,59 @@
 #include "include/types.h"
 #include "include/encoding.h"
 
+typedef enum {
+  LOG_DEBUG = 0,
+  LOG_INFO = 1,
+  LOG_WARN = 2,
+  LOG_ERROR = 3,
+} log_type;
+
 struct LogEntry {
   entity_inst_t who;
   utime_t stamp;
   __u64 seq;
-  __u8 level;
+  log_type type;
   string msg;
 
   void encode(bufferlist& bl) const {
+    __u16 t = type;
     ::encode(who, bl);
     ::encode(stamp, bl);
     ::encode(seq, bl);
-    ::encode(level, bl);
+    ::encode(t, bl);
     ::encode(msg, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u16 t;
     ::decode(who, bl);
     ::decode(stamp, bl);
     ::decode(seq, bl);
-    ::decode(level, bl);
+    ::decode(t, bl);
+    type = (log_type)t;
     ::decode(msg, bl);
   }
 };
 WRITE_CLASS_ENCODER(LogEntry)
 
+inline ostream& operator<<(ostream& out, const log_type& t)
+{
+  switch (t) {
+  case LOG_DEBUG:
+    return out << "[DBG]";
+  case LOG_INFO:
+    return out << "[INF]";
+  case LOG_WARN:
+    return out << "[WRN]";
+  case LOG_ERROR:
+    return out << "[ERR]";
+  default:
+    return out << "[???]";
+  }
+}
+
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.who << " : " << e.seq << " : " << (int)e.level << " : " << e.msg;
+  return out << e.stamp << " " << e.type << " " << e.who << " : " << e.seq << " : " << e.msg;
 }
 
 #endif

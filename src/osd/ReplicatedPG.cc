@@ -3027,7 +3027,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
        << stat.num_kb << "/" << info.stats.num_kb << " kb.";
     string s;
     getline(ss, s);
-    osd->get_logclient()->log(10, s);
+    osd->get_logclient()->log(LOG_ERROR, s);
     /*
   } else {
     stringstream ss;

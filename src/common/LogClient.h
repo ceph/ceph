@@ -18,33 +18,12 @@
 #include "msg/Dispatcher.h"
 
 #include "common/Mutex.h"
-#include "common/RWLock.h"
-#include "common/ThreadPool.h"
-#include "common/Timer.h"
-#include "common/WorkQueue.h"
-
-#include "mon/MonMap.h"
-
-#include "os/ObjectStore.h"
-
-#include "common/DecayCounter.h"
-
 #include "include/LogEntry.h"
 
-#include <map>
-using namespace std;
-
-#include <ext/hash_map>
-#include <ext/hash_set>
-using namespace __gnu_cxx;
-
-
 class Messenger;
-class Message;
-class Logger;
-class ObjectStore;
-class OSDMap;
 class MLog;
+class MonMap;
+
 
 class LogClient {
   Messenger *messenger;
@@ -56,7 +35,7 @@ class LogClient {
   deque<LogEntry> log_queue;
   version_t last_log;
 
-  void log(__u8 level, string s);
+  void log(log_type type, string s);
   void send_log();
   void handle_log(MLog *m);
 
