@@ -1511,7 +1511,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     opname = "no-op";
     noop = true;
   } else if (is_dup(op->get_reqid())) {
-    dout(3) << "op_modify " << opname << " dup op " << op->get_reqid()
+    dout(3) << "op_modify " << op->ops << " dup op " << op->get_reqid()
              << ", doing WRNOOP" << dendl;
     opname = "no-op";
     noop = true;
