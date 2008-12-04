@@ -1790,6 +1790,9 @@ void PG::scrub()
   osd->map_lock.get_read();
 
   lock();
+
+  epoch_t epoch = info.history.same_since;
+
   if (!is_primary()) {
     dout(10) << "scrub -- not primary" << dendl;
     unlock();
@@ -1810,22 +1813,45 @@ void PG::scrub()
 
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
-    dout(10) << " requesting scrubmap from osd" << acting[i] << dendl;
+    dout(10) << "scrub  requesting scrubmap from osd" << acting[i] << dendl;
     osd->messenger->send_message(new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
 				 osd->osdmap->get_inst(acting[i]));
   }
 
   osd->map_lock.put_read();
 
-  dout(10) << " building my scrub map" << dendl;
+  // wait for any ops in progress
+  while (is_write_in_progress()) {
+    dout(10) << "scrub  write(s) in progress, waiting" << dendl;
+    wait();
+  }
+
+  unlock();
+
+  dout(10) << "scrub building my map" << dendl;
   ScrubMap scrubmap;
   build_scrub_map(scrubmap);
+
+  lock();
+  if (epoch != info.history.same_since) {
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    unlock();
+    return;
+  }
 
   while (peer_scrub_map.size() < acting.size() - 1) {
     dout(10) << " have " << (peer_scrub_map.size()+1) << " / " << acting.size()
 	     << " scrub maps, waiting" << dendl;
     wait();
+
+    if (epoch != info.history.same_since) {
+      dout(10) << "scrub  pg changed, aborting" << dendl;
+      unlock();
+      return;
+    }
   }
+
+  unlock();
 
   // first, compare scrub maps
   vector<ScrubMap*> m(acting.size());
@@ -1898,7 +1924,6 @@ void PG::scrub()
       }
     }
 
-    
     if (ok)
       dout(10) << "scrub " << po->poid << " size " << po->size << " ok" << dendl;
 
@@ -1916,12 +1941,29 @@ void PG::scrub()
     osd->get_logclient()->log(LOG_ERROR, s);
   }
 
+  lock();
+  if (epoch != info.history.same_since) {
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    unlock();
+    return;
+  }
+
   // discard peer scrub info.
   peer_scrub_map.clear();
 
+  unlock();
+  
   // ok, do the pg-type specific scrubbing
   _scrub(scrubmap);
-  
+
+  lock();
+  if (epoch != info.history.same_since) {
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    unlock();
+    return;
+  }
+
+  // finish up
   info.stats.last_scrub = info.last_update;
   info.stats.last_scrub_stamp = g_clock.now();
   state_clear(PG_STATE_SCRUBBING);

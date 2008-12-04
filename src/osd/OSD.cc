@@ -3226,11 +3226,27 @@ void OSD::handle_op(MOSDOp *op)
     op_queue_cond.Wait(osd_lock);
   }
 
+  // require same or newer map
+  if (!require_same_or_newer_map(op, op->get_map_epoch()))
+    return;
+
+  // blacklisted?
+  if (osdmap->is_blacklisted(op->get_source_addr())) {
+    dout(4) << "handle_op " << op->get_source_addr() << " is blacklisted" << dendl;
+    reply_op_error(op, -EBLACKLISTED);
+    return;
+  }
+
+  // share our map with sender, if they're old
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
+
+
   // calc actual pgid
   pg_t pgid = osdmap->raw_pg_to_pg(op->get_pg());
 
   // get and lock *pg.
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
+
 
   logger->set("buf", buffer_total_alloc.test());
 
@@ -3296,12 +3312,20 @@ void OSD::handle_op(MOSDOp *op)
       // modify
       if ((pg->get_primary() != whoami ||
 	   !pg->same_for_modify_since(op->get_map_epoch()))) {
-	dout(7) << "handle_rep_op pg changed " << pg->info.history
+	dout(7) << "handle_op pg changed " << pg->info.history
 		<< " after " << op->get_map_epoch() 
 		<< ", dropping" << dendl;
 	assert(op->get_map_epoch() < osdmap->get_epoch());
 	pg->unlock();
 	delete op;
+	return;
+      }
+
+      // scrubbing?
+      if (pg->state_test(PG_STATE_SCRUBBING)) {
+	dout(10) << *pg << " is scrubbing, deferring op " << *op << dendl;
+	pg->waiting_for_active.push_back(op);
+	pg->unlock();
 	return;
       }
     }

@@ -790,6 +790,7 @@ public:
   virtual bool same_for_modify_since(epoch_t e) = 0;
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
+  virtual bool is_write_in_progress() = 0;
   virtual bool is_missing_object(object_t oid) = 0;
   virtual void wait_for_missing_object(object_t oid, Message *op) = 0;
 

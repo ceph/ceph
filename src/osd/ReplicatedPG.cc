@@ -1502,8 +1502,12 @@ void ReplicatedPG::put_projected_object(ProjectedObjectInfo *pinfo)
 	   << pinfo->ref << " -> " << (pinfo->ref-1) << dendl;
 
   --pinfo->ref;
-  if (pinfo->ref == 0)
+  if (pinfo->ref == 0) {
     projected_objects.erase(pinfo->poid);
+
+    if (projected_objects.empty())
+      kick();
+  }
 }
 
 

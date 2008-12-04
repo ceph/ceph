@@ -143,6 +143,9 @@ protected:
   ProjectedObjectInfo *get_projected_object(pobject_t poid);
   void put_projected_object(ProjectedObjectInfo *pinfo);
 
+  bool is_write_in_progress() {
+    return !projected_objects.empty();
+  }
 
   // load balancing
   set<object_t> balancing_reads;
