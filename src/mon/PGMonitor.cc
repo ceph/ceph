@@ -322,15 +322,22 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   // osd stat
   pending_inc.osd_stat_updates[from] = stats->osd_stat;
   
-  // apply to live map too (screw consistency)
-  if (pg_map.osd_stat.count(from)) {
+  if (pg_map.osd_stat.count(from))
     dout(10) << " got osd" << from << " " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
-    pg_map.stat_osd_sub(pg_map.osd_stat[from]);
-  } else {
+  else
     dout(10) << " got osd " << from << " " << stats->osd_stat << " (first report)" << dendl;
-  }
+
+  // apply to live map too (screw consistency)
+  /*
+    actually, no, don't.  that screws up our "latest" stash.  and can
+    lead to weird output where things appear to jump backwards in
+    time... that's just confusing.
+
+  if (pg_map.osd_stat.count(from))
+    pg_map.stat_osd_sub(pg_map.osd_stat[from]);
   pg_map.osd_stat[from] = stats->osd_stat;
   pg_map.stat_osd_add(stats->osd_stat);
+  */
 
   // pg stats
   MPGStatsAck *ack = new MPGStatsAck;
@@ -367,10 +374,12 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 	     << dendl;
     pending_inc.pg_stat_updates[pgid] = p->second;
 
+    /*
     // we don't care much about consistency, here; apply to live map.
     pg_map.stat_pg_sub(pgid, pg_map.pg_stat[pgid]);
     pg_map.pg_stat[pgid] = p->second;
     pg_map.stat_pg_add(pgid, pg_map.pg_stat[pgid]);
+    */
   }
   
   paxos->wait_for_commit(new C_Stats(this, ack, stats->get_orig_source_inst()));
