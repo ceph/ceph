@@ -1818,18 +1818,18 @@ void PG::scrub()
   osd->map_lock.put_read();
 
   dout(10) << " building my scrub map" << dendl;
-  ScrubMap map;
-  build_scrub_map(map);
+  ScrubMap scrubmap;
+  build_scrub_map(scrubmap);
 
   while (peer_scrub_map.size() < acting.size() - 1) {
-    dout(10) << " have " << peer_scrub_map.size() << " / " << (acting.size()-1)
+    dout(10) << " have " << (peer_scrub_map.size()+1) << " / " << acting.size()
 	     << " scrub maps, waiting" << dendl;
     wait();
   }
 
   // first, compare scrub maps
   vector<ScrubMap*> m(acting.size());
-  m[0] = &map;
+  m[0] = &scrubmap;
   for (unsigned i=1; i<acting.size(); i++)
     m[i] = &peer_scrub_map[acting[i]];
   vector<ScrubMap::object>::iterator p[acting.size()];
@@ -1875,7 +1875,27 @@ void PG::scrub()
 	ok = false;
 	num_bad++;
       }
-      // fixme: check attrs
+      if (po->attrs.size() != p[i]->attrs.size()) {
+	dout(0) << " osd" << acting[i] << " " << po->poid
+		<< " attr count " << p[i]->attrs.size() << " != " << po->attrs.size() << dendl;
+	ok = false;
+	num_bad++;
+      }
+      for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
+	if (p[i]->attrs.count(q->first)) {
+	  if (q->second.cmp(p[i]->attrs[q->first])) {
+	    dout(0) << " osd" << acting[i] << " " << po->poid
+		    << " attr " << q->first << " value mismatch" << dendl;
+	    ok = false;
+	    num_bad++;
+	  }
+	} else {
+	  dout(0) << " osd" << acting[i] << " " << po->poid
+		  << " attr " << q->first << " missing" << dendl;
+	  ok = false;
+	  num_bad++;
+	}
+      }
     }
 
     
@@ -1900,7 +1920,7 @@ void PG::scrub()
   peer_scrub_map.clear();
 
   // ok, do the pg-type specific scrubbing
-  _scrub(map);
+  _scrub(scrubmap);
   
   info.stats.last_scrub = info.last_update;
   info.stats.last_scrub_stamp = g_clock.now();
@@ -1908,6 +1928,8 @@ void PG::scrub()
   update_stats();
 
   dout(10) << "scrub done" << dendl;
+
+  osd->take_waiters(waiting_for_active);
 
   unlock();
 }

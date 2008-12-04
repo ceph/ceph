@@ -362,6 +362,20 @@ public:
       return _raw->len - _len;
     }
 
+    int cmp(const ptr& o) {
+      int l = _len < o._len ? _len : o._len;
+      if (l) {
+	int r = memcmp(c_str(), o.c_str(), l);
+	if (!r)
+	  return r;
+      }
+      if (_len < o._len)
+	return -1;
+      if (_len > o._len)
+	return 1;
+      return 0;
+    }
+
     // modifiers
     void set_offset(unsigned o) { _off = o; }
     void set_length(unsigned l) { _len = l; }
