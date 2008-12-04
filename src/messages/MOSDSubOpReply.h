@@ -30,6 +30,7 @@
  */
 
 class MOSDSubOpReply : public Message {
+public:
   epoch_t map_epoch;
   
   // subop metadata
@@ -38,7 +39,6 @@ class MOSDSubOpReply : public Message {
   tid_t rep_tid;
   pobject_t poid;
 
-public:
   vector<ceph_osd_op> ops;
 
   // result
@@ -119,6 +119,7 @@ public:
   
   void print(ostream& out) {
     out << "osd_sub_op_reply(" << reqid
+	<< " " << pgid 
 	<< " " << poid << " " << ops;
     if (ack_type & CEPH_OSD_OP_ONDISK)
       out << " ondisk";

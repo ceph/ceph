@@ -53,7 +53,6 @@
 #define MSG_REMOVE_SNAPS       89
 
 #define MSG_OSD_SCRUB          90
-#define MSG_OSD_PG_SCRUB       91
 
 
 

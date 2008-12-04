@@ -131,6 +131,7 @@ public:
   const char *get_type_name() { return "osd_sub_op"; }
   void print(ostream& out) {
     out << "osd_sub_op(" << reqid
+	<< " " << pgid
 	<< " " << poid
 	<< " " << ops;
     if (noop)

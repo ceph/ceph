@@ -25,7 +25,9 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGScrub.h"
+
+#include "messages/MOSDSubOp.h"
+#include "messages/MOSDSubOpReply.h"
 
 #include <sstream>
 
@@ -1720,6 +1722,52 @@ bool PG::block_if_wrlocked(MOSDOp* op)
 // ==========================================================================================
 // SCRUB
 
+void PG::sub_op_scrub(MOSDSubOp *op)
+{
+  dout(7) << "sub_op_scrub" << dendl;
+
+  if (op->map_epoch < info.history.same_primary_since) {
+    dout(10) << "sub_op_scrub discarding old sub_op from "
+	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+    delete op;
+    return;
+  }
+
+  ScrubMap map;
+  build_scrub_map(map);
+
+  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK); 
+  ::encode(map, reply->get_data());
+  osd->messenger->send_message(reply, op->get_source_inst());
+
+  delete op;
+}
+
+void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
+{
+  dout(7) << "sub_op_scrub_reply" << dendl;
+
+  if (op->map_epoch < info.history.same_primary_since) {
+    dout(10) << "sub_op_scrub discarding old sub_op from "
+	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+    delete op;
+    return;
+  }
+
+  int from = op->get_source().num();
+
+  if (peer_scrub_map.count(from)) {
+    dout(10) << " already had osd" << from << " scrub map" << dendl;
+  } else {
+    dout(10) << " got osd" << from << " scrub map" << dendl;
+    bufferlist::iterator p = op->get_data().begin();
+    peer_scrub_map[from].decode(p);
+    kick();
+  }
+
+  delete op;
+}
+
 
 /*
  * build a (sorted) summary of pg content for purposes of scrubbing
@@ -1787,10 +1835,12 @@ void PG::build_scrub_map(ScrubMap &map)
 
 void PG::scrub()
 {
+  stringstream ss;
+  ScrubMap scrubmap;
+
   osd->map_lock.get_read();
-
   lock();
-
+ 
   epoch_t epoch = info.history.same_since;
 
   if (!is_primary()) {
@@ -1814,11 +1864,18 @@ void PG::scrub()
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
     dout(10) << "scrub  requesting scrubmap from osd" << acting[i] << dendl;
-    osd->messenger->send_message(new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
+    vector<ceph_osd_op> scrub(1);
+    scrub[0].op = CEPH_OSD_OP_SCRUB;
+    pobject_t poid;
+    eversion_t v;
+    osd_reqid_t reqid;
+    MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, scrub, false, 0,
+				     osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
+    osd->messenger->send_message(subop, //new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
 				 osd->osdmap->get_inst(acting[i]));
   }
-
   osd->map_lock.put_read();
+
 
   // wait for any ops in progress
   while (is_write_in_progress()) {
@@ -1826,18 +1883,17 @@ void PG::scrub()
     wait();
   }
 
+
   //unlock();
 
   dout(10) << "scrub  building my map" << dendl;
-  ScrubMap scrubmap;
   build_scrub_map(scrubmap);
 
   /*
   lock();
   if (epoch != info.history.same_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
-    unlock();
-    return;
+    goto out;
   }
   */
 
@@ -1848,16 +1904,13 @@ void PG::scrub()
 
     if (epoch != info.history.same_since) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
-      unlock();
-      return;
+      goto out;
     }
   }
 
   /*
   unlock();
   */
-
-  stringstream ss;
 
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
@@ -1961,8 +2014,7 @@ void PG::scrub()
   lock();
   if (epoch != info.history.same_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
-    unlock();
-    return;
+    goto out;
   }
   */
 
@@ -1980,14 +2032,16 @@ void PG::scrub()
   lock();
   if (epoch != info.history.same_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
-    unlock();
-    return;
+    goto out;
   }
   */
 
   // finish up
   info.stats.last_scrub = info.last_update;
   info.stats.last_scrub_stamp = g_clock.now();
+
+
+ out:
   state_clear(PG_STATE_SCRUBBING);
   update_stats();
 

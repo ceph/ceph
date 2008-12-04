@@ -692,6 +692,9 @@ public:
   void build_scrub_map(ScrubMap &map);
   virtual void _scrub(ScrubMap &map) {}
 
+  void sub_op_scrub(class MOSDSubOp *op);
+  void sub_op_scrub_reply(class MOSDSubOpReply *op);
+
 
  public:  
   PG(OSD *o, pg_t p) : 

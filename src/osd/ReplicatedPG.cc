@@ -399,6 +399,9 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
     case CEPH_OSD_OP_PUSH:
       sub_op_push(op);
       return;
+    case CEPH_OSD_OP_SCRUB:
+      sub_op_scrub(op);
+      return;
     }
   }
 
@@ -412,6 +415,10 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
     if (first.op == CEPH_OSD_OP_PUSH) {
       // continue peer recovery
       sub_op_push_reply(r);
+      return;
+    }
+    if (first.op == CEPH_OSD_OP_SCRUB) {
+      sub_op_scrub_reply(r);
       return;
     }
   }
@@ -2235,6 +2242,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 
   // push it back!
   push(poid, op->get_source().num(), op->data_subset, op->clone_subsets);
+  delete op;
 }
 
 
@@ -2898,6 +2906,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 
 // ==========================================================================================
 // SCRUB
+
 
 void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {

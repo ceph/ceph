@@ -1068,6 +1068,7 @@ enum {
 	CEPH_OSD_OP_PUSH           = CEPH_OSD_OP_MODE_SUB | 2,
 	CEPH_OSD_OP_BALANCEREADS   = CEPH_OSD_OP_MODE_SUB | 3,
 	CEPH_OSD_OP_UNBALANCEREADS = CEPH_OSD_OP_MODE_SUB | 4,
+	CEPH_OSD_OP_SCRUB          = CEPH_OSD_OP_MODE_SUB | 5,
 
 	/* object data */
 	CEPH_OSD_OP_WRITE      = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
@@ -1151,6 +1152,7 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_PUSH: return "push";
 	case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
 	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
+	case CEPH_OSD_OP_SCRUB: return "scrub";
 
 	default: return "???";
 	}

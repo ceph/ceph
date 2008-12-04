@@ -58,7 +58,6 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
-#include "messages/MOSDPGScrub.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -1536,9 +1535,6 @@ void OSD::dispatch(Message *m)
       case MSG_OSD_PG_INFO:
         handle_pg_info((MOSDPGInfo*)m);
         break;
-      case MSG_OSD_PG_SCRUB:
-	handle_pg_scrub((MOSDPGScrub*)m);
-	break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -2865,46 +2861,6 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
-}
-
-void OSD::handle_pg_scrub(MOSDPGScrub *m)
-{
-  dout(7) << "handle_pg_scrub " << *m << " from " << m->get_source() << dendl;
-  int from = m->get_source().num();
-  if (!require_same_or_newer_map(m, m->epoch)) return;
-
-  PG *pg = _lookup_lock_pg(m->pgid);
-  if (pg) {
-    if (m->epoch < pg->info.history.same_since) {
-      dout(10) << *pg << " has changed since " << m->epoch << dendl;
-    } else {
-      if (pg->is_primary()) {
-	if (pg->peer_scrub_map.count(from)) {
-	  dout(10) << *pg << " already had osd" << from << " scrub map" << dendl;
-	} else {
-	  dout(10) << *pg << " got osd" << from << " scrub map" << dendl;
-	  bufferlist::iterator p = m->map.begin();
-	  pg->peer_scrub_map[from].decode(p);
-	  pg->kick();
-	}
-      } else {
-	// replica, reply
-	dout(10) << *pg << " building scrub map for primary" << dendl;
-
-	// do this is a separate thread.. FIXME
-	ScrubMap map;
-	pg->build_scrub_map(map);
-
-	MOSDPGScrub *reply = new MOSDPGScrub(pg->info.pgid, osdmap->get_epoch());
-	::encode(map, reply->map);
-	messenger->send_message(reply, m->get_source_inst());
-      }
-    }
-    pg->unlock();
-  } else {
-    dout(10) << " pg " << m->pgid << " not found" << dendl;
-  }
   delete m;
 }
 
