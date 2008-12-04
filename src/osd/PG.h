@@ -430,9 +430,12 @@ public:
     }
     
     void add_event(Log::Entry& e) {
-      if (e.is_update())
-	add(e.oid, e.version, e.prior_version);
-      else
+      if (e.is_update()) {
+	if (is_missing(e.oid, e.prior_version))
+	  add(e.oid, e.version);
+	else
+	  add(e.oid, e.version, e.prior_version);
+      } else
 	rm(e.oid, e.version);
     }
 
