@@ -23,6 +23,26 @@ class MOSDSubOpReply;
 
 class ReplicatedPG : public PG {
 public:  
+
+  /*
+   * keep tabs on object modifications that are in flight.
+   * we need to know the projected existence, size, snapset,
+   * etc., because we don't send writes down to disk until after
+   * replicas ack.
+   */
+  struct ProjectedObjectInfo {
+    int ref;
+    pobject_t poid;
+
+    SnapSet snapset;
+    bool exists;
+    __u64 size;
+    eversion_t version;
+    
+    ProjectedObjectInfo() : ref(0), exists(false), size(0) {}
+  };
+
+
   /*
    * gather state on the primary/head while replicating an osd op.
    */
@@ -45,23 +65,26 @@ public:
     
     utime_t   start;
     
-    eversion_t       old_version, at_version;
+    ProjectedObjectInfo *pinfo;
 
-    SnapSet snapset;
+    eversion_t at_version;
     SnapContext snapc;
 
     eversion_t          pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(MOSDOp *o, bool noop_, tid_t rt, eversion_t ov, eversion_t av, eversion_t lc,
-	      SnapSet& ss, SnapContext& sc) :
+    RepGather(MOSDOp *o, bool noop_, tid_t rt, 
+	      ProjectedObjectInfo *i,
+	      eversion_t av, eversion_t lc,
+	      SnapContext& sc) :
       queue_item(this),
       nref(1), op(o), rep_tid(rt), 
       noop(noop_),
       applied(false), aborted(false),
       sent_ack(false), sent_nvram(false), sent_disk(false),
-      old_version(ov), at_version(av), 
-      snapset(ss), snapc(sc),
+      pinfo(i),
+      at_version(av), 
+      snapc(sc),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
@@ -95,6 +118,7 @@ public:
     }
   };
 
+
 protected:
   // replica ops
   // [primary|tail]
@@ -104,11 +128,21 @@ protected:
   void apply_repop(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_repop(MOSDOp *op, bool noop, tid_t rep_tid, eversion_t ov, eversion_t nv,
-		       SnapSet& snapset, SnapContext& snapc);
+  RepGather *new_repop(MOSDOp *op, bool noop, tid_t rep_tid,
+		       ProjectedObjectInfo *pinfo,
+		       eversion_t nv,
+		       SnapContext& snapc);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
+
+
+  // projected object info
+  map<pobject_t, ProjectedObjectInfo> projected_objects;
+
+  ProjectedObjectInfo *get_projected_object(pobject_t poid);
+  void put_projected_object(ProjectedObjectInfo *pinfo);
+
 
   // load balancing
   set<object_t> balancing_reads;
@@ -154,7 +188,8 @@ protected:
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
-			   eversion_t old_version, eversion_t at_version,
+			   bool& exists, __u64& size, eversion_t& version,
+			   eversion_t at_version,
 			   SnapSet& snapset, SnapContext& snapc,
 			   __u32 inc_lock, eversion_t trim_to);
   

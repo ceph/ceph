@@ -40,8 +40,12 @@ public:
 
   // subop metadata
   tid_t rep_tid;
-  eversion_t version, old_version;
+  eversion_t version;
   uint32_t inc_lock;
+
+  bool old_exists;
+  __u64 old_size;
+  eversion_t old_version;
 
   SnapSet snapset;
   SnapContext snapc;
@@ -66,8 +70,10 @@ public:
     ::decode(acks_wanted, p);
     ::decode(rep_tid, p);
     ::decode(version, p);
-    ::decode(old_version, p);
     ::decode(inc_lock, p);
+    ::decode(old_exists, p);
+    ::decode(old_size, p);
+    ::decode(old_version, p);
     ::decode(snapset, p);
     ::decode(snapc, p);
     ::decode(pg_trim_to, p);
@@ -87,8 +93,10 @@ public:
     ::encode(acks_wanted, payload);
     ::encode(rep_tid, payload);
     ::encode(version, payload);
-    ::encode(old_version, payload);
     ::encode(inc_lock, payload);
+    ::encode(old_exists, payload);
+    ::encode(old_size, payload);
+    ::encode(old_version, payload);
     ::encode(snapset, payload);
     ::encode(snapc, payload);
     ::encode(pg_trim_to, payload);

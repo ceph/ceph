@@ -1120,7 +1120,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 				       pobject_t poid,
 				       vector<ceph_osd_op>& ops, bufferlist& bl,
-				       eversion_t old_version, eversion_t at_version,
+				       bool& exists, __u64& size, eversion_t& version,
+				       eversion_t at_version,
 				       SnapSet& snapset, SnapContext& snapc,
 				       __u32 inc_lock, eversion_t trim_to)
 {
@@ -1128,15 +1129,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   eversion_t log_version = at_version;
   assert(!ops.empty());
   
-  // stat existing
-  struct stat st;
-  int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
-  __u64 old_size = 0;
-  bool exists = false;
-  if (r == 0) {
-    exists = true;
-    old_size = st.st_size;
-  }
+  eversion_t old_version = version;
 
   // apply ops
   bool did_snap = false;
@@ -1145,17 +1138,18 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     // clone?
     if (!did_snap && poid.oid.snap &&
 	!ceph_osd_op_type_lock(ops[i].op)) {     // is a (non-lock) modification
-      prepare_clone(t, log_bl, reqid, info.stats, poid, old_size, old_version, at_version,
+      prepare_clone(t, log_bl, reqid, info.stats, poid, size, old_version, at_version,
 		    snapset, snapc);
       did_snap = true;
     }
-    prepare_simple_op(t, reqid, info.stats, poid, old_size, exists,
+    prepare_simple_op(t, reqid, info.stats, poid, size, exists,
 		      ops[i], bp,
 		      snapset, snapc);
   }
 
   // finish.
-  if (!old_size >= 0) {
+  version = at_version;
+  if (exists) {
     if (inc_lock)
       t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
 
@@ -1240,6 +1234,9 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   repop->op->get_data().clear();
   
   repop->applied = true;
+  
+  put_projected_object(repop->pinfo);
+
 
   // any completion stuff to do here?
   object_t oid = repop->op->get_oid();
@@ -1365,8 +1362,10 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->op->ops, repop->noop, acks_wanted,
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
-  wr->old_version = repop->old_version;
-  wr->snapset = repop->snapset;
+  wr->old_exists = repop->pinfo->exists;
+  wr->old_size = repop->pinfo->size;
+  wr->old_version = repop->pinfo->version;
+  wr->snapset = repop->pinfo->snapset;
   wr->snapc = repop->snapc;
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
   if (is_complete_pg())
@@ -1376,13 +1375,17 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 }
 
 ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, bool noop,
-						 tid_t rep_tid, eversion_t ov, eversion_t nv,
-						 SnapSet& snapset, SnapContext& snapc)
+						 tid_t rep_tid, 
+						 ProjectedObjectInfo *pinfo,
+						 eversion_t nv,
+						 SnapContext& snapc)
 {
   dout(10) << "new_repop rep_tid " << rep_tid << " on " << *op << dendl;
 
-  RepGather *repop = new RepGather(op, noop, rep_tid, ov, nv, info.last_complete,
-				   snapset, snapc);
+  RepGather *repop = new RepGather(op, noop, rep_tid, 
+				   pinfo,
+				   nv, info.last_complete,
+				   snapc);
   
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
@@ -1437,15 +1440,61 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 
 
+// -------------------------------------------------------
 
 
+ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t poid)
+{
+  ProjectedObjectInfo *pinfo = &projected_objects[poid];
+  pinfo->ref++;
 
+  if (pinfo->ref > 1) {
+    dout(10) << "get_projected_object " << poid << " "
+	     << (pinfo->ref-1) << " -> " << pinfo->ref << dendl;
+    return pinfo;    // already had it
+  }
 
+  dout(10) << "get_projected_object " << poid << " reading from disk" << dendl;
 
+  // pull info off disk
+  pinfo->poid = poid;
+  
+  struct stat st;
+  int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
+  if (r == 0) {
+    pinfo->exists = true;
+    pinfo->size = st.st_size;
+    
+    r = osd->store->getattr(info.pgid.to_coll(), poid, "version",
+			    &pinfo->version, sizeof(pinfo->version));
+    assert(r >= 0);
+    
+    if (poid.oid.snap == CEPH_NOSNAP) {
+      bufferlist bl;
+      int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	::decode(pinfo->snapset, p);
+      }
+    } else 
+      assert(poid.oid.snap == 0);   // no snapshotting.
+  } else {
+    pinfo->exists = false;
+    pinfo->size = 0;
+  }
 
+  return pinfo;
+}
 
+void ReplicatedPG::put_projected_object(ProjectedObjectInfo *pinfo)
+{
+  dout(10) << "put_projected_object " << pinfo->poid << " "
+	   << pinfo->ref << " -> " << (pinfo->ref-1) << dendl;
 
-
+  --pinfo->ref;
+  if (pinfo->ref == 0)
+    projected_objects.erase(pinfo->poid);
+}
 
 
 
@@ -1533,35 +1582,23 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   snapc.seq = op->get_snap_seq();
   snapc.snaps = op->get_snaps();
 
-  eversion_t old_version;
-  osd->store->getattr(info.pgid.to_coll(), poid, "version",
-		      &old_version, sizeof(old_version));
-  
-  SnapSet snapset;
-  if (poid.oid.snap == CEPH_NOSNAP) {
-    bufferlist bl;
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
-    if (r >= 0) {
-      bufferlist::iterator p = bl.begin();
-      ::decode(snapset, p);
-    }
-  } else 
-    assert(poid.oid.snap == 0);   // no snapshotting.
+  // get existing object info
+  ProjectedObjectInfo *pinfo = get_projected_object(poid);
 
   // set version in op, for benefit of client and our eventual reply
   op->set_version(av);
 
   dout(10) << "op_modify " << opname 
            << " " << poid.oid 
-           << " ov " << old_version << " av " << av 
+           << " ov " << pinfo->version << " av " << av 
 	   << " snapc " << snapc
-	   << " snapset " << snapset
+	   << " snapset " << pinfo->snapset
            << dendl;  
 
   // verify snap ordering
   if ((op->get_flags() & CEPH_OSD_OP_ORDERSNAP) &&
-      snapc.seq < snapset.seq) {
-    dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << snapset.seq
+      snapc.seq < pinfo->snapset.seq) {
+    dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << pinfo->snapset.seq
 	     << " on " << poid << dendl;
     osd->reply_op_error(op, -EOLDSNAPC);
     return;
@@ -1588,8 +1625,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(op, noop, rep_tid, old_version, av, snapset, snapc);
-
+  RepGather *repop = new_repop(op, noop, rep_tid, pinfo, av, snapc);
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
 
@@ -1597,8 +1633,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (!noop) {
     // log and update later.
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
-			old_version, av,
-			snapset, snapc,
+			pinfo->exists, pinfo->size, pinfo->version, av,
+			pinfo->snapset, snapc,
 			op->get_inc_lock(), peers_complete_thru);
   }
   
@@ -1713,7 +1749,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   if (!op->noop) {
     prepare_transaction(t, op->reqid,
 			op->poid, op->ops, op->get_data(),
-			op->old_version, op->version,
+			op->old_exists, op->old_size, op->old_version, op->version,
 			op->snapset, op->snapc,
 			op->inc_lock, op->pg_trim_to);
   }
