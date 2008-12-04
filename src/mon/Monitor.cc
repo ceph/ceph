@@ -331,7 +331,7 @@ void Monitor::stop_cluster()
 }
 
 
-void Monitor::dispatch(Message *m)
+bool Monitor::dispatch_impl(Message *m)
 {
   lock.Lock();
   {
@@ -432,11 +432,12 @@ void Monitor::dispatch(Message *m)
 
       
     default:
-      dout(0) << "unknown message " << m << " " << *m << " from " << m->get_source_inst() << dendl;
-      assert(0);
+        return false;
     }
   }
   lock.Unlock();
+
+  return true;
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)

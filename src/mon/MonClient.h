@@ -24,8 +24,8 @@ class MMonMap;
 class MonClient : public Dispatcher {
   int probe_mon(MonMap *pmonmap);
   void handle_monmap(MMonMap *m);
+  bool dispatch_impl(Message *m);
  public:
-  void dispatch(Message *m);
   int get_monmap(MonMap *pmonmap);
 };
 

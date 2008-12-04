@@ -1430,7 +1430,7 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
 }
 
 
-void OSD::heartbeat_dispatch(Message *m)
+bool OSD::heartbeat_dispatch(Message *m)
 {
   dout(20) << "heartbeat_dispatch " << m << dendl;
 
@@ -1446,13 +1446,13 @@ void OSD::heartbeat_dispatch(Message *m)
     break;
 
   default:
-    dout(1) << " got unknown message " << m->get_type() << dendl;
-    assert(0);
+    return false;
   }
 
+  return true;
 }
 
-void OSD::dispatch(Message *m) 
+bool OSD::dispatch_impl(Message *m) 
 {
   // lock!
   osd_lock.Lock();
@@ -1551,8 +1551,7 @@ void OSD::dispatch(Message *m)
         
         
       default:
-        dout(1) << " got unknown message " << m->get_type() << dendl;
-        assert(0);
+        return false;
       }
     }
   }
@@ -1571,11 +1570,12 @@ void OSD::dispatch(Message *m)
       dispatch(waiting.front());
       waiting.pop_front();
     }
-    return;
+    return true;
   }
   
   finished_lock.Unlock();
   osd_lock.Unlock();
+  return true;
 }
 
 

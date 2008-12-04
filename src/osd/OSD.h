@@ -138,14 +138,16 @@ private:
   } heartbeat_thread;
 
 public:
-  void heartbeat_dispatch(Message *m);
+  bool heartbeat_dispatch(Message *m);
 
   struct HeartbeatDispatcher : public Dispatcher {
+  private:
+    bool dispatch_impl(Message *m) {
+      return osd->heartbeat_dispatch(m);
+    };
+  public:
     OSD *osd;
     HeartbeatDispatcher(OSD *o) : osd(o) {}
-    void dispatch(Message *m) {
-      osd->heartbeat_dispatch(m);
-    };
   } heartbeat_dispatcher;
 
 
@@ -607,7 +609,8 @@ private:
     }
   } scrub_wq;
 
-
+ private:
+  virtual bool dispatch_impl(Message *m);
  public:
   OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev = 0);
   ~OSD();
@@ -623,7 +626,6 @@ private:
   int shutdown();
 
   // messages
-  virtual void dispatch(Message *m);
   virtual void ms_handle_failure(Message *m, const entity_inst_t& inst);
 
   void reply_op_error(MOSDOp *op, int r);

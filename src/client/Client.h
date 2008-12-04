@@ -806,6 +806,7 @@ protected:
 
   // friends
   friend class SyntheticClient;
+  bool dispatch_impl(Message *m);
 
  public:
   Client(Messenger *m, MonMap *mm);
@@ -818,8 +819,6 @@ protected:
   void shutdown();
 
   // messaging
-  void dispatch(Message *m);
-
   void handle_mon_map(MMonMap *m);
   void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);

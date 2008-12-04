@@ -71,6 +71,7 @@ protected:
 private:
   Context *proposal_timer;
   bool have_pending;
+  bool dispatch_impl(Message *m);
 
 public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
@@ -80,7 +81,6 @@ public:
   const char *get_machine_name();
   
   // i implement and you ignore
-  void dispatch(Message *m);
   void election_starting();
   void election_finished();
   void shutdown();

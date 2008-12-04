@@ -217,7 +217,8 @@ class MDS : public Dispatcher {
 
   int get_req_rate() { return req_rate; }
 
- 
+ private: 
+  virtual bool dispatch_impl(Message *m);
  public:
   MDS(int whoami, Messenger *m, MonMap *mm);
   ~MDS();
@@ -270,8 +271,7 @@ class MDS : public Dispatcher {
   void reset_beacon_killer();
 
   // messages
-  virtual void dispatch(Message *m);
-  void _dispatch(Message *m);
+  bool _dispatch(Message *m);
   
   void ms_handle_failure(Message *m, const entity_inst_t& inst);
   void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);

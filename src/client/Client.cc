@@ -1082,7 +1082,7 @@ void Client::handle_client_reply(MClientReply *reply)
 // ------------------------
 // incoming messages
 
-void Client::dispatch(Message *m)
+bool Client::dispatch_impl(Message *m)
 {
   client_lock.Lock();
 
@@ -1135,9 +1135,7 @@ void Client::dispatch(Message *m)
     break;
 
   default:
-    dout(10) << "dispatch doesn't recognize message type " << m->get_type() << dendl;
-    assert(0);  // fail loudly
-    break;
+    return false;
   }
 
   // unmounting?
@@ -1156,6 +1154,8 @@ void Client::dispatch(Message *m)
   }
 
   client_lock.Unlock();
+
+  return true;
 }
 
 

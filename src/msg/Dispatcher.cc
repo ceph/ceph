@@ -26,3 +26,14 @@ int Dispatcher::send_message(Message *m, msg_addr_t dest, int dest_port)
   //return dis_messenger->send_message(m, dest, dest_port, MDS_PORT_SERVER);  // on my port!
 }
 */
+void Dispatcher::dispatch(Message *m) { 
+  if (!dispatch_impl(m)) {
+    if (next) {
+      next->dispatch(m);
+    } else {
+      dout(10) << "dispatch doesn't recognize message type " << m->get_type() << dendl;
+      assert(0);
+    }
+  }
+}
+

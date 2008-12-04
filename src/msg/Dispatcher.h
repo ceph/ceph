@@ -21,11 +21,31 @@
 class Messenger;
 
 class Dispatcher {
- public:
-  virtual ~Dispatcher() { }
+  Dispatcher *next;
 
   // how i receive messages
-  virtual void dispatch(Message *m) = 0;
+  virtual bool dispatch_impl(Message *m) = 0;
+ public:
+  virtual ~Dispatcher() { }
+  Dispatcher() : next(NULL) { }
+
+  virtual void dispatch(Message *m) { 
+    if (!dispatch_impl(m)) {
+      if (next) {
+        next->dispatch(m);
+      } else {
+        assert(0);
+      }
+    }
+  }
+
+  virtual void add(Dispatcher *disp) {
+    if (!next) {
+      next = disp; 
+    } else {
+      next->add(disp);
+    }
+  }
 
   // how i deal with transmission failures.
   virtual void ms_handle_failure(Message *m, const entity_inst_t& inst) {  }

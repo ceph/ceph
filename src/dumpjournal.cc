@@ -48,7 +48,7 @@ Objecter *objecter = 0;
 Journaler *journaler = 0;
 
 class Dumper : public Dispatcher {
-  void dispatch(Message *m) {
+  bool dispatch_impl(Message *m) {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
       objecter->handle_osd_op_reply((MOSDOpReply *)m);
@@ -56,7 +56,10 @@ class Dumper : public Dispatcher {
     case CEPH_MSG_OSD_MAP:
       objecter->handle_osd_map((MOSDMap*)m);
       break;
+    default:
+      return false;
     }
+    return true;
   }
 } dispatcher;
 

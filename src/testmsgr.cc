@@ -44,7 +44,7 @@ Cond cond;
 __u64 received = 0;
 
 class Admin : public Dispatcher {
-  void dispatch(Message *m) {
+  bool dispatch_impl(Message *m) {
 
     //cerr << "got ping from " << m->get_source() << std::endl;
     dout(0) << "got ping from " << m->get_source() << dendl;
@@ -54,6 +54,7 @@ class Admin : public Dispatcher {
     lock.Unlock();
 
     delete m;
+    return true;
   }
 
   void ms_handle_failure(Message *m, const entity_inst_t& inst) { 

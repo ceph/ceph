@@ -151,13 +151,15 @@ public:
     }
   };
 
+ private:
+  bool dispatch_impl(Message *m);
+
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
 
   void init();
   void shutdown();
-  void dispatch(Message *m);
   void tick();
 
   void stop_cluster();

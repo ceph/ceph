@@ -36,7 +36,7 @@ const char *PaxosService::get_machine_name()
 }
 
 
-void PaxosService::dispatch(Message *m)
+bool PaxosService::dispatch_impl(Message *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
   
@@ -44,7 +44,7 @@ void PaxosService::dispatch(Message *m)
   if (!paxos->is_readable()) {
     dout(10) << " waiting for paxos -> readable" << dendl;
     paxos->wait_for_readable(new C_RetryMessage(this, m));
-    return;
+    return true;
   }
 
   // make sure service has latest from paxos.
@@ -52,21 +52,21 @@ void PaxosService::dispatch(Message *m)
 
   // preprocess
   if (preprocess_query(m)) 
-    return;  // easy!
+    return true;  // easy!
 
   // leader?
   if (!mon->is_leader()) {
     // fw to leader
     dout(10) << " fw to leader mon" << mon->get_leader() << dendl;
     mon->messenger->forward_message(m, mon->monmap->get_inst(mon->get_leader()));
-    return;
+    return true;
   }
   
   // writeable?
   if (!paxos->is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
     paxos->wait_for_writeable(new C_RetryMessage(this, m));
-    return;
+    return true;
   }
 
   // update
@@ -89,6 +89,7 @@ void PaxosService::dispatch(Message *m)
       dout(10) << " not proposing" << dendl;
     }
   }     
+  return true;
 }
 
 bool PaxosService::should_propose(double& delay)

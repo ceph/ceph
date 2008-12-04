@@ -88,14 +88,18 @@ void MonClient::handle_monmap(MMonMap *m)
   monmap_lock.Unlock();
 }
 
-void MonClient::dispatch(Message *m)
+bool MonClient::dispatch_impl(Message *m)
 {
   dout(10) << "dispatch " << *m << dendl;
 
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_monmap((MMonMap*)m);
+    break;
+  default:
+    return false;
   }
 
   delete m;
+  return true;
 }

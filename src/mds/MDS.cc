@@ -1097,16 +1097,19 @@ void MDS::suicide()
 
 
 
-void MDS::dispatch(Message *m)
+bool MDS::dispatch_impl(Message *m)
 {
+  bool ret;
   mds_lock.Lock();
-  _dispatch(m);
+  ret = _dispatch(m);
   mds_lock.Unlock();
+
+  return ret;
 }
 
 
 
-void MDS::_dispatch(Message *m)
+bool MDS::_dispatch(Message *m)
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
@@ -1126,7 +1129,7 @@ void MDS::_dispatch(Message *m)
 	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << dendl;
 	delete m;
-	return;
+	return true;
       }
     }
   }
@@ -1204,8 +1207,7 @@ void MDS::_dispatch(Message *m)
 	  break;
 	  
 	default:
-	  dout(1) << "MDS unknown messge " << m->get_type() << dendl;
-	  assert(0);
+	  return false;
 	}
       }
       
@@ -1214,7 +1216,7 @@ void MDS::_dispatch(Message *m)
 
 
   if (laggy)
-    return;
+    return true;
 
 
   // finish any triggered contexts
@@ -1314,7 +1316,7 @@ void MDS::_dispatch(Message *m)
       stopping_done();
     }
   }
-
+  return true;
 }
 
 
