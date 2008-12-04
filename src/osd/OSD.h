@@ -483,10 +483,8 @@ private:
       return false;
     }
     void _dequeue(PG *pg) {
-      if (pg->recovery_item.get_xlist()) {
-	pg->recovery_item.remove_myself();
+      if (pg->recovery_item.remove_myself())
 	pg->put();
-      }
     }
     PG * _dequeue() {
       if (osd->recovery_queue.empty())
@@ -582,11 +580,13 @@ private:
     bool _enqueue(PG *pg) {
       if (pg->scrub_item.is_on_xlist())
 	return false;
+      pg->get();
       osd->scrub_queue.push_back(&pg->scrub_item);
       return true;
     }
     void _dequeue(PG *pg) {
-      pg->scrub_item.remove_myself();
+      if (pg->scrub_item.remove_myself())
+	pg->put();
     }
     PG * _dequeue() {
       if (osd->scrub_queue.empty())
@@ -597,9 +597,14 @@ private:
     }
     void _process(PG *pg) {
       pg->scrub();
+      pg->get();
     }
     void _clear() {
-      osd->scrub_queue.clear();
+      while (!osd->scrub_queue.empty()) {
+	PG *pg = osd->scrub_queue.front();
+	osd->scrub_queue.pop_front();
+	pg->put();
+      }
     }
   } scrub_wq;
 

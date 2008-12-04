@@ -35,10 +35,13 @@ public:
     
     xlist* get_xlist() { return _list; }
     bool is_on_xlist() { return _list ? true:false; }
-    void remove_myself() {
-      if (_list) 
+    bool remove_myself() {
+      if (_list) {
 	_list->remove(this);
-      assert(_list == 0);
+	assert(_list == 0);
+	return true;
+      } else
+	return false;
     }
   };
 
