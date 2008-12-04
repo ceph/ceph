@@ -47,7 +47,7 @@ void LogClient::log(log_type type, stringstream& ss)
 void LogClient::log(log_type type, string& s)
 {
   Mutex::Locker l(log_lock);
-  dout(10) << "log " << (log_type)type << " : " << s << dendl;
+  dout(0) << "log " << (log_type)type << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
   e.stamp = g_clock.now();
