@@ -27,12 +27,16 @@
 
 /*
  * subprotocol versions.  when specific messages types or high-level
- * protocols change, bump the affected components.
+ * protocols change, bump the affected components.  we keep rev
+ * internal cluster protocols separately from the public,
+ * client-facing protocol.
  */
-#define CEPH_OSD_PROTOCOL    3
-#define CEPH_MDS_PROTOCOL    2
-#define CEPH_MON_PROTOCOL    2
-#define CEPH_CLIENT_PROTOCOL 1
+#define CEPH_OSD_PROTOCOL     3 /* cluster internal */
+#define CEPH_MDS_PROTOCOL     2 /* cluster internal */
+#define CEPH_MON_PROTOCOL     2 /* cluster internal */
+#define CEPH_OSDC_PROTOCOL    3 /* public/client */
+#define CEPH_MDSC_PROTOCOL    2 /* public/client */
+#define CEPH_MONC_PROTOCOL    2 /* public/client */
 
 
 /*
@@ -458,12 +462,16 @@ struct ceph_msg_header {
 	__le64 seq;       /* message seq# for this session */
 	__le16 type;      /* message type */
 	__le16 priority;  /* priority.  higher value == higher priority */
-	__le16 mon_protocol, osd_protocol, mds_protocol,
-		client_protocol; /* protocol versions */
+
 	__le32 front_len; /* bytes in main payload */
-	__le32 data_off;  /* sender: include full offset;
-			     receiver: mask against ~PAGE_MASK */
 	__le32 data_len;  /* bytes of data payload */
+	__le16 data_off;  /* sender: include full offset;
+			     receiver: mask against ~PAGE_MASK */
+
+	__u8 mon_protocol, monc_protocol;  /* protocol versions, */
+	__u8 osd_protocol, osdc_protocol;  /* internal and public */
+	__u8 mds_protocol, mdsc_protocol;
+
 	struct ceph_entity_inst src, orig_src, dst;
 	__le32 crc;       /* header crc32c */
 } __attribute__ ((packed));

@@ -1454,6 +1454,30 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::dispatch_impl(Message *m)
 {
+  // verify protocol version
+  if (m->get_orig_source().is_osd() &&
+      m->get_header().osd_protocol != CEPH_OSD_PROTOCOL) {
+    dout(0) << "osd protocol v " << (int)m->get_header().osd_protocol << " != my " << CEPH_OSD_PROTOCOL
+	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
+    delete m;
+    return true;
+  }
+
+  if (m->get_header().osdc_protocol != CEPH_OSDC_PROTOCOL) {
+    dout(0) << "osdc protocol v " << (int)m->get_header().osdc_protocol << " != my " << CEPH_OSDC_PROTOCOL
+	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
+    delete m;
+    return true;
+  }
+  if (m->get_orig_source().is_mon() &&
+      m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
+    dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
+	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
+    delete m;
+    return true;
+  }
+
+
   // lock!
   osd_lock.Lock();
   dout(20) << "dispatch " << m << dendl;

@@ -303,6 +303,21 @@ void Monitor::stop_cluster()
 
 bool Monitor::dispatch_impl(Message *m)
 {
+  // verify protocol version
+  if (m->get_orig_source().is_mon() &&
+      m->get_header().mon_protocol != CEPH_MON_PROTOCOL) {
+    dout(0) << "mon protocol v " << (int)m->get_header().mon_protocol << " != my " << CEPH_MON_PROTOCOL
+	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
+    delete m;
+    return true;
+  }
+  if (m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
+    dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
+	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
+    delete m;
+    return true;
+  }
+
   lock.Lock();
   {
     switch (m->get_type()) {
