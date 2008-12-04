@@ -166,7 +166,7 @@ void PG::trim_write_ahead()
 
 }
 
-void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from)
+void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from)
 {
   dout(10) << "proc_replica_log for osd" << from << ": " << olog << " " << omissing << dendl;
   assert(!is_active());
@@ -177,7 +177,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omiss
     peer_missing[from] = omissing;
     
     // merge log into our own log
-    merge_log(t, olog, omissing, from);
+    merge_log(t, oinfo, olog, omissing, from);
     proc_replica_missing(olog, omissing, from);
   } else {
     // i'm just building missing lists.
@@ -185,7 +185,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omiss
 
     // iterate over peer log. in reverse.
     list<Log::Entry>::reverse_iterator pp = olog.log.rbegin();
-    eversion_t lu = peer_info[from].last_update;
+    eversion_t lu = oinfo.last_update;
     while (pp != olog.log.rend()) {
       if (!log.logged_object(pp->oid)) {
 	if (!log.backlog) {
@@ -228,9 +228,9 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omiss
         lu = olog.bottom;
     }    
 
-    if (lu < peer_info[from].last_update) {
+    if (lu < oinfo.last_update) {
       dout(10) << " peer osd" << from << " last_update now " << lu << dendl;
-      peer_info[from].last_update = lu;
+      oinfo.last_update = lu;
       if (lu < oldest_update) {
         dout(10) << " oldest_update now " << lu << dendl;
         oldest_update = lu;
@@ -296,16 +296,16 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
   }
 }
 
-void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, int fromosd)
+void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing &omissing, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
   bool changed = false;
 
-  dout(15) << "log";
+  dout(15) << "log = ";
   log.print(*_dout);
   *_dout << dendl;
-  dout(15) << "olog";
+  dout(15) << "olog = ";
   olog.print(*_dout);
   *_dout << dendl;
 
@@ -366,7 +366,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
     info.last_update = log.top = olog.top;
     info.log_bottom = log.bottom = olog.bottom;
     info.log_backlog = log.backlog = olog.backlog;
-    info.stats = peer_info[fromosd].stats;
+    info.stats = oinfo.stats;
     changed = true;
   } 
 
@@ -453,7 +453,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Log &olog, Missing &omissing, in
                      olog.log, from, to);
       
       info.last_update = log.top = olog.top;
-      info.stats = peer_info[fromosd].stats;
+      info.stats = oinfo.stats;
 
       // process divergent items
       if (!divergent.empty()) {

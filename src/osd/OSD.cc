@@ -2795,7 +2795,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     if (pg->peer_log_requested.count(from) ||
 	pg->peer_summary_requested.count(from)) {
       if (!pg->is_active()) {
-	pg->proc_replica_log(t, log, missing, from);
+	pg->proc_replica_log(t, info, log, missing, from);
 	
 	// peer
 	map< int, map<pg_t,PG::Query> > query_map;
@@ -2813,7 +2813,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       // i am REPLICA
       
       // merge log
-      pg->merge_log(t, log, missing, from);
+      pg->merge_log(t, info, log, missing, from);
       
       // ok activate!
       pg->activate(t, info_map);

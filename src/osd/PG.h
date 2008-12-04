@@ -644,9 +644,9 @@ public:
     return false;
   }
 
-  void proc_replica_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from);
+  void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
   void merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
-  void merge_log(ObjectStore::Transaction& t, Log &olog, Missing& omissing, int from);
+  void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
   void proc_replica_missing(Log &olog, Missing &omissing, int fromosd);
   
   void generate_backlog();
@@ -809,7 +809,7 @@ WRITE_CLASS_ENCODER(PG::Interval)
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {
-  return out << " ec=" << h.epoch_created
+  return out << "ec=" << h.epoch_created
 	     << " les=" << h.last_epoch_started
 	     << " " << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
 }
