@@ -1452,7 +1452,7 @@ bool OSD::heartbeat_dispatch(Message *m)
   return true;
 }
 
-bool OSD::dispatch_impl(Message *m) 
+bool OSD::dispatch_impl(Message *m)
 {
   // lock!
   osd_lock.Lock();

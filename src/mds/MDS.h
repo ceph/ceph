@@ -217,7 +217,7 @@ class MDS : public Dispatcher {
 
   int get_req_rate() { return req_rate; }
 
- private: 
+ private:
   virtual bool dispatch_impl(Message *m);
  public:
   MDS(int whoami, Messenger *m, MonMap *mm);

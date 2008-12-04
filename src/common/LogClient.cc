@@ -82,7 +82,7 @@ void LogClient::handle_log(MLog *m)
   delete m;
 }
 
-bool LogClient::dispatch_impl(Message *m) 
+bool LogClient::dispatch_impl(Message *m)
 {
   dout(20) << "dispatch " << m << dendl;
 

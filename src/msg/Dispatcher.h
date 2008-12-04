@@ -29,7 +29,7 @@ class Dispatcher {
   virtual ~Dispatcher() { }
   Dispatcher() : next(NULL) { }
 
-  virtual void dispatch(Message *m) { 
+  virtual void dispatch(Message *m) {
     bool ret = false;
     if (next)
       ret = next->dispatch_impl(m);
@@ -43,7 +43,7 @@ class Dispatcher {
 
   virtual void link_dispatcher(Dispatcher *disp) {
     if (!next) {
-      next = disp; 
+      next = disp;
     } else {
       next->link_dispatcher(disp);
     }
