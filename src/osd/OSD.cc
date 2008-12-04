@@ -2880,10 +2880,14 @@ void OSD::handle_pg_scrub(MOSDPGScrub *m)
       dout(10) << *pg << " has changed since " << m->epoch << dendl;
     } else {
       if (pg->is_primary()) {
-	dout(10) << "handle_pg_scrub got peer osd" << from << " scrub map" << dendl;
-	bufferlist::iterator p = m->map.begin();
-	pg->peer_scrub_map[from].decode(p);
-	pg->kick();
+	if (pg->peer_scrub_map.count(from)) {
+	  dout(10) << "handle_pg_scrub got peer osd" << from << " scrub map -- had it already" << dendl;
+	} else {
+	  dout(10) << "handle_pg_scrub got peer osd" << from << " scrub map" << dendl;
+	  bufferlist::iterator p = m->map.begin();
+	  pg->peer_scrub_map[from].decode(p);
+	  pg->kick();
+	}
       } else {
 	// replica, reply
 	dout(10) << "handle_pg_scrub generating scrub map for primary" << dendl;
