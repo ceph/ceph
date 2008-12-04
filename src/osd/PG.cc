@@ -1402,10 +1402,10 @@ void PG::update_stats()
   pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
+    info.stats.reported.inc(osd->osdmap->get_epoch());
+    info.stats.version = info.last_update;
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
-    pg_stats_stable.version = info.last_update;
-    pg_stats_stable.reported.inc(osd->osdmap->get_epoch());
     pg_stats_stable.state = state;
     pg_stats_stable.acting = acting;
 
