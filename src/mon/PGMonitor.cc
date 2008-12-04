@@ -83,10 +83,14 @@ ostream& operator<<(ostream& out, PGMonitor& pm)
       << kb_t(pm.pg_map.osd_sum.kb_avail) << " / "
       << kb_t(pm.pg_map.osd_sum.kb) << " avail";
 
-  if (pm.pg_map.pg_sum.num_objects_missing_on_primary)
-    out << "; " << pm.pg_map.pg_sum.num_objects_missing_on_primary << "/"
-	<< pm.pg_map.pg_sum.num_objects << " mip";
-
+  if (pm.pg_map.pg_sum.num_objects_degraded) {
+    double pc = (double)pm.pg_map.pg_sum.num_objects_degraded / (double)pm.pg_map.pg_sum.num_object_copies * (double)100.0;
+    char b[20];
+    sprintf(b, "%.3lf", pc);
+    out << "; " //<< pm.pg_map.pg_sum.num_objects_missing_on_primary << "/"
+	<< pm.pg_map.pg_sum.num_objects_degraded 
+	<< "/" << pm.pg_map.pg_sum.num_object_copies << " degraded (" << b << "%)";
+  }
   return out;
 }
 

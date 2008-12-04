@@ -380,6 +380,7 @@ struct pg_stat_t {
   __u64 num_kb;       // in KB
   __u64 num_objects;
   __u64 num_object_clones;
+  __u64 num_object_copies;  // num_objects * num_replicas
   __u64 num_objects_missing_on_primary;
   __u64 num_objects_degraded;
 
@@ -405,6 +406,7 @@ struct pg_stat_t {
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
     ::encode(num_object_clones, bl);
+    ::encode(num_object_copies, bl);
     ::encode(num_objects_missing_on_primary, bl);
     ::encode(num_objects_degraded, bl);
     ::encode(acting, bl);
@@ -422,6 +424,7 @@ struct pg_stat_t {
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
     ::decode(num_object_clones, bl);
+    ::decode(num_object_copies, bl);
     ::decode(num_objects_missing_on_primary, bl);
     ::decode(num_objects_degraded, bl);
     ::decode(acting, bl);
@@ -432,6 +435,7 @@ struct pg_stat_t {
     num_kb += o.num_kb;
     num_objects += o.num_objects;
     num_object_clones += o.num_object_clones;
+    num_object_copies += o.num_object_copies;
     num_objects_missing_on_primary += o.num_objects_missing_on_primary;
     num_objects_degraded += o.num_objects_degraded;
   }
@@ -440,6 +444,7 @@ struct pg_stat_t {
     num_kb -= o.num_kb;
     num_objects -= o.num_objects;
     num_object_clones -= o.num_object_clones;
+    num_object_copies -= o.num_object_copies;
     num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
     num_objects_degraded -= o.num_objects_degraded;
   }

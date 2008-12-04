@@ -826,6 +826,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
         << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
   //out << " c " << pgi.epoch_created;
+  out << " n=" << pgi.stats.num_objects;
   out << " " << pgi.history
       << ")";
   return out;
