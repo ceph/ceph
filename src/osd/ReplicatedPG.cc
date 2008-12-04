@@ -2416,6 +2416,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
     missing_loc.erase(poid.oid);
 
+    if (poid.oid.snap == CEPH_NOSNAP && waiting_for_head.count(poid.oid))
+      waiting_for_head.erase(poid.oid);
+
     // close out pull op?
     if (pulling.count(poid.oid))
       pulling.erase(poid.oid);
@@ -2681,35 +2684,38 @@ int ReplicatedPG::recover_primary(int max)
 
     if (latest->is_update() &&
         !pulling.count(latest->oid) &&
-	!waiting_for_head.count(latest->oid) &&
         missing.is_missing(latest->oid)) {
-      pobject_t poid(info.pgid.pool(), 0, latest->oid);
-
-      // is this a clone operation that we can do locally?
-      if (latest->op == Log::Entry::CLONE) {
-	pobject_t head = poid;
-	head.oid.snap = CEPH_NOSNAP;
-	if (missing.is_missing(head.oid) &&
-	    missing.have_old(head.oid) == latest->prior_version) {
-	  dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
-		   << " to " << poid << " v" << latest->version
-		   << " snaps " << latest->snaps << dendl;
-	  ObjectStore::Transaction t;
-	  _make_clone(t, head, poid, latest->prior_version, latest->version,
-		      latest->snaps);
-	  osd->store->apply_transaction(t);
-	  missing.got(latest->oid, latest->version);
-	  missing_loc.erase(latest->oid);
-	  continue;
-	}
-      }
-
-      if (pull(poid))
-	++started;
-      else
+      if (waiting_for_head.count(latest->oid)) {
 	++skipped;
-      if (started >= max)
-	return started;
+      } else {
+	pobject_t poid(info.pgid.pool(), 0, latest->oid);
+
+	// is this a clone operation that we can do locally?
+	if (latest->op == Log::Entry::CLONE) {
+	  pobject_t head = poid;
+	  head.oid.snap = CEPH_NOSNAP;
+	  if (missing.is_missing(head.oid) &&
+	      missing.have_old(head.oid) == latest->prior_version) {
+	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
+		     << " to " << poid << " v" << latest->version
+		     << " snaps " << latest->snaps << dendl;
+	    ObjectStore::Transaction t;
+	    _make_clone(t, head, poid, latest->prior_version, latest->version,
+			latest->snaps);
+	    osd->store->apply_transaction(t);
+	    missing.got(latest->oid, latest->version);
+	    missing_loc.erase(latest->oid);
+	    continue;
+	  }
+	}
+	
+	if (pull(poid))
+	  ++started;
+	else
+	  ++skipped;
+	if (started >= max)
+	  return started;
+      }
     }
     
     p++;
