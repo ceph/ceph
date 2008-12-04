@@ -1306,7 +1306,7 @@ void OSD::send_pg_stats()
       if (pg->pg_stats_valid) {
 	pg->pg_stats_valid = false;
 	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
-	dout(30) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.state << dendl;
+	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
       }
       pg->pg_stats_lock.Unlock();
     }
@@ -1344,17 +1344,17 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     if (ack->pg_stat.count(pg->info.pgid)) {
       eversion_t acked = ack->pg_stat[pg->info.pgid];
       pg->pg_stats_lock.Lock();
-      if (acked == pg->pg_stats_stable.version) {
-	dout(30) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.version << dendl;
+      if (acked == pg->pg_stats_stable.reported) {
+	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put();
       } else {
-	dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.version
+	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported
 		 << " > acked " << acked << dendl;
       }
       pg->pg_stats_lock.Unlock();
     } else
-      dout(30) << " still pending " << pg->info.pgid << dendl;
+      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
   }
   
   if (pg_stat_queue.empty()) {
@@ -3243,23 +3243,6 @@ void OSD::handle_op(MOSDOp *op)
       stat_rd_ops_shed_in++;
     }
   }
-
-  // require same or newer map
-  if (!require_same_or_newer_map(op, op->get_map_epoch())) {
-    if (pg) pg->unlock();
-    return;
-  }
-
-  // blacklisted?
-  if (osdmap->is_blacklisted(op->get_source_addr())) {
-    dout(4) << "handle_op " << op->get_source_addr() << " is blacklisted" << dendl;
-    reply_op_error(op, -EBLACKLISTED);
-    return;
-  }
-
-  // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
-
 
   if (!op->get_source().is_osd()) {
     // REGULAR OP (non-replication)

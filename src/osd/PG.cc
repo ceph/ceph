@@ -1399,8 +1399,6 @@ void PG::purge_strays()
 
 void PG::update_stats()
 {
-  dout(15) << "update_stats" << dendl;
-
   pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
@@ -1419,12 +1417,16 @@ void PG::update_stats()
 	degraded += peer_missing[i].num_missing();
       pg_stats_stable.num_objects_degraded = degraded;
     }
+
+    dout(15) << "update_stats " << pg_stats_stable.reported << dendl;
   } else {
     pg_stats_valid = false;
+    dout(15) << "update_stats -- not primary" << dendl;
   }
   pg_stats_lock.Unlock();
 
-  osd->pg_stat_queue_enqueue(this);
+  if (is_primary())
+    osd->pg_stat_queue_enqueue(this);
 }
 
 void PG::clear_stats()
