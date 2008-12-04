@@ -3019,27 +3019,21 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	   << stat.num_kb << "/" << info.stats.num_kb << " kb."
 	   << dendl;
 
+  stringstream ss;
   if (stat.num_objects != info.stats.num_objects ||
       stat.num_object_clones != info.stats.num_object_clones ||
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
-    stringstream ss;
-    ss << "scrub " << info.pgid << " stat mismatch, got "
+    ss << info.pgid << " scrub stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
        << stat.num_kb << "/" << info.stats.num_kb << " kb.";
-    string s;
-    getline(ss, s);
-    osd->get_logclient()->log(LOG_ERROR, s);
-    /*
+    osd->get_logclient()->log(LOG_ERROR, ss);
   } else {
     stringstream ss;
     ss << info.pgid << " scrub ok";
-    string s;
-    getline(ss, s);
-    osd->log(0, s);
-    */
+    //osd->get_logclient()->log(LOG_DEBUG, ss);
   }
 
   dout(10) << "scrub finish" << dendl;

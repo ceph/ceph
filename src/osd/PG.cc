@@ -1857,6 +1857,8 @@ void PG::scrub()
   unlock();
   */
 
+  stringstream ss;
+
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
@@ -1893,7 +1895,8 @@ void PG::scrub()
       if (missing) {
 	for (unsigned i=0; i<acting.size(); i++) {
 	  if (p[i] == m[i]->objects.end() || po->poid != p[i]->poid) {
-	    dout(0) << "scrub  osd" << acting[i] << " missing " << po->poid << dendl;
+	    ss << info.pgid << " scrub osd" << acting[i] << " missing " << po->poid;
+	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    num_missing++;
 	  } else
 	    p[i]++;
@@ -1908,28 +1911,32 @@ void PG::scrub()
       bool ok = true;
       for (unsigned i=1; i<acting.size(); i++) {
 	if (po->size != p[i]->size) {
-	  dout(0) << "scrub  osd" << acting[i] << " " << po->poid
-		  << " size " << p[i]->size << " != " << po->size << dendl;
+	  ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
+	     << " size " << p[i]->size << " != " << po->size;
+	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  ok = false;
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->attrs.size()) {
-	  dout(0) << "scrub  osd" << acting[i] << " " << po->poid
-		  << " attr count " << p[i]->attrs.size() << " != " << po->attrs.size() << dendl;
+	  ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
+	     << " attr count " << p[i]->attrs.size() << " != " << po->attrs.size();
+	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  ok = false;
 	  num_bad++;
 	}
 	for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
 	  if (p[i]->attrs.count(q->first)) {
 	    if (q->second.cmp(p[i]->attrs[q->first])) {
-	      dout(0) << "scrub  osd" << acting[i] << " " << po->poid
-		      << " attr " << q->first << " value mismatch" << dendl;
+	      ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
+		 << " attr " << q->first << " value mismatch";
+	      osd->get_logclient()->log(LOG_ERROR, ss);
 	      ok = false;
 	      num_bad++;
 	    }
 	  } else {
-	    dout(0) << "scrub  osd" << acting[i] << " " << po->poid
-		    << " attr " << q->first << " missing" << dendl;
+	    ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
+	       << " attr " << q->first << " missing";
+	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    ok = false;
 	    num_bad++;
 	  }
@@ -1945,12 +1952,8 @@ void PG::scrub()
     }
     
     if (num_missing || num_bad) {
-      dout(10) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
-      stringstream ss;
-      ss << "scrub " << info.pgid << " " << num_missing << " missing, " << num_bad << " bad objects";
-      string s;
-      getline(ss, s);
-      osd->get_logclient()->log(LOG_ERROR, s);
+      ss << info.pgid << " scrub " << num_missing << " missing, " << num_bad << " bad objects";
+      osd->get_logclient()->log(LOG_ERROR, ss);
     }
   }
 
