@@ -33,6 +33,8 @@ class MonMap {
     generate_fsid();
   }
 
+  ceph_fsid& get_fsid() { return fsid; }
+
   unsigned size() {
     return mon_inst.size();
   }

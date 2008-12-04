@@ -22,6 +22,7 @@
 #include "common/ThreadPool.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "common/LogClient.h"
 
 #include "mon/MonMap.h"
 
@@ -58,6 +59,8 @@ protected:
   Logger      *logger;
   ObjectStore *store;
   MonMap      *monmap;
+
+  LogClient   *logclient;
 
   int whoami;
   const char *dev_name;
@@ -368,15 +371,6 @@ private:
 
   void do_mon_report();
 
-  // -- log --
-  Mutex log_lock;
-  deque<LogEntry> log_queue;
-  version_t last_log;
-
-  void log(__u8 level, string s);
-  void send_log();
-  void handle_log(MLog *m);
-
   // -- boot --
   void send_boot();
 
@@ -638,6 +632,7 @@ private:
 
   void force_remount();
 
+  LogClient *get_logclient() { return logclient; }
 };
 
 #endif

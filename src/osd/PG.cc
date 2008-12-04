@@ -1885,7 +1885,7 @@ void PG::scrub()
     ss << "scrub " << info.pgid << " " << num_missing << " missing, " << num_bad << " bad objects";
     string s;
     getline(ss, s);
-    osd->log(10, s);
+    osd->get_logclient()->log(10, s);
   }
 
   // discard peer scrub info.

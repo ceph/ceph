@@ -169,6 +169,7 @@ clean-local:
 
 # libs
 libcommon_a_SOURCES = \
+	common/LogClient.cc \
 	common/lockdep.cc \
 	msg/Message.cc \
 	common/Logger.cc \
