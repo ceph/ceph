@@ -724,11 +724,14 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 				continue;
 			ci = ceph_inode(inode);
 			spin_lock(&inode->i_lock);
+			if (!ci->i_snap_realm)
+				goto split_skip_inode;
 			ceph_put_snap_realm(mdsc, ci->i_snap_realm);
 			list_add(&ci->i_snap_realm_item,
 				 &realm->inodes_with_caps);
 			ci->i_snap_realm = realm;
 			realm->nref++;
+		split_skip_inode:
 			spin_unlock(&inode->i_lock);
 			iput(inode);
 		}
