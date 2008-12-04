@@ -274,9 +274,9 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 
   // first, just see if they need a new osdmap.  but 
   // only if they've had the map for a while.
-  if (stats->had_map_for > 10.0 && 
-      stats->epoch < mon->osdmon->osdmap.get_epoch())
-    mon->osdmon->send_latest(stats->get_orig_source_inst(), stats->epoch+1);
+  if (stats->had_map_for > 30.0 && 
+      stats->epoch < mon->osdmon()->osdmap.get_epoch())
+    mon->osdmon()->send_latest(stats->get_orig_source_inst(), stats->epoch+1);
 
   // any new osd or pg info?
   if (pg_map.osd_stat.count(from) ||
@@ -312,8 +312,8 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     return false;
   }
   if (!stats->get_orig_source().is_osd() ||
-      !mon->osdmon->osdmap.is_up(from) ||
-      stats->get_orig_source_inst() != mon->osdmon->osdmap.get_inst(from)) {
+      !mon->osdmon()->osdmap.is_up(from) ||
+      stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd" << dendl;
     delete stats;
     return false;
@@ -416,9 +416,9 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     return;
   }
 
-  if (!mon->osdmon->paxos->is_readable()) {
+  if (!mon->osdmon()->paxos->is_readable()) {
     dout(10) << "register_new_pgs -- osdmap not readable, waiting" << dendl;
-    mon->osdmon->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
+    mon->osdmon()->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
@@ -468,12 +468,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
 bool PGMonitor::register_new_pgs()
 {
-
-
-  dout(10) << "osdmap last_pg_change " << mon->osdmon->osdmap.get_last_pg_change()
+  dout(10) << "osdmap last_pg_change " << mon->osdmon()->osdmap.get_last_pg_change()
 	   << ", pgmap last_pg_scan " << pg_map.last_pg_scan << dendl;
-  if (mon->osdmon->osdmap.get_last_pg_change() <= pg_map.last_pg_scan ||
-      mon->osdmon->osdmap.get_last_pg_change() <= pending_inc.pg_scan) {
+  if (mon->osdmon()->osdmap.get_last_pg_change() <= pg_map.last_pg_scan ||
+      mon->osdmon()->osdmap.get_last_pg_change() <= pending_inc.pg_scan) {
     dout(10) << "register_new_pgs -- i've already scanned pg space since last significant osdmap update" << dendl;
     return false;
   }
@@ -481,9 +479,9 @@ bool PGMonitor::register_new_pgs()
   // iterate over crush mapspace
   dout(10) << "register_new_pgs scanning pgid space defined by crush rule masks" << dendl;
 
-  CrushWrapper *crush = &mon->osdmon->osdmap.crush;
-  int pg_num = mon->osdmon->osdmap.get_pg_num();
-  epoch_t epoch = mon->osdmon->osdmap.get_epoch();
+  CrushWrapper *crush = &mon->osdmon()->osdmap.crush;
+  int pg_num = mon->osdmon()->osdmap.get_pg_num();
+  epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
 
   bool first = pg_map.pg_stat.empty(); // first pg creation
   int created = 0;
@@ -564,10 +562,10 @@ void PGMonitor::send_pg_creates()
     if (pg_map.pg_stat[pgid].parent_split_bits)
       on = pg_map.pg_stat[pgid].parent;
     vector<int> acting;
-    int nrep = mon->osdmon->osdmap.pg_to_acting_osds(on, acting);
+    int nrep = mon->osdmon()->osdmap.pg_to_acting_osds(on, acting);
     if (!nrep) {
       dout(20) << "send_pg_creates  " << pgid << " -> no osds in epoch "
-	       << mon->osdmon->osdmap.get_epoch() << ", skipping" << dendl;
+	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
       continue;  // blarney!
     }
     int osd = acting[0];
@@ -580,7 +578,7 @@ void PGMonitor::send_pg_creates()
     dout(20) << "send_pg_creates  " << pgid << " -> osd" << osd 
 	     << " in epoch " << pg_map.pg_stat[pgid].created << dendl;
     if (msg.count(osd) == 0)
-      msg[osd] = new MOSDPGCreate(mon->osdmon->osdmap.get_epoch());
+      msg[osd] = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
     msg[osd]->mkpg[pgid].created = pg_map.pg_stat[pgid].created;
     msg[osd]->mkpg[pgid].parent = pg_map.pg_stat[pgid].parent;
     msg[osd]->mkpg[pgid].split_bits = pg_map.pg_stat[pgid].parent_split_bits;
@@ -590,7 +588,7 @@ void PGMonitor::send_pg_creates()
        p != msg.end();
        p++) {
     dout(10) << "sending pg_create to osd" << p->first << dendl;
-    mon->messenger->send_message(p->second, mon->osdmon->osdmap.get_inst(p->first));
+    mon->messenger->send_message(p->second, mon->osdmon()->osdmap.get_inst(p->first));
     last_sent_pg_create[p->first] = g_clock.now();
   }
 }
@@ -637,14 +635,14 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       pg_t pgid;
       r = -EINVAL;
       if (pgid.parse(m->cmd[2].c_str())) {
-	if (mon->pgmon->pg_map.pg_stat.count(pgid)) {
-	  if (mon->pgmon->pg_map.pg_stat[pgid].acting.size()) {
-	    int osd = mon->pgmon->pg_map.pg_stat[pgid].acting[0];
-	    if (mon->osdmon->osdmap.is_up(osd)) {
+	if (pg_map.pg_stat.count(pgid)) {
+	  if (pg_map.pg_stat[pgid].acting.size()) {
+	    int osd = pg_map.pg_stat[pgid].acting[0];
+	    if (mon->osdmon()->osdmap.is_up(osd)) {
 	      vector<pg_t> pgs(1);
 	      pgs[0] = pgid;
 	      mon->messenger->send_message(new MOSDScrub(mon->monmap->fsid, pgs),
-					   mon->osdmon->osdmap.get_inst(osd));
+					   mon->osdmon()->osdmap.get_inst(osd));
 	      ss << "instructing pg " << pgid << " on osd" << osd << " to scrub";
 	      r = 0;
 	    } else

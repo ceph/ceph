@@ -23,6 +23,14 @@
 #include "include/interval_set.h"
 #include "include/nstring.h"
 
+
+
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v006"
+
+
+
+
+
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
  * use for metadata and osd ops.
  */

@@ -34,8 +34,6 @@
 #define CEPH_MON_PROTOCOL    2
 #define CEPH_CLIENT_PROTOCOL 1
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v006"
-#define CEPH_MON_ONDISK_MAGIC "ceph mon volume v005"
 
 /*
  * types in this file are defined as little-endian, and are

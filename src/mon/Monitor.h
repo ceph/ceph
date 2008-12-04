@@ -34,11 +34,8 @@
 
 
 class MonitorStore;
-class OSDMonitor;
-class MDSMonitor;
-class ClientMonitor;
-class PGMonitor;
-class LogMonitor;
+
+class PaxosService;
 
 class MMonGetMap;
 
@@ -101,21 +98,17 @@ public:
 
 
   // -- paxos --
-  Paxos paxos_mdsmap;
-  Paxos paxos_osdmap;
-  Paxos paxos_clientmap;
-  Paxos paxos_pgmap;
-  Paxos paxos_log;
+  vector<Paxos*> paxos;
+  vector<PaxosService*> paxos_service;
+
+  Paxos *add_paxos(int type);
+
+  class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
+  class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
+  class OSDMonitor *osdmon() { return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP]; }
+  class ClientMonitor *clientmon() { return (class ClientMonitor *)paxos_service[PAXOS_CLIENTMAP]; }
+
   friend class Paxos;
-  
-
-  // -- services --
-  OSDMonitor *osdmon;
-  MDSMonitor *mdsmon;
-  ClientMonitor *clientmon;
-  PGMonitor *pgmon;
-  LogMonitor *logmon;
-
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class ClientMonitor;

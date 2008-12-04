@@ -71,29 +71,29 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   elector(this, w),
   mon_epoch(0), 
   leader(0),
-  
-  paxos_mdsmap(this, w, PAXOS_MDSMAP),
-  paxos_osdmap(this, w, PAXOS_OSDMAP),
-  paxos_clientmap(this, w, PAXOS_CLIENTMAP),
-  paxos_pgmap(this, w, PAXOS_PGMAP),
-  paxos_log(this, w, PAXOS_LOG),
-  
-  osdmon(0), mdsmon(0), clientmon(0)
+
+  paxos(PAXOS_NUM), paxos_service(PAXOS_NUM)
 {
-  osdmon = new OSDMonitor(this, &paxos_osdmap);
-  mdsmon = new MDSMonitor(this, &paxos_mdsmap);
-  clientmon = new ClientMonitor(this, &paxos_clientmap);
-  pgmon = new PGMonitor(this, &paxos_pgmap);
-  logmon = new LogMonitor(this, &paxos_log);
+  paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
+  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
+  paxos_service[PAXOS_CLIENTMAP] = new ClientMonitor(this, add_paxos(PAXOS_CLIENTMAP));
+  paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
+  paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
+}
+
+Paxos *Monitor::add_paxos(int type)
+{
+  Paxos *p = new Paxos(this, whoami, type);
+  paxos[type] = p;
+  return p;
 }
 
 Monitor::~Monitor()
 {
-  delete osdmon;
-  delete mdsmon;
-  delete clientmon;
-  delete pgmon;
-  delete logmon;
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    delete *p;
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    delete *p;
   if (messenger)
     messenger->destroy();
 }
@@ -105,10 +105,8 @@ void Monitor::init()
   dout(1) << "init fsid " << monmap->fsid << dendl;
   
   // init paxos
-  paxos_osdmap.init();
-  paxos_mdsmap.init();
-  paxos_clientmap.init();
-  paxos_pgmap.init();
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->init();
   
   // i'm ready!
   messenger->set_dispatcher(this);
@@ -137,11 +135,8 @@ void Monitor::shutdown()
   elector.shutdown();
   
   // clean up
-  osdmon->shutdown();
-  mdsmon->shutdown();
-  clientmon->shutdown();
-  pgmon->shutdown();
-  logmon->shutdown();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->shutdown();
 
   // cancel all events
   cancel_tick();
@@ -161,18 +156,11 @@ void Monitor::call_election()
   state = STATE_STARTING;
   
   // tell paxos
-  paxos_mdsmap.election_starting();
-  paxos_osdmap.election_starting();
-  paxos_clientmap.election_starting();
-  paxos_pgmap.election_starting();
-  paxos_log.election_starting();
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->election_starting();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->election_starting();
 
-  mdsmon->election_starting();
-  osdmon->election_starting();
-  clientmon->election_starting();
-  pgmon->election_starting();
-  logmon->election_starting();
-  
   // call a new election
   elector.call_election();
 }
@@ -185,19 +173,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   quorum = active;
   dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
   
-  // init paxos
-  paxos_mdsmap.leader_init();
-  paxos_osdmap.leader_init();
-  paxos_clientmap.leader_init();
-  paxos_pgmap.leader_init();
-  paxos_log.leader_init();
-  
-  // init
-  pgmon->election_finished();  // hack: before osdmon, for osd->pg kick works ok
-  osdmon->election_finished();
-  mdsmon->election_finished();
-  clientmon->election_finished();
-  logmon->election_finished();
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->leader_init();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->election_finished();
 } 
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
@@ -209,19 +188,10 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
   dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << dendl;
   
-  // init paxos
-  paxos_mdsmap.peon_init();
-  paxos_osdmap.peon_init();
-  paxos_clientmap.peon_init();
-  paxos_pgmap.peon_init();
-  paxos_log.peon_init();
-  
-  // init
-  osdmon->election_finished();
-  mdsmon->election_finished();
-  clientmon->election_finished();
-  pgmon->election_finished();
-  logmon->election_finished();
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->peon_init();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->election_finished();
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -237,19 +207,19 @@ void Monitor::handle_command(MMonCommand *m)
   int r = -EINVAL;
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
-      mdsmon->dispatch(m);
+      mdsmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "osd") {
-      osdmon->dispatch(m);
+      osdmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "pg") {
-      pgmon->dispatch(m);
+      pgmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "client") {
-      clientmon->dispatch(m);
+      clientmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "stop") {
@@ -327,7 +297,7 @@ void Monitor::stop_cluster()
 {
   dout(0) << "stop_cluster -- initiating shutdown" << dendl;
   stopping = true;
-  mdsmon->do_stop();
+  mdsmon()->do_stop();
 }
 
 
@@ -344,7 +314,7 @@ bool Monitor::dispatch_impl(Message *m)
 
     case CEPH_MSG_SHUTDOWN:
       if (m->get_source().is_osd()) 
-	osdmon->dispatch(m);
+	osdmon()->dispatch(m);
       else
 	handle_shutdown(m);
       break;
@@ -362,31 +332,31 @@ bool Monitor::dispatch_impl(Message *m)
     case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
     case MSG_REMOVE_SNAPS:
-      osdmon->dispatch(m);
+      paxos_service[PAXOS_OSDMAP]->dispatch(m);
       break;
 
       
       // MDSs
     case MSG_MDS_BEACON:
     case CEPH_MSG_MDS_GETMAP:
-      mdsmon->dispatch(m);
+      paxos_service[PAXOS_MDSMAP]->dispatch(m);
       break;
 
       // clients
     case CEPH_MSG_CLIENT_MOUNT:
     case CEPH_MSG_CLIENT_UNMOUNT:
-      clientmon->dispatch(m);
+      paxos_service[PAXOS_CLIENTMAP]->dispatch(m);
       break;
 
       // pg
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
-      pgmon->dispatch(m);
+      paxos_service[PAXOS_PGMAP]->dispatch(m);
       break;
 
       // log
     case MSG_LOG:
-      logmon->dispatch(m);
+      paxos_service[PAXOS_LOG]->dispatch(m);
       break;
 
       // paxos
@@ -403,25 +373,8 @@ bool Monitor::dispatch_impl(Message *m)
 	}
 
 	// send it to the right paxos instance
-	switch (pm->machine_id) {
-	case PAXOS_OSDMAP:
-	  paxos_osdmap.dispatch(m);
-	  break;
-	case PAXOS_MDSMAP:
-	  paxos_mdsmap.dispatch(m);
-	  break;
-	case PAXOS_CLIENTMAP:
-	  paxos_clientmap.dispatch(m);
-	  break;
-	case PAXOS_PGMAP:
-	  paxos_pgmap.dispatch(m);
-	  break;
-	case PAXOS_LOG:
-	  paxos_log.dispatch(m);
-	  break;
-	default:
-	  assert(0);
-	}
+	assert(pm->machine_id < PAXOS_NUM);
+	paxos[pm->machine_id]->dispatch(m);
       }
       break;
 
@@ -459,14 +412,14 @@ void Monitor::handle_shutdown(Message *m)
     if (is_leader()) {
       // stop osds.
       set<int32_t> ls;
-      osdmon->osdmap.get_all_osds(ls);
+      osdmon()->osdmap.get_all_osds(ls);
       for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
-	if (osdmon->osdmap.is_down(*it)) continue;
+	if (osdmon()->osdmap.is_down(*it)) continue;
 	dout(10) << "sending shutdown to osd" << *it << dendl;
 	messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
-				osdmon->osdmap.get_inst(*it));
+				osdmon()->osdmap.get_inst(*it));
       }
-      osdmon->mark_all_down();
+      osdmon()->mark_all_down();
       
       // monitors too.
       for (unsigned i=0; i<monmap->size(); i++)
@@ -517,11 +470,8 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   
-  osdmon->tick();
-  mdsmon->tick();
-  clientmon->tick();
-  pgmon->tick();
-  logmon->tick();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->tick();
   
   // next tick!
   reset_tick();
@@ -556,15 +506,7 @@ int Monitor::mkfs()
   store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  
   store->put_bl_ss(monmapbl, "monmap", "latest");
 
-  list<PaxosService*> services;
-  services.push_back(osdmon);
-  services.push_back(mdsmon);
-  services.push_back(clientmon);
-  services.push_back(pgmon);
-  services.push_back(logmon);
-  for (list<PaxosService*>::iterator p = services.begin(); 
-       p != services.end();
-       p++) {
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;
     dout(10) << "initializing " << svc->get_machine_name() << dendl;
     svc->paxos->init();

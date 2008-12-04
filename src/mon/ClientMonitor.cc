@@ -310,8 +310,8 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
   mon->monmap->encode(bl);
   mon->messenger->send_message(new MMonMap(bl), to);
 
-  mon->mdsmon->send_latest(to);
-  mon->osdmon->send_latest(to);
+  mon->mdsmon()->send_latest(to);
+  mon->osdmon()->send_latest(to);
 
   delete m;
 }

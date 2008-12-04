@@ -431,7 +431,7 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
 {
   if (from < 0) {
     dout(10) << "_updated (booted) mds" << from << " " << *m << dendl;
-    mon->osdmon->send_latest(m->get_orig_source_inst());
+    mon->osdmon()->send_latest(m->get_orig_source_inst());
   } else {
     dout(10) << "_updated mds" << from << " " << *m << dendl;
   }

@@ -105,6 +105,8 @@ public:
   virtual bool should_propose(double &delay);
 
   virtual void committed() = 0;            // [leader] called after a proposed value commits
+
+  virtual void tick() {}
   
 };
 

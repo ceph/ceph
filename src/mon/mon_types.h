@@ -15,16 +15,15 @@
 #ifndef __MON_TYPES_H
 #define __MON_TYPES_H
 
-#define PAXOS_TEST       0
+#define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1
 #define PAXOS_OSDMAP     2
 #define PAXOS_CLIENTMAP  3
-#define PAXOS_PGMAP      4
-#define PAXOS_LOG        5
+#define PAXOS_LOG        4
+#define PAXOS_NUM        5
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
-  case PAXOS_TEST: return "test";
   case PAXOS_MDSMAP: return "mdsmap";
   case PAXOS_OSDMAP: return "osdmap";
   case PAXOS_CLIENTMAP: return "clientmap";
@@ -33,5 +32,7 @@ inline const char *get_paxos_name(int p) {
   default: assert(0); return 0;
   }
 }
+
+#define CEPH_MON_ONDISK_MAGIC "ceph mon volume v006"
 
 #endif

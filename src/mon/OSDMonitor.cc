@@ -178,7 +178,7 @@ bool OSDMonitor::update_from_paxos()
 
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
-    mon->pgmon->check_osd_map(osdmap.epoch);
+    mon->pgmon()->check_osd_map(osdmap.epoch);
 
     bcast_latest_mds();
   }
@@ -737,11 +737,11 @@ void OSDMonitor::bcast_latest_mds()
   
   // tell mds
   set<int> up;
-  mon->mdsmon->mdsmap.get_up_mds_set(up);
+  mon->mdsmon()->mdsmap.get_up_mds_set(up);
   for (set<int>::iterator i = up.begin();
        i != up.end();
        i++) {
-    send_incremental(mon->mdsmon->mdsmap.get_inst(*i), osdmap.get_epoch());
+    send_incremental(mon->mdsmon()->mdsmap.get_inst(*i), osdmap.get_epoch());
   }
 }
 
@@ -968,7 +968,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       int n = atoi(m->cmd[2].c_str());
       if (n <= osdmap.get_pg_num()) {
 	ss << "specified pg_num " << n << " <= current " << osdmap.get_pg_num();
-      } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
+      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 	ss << "currently creating pgs, wait";
 	err = -EAGAIN;
       } else {
@@ -985,7 +985,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "specified pgp_num " << n << " <= current " << osdmap.get_pgp_num();
       } else if (n > osdmap.get_pg_num()) {
 	ss << "specified pgp_num " << n << " > pg_num " << osdmap.get_pg_num();
-      } else if (!mon->pgmon->pg_map.creating_pgs.empty()) {
+      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 	ss << "still creating pgs, wait";
 	err = -EAGAIN;
       } else {
