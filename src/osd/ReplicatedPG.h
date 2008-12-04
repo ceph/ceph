@@ -207,7 +207,7 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
-  bool pick_read_snap(pobject_t& poid);
+  int pick_read_snap(pobject_t& poid);
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 

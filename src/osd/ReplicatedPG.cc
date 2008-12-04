@@ -566,7 +566,7 @@ bool ReplicatedPG::snap_trimmer()
 /*
  * return false if object doesn't (logically) exist
  */
-bool ReplicatedPG::pick_read_snap(pobject_t& poid)
+int ReplicatedPG::pick_read_snap(pobject_t& poid)
 {
   pobject_t head = poid;
   head.oid.snap = CEPH_NOSNAP;
@@ -576,7 +576,7 @@ bool ReplicatedPG::pick_read_snap(pobject_t& poid)
     bufferlist bl;
     int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
     if (r < 0)
-      return false;  // if head doesn't exist, no snapped version will either.
+      return -ENOENT;  // if head doesn't exist, no snapped version will either.
     bufferlist::iterator p = bl.begin();
     ::decode(snapset, p);
   }
@@ -591,12 +591,12 @@ bool ReplicatedPG::pick_read_snap(pobject_t& poid)
 	       << " want " << want << " > snapset seq " << snapset.seq
 	       << " -- HIT" << dendl;
       poid = head;
-      return true;
+      return 0;
     } else {
       dout(10) << "pick_read_snap  " << head
 	       << " want " << want << " > snapset seq " << snapset.seq
 	       << " but head_exists = false -- DNE" << dendl;
-      return false;
+      return -ENOENT;
     }
   }
 
@@ -606,19 +606,25 @@ bool ReplicatedPG::pick_read_snap(pobject_t& poid)
     k++;
   if (k == snapset.clones.size()) {
     dout(10) << "pick_read_snap  no clones with last >= want " << want << " -- DNE" << dendl;
-    return false;
+    return -ENOENT;
   }
   
   // check clone
   poid.oid.snap = snapset.clones[k];
+
+  if (missing.is_missing(poid.oid)) {
+    dout(20) << "pick_read_snap  " << poid << " missing, try again later" << dendl;
+    return -EAGAIN;
+  }
+
   vector<snapid_t> snaps;
   {
     bufferlist bl;
     int r = osd->store->getattr(info.pgid.to_coll(), poid, "snaps", bl);
     if (r < 0) {
-      dout(20) << "pick_read_snap  " << poid << " dne" << dendl;
+      dout(20) << "pick_read_snap  " << poid << " dne, wtf" << dendl;
       assert(0);
-      return false;
+      return -ENOENT;
     }
     bufferlist::iterator p = bl.begin();
     ::decode(snaps, p);
@@ -628,10 +634,10 @@ bool ReplicatedPG::pick_read_snap(pobject_t& poid)
   snapid_t last = snaps[0];
   if (first <= want) {
     dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] contains " << want << " -- HIT" << dendl;
-    return true;
+    return 0;
   } else {
     dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] does not contain " << want << " -- DNE" << dendl;
-    return false;
+    return -ENOENT;
   }
 } 
 
@@ -699,10 +705,14 @@ void ReplicatedPG::op_read(MOSDOp *op)
   }
 
   // do it.
-  if (poid.oid.snap && !pick_read_snap(poid)) {
-    // we have no revision for this request.
-    result = -ENOENT;
-    goto done;
+  if (poid.oid.snap) {
+    result = pick_read_snap(poid);
+    if (result == -EAGAIN) {
+      wait_for_missing_object(poid.oid, op);
+      return;
+    }
+    if (result != 0)
+      goto done;    // we have no revision for this request.
   } 
   
   // check inc_lock?
