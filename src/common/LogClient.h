@@ -20,6 +20,8 @@
 #include "common/Mutex.h"
 #include "include/LogEntry.h"
 
+#include <sstream>
+
 class Messenger;
 class MLog;
 class MonMap;
@@ -35,7 +37,8 @@ class LogClient {
   deque<LogEntry> log_queue;
   version_t last_log;
 
-  void log(log_type type, string s);
+  void log(log_type type, string& s);
+  void log(log_type type, stringstream& s);
   void send_log();
   void handle_log(MLog *m);
 

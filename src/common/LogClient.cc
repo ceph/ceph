@@ -35,7 +35,16 @@
 
 #include "config.h"
 
-void LogClient::log(log_type type, string s)
+void LogClient::log(log_type type, stringstream& ss)
+{
+  while (!ss.eof()) {
+    string s;
+    getline(ss, s);
+    log(type, s);
+  }
+}
+
+void LogClient::log(log_type type, string& s)
 {
   Mutex::Locker l(log_lock);
   dout(10) << "log " << (log_type)type << " : " << s << dendl;
