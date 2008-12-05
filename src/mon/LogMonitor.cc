@@ -85,16 +85,44 @@ void LogMonitor::create_initial()
   e.type = LOG_INFO;
   e.msg = "mkfs";
   e.seq = 0;
-  stringstream ss;
-  ss << e;
-  string s;
-  getline(ss, s);
-  pending_inc.append(s);
-  pending_inc.append("\n");
+  e.encode(pending_inc);
 }
 
 bool LogMonitor::update_from_paxos()
 {
+  version_t paxosv = paxos->get_version();
+
+  if (paxosv == log_version) return true;
+  assert(paxosv >= log_version);
+
+  if (log_version == 0 && paxosv > 1) {
+    log_version = mon->store->get_int("log", "last_consumed");
+  }
+
+  // walk through incrementals
+  while (paxosv > log_version) {
+    bufferlist bl, new_bl;
+    LogEntry le;
+    bool success = paxos->read(log_version+1, bl);
+    assert(success);
+    bufferlist::iterator p = bl.begin();
+
+    le.decode(p);
+    dout(7) << "update_from_paxos applying incremental log " << log_version+1 <<  " " << le << dendl;
+
+    stringstream ss;
+    ss << le;
+    string s;
+    getline(ss, s);
+    new_bl.append(s);
+    new_bl.append("\n");
+    mon->store->append_bl_ss(new_bl, "out", NULL);
+
+    log_version++;
+  }
+
+  mon->store->put_int(paxosv, "log", "last_consumed");
+
   return true;
 }
 
@@ -166,12 +194,7 @@ bool LogMonitor::prepare_log(MLog *m)
        p != m->entries.end();
        p++) {
     dout(10) << " logging " << *p << dendl;
-    stringstream ss;
-    ss << *p;
-    string s;
-    getline(ss, s);
-    pending_inc.append(s);
-    pending_inc.append("\n");
+    (*p).encode(pending_inc);
   }
 
   paxos->wait_for_commit(new C_Log(this, m, m->get_orig_source_inst()));

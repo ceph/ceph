@@ -35,6 +35,12 @@
 
 #include "config.h"
 
+void LogClient::log(log_type type, const char *s)
+{
+  string str(s);
+  log(type, str);
+}
+
 void LogClient::log(log_type type, stringstream& ss)
 {
   while (!ss.eof()) {

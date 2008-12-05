@@ -238,7 +238,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync)
+int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
 {
   char fn[200];
   sprintf(fn, "%s/%s", dir.c_str(), a);
@@ -251,8 +251,13 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b, bool s
   }
   
   char tfn[200];
-  sprintf(tfn, "%s.new", fn);
-  int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
+  int fd;
+  if (append) {
+    fd = ::open(fn, O_WRONLY|O_CREAT|O_APPEND, 0644);
+  } else {
+    sprintf(tfn, "%s.new", fn);
+    fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
+  }
   assert(fd >= 0);
   
   // write data
@@ -269,7 +274,10 @@ int MonitorStore::put_bl_ss(bufferlist& bl, const char *a, const char *b, bool s
   if (sync)
     ::fsync(fd);
   ::close(fd);
-  ::rename(tfn, fn);
+  if (!append) {
+    ::rename(tfn, fn);
+  }
 
   return 0;
 }
+

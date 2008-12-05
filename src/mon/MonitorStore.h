@@ -24,6 +24,7 @@ class MonitorStore {
   string dir;
   int lock_fd;
 
+  int write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync=true);
 public:
   MonitorStore(const char *d) : dir(d) { }
   ~MonitorStore() { }
@@ -42,7 +43,12 @@ public:
   // ss and sn varieties.
   bool exists_bl_ss(const char *a, const char *b=0);
   int get_bl_ss(bufferlist& bl, const char *a, const char *b);
-  int put_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync=true);
+  int put_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync=true) {
+    return write_bl_ss(bl, a, b, false, sync);
+  }
+  int append_bl_ss(bufferlist& bl, const char *a, const char *b, bool sync=true) {
+    return write_bl_ss(bl, a, b, true, sync);
+  }
   bool exists_bl_sn(const char *a, version_t b) {
     char bs[20];
 #ifdef __LP64__
