@@ -389,7 +389,12 @@ bool Monitor::dispatch_impl(Message *m)
 
 	// send it to the right paxos instance
 	assert(pm->machine_id < PAXOS_NUM);
-	paxos[pm->machine_id]->dispatch(m);
+	Paxos *p = paxos[pm->machine_id];
+	p->dispatch(m);
+
+	// make sure service finds out about any state changes
+	if (p->is_active())
+	  paxos_service[pm->machine_id]->update_from_paxos();
       }
       break;
 
