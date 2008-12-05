@@ -584,7 +584,7 @@ void PG::generate_backlog()
 
   dout(10) << local << " local objects, "
            << add.size() << " objects added to backlog, " 
-           << log.objects.size() << " in pg" << dendl;
+           << log.objects.size() << " in log index" << dendl;
 
   //log.print(cout);
 }
@@ -1518,7 +1518,7 @@ void PG::write_log(ObjectStore::Transaction& t)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
   t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   
-  dout(10) << "write_log to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dout(10) << "write_log to " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
   dirty_log = false;
 }
 
@@ -1542,7 +1542,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   // we can trim!
   loff_t trim = p->first;
-  dout(10) << "  trimming ondisklog to [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dout(10) << "  trimming ondisklog to " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
 
   assert(trim >= ondisklog.bottom);
   ondisklog.bottom = trim;
@@ -1579,7 +1579,8 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 		    eversion_t logversion, eversion_t trim_to)
 {
-  dout(10) << "append_log " << ondisklog.bottom << "," << ondisklog.top << ") adding " << bl.length() <<  dendl;
+  dout(10) << "append_log " << ondisklog.bottom << "~" << ondisklog.length()
+	   << " adding " << bl.length() <<  dendl;
  
   // update block map?
   if (ondisklog.top % 4096 == 0) 
@@ -1600,7 +1601,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
     info.log_backlog = log.backlog;
     trim_ondisklog_to(t, trim_to);
   }
-  dout(10) << " ondisklog [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dout(10) << " ondisklog " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
 }
 
 void PG::read_log(ObjectStore *store)
@@ -1613,7 +1614,7 @@ void PG::read_log(ObjectStore *store)
   r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
   assert(r == sizeof(ondisklog.top));
 
-  dout(10) << "read_log [" << ondisklog.bottom << "," << ondisklog.top << ")" << dendl;
+  dout(10) << "read_log " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
 
   log.backlog = info.log_backlog;
   log.bottom = info.log_bottom;
@@ -1621,11 +1622,11 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.top > 0) {
     // read
     bufferlist bl;
-    store->read(0, info.pgid.to_log_pobject(), ondisklog.bottom, ondisklog.top-ondisklog.bottom, bl);
-    if (bl.length() < ondisklog.top-ondisklog.bottom) {
+    store->read(0, info.pgid.to_log_pobject(), ondisklog.bottom, ondisklog.length(), bl);
+    if (bl.length() < ondisklog.length()) {
       dout(0) << "read_log got " << bl.length() << " bytes, expected " 
 	      << ondisklog.top << "-" << ondisklog.bottom << "="
-	      << (ondisklog.top-ondisklog.bottom)
+	      << ondisklog.length()
 	      << dendl;
       assert(0);
     }

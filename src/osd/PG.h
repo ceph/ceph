@@ -390,6 +390,7 @@ public:
 
     OndiskLog() : bottom(0), top(0) {}
 
+    loff_t length() { return top - bottom; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
   };
 
