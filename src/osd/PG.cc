@@ -441,7 +441,8 @@ void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing 
       if (last_kept != olog.log.end()) {
 	while (1) {
 	  Log::Entry &oe = *log.log.rbegin();
-	  if (oe.version == last_kept->version)
+	  if (oe.version == last_kept->version ||
+	      oe.version <= olog.bottom)
 	    break;
 	  dout(10) << "merge_log divergent " << oe << dendl;
 	  divergent.push_front(oe);
