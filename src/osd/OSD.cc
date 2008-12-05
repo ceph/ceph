@@ -497,8 +497,11 @@ int OSD::shutdown()
   // tell pgs we're shutting down
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
-       p++)
+       p++) {
+    p->second->lock();
     p->second->on_shutdown();
+    p->second->unlock();
+  }
 
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
