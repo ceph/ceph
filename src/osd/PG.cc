@@ -547,8 +547,10 @@ void PG::generate_backlog()
      */
     eversion_t version;
     if (log.objects.count(poid.oid)) {
+      Log::Entry *e = log.objects[poid.oid];
+      assert(!e->is_delete());  // if it's a deletion, we are corrupt..
       // note the prior version
-      version = log.objects[poid.oid]->prior_version;
+      version = e->prior_version;
       if (version == eversion_t() ||  // either new object, or
 	  version >= log.bottom)      // prior_version also already in log
 	continue;   // already have it logged.
