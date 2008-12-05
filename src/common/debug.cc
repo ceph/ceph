@@ -13,16 +13,15 @@ using namespace std;
 Mutex _dout_lock("_dout_lock", false, false /* no lockdep */);  
 ostream *_dout = &std::cout;
 ostream *_derr = &std::cerr;
-char _dout_file[100] = {0};
 char _dout_dir[1000] = {0};
+char _dout_symlink_dir[1000] = {0};
+char _dout_path[1000] = {0};
 char _dout_symlink_path[1000] = {0};
 bool _dout_is_open = false;
 bool _dout_need_open = true;
 
 void _dout_open_log()
 {
-  char fn[80];
-
   // logging enabled?
   if (!(g_conf.dout_dir && g_conf.file_logs)) {
     _dout_need_open = false;
@@ -30,10 +29,7 @@ void _dout_open_log()
   }
 
   // calculate log dir, filename, etc.
-  if (!_dout_file[0]) {
-    char hostname[80];
-    gethostname(hostname, 79);
-    
+  if (!_dout_path[0]) {
     if (g_conf.dout_dir[0] == '/') 
       strcpy(_dout_dir, g_conf.dout_dir);
     else {
@@ -41,44 +37,52 @@ void _dout_open_log()
       strcat(_dout_dir, "/");
       strcat(_dout_dir, g_conf.dout_dir);
     }
-    sprintf(_dout_file, "%s.%d", hostname, getpid());
+
+    if (g_conf.dout_sym_dir[0] == '/') 
+      strcpy(_dout_symlink_dir, g_conf.dout_sym_dir);
+    else {
+      getcwd(_dout_symlink_dir, 100);
+      strcat(_dout_symlink_dir, "/");
+      strcat(_dout_symlink_dir, g_conf.dout_sym_dir);
+    }
+
+    char hostname[80];
+    gethostname(hostname, 79);
+    sprintf(_dout_path, "%s/%s.%d", _dout_dir, hostname, getpid());
   }
 
   if (_dout && _dout_is_open)
     delete _dout;
 
-  sprintf(fn, "%s/%s", _dout_dir, _dout_file);
-  std::ofstream *out = new std::ofstream(fn, ios::trunc|ios::out);
+  std::ofstream *out = new std::ofstream(_dout_path, ios::trunc|ios::out);
   if (!out->is_open()) {
-    std::cerr << "error opening output file " << fn << std::endl;
+    std::cerr << "error opening output file " << _dout_path << std::endl;
     delete out;
     _dout = &std::cout;
   } else {
     _dout_need_open = false;
     _dout_is_open = true;
     _dout = out;
-    *_dout << g_clock.now() << " --- opened log " << fn << " ---" << std::endl;
+    *_dout << g_clock.now() << " --- opened log " << _dout_path << " ---" << std::endl;
   }
 }
 
 int _dout_rename_output_file()  // after calling daemon()
 {
   if (g_conf.dout_dir && g_conf.file_logs) {
-    char oldfn[100];
-    char newfn[100];
+    char oldpath[1000];
     char hostname[80];
     gethostname(hostname, 79);
-    
-    sprintf(oldfn, "%s/%s", _dout_dir, _dout_file);
-    sprintf(newfn, "%s/%s.%d", _dout_dir, hostname, getpid());
-    dout(0) << "---- renamed log " << oldfn << " -> " << newfn << " ----" << dendl;
-    ::rename(oldfn, newfn);
-    sprintf(_dout_file, "%s.%d", hostname, getpid());
+
+    strcpy(oldpath, _dout_path);
+    sprintf(_dout_path, "%s/%s.%d", _dout_dir, hostname, getpid());
+    dout(0) << "---- renamed log " << oldpath << " -> " << _dout_path << " ----" << dendl;
+    ::rename(oldpath, _dout_path);
 
     if (_dout_symlink_path[0]) {
-      // new symlink
+      // fix symlink
       ::unlink(_dout_symlink_path);
-      ::symlink(_dout_file, _dout_symlink_path);
+      ::symlink(_dout_path, _dout_symlink_path);
     }
   }
   return 0;
@@ -90,7 +94,7 @@ int _dout_create_courtesy_output_symlink(const char *type, int n)
     if (_dout_need_open)
       _dout_open_log();
 
-    sprintf(_dout_symlink_path, "%s/%s%d", _dout_dir, type, n);
+    sprintf(_dout_symlink_path, "%s/%s%d", _dout_symlink_dir, type, n);
 
     // rotate out old symlink
     int n = 0;
@@ -114,9 +118,9 @@ int _dout_create_courtesy_output_symlink(const char *type, int n)
       n--;
     }
 
-    ::symlink(_dout_file, _dout_symlink_path);
+    ::symlink(_dout_path, _dout_symlink_path);
     dout(0) << "---- created symlink " << _dout_symlink_path
-	    << " -> " << _dout_file << " ----" << dendl;
+	    << " -> " << _dout_path << " ----" << dendl;
   }
   return 0;
 }

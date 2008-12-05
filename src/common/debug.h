@@ -18,9 +18,6 @@ extern ostream *_derr;
 extern Mutex _dout_lock;
 
 extern bool _dout_need_open;
-extern char _dout_file[100];
-extern char _dout_dir[1000];
-extern char _dout_symlink_path[1000];
 extern bool _dout_is_open;
 
 extern void _dout_open_log();

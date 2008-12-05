@@ -202,6 +202,7 @@ md_config_t g_conf = {
   logger_calc_variance: true,
 
   dout_dir: "out",    // if daemonize == true
+  dout_sym_dir: "out",    // if daemonize == true
   
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -686,8 +687,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     
     
     else if (//strcmp(args[i], "-o") == 0 ||
-	     strcmp(args[i], "--doutdir") == 0) 
+	     strcmp(args[i], "--dout_dir") == 0) 
       g_conf.dout_dir = args[++i];
+    else if (//strcmp(args[i], "-o") == 0 ||
+	     strcmp(args[i], "--dout_sym_dir") == 0) 
+      g_conf.dout_sym_dir = args[++i];
 
     else if (strcmp(args[i], "--lockdep") == 0)
       g_lockdep = atoi(args[++i]);

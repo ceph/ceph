@@ -65,6 +65,7 @@ struct md_config_t {
   bool logger_calc_variance;
 
   const char *dout_dir;
+  const char *dout_sym_dir;
 
   bool fake_clock;
   bool fakemessenger_serialize;
