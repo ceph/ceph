@@ -70,7 +70,7 @@ inline ostream& operator<<(ostream& out, const log_type& t)
 
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.type << " " << e.who << " : " << e.seq << " : " << e.msg;
+  return out << e.stamp << " " << e.who << " " << e.seq << " : " << e.type << " " << e.msg;
 }
 
 #endif

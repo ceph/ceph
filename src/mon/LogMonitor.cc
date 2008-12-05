@@ -96,32 +96,59 @@ bool LogMonitor::update_from_paxos()
   assert(paxosv >= log_version);
 
   if (log_version == 0 && paxosv > 1) {
-    log_version = mon->store->get_int("log", "last_consumed");
+    log_version = mon->store->get_int("logm", "last_consumed");
   }
+
+  bufferlist blog;
+  bufferlist blogdebug;
+  bufferlist bloginfo;
+  bufferlist blogwarn;
+  bufferlist blogerr;
 
   // walk through incrementals
   while (paxosv > log_version) {
-    bufferlist bl, new_bl;
-    LogEntry le;
+    bufferlist bl;
     bool success = paxos->read(log_version+1, bl);
     assert(success);
+
     bufferlist::iterator p = bl.begin();
+    while (!p.end()) {
+      LogEntry le;
+      le.decode(p);
+      dout(7) << "update_from_paxos applying incremental log " << log_version+1 <<  " " << le << dendl;
 
-    le.decode(p);
-    dout(7) << "update_from_paxos applying incremental log " << log_version+1 <<  " " << le << dendl;
+      stringstream ss;
+      ss << le;
+      string s;
+      getline(ss, s);
+      s += "\n";
 
-    stringstream ss;
-    ss << le;
-    string s;
-    getline(ss, s);
-    new_bl.append(s);
-    new_bl.append("\n");
-    mon->store->append_bl_ss(new_bl, "out", NULL);
+      blog.append(s);
+      if (le.type >= LOG_DEBUG)
+	blogdebug.append(s);
+      if (le.type >= LOG_INFO)
+	bloginfo.append(s);
+      if (le.type >= LOG_WARN)
+	blogwarn.append(s);
+      if (le.type >= LOG_ERROR)
+	blogerr.append(s);
+    }
 
     log_version++;
   }
+  
+  if (blog.length())
+    mon->store->append_bl_ss(blog, "log", NULL);
+  if (blogdebug.length())
+    mon->store->append_bl_ss(blogdebug, "log.debug", NULL);
+  if (bloginfo.length())
+    mon->store->append_bl_ss(bloginfo, "log.info", NULL);
+  if (blogwarn.length())
+    mon->store->append_bl_ss(blogwarn, "log.warn", NULL);
+  if (blogerr.length())
+    mon->store->append_bl_ss(blogerr, "log.err", NULL);
 
-  mon->store->put_int(paxosv, "log", "last_consumed");
+  mon->store->put_int(paxosv, "logm", "last_consumed");
 
   return true;
 }

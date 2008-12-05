@@ -28,7 +28,7 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_OSDMAP: return "osdmap";
   case PAXOS_CLIENTMAP: return "clientmap";
   case PAXOS_PGMAP: return "pgmap";
-  case PAXOS_LOG: return "log";
+  case PAXOS_LOG: return "logm";
   default: assert(0); return 0;
   }
 }
