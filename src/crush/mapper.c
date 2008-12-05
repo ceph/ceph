@@ -10,6 +10,7 @@
 #else
 # include <string.h>
 # include <stdio.h>
+# include <stdlib.h>
 # include <assert.h>
 # define BUG_ON(x) assert(!(x))
 # define dprintk(args...) /* printf(args) */
