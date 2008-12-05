@@ -431,29 +431,61 @@ public:
       return missing.count(oid) ? missing[oid].have : eversion_t();
     }
     
-    void add_event(Log::Entry& e) {
+    /*
+     * this needs to be called in log order as we extend the log.  it
+     * assumes missing is accurate up through the previous log entry.
+     */
+    void add_next_event(Log::Entry& e) {
       if (e.is_update()) {
-	if (is_missing(e.oid, e.prior_version))
-	  add(e.oid, e.version);
-	else
-	  add(e.oid, e.version, e.prior_version);
+	if (e.prior_version == eversion_t()) {
+	  // new object.
+	  assert(missing.count(e.oid) == 0);
+	  missing[e.oid].need = e.version;  // .have = nil
+	} else if (missing.count(e.oid)) {
+	  // already missing (prior).
+	  assert(missing[e.oid].need == e.prior_version);
+	  rmissing.erase(e.prior_version);
+	  missing[e.oid].need = e.version;  // .have unchanged.
+	} else {
+	  // not missing, we must have prior_version (if any)
+	  missing[e.oid] = item(e.version, e.prior_version);
+	}
+	rmissing[e.version] = e.oid;
       } else
 	rm(e.oid, e.version);
     }
 
-    void add(object_t oid, eversion_t need) {
-      eversion_t have;
-      add(oid, need, have);
+    void add_event(Log::Entry& e) {
+      if (e.is_update()) {
+	if (missing.count(e.oid)) {
+	  if (missing[e.oid].need >= e.version)
+	    return;   // already missing same or newer.
+	  // missing older, revise need
+	  rmissing.erase(missing[e.oid].need);
+	  missing[e.oid].need = e.version;
+	} else 
+	  // not missing => have prior_version (if any)
+	  missing[e.oid] = item(e.version, e.prior_version);
+	rmissing[e.version] = e.oid;
+      } else
+	rm(e.oid, e.version);
     }
-    void add(object_t oid, eversion_t need, eversion_t have) {
+
+    void revise_need(object_t oid, eversion_t need) {
       if (missing.count(oid)) {
-        if (missing[oid].need > need) return;   // already missing newer.
-        rmissing.erase(missing[oid].need);
-	missing[oid].need = need;  // don't have .have
-      } else 
-	missing[oid] = item(need, have);
+	rmissing.erase(missing[oid].need);
+	missing[oid].need = need;            // no not adjust .have
+      } else {
+	missing[oid] = item(need, eversion_t());
+      }
       rmissing[need] = oid;
     }
+
+    void add(object_t oid, eversion_t need, eversion_t have) {
+      missing[oid] = item(need, have);
+      rmissing[need] = oid;
+    }
+    
     void rm(object_t oid, eversion_t when) {
       if (missing.count(oid) && missing[oid].need < when) {
         rmissing.erase(missing[oid].need);

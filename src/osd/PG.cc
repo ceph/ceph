@@ -283,8 +283,7 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       } else {
 	// old update, new update
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : new item supercedes" << dendl;
-	missing.rm(oe.oid, oe.version);  // re-add older "new" entry to missing
-	missing.add_event(ne);
+	missing.revise_need(oe.oid, oe.version);
       }
     }
   } else {
@@ -348,7 +347,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing 
     for (; p != log.log.end(); p++) {
       Log::Entry &ne = *p;
       dout(10) << "merge_log merging " << ne << dendl;
-      missing.add_event(ne);
+      missing.add_next_event(ne);
       if (ne.is_delete())
 	t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, ne.oid));
     }
@@ -432,7 +431,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing 
 	Log::Entry &ne = *p;
         dout(10) << "merge_log " << ne << dendl;
 	log.index(ne);
-	missing.add_event(ne);
+	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, ne.oid));
       }
@@ -523,11 +522,11 @@ void PG::generate_backlog()
 
   /*
    * note that we don't create prior_version backlog entries for
-   * objects that no longer exist.  that's maybe a bit sloppy, but not
-   * a problem, since we mainly care about generating an accurate
-   * missing map, and an object that gets deleted will obviously not
-   * end up missing; in merge_log, we'll see the final remove entry,
-   * and missing.rm().
+   * objects that no longer exist (i.e., those for which there is a
+   * delete entry in the log).  that's maybe a bit sloppy, but not a
+   * problem, since we mainly care about generating an accurate
+   * missing map, and an object that was deleted should obviously not
+   * end up as missing.
    */
 
   int local = 0;
