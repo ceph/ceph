@@ -15,6 +15,8 @@ while [ $# -ge 1 ]; do
 done
 
 
+ARGS="--dout_dir /data/`hostname`"
+
 if [ $debug -eq 0 ]; then
 	CMON_ARGS="--debug_mon 10 --debug_ms 1"
 	COSD_ARGS=""
@@ -28,14 +30,22 @@ fi
 
 
 ./dstop.sh
+
+
 # mkmonfs
 if [ $new -eq 1 ]; then
 
     # clean up
+    echo removing old core files
     rm -f core*
 
+    echo removing old logs
+    rm -f log/*
+
+    echo removing old output
     test -d out || mkdir out
-    rm -f out/*
+    rm -f out/* /data/cosd*/*
+
     test -d gmon && ssh cosd0 rm -rf ceph/src/gmon/*
 
 
@@ -60,7 +70,7 @@ if [ $new -eq 1 ]; then
 fi
 
 # monitor
-./cmon -d mondata/mon0 $CMON_ARGS
+./cmon -d mondata/mon0 $ARGS $CMON_ARGS
 
 if [ $new -eq 1 ]; then
     # build and inject an initial osd map
@@ -104,12 +114,12 @@ do
    if [ $new -eq 1 ]; then
        ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
-   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./cosd $devm -d $COSD_ARGS
+   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./cosd $devm -d --dout_dir /data/cosd$host $COSD_ARGS
 
  done
 done
 
 # mds
-./cmds -d $CMDS_ARGS
+./cmds $ARGS -d $CMDS_ARGS
 
 
