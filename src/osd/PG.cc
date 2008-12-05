@@ -1651,22 +1651,27 @@ void PG::read_log(ObjectStore *store)
   log.index();
 
   // build missing
-  set<object_t> did;
-  for (list<Log::Entry>::reverse_iterator i = log.log.rbegin();
-       i != log.log.rend();
-       i++) {
-    if (i->version <= info.last_complete) break;
-    if (did.count(i->oid)) continue;
-    did.insert(i->oid);
+  if (info.last_complete < info.last_update) {
+    dout(10) << "read_log checking for missing items over interval (" << info.last_complete
+	     << "," << info.last_update << "]" << dendl;
 
-    if (i->is_delete()) continue;
-
-    eversion_t v;
-    pobject_t poid(info.pgid.pool(), 0, i->oid);
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
-    if (r < 0 || v < i->version) {
-      dout(15) << "read_log missing " << *i << dendl;
-      missing.add(i->oid, i->version, v);
+    set<object_t> did;
+    for (list<Log::Entry>::reverse_iterator i = log.log.rbegin();
+	 i != log.log.rend();
+	 i++) {
+      if (i->version <= info.last_complete) break;
+      if (did.count(i->oid)) continue;
+      did.insert(i->oid);
+      
+      if (i->is_delete()) continue;
+      
+      eversion_t v;
+      pobject_t poid(info.pgid.pool(), 0, i->oid);
+      int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
+      if (r < 0 || v < i->version) {
+	dout(15) << "read_log  missing " << *i << dendl;
+	missing.add(i->oid, i->version, v);
+      }
     }
   }
   dout(10) << "read_log done" << dendl;
