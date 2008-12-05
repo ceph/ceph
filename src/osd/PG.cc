@@ -1307,7 +1307,7 @@ void PG::activate(ObjectStore::Transaction& t,
     if (is_all_uptodate()) 
       finish_recovery();
     else {
-      dout(10) << "activate not all replicas are uptodate, starting recovery" << dendl;
+      dout(10) << "activate not all replicas are uptodate, queueing recovery" << dendl;
       osd->queue_for_recovery(this);
     }
 
@@ -1445,7 +1445,7 @@ void PG::update_stats()
       pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
       int degraded = missing.num_missing();
       for (unsigned i=1; i<acting.size(); i++)
-	degraded += peer_missing[i].num_missing();
+	degraded += peer_missing[acting[i]].num_missing();
       pg_stats_stable.num_objects_degraded = degraded;
     }
 
