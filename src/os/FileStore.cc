@@ -1469,17 +1469,26 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset)
 {
   // get attr list
   char names1[100];
-  char *name = names1;
-  int len = do_listxattr(fn, names1, sizeof(names1));
+  int len = do_listxattr(fn, names1, sizeof(names1)-1);
   char *names2 = 0;
+  char *name = 0;
   if (len == -ERANGE) {
     len = do_listxattr(fn, 0, 0);
-    if (len < 0) return len;
-    name = names2 = new char[len];
-    len = do_listxattr(fn, names2, len);
     if (len < 0)
       return len;
-  }
+    dout(10) << " -ERANGE, len is " << len << dendl;
+    names2 = new char[len+1];
+    len = do_listxattr(fn, names2, len);
+    dout(10) << " -ERANGE, got " << len << dendl;
+    if (len < 0)
+      return len;
+    name = names2;
+  } else if (len < 0)
+    return len;
+  else
+    name = names1;
+  name[len] = 0;
+
   char *end = name + len;
   while (name < end) {
     char *attrname = name;
