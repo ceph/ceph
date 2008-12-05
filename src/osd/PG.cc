@@ -570,7 +570,7 @@ void PG::generate_backlog()
       osd->store->getattr(info.pgid.to_coll(), poid, "from_version", 
 			  &e.prior_version, sizeof(e.prior_version));
     } else {
-      e.op = Log::Entry::MODIFY;           // FIXME when we do smarter op codes!
+      e.op = Log::Entry::BACKLOG;           // FIXME when we do smarter op codes!
     }
     add[e.version] = e;
     dout(10) << "generate_backlog found " << e << dendl;
