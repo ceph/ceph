@@ -53,6 +53,7 @@ string reply_rs;
 int reply_rc;
 bufferlist reply_bl;
 entity_inst_t reply_from;
+Context *resend_event = 0;
 
 
 // watch
@@ -129,6 +130,10 @@ void handle_ack(MMonCommandAck *ack)
     reply_rc = ack->r;
     reply_bl = ack->get_data();
     cond.Signal();
+    if (resend_event) {
+      timer.cancel_event(resend_event);
+      resend_event = 0;
+    }
     lock.Unlock();
   }
 }
@@ -146,7 +151,15 @@ class Admin : public Dispatcher {
   }
 } dispatcher;
 
+void send_command();
 
+struct C_Resend : public Context {
+  void finish(int) {
+    monmap.pick_mon(true);  // pick a new mon
+    if (!reply)
+      send_command();
+  }
+};
 void send_command()
 {
   MMonCommand *m = new MMonCommand(monmap.fsid);
@@ -156,6 +169,9 @@ void send_command()
   int mon = monmap.pick_mon();
   generic_dout(0) << "mon" << mon << " <- " << pending_cmd << dendl;
   messenger->send_message(m, monmap.get_inst(mon));
+
+  resend_event = new C_Resend;
+  timer.add_event_after(5.0, resend_event);
 }
 
 int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
@@ -179,6 +195,7 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 
   return reply_rc;
 }
+
 
 
 void usage() 
