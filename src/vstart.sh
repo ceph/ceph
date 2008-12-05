@@ -46,7 +46,7 @@ export CEPH_ARGS="--lockdep 1"
 
 
 # sudo if btrfs
-test -d dev/osd0 && SUDO="sudo"
+test -d dev/osd0 && test -e dev/sudo && SUDO="sudo"
 
 $SUDO ./stop.sh
 $SUDO rm -f core*
