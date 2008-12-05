@@ -222,7 +222,7 @@ protected:
 
 
   // -- scrub --
-  void _scrub(ScrubMap& map);
+  int _scrub(ScrubMap& map);
 
 
 

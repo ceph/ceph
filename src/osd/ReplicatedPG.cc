@@ -2909,8 +2909,9 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 // SCRUB
 
 
-void ReplicatedPG::_scrub(ScrubMap& scrubmap)
+int ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {
+  int errors = 0;
   dout(10) << "_scrub" << dendl;
 
   coll_t c = info.pgid.to_coll();
@@ -2934,6 +2935,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     eversion_t v;
     if (p->attrs.count("version") == 0) {
       dout(0) << "scrub no 'version' attr on " << poid << dendl;
+      errors++;
       continue;
     }
     p->attrs["version"].copy_out(0, sizeof(v), (char *)&v);
@@ -2951,11 +2953,13 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       if (head != pobject_t()) {
 	derr(0) << " missing clone(s) for " << head << dendl;
 	assert(head == pobject_t());  // we had better be done
+	errors++;
       }
 
       bufferlist bl;
       if (p->attrs.count("snapset") == 0) {
 	dout(0) << "no 'snapset' attr on " << p->poid << dendl;
+	errors++;
 	continue;
       }
       bl.push_back(p->attrs["snapset"]);
@@ -2993,6 +2997,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       bufferlist bl;
       if (p->attrs.count("snaps") == 0) {
 	dout(0) << "no 'snaps' attr on " << p->poid << dendl;
+	errors++;
 	continue;
       }
       bl.push_back(p->attrs["snaps"]);
@@ -3003,6 +3008,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       eversion_t from;
       if (p->attrs.count("from_version") == 0) {
 	dout(0) << "no 'from_version' attr on " << p->poid << dendl;
+	errors++;
 	continue;
       }
       p->attrs["from_version"].copy_out(0, sizeof(from), (char *)&from);
@@ -3040,11 +3046,9 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
        << stat.num_kb << "/" << info.stats.num_kb << " kb.";
     osd->get_logclient()->log(LOG_ERROR, ss);
-  } else {
-    stringstream ss;
-    ss << info.pgid << " scrub ok";
-    //osd->get_logclient()->log(LOG_DEBUG, ss);
+    errors++;
   }
 
   dout(10) << "scrub finish" << dendl;
+  return errors;
 }

@@ -1872,6 +1872,7 @@ void PG::scrub()
 {
   stringstream ss;
   ScrubMap scrubmap;
+  int errors = 0;
 
   osd->map_lock.get_read();
   lock();
@@ -2061,7 +2062,7 @@ void PG::scrub()
   */
 
   // ok, do the pg-type specific scrubbing
-  _scrub(scrubmap);
+  errors += _scrub(scrubmap);
 
   /*
   lock();
@@ -2070,6 +2071,10 @@ void PG::scrub()
     goto out;
   }
   */
+
+  ss << info.pgid << " scrub " << errors << " errors";
+  osd->get_logclient()->log(errors ? LOG_ERROR:LOG_INFO, ss);
+
 
   // finish up
   info.stats.last_scrub = info.last_update;
