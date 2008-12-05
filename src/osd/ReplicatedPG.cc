@@ -1434,11 +1434,12 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
   
   if (ack_type & CEPH_OSD_OP_ONDISK) {
     // disk
-    assert(repop->waitfor_disk.count(fromosd));      
-    repop->waitfor_disk.erase(fromosd);
-    repop->waitfor_nvram.erase(fromosd);
-    repop->waitfor_ack.erase(fromosd);
-    repop->pg_complete_thru[fromosd] = pg_complete_thru;
+    if (repop->waitfor_disk.count(fromosd)) {
+      repop->waitfor_disk.erase(fromosd);
+      repop->waitfor_nvram.erase(fromosd);
+      repop->waitfor_ack.erase(fromosd);
+      repop->pg_complete_thru[fromosd] = pg_complete_thru;
+    }
   } else if (ack_type & CEPH_OSD_OP_ONNVRAM) {
     // nvram
     repop->waitfor_nvram.erase(fromosd);
