@@ -911,14 +911,27 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "scrub" && m->cmd.size() > 2) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_up(osd)) {
-	mon->messenger->send_message(new MOSDScrub(osdmap.get_fsid()),
-				     osdmap.get_inst(osd));
+      if (m->cmd[2] == "*") {
+	ss << "osds ";
+	int c = 0;
+	for (int i=0; i<osdmap.get_max_osd(); i++)
+	  if (osdmap.is_up(i)) {
+	    ss << (c++ ? ",":"") << i;
+	    mon->messenger->send_message(new MOSDScrub(osdmap.get_fsid()),
+					 osdmap.get_inst(i));
+	  }	    
 	r = 0;
-	ss << "osd" << osd << " instructed to scrub";
-      } else 
-	ss << "osd" << osd << " is not up";
+	ss << " instructed to scrub";
+      } else {
+	long osd = strtol(m->cmd[2].c_str(), 0, 10);
+	if (osdmap.is_up(osd)) {
+	  mon->messenger->send_message(new MOSDScrub(osdmap.get_fsid()),
+				       osdmap.get_inst(osd));
+	  r = 0;
+	  ss << "osd" << osd << " instructed to scrub";
+	} else 
+	  ss << "osd" << osd << " is not up";
+      }
     }
 
   }
