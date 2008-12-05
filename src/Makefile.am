@@ -10,7 +10,7 @@ cmon_LDADD = libcommon.a libmon.a libcrush.a libcommon.a
 
 # admin tools
 cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
-cmonctl_LDADD = libcommon.a
+cmonctl_LDADD = libcommon.a -ledit
 mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libcommon.a libmon.a libcrush.a libcommon.a
 monmaptool_SOURCES = monmaptool.cc

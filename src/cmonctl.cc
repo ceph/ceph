@@ -36,6 +36,8 @@ using namespace std;
 #include <fcntl.h>
 
 Mutex lock("cmonctl.cc lock");
+Cond cond;
+
 Messenger *messenger = 0;
 
 const char *outfile = 0;
@@ -43,6 +45,17 @@ int watch = 0;
 
 MonMap monmap;
 
+// sync command
+vector<string> pending_cmd;
+bufferlist pending_bl;
+bool reply;
+string reply_rs;
+int reply_rc;
+bufferlist reply_bl;
+entity_inst_t reply_from;
+
+
+// watch
 enum { OSD, MON, MDS, CLIENT, LAST };
 int which = 0;
 int same = 0;
@@ -109,29 +122,16 @@ void handle_ack(MMonCommandAck *ack)
     
     lock.Unlock();
   } else {
-    generic_dout(0) << ack->get_source() << " -> '"
-		    << ack->rs << "' (" << ack->r << ")"
-		    << dendl;
-    messenger->shutdown();
-  }
-  int len = ack->get_data().length();
-  if (len) {
-    if (outfile) {
-      if (strcmp(outfile, "-") == 0) {
-	::write(1, ack->get_data().c_str(), len);
-      } else {
-	int fd = ::open(outfile, O_WRONLY|O_TRUNC|O_CREAT);
-	::write(fd, ack->get_data().c_str(), len);
-	::fchmod(fd, 0777);
-	::close(fd);
-      }
-      generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
-    } else {
-      generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
-    }
+    lock.Lock();
+    reply = true;
+    reply_from = ack->get_source_inst();
+    reply_rs = ack->rs;
+    reply_rc = ack->r;
+    reply_bl = ack->get_data();
+    cond.Signal();
+    lock.Unlock();
   }
 }
-
 
 class Admin : public Dispatcher {
   bool dispatch_impl(Message *m) {
@@ -145,6 +145,40 @@ class Admin : public Dispatcher {
     return true;
   }
 } dispatcher;
+
+
+void send_command()
+{
+  MMonCommand *m = new MMonCommand(monmap.fsid);
+  m->cmd = pending_cmd;
+  m->get_data() = pending_bl;
+
+  int mon = monmap.pick_mon();
+  generic_dout(0) << "mon" << mon << " <- " << pending_cmd << dendl;
+  messenger->send_message(m, monmap.get_inst(mon));
+}
+
+int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
+{
+  Mutex::Locker l(lock);
+
+  pending_cmd = cmd;
+  pending_bl = bl;
+  reply = false;
+  
+  send_command();
+
+  while (!reply)
+    cond.Wait(lock);
+
+  rs = rs;
+  rbl = reply_bl;
+  generic_dout(0) << reply_from.name << " -> '"
+		  << reply_rs << "' (" << reply_rc << ")"
+		  << dendl;
+
+  return reply_rc;
+}
 
 
 void usage() 
@@ -161,6 +195,81 @@ void usage()
        << "   ..." << std::endl;
   exit(1);
 }
+
+
+#include <histedit.h>
+
+
+const char *cli_prompt(EditLine *e) {
+  return "monctl> ";
+}
+
+int do_cli()
+{
+  /* emacs style */
+  EditLine *el = el_init("cmonctl", stdin, stdout, stderr);
+  el_set(el, EL_PROMPT, &cli_prompt);
+  el_set(el, EL_EDITOR, "emacs");
+
+  History *myhistory = history_init();
+  if (myhistory == 0) {
+    fprintf(stderr, "history could not be initialized\n");
+    return 1;
+  }
+
+  HistEvent ev;
+
+  /* Set the size of the history */
+  history(myhistory, &ev, H_SETSIZE, 800);
+
+  /* This sets up the call back functions for history functionality */
+  el_set(el, EL_HIST, history, myhistory);
+
+  Tokenizer *tok = tok_init(NULL);
+
+  while (1) {
+    int count;  // # chars read
+    const char *line = el_gets(el, &count);
+
+    if (!count) {
+      cout << "quit" << std::endl;
+      break;
+    }
+
+    //cout << "typed '" << line << "'" << std::endl;
+
+    if (strcmp(line, "quit\n") == 0)
+      break;
+
+    history(myhistory, &ev, H_ENTER, line);
+
+    int argc;
+    const char **argv;
+    tok_str(tok, line, &argc, &argv);
+    tok_reset(tok);
+
+    vector<string> cmd;
+    for (int i=0; i<argc; i++)
+      cmd.push_back(argv[i]);
+    if (cmd.empty())
+      continue;
+
+    //cout << "cmd is " << cmd << std::endl;
+
+    bufferlist out, in;
+    string rs;
+    do_command(cmd,out, rs, in);
+  }
+
+  history_end(myhistory);
+  el_end(el);
+
+  return 0;
+}
+
+
+
+
 
 int main(int argc, const char **argv, const char *envp[]) {
 
@@ -204,10 +313,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       cmd += nargs[i];
       vcmd.push_back(string(nargs[i]));
     }
-    if (vcmd.empty()) {
-      cerr << "no mon command specified" << std::endl;
-      usage();
-    }
   }
 
   // get monmap
@@ -229,17 +334,33 @@ int main(int argc, const char **argv, const char *envp[]) {
     get_status();
     lock.Unlock();
   } else {
-    // build command
-    MMonCommand *m = new MMonCommand(monmap.fsid);
-    m->set_data(indata);
-    m->cmd.swap(vcmd);
-    int mon = monmap.pick_mon();
+    if (vcmd.size()) {
+      
+      string rs;
+      bufferlist odata;
+      do_command(vcmd, indata, rs, odata);
+      
+      int len = odata.length();
+      if (len) {
+	if (outfile) {
+	  if (strcmp(outfile, "-") == 0) {
+	    ::write(1, odata.c_str(), len);
+	  } else {
+	    odata.write_file(outfile);
+	  }
+	  generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
+	} else {
+	  generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
+	}
+      }
+    } else {
+      // interactive mode
+      do_cli();
+    }
     
-    generic_dout(0) << "mon" << mon << " <- '" << cmd << "'" << dendl;
-    
-    // send it
-    messenger->send_message(m, monmap.get_inst(mon));
+    messenger->shutdown();
   }
+
 
   // wait for messenger to finish
   rank.wait();
