@@ -623,6 +623,17 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       pg_map.dump(ds);
       rdata.append(ds);
     }
+    else if (m->cmd[1] == "map" && m->cmd.size() == 3) {
+      pg_t pgid;
+      r = -EINVAL;
+      if (pgid.parse(m->cmd[2].c_str())) {
+	vector<int> acting;
+	mon->osdmon()->osdmap.pg_to_acting_osds(pgid, acting);
+	ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch() << " pg " << pgid << " -> " << acting;
+	r = 0;
+      } else
+	ss << "invalid pgid '" << m->cmd[2] << "'";
+    }
     else if (m->cmd[1] == "scrub" && m->cmd.size() == 3) {
       pg_t pgid;
       r = -EINVAL;
