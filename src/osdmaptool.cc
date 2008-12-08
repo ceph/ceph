@@ -35,45 +35,7 @@ void usage(const char *me)
   exit(1);
 }
 
-void printmap(const char *me, OSDMap *m, ostream& out)
-{
-  out << "epoch " << m->get_epoch() << "\n"
-      << "fsid " << m->get_fsid() << "\n"
-      << "ctime " << m->get_ctime() << "\n"
-      << "mtime " << m->get_mtime() << "\n"
-      << std::endl;
-  out << "pg_num " << m->get_pg_num() << "\n"
-      << "pgp_num " << m->get_pgp_num() << "\n"
-      << "lpg_num " << m->get_lpg_num() << "\n"
-      << "lpgp_num " << m->get_lpgp_num() << "\n"
-      << "last_pg_change " << m->get_last_pg_change() << "\n"
-      << std::endl;
-  out << "max_osd " << m->get_max_osd() << "\n";
-  for (int i=0; i<m->get_max_osd(); i++) {
-    if (m->exists(i)) {
-      out << "osd" << i;
-      out << (m->is_up(i) ? " up":" down");
-      if (m->is_up(i))
-	out << " " << m->get_addr(i);
-      osd_info_t& info = m->get_info(i);
-      out << " (up_from " << info.up_from
-	  << " up_thru " << info.up_thru
-	  << " down_at " << info.down_at
-	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
-      out << (m->is_in(i) ? " in":" out");
-      if (m->is_in(i))
-	out << " weight " << m->get_weight(i);
-      out << "\n";
-    }
-  }
-  out << std::endl;
-  
-  // ignore pg_swap_primary
-  
-  out << "max_snap " << m->get_max_snap() << "\n"
-      << "removed_snaps " << m->get_removed_snaps() << "\n"
-      << std::endl;
- }
+
 
 
 int main(int argc, const char **argv)
@@ -221,7 +183,7 @@ int main(int argc, const char **argv)
     osdmap.inc_epoch();
 
   if (print) 
-    printmap(me, &osdmap, cout);
+    osdmap.print(cout);
 
   if (modified) {
     bl.clear();

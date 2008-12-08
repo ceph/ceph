@@ -905,6 +905,9 @@ private:
 		    int mds_local_osd);
   static void build_simple_crush_map(CrushWrapper& crush, int num_osd, int num_dom=0);
 
+
+  void print(ostream& out);
+
 };
 
 

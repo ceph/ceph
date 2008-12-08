@@ -17,6 +17,48 @@
 #include "config.h"
 
 
+
+void OSDMap::print(ostream& out)
+{
+  out << "epoch " << get_epoch() << "\n"
+      << "fsid " << get_fsid() << "\n"
+      << "ctime " << get_ctime() << "\n"
+      << "mtime " << get_mtime() << "\n"
+      << std::endl;
+  out << "pg_num " << get_pg_num() << "\n"
+      << "pgp_num " << get_pgp_num() << "\n"
+      << "lpg_num " << get_lpg_num() << "\n"
+      << "lpgp_num " << get_lpgp_num() << "\n"
+      << "last_pg_change " << get_last_pg_change() << "\n"
+      << std::endl;
+  out << "max_osd " << get_max_osd() << "\n";
+  for (int i=0; i<get_max_osd(); i++) {
+    if (exists(i)) {
+      out << "osd" << i;
+      out << (is_up(i) ? " up":" down");
+      if (is_up(i))
+	out << " " << get_addr(i);
+      osd_info_t& info = get_info(i);
+      out << " (up_from " << info.up_from
+	  << " up_thru " << info.up_thru
+	  << " down_at " << info.down_at
+	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
+      out << (is_in(i) ? " in":" out");
+      if (is_in(i))
+	out << " weight " << get_weightf(i);
+      out << "\n";
+    }
+  }
+  out << std::endl;
+  
+  // ignore pg_swap_primary
+  
+  out << "max_snap " << get_max_snap() << "\n"
+      << "removed_snaps " << get_removed_snaps() << "\n"
+      << std::endl;
+}
+
+
 void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 			  int num_osd, int num_dom, int pg_bits, int lpg_bits,
 			  int mds_local_osd)
