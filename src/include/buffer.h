@@ -828,6 +828,14 @@ public:
 	   ++p) 
 	_buffers.push_back(*p);
     }
+    void append(istream& in) {
+      while (!in.eof()) {
+	string s;
+	getline(in, s);
+	append(s.c_str(), s.length());
+	append("\n", 1);
+      }
+    }
     
     void append_zero(unsigned len) {
       ptr bp(len);

@@ -39,8 +39,6 @@ class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
 
-  void dump(bufferlist& bl);
-
 private:
   PGMap::Incremental pending_inc;
 

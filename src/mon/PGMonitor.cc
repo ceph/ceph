@@ -169,8 +169,10 @@ bool PGMonitor::update_from_paxos()
 
   // dump pgmap summaries?  (useful for debugging)
   if (1) {
+    stringstream ds;
+    pg_map.dump(ds);
     bufferlist d;
-    dump(d);
+    d.append(ds);
     mon->store->put_bl_sn(d, "pgmap_dump", paxosv);
   }
 
@@ -593,18 +595,6 @@ void PGMonitor::send_pg_creates()
   }
 }
 
-void PGMonitor::dump(bufferlist& bl)
-{
-  stringstream ss;
-  pg_map.dump(ss);
-  while (!ss.eof()) {
-    string s;
-    getline(ss, s);
-    bl.append(s.c_str(), s.length());
-    bl.append("\n", 1);
-  }
-}
-
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
@@ -627,9 +617,11 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "dump") {
-      dump(rdata);
       ss << "ok";
       r = 0;
+      stringstream ds;
+      pg_map.dump(ds);
+      rdata.append(ds);
     }
     else if (m->cmd[1] == "scrub" && m->cmd.size() == 3) {
       pg_t pgid;

@@ -878,6 +878,13 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << *this;
       r = 0;
     }
+    else if (m->cmd[1] == "dump") {
+      ss << "ok";
+      r = 0;
+      stringstream ds;
+      osdmap.print(ds);
+      rdata.append(ds);
+    }
     else if (m->cmd[1] == "getmap") {
       osdmap.encode(rdata);
       ss << "got osdmap epoch " << osdmap.get_epoch();
