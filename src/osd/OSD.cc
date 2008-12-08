@@ -1694,7 +1694,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   wait_for_no_ops();
   recovery_wq.pause();
-  scrub_wq.pause();
+  scrub_wq.pause_new();   // _process() may be waiting for a replica message
   snap_trim_wq.pause();
   map_lock.get_write();
 

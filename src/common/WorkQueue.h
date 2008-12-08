@@ -107,6 +107,12 @@ public:
       wait_cond.Wait(_lock);
     _lock.Unlock();
   }
+  void pause_new() {
+    _lock.Lock();
+    assert(!_pause);
+    _pause = true;
+    _lock.Unlock();
+  }
 
   void unpause() {
     _lock.Lock();
