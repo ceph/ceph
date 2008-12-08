@@ -9,7 +9,16 @@
 #define _FS_CEPH_CEPH_FS_H
 
 
-#define CEPH_MON_PORT 12345
+#define CEPH_MON_PORT    6789  /* default monitor port */
+
+/*
+ * client-side processes will try to bind to ports in this
+ * range, simply for the benefit of tools like nmap or wireshark
+ * that would like to identify the protocol.
+ */
+#define CEPH_PORT_FIRST  6789
+#define CEPH_PORT_START  6800  /* non-monitors start here */
+#define CEPH_PORT_LAST   6900
 
 /*
  * Max file size is a policy choice; in reality we are limited

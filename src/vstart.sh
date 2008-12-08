@@ -60,7 +60,7 @@ test -d gmon && $SUDO rm -rf gmon/*
 HOSTNAME=`hostname`
 IP=`host $HOSTNAME | grep $HOSTNAME | cut -d ' ' -f 4`
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
-[ "$CEPH_PORT" == "" ] && CEPH_PORT=12345
+[ "$CEPH_PORT" == "" ] && CEPH_PORT=6789
 echo hostname $HOSTNAME
 echo "ip $IP"
 

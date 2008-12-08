@@ -17,7 +17,7 @@ then
 fi
 
 # build a fresh fs monmap, mon fs
-$CEPH_BIN/monmaptool --create --clobber --add $IP:12345 --print .ceph_monmap
+$CEPH_BIN/monmaptool --create --clobber --add $IP:6789 --print .ceph_monmap
 $CEPH_BIN/mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 
 # shared args

@@ -65,7 +65,7 @@ if [ $new -eq 1 ]; then
     fi
     
     # build a fresh fs monmap, mon fs
-    ./monmaptool --create --clobber --add $IP:12345 --print .ceph_monmap
+    ./monmaptool --create --clobber --add $IP:6789 --print .ceph_monmap
     ./mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
 fi
 

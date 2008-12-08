@@ -121,11 +121,29 @@ int Rank::Accepter::bind(int64_t force_nonce)
   ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
   
   /* bind to port */
-  int rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
-  if (rc < 0) {
-    derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
-	    << ": " << strerror(errno) << dendl;
-    return -errno;
+  int rc;
+  if (listen_addr.sin_port) {
+    // specific port
+    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+    if (rc < 0) {
+      derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
+	      << ": " << strerror(errno) << dendl;
+      return -errno;
+    }
+  } else {
+    // try a range of ports
+    for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
+      listen_addr.sin_port = htons(port);
+      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+      if (rc == 0)
+	break;
+    }
+    if (rc < 0) {
+      derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
+	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
+	      << ": " << strerror(errno) << dendl;
+      return -errno;
+    }
   }
 
   // what port did we get?
