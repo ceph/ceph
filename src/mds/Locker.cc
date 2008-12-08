@@ -3360,7 +3360,7 @@ void Locker::file_eval(FileLock *lock)
     in->get_caps_issued(&loner_issued, &other_issued);
 
     if (in->get_loner() >= 0) {
-      if ((loner_wanted & (CEPH_CAP_WR|CEPH_CAP_RD)) == 0 ||
+      if ((loner_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_RD)) == 0 ||
 	  (other_wanted & (CEPH_CAP_WR|CEPH_CAP_RD))) {
 	// we should lose it.
 	if ((other_wanted & CEPH_CAP_WR) ||
