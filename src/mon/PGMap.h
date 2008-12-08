@@ -171,7 +171,7 @@ public:
     ss << "version " << version << std::endl;
     ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
     ss << "last_pg_scan " << last_pg_scan << std::endl;
-    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tstate\tv\tepoch\tosds\tlast_scrub" << std::endl;
+    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tstate\tv\treported\tosds\tlast_scrub" << std::endl;
     for (set<pg_t>::iterator p = pg_set.begin();
 	 p != pg_set.end();
 	 p++) {
