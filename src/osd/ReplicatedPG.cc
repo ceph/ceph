@@ -2065,21 +2065,10 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
       dout(10) << "push_to_replica osd" << peer << " has correct old " << head
 	       << " v" << from_version 
 	       << ", pushing " << poid << " attrs as a clone op" << dendl;
-      // get attrs
-      map<nstring, bufferptr> attrset;
-      int r = osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
-      assert(r >= 0);
-      
-      osd_reqid_t rid;  // useless?
-      vector<ceph_osd_op> push(1);
-      push[0].op = CEPH_OSD_OP_PUSH;
-      push[0].offset = 0;
-      push[0].length = st.st_size;
-      MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false, 0,
-				       osd->osdmap->get_epoch(), osd->get_tid(), 0, version);
-      subop->clone_subsets[head].insert(0, st.st_size);
-      subop->attrset.swap(attrset);
-      osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
+      interval_set<__u64> data_subset;
+      map<pobject_t, interval_set<__u64> > clone_subsets;
+      clone_subsets[head].insert(0, st.st_size);
+      push(poid, peer, data_subset, clone_subsets);
       return;
     }
 
@@ -2139,7 +2128,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   map<nstring,bufferptr> attrset;
   __u64 size;
 
-  if (data_subset.size()) {
+  if (data_subset.size() || clone_subsets.size()) {
     struct stat st;
     int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
     assert(r == 0);
