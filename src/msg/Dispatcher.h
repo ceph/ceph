@@ -17,6 +17,7 @@
 #define __DISPATCHER_H
 
 #include "Message.h"
+#include "config.h"
 
 class Messenger;
 
@@ -36,6 +37,9 @@ class Dispatcher {
 
     if (!ret) {
       if (!dispatch_impl(m)) {
+	generic_dout(0) << "unhandled message " << m << " " << *m
+			<< " from " << m->get_orig_source_inst()
+			<< dendl;
         assert(0);
       }
     }
