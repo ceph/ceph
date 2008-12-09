@@ -46,53 +46,6 @@ static ostream& _prefix(Monitor *mon, PGMap& pg_map) {
 		<< ".pg v" << pg_map.version << " ";
 }
 
-struct kb_t {
-  uint64_t v;
-  kb_t(uint64_t _v) : v(_v) {}
-};
-ostream& operator<<(ostream& out, const kb_t& kb)
-{
-  __u64 bump_after = 100;
-  if (kb.v > bump_after << 40)
-    return out << (kb.v >> 40) << " PB";    
-  if (kb.v > bump_after << 30)
-    return out << (kb.v >> 30) << " TB";    
-  if (kb.v > bump_after << 20)
-    return out << (kb.v >> 20) << " GB";    
-  if (kb.v > bump_after << 10)
-    return out << (kb.v >> 10) << " MB";
-  return out << kb.v << " KB";
-}
-
-ostream& operator<<(ostream& out, PGMonitor& pm)
-{
-  std::stringstream ss;
-  for (hash_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
-       p != pm.pg_map.num_pg_by_state.end();
-       ++p) {
-    if (p != pm.pg_map.num_pg_by_state.begin())
-      ss << ", ";
-    ss << p->second << " " << pg_state_string(p->first);
-  }
-  string states = ss.str();
-  out << "v" << pm.pg_map.version << ": "
-      << pm.pg_map.pg_stat.size() << " pgs: "
-      << states << "; "
-      << kb_t(pm.pg_map.pg_sum.num_kb) << " data, " 
-      << kb_t(pm.pg_map.osd_sum.kb_used) << " used, "
-      << kb_t(pm.pg_map.osd_sum.kb_avail) << " / "
-      << kb_t(pm.pg_map.osd_sum.kb) << " avail";
-
-  if (pm.pg_map.pg_sum.num_objects_degraded) {
-    double pc = (double)pm.pg_map.pg_sum.num_objects_degraded / (double)pm.pg_map.pg_sum.num_object_copies * (double)100.0;
-    char b[20];
-    sprintf(b, "%.3lf", pc);
-    out << "; " //<< pm.pg_map.pg_sum.num_objects_missing_on_primary << "/"
-	<< pm.pg_map.pg_sum.num_objects_degraded 
-	<< "/" << pm.pg_map.pg_sum.num_object_copies << " degraded (" << b << "%)";
-  }
-  return out;
-}
 
 /*
  Tick function to update the map based on performance every N seconds
@@ -103,7 +56,7 @@ void PGMonitor::tick()
   if (!paxos->is_active()) return;
 
   update_from_paxos();
-  dout(10) << *this << dendl;
+  dout(10) << pg_map << dendl;
 
   if (!mon->is_leader()) return; 
 
@@ -156,7 +109,7 @@ bool PGMonitor::update_from_paxos()
     inc.decode(p);
     pg_map.apply_incremental(inc);
     
-    dout(0) << *this << dendl;
+    dout(0) << pg_map << dendl;
   }
 
   assert(paxosv == pg_map.version);
@@ -603,7 +556,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
-      ss << *this;
+      ss << pg_map;
       r = 0;
     }
     else if (m->cmd[1] == "getmap") {

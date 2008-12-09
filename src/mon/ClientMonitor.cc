@@ -40,11 +40,6 @@ static ostream& _prefix(Monitor *mon, ClientMap& client_map) {
 		<< ".client v" << client_map.version << " ";
 }
 
-ostream& operator<<(ostream& out, ClientMonitor& om)
-{
-  return out << "v" << om.client_map.version << ": "
-	     << om.client_map.client_info.size() << " clients, next is client" << om.client_map.next_client;
-}
 
 bool ClientMonitor::update_from_paxos()
 {
@@ -239,7 +234,7 @@ bool ClientMonitor::preprocess_command(MMonCommand *m)
 
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
-      ss << *this;
+      ss << client_map;
       r = 0;
     }
     else if (m->cmd[1] == "getmap") {
@@ -340,7 +335,7 @@ void ClientMonitor::tick()
   if (!paxos->is_active()) return;
 
   update_from_paxos();
-  dout(10) << *this << dendl;
+  dout(10) << client_map << dendl;
 
   if (!mon->is_leader()) return;
 

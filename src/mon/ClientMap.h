@@ -133,6 +133,16 @@ public:
     ::decode(client_info, bl);
     reverse();
   }
+
+  void print_summary(ostream& out) {
+    out << "v" << version << ": "
+	<< client_info.size() << " clients, next is client" << next_client;
+  }
 };
+
+inline ostream& operator<<(ostream& out, ClientMap& cm) {
+  cm.print_summary(out);
+  return out;
+}
 
 #endif

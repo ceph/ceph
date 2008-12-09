@@ -104,13 +104,6 @@ void OSDMonitor::fake_reorg()
 }
 
 
-ostream& operator<<(ostream& out, OSDMonitor& om)
-{
-  om.osdmap.print_summary(out);
-  return out;
-}
-
-
 /************ MAPS ****************/
 
 
@@ -170,7 +163,7 @@ bool OSDMonitor::update_from_paxos()
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
 
     // share
-    dout(1) << *this << dendl;
+    dout(1) << osdmap << dendl;
   }
   mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
 
@@ -785,7 +778,7 @@ void OSDMonitor::tick()
   if (!paxos->is_active()) return;
 
   update_from_paxos();
-  dout(10) << *this << dendl;
+  dout(10) << osdmap << dendl;
 
   if (!mon->is_leader()) return;
 

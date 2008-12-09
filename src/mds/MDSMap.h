@@ -390,4 +390,9 @@ class MDSMap {
   void print_summary(ostream& out);
 };
 
+inline ostream& operator<<(ostream& out, MDSMap& m) {
+  m.print_summary(out);
+  return out;
+}
+
 #endif

@@ -384,4 +384,28 @@ inline ostream& operator<<(ostream& out, const ceph_osd_op& op) {
 }
 
 
+
+
+
+struct kb_t {
+  uint64_t v;
+  kb_t(uint64_t _v) : v(_v) {}
+};
+
+inline ostream& operator<<(ostream& out, const kb_t& kb)
+{
+  __u64 bump_after = 100;
+  if (kb.v > bump_after << 40)
+    return out << (kb.v >> 40) << " PB";    
+  if (kb.v > bump_after << 30)
+    return out << (kb.v >> 30) << " TB";    
+  if (kb.v > bump_after << 20)
+    return out << (kb.v >> 20) << " GB";    
+  if (kb.v > bump_after << 10)
+    return out << (kb.v >> 10) << " MB";
+  return out << kb.v << " KB";
+}
+
+
+
 #endif

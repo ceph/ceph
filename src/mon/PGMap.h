@@ -22,6 +22,7 @@
 #define __PGMAP_H
 
 #include "osd/osd_types.h"
+#include <sstream>
 
 class PGMap {
 public:
@@ -214,6 +215,39 @@ public:
 	 << std::endl;
   }
 
+  void print_summary(ostream& out) {
+    std::stringstream ss;
+    for (hash_map<int,int>::iterator p = num_pg_by_state.begin();
+	 p != num_pg_by_state.end();
+	 ++p) {
+      if (p != num_pg_by_state.begin())
+	ss << ", ";
+      ss << p->second << " " << pg_state_string(p->first);
+    }
+    string states = ss.str();
+    out << "v" << version << ": "
+	<< pg_stat.size() << " pgs: "
+	<< states << "; "
+	<< kb_t(pg_sum.num_kb) << " data, " 
+	<< kb_t(osd_sum.kb_used) << " used, "
+	<< kb_t(osd_sum.kb_avail) << " / "
+	<< kb_t(osd_sum.kb) << " avail";
+    
+    if (pg_sum.num_objects_degraded) {
+      double pc = (double)pg_sum.num_objects_degraded / (double)pg_sum.num_object_copies * (double)100.0;
+      char b[20];
+      sprintf(b, "%.3lf", pc);
+      out << "; " //<< pg_sum.num_objects_missing_on_primary << "/"
+	  << pg_sum.num_objects_degraded 
+	  << "/" << pg_sum.num_object_copies << " degraded (" << b << "%)";
+    }
+  }
+
 };
+
+inline ostream& operator<<(ostream& out, PGMap& m) {
+  m.print_summary(out);
+  return out;
+}
 
 #endif

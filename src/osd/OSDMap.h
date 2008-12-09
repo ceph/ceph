@@ -911,5 +911,10 @@ private:
 
 };
 
+inline ostream& operator<<(ostream& out, OSDMap& m) {
+  m.print_summary(out);
+  return out;
+}
+
 
 #endif

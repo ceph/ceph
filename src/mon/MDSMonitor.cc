@@ -53,12 +53,6 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
   *_dout << dendl;
 }
 
-ostream& operator<<(ostream& out, MDSMonitor& mm)
-{
-  mm.mdsmap.print_summary(out);
-  return out;
-}
-
 
 
 // service methods
@@ -462,7 +456,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
-      ss << *this;
+      ss << mdsmap;
       r = 0;
     } 
     else if (m->cmd[1] == "dump") {
@@ -603,7 +597,7 @@ void MDSMonitor::tick()
   if (!paxos->is_active()) return;
 
   update_from_paxos();
-  dout(10) << *this << dendl;
+  dout(10) << mdsmap << dendl;
   
   bool do_propose = false;
 
