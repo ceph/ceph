@@ -85,6 +85,9 @@ fi
 
 
 # osds
+savelog -l cosd
+cp -p cosd.0 cosd
+
 for host in `cd dev/hosts ; ls`
 do
  ssh root@cosd$host killall cosd
