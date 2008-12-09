@@ -907,6 +907,7 @@ private:
 
 
   void print(ostream& out);
+  void print_summary(ostream& out);
 
 };
 

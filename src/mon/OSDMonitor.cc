@@ -106,10 +106,8 @@ void OSDMonitor::fake_reorg()
 
 ostream& operator<<(ostream& out, OSDMonitor& om)
 {
-  return out << "e" << om.osdmap.get_epoch() << ": "
-	     << om.osdmap.get_num_osds() << " osds: "
-	     << om.osdmap.get_num_up_osds() << " up, " 
-	     << om.osdmap.get_num_in_osds() << " in";
+  om.osdmap.print_summary(out);
+  return out;
 }
 
 
@@ -875,7 +873,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "stat") {
-      ss << *this;
+      osdmap.print_summary(ss);
       r = 0;
     }
     else if (m->cmd[1] == "dump") {

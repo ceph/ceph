@@ -58,6 +58,14 @@ void OSDMap::print(ostream& out)
       << std::endl;
 }
 
+void OSDMap::print_summary(ostream& out)
+{
+  out << "e" << get_epoch() << ": "
+      << get_num_osds() << " osds: "
+      << get_num_up_osds() << " up, " 
+      << get_num_in_osds() << " in";
+}
+
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
 			  int num_osd, int num_dom, int pg_bits, int lpg_bits,
