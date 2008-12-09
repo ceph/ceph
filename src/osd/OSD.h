@@ -122,6 +122,7 @@ private:
   map<int, epoch_t> heartbeat_to, heartbeat_from;
   map<int, utime_t> heartbeat_from_stamp;
   map<int, entity_inst_t> heartbeat_inst;
+  utime_t last_mon_heartbeat;
   Messenger *heartbeat_messenger;
   
   void update_heartbeat_peers();
