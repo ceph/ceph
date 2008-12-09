@@ -386,9 +386,8 @@ class MDSMap {
   }
 
 
-  /*** mapping functions ***/
-
-  int hash_dentry( inodeno_t dirino, const string& dn );  
+  void print(ostream& out);
+  void print_summary(ostream& out);
 };
 
 #endif

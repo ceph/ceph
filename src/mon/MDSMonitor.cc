@@ -48,61 +48,15 @@ static ostream& _prefix(Monitor *mon, MDSMap& mdsmap) {
 
 void MDSMonitor::print_map(MDSMap &m, int dbl)
 {
-  dout(7) << "print_map epoch " << m.get_epoch() << " max " << m.max_mds << dendl;
-  entity_inst_t blank;
-  set<int> all;
-  m.get_mds_set(all);
-  for (set<int>::iterator p = all.begin();
-       p != all.end();
-       ++p) {
-    if (m.standby_for.count(*p) && !m.standby_for[*p].empty()) {
-      dout(7) << " mds" << *p << "." << m.mds_inc[*p]
-	      << " : " << MDSMap::get_state_name(m.get_state(*p))
-	      << " : " << (m.have_inst(*p) ? m.get_inst(*p) : blank)
-	      << " : +" << m.standby_for[*p].size()
-	      << " standby " << m.standby_for[*p]
-	      << dendl;
-    } else {
-      dout(7) << " mds" << *p << "." << m.mds_inc[*p]
-	      << " : " << MDSMap::get_state_name(m.get_state(*p))
-	      << " : " << (m.have_inst(*p) ? m.get_inst(*p) : blank)
-	      << dendl;
-    }
-  }
-  if (!m.standby_any.empty()) {
-    dout(7) << " +" << m.standby_any.size() << " shared standby " << m.standby_any << dendl;
-  }
+  dout(7) << "print_map";
+  m.print(*_dout);
+  *_dout << dendl;
 }
 
 ostream& operator<<(ostream& out, MDSMonitor& mm)
 {
-  std::stringstream ss;
-  set<int> all;
-  MDSMap &m = mm.mdsmap;
-  m.get_mds_set(all);
-  int standby_spec = 0;
-  map<int,int> by_state;
-  for (set<int>::iterator p = all.begin();
-       p != all.end();
-       ++p) {
-    by_state[m.get_state(*p)]++;
-    standby_spec += m.get_num_standby_for(*p);
-  }
-
-  for (map<int,int>::iterator p = by_state.begin(); p != by_state.end(); p++) {
-    if (p != by_state.begin())
-      ss << ", ";
-    ss << p->second << " " << MDSMap::get_state_name(p->first);
-  }
-  if (m.get_num_standby_any())
-    ss << ", " << m.get_num_standby_any() << " standby (any)";
-  if (standby_spec)
-    ss << ", " << standby_spec << " standby (specific)";
-
-  string states = ss.str();  
-  return out << "e" << m.get_epoch() << ": "
-	     << all.size() << " nodes: " 
-	     << states;
+  mm.mdsmap.print_summary(out);
+  return out;
 }
 
 
@@ -511,6 +465,13 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       ss << *this;
       r = 0;
     } 
+    else if (m->cmd[1] == "dump") {
+      stringstream ds;
+      mdsmap.print(ds);
+      rdata.append(ds);
+      ss << "dumped mdsmap epoch " << mdsmap.get_epoch();
+      r = 0;
+    }
     else if (m->cmd[1] == "getmap") {
       mdsmap.encode(rdata);
       ss << "got mdsmap epoch " << mdsmap.get_epoch();

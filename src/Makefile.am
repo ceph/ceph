@@ -182,6 +182,7 @@ libcommon_a_SOURCES = \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
+	mds/MDSMap.cc \
 	config.cc
 
 libcrush_a_SOURCES = \
