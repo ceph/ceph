@@ -29,6 +29,7 @@ using namespace std;
 #include "mds/MDSMap.h"
 
 #include "PaxosService.h"
+#include "ClientMap.h"
 
 class Monitor;
 class Paxos;
@@ -37,108 +38,8 @@ class MClientUnmount;
 class MMonCommand;
 
 
-struct client_info_t {
-  entity_addr_t addr;
-  utime_t mount_time;
-  
-  void encode(bufferlist& bl) const {
-    ::encode(addr, bl);
-    ::encode(mount_time, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(addr, bl);
-    ::decode(mount_time, bl);
-  }
-};
-WRITE_CLASS_ENCODER(client_info_t)
-
-
 class ClientMonitor : public PaxosService {
 public:
-
-  struct Incremental {
-    version_t version;
-    uint32_t next_client;
-    map<int32_t, client_info_t> mount;
-    set<int32_t> unmount;
-    
-    Incremental() : version(0), next_client() {}
-
-    bool is_empty() { return mount.empty() && unmount.empty(); }
-    void add_mount(uint32_t client, client_info_t& info) {
-      next_client = MAX(next_client, client+1);
-      mount[client] = info;
-    }
-    void add_unmount(uint32_t client) {
-      assert(client < next_client);
-      if (mount.count(client))
-	mount.erase(client);
-      else
-	unmount.insert(client);
-    }
-    
-    void encode(bufferlist &bl) const {
-      ::encode(version, bl);
-      ::encode(next_client, bl);
-      ::encode(mount, bl);
-      ::encode(unmount, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(version, bl);
-      ::decode(next_client, bl);
-      ::decode(mount, bl);
-      ::decode(unmount, bl);
-    }
-  };
-
-  struct Map {
-    version_t version;
-    uint32_t next_client;
-    map<uint32_t,client_info_t> client_info;
-    map<entity_addr_t,uint32_t> addr_client;  // reverse map
-
-    Map() : version(0), next_client(0) {}
-
-    void reverse() {
-      addr_client.clear();
-      for (map<uint32_t,client_info_t>::iterator p = client_info.begin();
-	   p != client_info.end();
-	   ++p) {
-	addr_client[p->second.addr] = p->first;
-      }
-    }
-    void apply_incremental(Incremental &inc) {
-      assert(inc.version == version+1);
-      version = inc.version;
-      next_client = inc.next_client;
-      for (map<int32_t,client_info_t>::iterator p = inc.mount.begin();
-	   p != inc.mount.end();
-	   ++p) {
-	client_info[p->first] = p->second;
-	addr_client[p->second.addr] = p->first;
-      }
-	
-      for (set<int32_t>::iterator p = inc.unmount.begin();
-	   p != inc.unmount.end();
-	   ++p) {
-	assert(client_info.count(*p));
-	addr_client.erase(client_info[*p].addr);
-	client_info.erase(*p);
-      }
-    }
-
-    void encode(bufferlist &bl) const {
-      ::encode(version, bl);
-      ::encode(next_client, bl);
-      ::encode(client_info, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(version, bl);
-      ::decode(next_client, bl);
-      ::decode(client_info, bl);
-      reverse();
-    }
-  };
 
   class C_Mounted : public Context {
     ClientMonitor *cmon;
@@ -170,11 +71,11 @@ public:
   };
 
 
-  Map client_map;
+  ClientMap client_map;
 
 private:
   // leader
-  Incremental pending_inc;
+  ClientMap::Incremental pending_inc;
 
   void create_initial();
   bool update_from_paxos();

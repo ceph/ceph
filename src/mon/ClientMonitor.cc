@@ -33,7 +33,7 @@
 #define DOUT_SUBSYS mon
 #undef dout_prefix
 #define dout_prefix _prefix(mon, client_map)
-static ostream& _prefix(Monitor *mon, ClientMonitor::Map& client_map) {
+static ostream& _prefix(Monitor *mon, ClientMap& client_map) {
   return *_dout << dbeginl
 		<< "mon" << mon->whoami
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
@@ -76,7 +76,7 @@ bool ClientMonitor::update_from_paxos()
     assert(success);
 
     dout(7) << "update_from_paxos  applying incremental " << client_map.version+1 << dendl;
-    Incremental inc;
+    ClientMap::Incremental inc;
     bufferlist::iterator p = bl.begin();
     inc.decode(p);
     client_map.apply_incremental(inc);
@@ -99,7 +99,7 @@ bool ClientMonitor::update_from_paxos()
 
 void ClientMonitor::create_pending()
 {
-  pending_inc = Incremental();
+  pending_inc = ClientMap::Incremental();
   pending_inc.version = client_map.version + 1;
   pending_inc.next_client = client_map.next_client;
   dout(10) << "create_pending v " << pending_inc.version
