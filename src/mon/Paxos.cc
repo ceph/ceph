@@ -773,7 +773,7 @@ void Paxos::dispatch(Message *m)
 	 (mon->is_peon() && m->get_source().num() == mon->get_leader()));
   
   switch (m->get_type()) {
-    
+
   case MSG_MON_PAXOS:
     {
       MMonPaxos *pm = (MMonPaxos*)m;

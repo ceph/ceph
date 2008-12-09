@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <sys/stat.h>
@@ -67,34 +67,6 @@ map<string,string> status;
 
 int lines = 0;
 
-// refresh every second
-void get_status(bool newmon=false);
-
-struct C_Refresh : public Context {
-  void finish(int r) {
-    get_status(true);
-  }
-};
-
-SafeTimer timer(lock);
-Context *event = 0;
-
-void get_status(bool newmon)
-{
-  int mon = monmap.pick_mon(newmon);
-
-  vector<string> vcmd(2);
-  vcmd[0] = prefix[which];
-  vcmd[1] = "stat";
-  
-  MMonCommand *m = new MMonCommand(monmap.fsid);
-  m->cmd.swap(vcmd);
-  messenger->send_message(m, monmap.get_inst(mon));
-
-  event = new C_Refresh;
-  timer.add_event_after(.2, event);
-}
-
 void handle_notify(MMonObserveNotify *notify)
 {
     generic_dout(0) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id) << " v" << notify->ver
@@ -105,8 +77,8 @@ void handle_notify(MMonObserveNotify *notify)
 	switch (notify->machine_id) {
 	case PAXOS_PGMAP:
 		{
-  		  PGMap::Incremental inc;
-		  bufferlist::iterator p = notify->bl.begin();
+                  PGMap::Incremental inc;
+                  bufferlist::iterator p = notify->bl.begin();
 		  inc.decode(p);
 		  pgmap.apply_incremental(inc);
 		  break;
@@ -122,7 +94,7 @@ void handle_notify(MMonObserveNotify *notify)
 		break;
 	case PAXOS_CLIENTMAP:
 		{
-    		  ClientMap::Incremental inc;
+                  ClientMap::Incremental inc;
 		  bufferlist::iterator p = notify->bl.begin();
 		  inc.decode(p);
 		  clientmap.apply_incremental(inc);
@@ -189,7 +161,7 @@ class Admin : public Dispatcher {
 } dispatcher;
 
 
-void usage() 
+void usage()
 {
   cerr << "usage: covserver [options] monhost] command" << std::endl;
   cerr << "Options:" << std::endl;
@@ -211,11 +183,11 @@ static void send_requests()
 {
    bufferlist indata;
    for (int i=0; i<PAXOS_NUM; i++) {
-  	MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
-  	m->set_data(indata);
-  	int mon = monmap.pick_mon();
-  	generic_dout(0) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
-  	messenger->send_message(m, monmap.get_inst(mon));
+        MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
+        m->set_data(indata);
+        int mon = monmap.pick_mon();
+        generic_dout(0) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
+        messenger->send_message(m, monmap.get_inst(mon));
   }
 
   C_ObserverRefresh *observe_refresh_event = new C_ObserverRefresh();
@@ -241,7 +213,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (mc.get_monmap(&monmap) < 0)
     return -1;
    memset(map_ver, 0, sizeof(map_ver));
-  
+
   // start up network
   rank.bind();
   g_conf.daemonize = false; // not us!

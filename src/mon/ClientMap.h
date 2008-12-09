@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,11 +7,11 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
- 
+
 /*
  * The Client Monitor is used for traking the filesystem's clients.
  */
@@ -34,7 +34,7 @@ using namespace std;
 struct client_info_t {
   entity_addr_t addr;
   utime_t mount_time;
-  
+
   void encode(bufferlist& bl) const {
     ::encode(addr, bl);
     ::encode(mount_time, bl);
@@ -77,7 +77,7 @@ public:
       else
 	unmount.insert(client);
     }
-    
+
     void encode(bufferlist &bl) const {
       ::encode(version, bl);
       ::encode(next_client, bl);
@@ -112,7 +112,7 @@ public:
 	client_info[p->first] = p->second;
 	addr_client[p->second.addr] = p->first;
     }
-	
+
     for (set<int32_t>::iterator p = inc.unmount.begin();
 	   p != inc.unmount.end();
 	   ++p) {
