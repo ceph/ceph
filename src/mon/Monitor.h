@@ -38,6 +38,7 @@ class MonitorStore;
 class PaxosService;
 
 class MMonGetMap;
+class MMonObserve;
 
 class Monitor : public Dispatcher {
 public:
@@ -123,6 +124,7 @@ public:
 
   void reply_command(MMonCommand *m, int rc, const string &rs);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata);
+  void register_observer(MMonObserve *m);
 
   void inject_args(const entity_inst_t& inst, string& args) {
     vector<string> a(1);

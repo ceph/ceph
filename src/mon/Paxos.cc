@@ -17,6 +17,7 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonPaxos.h"
+#include "messages/MMonObserveNotify.h"
 
 #include "config.h"
 
@@ -34,6 +35,14 @@ static ostream& _prefix(Monitor *mon, int whoami, const char *machine_name, int 
 		      (const char*)"(peon)" : (const char*)"(?\?)"))) 
 		<< ".paxos(" << machine_name << " " << Paxos::get_statename(state) << " lc " << last_committed
 		<< ") ";
+}
+
+void PaxosObserver::notify(bufferlist& bl, version_t ver, Monitor *mon, bool is_incremental)
+{
+  MMonObserveNotify *msg = new MMonObserveNotify(paxos->machine_id, bl, ver, is_incremental);
+  last_version = ver;
+   
+  mon->messenger->send_message(msg, inst);
 }
 
 
@@ -768,7 +777,7 @@ void Paxos::dispatch(Message *m)
   case MSG_MON_PAXOS:
     {
       MMonPaxos *pm = (MMonPaxos*)m;
-      
+
       // NOTE: these ops are defined in messages/MMonPaxos.h
       switch (pm->op) {
 	// learner
@@ -802,10 +811,80 @@ void Paxos::dispatch(Message *m)
   default:
     assert(0);
   }
+
+  if (is_readable()) {
+    update_observers();
+  }
 }
 
+void Paxos::register_observer(PaxosObserver *observer)
+{
+  utime_t timeout=g_clock.now();
+  map<entity_inst_t, PaxosObserver *>::iterator iter;
 
+  observers_lock.Lock();
 
+  iter = observers.find(observer->inst);
+
+  if (iter != observers.end()) {
+    PaxosObserver *o = iter->second;
+
+    observers.erase(iter);
+
+    delete o;
+  }
+
+  timeout += g_conf.paxos_observer_timeout;
+  observer->set_timeout(timeout);
+
+  observers[observer->inst] = observer;
+
+  observers_lock.Unlock();
+}
+
+void Paxos::update_observers()
+{
+  bufferlist bl;
+  version_t ver;
+  map<entity_inst_t, PaxosObserver *>::iterator iter, last;
+
+  observers_lock.Lock();
+
+  last = observers.end();
+  iter = observers.begin();
+  while (iter != last) {
+    int done = 0;
+    PaxosObserver *observer = iter->second;
+    while (g_clock.now() > observer->timeout) {
+	delete observer;
+	observers.erase(iter++);
+	if (iter == last) {
+		observers_lock.Unlock();
+		return;
+	}
+	observer = iter->second;	
+    }
+
+    if (observer->get_ver() == 0) {
+        ver = get_latest(bl);
+        if (ver) {
+          observer->notify(bl, ver, mon, false);
+	   done=1;
+        }
+      }
+
+      if (!done) {
+        for (ver = observer->get_ver() + 1; ver <=last_committed; ver++) {
+          if (read(ver, bl)) {
+             observer->notify(bl, ver, mon, true);
+          }
+        }
+      }
+
+      ++iter;
+    }
+    observers_lock.Unlock();
+}
 
 // -----------------
 // service interface

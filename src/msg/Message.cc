@@ -19,6 +19,8 @@ using namespace std;
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
+#include "messages/MMonObserve.h"
+#include "messages/MMonObserveNotify.h"
 
 #include "messages/MMonElection.h"
 #include "messages/MLog.h"
@@ -165,6 +167,12 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     m = new MMonElection;
     break;
 
+  case MSG_MON_OBSERVE:
+    m = new MMonObserve;
+    break;
+  case MSG_MON_OBSERVE_NOTIFY:
+    m = new MMonObserveNotify;
+    break;
   case MSG_LOG:
     m = new MLog;
     break;

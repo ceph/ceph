@@ -277,6 +277,7 @@ md_config_t g_conf = {
   mon_pg_create_interval: 30.0, // no more than every 30s
 
   paxos_propose_interval: 1.0,  // gather updates for this long before proposing a map update
+  paxos_observer_timeout: 5*60,  // gather updates for this long before proposing a map update
 
   // --- client ---
   client_cache_size: 1000,

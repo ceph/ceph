@@ -28,6 +28,8 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonObserve.h"
+#include "messages/MMonObserveNotify.h"
 
 #include "messages/MMonPaxos.h"
 
@@ -281,6 +283,21 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   delete m;
 }
 
+void Monitor::register_observer(MMonObserve *m)
+{
+  if (m->monitor_id >= PAXOS_NUM) {
+    dout(0) << "register_observer: wrong monitor id: " << m->monitor_id << dendl;
+    delete m;
+    return;
+  }
+  Paxos *paxos = paxos_service[m->monitor_id]->paxos;
+  assert(paxos);
+  entity_inst_t inst=m->get_orig_source_inst();
+  PaxosObserver *observer = new PaxosObserver(paxos, inst, m->ver);
+  paxos->register_observer(observer);
+  delete m;
+}
+
 
 void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args)
 {
@@ -336,6 +353,10 @@ bool Monitor::dispatch_impl(Message *m)
       
     case MSG_MON_COMMAND:
       handle_command((MMonCommand*)m);
+      break;
+
+    case MSG_MON_OBSERVE:
+      register_observer((MMonObserve *)m);
       break;
 
 

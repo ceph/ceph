@@ -149,6 +149,7 @@ struct md_config_t {
   float mon_pg_create_interval;
 
   double paxos_propose_interval;
+  double paxos_observer_timeout;
 
   // client
   int      client_cache_size;
