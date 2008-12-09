@@ -705,7 +705,7 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   for (set<int>::iterator p = prior_set.begin();
        p != prior_set.end();
        p++)
-    if (osdmap->is_down(*p)) {
+    if (osdmap->is_down(*p) && prior_set_down.count(*p) == 0) {
       dout(10) << "prior_set_affected: osd" << *p << " now down" << dendl;
       return true;
     }
@@ -875,7 +875,6 @@ void PG::build_prior()
       for (unsigned i=0; i<interval.acting.size(); i++)
 	if (osd->osdmap->is_down(interval.acting[i])) {
 	  prior_set.insert(interval.acting[i]);
-	  prior_set_down.erase(interval.acting[i]);
 	  state_set(PG_STATE_DOWN);
 	}
       some_down = true;
