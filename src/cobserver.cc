@@ -59,94 +59,75 @@ static bufferlist log_bl;
 
 version_t map_ver[PAXOS_NUM];
 
-enum { OSD, MON, MDS, CLIENT, LAST };
-int which = 0;
-int same = 0;
-const char *prefix[4] = { "mds", "osd", "pg", "client" };
-map<string,string> status;
-
 SafeTimer timer(lock);
 
 int lines = 0;
 
 void handle_notify(MMonObserveNotify *notify)
 {
-    generic_dout(0) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id) << " v" << notify->ver
-		    << (notify->is_incremental ? " (i)" : "") << dendl;
-    if (notify->is_incremental) {
-        if (map_ver[notify->machine_id] >= notify->ver)
-		return;
-	switch (notify->machine_id) {
-	case PAXOS_PGMAP:
-		{
-                  PGMap::Incremental inc;
-                  bufferlist::iterator p = notify->bl.begin();
-		  inc.decode(p);
-		  pgmap.apply_incremental(inc);
-		  break;
-		}
-	case PAXOS_MDSMAP:
-		mdsmap.decode(notify->bl);
-		break;
-	case PAXOS_OSDMAP:
-		{
-                  OSDMap::Incremental inc(notify->bl);
-		  osdmap.apply_incremental(inc);
-		}
-		break;
-	case PAXOS_CLIENTMAP:
-		{
-                  ClientMap::Incremental inc;
-		  bufferlist::iterator p = notify->bl.begin();
-		  inc.decode(p);
-		  clientmap.apply_incremental(inc);
-		}
-		break;
-	case PAXOS_LOG:
-		{
-		  LogEntry le;
-		  bufferlist::iterator p = notify->bl.begin();
-		  le.decode(p);
-/*
-		  std::stringstream ss;
-		  ss << le;
-		  string s;
-		  getline(ss, s);
-		  log_bl.append(s);
-		  log_bl.append("\n"); */
-		  break;
-		}
-	}
-    } else {
-	switch (notify->machine_id) {
-	case PAXOS_PGMAP:
-		{
-		  bufferlist::iterator p = notify->bl.begin();
-	          pgmap.decode(p);
-		}
-		break;
-	case PAXOS_MDSMAP:
-		mdsmap.decode(notify->bl);
-		break;
-	case PAXOS_OSDMAP:
-	        osdmap.decode(notify->bl);
-		break;
-	case PAXOS_CLIENTMAP:
-		{
-		  bufferlist::iterator p = notify->bl.begin();
-		  clientmap.decode(p);
-		  break;
-		}
-	case PAXOS_LOG:
-		{
-		  LogEntry le;
-		  bufferlist::iterator p = notify->bl.begin();
-		  le.decode(p);
-		  break;
-		}
-	}
+  generic_dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id) << " v" << notify->ver
+		  << (notify->is_incremental ? " (i)" : "") << dendl;
+  
+  if (!notify->is_incremental &&
+      map_ver[notify->machine_id] >= notify->ver)
+    return;
+  
+  switch (notify->machine_id) {
+  case PAXOS_PGMAP:
+    {
+      bufferlist::iterator p = notify->bl.begin();
+      if (notify->is_incremental) {
+	PGMap::Incremental inc;
+	inc.decode(p);
+	pgmap.apply_incremental(inc);
+      } else {
+	pgmap.decode(p);
+      }
+      dout(0) << "pg " << pgmap << dendl;
+      break;
     }
-    map_ver[notify->machine_id] = notify->ver;
+
+  case PAXOS_MDSMAP:
+    mdsmap.decode(notify->bl);
+    dout(0) << "mds " << mdsmap << dendl;
+    break;
+
+  case PAXOS_OSDMAP:
+    {
+      if (notify->is_incremental) {
+	OSDMap::Incremental inc(notify->bl);
+	osdmap.apply_incremental(inc);
+      } else {
+	osdmap.decode(notify->bl);
+      }
+      dout(0) << "osd " << osdmap << dendl;
+    }
+    break;
+
+  case PAXOS_CLIENTMAP:
+    {
+      bufferlist::iterator p = notify->bl.begin();
+      if (notify->is_incremental) {
+	ClientMap::Incremental inc;
+	inc.decode(p);
+	clientmap.apply_incremental(inc);
+      } else 
+	clientmap.decode(p);
+      dout(0) << "client " << clientmap << dendl;
+    }
+    break;
+
+  case PAXOS_LOG:
+    {
+      LogEntry le;
+      bufferlist::iterator p = notify->bl.begin();
+      le.decode(p);
+      dout(0) << le << dendl;
+      break;
+    }
+  }
+
+  map_ver[notify->machine_id] = notify->ver;
 }
 
 class Admin : public Dispatcher {
@@ -165,7 +146,7 @@ class Admin : public Dispatcher {
 
 void usage()
 {
-  cerr << "usage: covserver [options] monhost] command" << std::endl;
+  cerr << "usage: cobserver [options] monhost] command" << std::endl;
   cerr << "Options:" << std::endl;
   cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
   exit(1);
@@ -188,13 +169,12 @@ static void send_requests()
         MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
         m->set_data(indata);
         int mon = monmap.pick_mon();
-        generic_dout(0) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
+        generic_dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
         messenger->send_message(m, monmap.get_inst(mon));
   }
 
   C_ObserverRefresh *observe_refresh_event = new C_ObserverRefresh();
   timer.add_event_after(g_conf.paxos_observer_timeout/2, observe_refresh_event);
-
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
