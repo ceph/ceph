@@ -2194,6 +2194,8 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
         peer_missing[peer].num_missing() == 0) 
       uptodate_set.insert(peer);
 
+    update_stats();
+
     if (pushing[poid.oid].empty()) {
       dout(10) << "pushed " << poid << " to all replicas" << dendl;
       finish_recovery_op();
