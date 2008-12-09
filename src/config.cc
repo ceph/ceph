@@ -418,6 +418,7 @@ md_config_t g_conf = {
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
+  osd_mon_heartbeat_interval: 30,  // if no peers, ping monitor
   osd_heartbeat_grace: 60,
   osd_mon_report_interval:  5,  // pg stats, failures, up_thru, boot.
   osd_replay_window: 45,

@@ -1125,10 +1125,13 @@ void OSD::heartbeat()
   
   // hmm.. am i all alone?
   if (heartbeat_from.empty() || heartbeat_to.empty()) {
-    dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-    int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
-                            monmap->get_inst(mon));
+    if (now - last_mon_heartbeat > g_conf.osd_mon_heartbeat_interval) {
+      last_mon_heartbeat = now;
+      dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
+      int mon = monmap->pick_mon();
+      messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
+			      monmap->get_inst(mon));
+    }
   }
 
   if (map_locked)
