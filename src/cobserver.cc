@@ -48,20 +48,16 @@ using namespace std;
 Mutex lock("cobserver.cc lock");
 Messenger *messenger = 0;
 
-const char *outfile = 0;
-
 static PGMap pgmap;
 static MonMap monmap;
 static MDSMap mdsmap;
 static OSDMap osdmap;
 static ClientMap clientmap;
-static bufferlist log_bl;
 
 version_t map_ver[PAXOS_NUM];
 
 SafeTimer timer(lock);
 
-int lines = 0;
 
 void handle_notify(MMonObserveNotify *notify)
 {
@@ -83,13 +79,13 @@ void handle_notify(MMonObserveNotify *notify)
       } else {
 	pgmap.decode(p);
       }
-      dout(0) << "pg " << pgmap << dendl;
+      dout(0) << "    pg " << pgmap << dendl;
       break;
     }
 
   case PAXOS_MDSMAP:
     mdsmap.decode(notify->bl);
-    dout(0) << "mds " << mdsmap << dendl;
+    dout(0) << "   mds " << mdsmap << dendl;
     break;
 
   case PAXOS_OSDMAP:
@@ -100,7 +96,7 @@ void handle_notify(MMonObserveNotify *notify)
       } else {
 	osdmap.decode(notify->bl);
       }
-      dout(0) << "osd " << osdmap << dendl;
+      dout(0) << "   osd " << osdmap << dendl;
     }
     break;
 
@@ -122,7 +118,7 @@ void handle_notify(MMonObserveNotify *notify)
       LogEntry le;
       bufferlist::iterator p = notify->bl.begin();
       le.decode(p);
-      dout(0) << le << dendl;
+      dout(0) << "   log " << le << dendl;
       break;
     }
   }
@@ -155,24 +151,24 @@ void usage()
 static void send_requests();
 
 class C_ObserverRefresh : public Context {
- public:
-    C_ObserverRefresh() {}
-    void finish(int r) {
-       send_requests();
-    }
+public:
+  C_ObserverRefresh() {}
+  void finish(int r) {
+    send_requests();
+  }
 };
 
 static void send_requests()
 {
-   bufferlist indata;
-   for (int i=0; i<PAXOS_NUM; i++) {
-        MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
-        m->set_data(indata);
-        int mon = monmap.pick_mon();
-        generic_dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
-        messenger->send_message(m, monmap.get_inst(mon));
+  bufferlist indata;
+  for (int i=0; i<PAXOS_NUM; i++) {
+    MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
+    m->set_data(indata);
+    int mon = monmap.pick_mon();
+    generic_dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
+    messenger->send_message(m, monmap.get_inst(mon));
   }
-
+  
   C_ObserverRefresh *observe_refresh_event = new C_ObserverRefresh();
   timer.add_event_after(g_conf.paxos_observer_timeout/2, observe_refresh_event);
 }
