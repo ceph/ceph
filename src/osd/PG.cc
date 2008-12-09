@@ -120,16 +120,12 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   if (backlog && s < bottom)
     s = bottom;
 
-  assert(complete_to == log.end() &&
-	 requested_to == log.end());
+  assert(complete_to == log.end());
 
   while (!log.empty()) {
     Entry &e = *log.begin();
 
     if (e.version > s) break;
-
-    assert(complete_to != log.begin());
-    assert(requested_to != log.begin());
 
     // remove from index,
     unindex(e);
@@ -1174,18 +1170,6 @@ void PG::peer(ObjectStore::Transaction& t,
 }
 
 
-void PG::init_recovery_pointers()
-{
-  dout(10) << "init_recovery_pointers" << dendl;
-  log.complete_to = log.log.begin();
-  while (log.complete_to->version < info.last_complete)
-    log.complete_to++;
-  assert(log.complete_to != log.log.end());
-  
-  if (is_primary())
-    log.requested_to = log.complete_to;
-}
-
 void PG::activate(ObjectStore::Transaction& t,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
@@ -1239,9 +1223,11 @@ void PG::activate(ObjectStore::Transaction& t,
     log.reset_recovery_pointers();
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
-
-    init_recovery_pointers();
-
+    log.complete_to = log.log.begin();
+    while (log.complete_to->version < info.last_complete)
+      log.complete_to++;
+    assert(log.complete_to != log.log.end());
+    log.last_requested = object_t();
     dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
     if (is_primary()) {
       dout(10) << "activate - starting recovery" << dendl;
@@ -1908,12 +1894,7 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
   } else {
     missing.add(po->poid.oid, v, eversion_t());
     missing_loc[po->poid.oid].insert(ok_peer);
-
-    // primary recovery is log driven
-    if (v < info.last_complete) {
-      info.last_complete = v;
-      init_recovery_pointers();
-    }
+    log.last_requested = object_t();
   }
   uptodate_set.erase(bad_peer);
   osd->queue_for_recovery(this);

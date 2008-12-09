@@ -294,8 +294,8 @@ public:
     hash_set<osd_reqid_t>     caller_ops;
 
     // recovery pointers
-    list<Entry>::iterator requested_to; // not inclusive of referenced item
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
+    object_t last_requested;            // last object requested by primary
 
     /****/
     IndexedLog() {}
@@ -307,8 +307,8 @@ public:
       reset_recovery_pointers();
     }
     void reset_recovery_pointers() {
-      requested_to = log.end();
       complete_to = log.end();
+      last_requested = object_t();
     }
 
     bool logged_object(object_t oid) const {
@@ -704,8 +704,6 @@ public:
 
   virtual void cancel_recovery() = 0;
   virtual int start_recovery_ops(int max) = 0;
-
-  void init_recovery_pointers();
 
   void purge_strays();
 

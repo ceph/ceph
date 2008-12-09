@@ -2679,24 +2679,23 @@ int ReplicatedPG::recover_primary(int max)
   int started = 0;
   int skipped = 0;
 
-  list<Log::Entry>::iterator p = log.requested_to;
-
-  while (p != log.log.end()) {
-    assert(log.objects.count(p->oid));
-    latest = log.objects[p->oid];
+  map<object_t, Missing::item>::iterator p = missing.missing.lower_bound(log.last_requested);
+  while (p != missing.missing.end()) {
+    assert(log.objects.count(p->first));
+    latest = log.objects[p->first];
     assert(latest);
 
     dout(10) << "recover_primary "
-             << *p
+             << *latest
 	     << (latest->is_update() ? " (update)":"")
 	     << (missing.is_missing(latest->oid) ? " (missing)":"")
              << (pulling.count(latest->oid) ? " (pulling)":"")
 	     << (waiting_for_head.count(latest->oid) ? " (waiting for head)":"")
              << dendl;
+    
+    assert(latest->is_update());
 
-    if (latest->is_update() &&
-        !pulling.count(latest->oid) &&
-        missing.is_missing(latest->oid)) {
+    if (!pulling.count(latest->oid)) {
       if (waiting_for_head.count(latest->oid)) {
 	++skipped;
       } else {
@@ -2732,9 +2731,9 @@ int ReplicatedPG::recover_primary(int max)
     
     p++;
 
-    // only advance requested_to if we haven't skipped anything
+    // only advance last_requested if we haven't skipped anything
     if (!skipped)
-      log.requested_to = p;
+      log.last_requested = latest->oid;
   }
 
   // done?
@@ -2753,8 +2752,7 @@ int ReplicatedPG::recover_primary(int max)
     info.last_complete = info.last_update;
   }
 
-  log.complete_to = log.log.end();
-  log.requested_to = log.log.end();
+  log.reset_recovery_pointers();
 
   uptodate_set.insert(osd->whoami);
   if (is_all_uptodate()) {
