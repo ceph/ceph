@@ -2,34 +2,41 @@
 
 let new=0
 let debug=0
+let stopfirst=1
 
 while [ $# -ge 1 ]; do
-        case $1 in
-                -d | --debug )
-                debug=1
-		;;
-                --new | -n )
-                new=1
-        esac
-        shift
+    case $1 in
+        -d | --debug )
+            debug=1
+	    ;;
+        --new | -n )
+            new=1
+	    ;;
+	--nostop )
+	    stopfirst=0
+	    ;;
+    esac
+    shift
 done
 
 
 ARGS="--dout_dir /data/`hostname`"
 
 if [ $debug -eq 0 ]; then
-	CMON_ARGS="--debug_mon 10 --debug_ms 1"
-	COSD_ARGS=""
-	CMDS_ARGS=""
+    CMON_ARGS="--debug_mon 10 --debug_ms 1"
+    COSD_ARGS=""
+    CMDS_ARGS=""
 else
-	echo "** going verbose **"
-	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
-	COSD_ARGS="--lockdep 1 --debug_osd 20 --debug_journal 20 --debug_filestore 15 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
+    echo "** going verbose **"
+    CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
+    COSD_ARGS="--lockdep 1 --debug_osd 20 --debug_journal 20 --debug_filestore 15 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+    CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
 fi
 
 
-./dstop.sh
+if [ $stopfirst -eq 1 ]; then
+    ./dstop.sh
+fi
 
 
 # mkmonfs
@@ -106,17 +113,21 @@ do
        echo "---- dev mount $devm ----"
        test -d $devm || mkdir -p $devm
        if [ $new -eq 1 ]; then
+	   echo mkfs btrfs
 	   ssh root@cosd$host cd $HOME/ceph/src \; umount $devm \; \
 	       $HOME/src/btrfs-progs-unstable/mkfs.btrfs $dev \; \
 	       mount -t btrfs $dev $devm
        else
+	   echo mounting btrfs
 	   ssh root@cosd$host cd $HOME/ceph/src \; mount $dev $devm
        fi
    fi
 
    if [ $new -eq 1 ]; then
+       echo mkfs
        ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
+   echo starting cosd
    ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./cosd $devm -d --dout_dir /data/cosd$host $COSD_ARGS
 
  done
