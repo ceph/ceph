@@ -65,6 +65,8 @@ int same = 0;
 const char *prefix[4] = { "mds", "osd", "pg", "client" };
 map<string,string> status;
 
+SafeTimer timer(lock);
+
 int lines = 0;
 
 void handle_notify(MMonObserveNotify *notify)
