@@ -22,16 +22,18 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mon/MonClient.h"
 #include "mon/mon_types.h"
-#include "mon/ClientMonitor.h"
+
+#include "mon/ClientMap.h"
 #include "mon/PGMap.h"
 #include "mon/ClientMap.h"
 #include "osd/OSDMap.h"
 #include "mds/MDSMap.h"
+#include "include/LogEntry.h"
+
 #include "msg/SimpleMessenger.h"
-#include "messages/MMonCommand.h"
+
 #include "messages/MMonObserve.h"
 #include "messages/MMonObserveNotify.h"
-#include "include/LogEntry.h"
 
 #include "common/Timer.h"
 
