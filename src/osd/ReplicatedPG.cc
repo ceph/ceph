@@ -2932,9 +2932,9 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
     stat.num_bytes += p->size;
     stat.num_kb += SHIFT_ROUND_UP(p->size, 10);
 
-    bufferlist data;
-    osd->store->read(c, poid, 0, 0, data);
-    assert(data.length() == p->size);
+    //bufferlist data;
+    //osd->store->read(c, poid, 0, 0, data);
+    //assert(data.length() == p->size);
 
     // new head?
     if (poid.oid.snap == CEPH_NOSNAP) {
