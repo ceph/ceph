@@ -355,6 +355,9 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SCRUBBING 256  // scrubbing
 #define PG_STATE_SCRUBQ    512  // queued for scrub
 #define PG_STATE_DEGRADED      1024  // pg membership not complete
+#define PG_STATE_INCONSISTENT  2048  // pg replicas are inconsistent (but shouldn't be)
+#define PG_STATE_REPAIR  2048   // pg should repair on next scrub
+#define PG_STATE_PEERING 4096
 
 static inline std::string pg_state_string(int state) {
   std::string st;
@@ -369,6 +372,9 @@ static inline std::string pg_state_string(int state) {
   if (state & PG_STATE_DEGRADED) st += "degraded+";
   if (state & PG_STATE_SCRUBBING) st += "scrubbing+";
   if (state & PG_STATE_SCRUBQ) st += "scrubq+";
+  if (state & PG_STATE_INCONSISTENT) st += "inconsistent+";
+  if (state & PG_STATE_REPAIR) st += "repair+";
+  if (state & PG_STATE_PEERING) st += "peering+";
   if (!st.length()) 
     st = "inactive";
   else 

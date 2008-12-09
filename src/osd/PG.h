@@ -669,6 +669,7 @@ public:
   void generate_past_intervals();
   void trim_past_intervals();
   void build_prior();
+  void clear_prior();
   bool prior_set_affected(OSDMap *map);
 
   bool adjust_peers_complete_thru() {
@@ -786,6 +787,7 @@ public:
 
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }

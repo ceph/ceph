@@ -734,6 +734,16 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   return false;
 }
 
+void PG::clear_prior()
+{
+  dout(10) << "clear_prior" << dendl;
+  prior_set.clear();
+  prior_set_down.clear();
+  prior_set_up_thru.clear();
+  must_notify_mon = false;
+}
+
+
 void PG::build_prior()
 {
   if (1) {
@@ -786,10 +796,7 @@ void PG::build_prior()
    * intervene in some as-yet-undetermined way.  :)
    */
 
-  // build prior set.
-  prior_set.clear();
-  prior_set_down.clear();
-  prior_set_up_thru.clear();
+  clear_prior();
 
   // current nodes, of course.
   for (unsigned i=1; i<acting.size(); i++)
@@ -800,8 +807,6 @@ void PG::build_prior()
   state_clear(PG_STATE_DOWN);
   bool any_up_now = false;
   bool some_down = false;
-
-  must_notify_mon = false;
 
   // generate past intervals, if we don't have them.
   if (info.history.same_since > info.history.last_epoch_started &&
@@ -933,9 +938,16 @@ void PG::peer(ObjectStore::Transaction& t,
               map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map)
 {
-  dout(10) << "peer.  acting is " << acting 
-           << ", prior_set is " << prior_set << dendl;
+  dout(10) << "peer acting is " << acting << dendl;
 
+  if (!is_active())
+    state_set(PG_STATE_PEERING);
+  
+  if (prior_set.empty())
+    build_prior();
+
+  dout(10) << "peer prior_set is " << prior_set << dendl;
+  
 
   /** GET ALL PG::Info *********/
 
@@ -1171,6 +1183,7 @@ void PG::activate(ObjectStore::Transaction& t,
   state_set(PG_STATE_ACTIVE);
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
+  state_clear(PG_STATE_PEERING);
   if (is_crashed()) {
     //assert(is_replay());      // HELP.. not on replica?
     state_clear(PG_STATE_CRASHED);
@@ -1181,7 +1194,7 @@ void PG::activate(ObjectStore::Transaction& t,
     state_set(PG_STATE_DEGRADED);
   else
     state_clear(PG_STATE_DEGRADED);
-  
+
   info.history.last_epoch_started = osd->osdmap->get_epoch();
   trim_past_intervals();
   
@@ -1422,6 +1435,12 @@ void PG::purge_strays()
   }
 
   stray_set.clear();
+
+  // clear _requested maps; we may have to peer() again if we discover
+  // (more) stray content
+  peer_info_requested.clear();
+  peer_log_requested.clear();
+  peer_summary_requested.clear();
 }
 
 

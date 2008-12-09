@@ -1991,6 +1991,8 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     int oldacker = pg->get_acker();
     vector<int> oldacting = pg->acting;
     
+    pg->clear_prior();
+
     // update PG
     pg->acting.swap(tacting);
     pg->set_role(role);
@@ -2026,6 +2028,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
     pg->state_clear(PG_STATE_DOWN);
+    pg->state_clear(PG_STATE_PEERING);  // we'll need to restart peering
 
     if (pg->is_primary() && 
 	pg->info.pgid.size() != pg->acting.size())
@@ -2128,10 +2131,11 @@ void OSD::activate_map(ObjectStore::Transaction& t)
       if (!pg->info.dead_snaps.empty())
 	pg->queue_snap_trim();
     }
-    else if (pg->is_primary() && !pg->is_active()) {
+    else if (pg->is_primary() &&
+	     !pg->is_active()) {
       // i am (inactive) primary
-      pg->build_prior();
-      pg->peer(t, query_map, &info_map);
+      if (!pg->is_peering())
+	pg->peer(t, query_map, &info_map);
     }
     else if (pg->is_stray() &&
 	     pg->get_primary() >= 0) {
@@ -2682,7 +2686,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->set_role(role);
 	pg->info.history = history;
 	pg->clear_primary_state();  // yep, notably, set hml=false
-	pg->build_prior();      
 	pg->write_info(t);
 	pg->write_log(t);
       }
@@ -2734,7 +2737,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       if (pg->is_all_uptodate()) 
 	pg->finish_recovery();
     } else {
-      pg->build_prior();
       pg->peer(t, query_map, &info_map);
     }
     pg->update_stats();
