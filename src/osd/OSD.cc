@@ -1632,8 +1632,12 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p != pg_map.end();
 	 p++) {
       PG *pg = p->second;
-      if (pg->is_primary() && !pg->is_scrubbing())
-	scrub_wq.queue(pg);
+      if (pg->is_primary()) {
+	if (m->repair)
+	  pg->state_set(PG_STATE_REPAIR);
+	if (!pg->is_scrubbing())
+	  scrub_wq.queue(pg);
+      }
     }
   } else {
     for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
@@ -1641,8 +1645,12 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p++)
       if (pg_map.count(*p)) {
 	PG *pg = pg_map[*p];
-	if (pg->is_primary() && !pg->is_scrubbing())
-	  scrub_wq.queue(pg);
+	if (pg->is_primary()) {
+	  if (m->repair)
+	    pg->state_set(PG_STATE_REPAIR);
+	  if (!pg->is_scrubbing())
+	    scrub_wq.queue(pg);
+	}
       }
   }
   

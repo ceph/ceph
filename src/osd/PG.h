@@ -705,6 +705,8 @@ public:
   virtual void cancel_recovery() = 0;
   virtual int start_recovery_ops(int max) = 0;
 
+  void init_recovery_pointers();
+
   void purge_strays();
 
 
@@ -724,6 +726,7 @@ public:
   // -- scrub --
   map<int,ScrubMap> peer_scrub_map;
 
+  void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
   void build_scrub_map(ScrubMap &map);
   virtual int _scrub(ScrubMap &map) { return 0; }

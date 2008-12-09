@@ -344,20 +344,20 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 /*
  * pg states
  */
-#define PG_STATE_CREATING    1  // creating
-#define PG_STATE_ACTIVE      2  // i am active.  (primary: replicas too)
-#define PG_STATE_CLEAN       4  // peers are complete, clean of stray replicas.
-#define PG_STATE_CRASHED     8  // all replicas went down, clients needs to replay
-#define PG_STATE_DOWN       16  // a needed replica is down, PG offline
-#define PG_STATE_REPLAY     32  // crashed, waiting for replay
-#define PG_STATE_STRAY      64  // i must notify the primary i exist.
-#define PG_STATE_SPLITTING 128  // i am splitting
-#define PG_STATE_SCRUBBING 256  // scrubbing
-#define PG_STATE_SCRUBQ    512  // queued for scrub
-#define PG_STATE_DEGRADED      1024  // pg membership not complete
-#define PG_STATE_INCONSISTENT  2048  // pg replicas are inconsistent (but shouldn't be)
-#define PG_STATE_REPAIR  2048   // pg should repair on next scrub
-#define PG_STATE_PEERING 4096
+#define PG_STATE_CREATING     (1<<0)  // creating
+#define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
+#define PG_STATE_CRASHED      (1<<3)  // all replicas went down, clients needs to replay
+#define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
+#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
+#define PG_STATE_STRAY        (1<<6)  // i must notify the primary i exist.
+#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
+#define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
+#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
+#define PG_STATE_DEGRADED     (1<<10) // pg membership not complete
+#define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
+#define PG_STATE_PEERING      (1<<12) // pg is (re)peering
+#define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
 
 static inline std::string pg_state_string(int state) {
   std::string st;

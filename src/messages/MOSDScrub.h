@@ -25,32 +25,38 @@
 struct MOSDScrub : public Message {
   ceph_fsid fsid;
   vector<pg_t> scrub_pgs;
+  bool repair;
 
   MOSDScrub() {}
   MOSDScrub(ceph_fsid& f) :
     Message(MSG_OSD_SCRUB),
     fsid(f) {}
-  MOSDScrub(ceph_fsid& f, vector<pg_t>& pgs) :
+  MOSDScrub(ceph_fsid& f, vector<pg_t>& pgs, bool r) :
     Message(MSG_OSD_SCRUB),
-    fsid(f), scrub_pgs(pgs) {}
+    fsid(f), scrub_pgs(pgs), repair(r) {}
 
   const char *get_type_name() { return "scrub"; }
   void print(ostream& out) {
     out << "scrub(";
     if (scrub_pgs.empty())
-      out << "osd)";
+      out << "osd";
     else
-      out << scrub_pgs << ")";
+      out << scrub_pgs;
+    if (repair)
+      out << " repair";
+    out << ")";
   }
 
   void encode_payload() {
     ::encode(fsid, payload);
     ::encode(scrub_pgs, payload);
+    ::encode(repair, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(scrub_pgs, p);
+    ::decode(repair, p);
   }
 };
 

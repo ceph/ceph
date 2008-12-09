@@ -1174,6 +1174,18 @@ void PG::peer(ObjectStore::Transaction& t,
 }
 
 
+void PG::init_recovery_pointers()
+{
+  dout(10) << "init_recovery_pointers" << dendl;
+  log.complete_to = log.log.begin();
+  while (log.complete_to->version < info.last_complete)
+    log.complete_to++;
+  assert(log.complete_to != log.log.end());
+  
+  if (is_primary())
+    log.requested_to = log.complete_to;
+}
+
 void PG::activate(ObjectStore::Transaction& t,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
@@ -1228,16 +1240,11 @@ void PG::activate(ObjectStore::Transaction& t,
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
 
-    log.complete_to = log.log.begin();
-    while (log.complete_to->version < info.last_complete)
-      log.complete_to++;
-    assert(log.complete_to != log.log.end());
-    dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
+    init_recovery_pointers();
 
+    dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
     if (is_primary()) {
-      // start recovery
       dout(10) << "activate - starting recovery" << dendl;
-      log.requested_to = log.complete_to;
       osd->queue_for_recovery(this);
     }
   }
@@ -1403,6 +1410,12 @@ void PG::_finish_recovery(Context *c)
     finish_sync_event = 0;
     purge_strays();
     update_stats();
+
+    if (state_test(PG_STATE_INCONSISTENT)) {
+      dout(10) << "_finish_recovery requeueing for scrub" << dendl;
+      osd->scrub_wq.queue(this);
+    }
+
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
@@ -1886,11 +1899,33 @@ void PG::build_scrub_map(ScrubMap &map)
 
 
 
+void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
+{
+  eversion_t v;
+  po->attrs["version"].copy_out(0, sizeof(v), (char *)&v);
+  if (bad_peer != acting[0]) {
+    peer_missing[bad_peer].add(po->poid.oid, v, eversion_t());
+  } else {
+    missing.add(po->poid.oid, v, eversion_t());
+    missing_loc[po->poid.oid].insert(ok_peer);
+
+    // primary recovery is log driven
+    if (v < info.last_complete) {
+      info.last_complete = v;
+      init_recovery_pointers();
+    }
+  }
+  uptodate_set.erase(bad_peer);
+  osd->queue_for_recovery(this);
+}
+
 void PG::scrub()
 {
   stringstream ss;
   ScrubMap scrubmap;
   int errors = 0;
+
+  bool repair = state_test(PG_STATE_REPAIR);
 
   osd->map_lock.get_read();
   lock();
@@ -1983,28 +2018,36 @@ void PG::scrub()
     
     while (1) {
       ScrubMap::object *po = 0;
-      bool missing = false;
+      int pi = -1;
+      bool anymissing = false;
       for (unsigned i=0; i<acting.size(); i++) {
 	if (p[i] == m[i]->objects.end()) {
-	  missing = true;
+	  anymissing = true;
 	  continue;
 	}
-	if (!po)
+	if (!po) {
 	  po = &(*p[i]);
+	  pi = i;
+	}
 	else if (po->poid != p[i]->poid) {
-	  missing = true;
-	  if (po->poid > p[i]->poid)
+	  anymissing = true;
+	  if (po->poid > p[i]->poid) {
 	    po = &(*p[i]);
+	    pi = i;
+	  }
 	}
       }
       if (!po)
 	break;
-      if (missing) {
+      if (anymissing) {
 	for (unsigned i=0; i<acting.size(); i++) {
 	  if (p[i] == m[i]->objects.end() || po->poid != p[i]->poid) {
 	    ss << info.pgid << " scrub osd" << acting[i] << " missing " << po->poid;
 	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    num_missing++;
+	    
+	    if (repair)
+	      repair_object(po, acting[i], acting[pi]);
 	  } else
 	    p[i]++;
 	}
@@ -2012,23 +2055,21 @@ void PG::scrub()
       }
       
       // compare
-      dout(10) << " po is " << (void*)po << dendl;
-      dout(10) << " po is " << po->poid << dendl;
-
       bool ok = true;
       for (unsigned i=1; i<acting.size(); i++) {
+	bool peerok = true;
 	if (po->size != p[i]->size) {
 	  ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 	     << " size " << p[i]->size << " != " << po->size;
 	  osd->get_logclient()->log(LOG_ERROR, ss);
-	  ok = false;
+	  peerok = ok = false;
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->attrs.size()) {
 	  ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 	     << " attr count " << p[i]->attrs.size() << " != " << po->attrs.size();
 	  osd->get_logclient()->log(LOG_ERROR, ss);
-	  ok = false;
+	  peerok = ok = false;
 	  num_bad++;
 	}
 	for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
@@ -2037,17 +2078,20 @@ void PG::scrub()
 	      ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 		 << " attr " << q->first << " value mismatch";
 	      osd->get_logclient()->log(LOG_ERROR, ss);
-	      ok = false;
+	      peerok = ok = false;
 	      num_bad++;
 	    }
 	  } else {
 	    ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 	       << " attr " << q->first << " missing";
 	    osd->get_logclient()->log(LOG_ERROR, ss);
-	    ok = false;
+	    peerok = ok = false;
 	    num_bad++;
 	  }
 	}
+
+	if (!peerok && repair)
+	  repair_object(po, acting[i], acting[pi]);
       }
       
       if (ok)
@@ -2061,6 +2105,9 @@ void PG::scrub()
     if (num_missing || num_bad) {
       ss << info.pgid << " scrub " << num_missing << " missing, " << num_bad << " bad objects";
       osd->get_logclient()->log(LOG_ERROR, ss);
+      state_set(PG_STATE_INCONSISTENT);
+      if (repair)
+	state_clear(PG_STATE_CLEAN);
     }
   }
 
@@ -2093,6 +2140,9 @@ void PG::scrub()
   ss << info.pgid << " scrub " << errors << " errors";
   osd->get_logclient()->log(errors ? LOG_ERROR:LOG_INFO, ss);
 
+  if (!errors && repair)
+    state_clear(PG_STATE_INCONSISTENT);
+  state_clear(PG_STATE_REPAIR);
 
   // finish up
   info.stats.last_scrub = info.last_update;

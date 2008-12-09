@@ -481,7 +481,8 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_orig_source_inst()) {
     // yup.
-    dout(7) << "preprocess_boot dup from " << m->get_orig_source_inst() << dendl;
+    dout(7) << "preprocess_boot dup from " << m->get_orig_source_inst()
+	    << " == " << osdmap.get_inst(from) << dendl;
     _booted(m);
     return true;
   }
@@ -676,13 +677,13 @@ void OSDMonitor::send_to_waiting()
 void OSDMonitor::send_latest(entity_inst_t who, epoch_t start)
 {
   if (paxos->is_readable()) {
-    dout(5) << "send_latest to " << who << " now" << dendl;
+    dout(5) << "send_latest to " << who << " start " << start << " now" << dendl;
     if (start == 0)
       send_full(who);
     else
       send_incremental(who, start);
   } else {
-    dout(5) << "send_latest to " << who << " later" << dendl;
+    dout(5) << "send_latest to " << who << " start " << start << " later" << dendl;
     waiting_for_map[who] = start;
   }
 }
