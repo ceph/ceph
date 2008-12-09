@@ -84,6 +84,9 @@ bool MDSMonitor::update_from_paxos()
   dout(10) << "update_from_paxos  got " << paxosv << dendl;
   mdsmap.decode(mdsmap_bl);
 
+  // save as 'latest', too.
+  paxos->stash_latest(paxosv, mdsmap_bl);
+
   // new map
   dout(4) << "new map" << dendl;
   print_map(mdsmap, 0);

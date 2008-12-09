@@ -138,18 +138,17 @@ bool OSDMonitor::update_from_paxos()
 
   if (osdmap.epoch == 0 && paxosv > 1) {
     // startup: just load latest full map
-    epoch_t lastfull = mon->store->get_int("osdmap_full","last_epoch");
-    if (lastfull) {
-      dout(7) << "update_from_paxos startup: loading latest full map e" << lastfull << dendl;
-      bufferlist bl;
-      mon->store->get_bl_sn(bl, "osdmap_full", lastfull);
-      osdmap.decode(bl);
+    bufferlist latest;
+    version_t v = paxos->get_latest(latest);
+    if (v) {
+      dout(7) << "update_from_paxos startup: loading latest full map e" << v << dendl;
+      osdmap.decode(latest);
     }
   } 
   
   // walk through incrementals
+  bufferlist bl;
   while (paxosv > osdmap.epoch) {
-    bufferlist bl;
     bool success = paxos->read(osdmap.epoch+1, bl);
     assert(success);
     
@@ -157,7 +156,7 @@ bool OSDMonitor::update_from_paxos()
     OSDMap::Incremental inc(bl);
     osdmap.apply_incremental(inc);
 
-    // write out the full map, too.
+    // write out the full map for all past epochs
     bl.clear();
     osdmap.encode(bl);
     mon->store->put_bl_sn(bl, "osdmap_full", osdmap.epoch);
@@ -165,7 +164,9 @@ bool OSDMonitor::update_from_paxos()
     // share
     dout(1) << osdmap << dendl;
   }
-  mon->store->put_int(osdmap.epoch, "osdmap_full","last_epoch");
+
+  // save latest
+  paxos->stash_latest(paxosv, bl);
 
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
