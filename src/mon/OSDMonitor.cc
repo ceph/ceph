@@ -190,16 +190,6 @@ void OSDMonitor::create_pending()
 }
 
 
-/*
-struct RetryClearMkpg : public Context {
-  OSDMonitor *osdmon;
-  RetryClearMkpg(OSDMonitor *o) : osdmon(o) {}
-  void finish(int r) {
-    osdmon->clear_mkpg_flag();
-  }
-};
-*/
-
 void OSDMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
@@ -213,7 +203,6 @@ void OSDMonitor::encode_pending(bufferlist &bl)
        i != pending_inc.new_down.end();
        i++) {
     dout(2) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
-    derr(0) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
     // no: this screws up map delivery on shutdown
     //mon->messenger->mark_down(osdmap.get_addr(i->first));
   }
@@ -221,20 +210,16 @@ void OSDMonitor::encode_pending(bufferlist &bl)
        i != pending_inc.new_up.end(); 
        i++) { 
     dout(2) << " osd" << i->first << " UP " << i->second << dendl;
-    derr(0) << " osd" << i->first << " UP " << i->second << dendl;
   }
   for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
        i != pending_inc.new_weight.end();
        i++) {
     if (i->second == CEPH_OSD_OUT) {
       dout(2) << " osd" << i->first << " OUT" << dendl;
-      derr(0) << " osd" << i->first << " OUT" << dendl;
     } else if (i->second == CEPH_OSD_IN) {
       dout(2) << " osd" << i->first << " IN" << dendl;
-      derr(0) << " osd" << i->first << " IN" << dendl;
     } else {
       dout(2) << " osd" << i->first << " WEIGHT " << hex << i->second << dec << dendl;
-      derr(0) << " osd" << i->first << " WEIGHT " << hex << i->second << dec << dendl;
     }
   }
 
