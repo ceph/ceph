@@ -1198,7 +1198,8 @@ int Rank::Pipe::connect()
   dout(20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
   if (!peer_addr.is_local_to(paddr)) {
     if (paddr.ipaddr.sin_addr.s_addr == 0 &&
-	peer_addr.ipaddr.sin_port == paddr.ipaddr.sin_port) {
+	peer_addr.ipaddr.sin_port == paddr.ipaddr.sin_port &&
+	peer_addr.nonce == paddr.nonce) {
       dout(0) << "connect claims to be " 
 	      << paddr << " not " << peer_addr << " - presumably this is the same node!" << dendl;
     } else {
