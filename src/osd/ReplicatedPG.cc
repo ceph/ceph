@@ -1988,7 +1988,6 @@ bool ReplicatedPG::pull(pobject_t poid)
       } else {
 	pull(head);
       }
-      waiting_for_head.insert(poid.oid);
       return false;
     }
 
@@ -2430,9 +2429,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
     missing_loc.erase(poid.oid);
 
-    if (poid.oid.snap == CEPH_NOSNAP && waiting_for_head.count(poid.oid))
-      waiting_for_head.erase(poid.oid);
-
     // close out pull op?
     if (pulling.count(poid.oid))
       pulling.erase(poid.oid);
@@ -2687,26 +2683,27 @@ int ReplicatedPG::recover_primary(int max)
     latest = log.objects[p->first];
     assert(latest);
 
+    pobject_t poid(info.pgid.pool(), 0, latest->oid);
+    pobject_t head = poid;
+    head.oid.snap = CEPH_NOSNAP;
+
     dout(10) << "recover_primary "
              << *latest
 	     << (latest->is_update() ? " (update)":"")
 	     << (missing.is_missing(latest->oid) ? " (missing)":"")
+	     << (missing.is_missing(head.oid) ? " (missing head)":"")
              << (pulling.count(latest->oid) ? " (pulling)":"")
-	     << (waiting_for_head.count(latest->oid) ? " (waiting for head)":"")
+	     << (pulling.count(head.oid) ? " (pulling head)":"")
              << dendl;
     
     assert(latest->is_update());
 
     if (!pulling.count(latest->oid)) {
-      if (waiting_for_head.count(latest->oid)) {
+      if (pulling.count(head.oid)) {
 	++skipped;
       } else {
-	pobject_t poid(info.pgid.pool(), 0, latest->oid);
-
 	// is this a clone operation that we can do locally?
 	if (latest->op == Log::Entry::CLONE) {
-	  pobject_t head = poid;
-	  head.oid.snap = CEPH_NOSNAP;
 	  if (missing.is_missing(head.oid) &&
 	      missing.have_old(head.oid) == latest->prior_version) {
 	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
