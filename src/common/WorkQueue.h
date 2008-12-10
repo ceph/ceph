@@ -29,6 +29,7 @@ class ThreadPool {
   struct _WorkQueue {
     string name;
     _WorkQueue(string n) : name(n) {}
+    virtual ~_WorkQueue() {}
     virtual void _clear() = 0;
     virtual void *_void_dequeue() = 0;
     virtual void _void_process(void *) = 0;
