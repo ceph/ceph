@@ -118,6 +118,8 @@ class MDSMap {
   map<entity_addr_t,int32_t> standby;    // -1 == any
   map<int32_t, set<entity_addr_t> > standby_for;
   set<entity_addr_t> standby_any;
+  
+  set<entity_addr_t> laggy;
 
   friend class MDSMonitor;
 
@@ -145,6 +147,8 @@ class MDSMap {
 
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
+
+  bool is_laggy(entity_addr_t a) const { return laggy.count(a); }
 
   // counts
   int get_num_mds() {
@@ -363,6 +367,7 @@ class MDSMap {
     ::encode(standby, bl);
     ::encode(standby_for, bl);
     ::encode(standby_any, bl);
+    ::encode(laggy, bl);
   }
   
   void decode(bufferlist& bl) {
@@ -383,6 +388,7 @@ class MDSMap {
     ::decode(standby, p);
     ::decode(standby_for, p);
     ::decode(standby_any, p);
+    ::decode(laggy, p);
   }
 
 

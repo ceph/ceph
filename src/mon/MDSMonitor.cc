@@ -173,9 +173,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     return false;
 
   // can i handle this query without a map update?
-  
+
+  // no longer laggy?
+  if (pending_mdsmap.laggy.count(addr)) {
+    return false;  // need to update map.
+  }
   // boot?
-  if (state == MDSMap::STATE_BOOT) {
+  else if (state == MDSMap::STATE_BOOT) {
     // already booted?
     if (pending_mdsmap.get_addr_rank(addr) == -1)
       return false; // not booted|booting|standby yet
@@ -233,7 +237,7 @@ bool MDSMonitor::prepare_update(Message *m)
   switch (m->get_type()) {
     
   case MSG_MDS_BEACON:
-    return handle_beacon((MMDSBeacon*)m);
+    return prepare_beacon((MMDSBeacon*)m);
 
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
@@ -248,7 +252,7 @@ bool MDSMonitor::prepare_update(Message *m)
 
 
 
-bool MDSMonitor::handle_beacon(MMDSBeacon *m)
+bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 {
   // -- this is an update --
   dout(12) << "handle_beacon " << *m
@@ -259,6 +263,11 @@ bool MDSMonitor::handle_beacon(MMDSBeacon *m)
   int state = m->get_state();
   version_t seq = m->get_seq();
 
+  if (pending_mdsmap.laggy.count(addr)) {
+    dout(10) << "prepare_beacon clearly laggy flag on " << addr << dendl;
+    pending_mdsmap.laggy.erase(addr);
+  }
+  
   // boot?
   int standby_for = -1;
   if (state == MDSMap::STATE_BOOT) {
@@ -662,9 +671,21 @@ void MDSMonitor::tick()
     entity_addr_t addr = p->first;
     p++;
 
-    if (last_beacon[addr] >= cutoff) continue;
+    if (last_beacon[addr] >= cutoff)
+      continue;
 
     int mds = pending_mdsmap.get_addr_rank(addr);
+
+    if ((mds < 0 || pending_mdsmap.standby_for.count(mds) == 0) &&
+	pending_mdsmap.standby_any.empty()) {
+      // laggy!
+      dout(10) << "no beacon from mds" << mds << " " << *p << " since " << last_beacon[addr]
+	       << ", marking laggy" << dendl;
+      pending_mdsmap.laggy.insert(addr);
+      do_propose = true;
+      continue;
+    }
+    
     if (mds >= 0) {
       // failure!
       int curstate = pending_mdsmap.get_state(mds);
@@ -675,14 +696,14 @@ void MDSMonitor::tick()
 	newstate = MDSMap::STATE_DNE;	// didn't finish creating
 	last_beacon.erase(addr);
 	break;
-
+	
       case MDSMap::STATE_STARTING:
 	newstate = MDSMap::STATE_STOPPED;
 	break;
-
+	
       case MDSMap::STATE_STOPPED:
 	break;
-
+	
       case MDSMap::STATE_REPLAY:
       case MDSMap::STATE_RESOLVE:
       case MDSMap::STATE_RECONNECT:
@@ -693,11 +714,11 @@ void MDSMonitor::tick()
 	newstate = MDSMap::STATE_FAILED;
 	pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	break;
-
+	
       default:
 	assert(0);
       }
-	  
+      
       dout(10) << "no beacon from mds" << mds << " " << *p << " since " << last_beacon[addr]
 	       << ", marking " << pending_mdsmap.get_state_name(newstate)
 	       << dendl;
@@ -705,6 +726,7 @@ void MDSMonitor::tick()
       // update map
       pending_mdsmap.mds_state[mds] = newstate;
       pending_mdsmap.mds_state_seq.erase(mds);
+      pending_mdsmap.laggy.erase(addr);
     } 
     else if (pending_mdsmap.is_standby(addr)) {
       dout(10) << "no beacon from standby " << addr << " since " << last_beacon[addr]
@@ -715,6 +737,7 @@ void MDSMonitor::tick()
       else
 	pending_mdsmap.standby_any.erase(addr);
       pending_mdsmap.standby.erase(addr);
+      pending_mdsmap.laggy.erase(addr);
     } 
     else {
       dout(0) << "BUG: removing stray " << addr << " from last_beacon map" << dendl;

@@ -75,7 +75,7 @@ class MDSMonitor : public PaxosService {
   void committed();
 
   bool preprocess_beacon(class MMDSBeacon *m);
-  bool handle_beacon(class MMDSBeacon *m);
+  bool prepare_beacon(class MMDSBeacon *m);
   void handle_mds_getmap(MMDSGetMap *m);
 
   void take_over(entity_addr_t addr, int mds);

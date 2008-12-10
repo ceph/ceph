@@ -23,26 +23,21 @@ void MDSMap::print(ostream& out)
   out << "epoch " << get_epoch() << std::endl;
   out << "max_mds " << max_mds << std::endl;
 
-  entity_inst_t blank;
   set<int> all;
   get_mds_set(all);
 
   for (set<int>::iterator p = all.begin();
        p != all.end();
        ++p) {
-    if (standby_for.count(*p) && !standby_for[*p].empty()) {
-      out << " mds" << *p << "." << mds_inc[*p]
-	  << " : " << get_state_name(get_state(*p))
-	  << " : " << (have_inst(*p) ? get_inst(*p) : blank)
-	  << " : +" << standby_for[*p].size()
+    out << " mds" << *p << "." << mds_inc[*p]
+	<< " : " << get_state_name(get_state(*p));
+    if (have_inst(*p))
+      out << " : " << get_inst(*p)
+	  << (is_laggy(get_inst(*p).addr) ? " LAGGY" : "");
+    if (standby_for.count(*p) && !standby_for[*p].empty())
+      out << " : +" << standby_for[*p].size()
 	  << " standby " << standby_for[*p]
 	  << std::endl;
-    } else {
-      out << " mds" << *p << "." << mds_inc[*p]
-	  << " : " << get_state_name(get_state(*p))
-	  << " : " << (have_inst(*p) ? get_inst(*p) : blank)
-	  << std::endl;
-    }
   }
   if (!standby_any.empty()) {
     out << " +" << standby_any.size() << " shared standby " << standby_any << std::endl;
@@ -59,19 +54,24 @@ void MDSMap::print_summary(ostream& out)
   get_mds_set(all);
 
   int standby_spec = 0;
-  map<int,int> by_state;
+  map<string,int> by_state;
   for (set<int>::iterator p = all.begin();
        p != all.end();
        ++p) {
-    by_state[get_state(*p)]++;
+    string s = get_state_name(get_state(*p));
+    if (laggy.count(get_inst(*p).addr))
+      s += "(laggy)";
+    by_state[s]++;
     standby_spec += get_num_standby_for(*p);
   }
   
-  for (map<int,int>::iterator p = by_state.begin(); p != by_state.end(); p++) {
+  for (map<string,int>::iterator p = by_state.begin(); p != by_state.end(); p++) {
     if (p != by_state.begin())
       ss << ", ";
-    ss << p->second << " " << MDSMap::get_state_name(p->first);
+    ss << p->second << " " << p->first;
   }
+  if (laggy.size())
+    ss << ", " << laggy.size() << " laggy";
   if (get_num_standby_any())
     ss << ", " << get_num_standby_any() << " standby (any)";
   if (standby_spec)
