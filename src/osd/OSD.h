@@ -114,7 +114,7 @@ public:
 
 private:
 
-
+  WorkThreadPool op_tp;
   WorkThreadPool recovery_tp;
   WorkThreadPool disk_tp;
 
@@ -269,7 +269,34 @@ private:
   }
   
   // -- op queue --
-  class ThreadPool<class OSD*, PG*>   *threadpool;
+  deque<PG*> op_queue;
+  
+  struct OpWQ : public WorkThreadPool::WorkQueue<PG> {
+    OSD *osd;
+    OpWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::OpWQ", tp), osd(o) {}
+
+    bool _enqueue(PG *pg) {
+      pg->get();
+      osd->op_queue.push_back(pg);
+      return true;
+    }
+    void _dequeue(PG *pg) {
+      assert(0);
+    }
+    PG * _dequeue() {
+      if (osd->op_queue.empty())
+	return NULL;
+      PG *pg = osd->op_queue.front();
+      osd->op_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      osd->dequeue_op(pg);
+    }
+    void _clear() {
+      assert(osd->op_queue.empty());
+    }
+  } op_wq;
 
   int   pending_ops;
   bool  waiting_for_no_ops;
