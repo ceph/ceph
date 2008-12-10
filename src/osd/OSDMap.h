@@ -448,7 +448,7 @@ private:
     return false;
   }
   entity_inst_t get_hb_inst(int osd) {
-    assert(exists(osd) && is_up(osd));
+    assert(exists(osd));
     entity_inst_t i(entity_name_t::OSD(osd),
 		    osd_addr[osd]);
     i.addr.erank++;  // heartbeat addr erank is regular addr erank + 1
