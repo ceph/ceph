@@ -463,6 +463,8 @@ noinst_HEADERS = \
         messages/MMonElection.h\
         messages/MMonGetMap.h\
         messages/MMonMap.h\
+        messages/MMonObserve.h\
+        messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
@@ -488,6 +490,7 @@ noinst_HEADERS = \
         messages/MRemoveSnaps.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
+        mon/ClientMap.h\
         mon/ClientMonitor.h\
         mon/Elector.h\
         mon/MDSMonitor.h\
