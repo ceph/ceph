@@ -104,6 +104,7 @@ struct md_config_t {
   int debug_ms;
   int debug_mon;
   int debug_paxos;
+  int debug_tp;
 
   int debug_after;
 

@@ -19,7 +19,6 @@
 
 #include "common/Mutex.h"
 #include "common/RWLock.h"
-#include "common/ThreadPool.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/LogClient.h"
@@ -114,9 +113,9 @@ public:
 
 private:
 
-  WorkThreadPool op_tp;
-  WorkThreadPool recovery_tp;
-  WorkThreadPool disk_tp;
+  ThreadPool op_tp;
+  ThreadPool recovery_tp;
+  ThreadPool disk_tp;
 
 
 
@@ -271,9 +270,9 @@ private:
   // -- op queue --
   deque<PG*> op_queue;
   
-  struct OpWQ : public WorkThreadPool::WorkQueue<PG> {
+  struct OpWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    OpWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::OpWQ", tp), osd(o) {}
+    OpWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::OpWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       pg->get();
@@ -502,9 +501,9 @@ private:
   utime_t defer_recovery_until;
   int recovery_ops_active;
 
-  struct RecoveryWQ : public WorkThreadPool::WorkQueue<PG> {
+  struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    RecoveryWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", tp), osd(o) {}
+    RecoveryWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       if (!pg->recovery_item.get_xlist()) {
@@ -578,9 +577,9 @@ private:
   // -- snap trimming --
   xlist<PG*> snap_trim_queue;
   
-  struct SnapTrimWQ : public WorkThreadPool::WorkQueue<PG> {
+  struct SnapTrimWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    SnapTrimWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", tp), osd(o) {}
+    SnapTrimWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       if (pg->snap_trim_item.is_on_xlist())
@@ -610,9 +609,9 @@ private:
   // -- scrubbing --
   xlist<PG*> scrub_queue;
 
-  struct ScrubWQ : public WorkThreadPool::WorkQueue<PG> {
+  struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    ScrubWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::ScrubWQ", tp), osd(o) {}
+    ScrubWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       if (pg->scrub_item.is_on_xlist())

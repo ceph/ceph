@@ -181,6 +181,7 @@ libcommon_a_SOURCES = \
 	common/sctp_crc32.c\
 	common/assert.cc \
 	common/debug.cc \
+	common/WorkQueue.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \

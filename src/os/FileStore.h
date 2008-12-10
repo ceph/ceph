@@ -18,7 +18,6 @@
 
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
-#include "common/ThreadPool.h"
 #include "common/Mutex.h"
 
 #include "Fake.h"

@@ -241,6 +241,7 @@ md_config_t g_conf = {
   debug_ms: 0,
   debug_mon: 1,
   debug_paxos: 0,
+  debug_tp: 0,
   
   debug_after: 0,
   
@@ -808,6 +809,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
         g_conf.debug_paxos = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_paxos = atoi(args[++i]);
+    else if (strcmp(args[i], "--debug_tp") == 0) 
+      if (!g_conf.debug_after) 
+        g_conf.debug_tp = atoi(args[++i]);
+      else 
+        g_debug_after_conf.debug_tp = atoi(args[++i]);
 
     else if (strcmp(args[i], "--debug_after") == 0) {
       g_conf.debug_after = atoi(args[++i]);

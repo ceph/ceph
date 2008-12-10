@@ -19,7 +19,8 @@
 #include "Cond.h"
 #include "Thread.h"
 
-class WorkThreadPool {
+class ThreadPool {
+  string name;
   Mutex _lock;
   Cond _cond;
   bool _stop, _pause;
@@ -28,14 +29,15 @@ class WorkThreadPool {
   struct _WorkQueue {
     string name;
     _WorkQueue(string n) : name(n) {}
-    virtual bool _try_process() = 0;
     virtual void _clear() = 0;
+    virtual void *_void_dequeue() = 0;
+    virtual void _void_process(void *) = 0;
   };  
 
 public:
   template<class T>
   class WorkQueue : public _WorkQueue {
-    WorkThreadPool *pool;
+    ThreadPool *pool;
     
     virtual bool _enqueue(T *) = 0;
     virtual void _dequeue(T *) = 0;
@@ -43,8 +45,15 @@ public:
     virtual void _process(T *) = 0;
     virtual void _clear() = 0;
     
+    void *_void_dequeue() {
+      return (void *)_dequeue();
+    }
+    void _void_process(void *p) {
+      _process((T *)p);
+    }
+
   public:
-    WorkQueue(string n, WorkThreadPool *p) : _WorkQueue(n), pool(p) {
+    WorkQueue(string n, ThreadPool *p) : _WorkQueue(n), pool(p) {
       pool->add_work_queue(this);
     }
     ~WorkQueue() {
@@ -69,17 +78,6 @@ public:
       pool->_lock.Unlock();
     }
 
-    bool _try_process() {
-      T *item = _dequeue();
-      if (item) {
-	pool->_lock.Unlock();
-	_process(item);
-	pool->_lock.Lock();
-	return true;
-      }
-      return false;
-    }
-
     void lock() {
       pool->lock();
     }
@@ -99,10 +97,10 @@ private:
 
   // threads
   struct WorkThread : public Thread {
-    WorkThreadPool *pool;
-    WorkThread(WorkThreadPool *p) : pool(p) {}
+    ThreadPool *pool;
+    WorkThread(ThreadPool *p) : pool(p) {}
     void *entry() {
-      pool->entry();
+      pool->worker();
       return 0;
     }
   };
@@ -110,42 +108,11 @@ private:
   set<WorkThread*> _threads;
   int processing;
 
-
-  void entry() {
-    _lock.Lock();
-    //generic_dout(0) << "entry start" << dendl;
-    while (!_stop) {
-      if (!_pause && work_queues.size()) {
-	_WorkQueue *wq;
-	int tries = work_queues.size();
-	bool did = false;
-	while (tries--) {
-	  last_work_queue++;
-	  last_work_queue %= work_queues.size();
-	  wq = work_queues[last_work_queue];
-	  
-	  processing++;
-	  //generic_dout(0) << "entry trying wq " << wq->name << dendl;
-	  did = wq->_try_process();
-	  processing--;
-	  //if (did) generic_dout(0) << "entry did wq " << wq->name << dendl;
-	  if (did && _pause)
-	    _wait_cond.Signal();
-	  if (did)
-	    break;
-	}
-	if (did)
-	  continue;
-      }
-      //generic_dout(0) << "entry waiting" << dendl;
-      _cond.Wait(_lock);
-    }
-    //generic_dout(0) << "entry finish" << dendl;
-    _lock.Unlock();
-  }
+  void worker();
 
 public:
-  WorkThreadPool(string name, int n=1) :
+  ThreadPool(string nm, int n=1) :
+    name(nm),
     _lock((new string(name + "::lock"))->c_str()),  // deliberately leak this
     _stop(false),
     _pause(false),
@@ -153,7 +120,7 @@ public:
     processing(0) {
     set_num_threads(n);
   }
-  ~WorkThreadPool() {
+  ~ThreadPool() {
     for (set<WorkThread*>::iterator p = _threads.begin();
 	 p != _threads.end();
 	 p++)
@@ -180,26 +147,6 @@ public:
     }
   }
 
-  void start() {
-    for (set<WorkThread*>::iterator p = _threads.begin();
-	 p != _threads.end();
-	 p++)
-      (*p)->create();
-  }
-  void stop(bool clear_after=true) {
-    _lock.Lock();
-    _stop = true;
-    _cond.Signal();
-    _lock.Unlock();
-    for (set<WorkThread*>::iterator p = _threads.begin();
-	 p != _threads.end();
-	 p++)
-      (*p)->join();
-    _lock.Lock();
-    for (unsigned i=0; i<work_queues.size(); i++)
-      work_queues[i]->_clear();
-    _lock.Unlock();    
-  }
   void kick() {
     _lock.Lock();
     _cond.Signal();
@@ -216,29 +163,11 @@ public:
     _lock.Unlock();
   }
 
-  void pause() {
-    _lock.Lock();
-    assert(!_pause);
-    _pause = true;
-    while (processing)
-      _wait_cond.Wait(_lock);
-    _lock.Unlock();
-  }
-  void pause_new() {
-    _lock.Lock();
-    assert(!_pause);
-    _pause = true;
-    _lock.Unlock();
-  }
-
-  void unpause() {
-    _lock.Lock();
-    assert(_pause);
-    _pause = false;
-    _cond.Signal();
-    _lock.Unlock();
-  }
-
+  void start();
+  void stop(bool clear_after=true);
+  void pause();
+  void pause_new();
+  void unpause();
 };
 
 

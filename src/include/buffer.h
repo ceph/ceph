@@ -41,8 +41,13 @@ void	*valloc(size_t);
 #endif
 
 #include <iostream>
+#include <istream>
 #include <iomanip>
 #include <list>
+#include <string>
+
+using std::istream;
+using std::string;
 
 #include "atomic.h"
 #include "page.h"
