@@ -415,7 +415,7 @@ bool Monitor::dispatch_impl(Message *m)
 
 	// make sure service finds out about any state changes
 	if (p->is_active())
-	  paxos_service[pm->machine_id]->update_from_paxos();
+	  paxos_service[p->machine_id]->update_from_paxos();
       }
       break;
 

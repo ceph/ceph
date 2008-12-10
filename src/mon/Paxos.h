@@ -90,6 +90,7 @@ class Paxos {
   int machine_id;
   const char *machine_name;
 
+  friend class Monitor;
   friend class PaxosService;
   friend class PaxosObserver;
 
