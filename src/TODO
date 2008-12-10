@@ -35,7 +35,7 @@ repair
       on cdir store is sufficient if mdlog survives...
   - or what the hell, full trace?
 - mds scrubbing
-- rados scrubbing
+/- rados scrubbing
 
 
 timer
@@ -52,7 +52,6 @@ kernel client
 - set mapping bits for ENOSPC, EIO?
 - flush caps on sync, fsync, etc.
   - do we need to block?  how do we track that?
-- forced unmount?
 - procfs/debugfs
   - adjust granular debug levels too
     - should we be using debugfs?
@@ -79,6 +78,12 @@ vfs issues
   2- real_lookup() takes dir i_mutex, but then finds a dentry
   3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
 - vfs_rename_dir()
+
+btrfs
+- investigate __mntput warning
+- clone compressed inline extents
+- ioctl to pull out data csum?
+
 
 userspace client
 - handle session STALE
@@ -130,11 +135,14 @@ journaler
 - need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
 
 
+mon
+- paxos need to clean up old states.
+  - default: simple max of (state count, min age), so that we have at least N hours of history, say?
+  - osd map: trim only old maps < oldest "in" osd up_from
+
+
 osdmon
 - monitor needs to monitor some osds...
-
-crush
-- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 pgmon
 - include osd vector with pg state
@@ -142,10 +150,8 @@ pgmon
 - monitor pg states, notify on out?
 - watch osd utilization; adjust overload in cluster map
 
-mon
-- paxos need to clean up old states.
-- some sort of tester for PaxosService...
-- osdmon needs to lower-bound old osdmap versions it keeps around?
+crush
+- allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 osd
 - pg split should be a work queue
@@ -155,58 +161,8 @@ osd
 - optimize remove wrt recovery pushes
 
 simplemessenger
-- close idle connections
+- close idle connections?
 
 objectcacher
 - read locks?
 - maintain more explicit inode grouping instead of wonky hashes
-
-ebofs
-- btrees
-  - checksums
-  - dups
-  - sets
-
-- optionally scrub deallocated extents
-- clone()
-
-- map ObjectStore
-
-- verify proper behavior of conflicting/overlapping reads of clones
-- combine inodes and/or cnodes into same blocks
-- fix bug in node rotation on insert (and reenable)
-- fix NEAR_LAST_FWD (?)
-
-- awareness of underlying software/hardware raid in allocator so that we
-  write full stripes _only_.
-  - hmm, that's basically just a large block size.
-
-- rewrite the btree code!
-  - multithreaded
-  - eliminate nodepools
-  - allow btree sets
-  - allow arbitrary embedded data?
-  - allow arbitrary btrees
-  - allow root node(s?) to be embedded in onode, or whereever.
-  - keys and values can be uniform (fixed-size) or non-uniform.  
-    - fixed size (if any) is a value in the btree struct.  
-      - negative indicates bytes of length value?  (1 -> 255bytes, 2 -> 65535 bytes, etc.?)
-    - non-uniform records preceeded by length.  
-    - keys sorted via a comparator defined in btree root.  
-      - lexicographically, by default.
-
-- goal
-  - object btree key->value payload, not just a data blob payload.
-  - better threading behavior.
-    - with transactional goodness!
-
-- onode
-  - object attributes.. as a btree?
-  - blob stream
-  - map stream.
-    - allow blob values.
-
-
-remaining hard problems
-- how to cope with file size changes and read/write sharing
-
