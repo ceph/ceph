@@ -97,6 +97,8 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- file size recovery doesn't update recursive stats?
+- file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
   - anchor source dir
   - build snaprealm for any hardlinked file
@@ -139,7 +141,7 @@ mon
 - paxos need to clean up old states.
   - default: simple max of (state count, min age), so that we have at least N hours of history, say?
   - osd map: trim only old maps < oldest "in" osd up_from
-
+- blacklist failed mds's
 
 osdmon
 - monitor needs to monitor some osds...
