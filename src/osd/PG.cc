@@ -918,6 +918,7 @@ void PG::clear_primary_state()
   peer_summary_requested.clear();
   peer_info.clear();
   peer_missing.clear();
+  need_up_thru = false;
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
 
@@ -1145,6 +1146,7 @@ void PG::peer(ObjectStore::Transaction& t,
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	       << " < same_since " << info.history.same_since
 	       << ", must notify monitor" << dendl;
+      need_up_thru = true;
       osd->queue_want_up_thru(info.history.same_since);
       return;
     } else {
@@ -1199,6 +1201,8 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   assert(info.last_complete >= log.bottom || log.backlog);
+
+  need_up_thru = false;
 
   // write pg info, log
   write_info(t);

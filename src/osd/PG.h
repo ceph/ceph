@@ -628,6 +628,7 @@ protected:
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_summary_requested;
+  bool need_up_thru;
   friend class OSD;
 
 

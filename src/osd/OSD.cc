@@ -2140,6 +2140,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
   map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
+  epoch_t up_thru = osdmap->get_up_thru(whoami);
+
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
@@ -2154,7 +2156,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     else if (pg->is_primary() &&
 	     !pg->is_active()) {
       // i am (inactive) primary
-      if (!pg->is_peering())
+      if (!pg->is_peering() || 
+	  (pg->need_up_thru && up_thru >= pg->info.history.same_since))
 	pg->peer(t, query_map, &info_map);
     }
     else if (pg->is_stray() &&
