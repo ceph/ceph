@@ -35,6 +35,12 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
+extern "C" {
+#include <histedit.h>
+}
+
+
+
 Mutex lock("cmonctl.cc lock");
 Cond cond;
 
@@ -212,9 +218,6 @@ void usage()
        << "   ..." << std::endl;
   exit(1);
 }
-
-
-#include <histedit.h>
 
 
 const char *cli_prompt(EditLine *e) {
