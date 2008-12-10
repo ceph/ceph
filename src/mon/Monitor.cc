@@ -283,18 +283,14 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   delete m;
 }
 
-void Monitor::register_observer(MMonObserve *m)
+void Monitor::handle_observe(MMonObserve *m)
 {
+  dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
   if (m->monitor_id >= PAXOS_NUM) {
-    dout(0) << "register_observer: wrong monitor id: " << m->monitor_id << dendl;
-    delete m;
-    return;
+    dout(0) << "register_observer: bad monitor id: " << m->monitor_id << dendl;
+  } else {
+    paxos[m->monitor_id]->register_observer(m->get_orig_source_inst(), m->ver);
   }
-  Paxos *paxos = paxos_service[m->monitor_id]->paxos;
-  assert(paxos);
-  entity_inst_t inst=m->get_orig_source_inst();
-  PaxosObserver *observer = new PaxosObserver(paxos, inst, m->ver);
-  paxos->register_observer(observer);
   delete m;
 }
 
@@ -355,11 +351,6 @@ bool Monitor::dispatch_impl(Message *m)
       handle_command((MMonCommand*)m);
       break;
 
-    case MSG_MON_OBSERVE:
-      register_observer((MMonObserve *)m);
-      break;
-
-
       // OSDs
     case CEPH_MSG_OSD_GETMAP:
     case MSG_OSD_FAILURE:
@@ -417,6 +408,10 @@ bool Monitor::dispatch_impl(Message *m)
 	if (p->is_active())
 	  paxos_service[p->machine_id]->update_from_paxos();
       }
+      break;
+
+    case MSG_MON_OBSERVE:
+      handle_observe((MMonObserve *)m);
       break;
 
       // elector messages

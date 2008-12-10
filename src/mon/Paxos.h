@@ -64,22 +64,6 @@ class Monitor;
 class MMonPaxos;
 class Paxos;
 
-class PaxosObserver {
-  friend class Paxos;
-
-  Paxos *paxos;
-  int machine_id;
-  entity_inst_t inst;
-  version_t last_version;
-  utime_t timeout;
-public:
-  PaxosObserver(Paxos *px, entity_inst_t& ei, version_t v) : paxos(px), inst(ei), last_version(v) { }
-  void notify(bufferlist& bl, version_t ver, Monitor *mon, bool is_incremental);
-  version_t get_ver() { return last_version; }
-  int get_machine_id() { return machine_id; }
-  void set_timeout(utime_t to) { timeout = to; }
-};
-
 
 // i am one state machine.
 class Paxos {
@@ -93,6 +77,8 @@ class Paxos {
   friend class Monitor;
   friend class PaxosService;
   friend class PaxosObserver;
+
+
 
   // LEADER+PEON
 
@@ -157,8 +143,16 @@ private:
 
   list<Context*> waiting_for_writeable;
   list<Context*> waiting_for_commit;
-  map<entity_inst_t, PaxosObserver *> observers;
-  Mutex observers_lock;
+
+  // observers
+  struct Observer {
+    entity_inst_t inst;
+    version_t last_version;
+    utime_t timeout;
+    Observer(entity_inst_t& ei, version_t v) : inst(ei), last_version(v) { }
+  };
+  map<entity_inst_t, Observer *> observers;
+
 
   class C_CollectTimeout : public Context {
     Paxos *paxos;
@@ -240,8 +234,7 @@ public:
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
 		   lease_timeout_event(0),
-		   accept_timeout_event(0),
-                   observers_lock("observers_lock") { }
+		   accept_timeout_event(0) { }
 
   const char *get_machine_name() const {
     return machine_name;
@@ -294,7 +287,7 @@ public:
   void stash_latest(version_t v, bufferlist& bl);
   version_t get_latest(bufferlist& bl);
 
-  void register_observer(PaxosObserver *observer);
+  void register_observer(entity_inst_t inst, version_t v);
   void update_observers();
 };
 

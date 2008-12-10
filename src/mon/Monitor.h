@@ -121,10 +121,10 @@ public:
   void handle_mon_get_map(MMonGetMap *m);
   void handle_shutdown(Message *m);
   void handle_command(class MMonCommand *m);
+  void handle_observe(MMonObserve *m);
 
   void reply_command(MMonCommand *m, int rc, const string &rs);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata);
-  void register_observer(MMonObserve *m);
 
   void inject_args(const entity_inst_t& inst, string& args) {
     vector<string> a(1);

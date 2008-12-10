@@ -23,7 +23,6 @@ using std::vector;
 class MMonObserve : public Message {
  public:
   ceph_fsid fsid;
-  vector<string> cmd;
   uint32_t monitor_id;
   version_t ver;
 
@@ -34,12 +33,7 @@ class MMonObserve : public Message {
   
   const char *get_type_name() { return "mon_observe"; }
   void print(ostream& o) {
-    o << "observe(";
-    for (unsigned i=0; i<cmd.size(); i++) {
-      if (i) o << ' ';
-      o << cmd[i];
-    }
-    o << ")";
+    o << "observe(" << monitor_id << " v" << ver << ")";
   }
   
   void encode_payload() {

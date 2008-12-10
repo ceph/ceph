@@ -63,23 +63,24 @@ SafeTimer timer(lock);
 
 void handle_notify(MMonObserveNotify *notify)
 {
-  generic_dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id) << " v" << notify->ver
-		  << (notify->is_incremental ? " (i)" : "") << dendl;
+  generic_dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
+		  << " v" << notify->ver
+		  << (notify->is_latest ? " (latest)" : "")
+		  << dendl;
   
-  if (!notify->is_incremental &&
-      map_ver[notify->machine_id] >= notify->ver)
+  if (map_ver[notify->machine_id] >= notify->ver)
     return;
   
   switch (notify->machine_id) {
   case PAXOS_PGMAP:
     {
       bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_incremental) {
+      if (notify->is_latest) {
+	pgmap.decode(p);
+      } else {
 	PGMap::Incremental inc;
 	inc.decode(p);
 	pgmap.apply_incremental(inc);
-      } else {
-	pgmap.decode(p);
       }
       dout(0) << "    pg " << pgmap << dendl;
       break;
@@ -92,11 +93,11 @@ void handle_notify(MMonObserveNotify *notify)
 
   case PAXOS_OSDMAP:
     {
-      if (notify->is_incremental) {
+      if (notify->is_latest) {
+	osdmap.decode(notify->bl);
+      } else {
 	OSDMap::Incremental inc(notify->bl);
 	osdmap.apply_incremental(inc);
-      } else {
-	osdmap.decode(notify->bl);
       }
       dout(0) << "   osd " << osdmap << dendl;
     }
@@ -105,12 +106,13 @@ void handle_notify(MMonObserveNotify *notify)
   case PAXOS_CLIENTMAP:
     {
       bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_incremental) {
+      if (notify->is_latest) {
+	clientmap.decode(p);
+      } else  {
 	ClientMap::Incremental inc;
 	inc.decode(p);
 	clientmap.apply_incremental(inc);
-      } else 
-	clientmap.decode(p);
+      }
       dout(0) << "client " << clientmap << dendl;
     }
     break;

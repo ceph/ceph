@@ -37,13 +37,6 @@ static ostream& _prefix(Monitor *mon, int whoami, const char *machine_name, int 
 		<< ") ";
 }
 
-void PaxosObserver::notify(bufferlist& bl, version_t ver, Monitor *mon, bool is_incremental)
-{
-  MMonObserveNotify *msg = new MMonObserveNotify(paxos->machine_id, bl, ver, is_incremental);
-  last_version = ver;
-   
-  mon->messenger->send_message(msg, inst);
-}
 
 
 void Paxos::init()
@@ -333,6 +326,7 @@ void Paxos::begin(bufferlist& v)
     finish_contexts(waiting_for_commit);
     finish_contexts(waiting_for_readable);
     finish_contexts(waiting_for_writeable);
+    update_observers();
     return;
   }
 
@@ -812,78 +806,69 @@ void Paxos::dispatch(Message *m)
     assert(0);
   }
 
-  if (is_readable()) {
+  if (is_readable())
     update_observers();
-  }
 }
 
-void Paxos::register_observer(PaxosObserver *observer)
+void Paxos::register_observer(entity_inst_t inst, version_t v)
 {
-  utime_t timeout=g_clock.now();
-  map<entity_inst_t, PaxosObserver *>::iterator iter;
+  dout(10) << "register_observer " << inst << " v" << v << dendl;
+  
+  Observer *observer;
+  if (observers.count(inst))
+    observer = observers[inst];
+  else {
+    observers[inst] = observer = new Observer(inst, v);
+  }  
 
-  observers_lock.Lock();
-
-  iter = observers.find(observer->inst);
-
-  if (iter != observers.end()) {
-    PaxosObserver *o = iter->second;
-
-    observers.erase(iter);
-
-    delete o;
-  }
-
+  utime_t timeout = g_clock.now();
   timeout += g_conf.paxos_observer_timeout;
-  observer->set_timeout(timeout);
+  observer->timeout = timeout;
 
-  observers[observer->inst] = observer;
-
-  observers_lock.Unlock();
+  if (is_readable())
+    update_observers();
 }
+
 
 void Paxos::update_observers()
 {
+  dout(10) << "update_observers" << dendl;
+
   bufferlist bl;
   version_t ver;
-  map<entity_inst_t, PaxosObserver *>::iterator iter, last;
 
-  observers_lock.Lock();
+  map<entity_inst_t, Observer *>::iterator iter = observers.begin();
+  while (iter != observers.end()) {
+    Observer *observer = iter->second;
 
-  last = observers.end();
-  iter = observers.begin();
-  while (iter != last) {
-    int done = 0;
-    PaxosObserver *observer = iter->second;
-    while (g_clock.now() > observer->timeout) {
-	delete observer;
-	observers.erase(iter++);
-	if (iter == last) {
-		observers_lock.Unlock();
-		return;
-	}
-	observer = iter->second;	
+    // timed out?
+    if (g_clock.now() > observer->timeout) {
+      delete observer;
+      observers.erase(iter++);
+      continue;
     }
-
-    if (observer->get_ver() == 0) {
-        ver = get_latest(bl);
-        if (ver) {
-          observer->notify(bl, ver, mon, false);
-	   done=1;
-        }
+    ++iter;
+    
+    if (observer->last_version == 0) {
+      ver = get_latest(bl);
+      if (ver) {
+	dout(10) << " sending summary state v" << ver << " to " << observer->inst << dendl;
+	mon->messenger->send_message(new MMonObserveNotify(machine_id, bl, ver, true),
+				     observer->inst);
+	observer->last_version = ver;
+	continue;
       }
-
-      if (!done) {
-        for (ver = observer->get_ver() + 1; ver <=last_committed; ver++) {
-          if (read(ver, bl)) {
-             observer->notify(bl, ver, mon, true);
-          }
-        }
-      }
-
-      ++iter;
     }
-    observers_lock.Unlock();
+    
+    for (ver = observer->last_version + 1; ver <= last_committed; ver++) {
+      if (read(ver, bl)) {
+	dout(10) << " sending state v" << ver << " to " << observer->inst << dendl;
+	mon->messenger->send_message(new MMonObserveNotify(machine_id, bl, ver, false),
+				     observer->inst);
+	observer->last_version = ver;
+      }
+    }
+  }
 }
 
 // -----------------
