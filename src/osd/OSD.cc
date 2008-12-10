@@ -1306,7 +1306,6 @@ void OSD::send_pg_stats()
       }
       pg->pg_stats_lock.Lock();
       if (pg->pg_stats_valid) {
-	pg->pg_stats_valid = false;
 	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
 	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
       }
