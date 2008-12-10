@@ -76,11 +76,10 @@ public:
 
       epoch_t same_since;          // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
-      epoch_t same_acker_since;    // same acker at least back through this epoch.
       History() : 	      
 	epoch_created(0),
 	last_epoch_started(0),
-	same_since(0), same_primary_since(0), same_acker_since(0) {}
+	same_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
 	if (epoch_created < other.epoch_created)
@@ -94,14 +93,12 @@ public:
 	::encode(last_epoch_started, bl);
 	::encode(same_since, bl);
 	::encode(same_primary_since, bl);
-	::encode(same_acker_since, bl);
       }
       void decode(bufferlist::iterator &bl) {
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
 	::decode(same_since, bl);
 	::decode(same_primary_since, bl);
-	::decode(same_acker_since, bl);
       }
     } history;
     
@@ -764,29 +761,12 @@ public:
   int        get_nrep() const { return acting.size(); }
 
   int        get_primary() { return acting.empty() ? -1:acting[0]; }
-  //int        get_tail() { return acting.empty() ? -1:acting[ acting.size()-1 ]; }
-  //int        get_acker() { return g_conf.osd_rep == OSD_REP_PRIMARY ? get_primary():get_tail(); }
-  int        get_acker() { 
-    if (g_conf.osd_rep == OSD_REP_PRIMARY ||
-	acting.size() <= 1) 
-      return get_primary();
-    return acting[1];
-  }
   
   int        get_role() const { return role; }
   void       set_role(int r) { role = r; }
 
   bool       is_primary() const { return role == PG_ROLE_HEAD; }
   bool       is_replica() const { return role > 0; }
-  bool       is_acker() const { 
-    if (g_conf.osd_rep == OSD_REP_PRIMARY)
-      return is_primary();
-    else
-      return role == PG_ROLE_ACKER; 
-  }
-  bool       is_head() const { return role == PG_ROLE_HEAD; }
-  bool       is_middle() const { return role == PG_ROLE_MIDDLE; }
-  bool       is_residual() const { return role == PG_ROLE_STRAY; }
   
   //int  get_state() const { return state; }
   bool state_test(int m) const { return (state & m) != 0; }
@@ -848,7 +828,6 @@ public:
   virtual void wait_for_missing_object(object_t oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
-  virtual void on_acker_change() = 0;
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;
   virtual void on_shutdown() = 0;
@@ -868,7 +847,7 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 {
   return out << "ec=" << h.epoch_created
 	     << " les=" << h.last_epoch_started
-	     << " " << h.same_since << "/" << h.same_primary_since << "/" << h.same_acker_since;
+	     << " " << h.same_since << "/" << h.same_primary_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 

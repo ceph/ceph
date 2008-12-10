@@ -53,7 +53,7 @@ static const int LOAD_HYBRID     = 3;
 
 bool ReplicatedPG::same_for_read_since(epoch_t e)
 {
-  return (e >= info.history.same_acker_since);
+  return (e >= info.history.same_primary_since);
 }
 
 bool ReplicatedPG::same_for_modify_since(epoch_t e)
@@ -64,8 +64,7 @@ bool ReplicatedPG::same_for_modify_since(epoch_t e)
 bool ReplicatedPG::same_for_rep_modify_since(epoch_t e)
 {
   // check osd map: same set, or primary+acker?
-  return (e >= info.history.same_primary_since &&
-	  e >= info.history.same_acker_since);    
+  return e >= info.history.same_primary_since;
 }
 
 // ====================
@@ -705,7 +704,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	  osd->store->getattr(info.pgid.to_coll(), poid, "balance-reads", &b, 1) < 0) {
 	dout(-10) << "read on replica, object " << poid 
 		  << " dne or no balance-reads, fw back to primary" << dendl;
-	osd->messenger->forward_message(op, osd->osdmap->get_inst(get_acker()));
+	osd->messenger->forward_message(op, osd->osdmap->get_inst(get_primary()));
 	return;
       }
     }
@@ -2499,11 +2498,6 @@ void ReplicatedPG::on_osd_failure(int o)
       } else
 	p++;
   }
-}
-
-void ReplicatedPG::on_acker_change()
-{
-  dout(10) << "on_acker_change" << dendl;
 }
 
 void ReplicatedPG::on_shutdown()

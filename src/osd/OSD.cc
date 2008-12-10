@@ -640,8 +640,7 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->info.history.epoch_created = 
     pg->info.history.last_epoch_started =
     pg->info.history.same_since =
-    pg->info.history.same_primary_since =
-    pg->info.history.same_acker_since = osdmap->get_epoch();
+    pg->info.history.same_primary_since = osdmap->get_epoch();
 
   pg->write_info(t);
   pg->write_log(t);
@@ -825,23 +824,10 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
         e > h.same_primary_since) {
       dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
       h.same_primary_since = e;
-    
-      if (g_conf.osd_rep == OSD_REP_PRIMARY)
-        h.same_acker_since = h.same_primary_since;
-    }
-
-    // acker change?
-    if (g_conf.osd_rep != OSD_REP_PRIMARY) {
-      if (!(!acting.empty() && !last.empty() && acting[acting.size()-1] == last[last.size()-1]) &&
-          e > h.same_acker_since) {
-        dout(15) << "project_pg_history " << pgid << " acker changed in " << e << dendl;
-        h.same_acker_since = e;
-      }
     }
 
     if (h.same_since >= e &&
-        h.same_primary_since >= e &&
-        h.same_acker_since >= e) break;
+        h.same_primary_since >= e) break;
   }
 
   dout(15) << "project_pg_history end " << h << dendl;
@@ -2035,7 +2021,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     // -- there was a change! --
     int oldrole = pg->get_role();
     int oldprimary = pg->get_primary();
-    int oldacker = pg->get_acker();
     vector<int> oldacting = pg->acting;
     
     pg->clear_prior();
@@ -2067,10 +2052,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       pg->cancel_recovery();
       pg->dirty_info = true;
     }
-    if (oldacker != pg->get_acker()) {
-      pg->info.history.same_acker_since = osdmap->get_epoch();
-      pg->dirty_info = true;
-    }
     
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
@@ -2095,8 +2076,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       if (osdmap->is_down(oldacting[i]))
 	pg->on_osd_failure(oldacting[i]);
     pg->on_change();
-    if (oldacker != pg->get_acker() && oldacker == whoami)
-      pg->on_acker_change();
     
     if (role != oldrole) {
       // old primary?
@@ -3429,7 +3408,7 @@ void OSD::handle_op(MOSDOp *op)
 
     } else {
       // modify
-      if ((pg->get_primary() != whoami ||
+      if ((!pg->is_primary() ||
 	   !pg->same_for_modify_since(op->get_map_epoch()))) {
 	dout(7) << "handle_op pg changed " << pg->info.history
 		<< " after " << op->get_map_epoch() 
