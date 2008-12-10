@@ -44,7 +44,7 @@ void ThreadPool::worker()
 	  _lock.Lock();
 	  dout(15) << "worker wq " << wq->name << " done processing " << item << dendl;
 	  processing--;
-	  if (_pause)
+	  if (_pause || _draining)
 	    _wait_cond.Signal();
 	  did = true;
 	  break;
@@ -118,3 +118,15 @@ void ThreadPool::unpause()
   _cond.Signal();
   _lock.Unlock();
 }
+
+void ThreadPool::drain()
+{
+  dout(10) << "drain" << dendl;
+  _lock.Lock();
+  _draining = true;
+  while (processing)
+    _wait_cond.Wait(_lock);
+  _draining = false;
+  _lock.Unlock();
+}
+
