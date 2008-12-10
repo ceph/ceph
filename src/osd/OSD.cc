@@ -260,6 +260,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   whoami(id), dev_name(dev),
   boot_epoch(0), last_active_epoch(0),
   state(STATE_BOOTING),
+  recovery_tp("OSD::recovery_tp", 1),
+  disk_tp("OSD::disk_tp", 2),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_epoch(0),
   heartbeat_messenger(hbm),
@@ -280,10 +282,10 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   tid_lock("OSD::tid_lock"),
   num_pulling(0),
   recovery_ops_active(0),
-  recovery_wq(this),
+  recovery_wq(this, &recovery_tp),
   remove_list_lock("OSD::remove_list_lock"),
-  snap_trim_wq(this),
-  scrub_wq(this)
+  snap_trim_wq(this, &disk_tp),
+  scrub_wq(this, &disk_tp)
 {
   osdmap = 0;
 
@@ -439,9 +441,12 @@ int OSD::init()
   // announce to monitor i exist and have booted.
   do_mon_report();
   
-  recovery_wq.start();
-  scrub_wq.start();
-  snap_trim_wq.start();
+  recovery_tp.add_work_queue(&recovery_wq);
+  recovery_tp.start();
+
+  disk_tp.add_work_queue(&scrub_wq);
+  disk_tp.add_work_queue(&snap_trim_wq);
+  disk_tp.start();
 
   // start the heartbeat
   heartbeat_thread.create();
@@ -487,12 +492,10 @@ int OSD::shutdown()
   delete threadpool;
   threadpool = 0;
 
-  recovery_wq.stop();
-  dout(10) << "recovery wq stopped" << dendl;
-  scrub_wq.stop();
-  dout(10) << "scrub wq stopped" << dendl;
-  snap_trim_wq.stop();
-  dout(10) << "snap trim wq stopped" << dendl;
+  recovery_tp.stop();
+  dout(10) << "recovery tp stopped" << dendl;
+  disk_tp.stop();
+  dout(10) << "disk tp stopped" << dendl;
 
   // tell pgs we're shutting down
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
@@ -1161,7 +1164,7 @@ void OSD::tick()
   }
 
   // periodically kick recovery work queue
-  recovery_wq.kick();
+  recovery_tp.kick();
   
   map_lock.get_read();
 
@@ -1642,8 +1645,10 @@ void OSD::handle_scrub(MOSDScrub *m)
       if (pg->is_primary()) {
 	if (m->repair)
 	  pg->state_set(PG_STATE_REPAIR);
-	if (!pg->is_scrubbing())
+	if (!pg->is_scrubbing()) {
+	  dout(10) << "queueing " << *pg << " for scrub" << dendl;
 	  scrub_wq.queue(pg);
+	}
       }
     }
   } else {
@@ -1655,8 +1660,10 @@ void OSD::handle_scrub(MOSDScrub *m)
 	if (pg->is_primary()) {
 	  if (m->repair)
 	    pg->state_set(PG_STATE_REPAIR);
-	  if (!pg->is_scrubbing())
+	  if (!pg->is_scrubbing()) {
+	    dout(10) << "queueing " << *pg << " for scrub" << dendl;
 	    scrub_wq.queue(pg);
+	  }
 	}
       }
   }
@@ -1724,9 +1731,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   state = STATE_ACTIVE;
 
   wait_for_no_ops();
-  recovery_wq.pause();
-  scrub_wq.pause_new();   // _process() may be waiting for a replica message
-  snap_trim_wq.pause();
+  recovery_tp.pause();
+  disk_tp.pause_new();   // _process() may be waiting for a replica message
   map_lock.get_write();
 
   assert(osd_lock.is_locked());
@@ -1920,9 +1926,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.put_write();
 
-  recovery_wq.unpause();
-  scrub_wq.unpause();
-  snap_trim_wq.unpause();
+  recovery_tp.unpause();
+  disk_tp.unpause();
 
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 

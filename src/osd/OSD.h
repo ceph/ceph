@@ -114,6 +114,12 @@ public:
 
 private:
 
+
+  WorkThreadPool recovery_tp;
+  WorkThreadPool disk_tp;
+
+
+
   // -- heartbeat --
   Mutex heartbeat_lock;
   Cond heartbeat_cond;
@@ -462,14 +468,16 @@ private:
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
 
+
+
   // -- pg recovery --
   xlist<PG*> recovery_queue;
   utime_t defer_recovery_until;
   int recovery_ops_active;
 
-  struct RecoveryWQ : public WorkQueue<PG> {
+  struct RecoveryWQ : public WorkThreadPool::WorkQueue<PG> {
     OSD *osd;
-    RecoveryWQ(OSD *o) : WorkQueue<PG>("OSD::RecoveryWQ"), osd(o) {}
+    RecoveryWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       if (!pg->recovery_item.get_xlist()) {
@@ -543,9 +551,9 @@ private:
   // -- snap trimming --
   xlist<PG*> snap_trim_queue;
   
-  struct SnapTrimWQ : public WorkQueue<PG> {
+  struct SnapTrimWQ : public WorkThreadPool::WorkQueue<PG> {
     OSD *osd;
-    SnapTrimWQ(OSD *o) : WorkQueue<PG>("OSD::SnapTrimWQ"), osd(o) {}
+    SnapTrimWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       if (pg->snap_trim_item.is_on_xlist())
@@ -575,9 +583,9 @@ private:
   // -- scrubbing --
   xlist<PG*> scrub_queue;
 
-  struct ScrubWQ : public WorkQueue<PG> {
+  struct ScrubWQ : public WorkThreadPool::WorkQueue<PG> {
     OSD *osd;
-    ScrubWQ(OSD *o) : WorkQueue<PG>("OSD::ScrubWQ"), osd(o) {}
+    ScrubWQ(OSD *o, WorkThreadPool *tp) : WorkThreadPool::WorkQueue<PG>("OSD::ScrubWQ", tp), osd(o) {}
 
     bool _enqueue(PG *pg) {
       if (pg->scrub_item.is_on_xlist())
