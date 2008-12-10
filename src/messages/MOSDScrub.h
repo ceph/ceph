@@ -30,7 +30,7 @@ struct MOSDScrub : public Message {
   MOSDScrub() {}
   MOSDScrub(ceph_fsid& f) :
     Message(MSG_OSD_SCRUB),
-    fsid(f) {}
+    fsid(f), repair(false) {}
   MOSDScrub(ceph_fsid& f, vector<pg_t>& pgs, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), scrub_pgs(pgs), repair(r) {}
