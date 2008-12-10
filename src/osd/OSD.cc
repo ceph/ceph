@@ -3141,7 +3141,8 @@ bool OSD::queue_for_recovery(PG *pg)
 bool OSD::_recover_now()
 {
   if (recovery_ops_active >= g_conf.osd_recovery_max_active) {
-    dout(15) << "_recover_now max " << g_conf.osd_recovery_max_active << " active" << dendl;
+    dout(15) << "_recover_now active " << recovery_ops_active
+	     << " >= max " << g_conf.osd_recovery_max_active << dendl;
     return false;
   }
   if (g_clock.now() < defer_recovery_until) {
