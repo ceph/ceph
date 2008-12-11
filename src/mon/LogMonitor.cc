@@ -82,7 +82,7 @@ void LogMonitor::create_initial()
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
   e.stamp = g_clock.now();
-  e.type = LOG_INFO;
+  e.type = LOG_ERROR;
   e.msg = "mkfs";
   e.seq = 0;
   e.encode(pending_inc);
