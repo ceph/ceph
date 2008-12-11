@@ -12,6 +12,7 @@
  * 
  */
 
+#include "include/types.h"
 #include "WorkQueue.h"
 
 #include "config.h"
