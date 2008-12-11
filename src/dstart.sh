@@ -9,9 +9,9 @@ while [ $# -ge 1 ]; do
     case $1 in
         -d | --debug )
             debug=1
+	    ;;
         --new | -n )
             new=1
-	    ;;
 	    ;;
         --restart | -n )
             norestart=""
