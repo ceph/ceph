@@ -1800,16 +1800,32 @@ int FileStore::collection_list(coll_t c, vector<pobject_t>& ls)
   if (!dir)
     return -errno;
   
+  // first, build (ino, object) list
+  vector< pair<ino_t,pobject_t> > inolist;
+
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
     pobject_t o;
-    if (parse_object(de->d_name, o))
+    if (parse_object(de->d_name, o)) {
+      inolist.push_back(pair<ino_t,pobject_t>(de->d_ino, o));
       ls.push_back(o);
+    }
   }
+
+  // sort
+  dout(10) << "collection_list " << fn << " sorting " << inolist.size() << " objects" << dendl;
+  sort(inolist.begin(), inolist.end());
+
+  // build final list
+  ls.resize(inolist.size());
+  int i = 0;
+  for (vector< pair<ino_t,pobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
+    ls[i++] = p->second;
   
+  dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
   ::closedir(dir);
   return 0;
 }
