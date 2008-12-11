@@ -3,14 +3,21 @@
 let new=0
 let debug=0
 let stopfirst=1
+norestart="--norestart"
 
 while [ $# -ge 1 ]; do
     case $1 in
         -d | --debug )
             debug=1
-	    ;;
         --new | -n )
             new=1
+	    ;;
+	    ;;
+        --restart | -n )
+            norestart=""
+	    ;;
+        --norestart | -n )
+            norestart="--norestart"
 	    ;;
 	--nostop )
 	    stopfirst=0
@@ -128,7 +135,7 @@ do
        ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
    echo starting cosd
-   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./cosd $devm -d --dout_dir /data/cosd$host $COSD_ARGS
+   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./crun $norestart ./cosd $devm --dout_dir /data/cosd$host $COSD_ARGS -f &
 
  done
 done
