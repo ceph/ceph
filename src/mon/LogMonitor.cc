@@ -228,10 +228,11 @@ bool LogMonitor::prepare_log(MLog *m)
   return true;
 }
 
-void LogMonitor::_updated_log(MLog *ack, entity_inst_t who)
+void LogMonitor::_updated_log(MLog *m, entity_inst_t who)
 {
   dout(7) << "_updated_log for " << who << dendl;
-  mon->messenger->send_message(ack, who);
+  mon->messenger->send_message(new MLog(m->fsid, m->entries.rbegin()->seq), who);
+  delete m;
 }
 
 

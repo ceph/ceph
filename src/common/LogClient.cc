@@ -68,8 +68,7 @@ void LogClient::send_log()
   Mutex::Locker l(log_lock);
   if (log_queue.empty())
     return;
-  MLog *log = new MLog(monmap->get_fsid());
-  log->entries = log_queue;
+  MLog *log = new MLog(monmap->get_fsid(), log_queue);
   int mon = monmap->pick_mon();
   dout(10) << "send_log to mon" << mon << dendl;
   messenger->send_message(log, monmap->get_inst(mon));
@@ -80,7 +79,7 @@ void LogClient::handle_log(MLog *m)
   Mutex::Locker l(log_lock);
   dout(10) << "handle_log " << *m << dendl;
 
-  version_t last = m->entries.rbegin()->seq;
+  version_t last = m->last;
   while (log_queue.size() && log_queue.begin()->seq <= last) {
     dout(10) << " logged " << log_queue.front() << dendl;
     log_queue.pop_front();

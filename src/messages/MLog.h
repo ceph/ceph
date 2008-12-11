@@ -24,8 +24,10 @@ public:
   version_t last;
   
   MLog() : Message(MSG_PGSTATS) {}
-  MLog(ceph_fsid& f) : 
-    Message(MSG_LOG), fsid(f) {}
+  MLog(ceph_fsid& f, deque<LogEntry>& e) : 
+    Message(MSG_LOG), fsid(f), entries(e), last(0) { }
+  MLog(ceph_fsid& f, version_t l) : 
+    Message(MSG_LOG), fsid(f), last(l) {}
 
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {
