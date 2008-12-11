@@ -1486,6 +1486,8 @@ void PG::clear_stats()
   pg_stats_lock.Lock();
   pg_stats_valid = false;
   pg_stats_lock.Unlock();
+
+  osd->pg_stat_queue_dequeue(this);
 }
 
 

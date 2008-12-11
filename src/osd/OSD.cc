@@ -474,8 +474,6 @@ int OSD::shutdown()
   wait_for_no_ops();
   dout(10) << "no ops" << dendl;
 
-  clear_pg_stat_queue();
-
   // stop threads
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
@@ -516,13 +514,13 @@ int OSD::shutdown()
   dout(10) << "sync done" << dendl;
   osd_lock.Lock();
 
+  clear_pg_stat_queue();
+
   // close pgs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
        p++) {
     PG *pg = p->second;
-    pg->lock();
-    pg->unlock();
     pg->put();
   }
   pg_map.clear();

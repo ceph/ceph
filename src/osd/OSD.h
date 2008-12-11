@@ -443,6 +443,12 @@ private:
     osd_stat_updated = true;
     pg_stat_queue_lock.Unlock();
   }
+  void pg_stat_queue_dequeue(PG *pg) {
+    pg_stat_queue_lock.Lock();
+    if (pg->stat_queue_item.remove_myself())
+      pg->put();
+    pg_stat_queue_lock.Unlock();
+  }
   void clear_pg_stat_queue() {
     pg_stat_queue_lock.Lock();
     while (!pg_stat_queue.empty()) {
