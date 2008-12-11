@@ -121,8 +121,10 @@ void handle_notify(MMonObserveNotify *notify)
     {
       LogEntry le;
       bufferlist::iterator p = notify->bl.begin();
-      le.decode(p);
-      dout(0) << "   log " << le << dendl;
+      while (!p.end()) {
+	le.decode(p);
+	dout(0) << "   log " << le << dendl;
+      }
       break;
     }
   }
