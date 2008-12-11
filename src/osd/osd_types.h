@@ -217,12 +217,13 @@ class eversion_t {
 public:
   version_t version;
   epoch_t epoch;
-  eversion_t() : version(0), epoch(0) {}
-  eversion_t(epoch_t e, version_t v) : version(v), epoch(e) {}
+  __u32 __pad;
+  eversion_t() : version(0), epoch(0), __pad(0) {}
+  eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
   eversion_t(const ceph_eversion& ce) : 
     version(ce.version),
-    epoch(ce.epoch) {}
+    epoch(ce.epoch) { }
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = epoch;
