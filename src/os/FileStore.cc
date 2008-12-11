@@ -184,7 +184,8 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
 bool FileStore::parse_object(char *s, pobject_t& o)
 {
   //assert(sizeof(o) == 28);
-  if (s[4] != '.' ||
+  if (strlen(s) < 36 ||
+      s[4] != '.' ||
       s[9] != '.' ||
       s[26] != '.' ||
       s[35] != '.')
@@ -203,7 +204,7 @@ bool FileStore::parse_object(char *s, pobject_t& o)
 
 bool FileStore::parse_coll(char *s, coll_t& c)
 {
-  if (s[16] == '.' && strlen(s) == 33) {
+  if (strlen(s) == 33 && s[16] == '.') {
     s[16] = 0;
     c.high = strtoull(s, 0, 16);
     c.low = strtoull(s+17, 0, 16);
@@ -1500,7 +1501,7 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset)
     name += strlen(name) + 1;
   }
 
-  delete names2;
+  delete[] names2;
   return 0;
 }
 
@@ -1649,7 +1650,7 @@ int FileStore::collection_getattrs(coll_t cid, map<nstring,bufferptr>& aset)
 {
   if (fake_attrs) return attrs.collection_getattrs(cid, aset);
 
-  char fn[100];
+  char fn[200];
   get_cdir(cid, fn);
   dout(10) << "collection_getattrs " << fn << dendl;
   int r = _getattrs(fn, aset);
