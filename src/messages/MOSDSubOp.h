@@ -122,7 +122,8 @@ public:
     ops(o), noop(noop_),   
     rep_tid(rtid),
     version(v),
-    inc_lock(il)
+    inc_lock(il),
+    old_exists(false), old_size(0)
   {
     memset(&peer_stat, 0, sizeof(peer_stat));
   }
