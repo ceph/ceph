@@ -1090,9 +1090,14 @@ void PG::peer(ObjectStore::Transaction& t,
   */  
 
   // gather missing from peers
+  bool have_all_missing = true;
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     if (peer_info[peer].is_empty()) continue;
+    if (peer_missing.count(peer) == 0) {
+      dout(10) << " still need log+missing from osd" << peer << dendl;
+      have_all_missing = false;
+    }
     if (peer_log_requested.count(peer) ||
         peer_summary_requested.count(peer)) continue;
 
@@ -1101,18 +1106,8 @@ void PG::peer(ObjectStore::Transaction& t,
     query_map[peer][info.pgid] = Query(Query::FULLLOG, info.history);
     peer_log_requested.insert(peer);
   }
-
-  // did we get them all?
-  bool have_missing = true;
-  for (unsigned i=1; i<acting.size(); i++) {
-    int peer = acting[i];
-    if (peer_info[peer].is_empty()) continue;
-    if (peer_missing.count(peer)) continue;
-    
-    dout(10) << " waiting for log+missing from osd" << peer << dendl;
-    have_missing = false;
-  }
-  if (!have_missing) return;
+  if (!have_all_missing)
+    return;
 
   dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
 
