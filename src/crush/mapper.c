@@ -308,6 +308,7 @@ static int crush_choose(struct crush_map *map,
 				}
 
 				if (recurse_to_leaf &&
+				    item < 0 &&
 				    crush_choose(map, map->buckets[-1-item], weight,
 						 x, outpos+1, 0,
 						 out2, outpos,
