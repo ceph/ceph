@@ -279,7 +279,7 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       } else {
 	// old update, new update
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : new item supercedes" << dendl;
-	missing.revise_need(oe.oid, oe.version);
+	missing.revise_need(ne.oid, ne.version);
       }
     }
   } else {
