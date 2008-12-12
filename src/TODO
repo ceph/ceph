@@ -79,8 +79,12 @@ vfs issues
   3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
 - vfs_rename_dir()
 
+filestore
+- sort object lists by ino
+- get file csum?
+
 btrfs
-- investigate __mntput warning
+- inode_lock vs tree->lock lockdep warning
 - clone compressed inline extents
 - ioctl to pull out data csum?
 
