@@ -422,6 +422,11 @@ public:
 
     unsigned num_missing() const { return missing.size(); }
 
+    void swap(Missing& o) {
+      missing.swap(o.missing);
+      rmissing.swap(o.rmissing);
+    }
+
     bool is_missing(object_t oid) {
       return missing.count(oid);
     }
@@ -686,9 +691,9 @@ public:
   }
 
   void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
-  void merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
+  bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
-  void proc_replica_missing(Log &olog, Missing &omissing, int fromosd);
+  void search_for_missing(Log &olog, Missing &omissing, int fromosd);
   
   void generate_backlog();
   void drop_backlog();

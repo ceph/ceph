@@ -2832,7 +2832,13 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   dout(10) << *pg << " got " << info << " " << log << " " << missing << dendl;
   pg->info.history.merge(info.history);
 
-  //m->log.print(cout);
+  // dump log
+  dout(15) << *pg << " my log = ";
+  pg->log.print(*_dout);
+  *_dout << dendl;
+  dout(15) << *pg << " osd" << from << " log = ";
+  log.print(*_dout);
+  *_dout << dendl;
 
   if (pg->is_primary()) {
     // i am PRIMARY
@@ -2850,16 +2856,12 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
       }
     } else {
-	dout(10) << *pg << " ignoring osd" << from << " log, i didn't ask for it (recently)" << dendl;
+      dout(10) << *pg << " ignoring osd" << from << " log, i didn't ask for it (recently)" << dendl;
     }
   } else {
     if (!pg->info.dne()) {
       // i am REPLICA
-      
-      // merge log
       pg->merge_log(t, info, log, missing, from);
-      
-      // ok activate!
       pg->activate(t, info_map);
     }
   }

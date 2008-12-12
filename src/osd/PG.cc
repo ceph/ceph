@@ -170,53 +170,60 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   assert(!is_active());
 
   if (!have_master_log) {
-    // i'm building master log.
-    // note peer's missing.
-    peer_missing[from] = omissing;
-    
     // merge log into our own log
     merge_log(t, oinfo, olog, omissing, from);
-    proc_replica_missing(olog, omissing, from);
-  } else {
-    // i'm just building missing lists.
-    peer_missing[from] = omissing;
+  } else if (is_acting(from)) {
+    // replica.  have master log. 
+    // populate missing; check for divergence
+    
+    /*
+      basically what we're doing here is rewinding the remote log, 
+      dropping divergent entries, until we find something that matches
+      out master log.  we then reset last_update to reflect the new
+      up to which missing is accurate.
 
-    // iterate over peer log. in reverse.
+      later, in activate(), missing will get wound forward again and we
+      will send the peer enough log to arrive at the same state.
+    */
+
     list<Log::Entry>::reverse_iterator pp = olog.log.rbegin();
     eversion_t lu = oinfo.last_update;
     while (pp != olog.log.rend()) {
-      if (!log.logged_object(pp->oid)) {
-	if (!log.backlog) {
-	  dout(10) << " divergent " << *pp << " not in our log, generating backlog" << dendl;
-	  //dout(0) << "log" << dendl;
-	  //log.print(*_dout);
-	  //dout(0) << "olog" << dendl;
-	  //olog.print(*_dout);
-	  generate_backlog();
-	} else {
-	  dout(10) << " divergent " << *pp << " not in our log, already have backlog" << dendl;
-	}
-      }
-      
-      if (!log.objects.count(pp->oid)) {
-        dout(10) << " divergent " << *pp << " dne, must have been new, ignoring" << dendl;
+      Log::Entry& oe = *pp;
+      if (!log.objects.count(oe.oid)) {
+        dout(10) << " had " << oe << " new dne : divergent, ignoring" << dendl;
         ++pp;
         continue;
       } 
-
-      if (log.objects[pp->oid]->version == pp->version) {
-        break;  // we're no longer divergent.
-        //++pp;
-        //continue;
+      
+      Log::Entry& ne = *log.objects[oe.oid];
+      if (ne.version == oe.version) {
+	dout(10) << " had " << oe << " new " << ne << " : match, stopping" << dendl;
+	break;
       }
-
-      if (log.objects[pp->oid]->version > pp->version) {
-        dout(10) << " divergent " << *pp
-                 << " superceded by " << log.objects[pp->oid]
-                 << ", ignoring" << dendl;
+      if (ne.version > oe.version) {
+	dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
       } else {
-        dout(10) << " divergent " << *pp << ", adding to missing" << dendl;
-        peer_missing[from].add_event(*pp);
+	if (oe.is_delete()) {
+	  if (ne.is_delete()) {
+	    // old and new are delete
+	    dout(20) << " had " << oe << " new " << ne << " : both deletes" << dendl;
+	  } else {
+	    // old delete, new update.
+	    dout(20) << " had " << oe << " new " << ne << " : missing" << dendl;
+	    omissing.add(ne.oid, ne.version, eversion_t());
+	  }
+	} else {
+	  if (ne.is_delete()) {
+	    // old update, new delete
+	    dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
+	    omissing.rm(oe.oid, oe.version);
+	  } else {
+	    // old update, new update
+	    dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
+	    omissing.revise_need(ne.oid, ne.version);
+	  }
+	}
       }
 
       ++pp;
@@ -234,9 +241,12 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
         oldest_update = lu;
       }
     }
-
-    proc_replica_missing(olog, peer_missing[from], from);
   }
+
+  peer_info[from] = oinfo;
+
+  search_for_missing(olog, omissing, from);
+  peer_missing[from].swap(omissing);
 }
 
 
@@ -245,21 +255,22 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
  * happens _after_ new log items have been assimilated.  thus, we assume
  * the index already references newer entries (if present), and missing
  * has been updated accordingly.
+ *
+ * return true if entry is not divergent.
  */
-void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
+bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 {
   if (log.objects.count(oe.oid)) {
-    // object still exists.
     Log::Entry &ne = *log.objects[oe.oid];  // new(er?) entry
     
     if (ne.version > oe.version) {
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : older, missing" << dendl;
       assert(missing.is_missing(ne.oid));
-      return;
+      return false;
     }
     if (ne.version == oe.version) {
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : same" << dendl;
-      return;
+      return true;
     }
 
     if (oe.is_delete()) {
@@ -291,20 +302,15 @@ void PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       missing.rm(oe.oid, oe.version);
     }
   }
+  return false;
 }
 
-void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing &omissing, int fromosd)
+void PG::merge_log(ObjectStore::Transaction& t,
+		   Info &oinfo, Log &olog, Missing &omissing, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
   bool changed = false;
-
-  dout(15) << "log = ";
-  log.print(*_dout);
-  *_dout << dendl;
-  dout(15) << "olog = ";
-  olog.print(*_dout);
-  *_dout << dendl;
 
   if (log.empty() ||
       (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
@@ -368,7 +374,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing 
   } 
 
   else {
-    // i can merge the two logs!
+    // try to merge the two logs?
 
     // extend on bottom?
     //  this is just filling in history.  it does not affect our
@@ -478,7 +484,7 @@ void PG::merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing 
  * process replica's missing map to determine if they have
  * any objects that i need
  */
-void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
+void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
 {
   // found items?
   for (map<object_t,Missing::item>::iterator p = missing.missing.begin();
@@ -487,15 +493,15 @@ void PG::proc_replica_missing(Log &olog, Missing &omissing, int fromosd)
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
     if (omissing.is_missing(p->first)) {
-      dout(10) << "proc_replica_missing " << p->first << " " << need
+      dout(10) << "search_for_missing " << p->first << " " << need
 	       << " also missing on osd" << fromosd << dendl;
     } 
     else if (need <= olog.top) {
-      dout(10) << "proc_replica_missing " << p->first << " " << need
+      dout(10) << "search_for_missing " << p->first << " " << need
                << " is on osd" << fromosd << dendl;
       missing_loc[p->first].insert(fromosd);
     } else {
-      dout(10) << "proc_replica_missing " << p->first << " " << need
+      dout(10) << "search_for_missing " << p->first << " " << need
                << " > olog.top " << olog.top << ", also missing on osd" << fromosd
                << dendl;
     }
