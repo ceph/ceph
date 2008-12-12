@@ -986,8 +986,8 @@ void PG::peer(ObjectStore::Transaction& t,
 
   // who (of all priors and active) has the latest PG version?
   eversion_t newest_update = info.last_update;
-  int        newest_update_osd = osd->whoami;
-  
+  int newest_update_osd = osd->whoami;
+
   oldest_update = info.last_update;  // only of acting (current) osd set.
   peers_complete_thru = info.last_complete;
   
@@ -1007,40 +1007,46 @@ void PG::peer(ObjectStore::Transaction& t,
         oldest_update = it->second.last_update;
       if (it->second.last_complete < peers_complete_thru)
         peers_complete_thru = it->second.last_complete;
-    }    
+    }
   }
   if (newest_update == info.last_update)   // or just me, if nobody better.
     newest_update_osd = osd->whoami;
-
+  
   // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
-    if (peer_log_requested.count(newest_update_osd) ||
-        peer_summary_requested.count(newest_update_osd)) {
-      dout(10) << " newest update on osd" << newest_update_osd
-               << " v " << newest_update 
-               << ", already queried" 
-               << dendl;
-    } else {
-      // we'd like it back to oldest_update, but will settle for log_bottom
-      eversion_t since = MAX(peer_info[newest_update_osd].log_bottom,
-                             oldest_update);
-      if (peer_info[newest_update_osd].log_bottom < log.top) {
-        dout(10) << " newest update on osd" << newest_update_osd
-                 << " v " << newest_update 
-                 << ", querying since " << since
-                 << dendl;
-        query_map[newest_update_osd][info.pgid] = Query(Query::LOG, log.top, since, info.history);
-        peer_log_requested.insert(newest_update_osd);
+    if (peer_info[newest_update_osd].log_bottom <= log.top) {
+      if (peer_log_requested.count(newest_update_osd)) {
+	dout(10) << " newest update on osd" << newest_update_osd
+		 << " v " << newest_update 
+		 << ", already queried log" 
+		 << dendl;
       } else {
-        dout(10) << " newest update on osd" << newest_update_osd
-                 << " v " << newest_update 
-                 << ", querying entire summary/backlog"
-                 << dendl;
-        assert((peer_info[newest_update_osd].last_complete >= 
-                peer_info[newest_update_osd].log_bottom) ||
-               peer_info[newest_update_osd].log_backlog);  // or else we're in trouble.
-        query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.history);
-        peer_summary_requested.insert(newest_update_osd);
+	// we'd like it back to oldest_update, but will settle for log_bottom
+	eversion_t since = MAX(peer_info[newest_update_osd].log_bottom,
+			       oldest_update);
+	dout(10) << " newest update on osd" << newest_update_osd
+		 << " v " << newest_update 
+		 << ", querying since " << since
+		 << dendl;
+	query_map[newest_update_osd][info.pgid] = Query(Query::LOG, log.top, since, info.history);
+	peer_log_requested.insert(newest_update_osd);
+      }
+    } else {
+      if (peer_summary_requested.count(newest_update_osd)) {
+	dout(10) << " newest update on osd" << newest_update_osd
+		 << " v " << newest_update 
+		 << ", already queried summary/backlog" 
+		 << dendl;
+      } else {
+	dout(10) << " newest update on osd" << newest_update_osd
+		 << " v " << newest_update 
+		 << ", querying entire summary/backlog"
+		 << dendl;
+	assert((peer_info[newest_update_osd].last_complete >= 
+		peer_info[newest_update_osd].log_bottom) ||
+	       peer_info[newest_update_osd].log_backlog);  // or else we're in trouble.
+	query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.history);
+	peer_summary_requested.insert(newest_update_osd);
       }
     }
     return;
@@ -1049,7 +1055,6 @@ void PG::peer(ObjectStore::Transaction& t,
   }
 
   dout(10) << " oldest_update " << oldest_update << dendl;
-
 
   if (is_down()) {
     dout(10) << " down.  we wait." << dendl;    
