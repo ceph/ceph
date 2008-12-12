@@ -282,6 +282,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   last_tid(0),
   tid_lock("OSD::tid_lock"),
   num_pulling(0),
+  backlog_wq(this, &disk_tp),
   recovery_ops_active(0),
   recovery_wq(this, &recovery_tp),
   remove_list_lock("OSD::remove_list_lock"),
@@ -673,6 +674,7 @@ void OSD::_remove_unlock_pg(PG *pg)
   recovery_wq.dequeue(pg);
   snap_trim_wq.dequeue(pg);
   scrub_wq.dequeue(pg);
+  backlog_wq.dequeue(pg);
 
   // remove from store
   vector<pobject_t> olist;
@@ -2996,32 +2998,39 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << *pg << " sending info" << dendl;
       notify_list[from].push_back(pg->info);
     } else {
-      MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
-      m->missing = pg->missing;
-
-      // primary -> other, when building master log
-      if (it->second.type == PG::Query::LOG) {
-        dout(10) << *pg << " sending info+missing+log since " << it->second.since
-                 << dendl;
-	m->log.copy_after(pg->log, it->second.since);
+      if (false &&  // NOT YET
+	  it->second.type == PG::Query::BACKLOG &&
+	  !pg->log.backlog) {
+	dout(10) << *pg << " requested info+missing+backlog - queueing for backlog" << dendl;
+	backlog_wq.queue(pg);
+	pg->backlog_requested = osdmap->get_epoch();
+      } else {
+	MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
+	m->missing = pg->missing;
+	
+	// primary -> other, when building master log
+	if (it->second.type == PG::Query::LOG) {
+	  dout(10) << *pg << " sending info+missing+log since " << it->second.since
+		   << dendl;
+	  m->log.copy_after(pg->log, it->second.since);
+	}
+	
+	if (it->second.type == PG::Query::BACKLOG) {
+	  dout(10) << *pg << " sending info+missing+backlog" << dendl;
+	  assert(pg->log.backlog);
+	  m->log = pg->log;
+	} 
+	else if (it->second.type == PG::Query::FULLLOG) {
+	  dout(10) << *pg << " sending info+missing+full log" << dendl;
+	  m->log.copy_non_backlog(pg->log);
+	}
+	
+	dout(10) << *pg << " sending " << m->log << " " << m->missing << dendl;
+	//m->log.print(cout);
+	
+	_share_map_outgoing(osdmap->get_inst(from));
+	messenger->send_message(m, osdmap->get_inst(from));
       }
-
-      if (it->second.type == PG::Query::BACKLOG) {
-        dout(10) << *pg << " sending info+missing+backlog" << dendl;
-        if (!pg->log.backlog)
-          pg->generate_backlog();
-	m->log = pg->log;
-      } 
-      else if (it->second.type == PG::Query::FULLLOG) {
-        dout(10) << *pg << " sending info+missing+full log" << dendl;
-        m->log.copy_non_backlog(pg->log);
-      }
-
-      dout(10) << *pg << " sending " << m->log << " " << m->missing << dendl;
-      //m->log.print(cout);
-
-      _share_map_outgoing(osdmap->get_inst(from));
-      messenger->send_message(m, osdmap->get_inst(from));
     }    
 
     pg->unlock();
@@ -3076,6 +3085,37 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
 // =========================================================
 // RECOVERY
+
+
+
+void OSD::do_backlog(PG *pg)
+{
+  pg->lock();
+  dout(10) << *pg << "do_backlog" << dendl;
+
+  pg->generate_backlog();
+  
+  pg->unlock();
+  map_lock.get_read();
+  pg->lock();
+
+  if (!pg->is_primary()) {
+    dout(10) << *pg << " sending info+missing+backlog" << dendl;
+    MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
+    m->missing = pg->missing;
+    m->log = pg->log;
+    _share_map_outgoing(osdmap->get_inst(pg->get_primary()));
+    messenger->send_message(m, osdmap->get_inst(pg->get_primary()));
+  } else {
+    dout(10) << *pg << " i am now primary" << dendl;
+  }
+
+  pg->drop_backlog();
+
+  pg->unlock();
+  pg->put();
+}
+
 
 
 /*

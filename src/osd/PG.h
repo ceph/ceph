@@ -604,8 +604,10 @@ public:
   set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
-  xlist<PG*>::item recovery_item, scrub_item, snap_trim_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, stat_queue_item;
   int recovery_ops_active;
+
+  epoch_t backlog_requested;  // [replica] epoch primary requested my backlog
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
@@ -744,7 +746,7 @@ public:
     _lock("PG::_lock"),
     ref(0), deleted(false), dirty_info(false), dirty_log(false),
     info(p),
-    recovery_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
+    recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     role(0),
     state(0),

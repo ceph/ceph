@@ -282,7 +282,7 @@ private:
     void _dequeue(PG *pg) {
       assert(0);
     }
-    PG * _dequeue() {
+    PG *_dequeue() {
       if (osd->op_queue.empty())
 	return NULL;
       PG *pg = osd->op_queue.front();
@@ -500,6 +500,45 @@ private:
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
 
+  // backlogs
+  xlist<PG*> backlog_queue;
+
+  struct BacklogWQ : public ThreadPool::WorkQueue<PG> {
+    OSD *osd;
+    BacklogWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::BacklogWQ", tp), osd(o) {}
+
+    bool _enqueue(PG *pg) {
+      if (!pg->backlog_item.get_xlist()) {
+	pg->get();
+	osd->backlog_queue.push_back(&pg->backlog_item);
+	return true;
+      }
+      return false;
+    }
+    void _dequeue(PG *pg) {
+      if (pg->backlog_item.remove_myself())
+	pg->put();
+    }
+    PG *_dequeue() {
+      if (osd->backlog_queue.empty())
+	return NULL;
+      PG *pg = osd->backlog_queue.front();
+      osd->backlog_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      osd->do_backlog(pg);
+    }
+    void _clear() {
+      while (!osd->backlog_queue.empty()) {
+	PG *pg = osd->backlog_queue.front();
+	osd->backlog_queue.pop_front();
+	pg->put();
+      }
+    }
+  } backlog_wq;
+
+  void do_backlog(PG *pg);
 
 
   // -- pg recovery --
@@ -528,7 +567,7 @@ private:
       if (pg->recovery_item.remove_myself())
 	pg->put();
     }
-    PG * _dequeue() {
+    PG *_dequeue() {
       if (osd->recovery_queue.empty())
 	return NULL;
       
@@ -596,7 +635,7 @@ private:
     void _dequeue(PG *pg) {
       pg->snap_trim_item.remove_myself();
     }
-    PG * _dequeue() {
+    PG *_dequeue() {
       if (osd->snap_trim_queue.empty())
 	return NULL;
       PG *pg = osd->snap_trim_queue.front();
@@ -630,7 +669,7 @@ private:
       if (pg->scrub_item.remove_myself())
 	pg->put();
     }
-    PG * _dequeue() {
+    PG *_dequeue() {
       if (osd->scrub_queue.empty())
 	return NULL;
       PG *pg = osd->scrub_queue.front();
