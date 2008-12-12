@@ -44,15 +44,18 @@ static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
 void PG::Log::copy_after(const Log &other, eversion_t v) 
 {
   assert(v >= other.bottom);
-  top = bottom = other.top;
+  top = other.top;
+  bottom = other.bottom;
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        i++) {
-    if (i->version == v) break;
+    if (i->version <= v) {
+      bottom = i->version;
+      break;
+    }
     assert(i->version > v);
     log.push_front(*i);
   }
-  bottom = v;
 }
 
 bool PG::Log::copy_after_unless_divergent(const Log &other, eversion_t split, eversion_t floor) 
@@ -1034,7 +1037,8 @@ void PG::peer(ObjectStore::Transaction& t,
 		 << " v " << newest_update 
 		 << ", querying since " << since
 		 << dendl;
-	query_map[newest_update_osd][info.pgid] = Query(Query::LOG, log.top, since, info.history);
+	query_map[newest_update_osd][info.pgid] = Query(Query::LOG, since, info.history);
+	//Query(Query::LOG, log.top, since, info.history);
 	peer_log_requested.insert(newest_update_osd);
       }
     } else {

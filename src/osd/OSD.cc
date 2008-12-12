@@ -2999,14 +2999,17 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
       m->missing = pg->missing;
 
+      // primary -> other, when building master log
       if (it->second.type == PG::Query::LOG) {
-        dout(10) << *pg << " sending info+missing+log since split " << it->second.split
-                 << " from floor " << it->second.floor 
+        dout(10) << *pg << " sending info+missing+log since " << it->second.floor
                  << dendl;
+	/*
         if (!m->log.copy_after_unless_divergent(pg->log, it->second.split, it->second.floor)) {
           dout(10) << *pg << "  divergent, sending backlog" << dendl;
           it->second.type = PG::Query::BACKLOG;
         }
+	*/
+	m->log.copy_after(pg->log, it->second.floor);
       }
 
       if (it->second.type == PG::Query::BACKLOG) {
