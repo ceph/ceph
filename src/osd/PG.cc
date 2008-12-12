@@ -180,13 +180,13 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     // populate missing; check for divergence
     
     /*
-      basically what we're doing here is rewinding the remote log, 
+      basically what we're doing here is rewinding the remote log,
       dropping divergent entries, until we find something that matches
-      out master log.  we then reset last_update to reflect the new
-      up to which missing is accurate.
+      our master log.  we then reset last_update to reflect the new
+      point up to which missing is accurate.
 
-      later, in activate(), missing will get wound forward again and we
-      will send the peer enough log to arrive at the same state.
+      later, in activate(), missing will get wound forward again and
+      we will send the peer enough log to arrive at the same state.
     */
 
     list<Log::Entry>::reverse_iterator pp = olog.log.rbegin();
