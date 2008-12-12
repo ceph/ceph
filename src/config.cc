@@ -410,7 +410,7 @@ md_config_t g_conf = {
   osd_object_layout: CEPH_OBJECT_LAYOUT_HASHINO,//LINEAR,//HASHINO,
   osd_pg_layout: CEPH_PG_LAYOUT_CRUSH,//LINEAR,//CRUSH,
   osd_min_rep: 2,
-  osd_max_rep: 2,
+  osd_max_rep: 3,
   osd_min_raid_width: 3,
   osd_max_raid_width: 2, //6, 
 
