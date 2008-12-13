@@ -173,8 +173,12 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   assert(!is_active());
 
   if (!have_master_log) {
-    // merge log into our own log
+    // merge log into our own log to build master log.  no need to
+    // make any adjustments to their missing map; we are taking their
+    // log to be authoritative (i.e., their entries are by definitely
+    // non-divergent).
     merge_log(t, oinfo, olog, omissing, from);
+
   } else if (is_acting(from)) {
     // replica.  have master log. 
     // populate missing; check for divergence
@@ -318,9 +322,13 @@ void PG::merge_log(ObjectStore::Transaction& t,
   if (log.empty() ||
       (olog.bottom > log.top && olog.backlog)) { // e.g. log=(0,20] olog=(40,50]+backlog) 
 
-    // build local backlog, and save old index
-    if (!log.empty() && !log.backlog)
-      generate_backlog();
+    if (is_primary()) {
+      // we should have our own backlog already; see peer() code where
+      // we request this.
+      assert(log.backlog);
+    } else {
+      generate_backlog();      // hmm?  fixme.
+    }
 
     hash_map<object_t,Log::Entry*> old_objects;
     old_objects.swap(log.objects);
@@ -1043,10 +1051,13 @@ void PG::peer(ObjectStore::Transaction& t,
       dout(10) << " newest update on osd" << newest_update_osd
 	       << ", whose log.bottom " << pi.log_bottom
 	       << " > my log.top " << log.top
-	       << ", i will need a backlog" << dendl;
-      // it's possible another peer could fill in the missing bit, but
+	       << ", i will need backlog for me+them." << dendl;
+      // it's possible another peer could fill in the missing bits, but
       // pretty unlikely.  someday it may be worth the complexity to
-      // try.  until then, just get the full backlog.
+      // try.  until then, just get the full backlogs.
+      if (!log.backlog)
+	generate_backlog();
+      
       if (peer_summary_requested.count(newest_update_osd)) {
 	dout(10) << " newest update on osd" << newest_update_osd
 		 << " v " << newest_update 
