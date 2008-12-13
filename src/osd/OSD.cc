@@ -3001,26 +3001,16 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
       // primary -> other, when building master log
       if (it->second.type == PG::Query::LOG) {
-        dout(10) << *pg << " sending info+missing+log since " << it->second.floor
+        dout(10) << *pg << " sending info+missing+log since " << it->second.since
                  << dendl;
-	/*
-        if (!m->log.copy_after_unless_divergent(pg->log, it->second.split, it->second.floor)) {
-          dout(10) << *pg << "  divergent, sending backlog" << dendl;
-          it->second.type = PG::Query::BACKLOG;
-        }
-	*/
-	m->log.copy_after(pg->log, it->second.floor);
+	m->log.copy_after(pg->log, it->second.since);
       }
 
       if (it->second.type == PG::Query::BACKLOG) {
         dout(10) << *pg << " sending info+missing+backlog" << dendl;
-        if (pg->log.backlog) {
-          m->log = pg->log;
-        } else {
+        if (!pg->log.backlog)
           pg->generate_backlog();
-          m->log = pg->log;
-          pg->drop_backlog();
-        }
+	m->log = pg->log;
       } 
       else if (it->second.type == PG::Query::FULLLOG) {
         dout(10) << *pg << " sending info+missing+full log" << dendl;

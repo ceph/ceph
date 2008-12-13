@@ -1023,25 +1023,30 @@ void PG::peer(ObjectStore::Transaction& t,
   
   // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
-    if (peer_info[newest_update_osd].log_bottom <= log.top) {
+    Info& pi = peer_info[newest_update_osd];
+    if (pi.log_bottom <= log.top) {
       if (peer_log_requested.count(newest_update_osd)) {
 	dout(10) << " newest update on osd" << newest_update_osd
 		 << " v " << newest_update 
 		 << ", already queried log" 
 		 << dendl;
       } else {
-	// we'd like it back to oldest_update, but will settle for log_bottom
-	eversion_t since = MAX(peer_info[newest_update_osd].log_bottom,
-			       oldest_update);
+	// we'd _like_ it back to oldest_update, but take what we can get.
 	dout(10) << " newest update on osd" << newest_update_osd
 		 << " v " << newest_update 
-		 << ", querying since " << since
+		 << ", querying since oldest_update " << oldest_update
 		 << dendl;
-	query_map[newest_update_osd][info.pgid] = Query(Query::LOG, since, info.history);
-	//Query(Query::LOG, log.top, since, info.history);
+	query_map[newest_update_osd][info.pgid] = Query(Query::LOG, oldest_update, info.history);
 	peer_log_requested.insert(newest_update_osd);
       }
     } else {
+      dout(10) << " newest update on osd" << newest_update_osd
+	       << ", whose log.bottom " << pi.log_bottom
+	       << " > my log.top " << log.top
+	       << ", i will need a backlog" << dendl;
+      // it's possible another peer could fill in the missing bit, but
+      // pretty unlikely.  someday it may be worth the complexity to
+      // try.  until then, just get the full backlog.
       if (peer_summary_requested.count(newest_update_osd)) {
 	dout(10) << " newest update on osd" << newest_update_osd
 		 << " v " << newest_update 
@@ -1052,9 +1057,6 @@ void PG::peer(ObjectStore::Transaction& t,
 		 << " v " << newest_update 
 		 << ", querying entire summary/backlog"
 		 << dendl;
-	assert((peer_info[newest_update_osd].last_complete >= 
-		peer_info[newest_update_osd].log_bottom) ||
-	       peer_info[newest_update_osd].log_backlog);  // or else we're in trouble.
 	query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.history);
 	peer_summary_requested.insert(newest_update_osd);
       }
@@ -1087,6 +1089,14 @@ void PG::peer(ObjectStore::Transaction& t,
   /*
     we also detect divergent replicas here by pulling the full log
     from everyone.  
+
+    for example:
+   0:    1:    2:    
+    2'6   2'6    2'6
+    2'7   2'7    2'7
+    3'8 | 2'8    2'8
+    3'9 |        2'9
+    
   */  
 
   // gather missing from peers
@@ -1100,11 +1110,27 @@ void PG::peer(ObjectStore::Transaction& t,
     }
     if (peer_log_requested.count(peer) ||
         peer_summary_requested.count(peer)) continue;
+   
+    Info& pi = peer_info[peer];
+    assert(pi.last_update <= log.top);
 
-    dout(10) << " pulling log+missing from osd" << peer
-             << dendl;
-    query_map[peer][info.pgid] = Query(Query::FULLLOG, info.history);
-    peer_log_requested.insert(peer);
+    if (pi.last_update < log.bottom) {
+      // we need the full backlog in order to build this node's missing map.
+      dout(10) << " osd" << peer << " last_update " << pi.last_update
+	       << " < log.bottom " << log.bottom
+	       << ", pulling missing+backlog" << dendl;
+      query_map[peer][info.pgid] = Query(Query::BACKLOG, info.history);
+      peer_summary_requested.insert(peer);
+    } else {
+      // we need just enough log to get any divergent items so that we
+      // can appropriate adjust the missing map.  that can be as far back
+      // as the peer's last_epoch_started.
+      eversion_t from(pi.history.last_epoch_started, 0);
+      dout(10) << " osd" << peer << " last_update " << pi.last_update
+	       << ", pulling missing+log from it's last_epoch_started " << from << dendl;
+      query_map[peer][info.pgid] = Query(Query::LOG, from, info.history);
+      peer_log_requested.insert(peer);
+    }
   }
   if (!have_all_missing)
     return;

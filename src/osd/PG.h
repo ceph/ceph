@@ -146,33 +146,28 @@ public:
   struct Query {
     const static int INFO = 0;
     const static int LOG = 1;
-    const static int BACKLOG = 2;
-    const static int FULLLOG = 3;
-    const static int LOGFROM = 4;
+    const static int BACKLOG = 3;
+    const static int MISSING = 4;
+    const static int FULLLOG = 5;
 
     __s32 type;
-    //eversion_t split;
-    eversion_t floor;
+    eversion_t since;
     Info::History history;
 
     Query() : type(-1) {}
     Query(int t, Info::History& h) : 
       type(t), history(h) { assert(t != LOG); }
-    Query(int t, eversion_t f, Info::History& h) : 
-      type(t),
-      //split(s), 
-      floor(f), history(h) { assert(t == LOG); }
+    Query(int t, eversion_t s, Info::History& h) : 
+      type(t), since(s), history(h) { assert(t == LOG); }
 
     void encode(bufferlist &bl) const {
       ::encode(type, bl);
-      //::encode(split, bl);
-      ::encode(floor, bl);
+      ::encode(since, bl);
       history.encode(bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(type, bl);
-      //::decode(split, bl);
-      ::decode(floor, bl);
+      ::decode(since, bl);
       history.decode(bl);
     }
   };
