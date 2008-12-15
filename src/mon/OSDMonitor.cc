@@ -313,6 +313,10 @@ bool OSDMonitor::should_propose(double& delay)
 {
   dout(10) << "should_propose" << dendl;
 
+  // if full map, propose immediately!  any subsequent changes will be clobbered.
+  if (pending_inc.fullmap.length())
+    return true;
+
   // adjust osd weights?
   if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
     dout(0) << " adjusting osd weights based on " << osd_weight << dendl;
