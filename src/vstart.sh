@@ -12,6 +12,7 @@ let start_mds=0
 let start_osd=0
 norestart=""
 valgrind=""
+MON_ADDR=""
 
 usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
@@ -19,14 +20,20 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--norestart\n"
 usage=$usage"\t--valgrind\n"
+usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
+
+usage_exit() {
+	printf "$usage"
+	exit
+}
 
 while [ $# -ge 1 ]; do
 case $1 in
--d | --debug )
-debug=1
+	-d | --debug )
+	debug=1
 	;;
---new | -n )
-new=1
+	--new | -n )
+	new=1
 	;;
 	--norestart )
 	norestart="--norestart"
@@ -46,9 +53,13 @@ new=1
 	start_osd=1
 	start_all=0
 	;;
+	-m )
+	[ "$2" == "" ] && usage_exit
+	MON_ADDR=$2
+	shift
+	;;
 	* )
-	printf "$usage"
-	exit
+	usage_exit
 esac
 shift
 done
@@ -70,6 +81,12 @@ else
 	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
 	COSD_ARGS="--lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
+fi
+
+if [ "$MON_ADDR" != "" ]; then
+	CMON_ARGS=$CMON_ARGS" -m "$MON_ADDR
+	COSD_ARGS=$COSD_ARGS" -m "$MON_ADDR
+	CMDS_ARGS=$CMDS_ARGS" -m "$MON_ADDR
 fi
 
 
