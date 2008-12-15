@@ -172,6 +172,15 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   if (!mon->is_leader())
     return false;
 
+  // booted, but not in map?
+  if (state != MDSMap::STATE_BOOT &&
+      pending_mdsmap.get_addr_rank(addr) < 0 &&
+      !pending_mdsmap.is_standby(addr)) {
+    dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
+    send_latest(m->get_orig_source_inst());
+    return true;
+  }
+
   // can i handle this query without a map update?
 
   // no longer laggy?
