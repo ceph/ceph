@@ -1,7 +1,7 @@
 cfuse
 cmds
 cmon
-cmonctl
+ceph
 cosd
 csyn
 dupstore

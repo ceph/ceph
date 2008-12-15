@@ -94,7 +94,7 @@ if [ $new -eq 1 ]; then
     ./crushtool -c cm.txt -o cm
     ./osdmaptool --clobber --import-crush cm .ceph_osdmap
 
-    ./cmonctl osd setmap -i .ceph_osdmap
+    ./ceph osd setmap -i .ceph_osdmap
 fi
 
 

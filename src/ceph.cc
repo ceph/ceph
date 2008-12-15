@@ -41,7 +41,7 @@ extern "C" {
 
 
 
-Mutex lock("cmonctl.cc lock");
+Mutex lock("ceph.cc lock");
 Cond cond;
 
 Messenger *messenger = 0;
@@ -206,7 +206,7 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 
 void usage() 
 {
-  cerr << "usage: cmonctl [options] monhost] command" << std::endl;
+  cerr << "usage: ceph [options] monhost] command" << std::endl;
   cerr << "Options:" << std::endl;
   cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
   cerr << "   -i infile         -- specify input file" << std::endl;
@@ -227,7 +227,7 @@ const char *cli_prompt(EditLine *e) {
 int do_cli()
 {
   /* emacs style */
-  EditLine *el = el_init("cmonctl", stdin, stdout, stderr);
+  EditLine *el = el_init("ceph", stdin, stdout, stderr);
   el_set(el, EL_PROMPT, &cli_prompt);
   el_set(el, EL_EDITOR, "emacs");
 

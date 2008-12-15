@@ -153,7 +153,7 @@ if [ $start_mon -eq 1 ]; then
 	if [ $new -eq 1 ]; then
 	# build and inject an initial osd map
 		$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
-		$CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
+		$CEPH_BIN/ceph osd setmap -i .ceph_osdmap
 	fi
 fi
 
@@ -179,7 +179,7 @@ if [ $start_mds -eq 1 ]; then
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_BIN/cmonctl mds set_max_mds 2
+#$CEPH_BIN/ceph mds set_max_mds 2
 	done
 fi
 

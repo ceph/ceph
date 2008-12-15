@@ -11,8 +11,8 @@ cmon_LDADD = libcommon.a libmon.a libcrush.a libcommon.a
 # admin tools
 cobserver_SOURCES = cobserver.cc msg/SimpleMessenger.cc
 cobserver_LDADD = libcrush.a libcommon.a
-cmonctl_SOURCES = cmonctl.cc msg/SimpleMessenger.cc
-cmonctl_LDADD = libcommon.a -ledit
+ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
+ceph_LDADD = libcommon.a -ledit
 mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libcommon.a libmon.a libcrush.a libcommon.a
 monmaptool_SOURCES = monmaptool.cc
@@ -43,7 +43,7 @@ csyn_LDADD = libcommon.a libclient.a libosdc.a libcrush.a libcommon.a
 
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
-	cmonctl cobserver \
+	ceph cobserver \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr
 
