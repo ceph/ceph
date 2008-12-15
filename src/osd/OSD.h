@@ -539,7 +539,7 @@ private:
   } backlog_wq;
 
   void queue_generate_backlog(PG *pg);
-  void do_backlog(PG *pg);
+  void generate_backlog(PG *pg);
 
 
   // -- pg recovery --
