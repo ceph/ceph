@@ -103,7 +103,7 @@ rule metadata {
 	pool 0
 	type replicated
 	min_size 2
-	max_size 2
+	max_size 3
 	step take metaroot
 	step choose firstn 0 type device
 	step emit
@@ -112,7 +112,7 @@ rule data {
 	pool 1
 	type replicated
 	min_size 2
-	max_size 2
+	max_size 3
 	step take root
 	step chooseleaf firstn 0 type domain
 	step emit
