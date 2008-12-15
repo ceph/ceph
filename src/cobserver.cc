@@ -158,7 +158,7 @@ class Admin : public Dispatcher {
 
 void usage()
 {
-  cerr << "usage: cobserver [options] monhost] command" << std::endl;
+  cerr << "usage: cobserver [options]" << std::endl;
   cerr << "Options:" << std::endl;
   cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
   exit(1);
