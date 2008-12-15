@@ -2217,7 +2217,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_allocated_ino(newi->ino(), mds->inotable->get_version());
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
-  le->metablob.add_dir(newdir, true, true); // dirty AND complete
+  le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));

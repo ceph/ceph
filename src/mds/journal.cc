@@ -344,11 +344,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
     dir->set_version( lump.fnode.version );
+
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
       dir->get_inode()->dirlock.set_updated();
     }
-
+    if (lump.is_new())
+      dir->mark_new(logseg);
     if (lump.is_complete())
       dir->mark_complete();
     

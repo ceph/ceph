@@ -189,6 +189,7 @@ public:
   struct dirlump {
     static const int STATE_COMPLETE =    (1<<1);
     static const int STATE_DIRTY =       (1<<2);  // dirty due to THIS journal item, that is!
+    static const int STATE_NEW =         (1<<3);  // new directory
 
     //version_t  dirv;
     fnode_t fnode;
@@ -209,6 +210,8 @@ public:
     void mark_complete() { state |= STATE_COMPLETE; }
     bool is_dirty() { return state & STATE_DIRTY; }
     void mark_dirty() { state |= STATE_DIRTY; }
+    bool is_new() { return state & STATE_NEW; }
+    void mark_new() { state |= STATE_NEW; }
 
     list<fullbit>   &get_dfull()   { return dfull; }
     list<remotebit> &get_dremote() { return dremote; }
@@ -449,11 +452,11 @@ private:
   }
 
   
-  dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
+  dirlump& add_dir(CDir *dir, bool dirty, bool complete=false, bool isnew=false) {
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
-		   dirty, complete);
+		   dirty, complete, isnew);
   }
-  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty, bool complete=false) {
+  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty, bool complete=false, bool isnew=false) {
     if (lump_map.count(df) == 0) {
       lump_order.push_back(df);
       lump_map[df].fnode = *pf;
@@ -462,6 +465,7 @@ private:
     dirlump& l = lump_map[df];
     if (complete) l.mark_complete();
     if (dirty) l.mark_dirty();
+    if (isnew) l.mark_new();
     return l;
   }
   
