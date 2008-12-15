@@ -393,6 +393,7 @@ int do_cli()
 
   Tokenizer *tok = tok_init(NULL);
 
+  bufferlist in;
   while (1) {
     int count;  // # chars read
     const char *line = el_gets(el, &count);
@@ -415,16 +416,65 @@ int do_cli()
     tok_reset(tok);
 
     vector<string> cmd;
-    for (int i=0; i<argc; i++)
+    const char *infile = 0;
+    const char *outfile = 0;
+    for (int i=0; i<argc; i++) {
+      if (strcmp(argv[i], ">") == 0 && i < argc-1) {
+	outfile = argv[++i];
+	continue;
+      }
+      if (argv[i][0] == '>') {
+	outfile = argv[i] + 1;
+	while (*outfile == ' ') outfile++;
+	continue;
+      }
+      if (strcmp(argv[i], "<") == 0 && i < argc-1) {
+	infile = argv[++i];
+	continue;
+      }
+      if (argv[i][0] == '<') {
+	infile = argv[i] + 1;
+	while (*infile == ' ') infile++;
+	continue;
+      }
       cmd.push_back(argv[i]);
+    }
     if (cmd.empty())
       continue;
 
+    if (cmd.size() == 1 && cmd[0] == "print") {
+      cout << "----\n" << in.c_str() << "---- (" << in.length() << " bytes)" << std::endl;
+      continue;
+    }
+
     //cout << "cmd is " << cmd << std::endl;
 
-    bufferlist out, in;
+    bufferlist out;
+    if (infile) {
+      if (out.read_file(infile) == 0) {
+	cout << "read " << out.length() << " from " << infile << std::endl;
+      } else {
+	cerr << "couldn't read from " << infile << ": " << strerror(errno) << std::endl;
+	continue;
+      }
+    }
+
+    in.clear();
     string rs;
-    do_command(cmd,out, rs, in);
+    do_command(cmd, out, rs, in);
+
+    if (in.length()) {
+      if (outfile) {
+	if (strcmp(outfile, "-") == 0) {
+	  cout << "----\n" << in.c_str() << "---- (" << in.length() << " bytes)" << std::endl;
+	} else {
+	  in.write_file(outfile);
+	  cout << "wrote " << in.length() << " to " << outfile << std::endl;
+	}
+      } else {
+	cout << "got " << in.length() << " byte payload; 'print' to dump to terminal, or add '>-' to command." << std::endl;
+      }
+    }
   }
 
   history_end(myhistory);
