@@ -2246,8 +2246,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->inode.mode |= 0777;     // ?
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
-  newi->inode.version = dn->pre_dirty() - 1;
+  newi->inode.rstat.rbytes = newi->inode.size;
   newi->inode.rstat.rfiles = 1;
+  newi->inode.version = dn->pre_dirty() - 1;
 
   dn->first = newi->first = follows+1;
 
@@ -4574,6 +4575,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = le64_to_cpu(req->head.args.truncate.length);
+  pi->rstat.rbytes = pi->size;
   pi->truncate_seq++;
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
@@ -4763,6 +4765,7 @@ public:
 
     // apply to cache
     in->inode.size = 0;
+    in->inode.rstat.rbytes = 0;
     in->inode.ctime = ctime;
     in->inode.mtime = ctime;
     in->pop_and_dirty_projected_inode(mdr->ls);
@@ -4804,6 +4807,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   pi->ctime = ctime;
   pi->version = pdv;
   pi->size = 0;
+  pi->rstat.rbytes = 0;
   pi->truncate_seq++;
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
