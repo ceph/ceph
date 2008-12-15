@@ -56,6 +56,9 @@ static MDSMap mdsmap;
 static OSDMap osdmap;
 static ClientMap clientmap;
 
+static bool got_response = false;
+static bool first_response = false;
+
 version_t map_ver[PAXOS_NUM];
 
 SafeTimer timer(lock);
@@ -67,6 +70,13 @@ void handle_notify(MMonObserveNotify *notify)
 		  << " v" << notify->ver
 		  << (notify->is_latest ? " (latest)" : "")
 		  << dendl;
+
+  lock.Lock();
+  if (!got_response) {
+	first_response = true;
+	got_response = true;
+  }
+  lock.Unlock();
   
   if (map_ver[notify->machine_id] >= notify->ver)
     return;
@@ -167,6 +177,15 @@ public:
 static void send_requests()
 {
   bufferlist indata;
+  float seconds=g_conf.paxos_observer_timeout/2;
+
+#define RETRY_SECONDS	5
+  if (first_response) {
+	first_response = false;
+	if (RETRY_SECONDS < seconds)
+		return;
+  }
+
   for (int i=0; i<PAXOS_NUM; i++) {
     MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
     m->set_data(indata);
@@ -176,7 +195,11 @@ static void send_requests()
   }
   
   C_ObserverRefresh *observe_refresh_event = new C_ObserverRefresh();
-  timer.add_event_after(g_conf.paxos_observer_timeout/2, observe_refresh_event);
+
+  if (!got_response)
+	seconds = (seconds < RETRY_SECONDS ? seconds : RETRY_SECONDS);
+
+  timer.add_event_after(seconds, observe_refresh_event);
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
