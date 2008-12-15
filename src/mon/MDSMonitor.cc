@@ -350,7 +350,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 	dout(10) << "mds_beacon boot: standby for mds" << standby_for << dendl;
 	pending_mdsmap.standby_for[standby_for].insert(addr);
       }
-      pending_mdsmap.standby[addr] = standby_for;
+      pending_mdsmap.standby[addr].mds = standby_for;
+      pending_mdsmap.standby[addr].state = MDSMap::STATE_STANDBY;
       state = MDSMap::STATE_STANDBY;
     } else {
       // join|takeover
@@ -579,7 +580,7 @@ void MDSMonitor::bcast_latest_mds()
   // standby too
   entity_inst_t inst;
   inst.name = entity_name_t::MDS(-1);
-  for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
+  for (map<entity_addr_t,MDSMap::standby_t>::iterator p = mdsmap.standby.begin();
        p != mdsmap.standby.end();
        p++) {
     inst.addr = p->first;
@@ -669,7 +670,7 @@ void MDSMonitor::tick()
 	mdsmap.get_state(p->first) != MDSMap::STATE_STOPPED &&
 	mdsmap.get_state(p->first) != MDSMap::STATE_FAILED)
       last_beacon[p->second.addr] = g_clock.now();
-  for (map<entity_addr_t,int32_t>::iterator p = mdsmap.standby.begin();
+  for (map<entity_addr_t,MDSMap::standby_t>::iterator p = mdsmap.standby.begin();
        p != mdsmap.standby.end();
        ++p )
     if (last_beacon.count(p->first) == 0)
@@ -742,8 +743,8 @@ void MDSMonitor::tick()
       dout(10) << "no beacon from standby " << addr << " since " << last_beacon[addr]
 	       << ", removing from standby list"
 	       << dendl;
-      if (pending_mdsmap.standby[addr] >= 0)
-	pending_mdsmap.standby_for[pending_mdsmap.standby[addr]].erase(addr);
+      if (pending_mdsmap.standby[addr].mds >= 0)
+	pending_mdsmap.standby_for[pending_mdsmap.standby[addr].mds].erase(addr);
       else
 	pending_mdsmap.standby_any.erase(addr);
       pending_mdsmap.standby.erase(addr);

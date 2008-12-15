@@ -32,15 +32,23 @@ void MDSMap::print(ostream& out)
     out << " mds" << *p << "." << mds_inc[*p]
 	<< " : " << get_state_name(get_state(*p));
     if (have_inst(*p))
-      out << " : " << get_inst(*p)
+      out << " : " << get_inst(*p).addr
 	  << (is_laggy(get_inst(*p).addr) ? " LAGGY" : "");
-    if (standby_for.count(*p) && !standby_for[*p].empty())
-      out << " : +" << standby_for[*p].size()
-	  << " standby " << standby_for[*p]
-	  << std::endl;
+    out << "\n";
+    if (standby_for.count(*p) && !standby_for[*p].empty()) {
+      //out << " : +" << standby_for[*p].size() << std::endl;
+      for (set<entity_addr_t>::iterator q = standby_for[*p].begin();
+	   q != standby_for[*p].end();
+	   q++)
+	out << " mds" << *p << ".? : " << get_state_name(standby[*q].state)
+	    << " : " << *q << std::endl;
+    }
   }
   if (!standby_any.empty()) {
-    out << " +" << standby_any.size() << " shared standby " << standby_any << std::endl;
+    for (set<entity_addr_t>::iterator q = standby_any.begin();
+	 q != standby_any.end();
+	 q++)
+      out << " mds?.? : " << get_state_name(standby[*q].state) << " : " << *q << std::endl;
   }
 }
 

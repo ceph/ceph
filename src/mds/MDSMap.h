@@ -61,6 +61,7 @@ class MDSMap {
 
   static const int STATE_BOOT     =   CEPH_MDS_STATE_BOOT;  // up, boot announcement.  destiny unknown.
   static const int STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY;  // up, idle.  waiting for assignment by monitor.
+  static const int STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY;  // up, replaying active node; ready to take over.
 
   static const int STATE_CREATING  =  CEPH_MDS_STATE_CREATING;  // up, creating MDS instance (new journal, idalloc..).
   static const int STATE_STARTING  =  CEPH_MDS_STATE_STARTING;  // up, starting prior stopped MDS instance.
@@ -83,6 +84,7 @@ class MDSMap {
       // up and out
     case STATE_BOOT:       return "up:boot";
     case STATE_STANDBY:    return "up:standby";
+    case STATE_STANDBY_REPLAY:    return "up:standby-replay";
     case STATE_CREATING:   return "up:creating";
     case STATE_STARTING:   return "up:starting";
       // up and in
@@ -96,6 +98,21 @@ class MDSMap {
     }
     return 0;
   }
+
+  struct standby_t {
+    int32_t mds;
+    int32_t state;
+    void encode(bufferlist& bl) const {
+      ::encode(mds, bl);
+      ::encode(state, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(mds, bl);
+      ::decode(state, bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(standby_t)
+
 
  protected:
   epoch_t epoch;
@@ -115,7 +132,7 @@ class MDSMap {
   map<int32_t,entity_inst_t> mds_inst;      // up instances
   map<int32_t,int32_t>       mds_inc;       // incarnation count (monotonically increases)
 
-  map<entity_addr_t,int32_t> standby;    // -1 == any
+  map<entity_addr_t,standby_t> standby;    // -1 == any
   map<int32_t, set<entity_addr_t> > standby_for;
   set<entity_addr_t> standby_any;
   
@@ -257,6 +274,17 @@ class MDSMap {
   bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
 
   bool is_standby(entity_addr_t a)  { return standby.count(a); }
+  
+  int get_standby_for(entity_addr_t a) {
+    if (standby.count(a))
+      return standby[a].mds;
+    return -1;
+  }
+  int get_standby_state(entity_addr_t a) {
+    if (standby.count(a))
+      return standby[a].state;
+    return STATE_DNE;
+  }
 
   // cluster states
   bool is_full() {
@@ -395,6 +423,7 @@ class MDSMap {
   void print(ostream& out);
   void print_summary(ostream& out);
 };
+WRITE_CLASS_ENCODER(MDSMap::standby_t)
 
 inline ostream& operator<<(ostream& out, MDSMap& m) {
   m.print_summary(out);

@@ -584,6 +584,7 @@ struct ceph_mds_getmap {
 #define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
 #define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
 #define CEPH_MDS_STATE_STARTING   -7  /* up, starting previously stopped mds. */
+#define CEPH_MDS_STATE_STANDBY_REPLAY -8  /* up, tailing active node's journal. */
 
 #define CEPH_MDS_STATE_REPLAY      8  /* up, replaying journal. */
 #define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed
