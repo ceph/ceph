@@ -607,7 +607,7 @@ public:
   xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, stat_queue_item;
   int recovery_ops_active;
 
-  epoch_t backlog_requested;  // [replica] epoch primary requested my backlog
+  epoch_t generate_backlog_epoch;  // epoch we decided to build a backlog.
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
@@ -696,7 +696,8 @@ public:
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
   void search_for_missing(Log &olog, Missing &omissing, int fromosd);
   
-  void generate_backlog();
+  bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
+  void assemble_backlog(map<eversion_t,Log::Entry>& omap);
   void drop_backlog();
   
   void trim_write_ahead();

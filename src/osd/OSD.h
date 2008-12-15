@@ -527,7 +527,7 @@ private:
       return pg;
     }
     void _process(PG *pg) {
-      osd->do_backlog(pg);
+      osd->generate_backlog(pg);
     }
     void _clear() {
       while (!osd->backlog_queue.empty()) {
@@ -538,6 +538,7 @@ private:
     }
   } backlog_wq;
 
+  void queue_generate_backlog(PG *pg);
   void do_backlog(PG *pg);
 
 

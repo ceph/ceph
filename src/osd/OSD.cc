@@ -2087,7 +2087,11 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       }
 
       pg->on_role_change();
-      
+
+      // interrupt backlog generation
+      pg->generate_backlog_epoch = 0;
+      backlog_wq.dequeue(pg);
+
       // take active waiters
       take_waiters(pg->waiting_for_active);
 
@@ -3002,8 +3006,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	  it->second.type == PG::Query::BACKLOG &&
 	  !pg->log.backlog) {
 	dout(10) << *pg << " requested info+missing+backlog - queueing for backlog" << dendl;
-	backlog_wq.queue(pg);
-	pg->backlog_requested = osdmap->get_epoch();
+	queue_generate_backlog(pg);
       } else {
 	MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
 	m->missing = pg->missing;
@@ -3087,31 +3090,81 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 // RECOVERY
 
 
+/*
 
-void OSD::do_backlog(PG *pg)
+  there are a few places we need to build a backlog.
+
+  on a primary:
+    - during peering 
+      - if osd with newest update has log.bottom > our log.top
+      - if other peers have log.tops below our log.bottom
+        (most common case is they are a fresh osd with no pg info at all)
+
+  on a replica or stray:
+    - when queried by the primary (handle_pg_query)
+
+  on a replica:
+    - when activated by the primary (handle_pg_log -> merge_log)
+    
+*/
+	
+void OSD::queue_generate_backlog(PG *pg)
+{
+  if (pg->generate_backlog_epoch) {
+    dout(10) << *pg << " queue_generate_backlog - already queued epoch " 
+	     << pg->generate_backlog_epoch << dendl;
+  } else {
+    pg->generate_backlog_epoch = osdmap->get_epoch();
+    dout(10) << *pg << " queue_generate_backlog epoch " << pg->generate_backlog_epoch << dendl;
+    backlog_wq.queue(pg);
+  }
+}
+
+void OSD::generate_backlog(PG *pg)
 {
   pg->lock();
-  dout(10) << *pg << "do_backlog" << dendl;
+  dout(10) << *pg << " generate_backlog" << dendl;
+  
+  map<eversion_t,PG::Log::Entry> omap;
+  if (!pg->build_backlog_map(omap))
+    goto out;
 
-  pg->generate_backlog();
+  pg->assemble_backlog(omap);
   
   pg->unlock();
   map_lock.get_read();
   pg->lock();
 
+  if (!pg->generate_backlog_epoch) {
+    dout(10) << *pg << " generate_backlog aborting" << dendl;
+    goto out;
+  }
+
   if (!pg->is_primary()) {
-    dout(10) << *pg << " sending info+missing+backlog" << dendl;
+    dout(10) << *pg << "  sending info+missing+backlog to primary" << dendl;
     MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
     m->missing = pg->missing;
     m->log = pg->log;
     _share_map_outgoing(osdmap->get_inst(pg->get_primary()));
     messenger->send_message(m, osdmap->get_inst(pg->get_primary()));
   } else {
-    dout(10) << *pg << " i am now primary" << dendl;
+    dout(10) << *pg << "  generated backlog, peering" << dendl;
+    assert(!pg->is_active());
+
+    map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+    ObjectStore::Transaction t;
+    pg->peer(t, query_map, NULL);
+    do_queries(query_map);
+    if (pg->dirty_info)
+      pg->write_info(t);
+    if (pg->dirty_log)
+      pg->write_log(t);
+    store->apply_transaction(t);
   }
+  
+  map_lock.put_read();
 
-  pg->drop_backlog();
-
+ out:
   pg->unlock();
   pg->put();
 }

@@ -43,7 +43,6 @@ static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 
 {
-  assert(v >= other.bottom);
   top = other.top;
   bottom = other.bottom;
   for (list<Entry>::const_reverse_iterator i = other.log.rbegin();
@@ -325,10 +324,10 @@ void PG::merge_log(ObjectStore::Transaction& t,
     if (is_primary()) {
       // we should have our own backlog already; see peer() code where
       // we request this.
-      assert(log.backlog);
     } else {
-      generate_backlog();      // hmm?  fixme.
+      // primary should have requested our backlog during peer().
     }
+    assert(log.backlog || log.top == eversion_t());
 
     hash_map<object_t,Log::Entry*> old_objects;
     old_objects.swap(log.objects);
@@ -523,16 +522,61 @@ void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
 
 
 
-void PG::generate_backlog()
+// ===============================================================
+// BACKLOG
+
+bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
 {
-  dout(10) << "generate_backlog to " << log << dendl;
-  assert(!log.backlog);
-  log.backlog = true;
+  dout(10) << "build_backlog_map requested epoch " << generate_backlog_epoch << dendl;
+
+  unlock();
 
   vector<pobject_t> olist;
   osd->store->collection_list(info.pgid.to_coll(), olist);
-  if (olist.size() != info.stats.num_objects)
-    dout(10) << " WARNING: " << olist.size() << " != num_objects " << info.stats.num_objects << dendl;
+
+  for (vector<pobject_t>::iterator it = olist.begin();
+       it != olist.end();
+       it++) {
+    pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
+
+    Log::Entry e;
+    e.oid = it->oid;
+    osd->store->getattr(info.pgid.to_coll(), poid, "version",
+			&e.version, sizeof(e.version));
+    if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
+      e.op = Log::Entry::CLONE;
+      osd->store->getattr(info.pgid.to_coll(), poid, "snaps", e.snaps);
+      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", 
+			  &e.prior_version, sizeof(e.prior_version));
+    } else {
+      e.op = Log::Entry::BACKLOG;           // FIXME if/when we do smarter op codes!
+    }
+
+    omap[e.version] = e;
+
+    lock();
+    dout(10) << "build_backlog_map  " << e << dendl;
+    if (!generate_backlog_epoch) {
+      dout(10) << "build_backlog_map aborting" << dendl;
+      return false;
+    }
+    unlock();
+  }
+  lock();
+  dout(10) << "build_backlog_map done: " << omap.size() << " objects" << dendl;
+  if (!generate_backlog_epoch) {
+    dout(10) << "build_backlog_map aborting" << dendl;
+    return false;
+  }
+  return true;
+}
+
+void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
+{
+  dout(10) << "assemble_backlog for " << log << ", " << omap.size() << " objects" << dendl;
+  
+  assert(!log.backlog);
+  log.backlog = true;
 
   /*
    * note that we don't create prior_version backlog entries for
@@ -543,14 +587,11 @@ void PG::generate_backlog()
    * end up as missing.
    */
 
-  int local = 0;
-  map<eversion_t,Log::Entry> add;
-  for (vector<pobject_t>::iterator it = olist.begin();
-       it != olist.end();
-       it++) {
-    local++;
-    pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
-    
+  for (map<eversion_t,Log::Entry>::reverse_iterator i = omap.rbegin();
+       i != omap.rend();
+       i++) {
+    Log::Entry& be = i->second;
+
     /*
      * we can skip an object if
      *  - is already in the log AND
@@ -558,52 +599,29 @@ void PG::generate_backlog()
      *    - the prior_version is also already in the log
      * otherwise, we need to include it.
      */
-    eversion_t version;
-    if (log.objects.count(poid.oid)) {
-      Log::Entry *e = log.objects[poid.oid];
-      assert(!e->is_delete());  // if it's a deletion, we are corrupt..
+    if (log.objects.count(be.oid)) {
+      Log::Entry *le = log.objects[be.oid];
+      
+      assert(!le->is_delete());  // if it's a deletion, we are corrupt..
+
       // note the prior version
-      version = e->prior_version;
-      if (version == eversion_t() ||  // either new object, or
-	  version >= log.bottom)      // prior_version also already in log
+      be.version = le->prior_version;
+      if (be.version == eversion_t() ||  // either new object, or
+	  be.version >= log.bottom) {    // prior_version also already in log
+	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
 	continue;   // already have it logged.
+      }
 
-      // ok, create backlog entry for _prior_ version!
+      dout(15) << "   adding" << be << " (have " << *le << ")" << dendl;
+      log.log.push_front(be);
     } else {
-      osd->store->getattr(info.pgid.to_coll(), poid, "version",
-			  &version, sizeof(version));
-
+      dout(15) << "   adding" << be << dendl;
+      log.log.push_front(be);
+      log.index( *log.log.begin() );
     }
-    
-    // add backlog entry.
-    Log::Entry e;
-    e.oid = poid.oid;
-    e.version = version;
-    if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
-      e.op = Log::Entry::CLONE;
-      osd->store->getattr(info.pgid.to_coll(), poid, "snaps", e.snaps);
-      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", 
-			  &e.prior_version, sizeof(e.prior_version));
-    } else {
-      e.op = Log::Entry::BACKLOG;           // FIXME when we do smarter op codes!
-    }
-    add[e.version] = e;
-    dout(10) << "generate_backlog found " << e << dendl;
   }
-
-  for (map<eversion_t,Log::Entry>::reverse_iterator i = add.rbegin();
-       i != add.rend();
-       i++) {
-    log.log.push_front(i->second);
-    log.index( *log.log.begin() );    // index
-  }
-
-  dout(10) << local << " local objects, "
-           << add.size() << " objects added to backlog, " 
-           << log.objects.size() << " in log index" << dendl;
-
-  //log.print(cout);
 }
+
 
 void PG::drop_backlog()
 {
@@ -617,7 +635,7 @@ void PG::drop_backlog()
     Log::Entry &e = *log.log.begin();
     if (e.version > log.bottom) break;
 
-    dout(15) << "drop_backlog trimming " << e.version << dendl;
+    dout(15) << "drop_backlog trimming " << e << dendl;
     log.unindex(e);
     log.log.pop_front();
   }
@@ -1055,8 +1073,10 @@ void PG::peer(ObjectStore::Transaction& t,
       // it's possible another peer could fill in the missing bits, but
       // pretty unlikely.  someday it may be worth the complexity to
       // try.  until then, just get the full backlogs.
-      if (!log.backlog)
-	generate_backlog();
+      if (!log.backlog) {
+	osd->queue_generate_backlog(this);
+	return;
+      }
       
       if (peer_summary_requested.count(newest_update_osd)) {
 	dout(10) << " newest update on osd" << newest_update_osd
@@ -1089,10 +1109,11 @@ void PG::peer(ObjectStore::Transaction& t,
 
   // -- do i need to generate backlog for any of my peers?
   if (oldest_update < log.bottom && !log.backlog) {
-    dout(10) << "generating backlog for some peers, bottom " 
-             << log.bottom << " > " << oldest_update
+    dout(10) << "must generate backlog for some peers, my bottom " 
+             << log.bottom << " > oldest_update " << oldest_update
              << dendl;
-    generate_backlog();
+    osd->queue_generate_backlog(this);
+    return;
   }
 
 
