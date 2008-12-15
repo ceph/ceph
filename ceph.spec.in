@@ -90,7 +90,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files mon
 %{_bindir}/cmon
-%{_bindir}/cmonctl
+%{_bindir}/ceph
 %{_bindir}/crushtool
 %{_bindir}/mkmonfs
 %{_bindir}/monmaptool
