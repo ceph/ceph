@@ -1,8 +1,12 @@
 v0.6
+- fold observer into cmonctl/ceph?
+/- osd scrub
+
+v0.7
 - ENOSPC
 - async metadata ops
 
-v0.7
+v0.8
 - cas?
 
 big items
