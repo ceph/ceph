@@ -895,10 +895,13 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
 
   inode_t *latest = in->get_projected_inode();
   uint64_t new_max = latest->max_size;
+  __u64 size = latest->size;
+  if (forceupdate)
+    size = new_size;
 
   if ((in->get_caps_wanted() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
     new_max = 0;
-  else if ((latest->size << 1) >= latest->max_size)
+  else if ((size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
 
   if (new_max == latest->max_size && !forceupdate)

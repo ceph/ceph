@@ -4047,10 +4047,8 @@ void MDCache::_recovered(CInode *in, int r)
     in->auth_unpin(this);
     remove_inode(in);
   } else {
-    // make sure this is in "newest" inode struct, and gets journaled
-    in->get_projected_inode()->size = in->inode.size;
+    // journal
     mds->locker->check_inode_max_size(in, true, in->inode.size);
-    
     in->auth_unpin(this);
   }
 
