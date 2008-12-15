@@ -41,11 +41,11 @@
  * client-facing protocol.
  */
 #define CEPH_OSD_PROTOCOL     3 /* cluster internal */
-#define CEPH_MDS_PROTOCOL     3 /* cluster internal */
-#define CEPH_MON_PROTOCOL     3 /* cluster internal */
+#define CEPH_MDS_PROTOCOL     4 /* cluster internal */
+#define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    3 /* public/client */
-#define CEPH_MDSC_PROTOCOL    3 /* public/client */
-#define CEPH_MONC_PROTOCOL    3 /* public/client */
+#define CEPH_MDSC_PROTOCOL    4 /* public/client */
+#define CEPH_MONC_PROTOCOL    4 /* public/client */
 
 
 /*
