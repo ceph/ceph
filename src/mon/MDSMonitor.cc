@@ -669,6 +669,7 @@ void MDSMonitor::tick()
   map<entity_addr_t, utime_t>::iterator p = last_beacon.begin();
   while (p != last_beacon.end()) {
     entity_addr_t addr = p->first;
+    utime_t since = p->second;
     p++;
 
     if (last_beacon[addr] >= cutoff)
@@ -679,7 +680,7 @@ void MDSMonitor::tick()
     if ((mds < 0 || pending_mdsmap.standby_for.count(mds) == 0) &&
 	pending_mdsmap.standby_any.empty()) {
       // laggy!
-      dout(10) << "no beacon from mds" << mds << " " << *p << " since " << last_beacon[addr]
+      dout(10) << "no beacon from mds" << mds << " " << addr << " since " << since
 	       << ", marking laggy" << dendl;
       pending_mdsmap.laggy.insert(addr);
       do_propose = true;
@@ -719,7 +720,7 @@ void MDSMonitor::tick()
 	assert(0);
       }
       
-      dout(10) << "no beacon from mds" << mds << " " << *p << " since " << last_beacon[addr]
+      dout(10) << "no beacon from mds" << mds << " " << addr << " since " << since
 	       << ", marking " << pending_mdsmap.get_state_name(newstate)
 	       << dendl;
       
