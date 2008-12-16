@@ -3133,13 +3133,15 @@ void OSD::generate_backlog(PG *pg)
 
   pg->assemble_backlog(omap);
   
+  // take osd_lock, map_log (read)
   pg->unlock();
+  osd_lock.Lock();
   map_lock.get_read();
   pg->lock();
 
   if (!pg->generate_backlog_epoch) {
     dout(10) << *pg << " generate_backlog aborting" << dendl;
-    goto out;
+    goto out2;
   }
 
   if (!pg->is_primary()) {
@@ -3163,8 +3165,10 @@ void OSD::generate_backlog(PG *pg)
       pg->write_log(t);
     store->apply_transaction(t);
   }
-  
+
+ out2:
   map_lock.put_read();
+  osd_lock.Unlock();
 
  out:
   pg->unlock();
