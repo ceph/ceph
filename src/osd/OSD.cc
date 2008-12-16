@@ -1325,7 +1325,7 @@ void OSD::send_pg_stats()
     while (!p.end()) {
       PG *pg = *p;
       ++p;
-      if (!pg->is_active()) {
+      if (!pg->is_primary()) {  // we hold map_lock; role is stable.
 	pg->stat_queue_item.remove_myself();
 	pg->put();
 	continue;
@@ -1334,6 +1334,8 @@ void OSD::send_pg_stats()
       if (pg->pg_stats_valid) {
 	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
 	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      } else {
+	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << ", not valid" << dendl;
       }
       pg->pg_stats_lock.Unlock();
     }
