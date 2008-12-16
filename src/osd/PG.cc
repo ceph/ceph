@@ -1226,10 +1226,14 @@ void PG::peer(ObjectStore::Transaction& t,
 
   // -- crash recovery?
   if (is_crashed()) {
-    dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window << dendl;
+    replay_until = g_clock.now();
+    replay_until += g_conf.osd_replay_window;
+    dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window
+	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
-    osd->timer.add_event_after(g_conf.osd_replay_window,
-			       new OSD::C_Activate(osd, info.pgid, osd->osdmap->get_epoch()));
+    osd->replay_queue_lock.Lock();
+    osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
+    osd->replay_queue_lock.Unlock();
   } 
   else if (!is_active()) {
     // -- ok, activate!
@@ -1551,6 +1555,7 @@ void PG::update_stats()
 
 void PG::clear_stats()
 {
+  dout(15) << "clear_stats" << dendl;
   pg_stats_lock.Lock();
   pg_stats_valid = false;
   pg_stats_lock.Unlock();

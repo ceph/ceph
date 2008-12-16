@@ -287,6 +287,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   recovery_ops_active(0),
   recovery_wq(this, &recovery_tp),
   remove_list_lock("OSD::remove_list_lock"),
+  replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, &disk_tp),
   scrub_wq(this, &disk_tp)
 {
@@ -1157,6 +1158,8 @@ void OSD::tick()
   
   map_lock.get_read();
 
+  check_replay_queue();
+
   // mon report?
   utime_t now = g_clock.now();
   if (now - last_mon_report > g_conf.osd_mon_report_interval)
@@ -1181,6 +1184,27 @@ void OSD::tick()
   map_lock.put_read();
 
   timer.add_event_after(1.0, new C_Tick(this));
+
+
+  // finishers?
+  finished_lock.Lock();
+  if (finished.empty()) {
+    finished_lock.Unlock();
+  } else {
+    list<Message*> waiting;
+    waiting.splice(waiting.begin(), finished);
+
+    finished_lock.Unlock();
+    osd_lock.Unlock();
+    
+    for (list<Message*>::iterator it = waiting.begin();
+         it != waiting.end();
+         it++) {
+      dispatch(*it);
+    }
+
+    osd_lock.Lock();
+  }
 }
 
 // =========================================
@@ -3135,7 +3159,6 @@ void OSD::generate_backlog(PG *pg)
   
   // take osd_lock, map_log (read)
   pg->unlock();
-  osd_lock.Lock();
   map_lock.get_read();
   pg->lock();
 
@@ -3168,7 +3191,6 @@ void OSD::generate_backlog(PG *pg)
 
  out2:
   map_lock.put_read();
-  osd_lock.Unlock();
 
  out:
   pg->unlock();
@@ -3177,10 +3199,26 @@ void OSD::generate_backlog(PG *pg)
 
 
 
+void OSD::check_replay_queue()
+{
+  utime_t now = g_clock.now();
+  list< pair<pg_t,utime_t> > pgids;
+  replay_queue_lock.Lock();
+  while (!replay_queue.empty() &&
+	 replay_queue.front().second <= now) {
+    pgids.push_back(replay_queue.front());
+    replay_queue.pop_front();
+  }
+  replay_queue_lock.Unlock();
+
+  for (list< pair<pg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); p++)
+    activate_pg(p->first, p->second);
+}
+
 /*
  * NOTE: this is called from SafeTimer, so caller holds osd_lock
  */
-void OSD::activate_pg(pg_t pgid, epoch_t epoch)
+void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 {
   assert(osd_lock.is_locked());
 
@@ -3189,7 +3227,7 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
     if (pg->is_crashed() &&
 	pg->is_replay() &&
 	pg->get_role() == 0 &&
-	pg->info.history.same_primary_since <= epoch) {
+	pg->replay_until == activate_at) {
       ObjectStore::Transaction t;
       pg->activate(t);
       store->apply_transaction(t);
@@ -3199,26 +3237,6 @@ void OSD::activate_pg(pg_t pgid, epoch_t epoch)
 
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
   wake_all_pg_waiters();
-
-  // finishers?
-  finished_lock.Lock();
-  if (finished.empty()) {
-    finished_lock.Unlock();
-  } else {
-    list<Message*> waiting;
-    waiting.splice(waiting.begin(), finished);
-
-    finished_lock.Unlock();
-    osd_lock.Unlock();
-    
-    for (list<Message*>::iterator it = waiting.begin();
-         it != waiting.end();
-         it++) {
-      dispatch(*it);
-    }
-
-    osd_lock.Lock();
-  }
 }
 
 

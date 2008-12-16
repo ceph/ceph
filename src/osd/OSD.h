@@ -606,18 +606,12 @@ private:
     remove_list_lock.Unlock();
   }
 
-  void activate_pg(pg_t pgid, epoch_t epoch);
-
-  class C_Activate : public Context {
-    OSD *osd;
-    pg_t pgid;
-    epoch_t epoch;
-  public:
-    C_Activate(OSD *o, pg_t p, epoch_t e) : osd(o), pgid(p), epoch(e) {}
-    void finish(int r) {
-      osd->activate_pg(pgid, epoch);
-    }
-  };
+  // replay / delayed pg activation
+  Mutex replay_queue_lock;
+  list< pair<pg_t, utime_t > > replay_queue;
+  
+  void check_replay_queue();
+  void activate_pg(pg_t pgid, utime_t activate_at);
 
 
   // -- snap trimming --

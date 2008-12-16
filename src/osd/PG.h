@@ -608,6 +608,7 @@ public:
   int recovery_ops_active;
 
   epoch_t generate_backlog_epoch;  // epoch we decided to build a backlog.
+  utime_t replay_until;
 
 protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
