@@ -35,8 +35,6 @@
 #include "SessionMap.h"
 
 
-
-
 class filepath;
 
 class OSDMap;
@@ -58,8 +56,6 @@ class Message;
 
 class MClientRequest;
 class MClientReply;
-class MHashReaddir;
-class MHashReaddirReply;
 
 class MMDSBeacon;
 
@@ -75,7 +71,6 @@ class MDSTableClient;
 class MDS : public Dispatcher {
  public:
   Mutex        mds_lock;
-
   SafeTimer    timer;
 
  protected:
