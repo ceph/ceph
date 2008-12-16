@@ -71,17 +71,16 @@
 
 
 // cons/des
-MDS::MDS(int whoami, Messenger *m, MonMap *mm) : 
+MDS::MDS(int whoami_, Messenger *m, MonMap *mm) : 
   mds_lock("MDS::mds_lock"),
-  timer(mds_lock), 
+  timer(mds_lock),
+  whoami(whoami_),
+  messenger(m),
+  monmap(mm),
+  logclient(messenger, monmap),
   sessionmap(this) {
 
-  this->whoami = whoami;
-
   last_tid = 0;
-
-  monmap = mm;
-  messenger = m;
 
   mdsmap = new MDSMap;
   osdmap = new OSDMap;
@@ -119,9 +118,6 @@ MDS::MDS(int whoami, Messenger *m, MonMap *mm) :
   want_state = state = MDSMap::STATE_DNE;
 
   logger = logger2 = 0;
-
-  // i'm ready!
-  messenger->set_dispatcher(this);
 }
 
 MDS::~MDS() {
@@ -361,6 +357,10 @@ int MDS::init(bool standby)
   // schedule tick
   reset_tick();
 
+  // i'm ready!
+  messenger->set_dispatcher(this);
+  link_dispatcher(&logclient);
+
   mds_lock.Unlock();
   return 0;
 }
@@ -381,6 +381,8 @@ void MDS::tick()
 
   // reschedule
   reset_tick();
+
+  logclient.send_log();
 
   if (laggy)
     return;
@@ -1090,6 +1092,7 @@ void MDS::suicide()
   objecter->shutdown();
   
   // shut down messenger
+  unlink_dispatcher(&logclient);
   messenger->shutdown();
 }
 

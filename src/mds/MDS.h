@@ -27,6 +27,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Timer.h"
+#include "common/LogClient.h"
 
 #include "mon/MonMap.h"
 #include "MDSMap.h"
@@ -82,11 +83,12 @@ class MDS : public Dispatcher {
 
  public:
   Messenger    *messenger;
-  MDSMap       *mdsmap;
   MonMap       *monmap;
+  MDSMap       *mdsmap;
   OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
+  LogClient    logclient;
 
   // sub systems
   Server       *server;
