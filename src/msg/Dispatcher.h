@@ -52,6 +52,13 @@ class Dispatcher {
       next->link_dispatcher(disp);
     }
   }
+  virtual void unlink_dispatcher(Dispatcher *disp) {
+    assert(next);
+    if (next == disp)
+      next = next->next;
+    else
+      next->unlink_dispatcher(disp);
+  }
 
   // how i deal with transmission failures.
   virtual void ms_handle_failure(Message *m, const entity_inst_t& inst) {  }

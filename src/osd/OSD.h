@@ -59,7 +59,7 @@ protected:
   ObjectStore *store;
   MonMap      *monmap;
 
-  LogClient   *logclient;
+  LogClient   logclient;
 
   int whoami;
   const char *dev_name;
@@ -719,7 +719,7 @@ private:
 
   void force_remount();
 
-  LogClient *get_logclient() { return logclient; }
+  LogClient *get_logclient() { return &logclient; }
 };
 
 #endif

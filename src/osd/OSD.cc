@@ -256,6 +256,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   logger(NULL),
   store(NULL),
   monmap(mm),
+  logclient(messenger, monmap),
   whoami(id), dev_name(dev),
   boot_epoch(0), last_active_epoch(0),
   state(STATE_BOOTING),
@@ -381,7 +382,6 @@ int OSD::init()
   assert(whoami == superblock.whoami);
     
   // log
-  logclient = new LogClient(messenger, monmap, this);
   char name[80];
   sprintf(name, "osd%d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
@@ -428,6 +428,7 @@ int OSD::init()
   
   // i'm ready!
   messenger->set_dispatcher(this);
+  link_dispatcher(&logclient);
   heartbeat_messenger->set_dispatcher(&heartbeat_dispatcher);
   
   // announce to monitor i exist and have booted.
@@ -526,6 +527,7 @@ int OSD::shutdown()
   }
   pg_map.clear();
 
+  unlink_dispatcher(&logclient);
   messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
@@ -1216,7 +1218,7 @@ void OSD::do_mon_report()
   }
 
   // do any pending reports
-  logclient->send_log();
+  logclient.send_log();
   if (is_booting())
     send_boot();
   send_alive();

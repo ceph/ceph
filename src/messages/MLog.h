@@ -31,7 +31,12 @@ public:
 
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {
-    out << "log";
+    out << "log(";
+    if (entries.size())
+      out << entries.size() << " entries";
+    if (last)
+      out << "last " << last;
+    out << ")";
   }
 
   void encode_payload() {

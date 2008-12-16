@@ -45,11 +45,9 @@ class LogClient : public Dispatcher {
   void send_log();
   void handle_log(MLog *m);
 
-  LogClient(Messenger *m, MonMap *mm, Dispatcher *disp) : messenger(m), monmap(mm), 
-                                        log_lock("LogClient::log_lock"), last_log(0) {
-    if (disp)
-      disp->link_dispatcher(this);
-  }
+  LogClient(Messenger *m, MonMap *mm) : 
+    messenger(m), monmap(mm), 
+    log_lock("LogClient::log_lock"), last_log(0) { }
 };
 
 #endif
