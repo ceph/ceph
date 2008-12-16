@@ -409,7 +409,7 @@ class Inode {
     if (dir_replicated) {// || ino() == 1) {
       // pick a random mds that isn't the auth
       set<int> s;
-      mdsmap->get_in_mds_set(s);
+      mdsmap->get_mds_set(s);
       set<int>::iterator it = s.begin();
       if (s.empty())
 	return 0;

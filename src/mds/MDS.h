@@ -73,10 +73,9 @@ class MDS : public Dispatcher {
   Mutex        mds_lock;
   SafeTimer    timer;
 
- protected:
-  int          whoami;
+  int whoami;
+  int incarnation;
 
- public:
   Messenger    *messenger;
   MonMap       *monmap;
   MDSMap       *mdsmap;
@@ -129,8 +128,6 @@ class MDS : public Dispatcher {
   }
 
   int get_state() { return state; } 
-  bool is_dne()      { return state == MDSMap::STATE_DNE; }
-  bool is_failed()   { return state == MDSMap::STATE_FAILED; }
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
@@ -140,7 +137,8 @@ class MDS : public Dispatcher {
   bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
-  bool is_stopped()  { return state == MDSMap::STATE_STOPPED; }
+
+  bool is_stopped()  { return mdsmap->is_stopped(whoami); }
 
   void request_state(int s);
 

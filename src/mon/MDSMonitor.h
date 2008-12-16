@@ -46,14 +46,13 @@ class MDSMonitor : public PaxosService {
 
   class C_Updated : public Context {
     MDSMonitor *mm;
-    int mds;
     MMDSBeacon *m;
   public:
-    C_Updated(MDSMonitor *a, int b, MMDSBeacon *c) :
-      mm(a), mds(b), m(c) {}
+    C_Updated(MDSMonitor *a, MMDSBeacon *c) :
+      mm(a), m(c) {}
     void finish(int r) {
       if (r >= 0)
-	mm->_updated(mds, m);   // success
+	mm->_updated(m);   // success
       else
 	mm->dispatch((Message*)m);        // try again
     }
@@ -66,7 +65,7 @@ class MDSMonitor : public PaxosService {
   void create_pending(); 
   void encode_pending(bufferlist &bl);
   
-  void _updated(int from, MMDSBeacon *m);
+  void _updated(MMDSBeacon *m);
  
   bool preprocess_query(Message *m);  // true if processed.
   bool prepare_update(Message *m);
@@ -77,8 +76,6 @@ class MDSMonitor : public PaxosService {
   bool preprocess_beacon(class MMDSBeacon *m);
   bool prepare_beacon(class MMDSBeacon *m);
   void handle_mds_getmap(MMDSGetMap *m);
-
-  void take_over(entity_addr_t addr, int mds);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);

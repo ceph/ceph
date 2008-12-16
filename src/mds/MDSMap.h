@@ -54,12 +54,14 @@ using namespace std;
 class MDSMap {
  public:
   // mds states
+  /*
   static const int STATE_DNE =        CEPH_MDS_STATE_DNE;  // down, never existed.
   static const int STATE_DESTROYING = CEPH_MDS_STATE_DESTROYING;  // down, existing, semi-destroyed.
-  static const int STATE_STOPPED =    CEPH_MDS_STATE_STOPPED;  // down, once existed, but no subtrees. empty log.
   static const int STATE_FAILED =     CEPH_MDS_STATE_FAILED;  // down, active subtrees; needs to be recovered.
-
+  */
+  static const int STATE_STOPPED =    CEPH_MDS_STATE_STOPPED;  // down, once existed, but no subtrees. empty log.
   static const int STATE_BOOT     =   CEPH_MDS_STATE_BOOT;  // up, boot announcement.  destiny unknown.
+
   static const int STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY;  // up, idle.  waiting for assignment by monitor.
   static const int STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY;  // up, replaying active node; ready to take over.
 
@@ -76,11 +78,13 @@ class MDSMap {
   static const char *get_state_name(int s) {
     switch (s) {
       // down and out
-    case STATE_DNE:        return "down:dne";
-    case STATE_DESTROYING: return "down:destroying";
     case STATE_STOPPED:    return "down:stopped";
+      /*
+    case STATE_DNE:        return "dne";
+    case STATE_DESTROYING: return "down:destroying";
       // down and in
     case STATE_FAILED:     return "down:failed";
+      */
       // up and out
     case STATE_BOOT:       return "up:boot";
     case STATE_STANDBY:    return "up:standby";
@@ -99,44 +103,70 @@ class MDSMap {
     return 0;
   }
 
-  struct standby_t {
+  struct mds_info_t {
     int32_t mds;
+    int32_t inc;
     int32_t state;
+    version_t state_seq;
+    entity_addr_t addr;
+    utime_t laggy_since;
+
+    mds_info_t() : mds(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
+
+    bool laggy() const { return !(laggy_since == utime_t()); }
+    void clear_laggy() { laggy_since = utime_t(); }
+
+    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(mds), addr); }
+
     void encode(bufferlist& bl) const {
       ::encode(mds, bl);
+      ::encode(inc, bl);
       ::encode(state, bl);
+      ::encode(state_seq, bl);
+      ::encode(addr, bl);
+      ::encode(laggy_since, bl);
     }
     void decode(bufferlist::iterator& bl) {
       ::decode(mds, bl);
+      ::decode(inc, bl);
       ::decode(state, bl);
+      ::decode(state_seq, bl);
+      ::decode(addr, bl);
+      ::decode(laggy_since, bl);
     }
   };
-  WRITE_CLASS_ENCODER(standby_t)
+  WRITE_CLASS_ENCODER(mds_info_t)
 
 
  protected:
+  // base map
   epoch_t epoch;
-  epoch_t client_epoch;       // incremented only when change is significant to client.
-  epoch_t last_failure;   // epoch of last failure.  for inclocks
+  epoch_t client_epoch;  // incremented only when change is significant to client.
+  epoch_t last_failure;  // epoch of last failure.  for inclocks
   utime_t created;
 
-  int32_t max_mds;
   int32_t tableserver;   // which MDS has anchortable, snaptable
   int32_t root;          // which MDS has root directory
 
   __u32 session_timeout;
   __u32 session_autoclose;
-
-  map<int32_t,int32_t>       mds_state;     // MDS state
-  map<int32_t,version_t>     mds_state_seq;
-  map<int32_t,entity_inst_t> mds_inst;      // up instances
-  map<int32_t,int32_t>       mds_inc;       // incarnation count (monotonically increases)
-
-  map<entity_addr_t,standby_t> standby;    // -1 == any
-  map<int32_t, set<entity_addr_t> > standby_for;
-  set<entity_addr_t> standby_any;
   
-  set<entity_addr_t> laggy;
+  /*
+   * in: the set of logical mds #'s that define the cluster.  this is the set
+   *     of mds's the metadata may be distributed over.
+   * up: map from logical mds #'s to the addrs filling those roles.
+   * failed: subset of @in that are failed.
+   * stopped: set of nodes that have been initialized, but are not active.
+   *
+   *    @up + @failed = @in.  @in * @stopped = {}.
+   */
+
+  uint32_t max_mds;
+  set<int32_t> in;              // currently defined cluster
+  map<int32_t,int32_t> inc;     // most recent incarnation.
+  set<int32_t> failed, stopped; // which roles are failed or stopped
+  map<int32_t,entity_addr_t> up;  // who is in those roles
+  map<entity_addr_t,mds_info_t> mds_info;
 
   friend class MDSMonitor;
 
@@ -165,130 +195,126 @@ class MDSMap {
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
-  bool is_laggy(entity_addr_t a) const { return laggy.count(a); }
 
   // counts
-  int get_num_mds() {
-    return get_num_in_mds();
+  unsigned get_num_mds() {
+    return in.size();
   }
   int get_num_mds(int state) {
     int n = 0;
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
+    for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
 	 p++)
-      if (p->second == state) ++n;
+      if (p->second.state == state) ++n;
     return n;
   }
+  int get_num_failed() { return failed.size(); }
 
-  int get_num_in_mds() { 
-    int n = 0;
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (p->second > 0) ++n;
-    return n;
-  }
 
   // sets
   void get_mds_set(set<int>& s) {
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
+    s = in;
+  }
+  void get_up_mds_set(set<int>& s) {
+    for (map<int32_t,entity_addr_t>::const_iterator p = up.begin();
+	 p != up.end();
 	 p++)
       s.insert(p->first);
-  }
-  void get_mds_set(set<int>& s, int state) {
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (p->second == state)
-	s.insert(p->first);
-  } 
-  void get_up_mds_set(set<int>& s) {
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (is_up(p->first)) s.insert(p->first);
-  }
-  void get_in_mds_set(set<int>& s) {
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (is_in(p->first)) s.insert(p->first);
   }
   void get_active_mds_set(set<int>& s) {
     get_mds_set(s, MDSMap::STATE_ACTIVE);
   }
   void get_failed_mds_set(set<int>& s) {
-    get_mds_set(s, MDSMap::STATE_FAILED);
+    s = failed;
   }
-  void get_recovery_mds_set(set<int>& s) {
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (is_failed(p->first) || 
-	  (p->second >= STATE_REPLAY && p->second <= STATE_STOPPING))
-	s.insert(p->first);
-  }
-
-  int get_random_in_mds() {
-    vector<int> v;
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++)
-      if (p->second > 0) v.push_back(p->first);
-    if (v.empty())
-      return -1;
-    else 
-      return v[rand() % v.size()];
-  }
-
-  int get_num_standby_any() {
-    return standby_any.size();
-  }
-  int get_num_standby_for(int m) {
-    if (standby_for.count(m))
-      return standby_for[m].size();
-    return 0;
-  }
-
-
-  // mds states
-  bool is_down(int m) { return is_dne(m) || is_stopped(m) || is_failed(m); }
-  bool is_up(int m) { return !is_down(m); }
-  bool is_in(int m) { return mds_state.count(m) && mds_state[m] > 0; }
-  bool is_out(int m) { return !mds_state.count(m) || mds_state[m] <= 0; }
-
-  bool is_dne(int m)      { return mds_state.count(m) == 0 || mds_state[m] == STATE_DNE; }
-  bool is_failed(int m)    { return mds_state.count(m) && mds_state[m] == STATE_FAILED; }
-
-  bool is_boot(int m)  { return mds_state.count(m) && mds_state[m] == STATE_BOOT; }
-  bool is_creating(int m) { return mds_state.count(m) && mds_state[m] == STATE_CREATING; }
-  bool is_starting(int m) { return mds_state.count(m) && mds_state[m] == STATE_STARTING; }
-  bool is_replay(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REPLAY; }
-  bool is_resolve(int m)   { return mds_state.count(m) && mds_state[m] == STATE_RESOLVE; }
-  bool is_reconnect(int m) { return mds_state.count(m) && mds_state[m] == STATE_RECONNECT; }
-  bool is_rejoin(int m)    { return mds_state.count(m) && mds_state[m] == STATE_REJOIN; }
-  bool is_active(int m)   { return mds_state.count(m) && mds_state[m] == STATE_ACTIVE; }
-  bool is_stopping(int m) { return mds_state.count(m) && mds_state[m] == STATE_STOPPING; }
-  bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }
-  bool is_stopped(int m)  { return mds_state.count(m) && mds_state[m] == STATE_STOPPED; }
-
-  bool is_standby(entity_addr_t a)  { return standby.count(a); }
-  
-  int get_standby_for(entity_addr_t a) {
-    if (standby.count(a))
-      return standby[a].mds;
+  int get_failed() {
+    if (failed.size()) return *failed.begin();
     return -1;
   }
-  int get_standby_state(entity_addr_t a) {
-    if (standby.count(a))
-      return standby[a].state;
-    return STATE_DNE;
+  void get_stopped_mds_set(set<int>& s) {
+    s = stopped;
   }
+  void get_recovery_mds_set(set<int>& s) {
+    s = failed;
+    for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 p++)
+      if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
+	s.insert(p->second.mds);
+  }
+  void get_mds_set(set<int>& s, int state) {
+    for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 p++)
+      if (p->second.state == state)
+	s.insert(p->second.mds);
+  } 
+
+  int get_random_up_mds() {
+    if (up.empty())
+      return -1;
+    map<int32_t,entity_addr_t>::iterator p = up.begin();
+    for (int n = rand() % up.size(); n; n--) p++;
+    return p->first;
+  }
+
+  bool find_standby_for(int mds, entity_addr_t &a) {
+    for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 p++) {
+      if (p->second.mds == mds &&
+	  p->second.state == MDSMap::STATE_STANDBY &&
+	  !p->second.laggy()) {
+	a = p->second.addr;
+	return true;
+      }
+    }
+    for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 p++) {
+      if (p->second.mds == -1 &&
+	  p->second.state == MDSMap::STATE_STANDBY &&
+	  !p->second.laggy()) {
+	a = p->second.addr;
+	return true;
+      }
+    }
+    return false;
+  }
+
+  // mds states
+  bool is_down(int m) { return up.count(m) == 0; }
+  bool is_up(int m) { return up.count(m); }
+  bool is_in(int m) { return up.count(m) || failed.count(m); }
+  bool is_out(int m) { return !is_in(m); }
+
+  bool is_failed(int m)    { return failed.count(m); }
+  bool is_stopped(int m)    { return stopped.count(m); }
+
+  bool is_dne(int m)      { return in.count(m) == 0; }
+  bool is_dne(entity_addr_t a) { return mds_info.count(a) == 0; }
+
+  int get_state(int m) { return up.count(m) ? mds_info[up[m]].state : 0; }
+  int get_state(entity_addr_t a) { return mds_info.count(a) ? mds_info[a].state : 0; }
+  mds_info_t& get_info(entity_addr_t a) { assert(mds_info.count(a)); return mds_info[a]; }
+
+  bool is_boot(int m)  { return get_state(m) == STATE_BOOT; }
+  bool is_creating(int m) { return get_state(m) == STATE_CREATING; }
+  bool is_starting(int m) { return get_state(m) == STATE_STARTING; }
+  bool is_replay(int m)    { return get_state(m) == STATE_REPLAY; }
+  bool is_resolve(int m)   { return get_state(m) == STATE_RESOLVE; }
+  bool is_reconnect(int m) { return get_state(m) == STATE_RECONNECT; }
+  bool is_rejoin(int m)    { return get_state(m) == STATE_REJOIN; }
+  bool is_active(int m)   { return get_state(m) == STATE_ACTIVE; }
+  bool is_stopping(int m) { return get_state(m) == STATE_STOPPING; }
+  bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }
+
+  bool is_laggy(entity_addr_t a) { return mds_info.count(a) && mds_info[a].laggy(); }
+
 
   // cluster states
   bool is_full() {
-    return get_num_in_mds() >= max_mds;
+    return in.size() >= max_mds;
   }
   bool is_degraded() {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     return 
@@ -296,7 +322,7 @@ class MDSMap {
       get_num_mds(STATE_RESOLVE) + 
       get_num_mds(STATE_RECONNECT) + 
       get_num_mds(STATE_REJOIN) + 
-      get_num_mds(STATE_FAILED);
+      failed.size();
   }
   bool is_rejoining() {  
     // nodes are rejoining cache state
@@ -305,125 +331,89 @@ class MDSMap {
       get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_RECONNECT) == 0 &&
       get_num_mds(STATE_RESOLVE) == 0 &&
-      get_num_mds(STATE_FAILED) == 0;
+      failed.empty();
   }
   bool is_stopped() {
-    return
-      get_num_in_mds() == 0 &&
-      get_num_mds(STATE_CREATING) == 0 &&
-      get_num_mds(STATE_STARTING) == 0 &&
-      get_num_mds(STATE_STANDBY) == 0;
-  }
-
-  bool would_be_overfull_with(int mds) {
-    int in = 1;  // mds!
-    for (map<int32_t,int32_t>::const_iterator p = mds_state.begin();
-	 p != mds_state.end();
-	 p++) {
-      if (p->first == mds) continue;
-      if (p->second > 0 ||
-	  p->second == STATE_STARTING ||
-	  p->second == STATE_CREATING) 
-	in++;
-    }
-    return (in > max_mds);
-  }
-
-  int get_state(int m) {
-    if (mds_state.count(m)) 
-      return mds_state[m];
-    else
-      return STATE_DNE;
+    return up.size() == 0;
   }
 
   // inst
   bool have_inst(int m) {
-    return mds_inst.count(m);
+    return up.count(m);
   }
-  const entity_inst_t& get_inst(int m) {
-    assert(mds_inst.count(m));
-    return mds_inst[m];
+  const entity_inst_t get_inst(int m) {
+    assert(up.count(m));
+    return mds_info[up[m]].get_inst();
   }
   bool get_inst(int m, entity_inst_t& inst) { 
-    if (mds_inst.count(m)) {
-      inst = mds_inst[m];
+    if (up.count(m)) {
+      inst = get_inst(m);
       return true;
     } 
     return false;
   }
   
-  int get_addr_rank(const entity_addr_t& addr) {
-    for (map<int32_t,entity_inst_t>::iterator p = mds_inst.begin();
-	 p != mds_inst.end();
-	 ++p) {
-      if (p->second.addr == addr) return p->first;
-    }
-    if (standby.count(addr))
-      return -2;
+  int get_rank(const entity_addr_t& addr) {
+    if (mds_info.count(addr))
+      return mds_info[addr].mds;
     return -1;
   }
 
   int get_inc(int m) {
-    if (mds_inc.count(m))
-      return mds_inc[m];
+    if (up.count(m)) 
+      return mds_info[up[m]].inc;
     return 0;
   }
 
 
-  void remove_mds(int m) {
-    mds_inst.erase(m);
-    mds_state.erase(m);
-    mds_state_seq.erase(m);
-  }
 
-
-  // serialize, unserialize
-  void encode(bufferlist& bl) {
+  void encode(bufferlist& bl) const {
     ::encode(epoch, bl);
     ::encode(client_epoch, bl);
     ::encode(last_failure, bl);
-    ::encode(created, bl);
-    ::encode(tableserver, bl);
     ::encode(root, bl);
     ::encode(session_timeout, bl);
     ::encode(session_autoclose, bl);
     ::encode(max_mds, bl);
-    ::encode(mds_state, bl);
-    ::encode(mds_state_seq, bl);
-    ::encode(mds_inst, bl);
-    ::encode(mds_inc, bl);
-    ::encode(standby, bl);
-    ::encode(standby_for, bl);
-    ::encode(standby_any, bl);
-    ::encode(laggy, bl);
+    ::encode(mds_info, bl);
+
+    ::encode(created, bl);
+    ::encode(tableserver, bl);
+    ::encode(in, bl);
+    ::encode(inc, bl);
+    ::encode(up, bl);
+    ::encode(failed, bl);
+    ::encode(stopped, bl);
   }
-  
-  void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+  void decode(bufferlist::iterator& p) {
     ::decode(epoch, p);
     ::decode(client_epoch, p);
     ::decode(last_failure, p);
-    ::decode(created, p);
-    ::decode(tableserver, p);
     ::decode(root, p);
     ::decode(session_timeout, p);
     ::decode(session_autoclose, p);
     ::decode(max_mds, p);
-    ::decode(mds_state, p);
-    ::decode(mds_state_seq, p);
-    ::decode(mds_inst, p);
-    ::decode(mds_inc, p);
-    ::decode(standby, p);
-    ::decode(standby_for, p);
-    ::decode(standby_any, p);
-    ::decode(laggy, p);
+    ::decode(mds_info, p);
+
+    ::decode(created, p);
+    ::decode(tableserver, p);
+    ::decode(in, p);
+    ::decode(inc, p);
+    ::decode(up, p);
+    ::decode(failed, p);
+    ::decode(stopped, p);
+  }
+  void decode(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
+    decode(p);
   }
 
 
   void print(ostream& out);
   void print_summary(ostream& out);
 };
-WRITE_CLASS_ENCODER(MDSMap::standby_t)
+WRITE_CLASS_ENCODER(MDSMap::mds_info_t)
+WRITE_CLASS_ENCODER(MDSMap)
 
 inline ostream& operator<<(ostream& out, MDSMap& m) {
   m.print_summary(out);

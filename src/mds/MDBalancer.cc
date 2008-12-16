@@ -208,7 +208,7 @@ void MDBalancer::send_heartbeat()
 
   
   set<int> up;
-  mds->get_mds_map()->get_in_mds_set(up);
+  mds->get_mds_map()->get_mds_set(up);
   for (set<int>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid()) continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
@@ -246,7 +246,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
   
-  unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
+  unsigned cluster_size = mds->get_mds_map()->get_num_mds();
   if (mds_load.size() == cluster_size) {
     // let's go!
     //export_empties();  // no!

@@ -66,7 +66,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << whoami << " "
+#define dout_prefix *_dout << dbeginl << "mds" << whoami << '.' << incarnation << ' '
 
 
 
@@ -74,7 +74,7 @@
 MDS::MDS(int whoami_, Messenger *m, MonMap *mm) : 
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
-  whoami(whoami_),
+  whoami(whoami_), incarnation(0),
   messenger(m),
   monmap(mm),
   logclient(messenger, monmap),
@@ -115,7 +115,7 @@ MDS::MDS(int whoami_, Messenger *m, MonMap *mm) :
 
   req_rate = 0;
 
-  want_state = state = MDSMap::STATE_DNE;
+  want_state = state = MDSMap::STATE_BOOT;
 
   logger = logger2 = 0;
 }
@@ -549,37 +549,36 @@ void MDS::handle_mds_map(MMDSMap *m)
   // decode and process
   mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
-  
-  // see who i am
-  whoami = mdsmap->get_addr_rank(messenger->get_myaddr());
-  if (whoami < 0) {
-    if (mdsmap->is_standby(messenger->get_myaddr())) {
-      if (state != MDSMap::STATE_STANDBY) {
-	want_state = state = MDSMap::STATE_STANDBY;
-	dout(1) << "handle_mds_map standby" << dendl;
-      }
-      goto out;
-    }
+
+  // do i exist?
+  if (mdsmap->is_dne(messenger->get_myaddr())) {
     dout(1) << "handle_mds_map i (" << messenger->get_myaddr() 
-	    << ") am not in the mdsmap, killing myself" << dendl;
+	    << ") dne in the mdsmap, killing myself" << dendl;
     suicide();
     goto out;
   }
 
+  // see who i am
+  whoami = mdsmap->get_rank(messenger->get_myaddr());
+  state = mdsmap->get_state(messenger->get_myaddr());
+  if (state == MDSMap::STATE_STANDBY) {
+    want_state = state = MDSMap::STATE_STANDBY;
+    dout(1) << "handle_mds_map standby" << dendl;
+    goto out;
+  }
+  // ??
+  assert(whoami >= 0);
+  incarnation = mdsmap->get_inc(whoami);
+
   // open logger?
-  //  note that fakesyn/newsyn starts knowing who they are
-  if (whoami >= 0 &&
-      mdsmap->is_up(whoami) &&
-      (oldwhoami != whoami || !logger)) {
+  if (oldwhoami != whoami || !logger) {
     _dout_create_courtesy_output_symlink("mds", whoami);
     reopen_logger(mdsmap->get_created());   // adopt mds cluster timeline
   }
   
   if (oldwhoami != whoami) {
     // update messenger.
-    dout(1) << "handle_mds_map i am now mds" << whoami
-	    << " incarnation " << mdsmap->get_inc(whoami)
-	    << dendl;
+    dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
     messenger->reset_myname(entity_name_t::MDS(whoami));
 
     // do i need an osdmap?
@@ -634,10 +633,6 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else if (is_stopping()) {
       assert(oldstate == MDSMap::STATE_ACTIVE);
       stopping_start();
-    } else if (is_stopped()) {
-      assert(oldstate == MDSMap::STATE_STOPPING);
-      suicide();
-      return;
     }
   }
 
@@ -687,8 +682,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (true) {
     // new failed?
     set<int> oldfailed, failed;
-    oldmap->get_mds_set(oldfailed, MDSMap::STATE_FAILED);
-    mdsmap->get_mds_set(failed, MDSMap::STATE_FAILED);
+    oldmap->get_failed_mds_set(oldfailed);
+    mdsmap->get_failed_mds_set(failed);
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
       if (oldfailed.count(*p) == 0)
 	mdcache->handle_mds_failure(*p);
@@ -705,8 +700,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (is_active() || is_stopping()) {
     // did anyone stop?
     set<int> oldstopped, stopped;
-    oldmap->get_mds_set(oldstopped, MDSMap::STATE_STOPPED);
-    mdsmap->get_mds_set(stopped, MDSMap::STATE_STOPPED);
+    oldmap->get_stopped_mds_set(oldstopped);
+    mdsmap->get_stopped_mds_set(stopped);
     for (set<int>::iterator p = stopped.begin(); p != stopped.end(); ++p) 
       if (oldstopped.count(*p) == 0)      // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
@@ -926,12 +921,12 @@ void MDS::replay_start()
 
 void MDS::replay_done()
 {
-  dout(1) << "replay_done in=" << mdsmap->get_num_in_mds()
-	  << " failed=" << mdsmap->get_num_mds(MDSMap::STATE_FAILED)
+  dout(1) << "replay_done in=" << mdsmap->get_num_mds()
+	  << " failed=" << mdsmap->get_num_failed()
 	  << dendl;
 
-  if (mdsmap->get_num_in_mds() == 1 &&
-      mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
+  if (mdsmap->get_num_mds() == 1 &&
+      mdsmap->get_num_failed() == 0) { // just me!
     dout(2) << "i am alone, moving to state reconnect" << dendl;      
     request_state(MDSMap::STATE_RECONNECT);
   } else {

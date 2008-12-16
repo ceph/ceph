@@ -20,73 +20,63 @@ using std::stringstream;
 
 void MDSMap::print(ostream& out) 
 {
-  out << "epoch " << get_epoch() << std::endl;
-  out << "max_mds " << max_mds << std::endl;
+  out << "epoch " << epoch << std::endl;
+  out << "\nclient_epoch " << client_epoch << std::endl;
+  out << "created " << created << std::endl;
+  out << "tableserver " << tableserver << std::endl;
+  out << "root " << root << std::endl;
+  out << "session_timeout " << session_timeout << "\n"
+      << "session_autoclose " << session_autoclose << "\n";
 
-  set<int> all;
-  get_mds_set(all);
+  out << "\nmax_mds " << max_mds << std::endl;
 
-  for (set<int>::iterator p = all.begin();
-       p != all.end();
-       ++p) {
-    out << " mds" << *p << "." << mds_inc[*p]
-	<< " : " << get_state_name(get_state(*p));
-    if (have_inst(*p))
-      out << " : " << get_inst(*p).addr
-	  << (is_laggy(get_inst(*p).addr) ? " LAGGY" : "");
-    out << "\n";
-    if (standby_for.count(*p) && !standby_for[*p].empty()) {
-      //out << " : +" << standby_for[*p].size() << std::endl;
-      for (set<entity_addr_t>::iterator q = standby_for[*p].begin();
-	   q != standby_for[*p].end();
-	   q++)
-	out << " mds" << *p << ".? : " << get_state_name(standby[*q].state)
-	    << " : " << *q << std::endl;
-    }
+  set<int> upset;
+  get_up_mds_set(upset);
+  out << "in " << in << "\n"
+      << "up " << upset << "\n";
+
+  map< pair<unsigned,unsigned>, entity_addr_t > foo;
+  for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
+       p != mds_info.end();
+       p++)
+    foo[pair<unsigned,unsigned>(p->second.mds, p->second.inc-1)] = p->first;
+
+  for (map< pair<unsigned,unsigned>, entity_addr_t >::iterator p = foo.begin();
+       p != foo.end();
+       p++) {
+    mds_info_t& info = mds_info[p->second];
+    
+    out << info.addr
+	<< " mds" << info.mds
+	<< "." << info.inc
+	<< " " << get_state_name(info.state)
+	<< " seq " << info.state_seq;
+    if (info.laggy())
+      out << " laggy since " << info.laggy_since;
+    out << "\n";    
   }
-  if (!standby_any.empty()) {
-    for (set<entity_addr_t>::iterator q = standby_any.begin();
-	 q != standby_any.end();
-	 q++)
-      out << " mds?.? : " << get_state_name(standby[*q].state) << " : " << *q << std::endl;
-  }
+
+  if (failed.size())
+    out << "failed " << failed << "\n";
+  if (stopped.size())
+    out << "stopped " << failed << "\n";
 }
 
 
 
 void MDSMap::print_summary(ostream& out) 
 {
-  stringstream ss;
+  map<int,int> by_state;
+  for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
+       p != mds_info.end();
+       p++)
+    by_state[p->second.state]++;
 
-  set<int> all;
-  get_mds_set(all);
+  out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << " up";
 
-  int standby_spec = 0;
-  map<string,int> by_state;
-  for (set<int>::iterator p = all.begin();
-       p != all.end();
-       ++p) {
-    string s = get_state_name(get_state(*p));
-    if (laggy.count(get_inst(*p).addr))
-      s += "(laggy)";
-    by_state[s]++;
-    standby_spec += get_num_standby_for(*p);
-  }
+  for (map<int,int>::iterator p = by_state.begin(); p != by_state.end(); p++)
+    out << ", " << p->second << " " << get_state_name(p->first);
   
-  for (map<string,int>::iterator p = by_state.begin(); p != by_state.end(); p++) {
-    if (p != by_state.begin())
-      ss << ", ";
-    ss << p->second << " " << p->first;
-  }
-  if (laggy.size())
-    ss << ", " << laggy.size() << " laggy";
-  if (get_num_standby_any())
-    ss << ", " << get_num_standby_any() << " standby (any)";
-  if (standby_spec)
-    ss << ", " << standby_spec << " standby (specific)";
-  
-  string states = ss.str();  
-  out << "e" << get_epoch() << ": "
-      << all.size() << " nodes: " 
-      << states;
+  if (failed.size())
+    out << ", " << failed.size() << " failed";
 }

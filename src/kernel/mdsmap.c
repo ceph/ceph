@@ -51,55 +51,52 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 {
 	struct ceph_mdsmap *m;
 	int i, n;
-	u32 mds;
 	int err = -EINVAL;
 
 	m = kzalloc(sizeof(*m), GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 10*sizeof(u32), bad);
+	ceph_decode_need(p, end, 8*sizeof(u32), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
-	*p += sizeof(struct ceph_timespec);  /* ignore map timestamp */
-	*p += sizeof(u32);                 /* skip anchortable */
 	ceph_decode_32(p, m->m_root);
 	ceph_decode_32(p, m->m_session_timeout);
 	ceph_decode_32(p, m->m_session_autoclose);
 	ceph_decode_32(p, m->m_max_mds);
 
-	m->m_addr = kmalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_NOFS);
+	m->m_addr = kzalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_NOFS);
 	m->m_state = kzalloc(m->m_max_mds*sizeof(*m->m_state), GFP_NOFS);
 	if (m->m_addr == NULL || m->m_state == NULL)
 		goto badmem;
 
-	/* state */
+	/* pick out active nodes from mds_info (state > 0) */
 	ceph_decode_32(p, n);
-	ceph_decode_need(p, end, n*2*sizeof(u32), bad);
-	for (i = 0; i < n; i++) {
-		ceph_decode_32(p, mds);
-		if (mds >= m->m_max_mds)
-			goto bad;
-		ceph_decode_32(p, m->m_state[mds]);
-	}
-
-	/* state_seq */
-	ceph_decode_32_safe(p, end, n, bad);
-	*p += n*(sizeof(u32)+sizeof(u64));
-
-	/* mds_inst */
-	ceph_decode_32_safe(p, end, n, bad);
 	ceph_decode_need(p, end,
-			 n*(sizeof(u32)+sizeof(struct ceph_entity_name)+
-			    sizeof(struct ceph_entity_addr)),
+			 n * (3*sizeof(u32) + sizeof(u64) +
+			      2*sizeof(*m->m_addr) +
+			      sizeof(struct ceph_timespec)),
 			 bad);
 	for (i = 0; i < n; i++) {
+		s32 mds, inc, state;
+		u64 state_seq;
+
+		*p += sizeof(m->m_addr[0]);  /* skip addr key */
 		ceph_decode_32(p, mds);
-		if (mds >= m->m_max_mds)
-			goto bad;
-		*p += sizeof(struct ceph_entity_name);
-		ceph_decode_copy(p, &m->m_addr[mds], sizeof(*m->m_addr));
+		ceph_decode_32(p, inc);
+		ceph_decode_32(p, state);
+		ceph_decode_64(p, state_seq);
+		dout(10, "mdsmap_decode %d/%d mds%d.%d state %d\n",
+		     i+1, n, mds, inc, state);
+		if (mds >= 0 && mds < m->m_max_mds && state > 0) {
+			m->m_state[mds] = state;
+			ceph_decode_copy(p, &m->m_addr[mds],
+					 sizeof(*m->m_addr));
+		} else {
+			*p += sizeof(m->m_addr[0]);  /* skip it */
+		}
+		*p += sizeof(struct ceph_timespec);
 	}
 
 	/* ok, we don't care about the rest. */

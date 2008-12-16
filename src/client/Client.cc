@@ -734,7 +734,7 @@ int Client::choose_target_mds(MClientRequest *req)
   // pick mds
   if (!diri || g_conf.client_use_random_mds) {
     // no root info, pick a random MDS
-    mds = mdsmap->get_random_in_mds();
+    mds = mdsmap->get_random_up_mds();
     dout(10) << "random mds" << mds << dendl;
     if (mds < 0) mds = 0;
 
@@ -829,7 +829,7 @@ MClientReply *Client::make_request(MClientRequest *req,
       if (mds >= 0) {
 	dout(10) << "chose target mds" << mds << " based on hierarchy" << dendl;
       } else {
-	mds = mdsmap->get_random_in_mds();
+	mds = mdsmap->get_random_up_mds();
 	if (mds < 0) mds = 0;  // hrm.
 	dout(10) << "chose random target mds" << mds << " for lack of anything better" << dendl;
       }
@@ -849,7 +849,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 
 	if (!mdsmap->is_active(mds)) {
 	  dout(10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << dendl;
-	  request.resend_mds = mdsmap->get_random_in_mds();
+	  request.resend_mds = mdsmap->get_random_up_mds();
 	  continue;
 	}
       }	
