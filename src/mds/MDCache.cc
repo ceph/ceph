@@ -1068,7 +1068,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
     // multiversion inode.
     CInode *in = dn->inode;
 
-    if (follows == CEPH_NOSNAP || follows == 0)
+    if (follows == CEPH_NOSNAP)
       follows = in->find_snaprealm()->get_newest_snap();
 
     // already cloned?
@@ -1443,11 +1443,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     // rstat
     if (primary_dn) { 
       SnapRealm *prealm = parent->inode->find_snaprealm();
-      snapid_t latest = prealm->get_newest_snap();
       
       snapid_t follows = cfollows;
-      if (follows == CEPH_NOSNAP || follows == 0)
-	follows = latest;
+      if (follows == CEPH_NOSNAP)
+	follows = prealm->get_newest_snap();
       
       snapid_t first = follows+1;
       if (cur->first > first)
