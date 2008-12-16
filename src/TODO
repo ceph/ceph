@@ -88,7 +88,6 @@ filestore
 - get file csum?
 
 btrfs
-- inode_lock vs tree->lock lockdep warning
 - clone compressed inline extents
 - ioctl to pull out data csum?
 
@@ -105,7 +104,6 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- file size recovery doesn't update recursive stats?
 - file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
   - anchor source dir
