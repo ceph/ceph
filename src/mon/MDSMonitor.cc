@@ -416,36 +416,6 @@ void MDSMonitor::_updated(int from, MMDSBeacon *m)
 
 void MDSMonitor::committed()
 {
-  // check for failed
-  set<int> failed;
-  pending_mdsmap.get_failed_mds_set(failed);
-
-  if (!pending_mdsmap.standby.empty() && !failed.empty()) {
-    bool didtakeover = false;
-    set<int>::iterator p = failed.begin();
-    while (p != failed.end()) {
-      int f = *p++;
-      
-      // someone standby for me?
-      if (pending_mdsmap.standby_for.count(f) &&
-	  !pending_mdsmap.standby_for[f].empty()) {
-	dout(0) << "mds" << f << " standby " << *pending_mdsmap.standby_for[f].begin() << " taking over" << dendl;
-	take_over(*pending_mdsmap.standby_for[f].begin(), f);
-	didtakeover = true;
-      }
-      else if (!pending_mdsmap.standby_any.empty()) {
-	dout(0) << "standby " << pending_mdsmap.standby.begin()->first << " taking over for mds" << f << dendl;
-	take_over(pending_mdsmap.standby.begin()->first, f);
-	didtakeover = true;
-      }
-    }
-    if (didtakeover) {
-      dout(7) << "pending map now:" << dendl;
-      print_map(pending_mdsmap);
-      propose_pending();
-    }
-  }
-
   // hackish: did all mds's shut down?
   if (mon->is_leader() &&
       g_conf.mon_stop_with_last_mds &&
@@ -453,20 +423,6 @@ void MDSMonitor::committed()
       mdsmap.is_stopped()) 
     mon->messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				 mon->monmap->get_inst(mon->whoami));
-}
-
-void MDSMonitor::take_over(entity_addr_t addr, int mds)
-{
-  pending_mdsmap.mds_inst[mds].addr = addr;
-  pending_mdsmap.mds_inst[mds].name = entity_name_t::MDS(mds);
-  pending_mdsmap.mds_inc[mds]++;
-  pending_mdsmap.mds_state[mds] = MDSMap::STATE_REPLAY;
-  pending_mdsmap.mds_state_seq[mds] = 0;
-
-  // remove from standby list(s)
-  pending_mdsmap.standby.erase(addr);
-  pending_mdsmap.standby_for[mds].erase(addr);
-  pending_mdsmap.standby_any.erase(addr);
 }
 
 
@@ -768,10 +724,49 @@ void MDSMonitor::tick()
     }
   }
 
+
+  // have a standby take over?
+  set<int> failed;
+  pending_mdsmap.get_failed_mds_set(failed);
+  if (!pending_mdsmap.standby.empty() && !failed.empty()) {
+    set<int>::iterator p = failed.begin();
+    while (p != failed.end()) {
+      int f = *p++;
+      
+      // someone standby for me?
+      if (pending_mdsmap.standby_for.count(f) &&
+	  !pending_mdsmap.standby_for[f].empty()) {
+	dout(0) << "mds" << f << " standby " << *pending_mdsmap.standby_for[f].begin() << " taking over" << dendl;
+	take_over(*pending_mdsmap.standby_for[f].begin(), f);
+	do_propose = true;
+      }
+      else if (!pending_mdsmap.standby_any.empty()) {
+	dout(0) << "standby " << pending_mdsmap.standby.begin()->first << " taking over for mds" << f << dendl;
+	take_over(pending_mdsmap.standby.begin()->first, f);
+	do_propose = true;
+      }
+    }
+  }
+
+
   if (do_propose)
     propose_pending();
 }
 
+void MDSMonitor::take_over(entity_addr_t addr, int mds)
+{
+  dout(10) << "take_over mds" << mds << " by " << addr << dendl;
+  pending_mdsmap.mds_inst[mds].addr = addr;
+  pending_mdsmap.mds_inst[mds].name = entity_name_t::MDS(mds);
+  pending_mdsmap.mds_inc[mds]++;
+  pending_mdsmap.mds_state[mds] = MDSMap::STATE_REPLAY;
+  pending_mdsmap.mds_state_seq[mds] = 0;
+
+  // remove from standby list(s)
+  pending_mdsmap.standby.erase(addr);
+  pending_mdsmap.standby_for[mds].erase(addr);
+  pending_mdsmap.standby_any.erase(addr);
+}
 
 void MDSMonitor::do_stop()
 {
