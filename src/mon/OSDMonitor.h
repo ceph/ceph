@@ -135,6 +135,8 @@ private:
 
   void send_latest(entity_inst_t i, epoch_t start=0);
 
+  void blacklist(entity_addr_t a, utime_t until);
+
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();
   void fake_reorg();

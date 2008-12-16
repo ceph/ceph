@@ -160,7 +160,7 @@ public:
     map<pg_t,uint32_t> new_pg_swap_primary;
     list<pg_t> old_pg_swap_primary;
 
-    vector<entity_addr_t> new_blacklist;
+    map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
 
     snapid_t new_max_snap;
@@ -280,7 +280,7 @@ private:
   snapid_t max_snap;
   interval_set<snapid_t> removed_snaps;
 
-  hash_set<entity_addr_t> blacklist;
+  hash_map<entity_addr_t,utime_t> blacklist;
 
  public:
   CrushWrapper     crush;       // hierarchical map
@@ -576,10 +576,10 @@ private:
     removed_snaps.union_of(inc.removed_snaps);
 
     // blacklist
-    for (vector<entity_addr_t>::iterator p = inc.new_blacklist.begin();
+    for (map<entity_addr_t,utime_t>::iterator p = inc.new_blacklist.begin();
 	 p != inc.new_blacklist.end();
 	 p++)
-      blacklist.insert(*p);
+      blacklist[p->first] = p->second;
     for (vector<entity_addr_t>::iterator p = inc.old_blacklist.begin();
 	 p != inc.old_blacklist.end();
 	 p++)

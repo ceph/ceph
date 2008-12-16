@@ -761,6 +761,15 @@ void OSDMonitor::bcast_full_osd()
 }
 
 
+
+void OSDMonitor::blacklist(entity_addr_t a, utime_t until)
+{
+  dout(10) << "blacklist " << a << " until " << until << dendl;
+  pending_inc.new_blacklist[a] = until;
+}
+
+
+
 // TICK
 
 
@@ -773,6 +782,9 @@ void OSDMonitor::tick()
 
   if (!mon->is_leader()) return;
 
+
+
+  bool do_propose = false;
 
   // mark down osds out?
   utime_t now = g_clock.now();
@@ -794,37 +806,50 @@ void OSDMonitor::tick()
     down_pending_out.erase(*i);
     pending_inc.new_weight[*i] = CEPH_OSD_OUT;
   }
-  if (!mark_out.empty()) {
-    propose_pending();
+  if (!mark_out.empty())
+    do_propose = true;
+
+
+  // expire blacklisted items?
+  for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+       p != osdmap.blacklist.end();
+       p++) {
+    if (p->second < now) {
+      dout(10) << "expiring blacklist item " << p->first << " expired " << p->second << " < now " << now << dendl;
+      pending_inc.old_blacklist.push_back(p->first);
+      do_propose = true;
+    }
   }
 
 
+  // ---------------
 #define SWAP_PRIMARIES_AT_START 0
 #define SWAP_TIME 1
-
-  if (!SWAP_PRIMARIES_AT_START) return;
-
-  // For all PGs that have OSD 0 as the primary,
-  // switch them to use the first replca
-
-
-  ps_t numps = osdmap.get_pg_num();
-  int minrep = 1; 
-  int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
-  for (int pool=0; pool<1; pool++)
-    for (int nrep = minrep; nrep <= maxrep; nrep++) { 
-      for (ps_t ps = 0; ps < numps; ++ps) {
-	pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1);
-	vector<int> osds;
-	osdmap.pg_to_osds(pgid, osds); 
-	if (osds[0] == 0) {
-	  pending_inc.new_pg_swap_primary[pgid] = osds[1];
-	  dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
-		  << osds[1] << dendl;
+  if (SWAP_PRIMARIES_AT_START) {
+    // For all PGs that have OSD 0 as the primary,
+    // switch them to use the first replca
+    ps_t numps = osdmap.get_pg_num();
+    int minrep = 1; 
+    int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
+    for (int pool=0; pool<1; pool++)
+      for (int nrep = minrep; nrep <= maxrep; nrep++) { 
+	for (ps_t ps = 0; ps < numps; ++ps) {
+	  pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1);
+	  vector<int> osds;
+	  osdmap.pg_to_osds(pgid, osds); 
+	  if (osds[0] == 0) {
+	    pending_inc.new_pg_swap_primary[pgid] = osds[1];
+	    dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
+		    << osds[1] << dendl;
+	    do_propose = true;
+    	  }
 	}
       }
-    }
-  propose_pending();
+  }
+  // ---------------
+
+  if (do_propose)
+    propose_pending();
 }
 
 

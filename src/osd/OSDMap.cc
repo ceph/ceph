@@ -51,6 +51,11 @@ void OSDMap::print(ostream& out)
   }
   out << std::endl;
   
+  for (hash_map<entity_addr_t,utime_t>::iterator p = blacklist.begin();
+       p != blacklist.end();
+       p++)
+    out << "blacklist " << p->first << " expires " << p->second << "\n";
+  
   // ignore pg_swap_primary
   
   out << "max_snap " << get_max_snap() << "\n"
@@ -64,6 +69,8 @@ void OSDMap::print_summary(ostream& out)
       << get_num_osds() << " osds: "
       << get_num_up_osds() << " up, " 
       << get_num_in_osds() << " in";
+  if (blacklist.size())
+    out << ", " << blacklist.size() << " blacklisted";
 }
 
 
