@@ -130,7 +130,6 @@ mds
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 - make truncate faster with a trunc_seq, attached to objects as attributes?
-- osd needs a set_floor_and_read op for safe failover/STOGITH-like semantics.
 - could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...
 - FIXME how to journal/store root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
@@ -151,7 +150,6 @@ mon
 - paxos need to clean up old states.
   - default: simple max of (state count, min age), so that we have at least N hours of history, say?
   - osd map: trim only old maps < oldest "in" osd up_from
-- blacklist failed mds's
 
 osdmon
 - monitor needs to monitor some osds...

@@ -199,6 +199,7 @@ struct md_config_t {
 
   float mds_beacon_interval;
   float mds_beacon_grace;
+  float mds_blacklist_interval;
 
   float mds_session_timeout;
   float mds_session_autoclose;

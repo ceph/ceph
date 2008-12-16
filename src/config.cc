@@ -329,6 +329,7 @@ md_config_t g_conf = {
 
   mds_beacon_interval: 4, //30.0,
   mds_beacon_grace: 30, //60*60.0,
+  mds_blacklist_interval: 24.0*60.0,  // how long to blacklist failed nodes
 
   mds_session_timeout: 60,    // cap bits and leases time out if client idle
   mds_session_autoclose: 300, // autoclose idle session 
@@ -337,7 +338,6 @@ md_config_t g_conf = {
                               //  make it (mds_session_timeout - mds_beacon_grace)
 
   mds_tick_interval: 5,
-
   mds_scatter_nudge_interval: 5,  // how quickly dirstat changes propagate up the hierarchy
 
   mds_log: true,
@@ -421,7 +421,7 @@ md_config_t g_conf = {
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
   osd_mon_heartbeat_interval: 30,  // if no peers, ping monitor
-  osd_heartbeat_grace: 60,
+  osd_heartbeat_grace: 20,
   osd_mon_report_interval:  5,  // pg stats, failures, up_thru, boot.
   osd_replay_window: 45,
   osd_max_pull: 2,
