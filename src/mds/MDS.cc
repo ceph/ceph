@@ -545,6 +545,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   MDSMap *oldmap = mdsmap;
   int oldwhoami = whoami;
   int oldstate = state;
+  entity_addr_t addr;
 
   // decode and process
   mdsmap = new MDSMap;
@@ -552,15 +553,18 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // do i exist?
   if (mdsmap->is_dne(messenger->get_myaddr())) {
-    dout(1) << "handle_mds_map i (" << messenger->get_myaddr() 
+    dout(1) << "handle_mds_map i (" << addr
 	    << ") dne in the mdsmap, killing myself" << dendl;
     suicide();
     goto out;
   }
 
   // see who i am
-  whoami = mdsmap->get_rank(messenger->get_myaddr());
-  state = mdsmap->get_state(messenger->get_myaddr());
+  addr = messenger->get_myaddr();
+  whoami = mdsmap->get_rank(addr);
+  state = mdsmap->get_state(addr);
+  dout(10) << "map says i am " << addr << " mds" << whoami << " state " << MDSMap::get_state_name(state) << dendl;
+
   if (state == MDSMap::STATE_STANDBY) {
     want_state = state = MDSMap::STATE_STANDBY;
     dout(1) << "handle_mds_map standby" << dendl;
@@ -591,11 +595,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   // tell objecter my incarnation
-  if (objecter->get_client_incarnation() < 0 &&
-      mdsmap->have_inst(whoami)) {
-    assert(mdsmap->get_inc(whoami) > 0);
-    objecter->set_client_incarnation(mdsmap->get_inc(whoami));
-  }
+  if (objecter->get_client_incarnation() != incarnation)
+    objecter->set_client_incarnation(incarnation);
   // and inc_lock
   objecter->set_inc_lock(mdsmap->get_last_failure());
 
@@ -603,9 +604,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (g_conf.mds_dump_cache_on_map)
     mdcache->dump_cache();
 
-  // update my state
-  state = mdsmap->get_state(whoami);
-  
   // did it change?
   if (oldstate != state) {
     dout(1) << "handle_mds_map state change "
@@ -620,7 +618,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 	  oldstate == MDSMap::STATE_RECONNECT) 
 	recovery_done();
       finish_contexts(waiting_for_active);  // kick waiters
-    } else if (is_replay()) {
+    } else if (is_replay() || is_standby_replay()) {
       replay_start();
     } else if (is_resolve()) {
       resolve_start();
@@ -857,7 +855,7 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
-    if (is_replay()) {
+    if (is_replay() || is_standby_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
       mdlog->replay(new C_MDS_BootStart(this, 3));
       break;
@@ -868,7 +866,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 3:
-    if (is_replay()) {
+    if (is_replay() || is_standby_replay()) {
       replay_done();
       break;
     }
@@ -924,6 +922,12 @@ void MDS::replay_done()
   dout(1) << "replay_done in=" << mdsmap->get_num_mds()
 	  << " failed=" << mdsmap->get_num_failed()
 	  << dendl;
+
+  if (is_standby_replay()) {
+    dout(2) << "hack.  journal looks ok.  shutting down." << dendl;
+    suicide();
+    return;
+  }
 
   if (mdsmap->get_num_mds() == 1 &&
       mdsmap->get_num_failed() == 0) { // just me!
