@@ -25,11 +25,16 @@ using namespace std;
 
 // states and such.
 //  C = cache reads, R = read, W = write, A = append, B = buffer writes, L = lazyio
+//
+// lower-case on a transition state means a 'trailing' rdlock or wrlock.. 
+// the old locks still there (from the prior state), but new locks aren't
+// allowed.
 
 //                               -----auth--------   ---replica-------
 #define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
 #define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
 #define LOCK_MIXED_SYNC  -13 // A    . . / . R . . . L
+#define LOCK_LOCK_SYNC   -14 // A    R w / C . . . b L
 
 #define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   . . / C . . . . .
@@ -37,11 +42,11 @@ using namespace std;
 #define LOCK_MIXED_LOCK  -5  // A    . . / . . . . . .
 
 #define LOCK_MIXED        6  // AR   . . / . R W A . L   . . / . R . . . L
-#define LOCK_SYNC_MIXED  -7  // AR   R . / . R . . . L   . . / . R . . . L 
+#define LOCK_SYNC_MIXED  -7  // AR   r . / . R . . . L   . . / . R . . . L 
 #define LOCK_LONER_MIXED -8  // A    . . / . r w a . L *                     loner -> mixed
 
 #define LOCK_LONER        9  // A    . . / c r w a b L *      (lock)      
-#define LOCK_SYNC_LONER  -10 // A    . . / . R . . . L 
+#define LOCK_SYNC_LONER  -10 // A    r . / . R . . . L 
 #define LOCK_MIXED_LONER -11 // A    . . / . R W A . L 
 #define LOCK_LOCK_LONER  -15 // A    . . / c . . . b . *
 
@@ -52,6 +57,7 @@ inline const char *get_filelock_state_name(int n) {
   case LOCK_SYNC: return "sync";
   case LOCK_LONER_SYNC: return "loner->sync";
   case LOCK_MIXED_SYNC: return "mixed->sync";
+  case LOCK_LOCK_SYNC: return "lock->sync";
   case LOCK_LOCK: return "lock";
   case LOCK_SYNC_LOCK: return "sync->lock";
   case LOCK_LONER_LOCK: return "loner->lock";

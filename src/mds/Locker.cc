@@ -3279,6 +3279,7 @@ void Locker::file_eval_gather(FileLock *lock)
       // to sync
     case LOCK_LONER_SYNC:
     case LOCK_MIXED_SYNC:
+    case LOCK_LOCK_SYNC:
       lock->set_state(LOCK_SYNC);
       in->loner_cap = -1;
       
@@ -3427,37 +3428,34 @@ bool Locker::file_sync(FileLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_state() != LOCK_LOCK) {
-    // gather?
-    switch (lock->get_state()) {
-    case LOCK_MIXED: lock->set_state(LOCK_MIXED_SYNC); break;
-    case LOCK_LONER: lock->set_state(LOCK_LONER_SYNC); break;
-    default: assert(0);
-    }
-
-    int gather = 0;
-    int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued);
-    if ((loner_issued & ~lock->caps_allowed(true)) ||
-	(other_issued & ~lock->caps_allowed(false))) {
-      issue_caps(in);
-      gather++;
-    }
-    if (lock->is_wrlocked())
-      gather++;
-    if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
-      mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
-      gather++;
-    }
-
-    if (gather) {
-      lock->get_parent()->auth_pin(lock);
-      return false;
-    }
+  // gather?
+  switch (lock->get_state()) {
+  case LOCK_MIXED: lock->set_state(LOCK_MIXED_SYNC); break;
+  case LOCK_LONER: lock->set_state(LOCK_LONER_SYNC); break;
+  case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
+  default: assert(0);
   }
 
-  assert(!lock->is_wrlocked());  // FIXME if we hit this we need a new gsynck state or somethin'
+  int gather = 0;
+  int loner_issued, other_issued;
+  in->get_caps_issued(&loner_issued, &other_issued);
+  if ((loner_issued & ~lock->caps_allowed(true)) ||
+      (other_issued & ~lock->caps_allowed(false))) {
+    issue_caps(in);
+    gather++;
+  }
+  if (lock->is_wrlocked())
+    gather++;
+  if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+    mds->mdcache->queue_file_recover(in);
+    mds->mdcache->do_file_recover();
+    gather++;
+  }
+  
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+    return false;
+  }
 
   // ok
   if (in->is_replicated()) {
