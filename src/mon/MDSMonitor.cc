@@ -542,20 +542,23 @@ void MDSMonitor::tick()
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
 
       dout(10) << "no beacon from " << addr << " mds" << info.mds << "." << info.inc
+	       << " " << MDSMap::get_state_name(info.state)
 	       << " since " << since << dendl;
       
       // are we in?
       // and is there a non-laggy standby that can take over for us?
       entity_addr_t sa;
       if (info.mds >= 0 &&
-	  info.state > 0 &&
+	  (info.state > 0 || info.state == MDSMap::STATE_STANDBY_REPLAY) &&
 	  pending_mdsmap.find_standby_for(info.mds, sa)) {
 	dout(10) << " replacing " << addr << " mds" << info.mds << "." << info.inc
+		 << " " << MDSMap::get_state_name(info.state)
 		 << " with " << sa << dendl;
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
+	case MDSMap::STATE_STANDBY_REPLAY:
 	  si.state = info.state;
 	  break;
 	case MDSMap::STATE_REPLAY:
@@ -570,21 +573,26 @@ void MDSMonitor::tick()
 	  assert(0);
 	}
 	si.mds = info.mds;
-	si.inc = ++pending_mdsmap.inc[info.mds];
-	pending_mdsmap.up[info.mds] = sa;
-	pending_mdsmap.last_failure = pending_mdsmap.epoch;
+	if (si.state > 0) {
+	  si.inc = ++pending_mdsmap.inc[info.mds];
+	  pending_mdsmap.up[info.mds] = sa;
+	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
+	}
 	pending_mdsmap.mds_info.erase(addr);
 
-	// blacklist
-	utime_t until = now;
-	until += g_conf.mds_blacklist_interval;
-	mon->osdmon()->blacklist(addr, until);
-	mon->osdmon()->propose_pending();
+	if (si.state > 0) {
+	  // blacklist
+	  utime_t until = now;
+	  until += g_conf.mds_blacklist_interval;
+	  mon->osdmon()->blacklist(addr, until);
+	  mon->osdmon()->propose_pending();
+	}
 	
 	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
 	dout(10) << " marking " << addr << " mds" << info.mds << "." << info.inc
+		 << " " << MDSMap::get_state_name(info.state)
 		 << " laggy" << dendl;
 	info.laggy_since = now;
 	do_propose = true;
@@ -653,7 +661,6 @@ void MDSMonitor::tick()
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[s];
       info.mds = *p;
-      info.inc = pending_mdsmap.inc[*p] + 1;
       info.state = MDSMap::STATE_STANDBY_REPLAY;
       do_propose = true;
     }
