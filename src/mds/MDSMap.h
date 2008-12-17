@@ -200,8 +200,8 @@ class MDSMap {
   unsigned get_num_mds() {
     return in.size();
   }
-  int get_num_mds(int state) {
-    int n = 0;
+  unsigned get_num_mds(int state) {
+    unsigned n = 0;
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++)

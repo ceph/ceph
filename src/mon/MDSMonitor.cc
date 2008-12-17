@@ -202,13 +202,25 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   else {
     // is there a state change here?
     if (info.state != state) {
-      if (mdsmap.get_epoch() == m->get_last_epoch_seen()) 
-	return false;  // need to update map
-      dout(10) << "mds_beacon " << *m
-	       << " ignoring requested state, because mds hasn't seen latest map" << dendl;
+      if (mdsmap.get_epoch() != m->get_last_epoch_seen()) {
+	dout(10) << "mds_beacon " << *m
+		 << " ignoring requested state, because mds hasn't seen latest map" << dendl;
+	goto ignore;
+      }
+      
+      // legal state change?
+      if ((info.state == MDSMap::STATE_STANDBY ||
+	   info.state == MDSMap::STATE_STANDBY_REPLAY) && state > 0) {
+	dout(10) << "mds_beacon mds can't activate itself (" << MDSMap::get_state_name(info.state)
+		 << " -> " << MDSMap::get_state_name(state) << ")" << dendl;
+	goto ignore;
+      }
+      
+      return false;  // need to update map
     }
   }
 
+ ignore:
   // note time and reply
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr] = g_clock.now();  
@@ -604,28 +616,30 @@ void MDSMonitor::tick()
     }
   }
 
-  /*
   // have a standby replay/shadow an active mds?
   if (!pending_mdsmap.is_degraded() &&
-      pending_mdsmap.standby.size() >= pending_mdsmap.get_num_mds()) {
+      pending_mdsmap.get_num_mds(MDSMap::STATE_STANDBY) >= pending_mdsmap.get_num_mds()) {
     // see which nodes are shadowed
     set<int> shadowed;
     map<int, set<entity_addr_t> > avail;
-    for (map<entity_addr_t,MDSMap::standby_t>::iterator p = pending_mdsmap.standby.begin();
-	 p != pending_mdsmap.standby.end();
+    for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
+	 p != pending_mdsmap.mds_info.end();
 	 p++) {
       if (p->second.state == MDSMap::STATE_STANDBY_REPLAY) 
 	shadowed.insert(p->second.mds);
-      if (p->second.state == MDSMap::STATE_STANDBY)
+      if (p->second.state == MDSMap::STATE_STANDBY &&
+	  !p->second.laggy())
 	avail[p->second.mds].insert(p->first);
     }
 
     // find an mds that needs a standby
-    set<int> active;
-    pending_mdsmap.get_active_mds_set(active);
-    for (set<int>::iterator p = active.begin(); p != active.end(); p++) {
+    set<int> in;
+    pending_mdsmap.get_mds_set(in);
+    for (set<int>::iterator p = in.begin(); p != in.end(); p++) {
       if (shadowed.count(*p))
 	continue;  // already shadowed.
+      if (pending_mdsmap.get_state(*p) < MDSMap::STATE_ACTIVE)
+	continue;  // only shadow active mds
       entity_addr_t s;
       if (avail[*p].size()) {
 	s = *avail[*p].begin();
@@ -636,19 +650,14 @@ void MDSMonitor::tick()
       } else
 	continue;
       dout(10) << "mds" << *p << " will be shadowed by " << s << dendl;
-      if (pending_mdsmap.standby[s].mds != *p) {
-	if (pending_mdsmap.standby[s].mds >= 0)
-	  pending_mdsmap.standby_for[pending_mdsmap.standby[s].mds].erase(s);
-	else
-	  pending_mdsmap.standby_any.erase(s);
-	pending_mdsmap.standby[s].mds = *p;
-	pending_mdsmap.standby_for[*p].insert(s);
-      }
-      pending_mdsmap.standby[s].state = MDSMap::STATE_STANDBY_REPLAY;
+
+      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[s];
+      info.mds = *p;
+      info.inc = pending_mdsmap.inc[*p] + 1;
+      info.state = MDSMap::STATE_STANDBY_REPLAY;
       do_propose = true;
     }
   }
-  */
 
   if (do_propose)
     propose_pending();
