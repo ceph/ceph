@@ -21,7 +21,7 @@ int MonClient::probe_mon(MonMap *pmonmap)
   parse_ip_port(g_conf.mon_host, monaddr);
   
   rank.bind();
-  cout << " connecting to monitor at " << monaddr << " ..." << std::endl;
+  dout(1) << " connecting to monitor at " << monaddr << " ..." << dendl;
   
   Messenger *msgr = rank.register_entity(entity_name_t::CLIENT(-1));
   msgr->set_dispatcher(this);
@@ -47,7 +47,8 @@ int MonClient::probe_mon(MonMap *pmonmap)
 
   if (monmap_bl.length()) {
     pmonmap->decode(monmap_bl);
-    dout(2) << "get_monmap got monmap epoch " << pmonmap->epoch << " fsid " << pmonmap->fsid << dendl;
+    dout(2) << "get_monmap got monmap from " << monaddr << " fsid " << pmonmap->fsid << dendl;
+    cout << "[got monmap from " << monaddr << " fsid " << pmonmap->fsid << "]" << std::endl;
   }
   msgr->shutdown();
   msgr->destroy();
@@ -71,8 +72,10 @@ int MonClient::get_monmap(MonMap *pmonmap)
   // file?
   const char *monmap_fn = ".ceph_monmap";
   int r = pmonmap->read(monmap_fn);
-  if (r >= 0)
+  if (r >= 0) {
+    cout << "[opened monmap at .ceph_monmap fsid " << pmonmap->fsid << "]" << std::endl;
     return 0;
+  }
 
   cerr << "unable to read monmap from " << monmap_fn 
        << ": " << strerror(errno) << std::endl;
