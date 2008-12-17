@@ -208,6 +208,7 @@ void *Rank::Accepter::entry()
   dout(10) << "accepter starting" << dendl;
   
   fd_set fds;
+  int errors = 0;
   while (!done) {
     FD_ZERO(&fds);
     FD_SET(listen_sd, &fds);
@@ -222,6 +223,7 @@ void *Rank::Accepter::entry()
     socklen_t slen = sizeof(addr);
     int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
     if (sd >= 0) {
+      errors = 0;
       opened_socket();
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
@@ -242,7 +244,9 @@ void *Rank::Accepter::entry()
       }
       rank.lock.Unlock();
     } else {
-      dout(10) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror(errno) << dendl;
+      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror(errno) << dendl;
+      if (++errors > 4)
+	break;
     }
   }
 
