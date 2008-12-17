@@ -1,5 +1,5 @@
 v0.6
-- fold observer into cmonctl/ceph?
+/- fold observer into cmonctl/ceph?
 /- osd scrub
 
 v0.7
@@ -115,10 +115,9 @@ mds
 - what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
-- add up:standby-replay mode?
+- add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too
-  - a brute-force mode too that will replay from scratch?
 - try_remove_unlinked_dn thing
 - rename: importing inode... also journal imported client map?
 - rerun destro trace against latest, with various journal lengths
