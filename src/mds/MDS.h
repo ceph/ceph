@@ -75,6 +75,8 @@ class MDS : public Dispatcher {
 
   int whoami;
   int incarnation;
+  
+  int standby_replay_for;
 
   Messenger    *messenger;
   MonMap       *monmap;

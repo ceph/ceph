@@ -215,6 +215,14 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 		 << " -> " << MDSMap::get_state_name(state) << ")" << dendl;
 	goto ignore;
       }
+
+      if (info.state == MDSMap::STATE_STANDBY &&
+	  state == MDSMap::STATE_STANDBY_REPLAY &&
+	  (pending_mdsmap.is_degraded() ||
+	   pending_mdsmap.get_state(info.mds) < MDSMap::STATE_ACTIVE)) {
+	dout(10) << "mds_beacon can't standby-replay mds" << info.mds << " at this time (cluster degraded, or mds not active)" << dendl;
+	goto ignore;
+      }
       
       return false;  // need to update map
     }
@@ -549,7 +557,7 @@ void MDSMonitor::tick()
       // and is there a non-laggy standby that can take over for us?
       entity_addr_t sa;
       if (info.mds >= 0 &&
-	  (info.state > 0 || info.state == MDSMap::STATE_STANDBY_REPLAY) &&
+	  info.state > 0 && //|| info.state == MDSMap::STATE_STANDBY_REPLAY) &&
 	  pending_mdsmap.find_standby_for(info.mds, sa)) {
 	dout(10) << " replacing " << addr << " mds" << info.mds << "." << info.inc
 		 << " " << MDSMap::get_state_name(info.state)
@@ -589,6 +597,12 @@ void MDSMonitor::tick()
 	}
 	
 	do_propose = true;
+      } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
+	dout(10) << " failing " << addr << " mds" << info.mds << "." << info.inc
+		 << " " << MDSMap::get_state_name(info.state)
+		 << dendl;
+	pending_mdsmap.mds_info.erase(addr);
+	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
 	dout(10) << " marking " << addr << " mds" << info.mds << "." << info.inc
@@ -625,7 +639,8 @@ void MDSMonitor::tick()
   }
 
   // have a standby replay/shadow an active mds?
-  if (!pending_mdsmap.is_degraded() &&
+  if (false &&
+      !pending_mdsmap.is_degraded() &&
       pending_mdsmap.get_num_mds(MDSMap::STATE_STANDBY) >= pending_mdsmap.get_num_mds()) {
     // see which nodes are shadowed
     set<int> shadowed;
@@ -703,7 +718,7 @@ void MDSMonitor::do_stop()
     case MDSMap::STATE_RESOLVE:
     case MDSMap::STATE_RECONNECT:
     case MDSMap::STATE_REJOIN:
-      // BUG: hrm, if this is the case, the STOPPING gusy won't be able to stop, will they?
+      // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
       pending_mdsmap.failed.insert(info.mds);
       pending_mdsmap.up.erase(info.mds);
       pending_mdsmap.mds_info.erase(info.addr);

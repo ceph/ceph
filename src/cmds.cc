@@ -43,11 +43,14 @@ int main(int argc, const char **argv)
   const char *monhost = 0;
   int whoami = -1;
   bool standby = false;  // by default, i'll start active.
+  int standby_replay_for;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--standby") == 0) 
       standby = true;
     else if (strcmp(args[i], "--mds") == 0) 
       whoami = atoi(args[++i]);
+    else if (strcmp(args[i], "--standby_replay_for") == 0)
+      whoami = standby_replay_for = atoi(args[++i]);
     else if (monhost == 0) 
       monhost = args[i];
     else {
@@ -79,6 +82,7 @@ int main(int argc, const char **argv)
   
   // start mds
   MDS *mds = new MDS(whoami, m, &monmap);
+  mds->standby_replay_for = standby_replay_for;
   mds->init(standby);
   
   rank.wait();

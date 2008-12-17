@@ -74,7 +74,7 @@ void MDSMap::print_summary(ostream& out)
 
   out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << " up";
 
-  for (map<int,int>::iterator p = by_state.begin(); p != by_state.end(); p++)
+  for (map<int,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
     out << ", " << p->second << " " << get_state_name(p->first);
   
   if (failed.size())

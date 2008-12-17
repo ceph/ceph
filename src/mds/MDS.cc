@@ -75,6 +75,7 @@ MDS::MDS(int whoami_, Messenger *m, MonMap *mm) :
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
   whoami(whoami_), incarnation(0),
+  standby_replay_for(-1),
   messenger(m),
   monmap(mm),
   logclient(messenger, monmap),
@@ -568,8 +569,13 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (state == MDSMap::STATE_STANDBY) {
     want_state = state = MDSMap::STATE_STANDBY;
     dout(1) << "handle_mds_map standby" << dendl;
+
+    if (standby_replay_for >= 0)
+      request_state(MDSMap::STATE_STANDBY_REPLAY);
+
     goto out;
   }
+
   // ??
   assert(whoami >= 0);
   incarnation = mdsmap->get_inc(whoami);
