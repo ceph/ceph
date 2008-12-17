@@ -23,28 +23,28 @@ using std::vector;
 class MMonObserve : public Message {
  public:
   ceph_fsid fsid;
-  uint32_t monitor_id;
+  uint32_t machine_id;
   version_t ver;
 
   MMonObserve() : Message(MSG_MON_OBSERVE) {}
-  MMonObserve(ceph_fsid &f, int mon_id, version_t v) : 
+  MMonObserve(ceph_fsid &f, int mid, version_t v) : 
     Message(MSG_MON_OBSERVE),
-    fsid(f), monitor_id(mon_id), ver(v) { }
+    fsid(f), machine_id(mid), ver(v) { }
   
   const char *get_type_name() { return "mon_observe"; }
   void print(ostream& o) {
-    o << "observe(" << monitor_id << " v" << ver << ")";
+    o << "observe(" << machine_id << " v" << ver << ")";
   }
   
   void encode_payload() {
     ::encode(fsid, payload);
-    ::encode(monitor_id, payload);
+    ::encode(machine_id, payload);
     ::encode(ver, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
-    ::decode(monitor_id, p);
+    ::decode(machine_id, p);
     ::decode(ver, p);
   }
 };

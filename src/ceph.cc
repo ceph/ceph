@@ -82,24 +82,25 @@ static MDSMap mdsmap;
 static OSDMap osdmap;
 static ClientMap clientmap;
 
-static bool got_response = false;
-static bool first_response = false;
+static set<int> registered;
 
 version_t map_ver[PAXOS_NUM];
 
+void handle_observe(MMonObserve *observe)
+{
+  dout(1) << observe->get_source() << " -> " << get_paxos_name(observe->machine_id)
+	  << " registered" << dendl;
+  lock.Lock();
+  registered.insert(observe->machine_id);  
+  lock.Unlock();
+}
+
 void handle_notify(MMonObserveNotify *notify)
 {
-  generic_dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
-		  << " v" << notify->ver
-		  << (notify->is_latest ? " (latest)" : "")
-		  << dendl;
-
-  lock.Lock();
-  if (!got_response) {
-	first_response = true;
-	got_response = true;
-  }
-  lock.Unlock();
+  dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
+	  << " v" << notify->ver
+	  << (notify->is_latest ? " (latest)" : "")
+	  << dendl;
   
   if (map_ver[notify->machine_id] >= notify->ver)
     return;
@@ -165,42 +166,49 @@ void handle_notify(MMonObserveNotify *notify)
   map_ver[notify->machine_id] = notify->ver;
 }
 
-static void send_observe_requests();
+static void send_observe_requests(bool);
+static bool is_timeout = false;
 
 class C_ObserverRefresh : public Context {
 public:
-  C_ObserverRefresh() {}
+  bool newmon;
+  C_ObserverRefresh(bool n) : newmon(n) {}
   void finish(int r) {
-    send_observe_requests();
+    is_timeout = false;
+    send_observe_requests(newmon);
   }
 };
 
-static void send_observe_requests()
+static void send_observe_requests(bool newmon)
 {
-  bufferlist indata;
-  float seconds = g_conf.paxos_observer_timeout/2;
+  dout(1) << "send_observe_requests " << newmon << dendl;
 
-#define RETRY_SECONDS	5
-  if (first_response) {
-	first_response = false;
-	if (RETRY_SECONDS < seconds)
-		return;
-  }
+  if (is_timeout)
+    return;
 
+  int mon = monmap.pick_mon(newmon);
+  bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
+    if (registered.count(i))
+      continue;
     MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
-    m->set_data(indata);
-    int mon = monmap.pick_mon();
-    generic_dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
+    dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
     messenger->send_message(m, monmap.get_inst(mon));
+    sent = true;
   }
-  
-  C_ObserverRefresh *observe_refresh_event = new C_ObserverRefresh();
 
-  if (!got_response)
-	seconds = (seconds < RETRY_SECONDS ? seconds : RETRY_SECONDS);
-
-  timer.add_event_after(seconds, observe_refresh_event);
+  float seconds = g_conf.paxos_observer_timeout/2;
+  float retry_seconds = 5.0;
+  if (!sent) {
+    // success.  clear for renewal.
+    registered.clear();
+    dout(1) << " refresh after " << seconds << " with same mon" << dendl;
+    timer.add_event_after(seconds, new C_ObserverRefresh(false));
+  } else {
+    is_timeout = true;
+    dout(1) << " refresh after " << retry_seconds << " with new mon" << dendl;
+    timer.add_event_after(retry_seconds, new C_ObserverRefresh(true));
+  }
 }
 
 
@@ -295,10 +303,21 @@ class Admin : public Dispatcher {
     case MSG_MON_OBSERVE_NOTIFY:
       handle_notify((MMonObserveNotify *)m);
       break;
+    case MSG_MON_OBSERVE:
+      handle_observe((MMonObserve *)m);
+      break;
     default:
       return false;
     }
     return true;
+  }
+
+  void ms_handle_reset(const entity_addr_t& peer, entity_name_t last) {
+    if (observe) {
+      lock.Lock();
+      send_observe_requests(true);
+      lock.Unlock();
+    }
   }
 } dispatcher;
 
@@ -555,7 +574,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
   if (observe) {
     lock.Lock();
-    send_observe_requests();
+    send_observe_requests(true);
     lock.Unlock();
   }
   if (!watch && !observe) {

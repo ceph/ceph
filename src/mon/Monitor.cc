@@ -286,12 +286,12 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 void Monitor::handle_observe(MMonObserve *m)
 {
   dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
-  if (m->monitor_id >= PAXOS_NUM) {
-    dout(0) << "register_observer: bad monitor id: " << m->monitor_id << dendl;
+  if (m->machine_id >= PAXOS_NUM) {
+    dout(0) << "register_observer: bad monitor id: " << m->machine_id << dendl;
   } else {
-    paxos[m->monitor_id]->register_observer(m->get_orig_source_inst(), m->ver);
+    paxos[m->machine_id]->register_observer(m->get_orig_source_inst(), m->ver);
   }
-  delete m;
+  messenger->send_message(m, m->get_orig_source_inst());
 }
 
 
