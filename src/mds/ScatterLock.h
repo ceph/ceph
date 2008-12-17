@@ -23,40 +23,40 @@
 //  Sync  --  Lock  --  sCatter
 //  Tempsync _/
 //                              auth repl
-#define LOCK_SYNC__          // R .  R .  rdlocks allowed on auth and replicas
-#define LOCK_GLOCKS     -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
-#define LOCK_GSCATTERS  -28  // r .  r .  
+#define LOCK_SYNC__                 // R .  R .  rdlocks allowed on auth and replicas
+#define LOCK_SYNC_LOCK__       -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
+#define LOCK_SYNC_SCATTER      -28  // r .  r .  
 
-#define LOCK_GSYNCL__        // . w       LOCK on replica.
-#define LOCK_LOCK__          // . W  . .
-#define LOCK_GTEMPSYNCL -21  // . w       LOCK on replica.
+#define LOCK_LOCK_SYNC__            // . w       LOCK on replica.
+#define LOCK_LOCK__                 // . W  . .
+#define LOCK_LOCK_TEMPSYNC     -21  // . w       LOCK on replica.
 
-#define LOCK_GLOCKC     -22  // . wp . wp waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
-#define LOCK_SCATTER     23  // . Wp . WP mtime updates on replicas allowed, no reads.  stable here.
-#define LOCK_GTEMPSYNCC -24  // . wp . wp GLOCKC|LOCK on replica
+#define LOCK_SCATTER_LOCK      -22  // . wp . wp waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
+#define LOCK_SCATTER            23  // . Wp . WP mtime updates on replicas allowed, no reads.  stable here.
+#define LOCK_SCATTER_TEMPSYNC  -24  // . wp . wp GLOCKC|LOCK on replica
 
-#define LOCK_GSCATTERT  -25  // r .       LOCK on replica.
-#define LOCK_GLOCKT     -26  // r .       LOCK on replica.
-#define LOCK_TEMPSYNC    27  // R .       LOCK on replica.
+#define LOCK_TEMPSYNC_SCATTER  -25  // r .       LOCK on replica.
+#define LOCK_TEMPSYNC_LOCK     -26  // r .       LOCK on replica.
+#define LOCK_TEMPSYNC           27  // R .       LOCK on replica.
 
 
 inline const char *get_scatterlock_state_name(int s) {
   switch(s) {
-  case LOCK_SYNC: return "Sync";
-  case LOCK_GLOCKS: return "gLockS";
-  case LOCK_GSCATTERS: return "gScatterS";
+  case LOCK_SYNC: return "sync";
+  case LOCK_SYNC_LOCK: return "sync->lock";
+  case LOCK_SYNC_SCATTER: return "sync->scatter";
     
-  case LOCK_GSYNCL: return "gSyncL";
-  case LOCK_LOCK: return "Lock";
-  case LOCK_GTEMPSYNCL: return "gTempsyncL";
+  case LOCK_LONER_SYNC: return "loner->sync";
+  case LOCK_LOCK: return "lock";
+  case LOCK_LOCK_TEMPSYNC: return "lock->tempsync";
     
-  case LOCK_GLOCKC: return "gLockC";
-  case LOCK_SCATTER: return "sCatter";
-  case LOCK_GTEMPSYNCC: return "gTempsyncC";
+  case LOCK_SCATTER_LOCK: return "scatter->lock";
+  case LOCK_SCATTER: return "scatter";
+  case LOCK_SCATTER_TEMPSYNC: return "scatter->tempsync";
     
-  case LOCK_GSCATTERT: return "gsCatterT";
-  case LOCK_GLOCKT: return "gLockT";
-  case LOCK_TEMPSYNC: return "Tempsync";
+  case LOCK_TEMPSYNC_SCATTER: return "tempsync->scatter";
+  case LOCK_TEMPSYNC_LOCK: return "tempsync->lock";
+  case LOCK_TEMPSYNC: return "tempsync";
     
   default: assert(0); return 0;
   }
@@ -85,20 +85,20 @@ public:
     case LOCK_SYNC: 
       return LOCK_SYNC;
       
-    case LOCK_GSCATTERS:  // hrm.
-    case LOCK_GLOCKS:
-    case LOCK_GSYNCL:
+    case LOCK_SYNC_SCATTER:  // hrm.
+    case LOCK_SYNC_LOCK:
+    case LOCK_LONER_SYNC:
     case LOCK_LOCK:
-    case LOCK_GTEMPSYNCL:
-    case LOCK_GLOCKC:
+    case LOCK_LOCK_TEMPSYNC:
+    case LOCK_SCATTER_LOCK:
       return LOCK_LOCK;
 
     case LOCK_SCATTER:
       return LOCK_SCATTER;
 
-    case LOCK_GTEMPSYNCC:
-    case LOCK_GSCATTERT:
-    case LOCK_GLOCKT:
+    case LOCK_SCATTER_TEMPSYNC:
+    case LOCK_TEMPSYNC_SCATTER:
+    case LOCK_TEMPSYNC_LOCK:
     case LOCK_TEMPSYNC:
       return LOCK_LOCK;
     default:
@@ -109,8 +109,8 @@ public:
 
   // true if we are gathering and need the replica's data to be consistent
   bool must_gather() {
-    return (state == LOCK_GTEMPSYNCC ||
-	    state == LOCK_GLOCKC);
+    return (state == LOCK_SCATTER_TEMPSYNC ||
+	    state == LOCK_SCATTER_LOCK);
   }
 
   void set_updated() { 
@@ -144,14 +144,14 @@ public:
     return state == LOCK_SYNC || state == LOCK_TEMPSYNC;
   }
   bool can_rdlock_soon() {
-    return state == LOCK_GTEMPSYNCC;
+    return state == LOCK_SCATTER_TEMPSYNC;
   }
   
   // xlock
   bool can_xlock_soon() {
     if (parent->is_auth())
-      return (state == LOCK_GLOCKC ||
-	      state == LOCK_GLOCKS);
+      return (state == LOCK_SCATTER_LOCK ||
+	      state == LOCK_SYNC_LOCK);
     else
       return false;
   }

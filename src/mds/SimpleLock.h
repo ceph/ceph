@@ -42,18 +42,16 @@ inline const char *get_lock_type_name(int t) {
 //                               auth   rep
 #define LOCK_SYNC     1  // AR   R .    R .
 #define LOCK_LOCK     2  // AR   R W    . .
-#define LOCK_GLOCKR  -3  // AR   R .    . .
+#define LOCK_SYNC_LOCK  -3  // AR   R .    . .
 #define LOCK_REMOTEXLOCK  -50    // on NON-auth
-#define LOCK_CLIENTDEL -60
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
   case LOCK_UNDEF: return "UNDEF";
   case LOCK_SYNC: return "sync";
   case LOCK_LOCK: return "lock";
-  case LOCK_GLOCKR: return "glockr";
+  case LOCK_SYNC_LOCK: return "sync->lock";
   case LOCK_REMOTEXLOCK: return "remote_xlock";
-  case LOCK_CLIENTDEL: return "clientdel";
   default: assert(0); return 0;
   }
 }
@@ -269,7 +267,7 @@ public:
   virtual int get_replica_state() const {
     switch (state) {
     case LOCK_LOCK:
-    case LOCK_GLOCKR: 
+    case LOCK_SYNC_LOCK: 
       return LOCK_LOCK;
     case LOCK_SYNC:
       return LOCK_SYNC;
@@ -330,7 +328,7 @@ public:
   }
   bool can_xlock_soon() {
     if (parent->is_auth())
-      return (state == LOCK_GLOCKR);
+      return (state == LOCK_SYNC_LOCK);
     else
       return false;
   }

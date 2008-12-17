@@ -3105,7 +3105,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  
 	  // scatterlock?
 	  if (is.dirlock == LOCK_SCATTER ||
-	      is.dirlock == LOCK_GLOCKC)  // replica still has wrlocks
+	      is.dirlock == LOCK_SCATTER_LOCK)  // replica still has wrlocks
 	    in->dirlock.set_state(LOCK_SCATTER);
 	  
 	  // auth pin?

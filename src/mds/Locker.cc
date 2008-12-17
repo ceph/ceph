@@ -1583,7 +1583,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     
   case LOCK_AC_LOCK:
     assert(lock->get_state() == LOCK_SYNC);
-    //||           lock->get_state() == LOCK_GLOCKR);
+    //||           lock->get_state() == LOCK_SYNC_LOCK);
     
     // wait for readers to finish?
     if (lock->is_rdlocked() ||
@@ -1591,7 +1591,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
       dout(7) << "handle_simple_lock has reader|leases, waiting before ack on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       revoke_client_leases(lock);
-      lock->set_state(LOCK_GLOCKR);
+      lock->set_state(LOCK_SYNC_LOCK);
     } else {
       // update lock and reply
       lock->set_state(LOCK_LOCK);
@@ -1602,7 +1602,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 
     // -- auth --
   case LOCK_AC_LOCKACK:
-    assert(lock->get_state() == LOCK_GLOCKR);
+    assert(lock->get_state() == LOCK_SYNC_LOCK);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
@@ -1666,7 +1666,7 @@ void Locker::simple_eval_gather(SimpleLock *lock)
   dout(10) << "simple_eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
 
   // finished gathering?
-  if (lock->get_state() == LOCK_GLOCKR &&
+  if (lock->get_state() == LOCK_SYNC_LOCK &&
       !lock->is_gathering() &&
       lock->get_num_client_lease() == 0 &&
       !lock->is_rdlocked()) {
@@ -1763,7 +1763,7 @@ void Locker::simple_lock(SimpleLock *lock)
     revoke_client_leases(lock);
     
     // change lock
-    lock->set_state(LOCK_GLOCKR);
+    lock->set_state(LOCK_SYNC_LOCK);
     lock->init_gather();
     lock->get_parent()->auth_pin(lock);
   } else {
@@ -2216,7 +2216,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
   if (!lock->get_parent()->is_auth()) {
     // REPLICA
 
-    if (lock->get_state() == LOCK_GLOCKC &&
+    if (lock->get_state() == LOCK_SCATTER_LOCK &&
 	!lock->is_wrlocked()) {
       dout(10) << "scatter_eval no wrlocks, acking lock" << dendl;
       int auth = lock->get_parent()->authority().first;
@@ -2228,7 +2228,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
       lock->set_state(LOCK_LOCK);
     }
 
-    if (lock->get_state() == LOCK_GLOCKS &&
+    if (lock->get_state() == LOCK_SYNC_LOCK &&
 	!lock->is_rdlocked() &&
 	lock->get_num_client_lease() == 0) {
       dout(10) << "scatter_eval no rdlocks|leases, acking lock" << dendl;
@@ -2245,8 +2245,8 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     // AUTH
 
     // glocks|glockt -> lock?
-    if ((lock->get_state() == LOCK_GLOCKS || 
-	 lock->get_state() == LOCK_GLOCKT) &&
+    if ((lock->get_state() == LOCK_SYNC_LOCK || 
+	 lock->get_state() == LOCK_TEMPSYNC_LOCK) &&
 	!lock->is_gathering() &&
 	lock->get_num_client_lease() == 0 &&
 	!lock->is_rdlocked()) {
@@ -2262,7 +2262,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     }
     
     // glockc -> lock?
-    else if (lock->get_state() == LOCK_GLOCKC &&
+    else if (lock->get_state() == LOCK_SCATTER_LOCK &&
 	     !lock->is_gathering() &&
 	     !lock->is_wrlocked()) {
       if (lock->is_updated()) {
@@ -2277,7 +2277,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     }
 
     // gSyncL -> sync?
-    else if (lock->get_state() == LOCK_GSYNCL &&
+    else if (lock->get_state() == LOCK_LONER_SYNC &&
 	     !lock->is_wrlocked()) {
       dout(7) << "scatter_eval finished sync un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -2293,8 +2293,8 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     }
 
     // gscattert|gscatters -> scatter?
-    else if ((lock->get_state() == LOCK_GSCATTERT ||
-	      lock->get_state() == LOCK_GSCATTERS) &&
+    else if ((lock->get_state() == LOCK_TEMPSYNC_SCATTER ||
+	      lock->get_state() == LOCK_SYNC_SCATTER) &&
 	     !lock->is_gathering() &&
 	     lock->get_num_client_lease() == 0 &&
 	     !lock->is_rdlocked()) {
@@ -2312,8 +2312,8 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     }
 
     // gTempsyncC|gTempsyncL -> tempsync
-    else if ((lock->get_state() == LOCK_GTEMPSYNCC ||
-	      lock->get_state() == LOCK_GTEMPSYNCL) &&
+    else if ((lock->get_state() == LOCK_SCATTER_TEMPSYNC ||
+	      lock->get_state() == LOCK_LOCK_TEMPSYNC) &&
 	     !lock->is_gathering() &&
 	     !lock->is_wrlocked()) {
       if (lock->is_updated()) {
@@ -2536,7 +2536,7 @@ void Locker::scatter_sync(ScatterLock *lock)
 
   case LOCK_LOCK:
     if (lock->is_wrlocked() || lock->is_xlocked()) {
-      lock->set_state(LOCK_GSYNCL);
+      lock->set_state(LOCK_LONER_SYNC);
       lock->get_parent()->auth_pin(lock);
       return;
     }
@@ -2547,7 +2547,7 @@ void Locker::scatter_sync(ScatterLock *lock)
 	!lock->is_wrlocked())
       break; // do it now
 
-    lock->set_state(LOCK_GLOCKC);
+    lock->set_state(LOCK_SCATTER_LOCK);
     lock->get_parent()->auth_pin(lock);
 
     if (lock->get_parent()->is_replicated()) {
@@ -2620,8 +2620,8 @@ void Locker::scatter_scatter(ScatterLock *lock)
     return;  // do nothing.
 
   switch (lock->get_state()) {
-  case LOCK_SYNC: lock->set_state(LOCK_GSCATTERS); break;
-  case LOCK_TEMPSYNC: lock->set_state(LOCK_GSCATTERT); break;
+  case LOCK_SYNC: lock->set_state(LOCK_SYNC_SCATTER); break;
+  case LOCK_TEMPSYNC: lock->set_state(LOCK_TEMPSYNC_SCATTER); break;
   default: assert(0);
   }
 
@@ -2673,9 +2673,9 @@ void Locker::scatter_lock(ScatterLock *lock)
     return;
 
   switch (lock->get_state()) {
-  case LOCK_SYNC: lock->set_state(LOCK_GLOCKS); break;
-  case LOCK_SCATTER: lock->set_state(LOCK_GLOCKC); break;
-  case LOCK_TEMPSYNC: lock->set_state(LOCK_GLOCKT); break;
+  case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
+  case LOCK_SCATTER: lock->set_state(LOCK_SCATTER_LOCK); break;
+  case LOCK_TEMPSYNC: lock->set_state(LOCK_TEMPSYNC_LOCK); break;
   default: assert(0);
   }
 
@@ -2703,7 +2703,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
   case LOCK_LOCK:
     if (lock->is_wrlocked() ||
 	lock->is_xlocked()) {
-      lock->set_state(LOCK_GTEMPSYNCL);
+      lock->set_state(LOCK_LOCK_TEMPSYNC);
       lock->get_parent()->auth_pin(lock);
       return;
     }
@@ -2715,7 +2715,7 @@ void Locker::scatter_tempsync(ScatterLock *lock)
       break; // do it.
     }
     
-    lock->set_state(LOCK_GTEMPSYNCC);
+    lock->set_state(LOCK_SCATTER_TEMPSYNC);
     lock->get_parent()->auth_pin(lock);
 
     if (lock->get_parent()->is_replicated()) {
@@ -2770,14 +2770,14 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
       assert(lock->get_state() == LOCK_SCATTER);
       dout(7) << "handle_scatter_lock has wrlocks, waiting on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      lock->set_state(LOCK_GLOCKC);
+      lock->set_state(LOCK_SCATTER_LOCK);
     } else if (lock->is_rdlocked() ||
 	       lock->get_num_client_lease()) {
       assert(lock->get_state() == LOCK_SYNC);
       dout(7) << "handle_scatter_lock has rdlocks|leases, waiting on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       revoke_client_leases(lock);
-      lock->set_state(LOCK_GLOCKS);
+      lock->set_state(LOCK_SYNC_LOCK);
     } else {
       dout(7) << "handle_scatter_lock has no rd|wrlocks|leases, sending lockack for " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -2800,10 +2800,10 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
 
     // -- for auth --
   case LOCK_AC_LOCKACK:
-    assert(lock->get_state() == LOCK_GLOCKS ||
-	   lock->get_state() == LOCK_GLOCKC ||
-	   lock->get_state() == LOCK_GSCATTERS ||
-	   lock->get_state() == LOCK_GTEMPSYNCC);
+    assert(lock->get_state() == LOCK_SYNC_LOCK ||
+	   lock->get_state() == LOCK_SCATTER_LOCK ||
+	   lock->get_state() == LOCK_SYNC_SCATTER ||
+	   lock->get_state() == LOCK_SCATTER_TEMPSYNC);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     lock->decode_locked_state(m->get_data());
@@ -3230,9 +3230,9 @@ void Locker::file_eval_gather(FileLock *lock)
     
     switch (lock->get_state()) {
       // to lock
-    case LOCK_GLOCKR:
-    case LOCK_GLOCKM:
-    case LOCK_GLOCKL:
+    case LOCK_SYNC_LOCK:
+    case LOCK_MIXED_LOCK:
+    case LOCK_LONER_LOCK:
       lock->set_state(LOCK_LOCK);
       in->loner_cap = -1;
 
@@ -3244,13 +3244,13 @@ void Locker::file_eval_gather(FileLock *lock)
       break;
       
       // to mixed
-    case LOCK_GMIXEDR:
+    case LOCK_SYNC_MIXED:
       lock->set_state(LOCK_MIXED);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
       lock->get_parent()->auth_unpin(lock);
       break;
 
-    case LOCK_GMIXEDL:
+    case LOCK_LONER_MIXED:
       lock->set_state(LOCK_MIXED);
       in->loner_cap = -1;
       
@@ -3268,17 +3268,17 @@ void Locker::file_eval_gather(FileLock *lock)
       break;
 
       // to loner
-    case LOCK_GLONERR:
-    case LOCK_GLONERM:
-    case LOCK_GLONERL:
+    case LOCK_SYNC_LONER:
+    case LOCK_MIXED_LONER:
+    case LOCK_LOCK_LONER:
       lock->set_state(LOCK_LONER);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
       lock->get_parent()->auth_unpin(lock);
       break;
       
       // to sync
-    case LOCK_GSYNCL:
-    case LOCK_GSYNCM:
+    case LOCK_LONER_SYNC:
+    case LOCK_MIXED_SYNC:
       lock->set_state(LOCK_SYNC);
       in->loner_cap = -1;
       
@@ -3312,7 +3312,7 @@ void Locker::file_eval_gather(FileLock *lock)
       lock->get_num_client_lease() == 0 &&
       ((other_issued & ~other_allowed)) == 0) {
     switch (lock->get_state()) {
-    case LOCK_GMIXEDR:
+    case LOCK_SYNC_MIXED:
       { 
 	lock->set_state(LOCK_MIXED);
 	
@@ -3322,7 +3322,7 @@ void Locker::file_eval_gather(FileLock *lock)
       }
       break;
 
-    case LOCK_GLOCKR:
+    case LOCK_SYNC_LOCK:
       {
         lock->set_state(LOCK_LOCK);
         
@@ -3430,8 +3430,8 @@ bool Locker::file_sync(FileLock *lock)
   if (lock->get_state() != LOCK_LOCK) {
     // gather?
     switch (lock->get_state()) {
-    case LOCK_MIXED: lock->set_state(LOCK_GSYNCM); break;
-    case LOCK_LONER: lock->set_state(LOCK_GSYNCL); break;
+    case LOCK_MIXED: lock->set_state(LOCK_MIXED_SYNC); break;
+    case LOCK_LONER: lock->set_state(LOCK_LONER_SYNC); break;
     default: assert(0);
     }
 
@@ -3484,15 +3484,15 @@ void Locker::file_lock(FileLock *lock)
 
   // gather?
   switch (lock->get_state()) {
-  case LOCK_SYNC: lock->set_state(LOCK_GLOCKR); break;
-  case LOCK_MIXED: lock->set_state(LOCK_GLOCKM); break;
-  case LOCK_LONER: lock->set_state(LOCK_GLOCKL); break;
+  case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
+  case LOCK_MIXED: lock->set_state(LOCK_MIXED_LOCK); break;
+  case LOCK_LONER: lock->set_state(LOCK_LONER_LOCK); break;
   default: assert(0);
   }
 
   int gather = 0;
   if (in->is_replicated() && 
-      lock->get_state() != LOCK_GLOCKL) {  // (replicas are LOCK when auth is LONER)
+      lock->get_state() != LOCK_LONER_LOCK) {  // (replicas are LOCK when auth is LONER)
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
@@ -3547,15 +3547,15 @@ void Locker::file_mixed(FileLock *lock)
   } else {
     // gather?
     switch (lock->get_state()) {
-    case LOCK_SYNC: lock->set_state(LOCK_GMIXEDR); break;
-    case LOCK_LONER: lock->set_state(LOCK_GMIXEDL); break;
+    case LOCK_SYNC: lock->set_state(LOCK_SYNC_MIXED); break;
+    case LOCK_LONER: lock->set_state(LOCK_LONER_MIXED); break;
     default: assert(0);
     }
 
     int gather = 0;
     if (in->is_replicated()) {
       send_lock_message(lock, LOCK_AC_MIXED);
-      if (lock->get_state() != LOCK_GMIXEDL) {  // LONER replica is LOCK
+      if (lock->get_state() != LOCK_LONER_MIXED) {  // LONER replica is LOCK
 	lock->init_gather();
 	gather++;
       }
@@ -3599,9 +3599,9 @@ void Locker::file_loner(FileLock *lock)
   assert(in->get_loner() >= 0 && in->mds_caps_wanted.empty());
   
   switch (lock->get_state()) {
-  case LOCK_SYNC: lock->set_state(LOCK_GLONERR); break;
-  case LOCK_MIXED: lock->set_state(LOCK_GLONERM); break;
-  case LOCK_LOCK: lock->set_state(LOCK_GLONERL); break;
+  case LOCK_SYNC: lock->set_state(LOCK_SYNC_LONER); break;
+  case LOCK_MIXED: lock->set_state(LOCK_MIXED_LONER); break;
+  case LOCK_LOCK: lock->set_state(LOCK_LOCK_LONER); break;
   default: assert(0);
   }
   int gather = 0;
@@ -3681,7 +3681,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     assert(lock->get_state() == LOCK_SYNC ||
            lock->get_state() == LOCK_MIXED);
     
-    lock->set_state(LOCK_GLOCKR);
+    lock->set_state(LOCK_SYNC_LOCK);
     
     // call back caps?
     int loner_issued, other_issued;
@@ -3712,7 +3712,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     
     if (lock->get_state() == LOCK_SYNC) {
       // MIXED
-      lock->set_state(LOCK_GMIXEDR);
+      lock->set_state(LOCK_SYNC_MIXED);
       int loner_issued, other_issued;
       in->get_caps_issued(&loner_issued, &other_issued);
       if ((loner_issued & ~lock->caps_allowed(true)) ||
@@ -3746,10 +3746,10 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
 
     // -- auth --
   case LOCK_AC_LOCKACK:
-    assert(lock->get_state() == LOCK_GLOCKR ||
-           lock->get_state() == LOCK_GLOCKM ||
-           lock->get_state() == LOCK_GLONERM ||
-           lock->get_state() == LOCK_GLONERR);
+    assert(lock->get_state() == LOCK_SYNC_LOCK ||
+           lock->get_state() == LOCK_MIXED_LOCK ||
+           lock->get_state() == LOCK_MIXED_LONER ||
+           lock->get_state() == LOCK_SYNC_LONER);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
 
@@ -3764,7 +3764,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     break;
     
   case LOCK_AC_SYNCACK:
-    assert(lock->get_state() == LOCK_GSYNCM);
+    assert(lock->get_state() == LOCK_MIXED_SYNC);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
@@ -3787,7 +3787,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     break;
 
   case LOCK_AC_MIXEDACK:
-    assert(lock->get_state() == LOCK_GMIXEDR);
+    assert(lock->get_state() == LOCK_SYNC_MIXED);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
