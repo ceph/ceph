@@ -3009,8 +3009,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << *pg << " sending info" << dendl;
       notify_list[from].push_back(pg->info);
     } else {
-      if (false &&  // NOT YET
-	  it->second.type == PG::Query::BACKLOG &&
+      if (it->second.type == PG::Query::BACKLOG &&
 	  !pg->log.backlog) {
 	dout(10) << *pg << " requested info+missing+backlog - queueing for backlog" << dendl;
 	queue_generate_backlog(pg);
