@@ -26,28 +26,30 @@ using namespace std;
 // states and such.
 //  C = cache reads, R = read, W = write, A = append, B = buffer writes, L = lazyio
 //
-// lower-case on a transition state means a 'trailing' rdlock or wrlock.. 
-// the old locks still there (from the prior state), but new locks aren't
-// allowed.
+// lower-case lock (R/W) on a transition state means a 'trailing'
+// rdlock or wrlock..  the old locks still there (from the prior
+// state), but new locks aren't allowed.
+//
+// lower-case caps means loner-only.
 
-//                               -----auth--------   ---replica-------
+//                                   -----auth--------   ---replica-------
 #define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
 #define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
-#define LOCK_MIXED_SYNC  -13 // A    . . / . R . . . L
-#define LOCK_LOCK_SYNC   -14 // A    R w / C . . . b L
+#define LOCK_MIXED_SYNC  -13 // A    . w / . R . . . L
+#define LOCK_LOCK_SYNC   -14 // A    . w / C . . . b L
 
 #define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   . . / C . . . . .
 #define LOCK_LONER_LOCK  -4  // A    . . / C . . . B .                       loner -> lock
-#define LOCK_MIXED_LOCK  -5  // A    . . / . . . . . .
+#define LOCK_MIXED_LOCK  -5  // A    . w / . . . . . .
 
-#define LOCK_MIXED        6  // AR   . . / . R W A . L   . . / . R . . . L
+#define LOCK_MIXED        6  // AR   . W / . R W A . L   . . / . R . . . L
 #define LOCK_SYNC_MIXED  -7  // AR   r . / . R . . . L   . . / . R . . . L 
 #define LOCK_LONER_MIXED -8  // A    . . / . r w a . L *                     loner -> mixed
 
 #define LOCK_LONER        9  // A    . . / c r w a b L *      (lock)      
 #define LOCK_SYNC_LONER  -10 // A    r . / . R . . . L 
-#define LOCK_MIXED_LONER -11 // A    . . / . R W A . L 
+#define LOCK_MIXED_LONER -11 // A    . w / . R W A . L 
 #define LOCK_LOCK_LONER  -15 // A    . . / c . . . b . *
 
 //                                                 * <- varies if client is loner vs non-loner.
@@ -141,38 +143,40 @@ class FileLock : public SimpleLock {
 
   // read/write access
   bool can_rdlock(Mutation *mdr) {
-    if (!parent->is_auth()) return (state == LOCK_SYNC);
-    //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true;
-    if (state == LOCK_LOCK && !xlock_by) return true;
-    return 
-      (state == LOCK_SYNC) ||
-      (state == LOCK_SYNC_MIXED) || 
-      (state == LOCK_SYNC_LOCK);
+    if (!parent->is_auth()) {
+      if (state == LOCK_LOCK && !xlock_by)
+	return true;
+      return (state == LOCK_SYNC);
+    } else
+      return (state == LOCK_SYNC);
   }
   bool can_rdlock_soon() {
     if (parent->is_auth())
-      return
+      return 
 	(state == LOCK_LONER_LOCK) ||
 	(state == LOCK_LOCK && xlock_by);
     else
       return false;
   }
+
+  // xlock
   bool can_xlock_soon() {
     if (parent->is_auth())
-      return (state == LOCK_SYNC_LOCK) || (state == LOCK_LONER_LOCK)
-        || (state == LOCK_MIXED_LOCK);
+      return (state == LOCK_SYNC_LOCK ||
+	      state == LOCK_LONER_LOCK ||
+	      state == LOCK_MIXED_LOCK);
     else
       return false;
   }
 
   // wrlock
   bool can_wrlock() {
-    return 
-      parent->is_auth() && 
-      (state == LOCK_LOCK || state == LOCK_MIXED_LOCK || state == LOCK_LONER_LOCK ||
-       state == LOCK_MIXED || state == LOCK_LONER_MIXED ||
-       state == LOCK_LONER || state == LOCK_MIXED_LONER || state == LOCK_LOCK_LONER ||
-       state == LOCK_MIXED_SYNC || state == LOCK_LONER_SYNC);
+    if (parent->is_auth())
+      return (state == LOCK_LOCK ||
+	      state == LOCK_MIXED);
+    else
+      return (state == LOCK_LOCK ||
+	      state == LOCK_MIXED);    
   }
   void get_wrlock(bool force) {
     assert(force || can_wrlock());
@@ -251,11 +255,10 @@ class FileLock : public SimpleLock {
 
   // true if we are in a "loner" mode that distinguishes between a loner and everyone else
   bool is_loner_mode() {
-    return state == LOCK_LONER_SYNC ||
-      state == LOCK_LONER_LOCK ||
-      state == LOCK_LONER_MIXED ||
-      state == LOCK_LONER ||
-      state == LOCK_LOCK_LONER;
+    return (state == LOCK_LONER_SYNC ||
+	    state == LOCK_LONER_MIXED ||
+	    state == LOCK_LONER ||
+	    state == LOCK_LOCK_LONER);
   }
 
 
