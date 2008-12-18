@@ -2,7 +2,7 @@
 
 [ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
 [ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=3
-[ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
+[ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=3
 
 let new=0
 let debug=0
@@ -80,7 +80,7 @@ else
 	echo "** going verbose **"
 	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
 	COSD_ARGS="--lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
+	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 1"
 fi
 
 if [ "$MON_ADDR" != "" ]; then
@@ -181,6 +181,7 @@ if [ $start_mds -eq 1 ]; then
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_BIN/ceph mds set_max_mds 2
 	done
+	./ceph mds set_max_mds $CEPH_NUM_MDS
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
