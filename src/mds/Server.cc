@@ -2770,8 +2770,8 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     pf->fragstat.mtime = rollback.old_dir_mtime;
     if (pf->rstat.rctime == pi->ctime)
       pf->rstat.rctime = rollback.old_dir_rctime;
-    mut->add_updated_scatterlock(&parent->get_inode()->dirlock);
-    mut->add_updated_scatterlock(&parent->get_inode()->nestlock);
+    mut->add_updated_lock(&parent->get_inode()->dirlock);
+    mut->add_updated_lock(&parent->get_inode()->nestlock);
   }
 
   // inode
@@ -4253,8 +4253,8 @@ void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, ut
     pf->fragstat.mtime = r.dirfrag_old_mtime;
     if (pf->rstat.rctime == ctime)
       pf->rstat.rctime = r.dirfrag_old_rctime;
-    mut->add_updated_scatterlock(&dir->get_inode()->dirlock);
-    mut->add_updated_scatterlock(&dir->get_inode()->nestlock);
+    mut->add_updated_lock(&dir->get_inode()->dirlock);
+    mut->add_updated_lock(&dir->get_inode()->nestlock);
   }
 }
 

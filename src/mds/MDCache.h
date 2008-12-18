@@ -101,7 +101,7 @@ struct Mutation {
   // for applying projected inode changes
   list<CInode*> projected_inodes;
   list<CDir*> projected_fnodes;
-  list<ScatterLock*> updated_scatterlocks;
+  list<ScatterLock*> updated_locks;
 
   list<CInode*> dirty_cow_inodes;
   list<CDentry*> dirty_cow_dentries;
@@ -191,8 +191,8 @@ struct Mutation {
     }
   }
   
-  void add_updated_scatterlock(ScatterLock *lock) {
-    updated_scatterlocks.push_back(lock);
+  void add_updated_lock(ScatterLock *lock) {
+    updated_locks.push_back(lock);
   }
 
   void add_cow_inode(CInode *in) {
@@ -217,8 +217,8 @@ struct Mutation {
 	 p++) 
       (*p)->_mark_dirty(ls);
 
-    for (list<ScatterLock*>::iterator p = updated_scatterlocks.begin();
-	 p != updated_scatterlocks.end();
+    for (list<ScatterLock*>::iterator p = updated_locks.begin();
+	 p != updated_locks.end();
 	 p++)
       (*p)->set_updated();
   }

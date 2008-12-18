@@ -27,7 +27,7 @@
 #define LOCK_SYNC_LOCK__       -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
 #define LOCK_SYNC_SCATTER      -28  // r .  r .  
 
-#define LOCK_LOCK_SYNC__            // . w       LOCK on replica.
+#define LOCK_LOCK_SYNC         -29  // . w       LOCK on replica.
 #define LOCK_LOCK__                 // . W  . .
 #define LOCK_LOCK_TEMPSYNC     -21  // . w       LOCK on replica.
 
@@ -46,7 +46,7 @@ inline const char *get_scatterlock_state_name(int s) {
   case LOCK_SYNC_LOCK: return "sync->lock";
   case LOCK_SYNC_SCATTER: return "sync->scatter";
     
-  case LOCK_LONER_SYNC: return "loner->sync";
+  case LOCK_LOCK_SYNC: return "lock->sync";
   case LOCK_LOCK: return "lock";
   case LOCK_LOCK_TEMPSYNC: return "lock->tempsync";
     
@@ -63,7 +63,6 @@ inline const char *get_scatterlock_state_name(int s) {
 }
 
 class ScatterLock : public SimpleLock {
-  int num_wrlock;
   bool updated;
   utime_t last_scatter;
 
@@ -73,7 +72,6 @@ public:
 
   ScatterLock(MDSCacheObject *o, int t, int wo) : 
     SimpleLock(o, t, wo),
-    num_wrlock(0),
     updated(false),
     xlistitem_updated(this) {}
   ~ScatterLock() {
@@ -87,7 +85,7 @@ public:
       
     case LOCK_SYNC_SCATTER:  // hrm.
     case LOCK_SYNC_LOCK:
-    case LOCK_LONER_SYNC:
+    case LOCK_LOCK_SYNC:
     case LOCK_LOCK:
     case LOCK_LOCK_TEMPSYNC:
     case LOCK_SCATTER_LOCK:
@@ -134,7 +132,7 @@ public:
   }
 
   // rdlock
-  bool can_rdlock(MDRequest *mdr) {
+  bool can_rdlock() {
     return state == LOCK_SYNC || state == LOCK_TEMPSYNC;
   }
   bool can_rdlock_soon() {
@@ -156,17 +154,6 @@ public:
       state == LOCK_SCATTER ||
       (parent->is_auth() && state == LOCK_LOCK);
   }
-  void get_wrlock(bool force=false) {
-    assert(can_wrlock() || force);
-    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
-    ++num_wrlock;
-  }
-  void put_wrlock() {
-    --num_wrlock;
-    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
-  }
-  bool is_wrlocked() { return num_wrlock > 0; }
-  int get_num_wrlocks() { return num_wrlock; }
 
   void print(ostream& out) {
     out << "(";

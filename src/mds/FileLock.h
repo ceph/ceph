@@ -22,6 +22,7 @@ using namespace std;
 #include "include/buffer.h"
 
 #include "SimpleLock.h"
+#include "ScatterLock.h"
 
 // states and such.
 //  C = cache reads, R = read, W = write, A = append, B = buffer writes, L = lazyio
@@ -36,7 +37,7 @@ using namespace std;
 #define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
 #define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
 #define LOCK_MIXED_SYNC  -13 // A    . w / . R . . . L   . w / . R . . . L
-#define LOCK_LOCK_SYNC   -14 // A    . w / C . . . b L
+#define LOCK_LOCK_SYNC_  -14 // A    . w / C . . . b L
 
 #define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   r . / C . . . . .
@@ -95,17 +96,13 @@ any + statlite(mtime)
 
  */
 
-// -- lock... hard or file
 
 class Mutation;
 
-class FileLock : public SimpleLock {
-  int num_wrlock;
-
+class FileLock : public ScatterLock {
  public:
   FileLock(MDSCacheObject *o, int t, int wo) : 
-    SimpleLock(o, t, wo),
-    num_wrlock(0) { }
+    ScatterLock(o, t, wo) {}
   
   int get_replica_state() const {
     switch (state) {
@@ -122,6 +119,7 @@ class FileLock : public SimpleLock {
     case LOCK_SYNC_MIXED:
       return LOCK_MIXED;
     case LOCK_SYNC:
+    case LOCK_LOCK_SYNC:
       return LOCK_SYNC;
 
       // after gather auth will bc LOCK_AC_MIXED or whatever
@@ -141,8 +139,9 @@ class FileLock : public SimpleLock {
     state = get_replica_state();
   }
 
+
   // read/write access
-  bool can_rdlock(Mutation *mdr) {
+  bool can_rdlock() {
     if (!parent->is_auth()) {
       if (state == LOCK_LOCK && !xlock_by)
 	return true;
@@ -177,17 +176,6 @@ class FileLock : public SimpleLock {
     else
       return (state == LOCK_MIXED);    
   }
-  void get_wrlock(bool force) {
-    assert(force || can_wrlock());
-    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
-    ++num_wrlock;
-  }
-  void put_wrlock() {
-    --num_wrlock;
-    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
-  }
-  bool is_wrlocked() { return num_wrlock > 0; }
-  int get_num_wrlocks() { return num_wrlock; }
 
 
   // client caps allowed

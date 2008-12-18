@@ -1500,7 +1500,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(10) << "predirty_journal_parents stop.  marking nestlock on " << *pin << dendl;
       mds->locker->mark_updated_scatterlock(&pin->nestlock);
       mut->ls->dirty_dirfrag_nest.push_back(&pin->xlist_dirty_dirfrag_nest);
-      mut->add_updated_scatterlock(&pin->nestlock);
+      mut->add_updated_lock(&pin->nestlock);
       break;
     }
     mds->locker->local_wrlock_grab(&pin->versionlock, mut);
@@ -7861,17 +7861,17 @@ void MDCache::fragment_stored(MDRequest *mdr)
   // dft lock
   mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
   mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->xlist_dirty_dirfrag_dirfragtree);
-  mdr->add_updated_scatterlock(&diri->dirfragtreelock);
+  mdr->add_updated_lock(&diri->dirfragtreelock);
 
   // dirlock
   mds->locker->mark_updated_scatterlock(&diri->dirlock);
   mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
-  mdr->add_updated_scatterlock(&diri->dirlock);
+  mdr->add_updated_lock(&diri->dirlock);
 
   // dirlock
   mds->locker->mark_updated_scatterlock(&diri->nestlock);
   mdr->ls->dirty_dirfrag_nest.push_back(&diri->xlist_dirty_dirfrag_nest);
-  mdr->add_updated_scatterlock(&diri->nestlock);
+  mdr->add_updated_lock(&diri->nestlock);
 
   // journal new dirfrag fragstats for each new fragment.
   for (list<CDir*>::iterator p = resultfrags.begin();

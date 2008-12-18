@@ -1991,7 +1991,7 @@ bool Locker::scatter_rdlock_start(ScatterLock *lock, MDRequest *mut)
     scatter_sync(lock);
 
   // can rdlock?
-  if (lock->can_rdlock(mut)) {
+  if (lock->can_rdlock()) {
     lock->get_rdlock();
     mut->rdlocks.insert(lock);
     mut->locks.insert(lock);
@@ -2277,7 +2277,7 @@ void Locker::scatter_eval_gather(ScatterLock *lock)
     }
 
     // gSyncL -> sync?
-    else if (lock->get_state() == LOCK_LONER_SYNC &&
+    else if (lock->get_state() == LOCK_LOCK_SYNC &&
 	     !lock->is_wrlocked()) {
       dout(7) << "scatter_eval finished sync un-wrlock on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
@@ -2344,7 +2344,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   if (in->is_base()) {
     dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
     lock->clear_updated();
-    scatter_eval_gather(lock);
+    eval_gather(lock);
     return;
   }
 
@@ -2536,7 +2536,7 @@ void Locker::scatter_sync(ScatterLock *lock)
 
   case LOCK_LOCK:
     if (lock->is_wrlocked() || lock->is_xlocked()) {
-      lock->set_state(LOCK_LONER_SYNC);
+      lock->set_state(LOCK_LOCK_SYNC);
       lock->get_parent()->auth_pin(lock);
       return;
     }
@@ -2955,7 +2955,7 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mut)
   dout(7) << "file_rdlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
   // can read?  grab ref.
-  if (lock->can_rdlock(mut)) {
+  if (lock->can_rdlock()) {
     lock->get_rdlock();
     mut->rdlocks.insert(lock);
     mut->locks.insert(lock);
@@ -2975,7 +2975,7 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mut)
       if (lock->is_stable()) {
         file_lock(lock);     // lock, bc easiest to back off ... FIXME
 	
-        if (lock->can_rdlock(mut)) {
+        if (lock->can_rdlock()) {
           lock->get_rdlock();
 	  mut->rdlocks.insert(lock);
 	  mut->locks.insert(lock);
@@ -3230,8 +3230,13 @@ void Locker::file_eval_gather(FileLock *lock)
     
     switch (lock->get_state()) {
       // to lock
-    case LOCK_SYNC_LOCK:
     case LOCK_MIXED_LOCK:
+      if (lock->is_updated()) {
+	scatter_writebehind(lock);
+	return;
+      }
+
+    case LOCK_SYNC_LOCK:
     case LOCK_LONER_LOCK:
       lock->set_state(LOCK_LOCK);
       in->loner_cap = -1;
@@ -3268,8 +3273,13 @@ void Locker::file_eval_gather(FileLock *lock)
       break;
 
       // to loner
-    case LOCK_SYNC_LONER:
     case LOCK_MIXED_LONER:
+      if (lock->is_updated()) {
+	scatter_writebehind(lock);
+	return;
+      }
+
+    case LOCK_SYNC_LONER:
     case LOCK_LOCK_LONER:
       lock->set_state(LOCK_LONER);
       lock->finish_waiters(SimpleLock::WAIT_STABLE);
@@ -3278,6 +3288,11 @@ void Locker::file_eval_gather(FileLock *lock)
       
       // to sync
     case LOCK_MIXED_SYNC:
+      if (lock->is_updated()) {
+	scatter_writebehind(lock);
+	return;
+      }
+
     case LOCK_LONER_SYNC:
     case LOCK_LOCK_SYNC:
       lock->set_state(LOCK_SYNC);
@@ -3524,6 +3539,10 @@ void Locker::file_lock(FileLock *lock)
   if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
     mds->mdcache->do_file_recover();
+    gather++;
+  }
+  if (lock->is_updated()) {
+    scatter_writebehind(lock);
     gather++;
   }
 

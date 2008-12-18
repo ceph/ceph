@@ -96,7 +96,7 @@ protected:
   int num_client_lease;
 
   // local state
-  int num_rdlock;
+  int num_rdlock, num_wrlock;
   Mutation *xlock_by;
 
 
@@ -104,7 +104,7 @@ public:
   SimpleLock(MDSCacheObject *o, int t, int wo) :
     parent(o), type(t), wait_offset(wo),
     state(LOCK_SYNC), num_client_lease(0),
-    num_rdlock(0), xlock_by(0) { }
+    num_rdlock(0), num_wrlock(0), xlock_by(0) { }
   virtual ~SimpleLock() {}
 
   // parent
@@ -189,7 +189,7 @@ public:
     gather_set.erase(i);
   }
 
-  // ref counting
+  // rdlock
   bool is_rdlocked() { return num_rdlock > 0; }
   int get_rdlock() { 
     if (!num_rdlock) parent->get(MDSCacheObject::PIN_LOCK);
@@ -203,6 +203,21 @@ public:
   }
   int get_num_rdlocks() { return num_rdlock; }
 
+  // wrlock
+  virtual bool can_wrlock() { return false; }
+  void get_wrlock(bool force=false) {
+    assert(can_wrlock() || force);
+    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
+    ++num_wrlock;
+  }
+  void put_wrlock() {
+    --num_wrlock;
+    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+  }
+  bool is_wrlocked() { return num_wrlock > 0; }
+  int get_num_wrlocks() { return num_wrlock; }
+
+  // xlock
   void get_xlock(Mutation *who) { 
     assert(xlock_by == 0);
     parent->get(MDSCacheObject::PIN_LOCK);
@@ -262,7 +277,6 @@ public:
   }
 
 
-  
   // simplelock specifics
   virtual int get_replica_state() const {
     switch (state) {

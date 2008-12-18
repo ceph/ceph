@@ -190,7 +190,9 @@ protected:
   bool file_xlock_start(FileLock *lock, MDRequest *mut);
   void file_xlock_finish(FileLock *lock, Mutation *mut);
 
-
+  xlist<FileLock*> updated_filelocks;
+public:
+  void mark_updated_Filelock(FileLock *lock);
 
   // -- file i/o --
  public:
