@@ -462,7 +462,9 @@ int do_cli()
       continue;
 
     if (cmd.size() == 1 && cmd[0] == "print") {
-      cout << "----\n" << in.c_str() << "---- (" << in.length() << " bytes)" << std::endl;
+      cout << "----" << std::endl;
+      write(1, in.c_str(), in.length());
+      cout << "---- (" << in.length() << " bytes)" << std::endl;
       continue;
     }
 
@@ -485,7 +487,9 @@ int do_cli()
     if (in.length()) {
       if (outfile) {
 	if (strcmp(outfile, "-") == 0) {
-	  cout << "----\n" << in.c_str() << "---- (" << in.length() << " bytes)" << std::endl;
+	  cout << "----" << std::endl;
+	  write(1, in.c_str(), in.length());
+	  cout << "---- (" << in.length() << " bytes)" << std::endl;
 	} else {
 	  in.write_file(outfile);
 	  cout << "wrote " << in.length() << " to " << outfile << std::endl;
