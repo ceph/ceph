@@ -16,7 +16,6 @@
 #define __MEXPORTDIRWARNINGACK_H
 
 #include "msg/Message.h"
-#include "mds/CInode.h"
 #include "include/types.h"
 
 class MExportDirWarningAck : public Message {

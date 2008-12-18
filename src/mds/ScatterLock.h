@@ -107,12 +107,6 @@ public:
     }
   }
 
-  // true if we are gathering and need the replica's data to be consistent
-  bool must_gather() {
-    return (state == LOCK_SCATTER_TEMPSYNC ||
-	    state == LOCK_SCATTER_LOCK);
-  }
-
   void set_updated() { 
     if (!updated) {
       parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);

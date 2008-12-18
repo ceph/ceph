@@ -17,7 +17,6 @@
 #define __MCLIENTLEASE_H
 
 #include "msg/Message.h"
-#include "mds/SimpleLock.h"
 
 static const char *get_lease_action_name(int a) {
   switch (a) {

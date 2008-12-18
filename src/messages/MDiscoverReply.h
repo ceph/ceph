@@ -17,8 +17,6 @@
 #define __MDISCOVERREPLY_H
 
 #include "msg/Message.h"
-#include "mds/CDir.h"
-#include "mds/CInode.h"
 #include "include/filepath.h"
 
 #include <vector>

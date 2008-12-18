@@ -17,7 +17,6 @@
 #define __MDISCOVER_H
 
 #include "msg/Message.h"
-#include "mds/CDir.h"
 #include "include/filepath.h"
 
 #include <vector>

@@ -55,11 +55,6 @@ class MExportDirNotify : public Message {
 	 i != ex.end(); ++i)
       bounds.push_back(*i);
   }
-  void copy_bounds(set<CDir*>& ex) {
-    for (set<CDir*>::iterator i = ex.begin();
-	 i != ex.end(); ++i)
-      bounds.push_back((*i)->dirfrag());
-  }
 
   void encode_payload() {
     ::encode(base, payload);

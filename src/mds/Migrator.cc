@@ -598,7 +598,9 @@ void Migrator::export_dir(CDir *dir, int dest)
   dir->state_set(CDir::STATE_EXPORTING);
 
   // send ExportDirDiscover (ask target)
-  mds->send_message_mds(new MExportDirDiscover(dir), dest);
+  filepath path;
+  dir->inode->make_path(path);
+  mds->send_message_mds(new MExportDirDiscover(path, dir->dirfrag()), dest);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin(this);
@@ -766,7 +768,8 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     MExportDirNotify *notify = new MExportDirNotify(dir->dirfrag(), true,
 						    pair<int,int>(mds->get_nodeid(),CDIR_AUTH_UNKNOWN),
 						    pair<int,int>(mds->get_nodeid(),export_peer[dir]));
-    notify->copy_bounds(bounds);
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
     mds->send_message_mds(notify, p->first);
     
   }
@@ -1231,7 +1234,8 @@ void Migrator::export_logged_finish(CDir *dir)
 				    pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
 				    pair<int,int>(dest, CDIR_AUTH_UNKNOWN));
 
-    notify->copy_bounds(bounds);
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
     
     mds->send_message_mds(notify, *p);
   }
@@ -1838,7 +1842,8 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
       new MExportDirNotify(dir->dirfrag(), true,
 			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
 			   pair<int,int>(import_peer[dir->dirfrag()], CDIR_AUTH_UNKNOWN));
-    notify->copy_bounds(bounds);
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
     mds->send_message_mds(notify, *p);
   }
 }
