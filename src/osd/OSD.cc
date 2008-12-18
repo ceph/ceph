@@ -3175,6 +3175,7 @@ void OSD::generate_backlog(PG *pg)
   map_lock.put_read();
 
  out:
+  pg->generate_backlog_epoch = 0;
   pg->unlock();
   pg->put();
 }
