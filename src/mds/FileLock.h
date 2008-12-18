@@ -36,14 +36,14 @@ using namespace std;
 //                                   -----auth--------   ---replica-------
 #define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
 #define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
-#define LOCK_MIXED_SYNC  -13 // A    . w / . R . . . L   . w / . R . . . L
-#define LOCK_MIXED_SYNC2 -14 // A    . w / . R . . . L   . w / . R . . . L   replica already acked
+#define LOCK_MIXED_SYNC  -13 // AR   . w / . R . . . L   . w / . R . . . L
+#define LOCK_MIXED_SYNC2 -14 //  R                       . . / . R . . . L   replica already acked
 #define LOCK_LOCK_SYNC_      // A    . w / C . . . b L
 
 #define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   r . / C . . . . .
 #define LOCK_LONER_LOCK  -4  // A    . . / C . . . B .                       loner -> lock
-#define LOCK_MIXED_LOCK  -5  // A    . w / . . . . . .   . w / . . . . . .
+#define LOCK_MIXED_LOCK  -5  // AR   . w / . . . . . .   . w / . . . . . .
 
 #define LOCK_MIXED        6  // AR   . W / . R W A . L   . W / . R . . . L
 #define LOCK_SYNC_MIXED  -7  // AR   r . / . R . . . L   r . / . R . . . L 
