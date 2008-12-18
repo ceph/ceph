@@ -587,13 +587,13 @@ public:
   public:
     // cons/des
     list() : _len(0), last_p(this) {}
-    list(const list& other) : _buffers(other._buffers), _len(other._len), last_p(this) { }
-    list(unsigned l) : _len(0), last_p(this) {
-      ptr bp(l);
-      push_back(bp);
+    list(unsigned prealloc) : _len(0), last_p(this) {
+      append_buffer = buffer::create(prealloc);
+      append_buffer.set_length(0);   // unused, so far.
     }
     ~list() {}
     
+    list(const list& other) : _buffers(other._buffers), _len(other._len), last_p(this) { }
     list& operator= (const list& other) {
       _buffers = other._buffers;
       _len = other._len;
