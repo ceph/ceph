@@ -604,14 +604,11 @@ int ceph_inode_lease_valid(struct inode *inode, int mask)
 	havemask = ci->i_lease_mask;
 
 	/* EXCL cap counts for an ICONTENT lease... check caps? */
-	if ((mask & CEPH_LOCK_ICONTENT) &&
+	if ((mask & CEPH_LOCK_IFILE) &&
 	    __ceph_caps_issued(ci, NULL) & CEPH_CAP_EXCL) {
 		dout(20, "lease_valid inode %p EXCL cap -> ICONTENT\n", inode);
-		havemask |= CEPH_LOCK_ICONTENT;
+		havemask |= CEPH_LOCK_IFILE;
 	}
-	/* any ICONTENT bits imply all ICONTENT bits */
-	if (havemask & CEPH_LOCK_ICONTENT)
-		havemask |= CEPH_LOCK_ICONTENT;
 
 	if (ci->i_lease_session) {
 		struct ceph_mds_session *s = ci->i_lease_session;
@@ -884,7 +881,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		/* update inode lease */
 		mask = update_inode_lease(in, rinfo->trace_ilease[d],
 					  session, req->r_request_started);
-		have_icontent = mask & CEPH_LOCK_ICONTENT;
+		have_icontent = mask & CEPH_LOCK_IFILE;
 
 		/* do we have a dn lease? */
 		have_lease = have_icontent ||
@@ -1529,7 +1526,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* if i have valid values, this may be a no-op */
-	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
+	if (ceph_inode_lease_valid(inode, CEPH_LOCK_IFILE) &&
 	    !(((ia_valid & ATTR_ATIME) &&
 	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
 	      ((ia_valid & ATTR_MTIME) &&
@@ -1551,7 +1548,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	if (ia_valid & ATTR_MTIME)
 		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
 
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
+	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IFILE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "utime result %d\n", err);
@@ -1584,7 +1581,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		spin_unlock(&inode->i_lock);
 		return 0;
 	}
-	if (ceph_inode_lease_valid(inode, CEPH_LOCK_ICONTENT) &&
+	if (ceph_inode_lease_valid(inode, CEPH_LOCK_IFILE) &&
 	    attr->ia_size == inode->i_size) {
 		dout(10, "lease indicates truncate is a no-op\n");
 		return 0;
@@ -1594,7 +1591,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
+	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IFILE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);
