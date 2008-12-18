@@ -1279,6 +1279,9 @@ void PG::activate(ObjectStore::Transaction& t,
 
   need_up_thru = false;
 
+  // clear prior set (and dependency info)... we are done peering!
+  clear_prior();
+
   // write pg info, log
   write_info(t);
   write_log(t);
