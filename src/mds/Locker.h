@@ -175,8 +175,8 @@ protected:
 public:
   void file_eval_gather(FileLock *lock);
   void try_file_eval(FileLock *lock);
-protected:
   void file_eval(FileLock *lock);
+protected:
   void handle_file_lock(FileLock *lock, MLock *m);
   bool file_sync(FileLock *lock);
   void file_lock(FileLock *lock);

@@ -338,9 +338,7 @@ class Inode {
     if (now < lease_ttl && lease_mds >= 0)
       havemask |= lease_mask;
     if (caps_issued() & CEPH_CAP_EXCL) 
-      havemask |= CEPH_LOCK_ICONTENT;
-    if (havemask & CEPH_LOCK_ICONTENT)
-      havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
+      havemask |= CEPH_LOCK_IFILE;
     return havemask;
   }
 
@@ -351,7 +349,7 @@ class Inode {
     if ((caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
       return true;
     // otherwise, look for lease or EXCL...
-    if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_ICONTENT)
+    if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_IFILE)
       return true;
     return false;
   }

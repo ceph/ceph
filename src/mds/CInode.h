@@ -115,8 +115,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_AUTHLOCK_OFFSET        = 4;
   static const int WAIT_LINKLOCK_OFFSET        = 4 +   SimpleLock::WAIT_BITS;
   static const int WAIT_DIRFRAGTREELOCK_OFFSET = 4 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET        = 4 + 3*SimpleLock::WAIT_BITS; // same
-  static const int WAIT_DIRLOCK_OFFSET         = 4 + 3*SimpleLock::WAIT_BITS; // same
+  static const int WAIT_FILELOCK_OFFSET        = 4 + 3*SimpleLock::WAIT_BITS;
   static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
   static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
@@ -300,7 +299,6 @@ private:
     linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
-    dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
     xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
     snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
     nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
@@ -431,7 +429,6 @@ public:
   SimpleLock linklock;
   ScatterLock dirfragtreelock;
   FileLock   filelock;
-  ScatterLock dirlock;
   SimpleLock xattrlock;
   SimpleLock snaplock;
   ScatterLock nestlock;
@@ -442,7 +439,6 @@ public:
     case CEPH_LOCK_IAUTH: return &authlock;
     case CEPH_LOCK_ILINK: return &linklock;
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
-    case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
     case CEPH_LOCK_ISNAP: return &snaplock;
     case CEPH_LOCK_INEST: return &nestlock;
@@ -661,11 +657,7 @@ public:
     authlock.replicate_relax();
     linklock.replicate_relax();
     dirfragtreelock.replicate_relax();
-
-    if ((get_caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) 
-      filelock.replicate_relax();
-
-    dirlock.replicate_relax();
+    filelock.replicate_relax();
     xattrlock.replicate_relax();
     snaplock.replicate_relax();
     nestlock.replicate_relax();

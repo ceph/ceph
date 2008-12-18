@@ -135,7 +135,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
-    mds->locker->scatter_nudge(&in->dirlock, gather->new_sub());
+    mds->locker->scatter_nudge(&in->filelock, gather->new_sub());
   }
   for (xlist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
     CInode *in = *p;
@@ -347,7 +347,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
-      dir->get_inode()->dirlock.set_updated();
+      dir->get_inode()->filelock.set_updated();
     }
     if (lump.is_new())
       dir->mark_new(logseg);

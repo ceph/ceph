@@ -121,11 +121,10 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.linklock;
   if (in.inode.is_dir()) {
     out << " " << in.dirfragtreelock;
-    out << " " << in.dirlock;
     out << " " << in.snaplock;
     out << " " << in.nestlock;
-  } else
-    out << " " << in.filelock;
+  }
+  out << " " << in.filelock;
   out << " " << in.xattrlock;
   
   // hack: spit out crap on which clients have caps
@@ -576,15 +575,15 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case CEPH_LOCK_IFILE:
-    ::encode(inode.layout, bl);
-    ::encode(inode.size, bl);
-    ::encode(inode.max_size, bl);
-    ::encode(inode.mtime, bl);
-    ::encode(inode.atime, bl);
-    ::encode(inode.time_warp_seq, bl);
-    break;
+    if (is_auth()) {
+      ::encode(inode.layout, bl);
+      ::encode(inode.size, bl);
+      ::encode(inode.max_size, bl);
+      ::encode(inode.mtime, bl);
+      ::encode(inode.atime, bl);
+      ::encode(inode.time_warp_seq, bl);
+    }
 
-  case CEPH_LOCK_IDIR:
     {
       dout(15) << "encode_lock_state inode.dirstat is " << inode.dirstat << dendl;
       ::encode(inode.dirstat, bl);  // only meaningful if i am auth.
@@ -721,15 +720,15 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IFILE:
-    ::decode(inode.layout, p);
-    ::decode(inode.size, p);
-    ::decode(inode.max_size, p);
-    ::decode(inode.mtime, p);
-    ::decode(inode.atime, p);
-    ::decode(inode.time_warp_seq, p);
-    break;
+    if (!is_auth()) {
+      ::decode(inode.layout, p);
+      ::decode(inode.size, p);
+      ::decode(inode.max_size, p);
+      ::decode(inode.mtime, p);
+      ::decode(inode.atime, p);
+      ::decode(inode.time_warp_seq, p);
+    }
 
-  case CEPH_LOCK_IDIR:
     {
       frag_info_t dirstat;
       ::decode(dirstat, p);
@@ -763,8 +762,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dir->fnode.accounted_fragstat = accounted_fragstat;
 	  dir->first = fgfirst;
 	  if (!(fragstat == accounted_fragstat)) {
-	    dout(10) << fg << " setting dirlock updated flag" << dendl;
-	    dirlock.set_updated();
+	    dout(10) << fg << " setting filelock updated flag" << dendl;
+	    filelock.set_updated();
 	  }
 	} else {
 	  if (dir && dir->is_auth()) {
@@ -865,7 +864,7 @@ void CInode::clear_dirty_scattered(int type)
 {
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
   switch (type) {
-  case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_IFILE:
     xlist_dirty_dirfrag_dir.remove_myself();
     break;
 
@@ -889,7 +888,7 @@ void CInode::finish_scatter_gather_update(int type)
   assert(is_auth());
 
   switch (type) {
-  case CEPH_LOCK_IDIR:
+  case CEPH_LOCK_IFILE:
     {
       // adjust summation
       assert(is_auth());
@@ -1382,7 +1381,6 @@ void CInode::_encode_locks_full(bufferlist& bl)
   ::encode(linklock, bl);
   ::encode(dirfragtreelock, bl);
   ::encode(filelock, bl);
-  ::encode(dirlock, bl);
   ::encode(xattrlock, bl);
   ::encode(snaplock, bl);
   ::encode(nestlock, bl);
@@ -1393,7 +1391,6 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(linklock, p);
   ::decode(dirfragtreelock, p);
   ::decode(filelock, p);
-  ::decode(dirlock, p);
   ::decode(xattrlock, p);
   ::decode(snaplock, p);
   ::decode(nestlock, p);
@@ -1405,7 +1402,6 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   linklock.encode_state_for_replica(bl);
   dirfragtreelock.encode_state_for_replica(bl);
   filelock.encode_state_for_replica(bl);
-  dirlock.encode_state_for_replica(bl);
   nestlock.encode_state_for_replica(bl);
   xattrlock.encode_state_for_replica(bl);
   snaplock.encode_state_for_replica(bl);
@@ -1416,7 +1412,6 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   linklock.decode_state(p, is_new);
   dirfragtreelock.decode_state(p, is_new);
   filelock.decode_state(p, is_new);
-  dirlock.decode_state(p, is_new);
   nestlock.decode_state(p, is_new);
   xattrlock.decode_state(p, is_new);
   snaplock.decode_state(p, is_new);
@@ -1427,7 +1422,6 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
   linklock.decode_state_rejoin(p, waiters);
   dirfragtreelock.decode_state_rejoin(p, waiters);
   filelock.decode_state_rejoin(p, waiters);
-  dirlock.decode_state_rejoin(p, waiters);
   nestlock.decode_state_rejoin(p, waiters);
   xattrlock.decode_state_rejoin(p, waiters);
   snaplock.decode_state_rejoin(p, waiters);

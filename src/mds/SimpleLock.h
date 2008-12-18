@@ -27,7 +27,6 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_IAUTH: return "iauth";
   case CEPH_LOCK_ILINK: return "ilink";
   case CEPH_LOCK_IDFT: return "idft";
-  case CEPH_LOCK_IDIR: return "idir";
   case CEPH_LOCK_INEST: return "inest";
   case CEPH_LOCK_IXATTR: return "ixattr";
   case CEPH_LOCK_ISNAP: return "isnap";

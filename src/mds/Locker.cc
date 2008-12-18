@@ -178,8 +178,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
-    else if ((*p)->get_type() == CEPH_LOCK_IDIR &&
-	     !(*p)->get_parent()->is_auth() && !((ScatterLock*)(*p))->can_wrlock()) { // we might have to request a scatter
+    else if ((*p)->get_type() == CEPH_LOCK_IFILE &&
+	     !(*p)->get_parent()->is_auth() && !(*p)->can_wrlock()) { // we might have to request a scatter
       dout(15) << " will also auth_pin " << *(*p)->get_parent() << " in case we need to request a scatter" << dendl;
       mustpin.insert(*p);
     }
@@ -360,7 +360,6 @@ void Locker::eval_gather(SimpleLock *lock)
   case CEPH_LOCK_IFILE:
     return file_eval_gather((FileLock*)lock);
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_eval_gather((ScatterLock*)lock);
   default:
@@ -374,7 +373,6 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
   case CEPH_LOCK_IFILE:
     return file_rdlock_start((FileLock*)lock, mut);
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_rdlock_start((ScatterLock*)lock, mut);
   default:
@@ -388,7 +386,6 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
   case CEPH_LOCK_IFILE:
     return file_rdlock_finish((FileLock*)lock, mut);
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_rdlock_finish((ScatterLock*)lock, mut);
   default:
@@ -400,7 +397,6 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_wrlock_start((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
@@ -417,7 +413,6 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_wrlock_finish((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
@@ -437,7 +432,6 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
   case CEPH_LOCK_IVERSION:
     return local_xlock_start((LocalLock*)lock, mut);
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_xlock_start((ScatterLock*)lock, mut);
   default:
@@ -453,7 +447,6 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   case CEPH_LOCK_IVERSION:
     return local_xlock_finish((LocalLock*)lock, mut);
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     return scatter_xlock_finish((ScatterLock*)lock, mut);
   default:
@@ -1365,11 +1358,7 @@ int Locker::issue_client_lease(CInode *in, int client,
   int pool = 1;   // fixme.. do something smart!
   if (in->authlock.can_lease()) mask |= CEPH_LOCK_IAUTH;
   if (in->linklock.can_lease()) mask |= CEPH_LOCK_ILINK;
-  if (in->is_dir()) {
-    if (in->dirlock.can_lease()) mask |= CEPH_LOCK_IDIR;
-  } else {
-    if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
-  }
+  if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
   if (in->xattrlock.can_lease()) mask |= CEPH_LOCK_IXATTR;
 
   _issue_client_lease(in, mask, pool, client, bl, now, session);
@@ -1388,7 +1377,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
-       (!diri->dirlock.can_lease() &&
+       (!diri->filelock.can_lease() &&
 	(diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0)) &&
       dn->lock.can_lease())
     mask |= CEPH_LOCK_DN;
@@ -1416,13 +1405,10 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 
       // i should also revoke the dir ICONTENT lease, if they have it!
       CInode *diri = dn->get_dir()->get_inode();
-      if (diri->get_client_lease_mask(l->client) & CEPH_LOCK_ICONTENT)
-	mask |= CEPH_LOCK_ICONTENT;
-
       mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
 						mask,
-						dn->get_dir()->ino(),
-						dn->get_dir()->get_inode()->first, CEPH_NOSNAP,
+						diri->ino(),
+						diri->first, CEPH_NOSNAP,
 						dn->get_name()),
 			       l->client);
     } else {
@@ -1466,7 +1452,6 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_ILINK:
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_IFILE:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_ISNAP:
@@ -1481,7 +1466,6 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       case CEPH_LOCK_ILINK: return &in->linklock;
       case CEPH_LOCK_IDFT: return &in->dirfragtreelock;
       case CEPH_LOCK_IFILE: return &in->filelock;
-      case CEPH_LOCK_IDIR: return &in->dirlock;
       case CEPH_LOCK_INEST: return &in->nestlock;
       case CEPH_LOCK_IXATTR: return &in->xattrlock;
       case CEPH_LOCK_ISNAP: return &in->snaplock;
@@ -1524,7 +1508,6 @@ void Locker::handle_lock(MLock *m)
     break;
     
   case CEPH_LOCK_IDFT:
-  case CEPH_LOCK_IDIR:
   case CEPH_LOCK_INEST:
     handle_scatter_lock((ScatterLock*)lock, m);
     break;
@@ -2470,12 +2453,26 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
     if (c)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
     if (lock->is_stable()) {
-      if (p->is_replicated() && lock->get_state() != LOCK_SCATTER)
-	scatter_scatter(lock);
-      else // if (lock->get_state() != LOCK_LOCK)
-	scatter_lock(lock);
-      //else
-      //scatter_sync(lock);
+      switch (lock->get_type()) {
+      case CEPH_LOCK_IFILE:
+	if (p->is_replicated() && lock->get_state() != LOCK_MIXED)
+	  file_mixed((FileLock*)lock);
+	else
+	  file_lock((FileLock*)lock);
+	break;
+
+      case CEPH_LOCK_IDFT:
+      case CEPH_LOCK_INEST:
+	if (p->is_replicated() && lock->get_state() != LOCK_SCATTER)
+	  scatter_scatter(lock);
+	else // if (lock->get_state() != LOCK_LOCK)
+	  scatter_lock(lock);
+	//else
+	//scatter_sync(lock);
+	break;
+      default:
+	assert(0);
+      }
     }
   } else {
     dout(10) << "scatter_nudge replica, requesting scatter/unscatter of " 

@@ -1504,7 +1504,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     xlocks.insert(&dn->lock);                 // new dn, xlock
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
-  wrlocks.insert(&dn->dir->inode->dirlock); // also, wrlock on dir mtime
+  wrlocks.insert(&dn->dir->inode->filelock); // also, wrlock on dir mtime
   wrlocks.insert(&dn->dir->inode->nestlock); // also, wrlock on dir mtime
   mds->locker->include_snap_rdlocks(rdlocks, dn->dir->inode);
 
@@ -1585,10 +1585,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   int mask = req->head.args.stat.mask;
   if (mask & CEPH_LOCK_ILINK) rdlocks.insert(&ref->linklock);
   if (mask & CEPH_LOCK_IAUTH) rdlocks.insert(&ref->authlock);
-  if (ref->is_file() && 
-      mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->filelock);
-  if (ref->is_dir() &&
-      mask & CEPH_LOCK_ICONTENT) rdlocks.insert(&ref->dirlock);
+  if (mask & CEPH_LOCK_IFILE) rdlocks.insert(&ref->filelock);
   if (mask & CEPH_LOCK_IXATTR) rdlocks.insert(&ref->xattrlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -2322,7 +2319,7 @@ void Server::handle_client_link(MDRequest *mdr)
   for (int i=0; i<(int)linktrace.size(); i++)
     rdlocks.insert(&linktrace[i]->lock);
   xlocks.insert(&dn->lock);
-  wrlocks.insert(&dn->dir->inode->dirlock);
+  wrlocks.insert(&dn->dir->inode->filelock);
   wrlocks.insert(&dn->dir->inode->nestlock);
   for (int i=0; i<(int)targettrace.size(); i++)
     rdlocks.insert(&targettrace[i]->lock);
@@ -2770,7 +2767,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     pf->fragstat.mtime = rollback.old_dir_mtime;
     if (pf->rstat.rctime == pi->ctime)
       pf->rstat.rctime = rollback.old_dir_rctime;
-    mut->add_updated_lock(&parent->get_inode()->dirlock);
+    mut->add_updated_lock(&parent->get_inode()->filelock);
     mut->add_updated_lock(&parent->get_inode()->nestlock);
   }
 
@@ -2918,15 +2915,15 @@ void Server::handle_client_unlink(MDRequest *mdr)
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
-  wrlocks.insert(&dn->dir->inode->dirlock);
+  wrlocks.insert(&dn->dir->inode->filelock);
   wrlocks.insert(&dn->dir->inode->nestlock);
   xlocks.insert(&in->linklock);
   if (straydn) {
-    wrlocks.insert(&straydn->dir->inode->dirlock);
+    wrlocks.insert(&straydn->dir->inode->filelock);
     wrlocks.insert(&straydn->dir->inode->nestlock);
   }
   if (in->is_dir())
-    rdlocks.insert(&in->dirlock);   // to verify it's empty
+    rdlocks.insert(&in->filelock);   // to verify it's empty
   mds->locker->include_snap_rdlocks(rdlocks, dn->dir->inode);
   mds->locker->include_snap_rdlocks(rdlocks, dn->inode);
 
@@ -3113,7 +3110,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
  * occur locally.
  *
  * this is a fastpath check.  we can't really be sure until we rdlock
- * the dirlock.
+ * the filelock.
  *
  * @param in is the inode being rmdir'd.  return true if it is
  * definitely not empty.
@@ -3336,7 +3333,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // straydn?
   if (straydn) {
-    wrlocks.insert(&straydn->dir->inode->dirlock);
+    wrlocks.insert(&straydn->dir->inode->filelock);
     wrlocks.insert(&straydn->dir->inode->nestlock);
   }
 
@@ -3344,14 +3341,14 @@ void Server::handle_client_rename(MDRequest *mdr)
   for (int i=0; i<(int)srctrace.size()-1; i++) 
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
-  wrlocks.insert(&srcdn->dir->inode->dirlock);
+  wrlocks.insert(&srcdn->dir->inode->filelock);
   wrlocks.insert(&srcdn->dir->inode->nestlock);
 
   // rdlock destdir path, xlock dest dentry
   for (int i=0; i<(int)desttrace.size(); i++)
     rdlocks.insert(&desttrace[i]->lock);
   xlocks.insert(&destdn->lock);
-  wrlocks.insert(&destdn->dir->inode->dirlock);
+  wrlocks.insert(&destdn->dir->inode->filelock);
   wrlocks.insert(&destdn->dir->inode->nestlock);
 
   // xlock versionlock on srci if remote?
@@ -3365,7 +3362,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (oldin) {
     xlocks.insert(&oldin->linklock);
     if (oldin->is_dir())
-      rdlocks.insert(&oldin->dirlock);
+      rdlocks.insert(&oldin->filelock);
   }
   mds->locker->include_snap_rdlocks(rdlocks, srcdn->dir->inode);
   mds->locker->include_snap_rdlocks(rdlocks, destdn->dir->inode);
@@ -3625,7 +3622,7 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
 					 srcdn->authority().first,
 					 mdr->ls,
 					 mdr->more()->cap_imports, updated_scatterlocks);
-  srcdn->inode->dirlock.clear_updated();  
+  srcdn->inode->filelock.clear_updated();  
   srcdn->inode->nestlock.clear_updated();  
 
   // hack: force back to !auth and clean, temporarily
@@ -4253,7 +4250,7 @@ void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, ut
     pf->fragstat.mtime = r.dirfrag_old_mtime;
     if (pf->rstat.rctime == ctime)
       pf->rstat.rctime = r.dirfrag_old_rctime;
-    mut->add_updated_lock(&dir->get_inode()->dirlock);
+    mut->add_updated_lock(&dir->get_inode()->filelock);
     mut->add_updated_lock(&dir->get_inode()->nestlock);
   }
 }

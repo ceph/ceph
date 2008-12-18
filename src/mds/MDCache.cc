@@ -545,15 +545,15 @@ void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
 
 void MDCache::eval_subtree_root(CDir *dir)
 {
-  // evaluate subtree inode dirlock?
-  //  (we should scatter the dirlock on subtree bounds)
+  // evaluate subtree inode filelock?
+  //  (we should scatter the filelock on subtree bounds)
   if (dir->inode->is_auth()) {
-    if (dir->inode->dirlock.is_stable()) {
+    if (dir->inode->filelock.is_stable()) {
       // force the issue a bit
       if (!dir->inode->is_frozen())
-	mds->locker->scatter_eval(&dir->inode->dirlock);
+	mds->locker->file_eval(&dir->inode->filelock);
       else
-	mds->locker->try_scatter_eval(&dir->inode->dirlock);  // ** may or may not be auth_pinned **
+	mds->locker->try_file_eval(&dir->inode->filelock);  // ** may or may not be auth_pinned **
     }
     if (dir->inode->nestlock.is_stable()) {
       // force the issue a bit
@@ -1414,7 +1414,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime || linkunlink) {
-      assert(mut->wrlocks.count(&pin->dirlock) ||
+      assert(mut->wrlocks.count(&pin->filelock) ||
 	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
       assert(cfollows == CEPH_NOSNAP);
       
@@ -2372,7 +2372,7 @@ void MDCache::recalc_auth_bits()
 	      dn->inode->mark_clean();
 	    // avoid touching scatterlocks for our subtree roots!
 	    if (subtree_inodes.count(dn->inode) == 0) {
-	      dn->inode->dirlock.clear_updated();
+	      dn->inode->filelock.clear_updated();
 	      dn->inode->nestlock.clear_updated();
 	      dn->inode->dirfragtreelock.clear_updated();
 	    }
@@ -2514,14 +2514,14 @@ void MDCache::rejoin_send_rejoins()
 	p->second->add_weak_inode(root->vino());
 	p->second->add_strong_inode(root->vino(),
 				    root->get_caps_wanted(),
-				    root->dirlock.get_state(),
+				    root->filelock.get_state(),
 				    root->nestlock.get_state());
       }
       if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
     	p->second->add_weak_inode(in->vino());
   	p->second->add_strong_inode(in->vino(),
 				    in->get_caps_wanted(),
-				    in->dirlock.get_state(),
+				    in->filelock.get_state(),
 				    in->nestlock.get_state());
       }
     }
@@ -2648,7 +2648,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	dout(15) << " add_strong_inode " << *in << dendl;
 	rejoin->add_strong_inode(in->vino(),
 				 in->get_caps_wanted(),
-				 in->dirlock.get_state(),
+				 in->filelock.get_state(),
 				 in->nestlock.get_state());
 	in->get_nested_dirfrags(nested);
       }
@@ -2774,7 +2774,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
        p++) {
     CInode *in = get_inode(p->first);
     assert(in);
-    in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
+    in->decode_lock_state(CEPH_LOCK_IFILE, p->second.first);
     in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
     if (!survivor)
       rejoin_potential_updated_scatterlocks.insert(in);
@@ -2821,7 +2821,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
       // scatter the dirlock, just in case?
       if (!survivor && in->is_dir() && in->has_subtree_root_dirfrag())
-	in->dirlock.set_state(LOCK_SCATTER);
+	in->filelock.set_state(LOCK_SCATTER);
 
       if (ack) {
 	ack->add_inode_base(in);
@@ -3011,7 +3011,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
        p++) {
     CInode *in = get_inode(p->first);
     assert(in);
-    in->decode_lock_state(CEPH_LOCK_IDIR, p->second.first);
+    in->decode_lock_state(CEPH_LOCK_IFILE, p->second.first);
     in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
     rejoin_potential_updated_scatterlocks.insert(in);
   }
@@ -3104,9 +3104,12 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  } 
 	  
 	  // scatterlock?
-	  if (is.dirlock == LOCK_SCATTER ||
-	      is.dirlock == LOCK_SCATTER_LOCK)  // replica still has wrlocks
-	    in->dirlock.set_state(LOCK_SCATTER);
+	  if (is.filelock == LOCK_SCATTER ||
+	      is.filelock == LOCK_SCATTER_LOCK)  // replica still has wrlocks
+	    in->filelock.set_state(LOCK_SCATTER);
+	  if (is.nestlock == LOCK_SCATTER ||
+	      is.nestlock == LOCK_SCATTER_LOCK)  // replica still has wrlocks
+	    in->nestlock.set_state(LOCK_SCATTER);
 	  
 	  // auth pin?
 	  if (strong->authpinned_inodes.count(in->vino())) {
@@ -4760,7 +4763,6 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   if (in->snaplock.remove_replica(from)) mds->locker->simple_eval_gather(&in->snaplock);
   if (in->xattrlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->xattrlock);
 
-  if (in->dirlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->dirlock);
   if (in->nestlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->nestlock);
 }
 
@@ -7713,10 +7715,10 @@ void MDCache::dispatch_fragment(MDRequest *mdr)
     mdr->auth_pin(dir);
   }
 
-  // wrlock dirlock, dftlock
+  // wrlock filelock, dftlock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   wrlocks.insert(&diri->dirfragtreelock);
-  wrlocks.insert(&diri->dirlock);
+  wrlocks.insert(&diri->filelock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -7863,10 +7865,10 @@ void MDCache::fragment_stored(MDRequest *mdr)
   mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->xlist_dirty_dirfrag_dirfragtree);
   mdr->add_updated_lock(&diri->dirfragtreelock);
 
-  // dirlock
-  mds->locker->mark_updated_scatterlock(&diri->dirlock);
+  // filelock
+  mds->locker->mark_updated_scatterlock(&diri->filelock);
   mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
-  mdr->add_updated_lock(&diri->dirlock);
+  mdr->add_updated_lock(&diri->filelock);
 
   // dirlock
   mds->locker->mark_updated_scatterlock(&diri->nestlock);

@@ -1637,7 +1637,7 @@ void CDir::decode_import(bufferlist::iterator& blp)
       !(fnode.rstat == fnode.accounted_rstat))
     cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
   if (!(fnode.fragstat == fnode.accounted_fragstat))
-    cache->mds->locker->mark_updated_scatterlock(&inode->dirlock);
+    cache->mds->locker->mark_updated_scatterlock(&inode->filelock);
 }
 
 

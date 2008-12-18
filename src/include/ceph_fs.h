@@ -605,16 +605,12 @@ struct ceph_mds_getmap {
 #define CEPH_LOCK_ISNAP       2
 #define CEPH_LOCK_IVERSION    4     /* mds internal */
 #define CEPH_LOCK_IFILE       8     /* mds internal */
-#define CEPH_LOCK_IDIR        16    /* mds internal */
 #define CEPH_LOCK_IAUTH       32
 #define CEPH_LOCK_ILINK       64
 #define CEPH_LOCK_IDFT        128   /* dir frag tree */
 #define CEPH_LOCK_INEST       256   /* mds internal */
 #define CEPH_LOCK_IXATTR      512
 #define CEPH_LOCK_INO         2048  /* immutable inode bits; not a lock */
-
-/* alias for either filelock or dirlock */
-#define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)
 
 /*
  * stat masks are defined in terms of the locks that cover inode fields.
@@ -626,12 +622,12 @@ struct ceph_mds_getmap {
 #define CEPH_STAT_MASK_GID      CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_MODE     CEPH_LOCK_IAUTH
 #define CEPH_STAT_MASK_NLINK    CEPH_LOCK_ILINK
-#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_ICONTENT
-#define CEPH_STAT_MASK_MTIME    CEPH_LOCK_ICONTENT
-#define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
-#define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
+#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_IFILE
+#define CEPH_STAT_MASK_MTIME    CEPH_LOCK_IFILE
+#define CEPH_STAT_MASK_SIZE     CEPH_LOCK_IFILE
+#define CEPH_STAT_MASK_ATIME    CEPH_LOCK_IFILE  /* fixme */
 #define CEPH_STAT_MASK_XATTR    CEPH_LOCK_IXATTR
-#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT | CEPH_LOCK_IAUTH | \
+#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_IFILE | CEPH_LOCK_IAUTH | \
 				  CEPH_LOCK_ILINK | CEPH_LOCK_INO)
 
 /* client_session ops */

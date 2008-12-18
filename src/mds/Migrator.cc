@@ -937,7 +937,6 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   in->linklock.export_twiddle();
   in->dirfragtreelock.export_twiddle();
   in->filelock.export_twiddle();
-  in->dirlock.export_twiddle();
 
   // mark auth
   assert(in->is_auth());
@@ -2008,9 +2007,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...
-  if (in->dirlock.is_updated()) {
-    updated_scatterlocks.push_back(&in->dirlock);
-    mds->locker->mark_updated_scatterlock(&in->dirlock);
+  if (in->filelock.is_updated()) {
+    updated_scatterlocks.push_back(&in->filelock);
+    mds->locker->mark_updated_scatterlock(&in->filelock);
   }
 
   // adjust replica list
