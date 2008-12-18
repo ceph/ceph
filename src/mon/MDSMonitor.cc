@@ -383,7 +383,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
       if (m->cmd[2] == "*") {
-	for (int i=0; i<mdsmap.get_max_mds(); i++)
+	for (unsigned i=0; i<mdsmap.get_max_mds(); i++)
 	  if (mdsmap.is_active(i))
 	    mon->inject_args(mdsmap.get_inst(i), m->cmd[3]);
 	r = 0;
@@ -502,9 +502,8 @@ void MDSMonitor::tick()
   if (!mon->is_leader()) return;
 
   // expand mds cluster (add new nodes to @in)?
-  int cursize = pending_mdsmap.get_num_mds();
-  if (cursize < pending_mdsmap.get_max_mds() &&
-      !pending_mdsmap.is_degraded()) {
+  while (pending_mdsmap.get_num_mds() < pending_mdsmap.get_max_mds() &&
+	 !pending_mdsmap.is_degraded()) {
     int mds = 0;
     while (pending_mdsmap.is_in(mds))
       mds++;
