@@ -35,16 +35,16 @@ using namespace std;
 //                                   -----auth--------   ---replica-------
 #define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
 #define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
-#define LOCK_MIXED_SYNC  -13 // A    . w / . R . . . L
+#define LOCK_MIXED_SYNC  -13 // A    . w / . R . . . L   . w / . R . . . L
 #define LOCK_LOCK_SYNC   -14 // A    . w / C . . . b L
 
 #define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
-#define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   . . / C . . . . .
+#define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   r . / C . . . . .
 #define LOCK_LONER_LOCK  -4  // A    . . / C . . . B .                       loner -> lock
-#define LOCK_MIXED_LOCK  -5  // A    . w / . . . . . .
+#define LOCK_MIXED_LOCK  -5  // A    . w / . . . . . .   . w / . . . . . .
 
-#define LOCK_MIXED        6  // AR   . W / . R W A . L   . . / . R . . . L
-#define LOCK_SYNC_MIXED  -7  // AR   r . / . R . . . L   . . / . R . . . L 
+#define LOCK_MIXED        6  // AR   . W / . R W A . L   . W / . R . . . L
+#define LOCK_SYNC_MIXED  -7  // AR   r . / . R . . . L   r . / . R . . . L 
 #define LOCK_LONER_MIXED -8  // A    . . / . r w a . L *                     loner -> mixed
 
 #define LOCK_LONER        9  // A    . . / c r w a b L *      (lock)      
@@ -175,8 +175,7 @@ class FileLock : public SimpleLock {
       return (state == LOCK_LOCK ||
 	      state == LOCK_MIXED);
     else
-      return (state == LOCK_LOCK ||
-	      state == LOCK_MIXED);    
+      return (state == LOCK_MIXED);    
   }
   void get_wrlock(bool force) {
     assert(force || can_wrlock());

@@ -3277,8 +3277,8 @@ void Locker::file_eval_gather(FileLock *lock)
       break;
       
       // to sync
-    case LOCK_LONER_SYNC:
     case LOCK_MIXED_SYNC:
+    case LOCK_LONER_SYNC:
     case LOCK_LOCK_SYNC:
       lock->set_state(LOCK_SYNC);
       in->loner_cap = -1;
@@ -3313,6 +3313,16 @@ void Locker::file_eval_gather(FileLock *lock)
       lock->get_num_client_lease() == 0 &&
       ((other_issued & ~other_allowed)) == 0) {
     switch (lock->get_state()) {
+    case LOCK_MIXED_SYNC:
+      if (!lock->is_wrlocked()) {
+	// reply
+	MLock *reply = new MLock(lock, LOCK_AC_SYNCACK, mds->get_nodeid());
+	lock->encode_locked_state(reply->get_data());
+	mds->send_message_mds(reply, in->authority().first);
+	lock->set_state(LOCK_LOCK);   // this is sort of funky :/
+      }
+      break;
+
     case LOCK_SYNC_MIXED:
       { 
 	lock->set_state(LOCK_MIXED);
@@ -3446,6 +3456,10 @@ bool Locker::file_sync(FileLock *lock)
   }
   if (lock->is_wrlocked())
     gather++;
+  if (in->is_replicated() && lock->get_state() == LOCK_MIXED_SYNC) {
+    send_lock_message(lock, LOCK_AC_SYNC);
+    gather++;
+  }
   if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
     mds->mdcache->do_file_recover();
@@ -3467,6 +3481,7 @@ bool Locker::file_sync(FileLock *lock)
   lock->set_state(LOCK_SYNC);
   in->loner_cap = -1;
   issue_caps(in);
+  lock->finish_waiters(FileLock::WAIT_RD|FileLock::WAIT_STABLE);
   return true;
 }
 
@@ -3517,6 +3532,7 @@ void Locker::file_lock(FileLock *lock)
   else {
     lock->set_state(LOCK_LOCK);
     in->loner_cap = -1;
+    lock->finish_waiters(FileLock::WAIT_XLOCK|FileLock::WAIT_WR|FileLock::WAIT_STABLE);
   }
 }
 
@@ -3662,17 +3678,31 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
   case LOCK_AC_SYNC:
     assert(lock->get_state() == LOCK_LOCK ||
            lock->get_state() == LOCK_MIXED);
+
+    if (lock->get_state() == LOCK_MIXED) {
+      // primary needs to gather up our changes
+      if (!lock->is_wrlocked()) {
+	// reply now
+	MLock *reply = new MLock(lock, LOCK_AC_SYNCACK, mds->get_nodeid());
+	lock->encode_locked_state(reply->get_data());
+	mds->send_message_mds(reply, from);
+      } else {
+	// gather
+	lock->set_state(LOCK_MIXED_SYNC);
+      }
+    } else {
+      // ok!
+      lock->decode_locked_state(m->get_data());
+      lock->set_state(LOCK_SYNC);
     
-    lock->decode_locked_state(m->get_data());
-    lock->set_state(LOCK_SYNC);
-    
-    // no need to reply.
-    
-    // waiters
-    lock->get_rdlock();
-    lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
-    lock->put_rdlock();
-    file_eval_gather(lock);
+      // no need to reply.
+      
+      // waiters
+      lock->get_rdlock();
+      lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+      lock->put_rdlock();
+      file_eval_gather(lock);
+    }
     break;
     
   case LOCK_AC_LOCK:
@@ -3700,6 +3730,8 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
       lock->set_state(LOCK_LOCK);
       
       MLock *reply = new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid());
+      if (lock->get_state() == LOCK_MIXED)
+	lock->encode_locked_state(reply->get_data());
       mds->send_message_mds(reply, from);
     }
     break;
@@ -3750,6 +3782,10 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
            lock->get_state() == LOCK_SYNC_LONER);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
+    
+    if (lock->get_state() == LOCK_MIXED_LOCK ||
+	lock->get_state() == LOCK_MIXED_LONER)
+      lock->decode_locked_state(m->get_data());
 
     if (lock->is_gathering()) {
       dout(7) << "handle_lock_inode_file " << *in << " from " << from
@@ -3766,13 +3802,7 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
-    /* not used currently
-    {
-      // merge data  (keep largest size, mtime, etc.)
-      int off = 0;
-      in->decode_merge_file_state(m->get_data(), off);
-    }
-    */
+    lock->decode_locked_state(m->get_data());
 
     if (lock->is_gathering()) {
       dout(7) << "handle_lock_inode_file " << *in << " from " << from
