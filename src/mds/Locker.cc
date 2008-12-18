@@ -874,17 +874,6 @@ public:
 bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
 {
   assert(in->is_auth());
-  if (!forceupdate && !in->filelock.can_wrlock()) {
-    // lock?
-    if (in->filelock.is_stable())
-      file_lock(&in->filelock);
-    if (!in->filelock.can_wrlock()) {
-      // try again later
-      in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
-      dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
-      return false;    
-    }
-  }
 
   inode_t *latest = in->get_projected_inode();
   uint64_t new_max = latest->max_size;
@@ -902,6 +891,18 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
 
   dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
 	   << " on " << *in << dendl;
+
+  if (!forceupdate && !in->filelock.can_wrlock()) {
+    // lock?
+    if (in->filelock.is_stable())
+      file_lock(&in->filelock);
+    if (!in->filelock.can_wrlock()) {
+      // try again later
+      in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
+      dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
+      return false;    
+    }
+  }
 
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
