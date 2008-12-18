@@ -37,7 +37,8 @@ using namespace std;
 #define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
 #define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
 #define LOCK_MIXED_SYNC  -13 // A    . w / . R . . . L   . w / . R . . . L
-#define LOCK_LOCK_SYNC_  -14 // A    . w / C . . . b L
+#define LOCK_MIXED_SYNC2 -14 // A    . w / . R . . . L   . w / . R . . . L   replica already acked
+#define LOCK_LOCK_SYNC_      // A    . w / C . . . b L
 
 #define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
 #define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   r . / C . . . . .
@@ -51,7 +52,7 @@ using namespace std;
 #define LOCK_LONER        9  // A    . . / c r w a b L *      (lock)      
 #define LOCK_SYNC_LONER  -10 // A    r . / . R . . . L 
 #define LOCK_MIXED_LONER -11 // A    . w / . R W A . L 
-#define LOCK_LOCK_LONER  -15 // A    . . / c . . . b . *
+#define LOCK_LOCK_LONER  -16 // A    . . / c . . . b . *
 
 //                                                 * <- varies if client is loner vs non-loner.
  
@@ -60,6 +61,7 @@ inline const char *get_filelock_state_name(int n) {
   case LOCK_SYNC: return "sync";
   case LOCK_LONER_SYNC: return "loner->sync";
   case LOCK_MIXED_SYNC: return "mixed->sync";
+  case LOCK_MIXED_SYNC2: return "mixed->sync2";
   case LOCK_LOCK_SYNC: return "lock->sync";
   case LOCK_LOCK: return "lock";
   case LOCK_SYNC_LOCK: return "sync->lock";
@@ -199,6 +201,9 @@ class FileLock : public ScatterLock {
       case LOCK_LOCK:
       case LOCK_LONER_LOCK:
         return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_WRBUFFER;
+
+      case LOCK_LOCK_SYNC:
+	return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
 
       case LOCK_MIXED_LOCK:
         return CEPH_CAP_PIN;

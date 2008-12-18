@@ -401,8 +401,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
     return scatter_wrlock_start((ScatterLock*)lock, mut);
   case CEPH_LOCK_IVERSION:
     return local_wrlock_start((LocalLock*)lock, mut);
-    //case CEPH_LOCK_IFILE:
-    //return file_wrlock_start((ScatterLock*)lock, mut);
+  case CEPH_LOCK_IFILE:
+    return file_wrlock_start((FileLock*)lock, mut);
   default:
     assert(0); 
     return false;
@@ -3053,6 +3053,57 @@ bool Locker::file_wrlock_force(FileLock *lock, Mutation *mut)
     }*/
 }
 
+
+bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
+{
+  dout(7) << "file_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+
+  bool want_scatter = lock->get_parent()->is_auth() &&
+    ((CInode*)lock->get_parent())->has_subtree_root_dirfrag();
+
+  // can wrlock?
+  if (lock->can_wrlock()) {
+    lock->get_wrlock();
+    if (mut) {
+      mut->wrlocks.insert(lock);
+      mut->locks.insert(lock);
+    }
+    return true;
+  }
+
+  if (lock->is_stable()) {
+    if (lock->get_parent()->is_auth()) {
+      if (want_scatter) 
+	file_mixed(lock);
+      else 
+	file_lock(lock);
+
+      // try again?
+      if (lock->can_wrlock()) {
+	lock->get_wrlock();
+	if (mut) {
+	  mut->wrlocks.insert(lock);
+	  mut->locks.insert(lock);
+	}
+	return true;
+      }
+
+      lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+
+    } else {
+      // replica.
+      // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
+      int auth = lock->get_parent()->authority().first;
+      dout(10) << "requesting scatter from auth on " 
+	       << *lock << " on " << *lock->get_parent() << dendl;
+      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+    }
+  }
+
+  return false;
+}
+
 void Locker::file_wrlock_finish(FileLock *lock, Mutation *mut)
 {
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -3248,7 +3299,7 @@ void Locker::file_eval_gather(FileLock *lock)
       // to mixed
     case LOCK_SYNC_MIXED:
       lock->set_state(LOCK_MIXED);
-      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
       lock->get_parent()->auth_unpin(lock);
       break;
 
@@ -3265,7 +3316,7 @@ void Locker::file_eval_gather(FileLock *lock)
 	send_lock_message(lock, LOCK_AC_MIXED, softdata);
       }
       
-      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
       lock->get_parent()->auth_unpin(lock);
       break;
 
@@ -3331,8 +3382,11 @@ void Locker::file_eval_gather(FileLock *lock)
 	MLock *reply = new MLock(lock, LOCK_AC_SYNCACK, mds->get_nodeid());
 	lock->encode_locked_state(reply->get_data());
 	mds->send_message_mds(reply, in->authority().first);
-	lock->set_state(LOCK_LOCK);   // this is sort of funky :/
+	lock->set_state(LOCK_MIXED_SYNC2);
       }
+      break;
+    case LOCK_MIXED_SYNC2:
+      // do nothing, we already acked
       break;
 
     case LOCK_SYNC_MIXED:
@@ -3470,6 +3524,7 @@ bool Locker::file_sync(FileLock *lock)
     gather++;
   if (in->is_replicated() && lock->get_state() == LOCK_MIXED_SYNC) {
     send_lock_message(lock, LOCK_AC_SYNC);
+    lock->init_gather();
     gather++;
   }
   if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
@@ -3693,7 +3748,8 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     // -- replica --
   case LOCK_AC_SYNC:
     assert(lock->get_state() == LOCK_LOCK ||
-           lock->get_state() == LOCK_MIXED);
+	   lock->get_state() == LOCK_MIXED ||
+	   lock->get_state() == LOCK_MIXED_SYNC2);
 
     if (lock->get_state() == LOCK_MIXED) {
       // primary needs to gather up our changes
@@ -3702,8 +3758,8 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
 	MLock *reply = new MLock(lock, LOCK_AC_SYNCACK, mds->get_nodeid());
 	lock->encode_locked_state(reply->get_data());
 	mds->send_message_mds(reply, from);
+	lock->set_state(LOCK_MIXED_SYNC2);
       } else {
-	// gather
 	lock->set_state(LOCK_MIXED_SYNC);
       }
     } else {
@@ -3814,7 +3870,8 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     break;
     
   case LOCK_AC_SYNCACK:
-    assert(lock->get_state() == LOCK_MIXED_SYNC);
+    assert(lock->get_state() == LOCK_MIXED_SYNC ||
+	   lock->get_state() == LOCK_MIXED_SYNC2);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
@@ -3843,6 +3900,35 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
 	      << ", last one" << dendl;
       file_eval_gather(lock);
     }
+    break;
+
+
+    // requests....
+  case LOCK_AC_REQSCATTER:
+    if (lock->is_stable()) {
+      /* NOTE: we can do this _even_ if !can_auth_pin (i.e. freezing)
+       *  because the replica should be holding an auth_pin if they're
+       *  doing this (and thus, we are freezing, not frozen, and indefinite
+       *  starvation isn't an issue).
+       */
+      dout(7) << "handle_file_lock got scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      file_mixed(lock);
+    } else {
+      dout(7) << "handle_file_lock ignoring scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    }
+    break;
+
+  case LOCK_AC_NUDGE:
+    if (lock->get_parent()->is_auth()) {
+      dout(7) << "handle_file_lock trying nudge on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      scatter_nudge(lock, 0);
+    } else {
+      dout(7) << "handle_file_lock IGNORING nudge on non-auth " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    }    
     break;
 
 

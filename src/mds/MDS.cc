@@ -1317,7 +1317,7 @@ bool MDS::_dispatch(Message *m)
     } while (dest == whoami);
     mdcache->migrator->export_dir_nicely(dir,dest);
   }
-  // hack: thrash exports
+  // hack: thrash fragments
   for (int i=0; i<g_conf.mds_thrash_fragments; i++) {
     if (!is_active()) break;
     dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf.mds_thrash_fragments << dendl;

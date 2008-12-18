@@ -104,6 +104,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
   - anchor source dir

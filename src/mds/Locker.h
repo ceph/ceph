@@ -186,6 +186,7 @@ protected:
   bool file_rdlock_start(FileLock *lock, MDRequest *mut);
   void file_rdlock_finish(FileLock *lock, Mutation *mut);
   bool file_wrlock_force(FileLock *lock, Mutation *mut);
+  bool file_wrlock_start(FileLock *lock, MDRequest *mut);
   void file_wrlock_finish(FileLock *lock, Mutation *mut);
   bool file_xlock_start(FileLock *lock, MDRequest *mut);
   void file_xlock_finish(FileLock *lock, Mutation *mut);
