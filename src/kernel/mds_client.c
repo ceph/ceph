@@ -1222,7 +1222,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_request *req)
 {
 	struct ceph_mds_session *session = NULL;
-	struct ceph_mds_request_head *rhead = req->r_request->front.iov_base;
+	struct ceph_mds_request_head *rhead;
 	int err;
 	int mds = -1;
 
@@ -1278,18 +1278,20 @@ retry:
 	if (req->r_request_started == 0)   /* note request start time */
 		req->r_request_started = jiffies;
 
+	/* if there are other references on this message, e.g., if we are
+	 * told to forward it and the previous copy is still in flight, dup
+	 * it. */
+	req->r_request = ceph_msg_maybe_dup(req->r_request);
+
+	rhead = req->r_request->front.iov_base;
 	rhead->retry_attempt = cpu_to_le32(req->r_attempts - 1);
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
+	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
 
 	/* send and wait */
 	mutex_unlock(&mdsc->mutex);
 	dout(10, "do_request %p %lld r_expected_cap=%p\n", req, req->r_tid,
 	     req->r_expected_cap);
-
-	/* if there are other references on this message, e.g., if we are
-	 * told to forward it and the previous copy is still in flight, dup
-	 * it. */
-	req->r_request = ceph_msg_maybe_dup(req->r_request);
 
 	ceph_msg_get(req->r_request);
 	ceph_send_msg_mds(mdsc, req->r_request, mds);
