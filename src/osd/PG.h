@@ -380,15 +380,25 @@ public:
   class OndiskLog {
   public:
     // ok
-    loff_t bottom;                     // first byte of log. 
-    loff_t top;                        // byte following end of log.
-    map<loff_t,eversion_t> block_map;  // block -> first stamp logged there
+    __u64 bottom;                     // first byte of log. 
+    __u64 top;                        // byte following end of log.
+    map<__u64,eversion_t> block_map;  // block -> first stamp logged there
 
     OndiskLog() : bottom(0), top(0) {}
 
-    loff_t length() { return top - bottom; }
+    __u64 length() { return top - bottom; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
+
+    void encode(bufferlist& bl) const {
+      ::encode(bottom, bl);
+      ::encode(top, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(bottom, bl);
+      ::decode(top, bl);
+    }
   };
+  WRITE_CLASS_ENCODER(OndiskLog)
 
 
   /*
@@ -841,7 +851,7 @@ WRITE_CLASS_ENCODER(PG::Missing)
 WRITE_CLASS_ENCODER(PG::Log::Entry)
 WRITE_CLASS_ENCODER(PG::Log)
 WRITE_CLASS_ENCODER(PG::Interval)
-
+WRITE_CLASS_ENCODER(PG::OndiskLog)
 
 inline ostream& operator<<(ostream& out, const PG::Info::History& h) 
 {

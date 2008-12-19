@@ -1614,8 +1614,10 @@ void PG::write_log(ObjectStore::Transaction& t)
   // write it
   t.remove(0, info.pgid.to_log_pobject() );
   t.write(0, info.pgid.to_log_pobject() , 0, bl.length(), bl);
-  t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+
+  bufferlist blb(sizeof(ondisklog));
+  ::encode(ondisklog, blb);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog", blb);
   
   dout(10) << "write_log to " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
   dirty_log = false;
@@ -1625,7 +1627,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 {
   dout(15) << "trim_ondisk_log_to v " << v << dendl;
 
-  map<loff_t,eversion_t>::iterator p = ondisklog.block_map.begin();
+  map<__u64,eversion_t>::iterator p = ondisklog.block_map.begin();
   while (p != ondisklog.block_map.end()) {
     dout(15) << "    " << p->first << " -> " << p->second << dendl;
     p++;
@@ -1640,7 +1642,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
     return;  // can't trim anything!
   
   // we can trim!
-  loff_t trim = p->first;
+  __u64 trim = p->first;
   dout(10) << "  trimming ondisklog to " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
 
   assert(trim >= ondisklog.bottom);
@@ -1650,8 +1652,9 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   while (p != ondisklog.block_map.begin()) 
     ondisklog.block_map.erase(ondisklog.block_map.begin());
   
-  t.collection_setattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
+  bufferlist blb(sizeof(ondisklog));
+  ::encode(ondisklog, blb);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog", blb);
 
   if (!g_conf.osd_preserve_trimmed_log)
     t.zero(0, info.pgid.to_log_pobject(), 0, ondisklog.bottom);
@@ -1688,8 +1691,11 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
   t.write(0, info.pgid.to_log_pobject(), ondisklog.top, bl.length(), bl );
   
   ondisklog.top += bl.length();
-  t.collection_setattr(info.pgid.to_coll(), "ondisklog_top",
-		       &ondisklog.top, sizeof(ondisklog.top));
+
+  bufferlist blb(sizeof(ondisklog));
+  ::encode(ondisklog, blb);
+  t.collection_setattr(info.pgid.to_coll(), "ondisklog", blb);
+
   
   // trim?
   if (trim_to > log.bottom &&
@@ -1705,13 +1711,13 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 
 void PG::read_log(ObjectStore *store)
 {
-  int r;
   // load bounds
   ondisklog.bottom = ondisklog.top = 0;
-  r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_bottom", &ondisklog.bottom, sizeof(ondisklog.bottom));
-  assert(r == sizeof(ondisklog.bottom));
-  r = store->collection_getattr(info.pgid.to_coll(), "ondisklog_top", &ondisklog.top, sizeof(ondisklog.top));
-  assert(r == sizeof(ondisklog.top));
+
+  bufferlist blb;
+  store->collection_getattr(info.pgid.to_coll(), "ondisklog", blb);
+  bufferlist::iterator p = blb.begin();
+  ::decode(ondisklog, p);
 
   dout(10) << "read_log " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
 
