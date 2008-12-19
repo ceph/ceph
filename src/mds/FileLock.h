@@ -241,6 +241,9 @@ class FileLock : public ScatterLock {
       case LOCK_SYNC_MIXED:
       case LOCK_MIXED:
         return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
+      case LOCK_MIXED_SYNC:
+      case LOCK_MIXED_SYNC2:
+	return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
       }
     assert(0);
     return 0;

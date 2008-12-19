@@ -3119,7 +3119,7 @@ void Locker::file_wrlock_finish(FileLock *lock, Mutation *mut)
   if (!lock->is_wrlocked()) {
     if (!lock->is_stable())
       file_eval_gather(lock);
-    else
+    else if (lock->get_parent()->is_auth())
       file_eval(lock);
   }
 }
@@ -3696,7 +3696,8 @@ void Locker::file_loner(FileLock *lock)
   }
   int gather = 0;
   
-  if (in->is_replicated()) {
+  if (in->is_replicated() &&
+      lock->get_state() != LOCK_LOCK_LONER) {  // if we were lock, replicas are already lock.
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
