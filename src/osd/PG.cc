@@ -1233,6 +1233,7 @@ void PG::peer(ObjectStore::Transaction& t,
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window
 	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
+    state_clear(PG_STATE_PEERING);
     osd->replay_queue_lock.Lock();
     osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
     osd->replay_queue_lock.Unlock();
