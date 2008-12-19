@@ -1062,8 +1062,12 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	mutex_unlock(&mdsc->mutex);
 
 	if (!session) {
-		dout(10, "handle_session no session for mds%d\n", mds);
-		return;
+		if (op != CEPH_SESSION_OPEN) {
+			dout(10, "handle_session no session for mds%d\n", mds);
+			return;
+		}
+		dout(10, "handle_session creating session for mds%d\n", mds);
+		session = register_session(mdsc, mds);
 	}
 
 	mutex_lock(&session->s_mutex);
