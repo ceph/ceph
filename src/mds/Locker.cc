@@ -1019,7 +1019,8 @@ void Locker::handle_client_caps(MClientCaps *m)
   assert(cap);
 
   // freezing|frozen?
-  if (in->is_freezing() || in->is_frozen()) {
+  if ((in->is_freezing() && in->filelock.is_stable()) ||  // continue if freezing and lock is unstable
+      in->is_frozen()) {
     dout(7) << "handle_client_caps freezing|frozen on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
     return;
