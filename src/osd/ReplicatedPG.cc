@@ -723,8 +723,11 @@ void ReplicatedPG::op_read(MOSDOp *op)
   
   // check inc_lock?
   if (op->get_inc_lock() > 0) {
+    bufferlist b;
     __u32 cur = 0;
-    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", &cur, sizeof(cur));
+    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
+    bufferlist::iterator bp = b.begin();
+    ::decode(cur, bp);
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
@@ -824,8 +827,12 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 {
   t.clone(info.pgid.to_coll(), head, coid);
   t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
-  t.setattr(info.pgid.to_coll(), coid, "version", &v, sizeof(v));
-  t.setattr(info.pgid.to_coll(), coid, "from_version", &ov, sizeof(v));
+  bufferlist bv(sizeof(v));
+  ::encode(v, bv);
+  t.setattr(info.pgid.to_coll(), coid, "version", bv);
+  bufferlist bov(sizeof(v));
+  ::encode(ov, bov);
+  t.setattr(info.pgid.to_coll(), coid, "from_version", bov);
 }
 
 void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& stats,
@@ -942,7 +949,9 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     // -- locking --
   case CEPH_OSD_OP_WRLOCK:
     { // lock object
-      t.setattr(info.pgid.to_coll(), poid, "wrlock", &reqid.name, sizeof(entity_name_t));
+      bufferlist b(sizeof(entity_name_t));
+      ::encode(reqid.name, b);
+      t.setattr(info.pgid.to_coll(), poid, "wrlock", b);
     }
     break;  
   case CEPH_OSD_OP_WRUNLOCK:
@@ -1166,10 +1175,15 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   // finish.
   version = at_version;
   if (exists) {
-    if (inc_lock)
-      t.setattr(info.pgid.to_coll(), poid, "inc_lock", &inc_lock, sizeof(inc_lock));
+    if (inc_lock) {
+      bufferlist b(sizeof(inc_lock));
+      ::encode(inc_lock, b);
+      t.setattr(info.pgid.to_coll(), poid, "inc_lock", b);
+    }
 
-    t.setattr(info.pgid.to_coll(), poid, "version", &at_version, sizeof(at_version));
+    bufferlist bv(sizeof(at_version));
+    ::encode(at_version, bv);
+    t.setattr(info.pgid.to_coll(), poid, "version", bv);
 
     bufferlist snapsetbl;
     ::encode(snapset, snapsetbl);
@@ -1482,9 +1496,10 @@ ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t 
     pinfo->exists = true;
     pinfo->size = st.st_size;
     
-    r = osd->store->getattr(info.pgid.to_coll(), poid, "version",
-			    &pinfo->version, sizeof(pinfo->version));
+    bufferlist bv;
+    r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
     assert(r >= 0);
+    pinfo->version.decode(bv);
     
     if (poid.oid.snap == CEPH_NOSNAP) {
       bufferlist bl;
@@ -1534,8 +1549,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   
   // check inc_lock?
   if (op->get_inc_lock() > 0) {
+    bufferlist b;
+    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
+    bufferlist::iterator bp = b.begin();
     __u32 cur = 0;
-    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", &cur, sizeof(cur));
+    ::decode(cur, bp);
     if (cur > op->get_inc_lock()) {
       dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 	       << " on " << poid << dendl;
@@ -2048,13 +2066,12 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
 
   // are we doing a clone on the replica?
   if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {	
-    eversion_t version, from_version;
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "version",
-				&version, sizeof(version));
+    bufferlist bv, bfv;
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
     assert(r >= 0);
-    r = osd->store->getattr(info.pgid.to_coll(), poid, "from_version",
-			    &from_version, sizeof(from_version));
+    r = osd->store->getattr(info.pgid.to_coll(), poid, "from_version", bfv);
     assert(r >= 0);
+    eversion_t version(bv), from_version(bfv);
     
     pobject_t head = poid;
     head.oid.snap = CEPH_NOSNAP;
@@ -2122,7 +2139,6 @@ void ReplicatedPG::push(pobject_t poid, int peer,
 {
   // read data+attrs
   bufferlist bl;
-  eversion_t v;
   map<nstring,bufferptr> attrset;
   __u64 size;
 
@@ -2143,7 +2159,9 @@ void ReplicatedPG::push(pobject_t poid, int peer,
     osd->store->read(info.pgid.to_coll(), poid, 0, 0, bl);
     size = bl.length();
   }
-  osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
+  bufferlist bv;
+  osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
+  eversion_t v(bv);
   osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
 
   // ok

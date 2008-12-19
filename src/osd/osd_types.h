@@ -224,6 +224,9 @@ public:
   eversion_t(const ceph_eversion& ce) : 
     version(ce.version),
     epoch(ce.epoch) { }
+
+  eversion_t(bufferlist& bl) { decode(bl); }
+
   operator ceph_eversion() {
     ceph_eversion c;
     c.epoch = epoch;
@@ -244,6 +247,10 @@ public:
   void decode(bufferlist::iterator &bl) {
     ::decode(version, bl);
     ::decode(epoch, bl);
+  }
+  void decode(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
+    decode(p);
   }
 };
 WRITE_CLASS_ENCODER(eversion_t)

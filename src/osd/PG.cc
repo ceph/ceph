@@ -541,13 +541,15 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
 
     Log::Entry e;
     e.oid = it->oid;
-    osd->store->getattr(info.pgid.to_coll(), poid, "version",
-			&e.version, sizeof(e.version));
+    bufferlist bv;
+    osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
+    e.version.decode(bv);
     if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
       e.op = Log::Entry::CLONE;
       osd->store->getattr(info.pgid.to_coll(), poid, "snaps", e.snaps);
-      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", 
-			  &e.prior_version, sizeof(e.prior_version));
+      bufferlist bfv;
+      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", bfv);
+      e.prior_version.decode(bfv);
     } else {
       e.op = Log::Entry::BACKLOG;           // FIXME if/when we do smarter op codes!
     }
@@ -1771,9 +1773,10 @@ void PG::read_log(ObjectStore *store)
       
       if (i->is_delete()) continue;
       
-      eversion_t v;
       pobject_t poid(info.pgid.pool(), 0, i->oid);
-      int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", &v, sizeof(v));
+      bufferlist bv;
+      int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
+      eversion_t v(bv);
       if (r < 0 || v < i->version) {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->oid, i->version, v);
@@ -1840,15 +1843,19 @@ bool PG::block_if_wrlocked(MOSDOp* op)
 {
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
-  entity_name_t source;
-  int len = osd->store->getattr(info.pgid.to_coll(), poid, "wrlock", &source, sizeof(entity_name_t));
-  //dout(0) << "getattr returns " << len << " on " << oid << dendl;
+  bufferlist bs;
+  int len = osd->store->getattr(info.pgid.to_coll(), poid, "wrlock", bs);
+  if (len > 0) {
+    entity_name_t source;
+    bufferlist::iterator bp = bs.begin();
+    ::decode(source, bp);
+    //dout(0) << "getattr returns " << len << " on " << oid << dendl;
   
-  if (len == sizeof(source) &&
-      source != op->get_orig_source()) {
-    //the object is locked for writing by someone else -- add the op to the waiting queue      
-    waiting_for_wr_unlock[poid.oid].push_back(op);
-    return true;
+    if (source != op->get_orig_source()) {
+      //the object is locked for writing by someone else -- add the op to the waiting queue      
+      waiting_for_wr_unlock[poid.oid].push_back(op);
+      return true;
+    }
   }
   
   return false; //the object wasn't locked, so the operation can be handled right away

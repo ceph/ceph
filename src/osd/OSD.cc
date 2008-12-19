@@ -2480,8 +2480,10 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       dout(20) << "  moving " << poid << " from " << parentid << " -> " << pgid << dendl;
       PG *child = children[pgid];
       assert(child);
-      eversion_t v;
-      store->getattr(parentid.to_coll(), poid, "version", &v, sizeof(v));
+      bufferlist bv;
+      store->getattr(parentid.to_coll(), poid, "version", bv);
+      eversion_t v(bv);
+
       if (v > child->info.last_update) {
 	child->info.last_update = v;
 	dout(25) << "        tagging pg with v " << v << "  > " << child->info.last_update << dendl;
