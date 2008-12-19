@@ -191,6 +191,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
        ++p) {
     dout(20) << " must rdlock " << **p << " " << *(*p)->get_parent() << dendl;
     sorted.insert(*p);
+    if ((*p)->get_parent()->is_auth())
+      mustpin.insert(*p);
   }
 
  
