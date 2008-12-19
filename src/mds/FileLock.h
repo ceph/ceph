@@ -144,12 +144,13 @@ class FileLock : public ScatterLock {
 
   // read/write access
   bool can_rdlock() {
-    if (!parent->is_auth()) {
-      if (state == LOCK_LOCK && !xlock_by)
-	return true;
-      return (state == LOCK_SYNC);
-    } else
-      return (state == LOCK_SYNC);
+    if (parent->is_auth())
+      return
+	(state == LOCK_LOCK && !xlock_by) ||
+	(state == LOCK_SYNC);
+    else
+      return
+	(state == LOCK_SYNC);
   }
   bool can_rdlock_soon() {
     if (parent->is_auth())
