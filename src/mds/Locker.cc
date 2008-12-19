@@ -3090,8 +3090,6 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
 	return true;
       }
 
-      lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
-
     } else {
       // replica.
       // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
@@ -3102,6 +3100,8 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
     }
   }
 
+  dout(7) << "file_wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
   return false;
 }
 
