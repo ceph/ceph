@@ -3479,7 +3479,9 @@ void Locker::file_eval(FileLock *lock)
   // * -> sync?
   else if (lock->get_state() != LOCK_SYNC &&
 	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
+	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	   !(in->get_state() == LOCK_MIXED &&
+	     in->is_dir() && in->has_subtree_root_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 
 	   //in->is_replicated() || 
 	   //lock->get_num_client_lease() || 
