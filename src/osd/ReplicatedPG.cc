@@ -2586,32 +2586,6 @@ void ReplicatedPG::on_change()
   
   // clear pushing map
   pushing.clear();
-  /*
-  // remove strays from pushing map
-  {
-    map<object_t, set<int> >::iterator p = pushing.begin();
-    while (p != pushing.end()) {
-      set<int>::iterator q = p->second.begin();
-      while (q != p->second.end()) {
-	int o = *q++;
-	bool have = false;
-	for (unsigned i=1; i<acting.size(); i++)
-	  if (acting[i] == o) {
-	    have = true;
-	    break;
-	  }
-	if (!have) {
-	  dout(10) << " forgetting push of " << p->first << " to (now stray) osd" << o << dendl;
-	  p->second.erase(o);
-	}
-      }
-      if (p->second.empty())
-	pushing.erase(p++);
-      else
-	p++;	
-    }
-  }
-  */
 }
 
 void ReplicatedPG::on_role_change()
