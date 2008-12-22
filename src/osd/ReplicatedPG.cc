@@ -726,13 +726,15 @@ void ReplicatedPG::op_read(MOSDOp *op)
     bufferlist b;
     __u32 cur = 0;
     osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
-    bufferlist::iterator bp = b.begin();
-    ::decode(cur, bp);
-    if (cur > op->get_inc_lock()) {
-      dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
-	       << " on " << poid << dendl;
-      result = -EINCLOCKED;
-      goto done;
+    if (b.length()) {
+      bufferlist::iterator bp = b.begin();
+      ::decode(cur, bp);
+      if (cur > op->get_inc_lock()) {
+	dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
+		 << " on " << poid << dendl;
+	result = -EINCLOCKED;
+	goto done;
+      }
     }
   }
 
@@ -1551,14 +1553,16 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (op->get_inc_lock() > 0) {
     bufferlist b;
     osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
-    bufferlist::iterator bp = b.begin();
-    __u32 cur = 0;
-    ::decode(cur, bp);
-    if (cur > op->get_inc_lock()) {
-      dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
-	       << " on " << poid << dendl;
-      osd->reply_op_error(op, -EINCLOCKED);
-      return;
+    if (b.length()) {
+      bufferlist::iterator bp = b.begin();
+      __u32 cur = 0;
+      ::decode(cur, bp);
+      if (cur > op->get_inc_lock()) {
+	dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
+		 << " on " << poid << dendl;
+	osd->reply_op_error(op, -EINCLOCKED);
+	return;
+      }
     }
   }
 
