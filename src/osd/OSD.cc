@@ -220,6 +220,8 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
 int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid& fsid, int& whoami)
 {
   ObjectStore *store = create_object_store(dev);
+  if (!store)
+	return -ENODEV;
   int err = store->mount();
   if (err < 0) 
     return err;
