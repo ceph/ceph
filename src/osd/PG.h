@@ -757,6 +757,7 @@ public:
     info(p),
     recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
     recovery_ops_active(0),
+    generate_backlog_epoch(0),
     role(0),
     state(0),
     have_master_log(true),
