@@ -1275,12 +1275,16 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 }
 
 
-bool CInode::encode_inodestat(bufferlist& bl, snapid_t snapid)
+bool CInode::encode_inodestat(bufferlist& bl, snapid_t snapid, bool projected)
 {
   bool valid = true;
 
   // pick a version!
-  inode_t *i = &inode;
+  inode_t *i;
+  if (projected)
+    i = get_projected_inode();
+  else 
+    i = &inode;
   bufferlist xbl;
   if (snapid && is_multiversion()) {
 

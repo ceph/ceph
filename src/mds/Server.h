@@ -75,10 +75,12 @@ public:
   void handle_client_request(MClientRequest *m);
 
   void dispatch_client_request(MDRequest *mdr);
+  void early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
-		      snapid_t snapid, CInode *snapdiri);
+		      snapid_t snapid, CInode *snapdiri,
+		      bool projected = false);
 
   void encode_empty_dirstat(bufferlist& bl);
   void encode_infinite_lease(bufferlist& bl);

@@ -502,6 +502,28 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *trace
 }
 
 
+void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
+{
+  MClientRequest *req = mdr->client_request;
+  entity_inst_t client_inst = req->get_orig_source_inst();
+  if (client_inst.name.is_mds())
+    return;
+
+  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  reply->set_unsafe();
+
+  dout(10) << "early_reply " << reply->get_result() 
+	   << " (" << strerror(-reply->get_result())
+	   << ") " << *req << dendl;
+
+  snapid_t snapid = CEPH_NOSNAP;
+  CInode *snapdiri = 0;
+  if (tracei || tracedn)
+    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true);
+
+  messenger->send_message(reply, client_inst);
+}
+
 /*
  * send given reply
  * include a trace to tracei
@@ -613,7 +635,8 @@ void Server::encode_null_lease(bufferlist& bl)
  * trace is in reverse order (i.e. root inode comes last)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
-			    snapid_t snapid, CInode *snapdiri)
+			    snapid_t snapid, CInode *snapdiri,
+			    bool projected)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -635,7 +658,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  inode:
   numi++;
-  if (in->encode_inodestat(bl, snapid))
+  if (in->encode_inodestat(bl, snapid, projected))
     lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   else {
     lmask = CEPH_STAT_MASK_INODE; // immutable bits
@@ -663,12 +686,18 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     dout(10) << " snapdiri at pos " << snapdirpos << dendl;
   }
 
-  if (!dn)
-    dn = in->get_parent_dn();
+  if (!dn) {
+    if (projected)
+      dn = in->get_projected_parent_dn();
+    else
+      dn = in->get_parent_dn();
+  }
   if (!dn) 
     goto done;
 
  dentry:
+  projected = false;
+
   ::encode(dn->get_name(), bl);
   if (snapid == CEPH_NOSNAP)
     lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);

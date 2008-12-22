@@ -190,6 +190,8 @@ public:
   void set_file_caps_mseq(capseq_t s) { st.file_caps_mseq = s; }
   //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
+  void set_unsafe() { st.safe = 0; }
+
   MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
