@@ -209,6 +209,8 @@ public:
       o << " " << strerror(-get_result());
     if (st.safe)
       o << " safe";
+    else
+      o << " unsafe";
     o << ")";
   }
 

@@ -1719,6 +1719,8 @@ void Server::handle_client_utime(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
+  early_reply(mdr, cur, 0);
+
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1763,6 +1765,8 @@ void Server::handle_client_chmod(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
 
+  early_reply(mdr, cur, 0);
+
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1806,6 +1810,8 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
+  early_reply(mdr, cur, 0);
+
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1847,6 +1853,8 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
+  early_reply(mdr, cur, 0);
+
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1909,6 +1917,8 @@ void Server::handle_client_setxattr(MDRequest *mdr)
     req->get_data().copy(0, len, cur->xattrs[name].c_str());
   le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
   
+  early_reply(mdr, cur, 0);
+
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
@@ -1956,6 +1966,8 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
   cur->xattrs.erase(name);
   le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
+
+  early_reply(mdr, cur, 0);
 
   mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -2196,6 +2208,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
   
+  //early_reply(mdr, newi, 0);
+
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
@@ -2245,6 +2259,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
+  //early_reply(mdr, newi, 0);
+
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
