@@ -5285,10 +5285,19 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     CDentry *dn = curdir->lookup(path[depth], snapid);
 
     // null and last_bit and xlocked by me?
-    if (dn && dn->is_null() && null_okay) {
-      dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
-      trace.push_back(dn);
-      break; // done!
+    if (dn && dn->is_null()) {
+      if (null_okay) {
+	dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
+	trace.push_back(dn);
+	break; // done!
+      }
+      if (dn->lock.is_xlocked() && dn->lock.get_xlocked_by() != mdr) {
+        dout(10) << "traverse: xlocked null dentry at " << *dn << dendl;
+        dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
+	if (mds->logger) mds->logger->inc("tlock");
+        return 1;
+      }
+
     }
 
     if (dn && !dn->is_null()) {
