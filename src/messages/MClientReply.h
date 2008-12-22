@@ -194,9 +194,10 @@ public:
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.tid = req->get_tid();
-    this->st.op = req->get_op();
-    this->st.result = result;
+    st.tid = req->get_tid();
+    st.op = req->get_op();
+    st.result = result;
+    st.safe = 1;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
@@ -204,6 +205,8 @@ public:
     o << " = " << get_result();
     if (get_result() <= 0)
       o << " " << strerror(-get_result());
+    if (st.safe)
+      o << " safe";
     o << ")";
   }
 

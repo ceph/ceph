@@ -63,7 +63,7 @@ public:
   MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
   MClientRequest(int op) : Message(CEPH_MSG_CLIENT_REQUEST) {
     memset(&head, 0, sizeof(head));
-    this->head.op = op;
+    head.op = op;
   }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }

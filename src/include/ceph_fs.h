@@ -823,6 +823,7 @@ struct ceph_mds_reply_head {
 	__le32 file_caps_seq;
 	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
+	__u8 safe;
 } __attribute__ ((packed));
 
 /* one for each node split */
