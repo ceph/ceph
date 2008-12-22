@@ -2584,6 +2584,9 @@ void ReplicatedPG::on_change()
     }
   }
   
+  // clear pushing map
+  pushing.clear();
+  /*
   // remove strays from pushing map
   {
     map<object_t, set<int> >::iterator p = pushing.begin();
@@ -2608,6 +2611,7 @@ void ReplicatedPG::on_change()
 	p++;	
     }
   }
+  */
 }
 
 void ReplicatedPG::on_role_change()
