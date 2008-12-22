@@ -223,9 +223,10 @@ public:
 
   eversion_t(const ceph_eversion& ce) : 
     version(ce.version),
-    epoch(ce.epoch) { }
+    epoch(ce.epoch),
+    __pad(0) { }
 
-  eversion_t(bufferlist& bl) { decode(bl); }
+  eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
   operator ceph_eversion() {
     ceph_eversion c;
