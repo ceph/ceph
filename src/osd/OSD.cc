@@ -2098,8 +2098,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       pg->on_role_change();
 
       // interrupt backlog generation
-      pg->generate_backlog_epoch = 0;
-      backlog_wq.dequeue(pg);
+      cancel_generate_backlog(pg);
 
       // take active waiters
       take_waiters(pg->waiting_for_active);
@@ -3128,6 +3127,13 @@ void OSD::queue_generate_backlog(PG *pg)
     dout(10) << *pg << " queue_generate_backlog epoch " << pg->generate_backlog_epoch << dendl;
     backlog_wq.queue(pg);
   }
+}
+
+void OSD::cancel_generate_backlog(PG *pg)
+{
+  dout(10) << *pg << " cancel_generate_backlog" << dendl;
+  pg->generate_backlog_epoch = 0;
+  backlog_wq.dequeue(pg);
 }
 
 void OSD::generate_backlog(PG *pg)

@@ -539,6 +539,7 @@ private:
   } backlog_wq;
 
   void queue_generate_backlog(PG *pg);
+  void cancel_generate_backlog(PG *pg);
   void generate_backlog(PG *pg);
 
 

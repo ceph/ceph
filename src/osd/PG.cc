@@ -1282,6 +1282,9 @@ void PG::activate(ObjectStore::Transaction& t,
   // clear prior set (and dependency info)... we are done peering!
   clear_prior();
 
+  // if we are building a backlog, cancel it!
+  osd->cancel_generate_backlog(this);
+
   // write pg info, log
   write_info(t);
   write_log(t);
