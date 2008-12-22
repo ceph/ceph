@@ -1782,7 +1782,9 @@ void PG::read_log(ObjectStore *store)
       pobject_t poid(info.pgid.pool(), 0, i->oid);
       bufferlist bv;
       int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
-      eversion_t v(bv);
+      eversion_t v;
+      if (r >= 0)
+	v = eversion_t(bv);
       if (r < 0 || v < i->version) {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->oid, i->version, v);
