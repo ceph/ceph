@@ -1540,7 +1540,7 @@ void PG::update_stats()
     pg_stats_stable.acting = acting;
 
     pg_stats_stable.num_object_copies = pg_stats_stable.num_objects * info.pgid.size();
-    if (!is_clean() && !is_peering()) {
+    if (!is_clean() && is_active()) {
       pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
       int degraded = missing.num_missing();
       for (unsigned i=1; i<acting.size(); i++) {
