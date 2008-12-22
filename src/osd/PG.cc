@@ -1179,7 +1179,6 @@ void PG::peer(ObjectStore::Transaction& t,
     // let's pull info+logs from _everyone_ (strays included, this
     // time) in search of missing objects.
 
-    bool waiting = false;
     for (map<int,Info>::iterator it = peer_info.begin();
          it != peer_info.end();
          it++) {
@@ -1190,19 +1189,17 @@ void PG::peer(ObjectStore::Transaction& t,
 
       if (peer_summary_requested.count(peer)) {
         dout(10) << " already requested summary/backlog from osd" << peer << dendl;
-        waiting = true;
         continue;
       }
 
       dout(10) << " requesting summary/backlog from osd" << peer << dendl;      
       query_map[peer][info.pgid] = Query(Query::BACKLOG, info.history);
       peer_summary_requested.insert(peer);
-      waiting = true;
+      return;
     }
     
-    if (!waiting)
-      dout(10) << (missing.num_missing() - missing_loc.size())
-	       << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
+    dout(10) << (missing.num_missing() - missing_loc.size())
+	     << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
     return;
   }
 
