@@ -1318,14 +1318,14 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
  *
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
-CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir) 
+CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino) 
 {
   CInode *in = new CInode(mdcache);
   
   // assign ino
   if (mdr->session->prealloc_inos.size()) {
     mdr->used_prealloc_ino = 
-      in->inode.ino = mdr->session->take_ino();  // prealloc -> used
+      in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.projected++;
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino << dendl;
   } else {
@@ -1333,7 +1333,16 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir)
       in->inode.ino = mds->inotable->project_alloc_id();
     dout(10) << "prepare_new_inode alloc " << mdr->alloc_ino << dendl;
   }
-  
+
+  if (useino && useino != in->inode.ino) {
+    dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
+    stringstream ss;
+    ss << mdr->client_request->get_orig_source() << " specified ino " << useino << " but mds" << mds->whoami
+       << " allocated " << in->inode.ino;
+    mds->logclient.log(LOG_ERROR, ss);
+    assert(0); // just for now.
+  }
+    
   int want = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
   if (want > 0) {
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, want);
@@ -2265,7 +2274,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
-  CInode *newi = prepare_new_inode(mdr, dn->dir);
+  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.mknod.ino));
   assert(newi);
 
   newi->projected_parent = dn;
@@ -2290,7 +2299,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
   
-  //early_reply(mdr, newi, 0);
+  early_reply(mdr, newi, 0);
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
@@ -2311,7 +2320,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
-  CInode *newi = prepare_new_inode(mdr, dn->dir);  
+  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.mkdir.ino));  
   assert(newi);
 
   // it's a directory.
@@ -2341,7 +2350,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
-  //early_reply(mdr, newi, 0);
+  early_reply(mdr, newi, 0);
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
@@ -2360,7 +2369,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdr->now = g_clock.real_now();
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
 
-  CInode *newi = prepare_new_inode(mdr, dn->dir);
+  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.symlink.ino));
   assert(newi);
 
   // it's a symlink
@@ -2383,6 +2392,8 @@ void Server::handle_client_symlink(MDRequest *mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
+
+  early_reply(mdr, newi, 0);
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
@@ -5007,7 +5018,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   mdr->now = g_clock.real_now();
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
 
-  CInode *in = prepare_new_inode(mdr, dn->dir);
+  CInode *in = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.open.ino));
   assert(in);
   
   // it's a file.

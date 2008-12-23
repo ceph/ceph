@@ -783,6 +783,9 @@ struct ceph_mds_request_head {
 			__le64 ino;
 		} __attribute__ ((packed)) mknod;
 		struct {
+			__le64 ino;
+		} __attribute__ ((packed)) symlink;
+		struct {
 			__le32 mode;
 			__le64 ino;
 		} __attribute__ ((packed)) mkdir;

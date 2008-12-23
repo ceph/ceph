@@ -55,12 +55,25 @@ public:
   deque<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   deque<inodeno_t> used_inos;       // journaling use
 
-  inodeno_t take_ino() {
+  inodeno_t take_ino(inodeno_t ino = 0) {
     assert(!prealloc_inos.empty());
-    inodeno_t i = prealloc_inos.front();
-    prealloc_inos.pop_front();
-    used_inos.push_back(i);
-    return i;
+
+    if (ino) {
+      deque<inodeno_t>::iterator p;
+      for (p = prealloc_inos.begin(); p != prealloc_inos.end(); p++) 
+	if (*p == ino)
+	  break;
+      if (p != prealloc_inos.end())
+	prealloc_inos.erase(p);
+      else
+	ino = 0;
+    }
+    if (!ino) {
+      ino = prealloc_inos.front();
+      prealloc_inos.pop_front();
+    }
+    used_inos.push_back(ino);
+    return ino;
   }
   int get_num_projected_prealloc_inos() {
     return prealloc_inos.size() + projected_inos;
