@@ -490,6 +490,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     client->got_journaled_agree(p->second, logseg);
   }
 
+  // opened ino?
+  if (opened_ino) {
+    CInode *in = mds->mdcache->get_inode(opened_ino);
+    assert(in);
+    dout(10) << "EMetaBlob.replay noting opened inode " << *in << dendl;
+    _segment->open_files.push_back(&in->xlist_open_file);
+  }
+
   // allocated_inos
   if (inotablev) {
     if (mds->inotable->get_version() >= inotablev) {

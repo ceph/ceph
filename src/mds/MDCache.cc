@@ -3064,7 +3064,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	MDRequest *mdr = request_get(ri);  // should have this from auth_pin above.
 	assert(mdr->is_auth_pinned(dn));
 	dn->lock.set_state(LOCK_LOCK);
-	dn->lock.get_xlock(mdr);
+	dn->lock.get_xlock(mdr, mdr->get_client());
 	mdr->xlocks.insert(&dn->lock);
 	mdr->locks.insert(&dn->lock);
       }
@@ -3121,7 +3121,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	      lock->set_state(LOCK_LOCK);
 	      if (lock == &in->filelock)
 		in->loner_cap = -1;
-	      lock->get_xlock(mdr);
+	      lock->get_xlock(mdr, mdr->get_client());
 	      mdr->xlocks.insert(lock);
 	      mdr->locks.insert(lock);
 	    }

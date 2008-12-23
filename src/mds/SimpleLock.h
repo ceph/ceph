@@ -97,13 +97,14 @@ protected:
   // local state
   int num_rdlock, num_wrlock;
   Mutation *xlock_by;
+  int xlock_by_client;
 
 
 public:
   SimpleLock(MDSCacheObject *o, int t, int wo) :
     parent(o), type(t), wait_offset(wo),
     state(LOCK_SYNC), num_client_lease(0),
-    num_rdlock(0), num_wrlock(0), xlock_by(0) { }
+    num_rdlock(0), num_wrlock(0), xlock_by(0), xlock_by_client(-1) { }
   virtual ~SimpleLock() {}
 
   // parent
@@ -217,15 +218,17 @@ public:
   int get_num_wrlocks() { return num_wrlock; }
 
   // xlock
-  void get_xlock(Mutation *who) { 
+  void get_xlock(Mutation *who, int client) { 
     assert(xlock_by == 0);
     parent->get(MDSCacheObject::PIN_LOCK);
     xlock_by = who; 
+    xlock_by_client = client;
   }
   void put_xlock() {
     assert(xlock_by);
     parent->put(MDSCacheObject::PIN_LOCK);
     xlock_by = 0;
+    xlock_by_client = -1;
   }
   bool is_xlocked() { return xlock_by ? true:false; }
   bool is_xlocked_by_other(Mutation *mdr) {
@@ -323,7 +326,11 @@ public:
     return false;
   }
 
-  bool can_lease() {
+  bool can_lease(int client=-1) {
+    if (client >= 0 &&
+	xlock_by &&
+	xlock_by_client == client)
+      return true;  // allow lease to xlocker... see simple_xlock_finish()
     return state == LOCK_SYNC;
   }
   bool can_rdlock(Mutation *mdr) {

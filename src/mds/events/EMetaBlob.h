@@ -273,6 +273,8 @@ private:
 
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
+  inodeno_t opened_ino;
+  
   // ino (pre)allocation.  may involve both inotable AND session state.
   version_t inotablev, sessionmapv;
   inodeno_t allocated_ino;            // inotable
@@ -292,6 +294,7 @@ private:
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
     ::encode(table_tids, bl);
+    ::encode(opened_ino, bl);
     ::encode(allocated_ino, bl);
     ::encode(used_preallocated_ino, bl);
     ::encode(preallocated_inos, bl);
@@ -306,6 +309,7 @@ private:
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
     ::decode(table_tids, bl);
+    ::decode(opened_ino, bl);
     ::decode(allocated_ino, bl);
     ::decode(used_preallocated_ino, bl);
     ::decode(preallocated_inos, bl);
@@ -325,7 +329,8 @@ private:
   // for replay, in certain cases
   LogSegment *_segment;
 
-  EMetaBlob() : inotablev(0), allocated_ino(0),
+  EMetaBlob() : opened_ino(0),
+		inotablev(0), allocated_ino(0),
 		last_subtree_map(0), my_offset(0), _segment(0) { }
   EMetaBlob(MDLog *mdl);  // defined in journal.cc
 
@@ -343,6 +348,11 @@ private:
 
   void add_table_transaction(int table, version_t tid) {
     table_tids.push_back(pair<__u8, version_t>(table, tid));
+  }
+
+  void add_opened_ino(inodeno_t ino) {
+    assert(!opened_ino);
+    opened_ino = ino;
   }
 
   void set_ino_alloc(inodeno_t alloc,

@@ -511,7 +511,8 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
 				   Session *session,
-				   bool& is_new)
+				   bool& is_new,
+				   SnapRealm *realm)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   
@@ -524,7 +525,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    cap = in->add_client_cap(my_client);
+    cap = in->add_client_cap(my_client, realm);
     session->touch_cap(cap);
     cap->set_wanted(my_want);
     cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
@@ -1383,7 +1384,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
        (!diri->filelock.can_lease() &&
 	(diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0)) &&
-      dn->lock.can_lease())
+      dn->lock.can_lease(client))
     mask |= CEPH_LOCK_DN;
 
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
@@ -1835,7 +1836,7 @@ bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mut)
       }
 
       // xlock.
-      lock->get_xlock(mut);
+      lock->get_xlock(mut, mut->get_client());
       mut->xlocks.insert(lock);
       mut->locks.insert(lock);
       return true;
@@ -1893,6 +1894,11 @@ void Locker::simple_xlock_finish(SimpleLock *lock, Mutation *mut)
       lock->get_parent()->set_object_info(slavereq->get_object_info());
       mds->send_message_mds(slavereq, auth);
     }
+  } else {
+    
+    // xlocker lease?
+    if (lock->get_num_client_lease())
+      simple_sync(lock);  // _must_ sync now.. xlocker already has a lease!
   }
 
   // others waiting?
@@ -2121,7 +2127,7 @@ bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
   // check again
   if (lock->can_xlock(mut)) {
     assert(lock->get_parent()->is_auth());
-    lock->get_xlock(mut);
+    lock->get_xlock(mut, mut->get_client());
     mut->locks.insert(lock);
     mut->xlocks.insert(lock);
     return true;
@@ -2926,7 +2932,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
     return false;
   }
 
-  lock->get_xlock(mut);
+  lock->get_xlock(mut, mut->get_client());
   mut->xlocks.insert(lock);
   mut->locks.insert(lock);
   return true;
@@ -3157,7 +3163,7 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
   // check again
   if (lock->can_xlock(mut)) {
     assert(lock->get_parent()->is_auth());
-    lock->get_xlock(mut);
+    lock->get_xlock(mut, mut->get_client());
     mut->locks.insert(lock);
     mut->xlocks.insert(lock);
     return true;

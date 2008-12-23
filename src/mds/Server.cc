@@ -516,11 +516,29 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *trace
   reply_request(mdr, new MClientReply(mdr->client_request, r), tracei, tracedn);
 }
 
+void Server::include_cap_in_reply(MDRequest *mdr, MClientReply *reply)
+{
+  // include cap / snapbl?
+  //  (only once!)
+  if (mdr->snapbl.length())
+    reply->snapbl.claim(mdr->snapbl);
+  if (mdr->cap) {
+    reply->set_file_caps(mdr->cap->pending());
+    reply->set_file_caps_seq(mdr->cap->get_last_seq());
+    reply->set_file_caps_mseq(mdr->cap->get_mseq());
+    mdr->cap = 0;
+  }
+  if (mdr->snap_caps)
+    reply->set_file_caps(mdr->snap_caps);
+}
+
 
 void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 {
-  if (mdr->alloc_ino) 
+  if (mdr->alloc_ino) {
+    dout(10) << "early_reply - allocated ino, not allowed" << dendl;
     return;
+  }
 
   MClientRequest *req = mdr->client_request;
   entity_inst_t client_inst = req->get_orig_source_inst();
@@ -538,6 +556,9 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   CInode *snapdiri = 0;
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true);
+
+  // include cap info?
+  include_cap_in_reply(mdr, reply);
 
   messenger->send_message(reply, client_inst);
 }
@@ -581,6 +602,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
 
+  // include cap info?
+  include_cap_in_reply(mdr, reply);
 
   // infer tracei/tracedn from mdr?
   snapid_t snapid = CEPH_NOSNAP;
@@ -955,7 +978,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
 	dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
 	mdr->xlocks.insert(lock);
 	mdr->locks.insert(lock);
-	lock->get_xlock(mdr);
+	lock->get_xlock(mdr, mdr->get_client());
 	lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
       }
       break;
@@ -1757,10 +1780,7 @@ public:
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
-    // reply
-    MClientReply *reply = new MClientReply(mdr->client_request, 0);
-    reply->set_result(0);
-    mds->server->reply_request(mdr, reply);
+    mds->server->reply_request(mdr, 0);
   }
 };
 
@@ -4808,16 +4828,13 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
   if (cur->inode.is_dir()) 
     cmode = CEPH_FILE_MODE_PIN;
 
-  // prepare reply
-  MClientReply *reply = new MClientReply(req, 0);
-
   if (mdr->ref_snapid == CEPH_NOSNAP) {
     // register new cap
     bool is_new = false;
     Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
     
     // drop our locks (they may interfere with us issuing new caps)
-    mdcache->request_drop_locks(mdr);
+    //mdcache->request_drop_locks(mdr);
     
     if (is_new)
       cap->dec_suppress();  // stop suppressing messages on new cap
@@ -4825,26 +4842,23 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
     dout(12) << "_do_open issued caps " << cap_string(cap->pending())
 	     << " for " << req->get_orig_source()
 	     << " on " << *cur << dendl;
-
-    reply->set_file_caps(cap->pending());
-    reply->set_file_caps_seq(cap->get_last_seq());
-    reply->set_file_caps_mseq(cap->get_mseq());
-
-    // make sure this inode gets into the journal
-    if (!cur->xlist_open_file.is_on_xlist()) {
-      LogSegment *ls = mds->mdlog->get_current_segment();
-      EOpen *le = new EOpen(mds->mdlog);
-      le->add_clean_inode(cur);
-      ls->open_files.push_back(&cur->xlist_open_file);
-      mds->mdlog->submit_entry(le);
-    }
+    mdr->cap = cap;
   } else {
     int caps = ceph_caps_for_mode(cmode);
     dout(12) << "_do_open issued IMMUTABLE SNAP caps " << cap_string(caps)
 	     << " for " << req->get_orig_source()
 	     << " snapid " << mdr->ref_snapid
 	     << " on " << *cur << dendl;
-    reply->set_file_caps(caps);
+    mdr->snap_caps = caps;
+  }
+
+  // make sure this inode gets into the journal
+  if (!cur->xlist_open_file.is_on_xlist()) {
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    EOpen *le = new EOpen(mds->mdlog);
+    le->add_clean_inode(cur);
+    ls->open_files.push_back(&cur->xlist_open_file);
+    mds->mdlog->submit_entry(le);
   }
   
   // hit pop
@@ -4857,11 +4871,10 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 			     mdr->client_request->get_orig_source().num());
   
   SnapRealm *realm = cur->find_snaprealm();
-  realm->build_snap_trace(reply->snapbl);
+  realm->build_snap_trace(mdr->snapbl);
   dout(10) << " snaprealm is " << *realm << " on " << *realm->inode << dendl;
 
-  //reply->set_file_data_version(fdv);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 }
 
 
@@ -4964,9 +4977,6 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    // link the inode
-    dn->get_dir()->link_primary_inode(dn, newi);
-
     // dirty inode, dn, dir
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
 
@@ -4982,7 +4992,7 @@ public:
     mdr->trace.push_back(dn);
 
     // ok, do the open.
-    mds->server->handle_client_open(mdr);
+    mds->server->reply_request(mdr, 0);
   }
 };
 
@@ -5013,10 +5023,14 @@ void Server::handle_client_openc(MDRequest *mdr)
   }
 
   // created null dn.
+
+  CInode *diri = dn->get_dir()->get_inode();
     
   // create inode.
   mdr->now = g_clock.real_now();
-  snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
+
+  SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
+  snapid_t follows = realm->get_newest_seq();
 
   CInode *in = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.open.ino));
   assert(in);
@@ -5029,9 +5043,11 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.max_size = in->get_layout_size_increment();
   in->inode.rstat.rfiles = 1;
 
-  in->projected_parent = dn;
   dn->first = in->first = follows+1;
   
+  // link now, so that in->parent is set and find_snaprealm() works.
+  dn->dir->link_primary_inode(dn, in);
+
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
@@ -5039,7 +5055,26 @@ void Server::handle_client_openc(MDRequest *mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, in);
-  
+
+  // do the open
+  bool is_new = false;
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
+  if (is_new)
+    cap->dec_suppress();
+
+  // stick cap, snapbl info in mdr
+  mdr->cap = cap;
+  realm->build_snap_trace(mdr->snapbl);
+
+  // make sure this inode gets into the journal
+  le->metablob.add_opened_ino(in->ino());
+  LogSegment *ls = mds->mdlog->get_current_segment();
+  ls->open_files.push_back(&in->xlist_open_file);
+
+  // early reply?
+  early_reply(mdr, in, 0);
+
   // log + wait
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
   mdlog->submit_entry(le, fin);

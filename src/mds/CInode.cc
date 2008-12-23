@@ -1245,10 +1245,6 @@ void CInode::close_snaprealm(bool nojoin)
   }
 }
 
-/*
- * note: this is _not_ inclusive of *this->snaprealm, as that is for
- * nested directory content.
- */ 
 SnapRealm *CInode::find_snaprealm()
 {
   CInode *cur = this;
