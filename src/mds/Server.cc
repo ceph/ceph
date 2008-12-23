@@ -131,19 +131,23 @@ class C_MDS_session_finish : public Context {
   Session *session;
   bool open;
   version_t cmapv;
+  deque<inodeno_t> inos;
+  version_t inotablev;
 public:
   C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv) :
-    mds(m), session(se), open(s), cmapv(mv) { }
+    mds(m), session(se), open(s), cmapv(mv), inotablev(0) { }
+  C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv, deque<inodeno_t>& i, version_t iv) :
+    mds(m), session(se), open(s), cmapv(mv), inos(i), inotablev(iv) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->_session_logged(session, open, cmapv);
+    mds->server->_session_logged(session, open, cmapv, inos, inotablev);
   }
 };
 
 
 void Server::handle_client_session(MClientSession *m)
 {
-  version_t pv, piv;
+  version_t pv, piv = 0;
   Session *session = mds->sessionmap.get_session(m->get_source());
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
@@ -195,13 +199,14 @@ void Server::handle_client_session(MClientSession *m)
     }
     mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     pv = ++mds->sessionmap.projected;
-    if (session->inos.size()) {
-      mds->inotable->release_ids(session->inos);
-      piv = mds->inotable->get_version();
+    if (session->prealloc_inos.size()) {
+      assert(session->projected_inos == 0);
+      mds->inotable->project_release_ids(session->prealloc_inos);
+      piv = mds->inotable->get_projected_version();
     } else
       piv = 0;
-    mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv, session->inos, piv),
-			new C_MDS_session_finish(mds, session, false, pv));
+    mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv, session->prealloc_inos, piv),
+			new C_MDS_session_finish(mds, session, false, pv, session->prealloc_inos, piv));
     break;
 
   default:
@@ -209,7 +214,7 @@ void Server::handle_client_session(MClientSession *m)
   }
 }
 
-void Server::_session_logged(Session *session, bool open, version_t pv)
+void Server::_session_logged(Session *session, bool open, version_t pv, deque<inodeno_t>& inos, version_t piv)
 {
   dout(10) << "_session_logged " << session->inst << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
@@ -234,6 +239,12 @@ void Server::_session_logged(Session *session, bool open, version_t pv)
       dout(20) << " killing client lease of " << *p << dendl;
       p->remove_client_lease(r, r->mask, mds->locker);
     }
+    
+    if (piv) {
+      mds->inotable->apply_release_ids(inos);
+      assert(mds->inotable->get_version() == piv);
+    }
+
     if (session->is_closing())
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
     else if (session->is_stale_closing())
@@ -586,14 +597,11 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   }
 
   // give any preallocated inos to the session
-  Session *session = mdr->session;
-  for (deque<inodeno_t>::iterator p = mdr->prealloc_inos.begin();
-       p != mdr->prealloc_inos.end();
-       p++)
-    session->inos.push_back(*p);
+  apply_allocated_inos(mdr);
 
   // clean up request, drop locks, etc.
   // do this before replying, so that we can issue leases
+  Session *session = mdr->session;
   entity_inst_t client_inst = req->get_orig_source_inst();
   mdcache->request_finish(mdr);
   mdr = 0;
@@ -1315,16 +1323,25 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir)
   CInode *in = new CInode(mdcache);
   
   // assign ino
-  int want = 1 + g_conf.mds_client_prealloc_inos - mdr->session->projected_inos;
-  mds->inotable->alloc_ids(mdr->prealloc_inos, want);
-  if (mdr->session->inos.size()) {
-    in->inode.ino = mdr->session->take_ino();  // previously preallocated
+  if (mdr->session->prealloc_inos.size()) {
+    mdr->used_prealloc_ino = 
+      in->inode.ino = mdr->session->take_ino();  // prealloc -> used
+    mds->sessionmap.projected++;
+    dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino << dendl;
   } else {
-    in->inode.ino = 
-      mdr->alloc_ino = mdr->prealloc_inos.front();  // ok, take one we just allocated.
-    mdr->prealloc_inos.pop_front();
+    mdr->alloc_ino = 
+      in->inode.ino = mds->inotable->project_alloc_id();
+    dout(10) << "prepare_new_inode alloc " << mdr->alloc_ino << dendl;
   }
-  mdr->session->projected_inos += mdr->prealloc_inos.size();
+  
+  int want = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+  if (want > 0) {
+    mds->inotable->project_alloc_ids(mdr->prealloc_inos, want);
+    assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
+    mdr->session->projected_inos += mdr->prealloc_inos.size();
+    mds->sessionmap.projected++;
+    dout(10) << "prepare_new_inode prealloc " << mdr->prealloc_inos << dendl;
+  }
 
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
@@ -1337,6 +1354,42 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir)
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;
   return in;
+}
+
+void Server::journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob)
+{
+  blob->set_ino_alloc(mdr->alloc_ino,
+		      mdr->used_prealloc_ino,
+		      mdr->prealloc_inos,
+		      mdr->client_request->get_orig_source(),
+		      mds->sessionmap.projected,
+		      mds->inotable->get_projected_version());
+}
+
+void Server::apply_allocated_inos(MDRequest *mdr)
+{
+  Session *session = mdr->session;
+  dout(10) << "apply_allocated_inos " << mdr->alloc_ino
+	   << " / " << mdr->prealloc_inos
+	   << " / " << mdr->used_prealloc_ino << dendl;
+
+  if (mdr->alloc_ino) {
+    mds->inotable->apply_alloc_id(mdr->alloc_ino);
+  }
+  if (mdr->prealloc_inos.size()) {
+    for (deque<inodeno_t>::iterator p = mdr->prealloc_inos.begin();
+	 p != mdr->prealloc_inos.end();
+	 p++)
+      session->prealloc_inos.push_back(*p);
+    session->projected_inos -= mdr->prealloc_inos.size();
+    mds->sessionmap.version++;
+    mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
+  }
+  if (mdr->used_prealloc_ino) {
+    assert(session->used_inos.front() == mdr->used_prealloc_ino);
+    session->used_inos.pop_front();
+    mds->sessionmap.version++;
+  }
 }
 
 
@@ -2202,17 +2255,6 @@ public:
 };
 
 
-void Server::note_allocated_inos(MDRequest *mdr, EMetaBlob *blob)
-{
-  if (mdr->alloc_ino)
-    blob->add_allocated_ino(mdr->alloc_ino, mds->inotable->get_version());
-  if (mdr->prealloc_inos.size()) 
-    for (deque<inodeno_t>::iterator p = mdr->prealloc_inos.begin();
-	 p != mdr->prealloc_inos.end();
-	 p++)
-      blob->add_allocated_ino(*p, mds->inotable->get_version());
-}
-
 void Server::handle_client_mknod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2243,7 +2285,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
   le->metablob.add_client_req(req->get_reqid());
-  note_allocated_inos(mdr, &le->metablob);
+  journal_allocated_inos(mdr, &le->metablob);
   
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
@@ -2294,7 +2336,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   le->metablob.add_client_req(req->get_reqid());
-  note_allocated_inos(mdr, &le->metablob);
+  journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
@@ -2338,7 +2380,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
   le->metablob.add_client_req(req->get_reqid());
-  note_allocated_inos(mdr, &le->metablob);
+  journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
@@ -4983,7 +5025,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
-  note_allocated_inos(mdr, &le->metablob);
+  journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, in);
   

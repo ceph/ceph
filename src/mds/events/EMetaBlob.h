@@ -273,9 +273,12 @@ private:
 
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
-  // ino's i've allocated
-  vector<inodeno_t> allocated_inos;
-  version_t inotablev;
+  // ino (pre)allocation.  may involve both inotable AND session state.
+  version_t inotablev, sessionmapv;
+  inodeno_t allocated_ino;            // inotable
+  deque<inodeno_t> preallocated_inos; // inotable + session
+  inodeno_t used_preallocated_ino;    //            session
+  entity_name_t client_name;          //            session
 
   // inodes i've truncated
   list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
@@ -289,9 +292,12 @@ private:
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
     ::encode(table_tids, bl);
-    ::encode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::encode(inotablev, bl);
+    ::encode(allocated_ino, bl);
+    ::encode(used_preallocated_ino, bl);
+    ::encode(preallocated_inos, bl);
+    ::encode(client_name, bl);
+    ::encode(inotablev, bl);
+    ::encode(sessionmapv, bl);
     ::encode(truncated_inodes, bl);
     ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
@@ -300,9 +306,12 @@ private:
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
     ::decode(table_tids, bl);
-    ::decode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::decode(inotablev, bl);
+    ::decode(allocated_ino, bl);
+    ::decode(used_preallocated_ino, bl);
+    ::decode(preallocated_inos, bl);
+    ::decode(client_name, bl);
+    ::decode(inotablev, bl);
+    ::decode(sessionmapv, bl);
     ::decode(truncated_inodes, bl);
     ::decode(destroyed_inodes, bl);
     ::decode(client_reqs, bl);
@@ -316,7 +325,8 @@ private:
   // for replay, in certain cases
   LogSegment *_segment;
 
-  EMetaBlob() : last_subtree_map(0), my_offset(0), _segment(0) { }
+  EMetaBlob() : inotablev(0), allocated_ino(0),
+		last_subtree_map(0), my_offset(0), _segment(0) { }
   EMetaBlob(MDLog *mdl);  // defined in journal.cc
 
   void print(ostream& out) {
@@ -333,11 +343,19 @@ private:
 
   void add_table_transaction(int table, version_t tid) {
     table_tids.push_back(pair<__u8, version_t>(table, tid));
-  }  
+  }
 
-  void add_allocated_ino(inodeno_t ino, version_t tablev) {
-    allocated_inos.push_back(ino);
-    inotablev = tablev;
+  void set_ino_alloc(inodeno_t alloc,
+		     inodeno_t used_prealloc,
+		     deque<inodeno_t>& prealloc,
+		     entity_name_t client,
+		     version_t sv, version_t iv) {
+    allocated_ino = alloc;
+    used_preallocated_ino = used_prealloc;
+    preallocated_inos = prealloc;
+    client_name = client;
+    sessionmapv = sv;
+    inotablev = iv;
   }
 
   void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
@@ -520,8 +538,15 @@ private:
       out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
     if (!table_tids.empty())
       out << " table_tids=" << table_tids;
-    if (!allocated_inos.empty())
-      out << " inos=" << allocated_inos << " v" << inotablev;
+    if (allocated_ino || preallocated_inos.size()) {
+      if (allocated_ino)
+	out << " alloc_ino=" << allocated_ino;
+      if (preallocated_inos.size())
+	out << " prealloc_ino=" << preallocated_inos;
+      if (used_preallocated_ino)
+	out << " used_prealloc_ino=" << used_preallocated_ino;
+      out << " v" << inotablev;
+    }
     out << "]";
   }
 

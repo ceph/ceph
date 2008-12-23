@@ -291,8 +291,10 @@ void EMetaBlob::update_segment(LogSegment *ls)
   // -> handled directly by Server.cc, replay()
 
   // alloc table update?
-  if (!allocated_inos.empty())
+  if (inotablev)
     ls->inotablev = inotablev;
+  if (sessionmapv)
+    ls->sessionmapv = sessionmapv;
 
   // truncated inodes
   // -> handled directly by Server.cc
@@ -489,15 +491,48 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   }
 
   // allocated_inos
-  if (!allocated_inos.empty()) {
+  if (inotablev) {
     if (mds->inotable->get_version() >= inotablev) {
       dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
-      dout(10) << " EMetaBlob.replay inotable " << allocated_inos << " tablev " << inotablev
-	       << " - 1 == table " << mds->inotable->get_version() << dendl;
-      mds->inotable->alloc_ids(allocated_inos);
+      dout(10) << " EMetaBlob.replay inotable v " << inotablev
+	       << " - 1 == table " << mds->inotable->get_version()
+	       << " allocated+used " << allocated_ino
+	       << " prealloc " << preallocated_inos
+	       << dendl;
+      if (allocated_ino)
+	mds->inotable->replay_alloc_id(allocated_ino);
+      if (preallocated_inos.size())
+	mds->inotable->replay_alloc_ids(preallocated_inos);
       assert(inotablev == mds->inotable->get_version());
+    }
+  }
+  if (sessionmapv) {
+    if (mds->sessionmap.version >= sessionmapv) {
+      dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
+	       << " <= table " << mds->sessionmap.version << dendl;
+    } else {
+      dout(10) << " EMetaBlob.replay sessionmap v" << sessionmapv
+	       << " -1 == table " << mds->sessionmap.version
+	       << " prealloc " << preallocated_inos
+	       << " used " << used_preallocated_ino
+	       << dendl;
+      Session *session = mds->sessionmap.get_session(client_name);
+      assert(session);
+      if (used_preallocated_ino) {
+	inodeno_t i = session->take_ino();
+	assert(i == used_preallocated_ino);
+	session->used_inos.clear();
+	mds->sessionmap.projected = mds->sessionmap.version++;
+      }
+      if (preallocated_inos.size()) {
+	session->prealloc_inos.insert(session->prealloc_inos.end(),
+				      preallocated_inos.begin(),
+				      preallocated_inos.end());
+	mds->sessionmap.projected = mds->sessionmap.version++;
+      }
+      assert(sessionmapv == mds->sessionmap.version);
     }
   }
 
@@ -580,7 +615,7 @@ void ESession::replay(MDS *mds)
       dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
 	       << " < " << inotablev << " " << (open ? "add":"remove") << dendl;
       assert(!open);  // for now
-      mds->inotable->release_ids(inos);
+      mds->inotable->replay_release_ids(inos);
       assert(mds->inotable->get_version() == inotablev);
     }
   }

@@ -51,15 +51,19 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
-  deque<inodeno_t> inos;
-  int projected_inos;
+  int projected_inos;               // journaling prealloc, will be added to prealloc_inos
+  deque<inodeno_t> prealloc_inos;   // preallocated, ready to use.
+  deque<inodeno_t> used_inos;       // journaling use
 
   inodeno_t take_ino() {
-    assert(!inos.empty());
-    inodeno_t i = inos.front();
-    inos.pop_front();
-    projected_inos--;
+    assert(!prealloc_inos.empty());
+    inodeno_t i = prealloc_inos.front();
+    prealloc_inos.pop_front();
+    used_inos.push_back(i);
     return i;
+  }
+  int get_num_projected_prealloc_inos() {
+    return prealloc_inos.size() + projected_inos;
   }
 
   int get_client() { return inst.name.num(); }
@@ -132,11 +136,17 @@ public:
     ::encode(inst, bl);
     ::encode(cap_push_seq, bl);
     ::encode(completed_requests, bl);
+    ::encode(prealloc_inos, bl);   // hacky, see below.
+    ::encode(used_inos, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(inst, p);
     ::decode(cap_push_seq, p);
     ::decode(completed_requests, p);
+    ::decode(prealloc_inos, p);
+    ::decode(used_inos, p);
+    prealloc_inos.insert(prealloc_inos.begin(), used_inos.begin(), used_inos.end());  // HACK
+    used_inos.clear();
   }
 };
 WRITE_CLASS_ENCODER(Session)

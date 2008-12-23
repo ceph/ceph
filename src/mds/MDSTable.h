@@ -36,7 +36,7 @@ class MDSTable {
   //static const int STATE_COMMITTING = 3;
   int state;
   
-  version_t version, committing_version, committed_version;
+  version_t version, committing_version, committed_version, projected_version;
   
   map<version_t, list<Context*> > waitfor_save;
   
@@ -45,12 +45,16 @@ public:
     mds(m), table_name(n),
     ino(0),
     state(STATE_UNDEF),
-    version(0), committing_version(0), committed_version(0) {}
+    version(0), committing_version(0), committed_version(0), projected_version(0) {}
   virtual ~MDSTable() {}
 
   version_t get_version() { return version; }
   version_t get_committed_version() { return committed_version; }
   version_t get_committing_version() { return committing_version; }
+  version_t get_projected_version() { return projected_version; }
+  
+  //version_t project_version() { return ++projected_version; }
+  //version_t inc_version() { return ++version; }
 
   // load/save from disk (hack)
   bool is_undef() { return state == STATE_UNDEF; }

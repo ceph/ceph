@@ -260,7 +260,7 @@ struct MDRequest : public Mutation {
   CInode *ref_snapdiri;
   snapid_t ref_snapid;
 
-  inodeno_t alloc_ino;
+  inodeno_t alloc_ino, used_prealloc_ino;  
   deque<inodeno_t> prealloc_inos;
 
   // -- i am a slave request
