@@ -494,16 +494,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
-      for (list<inodeno_t>::iterator p = allocated_inos.begin();
-	   p != allocated_inos.end();
-	   ++p) {
-	dout(10) << " EMetaBlob.replay inotable " << *p << " tablev " << inotablev
-		 << " - 1 == table " << mds->inotable->get_version() << dendl;
-	assert(inotablev-1 == mds->inotable->get_version());
-	
-	inodeno_t ino = mds->inotable->alloc_id();
-	assert(ino == *p);       // this should match.
-      }	
+      dout(10) << " EMetaBlob.replay inotable " << allocated_inos << " tablev " << inotablev
+	       << " - 1 == table " << mds->inotable->get_version() << dendl;
+      mds->inotable->alloc_ids(allocated_inos);
       assert(inotablev == mds->inotable->get_version());
     }
   }
@@ -554,6 +547,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 void ESession::update_segment()
 {
   _segment->sessionmapv = cmapv;
+  if (inos.size() && inotablev)
+    _segment->inotablev = inotablev;
 }
 
 void ESession::replay(MDS *mds)
@@ -576,6 +571,20 @@ void ESession::replay(MDS *mds)
 	mds->sessionmap.remove_session(session);
     }
   }
+
+  if (inos.size() && inotablev) {
+    if (mds->inotable->get_version() >= inotablev) {
+      dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
+	       << " >= " << inotablev << ", noop" << dendl;
+    } else {
+      dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
+	       << " < " << inotablev << " " << (open ? "add":"remove") << dendl;
+      assert(!open);  // for now
+      mds->inotable->release_ids(inos);
+      assert(mds->inotable->get_version() == inotablev);
+    }
+  }
+
   update_segment();
 }
 

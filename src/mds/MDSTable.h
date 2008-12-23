@@ -45,9 +45,7 @@ public:
     mds(m), table_name(n),
     ino(0),
     state(STATE_UNDEF),
-    version(0), committing_version(0), committed_version(0)
-  {
-  }
+    version(0), committing_version(0), committed_version(0) {}
   virtual ~MDSTable() {}
 
   version_t get_version() { return version; }

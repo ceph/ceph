@@ -209,6 +209,8 @@ struct md_config_t {
   float mds_tick_interval;
   float mds_scatter_nudge_interval;
 
+  int mds_client_prealloc_inos;
+
   bool mds_log;
   int mds_log_max_events;
   int mds_log_max_segments;

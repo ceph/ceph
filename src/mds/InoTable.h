@@ -28,8 +28,12 @@ class InoTable : public MDSTable {
   InoTable(MDS *m) : MDSTable(m, "inotable") { }
 
   // alloc or reclaim ids
-  inodeno_t alloc_id();
-  
+  inodeno_t alloc_id(inodeno_t id=0);
+  void alloc_ids(vector<inodeno_t>& inos);
+  void alloc_ids(deque<inodeno_t>& inos, int want);
+  void release_ids(vector<inodeno_t>& inos);
+  void release_ids(deque<inodeno_t>& inos);
+
   void init_inode();
   void reset_state();
   void encode_state(bufferlist& bl) {

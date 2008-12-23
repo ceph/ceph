@@ -44,12 +44,13 @@ void InoTable::reset_state()
   free.insert(start, end);
 }
 
-inodeno_t InoTable::alloc_id() 
+inodeno_t InoTable::alloc_id(inodeno_t id) 
 {
   assert(is_active());
   
   // pick one
-  inodeno_t id = free.start();
+  if (!id)
+    id = free.start();
   free.erase(id);
   dout(10) << "alloc id " << id << dendl;
 
@@ -57,4 +58,35 @@ inodeno_t InoTable::alloc_id()
   
   return id;
 }
+
+void InoTable::alloc_ids(vector<inodeno_t>& ids) 
+{
+  assert(is_active());
+  dout(10) << "alloc_ids " << ids << dendl;
+  for (vector<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++)
+    free.erase(*p);
+  version++;
+}
+
+void InoTable::alloc_ids(deque<inodeno_t>& ids, int want) 
+{
+  assert(is_active());
+  for (int i=0; i<want; i++) {
+    inodeno_t id = free.start();
+    free.erase(id);
+    dout(10) << "alloc_ids " << id << dendl;
+    ids.push_back(id);
+  }
+  version++;
+}
+
+void InoTable::release_ids(deque<inodeno_t>& ids) 
+{
+  assert(is_active());
+  dout(10) << "release_ids " << ids << dendl;
+  for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++)
+    free.insert(*p);
+  version++;
+}
+
 

@@ -71,8 +71,8 @@ void MDLog::reopen_logger(utime_t start, bool append)
 
     mdlog_logtype.add_set("expos");
     mdlog_logtype.add_set("wrpos");
-
-    mdlog_logtype.add_avg("jlat");
+    mdlog_logtype.add_avg("jacklat");
+    mdlog_logtype.add_avg("jsafelat");
   }
 
 }

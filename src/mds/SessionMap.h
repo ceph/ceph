@@ -51,6 +51,17 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
+  deque<inodeno_t> inos;
+  int projected_inos;
+
+  inodeno_t take_ino() {
+    assert(!inos.empty());
+    inodeno_t i = inos.front();
+    inos.pop_front();
+    projected_inos--;
+    return i;
+  }
+
   int get_client() { return inst.name.num(); }
 
   bool is_undef() { return state == STATE_UNDEF; }
@@ -114,6 +125,7 @@ public:
   Session() : 
     state(STATE_UNDEF), 
     session_list_item(this),
+    projected_inos(0),
     cap_push_seq(0) { }
 
   void encode(bufferlist& bl) const {

@@ -260,12 +260,14 @@ struct MDRequest : public Mutation {
   CInode *ref_snapdiri;
   snapid_t ref_snapid;
 
+  inodeno_t alloc_ino;
+  deque<inodeno_t> prealloc_inos;
+
   // -- i am a slave request
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
-
 
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
@@ -781,7 +783,6 @@ public:
   
 
  public:
-  CInode *create_inode();
   void add_inode(CInode *in);
 
   void remove_inode(CInode *in);

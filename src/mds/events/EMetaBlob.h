@@ -274,7 +274,7 @@ private:
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
   // ino's i've allocated
-  list<inodeno_t> allocated_inos;
+  vector<inodeno_t> allocated_inos;
   version_t inotablev;
 
   // inodes i've truncated

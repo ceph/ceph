@@ -151,22 +151,6 @@ bool MDCache::shutdown()
 // ====================================================================
 // some inode functions
 
-CInode *MDCache::create_inode()
-{
-  CInode *in = new CInode(this);
-
-  // assign ino
-  in->inode.ino = mds->inotable->alloc_id();
-  in->inode.version = 1;
-  in->inode.nlink = 1;   // FIXME
-
-  in->inode.layout = g_default_file_layout;
-
-  add_inode(in);  // add
-  return in;
-}
-
-
 void MDCache::add_inode(CInode *in) 
 {
   // add to lru, inode map
