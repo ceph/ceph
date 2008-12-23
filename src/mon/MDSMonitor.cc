@@ -508,20 +508,21 @@ void MDSMonitor::tick()
     while (pending_mdsmap.is_in(mds))
       mds++;
     entity_addr_t addr;
-    if (pending_mdsmap.find_standby_for(mds, addr)) {
-      dout(1) << "adding standby " << addr << " as mds" << mds << dendl;
+    if (!pending_mdsmap.find_standby_for(mds, addr))
+      break;
 
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
-      info.mds = mds;
-      if (pending_mdsmap.stopped.count(mds))
-	info.state = MDSMap::STATE_STARTING;
-      else
-	info.state = MDSMap::STATE_CREATING;
-      info.inc = ++pending_mdsmap.inc[mds];
-      pending_mdsmap.in.insert(mds);
-      pending_mdsmap.up[mds] = addr;
-      do_propose = true;
-    }
+    dout(1) << "adding standby " << addr << " as mds" << mds << dendl;
+    
+    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
+    info.mds = mds;
+    if (pending_mdsmap.stopped.count(mds))
+      info.state = MDSMap::STATE_STARTING;
+    else
+      info.state = MDSMap::STATE_CREATING;
+    info.inc = ++pending_mdsmap.inc[mds];
+    pending_mdsmap.in.insert(mds);
+    pending_mdsmap.up[mds] = addr;
+    do_propose = true;
   }
 
   // check beacon timestamps
