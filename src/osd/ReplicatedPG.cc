@@ -1131,6 +1131,9 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     }
     break;
 
+  case CEPH_OSD_OP_STARTSYNC:
+    t.start_sync();
+    break;
 
   default:
     return -EINVAL;

@@ -98,6 +98,9 @@ public:
     static const int OP_COLL_RMATTR =  25;  // cid, attrname
     static const int OP_COLL_SETATTRS = 26;  // cid, attrset
 
+    static const int OP_STARTSYNC =    27;  // start a sync 
+
+
   private:
     /*
     int len;
@@ -158,6 +161,10 @@ public:
       return attrsets[attrsetp++];
     }
 
+    void start_sync() {
+      int op = OP_STARTSYNC;
+      ops.push_back(op);
+    }
     void touch(coll_t cid, pobject_t oid) {
       int op = OP_TOUCH;
       ops.push_back(op);

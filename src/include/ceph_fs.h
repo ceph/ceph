@@ -1112,6 +1112,7 @@ enum {
 
 	/* fancy write */
 	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 6,
+	CEPH_OSD_OP_STARTSYNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 7,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
