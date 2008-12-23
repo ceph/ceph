@@ -780,13 +780,16 @@ struct ceph_mds_request_head {
 		struct {
 			__le32 mode;
 			__le32 rdev;
+			__le64 ino;
 		} __attribute__ ((packed)) mknod;
 		struct {
 			__le32 mode;
+			__le64 ino;
 		} __attribute__ ((packed)) mkdir;
 		struct {
 			__le32 flags;
 			__le32 mode;
+			__le64 ino;
 		} __attribute__ ((packed)) open;
 		struct {
 			__le64 length;
