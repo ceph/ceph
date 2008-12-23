@@ -72,7 +72,7 @@ void MDSMap::print_summary(ostream& out)
        p++)
     by_state[p->second.state]++;
 
-  out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << " up";
+  out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << "/" << max_mds << " up";
 
   for (map<int,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
     out << ", " << p->second << " " << get_state_name(p->first);
