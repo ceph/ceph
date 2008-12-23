@@ -22,11 +22,11 @@ using std::vector;
 
 class MMonCommand : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   vector<string> cmd;
 
   MMonCommand() : Message(MSG_MON_COMMAND) {}
-  MMonCommand(ceph_fsid &f) : 
+  MMonCommand(ceph_fsid_t &f) : 
     Message(MSG_MON_COMMAND),
     fsid(f) { }
   

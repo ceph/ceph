@@ -19,14 +19,14 @@
 
 class MPGStats : public Message {
 public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
   epoch_t epoch;
   utime_t had_map_for;
   
   MPGStats() : Message(MSG_PGSTATS) {}
-  MPGStats(ceph_fsid& f, epoch_t e, utime_t had) : 
+  MPGStats(ceph_fsid_t& f, epoch_t e, utime_t had) : 
     Message(MSG_PGSTATS), fsid(f), epoch(e), had_map_for(had) {}
 
   const char *get_type_name() { return "pg_stats"; }

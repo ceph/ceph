@@ -74,7 +74,7 @@ void OSDMap::print_summary(ostream& out)
 }
 
 
-void OSDMap::build_simple(epoch_t e, ceph_fsid &fsid,
+void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
 			  int num_osd, int num_dom, int pg_bits, int lpg_bits,
 			  int mds_local_osd)
 {

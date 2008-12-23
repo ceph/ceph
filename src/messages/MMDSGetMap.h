@@ -21,11 +21,11 @@
 
 class MMDSGetMap : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   epoch_t want;
 
   MMDSGetMap() {}
-  MMDSGetMap(ceph_fsid &f, epoch_t w=0) : 
+  MMDSGetMap(ceph_fsid_t &f, epoch_t w=0) : 
     Message(CEPH_MSG_MDS_GETMAP), 
     fsid(f),
     want(w) { }

@@ -198,7 +198,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
 
 void Monitor::handle_command(MMonCommand *m)
 {
-  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
     reply_command(m, -EPERM, "wrong fsid");
     return;

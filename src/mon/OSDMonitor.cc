@@ -340,7 +340,7 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
 	  << " start " << m->get_start_epoch()
 	  << dendl;
   
-  if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_osd_getmap on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
     goto out;
   }
@@ -369,7 +369,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   // who is failed
   int badboy = m->get_failed().name.num();
 
-  if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_failure on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
     goto didit;
   }
@@ -457,7 +457,7 @@ void OSDMonitor::_reported_failure(MOSDFailure *m)
 
 bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 {
-  if (!ceph_fsid_equal(&m->sb.fsid, &mon->monmap->fsid)) {
+  if (ceph_fsid_compare(&m->sb.fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_boot on fsid " << m->sb.fsid << " != " << mon->monmap->fsid << dendl;
     delete m;
     return true;
@@ -974,7 +974,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "setmap") {
       OSDMap map;
       map.decode(m->get_data());
-      if (ceph_fsid_equal(&map.fsid, &mon->monmap->fsid)) {
+      if (ceph_fsid_compare(&map.fsid, &mon->monmap->fsid) == 0) {
 	map.epoch = pending_inc.epoch;  // make sure epoch is correct
 	map.encode(pending_inc.fullmap);
 	string rs = "set osd map";

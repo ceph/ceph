@@ -23,12 +23,12 @@
 
 class MOSDPing : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   epoch_t map_epoch, peer_as_of_epoch;
   bool ack;
   osd_peer_stat_t peer_stat;
 
-  MOSDPing(ceph_fsid& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, bool a=false) : 
+  MOSDPing(ceph_fsid_t& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, bool a=false) : 
     Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), ack(a), peer_stat(ps) { }
   MOSDPing() {}
 

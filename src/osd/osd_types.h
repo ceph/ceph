@@ -614,7 +614,7 @@ struct ObjectMutation {
 class OSDSuperblock {
 public:
   nstring magic;
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.

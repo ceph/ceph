@@ -65,15 +65,12 @@ typedef __le32 ceph_epoch_t;
 /*
  * fs id
  */
-struct ceph_fsid {
-	__le64 major;
-	__le64 minor;
-} __attribute__ ((packed));
+typedef struct { unsigned char fsid[16]; } ceph_fsid_t;
 
-static inline int ceph_fsid_equal(const struct ceph_fsid *a,
-				  const struct ceph_fsid *b)
+static inline int ceph_fsid_compare(const ceph_fsid_t *a,
+				    const ceph_fsid_t *b)
 {
-	return a->major == b->major && a->minor == b->minor;
+	return memcmp(a, b, sizeof(*a));
 }
 
 
@@ -541,7 +538,7 @@ struct ceph_msg_footer {
 
 
 struct ceph_mon_statfs {
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	__le64 tid;
 };
 
@@ -553,18 +550,18 @@ struct ceph_statfs {
 };
 
 struct ceph_mon_statfs_reply {
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	__le64 tid;
 	struct ceph_statfs st;
 };
 
 struct ceph_osd_getmap {
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	__le32 start;
 } __attribute__ ((packed));
 
 struct ceph_mds_getmap {
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	__le32 want;
 } __attribute__ ((packed));
 
