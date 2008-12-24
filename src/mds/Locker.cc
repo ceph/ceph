@@ -398,6 +398,8 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
+  case CEPH_LOCK_IAUTH:
+    return simple_wrlock_start((SimpleLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_INEST:
     return scatter_wrlock_start((ScatterLock*)lock, mut);
@@ -414,6 +416,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
 void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 {
   switch (lock->get_type()) {
+  case CEPH_LOCK_IAUTH:
+    return simple_wrlock_finish(lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_INEST:
     return scatter_wrlock_finish((ScatterLock*)lock, mut);
@@ -1662,7 +1666,8 @@ void Locker::simple_eval_gather(SimpleLock *lock)
       !lock->is_gathering() &&
       lock->get_num_client_lease() == 0 &&
       !lock->is_rdlocked()) {
-    dout(7) << "simple_eval finished gather on " << *lock << " on " << *lock->get_parent() << dendl;
+    dout(7) << "simple_eval finished gather on " << *lock
+	    << " on " << *lock->get_parent() << dendl;
 
     // replica: tell auth
     if (!lock->get_parent()->is_auth()) {
@@ -1682,6 +1687,22 @@ void Locker::simple_eval_gather(SimpleLock *lock)
       simple_eval(lock);
     }
   }
+
+  else if (lock->get_state() == LOCK_LOCK_SYNC &&
+	   !lock->is_gathering() &&
+	   !lock->is_wrlocked()) {
+    dout(7) << "simple_eval finished gather on " << *lock 
+	    << " on " << *lock->get_parent() << dendl;
+    assert(lock->get_parent()->is_auth());
+
+    lock->set_state(LOCK_SYNC);
+    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD);
+
+    lock->get_parent()->auth_unpin(lock);
+
+    // re-eval?
+    simple_eval(lock);
+  }
 }
 
 void Locker::simple_eval(SimpleLock *lock)
@@ -1695,44 +1716,47 @@ void Locker::simple_eval(SimpleLock *lock)
 
   // stable -> sync?
   if (!lock->is_xlocked() &&
+      !lock->is_wrlocked() &&
       lock->get_state() != LOCK_SYNC &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock);
   }
-  
 }
 
 
 // mid
 
-void Locker::simple_sync(SimpleLock *lock)
+bool Locker::simple_sync(SimpleLock *lock)
 {
   dout(7) << "simple_sync on " << *lock << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
-  
-  // check state
-  if (lock->get_state() == LOCK_SYNC)
-    return; // already sync
-  assert(lock->get_state() == LOCK_LOCK);
 
-  // sync.
+  assert(lock->get_state() == LOCK_LOCK);
+  
+  lock->set_state(LOCK_LOCK_SYNC);
+
+  int gather = 0;
+  if (lock->is_wrlocked()) {
+    gather++;
+  }
+
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+    return false;
+  }
+
   if (lock->get_parent()->is_replicated()) {
-    // hard data
     bufferlist data;
     lock->encode_locked_state(data);
-    
-    // bcast to replicas
     send_lock_message(lock, LOCK_AC_SYNC, data);
   }
-  
-  // change lock
+
   lock->set_state(LOCK_SYNC);
-  
-  // waiters?
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+  return true;
 }
 
 void Locker::simple_lock(SimpleLock *lock)
@@ -1784,18 +1808,70 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
 {
   dout(7) << "simple_rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
-  // can read?  grab ref.
-  if (lock->can_rdlock(mut)) {
-    lock->get_rdlock();
-    mut->rdlocks.insert(lock);
-    mut->locks.insert(lock);
-    return true;
+  while (1) {
+    // can read?  grab ref.
+    if (lock->can_rdlock(mut)) {
+      lock->get_rdlock();
+      mut->rdlocks.insert(lock);
+      mut->locks.insert(lock);
+      return true;
+    }
+    
+    if (lock->is_stable() &&
+	lock->get_parent()->is_auth())
+      simple_sync(lock);
+    else
+      break;
   }
-  
+
   // wait!
   dout(7) << "simple_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
   return false;
+}
+
+bool Locker::simple_wrlock_start(SimpleLock *lock, MDRequest *mut)
+{
+  dout(7) << "simple_wrlock_start  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+
+  while (1) {
+    // can wrlock?
+    if (lock->can_wrlock()) {
+      lock->get_wrlock();
+      if (mut) {
+	mut->wrlocks.insert(lock);
+	mut->locks.insert(lock);
+      }
+      return true;
+    }
+
+    if (lock->is_stable() && lock->get_state() == LOCK_SYNC)
+      simple_lock(lock);
+    else
+      break;
+  }
+
+  dout(7) << "simple_wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+  return false;
+}
+
+void Locker::simple_wrlock_finish(SimpleLock *lock, Mutation *mut)
+{
+  dout(7) << "simple_wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->put_wrlock();
+  if (mut) {
+    mut->wrlocks.erase(lock);
+    mut->locks.erase(lock);
+  }
+
+  if (!lock->is_wrlocked()) {
+    if (!lock->is_stable())
+      simple_eval_gather(lock);
+    else if (lock->get_parent()->is_auth())
+      simple_eval(lock);
+  }
 }
 
 void Locker::simple_rdlock_finish(SimpleLock *lock, Mutation *mut)
@@ -3130,7 +3206,7 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
 
 void Locker::file_wrlock_finish(FileLock *lock, Mutation *mut)
 {
-  dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
+  dout(7) << "file_wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->put_wrlock();
   if (mut) {
     mut->wrlocks.erase(lock);

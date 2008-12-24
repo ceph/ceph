@@ -39,10 +39,11 @@ inline const char *get_lock_type_name(int t) {
 // sync <-> lock
 #define LOCK_UNDEF    0
 //                               auth   rep
-#define LOCK_SYNC     1  // AR   R .    R .
-#define LOCK_LOCK     2  // AR   R W    . .
-#define LOCK_SYNC_LOCK  -3  // AR   R .    . .
-#define LOCK_REMOTEXLOCK  -50    // on NON-auth
+#define LOCK_SYNC        1     // AR   R .    R .
+#define LOCK_LOCK        2     // AR   R W    . .
+#define LOCK_SYNC_LOCK  -3     // AR   R .    . .
+#define LOCK_LOCK_SYNC  -51    // A    R w
+#define LOCK_REMOTEXLOCK  -50  // on NON-auth
 
 inline const char *get_simplelock_state_name(int n) {
   switch (n) {
@@ -50,6 +51,7 @@ inline const char *get_simplelock_state_name(int n) {
   case LOCK_SYNC: return "sync";
   case LOCK_LOCK: return "lock";
   case LOCK_SYNC_LOCK: return "sync->lock";
+  case LOCK_LOCK_SYNC: return "lock->sync";
   case LOCK_REMOTEXLOCK: return "remote_xlock";
   default: assert(0); return 0;
   }
@@ -204,7 +206,9 @@ public:
   int get_num_rdlocks() { return num_rdlock; }
 
   // wrlock
-  virtual bool can_wrlock() { return false; }
+  virtual bool can_wrlock() {
+    return state == LOCK_LOCK;
+  }
   void get_wrlock(bool force=false) {
     assert(can_wrlock() || force);
     if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);

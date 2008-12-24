@@ -103,10 +103,12 @@ public:
 protected:
   void simple_eval(SimpleLock *lock);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
-  void simple_sync(SimpleLock *lock);
+  bool simple_sync(SimpleLock *lock);
   void simple_lock(SimpleLock *lock);
   bool simple_rdlock_start(SimpleLock *lock, MDRequest *mut);
   void simple_rdlock_finish(SimpleLock *lock, Mutation *mut);
+  bool simple_wrlock_start(SimpleLock *lock, MDRequest *mut);
+  void simple_wrlock_finish(SimpleLock *lock, Mutation *mut);
   bool simple_xlock_start(SimpleLock *lock, MDRequest *mut);
   void simple_xlock_finish(SimpleLock *lock, Mutation *mut);
 

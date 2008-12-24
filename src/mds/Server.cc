@@ -1861,7 +1861,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->authlock);
+  wrlocks.insert(&cur->authlock);
   mds->locker->include_snap_rdlocks(rdlocks, cur);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -1906,7 +1906,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->authlock);
+  wrlocks.insert(&cur->authlock);
   mds->locker->include_snap_rdlocks(rdlocks, cur);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))

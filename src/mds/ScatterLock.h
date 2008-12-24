@@ -27,7 +27,7 @@
 #define LOCK_SYNC_LOCK__       -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
 #define LOCK_SYNC_SCATTER      -28  // r .  r .  
 
-#define LOCK_LOCK_SYNC         -29  // . w       LOCK on replica.
+#define LOCK_LOCK_SYNC_             // . w       LOCK on replica.
 #define LOCK_LOCK__                 // . W  . .
 #define LOCK_LOCK_TEMPSYNC     -21  // . w       LOCK on replica.
 
