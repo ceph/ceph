@@ -153,7 +153,7 @@ if [ $start_mon -eq 1 ]; then
 	if [ $new -eq 1 ]; then
 	# build and inject an initial osd map
 		$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
-		$CEPH_BIN/ceph osd setmap -i .ceph_osdmap
+		$CEPH_BIN/ceph osd setmap 2 -i .ceph_osdmap 
 	fi
 fi
 
