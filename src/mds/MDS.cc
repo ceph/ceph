@@ -388,8 +388,9 @@ void MDS::tick()
   if (laggy)
     return;
 
-  // make sure mds log flushes periodically
+  // make sure mds log flushes, trims periodically
   mdlog->flush();
+  mdlog->trim();
 
   // log
   mds_load_t load = balancer->get_load();

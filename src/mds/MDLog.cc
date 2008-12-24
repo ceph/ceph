@@ -237,9 +237,6 @@ void MDLog::flush()
   if (unflushed)
     journaler->flush();
   unflushed = 0;
-
-  // trim
-  trim();
 }
 
 void MDLog::cap()
