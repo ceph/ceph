@@ -1257,8 +1257,12 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
     mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
-    mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
-								client, ack, releasecap));
+    mds->mdlog->submit_entry(le);
+    mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
+							     client, ack, releasecap));
+    // only flush immediately if the lock is unstable
+    if (!in->filelock.is_stable())
+      mds->mdlog->flush();
   } else {
     // no update, ack now.
     if (releasecap) {
@@ -2364,6 +2368,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
+  mds->mdlog->flush();
 }
 
 void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
@@ -3019,7 +3024,11 @@ bool Locker::file_rdlock_start(FileLock *lock, MDRequest *mut)
   // wait
   dout(7) << "file_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
-        
+  
+  // make sure we aren't waiting on a cap flush
+  if (lock->get_parent()->is_auth() && lock->is_wrlocked())
+    mds->mdlog->flush();
+
   return false;
 }
 
@@ -3111,6 +3120,11 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
 
   dout(7) << "file_wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+
+  // make sure we aren't waiting on a cap flush
+  if (lock->get_parent()->is_auth() && lock->is_wrlocked())
+    mds->mdlog->flush();
+
   return false;
 }
 
@@ -3167,11 +3181,16 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
     mut->locks.insert(lock);
     mut->xlocks.insert(lock);
     return true;
-  } else {
-    dout(7) << "file_xlock_start on auth, waiting for write on " << *lock << " on " << *lock->get_parent() << dendl;
-    lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
-    return false;
   }
+
+  dout(7) << "file_xlock_start on auth, waiting for write on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
+
+  // make sure we aren't waiting on a cap flush
+  if (lock->get_parent()->is_auth() && lock->is_wrlocked())
+    mds->mdlog->flush();
+
+  return false;
 }
 
 

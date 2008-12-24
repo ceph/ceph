@@ -245,6 +245,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	      << ", waiting for safe journal flush" << dendl;
       if (!gather) gather = new C_Gather;
       mds->mdlog->wait_for_safe(gather->new_sub());
+      mds->mdlog->flush();
     }
   }
 

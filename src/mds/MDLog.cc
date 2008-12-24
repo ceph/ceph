@@ -213,7 +213,7 @@ void MDLog::wait_for_sync( Context *c )
 {
   if (g_conf.mds_log) {
     // wait
-    journaler->flush(c);
+    journaler->wait_for_flush(c, 0);
   } else {
     // hack: bypass.
     c->finish(0);
@@ -224,7 +224,7 @@ void MDLog::wait_for_safe( Context *c )
 {
   if (g_conf.mds_log) {
     // wait
-    journaler->flush(0, c);
+    journaler->wait_for_flush(0, c);
   } else {
     // hack: bypass.
     c->finish(0);
@@ -263,8 +263,10 @@ void MDLog::start_new_segment(Context *onsync)
 
   ESubtreeMap *le = mds->mdcache->create_subtree_map();
   submit_entry(le, new C_MDL_WroteSubtreeMap(this, mds->mdlog->get_write_pos()));
-  if (onsync)
+  if (onsync) {
     wait_for_sync(onsync);  
+    flush();
+  }
 
   logger->inc("segadd");
   logger->set("seg", segments.size());

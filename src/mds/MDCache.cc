@@ -509,6 +509,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       
       mds->mdlog->submit_entry(le);
       mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, mut));
+      mds->mdlog->flush();
     }
   } 
 
@@ -2121,6 +2122,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 	uncommitted_slave_updates.erase(from);
 
       mds->mdlog->wait_for_sync(new C_MDC_SlaveCommit(this, from, *p));
+      mds->mdlog->flush();
     } else {
       MDRequest *mdr = request_get(*p);
       assert(mdr->slave_request == 0);  // shouldn't be doing anything!

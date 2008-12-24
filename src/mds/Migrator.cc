@@ -802,6 +802,7 @@ void Migrator::export_go(CDir *dir)
 
   // first sync log to flush out e.g. any cap imports
   mds->mdlog->wait_for_sync(new C_M_ExportGo(this, dir));
+  mds->mdlog->flush();
 }
 
 void Migrator::export_go_synced(CDir *dir)
@@ -1137,6 +1138,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_MDS_ExportFinishLogged(this, dir));
+  mds->mdlog->flush();
   
   delete m;
 }
@@ -1691,6 +1693,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   // log it
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(onlogged);
+  mds->mdlog->flush();
 
   // note state
   import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
@@ -2300,6 +2303,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(finish);
+  mds->mdlog->flush();
 
   delete ex;
 }

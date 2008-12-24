@@ -360,9 +360,9 @@ void Journaler::_do_flush()
   dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
 }
 
-  
 
-void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
+
+void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 {
   // all flushed and acked?
   if (write_pos == ack_pos) {
@@ -386,6 +386,21 @@ void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
     return;
   }
 
+  // queue waiter
+  if (onsync) 
+    waitfor_ack[write_pos].push_back(onsync);
+  if (onsafe) 
+    waitfor_safe[write_pos].push_back(onsafe);
+  if (add_ack_barrier)
+    ack_barrier.insert(write_pos);
+}  
+
+void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
+{
+  wait_for_flush(onsync, onsafe, add_ack_barrier);
+  if (write_pos == ack_pos)
+    return;
+
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at "
@@ -408,14 +423,6 @@ void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
       _do_flush();
     }
   }
-
-  // queue waiter (at _new_ write_pos; will go when reached by ack_pos)
-  if (onsync) 
-    waitfor_ack[write_pos].push_back(onsync);
-  if (onsafe) 
-    waitfor_safe[write_pos].push_back(onsafe);
-  if (add_ack_barrier)
-    ack_barrier.insert(write_pos);
 
   // write head?
   if (last_wrote_head.sec() + g_conf.journaler_write_head_interval < g_clock.now().sec()) {

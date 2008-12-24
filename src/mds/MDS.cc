@@ -388,6 +388,9 @@ void MDS::tick()
   if (laggy)
     return;
 
+  // make sure mds log flushes periodically
+  mdlog->flush();
+
   // log
   mds_load_t load = balancer->get_load();
   
@@ -1271,9 +1274,8 @@ bool MDS::_dispatch(Message *m)
 
   // HACK FOR NOW
   if (is_active() || is_stopping()) {
-    // flush log to disk after every op.  for now.
-    //mdlog->flush();
-    mdlog->trim();
+    if (is_stopping())
+      mdlog->trim();
 
     // trim cache
     mdcache->trim();
