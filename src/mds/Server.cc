@@ -560,6 +560,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   // include cap info?
   include_cap_in_reply(mdr, reply);
 
+  mdr->did_early_reply = true;
+
   messenger->send_message(reply, client_inst);
 }
 
@@ -625,6 +627,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   // clean up request, drop locks, etc.
   // do this before replying, so that we can issue leases
   Session *session = mdr->session;
+  bool did_early_reply = mdr->did_early_reply;
   entity_inst_t client_inst = req->get_orig_source_inst();
   mdcache->request_finish(mdr);
   mdr = 0;
@@ -635,7 +638,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     reply = 0;
   } else {
     // send reply, with trace, and possible leases
-    if (tracei || tracedn)
+    if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
+	(tracei || tracedn)) 
       set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri);
     messenger->send_message(reply, client_inst);
   }
