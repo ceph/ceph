@@ -4984,6 +4984,8 @@ public:
   void finish(int r) {
     assert(r == 0);
 
+    dn->get_dir()->link_primary_inode(dn, newi);
+
     // dirty inode, dn, dir
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
 
@@ -5052,9 +5054,6 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   dn->first = in->first = follows+1;
   
-  // link now, so that in->parent is set and find_snaprealm() works.
-  dn->dir->link_primary_inode(dn, in);
-
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");

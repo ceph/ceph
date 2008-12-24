@@ -1248,8 +1248,14 @@ void CInode::close_snaprealm(bool nojoin)
 SnapRealm *CInode::find_snaprealm()
 {
   CInode *cur = this;
-  while (cur->get_parent_dn() && !cur->snaprealm)
-    cur = cur->get_parent_dn()->get_dir()->get_inode();
+  while (!cur->snaprealm) {
+    if (cur->get_parent_dn())
+      cur = cur->get_parent_dn()->get_dir()->get_inode();
+    else if (cur == this && get_projected_parent_dn())
+      cur = get_projected_parent_dn()->get_dir()->get_inode();
+    else
+      break;
+  }
   return cur->snaprealm;
 }
 
