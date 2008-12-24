@@ -341,6 +341,7 @@ md_config_t g_conf = {
   mds_scatter_nudge_interval: 5,  // how quickly dirstat changes propagate up the hierarchy
 
   mds_client_prealloc_inos: 20,
+  mds_early_reply: true,
 
   mds_log: true,
   mds_log_max_events: -1,
@@ -870,6 +871,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 
     else if (strcmp(args[i], "--mds_decay_halflife") == 0) 
       g_conf.mds_decay_halflife = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--mds_early_reply") == 0) 
+      g_conf.mds_early_reply = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_client_prealloc_inos") == 0) 
+      g_conf.mds_client_prealloc_inos = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_bal_interval") == 0) 
       g_conf.mds_bal_interval = atoi(args[++i]);

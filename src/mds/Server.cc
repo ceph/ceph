@@ -535,6 +535,9 @@ void Server::include_cap_in_reply(MDRequest *mdr, MClientReply *reply)
 
 void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 {
+  if (!g_conf.mds_early_reply)
+    return;
+
   if (mdr->alloc_ino) {
     dout(10) << "early_reply - allocated ino, not allowed" << dendl;
     return;
