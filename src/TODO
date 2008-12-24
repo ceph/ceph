@@ -104,6 +104,8 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- xlock vs wrlock.. need more lock states?
+- xattrs need to be properly projected.  should we just expand inode_t?  or make some smarter thing?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
