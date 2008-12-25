@@ -211,7 +211,7 @@ bool LogMonitor::prepare_log(MLog *m)
 {
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
-  if (!ceph_fsid_equal(&m->fsid, &mon->monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
     delete m;
     return false;

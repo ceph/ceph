@@ -115,6 +115,8 @@ class FileStore : public JournalingObjectStore {
   int _do_clone_range(int from, int to, __u64 off, __u64 len);
   int _remove(coll_t cid, pobject_t oid);
 
+  void _start_sync();
+
   void sync();
   void sync(Context *onsafe);
 

@@ -2493,6 +2493,11 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
     int op = t.get_op();
     switch (op) {
  
+    case Transaction::OP_STARTSYNC:
+      dirty = true;
+      commit_cond.Signal();
+      break;
+
     case Transaction::OP_TOUCH:
       {
 	coll_t cid = t.get_cid();

@@ -99,7 +99,7 @@ int main(int argc, const char **argv)
 
   if (whoami < 0) {
     nstring magic;
-    ceph_fsid fsid;
+    ceph_fsid_t fsid;
     int r = OSD::peek_super(dev, magic, fsid, whoami);
     if (r < 0) {
       cerr << "unable to determine OSD identity from superblock on " << dev << ": " << strerror(-r) << std::endl;
@@ -109,7 +109,7 @@ int main(int argc, const char **argv)
       cerr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC << std::endl;
       exit(1);
     }
-    if (!ceph_fsid_equal(&fsid, &monmap.fsid)) {
+    if (ceph_fsid_compare(&fsid, &monmap.fsid)) {
       cerr << "OSD fsid " << fsid << " != monmap fsid " << monmap.fsid << std::endl;
       exit(1);
     }

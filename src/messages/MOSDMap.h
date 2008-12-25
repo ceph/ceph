@@ -22,7 +22,7 @@
 
 class MOSDMap : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
 
@@ -47,7 +47,7 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }
-  MOSDMap(ceph_fsid &f, OSDMap *oc=0) : Message(CEPH_MSG_OSD_MAP),
+  MOSDMap(ceph_fsid_t &f, OSDMap *oc=0) : Message(CEPH_MSG_OSD_MAP),
 				      fsid(f) {
     if (oc)
       oc->encode(maps[oc->get_epoch()]);

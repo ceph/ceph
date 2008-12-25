@@ -24,7 +24,7 @@
 class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   vector<entity_inst_t> mon_inst;
 
   int       last_mon;    // last mon i talked to
@@ -33,7 +33,7 @@ class MonMap {
     generate_fsid();
   }
 
-  ceph_fsid& get_fsid() { return fsid; }
+  ceph_fsid_t& get_fsid() { return fsid; }
 
   unsigned size() {
     return mon_inst.size();
@@ -99,8 +99,8 @@ class MonMap {
 
 
   void generate_fsid() {
-    fsid.major = ((uint64_t)rand() << 32) + rand();
-    fsid.minor = ((uint64_t)rand() << 32) + rand();
+    for (int i=0; i<16; i++)
+      fsid.fsid[i] = rand();
   }
 
   // read from/write to a file

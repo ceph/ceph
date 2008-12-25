@@ -21,11 +21,11 @@
 
 class MOSDGetMap : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   epoch_t start;  // this is the first incremental the sender wants (he has start-1)
 
   MOSDGetMap() : Message(CEPH_MSG_OSD_GETMAP) {}
-  MOSDGetMap(ceph_fsid& f, epoch_t s=0) : 
+  MOSDGetMap(ceph_fsid_t& f, epoch_t s=0) : 
     Message(CEPH_MSG_OSD_GETMAP),
     fsid(f), start(s) { }
 

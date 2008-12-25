@@ -20,7 +20,7 @@
 
 class MStatfs : public Message {
 public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   tid_t tid;
 
   MStatfs() : Message(CEPH_MSG_STATFS) {}

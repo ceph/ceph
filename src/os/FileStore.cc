@@ -694,6 +694,10 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       _collection_rmattr(t.get_cid(), t.get_attrname());
       break;
 
+    case Transaction::OP_STARTSYNC:
+      _start_sync();
+      break;
+
     default:
       cerr << "bad op " << op << std::endl;
       assert(0);
@@ -1429,6 +1433,12 @@ void FileStore::sync_entry()
 
   }
   lock.Unlock();
+}
+
+void FileStore::_start_sync()
+{
+  dout(10) << "start_sync" << dendl;
+  sync_cond.Signal();
 }
 
 void FileStore::sync()
