@@ -595,7 +595,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     wr->onack = 0;  // only do callback once
     num_unacked--;
   }
-  if (wr->oncommit) {
+  if (wr->oncommit && m->is_ondisk()) {
     dout(15) << "handle_osd_modify_reply safe" << dendl;
     oncommit = wr->oncommit;
     wr->oncommit = 0;
