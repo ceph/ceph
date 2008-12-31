@@ -149,7 +149,7 @@ ObjectStore *OSD::create_object_store(const char *dev)
 }
 
 
-int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
+int OSD::mkfs(const char *dev, ceph_fsid_t fsid, int whoami)
 {
   ObjectStore *store = create_object_store(dev);
   if (!store)
@@ -217,7 +217,7 @@ int OSD::mkfs(const char *dev, ceph_fsid fsid, int whoami)
   return 0;
 }
 
-int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid& fsid, int& whoami)
+int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami)
 {
   ObjectStore *store = create_object_store(dev);
   if (!store)
@@ -561,7 +561,7 @@ int OSD::read_superblock()
 
   dout(10) << "read_superblock " << superblock << dendl;
 
-  if (!ceph_fsid_equal(&superblock.fsid, &monmap->fsid)) {
+  if (ceph_fsid_compare(&superblock.fsid, &monmap->fsid)) {
     derr(0) << "read_superblock fsid " << superblock.fsid << " != monmap " << monmap->fsid << dendl;
     return -1;
   }
@@ -982,7 +982,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     return;
   }
 
-  if (!ceph_fsid_equal(&superblock.fsid, &m->fsid)) {
+  if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
     dout(20) << "handle_osd_ping from " << m->get_source()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
     delete m;
@@ -1633,7 +1633,7 @@ void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
   
-  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
     dout(0) << "handle_scrub fsid " << m->fsid << " != " << monmap->fsid << dendl;
     delete m;
     return;
@@ -1724,7 +1724,7 @@ void OSD::note_up_osd(int osd)
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
-  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
     delete m;
     return;
@@ -2098,8 +2098,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
       pg->on_role_change();
 
       // interrupt backlog generation
-      pg->generate_backlog_epoch = 0;
-      backlog_wq.dequeue(pg);
+      cancel_generate_backlog(pg);
 
       // take active waiters
       take_waiters(pg->waiting_for_active);
@@ -3128,6 +3127,13 @@ void OSD::queue_generate_backlog(PG *pg)
     dout(10) << *pg << " queue_generate_backlog epoch " << pg->generate_backlog_epoch << dendl;
     backlog_wq.queue(pg);
   }
+}
+
+void OSD::cancel_generate_backlog(PG *pg)
+{
+  dout(10) << *pg << " cancel_generate_backlog" << dendl;
+  pg->generate_backlog_epoch = 0;
+  backlog_wq.dequeue(pg);
 }
 
 void OSD::generate_backlog(PG *pg)

@@ -23,15 +23,15 @@
  */
 
 struct MOSDScrub : public Message {
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   vector<pg_t> scrub_pgs;
   bool repair;
 
   MOSDScrub() {}
-  MOSDScrub(ceph_fsid& f) :
+  MOSDScrub(ceph_fsid_t& f) :
     Message(MSG_OSD_SCRUB),
     fsid(f), repair(false) {}
-  MOSDScrub(ceph_fsid& f, vector<pg_t>& pgs, bool r) :
+  MOSDScrub(ceph_fsid_t& f, vector<pg_t>& pgs, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), scrub_pgs(pgs), repair(r) {}
 

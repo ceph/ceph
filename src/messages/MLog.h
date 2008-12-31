@@ -19,14 +19,14 @@
 
 class MLog : public Message {
 public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   deque<LogEntry> entries;
   version_t last;
   
   MLog() : Message(MSG_PGSTATS) {}
-  MLog(ceph_fsid& f, deque<LogEntry>& e) : 
+  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : 
     Message(MSG_LOG), fsid(f), entries(e), last(0) { }
-  MLog(ceph_fsid& f, version_t l) : 
+  MLog(ceph_fsid_t& f, version_t l) : 
     Message(MSG_LOG), fsid(f), last(l) {}
 
   const char *get_type_name() { return "log"; }

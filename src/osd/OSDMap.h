@@ -132,7 +132,7 @@ class OSDMap {
 public:
   class Incremental {
   public:
-    ceph_fsid fsid;
+    ceph_fsid_t fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     utime_t ctime;
     int32_t new_flags;
@@ -227,7 +227,7 @@ public:
 
     Incremental(epoch_t e=0) : epoch(e), new_flags(-1), new_max_osd(-1), 
 			       new_pg_num(0), new_pgp_num(0), new_lpg_num(0), new_lpgp_num(0) {
-      fsid.major = fsid.minor = 0;
+      memset(&fsid, 0, sizeof(fsid));
     }
     Incremental(bufferlist &bl) {
       bufferlist::iterator p = bl.begin();
@@ -239,7 +239,7 @@ public:
   };
   
 private:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
   utime_t ctime, mtime; // epoch start time
 
@@ -294,13 +294,13 @@ private:
 	     last_pg_change(0),
 	     flags(0),
 	     max_osd(0), max_snap(0) { 
-    fsid.major = fsid.minor = 0;
+    memset(&fsid, 0, sizeof(fsid));
     calc_pg_masks();
   }
 
   // map info
-  ceph_fsid& get_fsid() { return fsid; }
-  void set_fsid(ceph_fsid& f) { fsid = f; }
+  ceph_fsid_t& get_fsid() { return fsid; }
+  void set_fsid(ceph_fsid_t& f) { fsid = f; }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -484,7 +484,7 @@ private:
     if (inc.epoch == 1)
       fsid = inc.fsid;
     else
-      assert(ceph_fsid_equal(&inc.fsid, &fsid));
+      assert(ceph_fsid_compare(&inc.fsid, &fsid) == 0);
     assert(inc.epoch == epoch+1);
     epoch++;
     ctime = inc.ctime;
@@ -899,7 +899,7 @@ private:
   /*
    * handy helpers to build simple maps...
    */
-  void build_simple(epoch_t e, ceph_fsid &fsid,
+  void build_simple(epoch_t e, ceph_fsid_t &fsid,
 		    int num_osd, int num_dom,
 		    int pg_bits, int lpg_bits,
 		    int mds_local_osd);

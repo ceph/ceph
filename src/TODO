@@ -22,7 +22,6 @@ big items
 - client, user authentication
 - cas
 - osd failure declarations
-- libuuid?
 
 
 repair

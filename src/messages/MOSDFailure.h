@@ -21,12 +21,12 @@
 
 class MOSDFailure : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   entity_inst_t failed;
   epoch_t       epoch;
 
   MOSDFailure() : Message(MSG_OSD_FAILURE) {}
-  MOSDFailure(ceph_fsid &fs, entity_inst_t f, epoch_t e) : 
+  MOSDFailure(ceph_fsid_t &fs, entity_inst_t f, epoch_t e) : 
     Message(MSG_OSD_FAILURE),
     fsid(fs), failed(f), epoch(e) {}
  

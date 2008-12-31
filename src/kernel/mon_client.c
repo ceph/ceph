@@ -19,6 +19,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 {
 	struct ceph_monmap *m;
 	int i, err = -EINVAL;
+	__le64 major, minor;
 
 	dout(30, "monmap_decode %p %p len %d\n", p, end, (int)(end-p));
 
@@ -28,8 +29,10 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 		return ERR_PTR(-ENOMEM);
 
 	ceph_decode_need(&p, end, 2*sizeof(u32) + 2*sizeof(u64), bad);
-	ceph_decode_64_le(&p, m->fsid.major);
-	ceph_decode_64_le(&p, m->fsid.minor);
+	ceph_decode_64_le(&p, major);
+	__ceph_fsid_set_major(&m->fsid, major);
+	ceph_decode_64_le(&p, minor);
+	__ceph_fsid_set_minor(&m->fsid, minor);
 	ceph_decode_32(&p, m->epoch);
 	ceph_decode_32(&p, m->num_mon);
 	ceph_decode_need(&p, end, m->num_mon*sizeof(m->mon_inst[0]), bad);

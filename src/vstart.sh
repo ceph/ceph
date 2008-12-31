@@ -91,7 +91,7 @@ fi
 
 
 # lockdep everywhere?
-export CEPH_ARGS="--lockdep 1"
+# export CEPH_ARGS="--lockdep 1"
 
 
 # sudo if btrfs

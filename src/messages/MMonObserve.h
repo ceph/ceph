@@ -22,12 +22,12 @@ using std::vector;
 
 class MMonObserve : public Message {
  public:
-  ceph_fsid fsid;
+  ceph_fsid_t fsid;
   uint32_t machine_id;
   version_t ver;
 
   MMonObserve() : Message(MSG_MON_OBSERVE) {}
-  MMonObserve(ceph_fsid &f, int mid, version_t v) : 
+  MMonObserve(ceph_fsid_t &f, int mid, version_t v) : 
     Message(MSG_MON_OBSERVE),
     fsid(f), machine_id(mid), ver(v) { }
   

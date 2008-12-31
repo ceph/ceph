@@ -16,6 +16,7 @@
 #include "mon_client.h"
 #include "mds_client.h"
 #include "osd_client.h"
+#include "ceph_fs.h"
 
 /* f_type in struct statfs */
 #define CEPH_SUPER_MAGIC 0x00c36400
@@ -57,7 +58,7 @@ struct ceph_mount_args {
 	int sb_flags;
 	int flags;
 	int mount_timeout;
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
 	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
@@ -89,7 +90,7 @@ struct ceph_client {
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 
 	struct super_block *sb;
 
@@ -572,6 +573,26 @@ static inline bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
 
 /* super.c */
 extern const char *ceph_msg_type_name(int type);
+
+static inline __le64 __ceph_fsid_minor(ceph_fsid_t *fsid)
+{
+	return *(__le64 *)&fsid->fsid[8];
+}
+
+static inline __le64 __ceph_fsid_major(ceph_fsid_t *fsid)
+{
+	return *(__le64 *)&fsid->fsid[0];
+}
+
+static inline void __ceph_fsid_set_minor(ceph_fsid_t *fsid, __le64 val)
+{
+	*(__le64 *)&fsid->fsid[8] = val;
+}
+
+static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
+{
+	*(__le64 *)&fsid->fsid[0] = val;
+}
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;

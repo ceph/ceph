@@ -72,7 +72,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(osdmap); 
 
-  if (!ceph_fsid_equal(&m->fsid, &monmap->fsid)) {
+  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
     delete m;
     return;

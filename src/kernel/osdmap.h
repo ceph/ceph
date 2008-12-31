@@ -2,6 +2,7 @@
 #define _FS_CEPH_OSDMAP_H
 
 #include "types.h"
+#include "ceph_fs.h"
 #include "crush/crush.h"
 
 /*
@@ -17,7 +18,7 @@
  * the change between two successive epochs, or as a fully encoded map.
  */
 struct ceph_osdmap {
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	u32 epoch;
 	u32 mkfs_epoch;
 	struct ceph_timespec ctime, mtime;

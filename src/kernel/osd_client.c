@@ -442,7 +442,8 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	u32 epoch;
 	struct ceph_osdmap *newmap = NULL, *oldmap;
 	int err;
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
+	__le64 major, minor;
 
 	dout(2, "handle_map have %u\n", osdc->osdmap ? osdc->osdmap->epoch : 0);
 	p = msg->front.iov_base;
@@ -450,9 +451,11 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 
 	/* verify fsid */
 	ceph_decode_need(&p, end, sizeof(fsid), bad);
-	ceph_decode_64_le(&p, fsid.major);
-	ceph_decode_64_le(&p, fsid.minor);
-	if (!ceph_fsid_equal(&fsid, &osdc->client->monc.monmap->fsid)) {
+	ceph_decode_64_le(&p, major);
+	__ceph_fsid_set_major(&fsid, major);
+	ceph_decode_64_le(&p, minor);
+	__ceph_fsid_set_minor(&fsid, minor);
+	if (ceph_fsid_compare(&fsid, &osdc->client->monc.monmap->fsid)) {
 		derr(0, "got map with wrong fsid, ignoring\n");
 		return;
 	}

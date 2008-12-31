@@ -539,6 +539,7 @@ private:
   } backlog_wq;
 
   void queue_generate_backlog(PG *pg);
+  void cancel_generate_backlog(PG *pg);
   void generate_backlog(PG *pg);
 
 
@@ -693,8 +694,8 @@ private:
   // static bits
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const char *dev);
-  static int mkfs(const char *dev, ceph_fsid fsid, int whoami);
-  static int peek_super(const char *dev, nstring& magic, ceph_fsid& fsid, int& whoami);
+  static int mkfs(const char *dev, ceph_fsid_t fsid, int whoami);
+  static int peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami);
 
   // startup/shutdown
   int init();

@@ -105,7 +105,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_frsize = PAGE_CACHE_SIZE;
 
 	/* leave in little-endian, regardless of host endianness */
-	fsid = monmap->fsid.major ^ monmap->fsid.minor;
+	fsid = __ceph_fsid_major(&monmap->fsid) ^ __ceph_fsid_minor(&monmap->fsid);
 	buf->f_fsid.val[0] = le64_to_cpu(fsid) & 0xffffffff;
 	buf->f_fsid.val[1] = le64_to_cpu(fsid) >> 32;
 
@@ -134,7 +134,7 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 		seq_printf(m, ",debug=%d", ceph_debug);
 	if (args->flags & CEPH_MOUNT_FSID)
 		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu",
-			   args->fsid.major, args->fsid.minor);
+			   __ceph_fsid_major(&args->fsid), __ceph_fsid_minor(&args->fsid));
 	if (args->flags & CEPH_MOUNT_NOSHARE)
 		seq_puts(m, ",noshare");
 	if (args->flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
@@ -252,8 +252,8 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 		client->msgr->inst.name = msg->hdr.dst.name;
 		sprintf(name, "client%d", client->whoami);
 		dout(1, "i am %s, fsid is %llx.%llx\n", name,
-		     le64_to_cpu(client->monc.monmap->fsid.major),
-		     le64_to_cpu(client->monc.monmap->fsid.minor));
+		     le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
+		     le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 		client->client_kobj = kobject_create_and_add(name, ceph_kobj);
@@ -523,10 +523,10 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		}
 		switch (token) {
 		case Opt_fsidmajor:
-			args->fsid.major = cpu_to_le64(intval);
+			__ceph_fsid_set_major(&args->fsid, cpu_to_le64(intval));
 			break;
 		case Opt_fsidminor:
-			args->fsid.minor = cpu_to_le64(intval);
+			__ceph_fsid_set_minor(&args->fsid, cpu_to_le64(intval));
 			break;
 		case Opt_port:
 			args->my_addr.ipaddr.sin_port = htons(intval);
@@ -953,7 +953,7 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 
 	/* either compare fsid, or specified mon_hostname */
 	if (args->flags & CEPH_MOUNT_FSID) {
-		if (!ceph_fsid_equal(&args->fsid, &other->fsid)) {
+		if (ceph_fsid_compare(&args->fsid, &other->fsid)) {
 			dout(30, "fsid doesn't match\n");
 			return 0;
 		}

@@ -341,7 +341,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     list<Log::Entry>::iterator p = log.log.end();
     while (p != log.log.begin()) {
       p--;
-      if (p->version <= log.top) {
+      if (p->version.version <= log.top.version) {
 	dout(10) << "merge_log split point is " << *p << dendl;
 
 	if (p->version < log.top && p->version < oldest_update) {
@@ -371,9 +371,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	 p++) {
       Log::Entry &oe = *p;                      // old entry
       if (old_objects.count(oe.oid) &&
-	  old_objects[oe.oid] == &oe) {
+	  old_objects[oe.oid] == &oe)
 	merge_old_entry(t, oe);
-      }
     }
 
     info.last_update = log.top = olog.top;
@@ -1179,7 +1178,6 @@ void PG::peer(ObjectStore::Transaction& t,
     // let's pull info+logs from _everyone_ (strays included, this
     // time) in search of missing objects.
 
-    bool waiting = false;
     for (map<int,Info>::iterator it = peer_info.begin();
          it != peer_info.end();
          it++) {
@@ -1190,19 +1188,17 @@ void PG::peer(ObjectStore::Transaction& t,
 
       if (peer_summary_requested.count(peer)) {
         dout(10) << " already requested summary/backlog from osd" << peer << dendl;
-        waiting = true;
         continue;
       }
 
       dout(10) << " requesting summary/backlog from osd" << peer << dendl;      
       query_map[peer][info.pgid] = Query(Query::BACKLOG, info.history);
       peer_summary_requested.insert(peer);
-      waiting = true;
+      return;
     }
     
-    if (!waiting)
-      dout(10) << (missing.num_missing() - missing_loc.size())
-	       << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
+    dout(10) << (missing.num_missing() - missing_loc.size())
+	     << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
     return;
   }
 
@@ -1281,6 +1277,9 @@ void PG::activate(ObjectStore::Transaction& t,
 
   // clear prior set (and dependency info)... we are done peering!
   clear_prior();
+
+  // if we are building a backlog, cancel it!
+  osd->cancel_generate_backlog(this);
 
   // write pg info, log
   write_info(t);
@@ -1782,7 +1781,9 @@ void PG::read_log(ObjectStore *store)
       pobject_t poid(info.pgid.pool(), 0, i->oid);
       bufferlist bv;
       int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
-      eversion_t v(bv);
+      eversion_t v;
+      if (r >= 0)
+	v = eversion_t(bv);
       if (r < 0 || v < i->version) {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->oid, i->version, v);
