@@ -2193,9 +2193,10 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	int err = -EINVAL;
 	int from;
+	__le64 major, minor;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) == CEPH_ENTITY_TYPE_MDS)
 		from = le32_to_cpu(msg->hdr.src.name.num);
@@ -2203,9 +2204,11 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		from = -1;
 
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);
-	ceph_decode_64_le(&p, fsid.major);
-	ceph_decode_64_le(&p, fsid.minor);
-	if (!ceph_fsid_equal(&fsid, &mdsc->client->monc.monmap->fsid)) {
+	ceph_decode_64_le(&p, major);
+	__ceph_fsid_set_major(&fsid, major);
+	ceph_decode_64_le(&p, minor);
+	__ceph_fsid_set_minor(&fsid, minor);
+	if (ceph_fsid_compare(&fsid, &mdsc->client->monc.monmap->fsid)) {
 		derr(0, "got mdsmap with wrong fsid\n");
 		return;
 	}

@@ -29,7 +29,7 @@ struct ceph_mount_args;
  * ceph_monmap_decode().
  */
 struct ceph_monmap {
-	struct ceph_fsid fsid;
+	ceph_fsid_t fsid;
 	u32 epoch;
 	u32 num_mon;
 	struct ceph_entity_inst mon_inst[0];

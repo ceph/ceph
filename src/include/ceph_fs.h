@@ -61,7 +61,6 @@ typedef __le64 ceph_version_t;
 typedef __le64 ceph_tid_t;      /* transaction id */
 typedef __le32 ceph_epoch_t;
 
-
 /*
  * fs id
  */
