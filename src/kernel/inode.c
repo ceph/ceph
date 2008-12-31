@@ -1415,8 +1415,10 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 	int pathlen;
 	struct ceph_mds_request *req;
 	u64 pathbase;
+	int issued = ceph_caps_issued(ceph_inode(dentry->d_inode));
 
-	if (ia_valid & ATTR_FILE) {
+	if ((ia_valid & ATTR_FILE) ||
+	    (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))) {
 		dout(5, "prepare_setattr dentry %p (inode %llx.%llx)\n", dentry,
 		     ceph_vinop(dentry->d_inode));
 		req = ceph_mdsc_create_request(mdsc, op,
