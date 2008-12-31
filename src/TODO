@@ -105,7 +105,6 @@ userspace client
 
 mds
 - xlock vs wrlock.. need more lock states?
-- xattrs need to be properly projected.  should we just expand inode_t?  or make some smarter thing?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers

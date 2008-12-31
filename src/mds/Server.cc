@@ -1979,6 +1979,31 @@ void Server::handle_client_setlayout(MDRequest *mdr)
 
 // XATTRS
 
+class C_MDS_inode_xattr_update_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+public:
+  map<string, bufferptr> xattrs;
+
+  C_MDS_inode_xattr_update_finish(MDS *m, MDRequest *r, CInode *i) :
+    mds(m), mdr(r), in(i) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // apply
+    in->pop_and_dirty_projected_inode(mdr->ls);
+    
+    in->xattrs.swap(xattrs);
+
+    mdr->apply();
+
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+
+    mds->server->reply_request(mdr, 0);
+  }
+};
+
 void Server::handle_client_setxattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2029,15 +2054,21 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
 
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
+
+  C_MDS_inode_xattr_update_finish *fin = new C_MDS_inode_xattr_update_finish(mds, mdr, cur);
+  fin->xattrs = cur->xattrs;
+
   cur->xattrs.erase(name);
   cur->xattrs[name] = buffer::create(len);
   if (len)
     req->get_data().copy(0, len, cur->xattrs[name].c_str());
   le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
-  
+
   early_reply(mdr, cur, 0);
 
-  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  fin->xattrs.swap(cur->xattrs);
+
+  mdlog->submit_entry(le, fin);
 }
 
 void Server::handle_client_removexattr(MDRequest *mdr)
@@ -2082,12 +2113,18 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
 
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
+
+  C_MDS_inode_xattr_update_finish *fin = new C_MDS_inode_xattr_update_finish(mds, mdr, cur);
+  fin->xattrs = cur->xattrs;
+
   cur->xattrs.erase(name);
   le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
 
   early_reply(mdr, cur, 0);
 
-  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  fin->xattrs.swap(cur->xattrs);
+
+  mdlog->submit_entry(le, fin);
 }
 
 
