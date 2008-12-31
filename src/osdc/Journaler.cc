@@ -276,7 +276,7 @@ void Journaler::_finish_flush(int r, __s64 start, utime_t stamp, bool safe)
 }
 
 
-__s64 Journaler::append_entry(bufferlist& bl, Context *onsync)
+__s64 Journaler::append_entry(bufferlist& bl)
 {
   uint32_t s = bl.length();
 
@@ -323,10 +323,6 @@ __s64 Journaler::append_entry(bufferlist& bl, Context *onsync)
   write_buf.claim_append(bl);
   write_pos += sizeof(s) + s;
 
-  // flush now?
-  if (onsync) 
-    flush(onsync);
-
   return write_pos;
 }
 
@@ -364,6 +360,12 @@ void Journaler::_do_flush()
 
 void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 {
+  if (g_conf.journaler_safe && onsync) {
+    assert(!onsafe);
+    onsafe = onsync;
+    onsync = 0;
+  }
+  
   // all flushed and acked?
   if (write_pos == ack_pos) {
     assert(write_buf.length() == 0);

@@ -232,7 +232,7 @@ public:
   __s64 get_trimmed_pos() const { return trimmed_pos; }
 
   // write
-  __s64 append_entry(bufferlist& bl, Context *onsync = 0);
+  __s64 append_entry(bufferlist& bl);
   void wait_for_flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
   void flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
 
