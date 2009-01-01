@@ -43,18 +43,6 @@ public:
   }
   bool is_wrlocked() { return num_wrlock > 0; }
   int get_num_wrlocks() { return num_wrlock; }
-
-
-  void print(ostream& out) {
-    out << "(";
-    out << get_lock_type_name(get_type());
-    if (is_xlocked())
-      out << " x=" << get_xlocked_by();
-    if (is_wrlocked()) 
-      out << " wr=" << get_num_wrlocks();
-    out << ")";
-  }
-
 };
 
 

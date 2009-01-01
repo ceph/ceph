@@ -40,27 +40,6 @@
 #define LOCK_TEMPSYNC           27  // R .       LOCK on replica.
 
 
-inline const char *get_scatterlock_state_name(int s) {
-  switch(s) {
-  case LOCK_SYNC: return "sync";
-  case LOCK_SYNC_LOCK: return "sync->lock";
-  case LOCK_SYNC_SCATTER: return "sync->scatter";
-    
-  case LOCK_LOCK_SYNC: return "lock->sync";
-  case LOCK_LOCK: return "lock";
-  case LOCK_LOCK_TEMPSYNC: return "lock->tempsync";
-    
-  case LOCK_SCATTER_LOCK: return "scatter->lock";
-  case LOCK_SCATTER: return "scatter";
-  case LOCK_SCATTER_TEMPSYNC: return "scatter->tempsync";
-    
-  case LOCK_TEMPSYNC_SCATTER: return "tempsync->scatter";
-  case LOCK_TEMPSYNC_LOCK: return "tempsync->lock";
-  case LOCK_TEMPSYNC: return "tempsync";
-    
-  default: assert(0); return 0;
-  }
-}
 
 class ScatterLock : public SimpleLock {
   bool updated;
@@ -76,6 +55,28 @@ public:
     xlistitem_updated(this) {}
   ~ScatterLock() {
     xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
+  }
+
+  const char *get_scatterlock_state_name(int s) {
+    switch(s) {
+    case LOCK_SYNC: return "sync";
+    case LOCK_SYNC_LOCK: return "sync->lock";
+    case LOCK_SYNC_SCATTER: return "sync->scatter";
+      
+    case LOCK_LOCK_SYNC: return "lock->sync";
+    case LOCK_LOCK: return "lock";
+    case LOCK_LOCK_TEMPSYNC: return "lock->tempsync";
+      
+    case LOCK_SCATTER_LOCK: return "scatter->lock";
+    case LOCK_SCATTER: return "scatter";
+    case LOCK_SCATTER_TEMPSYNC: return "scatter->tempsync";
+      
+    case LOCK_TEMPSYNC_SCATTER: return "tempsync->scatter";
+    case LOCK_TEMPSYNC_LOCK: return "tempsync->lock";
+    case LOCK_TEMPSYNC: return "tempsync";
+      
+    default: assert(0); return 0;
+    }
   }
 
   int get_replica_state() const {
@@ -157,17 +158,7 @@ public:
 
   void print(ostream& out) {
     out << "(";
-    out << get_lock_type_name(get_type()) << " ";
-    out << get_scatterlock_state_name(get_state());
-    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
-    if (get_num_client_lease())
-      out << " c=" << get_num_client_lease();
-    if (is_rdlocked()) 
-      out << " r=" << get_num_rdlocks();
-    if (is_xlocked())
-      out << " x=" << get_xlocked_by();
-    if (is_wrlocked()) 
-      out << " wr=" << get_num_wrlocks();
+    _print(out);
     if (updated)
       out << " updated";
     out << ")";

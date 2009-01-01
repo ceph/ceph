@@ -45,17 +45,6 @@ inline const char *get_lock_type_name(int t) {
 #define LOCK_LOCK_SYNC  -51    // A    R w
 #define LOCK_REMOTEXLOCK  -50  // on NON-auth
 
-inline const char *get_simplelock_state_name(int n) {
-  switch (n) {
-  case LOCK_UNDEF: return "UNDEF";
-  case LOCK_SYNC: return "sync";
-  case LOCK_LOCK: return "lock";
-  case LOCK_SYNC_LOCK: return "sync->lock";
-  case LOCK_LOCK_SYNC: return "lock->sync";
-  case LOCK_REMOTEXLOCK: return "remote_xlock";
-  default: assert(0); return 0;
-  }
-}
 
 /*
 
@@ -84,6 +73,18 @@ public:
   static const __u64 WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
   static const int WAIT_BITS        = 4;
   static const __u64 WAIT_ALL         = ((1<<WAIT_BITS)-1);
+
+  virtual const char *get_state_name(int n) {
+    switch (n) {
+    case LOCK_UNDEF: return "UNDEF";
+    case LOCK_SYNC: return "sync";
+    case LOCK_LOCK: return "lock";
+    case LOCK_SYNC_LOCK: return "sync->lock";
+    case LOCK_LOCK_SYNC: return "lock->sync";
+    case LOCK_REMOTEXLOCK: return "remote_xlock";
+    default: assert(0); return 0;
+    }
+  }
 
 protected:
   // parent (what i lock)
@@ -357,17 +358,24 @@ public:
       return false;
   }
 
-  virtual void print(ostream& out) {
-    out << "(";
+  void _print(ostream& out) {
     out << get_lock_type_name(get_type()) << " ";
-    out << get_simplelock_state_name(get_state());
-    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
+    out << get_state_name(get_state());
+    if (!get_gather_set().empty())
+      out << " g=" << get_gather_set();
     if (num_client_lease)
-      out << " c=" << num_client_lease;
+      out << " l=" << num_client_lease;
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
+    if (is_wrlocked()) 
+      out << " w=" << get_num_wrlocks();
     if (is_xlocked())
       out << " x=" << get_xlocked_by();
+  }
+
+  virtual void print(ostream& out) {
+    out << "(";
+    _print(out);
     out << ")";
   }
 };

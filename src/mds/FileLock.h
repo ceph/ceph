@@ -56,27 +56,6 @@ using namespace std;
 
 //                                                 * <- varies if client is loner vs non-loner.
  
-inline const char *get_filelock_state_name(int n) {
-  switch (n) {
-  case LOCK_SYNC: return "sync";
-  case LOCK_LONER_SYNC: return "loner->sync";
-  case LOCK_MIXED_SYNC: return "mixed->sync";
-  case LOCK_MIXED_SYNC2: return "mixed->sync2";
-  case LOCK_LOCK_SYNC: return "lock->sync";
-  case LOCK_LOCK: return "lock";
-  case LOCK_SYNC_LOCK: return "sync->lock";
-  case LOCK_LONER_LOCK: return "loner->lock";
-  case LOCK_MIXED_LOCK: return "mixed->lock";
-  case LOCK_MIXED: return "mixed";
-  case LOCK_SYNC_MIXED: return "sync->mixed";
-  case LOCK_LONER_MIXED: return "loner->mixed";
-  case LOCK_LONER: return "loner";
-  case LOCK_SYNC_LONER: return "sync->loner";
-  case LOCK_MIXED_LONER: return "mixed->loner";
-  case LOCK_LOCK_LONER: return "lock->loner";
-  default: assert(0); return 0;
-  }
-}
 
 
 /* no append scenarios:
@@ -106,6 +85,29 @@ class FileLock : public ScatterLock {
   FileLock(MDSCacheObject *o, int t, int wo) : 
     ScatterLock(o, t, wo) {}
   
+  const char *get_state_name(int n) {
+    switch (n) {
+    case LOCK_SYNC: return "sync";
+    case LOCK_LONER_SYNC: return "loner->sync";
+    case LOCK_MIXED_SYNC: return "mixed->sync";
+    case LOCK_MIXED_SYNC2: return "mixed->sync2";
+    case LOCK_LOCK_SYNC: return "lock->sync";
+    case LOCK_LOCK: return "lock";
+    case LOCK_SYNC_LOCK: return "sync->lock";
+    case LOCK_LONER_LOCK: return "loner->lock";
+    case LOCK_MIXED_LOCK: return "mixed->lock";
+    case LOCK_MIXED: return "mixed";
+    case LOCK_SYNC_MIXED: return "sync->mixed";
+    case LOCK_LONER_MIXED: return "loner->mixed";
+    case LOCK_LONER: return "loner";
+    case LOCK_SYNC_LONER: return "sync->loner";
+    case LOCK_MIXED_LONER: return "mixed->loner";
+    case LOCK_LOCK_LONER: return "lock->loner";
+    default: assert(0); return 0;
+    }
+  }
+
+
   int get_replica_state() const {
     switch (state) {
     case LOCK_LOCK:
@@ -257,22 +259,6 @@ class FileLock : public ScatterLock {
 	    state == LOCK_LOCK_LONER);
   }
 
-
-  void print(ostream& out) {
-    out << "(";
-    out << get_lock_type_name(get_type()) << " ";
-    out << get_filelock_state_name(get_state());
-    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
-    if (get_num_client_lease())
-      out << " c=" << get_num_client_lease();
-    if (is_wrlocked())
-      out << " w=" << get_num_wrlocks();
-    if (is_rdlocked()) 
-      out << " r=" << get_num_rdlocks();
-    if (is_xlocked())
-      out << " x=" << get_xlocked_by();
-    out << ")";
-  }
 };
 
 
