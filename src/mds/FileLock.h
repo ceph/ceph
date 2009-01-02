@@ -33,29 +33,29 @@ using namespace std;
 //
 // lower-case caps means loner-only.
 
-//                                   -----auth--------   ---replica-------
-#define LOCK_SYNC_        1  // AR   R . / C R . . . L   R . / C R . . . L   stat()
-#define LOCK_LONER_SYNC  -12 // A    . . / C r . . . L *                     loner -> sync
-#define LOCK_MIXED_SYNC  -13 // AR   . w / . R . . . L   . w / . R . . . L
+//                                   -----auth----------   ---replica-------
+#define LOCK_SYNC_        1  // AR   R . / C . R . . . L   R . / C R . . . L   stat()
+#define LOCK_LONER_SYNC  -12 // A    . . / C . r . . . L *                     loner -> sync
+#define LOCK_MIXED_SYNC  -13 // AR   . w / . . R . . . L   . w / . R . . . L
 #define LOCK_MIXED_SYNC2 -14 //  R                       . . / . R . . . L   replica already acked
-#define LOCK_LOCK_SYNC_      // A    . w / C . . . b L
+#define LOCK_LOCK_SYNC_      // A    . w / C . . . . b L
 
-#define LOCK_LOCK_        2  // AR   R W / C . . . B .   . . / C . . . . .   truncate()
-#define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . .   r . / C . . . . .
-#define LOCK_LONER_LOCK  -4  // A    . . / C . . . B .                       loner -> lock
-#define LOCK_MIXED_LOCK  -5  // AR   . w / . . . . . .   . w / . . . . . .
+#define LOCK_LOCK_        2  // AR   R W / C . . . . B .   . . / C . . . . .   truncate()
+#define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . . .   r . / C . . . . .
+#define LOCK_LONER_LOCK  -4  // A    . . / C . . . . B .                       loner -> lock
+#define LOCK_MIXED_LOCK  -5  // AR   . w / . . . . . . .   . w / . . . . . .
 
-#define LOCK_MIXED        6  // AR   . W / . R W A . L   . W / . R . . . L
-#define LOCK_SYNC_MIXED  -7  // AR   r . / . R . . . L   r . / . R . . . L 
-#define LOCK_LONER_MIXED -8  // A    . . / . r w a . L *                     loner -> mixed
+#define LOCK_MIXED        6  // AR   . W / . . R W A . L   . W / . R . . . L
+#define LOCK_SYNC_MIXED  -7  // AR   r . / . . R . . . L   r . / . R . . . L 
+#define LOCK_LONER_MIXED -8  // A    . . / . . r w a . L *                     loner -> mixed
 
-#define LOCK_LONER        9  // A    . . / c r w a b L *      (lock)      
-#define LOCK_SYNC_LONER  -10 // A    r . / . R . . . L 
-#define LOCK_MIXED_LONER -11 // A    . w / . R W A . L 
-#define LOCK_LOCK_LONER  -16 // A    . . / c . . . b . *
+#define LOCK_LONER        9  // A    . . / c x r w a b L *      (lock)      
+#define LOCK_SYNC_LONER  -10 // A    r . / c . R . . . L *
+#define LOCK_MIXED_LONER -11 // A    . w / . . R W A . L 
+#define LOCK_LOCK_LONER  -16 // A    . . / c . . . . b . *
 
-//                                                 * <- varies if client is loner vs non-loner.
- 
+// * <- loner_mode: caps vary if client is loner vs non-loner.
+
 
 
 /* no append scenarios:
@@ -82,8 +82,8 @@ class Mutation;
 
 class FileLock : public ScatterLock {
  public:
-  FileLock(MDSCacheObject *o, int t, int wo) : 
-    ScatterLock(o, t, wo) {}
+  FileLock(MDSCacheObject *o, int t, int ws, int cs) : 
+    ScatterLock(o, t, ws, cs) {}
   
   const char *get_state_name(int n) {
     switch (n) {
@@ -183,81 +183,92 @@ class FileLock : public ScatterLock {
   }
 
 
-  // client caps allowed
-  int caps_allowed_ever() {
-    if (parent->is_auth())
-      return CEPH_CAP_PIN | 
-	CEPH_CAP_RDCACHE | CEPH_CAP_RD | 
-	CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_EXCL |
-	CEPH_CAP_LAZYIO;
-    else
-      return CEPH_CAP_PIN | 
-	CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-  }
-  int caps_allowed(bool loner) {
-    if (parent->is_auth())
-      switch (state) {
-      case LOCK_SYNC:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_SYNC_LOCK:
-         return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
-      case LOCK_LOCK:
-      case LOCK_LONER_LOCK:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_WRBUFFER;
-
-      case LOCK_LOCK_SYNC:
-	return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
-
-      case LOCK_MIXED_LOCK:
-        return CEPH_CAP_PIN;
-
-      case LOCK_MIXED:
-        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
-      case LOCK_SYNC_MIXED:
-        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_LONER_MIXED:
-        return CEPH_CAP_PIN | (loner ? (CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND) : 0);
-
-      case LOCK_LONER:  // single client writer, of course.
-        return CEPH_CAP_PIN | CEPH_CAP_LAZYIO |
-	  ( loner ? (CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_WRBUFFER | CEPH_CAP_EXCL) : 0 );
-      case LOCK_SYNC_LONER:
-        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_MIXED_LONER:
-        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_WR | CEPH_CAP_WREXTEND | CEPH_CAP_LAZYIO;
-      case LOCK_LOCK_LONER:
-        return CEPH_CAP_PIN | (loner ? (CEPH_CAP_RDCACHE | CEPH_CAP_WRBUFFER) : 0);
-
-      case LOCK_LONER_SYNC:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | (loner ? CEPH_CAP_RD:0) | CEPH_CAP_LAZYIO;
-      case LOCK_MIXED_SYNC:
-        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      }
-    else
-      switch (state) {
-      case LOCK_SYNC:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_LOCK:
-      case LOCK_SYNC_LOCK:
-        return CEPH_CAP_PIN | CEPH_CAP_RDCACHE;
-      case LOCK_SYNC_MIXED:
-      case LOCK_MIXED:
-        return CEPH_CAP_PIN | CEPH_CAP_RD | CEPH_CAP_LAZYIO;
-      case LOCK_MIXED_SYNC:
-      case LOCK_MIXED_SYNC2:
-	return CEPH_CAP_PIN | CEPH_CAP_RDCACHE | CEPH_CAP_LAZYIO;
-      }
-    assert(0);
-    return 0;
-  }
+  // caps
 
   // true if we are in a "loner" mode that distinguishes between a loner and everyone else
   bool is_loner_mode() {
     return (state == LOCK_LONER_SYNC ||
 	    state == LOCK_LONER_MIXED ||
 	    state == LOCK_LONER ||
+	    state == LOCK_SYNC_LONER ||
 	    state == LOCK_LOCK_LONER);
   }
+  int gcaps_allowed_ever() {
+    if (parent->is_auth())
+      return
+	CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL |
+	CEPH_CAP_GRD | CEPH_CAP_GWR |
+	CEPH_CAP_GWREXTEND |
+	CEPH_CAP_GWRBUFFER | 
+	CEPH_CAP_GLAZYIO;
+    else
+      return
+	CEPH_CAP_GRDCACHE | CEPH_CAP_GRD | CEPH_CAP_GLAZYIO;
+  }
+  int gcaps_allowed(bool loner) {
+    if (loner && !is_loner_mode())
+      loner = false;
+    if (parent->is_auth())
+      switch (state) {
+      case LOCK_SYNC:
+        return CEPH_CAP_GRDCACHE | CEPH_CAP_GRD | CEPH_CAP_GLAZYIO;
+      case LOCK_SYNC_LOCK:
+         return CEPH_CAP_GRDCACHE;
+      case LOCK_LOCK:
+      case LOCK_LONER_LOCK:
+        return CEPH_CAP_GRDCACHE | CEPH_CAP_GWRBUFFER;
+
+      case LOCK_LOCK_SYNC:
+	return CEPH_CAP_GRDCACHE | CEPH_CAP_GLAZYIO;
+
+      case LOCK_MIXED_LOCK:
+        return 0;
+
+      case LOCK_MIXED:
+        return CEPH_CAP_GRD | CEPH_CAP_GWR | CEPH_CAP_GWREXTEND | CEPH_CAP_GLAZYIO;
+      case LOCK_SYNC_MIXED:
+        return CEPH_CAP_GRD | CEPH_CAP_GLAZYIO;
+      case LOCK_LONER_MIXED:
+        return (loner ? (CEPH_CAP_GRD | CEPH_CAP_GWR | CEPH_CAP_GWREXTEND) : 0);
+
+      case LOCK_LONER:
+        return CEPH_CAP_GLAZYIO |
+	  ( loner ? (CEPH_CAP_GRDCACHE | CEPH_CAP_GRD | CEPH_CAP_GWR | CEPH_CAP_GWREXTEND | CEPH_CAP_GWRBUFFER | CEPH_CAP_GEXCL) : 0 );
+      case LOCK_SYNC_LONER:
+        return CEPH_CAP_GRD | CEPH_CAP_GLAZYIO | (loner ? CEPH_CAP_GRDCACHE : 0);
+      case LOCK_MIXED_LONER:
+        return CEPH_CAP_GRD | CEPH_CAP_GWR | CEPH_CAP_GWREXTEND | CEPH_CAP_GLAZYIO;
+      case LOCK_LOCK_LONER:
+        return (loner ? (CEPH_CAP_GRDCACHE | CEPH_CAP_GWRBUFFER) : 0);
+
+      case LOCK_LONER_SYNC:
+        return CEPH_CAP_GRDCACHE | (loner ? CEPH_CAP_GRD:0) | CEPH_CAP_GLAZYIO;
+      case LOCK_MIXED_SYNC:
+        return CEPH_CAP_GRD | CEPH_CAP_GLAZYIO;
+      }
+    else
+      switch (state) {
+      case LOCK_SYNC:
+        return CEPH_CAP_GRDCACHE | CEPH_CAP_GRD | CEPH_CAP_GLAZYIO;
+      case LOCK_LOCK:
+      case LOCK_SYNC_LOCK:
+        return CEPH_CAP_GRDCACHE;
+      case LOCK_SYNC_MIXED:
+      case LOCK_MIXED:
+        return CEPH_CAP_GRD | CEPH_CAP_GLAZYIO;
+      case LOCK_MIXED_SYNC:
+      case LOCK_MIXED_SYNC2:
+	return CEPH_CAP_GRDCACHE | CEPH_CAP_GLAZYIO;
+      }
+    assert(0);
+    return 0;
+  }
+  int gcaps_careful() {
+    if (num_wrlock)
+      return CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL | CEPH_CAP_GWRBUFFER;
+    return 0;
+  }
+
 
 };
 

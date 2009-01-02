@@ -136,7 +136,7 @@ public:
 	 p++) {
       c |= p->second;
       generic_dout(10) << " cap issued: seq " << p->first << " " 
-		       << cap_string(p->second) << " -> " << cap_string(c)
+		       << ccap_string(p->second) << " -> " << ccap_string(c)
 		       << dendl;
     }
     return c;
@@ -147,26 +147,6 @@ public:
   void set_wanted(int w) {
     wanted_caps = w;
   }
-
-  // needed
-  static int needed(int from) {
-    // strip out wrbuffer, rdcache
-    return from & (CEPH_CAP_WR|CEPH_CAP_RD);
-  }
-  int needed() { return needed(wanted_caps); }
-
-  // conflicts
-  static int conflicts(int from) {
-    int c = 0;
-    if (from & CEPH_CAP_WRBUFFER) c |= CEPH_CAP_RDCACHE|CEPH_CAP_RD;
-    if (from & CEPH_CAP_WR) c |= CEPH_CAP_RDCACHE;
-    if (from & CEPH_CAP_RD) c |= CEPH_CAP_WRBUFFER;
-    if (from & CEPH_CAP_RDCACHE) c |= CEPH_CAP_WRBUFFER|CEPH_CAP_WR;
-    return c;
-  }
-  int wanted_conflicts() { return conflicts(wanted()); }
-  int needed_conflicts() { return conflicts(needed()); }
-  int issued_conflicts() { return conflicts(issued()); }
 
   // issue caps; return seq number.
   capseq_t issue(int c) {
@@ -222,7 +202,7 @@ public:
 	// note what we're releasing..
 	if (p->second & ~caps) {
 	  generic_dout(10) << " cap.confirm_receipt revising seq " << seq 
-			  << " " << cap_string(cap_history[seq]) << " -> " << cap_string(caps) 
+			  << " " << ccap_string(cap_history[seq]) << " -> " << ccap_string(caps) 
 			  << dendl;
 	  r |= cap_history[seq] & ~caps; 
 	  cap_history[seq] = caps; // confirmed() now less than before..
@@ -231,14 +211,14 @@ public:
 	// null?
 	if (caps == 0 && seq == last_sent) {
 	  generic_dout(10) << " cap.confirm_receipt making null seq " << last_recv
-			  << " " << cap_string(cap_history[last_recv]) << dendl;
+			  << " " << ccap_string(cap_history[last_recv]) << dendl;
 	  cap_history.clear();  // viola, null!
 	}
 	break;
       }
 
       generic_dout(10) << " cap.confirm_receipt forgetting seq " << p->first
-		      << " " << cap_string(p->second) << dendl;
+		      << " " << ccap_string(p->second) << dendl;
       r |= p->second;
       cap_history.erase(p);
     }

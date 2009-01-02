@@ -898,15 +898,31 @@ static inline int ceph_flags_to_mode(int flags)
 	return CEPH_FILE_MODE_RD;
 }
 
-/* client file caps */
-#define CEPH_CAP_PIN       1  /* no specific capabilities beyond the pin */
-#define CEPH_CAP_RDCACHE   2  /* client can cache reads */
-#define CEPH_CAP_RD        4  /* client can read */
-#define CEPH_CAP_WR        8  /* client can write */
-#define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
-#define CEPH_CAP_WREXTEND 32  /* client can extend EOF */
-#define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
-#define CEPH_CAP_EXCL    128  /* exclusive/loner access */
+
+/* capability bits */
+#define CEPH_CAP_PIN         1  /* no specific capabilities beyond the pin */
+
+/* generic cap bits */
+#define CEPH_CAP_GRDCACHE    1  /* client can cache reads */
+#define CEPH_CAP_GEXCL       2  /* exclusive/loner access */
+#define CEPH_CAP_GRD         4  /* client can read */ 
+#define CEPH_CAP_GWR         8  /* client can write */
+#define CEPH_CAP_GWRBUFFER  16  /* client can buffer writes */
+#define CEPH_CAP_GWREXTEND  32  /* client can extend EOF */
+#define CEPH_CAP_GLAZYIO    64  /* client can perform lazy io */
+
+/* per-lock shift */
+#define CEPH_CAP_SAUTH      2
+#define CEPH_CAP_SLINK      4
+#define CEPH_CAP_SXATTR     6
+#define CEPH_CAP_SFILE      8
+
+#define CEPH_CAP_ANY_EXCL ((CEPH_CAP_GEXCL << CEPH_CAP_SAUTH) |		\
+			   (CEPH_CAP_GEXCL << CEPH_CAP_SLINK) |		\
+			   (CEPH_CAP_GEXCL << CEPH_CAP_SXATTR) |	\
+			   (CEPH_CAP_GEXCL << CEPH_CAP_SFILE))
+#define CEPH_CAP_ANY_FILE_WR ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)
+#define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
 
 static inline int ceph_caps_for_mode(int mode)
 {
@@ -915,16 +931,25 @@ static inline int ceph_caps_for_mode(int mode)
 		return CEPH_CAP_PIN;
 	case CEPH_FILE_MODE_RD:
 		return CEPH_CAP_PIN |
-			CEPH_CAP_RD | CEPH_CAP_RDCACHE;
+			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
+			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
 	case CEPH_FILE_MODE_RDWR:
 		return CEPH_CAP_PIN |
-			CEPH_CAP_RD | CEPH_CAP_RDCACHE |
-			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
-			CEPH_CAP_EXCL;
+			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE |
+			  CEPH_CAP_GWR | CEPH_CAP_GWRBUFFER |
+			  CEPH_CAP_GEXCL) << CEPH_CAP_SFILE) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
+			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
 	case CEPH_FILE_MODE_WR:
 		return CEPH_CAP_PIN |
-			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
-			CEPH_CAP_EXCL;
+			((CEPH_CAP_GWR | CEPH_CAP_GWRBUFFER |
+			  CEPH_CAP_GEXCL) << CEPH_CAP_SFILE) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
+			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
 	}
 	return 0;
 }
@@ -967,14 +992,25 @@ struct ceph_mds_caps {
 	__le64 ino;
 	__le32 seq;
 	__le32 caps, wanted;
+	__le32 migrate_seq;
+	__le64 snap_follows;
+	__le32 snap_trace_len;
+
+	/* authlock */
+	__le32 uid, gid, mode;
+
+	/* linklock */
+	__le32 nlink;
+
+	/* xattrlock */
+	__le32 xattr_len;
+
+	/* filelock */
 	__le64 size, max_size;
 	__le64 truncate_seq;
-	__le32 migrate_seq;
 	struct ceph_timespec mtime, atime, ctime;
 	struct ceph_file_layout layout;
 	__le64 time_warp_seq;
-	__le64 snap_follows;
-	__le32 snap_trace_len;
 } __attribute__ ((packed));
 
 

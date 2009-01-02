@@ -130,7 +130,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
+    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET, 0) { }
   CDentry(const nstring& n, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     name(n),
@@ -140,7 +140,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
+    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET, 0) { }
 
   CInode *get_inode() const { return inode; }
   CDir *get_dir() const { return dir; }

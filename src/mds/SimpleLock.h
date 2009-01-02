@@ -38,13 +38,21 @@ inline const char *get_lock_type_name(int t) {
 // -- lock states --
 // sync <-> lock
 #define LOCK_UNDEF    0
-//                               auth   rep
-#define LOCK_SYNC        1     // AR   R .    R .
-#define LOCK_LOCK        2     // AR   R W    . .
-#define LOCK_SYNC_LOCK  -3     // AR   R .    . .
-#define LOCK_LOCK_SYNC  -51    // A    R w
+//                                     auth        rep
+#define LOCK_SYNC        1     // AR   R . / C .   R . / C . 
+#define LOCK_LOCK        2     // AR   R W / . .   . . / . .
+#define LOCK_SYNC_LOCK  -3     // AR   R . / . .   . . / . .
+#define LOCK_LOCK_SYNC  -51    // A    R w / . .   (lock)
+
+#define LOCK_EXCL       -60    // A    . . / c x * (lock)
+#define LOCK_EXCL_SYNC  -61    // A    . . / c . * (lock)
+#define LOCK_EXCL_LOCK  -62    // A    . . / . .   (lock)
+#define LOCK_SYNC_EXCL  -63    // Ar   r . / c . * (sync->lock)
+#define LOCK_LOCK_EXCL  -64    // A    r w / . .   (lock)
+
 #define LOCK_REMOTEXLOCK  -50  // on NON-auth
 
+// * = loner mode
 
 /*
 
@@ -90,7 +98,8 @@ protected:
   // parent (what i lock)
   MDSCacheObject *parent;
   int type;
-  int wait_offset;
+  int wait_shift;
+  int cap_shift;
 
   // lock state
   __s32 state;
@@ -104,8 +113,8 @@ protected:
 
 
 public:
-  SimpleLock(MDSCacheObject *o, int t, int wo) :
-    parent(o), type(t), wait_offset(wo),
+  SimpleLock(MDSCacheObject *o, int t, int ws, int cs) :
+    parent(o), type(t), wait_shift(ws), cap_shift(cs),
     state(LOCK_SYNC), num_client_lease(0),
     num_rdlock(0), num_wrlock(0), xlock_by(0), xlock_by_client(-1) { }
   virtual ~SimpleLock() {}
@@ -113,6 +122,8 @@ public:
   // parent
   MDSCacheObject *get_parent() { return parent; }
   int get_type() { return type; }
+
+  int get_cap_shift() { return cap_shift; }
 
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
@@ -137,16 +148,16 @@ public:
     parent->encode_lock_state(type, bl);
   }
   void finish_waiters(__u64 mask, int r=0) {
-    parent->finish_waiting(mask << wait_offset, r);
+    parent->finish_waiting(mask << wait_shift, r);
   }
   void take_waiting(__u64 mask, list<Context*>& ls) {
-    parent->take_waiting(mask << wait_offset, ls);
+    parent->take_waiting(mask << wait_shift, ls);
   }
   void add_waiter(__u64 mask, Context *c) {
-    parent->add_waiter(mask << wait_offset, c);
+    parent->add_waiter(mask << wait_shift, c);
   }
   bool is_waiter_for(__u64 mask) {
-    return parent->is_waiter_for(mask << wait_offset);
+    return parent->is_waiter_for(mask << wait_shift);
   }
   
   
@@ -281,6 +292,50 @@ public:
     __s32 s;
     ::decode(s, p);
     set_state_rejoin(s, waiters);
+  }
+
+
+  // caps
+  virtual bool is_loner_mode() {
+    return (state == LOCK_EXCL ||
+	    state == LOCK_EXCL_SYNC ||
+	    state == LOCK_SYNC_EXCL);
+  }
+  virtual int gcaps_allowed_ever() {
+    if (!cap_shift) 
+      return 0;  // none for this lock.
+    return CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL;
+  }
+  virtual int gcaps_allowed(bool loner) {
+    if (!cap_shift)
+      return 0;
+    if (loner && !is_loner_mode())
+      loner = false;
+    if (parent->is_auth())
+      switch (state) {
+      case LOCK_SYNC: return CEPH_CAP_GRDCACHE;
+      case LOCK_LOCK: return 0;
+      case LOCK_SYNC_LOCK: return 0;
+      case LOCK_LOCK_SYNC: return 0;
+      case LOCK_EXCL: return loner ? (CEPH_CAP_GRDCACHE|CEPH_CAP_GEXCL) : 0;
+      case LOCK_EXCL_SYNC: return loner ? CEPH_CAP_GRDCACHE:0;
+      case LOCK_EXCL_LOCK: return 0;
+      case LOCK_SYNC_EXCL: return loner ? CEPH_CAP_GRDCACHE:0;
+      case LOCK_LOCK_EXCL: return 0;
+      case LOCK_REMOTEXLOCK: return 0;
+      }
+    else
+      switch (state) {
+      case LOCK_SYNC: return CEPH_CAP_GRDCACHE;
+      default: return 0;
+      }
+    assert(0);
+    return 0;
+  }
+  virtual int gcaps_careful() {
+    if (num_wrlock)
+      return CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL;
+    return 0;
   }
 
 

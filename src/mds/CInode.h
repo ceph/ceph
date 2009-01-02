@@ -294,14 +294,14 @@ private:
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
-    versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
-    authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),
-    linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
-    dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
-    filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
-    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
-    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
+    versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET, 0),
+    authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET, CEPH_CAP_SAUTH),
+    linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET, CEPH_CAP_SLINK),
+    dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET, 0),
+    filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET, CEPH_CAP_SFILE),
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET, CEPH_CAP_SXATTR),
+    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET, 0),
+    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET, 0),
     loner_cap(-1)
   {
     memset(&inode, 0, sizeof(inode));
@@ -487,7 +487,7 @@ public:
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale() &&
-	  (it->second->wanted() & (CEPH_CAP_WR|CEPH_CAP_RD))) {
+	  (it->second->wanted() & CEPH_CAP_ANY_WR)) {
 	if (n)
 	  return false;
 	n++;
@@ -600,8 +600,32 @@ public:
     }
   }
 
+  // caps allowed
+  int get_caps_allowed_ever() {
+    return 
+      (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
+      (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_allowed_ever() << linklock.get_cap_shift());
+  }
+  int get_caps_allowed(bool loner) {
+    return 
+      (filelock.gcaps_allowed(loner) << filelock.get_cap_shift()) |
+      (authlock.gcaps_allowed(loner) << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_allowed(loner) << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_allowed(loner) << linklock.get_cap_shift());
+  }
+  int get_caps_careful() {
+    return 
+      (filelock.gcaps_careful() << filelock.get_cap_shift()) |
+      (authlock.gcaps_careful() << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_careful() << linklock.get_cap_shift());
+  }
+
   // caps issued, wanted
-  int get_caps_issued(int *ploner = 0, int *pother = 0) {
+  int get_caps_issued(int *ploner = 0, int *pother = 0,
+		      int shift = 0, int mask = 0xffff) {
     int c = 0;
     int loner = 0, other = 0;
     if (!is_auth())
@@ -616,11 +640,11 @@ public:
       else
 	other |= i;
     }
-    if (ploner) *ploner = loner;
-    if (pother) *pother = other;
+    if (ploner) *ploner = (loner >> shift) & mask;
+    if (pother) *pother = (other >> shift) & mask;
     return c;
   }
-  int get_caps_wanted(int *ploner = 0, int *pother = 0) {
+  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
     int w = 0;
     int loner = 0, other = 0;
     for (map<int,Capability*>::iterator it = client_caps.begin();
@@ -644,8 +668,8 @@ public:
 	other |= it->second;
         //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
       }
-    if (ploner) *ploner = loner;
-    if (pother) *pother = other;
+    if (ploner) *ploner = (loner >> shift) & mask;
+    if (pother) *pother = (other >> shift) & mask;
     return w;
   }
 

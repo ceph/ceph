@@ -55,29 +55,35 @@ using namespace std;
 
 typedef __u32 capseq_t;
 
-inline string cap_string(int cap)
+inline string gcap_string(int cap)
 {
   string s;
-  /*
-  s = "[";
-  if (cap & CEPH_CAP_PIN) s += " pin";
-  if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
-  if (cap & CEPH_CAP_RD) s += " rd";
-  if (cap & CEPH_CAP_WR) s += " wr";
-  if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
-  if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
-  if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
-  if (cap & CEPH_CAP_EXCL) s += " excl";
-  s += " ]";
-  */
+  if (cap & CEPH_CAP_GRDCACHE) s += "c";
+  if (cap & CEPH_CAP_GEXCL) s += "x";
+  if (cap & CEPH_CAP_GRD) s += "r";
+  if (cap & CEPH_CAP_GWR) s += "w";
+  if (cap & CEPH_CAP_GWRBUFFER) s += "b";
+  if (cap & CEPH_CAP_GWREXTEND) s += "a";
+  if (cap & CEPH_CAP_GLAZYIO) s += "l";
+  return s;
+}
+inline string ccap_string(int cap)
+{
+  string s;
   if (cap & CEPH_CAP_PIN) s += "p";
-  if (cap & CEPH_CAP_RDCACHE) s += "c";
-  if (cap & CEPH_CAP_RD) s += "r";
-  if (cap & CEPH_CAP_WR) s += "w";
-  if (cap & CEPH_CAP_WRBUFFER) s += "b";
-  if (cap & CEPH_CAP_WRBUFFER) s += "a";
-  if (cap & CEPH_CAP_LAZYIO) s += "l";
-  if (cap & CEPH_CAP_EXCL) s += "x";
+
+  int a = (cap >> CEPH_CAP_SAUTH) & 3;
+  if (a) s += " a(" + gcap_string(a) + ")";
+
+  a = (cap >> CEPH_CAP_SLINK) & 3;
+  if (a) s += " l(" + gcap_string(a) + ")";
+
+  a = (cap >> CEPH_CAP_SXATTR) & 3;
+  if (a) s += " x(" + gcap_string(a) + ")";
+
+  a = cap >> CEPH_CAP_SFILE;
+  if (a) s += " f(" + gcap_string(a) + ")";
+
   return s;
 }
 

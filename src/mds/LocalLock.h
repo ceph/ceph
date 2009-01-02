@@ -23,8 +23,8 @@ protected:
   int num_wrlock;
 
 public:
-  LocalLock(MDSCacheObject *o, int t, int wo) : 
-    SimpleLock(o, t, wo),
+  LocalLock(MDSCacheObject *o, int t, int ws, int cs ) : 
+    SimpleLock(o, t, ws, cs),
     num_wrlock(0) { 
     set_state(LOCK_LOCK); // always.
   }

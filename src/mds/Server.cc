@@ -229,7 +229,7 @@ void Server::_session_logged(Session *session, bool open, version_t pv, deque<in
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
-      dout(20) << " killing capability " << cap_string(cap->issued()) << " on " << *in << dendl;
+      dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
       in->remove_client_cap(session->inst.name.num());
       mds->locker->try_file_eval(&in->filelock);
     }
@@ -4883,13 +4883,13 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
     if (is_new)
       cap->dec_suppress();  // stop suppressing messages on new cap
     
-    dout(12) << "_do_open issued caps " << cap_string(cap->pending())
+    dout(12) << "_do_open issued caps " << ccap_string(cap->pending())
 	     << " for " << req->get_orig_source()
 	     << " on " << *cur << dendl;
     mdr->cap = cap;
   } else {
     int caps = ceph_caps_for_mode(cmode);
-    dout(12) << "_do_open issued IMMUTABLE SNAP caps " << cap_string(caps)
+    dout(12) << "_do_open issued IMMUTABLE SNAP caps " << ccap_string(caps)
 	     << " for " << req->get_orig_source()
 	     << " snapid " << mdr->ref_snapid
 	     << " on " << *cur << dendl;

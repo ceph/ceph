@@ -543,8 +543,6 @@ Capability* Locker::issue_new_caps(CInode *in,
     }
   }
 
-  int before = cap->pending();
-
   if (in->is_auth()) {
     // [auth] twiddle mode?
     if (in->filelock.is_stable()) 
@@ -561,14 +559,6 @@ Capability* Locker::issue_new_caps(CInode *in,
   cap->issue(cap->pending());
   cap->set_last_open();
 
-  // twiddle file_data_version?
-  int now = cap->pending();
-  if ((before & CEPH_CAP_WRBUFFER) == 0 &&
-      (now & CEPH_CAP_WRBUFFER)) {
-    in->inode.file_data_version++;
-    dout(7) << " incrementing file_data_version, now " << in->inode.file_data_version << " for " << *in << dendl;
-  }
-
   return cap;
 }
 
@@ -578,41 +568,31 @@ Capability* Locker::issue_new_caps(CInode *in,
 bool Locker::issue_caps(CInode *in)
 {
   // allowed caps are determined by the lock mode.
-  int all_allowed = in->filelock.caps_allowed(false);
+  int all_allowed = in->get_caps_allowed(false);
+  int loner_allowed = in->get_caps_allowed(true);
+  int careful = in->get_caps_careful();
 
-  // loner mode?  if so, we restict allows caps to a single loner client
-  bool loner_mode = in->filelock.is_loner_mode();
-  int loner_allowed;
-  if (loner_mode)
-    loner_allowed = in->filelock.caps_allowed(true);
-  else
-    loner_allowed = all_allowed;
-
-  int loner = -1;
-  if (loner_mode) {
-    loner = in->get_loner();
-    dout(7) << "issue_caps filelock loner client" << loner
-	    << " allowed=" << cap_string(loner_allowed) 
-	    << ", others allowed=" << cap_string(all_allowed)
+  int loner = in->get_loner();
+  if (loner >= 0) {
+    dout(7) << "issue_caps loner client" << loner
+	    << " allowed=" << ccap_string(loner_allowed) 
+	    << ", others allowed=" << ccap_string(all_allowed)
 	    << " on " << *in << dendl;
   } else {
-    dout(7) << "issue_caps filelock allowed=" << cap_string(all_allowed) 
+    dout(7) << "issue_caps allowed=" << ccap_string(all_allowed) 
 	    << " on " << *in << dendl;
   }
+
+  if (careful)
+    dout(7) << "issue_caps careful " << ccap_string(careful) << dendl;
   
   // count conflicts with
   int nissued = 0;        
 
-  bool sizemtime_is_projected = false;
-  if (&in->inode != in->get_projected_inode() &&
-      (in->inode.size != in->get_projected_inode()->size ||
-       in->inode.mtime != in->get_projected_inode()->mtime)) {
-    dout(10) << " new size|mtime is projected" << dendl;
-    sizemtime_is_projected = true;
-  }
-
   // should we increase max_size?
-  if (!in->is_dir() && ((all_allowed|loner_allowed) & CEPH_CAP_WR) && in->is_auth())
+  if (!in->is_dir() &&
+      ((all_allowed|loner_allowed) & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) &&
+      in->is_auth())
     check_inode_max_size(in);
 
   // client caps
@@ -625,20 +605,18 @@ bool Locker::issue_caps(CInode *in)
 
     // do not issue _new_ bits when size|mtime is projected
     int allowed;
-    if (loner_mode && loner == it->first)
+    if (loner == it->first)
       allowed = loner_allowed;
     else
       allowed = all_allowed;
 
-    int careful = CEPH_CAP_EXCL|CEPH_CAP_WRBUFFER|CEPH_CAP_RDCACHE;
     int pending = cap->pending();
-    if (sizemtime_is_projected)
-      allowed &= ~careful | pending;   // only allow "careful" bits if already issued
+    allowed &= ~careful | pending;   // only allow "careful" bits if already issued
 
     dout(20) << " client" << it->first
-	     << " pending " << cap_string(pending) 
-	     << " allowed " << cap_string(allowed) 
-	     << " wanted " << cap_string(cap->wanted())
+	     << " pending " << ccap_string(pending) 
+	     << " allowed " << ccap_string(allowed) 
+	     << " wanted " << ccap_string(cap->wanted())
 	     << dendl;
 
     if (cap->pending() != (cap->wanted() & allowed)) {
@@ -647,28 +625,20 @@ bool Locker::issue_caps(CInode *in)
 
       int before = cap->pending();
       long seq = cap->issue(cap->wanted() & allowed);
-      int after = cap->pending();
-
-      // twiddle file_data_version?
-      if (!(before & CEPH_CAP_WRBUFFER) &&
-          (after & CEPH_CAP_WRBUFFER)) {
-        dout(7) << "   incrementing file_data_version for " << *in << dendl;
-        in->inode.file_data_version++;
-      }
 
       if (seq > 0 && 
           !cap->is_suppress()) {
         dout(7) << "   sending MClientCaps to client" << it->first
 		<< " seq " << cap->get_last_seq()
-		<< " new pending " << cap_string(cap->pending()) << " was " << cap_string(before) 
+		<< " new pending " << ccap_string(cap->pending()) << " was " << ccap_string(before) 
 		<< dendl;
         mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
-						     in->inode,
-						     in->find_snaprealm()->inode->ino(),
-						     cap->get_last_seq(),
-						     cap->pending(),
-						     cap->wanted(),
-						     cap->get_mseq()),
+						 in->inode,
+						 in->find_snaprealm()->inode->ino(),
+						 cap->get_last_seq(),
+						 cap->pending(),
+						 cap->wanted(),
+						 cap->get_mseq()),
 				 it->first);
       }
     }
@@ -686,12 +656,12 @@ void Locker::issue_truncate(CInode *in)
        it++) {
     Capability *cap = it->second;
     mds->send_message_client(new MClientCaps(CEPH_CAP_OP_TRUNC,
-						 in->inode,
-						 in->find_snaprealm()->inode->ino(),
-						 cap->get_last_seq(),
-						 cap->pending(),
-						 cap->wanted(),
-						 cap->get_mseq()),
+					     in->inode,
+					     in->find_snaprealm()->inode->ino(),
+					     cap->get_last_seq(),
+					     cap->pending(),
+					     cap->wanted(),
+					     cap->get_mseq()),
 			     it->first);
   }
 
@@ -710,15 +680,20 @@ void Locker::revoke_stale_caps(Session *session)
     CInode *in = cap->get_inode();
     int issued = cap->issued();
     if (issued) {
-      dout(10) << " revoking " << cap_string(issued) << " on " << *in << dendl;      
+      dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
+
       if (in->inode.max_size > in->inode.size)
 	in->state_set(CInode::STATE_NEEDSRECOVER);
-      if (!in->filelock.is_stable())
-	file_eval_gather(&in->filelock);
+
+      if (!in->filelock.is_stable()) file_eval_gather(&in->filelock);
+      if (!in->authlock.is_stable()) simple_eval_gather(&in->authlock);
+      if (!in->xattrlock.is_stable()) simple_eval_gather(&in->xattrlock);
+
       if (in->is_auth()) {
-	if (in->filelock.is_stable())
-	  file_eval(&in->filelock);
+	if (in->filelock.is_stable()) file_eval(&in->filelock);
+	if (in->authlock.is_stable()) simple_eval(&in->authlock);
+	if (in->xattrlock.is_stable()) simple_eval(&in->xattrlock);
       } else {
 	request_inode_file_caps(in);
       }
@@ -783,8 +758,8 @@ void Locker::request_inode_file_caps(CInode *in)
       if (in->replica_caps_wanted_keep_until > g_clock.recent_now()) {
         // ok, release them finally!
         in->replica_caps_wanted_keep_until.sec_ref() = 0;
-        dout(7) << "request_inode_file_caps " << cap_string(wanted)
-                 << " was " << cap_string(in->replica_caps_wanted) 
+        dout(7) << "request_inode_file_caps " << ccap_string(wanted)
+                 << " was " << ccap_string(in->replica_caps_wanted) 
                  << " no keeping anymore " 
                  << " on " << *in 
                  << dendl;
@@ -793,8 +768,8 @@ void Locker::request_inode_file_caps(CInode *in)
         in->replica_caps_wanted_keep_until = g_clock.recent_now();
         in->replica_caps_wanted_keep_until.sec_ref() += 2;
         
-        dout(7) << "request_inode_file_caps " << cap_string(wanted)
-                 << " was " << cap_string(in->replica_caps_wanted) 
+        dout(7) << "request_inode_file_caps " << ccap_string(wanted)
+                 << " was " << ccap_string(in->replica_caps_wanted) 
                  << " keeping until " << in->replica_caps_wanted_keep_until
                  << " on " << *in 
                  << dendl;
@@ -816,8 +791,8 @@ void Locker::request_inode_file_caps(CInode *in)
     }
 
     int auth = in->authority().first;
-    dout(7) << "request_inode_file_caps " << cap_string(wanted)
-            << " was " << cap_string(in->replica_caps_wanted) 
+    dout(7) << "request_inode_file_caps " << ccap_string(wanted)
+            << " was " << ccap_string(in->replica_caps_wanted) 
             << " on " << *in << " to mds" << auth << dendl;
     assert(!in->is_auth());
 
@@ -850,7 +825,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   }
 
   
-  dout(7) << "handle_inode_file_caps replica mds" << m->get_from() << " wants caps " << cap_string(m->get_caps()) << " on " << *in << dendl;
+  dout(7) << "handle_inode_file_caps replica mds" << m->get_from() << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
 
   if (m->get_caps())
     in->mds_caps_wanted[m->get_from()] = m->get_caps();
@@ -888,7 +863,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
   if (forceupdate)
     size = new_size;
 
-  if ((in->get_caps_wanted() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0)
+  if ((in->get_caps_wanted() & ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) == 0)
     new_max = 0;
   else if ((size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
@@ -969,7 +944,7 @@ void Locker::share_inode_max_size(CInode *in)
        it++) {
     const int client = it->first;
     Capability *cap = it->second;
-    if (cap->pending() & CEPH_CAP_WR) {
+    if (cap->pending() & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
       mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
 						   in->inode,
@@ -1062,12 +1037,12 @@ void Locker::handle_client_caps(MClientCaps *m)
     // for this and all subsequent versions of this inode,
     while (1) {
       // filter wanted based on what we could ever give out (given auth/replica status)
-      int wanted = m->get_wanted() & head_in->filelock.caps_allowed_ever();
+      int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
       int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
       int has = cap->confirmed();
       dout(10) << " follows " << follows
-	       << ", had " << cap_string(had) 
-	       << ", has " << cap_string(has)
+	       << ", had " << ccap_string(had) 
+	       << ", has " << ccap_string(has)
 	       << " on " << *in << dendl;
       
       MClientCaps *ack = 0;
@@ -1084,7 +1059,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	 * we use last_sent here, not last_open, just to keep the client
 	 * logic for deciding when to reply to a revocation simple.
 	 */
-	dout(10) << " ignoring release|wanted " << cap_string(m->get_wanted())
+	dout(10) << " ignoring release|wanted " << ccap_string(m->get_wanted())
 		 << " bc seq " << m->get_seq() << " < last sent " << cap->get_last_sent() << dendl;
       } else if (m->get_op() == CEPH_CAP_OP_RELEASE) {
 	dout(7) << " release request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
@@ -1097,8 +1072,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	cap->releasing++;
 	ack = new MClientCaps(CEPH_CAP_OP_RELEASED, in->inode, 0, 0, 0, 0, 0);
       } else if (wanted != cap->wanted()) {
-	dout(10) << " wanted " << cap_string(cap->wanted())
-		 << " -> " << cap_string(wanted) << dendl;
+	dout(10) << " wanted " << ccap_string(cap->wanted())
+		 << " -> " << ccap_string(wanted) << dendl;
 	cap->set_wanted(wanted);
       }
 
@@ -1157,7 +1132,7 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCa
 void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
 			    MClientCaps *ack, capseq_t releasecap)
 {
-  dout(10) << "_do_cap_update had " << cap_string(had) << " on " << *in << dendl;
+  dout(10) << "_do_cap_update had " << ccap_string(had) << " on " << *in << dendl;
 
   int client = m->get_source().num();
 
@@ -1169,8 +1144,8 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
   uint64_t size = m->get_size();
 
   // atime|mtime|size?
-  bool had_or_has_wr = had & CEPH_CAP_WR;
-  bool excl = had & CEPH_CAP_EXCL;
+  bool had_or_has_wr = had & (CEPH_CAP_GWR << CEPH_CAP_SFILE);
+  bool excl = had & CEPH_CAP_ANY_EXCL;
   bool dirty_atime = false;
   bool dirty_mtime = false;
   bool dirty_ctime = false;
@@ -1192,18 +1167,18 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
   uint64_t new_max = latest->max_size;
 
   if (in->is_auth()) {
-    if (latest->max_size && (all_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) {
+    if (latest->max_size && (all_wanted & CEPH_CAP_ANY_FILE_WR) == 0) {
       change_max = true;
       new_max = 0;
     }
-    else if ((all_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+    else if ((all_wanted & CEPH_CAP_ANY_FILE_WR) &&
 	(size << 1) >= latest->max_size) {
       dout(10) << "wr caps wanted, and size " << size
 	       << " *2 >= max " << latest->max_size << ", increasing" << dendl;
       change_max = true;
       new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
     }
-    if ((all_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_WREXTEND)) &&
+    if ((all_wanted & CEPH_CAP_ANY_FILE_WR) &&
 	m->get_max_size() > new_max) {
       dout(10) << "client requests file_max " << m->get_max_size()
 	       << " > max " << latest->max_size << dendl;
@@ -1391,7 +1366,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
        (!diri->filelock.can_lease() &&
-	(diri->get_client_cap_pending(client) & (CEPH_CAP_EXCL|CEPH_CAP_RDCACHE)) == 0)) &&
+	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0)) &&
       dn->lock.can_lease(client))
     mask |= CEPH_LOCK_DN;
 
@@ -3347,15 +3322,16 @@ void Locker::file_eval_gather(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
 
-  int loner_allowed = lock->caps_allowed(true);
-  int other_allowed = lock->caps_allowed(false);
+  // allowed _just_ by this lock
+  int loner_allowed = lock->gcaps_allowed(true);
+  int other_allowed = lock->gcaps_allowed(false);
 
   int loner_issued, other_issued;
-  in->get_caps_issued(&loner_issued, &other_issued);
+  in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
  
   dout(7) << "file_eval_gather issued "
-	  << cap_string(loner_issued) << "/" << cap_string(other_issued) << " vs "
-	  << cap_string(loner_allowed) << "/" << cap_string(other_allowed)
+	  << gcap_string(loner_issued) << "/" << gcap_string(other_issued) << " vs "
+	  << gcap_string(loner_allowed) << "/" << gcap_string(other_allowed)
 	  << " on " << *lock << " on " << *lock->get_parent() << dendl;
 
   if (lock->is_stable())
@@ -3526,8 +3502,8 @@ void Locker::file_eval(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   int loner_wanted, other_wanted;
-  int wanted = in->get_caps_wanted(&loner_wanted, &other_wanted);
-  dout(7) << "file_eval wanted=" << cap_string(wanted)
+  int wanted = in->get_caps_wanted(&loner_wanted, &other_wanted, CEPH_CAP_SFILE);
+  dout(7) << "file_eval wanted=" << gcap_string(wanted)
 	  << "  filelock=" << *lock << " on " << *lock->get_parent()
 	  << " loner " << in->get_loner()
 	  << dendl;
@@ -3545,10 +3521,10 @@ void Locker::file_eval(FileLock *lock)
     in->get_caps_issued(&loner_issued, &other_issued);
 
     if (in->get_loner() >= 0) {
-      if ((loner_wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_RD)) == 0 ||
-	  (other_wanted & (CEPH_CAP_WR|CEPH_CAP_RD))) {
+      if ((loner_wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) == 0 ||
+	  (other_wanted & (CEPH_CAP_GWR|CEPH_CAP_GRD))) {
 	// we should lose it.
-	if ((other_wanted & CEPH_CAP_WR) ||
+	if ((other_wanted & CEPH_CAP_GWR) ||
 	    lock->is_waiter_for(SimpleLock::WAIT_WR) ||
 	    lock->is_wrlocked())
 	  file_mixed(lock);
@@ -3562,7 +3538,7 @@ void Locker::file_eval(FileLock *lock)
   else if (lock->get_state() != LOCK_LONER &&
 	   !lock->is_rdlocked() &&
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   (wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	   (wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) &&
 	   in->choose_loner()) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
@@ -3573,8 +3549,8 @@ void Locker::file_eval(FileLock *lock)
   else if (lock->get_state() != LOCK_MIXED &&
 	   !lock->is_rdlocked() &&
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   (wanted & CEPH_CAP_RD) &&
-	   (wanted & CEPH_CAP_WR)) {
+	   (wanted & CEPH_CAP_GRD) &&
+	   (wanted & CEPH_CAP_GWR)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
@@ -3583,7 +3559,7 @@ void Locker::file_eval(FileLock *lock)
   // * -> sync?
   else if (lock->get_state() != LOCK_SYNC &&
 	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-	   !(wanted & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) &&
 	   !(in->get_state() == LOCK_MIXED &&
 	     in->is_dir() && in->has_subtree_root_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 
@@ -3621,9 +3597,9 @@ bool Locker::file_sync(FileLock *lock)
 
   int gather = 0;
   int loner_issued, other_issued;
-  in->get_caps_issued(&loner_issued, &other_issued);
-  if ((loner_issued & ~lock->caps_allowed(true)) ||
-      (other_issued & ~lock->caps_allowed(false))) {
+  in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
+  if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+      (other_issued & ~lock->gcaps_allowed(false))) {
     issue_caps(in);
     gather++;
   }
@@ -3689,9 +3665,9 @@ void Locker::file_lock(FileLock *lock)
     gather++;
   }
   int loner_issued, other_issued;
-  in->get_caps_issued(&loner_issued, &other_issued);
-  if ((loner_issued & ~lock->caps_allowed(true)) ||
-      (other_issued & ~lock->caps_allowed(false))) {
+  in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
+  if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+      (other_issued & ~lock->gcaps_allowed(false))) {
     issue_caps(in);
     gather++;
   }
@@ -3757,9 +3733,9 @@ void Locker::file_mixed(FileLock *lock)
       gather++;
     }
     int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued);
-    if ((loner_issued & ~lock->caps_allowed(true)) ||
-	(other_issued & ~lock->caps_allowed(false))) {
+    in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
+    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+	(other_issued & ~lock->gcaps_allowed(false))) {
       issue_caps(in);
       gather++;
     }
@@ -3809,10 +3785,10 @@ void Locker::file_loner(FileLock *lock)
     gather++;
   }
   int loner_issued, other_issued;
-  in->get_caps_issued(&loner_issued, &other_issued);
-  dout(10) << " issued loner " << cap_string(loner_issued) << " other " << cap_string(other_issued) << dendl;
-  if ((loner_issued & ~lock->caps_allowed(true)) ||
-      (other_issued & ~lock->caps_allowed(false))) {
+  in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
+  dout(10) << " issued loner " << gcap_string(loner_issued) << " other " << gcap_string(other_issued) << dendl;
+  if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+      (other_issued & ~lock->gcaps_allowed(false))) {
     issue_caps(in);
     gather++;
   }
@@ -3893,9 +3869,9 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
     
     // call back caps?
     int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued);
-    if ((loner_issued & ~lock->caps_allowed(true)) ||
-	(other_issued & ~lock->caps_allowed(false))) {
+    in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
+    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+	(other_issued & ~lock->gcaps_allowed(false))) {
       dout(7) << "handle_file_lock client readers, gathering caps on " << *in << dendl;
       issue_caps(in);
       break;
@@ -3924,9 +3900,9 @@ void Locker::handle_file_lock(FileLock *lock, MLock *m)
       // MIXED
       lock->set_state(LOCK_SYNC_MIXED);
       int loner_issued, other_issued;
-      in->get_caps_issued(&loner_issued, &other_issued);
-      if ((loner_issued & ~lock->caps_allowed(true)) ||
-	  (other_issued & ~lock->caps_allowed(false))) {
+      in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
+      if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+	  (other_issued & ~lock->gcaps_allowed(false))) {
         // call back client caps
         issue_caps(in);
         break;

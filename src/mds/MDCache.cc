@@ -1004,7 +1004,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       p != in->client_caps.end();
       p++) {
     Capability *cap = p->second;
-    if ((cap->issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) &&
+    if ((cap->issued() & CEPH_CAP_ANY_WR) &&
 	cap->client_follows < last) {
       // clone to oldin
       int client = p->first;
@@ -3085,7 +3085,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  // caps_wanted
 	  if (is.caps_wanted) {
 	    in->mds_caps_wanted[from] = is.caps_wanted;
-	    dout(15) << " inode caps_wanted " << cap_string(is.caps_wanted)
+	    dout(15) << " inode caps_wanted " << ccap_string(is.caps_wanted)
 		     << " on " << *in << dendl;
 	  } 
 	  
@@ -3486,9 +3486,9 @@ void MDCache::process_reconnected_caps()
     int issued = in->get_caps_issued();
     if (in->is_auth()) {
       // wr?
-      if (issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) {
+      if (issued & CEPH_CAP_ANY_WR) {
 	in->loner_cap = -1;
-	if (issued & (CEPH_CAP_RDCACHE|CEPH_CAP_WRBUFFER)) {
+	if (issued & ((CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) {
 	  in->filelock.set_state(LOCK_LONER);
 	  in->choose_loner();
 	} else {
@@ -3497,14 +3497,14 @@ void MDCache::process_reconnected_caps()
       }
     } else {
       // note that client should perform stale/reap cleanup during reconnect.
-      assert((issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0);   // ????
+      assert((issued & CEPH_CAP_ANY_WR) == 0);   // ????
       in->loner_cap = -1;
       if (in->filelock.is_xlocked())
 	in->filelock.set_state(LOCK_LOCK);
       else
 	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
     }
-    dout(15) << " issued " << cap_string(issued)
+    dout(15) << " issued " << ccap_string(issued)
 	     << " chose " << in->filelock
 	     << " on " << *in << dendl;
 
