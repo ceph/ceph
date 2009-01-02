@@ -22,6 +22,7 @@ class MClientCaps : public Message {
  public:
   struct ceph_mds_caps head;
   bufferlist snapbl;
+  bufferlist xattrbl;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -73,11 +74,18 @@ class MClientCaps : public Message {
     head.seq = seq;
     head.caps = caps;
     head.wanted = wanted;
+    head.migrate_seq = mseq;
+
+    head.uid = inode.uid;
+    head.gid = inode.gid;
+    head.mode = inode.mode;
+
+    head.xattr_len = 0; // FIXME
+
     head.layout = inode.layout;
     head.size = inode.size;
     head.max_size = inode.max_size;
     head.truncate_seq = inode.truncate_seq;
-    head.migrate_seq = mseq;
     inode.mtime.encode_timeval(&head.mtime);
     inode.atime.encode_timeval(&head.atime);
     inode.ctime.encode_timeval(&head.ctime);
@@ -116,11 +124,13 @@ class MClientCaps : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.snap_trace_len, snapbl, p);
+    ::decode_nohead(head.xattr_len, xattrbl, p);
   }
   void encode_payload() {
     head.snap_trace_len = snapbl.length();
     ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
+    ::encode_nohead(xattrbl, payload);
   }
 };
 

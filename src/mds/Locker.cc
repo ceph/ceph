@@ -999,7 +999,10 @@ void Locker::handle_client_caps(MClientCaps *m)
   assert(cap);
 
   // freezing|frozen?
-  if ((in->is_freezing() && in->filelock.is_stable()) ||  // continue if freezing and lock is unstable
+  if ((in->is_freezing() && (in->filelock.is_stable() &&
+			     in->authlock.is_stable() &&
+			     in->xattrlock.is_stable() &&
+			     in->linklock.is_stable())) ||  // continue if freezing and lock is unstable
       in->is_frozen()) {
     dout(7) << "handle_client_caps freezing|frozen on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
@@ -1145,22 +1148,33 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
 
   // atime|mtime|size?
   bool had_or_has_wr = had & (CEPH_CAP_GWR << CEPH_CAP_SFILE);
-  bool excl = had & CEPH_CAP_ANY_EXCL;
+  bool file_excl = had & (CEPH_CAP_GEXCL << CEPH_CAP_SFILE);
   bool dirty_atime = false;
   bool dirty_mtime = false;
   bool dirty_ctime = false;
   bool dirty_size = false;
-  if (had_or_has_wr || excl) {
-    if (mtime > latest->mtime || (excl && mtime != latest->mtime)) 
-      dirty_mtime = true;
+  bool dirty_file = false;
+  if (had_or_has_wr || file_excl) {
+    if (mtime > latest->mtime || (file_excl && mtime != latest->mtime)) 
+      dirty_file = dirty_mtime = true;
     if (ctime > latest->ctime)
-      dirty_ctime = true;
+      dirty_file = dirty_ctime = true;
     if (size > latest->size) 
-      dirty_size = true;
+      dirty_file = dirty_size = true;
   }
-  if (excl && atime != latest->atime)
-    dirty_atime = true;
-  bool dirty = dirty_atime || dirty_mtime || dirty_ctime || dirty_size;
+  if (file_excl && atime != latest->atime)
+    dirty_file = dirty_atime = true;
+  bool dirty_mode = false;
+  bool dirty_owner = false;
+  bool dirty_auth = false;
+  if (had & (CEPH_CAP_GEXCL << CEPH_CAP_SAUTH)) {
+    if (m->head.uid != latest->uid ||
+	m->head.gid != latest->gid)
+      dirty_auth = dirty_owner = true;
+    if (m->head.mode != latest->mode)
+      dirty_auth = dirty_mode = true;
+  }
+  bool dirty = dirty_file || dirty_auth;
   
   // increase or zero max_size?
   bool change_max = false;
@@ -1224,14 +1238,30 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
 	      << " for " << *in << dendl;
       pi->atime = atime;
     }
-    if (excl && pi->time_warp_seq < m->get_time_warp_seq()) {
+    if (file_excl && pi->time_warp_seq < m->get_time_warp_seq()) {
       dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
+    if (dirty_owner) {
+      dout(7) << "  uid.gid " << pi->uid << "." << pi->gid
+	      << " -> " << m->head.uid << "." << m->head.gid
+	      << " for " << *in << dendl;
+      pi->uid = m->head.uid;
+      pi->gid = m->head.gid;
+    }
+    if (dirty_mode) {
+      dout(7) << "  mode " << oct << pi->mode
+	      << " -> " << m->head.mode << dec
+	      << " for " << *in << dendl;
+      pi->mode = m->head.mode;
+    }
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
-    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+    if (dirty_file)
+      file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+    if (dirty_auth)
+      simple_wrlock_force(&in->authlock, mut);
     mut->auth_pin(in);
     mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
     mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
@@ -1250,12 +1280,6 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     } else if (ack)
       mds->send_message_client(ack, client);
   }
-
-  // reevaluate, waiters
-  if (!in->filelock.is_stable())
-    file_eval_gather(&in->filelock);
-  else if (in->is_auth())
-    file_eval(&in->filelock);
 }
 
 
@@ -1803,6 +1827,16 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
   dout(7) << "simple_rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
   return false;
+}
+
+bool Locker::simple_wrlock_force(SimpleLock *lock, Mutation *mut)
+{
+  dout(7) << "simple_wrlock_force  on " << *lock
+	  << " on " << *lock->get_parent() << dendl;  
+  lock->get_wrlock(true);
+  mut->wrlocks.insert(lock);
+  mut->locks.insert(lock);
+  return true;
 }
 
 bool Locker::simple_wrlock_start(SimpleLock *lock, MDRequest *mut)
