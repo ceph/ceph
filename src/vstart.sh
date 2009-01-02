@@ -1,7 +1,7 @@
 #!/bin/bash
 
 [ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
-[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=3
+[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=1
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
 let new=0
@@ -75,7 +75,7 @@ ARGS="-f"
 if [ $debug -eq 0 ]; then
 	CMON_ARGS="--debug_mon 10 --debug_ms 1"
 	COSD_ARGS=""
-	CMDS_ARGS=""
+	CMDS_ARGS="--debug_ms 1"
 else
 	echo "** going verbose **"
 	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"

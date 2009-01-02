@@ -46,6 +46,8 @@ timer
 
 
 kernel client
+- avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
+- include 'sync' in op when cap revocation is waiting on writeback
 - make osd retry writes if failure after ack..
 - ACLs
 - reconnect path should include pathbase, not just a string?
@@ -164,6 +166,7 @@ crush
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 osd
+- 'sync' op should kick store to do an immediate commit
 - pg split should be a work queue
 - pg split needs to fix up pg stats.  this is tricky with the clone overlap business...
 - generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
