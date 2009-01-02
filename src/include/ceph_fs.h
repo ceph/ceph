@@ -886,18 +886,18 @@ static inline int ceph_flags_to_mode(int flags)
 
 /* generic cap bits */
 #define CEPH_CAP_GRDCACHE    1  /* client can cache reads */
-#define CEPH_CAP_GEXCL       2  /* exclusive/loner access */
-#define CEPH_CAP_GRD         4  /* client can read */ 
-#define CEPH_CAP_GWR         8  /* client can write */
-#define CEPH_CAP_GWRBUFFER  16  /* client can buffer writes */
-#define CEPH_CAP_GWREXTEND  32  /* client can extend EOF */
-#define CEPH_CAP_GLAZYIO    64  /* client can perform lazy io */
+#define CEPH_CAP_GEXCL       2  /* client has exclusive access, can update */
+#define CEPH_CAP_GRD         4  /* (filelock) client can read */ 
+#define CEPH_CAP_GWR         8  /* (filelock) client can write */
+#define CEPH_CAP_GWRBUFFER  16  /* (filelock) client can buffer writes */
+#define CEPH_CAP_GWREXTEND  32  /* (filelock) client can extend EOF */
+#define CEPH_CAP_GLAZYIO    64  /* (filelock) client can perform lazy io */
 
 /* per-lock shift */
 #define CEPH_CAP_SAUTH      2
 #define CEPH_CAP_SLINK      4
 #define CEPH_CAP_SXATTR     6
-#define CEPH_CAP_SFILE      8
+#define CEPH_CAP_SFILE      8   /* goes at the end (uses >2 cap bits) */
 
 /* composed values */
 #define CEPH_CAP_AUTH_RDCACHE  (CEPH_CAP_GRDCACHE << CEPH_CAP_SAUTH)
