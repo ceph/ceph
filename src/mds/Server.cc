@@ -712,7 +712,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   if (in->encode_inodestat(bl, snapid, projected))
     lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
   else {
-    lmask = CEPH_STAT_MASK_INODE; // immutable bits
+    lmask = CEPH_STAT_CAP_INODE; // immutable bits
     encode_null_lease(bl);
   }
   dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
