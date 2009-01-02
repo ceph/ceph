@@ -1277,7 +1277,7 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 }
 
 
-bool CInode::encode_inodestat(bufferlist& bl, snapid_t snapid, bool projected)
+bool CInode::encode_inodestat(bufferlist& bl, Capability *cap, snapid_t snapid, bool projected)
 {
   bool valid = true;
 
@@ -1348,6 +1348,24 @@ bool CInode::encode_inodestat(bufferlist& bl, snapid_t snapid, bool projected)
   if (!xattrs.empty() && xbl.length() == 0)
     ::encode(xattrs, xbl);
   ::encode(xbl, bl);
+
+
+  // include capability?
+  if (snapid != CEPH_NOSNAP) {
+    e.cap.caps = valid ? get_caps_allowed(false) : CEPH_STAT_CAP_INODE;
+    e.cap.seq = 0;
+    e.cap.mseq = 0;
+  } else {
+    if (cap && valid) {
+      e.cap.caps = cap->pending();
+      e.cap.seq = cap->get_last_seq();
+      e.cap.mseq = cap->get_mseq();
+    } else {
+      e.cap.caps = 0;
+      e.cap.seq = 0;
+      e.cap.mseq = 0;
+    }
+  }
 
   return valid;
 }

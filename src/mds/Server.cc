@@ -516,23 +516,6 @@ void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *trace
   reply_request(mdr, new MClientReply(mdr->client_request, r), tracei, tracedn);
 }
 
-void Server::include_cap_in_reply(MDRequest *mdr, MClientReply *reply)
-{
-  // include cap / snapbl?
-  //  (only once!)
-  if (mdr->snapbl.length())
-    reply->snapbl.claim(mdr->snapbl);
-  if (mdr->cap) {
-    reply->set_file_caps(mdr->cap->pending());
-    reply->set_file_caps_seq(mdr->cap->get_last_seq());
-    reply->set_file_caps_mseq(mdr->cap->get_mseq());
-    mdr->cap = 0;
-  }
-  if (mdr->snap_caps)
-    reply->set_file_caps(mdr->snap_caps);
-}
-
-
 void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 {
   if (!g_conf.mds_early_reply)
@@ -559,9 +542,6 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   CInode *snapdiri = 0;
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true);
-
-  // include cap info?
-  include_cap_in_reply(mdr, reply);
 
   mdr->did_early_reply = true;
 
@@ -606,9 +586,6 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   */
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-
-  // include cap info?
-  include_cap_in_reply(mdr, reply);
 
   // infer tracei/tracedn from mdr?
   snapid_t snapid = CEPH_NOSNAP;
@@ -700,6 +677,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   utime_t now = g_clock.now();
   int lmask = 0;
 
+  // snapbl
+  SnapRealm *realm = in->find_snaprealm();
+  reply->snapbl = realm->get_snap_trace();
+  dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
+
   // start with dentry or inode?
   if (!in) {
     assert(dn);
@@ -709,18 +691,13 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  inode:
   numi++;
-  if (in->encode_inodestat(bl, snapid, projected))
-    lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
-  else {
-    lmask = CEPH_STAT_CAP_INODE; // immutable bits
-    encode_null_lease(bl);
-  }
-  dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
+  in->encode_inodestat(bl, in->get_client_cap(client), snapid, projected);
+  dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
     // do the snap name dentry
     const string& snapname = in->find_snaprealm()->get_snapname(snapid, in->ino());
-    dout(10) << " snapname " << snapname << dendl;
+    dout(10) << "set_trace_dist snapname " << snapname << dendl;
     ::encode(snapname, bl);
     encode_infinite_lease(bl);
     numdn++;
@@ -728,13 +705,12 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
     // back to the live tree
     snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, snapid);
-    lmask = mds->locker->issue_client_lease(in, client, bl, now, session);
+    in->encode_inodestat(bl, in->get_client_cap(client), snapid, false);
     numi++;
-    dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *in << dendl;
+    dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
     snapdirpos = numi;
-    dout(10) << " snapdiri at pos " << snapdirpos << dendl;
+    dout(10) << "set_trace_dist snapdiri at pos " << snapdirpos << dendl;
   }
 
   if (!dn) {
@@ -755,7 +731,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   else
     encode_null_lease(bl);
   numdn++;
-  dout(20) << " trace added " << lmask << " snapid " << snapid << " " << *dn << dendl;
+  dout(20) << "set_trace_dist added " << lmask << " snapid " << snapid << " " << *dn << dendl;
   
   // dir
 #ifdef MDS_VERIFY_FRAGSTAT
@@ -764,7 +740,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 #endif
 
   dn->get_dir()->encode_dirstat(bl, whoami);
-  dout(20) << " trace added " << *dn->get_dir() << dendl;
+  dout(20) << "set_trace_dist added " << *dn->get_dir() << dendl;
 
   in = dn->get_dir()->get_inode();
   dn = 0;
@@ -2254,9 +2230,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // inode
     dout(12) << "including inode " << *in << dendl;
-    bool valid = in->encode_inodestat(dnbl, snapid);
+    bool valid = in->encode_inodestat(dnbl, in->get_client_cap(client), snapid);
     assert(valid);
-    mds->locker->issue_client_lease(in, client, dnbl, mdr->now, mdr->session);
     numfiles++;
 
     // touch dn
@@ -4914,10 +4889,6 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
 			     mdr->client_request->get_orig_source().num());
   
-  SnapRealm *realm = cur->find_snaprealm();
-  realm->build_snap_trace(mdr->snapbl);
-  dout(10) << " snaprealm is " << *realm << " on " << *realm->inode << dendl;
-
   reply_request(mdr, 0);
 }
 
@@ -5108,7 +5079,6 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   // stick cap, snapbl info in mdr
   mdr->cap = cap;
-  realm->build_snap_trace(mdr->snapbl);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(in->ino());
@@ -5197,7 +5167,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
     else
       ::encode(p->second->get_long_name(), dnbl);
     encode_infinite_lease(dnbl);
-    diri->encode_inodestat(dnbl, p->first);
+    diri->encode_inodestat(dnbl, NULL, p->first);
     mds->locker->issue_client_lease(diri, client, dnbl, now, mdr->session);
     num++;
   }
@@ -5387,7 +5357,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   mdr->ref_snapid = snapid;
   mdr->ref_snapdiri = diri;
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  diri->snaprealm->build_snap_trace(reply->snapbl);
+  reply->snapbl = diri->snaprealm->get_snap_trace();
   reply_request(mdr, reply);
 }
 

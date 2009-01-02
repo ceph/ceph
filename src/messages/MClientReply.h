@@ -92,6 +92,8 @@ struct DirStat {
 struct InodeStat {
   vinodeno_t vino;
   version_t version;
+  ceph_mds_reply_cap cap;
+
   ceph_file_layout layout;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
@@ -179,16 +181,7 @@ public:
 
   int get_result() { return (__s32)(__u32)st.result; }
 
-  unsigned get_file_caps() { return st.file_caps; }
-  unsigned get_file_caps_seq() { return st.file_caps_seq; }
-  unsigned get_file_caps_mseq() { return st.file_caps_mseq; }
-  //uint64_t get_file_data_version() { return st.file_data_version; }
-  
   void set_result(int r) { st.result = r; }
-  void set_file_caps(unsigned char c) { st.file_caps = c; }
-  void set_file_caps_seq(capseq_t s) { st.file_caps_seq = s; }
-  void set_file_caps_mseq(capseq_t s) { st.file_caps_mseq = s; }
-  //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
 
   void set_unsafe() { st.safe = 0; }
 

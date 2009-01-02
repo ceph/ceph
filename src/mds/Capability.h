@@ -24,11 +24,6 @@ using namespace std;
 
 #include "config.h"
 
-
-// heuristics
-//#define CEPH_CAP_DELAYFLUSH  32
-
-
 class CInode;
 
 class Capability {

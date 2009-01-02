@@ -803,9 +803,6 @@ struct ceph_mds_reply_head {
 	ceph_tid_t tid;
 	__le32 op;
 	__le32 result;
-	__le32 file_caps;
-	__le32 file_caps_seq;
-	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
 	__u8 safe;
 } __attribute__ ((packed));
@@ -821,17 +818,23 @@ struct ceph_frag_tree_head {
 	struct ceph_frag_tree_split splits[];
 } __attribute__ ((packed));
 
+struct ceph_mds_reply_cap {
+	__le32 caps;
+	__le32 seq, mseq;
+} __attribute__ ((packed));
+
 struct ceph_mds_reply_inode {
 	__le64 ino;
 	__le64 snapid;
+	__le32 rdev;
 	__le64 version;
+	struct ceph_mds_reply_cap cap;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
 	__le64 time_warp_seq;
-	__le32 rdev;
+	__le64 size, max_size, truncate_seq;
 	__le32 mode, uid, gid;
 	__le32 nlink;
-	__le64 size, max_size, truncate_seq;
 	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
 	struct ceph_timespec rctime;
 	struct ceph_frag_tree_head fragtree;

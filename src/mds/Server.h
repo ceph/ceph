@@ -81,7 +81,6 @@ public:
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid, CInode *snapdiri,
 		      bool projected = false);
-  void include_cap_in_reply(MDRequest *mdr, MClientReply *reply);
 
   void encode_empty_dirstat(bufferlist& bl);
   void encode_infinite_lease(bufferlist& bl);

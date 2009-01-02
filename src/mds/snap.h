@@ -124,6 +124,8 @@ struct SnapRealm {
   set<snapid_t> cached_snaps;
   SnapContext cached_snap_context;
 
+  bufferlist cached_snap_trace;
+
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
@@ -165,6 +167,7 @@ struct SnapRealm {
 		      snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
+  const bufferlist& get_snap_trace();
   void build_snap_trace(bufferlist& snapbl);
 
   const string& get_snapname(snapid_t snapid, inodeno_t atino);

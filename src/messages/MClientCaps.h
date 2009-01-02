@@ -80,6 +80,8 @@ class MClientCaps : public Message {
     head.gid = inode.gid;
     head.mode = inode.mode;
 
+    head.nlink = inode.nlink;
+
     head.xattr_len = 0; // FIXME
 
     head.layout = inode.layout;

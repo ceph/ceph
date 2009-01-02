@@ -260,7 +260,6 @@ struct MDRequest : public Mutation {
 
   Capability *cap;
   int snap_caps;
-  bufferlist snapbl;
   bool did_early_reply;
 
   // -- i am a slave request
