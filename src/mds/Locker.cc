@@ -1739,9 +1739,10 @@ bool Locker::simple_sync(SimpleLock *lock)
   lock->set_state(LOCK_LOCK_SYNC);
 
   int gather = 0;
-  if (lock->is_wrlocked()) {
+  if (lock->is_wrlocked())
     gather++;
-  }
+  if (lock->is_xlocked())
+    gather++;
 
   if (gather) {
     lock->get_parent()->auth_pin(lock);
