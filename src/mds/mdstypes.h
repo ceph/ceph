@@ -73,16 +73,16 @@ inline string ccap_string(int cap)
   if (cap & CEPH_CAP_PIN) s += "p";
 
   int a = (cap >> CEPH_CAP_SAUTH) & 3;
-  if (a) s += " a(" + gcap_string(a) + ")";
+  if (a) s += 'A' + gcap_string(a);
 
   a = (cap >> CEPH_CAP_SLINK) & 3;
-  if (a) s += " l(" + gcap_string(a) + ")";
+  if (a) s += 'L' + gcap_string(a);
 
   a = (cap >> CEPH_CAP_SXATTR) & 3;
-  if (a) s += " x(" + gcap_string(a) + ")";
+  if (a) s += 'X' + gcap_string(a);
 
   a = cap >> CEPH_CAP_SFILE;
-  if (a) s += " f(" + gcap_string(a) + ")";
+  if (a) s += 'F' + gcap_string(a);
 
   return s;
 }

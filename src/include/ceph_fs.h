@@ -821,6 +821,7 @@ struct ceph_frag_tree_head {
 struct ceph_mds_reply_cap {
 	__le32 caps;
 	__le32 seq, mseq;
+	__le64 realm;
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {
@@ -903,21 +904,19 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_SFILE      8   /* goes at the end (uses >2 cap bits) */
 
 /* composed values */
-#define CEPH_CAP_AUTH_RDCACHE  (CEPH_CAP_GRDCACHE << CEPH_CAP_SAUTH)
-#define CEPH_CAP_AUTH_EXCL     (CEPH_CAP_GEXCL    << CEPH_CAP_SAUTH)
-#define CEPH_CAP_LINK_RDCACHE  (CEPH_CAP_GRDCACHE << CEPH_CAP_SLINK)
-#define CEPH_CAP_LINK_EXCL     (CEPH_CAP_GEXCL    << CEPH_CAP_SLINK)
-#define CEPH_CAP_XATTR_RDCACHE (CEPH_CAP_GRDCACHE << CEPH_CAP_SXATTR)
-#define CEPH_CAP_XATTR_EXCL    (CEPH_CAP_GEXCL    << CEPH_CAP_SXATTR)
-#define CEPH_CAP_FILE_RDCACHE  (CEPH_CAP_GRDCACHE << CEPH_CAP_SFILE)
-#define CEPH_CAP_FILE_EXCL     (CEPH_CAP_GEXCL    << CEPH_CAP_SFILE)
-
-#define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
-			   CEPH_CAP_LINK_EXCL |		\
-			   CEPH_CAP_XATTR_EXCL |	\
-			   CEPH_CAP_FILE_EXCL)
-#define CEPH_CAP_ANY_FILE_WR ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)
-#define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
+#define CEPH_CAP_AUTH_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SAUTH)
+#define CEPH_CAP_AUTH_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SAUTH)
+#define CEPH_CAP_LINK_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SLINK)
+#define CEPH_CAP_LINK_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SLINK)
+#define CEPH_CAP_XATTR_RDCACHE (CEPH_CAP_GRDCACHE  << CEPH_CAP_SXATTR)
+#define CEPH_CAP_XATTR_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SXATTR)
+#define CEPH_CAP_FILE_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_RD       (CEPH_CAP_GRD       << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_WR       (CEPH_CAP_GWR       << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_WRBUFFER (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_WREXTEND (CEPH_CAP_GWREXTEND << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_LAZYIO   (CEPH_CAP_GLAZYIO   << CEPH_CAP_SFILE)
 
 /* cap masks (for stat/getattr) */
 #define CEPH_STAT_CAP_INODE    CEPH_CAP_PIN
@@ -937,6 +936,14 @@ static inline int ceph_flags_to_mode(int flags)
 				 CEPH_CAP_LINK_RDCACHE |	\
 				 CEPH_CAP_FILE_RDCACHE |	\
 				 CEPH_CAP_XATTR_RDCACHE)
+
+#define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
+			   CEPH_CAP_LINK_EXCL |		\
+			   CEPH_CAP_XATTR_EXCL |	\
+			   CEPH_CAP_FILE_EXCL)
+#define CEPH_CAP_ANY_FILE_WR ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)
+#define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
+
 
 static inline int ceph_caps_for_mode(int mode)
 {
@@ -1003,7 +1010,7 @@ static inline const char *ceph_cap_op_name(int op)
  */
 struct ceph_mds_caps {
 	__le32 op;
-	__le64 ino;
+	__le64 ino, realm;
 	__le32 seq;
 	__le32 caps, wanted;
 	__le32 migrate_seq;

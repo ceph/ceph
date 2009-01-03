@@ -1336,6 +1336,31 @@ bool CInode::encode_inodestat(bufferlist& bl, Capability *cap, snapid_t snapid, 
   
   e.rdev = i->rdev;
   e.fragtree.nsplits = dirfragtree._splits.size();
+
+  // include capability?
+  if (snapid != CEPH_NOSNAP) {
+    e.cap.caps = valid ? get_caps_allowed(false) : CEPH_STAT_CAP_INODE;
+    e.cap.seq = 0;
+    e.cap.mseq = 0;
+    e.cap.realm = 0;
+  } else {
+    if (cap && valid) {
+      e.cap.caps = cap->pending();
+      e.cap.seq = cap->get_last_seq();
+      e.cap.mseq = cap->get_mseq();
+      e.cap.realm = find_snaprealm()->inode->ino();
+    } else {
+      e.cap.caps = 0;
+      e.cap.seq = 0;
+      e.cap.mseq = 0;
+      e.cap.realm = 0;
+    }
+  }
+  dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
+	   << " seq " << e.cap.seq
+	   << " mseq " << e.cap.mseq << dendl;
+
+  // encode
   ::encode(e, bl);
   for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
        p != dirfragtree._splits.end();
@@ -1348,24 +1373,6 @@ bool CInode::encode_inodestat(bufferlist& bl, Capability *cap, snapid_t snapid, 
   if (!xattrs.empty() && xbl.length() == 0)
     ::encode(xattrs, xbl);
   ::encode(xbl, bl);
-
-
-  // include capability?
-  if (snapid != CEPH_NOSNAP) {
-    e.cap.caps = valid ? get_caps_allowed(false) : CEPH_STAT_CAP_INODE;
-    e.cap.seq = 0;
-    e.cap.mseq = 0;
-  } else {
-    if (cap && valid) {
-      e.cap.caps = cap->pending();
-      e.cap.seq = cap->get_last_seq();
-      e.cap.mseq = cap->get_mseq();
-    } else {
-      e.cap.caps = 0;
-      e.cap.seq = 0;
-      e.cap.mseq = 0;
-    }
-  }
 
   return valid;
 }

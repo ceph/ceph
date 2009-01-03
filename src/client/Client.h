@@ -328,28 +328,16 @@ class Inode {
   }
   int caps_wanted() {
     int want = caps_file_wanted() | caps_used();
-    if (want & CEPH_CAP_WRBUFFER)
-      want |= CEPH_CAP_EXCL;
+    if (want & (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE))
+      want |= CEPH_CAP_FILE_EXCL;
     return want;
-  }
-
-  int get_effective_lease_mask(utime_t now) {
-    int havemask = 0;
-    if (now < lease_ttl && lease_mds >= 0)
-      havemask |= lease_mask;
-    if (caps_issued() & CEPH_CAP_EXCL) 
-      havemask |= CEPH_LOCK_IFILE;
-    return havemask;
   }
 
   bool have_valid_size() {
     // RD+RDCACHE or WR+WRBUFFER => valid size
-    if ((caps_issued() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
+    if ((caps_issued() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_RDCACHE)) == (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_RDCACHE))
       return true;
-    if ((caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
-      return true;
-    // otherwise, look for lease or EXCL...
-    if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_IFILE)
+    if ((caps_issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) == (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER))
       return true;
     return false;
   }
@@ -827,8 +815,7 @@ protected:
 
   // file caps
   void add_update_cap(Inode *in, int mds,
-		      bufferlist& snapbl,
-		      unsigned issued, unsigned seq, unsigned mseq);
+		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
 
@@ -865,15 +852,15 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
-  Inode* insert_trace(MClientReply *reply, utime_t ttl);
+  Inode* insert_trace(MClientReply *reply, utime_t ttl, int mds);
   void update_inode_file_bits(Inode *in,
 			      __u64 truncat_seq,__u64 size,
 			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
-  void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
+  void update_inode(Inode *in, InodeStat *st, utime_t ttl, int mds);
   Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			     InodeStat *ist, LeaseStat *ilease, 
-			     utime_t from);
+			     InodeStat *ist,
+			     utime_t from, int mds);
 
 
   // ----------------------

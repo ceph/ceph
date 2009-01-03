@@ -442,7 +442,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	inode_t fake_inode;
 	memset(&fake_inode, 0, sizeof(fake_inode));
 	fake_inode.ino = p->first;
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0);
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0);
 	//stale->head.migrate_seq = 0; // FIXME ******
 	mds->send_message_client(stale, m->get_source_inst());
 

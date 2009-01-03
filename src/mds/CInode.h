@@ -603,6 +603,7 @@ public:
   // caps allowed
   int get_caps_allowed_ever() {
     return 
+      CEPH_CAP_PIN |
       (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
       (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
       (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
@@ -610,6 +611,7 @@ public:
   }
   int get_caps_allowed(bool loner) {
     return 
+      CEPH_CAP_PIN |
       (filelock.gcaps_allowed(loner) << filelock.get_cap_shift()) |
       (authlock.gcaps_allowed(loner) << authlock.get_cap_shift()) |
       (xattrlock.gcaps_allowed(loner) << xattrlock.get_cap_shift()) |

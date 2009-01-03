@@ -121,6 +121,7 @@ struct InodeStat {
     vino.snapid = snapid_t(e.snapid);
     version = e.version;
     layout = e.layout;
+    cap = e.cap;
     size = e.size;
     max_size = e.max_size;
     truncate_seq = e.truncate_seq;
