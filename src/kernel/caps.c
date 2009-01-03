@@ -1463,3 +1463,8 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 	spin_unlock(&mdsc->cap_delay_lock);
 }
 
+void ceph_caps_release(struct inode *inode, int mask)
+{
+	/* TODO */
+}
+

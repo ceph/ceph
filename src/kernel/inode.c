@@ -1366,7 +1366,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 		mask |= CEPH_CHOWN_GID;
 	}
 	reqh->args.chown.mask = cpu_to_le32(mask);
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IAUTH);
+	ceph_caps_release(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "chown result %d\n", err);
@@ -1387,7 +1387,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IAUTH);
+	ceph_caps_release(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "chmod result %d\n", err);
@@ -1454,7 +1454,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	if (ia_valid & ATTR_MTIME)
 		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
 
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_CAP_FILE_RDCACHE);
+	ceph_caps_release(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "utime result %d\n", err);
@@ -1497,7 +1497,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_CAP_FILE_RDCACHE);
+	ceph_caps_release(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);
@@ -1921,7 +1921,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_request->hdr.data_len = cpu_to_le32(size);
 	req->r_request->hdr.data_off = cpu_to_le32(0);
 
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IXATTR);
+	ceph_caps_release(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -1965,7 +1965,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IXATTR);
+	ceph_caps_release(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

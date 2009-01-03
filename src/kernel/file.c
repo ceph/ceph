@@ -130,7 +130,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	dentry = d_find_alias(inode);
 	if (!dentry)
 		return -ESTALE;  /* yuck */
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_IFILE);
+	ceph_caps_release(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
@@ -178,7 +178,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	if (flags & O_CREAT)
-		ceph_mdsc_lease_release(mdsc, dir, NULL, CEPH_LOCK_IFILE);
+		ceph_caps_release(dir, CEPH_CAP_FILE_RDCACHE);
 	req->r_last_dentry = dget(dentry); /* use this dentry in fill_trace */
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, req);

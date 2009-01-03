@@ -646,6 +646,7 @@ extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 			       struct ceph_mds_session **psession);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
+extern void ceph_caps_release(struct inode *inode, int mask);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;
