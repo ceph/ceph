@@ -57,7 +57,7 @@ public:
     xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
   }
 
-  const char *get_scatterlock_state_name(int s) {
+  const char *get_state_name(int s) {
     switch(s) {
     case LOCK_SYNC: return "sync";
     case LOCK_SYNC_LOCK: return "sync->lock";
