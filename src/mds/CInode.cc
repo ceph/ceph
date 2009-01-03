@@ -1277,8 +1277,11 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 }
 
 
-bool CInode::encode_inodestat(bufferlist& bl, Capability *cap, snapid_t snapid, bool projected)
+bool CInode::encode_inodestat(bufferlist& bl, Session *session,
+			      snapid_t snapid, bool projected)
 {
+  int client = session->inst.name.num();
+
   bool valid = true;
 
   // pick a version!
@@ -1338,14 +1341,32 @@ bool CInode::encode_inodestat(bufferlist& bl, Capability *cap, snapid_t snapid, 
   e.fragtree.nsplits = dirfragtree._splits.size();
 
   // include capability?
-  if (snapid != CEPH_NOSNAP) {
+  Capability *cap = get_client_cap(client);
+  if (snapid != CEPH_NOSNAP && !cap) {
     e.cap.caps = valid ? get_caps_allowed(false) : CEPH_STAT_CAP_INODE;
     e.cap.seq = 0;
     e.cap.mseq = 0;
     e.cap.realm = 0;
   } else {
+    if (valid && !cap && is_auth()) {
+      // add a new cap
+      cap = add_client_cap(client, find_snaprealm());
+      session->touch_cap(cap);
+    }
     if (cap && valid) {
-      e.cap.caps = cap->pending();
+      bool loner = (get_loner() == client);
+      int issue = (cap->wanted() | CEPH_CAP_ANY_RD) & get_caps_allowed(loner);
+      int pending = cap->pending();
+      if (issue & ~pending) {
+	dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+		 << ", pending was " << ccap_string(pending) << dendl;
+	cap->issue(issue);
+	pending = issue;
+      } else {
+	dout(10) << "encode_inodestat wanted to issue " << ccap_string(issue)
+		 << ", already pending " << ccap_string(pending) << dendl;
+      }
+      e.cap.caps = pending;
       e.cap.seq = cap->get_last_seq();
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = find_snaprealm()->inode->ino();

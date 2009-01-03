@@ -937,6 +937,11 @@ static inline int ceph_flags_to_mode(int flags)
 				 CEPH_CAP_FILE_RDCACHE |	\
 				 CEPH_CAP_XATTR_RDCACHE)
 
+#define CEPH_CAP_ANY_RD   (CEPH_CAP_AUTH_RDCACHE |			\
+			   CEPH_CAP_LINK_RDCACHE |			\
+			   CEPH_CAP_XATTR_RDCACHE |			\
+			   CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD)
+
 #define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
 			   CEPH_CAP_LINK_EXCL |		\
 			   CEPH_CAP_XATTR_EXCL |	\

@@ -691,7 +691,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  inode:
   numi++;
-  in->encode_inodestat(bl, in->get_client_cap(client), snapid, projected);
+  in->encode_inodestat(bl, session, snapid, projected);
   dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
@@ -705,7 +705,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
     // back to the live tree
     snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, in->get_client_cap(client), snapid, false);
+    in->encode_inodestat(bl, session, snapid, false);
     numi++;
     dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
@@ -2230,7 +2230,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // inode
     dout(12) << "including inode " << *in << dendl;
-    bool valid = in->encode_inodestat(dnbl, in->get_client_cap(client), snapid);
+    bool valid = in->encode_inodestat(dnbl, mdr->session, snapid);
     assert(valid);
     numfiles++;
 
@@ -5167,7 +5167,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
     else
       ::encode(p->second->get_long_name(), dnbl);
     encode_infinite_lease(dnbl);
-    diri->encode_inodestat(dnbl, NULL, p->first);
+    diri->encode_inodestat(dnbl, mdr->session, p->first);
     mds->locker->issue_client_lease(diri, client, dnbl, now, mdr->session);
     num++;
   }

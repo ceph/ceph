@@ -553,11 +553,11 @@ Capability* Locker::issue_new_caps(CInode *in,
   }
 
   // issue caps (pot. incl new one)
-  issue_caps(in);  // note: _eval above may have done this already...
+  //issue_caps(in);  // note: _eval above may have done this already...
 
   // re-issue whatever we can
-  cap->issue(cap->pending());
-  cap->set_last_open();
+  //cap->issue(cap->pending());
+  //cap->set_last_open();  // not used, atm.
 
   return cap;
 }
@@ -613,31 +613,37 @@ bool Locker::issue_caps(CInode *in)
     int pending = cap->pending();
     allowed &= ~careful | pending;   // only allow "careful" bits if already issued
 
+    int wanted = cap->wanted();
+
     dout(20) << " client" << it->first
 	     << " pending " << ccap_string(pending) 
 	     << " allowed " << ccap_string(allowed) 
-	     << " wanted " << ccap_string(cap->wanted())
+	     << " wanted " << ccap_string(wanted)
 	     << dendl;
 
-    if (cap->pending() != (cap->wanted() & allowed)) {
+    if (pending != (wanted & allowed)) {
       // issue
       nissued++;
 
-      int before = cap->pending();
-      long seq = cap->issue(cap->wanted() & allowed);
+      // include caps that clients generally like, while we're at it.
+      int likes = CEPH_CAP_ANY_RD;
+
+      int before = pending;
+      long seq = cap->issue((wanted|likes) & allowed);
+      int after = cap->pending();
 
       if (seq > 0 && 
           !cap->is_suppress()) {
         dout(7) << "   sending MClientCaps to client" << it->first
 		<< " seq " << cap->get_last_seq()
-		<< " new pending " << ccap_string(cap->pending()) << " was " << ccap_string(before) 
+		<< " new pending " << ccap_string(after) << " was " << ccap_string(before) 
 		<< dendl;
         mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
 						 in->inode,
 						 in->find_snaprealm()->inode->ino(),
 						 cap->get_last_seq(),
-						 cap->pending(),
-						 cap->wanted(),
+						 after,
+						 wanted,
 						 cap->get_mseq()),
 				 it->first);
       }
