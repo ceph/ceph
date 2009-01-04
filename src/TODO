@@ -45,6 +45,19 @@ timer
 - each SafeTimer should just be its own thread.
 
 
+caps
+- notes
+  - client should not get unsolicited MClientCaps if wanted==0.
+  - if we do un-acked cap release, we need to handle unsolicited import/export
+  - may unacked release _only_ if wanted==0?
+- kclient
+  - only pin caps with wanted != 0?
+  - put unwanted caps on an lru list; expire
+- mds
+  - segregate wanted/unwanted caps?
+
+
+
 kernel client
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
 - include 'sync' in op when cap revocation is waiting on writeback
@@ -107,7 +120,7 @@ userspace client
 mds
 - caps
   - quick cap release if wanted == 0?
-  - make unwanted caps time out, like a lease
+  - make unwanted caps time out, like a lease?
 - xlock vs wrlock.. need more lock states?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
