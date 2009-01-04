@@ -385,6 +385,8 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
   //dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
   dout(12) << "update_inode caps " << ccap_string(st->cap.caps) << dendl;
 
+  int issued = in->caps_issued();
+
   if (st->cap.caps) {
     if (in->snapid == CEPH_NOSNAP)
       add_update_cap(in, mds, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm));
@@ -392,27 +394,28 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
       in->snap_caps |= st->cap.caps;
     }
   }
-
+  
   if (st->cap.caps & CEPH_CAP_PIN) {
     in->inode.ino = st->vino.ino;
     in->snapid = st->vino.snapid;
     in->inode.rdev = st->rdev;
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
-  }
-  if (st->cap.caps & CEPH_CAP_AUTH_RDCACHE) {
-    in->inode.mode = st->mode;
-    in->inode.uid = st->uid;
-    in->inode.gid = st->gid;
-  }
-  if (st->cap.caps & CEPH_CAP_LINK_RDCACHE) {
-    in->inode.nlink = st->nlink;
-    in->inode.anchored = false;  /* lie */
-  }
-  if (st->cap.caps & CEPH_CAP_XATTR_RDCACHE) {
-    in->xattrs.swap(st->xattrs);
-  }
 
-  if (st->cap.caps & CEPH_CAP_PIN) {
+    if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
+      in->inode.mode = st->mode;
+      in->inode.uid = st->uid;
+      in->inode.gid = st->gid;
+    }
+
+    if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+      in->inode.nlink = st->nlink;
+      in->inode.anchored = false;  /* lie */
+    }
+
+    if ((issued & CEPH_CAP_XATTR_EXCL) == 0) {
+      in->xattrs.swap(st->xattrs);
+    }
+
     in->inode.dirstat = st->dirstat;
     in->inode.rstat = st->rstat;
 

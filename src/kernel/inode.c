@@ -417,20 +417,27 @@ static int fill_inode(struct inode *inode,
 	    ci->i_version == le64_to_cpu(info->version))
 		goto no_change;
 
+	issued = __ceph_caps_issued(ci, NULL);
+
 	/* update inode */
 	ci->i_version = le64_to_cpu(info->version);
 	inode->i_version++;
-	inode->i_mode = le32_to_cpu(info->mode);
-	inode->i_uid = le32_to_cpu(info->uid);
-	inode->i_gid = le32_to_cpu(info->gid);
-	inode->i_nlink = le32_to_cpu(info->nlink);
 	inode->i_rdev = le32_to_cpu(info->rdev);
+
+	if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
+		inode->i_mode = le32_to_cpu(info->mode);
+		inode->i_uid = le32_to_cpu(info->uid);
+		inode->i_gid = le32_to_cpu(info->gid);
+	}
+
+	if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+		inode->i_nlink = le32_to_cpu(info->nlink);
+	}
 
 	/* be careful with mtime, atime, size */
 	ceph_decode_timespec(&atime, &info->atime);
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
-	issued = __ceph_caps_issued(ci, NULL);
 	ceph_fill_file_bits(inode, issued,
 			    le64_to_cpu(info->truncate_seq),
 			    le64_to_cpu(info->size),
@@ -442,7 +449,7 @@ static int fill_inode(struct inode *inode,
 	inode->i_blkbits = fls(le32_to_cpu(info->layout.fl_stripe_unit)) - 1;
 
 	/* xattrs */
-	if (iinfo->xattr_len) {
+	if (iinfo->xattr_len && (issued & CEPH_CAP_XATTR_EXCL) == 0) {
 		if (ci->i_xattr_len != iinfo->xattr_len) {
 			kfree(ci->i_xattr_data);
 			ci->i_xattr_len = iinfo->xattr_len;
