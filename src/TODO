@@ -50,6 +50,9 @@ caps
   - client should not get unsolicited MClientCaps if wanted==0.
   - if we do un-acked cap release, we need to handle unsolicited import/export
   - may unacked release _only_ if wanted==0?
+- maybe we really want a 'dirty' mask
+  - client knows when it has dirty data to writeback, and thus when it must wait for it to flush?
+
 - kclient
   - only pin caps with wanted != 0?
   - put unwanted caps on an lru list; expire

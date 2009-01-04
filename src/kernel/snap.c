@@ -310,6 +310,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		derr(10, "ENOMEM allocating ceph_cap_snap on %p\n", inode);
 		return;
 	}
+	atomic_set(&capsnap->nref, 1);
 
 	spin_lock(&inode->i_lock);
 	used = __ceph_caps_used(ci);
@@ -326,6 +327,15 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		capsnap->follows = snapc->seq - 1;
 		capsnap->context = ceph_get_snap_context(snapc);
 		capsnap->issued = __ceph_caps_issued(ci, NULL);
+
+		capsnap->mode = inode->i_mode;
+		capsnap->uid = inode->i_uid;
+		capsnap->gid = inode->i_gid;
+
+		/* fixme? */
+		capsnap->xattr_blob = 0;
+		capsnap->xattr_len = 0;
+
 		/* dirty page count moved from _head to this cap_snap;
 		   all subsequent writes page dirties occur _after_ this
 		   snapshot. */

@@ -307,7 +307,9 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
 			 int caps, int wanted, u64 seq, u64 mseq,
 			 u64 size, u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
-			 u64 time_warp_seq, u64 follows, int mds)
+			 u64 time_warp_seq,
+			 uid_t uid, gid_t gid, mode_t mode,
+			 u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
@@ -369,6 +371,9 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	struct timespec mtime, atime;
 	int wake = 0;
 	int op = CEPH_CAP_OP_ACK;
+	mode_t mode;
+	uid_t uid;
+	gid_t gid;
 
 	if (wanted == 0)
 		op = CEPH_CAP_OP_RELEASE;
@@ -399,6 +404,9 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	atime = inode->i_atime;
 	time_warp_seq = ci->i_time_warp_seq;
 	follows = ci->i_snap_realm->cached_context->seq;
+	uid = inode->i_uid;
+	gid = inode->i_gid;
+	mode = inode->i_mode;
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
@@ -410,6 +418,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	send_cap_msg(mdsc, ceph_vino(inode).ino,
 		     op, keep, wanted, seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
+		     uid, gid, mode,
 		     follows, session->s_mds);
 
 	if (wake)
@@ -433,11 +442,6 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci,
 	int mds;
 	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
-	u64 follows;
-	int issued;
-	u64 size;
-	struct timespec mtime, atime, ctime;
-	u64 time_warp_seq;
 	u32 mseq;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct ceph_mds_session *session = NULL; /* if session != NULL, we hold
@@ -491,25 +495,23 @@ retry:
 			goto retry;
 		}
 
-		follows = capsnap->follows;
-		size = capsnap->size;
-		atime = capsnap->atime;
-		mtime = capsnap->mtime;
-		ctime = capsnap->ctime;
-		time_warp_seq = capsnap->time_warp_seq;
-		issued = capsnap->issued;
+		atomic_inc(&capsnap->nref);
 		spin_unlock(&inode->i_lock);
 
 		dout(10, "flush_snaps %p cap_snap %p follows %lld size %llu\n",
-		     inode, capsnap, next_follows, size);
+		     inode, capsnap, next_follows, capsnap->size);
 		send_cap_msg(mdsc, ceph_vino(inode).ino,
-			     CEPH_CAP_OP_FLUSHSNAP, issued, 0, 0, mseq,
-			     size, 0,
-			     &mtime, &atime, time_warp_seq,
-			     follows, mds);
+			     CEPH_CAP_OP_FLUSHSNAP, capsnap->issued, 0, 0, mseq,
+			     capsnap->size, 0,
+			     &capsnap->mtime, &capsnap->atime,
+			     capsnap->time_warp_seq,
+			     capsnap->uid, capsnap->gid, capsnap->mode,
+			     capsnap->follows, mds);
+
+		next_follows = capsnap->follows + 1;
+		ceph_put_cap_snap(capsnap);
 
 		spin_lock(&inode->i_lock);
-		next_follows = follows + 1;
 		goto retry;
 	}
 
@@ -1155,7 +1157,7 @@ static void handle_cap_flushedsnap(struct inode *inode,
 			     capsnap, follows);
 			ceph_put_snap_context(capsnap->context);
 			list_del(&capsnap->ci_item);
-			kfree(capsnap);
+			ceph_put_cap_snap(capsnap);
 			drop = 1;
 			break;
 		} else {
@@ -1365,7 +1367,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	if (!inode) {
 		dout(10, " i don't have ino %llx, sending release\n", vino.ino);
 		send_cap_msg(mdsc, vino.ino, CEPH_CAP_OP_RELEASE, 0, 0, seq,
-			     size, 0, 0, NULL, NULL, 0, 0, mds);
+			     size, 0, 0, NULL, NULL, 0, 0, 0, 0, 0, mds);
 		goto no_inode;
 	}
 

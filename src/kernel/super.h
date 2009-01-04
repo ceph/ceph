@@ -144,16 +144,32 @@ struct ceph_cap {
  * data before flushing the snapped state (tracked here) back to the MDS.
  */
 struct ceph_cap_snap {
+	atomic_t nref;
+
 	struct list_head ci_item;
 	u64 follows;
 	int issued;
+	struct ceph_snap_context *context;
+	
+	mode_t mode;
+	uid_t uid;
+	gid_t gid;
+
+	void *xattr_blob;
+	int xattr_len;	
+
 	u64 size;
 	struct timespec mtime, atime, ctime;
 	u64 time_warp_seq;
-	struct ceph_snap_context *context;
 	int writing;   /* a sync write is still in progress */
 	int dirty;     /* dirty pages awaiting writeback */
 };
+
+static inline void ceph_put_cap_snap(struct ceph_cap_snap *capsnap)
+{
+	if (atomic_dec_and_test(&capsnap->nref))
+		kfree(capsnap);
+}
 
 /*
  * The frag tree describes how a directory is fragmented, potentially across
