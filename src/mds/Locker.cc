@@ -369,6 +369,19 @@ void Locker::eval_gather(SimpleLock *lock)
   }
 }
 
+void Locker::eval_cap_gather(CInode *in)
+{
+  // kick locks now
+  if (!in->filelock.is_stable())
+    file_eval_gather(&in->filelock);
+  if (!in->authlock.is_stable())
+    simple_eval_gather(&in->authlock);
+  if (!in->linklock.is_stable())
+    simple_eval_gather(&in->linklock);
+  if (!in->xattrlock.is_stable())
+    simple_eval_gather(&in->xattrlock);
+}
+
 bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
@@ -1040,7 +1053,10 @@ void Locker::handle_client_caps(MClientCaps *m)
     // case we get a dup response, so whatever.)
     MClientCaps *ack = new MClientCaps(CEPH_CAP_OP_FLUSHEDSNAP, in->inode, 0, 0, 0, 0, 0);
     ack->set_snap_follows(follows);
-    _do_cap_update(in, m->get_caps(), in->get_caps_wanted(), follows, m, ack);
+    if (!_do_cap_update(in, m->get_caps(), in->get_caps_wanted(), follows, m, ack)) {
+      mds->send_message_client(ack, client);
+      eval_cap_gather(in);
+    }
   } else {
 
     // for this and all subsequent versions of this inode,
@@ -1086,8 +1102,19 @@ void Locker::handle_client_caps(MClientCaps *m)
 	cap->set_wanted(wanted);
       }
 
-      _do_cap_update(in, has|had, in->get_caps_wanted() | wanted, follows, m, ack, releasecap);
-
+      if (((has|had) & CEPH_CAP_ANY_WR) == 0 ||                        // didn't have any wr caps, 
+	  !_do_cap_update(in, has|had, in->get_caps_wanted() | wanted, // or didn't change anything
+			  follows, m, ack, releasecap)) {
+	// no update, ack now.
+	if (releasecap) {
+	  assert(ack);
+	  _finish_release_cap(in, client, releasecap, ack);
+	} else if (ack)
+	  mds->send_message_client(ack, client);
+	
+	eval_cap_gather(in);
+      }
+      
       // done?
       if (in->last == CEPH_NOSNAP)
 	break;
@@ -1138,7 +1165,7 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCa
   }
 }
 
-void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
+bool Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
 			    MClientCaps *ack, capseq_t releasecap)
 {
   dout(10) << "_do_cap_update had " << ccap_string(had) << " on " << *in << dendl;
@@ -1213,79 +1240,77 @@ void Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follow
     }
   }
 
-  if ((dirty || change_max) &&
-      !in->is_base()) {              // FIXME.. what about root inode mtime/atime?
-    EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
-
-    inode_t *pi = in->project_inode();
-    pi->version = in->pre_dirty();
-    if (change_max) {
-      dout(7) << "  max_size " << pi->max_size << " -> " << new_max << dendl;
-      pi->max_size = new_max;
-    }    
-    if (dirty_mtime) {
-      dout(7) << "  mtime " << pi->mtime << " -> " << mtime
-	      << " for " << *in << dendl;
-      pi->mtime = mtime;
-    }
-    if (dirty_ctime) {
-      dout(7) << "  ctime " << pi->ctime << " -> " << ctime
-	      << " for " << *in << dendl;
-      pi->ctime = ctime;
-    }
-    if (dirty_size) {
-      dout(7) << "  size " << pi->size << " -> " << size
-	      << " for " << *in << dendl;
-      pi->size = size;
-      pi->rstat.rbytes = size;
-    }
-    if (dirty_atime) {
-      dout(7) << "  atime " << pi->atime << " -> " << atime
-	      << " for " << *in << dendl;
-      pi->atime = atime;
-    }
-    if (file_excl && pi->time_warp_seq < m->get_time_warp_seq()) {
-      dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
-	      << " for " << *in << dendl;
-      pi->time_warp_seq = m->get_time_warp_seq();
-    }
-    if (dirty_owner) {
-      dout(7) << "  uid.gid " << pi->uid << "." << pi->gid
-	      << " -> " << m->head.uid << "." << m->head.gid
-	      << " for " << *in << dendl;
-      pi->uid = m->head.uid;
-      pi->gid = m->head.gid;
-    }
-    if (dirty_mode) {
-      dout(7) << "  mode " << oct << pi->mode
-	      << " -> " << m->head.mode << dec
-	      << " for " << *in << dendl;
-      pi->mode = m->head.mode;
-    }
-    Mutation *mut = new Mutation;
-    mut->ls = mds->mdlog->get_current_segment();
-    if (dirty_file)
-      file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
-    if (dirty_auth)
-      simple_wrlock_force(&in->authlock, mut);
-    mut->auth_pin(in);
-    mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
-    mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
-
-    mds->mdlog->submit_entry(le);
-    mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
-							     client, ack, releasecap));
-    // only flush immediately if the lock is unstable
-    if (!in->filelock.is_stable())
-      mds->mdlog->flush();
-  } else {
-    // no update, ack now.
-    if (releasecap) {
-      assert(ack);
-      _finish_release_cap(in, client, releasecap, ack);
-    } else if (ack)
-      mds->send_message_client(ack, client);
+  if (!(dirty || change_max) || 
+      in->is_base()) {      // FIXME.. what about root inode mtime/atime?
+    return false;
   }
+
+  EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
+  
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  if (change_max) {
+    dout(7) << "  max_size " << pi->max_size << " -> " << new_max << dendl;
+    pi->max_size = new_max;
+  }    
+  if (dirty_mtime) {
+    dout(7) << "  mtime " << pi->mtime << " -> " << mtime
+	    << " for " << *in << dendl;
+    pi->mtime = mtime;
+  }
+  if (dirty_ctime) {
+    dout(7) << "  ctime " << pi->ctime << " -> " << ctime
+	    << " for " << *in << dendl;
+    pi->ctime = ctime;
+  }
+  if (dirty_size) {
+    dout(7) << "  size " << pi->size << " -> " << size
+	    << " for " << *in << dendl;
+    pi->size = size;
+    pi->rstat.rbytes = size;
+  }
+  if (dirty_atime) {
+    dout(7) << "  atime " << pi->atime << " -> " << atime
+	    << " for " << *in << dendl;
+    pi->atime = atime;
+  }
+  if (file_excl && pi->time_warp_seq < m->get_time_warp_seq()) {
+    dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
+	    << " for " << *in << dendl;
+    pi->time_warp_seq = m->get_time_warp_seq();
+  }
+  if (dirty_owner) {
+    dout(7) << "  uid.gid " << pi->uid << "." << pi->gid
+	    << " -> " << m->head.uid << "." << m->head.gid
+	    << " for " << *in << dendl;
+    pi->uid = m->head.uid;
+    pi->gid = m->head.gid;
+  }
+  if (dirty_mode) {
+    dout(7) << "  mode " << oct << pi->mode
+	    << " -> " << m->head.mode << dec
+	    << " for " << *in << dendl;
+    pi->mode = m->head.mode;
+  }
+  
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
+  if (dirty_file)
+    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+  if (dirty_auth)
+    simple_wrlock_force(&in->authlock, mut);
+  mut->auth_pin(in);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
+  mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
+  
+  mds->mdlog->submit_entry(le);
+  mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
+							   client, ack, releasecap));
+  // only flush immediately if the lock is unstable
+  if (!in->filelock.is_stable())
+    mds->mdlog->flush();
+
+  return true;
 }
 
 

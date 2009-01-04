@@ -106,10 +106,8 @@ userspace client
 
 mds
 - caps
+  - quick cap release if wanted == 0?
   - make unwanted caps time out, like a lease
-  - simplify ro cap release
-  - share cap across multiple locks
-  - dentry caps?
 - xlock vs wrlock.. need more lock states?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
