@@ -385,9 +385,10 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
  * populate an inode based on info from mds.
  * may be called on new or existing inodes.
  */
-int ceph_fill_inode(struct inode *inode,
-		    struct ceph_mds_reply_info_in *iinfo,
-		    struct ceph_mds_reply_dirfrag *dirinfo)
+static int fill_inode(struct inode *inode,
+		      struct ceph_mds_reply_info_in *iinfo,
+		      struct ceph_mds_reply_dirfrag *dirinfo,
+		      struct ceph_mds_session *session)
 {
 	struct ceph_mds_reply_inode *info = iinfo->in;
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -476,6 +477,18 @@ no_change:
 		dout(20, " frag %x split by %d\n", frag->frag, frag->split_by);
 	}
 	mutex_unlock(&ci->i_fragtree_mutex);
+
+	/* cap? */
+	if (info->cap.caps) {
+		if (ceph_snap(inode) == CEPH_NOSNAP) {
+			ceph_add_cap(inode, session, -1,
+				     info->cap.caps, info->cap.seq,
+				     info->cap.mseq, info->cap.realm,
+				     NULL);
+		} else {
+			
+		}
+	}
 
 	/* update delegation info? */
 	if (dirinfo)
@@ -765,9 +778,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	}
 
 	if (vino.ino == 1) {
-		err = ceph_fill_inode(in, &rinfo->trace_in[0],
-				      rinfo->trace_numd ?
-				      rinfo->trace_dir[0] : NULL);
+		err = fill_inode(in, &rinfo->trace_in[0],
+				 rinfo->trace_numd ?
+				 rinfo->trace_dir[0] : NULL,
+				 session);
 		if (err < 0)
 			return err;
 		if (unlikely(sb->s_root == NULL))
@@ -923,12 +937,13 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 	update_inode:
 		BUG_ON(dn->d_inode != in);
-		err = ceph_fill_inode(in,
-				      &rinfo->trace_in[d+1],
-				      rinfo->trace_numd <= d ?
-				      rinfo->trace_dir[d+1] : NULL);
+		err = fill_inode(in,
+				 &rinfo->trace_in[d+1],
+				 rinfo->trace_numd <= d ?
+				 rinfo->trace_dir[d+1] : NULL,
+				 session);
 		if (err < 0) {
-			derr(30, "ceph_fill_inode badness\n");
+			derr(30, "fill_inode badness\n");
 			d_delete(dn);
 			dn = NULL;
 			in = NULL;
@@ -1050,7 +1065,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 /*
  * prepopulate cache with readdir results, leases, etc.
  */
-int ceph_readdir_prepopulate(struct ceph_mds_request *req)
+int ceph_readdir_prepopulate(struct ceph_mds_request *req,
+			     struct ceph_mds_session *session)
 {
 	struct dentry *parent = req->r_last_dentry;
 	struct ceph_mds_reply_info_parsed *rinfo = &req->r_reply_info;
@@ -1122,8 +1138,8 @@ retry_lookup:
 			dn = splice_dentry(dn, in, NULL);
 		}
 
-		if (ceph_fill_inode(in, &rinfo->dir_in[i], NULL) < 0) {
-			dout(0, "ceph_fill_inode badness on %p\n", in);
+		if (fill_inode(in, &rinfo->dir_in[i], NULL, session) < 0) {
+			dout(0, "fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;
 		}

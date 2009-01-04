@@ -82,7 +82,6 @@ static int parse_reply_info_trace(void **p, void *end,
 
 	/* alloc one big block of memory for all of these arrays */
 	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
-					 2*sizeof(*info->trace_ilease) +
 					 sizeof(*info->trace_dir) +
 					 sizeof(*info->trace_dname) +
 					 sizeof(*info->trace_dname_len)),
@@ -91,8 +90,7 @@ static int parse_reply_info_trace(void **p, void *end,
 		err = -ENOMEM;
 		goto out_bad;
 	}
-	info->trace_ilease = (void *)(info->trace_in + numi);
-	info->trace_dir = (void *)(info->trace_ilease + numi);
+	info->trace_dir = (void *)(info->trace_in + numi);
 	info->trace_dname = (void *)(info->trace_dir + numd);
 	info->trace_dname_len = (void *)(info->trace_dname + numd);
 	info->trace_dlease = (void *)(info->trace_dname_len + numd);
@@ -110,8 +108,6 @@ inode:
 	err = parse_reply_info_in(p, end, &info->trace_in[numi]);
 	if (err < 0)
 		goto out_bad;
-	info->trace_ilease[numi] = *p;
-	*p += sizeof(struct ceph_mds_reply_lease);
 
 dentry:
 	if (!numd)
@@ -170,7 +166,6 @@ static int parse_reply_info_dir(void **p, void *end,
 	/* alloc large array */
 	info->dir_nr = num;
 	info->dir_in = kmalloc(num * (sizeof(*info->dir_in) +
-				      sizeof(*info->dir_ilease) +
 				      sizeof(*info->dir_dname) +
 				      sizeof(*info->dir_dname_len) +
 				      sizeof(*info->dir_dlease)),
@@ -179,8 +174,7 @@ static int parse_reply_info_dir(void **p, void *end,
 		err = -ENOMEM;
 		goto out_bad;
 	}
-	info->dir_ilease = (void *)(info->dir_in + num);
-	info->dir_dname = (void *)(info->dir_ilease + num);
+	info->dir_dname = (void *)(info->dir_in + num);
 	info->dir_dname_len = (void *)(info->dir_dname + num);
 	info->dir_dlease = (void *)(info->dir_dname_len + num);
 
@@ -199,8 +193,6 @@ static int parse_reply_info_dir(void **p, void *end,
 		err = parse_reply_info_in(p, end, &info->dir_in[i]);
 		if (err < 0)
 			goto out_bad;
-		info->dir_ilease[i] = *p;
-		*p += sizeof(struct ceph_mds_reply_lease);
 		i++;
 		num--;
 	}
@@ -1291,7 +1283,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	u64 tid;
 	int err, result;
 	int mds;
-	u32 cap, capseq, mseq;
 	int took_snap_sem = 0;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
@@ -1351,46 +1342,22 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	result = le32_to_cpu(rinfo->head->result);
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
+	/* snap trace */
+	if (rinfo->snapblob_len)
+		ceph_update_snap_trace(mdsc, rinfo->snapblob,
+			       rinfo->snapblob + rinfo->snapblob_len,
+			       le32_to_cpu(head->op) == CEPH_MDS_OP_RMSNAP);
+
 	/* insert trace into our cache */
 	err = ceph_fill_trace(mdsc->client->sb, req, req->r_session);
 	if (err)
 		goto done;
 	if (result == 0) {
-		/* caps?  (i.e. this is an open) */
-		if (req->r_expected_cap && req->r_last_inode) {
-			cap = le32_to_cpu(rinfo->head->file_caps);
-			capseq = le32_to_cpu(rinfo->head->file_caps_seq);
-			mseq = le32_to_cpu(rinfo->head->file_caps_mseq);
-			if (ceph_snap(req->r_last_inode) == CEPH_NOSNAP) {
-				/* use our preallocated struct ceph_cap */
-				err = ceph_add_cap(req->r_last_inode,
-						   req->r_session,
-						   req->r_fmode,
-						   cap, capseq, mseq,
-						   rinfo->snapblob,
-						   rinfo->snapblob_len,
-						   req->r_expected_cap);
-				req->r_expected_cap = NULL;
-				if (err)
-					goto done;
-			} else {
-				/* don't bother with full blown caps on snapped
-				 * metadata, since its read-only and won't
-				 * change anyway. */
-				struct ceph_inode_info *ci =
-					ceph_inode(req->r_last_inode);
-
-				spin_lock(&req->r_last_inode->i_lock);
-				ci->i_snap_caps |= cap;
-				__ceph_get_fmode(ci, req->r_fmode);
-				spin_unlock(&req->r_last_inode->i_lock);
-			}
-		}
-
 		/* readdir result? */
 		if (rinfo->dir_nr)
-			ceph_readdir_prepopulate(req);
+			ceph_readdir_prepopulate(req, req->r_session);
 	}
+
 
 done:
 	if (took_snap_sem)

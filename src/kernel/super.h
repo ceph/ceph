@@ -539,6 +539,8 @@ static inline int calc_pages_for(u64 off, u64 len)
 
 
 /* snap.c */
+struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
+					    u64 ino);
 extern void ceph_put_snap_realm(struct ceph_mds_client *mdsc,
 				struct ceph_snap_realm *realm);
 extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
@@ -596,9 +598,6 @@ extern void ceph_destroy_inode(struct inode *inode);
 extern struct inode *ceph_get_inode(struct super_block *sb,
 				    struct ceph_vino vino);
 extern struct inode *ceph_get_snapdir(struct inode *parent);
-extern int ceph_fill_inode(struct inode *inode,
-			   struct ceph_mds_reply_info_in *iinfo,
-			   struct ceph_mds_reply_dirfrag *dirinfo);
 extern void ceph_fill_file_bits(struct inode *inode, int issued,
 				u64 truncate_seq, u64 size,
 				u64 time_warp_seq, struct timespec *ctime,
@@ -606,7 +605,8 @@ extern void ceph_fill_file_bits(struct inode *inode, int issued,
 extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_request *req,
 			   struct ceph_mds_session *session);
-extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
+extern int ceph_readdir_prepopulate(struct ceph_mds_request *req,
+				    struct ceph_mds_session *session);
 
 extern int ceph_inode_holds_cap(struct inode *inode, int mask);
 extern int ceph_dentry_lease_valid(struct dentry *dentry);
@@ -632,8 +632,7 @@ extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session,
 			int fmode, unsigned issued,
-			unsigned cap, unsigned seq,
-			void *snapblob, int snapblob_len,
+			unsigned cap, unsigned seq, u64 realmino,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);

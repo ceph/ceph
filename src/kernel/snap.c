@@ -62,7 +62,6 @@ int ceph_debug_snap = -1;
  *
  * caller must hold snap_rwsem for write.
  */
-static
 struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 					    u64 ino)
 {
