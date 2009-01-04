@@ -205,14 +205,6 @@ struct ceph_inode_info {
 	int i_xattr_len;
 	char *i_xattr_data;
 
-	/* inode lease.  protected _both_ by i_lock and i_lease_session's
-	 * s_mutex. */
-	int i_lease_mask;
-	struct ceph_mds_session *i_lease_session;
-	long unsigned i_lease_ttl;     /* jiffies */
-	u32 i_lease_gen;
-	struct list_head i_lease_item; /* mds session list */
-
 	/* capabilities.  protected _both_ by i_lock and cap->session's
 	 * s_mutex. */
 	struct rb_root i_caps;           /* cap list */
@@ -377,14 +369,14 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
 	int used = 0;
 	if (ci->i_rd_ref)
-		used |= CEPH_CAP_RD;
+		used |= CEPH_CAP_GRD;
 	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
-		used |= CEPH_CAP_RDCACHE;
+		used |= CEPH_CAP_GRDCACHE;
 	if (ci->i_wr_ref)
-		used |= CEPH_CAP_WR;
+		used |= CEPH_CAP_GWR;
 	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_WRBUFFER;
-	return used;
+		used |= CEPH_CAP_GWRBUFFER;
+	return CEPH_CAP_FILE(used);
 }
 
 /*
@@ -406,8 +398,8 @@ static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
 	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
-	if (w & CEPH_CAP_WRBUFFER)
-		w |= CEPH_CAP_EXCL;  /* we want EXCL if we have dirty data */
+	if (w & CEPH_CAP_FILE_WRBUFFER)
+		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if we have dirty data */
 	return w;
 }
 
@@ -616,7 +608,7 @@ extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_session *session);
 extern int ceph_readdir_prepopulate(struct ceph_mds_request *req);
 
-extern int ceph_inode_lease_valid(struct inode *inode, int mask);
+extern int ceph_inode_holds_cap(struct inode *inode, int mask);
 extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);

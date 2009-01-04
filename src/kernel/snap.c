@@ -322,7 +322,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		dout(10, "queue_cap_snap %p snapc %p seq %llu used %d"
 		     " already pending\n", inode, snapc, snapc->seq, used);
 		kfree(capsnap);
-	} else if (ci->i_wrbuffer_ref_head || (used & CEPH_CAP_WR)) {
+	} else if (ci->i_wrbuffer_ref_head || (used & CEPH_CAP_FILE_WR)) {
 		igrab(inode);
 		capsnap->follows = snapc->seq - 1;
 		capsnap->context = ceph_get_snap_context(snapc);
@@ -336,7 +336,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		ci->i_head_snapc = NULL;
 		list_add_tail(&capsnap->ci_item, &ci->i_cap_snaps);
 
-		if (used & CEPH_CAP_WR) {
+		if (used & CEPH_CAP_FILE_WR) {
 			dout(10, "queue_cap_snap %p cap_snap %p snapc %p"
 			     " seq %llu used WR, now pending\n", inode,
 			     capsnap, snapc, snapc->seq);

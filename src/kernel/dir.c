@@ -401,7 +401,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		return ceph_lookup_open(dir, dentry, nd, mode, 1);
 	}
 
-	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL,
+	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE_ALL,
 			      0, 1);
 }
 
@@ -445,7 +445,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 		 * and the VFS needs a valid dentry.
 		 */
 		struct dentry *d;
-		d = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_MASK_INODE_ALL,
+		d = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE_ALL,
 				   0, 0);
 		if (d) {
 			/* ick.  this is untested, and inherently racey... i
@@ -768,8 +768,8 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 
 	if (ceph_ino(dir) != 1 &&  /* ICONTENT is meaningless on root inode */
 	    ceph_inode(dir)->i_version == dentry->d_time &&
-	    ceph_inode_lease_valid(dir, CEPH_LOCK_IFILE)) {
-		dout(20, "dentry_revalidate %p %lu ICONTENT on dir %p %llu\n",
+	    ceph_inode_holds_cap(dir, CEPH_CAP_FILE_RDCACHE)) {
+		dout(20, "dentry_revalidate %p %lu file RDCACHE dir %p %llu\n",
 		     dentry, dentry->d_time, dir, ceph_inode(dir)->i_version);
 		return 1;
 	}

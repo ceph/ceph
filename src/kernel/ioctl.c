@@ -16,7 +16,7 @@ static long ceph_ioctl_get_layout(struct file *file, void __user *arg)
 	struct ceph_inode_info *ci = ceph_inode(file->f_dentry->d_inode);
 	int err;
 
-	err = ceph_do_getattr(file->f_dentry, CEPH_STAT_MASK_LAYOUT);
+	err = ceph_do_getattr(file->f_dentry, CEPH_STAT_CAP_LAYOUT);
 	if (!err) {
 		if (copy_to_user(arg, &ci->i_layout, sizeof(ci->i_layout)))
 			return -EFAULT;

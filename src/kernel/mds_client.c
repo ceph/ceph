@@ -736,30 +736,6 @@ static void revoke_dentry_lease(struct dentry *dentry)
 }
 
 /*
- * caller must hold session s_mutex
- */
-static void revoke_inode_lease(struct ceph_inode_info *ci, int mask)
-{
-	struct inode *inode = &ci->vfs_inode;
-	int drop = 0;
-
-	spin_lock(&inode->i_lock);
-	dout(10, "revoke_inode_lease on inode %p, mask %d -> %d\n",
-	     inode, ci->i_lease_mask, ci->i_lease_mask & ~mask);
-	if (ci->i_lease_mask & mask) {
-		ci->i_lease_mask &= ~mask;
-		if (ci->i_lease_mask == 0) {
-			list_del_init(&ci->i_lease_item);
-			ci->i_lease_session = NULL;
-			drop = 1;
-		}
-	}
-	spin_unlock(&inode->i_lock);
-	if (drop)
-		iput(inode);
-}
-
-/*
  * remove old/expired leases for this session.  unpin parent
  * inode/dentries, so that [di]cache can prune them.
  *
@@ -767,31 +743,10 @@ static void revoke_inode_lease(struct ceph_inode_info *ci, int mask)
  */
 static void trim_session_leases(struct ceph_mds_session *session)
 {
-	struct ceph_inode_info *ci;
 	struct ceph_dentry_info *di;
 	struct dentry *dentry;
-	struct inode *inode;
 
 	dout(20, "trim_session_leases on session %p\n", session);
-
-	/* inodes */
-	while (!list_empty(&session->s_inode_leases)) {
-		ci = list_first_entry(&session->s_inode_leases,
-				      struct ceph_inode_info, i_lease_item);
-		inode = &ci->vfs_inode;
-		spin_lock(&inode->i_lock);
-		if (time_before(jiffies, ci->i_lease_ttl)) {
-			spin_unlock(&inode->i_lock);
-			break;
-		}
-		dout(20, "trim_session_leases inode %p mask %d\n",
-		     inode, ci->i_lease_mask);
-		ci->i_lease_session = NULL;
-		ci->i_lease_mask = 0;
-		list_del_init(&ci->i_lease_item);
-		spin_unlock(&inode->i_lock);
-		iput(inode);
-	}
 
 	/* dentries */
 	while (!list_empty(&session->s_dentry_leases)) {
@@ -817,18 +772,9 @@ static void trim_session_leases(struct ceph_mds_session *session)
  */
 static void remove_session_leases(struct ceph_mds_session *session)
 {
-	struct ceph_inode_info *ci;
 	struct ceph_dentry_info *di;
 
 	dout(10, "remove_session_leases on %p\n", session);
-
-	/* inodes */
-	while (!list_empty(&session->s_inode_leases)) {
-		ci = list_entry(session->s_inode_leases.next,
-				struct ceph_inode_info, i_lease_item);
-		dout(10, "removing lease from inode %p\n", &ci->vfs_inode);
-		revoke_inode_lease(ci, ci->i_lease_mask);
-	}
 
 	/* dentries */
 	while (!list_empty(&session->s_dentry_leases)) {
@@ -1858,7 +1804,6 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* inode */
 	ci = ceph_inode(inode);
-	revoke_inode_lease(ci, mask);
 
 	/* dentry */
 	if (mask & CEPH_LOCK_DN) {
@@ -1901,7 +1846,6 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
-	struct ceph_inode_info *ci;
 	struct ceph_dentry_info *di;
 	int origmask = mask;
 	int mds = -1;
@@ -1937,25 +1881,10 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 		mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
 	}
 
-	/* inode lease? */
-	ci = ceph_inode(inode);
-	spin_lock(&inode->i_lock);
-	if (ci->i_lease_session &&
-	    ci->i_lease_session->s_mds >= 0 &&
-	    ci->i_lease_gen == ci->i_lease_session->s_cap_gen &&
-	    time_before(jiffies, ci->i_lease_ttl)) {
-		mds = ci->i_lease_session->s_mds;
-		mask &= CEPH_LOCK_DN | ci->i_lease_mask;  /* lease is valid */
-		ci->i_lease_mask &= ~mask;
-	} else {
-		mask &= CEPH_LOCK_DN;  /* no lease; clear all but DN bits */
-	}
-	spin_unlock(&inode->i_lock);
-
 	if (mask == 0) {
-		dout(10, "lease_release inode %p (%d) dentry %p -- "
+		dout(10, "lease_release inode %p dentry %p -- "
 		     "no lease on %d\n",
-		     inode, ci->i_lease_mask, dentry, origmask);
+		     inode, dentry, origmask);
 		return;  /* nothing to drop */
 	}
 	BUG_ON(mds < 0);

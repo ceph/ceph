@@ -297,15 +297,16 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
 	     ceph_vinop(inode), pos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
-							 CEPH_CAP_RDCACHE,
+				       ceph_get_cap_refs(ci,
+							 CEPH_CAP_FILE_RD,
+							 CEPH_CAP_FILE_RDCACHE,
 							 &got, -1));
 	if (ret < 0)
 		goto out;
 	dout(10, "aio_read %llx.%llx %llu~%u got cap refs %d\n",
 	     ceph_vinop(inode), pos, (unsigned)len, got);
 
-	if ((got & CEPH_CAP_RDCACHE) == 0 ||
+	if ((got & CEPH_CAP_FILE_RDCACHE) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		/* hmm, this isn't really async... */
 		ret = ceph_sync_read(filp, iov->iov_base, len, ppos);
@@ -377,8 +378,9 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_WR,
-							 CEPH_CAP_WRBUFFER,
+				       ceph_get_cap_refs(ci,
+							 CEPH_CAP_FILE_WR,
+							 CEPH_CAP_FILE_WRBUFFER,
 							 &got, endoff));
 	if (ret < 0)
 		goto out;
@@ -386,7 +388,7 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u  got cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
 
-	if ((got & CEPH_CAP_WRBUFFER) == 0) {
+	if ((got & CEPH_CAP_FILE_WRBUFFER) == 0) {
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
 			&iocb->ki_pos);
 	} else {

@@ -53,7 +53,9 @@ static int __ceph_get_cap_mds(struct ceph_inode_info *ci, u32 *mseq)
 		mds = cap->mds;
 		if (mseq)
 			*mseq = cap->mseq;
-		if (cap->issued & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER|CEPH_CAP_EXCL))
+		if (cap->issued & (CEPH_CAP_FILE_WR |
+				   CEPH_CAP_FILE_WRBUFFER |
+				   CEPH_CAP_FILE_EXCL))
 			break;
 	}
 	return mds;
@@ -406,7 +408,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	follows = ci->i_snap_realm->cached_context->seq;
 	spin_unlock(&inode->i_lock);
 
-	if (dropping & CEPH_CAP_RDCACHE) {
+	if (dropping & CEPH_CAP_FILE_RDCACHE) {
 		/* invalidate what we can */
 		dout(20, "invalidating pages on %p\n", inode);
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
@@ -639,7 +641,7 @@ retry_locked:
 			goto ack;
 
 		/* approaching file_max? */
-		if ((cap->issued & CEPH_CAP_WR) &&
+		if ((cap->issued & CEPH_CAP_FILE_WR) &&
 		    (inode->i_size << 1) >= ci->i_max_size &&
 		    (ci->i_reported_size << 1) < ci->i_max_size) {
 			dout(10, "i_size approaching max_size\n");
@@ -719,13 +721,13 @@ ack:
  */
 static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 {
-	if (got & CEPH_CAP_RD)
+	if (got & CEPH_CAP_FILE_RD)
 		ci->i_rd_ref++;
-	if (got & CEPH_CAP_RDCACHE)
+	if (got & CEPH_CAP_FILE_RDCACHE)
 		ci->i_rdcache_ref++;
-	if (got & CEPH_CAP_WR)
+	if (got & CEPH_CAP_FILE_WR)
 		ci->i_wr_ref++;
-	if (got & CEPH_CAP_WRBUFFER) {
+	if (got & CEPH_CAP_FILE_WRBUFFER) {
 		ci->i_wrbuffer_ref++;
 		dout(30, "__take_cap_refs %p wrbuffer %d -> %d (?)\n",
 		     &ci->vfs_inode, ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref);
@@ -748,7 +750,7 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 
 	dout(30, "get_cap_refs %p need %d want %d\n", inode, need, want);
 	spin_lock(&inode->i_lock);
-	if (need & CEPH_CAP_WR) {
+	if (need & CEPH_CAP_FILE_WR) {
 		if (endoff >= 0 && endoff > (loff_t)ci->i_max_size) {
 			dout(20, "get_cap_refs %p endoff %llu > maxsize %llu\n",
 			     inode, endoff, ci->i_max_size);
@@ -811,19 +813,19 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	struct ceph_cap_snap *capsnap;
 
 	spin_lock(&inode->i_lock);
-	if (had & CEPH_CAP_RD)
+	if (had & CEPH_CAP_FILE_RD)
 		if (--ci->i_rd_ref == 0)
 			last++;
-	if (had & CEPH_CAP_RDCACHE)
+	if (had & CEPH_CAP_FILE_RDCACHE)
 		if (--ci->i_rdcache_ref == 0)
 			last++;
-	if (had & CEPH_CAP_WRBUFFER) {
+	if (had & CEPH_CAP_FILE_WRBUFFER) {
 		if (--ci->i_wrbuffer_ref == 0)
 			last++;
 		dout(30, "put_cap_refs %p wrbuffer %d -> %d (?)\n",
 		     inode, ci->i_wrbuffer_ref+1, ci->i_wrbuffer_ref);
 	}
-	if (had & CEPH_CAP_WR)
+	if (had & CEPH_CAP_FILE_WR)
 		if (--ci->i_wr_ref == 0) {
 			last++;
 			if (!list_empty(&ci->i_cap_snaps)) {
@@ -971,9 +973,9 @@ start:
 	/*
 	 * Each time we receive RDCACHE anew, we increment i_rdcache_gen.
 	 */
-	if ((newcaps & CEPH_CAP_RDCACHE) &&            /* we just got RDCACHE */
-	    (cap->issued & CEPH_CAP_RDCACHE) == 0 &&    /* and didn't have it */
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_RDCACHE) == 0)
+	if ((newcaps & CEPH_CAP_FILE_RDCACHE) &&            /* we just got RDCACHE */
+	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0 &&    /* and didn't have it */
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE) == 0)
 		ci->i_rdcache_gen++;
 
 	/*
@@ -981,7 +983,7 @@ start:
 	 * try to invalidate (once).  (If there are dirty buffers, we
 	 * will invalidate _after_ writeback.)
 	 */
-	if (((cap->issued & ~newcaps) & CEPH_CAP_RDCACHE) &&
+	if (((cap->issued & ~newcaps) & CEPH_CAP_FILE_RDCACHE) &&
 	    !ci->i_wrbuffer_ref && !tried_invalidate) {
 		dout(10, "RDCACHE invalidation\n");
 		spin_unlock(&inode->i_lock);
@@ -1045,9 +1047,9 @@ start:
 	/* revocation? */
 	if (cap->issued & ~newcaps) {
 		dout(10, "revocation: %d -> %d\n", cap->issued, newcaps);
-		if ((used & ~newcaps) & CEPH_CAP_WRBUFFER) {
+		if ((used & ~newcaps) & CEPH_CAP_FILE_WRBUFFER) {
 			writeback = 1; /* will delay ack */
-		} else if (((used & ~newcaps) & CEPH_CAP_RDCACHE) == 0 ||
+		} else if (((used & ~newcaps) & CEPH_CAP_FILE_RDCACHE) == 0 ||
 			   revoked_rdcache) {
 			/*
 			 * we're not using revoked caps.. ack now.
