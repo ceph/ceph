@@ -161,10 +161,11 @@ inline ostream& operator<<(ostream& out, const SnapRealm& r) {
 struct InodeCap {
   unsigned issued;
   unsigned implemented;
+  unsigned wanted;   // as known to mds.
   __u64 seq;
   __u32 mseq;  // migration seq
 
-  InodeCap() : issued(0), implemented(0), seq(0), mseq(0) {}
+  InodeCap() : issued(0), implemented(0), wanted(0), seq(0), mseq(0) {}
 };
 
 struct CapSnap {

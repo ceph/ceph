@@ -1449,8 +1449,8 @@ void Client::cap_delay_requeue(Inode *in)
 
 void Client::check_caps(Inode *in, bool is_delayed)
 {
-  int wanted = in->caps_wanted();
-  int used = in->caps_used();
+  unsigned wanted = in->caps_wanted();
+  unsigned used = in->caps_used();
 
   dout(10) << "check_caps on " << *in
 	   << " wanted " << ccap_string(wanted)
@@ -1479,6 +1479,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
     InodeCap *cap = it->second;
     it++;
 
+    int like = wanted;
+    if (!unmounting)
+      like |= CEPH_CAP_ANY_RD;
+
     int revoking = cap->implemented & ~cap->issued;
     
     if (in->wanted_max_size > in->inode.max_size &&
@@ -1499,8 +1503,11 @@ void Client::check_caps(Inode *in, bool is_delayed)
       goto ack;
     }
 
-    if ((cap->issued & ~wanted) == 0)
-      continue;     /* nothing extra, all good */
+    if (wanted == cap->wanted &&   // mds knows what we want.
+	cap->issued & ~like)       // and we don't have anything we wouldn't like
+      continue;   
+    //if ((cap->issued & ~wanted) == 0)
+    //continue;     /* nothing extra, all good */
 
     if (now < in->hold_caps_until) {
       dout(10) << "delaying cap release" << dendl;
@@ -1520,6 +1527,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
 				     cap->issued,
 				     wanted,
 				     cap->mseq);
+    cap->wanted = wanted;
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
@@ -2134,6 +2142,7 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
 
   // don't want it?
   int wanted = in->caps_wanted();
+  /*
   if (wanted == 0) {
     dout(5) << "handle_cap_grant on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
@@ -2145,6 +2154,7 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
     messenger->send_message(m, m->get_source_inst());
     return;
   }
+  */
 
   int used = in->caps_used();
 
@@ -2195,6 +2205,7 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
       m->set_mtime(in->inode.mtime);
       m->set_atime(in->inode.atime);
       m->set_wanted(wanted);
+      cap->wanted = wanted;
       m->set_snap_follows(in->snaprealm->get_snap_context().seq);
       m->set_migrate_seq(cap->mseq);
     }
