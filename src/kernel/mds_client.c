@@ -433,6 +433,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_request = msg;
 	req->r_started = jiffies;
 	req->r_resend_mds = -1;
+	req->r_fmode = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
 	return req;

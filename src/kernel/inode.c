@@ -388,7 +388,8 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 static int fill_inode(struct inode *inode,
 		      struct ceph_mds_reply_info_in *iinfo,
 		      struct ceph_mds_reply_dirfrag *dirinfo,
-		      struct ceph_mds_session *session)
+		      struct ceph_mds_session *session,
+		      int cap_fmode)
 {
 	struct ceph_mds_reply_inode *info = iinfo->in;
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -485,15 +486,19 @@ no_change:
 	}
 	mutex_unlock(&ci->i_fragtree_mutex);
 
-	/* cap? */
+	/* were we issued a capability? */
 	if (info->cap.caps) {
 		if (ceph_snap(inode) == CEPH_NOSNAP) {
-			ceph_add_cap(inode, session, -1,
+			ceph_add_cap(inode, session, cap_fmode,
 				     info->cap.caps, info->cap.seq,
 				     info->cap.mseq, info->cap.realm,
 				     NULL);
 		} else {
-			
+			spin_lock(&inode->i_lock);
+			ci->i_snap_caps |= info->cap.caps;
+			if (cap_fmode >= 0)
+				__ceph_get_fmode(ci, cap_fmode);
+			spin_unlock(&inode->i_lock);
 		}
 	}
 
@@ -788,7 +793,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		err = fill_inode(in, &rinfo->trace_in[0],
 				 rinfo->trace_numd ?
 				 rinfo->trace_dir[0] : NULL,
-				 session);
+				 session, -1);
 		if (err < 0)
 			return err;
 		if (unlikely(sb->s_root == NULL))
@@ -948,7 +953,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				 &rinfo->trace_in[d+1],
 				 rinfo->trace_numd <= d ?
 				 rinfo->trace_dir[d+1] : NULL,
-				 session);
+				 session,
+				 (d == rinfo->trace_numd-1 &&
+				  le32_to_cpu(rinfo->head->result) == 0) ?
+				 req->r_fmode : -1);
 		if (err < 0) {
 			derr(30, "fill_inode badness\n");
 			d_delete(dn);
@@ -1145,7 +1153,7 @@ retry_lookup:
 			dn = splice_dentry(dn, in, NULL);
 		}
 
-		if (fill_inode(in, &rinfo->dir_in[i], NULL, session) < 0) {
+		if (fill_inode(in, &rinfo->dir_in[i], NULL, session, -1) < 0) {
 			dout(0, "fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;
