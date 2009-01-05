@@ -676,11 +676,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   // choose lease duration
   utime_t now = g_clock.now();
   int lmask = 0;
-
-  // snapbl
-  SnapRealm *realm = in->find_snaprealm();
-  reply->snapbl = realm->get_snap_trace();
-  dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
+  SnapRealm *realm = 0;
 
   // start with dentry or inode?
   if (!in) {
@@ -691,6 +687,14 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  inode:
   numi++;
+
+  if (!realm) {
+    // snapbl
+    realm = in->find_snaprealm();
+    reply->snapbl = realm->get_snap_trace();
+    dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
+  }
+
   in->encode_inodestat(bl, session, snapid, projected);
   dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
