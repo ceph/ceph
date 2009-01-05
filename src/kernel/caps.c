@@ -1291,6 +1291,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	unsigned seq = le32_to_cpu(im->seq);
 	unsigned mseq = le32_to_cpu(im->migrate_seq);
 	u64 realmino = le64_to_cpu(im->realm);
+	struct ceph_snap_realm *realm;
 
 	if (ci->i_cap_exporting_mds >= 0 &&
 	    ci->i_cap_exporting_mseq < mseq) {
@@ -1306,8 +1307,10 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 		     inode, ci, mds, mseq);
 	}
 
-	ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len, false);
+	realm = ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
+				       false);
 	ceph_add_cap(inode, session, -1, issued, seq, mseq, realmino, NULL);
+	ceph_put_snap_realm(mdsc, realm);
 }
 
 

@@ -1284,7 +1284,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	u64 tid;
 	int err, result;
 	int mds;
-	int took_snap_sem = 0;
+	struct ceph_snap_realm *realm = NULL;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		return;
@@ -1324,11 +1324,8 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	BUG_ON(req->r_reply);
 	req->r_got_reply = 1;
 
-	/* take the snap sem if we are adding a cap here */
-	if (req->r_expected_cap) {
-		down_write(&mdsc->snap_rwsem);
-		took_snap_sem = 1;
-	}
+	/* take the snap sem -- we may be are adding a cap here */
+	down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&req->r_session->s_mutex);
@@ -1345,7 +1342,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* snap trace */
 	if (rinfo->snapblob_len)
-		ceph_update_snap_trace(mdsc, rinfo->snapblob,
+		realm = ceph_update_snap_trace(mdsc, rinfo->snapblob,
 			       rinfo->snapblob + rinfo->snapblob_len,
 			       le32_to_cpu(head->op) == CEPH_MDS_OP_RMSNAP);
 
@@ -1361,8 +1358,9 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 
 done:
-	if (took_snap_sem)
-		up_write(&mdsc->snap_rwsem);
+	if (realm)
+		ceph_put_snap_realm(mdsc, realm);
+	up_write(&mdsc->snap_rwsem);
 
 	if (err) {
 		req->r_err = err;
