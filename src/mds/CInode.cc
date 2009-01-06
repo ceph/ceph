@@ -1357,18 +1357,10 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       bool loner = (get_loner() == client);
       int likes = get_caps_liked();
       int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
-      int pending = cap->pending();
-      if (issue & ~pending) {
-	dout(10) << "encode_inodestat issuing " << ccap_string(issue)
-		 << ", pending was " << ccap_string(pending) << dendl;
-	cap->issue(issue);
-	pending = issue;
-      } else {
-	dout(10) << "encode_inodestat wanted to issue " << ccap_string(issue)
-		 << ", already pending " << ccap_string(pending) << dendl;
-      }
-      e.cap.caps = pending;
+      cap->issue(issue);
+      e.cap.caps = issue;
       e.cap.seq = cap->get_last_seq();
+      dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = find_snaprealm()->inode->ino();
     } else {
