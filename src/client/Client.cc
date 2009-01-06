@@ -1457,8 +1457,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned used = in->caps_used();
   int like = wanted;
   if (!unmounting)
-    like |= CEPH_CAP_ANY_RD;
-
+    like |= CEPH_CAP_PIN | (in->inode.is_dir() ? CEPH_CAP_ANY_RDCACHE:CEPH_CAP_ANY_RD);
+  
   dout(10) << "check_caps on " << *in
 	   << " wanted " << ccap_string(wanted)
 	   << " used " << ccap_string(used)
