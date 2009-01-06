@@ -633,7 +633,10 @@ bool Locker::issue_caps(CInode *in)
 	     << " wanted " << ccap_string(wanted)
 	     << dendl;
 
-    if (pending != (wanted & allowed)) {
+    // are there caps that the client _wants_ and can have, but aren't pending?
+    // or do we need to revoke?
+    if (((wanted & allowed) & ~pending) ||  // missing wanted+allowed caps
+	(pending & ~allowed)) {             // need to revoke ~allowed caps.
       // issue
       nissued++;
 
