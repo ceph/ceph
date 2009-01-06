@@ -84,6 +84,8 @@ inline string ccap_string(int cap)
   a = cap >> CEPH_CAP_SFILE;
   if (a) s += 'F' + gcap_string(a);
 
+  if (s.length() == 0)
+    s = "-";
   return s;
 }
 

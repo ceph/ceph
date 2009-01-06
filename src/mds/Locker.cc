@@ -1088,14 +1088,14 @@ void Locker::handle_client_caps(MClientCaps *m)
 			    m->get_caps(), 0, m->get_dirty(), 0);
     }
     if (m->get_caps() == 0) {
-      assert(m->get_seq() <= cap->get_last_issue());
-      if (m->get_seq() == cap->get_last_issue()) {
+      assert(m->get_seq() <= cap->get_last_sent());
+      if (m->get_seq() == cap->get_last_sent()) {
 	dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
 	cap->releasing++;
 	releasecap = m->get_seq();
       } else {
 	dout(7) << " NOT releasing request client" << client << " seq " << m->get_seq()
-		<< " < last_issue " << cap->get_last_issue() << " on " << *in << dendl;
+		<< " < last_sent " << cap->get_last_sent() << " on " << *in << dendl;
       }
     }
     if (wanted != cap->wanted()) {
