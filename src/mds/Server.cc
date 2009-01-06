@@ -1713,10 +1713,10 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> xlocks = mdr->xlocks;
   
   int mask = req->head.args.stat.mask;
-  if (mask & CEPH_LOCK_ILINK) rdlocks.insert(&ref->linklock);
-  if (mask & CEPH_LOCK_IAUTH) rdlocks.insert(&ref->authlock);
-  if (mask & CEPH_LOCK_IFILE) rdlocks.insert(&ref->filelock);
-  if (mask & CEPH_LOCK_IXATTR) rdlocks.insert(&ref->xattrlock);
+  if (mask & CEPH_CAP_LINK_RDCACHE) rdlocks.insert(&ref->linklock);
+  if (mask & CEPH_CAP_AUTH_RDCACHE) rdlocks.insert(&ref->authlock);
+  if (mask & CEPH_CAP_FILE_RDCACHE) rdlocks.insert(&ref->filelock);
+  if (mask & CEPH_CAP_XATTR_RDCACHE) rdlocks.insert(&ref->xattrlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
