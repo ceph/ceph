@@ -83,6 +83,21 @@ WRITE_INTTYPE_ENCODER(s16, le16)
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
+// array
+template<class A>
+inline void encode_array_nohead(const A a[], int n, bufferlist &bl)
+{
+  for (int i=0; i<n; i++)
+    encode(a[n], bl);
+}
+template<class A>
+inline void decode_array_nohead(A a[], int n, bufferlist::iterator &p)
+{
+  for (int i=0; i<n; i++)
+    decode(a[n], p);
+}
+
+
 
 // -----------------------------
 // STL container types

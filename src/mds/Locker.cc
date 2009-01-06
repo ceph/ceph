@@ -1072,11 +1072,10 @@ void Locker::handle_client_caps(MClientCaps *m)
   while (1) {
     // filter wanted based on what we could ever give out (given auth/replica status)
     int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
-    int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
-    int has = cap->confirmed();
+    cap->confirm_receipt(m->get_seq(), m->get_caps());
     dout(10) << " follows " << follows
-	     << ", had " << ccap_string(had) 
-	     << ", has " << ccap_string(has)
+	     << " retains " << ccap_string(m->get_caps())
+	     << " dirty " << ccap_string(m->get_caps())
 	     << " on " << *in << dendl;
     
     MClientCaps *ack = 0;

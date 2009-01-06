@@ -98,8 +98,93 @@ public:
 private:
   CInode *inode;
   __u32 wanted_caps;     // what the client wants (ideally)
+    //::decode(cap_history, bl);
 
-  map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
+
+  // simplest --------------------------
+#if 0
+  __u32 _pending;
+  __u32 _issued;
+
+public:
+  int pending() {
+    return _pending;
+  }
+  int issued() {
+    return _pending | _issued;
+  }
+  capseq_t issue(int c) {
+    _pending = c;
+    _issued |= c;
+    last_issue = ++last_sent;
+    return last_sent;
+  }
+  void confirm_receipt(capseq_t seq, int caps) {
+    if (seq == last_sent)
+      _pending = _issued = caps;
+  }    
+  bool is_null() { return !_issued && !_pending; }
+#endif
+
+  // track up to N revocations ---------
+#if 1
+  static const int _max_revoke = 3;
+  __u32 _pending, _issued;
+  __u32 _revoke_before[_max_revoke];  // caps before this issue
+  capseq_t _revoke_seq[_max_revoke];
+  int _num_revoke;
+
+public:
+  int pending() { return _pending; }
+  int issued() {
+    int c = _pending | _issued;
+    for (int i=0; i<_num_revoke; i++)
+      c |= _revoke_before[i];
+    return c;
+  }
+  capseq_t issue(int c) {
+    if (_pending & ~c) {
+      // note _revoked_ caps prior to this revocation
+      if (_num_revoke < _max_revoke) {
+	_num_revoke++;
+	_revoke_before[_num_revoke] = 0;
+      }
+      _revoke_before[_num_revoke] |= _pending|_issued;
+      _revoke_seq[_num_revoke] = last_sent;
+    }
+    _pending = c;
+    last_issue = ++last_sent;
+    return last_sent;
+  }
+  void confirm_receipt(capseq_t seq, int caps) {
+    _issued = caps;
+    if (seq == last_sent) {
+      _pending = caps;
+      _num_revoke = 0;
+    } else {
+      // can i forget any revocations?
+      int i = 0, o = 0;
+      while (i < _num_revoke) {
+	if (_revoke_seq[i] > seq) {
+	  // keep this one
+	  if (o < i) {
+	    _revoke_before[o] = _revoke_before[i];
+	    _revoke_seq[o] = _revoke_before[i];
+	  }
+	  o++;
+	}
+	i++;
+      }
+      _num_revoke = o;
+    }
+  }
+  bool is_null() {
+    return !_pending && !_issued && !_num_revoke;
+  }
+#endif
+
+
+private:
   capseq_t last_sent, last_recv;
   capseq_t last_issue;
   capseq_t mseq;
@@ -119,6 +204,8 @@ public:
   Capability(CInode *i=0, int want=0, capseq_t s=0) :
     inode(i),
     wanted_caps(want),
+    //_pending(0), _issued(0),
+    _pending(0), _issued(0), _num_revoke(0),
     last_sent(s),
     last_recv(s),
     last_issue(0),
@@ -143,41 +230,6 @@ public:
   CInode *get_inode() { return inode; }
   void set_inode(CInode *i) { inode = i; }
 
-  bool is_null() { return cap_history.empty() && wanted_caps == 0; }
-
-  // most recently issued caps.
-  int pending() { 
-    if (!last_sent) 
-      return 0;
-    if (cap_history.count(last_sent))
-      return cap_history[last_sent];
-    else 
-      return 0;
-  }
-  
-  // caps client has confirmed receipt of
-  int confirmed() { 
-    if (!last_recv)
-      return 0;
-    if (cap_history.count(last_recv))
-      return cap_history[last_recv];
-    else
-      return 0;
-  }
-
-  // caps issued, potentially still in hands of client
-  int issued() { 
-    int c = 0;
-    for (map<capseq_t,__u32>::iterator p = cap_history.begin();
-	 p != cap_history.end();
-	 p++) {
-      c |= p->second;
-      generic_dout(10) << " cap issued: seq " << p->first << " " 
-		       << ccap_string(p->second) << " -> " << ccap_string(c)
-		       << dendl;
-    }
-    return c;
-  }
 
   // caps this client wants to hold
   int wanted() { return wanted_caps; }
@@ -185,13 +237,8 @@ public:
     wanted_caps = w;
   }
 
-  // issue caps; return seq number.
-  capseq_t issue(int c) {
-    last_issue = ++last_sent;
-    cap_history[last_sent] = c;
-    return last_sent;
-  }
   capseq_t get_last_seq() { return last_sent; }
+
 
   Export make_export() {
     return Export(wanted_caps, issued(), pending(), client_follows, mseq+1);
@@ -220,50 +267,6 @@ public:
     wanted_caps = wanted_caps | otherwanted;
   }
 
-  // confirm receipt of a previous sent/issued seq.
-  int confirm_receipt(capseq_t seq, int caps) {
-    int r = 0;
-
-    generic_dout(10) << " confirm_receipt seq " << seq << " last_recv " << last_recv << " last_sent " << last_sent
-		    << " cap_history " << cap_history << dendl;
-
-    assert(last_recv <= last_sent);
-    assert(seq <= last_sent);
-    while (!cap_history.empty()) {
-      map<capseq_t,__u32>::iterator p = cap_history.begin();
-
-      if (p->first > seq)
-	break;
-
-      if (p->first == seq) {
-	// note what we're releasing..
-	if (p->second & ~caps) {
-	  generic_dout(10) << " cap.confirm_receipt revising seq " << seq 
-			  << " " << ccap_string(cap_history[seq]) << " -> " << ccap_string(caps) 
-			  << dendl;
-	  r |= cap_history[seq] & ~caps; 
-	  cap_history[seq] = caps; // confirmed() now less than before..
-	}
-
-	// null?
-	if (caps == 0 && seq == last_sent) {
-	  generic_dout(10) << " cap.confirm_receipt making null seq " << last_recv
-			  << " " << ccap_string(cap_history[last_recv]) << dendl;
-	  cap_history.clear();  // viola, null!
-	}
-	break;
-      }
-
-      generic_dout(10) << " cap.confirm_receipt forgetting seq " << p->first
-		      << " " << ccap_string(p->second) << dendl;
-      r |= p->second;
-      cap_history.erase(p);
-    }
-    last_recv = seq;
-      
-    return r;
-  }
-
   void revoke() {
     if (pending())
       issue(0);
@@ -275,13 +278,23 @@ public:
     ::encode(wanted_caps, bl);
     ::encode(last_sent, bl);
     ::encode(last_recv, bl);
-    ::encode(cap_history, bl);
+
+    ::encode(_pending, bl);
+    ::encode(_issued, bl);
+    ::encode(_num_revoke, bl);
+    ::encode_array_nohead(_revoke_before, _num_revoke, bl);
+    ::encode_array_nohead(_revoke_seq, _num_revoke, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(wanted_caps, bl);
     ::decode(last_sent, bl);
     ::decode(last_recv, bl);
-    ::decode(cap_history, bl);
+
+    ::decode(_pending, bl);
+    ::decode(_issued, bl);
+    ::decode(_num_revoke, bl);
+    ::decode_array_nohead(_revoke_before, _num_revoke, bl);
+    ::decode_array_nohead(_revoke_seq, _num_revoke, bl);
   }
   
 };

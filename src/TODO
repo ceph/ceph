@@ -46,7 +46,6 @@ timer
 
 
 caps
-- flatten Capability tracking of issued/pending caps.
 - exploit excl auth lease on client
 - issue excl leases to loner if open for write...
 
