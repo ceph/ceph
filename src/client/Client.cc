@@ -2024,23 +2024,31 @@ void Client::handle_caps(MClientCaps *m)
   if (!in) {
     dout(5) << "handle_caps don't have vino " << vino << dendl;
 
-    if (m->get_op() == CEPH_CAP_OP_IMPORT) {
-      // release.
-      m->set_op(CEPH_CAP_OP_RELEASE);
-      m->head.caps = 0;
-      m->head.dirty = 0;
-      messenger->send_message(m, m->get_source_inst());
-    } else
-      delete m;
+    // release.
+    m->set_op(CEPH_CAP_OP_RELEASE);
+    m->head.caps = 0;
+    m->head.dirty = 0;
+    messenger->send_message(m, m->get_source_inst());
     return;
   }
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_IMPORT: return handle_cap_import(in, m);
   case CEPH_CAP_OP_EXPORT: return handle_cap_export(in, m);
+  case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(in, m);
+  }
+
+  if (in->caps.count(mds) == 0) {
+    m->set_op(CEPH_CAP_OP_RELEASE);
+    m->head.caps = 0;
+    m->head.dirty = 0;
+    messenger->send_message(m, m->get_source_inst());
+    return;
+  }
+
+  switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
   case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, m);
-  case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(in, m);
   case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, m);
   default:
     delete m;
@@ -2179,11 +2187,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
 void Client::handle_cap_grant(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
-  if (in->caps.count(mds) == 0) {
-    dout(5) << "handle_cap_grant on ino " << m->get_ino() << " no cap for mds" << mds << dendl;
-    delete m;
-    return;
-  }
+  assert(in->caps.count(mds) == 0);
   InodeCap *cap = in->caps[mds];
   cap->seq = m->get_seq();
   in->inode.layout = m->get_layout();
