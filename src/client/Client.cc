@@ -1435,7 +1435,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       for (map<snapid_t,CapSnap>::iterator p = in->cap_snaps.begin();
 	   p != in->cap_snaps.end();
 	   p++)
-	p->second.dirty = 0;
+	p->second.dirty_data = 0;
       check_caps(in, false);
       signal_cond_list(in->waitfor_commit);
     }
@@ -1582,8 +1582,9 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
   CapSnap *capsnap = &in->cap_snaps[seq];
   capsnap->context = in->snaprealm->cached_snap_context;
   capsnap->issued = in->caps_issued();
+  capsnap->dirty = in->caps_dirty();  // a bit conservative?
   
-  capsnap->dirty = (used & CEPH_CAP_FILE_WRBUFFER);
+  capsnap->dirty_data = (used & CEPH_CAP_FILE_WRBUFFER);
 
   if (used & CEPH_CAP_FILE_WR) {
     dout(10) << "queue_cap_snap WR used on " << *in << dendl;
@@ -1605,7 +1606,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
     dout(10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
   } else {
-    capsnap->dirty = 0;
+    capsnap->dirty_data = 0;
     flush_snaps(in);
   }
 }
@@ -1614,7 +1615,7 @@ void Client::_flushed_cap_snap(Inode *in, snapid_t seq)
 {
   dout(10) << "_flushed_cap_snap seq " << seq << " on " << *in << dendl;
   assert(in->cap_snaps.count(seq));
-  in->cap_snaps[seq].dirty = 0;
+  in->cap_snaps[seq].dirty_data = 0;
   flush_snaps(in);
 }
 
@@ -1640,15 +1641,16 @@ void Client::flush_snaps(Inode *in)
 	     << " follows " << p->first
 	     << " size " << p->second.size
 	     << " mtime " << p->second.mtime
-	     << " dirty=" << p->second.dirty
+	     << " dirty_data=" << p->second.dirty_data
 	     << " writing=" << p->second.writing
 	     << " on " << *in << dendl;
-    if (p->second.dirty || p->second.writing)
+    if (p->second.dirty_data || p->second.writing)
       continue;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino(), in->snaprealm->ino, mseq);
     m->head.snap_follows = p->first;
     m->head.size = p->second.size;
     m->head.caps = p->second.issued;
+    m->head.dirty = p->second.dirty;
     p->second.ctime.encode_timeval(&m->head.ctime);
     p->second.mtime.encode_timeval(&m->head.mtime);
     p->second.atime.encode_timeval(&m->head.atime);

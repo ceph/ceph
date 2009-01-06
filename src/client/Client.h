@@ -172,12 +172,12 @@ struct InodeCap {
 struct CapSnap {
   //snapid_t follows;  // map key
   SnapContext context;
-  int issued;
+  int issued, dirty;
   __u64 size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
-  bool writing, dirty;
-  CapSnap() : issued(0), size(0), time_warp_seq(0), writing(false), dirty(false) {}
+  bool writing, dirty_data;
+  CapSnap() : issued(0), dirty(0), size(0), time_warp_seq(0), writing(false), dirty_data(false) {}
 };
 
 
