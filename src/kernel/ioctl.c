@@ -28,6 +28,7 @@ static long ceph_ioctl_get_layout(struct file *file, void __user *arg)
 static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 {
 	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	struct ceph_mds_client *mdsc = &ceph_sb_to_client(inode->i_sb)->mdsc;
 	char *path;
 	int pathlen;
@@ -52,7 +53,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	reqh = req->r_request->front.iov_base;
 	reqh->args.setlayout.layout = layout;
 	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	return err;
 }

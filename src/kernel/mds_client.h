@@ -152,6 +152,8 @@ struct ceph_mds_request {
 	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
 	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
+	struct inode	*r_listener;
+
 	/* references to the trailing dentry and inode from parsing the
 	 * mds response.  also used to feed a VFS-provided dentry into
 	 * the reply handler */
@@ -170,6 +172,7 @@ struct ceph_mds_request {
 
 	atomic_t          r_ref;
 	struct completion r_completion;
+	struct completion r_safe_completion;
 	int		  r_got_reply;
 };
 
@@ -247,6 +250,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 u64 ino2, const char *path2,
 			 struct dentry *ref, int want_auth);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
+				struct inode *listener,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
@@ -256,5 +260,7 @@ extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 
 extern void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
 				       struct ceph_mds_session *session);
+extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
+						    u64 tid);
 
 #endif

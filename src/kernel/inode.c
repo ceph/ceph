@@ -293,6 +293,9 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_vmtruncate_to = -1;
 	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
 
+	INIT_RADIX_TREE(&ci->i_listener_tree, GFP_NOFS);
+	spin_lock_init(&ci->i_listener_lock);
+
 	return &ci->vfs_inode;
 }
 
@@ -1388,6 +1391,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	const unsigned int ia_valid = attr->ia_valid;
@@ -1424,7 +1428,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	}
 	reqh->args.chown.mask = cpu_to_le32(mask);
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "chown result %d\n", err);
 	return err;
@@ -1434,6 +1438,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
@@ -1457,7 +1462,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	reqh = req->r_request->front.iov_base;
 	reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "chmod result %d\n", err);
 	return err;
@@ -1466,6 +1471,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -1526,7 +1532,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
 
 	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "utime result %d\n", err);
 	return err;
@@ -1535,6 +1541,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -1569,7 +1576,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	reqh = req->r_request->front.iov_base;
 	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
 	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);
 	__ceph_do_pending_vmtruncate(inode);
@@ -1933,6 +1940,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
 	struct inode *inode = dentry->d_inode;
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
@@ -1993,7 +2001,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_request->hdr.data_off = cpu_to_le32(0);
 
 	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 
 out:
@@ -2010,6 +2018,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	struct ceph_client *client = ceph_client(dentry->d_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = dentry->d_inode;
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_mds_request *req;
 	char *path;
 	int pathlen;
@@ -2037,7 +2046,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 		return PTR_ERR(req);
 
 	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	return err;
 }

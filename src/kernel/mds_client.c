@@ -438,6 +438,7 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
 	req->r_fmode = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
+	init_completion(&req->r_safe_completion);
 	return req;
 }
 
@@ -447,22 +448,57 @@ static struct ceph_mds_request *new_request(struct ceph_msg *msg)
  * Called under mdsc->mutex.
  */
 static void __register_request(struct ceph_mds_client *mdsc,
+			       struct inode *listener,
 			       struct ceph_mds_request *req)
 {
 	struct ceph_mds_request_head *head = req->r_request->front.iov_base;
+	struct ceph_inode_info *ci;
 	req->r_tid = ++mdsc->last_tid;
 	head->tid = cpu_to_le64(req->r_tid);
 	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
 	get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
+	req->r_listener = listener;
+	if (listener) {
+		ci = ceph_inode(listener);
+		spin_lock(&ci->i_listener_lock);
+		radix_tree_insert(&ci->i_listener_tree, req->r_tid, (void *)req);
+		spin_unlock(&ci->i_listener_lock);
+	}
 }
 
 static void __unregister_request(struct ceph_mds_client *mdsc,
 				 struct ceph_mds_request *req)
 {
+	struct ceph_inode_info *ci;
 	dout(30, "__unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
+	if (req->r_listener) {
+		ci = ceph_inode(req->r_listener);
+		spin_lock(&ci->i_listener_lock);
+		radix_tree_delete(&ci->i_listener_tree, req->r_tid);
+		spin_unlock(&ci->i_listener_lock);
+	}
 	ceph_mdsc_put_request(req);
+}
+
+struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
+						    u64 tid)
+{
+	struct ceph_mds_request *req = NULL;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int got;
+
+	spin_lock(&ci->i_listener_lock);
+	got = radix_tree_gang_lookup(&ci->i_listener_tree,
+					(void **)&req, 0, 1);
+
+	if (got >= 0) {
+		get_request(req);
+	}
+	spin_unlock(&ci->i_listener_lock);
+
+	return req;
 }
 
 static bool __have_session(struct ceph_mds_client *mdsc, int mds)
@@ -471,7 +507,6 @@ static bool __have_session(struct ceph_mds_client *mdsc, int mds)
 		return false;
 	return mdsc->sessions[mds];
 }
-
 
 /*
  * Choose mds to send request to next.  If there is a hint set in
@@ -1107,17 +1142,19 @@ static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
  * session setup, forwarding, retry details.
  */
 int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
+			 struct inode *listener,
 			 struct ceph_mds_request *req)
 {
 	struct ceph_mds_session *session = NULL;
 	struct ceph_mds_request_head *rhead;
 	int err;
 	int mds = -1;
+	int safe = 0;
 
 	dout(30, "do_request on %p\n", req);
 
 	mutex_lock(&mdsc->mutex);
-	__register_request(mdsc, req);
+	__register_request(mdsc, listener, req);
 retry:
 	if (req->r_timeout &&
 	    time_after_eq(jiffies, req->r_started + req->r_timeout)) {
@@ -1207,12 +1244,20 @@ retry:
 	if (!err)
 		/* all is well, reply has been parsed. */
 		err = le32_to_cpu(req->r_reply_info.head->result);
+	if (req)
+		safe = req->r_reply_info.head->safe;
 finish:
-	__unregister_request(mdsc, req);
+	if (safe) {
+		complete(&req->r_safe_completion);
+		__unregister_request(mdsc, req);
+	}
+
 	mutex_unlock(&mdsc->mutex);
 
-	ceph_msg_put(req->r_request);
-	req->r_request = NULL;
+	if (safe) {
+		ceph_msg_put(req->r_request);
+		req->r_request = NULL;
+	}
 
 	dout(30, "do_request %p done, result %d\n", req, err);
 	return err;
@@ -1254,8 +1299,22 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply %p expected_cap=%p\n", req, req->r_expected_cap);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
 	if (req->r_got_reply) {
-		derr(1, "got reply on %llu, mds%d got more than one reply\n",
-		     tid, mds);
+		if (req->r_reply_info.head->safe) {
+			/* 
+			   We already handled the unsafe response, now do the cleanup.
+			   Shouldn't we check the safe response to see if it matches
+			   the unsafe one?
+			*/
+			complete(&req->r_safe_completion);
+			__unregister_request(mdsc, req);
+			dout(10, "got another reply %llu, mds%d\n",
+				tid, mds);
+			ceph_msg_put(req->r_request);
+			req->r_request = NULL;
+		} else {
+			dout(0, "got another _unsafe_ reply %llu, mds%d\n",
+				tid, mds);
+		}
 		mutex_unlock(&mdsc->mutex);
 		ceph_mdsc_put_request(req);
 		return;
@@ -1324,6 +1383,7 @@ done:
 	/* kick calling process */
 	complete(&req->r_completion);
 	ceph_mdsc_put_request(req);
+
 	return;
 }
 

@@ -94,6 +94,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct dentry *dentry;
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
+	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
 	int flags, fmode, wantcaps;
 
@@ -136,7 +137,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		err = PTR_ERR(req);
 		goto out;
 	}
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	if (!err)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
@@ -166,6 +167,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct file *file = nd->intent.open.file;
+	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	struct ceph_mds_request *req;
 	int err;
 	int flags = nd->intent.open.flags - 1;  /* silly vfs! */
@@ -181,7 +183,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	req->r_last_dentry = dget(dentry); /* use this dentry in fill_trace */
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	if (!err)
 		err = ceph_init_file(req->r_last_inode, file, req->r_fmode);
@@ -419,12 +421,37 @@ out:
 static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	struct inode *inode = dentry->d_inode;
-	int ret;
+	int ret, err;
+	struct ceph_mds_request *req;
+	u64 nexttid = 0;
 
 	dout(10, "fsync on inode %p\n", inode);
 	ret = write_inode_now(inode, 1);
 	if (ret < 0)
 		return ret;
+
+	ret = 0;
+	if ((inode->i_mode & S_IFMT) == S_IFDIR) {
+		dout(0, "sync on directory\n");
+
+		do {
+			req = ceph_mdsc_get_listener_req(inode, nexttid);
+
+			if (!req)
+				break;
+			nexttid = req->r_tid + 1;
+
+			if (req->r_timeout) {
+				err = wait_for_completion_timeout(&req->r_safe_completion,
+								req->r_timeout);
+				if (err == 0)
+					ret = -EIO;  /* timed out */
+			} else {
+				wait_for_completion(&req->r_safe_completion);
+			}
+			ceph_mdsc_put_request(req);
+		} while (req);
+	}
 
 	/*
 	 * HMM: should we also ensure that caps are flushed to mds?
@@ -433,7 +460,7 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	 * Not mtime, though.
 	 */
 
-	return 0;
+	return ret;
 }
 
 const struct file_operations ceph_file_fops = {
