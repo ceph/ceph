@@ -570,7 +570,6 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   // re-issue whatever we can
   //cap->issue(cap->pending());
-  //cap->set_last_open();  // not used, atm.
 
   return cap;
 }
@@ -639,8 +638,7 @@ bool Locker::issue_caps(CInode *in)
       nissued++;
 
       // include caps that clients generally like, while we're at it.
-      int likes = CEPH_CAP_ANY_RD;
-
+      int likes = in->get_caps_liked();      
       int before = pending;
       long seq = cap->issue((wanted|likes) & allowed);
       int after = cap->pending();
@@ -655,8 +653,7 @@ bool Locker::issue_caps(CInode *in)
 						 in->inode,
 						 in->find_snaprealm()->inode->ino(),
 						 cap->get_last_seq(),
-						 after,
-						 wanted,
+						 after, wanted, 0,
 						 cap->get_mseq()),
 				 it->first);
       }
@@ -678,8 +675,7 @@ void Locker::issue_truncate(CInode *in)
 					     in->inode,
 					     in->find_snaprealm()->inode->ino(),
 					     cap->get_last_seq(),
-					     cap->pending(),
-					     cap->wanted(),
+					     cap->pending(), cap->wanted(), 0,
 					     cap->get_mseq()),
 			     it->first);
   }
@@ -966,12 +962,11 @@ void Locker::share_inode_max_size(CInode *in)
     if (cap->pending() & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
       mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
-						   in->inode,
-						   in->find_snaprealm()->inode->ino(),
-						   cap->get_last_seq(),
-						   cap->pending(),
-						   cap->wanted(),
-						   cap->get_mseq()),
+					       in->inode,
+					       in->find_snaprealm()->inode->ino(),
+					       cap->get_last_seq(),
+					       cap->pending(), cap->wanted(), 0,
+					       cap->get_mseq()),
 			       client);
     }
   }
@@ -1034,98 +1029,101 @@ void Locker::handle_client_caps(MClientCaps *m)
     return;
   }
 
+  int op = m->get_op();
+
   // flushsnap?
-  if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
-    dout(7) << " flushsnap follows " << follows
-	    << " client" << client << " on " << *in << dendl;
-    // this cap now follows a later snap (i.e. the one initiating this flush, or later)
-    cap->client_follows = follows+1;
-
-    if (in->last <= follows) {
-      dout(10) << "  flushsnap releasing cloned cap" << dendl;
-      in->remove_client_cap(client);
-    } else {
-      dout(10) << "  flushsnap NOT releasing live cap" << dendl;
-    }
-
-    // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
-    // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
-    // case we get a dup response, so whatever.)
-    MClientCaps *ack = new MClientCaps(CEPH_CAP_OP_FLUSHEDSNAP, in->inode, 0, 0, 0, 0, 0);
-    ack->set_snap_follows(follows);
-    if (!_do_cap_update(in, m->get_caps(), in->get_caps_wanted(), follows, m, ack)) {
-      mds->send_message_client(ack, client);
-      eval_cap_gather(in);
-    }
-  } else {
-
-    // for this and all subsequent versions of this inode,
-    while (1) {
-      // filter wanted based on what we could ever give out (given auth/replica status)
-      int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
-      int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
-      int has = cap->confirmed();
-      dout(10) << " follows " << follows
-	       << ", had " << ccap_string(had) 
-	       << ", has " << ccap_string(has)
-	       << " on " << *in << dendl;
+  if (op == CEPH_CAP_OP_FLUSHSNAP) {
+    if (in->is_auth()) {
+      dout(7) << " flushsnap follows " << follows
+	      << " client" << client << " on " << *in << dendl;
+      // this cap now follows a later snap (i.e. the one initiating this flush, or later)
+      cap->client_follows = follows+1;
       
-      MClientCaps *ack = 0;
-      capseq_t releasecap = 0;
-
-      if (m->get_seq() < cap->get_last_sent()) {
-	/* client may be trying to release caps (i.e. inode closed, etc.)
-	 * by setting reducing wanted set.  but it may also be opening the
-	 * same filename, not sure that it'll map to the same inode.  so,
-	 * we don't want RELEASE or wanted updates to clobber mds's notion
-	 * of wanted unless we're sure the client has seen all the latest
-	 * caps.
-	 *
-	 * we use last_sent here, not last_open, just to keep the client
-	 * logic for deciding when to reply to a revocation simple.
-	 */
-	dout(10) << " ignoring release|wanted " << ccap_string(m->get_wanted())
-		 << " bc seq " << m->get_seq() << " < last sent " << cap->get_last_sent() << dendl;
-      } else if (m->get_op() == CEPH_CAP_OP_RELEASE) {
-	dout(7) << " release request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
-	releasecap = m->get_seq();
-	/*
-	 * if multiple release requests overlap (i.e. because the first one is waiting
-	 * for the log to flush), wait for them all to "complete", and only ack the
-	 * last one.  to do this, keep count; see matching decrement in _finish_release_cap().
-	 */
-	cap->releasing++;
-	ack = new MClientCaps(CEPH_CAP_OP_RELEASED, in->inode, 0, 0, 0, 0, 0);
-      } else if (wanted != cap->wanted()) {
-	dout(10) << " wanted " << ccap_string(cap->wanted())
-		 << " -> " << ccap_string(wanted) << dendl;
-	cap->set_wanted(wanted);
+      if (in->last <= follows) {
+	dout(10) << "  flushsnap releasing cloned cap" << dendl;
+	in->remove_client_cap(client);
+      } else {
+	dout(10) << "  flushsnap NOT releasing live cap" << dendl;
       }
-
-      if (((has|had) & CEPH_CAP_ANY_WR) == 0 ||                        // didn't have any wr caps, 
-	  !_do_cap_update(in, has|had, in->get_caps_wanted() | wanted, // or didn't change anything
-			  follows, m, ack, releasecap)) {
-	// no update, ack now.
-	if (releasecap) {
-	  assert(ack);
-	  _finish_release_cap(in, client, releasecap, ack);
-	} else if (ack)
+      
+      // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
+      // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
+      // case we get a dup response, so whatever.)
+      MClientCaps *ack = 0;
+      if (m->get_dirty()) {
+	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->inode, 0, 0, 0, 0, m->get_dirty(), 0);
+	ack->set_snap_follows(follows);
+      }
+      if (!_do_cap_update(in, m->get_dirty(), 0, follows, m, ack)) {
+	if (ack)
 	  mds->send_message_client(ack, client);
-	
 	eval_cap_gather(in);
       }
-      
-      // done?
-      if (in->last == CEPH_NOSNAP)
-	break;
-     
-      // next!
-      in = mdcache->pick_inode_snap(in, in->last);
-      cap = in->get_client_cap(client);
-      assert(cap);    
-    }
+    } else
+      dout(7) << " not auth, ignoring flushsnap on " << *in << dendl;
+    goto out;
   }
 
+
+  // for this and all subsequent versions of this inode,
+  while (1) {
+    // filter wanted based on what we could ever give out (given auth/replica status)
+    int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
+    int had = cap->confirm_receipt(m->get_seq(), m->get_caps());
+    int has = cap->confirmed();
+    dout(10) << " follows " << follows
+	     << ", had " << ccap_string(had) 
+	     << ", has " << ccap_string(has)
+	     << " on " << *in << dendl;
+    
+    MClientCaps *ack = 0;
+    capseq_t releasecap = 0;
+    
+    if (m->get_dirty() && in->is_auth()) {
+      dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
+	      << " seq " << m->get_seq() << " on " << *in << dendl;
+      ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->inode, 0, m->get_seq(),
+			    m->get_caps(), 0, m->get_dirty(), 0);
+    }
+    if (m->get_caps() == 0) {
+      if (m->get_seq() < cap->get_last_issue()) {
+	dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
+	cap->releasing++;
+	releasecap = m->get_seq();
+      } else {
+	dout(7) << " NOT releasing request client" << client << " seq " << m->get_seq()
+		<< " (issue race) on " << *in << dendl;
+      }
+    }
+    if (wanted != cap->wanted()) {
+      dout(10) << " wanted " << ccap_string(cap->wanted())
+	       << " -> " << ccap_string(wanted) << dendl;
+      cap->set_wanted(wanted);
+    }
+    
+    if (!_do_cap_update(in, m->get_dirty(), m->get_wanted(), follows, m, ack, releasecap)) {
+      // no update, ack now.
+      if (releasecap)
+	_finish_release_cap(in, client, releasecap, ack);
+      else if (ack)
+	mds->send_message_client(ack, client);
+      
+      eval_cap_gather(in);
+      if (in->filelock.is_stable())
+	file_eval(&in->filelock);
+    }
+      
+    // done?
+    if (in->last == CEPH_NOSNAP)
+      break;
+    
+    // next!
+    in = mdcache->pick_inode_snap(in, in->last);
+    cap = in->get_client_cap(client);
+    assert(cap);    
+  }
+  
+ out:
   delete m;
 }
 
@@ -1153,7 +1151,8 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCa
     if (!in->is_auth())
       request_inode_file_caps(in);
     
-    mds->send_message_client(ack, client);
+    if (ack)
+      mds->send_message_client(ack, client);
 
     // unlinked stray?  may need to purge (e.g., after all caps are released)
     if (in->inode.nlink == 0 &&
@@ -1165,140 +1164,140 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCa
   }
 }
 
-bool Locker::_do_cap_update(CInode *in, int had, int all_wanted, snapid_t follows, MClientCaps *m,
+/*
+ * update inode based on cap flush|flushsnap|wanted.
+ *  adjust max_size, if needed.
+ * if we update, return true; otherwise, false (no updated needed).
+ */
+bool Locker::_do_cap_update(CInode *in, int dirty, int wanted, snapid_t follows, MClientCaps *m,
 			    MClientCaps *ack, capseq_t releasecap)
 {
-  dout(10) << "_do_cap_update had " << ccap_string(had) << " on " << *in << dendl;
-
+  dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
+	   << " wanted " << ccap_string(wanted)
+	   << " on " << *in << dendl;
+  assert(in->is_auth());
   int client = m->get_source().num();
-
   inode_t *latest = in->get_projected_inode();
 
-  utime_t atime = m->get_atime();
-  utime_t mtime = m->get_mtime();
-  utime_t ctime = m->get_ctime();
-  uint64_t size = m->get_size();
+  if (in->is_base())
+    return false;   // FIXME?
 
-  // atime|mtime|size?
-  bool had_or_has_wr = had & (CEPH_CAP_GWR << CEPH_CAP_SFILE);
-  bool file_excl = had & (CEPH_CAP_GEXCL << CEPH_CAP_SFILE);
-  bool dirty_atime = false;
-  bool dirty_mtime = false;
-  bool dirty_ctime = false;
-  bool dirty_size = false;
-  bool dirty_file = false;
-  if (had_or_has_wr || file_excl) {
-    if (mtime > latest->mtime || (file_excl && mtime != latest->mtime)) 
-      dirty_file = dirty_mtime = true;
-    if (ctime > latest->ctime)
-      dirty_file = dirty_ctime = true;
-    if (size > latest->size) 
-      dirty_file = dirty_size = true;
-  }
-  if (file_excl && atime != latest->atime)
-    dirty_file = dirty_atime = true;
-  bool dirty_mode = false;
-  bool dirty_owner = false;
-  bool dirty_auth = false;
-  if (had & (CEPH_CAP_GEXCL << CEPH_CAP_SAUTH)) {
-    if (m->head.uid != latest->uid ||
-	m->head.gid != latest->gid)
-      dirty_auth = dirty_owner = true;
-    if (m->head.mode != latest->mode)
-      dirty_auth = dirty_mode = true;
-  }
-  bool dirty = dirty_file || dirty_auth;
-  
   // increase or zero max_size?
+  __u64 size = m->get_size();
   bool change_max = false;
   uint64_t new_max = latest->max_size;
-
-  if (in->is_auth()) {
-    if (latest->max_size && (all_wanted & CEPH_CAP_ANY_FILE_WR) == 0) {
-      change_max = true;
-      new_max = 0;
-    }
-    else if ((all_wanted & CEPH_CAP_ANY_FILE_WR) &&
-	(size << 1) >= latest->max_size) {
-      dout(10) << "wr caps wanted, and size " << size
-	       << " *2 >= max " << latest->max_size << ", increasing" << dendl;
-      change_max = true;
-      new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-    }
-    if ((all_wanted & CEPH_CAP_ANY_FILE_WR) &&
-	m->get_max_size() > new_max) {
-      dout(10) << "client requests file_max " << m->get_max_size()
-	       << " > max " << latest->max_size << dendl;
-      change_max = true;
-      new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
-    }
-
-    if (change_max && !in->filelock.can_wrlock()) {
-      dout(10) << "want to change file_max, but lock won't allow it; will retry" << dendl;
-      check_inode_max_size(in);  // this will fail, and schedule a waiter.
-      change_max = false;
-    }
-  }
-
-  if (!(dirty || change_max) || 
-      in->is_base()) {      // FIXME.. what about root inode mtime/atime?
-    return false;
-  }
-
-  EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
   
+  if (latest->max_size && (wanted & CEPH_CAP_ANY_FILE_WR) == 0) {
+    change_max = true;
+    new_max = 0;
+  }
+  else if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
+	   (size << 1) >= latest->max_size) {
+    dout(10) << " wr caps wanted, and size " << size
+	     << " *2 >= max " << latest->max_size << ", increasing" << dendl;
+    change_max = true;
+    new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
+  }
+  if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
+      m->get_max_size() > new_max) {
+    dout(10) << "client requests file_max " << m->get_max_size()
+	     << " > max " << latest->max_size << dendl;
+    change_max = true;
+    new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
+  }
+  if (change_max &&
+      !in->filelock.can_wrlock() &&
+      (dirty & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_EXCL)) == 0) {  // not already writing dirty file data
+    dout(10) << " i want to change file_max, but lock won't allow it; will retry" << dendl;
+    check_inode_max_size(in);  // this will fail, and schedule a waiter.
+    change_max = false;
+  }
+
+  if (!dirty && !change_max)
+    return false;
+
+
+  // do the update.
+  EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
+
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
+
   if (change_max) {
     dout(7) << "  max_size " << pi->max_size << " -> " << new_max << dendl;
     pi->max_size = new_max;
-  }    
-  if (dirty_mtime) {
-    dout(7) << "  mtime " << pi->mtime << " -> " << mtime
-	    << " for " << *in << dendl;
-    pi->mtime = mtime;
   }
-  if (dirty_ctime) {
-    dout(7) << "  ctime " << pi->ctime << " -> " << ctime
-	    << " for " << *in << dendl;
-    pi->ctime = ctime;
+
+  // file
+  if (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) {
+    utime_t atime = m->get_atime();
+    utime_t mtime = m->get_mtime();
+    utime_t ctime = m->get_ctime();
+    uint64_t size = m->get_size();
+    
+    if (((dirty & CEPH_CAP_FILE_WR) && mtime > latest->mtime) ||
+	((dirty & CEPH_CAP_FILE_EXCL) && mtime != latest->mtime)) {
+      dout(7) << "  mtime " << pi->mtime << " -> " << mtime
+	      << " for " << *in << dendl;
+      pi->mtime = mtime;
+    }
+    if (ctime > latest->ctime) {
+      dout(7) << "  ctime " << pi->ctime << " -> " << ctime
+	      << " for " << *in << dendl;
+      pi->ctime = ctime;
+    }
+    if (size > latest->size) {
+      dout(7) << "  size " << pi->size << " -> " << size
+	      << " for " << *in << dendl;
+      pi->size = size;
+      pi->rstat.rbytes = size;
+    }
+    if ((dirty & CEPH_CAP_FILE_EXCL) && atime != latest->atime) {
+      dout(7) << "  atime " << pi->atime << " -> " << atime
+	      << " for " << *in << dendl;
+      pi->atime = atime;
+    }
+    if ((dirty & CEPH_CAP_FILE_EXCL) && pi->time_warp_seq < m->get_time_warp_seq()) {
+      dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
+	      << " for " << *in << dendl;
+      pi->time_warp_seq = m->get_time_warp_seq();
+    }
   }
-  if (dirty_size) {
-    dout(7) << "  size " << pi->size << " -> " << size
+  if (change_max) {
+    dout(7) << "  max_size " << pi->max_size << " -> " << new_max
 	    << " for " << *in << dendl;
-    pi->size = size;
-    pi->rstat.rbytes = size;
+    pi->max_size = new_max;
   }
-  if (dirty_atime) {
-    dout(7) << "  atime " << pi->atime << " -> " << atime
-	    << " for " << *in << dendl;
-    pi->atime = atime;
-  }
-  if (file_excl && pi->time_warp_seq < m->get_time_warp_seq()) {
-    dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
-	    << " for " << *in << dendl;
-    pi->time_warp_seq = m->get_time_warp_seq();
-  }
-  if (dirty_owner) {
-    dout(7) << "  uid.gid " << pi->uid << "." << pi->gid
-	    << " -> " << m->head.uid << "." << m->head.gid
-	    << " for " << *in << dendl;
-    pi->uid = m->head.uid;
-    pi->gid = m->head.gid;
-  }
-  if (dirty_mode) {
-    dout(7) << "  mode " << oct << pi->mode
-	    << " -> " << m->head.mode << dec
-	    << " for " << *in << dendl;
-    pi->mode = m->head.mode;
+    
+  if (change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) 
+    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
+
+  // auth
+  if (dirty & CEPH_CAP_AUTH_EXCL) {
+    if (m->head.uid != latest->uid) {
+      dout(7) << "  uid " << pi->uid
+	      << " -> " << m->head.uid
+	      << " for " << *in << dendl;
+      pi->uid = m->head.uid;
+    }
+    if (m->head.gid != latest->gid) {
+      dout(7) << "  gid " << pi->gid
+	      << " -> " << m->head.gid
+	      << " for " << *in << dendl;
+      pi->gid = m->head.gid;
+    }
+    if (m->head.mode != latest->mode) {
+      dout(7) << "  mode " << oct << pi->mode
+	      << " -> " << m->head.mode << dec
+	      << " for " << *in << dendl;
+      pi->mode = m->head.mode;
+    }
+
+    simple_wrlock_force(&in->authlock, mut);
   }
   
-  Mutation *mut = new Mutation;
-  mut->ls = mds->mdlog->get_current_segment();
-  if (dirty_file)
-    file_wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
-  if (dirty_auth)
-    simple_wrlock_force(&in->authlock, mut);
   mut->auth_pin(in);
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);

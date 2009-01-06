@@ -24,6 +24,48 @@ using namespace std;
 
 #include "config.h"
 
+
+/*
+
+  Capability protocol notes.
+
+- two types of cap events from mds -> client:
+  - cap "issue" in a MClientReply, or an MClientCaps IMPORT op.
+  - cap "update" (revocation, etc.) .. an MClientCaps message.
+- if client has cap, the mds should have it too.
+
+- if client has no dirty data, it can release it without waiting for an mds ack.
+  - client may thus get a cap _update_ and not have the cap.  ignore it.
+
+- mds should track seq of last _issue_ (not update).  any release
+  attempt will only succeed if the client has seen the latest issue.
+  - if client gets an IMPORT issue and doesn't have the inode, immediately send a release.
+
+- a UPDATE updates the clients issued caps, wanted, etc.  it may also flush dirty metadata.
+  - 'caps' are which caps the client retains.
+    - if 0, client wishes to release the cap
+  - 'wanted' is which caps the client wants.
+  - 'dirty' is which metadata is to be written.
+    - client gets a FLUSH_ACK with matching dirty flags indicating which caps were written.
+
+- a FLUSH_ACK acks a FLUSH.
+  - 'dirty' is the _original_ FLUSH's dirty (i.e., which metadata was written back)
+  - 'seq' is the _original_ FLUSH's seq.
+  - 'caps' is the _original_ FLUSH's caps.
+  - client can conclude that (dirty & ~caps) bits were successfully cleaned.
+
+- a FLUSHSNAP flushes snapshot metadata.
+  - 'dirty' indicates which caps, were dirty, if any.
+  - mds writes metadata.  if dirty!=0, replies with FLUSHSNAP_ACK.
+
+- a RELEASE releases one or more (clean) caps.
+  - 'caps' is which caps are retained by the client.
+  - 'wanted' is which caps the client wants.
+  - dirty==0
+  - if caps==0, mds can close out the cap (provided there are no racing cap issues)
+
+ */
+
 class CInode;
 
 class Capability {
@@ -59,7 +101,7 @@ private:
 
   map<capseq_t, __u32>  cap_history;  // seq -> cap, [last_recv,last_sent]
   capseq_t last_sent, last_recv;
-  capseq_t last_open;
+  capseq_t last_issue;
   capseq_t mseq;
 
   int suppress;
@@ -79,7 +121,7 @@ public:
     wanted_caps(want),
     last_sent(s),
     last_recv(s),
-    last_open(0),
+    last_issue(0),
     mseq(0),
     suppress(0), stale(false), releasing(0),
     client_follows(0),
@@ -88,8 +130,8 @@ public:
   capseq_t get_mseq() { return mseq; }
 
   capseq_t get_last_sent() { return last_sent; }
-  capseq_t get_last_open() { return last_open; }
-  void set_last_open() { last_open = last_sent; }
+
+  capseq_t get_last_issue() { return last_issue; }
 
   bool is_suppress() { return suppress > 0; }
   void inc_suppress() { suppress++; }
@@ -145,7 +187,7 @@ public:
 
   // issue caps; return seq number.
   capseq_t issue(int c) {
-    ++last_sent;
+    last_issue = ++last_sent;
     cap_history[last_sent] = c;
     return last_sent;
   }

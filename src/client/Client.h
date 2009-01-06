@@ -162,10 +162,11 @@ struct InodeCap {
   unsigned issued;
   unsigned implemented;
   unsigned wanted;   // as known to mds.
+  unsigned flushing;
   __u64 seq;
   __u32 mseq;  // migration seq
 
-  InodeCap() : issued(0), implemented(0), wanted(0), seq(0), mseq(0) {}
+  InodeCap() : issued(0), implemented(0), wanted(0), flushing(0), seq(0), mseq(0) {}
 };
 
 struct CapSnap {
@@ -194,12 +195,13 @@ class Inode {
 
   // per-mds caps
   map<int,InodeCap*> caps;            // mds -> InodeCap
+  unsigned dirty_caps;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
   capseq_t exporting_mseq;
   utime_t hold_caps_until;
-  xlist<Inode*>::item cap_delay_item;
+  xlist<Inode*>::item cap_item;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -263,9 +265,10 @@ class Inode {
     snapid(vino.snapid),
     lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    dirty_caps(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    cap_delay_item(this),
+    cap_item(this),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
@@ -332,6 +335,14 @@ class Inode {
     if (want & (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE))
       want |= CEPH_CAP_FILE_EXCL;
     return want;
+  }
+  int caps_dirty() {
+    int flushing = dirty_caps;
+    for (map<int,InodeCap*>::iterator it = caps.begin();
+         it != caps.end();
+         it++)
+      flushing |= it->second->flushing;
+    return flushing;
   }
 
   bool have_valid_size() {
@@ -614,7 +625,8 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
-  xlist<Inode*> delayed_caps;
+  // all inodes with caps sit on either cap_list or delayed_caps.
+  xlist<Inode*> delayed_caps, cap_list;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
   SnapRealm *get_snap_realm(inodeno_t r) {
@@ -828,8 +840,8 @@ protected:
   void handle_cap_import(Inode *in, class MClientCaps *m);
   void handle_cap_export(Inode *in, class MClientCaps *m);
   void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_released(Inode *in, class MClientCaps *m);
-  void handle_cap_flushedsnap(Inode *in, class MClientCaps *m);
+  void handle_cap_flush_ack(Inode *in, class MClientCaps *m);
+  void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void check_caps(Inode *in, bool is_delayed);

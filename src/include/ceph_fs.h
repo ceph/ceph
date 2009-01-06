@@ -938,10 +938,11 @@ static inline int ceph_flags_to_mode(int flags)
 				 CEPH_CAP_FILE_RDCACHE |	\
 				 CEPH_CAP_XATTR_RDCACHE)
 
-#define CEPH_CAP_ANY_RD   (CEPH_CAP_AUTH_RDCACHE |			\
-			   CEPH_CAP_LINK_RDCACHE |			\
-			   CEPH_CAP_XATTR_RDCACHE |			\
-			   CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD)
+#define CEPH_CAP_ANY_RDCACHE (CEPH_CAP_AUTH_RDCACHE |			\
+			      CEPH_CAP_LINK_RDCACHE |			\
+			      CEPH_CAP_XATTR_RDCACHE |			\
+			      CEPH_CAP_FILE_RDCACHE)
+#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_RDCACHE | CEPH_CAP_FILE_RD)
 
 #define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
 			   CEPH_CAP_LINK_EXCL |		\
@@ -986,12 +987,11 @@ enum {
 	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify */
 	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
-	CEPH_CAP_OP_RELEASED,    /* mds->client close out cap */
-	CEPH_CAP_OP_FLUSHEDSNAP, /* mds->client flushed snap */
-	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was recall) */
-	CEPH_CAP_OP_REQUEST,   /* client->mds request (update wanted bits) */
+	CEPH_CAP_OP_UPDATE,    /* client->mds update */
+	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed.  if caps=0, cap also released. */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
-	CEPH_CAP_OP_RELEASE,   /* client->mds request release cap */
+	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
+	CEPH_CAP_OP_RELEASE,   /* client->mds release (clean) cap */
 };
 
 static inline const char *ceph_cap_op_name(int op)
@@ -1001,11 +1001,10 @@ static inline const char *ceph_cap_op_name(int op)
 	case CEPH_CAP_OP_TRUNC: return "trunc";
 	case CEPH_CAP_OP_EXPORT: return "export";
 	case CEPH_CAP_OP_IMPORT: return "import";
-	case CEPH_CAP_OP_RELEASED: return "released";
-	case CEPH_CAP_OP_FLUSHEDSNAP: return "flushedsnap";
-	case CEPH_CAP_OP_ACK: return "ack";
-	case CEPH_CAP_OP_REQUEST: return "request";
+	case CEPH_CAP_OP_UPDATE: return "update";
+	case CEPH_CAP_OP_FLUSH_ACK: return "flush_ack";
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
+	case CEPH_CAP_OP_FLUSHSNAP_ACK: return "flushsnap_ack";
 	case CEPH_CAP_OP_RELEASE: return "release";
 	default: return "???";
 	}
@@ -1018,7 +1017,7 @@ struct ceph_mds_caps {
 	__le32 op;
 	__le64 ino, realm;
 	__le32 seq;
-	__le32 caps, wanted;
+	__le32 caps, wanted, dirty;
 	__le32 migrate_seq;
 	__le64 snap_follows;
 	__le32 snap_trace_len;

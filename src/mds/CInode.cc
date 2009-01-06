@@ -1355,7 +1355,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     }
     if (cap && valid) {
       bool loner = (get_loner() == client);
-      int issue = (cap->wanted() | CEPH_CAP_ANY_RD) & get_caps_allowed(loner);
+      int likes = get_caps_liked();
+      int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
       int pending = cap->pending();
       if (issue & ~pending) {
 	dout(10) << "encode_inodestat issuing " << ccap_string(issue)

@@ -26,6 +26,7 @@ class MClientCaps : public Message {
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
+  int      get_dirty() { return head.dirty; }
   capseq_t get_seq() { return head.seq; }
   capseq_t get_mseq() { return head.migrate_seq; }
 
@@ -67,6 +68,7 @@ class MClientCaps : public Message {
 	      long seq,
 	      int caps,
 	      int wanted,
+	      int dirty,
 	      int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
     memset(&head, 0, sizeof(head));
@@ -76,6 +78,7 @@ class MClientCaps : public Message {
     head.seq = seq;
     head.caps = caps;
     head.wanted = wanted;
+    head.dirty = dirty;
     head.migrate_seq = mseq;
 
     head.uid = inode.uid;
@@ -112,16 +115,19 @@ class MClientCaps : public Message {
 	<< " ino " << inodeno_t(head.ino)
 	<< " seq " << head.seq 
 	<< " caps=" << ccap_string(head.caps)
-	<< " wanted=" << ccap_string(head.wanted)
-	<< " size " << head.size << "/" << head.max_size;
+	<< " dirty=" << ccap_string(head.dirty)
+	<< " wanted=" << ccap_string(head.wanted);
+    out << " follows " << snapid_t(head.snap_follows);
+    if (head.migrate_seq)
+      out << " mseq " << head.migrate_seq;
+
+    out << " size " << head.size << "/" << head.max_size;
     if (head.truncate_seq)
       out << " ts " << head.truncate_seq;
     out << " mtime " << utime_t(head.mtime);
     if (head.time_warp_seq)
       out << " tws " << head.time_warp_seq;
-    out << " follows " << snapid_t(head.snap_follows);
-    if (head.migrate_seq)
-      out << " mseq " << head.migrate_seq;
+
     out << ")";
   }
   

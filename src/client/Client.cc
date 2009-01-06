@@ -413,6 +413,7 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
     }
 
     if ((issued & CEPH_CAP_XATTR_EXCL) == 0) {
+#warning xattrs
       in->xattrs.swap(st->xattrs);
     }
 
@@ -1374,7 +1375,7 @@ void Client::put_inode(Inode *in, int n)
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
-    in->cap_delay_item.remove_myself();
+    in->cap_item.remove_myself();
     in->snaprealm_item.remove_myself();
     if (in == root) root = 0;
     delete in;
@@ -1447,13 +1448,16 @@ void Client::cap_delay_requeue(Inode *in)
   in->hold_caps_until = g_clock.now();
   in->hold_caps_until += 5.0;
 
-  delayed_caps.push_back(&in->cap_delay_item);
+  delayed_caps.push_back(&in->cap_item);
 }
 
 void Client::check_caps(Inode *in, bool is_delayed)
 {
   unsigned wanted = in->caps_wanted();
   unsigned used = in->caps_used();
+  int like = wanted;
+  if (!unmounting)
+    like |= CEPH_CAP_ANY_RD;
 
   dout(10) << "check_caps on " << *in
 	   << " wanted " << ccap_string(wanted)
@@ -1482,21 +1486,24 @@ void Client::check_caps(Inode *in, bool is_delayed)
     InodeCap *cap = it->second;
     it++;
 
-    int like = wanted;
-    if (!unmounting)
-      like |= CEPH_CAP_ANY_RD;
-
     int revoking = cap->implemented & ~cap->issued;
     
+    dout(10) << " cap mds" << mds
+	     << " issued " << ccap_string(cap->issued)
+	     << " implemented " << ccap_string(cap->implemented)
+	     << " revoking " << ccap_string(revoking) << dendl;
+
     if (in->wanted_max_size > in->inode.max_size &&
 	in->wanted_max_size > in->requested_max_size)
       goto ack;
 
     /* completed revocation? */
     if (revoking && (revoking && used) == 0) {
-      dout(10) << "completed revocation of " << (cap->implemented & ~cap->issued) << dendl;
+      dout(10) << "completed revocation of " << ccap_string(cap->implemented & ~cap->issued) << dendl;
       goto ack;
     }
+    if (!revoking && unmounting)
+      goto ack;
 
     /* approaching file_max? */
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
@@ -1518,24 +1525,35 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
     
   ack:
-    int op;
-    if (wanted == 0)
+    int op = CEPH_CAP_OP_UPDATE;
+    if (like == 0)
       op = CEPH_CAP_OP_RELEASE;
     else
-      op = CEPH_CAP_OP_ACK;
+      op = CEPH_CAP_OP_UPDATE;
+    
+    cap->flushing |= in->caps_dirty() & cap->issued;
+    if (cap->flushing) {
+      dout(10) << " flushing " << ccap_string(cap->flushing) << dendl;
+      in->dirty_caps &= ~cap->flushing;
+    }
+    cap->issued &= like;
+
     MClientCaps *m = new MClientCaps(op,
 				     in->inode,
 				     0,
 				     cap->seq,
 				     cap->issued,
 				     wanted,
+				     cap->flushing,
 				     cap->mseq);
-    cap->wanted = wanted;
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;
     m->set_snap_follows(in->snaprealm->get_snap_context().seq);
     messenger->send_message(m, mdsmap->get_inst(mds));
+
+    if (cap->flushing == 0 && cap->issued == 0)
+      remove_cap(in, mds);
   }
 }
 
@@ -1731,6 +1749,7 @@ void Client::add_update_cap(Inode *in, int mds,
       in->exporting_mseq = 0;
     }
     in->caps[mds] = cap = new InodeCap;
+    cap_list.push_back(&in->cap_item);
   }
 
   unsigned old_caps = cap->issued;
@@ -1739,7 +1758,9 @@ void Client::add_update_cap(Inode *in, int mds,
   cap->seq = seq;
   cap->mseq = mseq;
   dout(10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap->issued)
-	   << " from mds" << mds << dendl;
+	   << " from mds" << mds
+	   << " on " << *in
+	   << dendl;
 
   if (issued & ~old_caps)
     signal_cond_list(in->waitfor_caps);
@@ -1747,6 +1768,7 @@ void Client::add_update_cap(Inode *in, int mds,
 
 void Client::remove_cap(Inode *in, int mds)
 {
+  dout(10) << "remove_cap mds" << mds << " on " << *in << dendl;
   assert(in->caps.count(mds));
   in->caps.erase(mds);
   if (in->caps.empty()) {
@@ -1999,8 +2021,15 @@ void Client::handle_caps(MClientCaps *m)
   if (inode_map.count(vino)) in = inode_map[vino];
   if (!in) {
     dout(5) << "handle_caps don't have vino " << vino << dendl;
-    assert(0); // shouldn't happen
-    delete m;
+
+    if (m->get_op() == CEPH_CAP_OP_IMPORT) {
+      // release.
+      m->set_op(CEPH_CAP_OP_RELEASE);
+      m->head.caps = 0;
+      m->head.dirty = 0;
+      messenger->send_message(m, m->get_source_inst());
+    } else
+      delete m;
     return;
   }
 
@@ -2009,8 +2038,8 @@ void Client::handle_caps(MClientCaps *m)
   case CEPH_CAP_OP_EXPORT: return handle_cap_export(in, m);
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
   case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, m);
-  case CEPH_CAP_OP_RELEASED: return handle_cap_released(in, m);
-  case CEPH_CAP_OP_FLUSHEDSNAP: return handle_cap_flushedsnap(in, m);
+  case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(in, m);
+  case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, m);
   default:
     delete m;
   }
@@ -2102,18 +2131,29 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   delete m;
 }
 
-void Client::handle_cap_released(Inode *in, MClientCaps *m)
+void Client::handle_cap_flush_ack(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
   assert(in->caps[mds]);
+  InodeCap *cap = in->caps[mds];
 
-  dout(5) << "handle_cap_released mds" << mds << " released cap on " << *in << dendl;
-  remove_cap(in, mds);
+  int cleaned = m->get_dirty() & ~m->get_caps();
+  dout(5) << "handle_cap_flush_ack mds" << mds
+	  << " cleaned " << ccap_string(cleaned) << " on " << *in << dendl;
+  cap->flushing &= ~cleaned;
+  dout(5) << "  cap->flushing now " << ccap_string(cap->flushing)
+	  << ", in->caps_dirty() now " << ccap_string(in->caps_dirty()) << dendl;
+
+  if (m->get_caps() == 0 &&
+      m->get_seq() == cap->seq) {
+    assert(in->caps_dirty() == 0);
+    remove_cap(in, mds);
+  }
   delete m;
 }
 
 
-void Client::handle_cap_flushedsnap(Inode *in, MClientCaps *m)
+void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
   assert(in->caps[mds]);
@@ -2127,7 +2167,7 @@ void Client::handle_cap_flushedsnap(Inode *in, MClientCaps *m)
   } else {
     dout(5) << "handle_cap_flushedsnap DUP(?) mds" << mds << " flushed snap follows " << follows
 	    << " on " << *in << dendl;
-    // we may not have it if we send multiple FLUSHSNAP requests and (get multiple FLUSHEDSNAPs back)
+    // we may not have it if we send multiple FLUSHSNAP requests and (got multiple FLUSHEDSNAPs back)
   }
     
   delete m;
@@ -2137,15 +2177,18 @@ void Client::handle_cap_flushedsnap(Inode *in, MClientCaps *m)
 void Client::handle_cap_grant(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
-  assert(in->caps[mds]);
+  if (in->caps.count(mds) == 0) {
+    dout(5) << "handle_cap_grant on ino " << m->get_ino() << " no cap for mds" << mds << dendl;
+    delete m;
+    return;
+  }
   InodeCap *cap = in->caps[mds];
-  
   cap->seq = m->get_seq();
   in->inode.layout = m->get_layout();
 
   // don't want it?
-  int wanted = in->caps_wanted();
   /*
+  int wanted = in->caps_wanted();
   if (wanted == 0) {
     dout(5) << "handle_cap_grant on ino " << m->get_ino() 
             << " seq " << m->get_seq() 
@@ -2169,7 +2212,20 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
           << " caps now " << ccap_string(new_caps) 
           << " was " << ccap_string(old_caps) << dendl;
   
-  // size/ctime/mtime/atime
+  // update inode
+  int issued = in->caps_issued();
+  if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
+    in->inode.mode = m->head.mode;
+    in->inode.uid = m->head.uid;
+    in->inode.gid = m->head.gid;
+  }
+  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+    in->inode.nlink = m->head.nlink;
+    in->inode.anchored = false;  /* lie */
+  }
+  if ((issued & CEPH_CAP_XATTR_EXCL) == 0) {
+#warning xattrs in->xattrs.swap(m->xattrs);
+  }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_size(),
 			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps);
 
@@ -2186,9 +2242,6 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
   }
 
   // update caps
-
-  bool ack = false;
-  
   if (old_caps & ~new_caps) { 
     dout(10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
     cap->issued = new_caps;
@@ -2198,20 +2251,9 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
 
     if ((used & ~new_caps) & CEPH_CAP_FILE_WRBUFFER)
       _flush(in);
-    else {
-      ack = true;
-      cap->implemented = new_caps;
+    else 
+      check_caps(in, false);
 
-      // share our (possibly newer) file size, mtime, atime
-      m->set_size(in->inode.size);
-      m->set_max_size(0);  // dont re-request
-      m->set_mtime(in->inode.mtime);
-      m->set_atime(in->inode.atime);
-      m->set_wanted(wanted);
-      cap->wanted = wanted;
-      m->set_snap_follows(in->snaprealm->get_snap_context().seq);
-      m->set_migrate_seq(cap->mseq);
-    }
   } else if (old_caps == new_caps) {
     dout(10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
   } else {
@@ -2223,10 +2265,7 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
   if (new_caps)
     signal_cond_list(in->waitfor_caps);
 
-  if (ack)
-    messenger->send_message(m, m->get_source_inst());
-  else
-    delete m;
+  delete m;
 }
 
 
@@ -2360,11 +2399,7 @@ int Client::unmount()
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
   assert(fd_map.empty());
 
-  dout(10) << "a" << dendl;
-
   _ll_drop_pins();
-  
-  dout(10) << "b" << dendl;
 
   // empty lru cache
   lru.lru_set_max(0);
@@ -2376,6 +2411,14 @@ int Client::unmount()
     Inode *in = *p;
     ++p;
     delayed_caps.pop_front();
+    check_caps(in, true);
+  }
+
+  // other caps, too
+  p = cap_list.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
     check_caps(in, true);
   }
 
@@ -2499,6 +2542,7 @@ void Client::tick()
     if (in->hold_caps_until > now)
       break;
     delayed_caps.pop_front();
+    cap_list.push_back(&in->cap_item);
     check_caps(in, true);
   }
 }
@@ -2975,6 +3019,7 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, int mask
       dn->inode->inode.mtime = mtime;
     if (mask & CEPH_UTIME_ATIME)
       dn->inode->inode.atime = atime;
+    dn->inode->dirty_caps |= CEPH_CAP_FILE_EXCL;
     return 0;
   }
 
@@ -3905,6 +3950,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   // extend file?
   if (totalwritten + offset > in->inode.size) {
     in->inode.size = totalwritten + offset;
+    in->dirty_caps |= CEPH_CAP_FILE_WR;
     
     if ((in->inode.size << 1) >= in->inode.max_size &&
 	(in->reported_size << 1) < in->inode.max_size)
@@ -3917,6 +3963,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 
   // mtime
   in->inode.mtime = g_clock.real_now();
+  in->dirty_caps |= CEPH_CAP_FILE_WR;
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   
