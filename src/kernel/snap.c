@@ -327,6 +327,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		capsnap->follows = snapc->seq - 1;
 		capsnap->context = ceph_get_snap_context(snapc);
 		capsnap->issued = __ceph_caps_issued(ci, NULL);
+		capsnap->dirty = __ceph_caps_dirty(ci);
 
 		capsnap->mode = inode->i_mode;
 		capsnap->uid = inode->i_uid;
@@ -339,7 +340,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		/* dirty page count moved from _head to this cap_snap;
 		   all subsequent writes page dirties occur _after_ this
 		   snapshot. */
-		capsnap->dirty = ci->i_wrbuffer_ref_head;
+		capsnap->dirty_pages = ci->i_wrbuffer_ref_head;
 		ci->i_wrbuffer_ref_head = 0;
 		ceph_put_snap_context(ci->i_head_snapc);
 		ci->i_head_snapc = NULL;
@@ -382,11 +383,11 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	capsnap->atime = inode->i_atime;
 	capsnap->ctime = inode->i_ctime;
 	capsnap->time_warp_seq = ci->i_time_warp_seq;
-	if (capsnap->dirty) {
+	if (capsnap->dirty_pages) {
 		dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu s=%llu "
 		     "still has %d dirty pages\n", inode, capsnap,
 		     capsnap->context, capsnap->context->seq,
-		     capsnap->size, capsnap->dirty);
+		     capsnap->size, capsnap->dirty_pages);
 		return 0;
 	}
 	dout(10, "finish_cap_snap %p cap_snap %p snapc %p %llu s=%llu clean\n",

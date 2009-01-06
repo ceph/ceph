@@ -258,6 +258,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattr_data = NULL;
 
 	ci->i_caps = RB_ROOT;
+	ci->i_dirty_caps = 0;
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
@@ -1204,6 +1205,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_lock(&ci->vfs_inode.i_lock);
 	dout(20, "put_mode %p fmode %d %d -> %d\n", &ci->vfs_inode, fmode,
 	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
+	WARN_ON(ci->i_nr_by_mode[fmode] == 0);
 	if (--ci->i_nr_by_mode[fmode] == 0)
 		last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
@@ -1445,6 +1447,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_MTIME)
 			inode->i_mtime = attr->ia_mtime;
 		inode->i_ctime = CURRENT_TIME;
+		ci->i_dirty_caps |= CEPH_CAP_FILE_EXCL;
 		return 0;
 	}
 
@@ -1460,6 +1463,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_MTIME)
 			inode->i_mtime = attr->ia_mtime;
 		inode->i_ctime = CURRENT_TIME;
+		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
 		return 0;
 	}
 	/* if i have valid values, this may be a no-op */

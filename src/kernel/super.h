@@ -135,6 +135,7 @@ struct ceph_cap {
 	int mds;
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemented (for tracking revocation) */
+	int flushing;     /* dirty fields being written back to mds */
 	u32 seq, mseq, gen;
 };
 
@@ -148,7 +149,7 @@ struct ceph_cap_snap {
 
 	struct list_head ci_item;
 	u64 follows;
-	int issued;
+	int issued, dirty;
 	struct ceph_snap_context *context;
 	
 	mode_t mode;
@@ -162,7 +163,7 @@ struct ceph_cap_snap {
 	struct timespec mtime, atime, ctime;
 	u64 time_warp_seq;
 	int writing;   /* a sync write is still in progress */
-	int dirty;     /* dirty pages awaiting writeback */
+	int dirty_pages;     /* dirty pages awaiting writeback */
 };
 
 static inline void ceph_put_cap_snap(struct ceph_cap_snap *capsnap)
@@ -224,6 +225,7 @@ struct ceph_inode_info {
 	/* capabilities.  protected _both_ by i_lock and cap->session's
 	 * s_mutex. */
 	struct rb_root i_caps;           /* cap list */
+	unsigned i_dirty_caps;           /* mask of dirtied fields */
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */
 	struct list_head i_cap_delay_list;  /* for delayed cap release to mds */
@@ -380,6 +382,8 @@ static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 	spin_unlock(&ci->vfs_inode.i_lock);
 	return issued;
 }
+
+extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
 
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
@@ -643,6 +647,7 @@ extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
 extern int ceph_removexattr(struct dentry *, const char *);
 
 /* caps.c */
+extern const char *ceph_cap_string(int c);
 extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern int ceph_add_cap(struct inode *inode,

@@ -399,6 +399,9 @@ retry_snap:
 			ret = sync_page_range(inode, mapping, pos, ret);
 		}
 	}
+	if (ret >= 0)
+		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
+
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);

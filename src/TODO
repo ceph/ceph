@@ -46,6 +46,11 @@ timer
 
 
 caps
+- flatten Capability tracking of issued/pending caps.
+- exploit excl auth lease on client
+- issue excl leases to loner if open for write...
+
+
 
 - two types of cap events from mds -> client
   - cap issue .. in a reply, or an IMPORT cap op.
