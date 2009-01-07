@@ -822,6 +822,7 @@ struct ceph_mds_reply_cap {
 	__le32 caps;
 	__le32 seq, mseq;
 	__le64 realm;
+	__le32 ttl_ms;  /* ttl, in ms.  if readonly and unwanted. */
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_inode {

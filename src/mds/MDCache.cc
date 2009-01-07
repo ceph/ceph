@@ -1010,6 +1010,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       int client = p->first;
       Capability *newcap = oldin->add_client_cap(client, in->containing_realm);
       newcap->issue(cap->issued());
+      newcap->set_last_issue_stamp(cap->get_last_issue_stamp());
       newcap->client_follows = cap->client_follows;
       dout(10) << " cloning client" << client << " wr cap " << cap
 	       << " to " << newcap << " on cloned inode" << dendl;

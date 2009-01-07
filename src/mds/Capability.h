@@ -76,15 +76,17 @@ public:
     int32_t pending;
     snapid_t client_follows;
     capseq_t mseq;
+    utime_t last_issue_stamp;
     Export() {}
-    Export(int w, int i, int p, snapid_t cf, capseq_t s) : 
-      wanted(w), issued(i), pending(p), client_follows(cf), mseq(s) {}
+    Export(int w, int i, int p, snapid_t cf, capseq_t s, utime_t lis) : 
+      wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const {
       ::encode(wanted, bl);
       ::encode(issued, bl);
       ::encode(pending, bl);
       ::encode(client_follows, bl);
       ::encode(mseq, bl);
+      ::encode(last_issue_stamp, bl);
     }
     void decode(bufferlist::iterator &p) {
       ::decode(wanted, p);
@@ -92,6 +94,7 @@ public:
       ::decode(pending, p);
       ::decode(client_follows, p);
       ::decode(mseq, p);
+      ::decode(last_issue_stamp, p);
     }
   };
 
@@ -100,6 +103,7 @@ private:
   __u32 wanted_caps;     // what the client wants (ideally)
     //::decode(cap_history, bl);
 
+  utime_t last_issue_stamp;
 
   // simplest --------------------------
 #if 0
@@ -116,14 +120,15 @@ public:
   capseq_t issue(int c) {
     _pending = c;
     _issued |= c;
-    last_issue = ++last_sent;
+    //last_issue = 
+    ++last_sent;
     return last_sent;
   }
   void confirm_receipt(capseq_t seq, int caps) {
     if (seq == last_sent)
       _pending = _issued = caps;
   }    
-  bool is_null() { return !_issued && !_pending; }
+  bool is_null() { rinclude/eturn !_issued && !_pending; }
 #endif
 
   // track up to N revocations ---------
@@ -153,7 +158,8 @@ public:
       _revoke_seq[_num_revoke] = last_sent;
     }
     _pending = c;
-    last_issue = ++last_sent;
+    //last_issue = 
+    ++last_sent;
     return last_sent;
   }
   void confirm_receipt(capseq_t seq, int caps) {
@@ -185,8 +191,8 @@ public:
 
 
 private:
-  capseq_t last_sent, last_recv;
-  capseq_t last_issue;
+  capseq_t last_sent;
+  //capseq_t last_issue;
   capseq_t mseq;
 
   int suppress;
@@ -207,8 +213,7 @@ public:
     //_pending(0), _issued(0),
     _pending(0), _issued(0), _num_revoke(0),
     last_sent(s),
-    last_recv(s),
-    last_issue(0),
+    //last_issue(0),
     mseq(0),
     suppress(0), stale(false), releasing(0),
     client_follows(0),
@@ -217,8 +222,14 @@ public:
   capseq_t get_mseq() { return mseq; }
 
   capseq_t get_last_sent() { return last_sent; }
+  utime_t get_last_issue_stamp() { return last_issue_stamp; }
+  void touch() {
+    session_caps_item.move_to_back();
+  }
 
-  capseq_t get_last_issue() { return last_issue; }
+  void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
+
+  //capseq_t get_last_issue() { return last_issue; }
 
   bool is_suppress() { return suppress > 0; }
   void inc_suppress() { suppress++; }
@@ -241,7 +252,7 @@ public:
 
 
   Export make_export() {
-    return Export(wanted_caps, issued(), pending(), client_follows, mseq+1);
+    return Export(wanted_caps, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
   }
   void merge(Export& other) {
     // issued + pending
@@ -249,6 +260,7 @@ public:
     if (other.issued & ~newpending)
       issue(other.issued | newpending);
     issue(newpending);
+    last_issue_stamp = other.last_issue_stamp;
 
     client_follows = other.client_follows;
 
@@ -277,7 +289,7 @@ public:
   void encode(bufferlist &bl) const {
     ::encode(wanted_caps, bl);
     ::encode(last_sent, bl);
-    ::encode(last_recv, bl);
+    ::encode(last_issue_stamp, bl);
 
     ::encode(_pending, bl);
     ::encode(_issued, bl);
@@ -288,7 +300,7 @@ public:
   void decode(bufferlist::iterator &bl) {
     ::decode(wanted_caps, bl);
     ::decode(last_sent, bl);
-    ::decode(last_recv, bl);
+    ::decode(last_issue_stamp, bl);
 
     ::decode(_pending, bl);
     ::decode(_issued, bl);

@@ -212,6 +212,8 @@ struct md_config_t {
   int mds_client_prealloc_inos;
   bool mds_early_reply;
 
+  int mds_rdcap_ttl_ms;
+
   bool mds_log;
   int mds_log_max_events;
   int mds_log_max_segments;

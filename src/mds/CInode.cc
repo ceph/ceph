@@ -1358,16 +1358,20 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       int likes = get_caps_liked();
       int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
       cap->issue(issue);
+      cap->set_last_issue_stamp(g_clock.recent_now());
+      cap->touch();
       e.cap.caps = issue;
       e.cap.seq = cap->get_last_seq();
       dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = find_snaprealm()->inode->ino();
+      e.cap.ttl_ms = g_conf.mds_rdcap_ttl_ms;
     } else {
       e.cap.caps = 0;
       e.cap.seq = 0;
       e.cap.mseq = 0;
       e.cap.realm = 0;
+      e.cap.ttl_ms = 0;
     }
   }
   dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
