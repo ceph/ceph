@@ -343,7 +343,7 @@ md_config_t g_conf = {
   mds_client_prealloc_inos: 20,
   mds_early_reply: true,
 
-  mds_rdcap_ttl_ms: 30 * 10000,
+  mds_rdcap_ttl_ms: 60*1000,
 
   mds_log: true,
   mds_log_max_events: -1,

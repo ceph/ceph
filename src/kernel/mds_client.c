@@ -1930,6 +1930,7 @@ static void delayed_work(struct work_struct *work)
 		if (renew_caps)
 			send_renew_caps(mdsc, s);
 		trim_session_leases(s);
+		ceph_trim_session_rdcaps(s);
 		mutex_unlock(&s->s_mutex);
 		ceph_put_mds_session(s);
 

@@ -46,13 +46,11 @@ timer
 
 
 caps
-- issue excl leases to loner if open for write...
-
-
 - kclient
   - only pin caps with dirty metadata? and/or wanted != 0?
   - and/or, put unwanted caps on an lru list, and expire?
 - mds
+  - trim expired rdcaps
   - segregate wanted/unwanted caps?  rd/wr caps?
 
 

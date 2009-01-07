@@ -952,6 +952,12 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_ANY_FILE_WR ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
 
+/*
+ * these cap bits time out, if no others are held and nothing is
+ * registered as 'wanted' by the client.
+ */
+#define CEPH_CAP_EXPIREABLE (CEPH_CAP_PIN|CEPH_CAP_ANY_RDCACHE)
+
 
 static inline int ceph_caps_for_mode(int mode)
 {

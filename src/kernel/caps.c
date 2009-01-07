@@ -226,7 +226,7 @@ retry:
 		session->s_nr_caps++;
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
-	if ((cap->issued & ~(CEPH_CAP_ANY_RDCACHE|CEPH_CAP_PIN)) == 0) {
+	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
 		/* move to tail of session rdcaps lru */
 		if (!list_empty(&cap->session_rdcaps))
 		    list_del(&cap->session_rdcaps);
@@ -284,6 +284,15 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 			     cap, ceph_cap_string(cap->issued), cap->gen, gen);
 			continue;
 		}
+
+		if (time_after_eq(jiffies, cap->expires) &&
+		    (cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
+			dout(30, "__ceph_caps_issued %p cap %p issued %s "
+			     "but readonly and expired\n", &ci->vfs_inode,
+			     cap, ceph_cap_string(cap->issued));
+			continue;
+		}
+
 		dout(30, "__ceph_caps_issued %p cap %p issued %s\n",
 		     &ci->vfs_inode, cap, ceph_cap_string(cap->issued));
 		have |= cap->issued;
@@ -1665,3 +1674,43 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 	spin_unlock(&mdsc->cap_delay_lock);
 }
 
+
+/*
+ * caller must hold session s_mutex
+ */
+void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
+{
+	struct inode *inode;
+	struct ceph_cap *cap;
+	struct list_head *p, *n;
+	int wanted;
+
+	dout(10, "trim_rdcaps for mds%d\n", session->s_mds);
+	list_for_each_safe(p, n, &session->s_rdcaps) {
+		cap = list_entry(p, struct ceph_cap, session_rdcaps);
+
+		inode = &cap->ci->vfs_inode;
+		igrab(inode);
+		spin_lock(&inode->i_lock);
+
+		if (time_before(jiffies, cap->expires)) {
+			dout(20, " stopping at %p cap %p expires %lu > %lu\n",
+			     inode, cap, cap->expires, jiffies);
+			spin_unlock(&inode->i_lock);
+			iput(inode);
+			break;
+		}
+
+		/* wanted? */
+		wanted = __ceph_caps_wanted(cap->ci);
+		if (wanted == 0) {
+			dout(20, " dropping %p cap %p\n", inode, cap);
+			__ceph_remove_cap(cap);
+		} else {
+			dout(20, " keeping %p cap %p (wanted %s)\n", inode, cap,
+			     ceph_cap_string(wanted));
+		}
+		spin_unlock(&inode->i_lock);
+		iput(inode);
+	}
+}
