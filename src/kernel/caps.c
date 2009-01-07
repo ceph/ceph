@@ -177,9 +177,9 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
  */
 int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session,
-		 int fmode, unsigned issued,
+		 int fmode, unsigned issued, unsigned wanted,
 		 unsigned seq, unsigned mseq, u64 realmino,
-		 unsigned ttl_ms,
+		 unsigned ttl_ms, unsigned long ttl_from,
 		 struct ceph_cap *new_cap)
 {
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -207,6 +207,7 @@ retry:
 
 		cap->issued = cap->implemented = 0;
 		cap->flushing = 0;
+		cap->mds_wanted = wanted;
 		cap->mds = mds;
 
 		is_first = RB_EMPTY_ROOT(&ci->i_caps);  /* grab inode later */
@@ -247,7 +248,7 @@ retry:
 	cap->seq = seq;
 	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
-	cap->expires = jiffies + (ttl_ms * HZ / 1000);
+	cap->expires = ttl_from + (ttl_ms * HZ / 1000);
 	if (fmode >= 0)
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
@@ -449,14 +450,19 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
 	fc->wanted = cpu_to_le32(wanted);
 	fc->dirty = cpu_to_le32(dirty);
 	fc->ino = cpu_to_le64(ino);
+	fc->snap_follows = cpu_to_le64(follows);
+
 	fc->size = cpu_to_le64(size);
 	fc->max_size = cpu_to_le64(max_size);
-	fc->snap_follows = cpu_to_le64(follows);
 	if (mtime)
 		ceph_encode_timespec(&fc->mtime, mtime);
 	if (atime)
 		ceph_encode_timespec(&fc->atime, atime);
 	fc->time_warp_seq = cpu_to_le64(time_warp_seq);
+
+	fc->uid = cpu_to_le32(uid);
+	fc->gid = cpu_to_le32(gid);
+	fc->mode = cpu_to_le32(mode);
 
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
@@ -523,6 +529,8 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 		 */
 		wake = 1;
 	}
+
+	cap->mds_wanted = want;
 
 	keep = cap->issued;
 	flushing = cap->flushing;
@@ -694,7 +702,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop)
 	int file_wanted, used;
 	struct ceph_mds_session *session = NULL;    /* if set, i hold s_mutex */
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
-	int retain, revoking;
+	int want, retain, revoking;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
@@ -716,7 +724,9 @@ retry_locked:
 	file_wanted = __ceph_caps_file_wanted(ci);
 	used = __ceph_caps_used(ci);
 
-	retain = file_wanted | used;
+	want = file_wanted | used;
+	
+	retain = want;
 	if (!mdsc->stopping)
 		retain |= CEPH_CAP_PIN |
 			(S_ISDIR(inode->i_mode) ? CEPH_CAP_ANY_RDCACHE :
@@ -805,6 +815,10 @@ retry_locked:
 		if (!revoking && mdsc->stopping && (used == 0))
 			goto ack;
 
+		/* adjust wanted? */
+		if (cap->mds_wanted != want)
+			goto ack;
+
 		if ((cap->issued & ~retain) == 0)
 			continue;     /* nothing extra, all good */
 
@@ -847,7 +861,7 @@ ack:
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, session, cap, used, file_wanted|used, retain);
+		__send_cap(mdsc, session, cap, used, want, retain);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
@@ -1474,10 +1488,12 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	unsigned issued = le32_to_cpu(im->caps);
+	unsigned wanted = le32_to_cpu(im->wanted);
 	unsigned seq = le32_to_cpu(im->seq);
 	unsigned mseq = le32_to_cpu(im->migrate_seq);
 	u64 realmino = le64_to_cpu(im->realm);
 	struct ceph_snap_realm *realm;
+	unsigned long ttl_ms = le32_to_cpu(im->ttl_ms);
 
 	if (ci->i_cap_exporting_mds >= 0 &&
 	    ci->i_cap_exporting_mseq < mseq) {
@@ -1495,8 +1511,8 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 
 	realm = ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
 				       false);
-	ceph_add_cap(inode, session, -1, issued, seq, mseq, realmino,
-		     le32_to_cpu(im->ttl_ms), NULL);
+	ceph_add_cap(inode, session, -1, issued, wanted, seq, mseq, realmino,
+		     ttl_ms, jiffies - ttl_ms/2, NULL);
 	ceph_put_snap_realm(mdsc, realm);
 }
 
@@ -1683,21 +1699,19 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct list_head *p, *n;
-	int wanted;
+	int wanted, last_cap;
 
 	dout(10, "trim_rdcaps for mds%d\n", session->s_mds);
 	list_for_each_safe(p, n, &session->s_rdcaps) {
 		cap = list_entry(p, struct ceph_cap, session_rdcaps);
 
 		inode = &cap->ci->vfs_inode;
-		igrab(inode);
 		spin_lock(&inode->i_lock);
 
 		if (time_before(jiffies, cap->expires)) {
 			dout(20, " stopping at %p cap %p expires %lu > %lu\n",
 			     inode, cap, cap->expires, jiffies);
 			spin_unlock(&inode->i_lock);
-			iput(inode);
 			break;
 		}
 
@@ -1705,12 +1719,13 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 		wanted = __ceph_caps_wanted(cap->ci);
 		if (wanted == 0) {
 			dout(20, " dropping %p cap %p\n", inode, cap);
-			__ceph_remove_cap(cap);
+			last_cap = __ceph_remove_cap(cap);
 		} else {
 			dout(20, " keeping %p cap %p (wanted %s)\n", inode, cap,
 			     ceph_cap_string(wanted));
 		}
 		spin_unlock(&inode->i_lock);
-		iput(inode);
+		if (last_cap)
+			iput(inode);
 	}
 }

@@ -137,6 +137,7 @@ struct ceph_cap {
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemented (for tracking revocation) */
 	int flushing;     /* dirty fields being written back to mds */
+	int mds_wanted;
 	u32 seq, mseq, gen;
 	unsigned long expires;  /* if readonly and unwanted (jiffies) */
 };
@@ -654,9 +655,9 @@ extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session,
-			int fmode, unsigned issued,
+			int fmode, unsigned issued, unsigned wanted,
 			unsigned cap, unsigned seq, u64 realmino,
-			unsigned ttl_ms,
+			unsigned ttl_ms, unsigned long ttl_from,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);

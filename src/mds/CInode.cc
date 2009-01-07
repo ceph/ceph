@@ -1348,11 +1348,10 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     e.cap.mseq = 0;
     e.cap.realm = 0;
   } else {
-    if (valid && !cap && is_auth()) {
+    if (valid && !cap && is_auth())
       // add a new cap
-      cap = add_client_cap(client, find_snaprealm());
-      session->touch_cap(cap);
-    }
+      cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
+
     if (cap && valid) {
       bool loner = (get_loner() == client);
       int likes = get_caps_liked();
@@ -1361,8 +1360,9 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	issue |= CEPH_CAP_AUTH_EXCL; // | CEPH_CAP_XATTR_EXCL; 
       cap->issue(issue);
       cap->set_last_issue_stamp(g_clock.recent_now());
-      cap->touch();
+      cap->touch();   // move to back of session cap LRU
       e.cap.caps = issue;
+      e.cap.wanted = cap->wanted();
       e.cap.seq = cap->get_last_seq();
       dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
@@ -1373,6 +1373,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.seq = 0;
       e.cap.mseq = 0;
       e.cap.realm = 0;
+      e.cap.wanted = 0;
       e.cap.ttl_ms = 0;
     }
   }

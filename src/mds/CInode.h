@@ -30,6 +30,7 @@
 #include "LocalLock.h"
 #include "Capability.h"
 #include "snap.h"
+#include "SessionMap.h"
 
 #include <list>
 #include <vector>
@@ -528,7 +529,7 @@ public:
     if (c) return c->pending();
     return 0;
   }
-  Capability *add_client_cap(int client, SnapRealm *conrealm=0) {
+  Capability *add_client_cap(int client, Session *session, xlist<Capability*> *rdcaps_list, SnapRealm *conrealm=0) {
     if (client_caps.empty()) {
       get(PIN_CAPS);
       if (conrealm)
@@ -539,10 +540,12 @@ public:
     }
 
     assert(client_caps.count(client) == 0);
-    Capability *cap = client_caps[client] = new Capability;
-    cap->set_inode(this);
+    Capability *cap = client_caps[client] = new Capability(this, client, rdcaps_list);
+    if (session)
+      session->add_cap(cap);
+
     cap->client_follows = first-1;
-   
+  
     containing_realm->add_cap(client, cap);
     
     return cap;
@@ -552,6 +555,7 @@ public:
     Capability *cap = client_caps[client];
 
     cap->session_caps_item.remove_myself();
+    cap->rdcaps_item.remove_myself();
     containing_realm->remove_cap(client, cap);
 
     delete cap;
@@ -575,12 +579,12 @@ public:
     containing_realm = realm;
   }
 
-  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr) {
+  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session, xlist<Capability*> *rdcaps_list) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      cap = add_client_cap(client);
+      cap = add_client_cap(client, session, rdcaps_list);
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }

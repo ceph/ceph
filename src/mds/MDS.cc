@@ -1281,6 +1281,7 @@ bool MDS::_dispatch(Message *m)
     // trim cache
     mdcache->trim();
     mdcache->trim_client_leases();
+    mdcache->trim_client_rdcaps();
   }
 
   

@@ -542,8 +542,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    cap = in->add_client_cap(my_client, realm);
-    session->touch_cap(cap);
+    cap = in->add_client_cap(my_client, session, &mdcache->client_rdcaps, realm);
     cap->set_wanted(my_want);
     cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
     is_new = true;

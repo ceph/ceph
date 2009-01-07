@@ -425,8 +425,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	// we recovered it, and it's ours.  take note.
 	dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
 		 << " on " << *in << dendl;
-	Capability *cap = in->reconnect_cap(from, p->second.capinfo);
-	session->touch_cap(cap);
+	in->reconnect_cap(from, p->second.capinfo, session, &mdcache->client_rdcaps);
 	mds->mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
 	continue;
       }

@@ -410,6 +410,13 @@ public:
     r->ttl = ttl;
   }
 
+  void trim_client_leases();
+
+  // -- client caps --
+  xlist<Capability*> client_rdcaps;
+  
+  void trim_client_rdcaps();
+
 
   // -- discover --
   // waiters
@@ -742,8 +749,6 @@ public:
 		  map<int,class MCacheExpire*>& expiremap);
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
-
-  void trim_client_leases();
 
   // shutdown
   void shutdown_start();

@@ -29,6 +29,7 @@ class CInode;
 
 #include "Capability.h"
 
+
 /* 
  * session
  */
@@ -100,7 +101,7 @@ public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
 
-  void touch_cap(Capability *cap) {
+  void add_cap(Capability *cap) {
     caps.push_back(&cap->session_caps_item);
   }
   void touch_lease(ClientLease *r) {

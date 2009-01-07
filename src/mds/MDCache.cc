@@ -1008,7 +1008,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	cap->client_follows < last) {
       // clone to oldin
       int client = p->first;
-      Capability *newcap = oldin->add_client_cap(client, in->containing_realm);
+      Capability *newcap = oldin->add_client_cap(client, 0, &client_rdcaps, in->containing_realm);
+      cap->session_caps_item.get_xlist()->push_back(&newcap->session_caps_item);
       newcap->issue(cap->issued());
       newcap->set_last_issue_stamp(cap->get_last_issue_stamp());
       newcap->client_follows = cap->client_follows;
@@ -3629,8 +3630,7 @@ void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& 
   assert(session);
 
   // add cap
-  Capability *cap = in->reconnect_cap(client, icr);
-  session->touch_cap(cap);
+  Capability *cap = in->reconnect_cap(client, icr, session, &client_rdcaps);
 
   do_cap_import(session, in, cap);
 }
@@ -4789,6 +4789,42 @@ void MDCache::trim_client_leases()
   }
 }
 
+
+void MDCache::trim_client_rdcaps()
+{
+  utime_t cutoff = g_clock.now();
+  cutoff -= g_conf.mds_rdcap_ttl_ms / 1000.0;
+  
+  dout(10) << "trim_client_rdcaps" << dendl;
+
+  xlist<Capability*>::iterator p = client_rdcaps.begin();
+  while (!p.end()) {
+    Capability *cap = *p;
+    ++p;
+
+    CInode *in = cap->get_inode();
+    int client = cap->get_client();
+
+    if (cap->get_last_issue_stamp() == utime_t()) {
+      dout(20) << " skipping client" << client
+	       << " stamp " << cap->get_last_issue_stamp()
+	       << " on " << *in << dendl;
+      continue;
+    }
+    if (cap->get_last_issue_stamp() > cutoff) {
+      dout(20) << " stopping at client" << client
+	       << " stamp " << cap->get_last_issue_stamp() << " > cutoff " << cutoff
+	       << " on " << *in << dendl;
+      break;
+    }
+
+    dout(10) << " expiring client" << client
+	     << " issued " << ccap_string(cap->issued())
+	     << " wanted " << ccap_string(cap->wanted())
+	     << " on " << *in << dendl;
+    in->remove_client_cap(client);
+  }
+}
 
 
 // =========================================================================================

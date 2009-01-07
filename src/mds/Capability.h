@@ -24,7 +24,6 @@ using namespace std;
 
 #include "config.h"
 
-
 /*
 
   Capability protocol notes.
@@ -100,10 +99,13 @@ public:
 
 private:
   CInode *inode;
-  __u32 wanted_caps;     // what the client wants (ideally)
+  int client;
+
+  __u32 _wanted;     // what the client wants (ideally)
     //::decode(cap_history, bl);
 
   utime_t last_issue_stamp;
+
 
   // simplest --------------------------
 #if 0
@@ -131,6 +133,7 @@ public:
   bool is_null() { rinclude/eturn !_issued && !_pending; }
 #endif
 
+
   // track up to N revocations ---------
 #if 1
   static const int _max_revoke = 3;
@@ -157,6 +160,8 @@ public:
       _revoke_before[_num_revoke] |= _pending|_issued;
       _revoke_seq[_num_revoke] = last_sent;
     }
+
+    check_rdcaps_list(_pending, c, _wanted, _wanted);
     _pending = c;
     //last_issue = 
     ++last_sent;
@@ -204,27 +209,28 @@ public:
   snapid_t client_follows;
   
   xlist<Capability*>::item session_caps_item;
+  xlist<Capability*> *rdcaps_list;
+  xlist<Capability*>::item rdcaps_item;
 
   xlist<Capability*>::item snaprealm_caps_item;
 
-  Capability(CInode *i=0, int want=0, capseq_t s=0) :
-    inode(i),
-    wanted_caps(want),
-    //_pending(0), _issued(0),
+  Capability(CInode *i, int c, xlist<Capability*> *rl) : 
+    inode(i), client(c),
+    _wanted(0),
     _pending(0), _issued(0), _num_revoke(0),
-    last_sent(s),
-    //last_issue(0),
+    last_sent(0),
     mseq(0),
     suppress(0), stale(false), releasing(0),
     client_follows(0),
-    session_caps_item(this), snaprealm_caps_item(this) { }
+    session_caps_item(this), rdcaps_list(rl), rdcaps_item(this), snaprealm_caps_item(this) { }
   
   capseq_t get_mseq() { return mseq; }
 
   capseq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
   void touch() {
-    session_caps_item.move_to_back();
+    if (rdcaps_item.is_on_xlist())
+      rdcaps_item.move_to_back();
   }
 
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
@@ -239,20 +245,33 @@ public:
   void set_stale(bool b) { stale = b; }
 
   CInode *get_inode() { return inode; }
-  void set_inode(CInode *i) { inode = i; }
-
+  int get_client() { return client; }
 
   // caps this client wants to hold
-  int wanted() { return wanted_caps; }
+  int wanted() { return _wanted; }
   void set_wanted(int w) {
-    wanted_caps = w;
+    check_rdcaps_list(_pending, _pending, _wanted, w);
+    _wanted = w;
   }
 
   capseq_t get_last_seq() { return last_sent; }
 
 
+  void check_rdcaps_list(int o, int n, int ow, int nw)
+  {
+    bool wastrimmable = rdcaps_item.is_on_xlist();//(o & ~CEPH_CAP_EXPIREABLE) == 0 && ow == 0;
+    bool istrimmable =  (n & ~CEPH_CAP_EXPIREABLE) == 0 && nw == 0;
+    
+    if (!wastrimmable && istrimmable) 
+      rdcaps_list->push_back(&rdcaps_item);
+    else if (wastrimmable && !istrimmable)
+      rdcaps_item.remove_myself();
+  }
+
+
+  // -- exports --
   Export make_export() {
-    return Export(wanted_caps, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
+    return Export(_wanted, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
   }
   void merge(Export& other) {
     // issued + pending
@@ -265,7 +284,7 @@ public:
     client_follows = other.client_follows;
 
     // wanted
-    wanted_caps = wanted_caps | other.wanted;
+    _wanted = _wanted | other.wanted;
     mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
@@ -276,7 +295,7 @@ public:
     issue(newpending);
 
     // wanted
-    wanted_caps = wanted_caps | otherwanted;
+    _wanted = _wanted | otherwanted;
   }
 
   void revoke() {
@@ -287,10 +306,10 @@ public:
 
   // serializers
   void encode(bufferlist &bl) const {
-    ::encode(wanted_caps, bl);
     ::encode(last_sent, bl);
     ::encode(last_issue_stamp, bl);
 
+    ::encode(_wanted, bl);
     ::encode(_pending, bl);
     ::encode(_issued, bl);
     ::encode(_num_revoke, bl);
@@ -298,10 +317,10 @@ public:
     ::encode_array_nohead(_revoke_seq, _num_revoke, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(wanted_caps, bl);
     ::decode(last_sent, bl);
     ::decode(last_issue_stamp, bl);
 
+    ::decode(_wanted, bl);
     ::decode(_pending, bl);
     ::decode(_issued, bl);
     ::decode(_num_revoke, bl);
