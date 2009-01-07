@@ -325,8 +325,6 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	INIT_LIST_HEAD(&s->s_caps);
 	INIT_LIST_HEAD(&s->s_rdcaps);
 	s->s_nr_caps = 0;
-	INIT_LIST_HEAD(&s->s_inode_leases);
-	INIT_LIST_HEAD(&s->s_dentry_leases);
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
 
@@ -723,63 +721,11 @@ static void revoke_dentry_lease(struct dentry *dentry)
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
 	if (di) {
-		list_del(&di->lease_item);
+		ceph_put_mds_session(di->lease_session);
 		kfree(di);
 		dentry->d_fsdata = NULL;
 	}
 	spin_unlock(&dentry->d_lock);
-	if (di)
-		dput(dentry);
-}
-
-/*
- * remove old/expired leases for this session.  unpin parent
- * inode/dentries, so that [di]cache can prune them.
- *
- * caller must hold session s_mutex
- */
-static void trim_session_leases(struct ceph_mds_session *session)
-{
-	struct ceph_dentry_info *di;
-	struct dentry *dentry;
-
-	dout(20, "trim_session_leases on session %p\n", session);
-
-	/* dentries */
-	while (!list_empty(&session->s_dentry_leases)) {
-		di = list_first_entry(&session->s_dentry_leases,
-				      struct ceph_dentry_info, lease_item);
-		dentry = di->dentry;
-		spin_lock(&dentry->d_lock);
-		if (time_before(jiffies, dentry->d_time)) {
-			spin_unlock(&dentry->d_lock);
-			break;
-		}
-		dout(20, "trim_session_leases dentry %p\n", dentry);
-		list_del(&di->lease_item);
-		kfree(di);
-		dentry->d_fsdata = NULL;
-		spin_unlock(&dentry->d_lock);
-		dput(dentry);
-	}
-}
-
-/*
- * caller must hold session s_mutex
- */
-static void remove_session_leases(struct ceph_mds_session *session)
-{
-	struct ceph_dentry_info *di;
-
-	dout(10, "remove_session_leases on %p\n", session);
-
-	/* dentries */
-	while (!list_empty(&session->s_dentry_leases)) {
-		di = list_entry(session->s_dentry_leases.next,
-				struct ceph_dentry_info, lease_item);
-		dout(10, "removing lease from dentry %p\n", di->dentry);
-		revoke_dentry_lease(di->dentry);
-	}
 }
 
 /*
@@ -1034,7 +980,6 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	case CEPH_SESSION_CLOSE:
 		unregister_session(mdsc, mds);
 		remove_session_caps(session);
-		remove_session_leases(session);
 		complete(&session->s_completion); /* for good measure */
 		complete(&mdsc->session_close_waiters);
 		kick_requests(mdsc, mds, 0);      /* cur only */
@@ -1824,16 +1769,10 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	int dnamelen = 0;
 
 	BUG_ON(inode == NULL);
-
-	/*
-	 * NOTE: if the inode and dentry leases come from different
-	 * mds's, we only release the inode lease.  That's rare, so
-	 * it's no big deal: the dentry lease will just get revoked
-	 * explicitly.
-	 */
+	BUG_ON(dentry == NULL);
 
 	/* is dentry lease valid? */
-	if ((mask & CEPH_LOCK_DN) && dentry) {
+	if (mask & CEPH_LOCK_DN) {
 		spin_lock(&dentry->d_lock);
 		di = ceph_dentry(dentry);
 		if (di &&
@@ -1932,7 +1871,6 @@ static void delayed_work(struct work_struct *work)
 		mutex_lock(&s->s_mutex);
 		if (renew_caps)
 			send_renew_caps(mdsc, s);
-		trim_session_leases(s);
 		ceph_trim_session_rdcaps(s);
 		mutex_unlock(&s->s_mutex);
 		ceph_put_mds_session(s);
@@ -1980,12 +1918,11 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 	dout(10, "drop_leases\n");
 	mutex_lock(&mdsc->mutex);
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *s = __ceph_get_mds_session(mdsc, i);
+		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
 		if (!s)
 			continue;
 		mutex_unlock(&mdsc->mutex);
 		mutex_lock(&s->s_mutex);
-		remove_session_leases(s);
 		mutex_unlock(&s->s_mutex);
 		ceph_put_mds_session(s);
 		mutex_lock(&mdsc->mutex);

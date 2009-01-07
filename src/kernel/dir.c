@@ -786,7 +786,13 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 
 static void ceph_dentry_release(struct dentry *dentry)
 {
-	BUG_ON(dentry->d_fsdata);
+	struct ceph_dentry_info *di = ceph_dentry(dentry);
+	
+	if (di) {
+		ceph_put_mds_session(di->lease_session);
+		kfree(di);
+		dentry->d_fsdata = NULL;
+	}
 }
 
 static int ceph_snapdir_dentry_revalidate(struct dentry *dentry,

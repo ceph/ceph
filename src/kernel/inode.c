@@ -614,7 +614,7 @@ static void update_dentry_lease(struct dentry *dentry,
 	if (dentry->d_time != 0 &&
 	    di && di->lease_gen == session->s_cap_gen &&
 	    time_before(ttl, dentry->d_time))
-		goto fail_unlock;  /* we already have a newer lease. */
+		goto out_unlock;  /* we already have a newer lease. */
 
 	if (!di) {
 		spin_unlock(&dentry->d_lock);
@@ -625,34 +625,22 @@ static void update_dentry_lease(struct dentry *dentry,
 		spin_lock(&dentry->d_lock);
 		if (dentry->d_fsdata) {
 			kfree(di);   /* lost a race! */
-			goto fail_unlock;
+			goto out_unlock;
 		}
-		di->dentry = dentry;
 		dentry->d_fsdata = di;
-		di->lease_session = session;
+		di->lease_session = ceph_get_mds_session(session);
 		di->lease_gen = session->s_cap_gen;
-		list_add(&di->lease_item, &session->s_dentry_leases);
 		is_new = 1;
-	} else {
-		/* touch existing */
-		if (di->lease_session != session)
-			goto fail_unlock;
-		list_move_tail(&di->lease_item, &session->s_dentry_leases);
-	}
+	} else if (di->lease_session != session)
+		goto out_unlock;
 	dentry->d_time = ttl;
+out_unlock:
 	spin_unlock(&dentry->d_lock);
-	if (is_new) {
-		dout(10, "lease dget on %p\n", dentry);
-		dget(dentry);
-	}
 	return;
-
-fail_unlock:
-	spin_unlock(&dentry->d_lock);
 }
 
 /*
- * check if dentry lease is valid
+ * check if dentry lease is valid.  if not, delete it.
  */
 int ceph_dentry_lease_valid(struct dentry *dentry)
 {
@@ -673,8 +661,13 @@ int ceph_dentry_lease_valid(struct dentry *dentry)
 
 		if (di->lease_gen == gen &&
 		    time_before(jiffies, dentry->d_time) &&
-		    time_before(jiffies, ttl))
+		    time_before(jiffies, ttl)) {
 			valid = 1;
+		} else {
+			ceph_put_mds_session(di->lease_session);
+			kfree(di);
+			dentry->d_fsdata = NULL;
+		}
 	}
 	spin_unlock(&dentry->d_lock);
 	dout(20, "dentry_lease_valid - dentry %p = %d\n", dentry, valid);
