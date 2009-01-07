@@ -368,6 +368,8 @@ static void unregister_session(struct ceph_mds_client *mdsc, int mds)
  */
 static void get_request(struct ceph_mds_request *req)
 {
+	dout(10, "get_request %p %d -> %d\n", req, 
+	     atomic_read(&req->r_ref), atomic_read(&req->r_ref)+1);
 	atomic_inc(&req->r_ref);
 }
 
@@ -414,7 +416,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
  *
  * called under mdsc->mutex.
  */
-static struct ceph_mds_request *__get_request(struct ceph_mds_client *mdsc,
+static struct ceph_mds_request *__lookup_request(struct ceph_mds_client *mdsc,
 					     u64 tid)
 {
 	struct ceph_mds_request *req;
@@ -1298,7 +1300,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	/* get request, session */
 	tid = le64_to_cpu(head->tid);
 	mutex_lock(&mdsc->mutex);
-	req = __get_request(mdsc, tid);
+	req = __lookup_request(mdsc, tid);
 	if (!req) {
 		dout(1, "handle_reply on unknown tid %llu\n", tid);
 		mutex_unlock(&mdsc->mutex);
@@ -1310,6 +1312,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		derr(1, "got reply on %llu, mds%d got more than one reply\n",
 		     tid, mds);
 		mutex_unlock(&mdsc->mutex);
+		ceph_mdsc_put_request(req);
 		return;
 	}
 	if (req->r_session && req->r_session->s_mds != mds) {
@@ -1408,7 +1411,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	ceph_decode_8(&p, must_resend);
 
 	mutex_lock(&mdsc->mutex);
-	req = __get_request(mdsc, tid);
+	req = __lookup_request(mdsc, tid);
 	if (!req) {
 		dout(10, "forward %llu dne\n", tid);
 		goto out;  /* dup reply? */
