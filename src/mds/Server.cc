@@ -5106,7 +5106,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 void Server::handle_client_lssnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = req->get_orig_source().num();
+  //int client = req->get_orig_source().num();
 
   // traverse to path
   vector<CDentry*> trace;
@@ -5171,7 +5171,6 @@ void Server::handle_client_lssnap(MDRequest *mdr)
       ::encode(p->second->get_long_name(), dnbl);
     encode_infinite_lease(dnbl);
     diri->encode_inodestat(dnbl, mdr->session, p->first);
-    mds->locker->issue_client_lease(diri, client, dnbl, now, mdr->session);
     num++;
   }
 
