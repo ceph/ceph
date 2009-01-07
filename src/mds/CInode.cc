@@ -1357,6 +1357,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       bool loner = (get_loner() == client);
       int likes = get_caps_liked();
       int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
+      if (loner && (issue & CEPH_CAP_FILE_EXCL))
+	issue |= CEPH_CAP_AUTH_EXCL; // | CEPH_CAP_XATTR_EXCL; 
       cap->issue(issue);
       cap->set_last_issue_stamp(g_clock.recent_now());
       cap->touch();
