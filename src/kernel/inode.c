@@ -1392,7 +1392,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 
 	spin_lock(&inode->i_lock);
 	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
-		dout(10, " holding auth EXCL, doing locally\n");
+		dout(10, "chown holding auth EXCL, doing locally\n");
 		if (ia_valid & ATTR_UID)
 			inode->i_uid = attr->ia_uid;
 		if (ia_valid & ATTR_GID)
@@ -1436,7 +1436,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 
 	spin_lock(&inode->i_lock);
 	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
-		dout(10, " holding auth EXCL, doing locally\n");
+		dout(10, "chmod holding auth EXCL, doing locally\n");
 		inode->i_mode = attr->ia_mode;
 		inode->i_ctime = CURRENT_TIME;
 		ci->i_dirty_caps |= CEPH_CAP_AUTH_EXCL;

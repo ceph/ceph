@@ -727,10 +727,15 @@ retry_locked:
 	want = file_wanted | used;
 	
 	retain = want;
-	if (!mdsc->stopping)
+	if (!mdsc->stopping) {
 		retain |= CEPH_CAP_PIN |
 			(S_ISDIR(inode->i_mode) ? CEPH_CAP_ANY_RDCACHE :
 			 CEPH_CAP_ANY_RD);
+
+		/* keep any EXCL bits too, while we are holding caps anyway */
+		if (want)
+			retain |= CEPH_CAP_ANY_EXCL;
+	}
 	retain &= ~drop;
 
 	dout(10, "check_caps %p file_wanted %s used %s retain %s issued %s\n",
@@ -815,12 +820,9 @@ retry_locked:
 		if (!revoking && mdsc->stopping && (used == 0))
 			goto ack;
 
-		/* adjust wanted? */
-		if (cap->mds_wanted != want)
-			goto ack;
-
-		if ((cap->issued & ~retain) == 0)
-			continue;     /* nothing extra, all good */
+		if ((cap->issued & ~retain) == 0 &&
+		    cap->mds_wanted == want)
+			continue;     /* nothing extra, wanted is correct */
 
 		/* delay cap release for a bit? */
 		if (!is_delayed &&
@@ -1699,10 +1701,12 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct list_head *p, *n;
-	int wanted, last_cap;
+	int wanted;
 
 	dout(10, "trim_rdcaps for mds%d\n", session->s_mds);
 	list_for_each_safe(p, n, &session->s_rdcaps) {
+		int last_cap = 0;
+
 		cap = list_entry(p, struct ceph_cap, session_rdcaps);
 
 		inode = &cap->ci->vfs_inode;
