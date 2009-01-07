@@ -676,7 +676,7 @@ void ceph_flush_snaps(struct ceph_inode_info *ci)
  * @is_delayed indicates caller is delayed work and we should not
  * delay further.
  */
-void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed)
+void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -712,6 +712,7 @@ retry_locked:
 		retain |= CEPH_CAP_PIN |
 			(S_ISDIR(inode->i_mode) ? CEPH_CAP_ANY_RDCACHE :
 			 CEPH_CAP_ANY_RD);
+	retain &= ~drop;
 
 	dout(10, "check_caps %p file_wanted %s used %s retain %s issued %s\n",
 	     inode, ceph_cap_string(file_wanted), ceph_cap_string(used),
@@ -771,7 +772,7 @@ retry_locked:
 			dout(10, "mds%d revoking %s\n", cap->mds,
 			     ceph_cap_string(revoking));
 
-		/* request larger max_size from MDS? */
+		/* request larger max_size from MDS& ~drop;? */
 		if (ci->i_wanted_max_size > ci->i_max_size &&
 		    ci->i_wanted_max_size > ci->i_requested_max_size)
 			goto ack;
@@ -850,7 +851,6 @@ ack:
 	if (took_snap_rwsem)
 		up_read(&mdsc->snap_rwsem);
 }
-
 
 /*
  * Track references to capabilities we hold, so that we don't release
@@ -988,7 +988,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	     last ? "last" : "");
 
 	if (last && !flushsnaps)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 	else if (flushsnaps)
 		ceph_flush_snaps(ci);
 	if (wake)
@@ -1050,7 +1050,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	spin_unlock(&inode->i_lock);
 
 	if (last) {
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 	} else if (last_snap) {
 		ceph_flush_snaps(ci);
 		wake_up(&ci->i_cap_wq);
@@ -1619,7 +1619,7 @@ done:
 	ceph_put_mds_session(session);
 
 	if (check_caps)
-		ceph_check_caps(ceph_inode(inode), 1);
+		ceph_check_caps(ceph_inode(inode), 1, 0);
 	if (inode)
 		iput(inode);
 	return;
@@ -1659,14 +1659,9 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		list_del_init(&ci->i_cap_delay_list);
 		spin_unlock(&mdsc->cap_delay_lock);
 		dout(10, "check_delayed_caps on %p\n", &ci->vfs_inode);
-		ceph_check_caps(ci, 1);
+		ceph_check_caps(ci, 1, 0);
 		iput(&ci->vfs_inode);
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
-}
-
-void ceph_caps_release(struct inode *inode, int mask)
-{
-	/* TODO */
 }
 

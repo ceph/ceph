@@ -51,7 +51,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	kfree(path);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.setlayout.layout = layout;
-	ceph_caps_release(inode, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

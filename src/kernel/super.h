@@ -667,9 +667,12 @@ extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);
 extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 			       struct ceph_mds_session **psession);
-extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed);
+extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int drop);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
-extern void ceph_caps_release(struct inode *inode, int mask);
+extern inline void ceph_release_caps(struct inode *inode, int mask)
+{
+	ceph_check_caps(ceph_inode(inode), 1, mask);
+}
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

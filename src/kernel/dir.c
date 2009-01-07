@@ -437,7 +437,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mknod.mode = cpu_to_le32(mode);
 	rhead->args.mknod.rdev = cpu_to_le32(rdev);
-	ceph_caps_release(dir, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (!err && req->r_reply_info.trace_numd == 0) {
 		/*
@@ -511,7 +511,7 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(req);
 	}
 	req->r_locked_dir = dir;
-	ceph_caps_release(dir, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	if (err)
@@ -567,7 +567,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	rhead = req->r_request->front.iov_base;
 	rhead->args.mkdir.mode = cpu_to_le32(mode);
 
-	ceph_caps_release(dir, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	if (err < 0)
@@ -613,7 +613,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	req->r_last_dentry = dget(dentry); /* use this dentry in fill_trace */
 	req->r_locked_dir = old_dentry->d_inode;
 
-	ceph_caps_release(dir, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (err) {
 		d_drop(dentry);
@@ -677,10 +677,10 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 
 	req->r_locked_dir = dir;  /* by VFS */
 
-	ceph_caps_release(dir, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	ceph_mdsc_lease_release(mdsc, dir, dentry,
 				CEPH_LOCK_DN);
-	ceph_caps_release(inode, CEPH_CAP_LINK_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_LINK_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -725,11 +725,11 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	req->r_old_dentry = dget(old_dentry);
 	req->r_last_dentry = dget(new_dentry);
 	req->r_locked_dir = new_dir;
-	ceph_caps_release(old_dir, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(old_dir, CEPH_CAP_FILE_RDCACHE);
 	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry,
 				CEPH_LOCK_DN);
 	if (new_dentry->d_inode)
-		ceph_caps_release(new_dentry->d_inode, CEPH_CAP_FILE_RDCACHE);
+		ceph_release_caps(new_dentry->d_inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	if (!err && req->r_reply_info.trace_numd == 0) {
 		/*

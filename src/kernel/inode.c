@@ -1188,7 +1188,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 	} else {
 		spin_unlock(&inode->i_lock);
 	}
@@ -1212,7 +1212,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last && ci->i_vino.snap == CEPH_NOSNAP)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 }
 
 
@@ -1273,7 +1273,7 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 	spin_unlock(&inode->i_lock);
 
 	if (check)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0);
 out:
 	iput(inode);
 }
@@ -1319,7 +1319,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
 		truncate_inode_pages(inode->i_mapping, to);
 		if (wrbuffer_refs == 0)
-			ceph_check_caps(ci, 0);
+			ceph_check_caps(ci, 0, 0);
 	} else {
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 	}
@@ -1415,7 +1415,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 		mask |= CEPH_CHOWN_GID;
 	}
 	reqh->args.chown.mask = cpu_to_le32(mask);
-	ceph_caps_release(inode, CEPH_CAP_AUTH_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "chown result %d\n", err);
@@ -1448,7 +1448,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
-	ceph_caps_release(inode, CEPH_CAP_AUTH_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "chmod result %d\n", err);
@@ -1517,7 +1517,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	if (ia_valid & ATTR_MTIME)
 		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
 
-	ceph_caps_release(inode, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "utime result %d\n", err);
@@ -1560,7 +1560,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-	ceph_caps_release(inode, CEPH_CAP_FILE_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);
@@ -1984,7 +1984,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_request->hdr.data_len = cpu_to_le32(size);
 	req->r_request->hdr.data_off = cpu_to_le32(0);
 
-	ceph_caps_release(inode, CEPH_CAP_XATTR_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
@@ -2028,7 +2028,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	ceph_caps_release(inode, CEPH_CAP_XATTR_RDCACHE);
+	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 	return err;

@@ -925,7 +925,7 @@ static void check_all_caps(struct ceph_mds_client *mdsc,
 
 		igrab(inode);
 		mutex_unlock(&session->s_mutex);
-		ceph_check_caps(ceph_inode(inode), 1);
+		ceph_check_caps(ceph_inode(inode), 1, 0);
 		mutex_lock(&session->s_mutex);
 		iput(inode);
 	}
