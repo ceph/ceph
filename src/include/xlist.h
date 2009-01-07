@@ -45,12 +45,10 @@ public:
     }
     void move_to_front() {
       assert(_list);
-      _list->remove(this);
       _list->push_front(this);
     }
     void move_to_back() {
       assert(_list);
-      _list->remove(this);
       _list->push_back(this);
     }
   };

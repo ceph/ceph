@@ -493,6 +493,7 @@ no_change:
 			ceph_add_cap(inode, session, cap_fmode,
 				     info->cap.caps, info->cap.seq,
 				     info->cap.mseq, info->cap.realm,
+				     info->cap.ttl_ms,
 				     NULL);
 		} else {
 			spin_lock(&inode->i_lock);

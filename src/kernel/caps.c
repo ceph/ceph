@@ -179,6 +179,7 @@ int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session,
 		 int fmode, unsigned issued,
 		 unsigned seq, unsigned mseq, u64 realmino,
+		 unsigned ttl_ms,
 		 struct ceph_cap *new_cap)
 {
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -212,17 +213,24 @@ retry:
 		cap->ci = ci;
 		__insert_cap_node(ci, cap);
 
-		/* add to session cap list */
-		cap->session = session;
-		list_add(&cap->session_caps, &session->s_caps);
-		session->s_nr_caps++;
-
 		/* clear out old exporting info?  (i.e. on cap import) */
 		if (ci->i_cap_exporting_mds == mds) {
 			ci->i_cap_exporting_issued = 0;
 			ci->i_cap_exporting_mseq = 0;
 			ci->i_cap_exporting_mds = -1;
 		}
+
+		/* add to session cap list */
+		cap->session = session;
+		list_add(&cap->session_caps, &session->s_caps);
+		session->s_nr_caps++;
+		INIT_LIST_HEAD(&cap->session_rdcaps);
+	}
+	if ((cap->issued & ~(CEPH_CAP_ANY_RDCACHE|CEPH_CAP_PIN)) == 0) {
+		/* move to tail of session rdcaps lru */
+		if (!list_empty(&cap->session_rdcaps))
+		    list_del(&cap->session_rdcaps);
+		list_add_tail(&cap->session_rdcaps, &session->s_rdcaps);
 	}
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
@@ -239,6 +247,7 @@ retry:
 	cap->seq = seq;
 	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
+	cap->expires = jiffies + (ttl_ms * HZ / 1000);
 	if (fmode >= 0)
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
@@ -320,6 +329,8 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 
 	/* remove from session list */
 	list_del_init(&cap->session_caps);
+	if (!list_empty(&cap->session_rdcaps))
+		list_del_init(&cap->session_rdcaps);
 	session->s_nr_caps--;
 
 	/* remove from inode list */
@@ -1475,7 +1486,8 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 
 	realm = ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
 				       false);
-	ceph_add_cap(inode, session, -1, issued, seq, mseq, realmino, NULL);
+	ceph_add_cap(inode, session, -1, issued, seq, mseq, realmino,
+		     le32_to_cpu(im->ttl_ms), NULL);
 	ceph_put_snap_realm(mdsc, realm);
 }
 

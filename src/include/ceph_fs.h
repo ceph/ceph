@@ -1022,6 +1022,7 @@ struct ceph_mds_caps {
 	__le32 migrate_seq;
 	__le64 snap_follows;
 	__le32 snap_trace_len;
+	__le32 ttl_ms;  /* for IMPORT op only */
 
 	/* authlock */
 	__le32 uid, gid, mode;

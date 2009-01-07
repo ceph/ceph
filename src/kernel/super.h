@@ -131,12 +131,14 @@ struct ceph_cap {
 	struct ceph_inode_info *ci;
 	struct rb_node ci_node;         /* per-ci cap tree */
 	struct ceph_mds_session *session;
-	struct list_head session_caps;  /* per-session caplist */
+	struct list_head session_caps;   /* per-session caplist */
+	struct list_head session_rdcaps; /* per-session rdonly caps */
 	int mds;
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemented (for tracking revocation) */
 	int flushing;     /* dirty fields being written back to mds */
 	u32 seq, mseq, gen;
+	unsigned long expires;  /* if readonly and unwanted (jiffies) */
 };
 
 /*
@@ -654,6 +656,7 @@ extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session,
 			int fmode, unsigned issued,
 			unsigned cap, unsigned seq, u64 realmino,
+			unsigned ttl_ms,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);
