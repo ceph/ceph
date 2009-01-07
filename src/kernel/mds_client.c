@@ -84,7 +84,8 @@ static int parse_reply_info_trace(void **p, void *end,
 	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
 					 sizeof(*info->trace_dir) +
 					 sizeof(*info->trace_dname) +
-					 sizeof(*info->trace_dname_len)),
+					 sizeof(*info->trace_dname_len) +
+					 sizeof(*info->trace_dlease)),
 				 GFP_NOFS);
 	if (info->trace_in == NULL) {
 		err = -ENOMEM;
