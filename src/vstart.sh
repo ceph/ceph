@@ -109,7 +109,7 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 # figure machine's ip
 HOSTNAME=`hostname`
-IP=`host $HOSTNAME | grep $HOSTNAME | cut -d ' ' -f 4`
+IP=`host $HOSTNAME | grep 'has address' | cut -d ' ' -f 4`
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
 [ "$CEPH_PORT" == "" ] && CEPH_PORT=6789
 echo hostname $HOSTNAME
