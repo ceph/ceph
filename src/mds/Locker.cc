@@ -1395,6 +1395,7 @@ void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int clie
   
 
 
+/*
 int Locker::issue_client_lease(CInode *in, int client, 
 			       bufferlist &bl, utime_t now, Session *session)
 {
@@ -1408,6 +1409,7 @@ int Locker::issue_client_lease(CInode *in, int client,
   _issue_client_lease(in, mask, pool, client, bl, now, session);
   return mask;
 }
+*/
 
 int Locker::issue_client_lease(CDentry *dn, int client,
 			       bufferlist &bl, utime_t now, Session *session)
