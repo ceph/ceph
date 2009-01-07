@@ -5242,7 +5242,8 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
-  xlocks.insert(&dn->inode->snaplock);
+  rdlocks.erase(&diri->snaplock);
+  xlocks.insert(&diri->snaplock);
   if (!diri->is_anchored()) {
     // we need to anchor... get these locks up front!
     CDentry *dn = diri->get_parent_dn();
@@ -5426,7 +5427,8 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
-  xlocks.insert(&dn->inode->snaplock);
+  rdlocks.erase(&diri->snaplock);
+  xlocks.insert(&diri->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;

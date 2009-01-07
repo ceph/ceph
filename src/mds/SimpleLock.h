@@ -413,7 +413,7 @@ public:
       return false;
   }
 
-  void _print(ostream& out) {
+  virtual void _print(ostream& out) {
     out << get_lock_type_name(get_type()) << " ";
     out << get_state_name(get_state());
     if (!get_gather_set().empty())
