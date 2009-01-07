@@ -49,10 +49,6 @@ caps
 - kclient
   - only pin caps with dirty metadata? and/or wanted != 0?
   - and/or, put unwanted caps on an lru list, and expire?
-- mds
-  - trim expired rdcaps
-  - segregate wanted/unwanted caps?  rd/wr caps?
-
 
 kernel client
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
@@ -114,9 +110,6 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- caps
-  - quick cap release if wanted == 0?
-  - make unwanted caps time out, like a lease?
 - xlock vs wrlock.. need more lock states?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
