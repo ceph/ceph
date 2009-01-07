@@ -37,9 +37,9 @@ using namespace std;
 - if client has no dirty data, it can release it without waiting for an mds ack.
   - client may thus get a cap _update_ and not have the cap.  ignore it.
 
-- mds should track seq of last _issue_ (not update).  any release
-  attempt will only succeed if the client has seen the latest issue.
-  - if client gets an IMPORT issue and doesn't have the inode, immediately send a release.
+- mds should track seq of last issue OR update.  any release
+  attempt will only succeed if the client has seen the latest.
+- if the client gets a cap message and doesn't have the inode or cap, reply with a release.
 
 - a UPDATE updates the clients issued caps, wanted, etc.  it may also flush dirty metadata.
   - 'caps' are which caps the client retains.
