@@ -207,8 +207,15 @@ struct ceph_mds_client {
 
 extern const char *ceph_mds_op_name(int op);
 
-extern struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *,
-						       int mds);
+extern struct ceph_mds_session *
+__ceph_lookup_mds_session(struct ceph_mds_client *, int mds);
+
+inline static struct ceph_mds_session *
+ceph_get_mds_session(struct ceph_mds_session *s)
+{
+	atomic_inc(&s->s_ref);
+	return s;
+}
 extern void ceph_put_mds_session(struct ceph_mds_session *s);
 
 extern void ceph_send_msg_mds(struct ceph_mds_client *mdsc,

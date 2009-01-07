@@ -626,7 +626,7 @@ retry:
 		if (!session) {
 			spin_unlock(&inode->i_lock);
 			mutex_lock(&mdsc->mutex);
-			session = __ceph_get_mds_session(mdsc, mds);
+			session = __ceph_lookup_mds_session(mdsc, mds);
 			mutex_unlock(&mdsc->mutex);
 			if (session) {
 				dout(10, "inverting session/ino locks on %p\n",
@@ -1556,7 +1556,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	/* find session */
 	mutex_lock(&mdsc->mutex);
-	session = __ceph_get_mds_session(mdsc, mds);
+	session = __ceph_lookup_mds_session(mdsc, mds);
 	if (session)
 		down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
