@@ -71,7 +71,7 @@ bool PaxosService::dispatch_impl(Message *m)
 
   // update
   if (prepare_update(m)) {
-    double delay;
+    double delay = 0.0;
     if (should_propose(delay)) {
       if (delay == 0.0) {
 	propose_pending();
