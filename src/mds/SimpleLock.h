@@ -110,13 +110,15 @@ protected:
   int num_rdlock, num_wrlock;
   Mutation *xlock_by;
   int xlock_by_client;
+  bool xlock_done;
 
 
 public:
   SimpleLock(MDSCacheObject *o, int t, int ws, int cs) :
     parent(o), type(t), wait_shift(ws), cap_shift(cs),
     state(LOCK_SYNC), num_client_lease(0),
-    num_rdlock(0), num_wrlock(0), xlock_by(0), xlock_by_client(-1) { }
+    num_rdlock(0), num_wrlock(0),
+    xlock_by(0), xlock_by_client(-1), xlock_done(false) { }
   virtual ~SimpleLock() {}
 
   // parent
@@ -239,6 +241,11 @@ public:
     parent->get(MDSCacheObject::PIN_LOCK);
     xlock_by = who; 
     xlock_by_client = client;
+    xlock_done = false;
+  }
+  void set_xlock_done() {
+    assert(xlock_by);
+    xlock_done = true;
   }
   void put_xlock() {
     assert(xlock_by);
@@ -247,6 +254,10 @@ public:
     xlock_by_client = -1;
   }
   bool is_xlocked() { return xlock_by ? true:false; }
+  bool is_xlocked_by_client(int c) {
+    return xlock_by_client == c;
+  }
+  bool xlocker_is_done() { return is_xlocked() && xlock_done; }
   bool is_xlocked_by_other(Mutation *mdr) {
     return is_xlocked() && xlock_by != mdr;
   }
@@ -386,14 +397,22 @@ public:
     return false;
   }
 
-  bool can_lease(int client=-1) {
+  bool can_lease(int client) {
     if (client >= 0 &&
 	xlock_by &&
-	xlock_by_client == client)
-      return true;  // allow lease to xlocker... see simple_xlock_finish()
+	xlock_done &&
+	xlock_by_client == client &&
+	state == LOCK_LOCK_SYNC)
+      return true;  // allow lease to xlocker
     return state == LOCK_SYNC;
   }
-  bool can_rdlock(Mutation *mdr) {
+  bool can_rdlock(Mutation *mdr, int client = -1) {
+    if (client >= 0 &&
+	xlock_by &&
+	xlock_done &&
+	xlock_by_client == client &&
+	state == LOCK_LOCK_SYNC)
+      return true;
     //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
     //if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
     return (state == LOCK_SYNC);
@@ -424,8 +443,11 @@ public:
       out << " r=" << get_num_rdlocks();
     if (is_wrlocked()) 
       out << " w=" << get_num_wrlocks();
-    if (is_xlocked())
+    if (is_xlocked()) {
       out << " x=" << get_xlocked_by();
+      if (xlock_done)
+	out << " (done)";
+    }
   }
 
   virtual void print(ostream& out) {

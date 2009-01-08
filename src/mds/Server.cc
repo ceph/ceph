@@ -2342,10 +2342,14 @@ void Server::handle_client_mknod(MDRequest *mdr)
   
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
+
+  // allow the same client rdlock|lease the dentry
+  dn->lock.set_xlock_done();
   
   early_reply(mdr, newi, 0);
 
   // log + wait
+  mdr->committing = true;
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
@@ -2394,9 +2398,13 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
+  // allow the same client rdlock|lease the dentry
+  dn->lock.set_xlock_done();
+  
   early_reply(mdr, newi, 0);
 
   // log + wait
+  mdr->committing = true;
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
@@ -2437,9 +2445,13 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
+  // allow the same client rdlock|lease the dentry
+  dn->lock.set_xlock_done();
+  
   early_reply(mdr, newi, 0);
 
   // log + wait
+  mdr->committing = true;
   mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 

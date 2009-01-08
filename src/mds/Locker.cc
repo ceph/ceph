@@ -1425,10 +1425,20 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
-       (!diri->filelock.can_lease() &&
-	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0)) &&
-      dn->lock.can_lease(client))
-    mask |= CEPH_LOCK_DN;
+       (!diri->filelock.can_lease(client) &&
+	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0))) {
+
+    if (dn->lock.get_state() == LOCK_LOCK &&
+	dn->lock.is_xlocked_by_client(client) &&
+	dn->lock.xlocker_is_done()) {
+      dout(10) << " setting " << dn->lock << " to lock->sync on " << *dn << dendl;
+      dn->lock.get_parent()->auth_pin(&dn->lock);
+      dn->lock.set_state(LOCK_LOCK_SYNC);
+    }
+
+    if (dn->lock.can_lease(client))
+      mask |= CEPH_LOCK_DN;
+  }
 
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
@@ -1844,15 +1854,27 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
 {
   dout(7) << "simple_rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
+  // client may be allowed to rdlock the same item it has xlocked.
+  int client = mut->reqid.name.is_client() ? mut->reqid.name.num() : -1;
+
   while (1) {
+    if (client >= 0 &&
+	lock->get_state() == LOCK_LOCK &&
+	lock->is_xlocked_by_client(client) &&
+	lock->xlocker_is_done()) {
+      dout(10) << " setting " << *lock << " to lock->sync on " << *lock->get_parent() << dendl;
+      lock->get_parent()->auth_pin(lock);
+      lock->set_state(LOCK_LOCK_SYNC);
+    }
+
     // can read?  grab ref.
-    if (lock->can_rdlock(mut)) {
+    if (lock->can_rdlock(mut, client)) {
       lock->get_rdlock();
       mut->rdlocks.insert(lock);
       mut->locks.insert(lock);
       return true;
     }
-    
+
     if (lock->is_stable() &&
 	lock->get_parent()->is_auth())
       simple_sync(lock);
@@ -2007,7 +2029,6 @@ void Locker::simple_xlock_finish(SimpleLock *lock, Mutation *mut)
   dout(7) << "simple_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // drop ref
-  assert(lock->can_xlock(mut));
   lock->put_xlock();
   assert(mut);
   mut->xlocks.erase(lock);
@@ -2056,7 +2077,7 @@ bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace)
        it != trace.end();
        it++) {
     CDentry *dn = *it;
-    if (!dn->lock.can_rdlock(0)) {
+    if (!dn->lock.can_rdlock(0, -1)) {
       dout(10) << "can_rdlock_trace can't rdlock " << *dn << dendl;
       return false;
     }
@@ -2270,7 +2291,6 @@ void Locker::scatter_xlock_finish(ScatterLock *lock, Mutation *mut)
   dout(7) << "scatter_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // drop ref
-  assert(lock->can_xlock(mut));
   lock->put_xlock();
   mut->locks.erase(lock);
   mut->xlocks.erase(lock);
@@ -3324,7 +3344,6 @@ void Locker::file_xlock_finish(FileLock *lock, Mutation *mut)
   dout(7) << "file_xlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
 
   // drop ref
-  assert(lock->can_xlock(mut));
   lock->put_xlock();
   mut->locks.erase(lock);
   mut->xlocks.erase(lock);
