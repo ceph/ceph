@@ -524,7 +524,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	       << " <= table " << mds->sessionmap.version << dendl;
     } else {
       dout(10) << " EMetaBlob.replay sessionmap v" << sessionmapv
-	       << " -1 == table " << mds->sessionmap.version
+	       << " -(1|2) == table " << mds->sessionmap.version
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
@@ -534,13 +534,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	inodeno_t i = session->take_ino();
 	assert(i == used_preallocated_ino);
 	session->used_inos.clear();
-	mds->sessionmap.projected = mds->sessionmap.version++;
+	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       if (preallocated_inos.size()) {
 	session->prealloc_inos.insert(session->prealloc_inos.end(),
 				      preallocated_inos.begin(),
 				      preallocated_inos.end());
-	mds->sessionmap.projected = mds->sessionmap.version++;
+	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       assert(sessionmapv == mds->sessionmap.version);
     }
