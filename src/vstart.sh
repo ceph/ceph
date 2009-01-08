@@ -146,8 +146,9 @@ if [ $start_mon -eq 1 ]; then
 	# start monitors
 	if [ $start_mon -ne 0 ]; then
 		for f in `seq 0 $((CEPH_NUM_MON-1))`; do
-			$CEPH_BIN/cmon $ARGS -d $CMON_ARGS mondata/mon$f
+		    $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
 		done
+		sleep 1
 	fi
 
 	if [ $new -eq 1 ]; then
