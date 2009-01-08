@@ -155,10 +155,10 @@ public:
       // note _revoked_ caps prior to this revocation
       if (_num_revoke < _max_revoke) {
 	_num_revoke++;
-	_revoke_before[_num_revoke] = 0;
+	_revoke_before[_num_revoke-1] = 0;
       }
-      _revoke_before[_num_revoke] |= _pending|_issued;
-      _revoke_seq[_num_revoke] = last_sent;
+      _revoke_before[_num_revoke-1] |= _pending|_issued;
+      _revoke_seq[_num_revoke-1] = last_sent;
     }
 
     check_rdcaps_list(_pending, c, _wanted, _wanted);
