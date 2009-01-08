@@ -39,6 +39,9 @@ done
 
 if [ $stop_all -eq 1 ]; then
 	killall crun cmon cmds cosd
+	pkill -f valgrind.bin.\*cmon
+	pkill -f valgrind.bin.\*cosd
+	pkill -f valgrind.bin.\*cmds
 else
 	[ $stop_mon -eq 1 ] && do_killall cmon
 	[ $stop_mds -eq 1 ] && do_killall cmds
