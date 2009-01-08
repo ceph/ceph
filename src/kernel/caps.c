@@ -1450,7 +1450,7 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 	/* make sure we haven't seen a higher mseq */
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		t = rb_entry(p, struct ceph_cap, ci_node);
-		if (t->mseq > mseq) {
+		if (ceph_seq_cmp(t->mseq, mseq) > 0) {
 			dout(10, " higher mseq on cap from mds%d\n",
 			     t->session->s_mds);
 			remember = 0;
@@ -1498,7 +1498,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	unsigned long ttl_ms = le32_to_cpu(im->ttl_ms);
 
 	if (ci->i_cap_exporting_mds >= 0 &&
-	    ci->i_cap_exporting_mseq < mseq) {
+	    ceph_seq_cmp(ci->i_cap_exporting_mseq, mseq) < 0) {
 		dout(10, "handle_cap_import inode %p ci %p mds%d mseq %d"
 		     " - cleared exporting from mds%d\n",
 		     inode, ci, mds, mseq,
@@ -1510,7 +1510,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 		dout(10, "handle_cap_import inode %p ci %p mds%d mseq %d\n",
 		     inode, ci, mds, mseq);
 	}
-
+	
 	realm = ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
 				       false);
 	ceph_add_cap(inode, session, -1, issued, wanted, seq, mseq, realmino,

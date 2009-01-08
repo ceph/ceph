@@ -27,19 +27,19 @@ class MClientCaps : public Message {
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
   int      get_dirty() { return head.dirty; }
-  capseq_t get_seq() { return head.seq; }
-  capseq_t get_mseq() { return head.migrate_seq; }
+  ceph_seq_t get_seq() { return head.seq; }
+  ceph_seq_t get_mseq() { return head.migrate_seq; }
 
   inodeno_t get_ino() { return inodeno_t(head.ino); }
   inodeno_t get_realm() { return inodeno_t(head.realm); }
 
   __u64 get_size() { return head.size;  }
   __u64 get_max_size() { return head.max_size;  }
-  __u64 get_truncate_seq() { return head.truncate_seq; }
+  __u32 get_truncate_seq() { return head.truncate_seq; }
   utime_t get_ctime() { return utime_t(head.ctime); }
   utime_t get_mtime() { return utime_t(head.mtime); }
   utime_t get_atime() { return utime_t(head.atime); }
-  __u64 get_time_warp_seq() { return head.time_warp_seq; }
+  __u32 get_time_warp_seq() { return head.time_warp_seq; }
 
   ceph_file_layout& get_layout() { return head.layout; }
 

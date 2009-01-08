@@ -19,9 +19,6 @@
 #include "include/buffer.h"
 #include "include/xlist.h"
 
-#include <map>
-using namespace std;
-
 #include "config.h"
 
 /*
@@ -74,10 +71,10 @@ public:
     int32_t issued;
     int32_t pending;
     snapid_t client_follows;
-    capseq_t mseq;
+    ceph_seq_t mseq;
     utime_t last_issue_stamp;
     Export() {}
-    Export(int w, int i, int p, snapid_t cf, capseq_t s, utime_t lis) : 
+    Export(int w, int i, int p, snapid_t cf, ceph_seq_t s, utime_t lis) : 
       wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const {
       ::encode(wanted, bl);
@@ -102,7 +99,6 @@ private:
   int client;
 
   __u32 _wanted;     // what the client wants (ideally)
-    //::decode(cap_history, bl);
 
   utime_t last_issue_stamp;
 
@@ -119,14 +115,14 @@ public:
   int issued() {
     return _pending | _issued;
   }
-  capseq_t issue(int c) {
+  ceph_seq_t issue(int c) {
     _pending = c;
     _issued |= c;
     //last_issue = 
     ++last_sent;
     return last_sent;
   }
-  void confirm_receipt(capseq_t seq, int caps) {
+  void confirm_receipt(ceph_seq_t seq, int caps) {
     if (seq == last_sent)
       _pending = _issued = caps;
   }    
@@ -139,7 +135,7 @@ public:
   static const int _max_revoke = 3;
   __u32 _pending, _issued;
   __u32 _revoke_before[_max_revoke];  // caps before this issue
-  capseq_t _revoke_seq[_max_revoke];
+  ceph_seq_t _revoke_seq[_max_revoke];
   int _num_revoke;
 
 public:
@@ -150,7 +146,7 @@ public:
       c |= _revoke_before[i];
     return c;
   }
-  capseq_t issue(int c) {
+  ceph_seq_t issue(int c) {
     if (_pending & ~c) {
       // note _revoked_ caps prior to this revocation
       if (_num_revoke < _max_revoke) {
@@ -167,7 +163,7 @@ public:
     ++last_sent;
     return last_sent;
   }
-  void confirm_receipt(capseq_t seq, int caps) {
+  void confirm_receipt(ceph_seq_t seq, int caps) {
     _issued = caps;
     if (seq == last_sent) {
       _pending = caps;
@@ -196,9 +192,9 @@ public:
 
 
 private:
-  capseq_t last_sent;
-  //capseq_t last_issue;
-  capseq_t mseq;
+  ceph_seq_t last_sent;
+  //ceph_seq_t last_issue;
+  ceph_seq_t mseq;
 
   int suppress;
   bool stale;
@@ -224,9 +220,9 @@ public:
     client_follows(0),
     session_caps_item(this), rdcaps_list(rl), rdcaps_item(this), snaprealm_caps_item(this) { }
   
-  capseq_t get_mseq() { return mseq; }
+  ceph_seq_t get_mseq() { return mseq; }
 
-  capseq_t get_last_sent() { return last_sent; }
+  ceph_seq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
   void touch() {
     if (rdcaps_item.is_on_xlist())
@@ -235,7 +231,7 @@ public:
 
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
 
-  //capseq_t get_last_issue() { return last_issue; }
+  //ceph_seq_t get_last_issue() { return last_issue; }
 
   bool is_suppress() { return suppress > 0; }
   void inc_suppress() { suppress++; }
@@ -254,7 +250,7 @@ public:
     _wanted = w;
   }
 
-  capseq_t get_last_seq() { return last_sent; }
+  ceph_seq_t get_last_seq() { return last_sent; }
 
 
   void check_rdcaps_list(int o, int n, int ow, int nw)

@@ -53,8 +53,6 @@ using namespace std;
 
 // CAPS
 
-typedef __u32 capseq_t;
-
 inline string gcap_string(int cap)
 {
   string s;
@@ -296,10 +294,10 @@ struct inode_t {
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
-  uint64_t   truncate_seq;
+  uint32_t   truncate_seq;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
   // dirfrag, recursive accounting
   frag_info_t dirstat;

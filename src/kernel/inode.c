@@ -330,7 +330,7 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int warn = 0;
 
-	if (truncate_seq > ci->i_truncate_seq ||
+	if (ceph_seq_cmp(truncate_seq, ci->i_truncate_seq) > 0 ||
 	    (truncate_seq == ci->i_truncate_seq && size > inode->i_size)) {
 		dout(10, "size %lld -> %llu\n", inode->i_size, size);
 		inode->i_size = size;
@@ -346,11 +346,11 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 		 */
 		if (timespec_compare(ctime, &inode->i_ctime) > 0)
 			inode->i_ctime = *ctime;
-		if (time_warp_seq > ci->i_time_warp_seq)
+		if (ceph_seq_cmp(time_warp_seq, ci->i_time_warp_seq) > 0)
 			derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
 			     inode, time_warp_seq, ci->i_time_warp_seq);
 	} else if (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) {
-		if (time_warp_seq > ci->i_time_warp_seq) {
+		if (ceph_seq_cmp(time_warp_seq, ci->i_time_warp_seq) > 0) {
 			/* the MDS did a utimes() */
 			inode->i_ctime = *ctime;
 			inode->i_mtime = *mtime;
@@ -368,7 +368,7 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 		}
 	} else {
 		/* we have no write caps; whatever the MDS says is true */
-		if (time_warp_seq >= ci->i_time_warp_seq) {
+		if (ceph_seq_cmp(time_warp_seq, ci->i_time_warp_seq) >= 0) {
 			inode->i_ctime = *ctime;
 			inode->i_mtime = *mtime;
 			inode->i_atime = *atime;

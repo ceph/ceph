@@ -101,6 +101,18 @@ struct ceph_timespec {
 
 
 /*
+ * Rollover-safe type and comparator for 32-bit sequence numbers.
+ * Comparator returns -1, 0, or 1.
+ */
+typedef __u32 ceph_seq_t;
+
+static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
+{
+	return ((__s32)a - (__s32)b);
+}
+
+
+/*
  * "Frags" are a way to describe a subset of a 32-bit number space,
  * using a mask and a value to match against that mask.  Any given frag
  * (subset of the number space) can be partitioned into 2^n sub-frags.
@@ -833,7 +845,7 @@ struct ceph_mds_reply_inode {
 	struct ceph_mds_reply_cap cap;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
-	__le64 time_warp_seq;
+	__le32 time_warp_seq;
 	__le64 size, max_size, truncate_seq;
 	__le32 mode, uid, gid;
 	__le32 nlink;
@@ -958,7 +970,6 @@ static inline int ceph_flags_to_mode(int flags)
  */
 #define CEPH_CAP_EXPIREABLE (CEPH_CAP_PIN|CEPH_CAP_ANY_RDCACHE)
 
-
 static inline int ceph_caps_for_mode(int mode)
 {
 	switch (mode) {
@@ -1041,10 +1052,10 @@ struct ceph_mds_caps {
 
 	/* filelock */
 	__le64 size, max_size;
-	__le64 truncate_seq;
+	__le32 truncate_seq;
 	struct ceph_timespec mtime, atime, ctime;
 	struct ceph_file_layout layout;
-	__le64 time_warp_seq;
+	__le32 time_warp_seq;
 } __attribute__ ((packed));
 
 

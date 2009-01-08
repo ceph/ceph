@@ -490,9 +490,9 @@ struct C_Locker_FileUpdate_finish : public Context {
   bool share;
   int client;
   MClientCaps *ack;
-  capseq_t releasecap;
+  ceph_seq_t releasecap;
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, int c=-1,
-			     MClientCaps *ac = 0, capseq_t rc=0) : 
+			     MClientCaps *ac = 0, ceph_seq_t rc=0) : 
     locker(l), in(i), mut(m), share(e), client(c),
     ack(ac), releasecap(rc) {
     in->get(CInode::PIN_PTRWAITER);
@@ -503,7 +503,7 @@ struct C_Locker_FileUpdate_finish : public Context {
 };
 
 void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int client, 
-				MClientCaps *ack, capseq_t releasecap)
+				MClientCaps *ack, ceph_seq_t releasecap)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
@@ -1024,7 +1024,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
     return;
   }
-  if (m->get_mseq() < cap->get_mseq()) {
+  if (ceph_seq_cmp(m->get_mseq(), cap->get_mseq()) < 0) {
     dout(7) << "handle_client_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
 	    << ", dropping" << dendl;
     delete m;
@@ -1078,7 +1078,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	     << " on " << *in << dendl;
     
     MClientCaps *ack = 0;
-    capseq_t releasecap = 0;
+    ceph_seq_t releasecap = 0;
     
     if (m->get_dirty() && in->is_auth()) {
       dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
@@ -1087,7 +1087,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 			    m->get_caps(), 0, m->get_dirty(), 0);
     }
     if (m->get_caps() == 0) {
-      assert(m->get_seq() <= cap->get_last_sent());
+      
+      assert(ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) <= 0);
       if (m->get_seq() == cap->get_last_sent()) {
 	dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
 	cap->releasing++;
@@ -1129,7 +1130,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCaps *ack)
+void Locker::_finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClientCaps *ack)
 {
   dout(10) << "_finish_release_cap client" << client << " seq " << seq << " on " << *in << dendl;
   
@@ -1144,7 +1145,7 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCa
   if (cap->releasing) {
     dout(10) << " another release attempt in flight, not releasing yet" << dendl;
     delete ack;
-  } else if (seq < cap->get_last_sent()) {
+  } else if (ceph_seq_cmp(seq, cap->get_last_sent()) < 0) {
     dout(10) << " NOT releasing cap client" << client << ", last_sent " << cap->get_last_sent()
 	     << " > " << seq << dendl;
     delete ack;
@@ -1172,7 +1173,7 @@ void Locker::_finish_release_cap(CInode *in, int client, capseq_t seq, MClientCa
  * if we update, return true; otherwise, false (no updated needed).
  */
 bool Locker::_do_cap_update(CInode *in, int dirty, int wanted, snapid_t follows, MClientCaps *m,
-			    MClientCaps *ack, capseq_t releasecap)
+			    MClientCaps *ack, ceph_seq_t releasecap)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " wanted " << ccap_string(wanted)
@@ -1263,7 +1264,8 @@ bool Locker::_do_cap_update(CInode *in, int dirty, int wanted, snapid_t follows,
 	      << " for " << *in << dendl;
       pi->atime = atime;
     }
-    if ((dirty & CEPH_CAP_FILE_EXCL) && pi->time_warp_seq < m->get_time_warp_seq()) {
+    if ((dirty & CEPH_CAP_FILE_EXCL) &&
+	ceph_seq_cmp(pi->time_warp_seq, m->get_time_warp_seq()) < 0) {
       dout(7) << "  time_warp_seq " << pi->time_warp_seq << " -> " << m->get_time_warp_seq()
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();

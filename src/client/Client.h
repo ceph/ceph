@@ -199,7 +199,7 @@ class Inode {
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
-  capseq_t exporting_mseq;
+  ceph_seq_t exporting_mseq;
   utime_t hold_caps_until;
   xlist<Inode*>::item cap_item;
 
