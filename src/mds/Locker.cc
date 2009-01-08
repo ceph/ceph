@@ -938,7 +938,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
     CDentry *parent = in->get_projected_parent_dn();
     metablob->add_primary_dentry(parent, true, in, in->get_projected_inode());
   } else {
-    metablob->add_dir_context(in->get_parent_dir());
+    metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
     mdcache->journal_dirty_inode(mut, metablob, in);
   }
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
