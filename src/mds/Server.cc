@@ -1397,6 +1397,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
 
 void Server::journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob)
 {
+  dout(20) << "journal_allocated_inos" << dendl;
   blob->set_ino_alloc(mdr->alloc_ino,
 		      mdr->used_prealloc_ino,
 		      mdr->prealloc_inos,

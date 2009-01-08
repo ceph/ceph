@@ -275,11 +275,12 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
-EMetaBlob::EMetaBlob(MDLog *mdlog) :
-  last_subtree_map(mdlog->get_last_segment_offset()),
-  my_offset(mdlog->get_write_pos()) 
-{
-}
+EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0),
+				     inotablev(0), sessionmapv(0),
+				     allocated_ino(0),
+				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
+				     my_offset(mdlog ? mdlog->get_write_pos() : 0) //, _segment(0)
+{ }
 
 void EMetaBlob::update_segment(LogSegment *ls)
 {
@@ -310,7 +311,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << dendl;
 
-  if (!logseg) logseg = _segment;
+  //if (!logseg) logseg = _segment;
   assert(logseg);
 
   // walk through my dirs (in order!)
@@ -496,7 +497,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     CInode *in = mds->mdcache->get_inode(opened_ino);
     assert(in);
     dout(10) << "EMetaBlob.replay noting opened inode " << *in << dendl;
-    _segment->open_files.push_back(&in->xlist_open_file);
+    logseg->open_files.push_back(&in->xlist_open_file);
   }
 
   // allocated_inos

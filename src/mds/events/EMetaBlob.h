@@ -327,12 +327,9 @@ private:
   off_t my_offset;
 
   // for replay, in certain cases
-  LogSegment *_segment;
+  //LogSegment *_segment;
 
-  EMetaBlob() : opened_ino(0),
-		inotablev(0), allocated_ino(0),
-		last_subtree_map(0), my_offset(0), _segment(0) { }
-  EMetaBlob(MDLog *mdl);  // defined in journal.cc
+  EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
 
   void print(ostream& out) {
     for (list<dirfrag_t>::iterator p = lump_order.begin();
