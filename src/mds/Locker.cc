@@ -3288,7 +3288,8 @@ void Locker::file_xlock_finish(FileLock *lock, Mutation *mut)
 		       SimpleLock::WAIT_WR | 
 		       SimpleLock::WAIT_RD, 0); 
 
-  if (lock->get_parent()->is_auth())
+  if (lock->get_parent()->is_auth() &&
+      lock->is_stable())
     file_eval(lock);
 }
 
