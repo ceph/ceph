@@ -588,6 +588,7 @@ public:
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }
+    cap->set_last_issue_stamp(g_clock.recent_now());
     inode.size = MAX(inode.size, icr.size);
     inode.mtime = MAX(inode.mtime, utime_t(icr.mtime));
     inode.atime = MAX(inode.atime, utime_t(icr.atime));
