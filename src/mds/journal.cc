@@ -275,11 +275,12 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
-EMetaBlob::EMetaBlob(MDLog *mdlog) :
-  last_subtree_map(mdlog->get_last_segment_offset()),
-  my_offset(mdlog->get_write_pos()) 
-{
-}
+EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0),
+				     inotablev(0), sessionmapv(0),
+				     allocated_ino(0),
+				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
+				     my_offset(mdlog ? mdlog->get_write_pos() : 0) //, _segment(0)
+{ }
 
 void EMetaBlob::update_segment(LogSegment *ls)
 {
@@ -310,7 +311,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << dendl;
 
-  if (!logseg) logseg = _segment;
+  //if (!logseg) logseg = _segment;
   assert(logseg);
 
   // walk through my dirs (in order!)
@@ -496,7 +497,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     CInode *in = mds->mdcache->get_inode(opened_ino);
     assert(in);
     dout(10) << "EMetaBlob.replay noting opened inode " << *in << dendl;
-    _segment->open_files.push_back(&in->xlist_open_file);
+    logseg->open_files.push_back(&in->xlist_open_file);
   }
 
   // allocated_inos
@@ -523,7 +524,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	       << " <= table " << mds->sessionmap.version << dendl;
     } else {
       dout(10) << " EMetaBlob.replay sessionmap v" << sessionmapv
-	       << " -1 == table " << mds->sessionmap.version
+	       << " -(1|2) == table " << mds->sessionmap.version
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
@@ -533,13 +534,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	inodeno_t i = session->take_ino();
 	assert(i == used_preallocated_ino);
 	session->used_inos.clear();
-	mds->sessionmap.projected = mds->sessionmap.version++;
+	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       if (preallocated_inos.size()) {
 	session->prealloc_inos.insert(session->prealloc_inos.end(),
 				      preallocated_inos.begin(),
 				      preallocated_inos.end());
-	mds->sessionmap.projected = mds->sessionmap.version++;
+	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       assert(sessionmapv == mds->sessionmap.version);
     }
