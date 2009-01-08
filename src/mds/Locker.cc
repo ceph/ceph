@@ -1932,8 +1932,12 @@ void Locker::simple_rdlock_finish(SimpleLock *lock, Mutation *mut)
   dout(7) << "simple_rdlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
   
   // last one?
-  if (!lock->is_rdlocked())
-    simple_eval_gather(lock);
+  if (!lock->is_rdlocked()) {
+    if (!lock->is_stable())
+      simple_eval_gather(lock);
+    else if (lock->get_parent()->is_auth())
+      simple_eval(lock);
+  }
 }
 
 bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mut)
@@ -2020,11 +2024,6 @@ void Locker::simple_xlock_finish(SimpleLock *lock, Mutation *mut)
       lock->get_parent()->set_object_info(slavereq->get_object_info());
       mds->send_message_mds(slavereq, auth);
     }
-  } else {
-    
-    // xlocker lease?
-    if (lock->get_num_client_lease())
-      simple_sync(lock);  // _must_ sync now.. xlocker already has a lease!
   }
 
   // others waiting?
@@ -2033,7 +2032,9 @@ void Locker::simple_xlock_finish(SimpleLock *lock, Mutation *mut)
 		       SimpleLock::WAIT_RD, 0); 
 
   // eval?
-  if (lock->get_parent()->is_auth())
+  if (!lock->is_stable())
+    simple_eval_gather(lock);
+  else if (lock->get_parent()->is_auth())
     simple_eval(lock);
 }
 
@@ -2281,7 +2282,9 @@ void Locker::scatter_xlock_finish(ScatterLock *lock, Mutation *mut)
 		       SimpleLock::WAIT_WR | 
 		       SimpleLock::WAIT_RD, 0); 
 
-  if (lock->get_parent()->is_auth())
+  if (!lock->is_stable())
+    scatter_eval_gather(lock);
+  else if (lock->get_parent()->is_auth())
     scatter_eval(lock);
 }
 
@@ -3333,8 +3336,10 @@ void Locker::file_xlock_finish(FileLock *lock, Mutation *mut)
 		       SimpleLock::WAIT_WR | 
 		       SimpleLock::WAIT_RD, 0); 
 
-  if (lock->get_parent()->is_auth() &&
-      lock->is_stable())
+  // eval?
+  if (!lock->is_stable())
+    file_eval_gather(lock);
+  else if (lock->get_parent()->is_auth())
     file_eval(lock);
 }
 
