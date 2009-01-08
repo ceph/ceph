@@ -1423,7 +1423,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	int num_caps, num_realms = 0;
 	int got;
 	u64 next_snap_ino = 0;
-	__le32 *pnum_realms;
+	__le32 *pnum_caps, *pnum_realms;
 
 	dout(1, "reconnect to recovering mds%d\n", mds);
 
@@ -1470,6 +1470,7 @@ retry:
 
 	/* traverse this session's caps */
 	ceph_encode_8(&p, 0);
+	pnum_caps = p;
 	ceph_encode_32(&p, session->s_nr_caps);
 	num_caps = 0;
 	list_for_each(cp, &session->s_caps) {
@@ -1480,8 +1481,17 @@ retry:
 		ci = cap->ci;
 		inode = &ci->vfs_inode;
 
-		dout(10, " adding cap %p on ino %llx.%llx inode %p\n", cap,
-		     ceph_vinop(inode), inode);
+		/* skip+drop expireable caps.  this is racy, but harmless. */
+		if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
+			dout(10, " skipping %p ino %llx.%llx cap %p %s\n",
+			     inode, ceph_vinop(inode), cap,
+			     ceph_cap_string(cap->issued));
+			continue;
+		}
+
+		dout(10, " adding %p ino %llx.%llx cap %p %s\n",
+		     inode, ceph_vinop(inode), cap,
+		     ceph_cap_string(cap->issued));
 		ceph_decode_need(&p, end, sizeof(u64), needmore);
 		ceph_encode_64(&p, ceph_ino(inode));
 
@@ -1507,7 +1517,7 @@ retry:
 		spin_lock(&inode->i_lock);
 		cap->seq = 0;  /* reset cap seq */
 		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
-		rec->issued = cpu_to_le32(__ceph_caps_issued(ci, NULL));
+		rec->issued = cpu_to_le32(cap->issued);
 		rec->size = cpu_to_le64(inode->i_size);
 		ceph_encode_timespec(&rec->mtime, &inode->i_mtime);
 		ceph_encode_timespec(&rec->atime, &inode->i_atime);
@@ -1518,6 +1528,7 @@ retry:
 		dput(dentry);
 		num_caps++;
 	}
+	*pnum_caps = cpu_to_le32(num_caps);
 
 	/*
 	 * snaprealms.  we provide mds with the ino, seq (version), and
