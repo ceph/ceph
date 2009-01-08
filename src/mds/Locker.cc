@@ -601,7 +601,7 @@ bool Locker::issue_caps(CInode *in)
   int nissued = 0;        
 
   // should we increase max_size?
-  if (!in->is_dir() &&
+  if (in->is_file() &&
       ((all_allowed|loner_allowed) & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) &&
       in->is_auth())
     check_inode_max_size(in);
@@ -683,7 +683,7 @@ void Locker::issue_truncate(CInode *in)
   }
 
   // should we increase max_size?
-  if (in->is_auth() && !in->is_dir())
+  if (in->is_auth() && in->is_file())
     check_inode_max_size(in);
 }
 
@@ -1189,30 +1189,32 @@ bool Locker::_do_cap_update(CInode *in, int dirty, int wanted, snapid_t follows,
   bool change_max = false;
   uint64_t new_max = latest->max_size;
   
-  if (latest->max_size && (wanted & CEPH_CAP_ANY_FILE_WR) == 0) {
-    change_max = true;
-    new_max = 0;
-  }
-  else if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
-	   (size << 1) >= latest->max_size) {
-    dout(10) << " wr caps wanted, and size " << size
-	     << " *2 >= max " << latest->max_size << ", increasing" << dendl;
-    change_max = true;
-    new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-  }
-  if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
-      m->get_max_size() > new_max) {
-    dout(10) << "client requests file_max " << m->get_max_size()
-	     << " > max " << latest->max_size << dendl;
-    change_max = true;
-    new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
-  }
-  if (change_max &&
-      !in->filelock.can_wrlock() &&
-      (dirty & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_EXCL)) == 0) {  // not already writing dirty file data
-    dout(10) << " i want to change file_max, but lock won't allow it; will retry" << dendl;
-    check_inode_max_size(in);  // this will fail, and schedule a waiter.
-    change_max = false;
+  if (in->is_file()) {
+    if (latest->max_size && (wanted & CEPH_CAP_ANY_FILE_WR) == 0) {
+      change_max = true;
+      new_max = 0;
+    }
+    else if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
+	     (size << 1) >= latest->max_size) {
+      dout(10) << " wr caps wanted, and size " << size
+	       << " *2 >= max " << latest->max_size << ", increasing" << dendl;
+      change_max = true;
+      new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
+    }
+    if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
+	m->get_max_size() > new_max) {
+      dout(10) << "client requests file_max " << m->get_max_size()
+	       << " > max " << latest->max_size << dendl;
+      change_max = true;
+      new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
+    }
+    if (change_max &&
+	!in->filelock.can_wrlock() &&
+	(dirty & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_EXCL)) == 0) {  // not already writing dirty file data
+      dout(10) << " i want to change file_max, but lock won't allow it; will retry" << dendl;
+      check_inode_max_size(in);  // this will fail, and schedule a waiter.
+      change_max = false;
+    }
   }
 
   if (!dirty && !change_max)
