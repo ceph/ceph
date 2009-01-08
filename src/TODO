@@ -44,13 +44,9 @@ repair
 timer
 - each SafeTimer should just be its own thread.
 
-
-caps
-- kclient
-  - only pin caps with dirty metadata? and/or wanted != 0?
-  - and/or, put unwanted caps on an lru list, and expire?
-
 kernel client
+- orderly replay of unsafe ops during reconnect
+- avoid pinning inodes with expireable caps?
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
 - include 'sync' in op when cap revocation is waiting on writeback
 - make osd retry writes if failure after ack..
@@ -110,6 +106,8 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- make recovery work with early replies
+  - purge each session's unused preallocated inodes
 - xlock vs wrlock.. need more lock states?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
