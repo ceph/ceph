@@ -491,11 +491,11 @@ struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
 
 	spin_lock(&ci->i_listener_lock);
 	got = radix_tree_gang_lookup(&ci->i_listener_tree,
-					(void **)&req, 0, 1);
+					(void **)&req, tid, 1);
 
-	if (got >= 0) {
+	if (got > 0)
 		get_request(req);
-	}
+
 	spin_unlock(&ci->i_listener_lock);
 
 	return req;
@@ -1299,7 +1299,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply %p expected_cap=%p\n", req, req->r_expected_cap);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
 	if (req->r_got_reply) {
-		if (req->r_reply_info.head->safe) {
+		if (head->safe) {
 			/* 
 			   We already handled the unsafe response, now do the cleanup.
 			   Shouldn't we check the safe response to see if it matches
@@ -1307,11 +1307,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			*/
 			complete(&req->r_safe_completion);
 			__unregister_request(mdsc, req);
-			dout(10, "got another reply %llu, mds%d\n",
+			dout(10, "got safe reply %llu, mds%d\n",
 				tid, mds);
 			ceph_msg_put(req->r_request);
 			req->r_request = NULL;
 		} else {
+			mutex_unlock(&mdsc->mutex);
 			dout(0, "got another _unsafe_ reply %llu, mds%d\n",
 				tid, mds);
 		}

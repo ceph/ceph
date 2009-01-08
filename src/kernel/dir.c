@@ -857,6 +857,37 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	return size - left;
 }
 
+static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync)
+{
+	struct inode *inode = dentry->d_inode;
+	int ret, err;
+	struct ceph_mds_request *req;
+	u64 nexttid = 0;
+
+	ret = 0;
+	dout(0, "sync on directory\n");
+
+	do {
+		req = ceph_mdsc_get_listener_req(inode, nexttid);
+
+		if (!req)
+			break;
+		nexttid = req->r_tid + 1;
+
+		if (req->r_timeout) {
+			err = wait_for_completion_timeout(&req->r_safe_completion,
+							req->r_timeout);
+			if (err == 0)
+				ret = -EIO;  /* timed out */
+		} else {
+			wait_for_completion(&req->r_safe_completion);
+		}
+		ceph_mdsc_put_request(req);
+	} while (req);
+
+	return ret;
+}
+
 const struct file_operations ceph_dir_fops = {
 	.read = ceph_read_dir,
 	.readdir = ceph_readdir,
@@ -864,6 +895,7 @@ const struct file_operations ceph_dir_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
 	.unlocked_ioctl = ceph_ioctl,
+	.fsync = ceph_dir_fsync,
 };
 
 const struct inode_operations ceph_dir_iops = {

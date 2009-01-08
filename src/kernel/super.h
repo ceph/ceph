@@ -738,4 +738,12 @@ extern const struct export_operations ceph_export_ops;
 extern int ceph_proc_init(void);
 extern void ceph_proc_cleanup(void);
 
+static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
+{
+	if (dentry && dentry->d_parent)
+		return dentry->d_parent->d_inode;
+
+	return NULL;
+}
+
 #endif /* _FS_CEPH_SUPER_H */
