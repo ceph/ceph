@@ -1312,7 +1312,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			ceph_msg_put(req->r_request);
 			req->r_request = NULL;
 		} else {
-			mutex_unlock(&mdsc->mutex);
 			dout(0, "got another _unsafe_ reply %llu, mds%d\n",
 				tid, mds);
 		}
