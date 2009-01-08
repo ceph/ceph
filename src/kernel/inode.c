@@ -743,7 +743,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct ceph_mds_reply_inode *ininfo;
 	int d = 0;
 	struct ceph_vino vino;
-	bool have_lease;
+	bool have_dir_cap, have_lease;
 
 	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
@@ -818,11 +818,17 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			goto no_dir_mutex;
 		}
 
+		/* do we have a lease on the whole dir? */
+		have_dir_cap =
+			rinfo->trace_in[d].in->cap.caps & CEPH_CAP_FILE_RDCACHE;
+
 		/* do we have a dn lease? */
-		have_lease = (le16_to_cpu(rinfo->trace_dlease[d]->mask) &
+		have_lease = have_dir_cap ||
+			(le16_to_cpu(rinfo->trace_dlease[d]->mask) &
 			 CEPH_LOCK_DN);
+
 		if (!have_lease)
-			dout(10, "fill_trace  no icontent|dentry lease\n");
+			dout(10, "fill_trace  no dentry lease or dir cap\n");
 
 		dout(10, "fill_trace  took %p i_mutex\n", parent->d_inode);
 
