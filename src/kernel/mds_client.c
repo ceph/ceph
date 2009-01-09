@@ -327,6 +327,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	init_completion(&s->s_completion);
+	INIT_LIST_HEAD(&s->s_unsafe);
 
 	dout(10, "register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
@@ -1292,18 +1293,18 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	if (req->r_got_unsafe && head->safe) {
 		/* 
-		 * We already handled the unsafe response, now
-		 * do the cleanup.  Shouldn't we check the
-		 * safe response to see if it matches the
-		 * unsafe one?
+		 * We already handled the unsafe response, now do the
+		 * cleanup.  No need to examine the response; the MDS
+		 * doesn't include any result info in the safe
+		 * response.  And even if it did, there is nothing
+		 * useful we could do with a revised return value.
 		 */
+		dout(10, "got safe reply %llu, mds%d\n", tid, mds);
+		BUG_ON(req->r_session == NULL);
 		complete(&req->r_safe_completion);
 		__unregister_request(mdsc, req);
-		dout(10, "got safe reply %llu, mds%d\n",
-		     tid, mds);
-		ceph_msg_put(req->r_request);
-		req->r_request = NULL;
 		req->r_got_safe = true;
+		list_del_init(&req->r_unsafe_item);
 		mutex_unlock(&mdsc->mutex);
 		ceph_mdsc_put_request(req);
 		return;
@@ -1324,8 +1325,10 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	if (head->safe)
 		req->r_got_safe = true;
-	else
+	else {
 		req->r_got_unsafe = true;
+		list_add_tail(&req->r_unsafe_item, &req->r_session->s_unsafe);
+	}
 
 	/* take the snap sem -- we may be are adding a cap here */
 	down_write(&mdsc->snap_rwsem);

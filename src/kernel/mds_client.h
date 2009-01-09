@@ -119,6 +119,7 @@ struct ceph_mds_session {
 	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct completion s_completion;
+	struct list_head  s_unsafe;   /* unsafe requests */
 };
 
 /*
@@ -174,6 +175,7 @@ struct ceph_mds_request {
 	atomic_t          r_ref;
 	struct completion r_completion;
 	struct completion r_safe_completion;
+	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
 	bool		  r_got_unsafe, r_got_safe;
 };
 
