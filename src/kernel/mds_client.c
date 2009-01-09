@@ -360,17 +360,6 @@ static void unregister_session(struct ceph_mds_client *mdsc, int mds)
 	mdsc->sessions[mds] = NULL;
 }
 
-
-/*
- * requests
- */
-static void get_request(struct ceph_mds_request *req)
-{
-	dout(10, "get_request %p %d -> %d\n", req, 
-	     atomic_read(&req->r_ref), atomic_read(&req->r_ref)+1);
-	atomic_inc(&req->r_ref);
-}
-
 /* drop session refs in request */
 static void put_request_sessions(struct ceph_mds_request *req)
 {
@@ -420,7 +409,7 @@ static struct ceph_mds_request *__lookup_request(struct ceph_mds_client *mdsc,
 	struct ceph_mds_request *req;
 	req = radix_tree_lookup(&mdsc->request_tree, tid);
 	if (req)
-		get_request(req);
+		ceph_mdsc_get_request(req);
 	return req;
 }
 
@@ -456,13 +445,13 @@ static void __register_request(struct ceph_mds_client *mdsc,
 	req->r_tid = ++mdsc->last_tid;
 	head->tid = cpu_to_le64(req->r_tid);
 	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
-	get_request(req);
+	ceph_mdsc_get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
 	req->r_listener = listener;
 	if (listener) {
 		ci = ceph_inode(listener);
 		spin_lock(&ci->i_listener_lock);
-		radix_tree_insert(&ci->i_listener_tree, req->r_tid, (void *)req);
+		list_add_tail(&req->r_listener_item, &ci->i_listener_list);
 		spin_unlock(&ci->i_listener_lock);
 	}
 }
@@ -476,29 +465,10 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 	if (req->r_listener) {
 		ci = ceph_inode(req->r_listener);
 		spin_lock(&ci->i_listener_lock);
-		radix_tree_delete(&ci->i_listener_tree, req->r_tid);
+		list_del(&req->r_listener_item);
 		spin_unlock(&ci->i_listener_lock);
 	}
 	ceph_mdsc_put_request(req);
-}
-
-struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
-						    u64 tid)
-{
-	struct ceph_mds_request *req = NULL;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int got;
-
-	spin_lock(&ci->i_listener_lock);
-	got = radix_tree_gang_lookup(&ci->i_listener_tree,
-					(void **)&req, tid, 1);
-
-	if (got > 0)
-		get_request(req);
-
-	spin_unlock(&ci->i_listener_lock);
-
-	return req;
 }
 
 static bool __have_session(struct ceph_mds_client *mdsc, int mds)

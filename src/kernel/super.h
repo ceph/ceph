@@ -274,7 +274,7 @@ struct ceph_inode_info {
 	loff_t i_vmtruncate_to;        /* delayed truncate work */
 	struct work_struct i_vmtruncate_work;
 
-	struct radix_tree_root i_listener_tree; /* requests we pend on */
+	struct list_head i_listener_list; /* requests we pend on */
 	spinlock_t i_listener_lock;
 
 	struct inode vfs_inode; /* at end */

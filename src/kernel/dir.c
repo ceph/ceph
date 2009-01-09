@@ -860,20 +860,18 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	int ret, err;
-	struct ceph_mds_request *req;
-	u64 nexttid = 0;
+	struct list_head *p, *n;
 
 	ret = 0;
 	dout(0, "sync on directory\n");
-
-	do {
-		req = ceph_mdsc_get_listener_req(inode, nexttid);
-
-		if (!req)
-			break;
-		nexttid = req->r_tid + 1;
-
+	spin_lock(&ci->i_listener_lock);
+	list_for_each_safe(p, n, &ci->i_listener_list) {
+		struct ceph_mds_request *req =
+                        list_entry(p, struct ceph_mds_request, r_listener_item);
+		ceph_mdsc_get_request(req);
+		spin_unlock(&ci->i_listener_lock);
 		if (req->r_timeout) {
 			err = wait_for_completion_timeout(&req->r_safe_completion,
 							req->r_timeout);
@@ -882,8 +880,10 @@ static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync
 		} else {
 			wait_for_completion(&req->r_safe_completion);
 		}
+		spin_lock(&ci->i_listener_lock);
+
 		ceph_mdsc_put_request(req);
-	} while (req);
+	}
 
 	return ret;
 }

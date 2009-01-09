@@ -153,6 +153,7 @@ struct ceph_mds_request {
 	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
 	struct inode	*r_listener;
+	struct list_head r_listener_item;
 
 	/* references to the trailing dentry and inode from parsing the
 	 * mds response.  also used to feed a VFS-provided dentry into
@@ -218,6 +219,15 @@ ceph_get_mds_session(struct ceph_mds_session *s)
 	atomic_inc(&s->s_ref);
 	return s;
 }
+
+/*
+ * requests
+ */
+static inline void ceph_mdsc_get_request(struct ceph_mds_request *req)
+{
+	atomic_inc(&req->r_ref);
+}
+
 extern void ceph_put_mds_session(struct ceph_mds_session *s);
 
 extern void ceph_send_msg_mds(struct ceph_mds_client *mdsc,
