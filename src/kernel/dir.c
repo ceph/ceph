@@ -884,6 +884,7 @@ static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync
 
 		ceph_mdsc_put_request(req);
 	}
+	spin_unlock(&ci->i_listener_lock);
 
 	return ret;
 }
