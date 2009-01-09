@@ -106,6 +106,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- move root inode into stray dir
 - make recovery work with early replies
   - purge each session's unused preallocated inodes
 - xlock vs wrlock.. need more lock states?
