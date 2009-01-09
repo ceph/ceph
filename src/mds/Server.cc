@@ -2320,7 +2320,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
-  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.mknod.ino));
+  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.ino));
   assert(newi);
 
   newi->projected_parent = dn;
@@ -2370,7 +2370,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
-  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.mkdir.ino));  
+  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.ino));  
   assert(newi);
 
   // it's a directory.
@@ -2423,7 +2423,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdr->now = g_clock.real_now();
   snapid_t follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
 
-  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.symlink.ino));
+  CInode *newi = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.ino));
   assert(newi);
 
   // it's a symlink
@@ -5068,7 +5068,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
 
-  CInode *in = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.args.open.ino));
+  CInode *in = prepare_new_inode(mdr, dn->dir, inodeno_t(req->head.ino));
   assert(in);
   
   // it's a file.

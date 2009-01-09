@@ -1183,6 +1183,11 @@ retry:
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
 	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
 
+	if (req->r_last_inode)
+		rhead->ino = cpu_to_le64(ceph_ino(req->r_last_inode));
+	else
+		rhead->ino = 0;
+
 	/* send and wait */
 	mutex_unlock(&mdsc->mutex);
 	dout(10, "do_request %p %lld r_expected_cap=%p\n", req, req->r_tid,

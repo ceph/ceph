@@ -742,6 +742,7 @@ struct ceph_mds_request_head {
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
+	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 
 	union {
 		struct {
@@ -770,19 +771,13 @@ struct ceph_mds_request_head {
 		struct {
 			__le32 mode;
 			__le32 rdev;
-			__le64 ino;
 		} __attribute__ ((packed)) mknod;
 		struct {
-			__le64 ino;
-		} __attribute__ ((packed)) symlink;
-		struct {
 			__le32 mode;
-			__le64 ino;
 		} __attribute__ ((packed)) mkdir;
 		struct {
 			__le32 flags;
 			__le32 mode;
-			__le64 ino;
 		} __attribute__ ((packed)) open;
 		struct {
 			__le64 length;
