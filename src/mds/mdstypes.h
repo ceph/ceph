@@ -299,13 +299,14 @@ struct inode_t {
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  // dirfrag, recursive accounting
+  // dirfrag, recursive accountin
   frag_info_t dirstat;
   nest_info_t rstat, accounted_rstat;
  
   // special stuff
   version_t version;           // auth only
   version_t file_data_version; // auth only
+  version_t xattr_version;
 
   // file type
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
@@ -338,6 +339,7 @@ struct inode_t {
 
     ::encode(version, bl);
     ::encode(file_data_version, bl);
+    ::encode(xattr_version, bl);
   }
   void decode(bufferlist::iterator &p) {
     ::decode(ino, p);
@@ -365,6 +367,7 @@ struct inode_t {
 
     ::decode(version, p);
     ::decode(file_data_version, p);
+    ::decode(xattr_version, p);
   }
 };
 WRITE_CLASS_ENCODER(inode_t)

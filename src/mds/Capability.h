@@ -203,6 +203,7 @@ public:
   int releasing;   // only allow a single in-progress release (it may be waiting for log to flush)
 
   snapid_t client_follows;
+  version_t client_xattr_version;
   
   xlist<Capability*>::item session_caps_item;
   xlist<Capability*> *rdcaps_list;
@@ -217,7 +218,7 @@ public:
     last_sent(0),
     mseq(0),
     suppress(0), stale(false), releasing(0),
-    client_follows(0),
+    client_follows(0), client_xattr_version(0),
     session_caps_item(this), rdcaps_list(rl), rdcaps_item(this), snaprealm_caps_item(this) { }
   
   ceph_seq_t get_mseq() { return mseq; }

@@ -2027,6 +2027,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
+  pi->xattr_version++;
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -2086,7 +2087,8 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   inode_t *pi = cur->project_inode();
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
-  
+  pi->xattr_version++;
+
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");

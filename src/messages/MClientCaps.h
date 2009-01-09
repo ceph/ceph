@@ -128,6 +128,9 @@ class MClientCaps : public Message {
     if (head.time_warp_seq)
       out << " tws " << head.time_warp_seq;
 
+    if (head.xattr_version)
+      out << " xattrs(v=" << head.xattr_version << " l=" << xattrbl.length() << ")";
+
     out << ")";
   }
   
@@ -139,6 +142,7 @@ class MClientCaps : public Message {
   }
   void encode_payload() {
     head.snap_trace_len = snapbl.length();
+    head.xattr_len = xattrbl.length();
     ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
     ::encode_nohead(xattrbl, payload);

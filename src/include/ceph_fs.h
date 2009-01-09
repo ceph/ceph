@@ -852,6 +852,7 @@ struct ceph_mds_reply_inode {
 	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
 	struct ceph_timespec rctime;
 	struct ceph_frag_tree_head fragtree;
+	__le64 xattr_version;
 } __attribute__ ((packed));
 /* followed by frag array, then symlink string, then xattr blob */
 
@@ -1049,6 +1050,7 @@ struct ceph_mds_caps {
 
 	/* xattrlock */
 	__le32 xattr_len;
+	__le64 xattr_version;
 
 	/* filelock */
 	__le64 size, max_size;

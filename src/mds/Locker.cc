@@ -651,13 +651,24 @@ bool Locker::issue_caps(CInode *in)
 		<< " seq " << cap->get_last_seq()
 		<< " new pending " << ccap_string(after) << " was " << ccap_string(before) 
 		<< dendl;
-        mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
-						 in->inode,
-						 in->find_snaprealm()->inode->ino(),
-						 cap->get_last_seq(),
-						 after, wanted, 0,
-						 cap->get_mseq()),
-				 it->first);
+
+	MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
+					 in->inode,
+					 in->find_snaprealm()->inode->ino(),
+					 cap->get_last_seq(),
+					 after, wanted, 0,
+					 cap->get_mseq());
+
+	// include xattrs if they're newer than what the client has
+	if ((after & CEPH_CAP_XATTR_RDCACHE) &&
+	    in->inode.xattr_version > cap->client_xattr_version) {
+	  dout(10) << "    including xattrs v " << in->inode.xattr_version << dendl;
+	  ::encode(in->xattrs, m->xattrbl);
+	  m->head.xattr_version = in->inode.xattr_version;
+	  cap->client_xattr_version = in->inode.xattr_version;
+	}
+	
+	mds->send_message_client(m, it->first);
       }
     }
   }

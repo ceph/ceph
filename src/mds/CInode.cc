@@ -1290,7 +1290,9 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     i = get_projected_inode();
   else 
     i = &inode;
-  bufferlist xbl;
+
+  map<string, bufferptr> *pxattrs = &xattrs;
+
   if (snapid && is_multiversion()) {
 
     // for now at least, old_inodes is only defined/valid on the auth
@@ -1305,7 +1307,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	       << dendl;
       assert(p->second.first <= snapid && snapid <= p->first);
       i = &p->second.inode;
-      ::encode(p->second.xattrs, xbl);
+      pxattrs = &p->second.xattrs;
     }
   }
   
@@ -1340,8 +1342,12 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.rdev = i->rdev;
   e.fragtree.nsplits = dirfragtree._splits.size();
 
-  // include capability?
   Capability *cap = get_client_cap(client);
+
+  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_RDCACHE) &&
+    cap->client_xattr_version == i->xattr_version;
+  
+  // include capability?
   if (snapid != CEPH_NOSNAP && !cap) {
     e.cap.caps = valid ? get_caps_allowed(false) : CEPH_STAT_CAP_INODE;
     e.cap.seq = 0;
@@ -1381,6 +1387,18 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	   << " seq " << e.cap.seq
 	   << " mseq " << e.cap.mseq << dendl;
 
+  // xattr
+  bufferlist xbl;
+  e.xattr_version = i->xattr_version;
+  if (!had_latest_xattrs &&
+      cap &&
+      (cap->pending() & CEPH_CAP_XATTR_RDCACHE)) {
+    ::encode(*pxattrs, xbl);
+    if (cap)
+      cap->client_xattr_version = i->xattr_version;
+    dout(10) << "including xattrs version " << i->xattr_version << dendl;
+  }
+
   // encode
   ::encode(e, bl);
   for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
@@ -1390,9 +1408,6 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     ::encode(p->second, bl);
   }
   ::encode(symlink, bl);
-  
-  if (!xattrs.empty() && xbl.length() == 0)
-    ::encode(xattrs, xbl);
   ::encode(xbl, bl);
 
   return valid;
