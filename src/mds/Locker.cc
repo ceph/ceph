@@ -602,9 +602,11 @@ bool Locker::issue_caps(CInode *in)
 
   // should we increase max_size?
   if (in->is_file() &&
-      ((all_allowed|loner_allowed) & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) &&
+      ((all_allowed|loner_allowed) & CEPH_CAP_FILE_WR) &&
       in->is_auth())
-    check_inode_max_size(in);
+    // we force an update here, which among other things avoids twiddling
+    // the lock state.
+    check_inode_max_size(in, true);
 
   // client caps
   for (map<int, Capability*>::iterator it = in->client_caps.begin();
@@ -881,14 +883,14 @@ public:
 };
 
 
-bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
+bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_size, __u64 new_size)
 {
   assert(in->is_auth());
 
   inode_t *latest = in->get_projected_inode();
   uint64_t new_max = latest->max_size;
   __u64 size = latest->size;
-  if (forceupdate)
+  if (update_size)
     size = new_size;
 
   if ((in->get_caps_wanted() & ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) == 0)
@@ -896,13 +898,13 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
   else if ((size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
 
-  if (new_max == latest->max_size && !forceupdate)
+  if (new_max == latest->max_size && !update_size)
     return false;  // no change.
 
   dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
 	   << " on " << *in << dendl;
 
-  if (!forceupdate && !in->filelock.can_wrlock()) {
+  if (!force_wrlock && !in->filelock.can_wrlock()) {
     // lock?
     if (in->filelock.is_stable())
       file_lock(&in->filelock);
@@ -920,7 +922,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->max_size = new_max;
-  if (forceupdate) {
+  if (update_size) {
     dout(10) << "check_inode_max_size also forcing size " 
 	     << pi->size << " -> " << new_size << dendl;
     pi->size = new_size;
@@ -943,7 +945,7 @@ bool Locker::check_inode_max_size(CInode *in, bool forceupdate, __u64 new_size)
     metablob = &eu->metablob;
     le = eu;
   }
-  if (forceupdate) {  // FIXME if/when we do max_size nested accounting
+  if (update_size) {  // FIXME if/when we do max_size nested accounting
     mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
     // no cow, here!
     CDentry *parent = in->get_projected_parent_dn();
