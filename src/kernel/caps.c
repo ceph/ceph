@@ -243,7 +243,7 @@ retry:
 	dout(10, "add_cap inode %p (%llx.%llx) cap %s now %s seq %d mds%d\n",
 	     inode, ceph_vinop(inode), ceph_cap_string(issued),
 	     ceph_cap_string(issued|cap->issued), seq, mds);
-	cap->issued |= issued;
+	cap->issued = issued;
 	cap->implemented |= issued;
 	cap->seq = seq;
 	cap->mseq = mseq;
