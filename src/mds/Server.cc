@@ -2605,6 +2605,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
   mdcache->journal_dirty_inode(mdr, &le->metablob, targeti);
 
+  dn->lock.set_xlock_done();
+
   early_reply(mdr, targeti, dn);
 
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
@@ -2709,6 +2711,8 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
+
+  dn->lock.set_xlock_done();
 
   early_reply(mdr, targeti, dn);
 
@@ -3236,6 +3240,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
+  dn->lock.set_xlock_done();
+
   early_reply(mdr, 0, dn);
 
   // log + wait
@@ -3741,7 +3747,10 @@ void Server::handle_client_rename(MDRequest *mdr)
   // mark committing (needed for proper recovery)
   mdr->committing = true;
   
-  early_reply(mdr, destdn->get_inode(), destdn);
+  srcdn->lock.set_xlock_done();
+  destdn->lock.set_xlock_done();
+
+  early_reply(mdr, srci, destdn);
 
   // log + wait
   mdlog->submit_entry(le, fin);
@@ -5116,6 +5125,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   ls->open_files.push_back(&in->xlist_open_file);
 
   // early reply?
+  dn->lock.set_xlock_done();
+
   early_reply(mdr, in, 0);
 
   // log + wait
