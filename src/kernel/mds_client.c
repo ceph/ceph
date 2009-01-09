@@ -770,7 +770,8 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 			break;
 		nexttid = reqs[got-1]->r_tid + 1;
 		for (i = 0; i < got; i++) {
-			if ((reqs[i]->r_session &&
+			if (!reqs[i]->r_got_unsafe &&
+			    (reqs[i]->r_session &&
 			     reqs[i]->r_session->s_mds == mds) ||
 			    (all && reqs[i]->r_fwd_session &&
 			     reqs[i]->r_fwd_session->s_mds == mds)) {
@@ -1121,6 +1122,8 @@ static void __prepare_send_request(struct ceph_mds_client *mdsc,
 	 * it. */
 	req->r_request = ceph_msg_maybe_dup(req->r_request);
 
+	req->r_attempts++;
+
 	rhead = req->r_request->front.iov_base;
 	rhead->retry_attempt = cpu_to_le32(req->r_attempts - 1);
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
@@ -1192,7 +1195,6 @@ retry:
 	BUG_ON(req->r_session);
 	req->r_session = session; /* request now owns the session ref */
 	req->r_resend_mds = -1;   /* forget any previous mds hint */
-	req->r_attempts++;
 
 	if (req->r_request_started == 0)   /* note request start time */
 		req->r_request_started = jiffies;
@@ -1452,6 +1454,26 @@ bad:
 }
 
 
+/*
+ * called under session->mutex.
+ */
+static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
+				   struct ceph_mds_session *session)
+{
+	struct list_head *p, *n;
+	struct ceph_mds_request *req;
+
+	dout(10, "replay_unsafe_requests mds%d\n", session->s_mds);
+
+	mutex_lock(&mdsc->mutex);
+	list_for_each_safe(p, n, &session->s_unsafe) {
+		req = list_entry(p, struct ceph_mds_request, r_unsafe_item);
+		__prepare_send_request(mdsc, req);
+		ceph_msg_get(req->r_request);
+		ceph_send_msg_mds(mdsc, req->r_request, session->s_mds);
+	}
+	mutex_unlock(&mdsc->mutex);
+}
 
 /*
  * If an MDS fails and recovers, it needs to reconnect with clients in order
@@ -1486,9 +1508,17 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 
 	/* find session */
 	session = __ceph_lookup_mds_session(mdsc, mds);
+	down_read(&mdsc->snap_rwsem);
+	mutex_unlock(&mdsc->mutex);    /* drop lock for duration */
+
 	if (session) {
+		mutex_lock(&session->s_mutex);
+
 		session->s_state = CEPH_MDS_SESSION_RECONNECTING;
 		session->s_seq = 0;
+
+		/* replay unsafe requests */
+		replay_unsafe_requests(mdsc, session);
 
 		/* estimate needed space */
 		len += session->s_nr_caps *
@@ -1500,11 +1530,6 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		dout(20, "no session for mds%d, will send short reconnect\n",
 		     mds);
 	}
-
-	down_read(&mdsc->snap_rwsem);
-	mutex_unlock(&mdsc->mutex);    /* drop lock for duration */
-	if (session)
-		mutex_lock(&session->s_mutex);
 
 retry:
 	/* build reply */
