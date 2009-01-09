@@ -191,6 +191,10 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   
   if (c) {
     unflushed = 0;
+    
+    if (!g_conf.mds_log_unsafe)
+      wait_safe = true;
+
     journaler->flush(wait_safe ? 0:c);
     if (wait_safe)
       journaler->wait_for_flush(0, c);
@@ -213,6 +217,9 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
 
 void MDLog::wait_for_sync( Context *c )
 {
+  if (!g_conf.mds_log_unsafe)
+    return wait_for_safe(c);
+
   if (g_conf.mds_log) {
     // wait
     journaler->wait_for_flush(c, 0);

@@ -346,6 +346,7 @@ md_config_t g_conf = {
   mds_rdcap_ttl_ms: 60*1000,
 
   mds_log: true,
+  mds_log_unsafe: false,      // only wait for log sync, when it's mostly safe to do so
   mds_log_max_events: -1,
   mds_log_max_segments: 100,  // segment size defined by FileLayout, above
   mds_log_max_expiring: 20,

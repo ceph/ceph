@@ -215,6 +215,7 @@ struct md_config_t {
   int mds_rdcap_ttl_ms;
 
   bool mds_log;
+  bool mds_log_unsafe;
   int mds_log_max_events;
   int mds_log_max_segments;
   int mds_log_max_expiring;
