@@ -161,7 +161,7 @@ public:
   bool is_capped() { return capped; }
   void cap();
 
-  void submit_entry( LogEvent *e, Context *c = 0 );
+  void submit_entry( LogEvent *e, Context *c = 0, bool wait_for_safe=false );
   void wait_for_sync( Context *c );
   void wait_for_safe( Context *c );
   void flush();

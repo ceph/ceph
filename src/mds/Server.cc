@@ -2352,7 +2352,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
 
   // log + wait
   mdr->committing = true;
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows),
+		      mdr->did_ino_allocation());
 }
 
 
@@ -2407,7 +2408,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 
   // log + wait
   mdr->committing = true;
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows),
+		      mdr->did_ino_allocation());
 }
 
 
@@ -2454,7 +2456,8 @@ void Server::handle_client_symlink(MDRequest *mdr)
 
   // log + wait
   mdr->committing = true;
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows),
+		      mdr->did_ino_allocation());
 }
 
 
@@ -5109,7 +5112,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   // log + wait
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
-  mdlog->submit_entry(le, fin);
+  mdlog->submit_entry(le, fin, mdr->did_ino_allocation());
 }
 
 

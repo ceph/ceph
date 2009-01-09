@@ -147,7 +147,7 @@ void MDLog::append()
 
 // -------------------------------------------------
 
-void MDLog::submit_entry( LogEvent *le, Context *c ) 
+void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe ) 
 {
   if (!g_conf.mds_log) {
     // hack: log is disabled.
@@ -191,7 +191,9 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   
   if (c) {
     unflushed = 0;
-    journaler->flush(c);
+    journaler->flush(wait_safe ? 0:c);
+    if (wait_safe)
+      journaler->wait_for_flush(0, c);
   }
   else
     unflushed++;

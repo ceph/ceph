@@ -345,7 +345,10 @@ struct MDRequest : public Mutation {
   }
 
   bool slave_did_prepare() { return more()->slave_commit; }
-  
+
+  bool did_ino_allocation() {
+    return alloc_ino || used_prealloc_ino || prealloc_inos.size();
+  }      
 
   void print(ostream &out) {
     out << "request(" << reqid;
