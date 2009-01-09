@@ -1241,11 +1241,6 @@ bool Locker::_do_cap_update(CInode *in, int dirty, int wanted, snapid_t follows,
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
 
-  if (change_max) {
-    dout(7) << "  max_size " << pi->max_size << " -> " << new_max << dendl;
-    pi->max_size = new_max;
-  }
-
   // file
   if (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) {
     utime_t atime = m->get_atime();
