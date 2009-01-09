@@ -2605,6 +2605,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
   mdcache->journal_dirty_inode(mdr, &le->metablob, targeti);
 
+  early_reply(mdr, targeti, dn);
+
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
 }
 
@@ -2707,6 +2709,8 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
 
   // mark committing (needed for proper recovery)
   mdr->committing = true;
+
+  early_reply(mdr, targeti, dn);
 
   // log + wait
   mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, inc, dn, targeti));
@@ -3232,6 +3236,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
+  early_reply(mdr, 0, dn);
+
   // log + wait
   mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
 }
@@ -3735,6 +3741,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   // mark committing (needed for proper recovery)
   mdr->committing = true;
   
+  early_reply(mdr, destdn->get_inode(), destdn);
+
   // log + wait
   mdlog->submit_entry(le, fin);
 }
