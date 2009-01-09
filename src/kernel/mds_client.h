@@ -174,7 +174,7 @@ struct ceph_mds_request {
 	atomic_t          r_ref;
 	struct completion r_completion;
 	struct completion r_safe_completion;
-	int		  r_got_reply;
+	bool		  r_got_unsafe, r_got_safe;
 };
 
 /*

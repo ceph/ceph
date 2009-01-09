@@ -1273,27 +1273,36 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	dout(10, "handle_reply %p expected_cap=%p\n", req, req->r_expected_cap);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
-	if (req->r_got_reply) {
-		if (head->safe) {
-			/* 
-			   We already handled the unsafe response, now do the cleanup.
-			   Shouldn't we check the safe response to see if it matches
-			   the unsafe one?
-			*/
-			complete(&req->r_safe_completion);
-			__unregister_request(mdsc, req);
-			dout(10, "got safe reply %llu, mds%d\n",
-				tid, mds);
-			ceph_msg_put(req->r_request);
-			req->r_request = NULL;
-		} else {
-			dout(0, "got another _unsafe_ reply %llu, mds%d\n",
-				tid, mds);
-		}
+
+	/* dup? */
+	if ((req->r_got_unsafe && !head->safe) ||
+	    (req->r_got_safe && head->safe)) {
+		dout(0, "got a dup %s reply on %llu from mds%d\n",
+		     head->safe ? "safe":"unsafe", tid, mds);
 		mutex_unlock(&mdsc->mutex);
 		ceph_mdsc_put_request(req);
 		return;
 	}
+
+	if (req->r_got_unsafe && head->safe) {
+		/* 
+		 * We already handled the unsafe response, now
+		 * do the cleanup.  Shouldn't we check the
+		 * safe response to see if it matches the
+		 * unsafe one?
+		 */
+		complete(&req->r_safe_completion);
+		__unregister_request(mdsc, req);
+		dout(10, "got safe reply %llu, mds%d\n",
+		     tid, mds);
+		ceph_msg_put(req->r_request);
+		req->r_request = NULL;
+		req->r_got_safe = true;
+		mutex_unlock(&mdsc->mutex);
+		ceph_mdsc_put_request(req);
+		return;
+	}
+
 	if (req->r_session && req->r_session->s_mds != mds) {
 		ceph_put_mds_session(req->r_session);
 		req->r_session = __ceph_lookup_mds_session(mdsc, mds);
@@ -1306,7 +1315,11 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		return;
 	}
 	BUG_ON(req->r_reply);
-	req->r_got_reply = 1;
+
+	if (head->safe)
+		req->r_got_safe = true;
+	else
+		req->r_got_unsafe = true;
 
 	/* take the snap sem -- we may be are adding a cap here */
 	down_write(&mdsc->snap_rwsem);
