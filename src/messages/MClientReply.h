@@ -106,7 +106,10 @@ struct InodeStat {
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
-  map<string, bufferptr> xattrs;
+
+  version_t xattr_version;
+  bufferlist xattrbl;
+  //map<string, bufferptr> xattrs;
 
  public:
   InodeStat() {}
@@ -152,13 +155,9 @@ struct InodeStat {
       n--;
     }
     ::decode(symlink, p);
-
-    bufferlist xbl;
-    ::decode(xbl, p);
-    if (xbl.length()) {
-      bufferlist::iterator q = xbl.begin();
-      ::decode(xattrs, q);
-    }
+    
+    xattr_version = e.xattr_version;
+    ::decode(xattrbl, p);
   }
   
   // see CInode::encode_inodestat for encoder.

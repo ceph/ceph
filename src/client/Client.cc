@@ -412,9 +412,12 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
       in->inode.anchored = false;  /* lie */
     }
 
-    if ((issued & CEPH_CAP_XATTR_EXCL) == 0) {
-#warning xattrs
-      in->xattrs.swap(st->xattrs);
+    if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+	st->xattrbl.length() &&
+	st->xattr_version > in->inode.xattr_version) {
+      bufferlist::iterator p = st->xattrbl.begin();
+      ::decode(in->xattrs, p);
+      in->inode.xattr_version = st->xattr_version;
     }
 
     in->inode.dirstat = st->dirstat;
@@ -2229,8 +2232,12 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
     in->inode.nlink = m->head.nlink;
     in->inode.anchored = false;  /* lie */
   }
-  if ((issued & CEPH_CAP_XATTR_EXCL) == 0) {
-#warning xattrs in->xattrs.swap(m->xattrs);
+  if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+      m->xattrbl.length() &&
+      m->head.xattr_version > in->inode.xattr_version) {
+    bufferlist::iterator p = m->xattrbl.begin();
+    ::decode(in->xattrs, p);
+    in->inode.xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_size(),
 			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps);
