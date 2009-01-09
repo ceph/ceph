@@ -2276,6 +2276,7 @@ bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
       }
       
       // initiate lock 
+      assert(lock->get_state() != LOCK_LOCK);
       scatter_lock(lock);
       
       // fall-thru to below.
@@ -3322,7 +3323,8 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
 	return false;
       }
       
-      // initiate lock 
+      // initiate lock
+      assert(lock->get_state() != LOCK_LOCK);
       file_lock(lock);
       
       // fall-thru to below.

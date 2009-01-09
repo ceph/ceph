@@ -144,7 +144,8 @@ public:
   bool can_xlock_soon() {
     if (parent->is_auth())
       return (state == LOCK_SCATTER_LOCK ||
-	      state == LOCK_SYNC_LOCK);
+	      state == LOCK_SYNC_LOCK ||
+	      state == LOCK_LOCK);
     else
       return false;
   }

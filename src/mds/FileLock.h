@@ -168,7 +168,8 @@ class FileLock : public ScatterLock {
     if (parent->is_auth())
       return (state == LOCK_SYNC_LOCK ||
 	      state == LOCK_LONER_LOCK ||
-	      state == LOCK_MIXED_LOCK);
+	      state == LOCK_MIXED_LOCK ||
+	      state == LOCK_LOCK);
     else
       return false;
   }
