@@ -1095,7 +1095,8 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
  */
 static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			    struct ceph_mds_session *session,
-			    struct ceph_cap *cap)
+			    struct ceph_cap *cap,
+			    void **xattr_data)
 	__releases(inode->i_lock)
 
 {
@@ -1188,7 +1189,19 @@ start:
 	}
 
 	if ((issued & CEPH_CAP_XATTR_EXCL) == 0 && grant->xattr_len) {
-#warning fix xattr cap update
+		int len = le32_to_cpu(grant->xattr_len);
+		u64 version = le64_to_cpu(grant->xattr_version);
+
+		if (!(len > 4 && *xattr_data == 0) &&  /* ENOMEM in caller */
+		    version > ci->i_xattr_version) {
+			dout(20, " got new xattrs v%llu on %p len %d\n",
+			     version, inode, len);
+			kfree(ci->i_xattr_data);
+			ci->i_xattr_len = len;
+			ci->i_xattr_version = version;
+			ci->i_xattr_data = *xattr_data;
+			*xattr_data = 0;
+		}
 	}
 
 	/* size/ctime/mtime/atime? */
@@ -1540,6 +1553,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	struct ceph_vino vino;
 	u64 size, max_size;
 	int check_caps = 0;
+	void *xattr_data = 0;
 
 	dout(10, "handle_caps from mds%d\n", mds);
 
@@ -1602,6 +1616,10 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	}
 
+	/* preallocate space for xattrs? */
+	if (le32_to_cpu(h->xattr_len) > 4)
+		xattr_data = kmalloc(le32_to_cpu(h->xattr_len), GFP_NOFS);
+
 	/* the rest require a cap */
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(inode, mds);
@@ -1616,7 +1634,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	switch (op) {
 	case CEPH_CAP_OP_GRANT:
 		up_write(&mdsc->snap_rwsem);
-		if (handle_cap_grant(inode, h, session, cap) == 1) {
+		if (handle_cap_grant(inode, h, session, cap,&xattr_data) == 1) {
 			dout(10, " sending reply back to mds%d\n", mds);
 			ceph_msg_get(msg);
 			ceph_send_msg_mds(mdsc, msg, mds);
@@ -1645,6 +1663,7 @@ done:
 	mutex_unlock(&session->s_mutex);
 	ceph_put_mds_session(session);
 
+	kfree(xattr_data);
 	if (check_caps)
 		ceph_check_caps(ceph_inode(inode), 1, 0);
 	if (inode)

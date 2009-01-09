@@ -160,7 +160,8 @@ struct ceph_cap_snap {
 	gid_t gid;
 
 	void *xattr_blob;
-	int xattr_len;	
+	int xattr_len;
+	u64 xattr_version;
 
 	u64 size;
 	struct timespec mtime, atime, ctime;
@@ -220,10 +221,17 @@ struct ceph_inode_info {
 	struct rb_root i_fragtree;
 	struct mutex i_fragtree_mutex;
 
-	/* (still encoded) xattr blob. we avoid the overhead of parsing
-	 * this until someone actually called getxattr, etc. */
+	/*
+	 * (still encoded) xattr blob. we avoid the overhead of parsing
+	 * this until someone actually calls getxattr, etc.
+	 *
+	 * if i_xattr_len == 0 or 4, i_xattr_data == NULL.
+	 * i_xattr_len == 4 implies there are no xattrs; 0 means we
+	 * don't know.
+	 */
 	int i_xattr_len;
 	char *i_xattr_data;
+	u64 i_xattr_version;
 
 	/* capabilities.  protected _both_ by i_lock and cap->session's
 	 * s_mutex. */

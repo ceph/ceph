@@ -405,8 +405,12 @@ static int fill_inode(struct inode *inode,
 	     inode, ceph_vinop(inode), le64_to_cpu(info->version),
 	     ci->i_version);
 
-	/* prealloc xattr data, if it looks like we'll need it */
-	if (iinfo->xattr_len && iinfo->xattr_len != ci->i_xattr_len) {
+	/*
+	 * prealloc xattr data, if it looks like we'll need it.  only
+	 * if len > 4 (meaning there are actually xattrs; the first 4
+	 * bytes are the xattr count).
+	 */
+	if (iinfo->xattr_len > 4 && iinfo->xattr_len != ci->i_xattr_len) {
 		xattr_data = kmalloc(iinfo->xattr_len, GFP_NOFS);
 		if (!xattr_data)
 			derr(10, "ENOMEM on xattr blob %d bytes\n",
@@ -451,14 +455,17 @@ static int fill_inode(struct inode *inode,
 	inode->i_blkbits = fls(le32_to_cpu(info->layout.fl_stripe_unit)) - 1;
 
 	/* xattrs */
-	if (iinfo->xattr_len && (issued & CEPH_CAP_XATTR_EXCL) == 0) {
+	/* note that if i_xattr_len <= 4, i_xattr_data will still be NULL. */
+	if (iinfo->xattr_len && (issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+	    le64_to_cpu(info->xattr_version) > ci->i_xattr_version) {
 		if (ci->i_xattr_len != iinfo->xattr_len) {
 			kfree(ci->i_xattr_data);
 			ci->i_xattr_len = iinfo->xattr_len;
+			ci->i_xattr_version = le64_to_cpu(info->xattr_version);
 			ci->i_xattr_data = xattr_data;
 			xattr_data = NULL;
 		}
-		if (ci->i_xattr_len)
+		if (ci->i_xattr_len > 4)
 			memcpy(ci->i_xattr_data, iinfo->xattr_data,
 			       ci->i_xattr_len);
 	}
@@ -1802,7 +1809,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	spin_lock(&inode->i_lock);
 
 	err = -ENODATA;  /* == ENOATTR */
-	if (!ci->i_xattr_len)
+	if (ci->i_xattr_len <= 4)
 		goto out;
 
 	/* find attr name */
@@ -1858,7 +1865,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	spin_lock(&inode->i_lock);
 
 	/* measure len of names */
-	if (ci->i_xattr_len) {
+	if (ci->i_xattr_len > 4) {
 		p = ci->i_xattr_data;
 		end = p + ci->i_xattr_len;
 		ceph_decode_32_safe(&p, end, numattr, bad);
@@ -1886,7 +1893,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 		goto out;
 
 	/* copy names */
-	if (ci->i_xattr_len) {
+	if (ci->i_xattr_len> 4) {
 		p = ci->i_xattr_data;
 		ceph_decode_32(&p, numattr);
 		while (numattr--) {
