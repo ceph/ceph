@@ -293,7 +293,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_vmtruncate_to = -1;
 	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
 
-	INIT_RADIX_TREE(&ci->i_listener_tree, GFP_NOFS);
+	INIT_RADIX_TREE(&ci->i_listener_tree, GFP_ATOMIC);
 	spin_lock_init(&ci->i_listener_lock);
 
 	return &ci->vfs_inode;
