@@ -330,7 +330,7 @@ void Ager::save_freelist(int el)
   bufferlist bl;
   ((Ebofs*)store)->_export_freelist(bl);
   ::unlink(s);
-  int fd = ::open(s, O_CREAT|O_WRONLY);
+  int fd = ::open(s, O_CREAT|O_WRONLY, 0644);
   ::fchmod(fd, 0644);
   ::write(fd, bl.c_str(), bl.length());
   ::close(fd);
