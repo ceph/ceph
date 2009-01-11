@@ -771,10 +771,10 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 		nexttid = reqs[got-1]->r_tid + 1;
 		for (i = 0; i < got; i++) {
 			if (!reqs[i]->r_got_unsafe &&
-			    (reqs[i]->r_session &&
-			     reqs[i]->r_session->s_mds == mds) ||
-			    (all && reqs[i]->r_fwd_session &&
-			     reqs[i]->r_fwd_session->s_mds == mds)) {
+			    ((reqs[i]->r_session &&
+			      reqs[i]->r_session->s_mds == mds) ||
+			     (all && reqs[i]->r_fwd_session &&
+			      reqs[i]->r_fwd_session->s_mds == mds))) {
 				dout(10, " kicking tid %llu\n", reqs[i]->r_tid);
 				put_request_sessions(reqs[i]);
 				complete(&reqs[i]->r_completion);
