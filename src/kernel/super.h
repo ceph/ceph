@@ -319,6 +319,7 @@ extern u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 struct ceph_dentry_info {
 	struct ceph_mds_session *lease_session;
 	u32 lease_gen;
+	u32 lease_seq;
 };
 
 static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)

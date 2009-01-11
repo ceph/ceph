@@ -1766,6 +1766,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mds_session *session;
 	struct ceph_inode_info *ci;
 	struct dentry *parent, *dentry;
+	struct ceph_dentry_info *di;
 	int mds;
 	struct ceph_mds_lease *h = msg->front.iov_base;
 	struct ceph_vino vino;
@@ -1827,7 +1828,11 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dput(parent);
 		if (!dentry)
 			goto release;
-		revoke_dentry_lease(dentry);
+		di = ceph_dentry(dentry);
+		if (di && di->lease_session == session) {
+			h->seq = cpu_to_le32(di->lease_seq);
+			revoke_dentry_lease(dentry);
+		}
 		dput(dentry);
 	}
 

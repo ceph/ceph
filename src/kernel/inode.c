@@ -640,6 +640,7 @@ static void update_dentry_lease(struct dentry *dentry,
 		dentry->d_fsdata = di;
 		di->lease_session = ceph_get_mds_session(session);
 		di->lease_gen = session->s_cap_gen;
+		di->lease_seq = le32_to_cpu(lease->seq);
 		is_new = 1;
 	} else if (di->lease_session != session)
 		goto out_unlock;
