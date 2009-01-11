@@ -49,13 +49,16 @@ struct LeaseStat {
   // this matches ceph_mds_reply_lease
   __u16 mask;
   __u32 duration_ms;  
+  __u32 seq;
   void encode(bufferlist &bl) const {
     ::encode(mask, bl);
     ::encode(duration_ms, bl);
+    ::encode(seq, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(mask, bl);
     ::decode(duration_ms, bl);
+    ::decode(seq, bl);
   }
 };
 WRITE_CLASS_ENCODER(LeaseStat)

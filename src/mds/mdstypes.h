@@ -877,12 +877,13 @@ struct ClientLease {
   int mask;                 // CEPH_STAT_MASK_*
   MDSCacheObject *parent;
 
+  ceph_seq_t seq;
   utime_t ttl;
   xlist<ClientLease*>::item session_lease_item; // per-session list
   xlist<ClientLease*>::item lease_item;         // global list
 
   ClientLease(int c, MDSCacheObject *p) : 
-    client(c), mask(0), parent(p),
+    client(c), mask(0), parent(p), seq(0),
     session_lease_item(this),
     lease_item(this) { }
 };

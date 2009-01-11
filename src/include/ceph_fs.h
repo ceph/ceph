@@ -855,6 +855,7 @@ struct ceph_mds_reply_inode {
 struct ceph_mds_reply_lease {
 	__le16 mask;
 	__le32 duration_ms;
+	__le32 seq;
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_dirfrag {
@@ -1065,6 +1066,7 @@ struct ceph_mds_lease {
 	__le16 mask;
 	__le64 ino;
 	__le64 first, last;
+	__le32 seq;
 } __attribute__ ((packed));
 /* followed by a __le32+string for dname */
 

@@ -33,24 +33,27 @@ struct MClientLease : public Message {
   nstring dname;
   
   int get_action() { return h.action; }
+  ceph_seq_t get_seq() { return h.seq; }
   int get_mask() { return h.mask; }
   inodeno_t get_ino() { return inodeno_t(h.ino); }
   snapid_t get_first() { return snapid_t(h.first); }
   snapid_t get_last() { return snapid_t(h.last); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
-  MClientLease(int ac, int m, __u64 i, __u64 sf, __u64 sl) :
+  MClientLease(int ac, ceph_seq_t seq, int m, __u64 i, __u64 sf, __u64 sl) :
     Message(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
+    h.seq = seq;
     h.mask = m;
     h.ino = i;
     h.first = sf;
     h.last = sl;
   }
-  MClientLease(int ac, int m, __u64 i, __u64 sf, __u64 sl, const nstring& d) :
+  MClientLease(int ac, ceph_seq_t seq, int m, __u64 i, __u64 sf, __u64 sl, const nstring& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;
+    h.seq = seq;
     h.mask = m;
     h.ino = i;
     h.first = sf;
@@ -60,6 +63,7 @@ struct MClientLease : public Message {
   const char *get_type_name() { return "client_lease"; }
   void print(ostream& out) {
     out << "client_lease(a=" << get_lease_action_name(get_action())
+	<< " seq " << get_seq()
 	<< " mask " << get_mask();
     out << " " << get_ino();
     if (h.last != CEPH_NOSNAP)

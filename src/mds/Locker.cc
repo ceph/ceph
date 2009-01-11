@@ -1364,6 +1364,11 @@ void Locker::handle_client_lease(MClientLease *m)
     delete m;
     return;
   } 
+  if (l->seq != m->get_seq()) {
+    dout(7) << "handle_client_lease lease seq " << l->seq << " != " << m->get_seq() << dendl;
+    delete m;
+    return;
+  }
 
   switch (m->get_action()) {
   case CEPH_MDS_LEASE_RELEASE:
@@ -1390,16 +1395,20 @@ void Locker::handle_client_lease(MClientLease *m)
 void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
 				 bufferlist &bl, utime_t now, Session *session)
 {
+  LeaseStat e;
+  e.mask = mask;
+
   if (mask) {
     ClientLease *l = p->add_client_lease(client, mask);
     session->touch_lease(l);
 
+    e.seq = ++l->seq;
+
     now += mdcache->client_lease_durations[pool];
     mdcache->touch_client_lease(l, pool, now);
-  }
+  } else
+    e.seq = 0;
 
-  LeaseStat e;
-  e.mask = mask;
   e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
   ::encode(e, bl);
   dout(20) << "_issue_client_lease mask " << e.mask << " dur " << e.duration_ms << "ms" << dendl;
@@ -1467,24 +1476,19 @@ void Locker::revoke_client_leases(SimpleLock *lock)
       continue;
     
     n++;
-    if (lock->get_type() == CEPH_LOCK_DN) {
-      CDentry *dn = (CDentry*)lock->get_parent();
-      int mask = CEPH_LOCK_DN;
+    assert(lock->get_type() == CEPH_LOCK_DN);
 
-      // i should also revoke the dir ICONTENT lease, if they have it!
-      CInode *diri = dn->get_dir()->get_inode();
-      mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
-						mask,
-						diri->ino(),
-						diri->first, CEPH_NOSNAP,
-						dn->get_name()),
-			       l->client);
-    } else {
-      CInode *in = (CInode*)lock->get_parent();
-      mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE,
-						lock->get_type(), in->ino(), in->first, in->last),
-			       l->client);
-    }
+    CDentry *dn = (CDentry*)lock->get_parent();
+    int mask = CEPH_LOCK_DN;
+    
+    // i should also revoke the dir ICONTENT lease, if they have it!
+    CInode *diri = dn->get_dir()->get_inode();
+    mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq,
+					      mask,
+					      diri->ino(),
+					      diri->first, CEPH_NOSNAP,
+					      dn->get_name()),
+			     l->client);
   }
   assert(n == lock->get_num_client_lease());
 }
