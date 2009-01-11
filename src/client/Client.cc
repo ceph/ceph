@@ -515,6 +515,7 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
       dout(10) << "got dentry lease on " << dname << " dur " << dlease->duration_ms << "ms ttl " << ttl << dendl;
       dn->lease_ttl = ttl;
       dn->lease_mds = from;
+      dn->lease_seq = dlease->seq;
     }
   }
 
@@ -683,8 +684,7 @@ Dentry *Client::lookup(const filepath& path, snapid_t snapid)
       Dir *dir = cur->dir;
       if (dir->dentries.count(path[i])) {
         dn = dir->dentries[path[i]];
-        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode
-		 << " ttl " << dn->inode->lease_ttl << dendl;
+        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << dendl;
       } else {
         dout(14) << " dentry " << path[i] << " dne" << dendl;
         return NULL;
@@ -699,8 +699,7 @@ Dentry *Client::lookup(const filepath& path, snapid_t snapid)
   if (!dn) 
     dn = cur->dn;
   if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino
-	     << " ttl " << dn->inode->lease_ttl << dendl;
+    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << dendl;
   }
 
   return dn;
@@ -1305,6 +1304,8 @@ void Client::handle_lease(MClientLease *m)
   int mds = m->get_source().num();
   mds_sessions[mds].seq++;
 
+  ceph_seq_t seq = m->get_seq();
+
   Inode *in;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
   if (inode_map.count(vino) == 0) {
@@ -1320,17 +1321,13 @@ void Client::handle_lease(MClientLease *m)
     }
     Dentry *dn = in->dir->dentries[m->dname];
     dout(10) << " revoked DN lease on " << dn << dendl;
+    if (dn->lease_mds == mds)
+      seq = dn->lease_seq;
     dn->lease_mds = -1;
   } 
-  if (m->get_mask() & in->lease_mask) {
-    int newmask = in->lease_mask & ~m->get_mask();
-    dout(10) << " revoked inode lease on " << in->ino() 
-	     << " mask " << in->lease_mask << " -> " << newmask << dendl;
-    in->lease_mask = newmask;
-  }
   
  revoke:
-  messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE,
+  messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, seq,
 					   m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname),
 			  m->get_source_inst());
   delete m;
@@ -1339,29 +1336,18 @@ void Client::handle_lease(MClientLease *m)
 
 void Client::release_lease(Inode *in, Dentry *dn, int mask)
 {
-  int havemask = 0;
-  int mds = -1;
   utime_t now = g_clock.now();
-  string dname;
 
-  // inode?
-  if (in->lease_mds >= 0 && (in->lease_mask & mask) && now < in->lease_ttl) {
-    havemask |= (in->lease_mask & mask);
-    mds = in->lease_mds;
-  }
+  assert(dn);
 
   // dentry?
-  if (dn && dn->lease_mds >= 0 && now < in->lease_ttl) {
-    havemask |= CEPH_LOCK_DN;
-    mds = dn->lease_mds;
-    dname = dn->name;
-  }
-
-  if (mds >= 0 && mdsmap->is_up(mds)) {
-    dout(10) << "release_lease mds" << mds << " mask " << mask
-	     << " on " << in->ino() << " " << dname << dendl;
-    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, mask, in->ino(), in->snapid, in->snapid, dname),
-			    mdsmap->get_inst(mds));
+  if (dn->lease_mds >= 0 && now < dn->lease_ttl && mdsmap->is_up(dn->lease_mds)) {
+    dout(10) << "release_lease mds" << dn->lease_mds << " mask " << mask
+	     << " on " << in->ino() << " " << dn->name << dendl;
+    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, dn->lease_seq, 
+					     CEPH_LOCK_DN,
+					     in->ino(), in->snapid, in->snapid, dn->name),
+			    mdsmap->get_inst(dn->lease_mds));
   }
 }
 
@@ -2874,7 +2860,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   if (rstat)
     *rstat = in->inode.rstat;
 
-  return in->lease_mask;
+  return in->caps_issued();
 }
 
 
@@ -4321,7 +4307,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
 	diri->dir->dentries.count(dname)) {
       Dentry *dn = diri->dir->dentries[dname];
       if ((dn->lease_mds >= 0 && dn->lease_ttl > now) ||
-	  (diri->lease_mds >= 0 && diri->lease_ttl > now && (diri->lease_mask & CEPH_LOCK_IFILE))) {
+	  (diri->caps_issued() & CEPH_CAP_FILE_RDCACHE)) {
 	touch_dn(dn);
 	in = dn->inode;
 	dout(1) << "ll_lookup " << parent << " " << name << " -> have valid lease on dentry|IFILE" << dendl;

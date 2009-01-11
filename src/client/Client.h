@@ -90,6 +90,7 @@ class Dentry : public LRUObject {
   int     ref;                       // 1 if there's a dir beneath me.
   int lease_mds;
   utime_t lease_ttl;
+  ceph_seq_t lease_seq;
   
   void get() { 
     assert(ref == 0); ref++; lru_pin(); 
@@ -100,7 +101,7 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0) { }
 };
 
 class Dir {
@@ -185,8 +186,6 @@ class Inode {
  public:
   inode_t   inode;    // the actual inode
   snapid_t  snapid;
-  int       lease_mask, lease_mds;
-  utime_t   lease_ttl;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -263,7 +262,6 @@ class Inode {
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     //inode(_inode),
     snapid(vino.snapid),
-    lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     dirty_caps(0),
     snap_caps(0), snap_cap_refs(0),
