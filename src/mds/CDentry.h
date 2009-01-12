@@ -91,6 +91,7 @@ protected:
   unsigned char remote_d_type;
 
   CInode *inode; // linked inode (if any)
+  CInode *projected_inode;  // projected inode (if any)
   CDir *dir;     // containing dirfrag
 
   version_t version;  // dir version when last touched.
@@ -126,7 +127,7 @@ public:
     name(n),
     first(f), last(l),
     remote_ino(0), remote_d_type(0),
-    inode(0), dir(0),
+    inode(0), projected_inode(0), dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
@@ -136,7 +137,7 @@ public:
     name(n),
     first(f), last(l),
     remote_ino(ino), remote_d_type(dt),
-    inode(0), dir(0),
+    inode(0), projected_inode(0), dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),

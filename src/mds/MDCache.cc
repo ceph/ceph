@@ -5170,7 +5170,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
                            vector<CDentry*>& trace,          // result
 			   snapid_t *psnapid, CInode **psnapdiri,
                            bool follow_trailing_symlink,     // how
-                           int onfail)
+                           int onfail,
+			   bool allow_projected)
 {
   assert(mdr || req);
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
@@ -5183,6 +5184,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   snapid_t snapid = CEPH_NOSNAP;
   if (psnapdiri)
     *psnapdiri = 0;
+
+  int client = mdr->reqid.name.is_client() ? mdr->reqid.name.num() : -1;
 
   // root
   CInode *cur = get_inode(origpath.get_ino());
@@ -5307,6 +5310,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
 
+    bool use_projected = false;
+    if (allow_projected &&
+	dn &&
+	dn->is_null() &&
+	dn->lock.is_xlocked() &&
+	dn->lock.can_rdlock(mdr, client) &&
+	dn->projected_inode)
+      use_projected = true;
+
     // null and last_bit and xlocked by me?
     if (dn && dn->is_null()) {
       if (null_okay) {
@@ -5314,7 +5326,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	trace.push_back(dn);
 	break; // done!
       }
-      if (dn->lock.is_xlocked() && dn->lock.get_xlocked_by() != mdr) {
+      if (dn->lock.is_xlocked() &&
+	  dn->lock.get_xlocked_by() != mdr &&
+	  !use_projected) {
         dout(10) << "traverse: xlocked null dentry at " << *dn << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
 	if (mds->logger) mds->logger->inc("tlock");
@@ -5323,20 +5337,25 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     }
 
-    if (dn && !dn->is_null()) {
+    if (dn && (!dn->is_null() || use_projected)) {
       // dentry exists.  xlocked?
-      if (!noperm && dn->lock.is_xlocked() && dn->lock.get_xlocked_by() != mdr) {
+      if (!noperm &&
+	  dn->lock.is_xlocked() &&
+	  dn->lock.get_xlocked_by() != mdr &&
+	  !dn->lock.can_rdlock(mdr, client)) {
         dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
 	if (mds->logger) mds->logger->inc("tlock");
         return 1;
       }
 
+      CInode *in = use_projected ? dn->projected_inode : dn->inode;
+      
       // do we have inode?
-      if (!dn->inode) {
+      if (!in) {
         assert(dn->is_remote());
         // do i have it?
-        CInode *in = get_inode(dn->get_remote_ino());
+        in = get_inode(dn->get_remote_ino());
         if (in) {
           dout(7) << "linking in remote in " << *in << dendl;
           dn->link_remote(in);
@@ -5350,11 +5369,11 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       }
 
       // symlink?
-      if (dn->inode->is_symlink() &&
+      if (in->is_symlink() &&
           (follow_trailing_symlink || depth < path.depth()-1)) {
         // symlink, resolve!
-        filepath sym = dn->inode->symlink;
-        dout(10) << "traverse: hit symlink " << *dn->inode << " to " << sym << dendl;
+        filepath sym = in->symlink;
+        dout(10) << "traverse: hit symlink " << *in << " to " << sym << dendl;
 
         // break up path components
         // /head/symlink/tail
@@ -5363,18 +5382,18 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         dout(10) << "traverse: path head = " << head << dendl;
         dout(10) << "traverse: path tail = " << tail << dendl;
         
-        if (symlinks_resolved.count(pair<CInode*,string>(dn->inode, tail.get_path()))) {
+        if (symlinks_resolved.count(pair<CInode*,string>(in, tail.get_path()))) {
           dout(10) << "already hit this symlink, bailing to avoid the loop" << dendl;
           return -ELOOP;
         }
-        symlinks_resolved.insert(pair<CInode*,string>(dn->inode, tail.get_path()));
+        symlinks_resolved.insert(pair<CInode*,string>(in, tail.get_path()));
 
         // start at root?
-        if (dn->inode->symlink[0] == '/') {
+        if (in->symlink[0] == '/') {
           // absolute
           trace.clear();
           depth = 0;
-	  path = dn->inode->symlink;
+	  path = in->symlink;
 	  path.append(tail);
           dout(10) << "traverse: absolute symlink, path now " << path << " depth " << depth << dendl;
         } else {
@@ -5413,7 +5432,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	    reply->starts_with = MDiscoverReply::DENTRY;
 	    replicate_dentry(dn, from, reply->trace);
 	    if (dn->is_primary())
-	      replicate_inode(dn->inode, from, reply->trace);
+	      replicate_inode(in, from, reply->trace);
 	    mds->send_message_mds(reply, req->get_source().num());
 	  }
 	}
@@ -5421,7 +5440,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       
       // add to trace, continue.
       trace.push_back(dn);
-      cur = dn->inode;
+      cur = in;
       touch_inode(cur);
       depth++;
       continue;
@@ -5655,11 +5674,14 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin)
  *
  * will return inode for primary, or link up/open up remote link's inode as necessary.
  */
-CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr)
+CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected)
 {
+  if (projected && dn->projected_inode)
+    return dn->projected_inode;
+
   assert(!dn->is_null());
   
-  if (dn->is_primary()) 
+  if (dn->is_primary())
     return dn->inode;
 
   assert(dn->is_remote());

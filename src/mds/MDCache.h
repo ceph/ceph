@@ -857,7 +857,8 @@ public:
   int path_traverse(MDRequest *mdr, Message *req, filepath& path, 
 		    vector<CDentry*>& trace, snapid_t *psnap, CInode **psnapdiri,
 		    bool follow_trailing_sym,
-                    int onfail);
+                    int onfail,
+		    bool allow_projected=false);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
     filepath path(p);
@@ -868,7 +869,7 @@ public:
   int inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item>& inopath);
   
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
-  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
+  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected=false);
   void open_remote_ino(inodeno_t ino, Context *fin, inodeno_t hadino=0, version_t hadv=0);
   void open_remote_ino_2(inodeno_t ino,
                          vector<Anchor>& anchortrace,

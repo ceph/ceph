@@ -540,7 +540,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   snapid_t snapid = CEPH_NOSNAP;
   CInode *snapdiri = 0;
   if (tracei || tracedn)
-    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true);
+    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true, mdr);
 
   mdr->did_early_reply = true;
 
@@ -663,7 +663,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    bool projected)
+			    bool projected, MDRequest *mdr)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -717,17 +717,18 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
   if (!dn) {
-    if (projected)
+    if (projected && mdr) {
       dn = in->get_projected_parent_dn();
-    else
+      if (dn && mdr->locks.count(&dn->lock) == 0)  // only use projected value if we've locked it!
+	dn = NULL;
+    }
+    if (!dn)
       dn = in->get_parent_dn();
   }
   if (!dn) 
     goto done;
 
  dentry:
-  projected = false;
-
   ::encode(dn->get_name(), bl);
   if (snapid == CEPH_NOSNAP)
     lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
@@ -1431,7 +1432,8 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   snapid_t snapid;
   int r = mdcache->path_traverse(mdr, mdr->client_request,
 				 refpath, trace, &snapid, &mdr->ref_snapdiri,
-				 false, MDS_TRAVERSE_FORWARD);
+				 false, MDS_TRAVERSE_FORWARD,
+				 true);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     reply_request(mdr, r);
@@ -1443,7 +1445,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   if (trace.empty())
     diri = mdcache->get_inode(refpath.get_ino());
   else
-    diri = mdcache->get_dentry_inode(trace[trace.size()-1], mdr);
+    diri = mdcache->get_dentry_inode(trace[trace.size()-1], mdr, true);
   if (!diri) 
     return 0; // opening inode.
 
@@ -1481,7 +1483,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
 				 trace, &mdr->ref_snapid, &mdr->ref_snapdiri,
-				 req->follow_trailing_symlink(), MDS_TRAVERSE_FORWARD);
+				 req->follow_trailing_symlink(), MDS_TRAVERSE_FORWARD,
+				 true);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     reply_request(mdr, r);
@@ -1510,7 +1513,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
     }
 
     // open ref inode
-    ref = mdcache->get_dentry_inode(dn, mdr);
+    ref = mdcache->get_dentry_inode(dn, mdr, true);
     if (!ref) return 0;
   }
   dout(10) << "ref is " << *ref << dendl;
@@ -2324,6 +2327,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
   assert(newi);
 
   newi->projected_parent = dn;
+  dn->projected_inode = newi;
+
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
   if ((newi->inode.mode & S_IFMT) == 0)
@@ -2331,7 +2336,6 @@ void Server::handle_client_mknod(MDRequest *mdr)
   newi->inode.version = dn->pre_dirty() - 1;
   newi->inode.rstat.rfiles = 1;
 
-  newi->projected_parent = dn;
   dn->first = newi->first = follows+1;
     
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
@@ -2376,6 +2380,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 
   // it's a directory.
   newi->projected_parent = dn;
+  dn->projected_inode = newi;
+
   newi->inode.mode = req->head.args.mkdir.mode;
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFDIR;
@@ -2430,6 +2436,8 @@ void Server::handle_client_symlink(MDRequest *mdr)
 
   // it's a symlink
   newi->projected_parent = dn;
+  dn->projected_inode = newi;
+
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFLNK;
   newi->inode.mode |= 0777;     // ?
@@ -2488,7 +2496,7 @@ void Server::handle_client_link(MDRequest *mdr)
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
 				 targetpath, targettrace, NULL, NULL,
-				 false, MDS_TRAVERSE_DISCOVER);
+				 false, MDS_TRAVERSE_DISCOVER, true);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
   if (r < 0) {
@@ -2497,8 +2505,9 @@ void Server::handle_client_link(MDRequest *mdr)
   }
   
   // identify target inode
-  CInode *targeti = targettrace[targettrace.size()-1]->inode;
-  assert(targeti);
+  CInode *targeti = mdcache->get_dentry_inode(targettrace[targettrace.size()-1], mdr, true);
+  if (!targeti)
+    return;
 
   // dir?
   dout(7) << "target is " << *targeti << dendl;
@@ -3084,7 +3093,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // get/open inode.
   mdr->trace.swap(trace);
-  CInode *in = mdcache->get_dentry_inode(dn, mdr);
+  CInode *in = mdcache->get_dentry_inode(dn, mdr, true);
   if (!in) return;
   dout(7) << "dn links to " << *in << dendl;
 
@@ -3914,6 +3923,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
     }
     srcdn->inode->projected_parent = destdn;
+    destdn->projected_inode = srcdn->inode;
   }
 
   // src
@@ -5093,6 +5103,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   
   // it's a file.
   in->projected_parent = dn;
+  dn->projected_inode = in;
+
   in->inode.mode = req->head.args.open.mode;
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;

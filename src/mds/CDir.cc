@@ -388,6 +388,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
   assert(dn->inode == 0);
   dn->inode = in;
+  dn->projected_inode = 0;
   in->set_primary_parent(dn);
 
   if (dn->last == CEPH_NOSNAP)
