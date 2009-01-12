@@ -240,6 +240,18 @@ retry:
 		list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
 	}
 
+	/*
+	 * if we are newly issued FILE_RDCACHE, clear I_COMPLETE; we
+	 * don't know what happened to this directory while we didn't
+	 * have the cap.
+	 */
+	if (S_ISDIR(inode->i_mode) &&
+	    (issued & CEPH_CAP_FILE_RDCACHE) &&
+	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0) {
+		dout(10, " marking %p NOT complete\n", inode);
+		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+	}
+
 	dout(10, "add_cap inode %p (%llx.%llx) cap %s now %s seq %d mds%d\n",
 	     inode, ceph_vinop(inode), ceph_cap_string(issued),
 	     ceph_cap_string(issued|cap->issued), seq, mds);
@@ -1141,11 +1153,18 @@ start:
 
 	/*
 	 * Each time we receive RDCACHE anew, we increment i_rdcache_gen.
+	 * Also clear I_COMPLETE: we don't know what happened to this directory
 	 */
-	if ((newcaps & CEPH_CAP_FILE_RDCACHE) &&            /* we just got RDCACHE */
-	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0 &&    /* and didn't have it */
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE) == 0)
+	if ((newcaps & CEPH_CAP_FILE_RDCACHE) &&          /* got RDCACHE */
+	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0 && /* but not before */
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE) == 0) {
 		ci->i_rdcache_gen++;
+
+		if (S_ISDIR(inode->i_mode)) {
+			dout(10, " marking %p NOT complete\n", inode);
+			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+		}
+	}
 
 	/*
 	 * If RDCACHE is being revoked, and we have no dirty buffers,

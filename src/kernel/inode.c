@@ -249,6 +249,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_version = 0;
 	ci->i_truncate_seq = 0;
 	ci->i_time_warp_seq = 0;
+	ci->i_ceph_flags = 0;
 	ci->i_symlink = NULL;
 
 	ci->i_fragtree = RB_ROOT;
@@ -501,14 +502,17 @@ no_change:
 	if (info->cap.caps) {
 		if (ceph_snap(inode) == CEPH_NOSNAP) {
 			ceph_add_cap(inode, session, cap_fmode,
-				     info->cap.caps, info->cap.wanted,
-				     info->cap.seq,
-				     info->cap.mseq, info->cap.realm,
-				     info->cap.ttl_ms, ttl_from,
+				     le32_to_cpu(info->cap.caps),
+				     le32_to_cpu(info->cap.wanted),
+				     le32_to_cpu(info->cap.seq),
+				     le32_to_cpu(info->cap.mseq),
+				     le64_to_cpu(info->cap.realm),
+				     le32_to_cpu(info->cap.ttl_ms),
+				     ttl_from,
 				     NULL);
 		} else {
 			spin_lock(&inode->i_lock);
-			ci->i_snap_caps |= info->cap.caps;
+			ci->i_snap_caps |= le32_to_cpu(info->cap.caps);
 			if (cap_fmode >= 0)
 				__ceph_get_fmode(ci, cap_fmode);
 			spin_unlock(&inode->i_lock);
@@ -560,6 +564,13 @@ no_change:
 		if (ceph_client(inode->i_sb)->mount_args.flags &
 		    CEPH_MOUNT_RBYTES)
 			inode->i_size = ci->i_rbytes;
+
+		/* set dir completion flag? */
+		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
+		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_RDCACHE)) {
+			dout(10, " marking %p complete (empty)\n", inode);
+			ci->i_ceph_flags |= CEPH_I_COMPLETE;
+		}
 		break;
 	default:
 		derr(0, "BAD mode 0%o S_IFMT 0%o\n", inode->i_mode,

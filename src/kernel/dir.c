@@ -130,6 +130,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
 	struct inode *inode = filp->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	unsigned frag = fpos_frag(filp->f_pos);
 	unsigned off = fpos_off(filp->f_pos);
@@ -137,6 +138,10 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	int err;
 	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
+
+	/* set I_READDIR at start of readdir */
+	if (filp->f_pos == 0)
+		ceph_i_set(inode, CEPH_I_READDIR);
 
 nextfrag:
 	dout(5, "readdir filp %p at frag %u off %u\n", filp, frag, off);
@@ -239,6 +244,19 @@ nextfrag:
 		goto nextfrag;
 	}
 
+	/*
+	 * if I_READDIR is still set, no dentries were released
+	 * during the whole readdir, and we should have the complete
+	 * dir contents in our cache.
+	 */
+	spin_lock(&inode->i_lock);
+	if (ci->i_ceph_flags & CEPH_I_READDIR) {
+		dout(10, " marking %p complete\n", inode);
+		ci->i_ceph_flags |= CEPH_I_COMPLETE;
+		ci->i_ceph_flags &= ~CEPH_I_READDIR;
+	}
+	spin_unlock(&inode->i_lock);
+
 	dout(20, "readdir done.\n");
 	return 0;
 }
@@ -247,6 +265,7 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 {
 	struct ceph_file_info *fi = file->private_data;
 	struct inode *inode = file->f_mapping->host;
+	loff_t old_offset = offset;
 	loff_t retval;
 
 	mutex_lock(&inode->i_mutex);
@@ -272,6 +291,10 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 			ceph_mdsc_put_request(fi->last_readdir);
 			fi->last_readdir = NULL;
 		}
+
+		/* clear I_READDIR if we did a forward seek */
+		if (offset > old_offset)
+			ceph_inode(inode)->i_ceph_flags &= ~CEPH_I_READDIR;
 	}
 	mutex_unlock(&inode->i_mutex);
 	return retval;
@@ -346,10 +369,30 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 	int pathlen;
 	struct ceph_mds_request *req;
 	struct ceph_mds_request_head *rhead;
+	struct inode *dir = dentry->d_parent->d_inode;
 	int err;
 
 	if (dentry->d_name.len > NAME_MAX)
 		return ERR_PTR(-ENAMETOOLONG);
+
+	/* can we conclude ENOENT locally? */
+	if (dentry->d_inode == NULL) {
+		struct ceph_inode_info *ci = ceph_inode(dir);
+
+		spin_lock(&dir->i_lock);
+		dout(10, "%p flags are %d\n", dir, ci->i_ceph_flags);
+		if (ceph_ino(dir) != 1 &&
+		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
+		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+			spin_unlock(&dir->i_lock);
+			dout(10, "do_lookup %p dir %p complete, -ENOENT\n",
+			     dentry, dir);
+			ceph_init_dentry(dentry);
+			d_add(dentry, NULL);
+			return 0;
+		}
+		spin_unlock(&dir->i_lock);
+	}
 
 	dout(10, "do_lookup %p mask %d\n", dentry, mask);
 	if (on_inode) {
@@ -793,6 +836,8 @@ static void ceph_dentry_release(struct dentry *dentry)
 		kfree(di);
 		dentry->d_fsdata = NULL;
 	}
+
+	ceph_i_clear(dentry->d_parent->d_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
 }
 
 static int ceph_snapdir_dentry_revalidate(struct dentry *dentry,

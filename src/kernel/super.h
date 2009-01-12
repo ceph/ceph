@@ -203,11 +203,16 @@ struct ceph_inode_frag {
 /*
  * Ceph inode.
  */
+#define CEPH_I_COMPLETE  1  /* we have complete directory cached */
+#define CEPH_I_READDIR   2  /* no dentries trimmed since readdir start */
+
 struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */
 
 	u64 i_version;
 	u64 i_truncate_seq, i_time_warp_seq;
+
+	unsigned i_ceph_flags;
 
 	struct ceph_file_layout i_layout;
 	char *i_symlink;
@@ -284,6 +289,36 @@ static inline struct ceph_inode_info *ceph_inode(struct inode *inode)
 {
 	return list_entry(inode, struct ceph_inode_info, vfs_inode);
 }
+
+static inline void ceph_i_clear(struct inode *inode, unsigned mask)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	spin_lock(&inode->i_lock);
+	ci->i_ceph_flags &= ~mask;
+	spin_unlock(&inode->i_lock);
+}
+
+static inline void ceph_i_set(struct inode *inode, unsigned mask)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	spin_lock(&inode->i_lock);
+	ci->i_ceph_flags |= mask;
+	spin_unlock(&inode->i_lock);
+}
+
+static inline bool ceph_i_test(struct inode *inode, unsigned mask)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	bool r;
+
+	spin_lock(&inode->i_lock);
+	r = (ci->i_ceph_flags & mask) == mask;
+	spin_unlock(&inode->i_lock);
+	return r;
+}
+
 
 /* find a specific frag @f */
 static inline struct ceph_inode_frag *
