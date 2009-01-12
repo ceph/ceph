@@ -708,6 +708,7 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		     dn, atomic_read(&dn->d_count), in, ceph_vinop(in));
 		if (prehash)
 			*prehash = false; /* don't rehash on error */
+		dn = realdn; /* note realdn contains the error */
 		goto out;
 	} else if (realdn) {
 		dout(10, "dn %p (%d) spliced with %p (%d) "
@@ -941,6 +942,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 			in = dn->d_inode;
 		} else {
+			struct dentry *newdn;
 			in = ceph_get_inode(dn->d_sb, vino);
 			if (IS_ERR(in)) {
 				derr(30, "get_inode badness\n");
@@ -949,7 +951,12 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				dn = NULL;
 				goto out_dir_no_inode;
 			}
-			dn = splice_dentry(dn, in, &have_lease);
+			newdn = splice_dentry(dn, in, &have_lease);
+
+			if (IS_ERR(newdn)) {
+				goto no_mutex_find_alias;
+			}
+			dn = newdn;
 		}
 
 		if (have_lease)
@@ -1047,6 +1054,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			in = NULL;
 			break;
 		}
+	no_mutex_find_alias:
 		existing = d_find_alias(in);
 		if (existing) {
 			if (dn)
