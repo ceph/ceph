@@ -107,10 +107,7 @@ protected:
 
   friend class Migrator;
   friend class Locker;
-  friend class Renamer;
-  friend class Server;
   friend class MDCache;
-  friend class MDS;
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
@@ -154,6 +151,9 @@ public:
     remote_ino = ino;
     remote_d_type = d_type;
   }
+
+  CInode *get_projected_inode() const { return projected_inode; }
+  void set_projected_inode(CInode *i) { assert(!projected_inode); projected_inode = i; }
 
   // ref counts: pin ourselves in the LRU when we're pinned.
   void first_get() {
