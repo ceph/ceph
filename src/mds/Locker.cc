@@ -3241,9 +3241,16 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
   bool want_scatter = lock->get_parent()->is_auth() &&
     ((CInode*)lock->get_parent())->has_subtree_root_dirfrag();
 
+  CInode *in = (CInode*)lock->get_parent();
+  int client = mut->reqid.name.is_client() ? mut->reqid.name.num() : -1;
+  Capability *cap = 0;
+  if (client >= 0)
+    cap = in->get_client_cap(client);
+
   // can wrlock?
-  if (lock->can_wrlock()) {
-    lock->get_wrlock();
+  if (lock->can_wrlock() ||
+      (cap && in->get_loner() == client && (cap->pending() & CEPH_CAP_FILE_EXCL))) {
+    lock->get_wrlock(true);
     if (mut) {
       mut->wrlocks.insert(lock);
       mut->locks.insert(lock);
@@ -3260,7 +3267,7 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
 
       // try again?
       if (lock->can_wrlock()) {
-	lock->get_wrlock();
+	lock->get_wrlock(true);
 	if (mut) {
 	  mut->wrlocks.insert(lock);
 	  mut->locks.insert(lock);
@@ -3633,7 +3640,8 @@ void Locker::file_eval(FileLock *lock)
     in->get_caps_issued(&loner_issued, &other_issued);
 
     if (in->get_loner() >= 0) {
-      if ((loner_wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) == 0 ||
+      if (((loner_wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) == 0 &&
+	   in->inode.is_file()) ||
 	  (other_wanted & (CEPH_CAP_GWR|CEPH_CAP_GRD))) {
 	// we should lose it.
 	if ((other_wanted & CEPH_CAP_GWR) ||
@@ -3650,7 +3658,7 @@ void Locker::file_eval(FileLock *lock)
   else if (lock->get_state() != LOCK_LONER &&
 	   !lock->is_rdlocked() &&
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   (wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) &&
+	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) || in->inode.is_dir()) &&
 	   in->choose_loner()) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
