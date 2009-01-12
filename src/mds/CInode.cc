@@ -1103,15 +1103,14 @@ void CInode::auth_unpin(void *by)
 
 void CInode::adjust_nested_auth_pins(int a)
 {
-  if (!parent) return;
   nested_auth_pins += a;
-
   dout(35) << "adjust_nested_auth_pins by " << a
 	   << " now " << auth_pins << "+" << nested_auth_pins
 	   << dendl;
   assert(nested_auth_pins >= 0);
 
-  parent->adjust_nested_auth_pins(a, 0);
+  if (parent)
+    parent->adjust_nested_auth_pins(a, 0);
 }
 
 void CInode::adjust_nested_anchors(int by)
