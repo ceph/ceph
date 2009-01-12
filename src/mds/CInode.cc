@@ -20,6 +20,7 @@
 
 #include "MDS.h"
 #include "MDCache.h"
+#include "Locker.h"
 
 #include "snap.h"
 
@@ -1353,16 +1354,28 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     e.cap.mseq = 0;
     e.cap.realm = 0;
   } else {
-    if (valid && !cap && is_auth())
+    if (valid && !cap && is_auth()) {
       // add a new cap
       cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
+    }
+
+    // if we're a directory, maybe bump filelock to loner?
+    if (inode.is_dir() &&
+	is_auth() &&
+	client == loner_cap &&
+	filelock.is_stable())
+      mdcache->mds->locker->file_eval(&filelock);
 
     if (cap && valid) {
       bool loner = (get_loner() == client);
       int likes = get_caps_liked();
+      if (loner) {
+	if (inode.is_dir())
+	  likes |= CEPH_CAP_FILE_EXCL;
+	if (inode.is_file() && (cap->wanted() & CEPH_CAP_FILE_EXCL))
+	  likes |= CEPH_CAP_AUTH_EXCL; // | CEPH_CAP_XATTR_EXCL; 
+      }
       int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
-      if (loner && (issue & CEPH_CAP_FILE_EXCL))
-	issue |= CEPH_CAP_AUTH_EXCL; // | CEPH_CAP_XATTR_EXCL; 
       cap->issue(issue);
       cap->set_last_issue_stamp(g_clock.recent_now());
       cap->touch();   // move to back of session cap LRU
