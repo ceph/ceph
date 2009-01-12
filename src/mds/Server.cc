@@ -1337,7 +1337,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
     mdr->used_prealloc_ino = 
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.projected++;
-    dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino << dendl;
+    dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
+	     << " (" << mdr->session->prealloc_inos.size() << " left)"
+	     << dendl;
   } else {
     mdr->alloc_ino = 
       in->inode.ino = mds->inotable->project_alloc_id();

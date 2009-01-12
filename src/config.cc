@@ -340,7 +340,7 @@ md_config_t g_conf = {
   mds_tick_interval: 5,
   mds_scatter_nudge_interval: 5,  // how quickly dirstat changes propagate up the hierarchy
 
-  mds_client_prealloc_inos: 20,
+  mds_client_prealloc_inos: 100,
   mds_early_reply: true,
 
   mds_rdcap_ttl_ms: 60*1000,

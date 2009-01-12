@@ -128,7 +128,7 @@ mds
 - try_remove_unlinked_dn thing
 - rename: importing inode... also journal imported client map?
 - rerun destro trace against latest, with various journal lengths
-- lease length heuristics
+- cap/lease length heuristics
   - mds lock last_change stamp?
 - handle slow client reconnect (i.e. after mds has gone active)
 - fix reconnect/rejoin open file weirdness
