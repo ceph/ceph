@@ -745,7 +745,7 @@ retry_locked:
 			 CEPH_CAP_ANY_RD);
 
 		/* keep any EXCL bits too, while we are holding caps anyway */
-		if (want)
+		if (want || S_ISDIR(inode->i_mode))
 			retain |= CEPH_CAP_ANY_EXCL;
 	}
 	retain &= ~drop;
