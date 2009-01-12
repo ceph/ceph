@@ -862,14 +862,31 @@ static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int ret, err;
-	struct list_head *p, *n;
+	struct list_head *p, *n, *head;
+	struct ceph_mds_request *req;
+	u64 last_tid;
 
 	ret = 0;
-	dout(0, "sync on directory\n");
+	dout(10, "sync on directory\n");
+
+	head = &ci->i_listener_list;
+
 	spin_lock(&ci->i_listener_lock);
-	list_for_each_safe(p, n, &ci->i_listener_list) {
-		struct ceph_mds_request *req =
-                        list_entry(p, struct ceph_mds_request, r_listener_item);
+
+	if (list_empty(head))
+		goto out;
+
+	req = list_entry(head->prev,
+			 struct ceph_mds_request, r_listener_item);
+	last_tid = req->r_tid;
+
+	list_for_each_safe(p, n, head) {
+		req = list_entry(p, struct ceph_mds_request, r_listener_item);
+
+		/* avoid starvation */
+		if (req->r_tid > last_tid)
+			goto out;
+
 		ceph_mdsc_get_request(req);
 		spin_unlock(&ci->i_listener_lock);
 		if (req->r_timeout) {
@@ -884,8 +901,8 @@ static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync
 
 		ceph_mdsc_put_request(req);
 	}
+out:
 	spin_unlock(&ci->i_listener_lock);
-
 	return ret;
 }
 
