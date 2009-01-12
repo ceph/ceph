@@ -1441,24 +1441,23 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   // -> dont issue per-dentry lease if a dir lease is possible, or
   //    if the client is holding EXCL|RDCACHE caps.
   int mask = 0;
+
+  if (dn->lock.get_state() == LOCK_LOCK &&
+      dn->lock.is_xlocked_by_client(client) &&
+      dn->lock.xlocker_is_done()) {
+    dout(10) << " setting " << dn->lock << " to lock->sync on " << *dn << dendl;
+    dn->lock.get_parent()->auth_pin(&dn->lock);
+    dn->lock.set_state(LOCK_LOCK_SYNC);
+  }
+
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
        (!diri->filelock.can_lease(client) &&
-	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0))) {
-
-    if (dn->lock.get_state() == LOCK_LOCK &&
-	dn->lock.is_xlocked_by_client(client) &&
-	dn->lock.xlocker_is_done()) {
-      dout(10) << " setting " << dn->lock << " to lock->sync on " << *dn << dendl;
-      dn->lock.get_parent()->auth_pin(&dn->lock);
-      dn->lock.set_state(LOCK_LOCK_SYNC);
-    }
-
-    if (dn->lock.can_lease(client))
-      mask |= CEPH_LOCK_DN;
-  }
-
+	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0)) &&
+      dn->lock.can_lease(client))
+    mask |= CEPH_LOCK_DN;
+  
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
   return mask;
 }
