@@ -2199,7 +2199,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
     CDentry *dn = it->second;
     it++;
 
-    if (dn->is_null()) continue;
+    if (dn->is_null() &&
+	!(dn->get_projected_inode() &&
+	  dn->lock.can_rdlock(mdr, client))) continue;
     if (snaps && dn->last != CEPH_NOSNAP) {
       set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
       if (p == snaps->end() || *p > dn->last) {
@@ -2211,6 +2213,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
       continue;
 
     CInode *in = dn->get_inode();
+    if (dn->get_projected_inode() &&
+	dn->lock.can_rdlock(mdr, client))
+      in = dn->get_projected_inode();
 
     // remote link?
     // better for the MDS to do the work, if we think the client will stat any of these files.
