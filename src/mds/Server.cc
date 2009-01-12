@@ -2375,7 +2375,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   if (!dn) return;
 
   // new inode
-  snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
+  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));  
@@ -2410,6 +2411,22 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
+  // issue a cap on the directory
+  bool is_new = false;
+  int cmode = CEPH_FILE_MODE_RDWR;
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, is_new, realm);
+  if (is_new)
+    cap->dec_suppress();
+  cap->set_wanted(0);
+
+  // put locks in excl mode
+  newi->filelock.set_state(LOCK_LONER);
+
+  // make sure this inode gets into the journal
+  le->metablob.add_opened_ino(newi->ino());
+  LogSegment *ls = mds->mdlog->get_current_segment();
+  ls->open_files.push_back(&newi->xlist_open_file);
+
   // allow the same client rdlock|lease the dentry
   dn->lock.set_xlock_done();
   
@@ -5130,6 +5147,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
   if (is_new)
     cap->dec_suppress();
+
+  in->authlock.set_state(LOCK_EXCL);
 
   // stick cap, snapbl info in mdr
   mdr->cap = cap;

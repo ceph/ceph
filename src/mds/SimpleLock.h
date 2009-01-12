@@ -90,6 +90,11 @@ public:
     case LOCK_SYNC_LOCK: return "sync->lock";
     case LOCK_LOCK_SYNC: return "lock->sync";
     case LOCK_REMOTEXLOCK: return "remote_xlock";
+    case LOCK_EXCL: return "excl";
+    case LOCK_EXCL_SYNC: return "excl->sync";
+    case LOCK_EXCL_LOCK: return "excl->lock";
+    case LOCK_SYNC_EXCL: return "sync->excl";
+    case LOCK_LOCK_EXCL: return "lock->excl";      
     default: assert(0); return 0;
     }
   }
