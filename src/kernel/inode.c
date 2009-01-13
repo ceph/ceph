@@ -795,7 +795,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		in = dn->d_inode;
 		/* trace should start at root, or have only 1 dentry
 		 * (if it is in an mds stray dir) */
-		WARN_ON(vino.ino != 1 && rinfo->trace_numd != 1);
+		WARN_ON(vino.ino != CEPH_INO_ROOT && rinfo->trace_numd != 1);
 	} else {
 		/* first reply (i.e. we just mounted) */
 		in = ceph_get_inode(sb, vino);
@@ -808,7 +808,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 	}
 
-	if (vino.ino == 1) {
+	if (vino.ino == CEPH_INO_ROOT) {
 		err = fill_inode(in, &rinfo->trace_in[0],
 				 rinfo->trace_numd ?
 				 rinfo->trace_dir[0] : NULL,

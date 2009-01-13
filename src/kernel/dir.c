@@ -320,7 +320,7 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 
 	/* snap dir? */
 	if (err == -ENOENT &&
-	    ceph_vino(parent).ino != 1 &&  /* no .snap in root dir */
+	    ceph_vino(parent).ino != CEPH_INO_ROOT && /* no .snap in root dir */
 	    strcmp(dentry->d_name.name, client->mount_args.snapdir_name) == 0) {
 		struct inode *inode = ceph_get_snapdir(parent);
 		dout(10, "ENOENT on snapdir %p '%.*s', linking to snapdir %p\n",
@@ -381,7 +381,7 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 
 		spin_lock(&dir->i_lock);
 		dout(10, "%p flags are %d\n", dir, ci->i_ceph_flags);
-		if (ceph_ino(dir) != 1 &&
+		if (ceph_ino(dir) != CEPH_INO_ROOT &&
 		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
 		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
 			spin_unlock(&dir->i_lock);
@@ -817,7 +817,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 
-	if (ceph_ino(dir) != 1 &&  /* ICONTENT is meaningless on root inode */
+	if (ceph_ino(dir) != CEPH_INO_ROOT &&
 	    ceph_inode(dir)->i_version == dentry->d_time &&
 	    ceph_inode_holds_cap(dir, CEPH_CAP_FILE_RDCACHE)) {
 		dout(20, "dentry_revalidate %p %lu file RDCACHE dir %p %llu\n",
