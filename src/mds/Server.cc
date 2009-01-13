@@ -1471,7 +1471,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   if (mdr->ref) {
     if (mdr->trace.size()) {
       CDentry *last = mdr->trace[mdr->trace.size()-1];
-      assert(last->get_inode() == mdr->ref);
+      assert(last->get_inode() == mdr->ref ||
+	     last->get_projected_inode() == mdr->ref);
     }
     dout(10) << "rdlock_path_pin_ref had snap " << mdr->ref_snapid << " " << *mdr->ref << dendl;
     return mdr->ref;
@@ -1582,7 +1583,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
   if (mdr->ref) {
     CDentry *last = mdr->trace[mdr->trace.size()-1];
-    assert(last->get_inode() == mdr->ref);
+    assert(last->get_inode() == mdr->ref ||
+	   last->get_projected_inode() == mdr->ref);
     dout(10) << "rdlock_path_xlock_dentry had " << *last << " " << *mdr->ref << dendl;
     return last;
   }
