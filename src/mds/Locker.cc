@@ -1742,7 +1742,8 @@ void Locker::simple_eval_gather(SimpleLock *lock)
       lock->get_parent()->auth_unpin(lock);
 
       // re-eval?
-      simple_eval(lock);
+      if (lock->is_stable())
+	simple_eval(lock);
     }
   }
 
@@ -1759,7 +1760,8 @@ void Locker::simple_eval_gather(SimpleLock *lock)
     lock->get_parent()->auth_unpin(lock);
 
     // re-eval?
-    simple_eval(lock);
+    if (lock->is_stable())
+      simple_eval(lock);
   }
 }
 
