@@ -983,7 +983,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
   CDir::map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
     CDentry *dn = it->second;
-    CInode *in = dn->get_inode();
+    CInode *in = dn->get_linkage()->get_inode();
     
     num_exported++;
     
@@ -1000,17 +1000,17 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     // points to...
     
     // null dentry?
-    if (dn->is_null()) {
+    if (dn->get_linkage()->is_null()) {
       exportbl.append("N", 1);  // null dentry
       continue;
     }
     
-    if (dn->is_remote()) {
+    if (dn->get_linkage()->is_remote()) {
       // remote link
       exportbl.append("L", 1);  // remote link
       
-      inodeno_t ino = dn->get_remote_ino();
-      unsigned char d_type = dn->get_remote_d_type();
+      inodeno_t ino = dn->get_linkage()->get_remote_ino();
+      unsigned char d_type = dn->get_linkage()->get_remote_d_type();
       ::encode(ino, exportbl);
       ::encode(d_type, exportbl);
       continue;
@@ -1071,13 +1071,13 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
   CDir::map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
     CDentry *dn = it->second;
-    CInode *in = dn->get_inode();
+    CInode *in = dn->get_linkage()->get_inode();
 
     // dentry
     dn->finish_export();
 
     // inode?
-    if (dn->is_primary()) {
+    if (dn->get_linkage()->is_primary()) {
       finish_export_inode(in, now, finished);
 
       // subdirs?
@@ -1173,8 +1173,8 @@ void Migrator::export_reverse(CDir *dir)
     dir->abort_export();
     for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
       p->second->abort_export();
-      if (!p->second->is_primary()) continue;
-      CInode *in = p->second->get_inode();
+      if (!p->second->get_linkage()->is_primary()) continue;
+      CInode *in = p->second->get_linkage()->get_inode();
       in->abort_export();
       if (in->is_dir())
 	in->get_nested_dirfrags(rq);
@@ -1780,8 +1780,8 @@ void Migrator::import_reverse(CDir *dir)
 	dn->mark_clean();
 
       // inode?
-      if (dn->is_primary()) {
-	CInode *in = dn->get_inode();
+      if (dn->get_linkage()->is_primary()) {
+	CInode *in = dn->get_linkage()->get_inode();
 	in->state_clear(CDentry::STATE_AUTH);
 	in->clear_replica_map();
 	if (in->is_dirty()) 
@@ -1994,8 +1994,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   decode_import_inode_caps(in, blp, cap_imports);
 
   // link before state  -- or not!  -sage
-  if (dn->get_inode() != in) {
-    assert(!dn->get_inode());
+  if (dn->get_linkage()->get_inode() != in) {
+    assert(!dn->get_linkage()->get_inode());
     dn->dir->link_primary_inode(dn, in);
   }
  
@@ -2142,7 +2142,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     if (icode == 'N') {
       // null dentry
-      assert(dn->is_null());  
+      assert(dn->get_linkage()->is_null());  
       
       // fall thru
     }
@@ -2152,8 +2152,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
       unsigned char d_type;
       ::decode(ino, blp);
       ::decode(d_type, blp);
-      if (dn->is_remote()) {
-	assert(dn->get_remote_ino() == ino);
+      if (dn->get_linkage()->is_remote()) {
+	assert(dn->get_linkage()->get_remote_ino() == ino);
       } else {
 	dir->link_remote_inode(dn, ino, d_type);
       }

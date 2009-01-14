@@ -395,10 +395,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
-	if (!dn->is_null()) {
-	  if (dn->is_primary())
+	if (!dn->get_linkage()->is_null()) {
+	  if (dn->get_linkage()->is_primary())
 	    dout(-10) << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn 
-		     << " " << *dn->get_inode()
+		     << " " << *dn->get_linkage()->get_inode()
 		     << " should be " << p->inode.ino
 		     << dendl;
 	  dir->unlink_inode(dn);
@@ -408,7 +408,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (p->dirty) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
-	if (dn->get_inode() != in && in->get_parent_dn()) {
+	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
@@ -422,8 +422,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
-	if (dn->get_inode() != in) {
-	  if (!dn->is_null())  // note: might be remote.  as with stray reintegration.
+	if (dn->get_linkage()->get_inode() != in) {
+	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.
 	    dir->unlink_inode(dn);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
@@ -445,7 +445,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
-	if (!dn->is_null()) {
+	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
 	}
@@ -470,7 +470,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
 	dn->first = p->dnfirst;
-	if (!dn->is_null()) {
+	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
 	}

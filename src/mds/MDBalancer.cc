@@ -674,7 +674,7 @@ void MDBalancer::find_exports(CDir *dir,
   for (CDir::map_t::iterator it = dir->begin();
        it != dir->end();
        it++) {
-    CInode *in = it->second->get_inode();
+    CInode *in = it->second->get_linkage()->get_inode();
     if (!in) continue;
     if (!in->is_dir()) continue;
     
@@ -1015,8 +1015,8 @@ void MDBalancer::dump_pop_map()
 	for (CDir::map_t::iterator q = dir->items.begin();
 	     q != dir->items.end();
 	     q++) 
-	  if (q->second->is_primary())
-	    iq.push_front(q->second->get_inode());
+	  if (q->second->get_linkage()->is_primary())
+	    iq.push_front(q->second->get_linkage()->get_inode());
       }
     }
     

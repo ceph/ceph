@@ -322,7 +322,7 @@ void CDir::remove_dentry(CDentry *dn)
   // there should be no client leases at this point!
   assert(dn->client_lease_map.empty());
 
-  if (dn->get_inode()) {
+  if (dn->get_linkage()->get_inode()) {
     // detach inode and dentry
     unlink_inode_work(dn);
   } else {
@@ -360,7 +360,7 @@ void CDir::link_remote_inode(CDentry *dn, CInode *in)
 void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 {
   dout(12) << "link_remote_inode " << *dn << " remote " << ino << dendl;
-  assert(dn->is_null());
+  assert(dn->get_linkage()->is_null());
 
   dn->get_linkage()->set_remote(ino, d_type);
 
@@ -377,7 +377,7 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
 {
   dout(12) << "link_primary_inode " << *dn << " " << *in << dendl;
-  assert(dn->is_null());
+  assert(dn->get_linkage()->is_null());
 
   dn->get_linkage()->inode = in;
   in->set_primary_parent(dn);
@@ -394,7 +394,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
-  assert(dn->get_inode() == in);
+  assert(dn->get_linkage()->get_inode() == in);
   assert(in->get_parent_dn() == dn);
 
   if (dn->last == CEPH_NOSNAP)
@@ -423,10 +423,10 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 
 void CDir::unlink_inode( CDentry *dn )
 {
-  if (dn->is_remote()) {
+  if (dn->get_linkage()->is_remote()) {
     dout(12) << "unlink_inode " << *dn << dendl;
   } else {
-    dout(12) << "unlink_inode " << *dn << " " << *dn->get_inode() << dendl;
+    dout(12) << "unlink_inode " << *dn << " " << *dn->get_linkage()->get_inode() << dendl;
   }
 
   unlink_inode_work(dn);
@@ -442,7 +442,7 @@ void CDir::unlink_inode( CDentry *dn )
 void CDir::try_remove_unlinked_dn(CDentry *dn)
 {
   assert(dn->dir == this);
-  assert(dn->is_null());
+  assert(dn->get_linkage()->is_null());
   assert(dn->is_dirty());
   
   /* FIXME: there is a bug in this.  i think new dentries are properly
@@ -479,9 +479,9 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
 
 void CDir::unlink_inode_work( CDentry *dn )
 {
-  CInode *in = dn->get_inode();
+  CInode *in = dn->get_linkage()->get_inode();
 
-  if (dn->is_remote()) {
+  if (dn->get_linkage()->is_remote()) {
     // remote
     if (in) 
       dn->unlink_remote();
@@ -489,7 +489,7 @@ void CDir::unlink_inode_work( CDentry *dn )
     dn->get_linkage()->set_remote(0, 0);
   } else {
     // primary
-    assert(dn->is_primary());
+    assert(dn->get_linkage()->is_primary());
  
     // unpin dentry?
     if (in->get_num_ref())
@@ -520,7 +520,7 @@ void CDir::remove_null_dentries() {
   while (p != items.end()) {
     CDentry *dn = p->second;
     p++;
-    if (dn->is_null())
+    if (dn->get_linkage()->is_null() && !dn->is_projected())
       remove_dentry(dn);
   }
 
@@ -546,8 +546,8 @@ void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
     if (p == snaps.end() ||
 	*p > dn->last) {
       dout(10) << " purging " << *dn << dendl;
-      if (dn->is_primary() && dn->get_inode()->is_dirty())
-	dn->get_inode()->mark_clean();
+      if (dn->get_linkage()->is_primary() && dn->get_linkage()->get_inode()->is_dirty())
+	dn->get_linkage()->get_inode()->mark_clean();
       remove_dentry(dn);
     }
   }
@@ -571,7 +571,7 @@ void CDir::steal_dentry(CDentry *dn)
 
   if (get_num_any() == 0)
     get(PIN_CHILD);
-  if (dn->is_null()) {
+  if (dn->get_linkage()->is_null()) {
     if (dn->last == CEPH_NOSNAP)
       num_head_null++;
     else
@@ -582,9 +582,9 @@ void CDir::steal_dentry(CDentry *dn)
     else
       num_snap_items++;
 
-    if (dn->is_primary()) {
-      inode_t *pi = dn->get_inode()->get_projected_inode();
-      if (dn->get_inode()->is_dir())
+    if (dn->get_linkage()->is_primary()) {
+      inode_t *pi = dn->get_linkage()->get_inode()->get_projected_inode();
+      if (dn->get_linkage()->get_inode()->is_dir())
 	fnode.fragstat.nsubdirs++;
       else
 	fnode.fragstat.nfiles++;
@@ -595,8 +595,8 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rsnaprealms += pi->accounted_rstat.ranchors;
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
-    } else if (dn->is_remote()) {
-      if (dn->get_remote_d_type() == (S_IFDIR >> 12))
+    } else if (dn->get_linkage()->is_remote()) {
+      if (dn->get_linkage()->get_remote_d_type() == (S_IFDIR >> 12))
 	fnode.fragstat.nsubdirs++;
       else
 	fnode.fragstat.nfiles++;
@@ -1161,7 +1161,7 @@ void CDir::_fetched(bufferlist &bl)
 	continue;
 
       if (dn) {
-        if (dn->get_inode() == 0) {
+        if (dn->get_linkage()->get_inode() == 0) {
           dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
         } else {
           dout(12) << "_fetched  had dentry " << *dn << dendl;
@@ -1202,7 +1202,7 @@ void CDir::_fetched(bufferlist &bl)
 	continue;
 
       if (dn) {
-        if (dn->get_inode() == 0) {
+        if (dn->get_linkage()->get_inode() == 0) {
           dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
         } else {
           dout(12) << "_fetched  had dentry " << *dn << dendl;
@@ -1269,10 +1269,10 @@ void CDir::_fetched(bufferlist &bl)
       dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
       dn->mark_clean();
 
-      if (dn->get_inode()) {
-	assert(dn->get_inode()->get_version() <= fnode.version);
-	dout(10) << "_fetched  had underwater inode " << *dn->get_inode() << ", marking clean" << dendl;
-	dn->get_inode()->mark_clean();
+      if (dn->get_linkage()->get_inode()) {
+	assert(dn->get_linkage()->get_inode()->get_version() <= fnode.version);
+	dout(10) << "_fetched  had underwater inode " << *dn->get_linkage()->get_inode() << ", marking clean" << dendl;
+	dn->get_linkage()->get_inode()->mark_clean();
       }
     }
   }
@@ -1414,15 +1414,15 @@ void CDir::_commit(version_t want)
     CDentry *dn = p->second;
     p++;
     
-    if (dn->is_null()) 
+    if (dn->linkage.is_null()) 
       continue;  // skip negative entries
 
     if (snaps && dn->last != CEPH_NOSNAP) {
       set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
       if (p == snaps->end() || *p > dn->last) {
 	dout(10) << " purging " << *dn << dendl;
-	if (dn->is_primary() && dn->get_inode()->is_dirty())
-	  dn->get_inode()->mark_clean();
+	if (dn->linkage.is_primary() && dn->linkage.get_inode()->is_dirty())
+	  dn->linkage.get_inode()->mark_clean();
 	remove_dentry(dn);
 	continue;
       }
@@ -1431,9 +1431,9 @@ void CDir::_commit(version_t want)
     n++;
 
     // primary or remote?
-    if (dn->is_remote()) {
-      inodeno_t ino = dn->get_remote_ino();
-      unsigned char d_type = dn->get_remote_d_type();
+    if (dn->linkage.is_remote()) {
+      inodeno_t ino = dn->linkage.get_remote_ino();
+      unsigned char d_type = dn->linkage.get_remote_d_type();
       dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' remote ino " << ino << dendl;
       
       // marker, name, ino
@@ -1445,7 +1445,7 @@ void CDir::_commit(version_t want)
       ::encode(d_type, bl);
     } else {
       // primary link
-      CInode *in = dn->get_inode();
+      CInode *in = dn->linkage.get_inode();
       assert(in);
 
       dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' inode " << *in << dendl;
@@ -1539,8 +1539,8 @@ void CDir::_committed(version_t v)
     }
 
     // inode?
-    if (dn->is_primary()) {
-      CInode *in = dn->get_inode();
+    if (dn->linkage.is_primary()) {
+      CInode *in = dn->linkage.get_inode();
       assert(in);
       assert(in->is_auth());
       

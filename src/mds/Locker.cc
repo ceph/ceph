@@ -130,8 +130,8 @@ void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
   // rdlock ancestor snaps
   CInode *t = in;
   rdlocks.insert(&in->snaplock);
-  while (t->get_parent_dn()) {
-    t = t->get_parent_dn()->get_dir()->get_inode();
+  while (t->get_projected_parent_dn()) {
+    t = t->get_projected_parent_dn()->get_dir()->get_inode();
     rdlocks.insert(&t->snaplock);
   }
 }
@@ -1628,7 +1628,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     // special case: trim replica no-longer-null dentry?
     if (lock->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)lock->get_parent();
-      if (dn->is_null() && m->get_data().length() > 0) {
+      if (dn->get_linkage()->is_null() && m->get_data().length() > 0) {
 	dout(10) << "handle_simple_lock replica dentry null -> non-null, must trim " 
 		 << *dn << dendl;
 	assert(dn->get_num_ref() == 0);
@@ -1923,7 +1923,7 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
   dout(7) << "simple_rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // client may be allowed to rdlock the same item it has xlocked.
-  int client = mut->reqid.name.is_client() ? mut->reqid.name.num() : -1;
+  int client = mut->get_client();
 
   while (1) {
     if (lock->try_relax_xlock(client))
@@ -3290,7 +3290,7 @@ bool Locker::file_wrlock_start(FileLock *lock, MDRequest *mut)
     ((CInode*)lock->get_parent())->has_subtree_root_dirfrag();
 
   CInode *in = (CInode*)lock->get_parent();
-  int client = mut->reqid.name.is_client() ? mut->reqid.name.num() : -1;
+  int client = mut->get_client();
   Capability *cap = 0;
   if (client >= 0)
     cap = in->get_client_cap(client);

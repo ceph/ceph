@@ -165,11 +165,19 @@ public:
   CDir *get_dir() const { return dir; }
   const nstring& get_name() const { return name; }
 
+  /*
   CInode *get_inode() const { return linkage.inode; }
   inodeno_t get_remote_ino() { return linkage.remote_ino; }
   unsigned char get_remote_d_type() { return linkage.remote_d_type; }
 
+  // dentry type is primary || remote || null
+  // inode ptr is required for primary, optional for remote, undefined for null
+  bool is_primary() { return linkage.is_primary(); }
+  bool is_remote() { return linkage.is_remote(); }
+  bool is_null() { return linkage.is_null(); }
+
   inodeno_t get_ino();
+  */
 
   linkage_t *get_linkage() { return &linkage; }
 
@@ -186,7 +194,7 @@ public:
     p->remote_d_type = d_type;
   }
   void push_projected_linkage(CInode *inode); 
-  void pop_projected_linkage();
+  linkage_t *pop_projected_linkage();
 
   bool is_projected() { return projected.size(); }
 
@@ -197,6 +205,17 @@ public:
   }
   CInode *get_projected_inode() {
     return get_projected_linkage()->inode;
+  }
+
+  bool use_projected(int client) {
+    if (lock.is_xlocked()) {
+      lock.try_relax_xlock(client);
+      return lock.can_rdlock(0, client);
+    }
+    return false;
+  }
+  linkage_t *get_linkage(int client) {
+    return use_projected(client) ? get_projected_linkage() : get_linkage();
   }
 
   // ref counts: pin ourselves in the LRU when we're pinned.
@@ -215,12 +234,6 @@ public:
   bool is_frozen();
   
   void adjust_nested_anchors(int by);
-
-  // dentry type is primary || remote || null
-  // inode ptr is required for primary, optional for remote, undefined for null
-  bool is_primary() { return linkage.is_primary(); }
-  bool is_remote() { return linkage.is_remote(); }
-  bool is_null() { return linkage.is_null(); }
 
   // remote links
   void link_remote(CInode *in);

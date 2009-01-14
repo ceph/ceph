@@ -472,8 +472,8 @@ void CInode::make_path(filepath& fp)
 
 void CInode::make_anchor_trace(vector<Anchor>& trace)
 {
-  if (parent)
-    parent->make_anchor_trace(trace, this);
+  if (get_projected_parent_dn())
+    get_projected_parent_dn()->make_anchor_trace(trace, this);
   else 
     assert(is_root() || is_stray());
 }

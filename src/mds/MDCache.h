@@ -874,8 +874,8 @@ public:
                          vector<Anchor>& anchortrace,
 			 inodeno_t hadino, version_t hadv,
                          Context *onfinish);
-  void open_remote_dentry(CDentry *dn, Context *fin);
-  void _open_remote_dentry_finish(int r, CDentry *dn, Context *fin);
+  void open_remote_dentry(CDentry *dn, bool projected, Context *fin);
+  void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
   C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);
 

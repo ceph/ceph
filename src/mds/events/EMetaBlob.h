@@ -399,8 +399,8 @@ private:
   void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			 inodeno_t rino=0, unsigned char rdt=0) {
     if (!rino) {
-      rino = dn->get_remote_ino();
-      rdt = dn->get_remote_d_type();
+      rino = dn->get_projected_linkage()->get_remote_ino();
+      rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
     if (dirty)
@@ -426,7 +426,7 @@ private:
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
     if (!in) 
-      in = dn->get_inode();
+      in = dn->get_projected_linkage()->get_inode();
 
     // make note of where this inode was last journaled
     in->last_journaled = my_offset;
@@ -465,14 +465,14 @@ private:
   }
   inode_t *add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // primary or remote
-    if (dn->is_remote()) {
+    if (dn->get_projected_linkage()->is_remote()) {
       add_remote_dentry(dn, dirty);
       return 0;
-    } else if (dn->is_null()) {
+    } else if (dn->get_projected_linkage()->is_null()) {
       add_null_dentry(dn, dirty);
       return 0;
     }
-    assert(dn->is_primary());
+    assert(dn->get_projected_linkage()->is_primary());
     return add_primary_dentry(dn, dirty);
   }
 

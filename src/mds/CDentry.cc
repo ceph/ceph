@@ -64,10 +64,10 @@ ostream& operator<<(ostream& out, CDentry& dn)
     assert(dn.get_replica_nonce() >= 0);
   }
 
-  if (dn.is_null()) out << " NULL";
-  if (dn.is_remote()) {
+  if (dn.get_linkage()->is_null()) out << " NULL";
+  if (dn.get_linkage()->is_remote()) {
     out << " REMOTE(";
-    switch (dn.get_remote_d_type() << 12) {
+    switch (dn.get_linkage()->get_remote_d_type() << 12) {
     case S_IFSOCK: out << "sock"; break;
     case S_IFLNK: out << "lnk"; break;
     case S_IFREG: out << "reg"; break;
@@ -85,7 +85,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   out << " v=" << dn.get_version();
   out << " pv=" << dn.get_projected_version();
 
-  out << " inode=" << dn.get_inode();
+  out << " inode=" << dn.get_linkage()->get_inode();
 
   if (dn.is_new()) out << " state=new";
 
@@ -117,13 +117,14 @@ void CDentry::print(ostream& out)
 }
 
 
+/*
 inodeno_t CDentry::get_ino()
 {
   if (get_inode()) 
     return get_inode()->ino();
   return inodeno_t();
 }
-
+*/
 
 pair<int,int> CDentry::authority()
 {
@@ -258,8 +259,8 @@ void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
 
 void CDentry::link_remote(CInode *in)
 {
-  assert(is_remote());
-  assert(in->ino() == get_remote_ino());
+  assert(linkage.is_remote());
+  assert(in->ino() == linkage.get_remote_ino());
 
   linkage.inode = in;
   in->add_remote_parent(this);
@@ -267,7 +268,7 @@ void CDentry::link_remote(CInode *in)
 
 void CDentry::unlink_remote()
 {
-  assert(is_remote());
+  assert(linkage.is_remote());
   assert(linkage.inode);
   
   linkage.inode->remove_remote_parent(this);
@@ -280,7 +281,7 @@ void CDentry::push_projected_linkage(CInode *inode)
   inode->push_projected_parent(this);
 }
 
-void CDentry::pop_projected_linkage()
+CDentry::linkage_t *CDentry::pop_projected_linkage()
 {
   assert(projected.size());
   
@@ -296,6 +297,8 @@ void CDentry::pop_projected_linkage()
   assert(n.remote_d_type == linkage.remote_d_type);
 
   projected.pop_front();
+
+  return &linkage;
 }
 
 
@@ -386,10 +389,10 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
   ::decode(rino, p);
   ::decode(rdtype, p);
   if (rino) {
-    if (is_null())
+    if (linkage.is_null())
       dir->link_remote_inode(this, rino, rdtype);
     else
-      assert(is_remote() && linkage.remote_ino == rino);
+      assert(linkage.is_remote() && linkage.remote_ino == rino);
   }
   
   __s32 ls;
@@ -416,17 +419,17 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
 
   // null, ino, or remote_ino?
   char c;
-  if (is_primary()) {
+  if (linkage.is_primary()) {
     c = 1;
     ::encode(c, bl);
-    ::encode(get_inode()->inode.ino, bl);
+    ::encode(linkage.get_inode()->inode.ino, bl);
   }
-  else if (is_remote()) {
+  else if (linkage.is_remote()) {
     c = 2;
     ::encode(c, bl);
-    ::encode(get_remote_ino(), bl);
+    ::encode(linkage.get_remote_ino(), bl);
   }
-  else if (is_null()) {
+  else if (linkage.is_null()) {
     // encode nothing.
   }
   else assert(0);  
@@ -447,7 +450,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 
   if (p.end()) {
     // null
-    assert(is_null());
+    assert(linkage.is_null());
     return;
   }
 
@@ -460,7 +463,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
   case 2:
     ::decode(ino, p);
     // newly linked?
-    if (is_null() && !is_auth()) {
+    if (linkage.is_null() && !is_auth()) {
       // force trim from cache!
       dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << dendl;
       //assert(get_num_ref() == 0);
