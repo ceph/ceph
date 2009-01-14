@@ -1724,8 +1724,9 @@ void Locker::simple_eval_gather(SimpleLock *lock)
   dout(10) << "simple_eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
 
   CInode *in = 0;
-  if (lock->get_type() != CEPH_LOCK_DN)
+  if (lock->get_cap_shift())
     in = (CInode *)lock->get_parent();
+
   int loner_issued = 0, other_issued = 0;
   if (in)
     in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
@@ -1811,7 +1812,7 @@ bool Locker::simple_sync(SimpleLock *lock)
   assert(lock->is_stable());
 
   CInode *in = 0;
-  if (lock->get_type() != CEPH_LOCK_DN)
+  if (lock->get_cap_shift())
     in = (CInode *)lock->get_parent();
 
   switch (lock->get_state()) {
@@ -1861,7 +1862,7 @@ void Locker::simple_lock(SimpleLock *lock)
   assert(lock->get_state() != LOCK_LOCK);
   
   CInode *in = 0;
-  if (lock->get_type() != CEPH_LOCK_DN)
+  if (lock->get_cap_shift())
     in = (CInode *)lock->get_parent();
 
   switch (lock->get_state()) {
