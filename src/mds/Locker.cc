@@ -165,7 +165,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	// master.  wrlock versionlock so we can pipeline inode updates to journal.
 	wrlocks.insert(&in->versionlock);
       } else {
-	// slave.  exclusively lock the inode version (i.e. block other journal updates)
+	// slave.  exclusively lock the inode version (i.e. block other journal updates).
+	// this makes rollback safe.
 	xlocks.insert(&in->versionlock);
 	sorted.insert(&in->versionlock);
       }

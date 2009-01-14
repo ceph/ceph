@@ -2523,7 +2523,8 @@ void Server::handle_client_link(MDRequest *mdr)
     return;
   }
   
-  // identify target inode
+  // identify target inode.
+  //  use projected target; we'll rdlock the dentry to ensure it's correct.
   CInode *targeti = mdcache->get_dentry_inode(targettrace[targettrace.size()-1], mdr, true);
   if (!targeti)
     return;
@@ -2857,7 +2858,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   link_rollback rollback;
   rollback.reqid = mdr->reqid;
   rollback.ino = targeti->ino();
-  rollback.old_ctime = targeti->inode.ctime;   // we hold versionlock; no concorrent projections
+  rollback.old_ctime = targeti->inode.ctime;   // we hold versionlock xlock; no concorrent projections
   fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
@@ -2983,7 +2984,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   CInode *in = mds->mdcache->get_inode(rollback.ino);
   assert(in);
   dout(10) << " target is " << *in << dendl;
-  assert(!in->is_projected());  // live slave request hold versionlock.
+  assert(!in->is_projected());  // live slave request hold versionlock xlock.
   
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
