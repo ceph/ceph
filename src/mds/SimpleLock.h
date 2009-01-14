@@ -44,7 +44,7 @@ inline const char *get_lock_type_name(int t) {
 #define LOCK_SYNC_LOCK  -3     // AR   R . / . .   . . / . .
 #define LOCK_LOCK_SYNC  -51    // A    R w / . .   (lock)
 
-#define LOCK_EXCL       -60    // A    . . / c x * (lock)
+#define LOCK_EXCL        60    // A    . . / c x * (lock)
 #define LOCK_EXCL_SYNC  -61    // A    . . / c . * (lock)
 #define LOCK_EXCL_LOCK  -62    // A    . . / . .   (lock)
 #define LOCK_SYNC_EXCL  -63    // Ar   r . / c . * (sync->lock)
@@ -360,6 +360,11 @@ public:
     switch (state) {
     case LOCK_LOCK:
     case LOCK_SYNC_LOCK: 
+    case LOCK_EXCL:
+    case LOCK_SYNC_EXCL:
+    case LOCK_LOCK_EXCL:
+    case LOCK_EXCL_LOCK:
+    case LOCK_EXCL_SYNC:
       return LOCK_LOCK;
     case LOCK_SYNC:
       return LOCK_SYNC;
@@ -401,6 +406,21 @@ public:
       return true;
     return false;
   }
+
+
+  bool try_relax_xlock(int client) {
+    if (client >= 0 &&
+	xlock_by && 
+	xlock_done &&
+	xlock_by_client == client &&
+	state == LOCK_LOCK) {
+      state = LOCK_LOCK_SYNC;
+      parent->auth_pin(this);
+      return true;
+    }
+    return false;
+  }
+  
 
   bool can_lease(int client) {
     if (client >= 0 &&

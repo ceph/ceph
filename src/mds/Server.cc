@@ -690,6 +690,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
  inode:
   numi++;
 
+  dout(15) << "set_trace_dist " << *in << dendl;
+
   if (!realm) {
     // snapbl
     realm = in->find_snaprealm();
@@ -721,8 +723,13 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
   if (!dn) {
     dn = in->get_projected_parent_dn();
-    if (dn && dn->lock.is_xlocked() && !dn->lock.can_rdlock(0, client))
-      dn = NULL;   // can't use projected parent
+    if (dn)
+      dout(20) << "  maybe use projected dn? " << *dn << dendl;
+    if (dn && dn->lock.is_xlocked()) {
+      dn->lock.try_relax_xlock(client);
+      if (!dn->lock.can_rdlock(0, client))
+	dn = NULL;   // can't use projected parent
+    }
     if (!dn)
       dn = in->get_parent_dn();
   }
@@ -730,6 +737,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     goto done;
 
  dentry:
+  dout(15) << "set_trace_dist " << *dn << dendl;
+
   expose_projected_inode = false;
 
   ::encode(dn->get_name(), bl);

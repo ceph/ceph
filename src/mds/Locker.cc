@@ -1450,14 +1450,9 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   //    if the client is holding EXCL|RDCACHE caps.
   int mask = 0;
 
-  if (dn->lock.get_state() == LOCK_LOCK &&
-      dn->lock.is_xlocked_by_client(client) &&
-      dn->lock.xlocker_is_done()) {
-    dout(10) << " setting " << dn->lock << " to lock->sync on " << *dn << dendl;
-    dn->lock.get_parent()->auth_pin(&dn->lock);
-    dn->lock.set_state(LOCK_LOCK_SYNC);
-  }
-
+  if (dn->lock.try_relax_xlock(client))
+    dout(10) << " set " << dn->lock << " to lock->sync on " << *dn << dendl;
+  
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
@@ -1727,6 +1722,13 @@ void Locker::simple_eval_gather(SimpleLock *lock)
 {
   dout(10) << "simple_eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
 
+  CInode *in = 0;
+  if (lock->get_type() != CEPH_LOCK_DN)
+    in = (CInode *)lock->get_parent();
+  int loner_issued = 0, other_issued = 0;
+  if (in)
+    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+
   // finished gathering?
   if (lock->get_state() == LOCK_SYNC_LOCK &&
       !lock->is_gathering() &&
@@ -1755,9 +1757,14 @@ void Locker::simple_eval_gather(SimpleLock *lock)
     }
   }
 
-  else if (lock->get_state() == LOCK_LOCK_SYNC &&
+  else if ((lock->get_state() == LOCK_LOCK_SYNC ||
+	    lock->get_state() == LOCK_EXCL_SYNC) &&
+	   (!in ||
+	    ((loner_issued & ~lock->gcaps_allowed(true)) == 0 &&
+	     (other_issued & ~lock->gcaps_allowed(false)) == 0)) &&
 	   !lock->is_gathering() &&
-	   !lock->is_wrlocked()) {
+	   !lock->is_wrlocked() &&
+	   !lock->is_xlocked()) {
     dout(7) << "simple_eval finished gather on " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     assert(lock->get_parent()->is_auth());
@@ -1802,15 +1809,31 @@ bool Locker::simple_sync(SimpleLock *lock)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  assert(lock->get_state() == LOCK_LOCK);
-  
-  lock->set_state(LOCK_LOCK_SYNC);
+  CInode *in = 0;
+  if (lock->get_type() != CEPH_LOCK_DN)
+    in = (CInode *)lock->get_parent();
+
+  switch (lock->get_state()) {
+  case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
+  case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
+  default: assert(0);
+  }
 
   int gather = 0;
   if (lock->is_wrlocked())
     gather++;
   if (lock->is_xlocked())
     gather++;
+
+  if (in) {
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+	(other_issued & ~lock->gcaps_allowed(false))) {
+      issue_caps(in);
+      gather++;
+    }
+  }
 
   if (gather) {
     lock->get_parent()->auth_pin(lock);
@@ -1828,28 +1851,48 @@ bool Locker::simple_sync(SimpleLock *lock)
   return true;
 }
 
+
 void Locker::simple_lock(SimpleLock *lock)
 {
   dout(7) << "simple_lock on " << *lock << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
+  assert(lock->get_state() != LOCK_LOCK);
   
-  // check state
-  if (lock->get_state() == LOCK_LOCK) return;
-  assert(lock->get_state() == LOCK_SYNC);
-  
-  if (lock->get_parent()->is_replicated() ||
-      lock->get_num_client_lease() ||
-      lock->is_rdlocked()) {
-    // bcast to mds replicas
-    send_lock_message(lock, LOCK_AC_LOCK);
+  CInode *in = 0;
+  if (lock->get_type() != CEPH_LOCK_DN)
+    in = (CInode *)lock->get_parent();
 
-    // bcast to client replicas
-    revoke_client_leases(lock);
-    
-    // change lock
-    lock->set_state(LOCK_SYNC_LOCK);
+  switch (lock->get_state()) {
+  case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
+  case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
+  default: assert(0);
+  }
+
+  int gather = 0;
+  if (lock->get_parent()->is_replicated()) {
+    gather++;
+    send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
+  }
+  if (lock->get_num_client_lease()) {
+    gather++;
+    revoke_client_leases(lock);
+  }
+  if (lock->is_rdlocked())
+    gather++;
+  
+  if (in) {
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+	(other_issued & ~lock->gcaps_allowed(false))) {
+      issue_caps(in);
+      gather++;
+    }
+  }
+
+  if (gather) {
     lock->get_parent()->auth_pin(lock);
   } else {
     lock->set_state(LOCK_LOCK);
@@ -1881,14 +1924,8 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
   int client = mut->reqid.name.is_client() ? mut->reqid.name.num() : -1;
 
   while (1) {
-    if (client >= 0 &&
-	lock->get_state() == LOCK_LOCK &&
-	lock->is_xlocked_by_client(client) &&
-	lock->xlocker_is_done()) {
-      dout(10) << " setting " << *lock << " to lock->sync on " << *lock->get_parent() << dendl;
-      lock->get_parent()->auth_pin(lock);
-      lock->set_state(LOCK_LOCK_SYNC);
-    }
+    if (lock->try_relax_xlock(client))
+      dout(10) << " set " << *lock << " to lock->sync on " << *lock->get_parent() << dendl;
 
     // can read?  grab ref.
     if (lock->can_rdlock(mut, client)) {
