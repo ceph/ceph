@@ -2157,13 +2157,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
   dout(10) << "handle_client_readdir on " << *dir << dendl;
   assert(dir->is_auth());
 
-  // check perm
-  /*
-  if (!mds->locker->inode_hard_rdlock_start(diri, mdr))
-    return;
-  mds->locker->inode_hard_rdlock_finish(diri, mdr);
-  */
-
   if (!dir->is_complete()) {
     // fetch
     dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
@@ -2405,8 +2398,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
   newdir->mark_complete();
   newdir->pre_dirty();
-
-  //if (mds->logger) mds->logger->inc("mkdir");
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -4774,8 +4765,6 @@ void Server::handle_client_truncate(MDRequest *mdr)
   }
     
 
-  // check permissions?  
-
   // xlock inode
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
@@ -4860,8 +4849,6 @@ void Server::handle_client_open(MDRequest *mdr)
     reply_request(mdr, -EPERM);
     return;
   }
-
-  // hmm, check permissions or something.
 
   // O_TRUNC
   if ((flags & O_TRUNC) &&
