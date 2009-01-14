@@ -51,8 +51,9 @@ ostream& CInode::print_db_line_prefix(ostream& out)
 
 ostream& operator<<(ostream& out, CInode& in)
 {
-  filepath path;
-  in.make_path(path);
+  string path;
+  in.make_path_string_projected(path);
+
   out << "[inode " << in.inode.ino;
   out << " [" 
       << (in.is_multiversion() ? "...":"")
@@ -418,10 +419,13 @@ bool CInode::is_ancestor_of(CInode *other)
   return false;
 }
 
-void CInode::make_path_string(string& s)
+void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
 {
-  if (parent) {
-    parent->make_path_string(s);
+  if (!force)
+    use_parent = parent;
+
+  if (use_parent) {
+    use_parent->make_path_string(s);
   } 
   else if (is_root()) {
     s = "";  // root
@@ -433,7 +437,28 @@ void CInode::make_path_string(string& s)
     s += n;
   }
   else {
-    s = "(dangling)";  // dangling
+    char n[20];
+    sprintf(n, "#%llx", (unsigned long long)(ino()));
+    s += n;
+  }
+}
+void CInode::make_path_string_projected(string& s)
+{
+  make_path_string(s);
+  
+  if (projected_parent.size()) {
+    string q;
+    q.swap(s);
+    s = "{" + q;
+    for (list<CDentry*>::iterator p = projected_parent.begin();
+	 p != projected_parent.end();
+	 p++) {
+      string q;
+      make_path_string(q, true, *p);
+      s += " ";
+      s += q;
+    }
+    s += "}";
   }
 }
 
@@ -467,10 +492,10 @@ void CInode::name_stray_dentry(string& dname)
 
 version_t CInode::pre_dirty()
 {    
-  assert(parent || projected_parent);
+  assert(parent || projected_parent.size());
   version_t pv;
-  if (projected_parent)
-    pv = projected_parent->pre_dirty(get_projected_version());
+  if (projected_parent.size())
+    pv = projected_parent.front()->pre_dirty(get_projected_version());
   else
     pv = parent->pre_dirty();
   dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
@@ -494,7 +519,7 @@ void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   
   dout(10) << "mark_dirty " << *this << dendl;
 
-  assert(parent || projected_parent);
+  assert(parent || projected_parent.size());
 
   /*
     NOTE: I may already be dirty, but this fn _still_ needs to be called so that

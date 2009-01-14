@@ -119,8 +119,8 @@ void CDentry::print(ostream& out)
 
 inodeno_t CDentry::get_ino()
 {
-  if (inode) 
-    return inode->ino();
+  if (get_inode()) 
+    return get_inode()->ino();
   return inodeno_t();
 }
 
@@ -259,20 +259,45 @@ void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
 void CDentry::link_remote(CInode *in)
 {
   assert(is_remote());
-  assert(in->ino() == remote_ino);
+  assert(in->ino() == get_remote_ino());
 
-  inode = in;
+  linkage.inode = in;
   in->add_remote_parent(this);
 }
 
 void CDentry::unlink_remote()
 {
   assert(is_remote());
-  assert(inode);
+  assert(linkage.inode);
   
-  inode->remove_remote_parent(this);
-  inode = 0;
+  linkage.inode->remove_remote_parent(this);
+  linkage.inode = 0;
 }
+
+void CDentry::push_projected_linkage(CInode *inode)
+{
+  _project_linkage()->inode = inode;
+  inode->push_projected_parent(this);
+}
+
+void CDentry::pop_projected_linkage()
+{
+  assert(projected.size());
+  
+  linkage_t& n = projected.front();
+  if (n.inode) {
+    dir->link_primary_inode(this, n.inode);
+    n.inode->pop_projected_parent();
+  } else if (n.remote_ino)
+    dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
+
+  assert(n.inode == linkage.inode);
+  assert(n.remote_ino == linkage.remote_ino);
+  assert(n.remote_d_type == linkage.remote_d_type);
+
+  projected.pop_front();
+}
+
 
 
 // ----------------------------
@@ -364,7 +389,7 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
     if (is_null())
       dir->link_remote_inode(this, rino, rdtype);
     else
-      assert(is_remote() && remote_ino == rino);
+      assert(is_remote() && linkage.remote_ino == rino);
   }
   
   __s32 ls;
@@ -394,12 +419,12 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   if (is_primary()) {
     c = 1;
     ::encode(c, bl);
-    ::encode(inode->inode.ino, bl);
+    ::encode(get_inode()->inode.ino, bl);
   }
   else if (is_remote()) {
     c = 2;
     ::encode(c, bl);
-    ::encode(remote_ino, bl);
+    ::encode(get_remote_ino(), bl);
   }
   else if (is_null()) {
     // encode nothing.

@@ -1994,8 +1994,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   decode_import_inode_caps(in, blp, cap_imports);
 
   // link before state  -- or not!  -sage
-  if (dn->inode != in) {
-    assert(!dn->inode);
+  if (dn->get_inode() != in) {
+    assert(!dn->get_inode());
     dn->dir->link_primary_inode(dn, in);
   }
  

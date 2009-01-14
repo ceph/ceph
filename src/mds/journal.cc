@@ -449,7 +449,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
 	}
-	dn->set_remote(p->ino, p->d_type);
+	dn->get_linkage()->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;

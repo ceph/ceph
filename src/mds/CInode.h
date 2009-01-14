@@ -230,7 +230,8 @@ public:
   // parent dentries in cache
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
-  CDentry         *projected_parent;   // for in-progress rename
+
+  list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
   pair<int,int> inode_auth;
 
@@ -286,7 +287,7 @@ private:
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
-    parent(0), projected_parent(0),
+    parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_caps(this), xlist_open_file(this), 
@@ -342,7 +343,7 @@ private:
 
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
-  CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }
+  CDentry* get_projected_parent_dn() { return projected_parent.size() ? projected_parent.back():parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   
@@ -358,7 +359,8 @@ private:
 
   // -- misc -- 
   bool is_ancestor_of(CInode *other);
-  void make_path_string(string& s);
+  void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
+  void make_path_string_projected(string& s);  
   void make_path(filepath& s);
   void make_anchor_trace(vector<class Anchor>& trace);
   void name_stray_dentry(string& dname);
@@ -757,10 +759,6 @@ public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
     parent = p;
-    if (projected_parent) {
-      assert(projected_parent == p);
-      projected_parent = 0;
-    }
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
@@ -770,6 +768,15 @@ public:
   void remove_remote_parent(CDentry *p);
   int num_remote_parents() {
     return remote_parents.size(); 
+  }
+
+  void push_projected_parent(CDentry *dn) {
+    projected_parent.push_back(dn);
+  }
+  void pop_projected_parent() {
+    assert(projected_parent.size());
+    parent = projected_parent.front();
+    projected_parent.pop_front();
   }
 
   void print(ostream& out);

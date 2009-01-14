@@ -857,8 +857,7 @@ public:
   int path_traverse(MDRequest *mdr, Message *req, filepath& path, 
 		    vector<CDentry*>& trace, snapid_t *psnap, CInode **psnapdiri,
 		    bool follow_trailing_sym,
-                    int onfail,
-		    bool allow_projected=false);
+                    int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
     filepath path(p);

@@ -342,6 +342,14 @@ bool Locker::acquire_locks(MDRequest *mdr,
 }
 
 
+void Locker::set_xlocks_done(Mutation *mut)
+{
+  for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
+       p != mut->xlocks.end();
+       p++)
+    (*p)->set_xlock_done();
+}
+
 void Locker::drop_locks(Mutation *mut)
 {
   // leftover locks

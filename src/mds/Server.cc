@@ -525,6 +525,9 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
     return;
   }
 
+  // mark xlocks "done", indicating that we are exposing uncommitted changes
+  mds->locker->set_xlocks_done(mdr);
+
   MClientRequest *req = mdr->client_request;
   entity_inst_t client_inst = req->get_orig_source_inst();
   if (client_inst.name.is_mds())
@@ -663,7 +666,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    bool projected, MDRequest *mdr)
+			    bool expose_projected_inode, MDRequest *mdr)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -694,7 +697,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
   }
 
-  in->encode_inodestat(bl, session, snapid, projected);
+  in->encode_inodestat(bl, session, snapid, expose_projected_inode);
   dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
@@ -717,11 +720,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   }
 
   if (!dn) {
-    if (projected && mdr) {
-      dn = in->get_projected_parent_dn();
-      if (dn && mdr->locks.count(&dn->lock) == 0)  // only use projected value if we've locked it!
-	dn = NULL;
-    }
+    dn = in->get_projected_parent_dn();
+    if (dn && dn->lock.is_xlocked() && !dn->lock.can_rdlock(0, client))
+      dn = NULL;   // can't use projected parent
     if (!dn)
       dn = in->get_parent_dn();
   }
@@ -729,6 +730,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     goto done;
 
  dentry:
+  expose_projected_inode = false;
+
   ::encode(dn->get_name(), bl);
   if (snapid == CEPH_NOSNAP)
     lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
@@ -1434,8 +1437,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   snapid_t snapid;
   int r = mdcache->path_traverse(mdr, mdr->client_request,
 				 refpath, trace, &snapid, &mdr->ref_snapdiri,
-				 false, MDS_TRAVERSE_FORWARD,
-				 true);
+				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     reply_request(mdr, r);
@@ -1486,8 +1488,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
 				 trace, &mdr->ref_snapid, &mdr->ref_snapdiri,
-				 req->follow_trailing_symlink(), MDS_TRAVERSE_FORWARD,
-				 true);
+				 req->follow_trailing_symlink(), MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     reply_request(mdr, r);
@@ -2201,9 +2202,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
     CDentry *dn = it->second;
     it++;
 
-    if (dn->is_null() &&
-	!(dn->get_projected_inode() &&
-	  dn->lock.can_rdlock(mdr, client))) continue;
+    CDentry::linkage_t *dnl = 0;
+    if (dn->lock.can_rdlock(mdr, client))
+      dnl = dn->get_projected_linkage();
+    else
+      dnl = dn->get_linkage();
+
+    if (dnl->is_null())
+      continue;
     if (snaps && dn->last != CEPH_NOSNAP) {
       set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
       if (p == snaps->end() || *p > dn->last) {
@@ -2214,17 +2220,15 @@ void Server::handle_client_readdir(MDRequest *mdr)
     if (dn->last < snapid || dn->first > snapid)
       continue;
 
-    CInode *in = dn->get_inode();
-    if (dn->get_projected_inode() &&
-	dn->lock.can_rdlock(mdr, client))
-      in = dn->get_projected_inode();
+    CInode *in = dnl->get_inode();
 
     // remote link?
     // better for the MDS to do the work, if we think the client will stat any of these files.
-    if (dn->is_remote() && !in) {
-      in = mdcache->get_inode(dn->get_remote_ino());
+    if (dnl->is_remote() && !in) {
+      in = mdcache->get_inode(dnl->get_remote_ino());
       if (in) {
-	dn->link_remote(in);
+	if (!dn->is_projected())
+	  dn->link_remote(in);
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
@@ -2295,7 +2299,7 @@ public:
     assert(r == 0);
 
     // link the inode
-    dn->get_dir()->link_primary_inode(dn, newi);
+    dn->pop_projected_linkage();
     
     // dirty inode, dn, dir
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
@@ -2335,8 +2339,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
   assert(newi);
 
-  newi->projected_parent = dn;
-  dn->set_projected_inode(newi);
+  dn->push_projected_linkage(newi);
 
   newi->inode.rdev = req->head.args.mknod.rdev;
   newi->inode.mode = req->head.args.mknod.mode;
@@ -2359,9 +2362,6 @@ void Server::handle_client_mknod(MDRequest *mdr)
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  // allow the same client rdlock|lease the dentry
-  dn->lock.set_xlock_done();
-  
   early_reply(mdr, newi, 0);
 
   // log + wait
@@ -2390,8 +2390,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   assert(newi);
 
   // it's a directory.
-  newi->projected_parent = dn;
-  dn->set_projected_inode(newi);
+  dn->push_projected_linkage(newi);
 
   newi->inode.mode = req->head.args.mkdir.mode;
   newi->inode.mode &= ~S_IFMT;
@@ -2434,9 +2433,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&newi->xlist_open_file);
 
-  // allow the same client rdlock|lease the dentry
-  dn->lock.set_xlock_done();
-  
   early_reply(mdr, newi, 0);
 
   // log + wait
@@ -2462,8 +2458,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   assert(newi);
 
   // it's a symlink
-  newi->projected_parent = dn;
-  dn->set_projected_inode(newi);
+  dn->push_projected_linkage(newi);
 
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFLNK;
@@ -2484,9 +2479,6 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  // allow the same client rdlock|lease the dentry
-  dn->lock.set_xlock_done();
-  
   early_reply(mdr, newi, 0);
 
   // log + wait
@@ -2523,7 +2515,7 @@ void Server::handle_client_link(MDRequest *mdr)
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
 				 targetpath, targettrace, NULL, NULL,
-				 false, MDS_TRAVERSE_DISCOVER, true);
+				 false, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
   if (r < 0) {
@@ -2641,8 +2633,6 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
   mdcache->journal_dirty_inode(mdr, &le->metablob, targeti);
 
-  dn->lock.set_xlock_done();
-
   early_reply(mdr, targeti, dn);
 
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
@@ -2654,7 +2644,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
-  dn->get_dir()->link_remote_inode(dn, targeti);
+  dn->pop_projected_linkage();
   dn->mark_dirty(dnpv, mdr->ls);
 
   // target inode
@@ -2748,8 +2738,6 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   // mark committing (needed for proper recovery)
   mdr->committing = true;
 
-  dn->lock.set_xlock_done();
-
   early_reply(mdr, targeti, dn);
 
   // log + wait
@@ -2766,7 +2754,7 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
 
   if (inc) {
     // link the new dentry
-    dn->get_dir()->link_remote_inode(dn, targeti);
+    dn->pop_projected_linkage();
     dn->mark_dirty(dpv, mdr->ls);
   } else {
     // unlink main dentry
@@ -3236,8 +3224,9 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   le->metablob.add_client_req(mdr->reqid);
 
-  if (dn->is_primary())
-    dn->get_inode()->projected_parent = straydn;
+  if (dn->is_primary()) {
+    straydn->push_projected_linkage(dn->get_inode());
+  }
 
   // the unlinked dentry
   dn->pre_dirty();
@@ -3276,8 +3265,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
-  dn->lock.set_xlock_done();
-
   early_reply(mdr, 0, dn);
 
   // log + wait
@@ -3291,13 +3278,12 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dout(10) << "_unlink_local_finish " << *dn << dendl;
 
   // unlink main dentry
-  CInode *in = dn->get_inode();
   dn->get_dir()->unlink_inode(dn);
 
   // relink as stray?  (i.e. was primary link?)
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
-    straydn->get_dir()->link_primary_inode(straydn, in);
+    straydn->pop_projected_linkage();
     
     SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
     
@@ -3783,9 +3769,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   // mark committing (needed for proper recovery)
   mdr->committing = true;
   
-  srcdn->lock.set_xlock_done();
-  destdn->lock.set_xlock_done();
-
   early_reply(mdr, srci, destdn);
 
   // log + wait
@@ -3913,7 +3896,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	tpi = destdn->get_inode()->project_inode();
 	tpi->version = straydn->pre_dirty(tpi->version);
       }
-      destdn->get_inode()->projected_parent = straydn;
+      straydn->push_projected_linkage(destdn->get_inode());
     } else if (destdn->is_remote()) {
       // nlink-- targeti
       if (destdn->get_inode()->is_auth()) {
@@ -3949,8 +3932,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       pi = srcdn->get_inode()->project_inode();
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
     }
-    srcdn->get_inode()->projected_parent = destdn;
-    destdn->set_projected_inode(srcdn->get_inode());
+    destdn->push_projected_linkage(srcdn->get_inode());
   }
 
   // src
@@ -4092,7 +4074,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
       destdn->get_dir()->unlink_inode(destdn);
-      straydn->get_dir()->link_primary_inode(straydn, oldin);
+      straydn->pop_projected_linkage();
       
       if (straydn->is_auth()) {
 	SnapRealm *oldparent = destdn->get_dir()->inode->find_snaprealm();
@@ -4121,7 +4103,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   if (srcdn->is_remote()) {
     if (!linkmerge) {
       srcdn->get_dir()->unlink_inode(srcdn);
-      destdn->get_dir()->link_remote_inode(destdn, in);
+      destdn->pop_projected_linkage();
       destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
@@ -4137,7 +4119,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->get_dir()->unlink_inode(destdn);
     }
     srcdn->get_dir()->unlink_inode(srcdn);
-    destdn->get_dir()->link_primary_inode(destdn, in);
+    destdn->pop_projected_linkage();
 
     // srcdn inode import?
     if (!srcdn->is_auth() && destdn->is_auth()) {
@@ -5068,15 +5050,12 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    dn->get_dir()->link_primary_inode(dn, newi);
+    dn->pop_projected_linkage();
 
     // dirty inode, dn, dir
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
 
     mdr->apply();
-
-    // downgrade xlock to rdlock
-    //mds->locker->dentry_xlock_downgrade_to_rdlock(dn, mdr);
 
     // set/pin ref inode for open()
     mdr->ref = newi;
@@ -5129,8 +5108,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   assert(in);
   
   // it's a file.
-  in->projected_parent = dn;
-  dn->set_projected_inode(in);
+  dn->push_projected_linkage(in);
 
   in->inode.mode = req->head.args.open.mode;
   in->inode.mode |= S_IFREG;
@@ -5164,9 +5142,6 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_opened_ino(in->ino());
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->xlist_open_file);
-
-  // early reply?
-  dn->lock.set_xlock_done();
 
   early_reply(mdr, in, 0);
 
