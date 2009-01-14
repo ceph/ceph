@@ -2171,7 +2171,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	newmap = ceph_mdsmap_decode(&p, end);
 	if (IS_ERR(newmap)) {
 		err = PTR_ERR(newmap);
-		goto bad;
+		goto bad_unlock;
 	}
 
 	/* swap into place */
@@ -2197,6 +2197,8 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	complete(&mdsc->map_waiters);
 	return;
 
+bad_unlock:
+	mutex_unlock(&mdsc->mutex);
 bad:
 	derr(1, "problem with mdsmap %d\n", err);
 	return;
