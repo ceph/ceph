@@ -643,6 +643,7 @@ void Server::encode_empty_dirstat(bufferlist& bl)
 void Server::encode_infinite_lease(bufferlist& bl)
 {
   LeaseStat e;
+  e.seq = 0;
   e.mask = -1;
   e.duration_ms = -1;
   ::encode(e, bl);
@@ -652,6 +653,7 @@ void Server::encode_infinite_lease(bufferlist& bl)
 void Server::encode_null_lease(bufferlist& bl)
 {
   LeaseStat e;
+  e.seq = 0;
   e.mask = 0;
   e.duration_ms = 0;
   ::encode(e, bl);
