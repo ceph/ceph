@@ -3216,7 +3216,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 {
   dout(10) << "_unlink_local " << *dn << dendl;
 
-  CDentry::linkage_t *dnl = dn->get_linkage(mdr->get_client());
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
   // ok, let's do it.
   mdr->ls = mdlog->get_current_segment();
@@ -3265,6 +3265,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
+  dn->push_projected_linkage();
+
   early_reply(mdr, 0, dn);
 
   // log + wait
@@ -3279,6 +3281,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   // unlink main dentry
   dn->get_dir()->unlink_inode(dn);
+  dn->pop_projected_linkage();
 
   // relink as stray?  (i.e. was primary link?)
   if (straydn) {
