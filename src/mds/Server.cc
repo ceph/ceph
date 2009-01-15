@@ -3366,7 +3366,8 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
     assert(dir);
 
     // does the frag _look_ empty?
-    if (dir->get_num_head_items()) {
+    if (false &&  // FIXME: need to look at _projected_ directory size.
+	dir->get_num_head_items()) {
       dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() 
 	       << " cached items in frag " << *dir << dendl;
       reply_request(mdr, -ENOTEMPTY);
