@@ -5322,17 +5322,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
-
-    bool use_projected = false;
-    CDentry::linkage_t *dnl = NULL;
-    if (dn) {
-      if (dn->lock.is_xlocked() &&
-	  dn->lock.can_rdlock(mdr, client)) {
-	use_projected = true;
-	dnl = dn->get_projected_linkage();
-      } else
-	dnl = dn->get_linkage();
-    }
+    CDentry::linkage_t *dnl = dn ? dn->get_projected_linkage() : 0;
 
     // null and last_bit and xlocked by me?
     if (dnl && dnl->is_null()) {
@@ -5348,7 +5338,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	if (mds->logger) mds->logger->inc("tlock");
         return 1;
       }
-
     }
 
     if (dnl && !dnl->is_null()) {
@@ -5371,7 +5360,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         // do i have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
-          if (!use_projected) {
+          if (!dn->is_projected()) {
 	    dout(7) << "linking in remote in " << *in << dendl;
 	    dn->link_remote(in);
 	  }
