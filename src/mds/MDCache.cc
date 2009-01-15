@@ -5325,33 +5325,24 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     CDentry::linkage_t *dnl = dn ? dn->get_projected_linkage() : 0;
 
     // null and last_bit and xlocked by me?
-    if (dnl && dnl->is_null()) {
-      if (null_okay) {
-	dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
-	trace.push_back(dn);
-	break; // done!
-      }
-      if (dn->lock.is_xlocked() &&
-	  dn->lock.get_xlocked_by() != mdr) {
-        dout(10) << "traverse: xlocked null dentry at " << *dn << dendl;
-        dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
-	if (mds->logger) mds->logger->inc("tlock");
-        return 1;
-      }
+    if (dnl && dnl->is_null() && null_okay) {
+      dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
+      trace.push_back(dn);
+      break; // done!
     }
 
+    if (dnl &&
+	dn->lock.is_xlocked() &&
+	dn->lock.get_xlocked_by() != mdr &&
+	!dn->lock.can_rdlock(mdr, client) &&
+	(dnl->is_null() || !noperm)) {
+      dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
+      dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
+      if (mds->logger) mds->logger->inc("tlock");
+      return 1;
+    }
+    
     if (dnl && !dnl->is_null()) {
-      // dentry exists.  xlocked?
-      if (!noperm &&
-	  dn->lock.is_xlocked() &&
-	  dn->lock.get_xlocked_by() != mdr &&
-	  !dn->lock.can_rdlock(mdr, client)) {
-        dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
-        dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
-	if (mds->logger) mds->logger->inc("tlock");
-        return 1;
-      }
-
       CInode *in = dnl->get_inode();
       
       // do we have inode?
