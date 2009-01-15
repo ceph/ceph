@@ -24,20 +24,20 @@
 //  Tempsync _/
 //                              auth repl
 #define LOCK_SYNC__                 // R .  R .  rdlocks allowed on auth and replicas
-#define LOCK_SYNC_LOCK__       -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
-#define LOCK_SYNC_SCATTER      -28  // r .  r .  
+#define LOCK_SYNC_LOCK__       -40  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
+#define LOCK_SYNC_SCATTER      -41  // r .  r .  
 
 #define LOCK_LOCK_SYNC_             // . w       LOCK on replica.
 #define LOCK_LOCK__                 // . W  . .
-#define LOCK_LOCK_TEMPSYNC     -21  // . w       LOCK on replica.
+#define LOCK_LOCK_TEMPSYNC     -42  // . w       LOCK on replica.
 
-#define LOCK_SCATTER_LOCK      -22  // . wp . wp waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
-#define LOCK_SCATTER            23  // . Wp . WP mtime updates on replicas allowed, no reads.  stable here.
-#define LOCK_SCATTER_TEMPSYNC  -24  // . wp . wp GLOCKC|LOCK on replica
+#define LOCK_SCATTER_LOCK      -43  // . wp . wp waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
+#define LOCK_SCATTER            44  // . Wp . WP mtime updates on replicas allowed, no reads.  stable here.
+#define LOCK_SCATTER_TEMPSYNC  -45  // . wp . wp GLOCKC|LOCK on replica
 
-#define LOCK_TEMPSYNC_SCATTER  -25  // r .       LOCK on replica.
-#define LOCK_TEMPSYNC_LOCK     -26  // r .       LOCK on replica.
-#define LOCK_TEMPSYNC           27  // R .       LOCK on replica.
+#define LOCK_TEMPSYNC_SCATTER  -46  // r .       LOCK on replica.
+#define LOCK_TEMPSYNC_LOCK     -47  // r .       LOCK on replica.
+#define LOCK_TEMPSYNC           48  // R .       LOCK on replica.
 
 
 
@@ -56,6 +56,19 @@ public:
   ~ScatterLock() {
     xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
   }
+
+  bool is_stable() {
+    switch (state) {
+    case LOCK_SYNC:
+    case LOCK_LOCK:
+    case LOCK_SCATTER:
+    case LOCK_TEMPSYNC:
+      return true;
+    default:
+      return false;
+    }
+  }
+
 
   const char *get_state_name(int s) {
     switch(s) {

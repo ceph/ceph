@@ -35,58 +35,23 @@ inline const char *get_lock_type_name(int t) {
   }
 }
 
-// -- lock states --
-// sync <-> lock
-#define LOCK_UNDEF    0
-//                                     auth        rep
-#define LOCK_SYNC        1     // AR   R . / C .   R . / C . 
-#define LOCK_LOCK        2     // AR   R W / . .   . . / . .
-#define LOCK_SYNC_LOCK  -3     // AR   R . / . .   . . / . .
-#define LOCK_LOCK_SYNC  -51    // A    R w / . .   (lock)
-
-#define LOCK_EXCL        60    // A    . . / c x * (lock)
-#define LOCK_EXCL_SYNC  -61    // A    . . / c . * (lock)
-#define LOCK_EXCL_LOCK  -62    // A    . . / . .   (lock)
-#define LOCK_SYNC_EXCL  -63    // Ar   r . / c . * (sync->lock)
-#define LOCK_LOCK_EXCL  -64    // A    r w / . .   (lock)
-
-#define LOCK_REMOTEXLOCK  -50  // on NON-auth
-
-// * = loner mode
-
-/*
-
-
-          glockr
-       <-/      ^--
-  lock      -->    sync
-       
-    | ^-- glockc
-    v
-          ^
-  clientdel
-         
-
- */
-
 class Mutation;
+
+extern "C" {
+#include "locks.h"
+}
 
 
 class SimpleLock {
 public:
-  static const __u64 WAIT_RD          = (1<<0);  // to read
-  static const __u64 WAIT_WR          = (1<<1);  // to write
-  static const __u64 WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
-  static const __u64 WAIT_STABLE      = (1<<2);  // for a stable state
-  static const __u64 WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
-  static const int WAIT_BITS        = 4;
-  static const __u64 WAIT_ALL         = ((1<<WAIT_BITS)-1);
-
+  
   virtual const char *get_state_name(int n) {
     switch (n) {
     case LOCK_UNDEF: return "UNDEF";
     case LOCK_SYNC: return "sync";
     case LOCK_LOCK: return "lock";
+    case LOCK_XLOCK: return "xlock";
+    case LOCK_XLOCKDONE: return "xlockdone";
     case LOCK_SYNC_LOCK: return "sync->lock";
     case LOCK_LOCK_SYNC: return "lock->sync";
     case LOCK_REMOTEXLOCK: return "remote_xlock";
@@ -98,6 +63,19 @@ public:
     default: assert(0); return 0;
     }
   }
+
+
+  // waiting
+  static const __u64 WAIT_RD          = (1<<0);  // to read
+  static const __u64 WAIT_WR          = (1<<1);  // to write
+  static const __u64 WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
+  static const __u64 WAIT_STABLE      = (1<<2);  // for a stable state
+  static const __u64 WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
+  static const int WAIT_BITS        = 4;
+  static const __u64 WAIT_ALL         = ((1<<WAIT_BITS)-1);
+
+
+  sm_state_t *states;
 
 protected:
   // parent (what i lock)
@@ -112,18 +90,18 @@ protected:
   int num_client_lease;
 
   // local state
-  int num_rdlock, num_wrlock;
+  int num_rdlock, num_wrlock, num_xlock;
   Mutation *xlock_by;
   int xlock_by_client;
-  bool xlock_done;
 
 
 public:
   SimpleLock(MDSCacheObject *o, int t, int ws, int cs) :
+    states(sm_simplelock),
     parent(o), type(t), wait_shift(ws), cap_shift(cs),
     state(LOCK_SYNC), num_client_lease(0),
-    num_rdlock(0), num_wrlock(0),
-    xlock_by(0), xlock_by_client(-1), xlock_done(false) { }
+    num_rdlock(0), num_wrlock(0), num_xlock(0),
+    xlock_by(0), xlock_by_client(-1) { }
   virtual ~SimpleLock() {}
 
   // parent
@@ -186,8 +164,11 @@ public:
     take_waiting(SimpleLock::WAIT_ALL, waiters);
   }
 
-  bool is_stable() {
-    return state >= 0;
+  virtual bool is_stable() {
+    return states[state].next == 0;
+  }
+  int get_next_state() {
+    return states[state].next;
   }
 
 
@@ -210,6 +191,34 @@ public:
     gather_set.erase(i);
   }
 
+
+  // can_*
+  bool can_lease(int client) {
+    return states[state].can_lease == ANY ||
+      (states[state].can_lease == AUTH && parent->is_auth()) ||
+      (states[state].can_lease == XCL && client >= 0 && xlock_by_client == client);
+  }
+  bool can_read(int client) {
+    return states[state].can_read == ANY ||
+      (states[state].can_read == AUTH && parent->is_auth()) ||
+      (states[state].can_read == XCL && client >= 0 && xlock_by_client == client);
+  }
+  bool can_read_projected(int client) {
+    return states[state].can_read_projected == ANY ||
+      (states[state].can_read_projected == AUTH && parent->is_auth()) ||
+      (states[state].can_read_projected == XCL && client >= 0 && xlock_by_client == client);
+  }
+  bool can_rdlock(int client) {
+    return states[state].can_rdlock == ANY ||
+      (states[state].can_rdlock == AUTH && parent->is_auth()) ||
+      (states[state].can_rdlock == XCL && client >= 0 && xlock_by_client == client);
+  }
+  bool can_xlock(int client) {
+    return states[state].can_xlock == ANY ||
+      (states[state].can_xlock == AUTH && parent->is_auth()) ||
+      (states[state].can_xlock == XCL && client >= 0 && xlock_by_client == client);
+  }
+
   // rdlock
   bool is_rdlocked() { return num_rdlock > 0; }
   int get_rdlock() { 
@@ -225,11 +234,9 @@ public:
   int get_num_rdlocks() { return num_rdlock; }
 
   // wrlock
-  virtual bool can_wrlock() {
-    return state == LOCK_LOCK;
-  }
+  virtual bool can_wrlock() { assert(0); }
   void get_wrlock(bool force=false) {
-    assert(can_wrlock() || force);
+    //assert(can_wrlock() || force);
     if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
   }
@@ -243,35 +250,41 @@ public:
   // xlock
   void get_xlock(Mutation *who, int client) { 
     assert(xlock_by == 0);
+    assert(state == LOCK_XLOCK);
     parent->get(MDSCacheObject::PIN_LOCK);
+    num_xlock++;
     xlock_by = who; 
     xlock_by_client = client;
-    xlock_done = false;
   }
   void set_xlock_done() {
     assert(xlock_by);
-    xlock_done = true;
+    assert(state == LOCK_XLOCK);
+    state = LOCK_XLOCKDONE;
+    xlock_by = 0;
   }
   void put_xlock() {
-    assert(xlock_by);
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    --num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
-    xlock_by = 0;
-    xlock_by_client = -1;
+    if (num_xlock == 0) {
+      xlock_by = 0;
+      xlock_by_client = -1;
+    }
   }
-  bool is_xlocked() { return xlock_by ? true:false; }
+  bool is_xlocked() { return num_xlock > 0; }
+  int get_num_xlocks() { return num_xlock; }
   bool is_xlocked_by_client(int c) {
     return xlock_by_client == c;
   }
-  bool xlocker_is_done() { return is_xlocked() && xlock_done; }
+  Mutation *get_xlocked_by() { return xlock_by; }
+  /*
+  bool xlocker_is_done() { return state == LOCK_XLOCKDONE; }
   bool is_xlocked_by_other(Mutation *mdr) {
     return is_xlocked() && xlock_by != mdr;
   }
-  Mutation *get_xlocked_by() { return xlock_by; }
+  */
   
-  bool is_used() {
-    return is_xlocked() || is_rdlocked() || num_client_lease;
-  }
-
+  // lease
   void get_client_lease() {
     num_client_lease++;
   }
@@ -279,8 +292,13 @@ public:
     assert(num_client_lease > 0);
     num_client_lease--;
   }
+  bool is_leased() { return num_client_lease > 0; }
   int get_num_client_lease() {
     return num_client_lease;
+  }
+
+  bool is_used() {
+    return is_xlocked() || is_rdlocked() || is_wrlocked() || num_client_lease;
   }
 
   // encode/decode
@@ -313,9 +331,7 @@ public:
 
   // caps
   virtual bool is_loner_mode() {
-    return (state == LOCK_EXCL ||
-	    state == LOCK_EXCL_SYNC ||
-	    state == LOCK_SYNC_EXCL);
+    return states[state].loner;
   }
   virtual int gcaps_allowed_ever() {
     if (!cap_shift) 
@@ -325,28 +341,13 @@ public:
   virtual int gcaps_allowed(bool loner) {
     if (!cap_shift)
       return 0;
-    if (loner && !is_loner_mode())
-      loner = false;
-    if (parent->is_auth())
-      switch (state) {
-      case LOCK_SYNC: return CEPH_CAP_GRDCACHE;
-      case LOCK_LOCK: return 0;
-      case LOCK_SYNC_LOCK: return 0;
-      case LOCK_LOCK_SYNC: return 0;
-      case LOCK_EXCL: return loner ? (CEPH_CAP_GRDCACHE|CEPH_CAP_GEXCL) : 0;
-      case LOCK_EXCL_SYNC: return loner ? CEPH_CAP_GRDCACHE:0;
-      case LOCK_EXCL_LOCK: return 0;
-      case LOCK_SYNC_EXCL: return loner ? CEPH_CAP_GRDCACHE:0;
-      case LOCK_LOCK_EXCL: return 0;
-      case LOCK_REMOTEXLOCK: return 0;
-      }
-    else
-      switch (state) {
-      case LOCK_SYNC: return CEPH_CAP_GRDCACHE;
-      default: return 0;
-      }
-    assert(0);
-    return 0;
+    if (parent->is_auth()) {
+      if (is_loner_mode() && loner)
+	return states[state].loner_caps;
+      else
+	return states[state].caps;
+    } else 
+      return states[state].replica_caps;
   }
   virtual int gcaps_careful() {
     if (num_wrlock)
@@ -357,21 +358,7 @@ public:
 
   // simplelock specifics
   virtual int get_replica_state() const {
-    switch (state) {
-    case LOCK_LOCK:
-    case LOCK_SYNC_LOCK: 
-    case LOCK_EXCL:
-    case LOCK_SYNC_EXCL:
-    case LOCK_LOCK_EXCL:
-    case LOCK_EXCL_LOCK:
-    case LOCK_EXCL_SYNC:
-      return LOCK_LOCK;
-    case LOCK_SYNC:
-      return LOCK_SYNC;
-    default: 
-      assert(0);
-    }
-    return 0;
+    return states[state].replica_state;
   }
   void export_twiddle() {
     clear_gather();
@@ -407,56 +394,6 @@ public:
     return false;
   }
 
-
-  bool try_relax_xlock(int client) {
-    if (client >= 0 &&
-	xlock_by && 
-	xlock_done &&
-	xlock_by_client == client &&
-	state == LOCK_LOCK) {
-      state = LOCK_LOCK_SYNC;
-      parent->auth_pin(this);
-      return true;
-    }
-    return false;
-  }
-  
-
-  bool can_lease(int client) {
-    if (client >= 0 &&
-	xlock_by &&
-	xlock_done &&
-	xlock_by_client == client &&
-	state == LOCK_LOCK_SYNC)
-      return true;  // allow lease to xlocker
-    return state == LOCK_SYNC;
-  }
-  bool can_rdlock(Mutation *mdr, int client = -1) {
-    if (client >= 0 &&
-	xlock_by &&
-	xlock_done &&
-	xlock_by_client == client &&
-	state == LOCK_LOCK_SYNC)
-      return true;
-    //if (state == LOCK_LOCK && mdr && xlock_by == mdr) return true; // xlocked by me.  (actually, is this right?)
-    //if (state == LOCK_LOCK && !xlock_by && parent->is_auth()) return true;
-    return (state == LOCK_SYNC);
-  }
-  bool can_xlock(Mutation *mdr) {
-    if (mdr && xlock_by == mdr) {
-      assert(state == LOCK_LOCK);
-      return true; // auth or replica!  xlocked by me.
-    }
-    if (state == LOCK_LOCK && parent->is_auth() && !xlock_by) return true;
-    return false;
-  }
-  bool can_xlock_soon() {
-    if (parent->is_auth())
-      return (state == LOCK_SYNC_LOCK);
-    else
-      return false;
-  }
-
   virtual void _print(ostream& out) {
     out << get_lock_type_name(get_type()) << " ";
     out << get_state_name(get_state());
@@ -469,9 +406,9 @@ public:
     if (is_wrlocked()) 
       out << " w=" << get_num_wrlocks();
     if (is_xlocked()) {
-      out << " x=" << get_xlocked_by();
-      if (xlock_done)
-	out << " (done)";
+      out << " x=" << get_num_xlocks();
+      if (get_xlocked_by())
+	out << " by " << get_xlocked_by();
     }
   }
 

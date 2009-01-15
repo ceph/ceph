@@ -108,6 +108,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- no need for ACK from journaler
 - linkage vs cdentry replicas and remote rename....
 - move root inode into stray dir
 - make recovery work with early replies

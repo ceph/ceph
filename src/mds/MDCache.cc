@@ -722,7 +722,7 @@ CDir *MDCache::get_subtree_root(CDir *dir)
   while (true) {
     if (dir->is_subtree_root()) 
       return dir;
-    dir = dir->get_parent_dir();
+    dir = dir->get_inode()->get_projected_parent_dn()->get_dir(); //get_parent_dir();
     if (!dir) 
       return 0;             // none
   }
@@ -5334,7 +5334,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     if (dnl &&
 	dn->lock.is_xlocked() &&
 	dn->lock.get_xlocked_by() != mdr &&
-	!dn->lock.can_rdlock(mdr, client) &&
+	!dn->lock.can_read(client) &&
 	(dnl->is_null() || !noperm)) {
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));

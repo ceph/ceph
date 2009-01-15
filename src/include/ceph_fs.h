@@ -436,7 +436,7 @@ struct ceph_entity_addr {
 static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
 					     const struct ceph_entity_addr *b)
 {
-	return le32_to_cpu(a->nonce) == le32_to_cpu(b->nonce) &&
+	return a->nonce == b->nonce &&
 		a->ipaddr.sin_addr.s_addr == b->ipaddr.sin_addr.s_addr;
 }
 

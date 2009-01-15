@@ -208,11 +208,7 @@ public:
   }
 
   bool use_projected(int client) {
-    if (lock.is_xlocked()) {
-      lock.try_relax_xlock(client);
-      return lock.can_rdlock(0, client);
-    }
-    return false;
+    return lock.can_read_projected(client);
   }
   linkage_t *get_linkage(int client) {
     return use_projected(client) ? get_projected_linkage() : get_linkage();

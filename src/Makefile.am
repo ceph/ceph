@@ -208,6 +208,7 @@ libmon_a_SOURCES = \
 
 libmds_a_SOURCES = \
 	mds/MDS.cc \
+	mds/locks.c \
 	mds/journal.cc \
 	mds/Server.cc \
 	mds/MDCache.cc \

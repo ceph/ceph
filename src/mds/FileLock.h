@@ -34,25 +34,25 @@ using namespace std;
 // lower-case caps means loner-only.
 
 //                                   -----auth----------   ---replica-------
-#define LOCK_SYNC_        1  // AR   R . / C . R . . . L   R . / C R . . . L   stat()
-#define LOCK_LONER_SYNC  -12 // A    . . / C . r . . . L *                     loner -> sync
-#define LOCK_MIXED_SYNC  -13 // AR   . w / . . R . . . L   . w / . R . . . L
-#define LOCK_MIXED_SYNC2 -14 //  R                       . . / . R . . . L   replica already acked
+#define LOCK_SYNC_           // AR   R . / C . R . . . L   R . / C R . . . L   stat()
+#define LOCK_LONER_SYNC  -20 // A    . . / C . r . . . L *                     loner -> sync
+#define LOCK_MIXED_SYNC  -21 // AR   . w / . . R . . . L   . w / . R . . . L
+#define LOCK_MIXED_SYNC2 -22 //  R                       . . / . R . . . L   replica already acked
 #define LOCK_LOCK_SYNC_      // A    . w / C . . . . b L
 
-#define LOCK_LOCK_        2  // AR   R W / C . . . . B .   . . / C . . . . .   truncate()
-#define LOCK_SYNC_LOCK_  -3  // AR   R . / C . . . . . .   r . / C . . . . .
-#define LOCK_LONER_LOCK  -4  // A    . . / C . . . . B .                       loner -> lock
-#define LOCK_MIXED_LOCK  -5  // AR   . w / . . . . . . .   . w / . . . . . .
+#define LOCK_LOCK_           // AR   R W / C . . . . B .   . . / C . . . . .   truncate()
+#define LOCK_SYNC_LOCK_  -23 // AR   R . / C . . . . . .   r . / C . . . . .
+#define LOCK_LONER_LOCK  -24 // A    . . / C . . . . B .                       loner -> lock
+#define LOCK_MIXED_LOCK  -25 // AR   . w / . . . . . . .   . w / . . . . . .
 
-#define LOCK_MIXED        6  // AR   . W / . . R W A . L   . W / . R . . . L
-#define LOCK_SYNC_MIXED  -7  // AR   r . / . . R . . . L   r . / . R . . . L 
-#define LOCK_LONER_MIXED -8  // A    . . / . . r w a . L *                     loner -> mixed
+#define LOCK_MIXED        25 // AR   . W / . . R W A . L   . W / . R . . . L
+#define LOCK_SYNC_MIXED  -27 // AR   r . / . . R . . . L   r . / . R . . . L 
+#define LOCK_LONER_MIXED -28 // A    . . / . . r w a . L *                     loner -> mixed
 
-#define LOCK_LONER        9  // A    . . / c x r w a b L *      (lock)      
-#define LOCK_SYNC_LONER  -10 // A    r . / c . R . . . L *
-#define LOCK_MIXED_LONER -11 // A    . w / . . R W A . L 
-#define LOCK_LOCK_LONER  -16 // A    . . / c . . . . b . *
+#define LOCK_LONER        29 // A    . . / c x r w a b L *      (lock)      
+#define LOCK_SYNC_LONER  -30 // A    r . / c . R . . . L *
+#define LOCK_MIXED_LONER -31 // A    . w / . . R W A . L 
+#define LOCK_LOCK_LONER  -32 // A    . . / c . . . . b . *
 
 // * <- loner_mode: caps vary if client is loner vs non-loner.
 
@@ -107,6 +107,17 @@ class FileLock : public ScatterLock {
     }
   }
 
+  bool is_stable() const {
+    switch (state) {
+    case LOCK_SYNC:
+    case LOCK_LOCK:
+    case LOCK_LONER:
+    case LOCK_MIXED:
+      return true;
+    default:
+      return false;
+    }
+  }
 
   int get_replica_state() const {
     switch (state) {

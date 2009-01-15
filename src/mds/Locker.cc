@@ -347,8 +347,10 @@ void Locker::set_xlocks_done(Mutation *mut)
 {
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
-       p++)
+       p++) {
+    dout(10) << "set_xlocks_done on " << **p << " " << *(*p)->get_parent() << dendl;
     (*p)->set_xlock_done();
+  }
 }
 
 void Locker::drop_locks(Mutation *mut)
@@ -420,8 +422,8 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut)
 {
   switch (lock->get_type()) {
-  case CEPH_LOCK_IAUTH:
-    return simple_wrlock_start((SimpleLock*)lock, mut);
+    //case CEPH_LOCK_IAUTH:
+    //return simple_wrlock_start((SimpleLock*)lock, mut);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_INEST:
     return scatter_wrlock_start((ScatterLock*)lock, mut);
@@ -1375,7 +1377,7 @@ void Locker::handle_client_lease(MClientLease *m)
   } 
   if ((m->get_action() == CEPH_MDS_LEASE_REVOKE_ACK) &&
       (l->seq != m->get_seq())) {
-    dout(7) << "handle_client_lease lease seq " << l->seq << " != " << m->get_seq() << dendl;
+    dout(7) << "handle_client_lease lease seq " << l->seq << " != provided " << m->get_seq() << dendl;
     delete m;
     return;
   }
@@ -1453,9 +1455,6 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   //    if the client is holding EXCL|RDCACHE caps.
   int mask = 0;
 
-  if (dn->lock.try_relax_xlock(client))
-    dout(10) << " set " << dn->lock << " to lock->sync on " << *dn << dendl;
-  
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
@@ -1724,21 +1723,29 @@ void Locker::try_simple_eval(SimpleLock *lock)
 void Locker::simple_eval_gather(SimpleLock *lock)
 {
   dout(10) << "simple_eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
+  assert(!lock->is_stable());
 
   CInode *in = 0;
   if (lock->get_cap_shift())
     in = (CInode *)lock->get_parent();
 
-  int loner_issued = 0, other_issued = 0;
-  if (in)
+  int loner_issued = 0, other_issued = 0, replica_issued = 0;
+  if (in) {
     in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    replica_issued = in->is_auth() ? 0 : other_issued;
+  }
 
-  // finished gathering?
-  if (lock->get_state() == LOCK_SYNC_LOCK &&
-      !lock->is_gathering() &&
-      lock->get_num_client_lease() == 0 &&
-      !lock->is_rdlocked()) {
-    dout(7) << "simple_eval finished gather on " << *lock
+  int next = lock->get_next_state();
+
+  if (!lock->is_gathering() &&
+      (lock->states[next].can_rdlock || !lock->is_rdlocked()) &&
+      (lock->states[next].can_wrlock || !lock->is_wrlocked()) &&
+      (lock->states[next].can_xlock || !lock->is_xlocked()) &&
+      (lock->states[next].can_lease || !lock->is_leased()) &&
+      (~lock->states[next].caps & other_issued) == 0 &&
+      (~lock->states[next].loner_caps & loner_issued) == 0 &&
+      (~lock->states[next].replica_caps & replica_issued) == 0) {
+    dout(7) << "simple_eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
     // replica: tell auth
@@ -1748,38 +1755,21 @@ void Locker::simple_eval_gather(SimpleLock *lock)
 	mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), 
 			      lock->get_parent()->authority().first);
     }
-    
-    lock->set_state(LOCK_LOCK);
-    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR);
+    else if (next == LOCK_SYNC &&
+	     lock->get_parent()->is_replicated()) {
+      bufferlist data;
+      lock->encode_locked_state(data);
+      send_lock_message(lock, LOCK_AC_SYNC, data);
+    }
 
-    if (lock->get_parent()->is_auth()) {
+    if (lock->get_parent()->is_auth())
       lock->get_parent()->auth_unpin(lock);
 
-      // re-eval?
-      if (lock->is_stable())
-	simple_eval(lock);
-    }
-  }
+    lock->set_state(next);
+    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
 
-  else if ((lock->get_state() == LOCK_LOCK_SYNC ||
-	    lock->get_state() == LOCK_EXCL_SYNC) &&
-	   (!in ||
-	    ((loner_issued & ~lock->gcaps_allowed(true)) == 0 &&
-	     (other_issued & ~lock->gcaps_allowed(false)) == 0)) &&
-	   !lock->is_gathering() &&
-	   !lock->is_wrlocked() &&
-	   !lock->is_xlocked()) {
-    dout(7) << "simple_eval finished gather on " << *lock 
-	    << " on " << *lock->get_parent() << dendl;
-    assert(lock->get_parent()->is_auth());
-
-    lock->set_state(LOCK_SYNC);
-    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD);
-
-    lock->get_parent()->auth_unpin(lock);
-
-    // re-eval?
-    if (lock->is_stable())
+    if (lock->get_parent()->is_auth() &&
+	lock->is_stable())
       simple_eval(lock);
   }
 }
@@ -1928,11 +1918,8 @@ bool Locker::simple_rdlock_start(SimpleLock *lock, MDRequest *mut)
   int client = mut->get_client();
 
   while (1) {
-    if (lock->try_relax_xlock(client))
-      dout(10) << " set " << *lock << " to lock->sync on " << *lock->get_parent() << dendl;
-
     // can read?  grab ref.
-    if (lock->can_rdlock(mut, client)) {
+    if (lock->can_rdlock(client)) {
       lock->get_rdlock();
       mut->rdlocks.insert(lock);
       mut->locks.insert(lock);
@@ -1962,6 +1949,7 @@ bool Locker::simple_wrlock_force(SimpleLock *lock, Mutation *mut)
   return true;
 }
 
+/*
 bool Locker::simple_wrlock_start(SimpleLock *lock, MDRequest *mut)
 {
   dout(7) << "simple_wrlock_start  on " << *lock
@@ -1988,6 +1976,7 @@ bool Locker::simple_wrlock_start(SimpleLock *lock, MDRequest *mut)
   lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
   return false;
 }
+*/
 
 void Locker::simple_wrlock_finish(SimpleLock *lock, Mutation *mut)
 {
@@ -2029,38 +2018,32 @@ void Locker::simple_rdlock_finish(SimpleLock *lock, Mutation *mut)
 bool Locker::simple_xlock_start(SimpleLock *lock, MDRequest *mut)
 {
   dout(7) << "simple_xlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;
-
-  // xlock by me?
-  if (lock->is_xlocked() &&
-      lock->get_xlocked_by() == mut) 
-    return true;
+  int client = mut->get_client();
 
   // auth?
   if (lock->get_parent()->is_auth()) {
     // auth
 
-    // lock.
-    if (lock->get_state() == LOCK_SYNC)
-      simple_lock(lock);
+    while (1) {
+      if (lock->can_xlock(client)) {
 
-    // already locked?
-    if (lock->get_state() == LOCK_LOCK) {
-      if (lock->is_xlocked()) {
-	// by someone else.
-	lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
-	return false;
+	if (lock->is_stable())
+	  lock->get_parent()->auth_pin(lock);
+	lock->set_state(LOCK_XLOCK);
+	lock->get_xlock(mut, client);
+	mut->xlocks.insert(lock);
+	mut->locks.insert(lock);
+	return true;
       }
 
-      // xlock.
-      lock->get_xlock(mut, mut->get_client());
-      mut->xlocks.insert(lock);
-      mut->locks.insert(lock);
-      return true;
-    } else {
-      // wait for lock
-      lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
-      return false;
+      if (lock->get_state() == LOCK_SYNC)
+	simple_lock(lock);
+      else
+	break;
     }
+
+    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+    return false;
   } else {
     // replica
     // this had better not be a remote xlock attempt!
@@ -2109,13 +2092,26 @@ void Locker::simple_xlock_finish(SimpleLock *lock, Mutation *mut)
       lock->get_parent()->set_object_info(slavereq->get_object_info());
       mds->send_message_mds(slavereq, auth);
     }
+    // others waiting?
+    lock->finish_waiters(SimpleLock::WAIT_STABLE |
+			 SimpleLock::WAIT_WR | 
+			 SimpleLock::WAIT_RD, 0); 
+  } else {
+    if (lock->get_num_xlocks() == 0 &&
+	lock->get_num_rdlocks() == 0 &&
+	lock->get_num_wrlocks() == 0 &&
+	lock->get_num_client_lease() == 0) {
+      if (!lock->is_stable())
+	lock->get_parent()->auth_unpin(lock);
+      lock->set_state(LOCK_LOCK);
+    }
+
+    // others waiting?
+    lock->finish_waiters(SimpleLock::WAIT_STABLE |
+			 SimpleLock::WAIT_WR | 
+			 SimpleLock::WAIT_RD, 0); 
   }
-
-  // others waiting?
-  lock->finish_waiters(SimpleLock::WAIT_STABLE |
-		       SimpleLock::WAIT_WR | 
-		       SimpleLock::WAIT_RD, 0); 
-
+    
   // eval?
   if (!lock->is_stable())
     simple_eval_gather(lock);
@@ -2141,7 +2137,7 @@ bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace)
        it != trace.end();
        it++) {
     CDentry *dn = *it;
-    if (!dn->lock.can_rdlock(0, -1)) {
+    if (!dn->lock.can_rdlock(-1)) {
       dout(10) << "can_rdlock_trace can't rdlock " << *dn << dendl;
       return false;
     }
@@ -2319,7 +2315,7 @@ bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
     return true;
 
   // can't write?
-  if (!lock->can_xlock(mut)) {
+  if (!lock->can_xlock(-1)) {
     
     // auth
     if (!lock->can_xlock_soon()) {
@@ -2338,7 +2334,7 @@ bool Locker::scatter_xlock_start(ScatterLock *lock, MDRequest *mut)
   } 
   
   // check again
-  if (lock->can_xlock(mut)) {
+  if (lock->can_xlock(-1)) {
     assert(lock->get_parent()->is_auth());
     lock->get_xlock(mut, mut->get_client());
     mut->locks.insert(lock);
@@ -3142,7 +3138,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
   dout(7) << "local_xlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
-  if (lock->is_xlocked_by_other(mut)) {
+  if (!lock->can_xlock(-1)) {
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
@@ -3374,7 +3370,7 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
     return true;
 
   // can't write?
-  if (!lock->can_xlock(mut)) {
+  if (!lock->can_xlock(-1)) {
     
     // auth
     if (!lock->can_xlock_soon()) {
@@ -3393,7 +3389,7 @@ bool Locker::file_xlock_start(FileLock *lock, MDRequest *mut)
   } 
   
   // check again
-  if (lock->can_xlock(mut)) {
+  if (lock->can_xlock(-1)) {
     assert(lock->get_parent()->is_auth());
     lock->get_xlock(mut, mut->get_client());
     mut->locks.insert(lock);
