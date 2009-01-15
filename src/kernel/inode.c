@@ -767,9 +767,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	int d = 0;
 	struct ceph_vino vino;
 	bool have_dir_cap, have_lease;
+	int update_parent;
 
 	if (rinfo->trace_numi == 0) {
 		dout(10, "fill_trace reply has empty trace!\n");
+		if (!rinfo->head->result &&
+		    req->r_locked_dir) {
+			struct ceph_inode_info *ci = ceph_inode(req->r_locked_dir);
+			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
+		}
+
 		return 0;
 	}
 
@@ -826,6 +833,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dname.len = rinfo->trace_dname_len[d];
 		parent = dn;
 		dn = NULL;
+		update_parent = 0;
 
 		dout(10, "fill_trace %d/%d parent %p inode %p: '%.*s'"
 		     " dmask %d\n",
@@ -918,6 +926,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* rename? */
 		if (d == rinfo->trace_numd-1 && req->r_old_dentry) {
+			update_parent = 1;
 			dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 			     req->r_old_dentry,
 			     req->r_old_dentry->d_name.len,
@@ -947,6 +956,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 				d_delete(dn);
 				dput(dn);
+				update_parent = 1;
 				goto retry_lookup;
 			}
 			dout(10, "dn %p correct %p ino %llx.%llx\n",
@@ -963,6 +973,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				goto out_dir_no_inode;
 			}
 			newdn = splice_dentry(dn, in, &have_lease);
+			update_parent = 1;
 
 			if (IS_ERR(newdn)) {
 				goto no_mutex_find_alias;
@@ -973,6 +984,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (have_lease)
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
 					    session, req->r_request_started);
+
+		if (update_parent) {
+			struct ceph_inode_info *ci = ceph_inode(parent->d_inode);
+			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
+		}
 
 		/* done with dn update */
 		if (req->r_locked_dir != parent->d_inode)
@@ -1074,6 +1090,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			dn = existing;
 			dout(10, " using existing %p alias %p\n", in, dn);
 		} else {
+			update_parent = 1;
 			if (dn && dn->d_inode == NULL) {
 				dout(10, " instantiating provided %p\n", dn);
 				d_instantiate(dn, in);
