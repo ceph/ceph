@@ -61,6 +61,4 @@ public:
   }
 };
 
-typedef ScatterLock FileLock;
-
 #endif

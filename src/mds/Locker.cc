@@ -521,7 +521,7 @@ void Locker::eval(SimpleLock *lock)
 {
   switch (lock->get_type()) {
   case CEPH_LOCK_IFILE:
-    return file_eval((FileLock*)lock);
+    return file_eval((ScatterLock*)lock);
   case CEPH_LOCK_IDFT:
   case CEPH_LOCK_INEST:
     return scatter_eval((ScatterLock*)lock);
@@ -1931,7 +1931,7 @@ void Locker::handle_lock(MLock *m)
     break;
     
   case CEPH_LOCK_IFILE:
-    handle_file_lock((FileLock*)lock, m);
+    handle_file_lock((ScatterLock*)lock, m);
     break;
     
   case CEPH_LOCK_IDFT:
@@ -2227,7 +2227,7 @@ void Locker::simple_lock(SimpleLock *lock)
     if (in)
       in->try_drop_loner();
     lock->set_state(LOCK_LOCK);
-    lock->finish_waiters(FileLock::WAIT_XLOCK|FileLock::WAIT_WR|FileLock::WAIT_STABLE);
+    lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
   }
 }
 
@@ -2506,9 +2506,9 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
       switch (lock->get_type()) {
       case CEPH_LOCK_IFILE:
 	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
-	  file_mixed((FileLock*)lock);
+	  file_mixed((ScatterLock*)lock);
 	else
-	  simple_lock((FileLock*)lock);
+	  simple_lock((ScatterLock*)lock);
 	break;
 
       case CEPH_LOCK_IDFT:
@@ -2905,9 +2905,9 @@ void Locker::local_xlock_finish(LocalLock *lock, Mutation *mut)
  */
 class C_Locker_FileEval : public Context {
   Locker *locker;
-  FileLock *lock;
+  ScatterLock *lock;
 public:
-  C_Locker_FileEval(Locker *l, FileLock *lk) : locker(l), lock(lk) {
+  C_Locker_FileEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {
     lock->get_parent()->get(CInode::PIN_PTRWAITER);    
   }
   void finish(int r) {
@@ -2916,7 +2916,7 @@ public:
   }
 };
 
-void Locker::try_file_eval(FileLock *lock)
+void Locker::try_file_eval(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
 
@@ -2948,7 +2948,7 @@ void Locker::try_file_eval(FileLock *lock)
 
 
 
-void Locker::file_eval(FileLock *lock)
+void Locker::file_eval(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   int loner_wanted, other_wanted;
@@ -3029,7 +3029,7 @@ void Locker::file_eval(FileLock *lock)
 
 
 
-void Locker::file_mixed(FileLock *lock)
+void Locker::file_mixed(ScatterLock *lock)
 {
   dout(7) << "file_mixed " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -3094,7 +3094,7 @@ void Locker::file_mixed(FileLock *lock)
 }
 
 
-void Locker::file_excl(FileLock *lock)
+void Locker::file_excl(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   dout(7) << "file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
@@ -3148,7 +3148,7 @@ void Locker::file_excl(FileLock *lock)
 
 // messenger
 
-void Locker::handle_file_lock(FileLock *lock, MLock *m)
+void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 {
   CInode *in = (CInode*)lock->get_parent();
   int from = m->get_asker();

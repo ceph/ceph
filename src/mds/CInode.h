@@ -25,7 +25,6 @@
 
 #include "CDentry.h"
 #include "SimpleLock.h"
-//#include "FileLock.h"
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"

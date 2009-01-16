@@ -377,7 +377,6 @@ noinst_HEADERS = \
         mds/CDir.h\
         mds/CInode.h\
         mds/Capability.h\
-        mds/FileLock.h\
         mds/InoTable.h\
         mds/LocalLock.h\
         mds/Locker.h\
