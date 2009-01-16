@@ -109,6 +109,7 @@ public:
       remote_d_type = d_type;
       inode = 0;
     }
+    void link_remote(CInode *in);
   };
   
 protected:
@@ -233,8 +234,8 @@ public:
   void adjust_nested_anchors(int by);
 
   // remote links
-  void link_remote(CInode *in);
-  void unlink_remote();
+  void link_remote(linkage_t *dnl, CInode *in);
+  void unlink_remote(linkage_t *dnl);
   
   // copy cons
   CDentry(const CDentry& m);

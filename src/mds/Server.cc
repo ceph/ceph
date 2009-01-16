@@ -2229,8 +2229,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
       if (in) {
-	if (!dn->is_projected())
-	  dn->link_remote(in);
+	dn->link_remote(dnl, in);
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
@@ -4153,7 +4152,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	destdnl = destdn->pop_projected_linkage();
       else
 	destdn->get_dir()->link_remote_inode(destdn, in);
-      destdn->link_remote(in);
+      destdn->link_remote(destdnl, in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     } else {

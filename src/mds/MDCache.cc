@@ -5352,10 +5352,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         // do i have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
-          if (!dn->is_projected()) {
-	    dout(7) << "linking in remote in " << *in << dendl;
-	    dn->link_remote(in);
-	  }
+	  dout(7) << "linking in remote in " << *in << dendl;
+	  dn->link_remote(dnl, in);
         } else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
@@ -5675,27 +5673,26 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin)
  */
 CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected)
 {
-  CDentry::linkage_t *l;
+  CDentry::linkage_t *dnl;
   if (projected)
-    l = dn->get_projected_linkage();
+    dnl = dn->get_projected_linkage();
   else
-    l = dn->get_linkage();
+    dnl = dn->get_linkage();
 
-  assert(!l->is_null());
+  assert(!dnl->is_null());
   
-  if (l->is_primary())
-    return l->inode;
+  if (dnl->is_primary())
+    return dnl->inode;
 
-  assert(l->is_remote());
-  CInode *in = get_inode(l->get_remote_ino());
+  assert(dnl->is_remote());
+  CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
     dout(7) << "get_dentry_inode linking in remote in " << *in << dendl;
-    if (!projected)
-      dn->link_remote(in);
+    dn->link_remote(dnl, in);
     return in;
   } else {
     dout(10) << "get_dentry_inode on remote dn, opening inode for " << *dn << dendl;
-    open_remote_ino(l->remote_ino, new C_MDS_RetryRequest(this, mdr));
+    open_remote_ino(dnl->remote_ino, new C_MDS_RetryRequest(this, mdr));
     return 0;
   }
 }

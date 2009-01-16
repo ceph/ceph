@@ -484,7 +484,7 @@ void CDir::unlink_inode_work( CDentry *dn )
   if (dn->get_linkage()->is_remote()) {
     // remote
     if (in) 
-      dn->unlink_remote();
+      dn->unlink_remote(dn->get_linkage());
 
     dn->get_linkage()->set_remote(0, 0);
   } else {
@@ -1173,7 +1173,7 @@ void CDir::_fetched(bufferlist &bl)
 	// link to inode?
 	CInode *in = cache->get_inode(ino);   // we may or may not have it.
 	if (in) {
-	  dn->link_remote(in);
+	  dn->link_remote(dn->get_linkage(), in);
 	  dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
 	} else {
 	  dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;

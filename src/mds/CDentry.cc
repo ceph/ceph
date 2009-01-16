@@ -256,23 +256,30 @@ void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
 }
 
 
-
-void CDentry::link_remote(CInode *in)
+/*
+ * we only add ourselves to remote_parents when the linkage is
+ * active (no longer projected).  if the passed dnl is projected,
+ * don't link in, and do that work later in pop_projected_linkage().
+ */
+void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 {
-  assert(linkage.is_remote());
-  assert(in->ino() == linkage.get_remote_ino());
+  assert(dnl->is_remote());
+  assert(in->ino() == dnl->get_remote_ino());
+  dnl->inode = in;
 
-  linkage.inode = in;
-  in->add_remote_parent(this);
+  if (dnl == &linkage)
+    in->add_remote_parent(this);
 }
 
-void CDentry::unlink_remote()
+void CDentry::unlink_remote(CDentry::linkage_t *dnl)
 {
-  assert(linkage.is_remote());
-  assert(linkage.inode);
+  assert(dnl->is_remote());
+  assert(dnl->inode);
   
-  linkage.inode->remove_remote_parent(this);
-  linkage.inode = 0;
+  if (dnl == &linkage)
+    dnl->inode->remove_remote_parent(this);
+
+  dnl->inode = 0;
 }
 
 void CDentry::push_projected_linkage(CInode *inode)
@@ -286,11 +293,23 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
   assert(projected.size());
   
   linkage_t& n = projected.front();
-  if (n.inode) {
+
+  /*
+   * the idea here is that the link_remote_inode(), link_primary_inode(), 
+   * etc. calls should make linkage identical to &n (and we assert as
+   * much).
+   */
+
+  if (n.remote_ino) {
+    dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
+    if (n.inode) {
+      linkage.inode = n.inode;
+      linkage.inode->add_remote_parent(this);
+    }
+  } else if (n.inode) {
     dir->link_primary_inode(this, n.inode);
     n.inode->pop_projected_parent();
-  } else if (n.remote_ino)
-    dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
+  }
 
   assert(n.inode == linkage.inode);
   assert(n.remote_ino == linkage.remote_ino);
