@@ -51,6 +51,7 @@ struct sm_state_t scatterlock[30] = {
                       // stable     loner  rep state  r     rp   rd   wr   l    x    caps,other
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   ANY, 0,   CEPH_CAP_GRDCACHE,0,CEPH_CAP_GRDCACHE },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0 },
+    [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0 },
     
     [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   FW,  AUTH,0,   ANY, 0,0,0 },
     [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0 },
