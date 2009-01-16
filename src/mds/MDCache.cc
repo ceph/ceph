@@ -6479,11 +6479,16 @@ void MDCache::eval_stray(CDentry *dn)
     // trivial reintegrate?
     if (!in->remote_parents.empty()) {
       CDentry *rlink = *in->remote_parents.begin();
-      if (rlink->is_auth() && rlink->dir->can_auth_pin())
-	reintegrate_stray(dn, rlink);
       
-      if (!rlink->is_auth() && dn->is_auth())
-	migrate_stray(dn, mds->get_nodeid(), rlink->authority().first);
+      // don't do anything if the remote parent is projected, or we may
+      // break user-visible semantics!
+      if (!rlink->is_projected()) {
+	if (rlink->is_auth() && rlink->dir->can_auth_pin())
+	  reintegrate_stray(dn, rlink);
+	
+	if (!rlink->is_auth() && dn->is_auth())
+	  migrate_stray(dn, mds->get_nodeid(), rlink->authority().first);
+      }
     }
   } else {
     // wait for next use.
