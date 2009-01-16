@@ -2176,7 +2176,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
 void Client::handle_cap_grant(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
-  assert(in->caps.count(mds) == 0);
+  assert(in->caps.count(mds));
   InodeCap *cap = in->caps[mds];
   cap->seq = m->get_seq();
   in->inode.layout = m->get_layout();
