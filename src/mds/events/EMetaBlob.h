@@ -525,7 +525,7 @@ private:
     
     // stop at root/stray
     CInode *diri = dir->get_inode();
-    if (!diri->get_parent_dn())
+    if (!diri->get_projected_parent_dn())
       return;
 
     // journaled?
