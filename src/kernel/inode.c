@@ -593,12 +593,10 @@ int ceph_inode_holds_cap(struct inode *inode, int mask)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int issued = ceph_caps_issued(ci);
-	int ret;
+	int ret = ((issued & mask) == mask);
 
-	if ((issued & mask) == mask)
-		ret = 1;
-	dout(10, "ceph_inode_holds_cap inode %p have %d want %d = %d\n", inode,
-	     issued, mask, ret);
+	dout(10, "ceph_inode_holds_cap inode %p have %s want %s = %d\n", inode,
+	     ceph_cap_string(issued), ceph_cap_string(mask), ret);
 	return ret;
 }
 
