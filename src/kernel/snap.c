@@ -334,7 +334,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		capsnap->gid = inode->i_gid;
 
 		/* fixme? */
-		capsnap->xattr_blob = 0;
+		capsnap->xattr_blob = NULL;
 		capsnap->xattr_len = 0;
 
 		/* dirty page count moved from _head to this cap_snap;

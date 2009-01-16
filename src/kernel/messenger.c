@@ -698,7 +698,7 @@ static void prepare_write_message(struct ceph_connection *con)
 		/* initialize page iterator */
 		con->out_msg_pos.page = 0;
 		con->out_msg_pos.page_pos =
-			le32_to_cpu(m->hdr.data_off) & ~PAGE_MASK;
+			le16_to_cpu(m->hdr.data_off) & ~PAGE_MASK;
 		con->out_msg_pos.data_pos = 0;
 		con->out_msg_pos.did_page_crc = 0;
 		con->out_more = 1;  /* data + footer will follow */
@@ -744,9 +744,10 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 	int len = strlen(CEPH_BANNER);
 
 	dout(10, "prepare_write_connect %p\n", con);
-	con->out_connect.host_type = CEPH_ENTITY_TYPE_CLIENT;
+	con->out_connect.host_type = cpu_to_le32(CEPH_ENTITY_TYPE_CLIENT);
 	con->out_connect.connect_seq = cpu_to_le32(con->connect_seq);
-	con->out_connect.global_seq = get_global_seq(con->msgr, 0);
+	con->out_connect.global_seq =
+		cpu_to_le32(get_global_seq(con->msgr, 0));
 	con->out_connect.flags = 0;
 	if (test_bit(LOSSYTX, &con->state))
 		con->out_connect.flags = CEPH_MSG_CONNECT_LOSSY;
@@ -770,7 +771,8 @@ static void prepare_write_connect_retry(struct ceph_messenger *msgr,
 {
 	dout(10, "prepare_write_connect_retry %p\n", con);
 	con->out_connect.connect_seq = cpu_to_le32(con->connect_seq);
-	con->out_connect.global_seq = get_global_seq(con->msgr, 0);
+	con->out_connect.global_seq =
+		cpu_to_le32(get_global_seq(con->msgr, 0));
 
 	con->out_kvec[0].iov_base = &con->out_connect;
 	con->out_kvec[0].iov_len = sizeof(con->out_connect);
@@ -1172,7 +1174,7 @@ static int process_connect(struct ceph_connection *con)
 
 	case CEPH_MSGR_TAG_READY:
 		clear_bit(CONNECTING, &con->state);
-		if (le32_to_cpu(con->in_reply.flags) & CEPH_MSG_CONNECT_LOSSY)
+		if (con->in_reply.flags & CEPH_MSG_CONNECT_LOSSY)
 			set_bit(LOSSYRX, &con->state);
 		con->peer_global_seq = le32_to_cpu(con->in_reply.global_seq);
 		con->connect_seq++;
@@ -1307,8 +1309,10 @@ static int process_accept(struct ceph_connection *con)
 			goto reply;
 		}
 
-		WARN_ON(con->in_connect.connect_seq <= existing->connect_seq);
-		WARN_ON(con->in_connect.global_seq < existing->peer_global_seq);
+		WARN_ON(le32_to_cpu(con->in_connect.connect_seq) <=
+						existing->connect_seq);
+		WARN_ON(le32_to_cpu(con->in_connect.global_seq) <
+						existing->peer_global_seq);
 		if (existing->connect_seq == 0) {
 			/* we reset, sending RESETSESSION */
 			con->out_reply.tag = CEPH_MSGR_TAG_RESETSESSION;

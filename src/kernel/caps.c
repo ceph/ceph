@@ -470,7 +470,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
 		ceph_encode_timespec(&fc->mtime, mtime);
 	if (atime)
 		ceph_encode_timespec(&fc->atime, atime);
-	fc->time_warp_seq = cpu_to_le64(time_warp_seq);
+	fc->time_warp_seq = cpu_to_le32(time_warp_seq);
 
 	fc->uid = cpu_to_le32(uid);
 	fc->gid = cpu_to_le32(gid);
@@ -688,7 +688,7 @@ retry:
 	}
 }
 
-void ceph_flush_snaps(struct ceph_inode_info *ci)
+static void ceph_flush_snaps(struct ceph_inode_info *ci)
 {
 	struct inode *inode = &ci->vfs_inode;
 
@@ -1211,7 +1211,7 @@ start:
 		int len = le32_to_cpu(grant->xattr_len);
 		u64 version = le64_to_cpu(grant->xattr_version);
 
-		if (!(len > 4 && *xattr_data == 0) &&  /* ENOMEM in caller */
+		if (!(len > 4 && *xattr_data == NULL) &&  /* ENOMEM in caller */
 		    version > ci->i_xattr_version) {
 			dout(20, " got new xattrs v%llu on %p len %d\n",
 			     version, inode, len);
@@ -1219,7 +1219,7 @@ start:
 			ci->i_xattr_len = len;
 			ci->i_xattr_version = version;
 			ci->i_xattr_data = *xattr_data;
-			*xattr_data = 0;
+			*xattr_data = NULL;
 		}
 	}
 
@@ -1228,8 +1228,8 @@ start:
 	ceph_decode_timespec(&atime, &grant->atime);
 	ceph_decode_timespec(&ctime, &grant->ctime);
 	ceph_fill_file_bits(inode, issued,
-			    le64_to_cpu(grant->truncate_seq), size,
-			    le64_to_cpu(grant->time_warp_seq), &ctime, &mtime,
+			    le32_to_cpu(grant->truncate_seq), size,
+			    le32_to_cpu(grant->time_warp_seq), &ctime, &mtime,
 			    &atime);
 
 	/* max size increase? */
@@ -1278,7 +1278,7 @@ start:
 			grant->max_size = 0;  /* don't re-request */
 			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
 			ceph_encode_timespec(&grant->atime, &inode->i_atime);
-			grant->time_warp_seq = cpu_to_le64(ci->i_time_warp_seq);
+			grant->time_warp_seq = cpu_to_le32(ci->i_time_warp_seq);
 			grant->snap_follows =
 			     cpu_to_le64(ci->i_snap_realm->cached_context->seq);
 			reply = 1;
@@ -1572,7 +1572,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	struct ceph_vino vino;
 	u64 size, max_size;
 	int check_caps = 0;
-	void *xattr_data = 0;
+	void *xattr_data = NULL;
 
 	dout(10, "handle_caps from mds%d\n", mds);
 

@@ -451,7 +451,7 @@ static int fill_inode(struct inode *inode,
 	ceph_fill_file_bits(inode, issued,
 			    le64_to_cpu(info->truncate_seq),
 			    le64_to_cpu(info->size),
-			    le64_to_cpu(info->time_warp_seq),
+			    le32_to_cpu(info->time_warp_seq),
 			    &ctime, &mtime, &atime);
 
 	ci->i_max_size = le64_to_cpu(info->max_size);
@@ -854,7 +854,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* do we have a lease on the whole dir? */
 		have_dir_cap =
-			rinfo->trace_in[d].in->cap.caps & CEPH_CAP_FILE_RDCACHE;
+			(le32_to_cpu(rinfo->trace_in[d].in->cap.caps) &
+			 CEPH_CAP_FILE_RDCACHE);
 
 		/* do we have a dn lease? */
 		have_lease = have_dir_cap ||
@@ -2037,7 +2038,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_request->pages = pages;
 	req->r_request->nr_pages = nr_pages;
 	req->r_request->hdr.data_len = cpu_to_le32(size);
-	req->r_request->hdr.data_off = cpu_to_le32(0);
+	req->r_request->hdr.data_off = cpu_to_le16(0);
 
 	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);

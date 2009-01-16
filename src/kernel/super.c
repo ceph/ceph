@@ -726,7 +726,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
 	reqhead = req->r_request->front.iov_base;
-	reqhead->args.stat.mask = CEPH_STAT_CAP_INODE;
+	reqhead->args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
 		root = req->r_last_dentry;
