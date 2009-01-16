@@ -799,12 +799,12 @@ public:
  protected:
   void touch_inode(CInode *in) {
     if (in->get_parent_dn())
-      touch_dentry(in->get_parent_dn());
+      touch_dentry(in->get_projected_parent_dn());
   }
   void touch_dentry(CDentry *dn) {
     // touch ancestors
-    if (dn->get_dir()->get_inode()->get_parent_dn())
-      touch_dentry(dn->get_dir()->get_inode()->get_parent_dn());
+    if (dn->get_dir()->get_inode()->get_projected_parent_dn())
+      touch_dentry(dn->get_dir()->get_inode()->get_projected_parent_dn());
     
     // touch me
     if (dn->is_auth())
