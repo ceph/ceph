@@ -735,8 +735,6 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
   dout(7) << "xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
   int client = mut->get_client();
 
-#warning need lock -> xlock state
-
   // auth?
   if (lock->get_parent()->is_auth()) {
     // auth
@@ -752,14 +750,17 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 	return true;
       }
       
-      if (lock->get_state() == LOCK_SYNC) {
+      if (!lock->is_stable())
+	break;
+
+      if (lock->get_state() == LOCK_LOCK)
+	simple_xlock(lock);
+      else {
 	if (lock->sm == &sm_simplelock)
 	  simple_lock(lock);
 	else
 	  file_lock((ScatterLock*)lock);
       }
-      else
-	break;
     }
     
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
@@ -2194,6 +2195,46 @@ void Locker::simple_lock(SimpleLock *lock)
     lock->get_parent()->auth_pin(lock);
   } else {
     lock->set_state(LOCK_LOCK);
+  }
+}
+
+
+void Locker::simple_xlock(SimpleLock *lock)
+{
+  dout(7) << "simple_xlock on " << *lock << " on " << *lock->get_parent() << dendl;
+  assert(lock->get_parent()->is_auth());
+  assert(lock->is_stable());
+  assert(lock->get_state() != LOCK_XLOCK);
+  
+  CInode *in = 0;
+  if (lock->get_cap_shift())
+    in = (CInode *)lock->get_parent();
+
+  switch (lock->get_state()) {
+  case LOCK_LOCK: lock->set_state(LOCK_LOCK_XLOCK); break;
+  default: assert(0);
+  }
+
+  int gather = 0;
+  if (lock->is_rdlocked())
+    gather++;
+  if (lock->is_wrlocked())
+    gather++;
+  
+  if (in) {
+    int loner_issued, other_issued;
+    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
+	(other_issued & ~lock->gcaps_allowed(false))) {
+      issue_caps(in);
+      gather++;
+    }
+  }
+
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+  } else {
+    lock->set_state(LOCK_XLOCK);
   }
 }
 

@@ -109,6 +109,7 @@ protected:
   void handle_simple_lock(SimpleLock *lock, MLock *m);
   bool simple_sync(SimpleLock *lock);
   void simple_lock(SimpleLock *lock);
+  void simple_xlock(SimpleLock *lock);
   bool simple_rdlock_start(SimpleLock *lock, MDRequest *mut);
   void simple_rdlock_finish(SimpleLock *lock, Mutation *mut);
   bool simple_wrlock_force(SimpleLock *lock, Mutation *mut);
