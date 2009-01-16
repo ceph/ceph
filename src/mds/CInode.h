@@ -479,8 +479,9 @@ public:
   // client caps
   int loner_cap;
 
-  bool choose_loner() {
-    assert(loner_cap < 0);
+  bool try_choose_loner() {
+    if (loner_cap >= 0)
+      return true;
 
     if (!mds_caps_wanted.empty())
       return false;
@@ -503,6 +504,21 @@ public:
     }
     return false;
   }
+  
+  bool try_drop_loner() {
+    if (loner_cap < 0)
+      return true;
+
+    int other_allowed = get_caps_allowed(false);
+    Capability *cap = get_client_cap(loner_cap);
+    if (!cap ||
+	(cap->issued() & ~other_allowed) == 0) {
+      loner_cap = -1;
+      return true;
+    }
+    return false;
+  }
+
 
   int count_nonstale_caps() {
     int n = 0;
@@ -559,6 +575,9 @@ public:
     cap->session_caps_item.remove_myself();
     cap->rdcaps_item.remove_myself();
     containing_realm->remove_cap(client, cap);
+
+    if (client == loner_cap)
+      loner_cap = -1;
 
     delete cap;
     client_caps.erase(client);

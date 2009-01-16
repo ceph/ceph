@@ -3500,7 +3500,7 @@ void MDCache::process_reconnected_caps()
 	in->loner_cap = -1;
 	if (issued & ((CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) {
 	  in->filelock.set_state(LOCK_EXCL);
-	  in->choose_loner();
+	  in->try_choose_loner();
 	} else {
 	  in->filelock.set_state(LOCK_MIX);
 	}

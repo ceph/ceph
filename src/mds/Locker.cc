@@ -464,9 +464,6 @@ void Locker::eval_gather(SimpleLock *lock)
 	return;
       }
       
-      if (in && lock->get_state() != LOCK_EXCL)
-	in->loner_cap = -1;
-
       switch (lock->get_state()) {
 	// to mixed
       case LOCK_TSYN_MIX:
@@ -491,6 +488,9 @@ void Locker::eval_gather(SimpleLock *lock)
 
       lock->get_parent()->auth_unpin(lock);
     }
+
+    if (in)
+      in->try_drop_loner();
 
     lock->set_state(next);
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
@@ -529,7 +529,6 @@ void Locker::eval(SimpleLock *lock)
     return simple_eval(lock);
   }
 }
-
 
 
 // ------------------
@@ -2158,7 +2157,8 @@ bool Locker::simple_sync(SimpleLock *lock)
     lock->encode_locked_state(data);
     send_lock_message(lock, LOCK_AC_SYNC, data);
   }
-
+  if (in)
+    in->try_drop_loner();
   lock->set_state(LOCK_SYNC);
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
   return true;
@@ -2224,8 +2224,9 @@ void Locker::simple_lock(SimpleLock *lock)
   if (gather) {
     lock->get_parent()->auth_pin(lock);
   } else {
+    if (in)
+      in->try_drop_loner();
     lock->set_state(LOCK_LOCK);
-    in->loner_cap = -1;
     lock->finish_waiters(FileLock::WAIT_XLOCK|FileLock::WAIT_WR|FileLock::WAIT_STABLE);
   }
 }
@@ -2591,6 +2592,9 @@ bool Locker::scatter_scatter_fastpath(ScatterLock *lock)
       lock->encode_locked_state(data);
       send_lock_message(lock, LOCK_AC_SCATTER, data);
     } 
+    
+    ((CInode *)lock->get_parent())->try_drop_loner();
+
     lock->set_state(LOCK_MIX);
     lock->finish_waiters(ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
     return true;
@@ -2671,6 +2675,8 @@ void Locker::scatter_tempsync(ScatterLock *lock)
   }
   
   // do tempsync
+  ((CInode *)lock->get_parent())->try_drop_loner();
+
   lock->set_state(LOCK_TSYN);
   lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
 }
@@ -2984,10 +2990,10 @@ void Locker::file_eval(FileLock *lock)
 	   !lock->is_rdlocked() &&
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) || in->inode.is_dir()) &&
-	   in->choose_loner()) {
+	   in->try_choose_loner()) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
-    file_loner(lock);
+    file_excl(lock);
   }
 
   // * -> mixed?
@@ -3080,15 +3086,15 @@ void Locker::file_mixed(FileLock *lock)
     if (gather)
       lock->get_parent()->auth_pin(lock);
     else {
+      in->try_drop_loner();
       lock->set_state(LOCK_MIX);
-      in->loner_cap = -1;
       issue_caps(in);
     }
   }
 }
 
 
-void Locker::file_loner(FileLock *lock)
+void Locker::file_excl(FileLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
   dout(7) << "file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
