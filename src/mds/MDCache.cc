@@ -6482,6 +6482,7 @@ void MDCache::eval_stray(CDentry *dn)
       
       // don't do anything if the remote parent is projected, or we may
       // break user-visible semantics!
+      // NOTE: we repeat this check in _rename(), since our submission path is racey.
       if (!rlink->is_projected()) {
 	if (rlink->is_auth() && rlink->dir->can_auth_pin())
 	  reintegrate_stray(dn, rlink);

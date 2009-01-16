@@ -3543,6 +3543,15 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (destdn)
     destdnl = destdn->get_projected_linkage();
 
+
+  // is this a stray reintegration or merge? (sanity checks!)
+  if (mdr->reqid.name.is_mds() &&
+      (!destdnl->is_remote() ||
+       destdnl->get_remote_ino() != srci->ino())) {
+    reply_request(mdr, -EINVAL);  // actually, this won't reply, but whatev.
+    return;
+  }
+
   CInode *oldin = 0;
   if (destdn && !destdnl->is_null()) {
     //dout(10) << "dest dn exists " << *destdn << dendl;
