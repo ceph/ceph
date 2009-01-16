@@ -926,7 +926,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		/* rename? */
 		if (d == rinfo->trace_numd-1 && req->r_old_dentry) {
-			update_parent = 1;
 			dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 			     req->r_old_dentry,
 			     req->r_old_dentry->d_name.len,
@@ -956,7 +955,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 				d_delete(dn);
 				dput(dn);
-				update_parent = 1;
 				goto retry_lookup;
 			}
 			dout(10, "dn %p correct %p ino %llx.%llx\n",
