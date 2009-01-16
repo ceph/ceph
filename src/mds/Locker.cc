@@ -1254,8 +1254,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   __u64 size = latest->size;
   if (update_size)
     size = new_size;
-
-  if ((in->get_caps_wanted() & ((CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) == 0)
+  
+  if ((in->get_caps_wanted() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) == 0)
     new_max = 0;
   else if ((size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();

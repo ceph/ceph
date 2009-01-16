@@ -5168,6 +5168,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
 
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
   assert(in);
   
@@ -5177,7 +5179,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.mode = req->head.args.open.mode;
   in->inode.mode |= S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
-  in->inode.max_size = in->get_layout_size_increment();
+  in->inode.max_size = (cmode & CEPH_FILE_MODE_WR) ? in->get_layout_size_increment() : 0;
   in->inode.rstat.rfiles = 1;
 
   dn->first = in->first = follows+1;
@@ -5192,7 +5194,6 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   // do the open
   bool is_new = false;
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
   Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
   if (is_new)
     cap->dec_suppress();
