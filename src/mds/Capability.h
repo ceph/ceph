@@ -147,6 +147,7 @@ public:
     return c;
   }
   ceph_seq_t issue(int c) {
+    int before = issued();
     if (_pending & ~c) {
       // note _revoked_ caps prior to this revocation
       if (_num_revoke < _max_revoke) {
@@ -157,13 +158,15 @@ public:
       _revoke_seq[_num_revoke-1] = last_sent;
     }
 
-    check_rdcaps_list(_pending, c, _wanted, _wanted);
     _pending = c;
+    int after = issued();
+    check_rdcaps_list(before, after, _wanted, _wanted);
     //last_issue = 
     ++last_sent;
     return last_sent;
   }
   void confirm_receipt(ceph_seq_t seq, int caps) {
+    int before = issued();
     _issued = caps;
     if (seq == last_sent) {
       _pending = caps;
@@ -184,6 +187,8 @@ public:
       }
       _num_revoke = o;
     }
+    int after = issued();
+    check_rdcaps_list(before, after, _wanted, _wanted);
   }
   bool is_null() {
     return !_pending && !_issued && !_num_revoke;
@@ -247,7 +252,8 @@ public:
   // caps this client wants to hold
   int wanted() { return _wanted; }
   void set_wanted(int w) {
-    check_rdcaps_list(_pending, _pending, _wanted, w);
+    int i = issued();
+    check_rdcaps_list(i, i, _wanted, w);
     _wanted = w;
   }
 
