@@ -463,21 +463,15 @@ void Locker::eval_gather(SimpleLock *lock)
 	scatter_writebehind((ScatterLock*)lock);
 	return;
       }
+      
+      if (in && lock->get_state() != LOCK_EXCL)
+	in->loner_cap = -1;
 
       switch (lock->get_state()) {
-	// to lock
-      case LOCK_MIX_LOCK:
-      case LOCK_SYNC_LOCK:
-      case LOCK_EXCL_LOCK:
-	in->loner_cap = -1;
-	break;
-
 	// to mixed
       case LOCK_TSYN_MIX:
       case LOCK_SYNC_MIX:
       case LOCK_EXCL_MIX:
-	in->loner_cap = -1;
-	
 	if (in->is_replicated()) {
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
@@ -487,8 +481,6 @@ void Locker::eval_gather(SimpleLock *lock)
 	
       case LOCK_EXCL_SYNC:
       case LOCK_LOCK_SYNC:
-	in->loner_cap = -1;
-	
 	{ // bcast data to replicas
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
