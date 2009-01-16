@@ -19,13 +19,9 @@
 #include "SimpleLock.h"
 
 class LocalLock : public SimpleLock {
-protected:
-  int num_wrlock;
-
 public:
-  LocalLock(MDSCacheObject *o, int t, int ws, int cs ) : 
-    SimpleLock(o, t, ws, cs),
-    num_wrlock(0) { 
+  LocalLock(MDSCacheObject *o, int t, int ws) : 
+    SimpleLock(o, t, ws) {
     set_state(LOCK_LOCK); // always.
   }
 

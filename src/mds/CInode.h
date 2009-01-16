@@ -297,14 +297,14 @@ private:
     xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
-    versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET, 0),
-    authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET, CEPH_CAP_SAUTH),
-    linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET, CEPH_CAP_SLINK),
-    dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET, 0),
-    filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET, CEPH_CAP_SFILE),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET, CEPH_CAP_SXATTR),
-    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET, 0),
-    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET, 0),
+    versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
+    authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),
+    linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
+    dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
+    filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
+    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
+    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
+    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
     loner_cap(-1)
   {
     memset(&inode, 0, sizeof(inode));

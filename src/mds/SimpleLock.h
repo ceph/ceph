@@ -99,7 +99,6 @@ protected:
   MDSCacheObject *parent;
   int type;
   int wait_shift;
-  int cap_shift;
 
   // lock state
   __s32 state;
@@ -113,8 +112,8 @@ protected:
 
 
 public:
-  SimpleLock(MDSCacheObject *o, int t, int ws, int cs) :
-    parent(o), type(t), wait_shift(ws), cap_shift(cs),
+  SimpleLock(MDSCacheObject *o, int t, int ws) :
+    parent(o), type(t), wait_shift(ws),
     state(LOCK_SYNC), num_client_lease(0),
     num_rdlock(0), num_wrlock(0), num_xlock(0),
     xlock_by(0), xlock_by_client(-1) {
@@ -143,7 +142,21 @@ public:
   MDSCacheObject *get_parent() { return parent; }
   int get_type() { return type; }
 
-  int get_cap_shift() { return cap_shift; }
+  int get_cap_shift() {
+    switch (type) {
+    case CEPH_LOCK_IAUTH: return CEPH_CAP_SAUTH;
+    case CEPH_LOCK_ILINK: return CEPH_CAP_SLINK;
+    case CEPH_LOCK_IFILE: return CEPH_CAP_SFILE;
+    case CEPH_LOCK_IXATTR: return CEPH_CAP_SXATTR;
+    default: return 0;
+    }
+  }
+  int get_cap_mask() {
+    switch (type) {
+    case CEPH_LOCK_IFILE: return 0xffff;
+    default: return 0x3;
+    }
+  }
 
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
@@ -374,13 +387,9 @@ public:
     return sm->states[state].loner;
   }
   int gcaps_allowed_ever() {
-    if (!cap_shift) 
-      return 0;  // none for this lock.
     return parent->is_auth() ? sm->allowed_ever_auth : sm->allowed_ever_replica;
   }
   int gcaps_allowed(bool loner, int s=-1) {
-    if (!cap_shift)
-      return 0;
     if (s < 0) s = state;
     if (parent->is_auth()) {
       if (is_loner_mode() && !loner)

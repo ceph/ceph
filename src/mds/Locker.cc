@@ -579,7 +579,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
 	else
 	  scatter_sync((ScatterLock*)lock);
       } else if (lock->sm == &sm_filelock)
-	file_lock((ScatterLock*)lock);
+	simple_lock(lock);
       else
 	simple_sync(lock);
     }
@@ -666,21 +666,17 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       break;
 
     if (in->is_auth()) {
-      if (lock->sm == &sm_filelock) {
-	if (want_scatter) 
+      if (want_scatter) {
+	if (lock->sm == &sm_filelock)
 	  file_mixed((ScatterLock*)lock);
 	else 
-	  file_lock((ScatterLock*)lock);
-      } else if (lock->sm == &sm_scatterlock) {
-	if (want_scatter) 
 	  scatter_scatter((ScatterLock*)lock, nowait);
-	else 
-	  scatter_lock((ScatterLock*)lock, nowait);
-	if (nowait && !lock->can_wrlock(client))
-	  return false;
-      } else
-	assert(0);
-      continue;
+      } else 
+	simple_lock(lock);
+
+      if (nowait && !lock->can_wrlock(client))
+	return false;
+      
     } else {
       // replica.
       // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
@@ -688,6 +684,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       dout(10) << "requesting scatter from auth on " 
 	       << *lock << " on " << *lock->get_parent() << dendl;
       mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      break;
     }
   }
 
@@ -756,10 +753,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
       if (lock->get_state() == LOCK_LOCK)
 	simple_xlock(lock);
       else {
-	if (lock->sm == &sm_simplelock)
-	  simple_lock(lock);
-	else
-	  file_lock((ScatterLock*)lock);
+	simple_lock(lock);
       }
     }
     
@@ -1276,7 +1270,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   if (!force_wrlock && !in->filelock.can_wrlock(-1)) {
     // lock?
     if (in->filelock.is_stable())
-      file_lock(&in->filelock);
+      simple_lock(&in->filelock);
     if (!in->filelock.can_wrlock(-1)) {
       // try again later
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
@@ -2126,7 +2120,7 @@ bool Locker::simple_sync(SimpleLock *lock)
 
   if (in) {
     int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), lock->get_cap_mask());
     if ((loner_issued & ~lock->gcaps_allowed(true)) ||
 	(other_issued & ~lock->gcaps_allowed(false))) {
       issue_caps(in);
@@ -2162,14 +2156,19 @@ void Locker::simple_lock(SimpleLock *lock)
   if (lock->get_cap_shift())
     in = (CInode *)lock->get_parent();
 
+  int old_state = lock->get_state();
+
   switch (lock->get_state()) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
+  case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
+  case LOCK_TSYN: lock->set_state(LOCK_TSYN_LOCK); break;
   default: assert(0);
   }
 
   int gather = 0;
-  if (lock->get_parent()->is_replicated()) {
+  if (lock->get_parent()->is_replicated() &&
+      lock->sm->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
     gather++;
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
@@ -2180,10 +2179,9 @@ void Locker::simple_lock(SimpleLock *lock)
   }
   if (lock->is_rdlocked())
     gather++;
-  
   if (in) {
     int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), lock->get_cap_mask());
     if ((loner_issued & ~lock->gcaps_allowed(true)) ||
 	(other_issued & ~lock->gcaps_allowed(false))) {
       issue_caps(in);
@@ -2191,10 +2189,24 @@ void Locker::simple_lock(SimpleLock *lock)
     }
   }
 
+  if (lock->get_type() == CEPH_LOCK_IFILE &&
+      in->state_test(CInode::STATE_NEEDSRECOVER)) {
+    mds->mdcache->queue_file_recover(in);
+    mds->mdcache->do_file_recover();
+    gather++;
+  }
+
+  if (!gather && lock->is_updated()) {
+    scatter_writebehind((ScatterLock*)lock);
+    gather++;
+  }
+
   if (gather) {
     lock->get_parent()->auth_pin(lock);
   } else {
     lock->set_state(LOCK_LOCK);
+    in->loner_cap = -1;
+    lock->finish_waiters(FileLock::WAIT_XLOCK|FileLock::WAIT_WR|FileLock::WAIT_STABLE);
   }
 }
 
@@ -2475,7 +2487,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
 	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
 	  file_mixed((FileLock*)lock);
 	else
-	  file_lock((FileLock*)lock);
+	  simple_lock((FileLock*)lock);
 	break;
 
       case CEPH_LOCK_IDFT:
@@ -2483,7 +2495,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
 	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
 	  scatter_scatter(lock);
 	else // if (lock->get_state() != LOCK_LOCK)
-	  scatter_lock(lock);
+	  simple_lock(lock);
 	//else
 	//scatter_sync(lock);
 	break;
@@ -2649,59 +2661,6 @@ void Locker::scatter_scatter(ScatterLock *lock, bool nowait)
     revoke_client_leases(lock);
 }
 
-bool Locker::scatter_lock_fastpath(ScatterLock *lock)
-{
-  assert(lock->get_parent()->is_auth());
-  assert(lock->is_stable());
-
-  if (lock->get_state() == LOCK_LOCK)
-    return true;
-  if (!lock->is_rdlocked() &&
-      !lock->is_wrlocked() &&
-      !lock->is_xlocked() &&
-      !lock->get_num_client_lease() &&
-      (!lock->get_parent()->is_replicated() ||  // sync | scatter
-       lock->get_state() == LOCK_TSYN)) {
-
-    if (lock->is_updated()) {
-      scatter_writebehind(lock);
-      return false;
-    } 
-
-    // lock
-    lock->set_state(LOCK_LOCK);
-    lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
-    return true;
-  }
-  return false;
-}
-
-void Locker::scatter_lock(ScatterLock *lock, bool nowait)
-{
-  dout(10) << "scatter_lock " << *lock
-	   << " on " << *lock->get_parent() << dendl;
-  assert(lock->get_parent()->is_auth());
-  assert(lock->is_stable());
-
-  if (scatter_lock_fastpath(lock) || nowait)
-    return;
-
-  switch (lock->get_state()) {
-  case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
-  case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
-  case LOCK_TSYN: lock->set_state(LOCK_TSYN_LOCK); break;
-  default: assert(0);
-  }
-
-  lock->get_parent()->auth_pin(lock);
-
-  if (lock->get_parent()->is_replicated()) {
-    send_lock_message(lock, LOCK_AC_LOCK);
-    lock->init_gather();
-  } 
-  if (lock->get_num_client_lease())
-    revoke_client_leases(lock);  
-}
 
 void Locker::scatter_tempsync(ScatterLock *lock)
 {
@@ -3153,60 +3112,6 @@ bool Locker::file_sync(FileLock *lock)
   return true;
 }
 
-
-
-void Locker::file_lock(FileLock *lock)
-{
-  CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "file_lock " << *lock << " on " << *lock->get_parent() << dendl;  
-
-  assert(in->is_auth());
-  assert(lock->is_stable());
-
-  // gather?
-  switch (lock->get_state()) {
-  case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
-  case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
-  case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
-  default: assert(0);
-  }
-
-  int gather = 0;
-  if (in->is_replicated() && 
-      lock->get_state() != LOCK_EXCL_LOCK) {  // (replicas are LOCK when auth is EXCL)
-    send_lock_message(lock, LOCK_AC_LOCK);
-    lock->init_gather();
-    gather++;
-  }
-  if (lock->get_num_client_lease()) {
-    revoke_client_leases(lock);
-    gather++;
-  }
-  int loner_issued, other_issued;
-  in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
-  if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-      (other_issued & ~lock->gcaps_allowed(false))) {
-    issue_caps(in);
-    gather++;
-  }
-  if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
-    mds->mdcache->queue_file_recover(in);
-    mds->mdcache->do_file_recover();
-    gather++;
-  }
-  if (lock->is_updated()) {
-    scatter_writebehind(lock);
-    gather++;
-  }
-
-  if (gather)
-    lock->get_parent()->auth_pin(lock);
-  else {
-    lock->set_state(LOCK_LOCK);
-    in->loner_cap = -1;
-    lock->finish_waiters(FileLock::WAIT_XLOCK|FileLock::WAIT_WR|FileLock::WAIT_STABLE);
-  }
-}
 
 
 void Locker::file_mixed(FileLock *lock)
