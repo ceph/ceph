@@ -2303,7 +2303,10 @@ public:
     // link the inode
     dn->pop_projected_linkage();
     
-    // dirty inode, dn, dir
+    // be a bit hacky with the inode version, here.. we decrement it
+    // just to keep mark_dirty() happen. (we didn't bother projecting
+    // a new version of hte inode since it's just been created)
+    newi->inode.version--; 
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
 
     // mkdir?
@@ -2347,7 +2350,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   newi->inode.mode = req->head.args.mknod.mode;
   if ((newi->inode.mode & S_IFMT) == 0)
     newi->inode.mode |= S_IFREG;
-  newi->inode.version = dn->pre_dirty() - 1;
+  newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rfiles = 1;
 
   dn->first = newi->first = follows+1;
@@ -2398,7 +2401,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFDIR;
   newi->inode.layout = g_default_mds_dir_layout;
-  newi->inode.version = dn->pre_dirty() - 1;
+  newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rsubdirs = 1;
 
   dn->first = newi->first = follows+1;
@@ -2467,7 +2470,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->inode.size = newi->symlink.length();
   newi->inode.rstat.rbytes = newi->inode.size;
   newi->inode.rstat.rfiles = 1;
-  newi->inode.version = dn->pre_dirty() - 1;
+  newi->inode.version = dn->pre_dirty();
 
   dn->first = newi->first = follows+1;
 
@@ -3233,8 +3236,10 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   le->metablob.add_client_req(mdr->reqid);
 
-  if (dnl->is_primary())
+  if (straydn) {
+    assert(dnl->is_primary());
     straydn->push_projected_linkage(dnl->get_inode());
+  }
 
   // the unlinked dentry
   dn->pre_dirty();

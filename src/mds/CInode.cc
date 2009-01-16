@@ -79,6 +79,8 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " " << in.dirfragtree;
   
   out << " v" << in.get_version();
+  if (in.get_projected_version() > in.get_version())
+    out << " pv" << in.get_projected_version();
 
   if (in.is_auth_pinned()) {
     out << " ap=" << in.get_num_auth_pins();
@@ -493,11 +495,7 @@ void CInode::name_stray_dentry(string& dname)
 version_t CInode::pre_dirty()
 {    
   assert(parent || projected_parent.size());
-  version_t pv;
-  if (projected_parent.size())
-    pv = projected_parent.front()->pre_dirty(get_projected_version());
-  else
-    pv = parent->pre_dirty();
+  version_t pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
   dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
   return pv;
 }
