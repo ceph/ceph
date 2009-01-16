@@ -1450,7 +1450,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_UID)
 			inode->i_uid = attr->ia_uid;
 		if (ia_valid & ATTR_GID)
-			inode->i_uid = attr->ia_gid;
+			inode->i_gid = attr->ia_gid;
 		inode->i_ctime = CURRENT_TIME;
 		ci->i_dirty_caps |= CEPH_CAP_AUTH_EXCL;
 		spin_unlock(&inode->i_lock);
